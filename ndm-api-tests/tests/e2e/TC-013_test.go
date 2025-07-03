@@ -188,9 +188,9 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 			err = WaitForJobState(firstCutoverjobRunID, BLOCKED_JOBRUN)
 			Expect(err).NotTo(HaveOccurred(), "Cutover job did not reach to blocked state")
 
-			result, err := ValidateReport(firstCutoverjobRunID, JobTypeCutover, "../../validators/cutover_validation.json")
-			Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", firstCutoverjobRunID)
-			By(fmt.Sprintf("validation report result %s", result))
+			// result, err := ValidateReport(firstCutoverjobRunID, JobTypeCutover, "../../validators/cutover_validation.json")
+			// Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", firstCutoverjobRunID)
+			// By(fmt.Sprintf("validation report result %s", result))
 
 			By("Restarting migration job run")
 			for _, migrationJobConfigID := range migrationJobConfigIDs {

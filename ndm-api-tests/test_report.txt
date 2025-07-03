@@ -1,0 +1,1184 @@
+Running regression tests
+DEBUG: Request method is GET
+2025/07/03 23:42:06 [DEBUG] Status check response: RUNNING
+2025/07/03 23:42:06 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 14
+2025/07/03 23:42:06 [DEBUG] Current job run status: RUNNING
+2025/07/03 23:42:09 [DEBUG] Current working directory: C:\Users\ls89152\OneDrive - NetApp Inc\Desktop\aaj vala\ndm\ndm-api-tests\tests\regression
+2025/07/03 23:42:09 Environment variables loaded successfully from .env file
+Running Suite: Regression Suite - C:\Users\ls89152\OneDrive - NetApp Inc\Desktop\aaj vala\ndm\ndm-api-tests\tests\regression
+============================================================================================================================
+Random Seed: [1m1751566326[0m
+
+Will run [1m4[0m of [1m4[0m specs
+[38;5;243m------------------------------[0m
+[0m[1m[BeforeSuite] [0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/regression_suite_test.go:16[0m
+  [1mSTEP:[0m Setting before the suite [38;5;243m@ 07/03/25 23:42:09.524[0m
+DEBUG: Request method is GET
+2025/07/03 23:42:12 [DEBUG] Status check response: RUNNING
+2025/07/03 23:42:12 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 15
+2025/07/03 23:42:12 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+DEBUG: Request method is POST
+DEBUG: Request method is GET
+DEBUG: Request method is PUT
+DEBUG: Request method is PUT
+2025/07/03 23:42:13 Successfully updated app admin for 'admin@datamigrator.local'
+DEBUG: Request method is POST
+DEBUG: Request method is GET
+2025/07/03 23:42:14 Access Token: Fetched
+2025/07/03 23:42:14 Refresh Token: Fetched
+2025/07/03 23:42:14 Fetching Role IDs...
+[38;5;10m[BeforeSuite] PASSED [4.981 seconds][0m
+[38;5;243m------------------------------[0m
+[0mRTC-004: Test migration with single worker and make worker unhealthy during migration for NFS [38;5;243mRTC-004 [0m[1mRTC-004: Test migration with single worker and make worker unhealthy during migration for NFS[0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-004_test.go:32[0m
+DEBUG: Request method is POST
+2025/07/03 23:42:14 Role IDs fetched successfully.
+DEBUG: Request method is POST
+2025/07/03 23:42:14 [DEBUG] Project created with ID: 6acc78b4-53c2-4ffa-995e-bea03ce3bef1
+2025/07/03 23:42:14 [DEBUG] For worker 10.192.7.107, running script: 
+	sudo su -c '
+	export WORKER_ID=ed0100ee-9713-4571-a6bf-ea92e2c7e268
+	export WORKER_SECRET=b4d67692-1a52-4c73-a8e0-224b8cd8a7ee
+	export CONTROL_PLANE_IP=10.192.7.54
+	sh /opt/datamigrator/bin/worker_register.sh
+	'
+	
+  [38;5;9m[FAILED][0m in [BeforeEach] - C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-004_test.go:25 [38;5;243m@ 07/03/25 23:42:16.255[0m
+  [38;5;9m[FAILED][0m in [AfterEach] - C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-004_test.go:139 [38;5;243m@ 07/03/25 23:42:16.256[0m
+[38;5;9m+ [FAILED] [1.751 seconds][0m
+[0mRTC-004: Test migration with single worker and make worker unhealthy during migration for NFS [38;5;9m[1mRTC-004 [BeforeEach] [0mRTC-004: Test migration with single worker and make worker unhealthy during migration for NFS[0m
+  [38;5;9m[BeforeEach][0m [38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-004_test.go:22[0m
+  [38;5;243m[It] C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-004_test.go:32[0m
+
+  [38;5;9m[FAILED] Error during test environment setup
+  Expected
+      <*fmt.wrapError | 0xc00009bb20>: 
+      failed to attach workers: failed to attach worker 10.192.7.107: failed to run script: Process exited with status 1
+      stderr: 
+      {
+          msg: "failed to attach workers: failed to attach worker 10.192.7.107: failed to run script: Process exited with status 1\nstderr: ",
+          err: <*fmt.wrapError | 0xc00009bb00>{
+              msg: "failed to attach worker 10.192.7.107: failed to run script: Process exited with status 1\nstderr: ",
+              err: <*fmt.wrapError | 0xc00009bae0>{
+                  msg: "failed to run script: Process exited with status 1\nstderr: ",
+                  err: <*ssh.ExitError | 0xc0000979c0>{
+                      Waitmsg: {status: 1, signal: "", msg: "", lang: ""},
+                  },
+              },
+          },
+      }
+  to be nil[0m
+  [38;5;9mIn [1m[BeforeEach][0m[38;5;9m at: [1mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-004_test.go:25[0m [38;5;243m@ 07/03/25 23:42:16.255[0m
+
+  There were [1m[38;5;9madditional failures[0m detected.  To view them in detail run [1mginkgo -vv[0m
+[38;5;243m------------------------------[0m
+[0mRTC-005: Test migration with 2 worker and make worker unhealthy during migration for NFS [38;5;243mRTC-005 [0m[1mRTC-005: Test migration with 2 workers and make one worker unhealthy during migration for NFS[0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-005_test.go:34[0m
+DEBUG: Request method is POST
+DEBUG: Request method is POST
+2025/07/03 23:42:16 [DEBUG] Project created with ID: 502fae67-0a0b-4448-8190-9a8b14000a68
+2025/07/03 23:42:16 [DEBUG] For worker 10.192.7.107, running script: 
+	sudo su -c '
+	export WORKER_ID=1d7b50c7-892c-4e66-9376-25f78001daff
+	export WORKER_SECRET=48454e5b-3bda-49e1-af68-3100f2c2a8e4
+	export CONTROL_PLANE_IP=10.192.7.54
+	sh /opt/datamigrator/bin/worker_register.sh
+	'
+	
+DEBUG: Request method is GET
+2025/07/03 23:42:17 [DEBUG] Status check response: RUNNING
+2025/07/03 23:42:17 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 16
+2025/07/03 23:42:17 [DEBUG] Current job run status: RUNNING
+  [38;5;9m[FAILED][0m in [BeforeEach] - C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-005_test.go:26 [38;5;243m@ 07/03/25 23:42:17.487[0m
+  [38;5;9m[FAILED][0m in [AfterEach] - C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-005_test.go:138 [38;5;243m@ 07/03/25 23:42:17.487[0m
+[38;5;9m+ [FAILED] [1.231 seconds][0m
+[0mRTC-005: Test migration with 2 worker and make worker unhealthy during migration for NFS [38;5;9m[1mRTC-005 [BeforeEach] [0mRTC-005: Test migration with 2 workers and make one worker unhealthy during migration for NFS[0m
+  [38;5;9m[BeforeEach][0m [38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-005_test.go:23[0m
+  [38;5;243m[It] C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-005_test.go:34[0m
+
+  [38;5;9m[FAILED] Error during test environment setup
+  Expected
+      <*fmt.wrapError | 0xc000208dc0>: 
+      failed to attach workers: failed to attach worker 10.192.7.107: failed to run script: Process exited with status 1
+      stderr: 
+      {
+          msg: "failed to attach workers: failed to attach worker 10.192.7.107: failed to run script: Process exited with status 1\nstderr: ",
+          err: <*fmt.wrapError | 0xc000208da0>{
+              msg: "failed to attach worker 10.192.7.107: failed to run script: Process exited with status 1\nstderr: ",
+              err: <*fmt.wrapError | 0xc000208d80>{
+                  msg: "failed to run script: Process exited with status 1\nstderr: ",
+                  err: <*ssh.ExitError | 0xc00021acc0>{
+                      Waitmsg: {status: 1, signal: "", msg: "", lang: ""},
+                  },
+              },
+          },
+      }
+  to be nil[0m
+  [38;5;9mIn [1m[BeforeEach][0m[38;5;9m at: [1mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-005_test.go:26[0m [38;5;243m@ 07/03/25 23:42:17.487[0m
+
+  There were [1m[38;5;9madditional failures[0m detected.  To view them in detail run [1mginkgo -vv[0m
+[38;5;243m------------------------------[0m
+[0mRTC-001-002: Check worker status when worker goes down/becomes unhealthy [38;5;243mRTC-001-002 [0m[1mRTC-001-002: Check worker status when worker goes down/becomes unhealthy[0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-001-002_test.go:31[0m
+DEBUG: Request method is POST
+DEBUG: Request method is POST
+2025/07/03 23:42:17 [DEBUG] Project created with ID: 83091720-9e88-4e4c-907d-c78924561b53
+2025/07/03 23:42:17 [DEBUG] For worker 10.192.7.107, running script: 
+	sudo su -c '
+	export WORKER_ID=b9098d59-0a33-455a-9f7a-7e3ac769cbf1
+	export WORKER_SECRET=f56042e6-a2e1-4454-ab21-12d3f0ef0b91
+	export CONTROL_PLANE_IP=10.192.7.54
+	sh /opt/datamigrator/bin/worker_register.sh
+	'
+	
+attachedWorkersConfig: map[]
+  [38;5;9m[FAILED][0m in [BeforeEach] - C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-001-002_test.go:25 [38;5;243m@ 07/03/25 23:42:19.192[0m
+  [38;5;9m[FAILED][0m in [AfterEach] - C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-001-002_test.go:86 [38;5;243m@ 07/03/25 23:42:19.192[0m
+[38;5;9m+ [FAILED] [1.704 seconds][0m
+[0mRTC-001-002: Check worker status when worker goes down/becomes unhealthy [38;5;9m[1mRTC-001-002 [BeforeEach] [0mRTC-001-002: Check worker status when worker goes down/becomes unhealthy[0m
+  [38;5;9m[BeforeEach][0m [38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-001-002_test.go:21[0m
+  [38;5;243m[It] C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-001-002_test.go:31[0m
+
+  [38;5;9m[FAILED] Error during test environment setup
+  Expected
+      <*fmt.wrapError | 0xc0003a6140>: 
+      failed to attach workers: failed to attach worker 10.192.7.107: failed to run script: Process exited with status 1
+      stderr: 
+      {
+          msg: "failed to attach workers: failed to attach worker 10.192.7.107: failed to run script: Process exited with status 1\nstderr: ",
+          err: <*fmt.wrapError | 0xc0003a6120>{
+              msg: "failed to attach worker 10.192.7.107: failed to run script: Process exited with status 1\nstderr: ",
+              err: <*fmt.wrapError | 0xc0003a6100>{
+                  msg: "failed to run script: Process exited with status 1\nstderr: ",
+                  err: <*ssh.ExitError | 0xc000394500>{
+                      Waitmsg: {status: 1, signal: "", msg: "", lang: ""},
+                  },
+              },
+          },
+      }
+  to be nil[0m
+  [38;5;9mIn [1m[BeforeEach][0m[38;5;9m at: [1mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-001-002_test.go:25[0m [38;5;243m@ 07/03/25 23:42:19.192[0m
+
+  There were [1m[38;5;9madditional failures[0m detected.  To view them in detail run [1mginkgo -vv[0m
+[38;5;243m------------------------------[0m
+[0mRTC-003: Test discovery with single worker and restart the worker service during discovery for NFS [38;5;243mRTC-003 [0m[1mRTC-003: Test discovery with single worker and restart the worker service during discovery for NFS[0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-003_test.go:32[0m
+DEBUG: Request method is POST
+2025/07/03 23:42:19 [DEBUG] Project created with ID: d6c70534-8944-4cc7-a299-bf8c68105f3b
+DEBUG: Request method is POST
+2025/07/03 23:42:19 [DEBUG] For worker 10.192.7.107, running script: 
+	sudo su -c '
+	export WORKER_ID=3ac9ca42-7cbb-46d9-9719-20f05d094dd8
+	export WORKER_SECRET=f98e9c30-13e2-43a4-9da1-1d20fb2e2efc
+	export CONTROL_PLANE_IP=10.192.7.54
+	sh /opt/datamigrator/bin/worker_register.sh
+	'
+	
+  [38;5;9m[FAILED][0m in [BeforeEach] - C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-003_test.go:25 [38;5;243m@ 07/03/25 23:42:20.453[0m
+  [38;5;9m[FAILED][0m in [AfterEach] - C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-003_test.go:112 [38;5;243m@ 07/03/25 23:42:20.454[0m
+[38;5;9m+ [FAILED] [1.262 seconds][0m
+[0mRTC-003: Test discovery with single worker and restart the worker service during discovery for NFS [38;5;9m[1mRTC-003 [BeforeEach] [0mRTC-003: Test discovery with single worker and restart the worker service during discovery for NFS[0m
+  [38;5;9m[BeforeEach][0m [38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-003_test.go:22[0m
+  [38;5;243m[It] C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-003_test.go:32[0m
+
+  [38;5;9m[FAILED] Error during test environment setup
+  Expected
+      <*fmt.wrapError | 0xc0005020c0>: 
+      failed to attach workers: failed to attach worker 10.192.7.107: failed to run script: Process exited with status 1
+      stderr: 
+      {
+          msg: "failed to attach workers: failed to attach worker 10.192.7.107: failed to run script: Process exited with status 1\nstderr: ",
+          err: <*fmt.wrapError | 0xc0005020a0>{
+              msg: "failed to attach worker 10.192.7.107: failed to run script: Process exited with status 1\nstderr: ",
+              err: <*fmt.wrapError | 0xc000502080>{
+                  msg: "failed to run script: Process exited with status 1\nstderr: ",
+                  err: <*ssh.ExitError | 0xc000512080>{
+                      Waitmsg: {status: 1, signal: "", msg: "", lang: ""},
+                  },
+              },
+          },
+      }
+  to be nil[0m
+  [38;5;9mIn [1m[BeforeEach][0m[38;5;9m at: [1mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-003_test.go:25[0m [38;5;243m@ 07/03/25 23:42:20.453[0m
+
+  There were [1m[38;5;9madditional failures[0m detected.  To view them in detail run [1mginkgo -vv[0m
+[38;5;243m------------------------------[0m
+
+[38;5;9m[1mSummarizing 4 Failures:[0m
+  [38;5;9m[FAIL][0m [0mRTC-004: Test migration with single worker and make worker unhealthy during migration for NFS [38;5;9m[1mRTC-004 [BeforeEach] [0mRTC-004: Test migration with single worker and make worker unhealthy during migration for NFS[0m
+  [38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-004_test.go:25[0m
+  [38;5;9m[FAIL][0m [0mRTC-005: Test migration with 2 worker and make worker unhealthy during migration for NFS [38;5;9m[1mRTC-005 [BeforeEach] [0mRTC-005: Test migration with 2 workers and make one worker unhealthy during migration for NFS[0m
+  [38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-005_test.go:26[0m
+  [38;5;9m[FAIL][0m [0mRTC-001-002: Check worker status when worker goes down/becomes unhealthy [38;5;9m[1mRTC-001-002 [BeforeEach] [0mRTC-001-002: Check worker status when worker goes down/becomes unhealthy[0m
+  [38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-001-002_test.go:25[0m
+  [38;5;9m[FAIL][0m [0mRTC-003: Test discovery with single worker and restart the worker service during discovery for NFS [38;5;9m[1mRTC-003 [BeforeEach] [0mRTC-003: Test discovery with single worker and restart the worker service during discovery for NFS[0m
+  [38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-003_test.go:25[0m
+
+[38;5;9m[1mRan 4 of 4 Specs in 10.930 seconds[0m
+[38;5;9m[1mFAIL![0m -- [38;5;10m[1m0 Passed[0m | [38;5;9m[1m4 Failed[0m | [38;5;11m[1m0 Pending[0m | [38;5;14m[1m0 Skipped[0m
+--- FAIL: TestRegression (10.93s)
+FAIL
+
+Ginkgo ran 1 suite in 14.1020906s
+
+Test Suite Failed
+Running end-to-end tests
+DEBUG: Request method is GET
+2025/07/03 23:42:22 [DEBUG] Status check response: RUNNING
+2025/07/03 23:42:22 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 17
+2025/07/03 23:42:22 [DEBUG] Current job run status: RUNNING
+2025/07/03 23:42:24 [DEBUG] Current working directory: C:\Users\ls89152\OneDrive - NetApp Inc\Desktop\aaj vala\ndm\ndm-api-tests\tests\e2e
+2025/07/03 23:42:24 Environment variables loaded successfully from .env file
+Running Suite: E2e Suite - C:\Users\ls89152\OneDrive - NetApp Inc\Desktop\aaj vala\ndm\ndm-api-tests\tests\e2e
+==============================================================================================================
+Random Seed: [1m1751566341[0m
+
+Will run [1m1[0m of [1m1[0m specs
+[38;5;243m------------------------------[0m
+[0m[1m[BeforeSuite] [0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/e2e/e2e_suite_test.go:16[0m
+  [1mSTEP:[0m Setting before the suite [38;5;243m@ 07/03/25 23:42:24.305[0m
+DEBUG: Request method is GET
+DEBUG: Request method is POST
+DEBUG: Request method is GET
+2025/07/03 23:42:27 [DEBUG] Status check response: RUNNING
+2025/07/03 23:42:27 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 18
+2025/07/03 23:42:27 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+DEBUG: Request method is PUT
+DEBUG: Request method is PUT
+2025/07/03 23:42:27 Successfully updated app admin for 'admin@datamigrator.local'
+DEBUG: Request method is POST
+2025/07/03 23:42:28 Access Token: Fetched
+DEBUG: Request method is GET
+2025/07/03 23:42:28 Refresh Token: Fetched
+2025/07/03 23:42:28 Fetching Role IDs...
+2025/07/03 23:42:28 Role IDs fetched successfully.
+[38;5;10m[BeforeSuite] PASSED [4.083 seconds][0m
+[38;5;243m------------------------------[0m
+[0mTC-001: Create a fileserver with 2 workers and check discovery and migration [38;5;243mTC-001 [0m[1mTC-001: Create a fileserver with 2 workers and check discovery and migration[0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/e2e/TC-001_test.go:44[0m
+DEBUG: Request method is POST
+DEBUG: Request method is POST
+2025/07/03 23:42:28 [DEBUG] Project created with ID: 00b4b9d4-4080-4835-97ed-159e13d68956
+2025/07/03 23:42:28 [DEBUG] For worker 10.192.7.107, running script: 
+	sudo su -c '
+	export WORKER_ID=268dbb9a-3452-4a6a-a05d-2e5573d94cf6
+	export WORKER_SECRET=23255c60-ce7b-425f-a1a9-98b3b82ac409
+	export CONTROL_PLANE_IP=10.192.7.54
+	sh /opt/datamigrator/bin/worker_register.sh
+	'
+	
+  [38;5;9m[FAILED][0m in [BeforeEach] - C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/e2e/TC-001_test.go:31 [38;5;243m@ 07/03/25 23:42:29.661[0m
+  [38;5;9m[FAILED][0m in [AfterEach] - C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/e2e/TC-001_test.go:282 [38;5;243m@ 07/03/25 23:42:29.662[0m
+[38;5;9m+ [FAILED] [1.273 seconds][0m
+[0mTC-001: Create a fileserver with 2 workers and check discovery and migration [38;5;9m[1mTC-001 [BeforeEach] [0mTC-001: Create a fileserver with 2 workers and check discovery and migration[0m
+  [38;5;9m[BeforeEach][0m [38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/e2e/TC-001_test.go:28[0m
+  [38;5;243m[It] C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/e2e/TC-001_test.go:44[0m
+
+  [38;5;9m[FAILED] Error during test environment setup
+  Expected
+      <*fmt.wrapError | 0xc0001fe140>: 
+      failed to attach workers: failed to attach worker 10.192.7.107: failed to run script: Process exited with status 1
+      stderr: 
+      {
+          msg: "failed to attach workers: failed to attach worker 10.192.7.107: failed to run script: Process exited with status 1\nstderr: ",
+          err: <*fmt.wrapError | 0xc0001fe120>{
+              msg: "failed to attach worker 10.192.7.107: failed to run script: Process exited with status 1\nstderr: ",
+              err: <*fmt.wrapError | 0xc0001fe100>{
+                  msg: "failed to run script: Process exited with status 1\nstderr: ",
+                  err: <*ssh.ExitError | 0xc000073e80>{
+                      Waitmsg: {status: 1, signal: "", msg: "", lang: ""},
+                  },
+              },
+          },
+      }
+  to be nil[0m
+  [38;5;9mIn [1m[BeforeEach][0m[38;5;9m at: [1mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/e2e/TC-001_test.go:31[0m [38;5;243m@ 07/03/25 23:42:29.661[0m
+
+  There were [1m[38;5;9madditional failures[0m detected.  To view them in detail run [1mginkgo -vv[0m
+[38;5;243m------------------------------[0m
+
+[38;5;9m[1mSummarizing 1 Failure:[0m
+  [38;5;9m[FAIL][0m [0mTC-001: Create a fileserver with 2 workers and check discovery and migration [38;5;9m[1mTC-001 [BeforeEach] [0mTC-001: Create a fileserver with 2 workers and check discovery and migration[0m
+  [38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/e2e/TC-001_test.go:31[0m
+
+[38;5;9m[1mRan 1 of 1 Specs in 5.358 seconds[0m
+[38;5;9m[1mFAIL![0m -- [38;5;10m[1m0 Passed[0m | [38;5;9m[1m1 Failed[0m | [38;5;11m[1m0 Pending[0m | [38;5;14m[1m0 Skipped[0m
+--- FAIL: TestE2e (5.36s)
+FAIL
+
+Ginkgo ran 1 suite in 8.6037914s
+
+Test Suite Failed
+Running smoke tests
+DEBUG: Request method is GET
+2025/07/03 23:42:32 [DEBUG] Status check response: RUNNING
+2025/07/03 23:42:32 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 19
+2025/07/03 23:42:32 [DEBUG] Current job run status: RUNNING
+2025/07/03 23:42:34 [DEBUG] Current working directory: C:\Users\ls89152\OneDrive - NetApp Inc\Desktop\aaj vala\ndm\ndm-api-tests\tests\smoke
+2025/07/03 23:42:34 Environment variables loaded successfully from .env file
+Running Suite: Smoke Suite - C:\Users\ls89152\OneDrive - NetApp Inc\Desktop\aaj vala\ndm\ndm-api-tests\tests\smoke
+==================================================================================================================
+Random Seed: [1m1751566350[0m
+
+Will run [1m3[0m of [1m3[0m specs
+[38;5;243m------------------------------[0m
+[0m[1m[BeforeSuite] [0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/smoke/smoke_suite_test.go:21[0m
+  [1mSTEP:[0m Setting before the suite [38;5;243m@ 07/03/25 23:42:34.364[0m
+DEBUG: Request method is GET
+DEBUG: Request method is POST
+DEBUG: Request method is GET
+DEBUG: Request method is PUT
+DEBUG: Request method is PUT
+2025/07/03 23:42:37 Successfully updated app admin for 'admin@datamigrator.local'
+DEBUG: Request method is POST
+DEBUG: Request method is GET
+2025/07/03 23:42:37 Access Token: Fetched
+2025/07/03 23:42:37 Refresh Token: Fetched
+2025/07/03 23:42:37 Fetching Role IDs...
+2025/07/03 23:42:37 Role IDs fetched successfully.
+2025/07/03 23:42:37 [DEBUG] Project root: C:\Users\ls89152\OneDrive - NetApp Inc\Desktop\aaj vala\ndm\ndm-api-tests\tests
+2025/07/03 23:42:37 [DEBUG] Reading scenario configuration from: C:\Users\ls89152\OneDrive - NetApp Inc\Desktop\aaj vala\ndm\ndm-api-tests\tests\smoke\scenarios\scenario_config.yml
+2025/07/03 23:42:37 [DEBUG] Using scenario files: [accounts.yml auth.yml user-roles-app-admin.yml user-roles-project-admin.yml user-operations-app-admin.yml user-operations-project-admin.yml login-logout-app-admin.yml login-logout-project-admin.yml login-logout-project-viewer.yml project-management-app-admin.yml project-management-project-admin.yml project-management-project-viewer.yml]
+[38;5;10m[BeforeSuite] PASSED [3.103 seconds][0m
+[38;5;243m------------------------------[0m
+[0mAPI Scenarios (Sequential from YAML Files) [0m[1mexecutes initialization[0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/smoke/scenario_test.go:20[0m
+DEBUG: Request method is POST
+DEBUG: Request method is GET
+DEBUG: Request method is POST
+2025/07/03 23:42:37 [DEBUG] Project created with ID: e801d13f-55b1-4193-9c51-b95c02785f2e
+2025/07/03 23:42:37 [DEBUG] Status check response: RUNNING
+2025/07/03 23:42:37 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 20
+2025/07/03 23:42:37 [DEBUG] Current job run status: RUNNING
+2025/07/03 23:42:37 [DEBUG] For worker 10.192.7.107, running script: 
+	sudo su -c '
+	export WORKER_ID=6c9dd363-e5f6-4c7c-830f-624a90a15342
+	export WORKER_SECRET=369f4854-2f58-4385-acfb-07408dc9cf67
+	export CONTROL_PLANE_IP=10.192.7.54
+	sh /opt/datamigrator/bin/worker_register.sh
+	'
+	
+  [38;5;9m[FAILED][0m in [It] - C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/smoke/scenario_test.go:22 [38;5;243m@ 07/03/25 23:42:38.704[0m
+[38;5;9m+ [FAILED] [1.237 seconds][0m
+[0mAPI Scenarios (Sequential from YAML Files) [38;5;9m[1m[It] executes initialization[0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/smoke/scenario_test.go:20[0m
+
+  [38;5;9m[FAILED] Error during test environment setup
+  Expected
+      <*fmt.wrapError | 0xc00029e440>: 
+      failed to attach workers: failed to attach worker 10.192.7.107: failed to run script: Process exited with status 1
+      stderr: 
+      {
+          msg: "failed to attach workers: failed to attach worker 10.192.7.107: failed to run script: Process exited with status 1\nstderr: ",
+          err: <*fmt.wrapError | 0xc00029e420>{
+              msg: "failed to attach worker 10.192.7.107: failed to run script: Process exited with status 1\nstderr: ",
+              err: <*fmt.wrapError | 0xc0001e7560>{
+                  msg: "failed to run script: Process exited with status 1\nstderr: ",
+                  err: <*ssh.ExitError | 0xc0001f7780>{
+                      Waitmsg: {status: 1, signal: "", msg: "", lang: ""},
+                  },
+              },
+          },
+      }
+  to be nil[0m
+  [38;5;9mIn [1m[It][0m[38;5;9m at: [1mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/smoke/scenario_test.go:22[0m [38;5;243m@ 07/03/25 23:42:38.704[0m
+[38;5;243m------------------------------[0m
+[0mAPI Scenarios (Sequential from YAML Files) [0m[1mexecutes scenario files[0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/smoke/scenario_test.go:40[0m
+  [1mSTEP:[0m Processing scenario file: C:\Users\ls89152\OneDrive - NetApp Inc\Desktop\aaj vala\ndm\ndm-api-tests\tests\smoke\scenarios\accounts.yml [38;5;243m@ 07/03/25 23:42:38.704[0m
+  [38;5;9m[FAILED][0m in [It] - C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/smoke/scenario_test.go:47 [38;5;243m@ 07/03/25 23:42:38.705[0m
+[38;5;9m+ [FAILED] [0.001 seconds][0m
+[0mAPI Scenarios (Sequential from YAML Files) [38;5;9m[1m[It] executes scenario files[0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/smoke/scenario_test.go:40[0m
+
+  [38;5;9m[FAILED] sharedVars should be initialized
+  Expected
+      <map[string]interface {} | len:0>: nil
+  not to be nil[0m
+  [38;5;9mIn [1m[It][0m[38;5;9m at: [1mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/smoke/scenario_test.go:47[0m [38;5;243m@ 07/03/25 23:42:38.705[0m
+[38;5;243m------------------------------[0m
+[0mAPI Scenarios (Sequential from YAML Files) [0m[1mexecutes cleanup[0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/smoke/scenario_test.go:126[0m
+  [38;5;9m[FAILED][0m in [It] - C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/smoke/scenario_test.go:128 [38;5;243m@ 07/03/25 23:42:38.705[0m
+[38;5;9m+ [FAILED] [0.001 seconds][0m
+[0mAPI Scenarios (Sequential from YAML Files) [38;5;9m[1m[It] executes cleanup[0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/smoke/scenario_test.go:126[0m
+
+  [38;5;9m[FAILED] Error during test environment cleanup
+  Expected
+      <*fmt.wrapError | 0xc00029e840>: 
+      failed to detach workers: no workers currently attached
+      {
+          msg: "failed to detach workers: no workers currently attached",
+          err: <*errors.errorString | 0xc00028af00>{
+              s: "no workers currently attached",
+          },
+      }
+  to be nil[0m
+  [38;5;9mIn [1m[It][0m[38;5;9m at: [1mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/smoke/scenario_test.go:128[0m [38;5;243m@ 07/03/25 23:42:38.705[0m
+[38;5;243m------------------------------[0m
+
+[38;5;9m[1mSummarizing 3 Failures:[0m
+  [38;5;9m[FAIL][0m [0mAPI Scenarios (Sequential from YAML Files) [38;5;9m[1m[It] executes initialization[0m
+  [38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/smoke/scenario_test.go:22[0m
+  [38;5;9m[FAIL][0m [0mAPI Scenarios (Sequential from YAML Files) [38;5;9m[1m[It] executes scenario files[0m
+  [38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/smoke/scenario_test.go:47[0m
+  [38;5;9m[FAIL][0m [0mAPI Scenarios (Sequential from YAML Files) [38;5;9m[1m[It] executes cleanup[0m
+  [38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/smoke/scenario_test.go:128[0m
+
+[38;5;9m[1mRan 3 of 3 Specs in 4.341 seconds[0m
+[38;5;9m[1mFAIL![0m -- [38;5;10m[1m0 Passed[0m | [38;5;9m[1m3 Failed[0m | [38;5;11m[1m0 Pending[0m | [38;5;14m[1m0 Skipped[0m
+--- FAIL: TestSmoke (4.34s)
+[1m[38;5;9mRerunning Suite[0m
+  It looks like you are calling RunSpecs more than once. Ginkgo does not support
+  rerunning suites.  If you want to rerun a suite try [1mginkgo --repeat=N[0m or
+  [1mginkgo --until-it-fails[0m
+
+  [1mLearn more at:[0m
+  [38;5;14m[4mhttp://onsi.github.io/ginkgo/#repeating-spec-runs-and-managing-flaky-specs[0m
+
+
+Ginkgo ran 1 suite in 8.4863601s
+
+Test Suite Failed
+DEBUG: Request method is GET
+2025/07/03 23:42:42 [DEBUG] Status check response: RUNNING
+2025/07/03 23:42:42 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 21
+2025/07/03 23:42:42 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:42:48 [DEBUG] Status check response: RUNNING
+2025/07/03 23:42:48 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 22
+2025/07/03 23:42:48 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:42:53 [DEBUG] Status check response: RUNNING
+2025/07/03 23:42:53 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 23
+2025/07/03 23:42:53 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:42:58 [DEBUG] Status check response: RUNNING
+2025/07/03 23:42:58 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 24
+2025/07/03 23:42:58 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:43:03 [DEBUG] Status check response: RUNNING
+2025/07/03 23:43:03 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 25
+2025/07/03 23:43:03 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:43:08 [DEBUG] Status check response: RUNNING
+2025/07/03 23:43:08 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 26
+2025/07/03 23:43:08 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:43:13 [DEBUG] Status check response: RUNNING
+2025/07/03 23:43:13 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 27
+2025/07/03 23:43:13 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:43:18 [DEBUG] Status check response: RUNNING
+2025/07/03 23:43:18 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 28
+2025/07/03 23:43:18 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:43:23 [DEBUG] Status check response: RUNNING
+2025/07/03 23:43:23 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 29
+2025/07/03 23:43:23 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:43:29 [DEBUG] Status check response: RUNNING
+2025/07/03 23:43:29 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 30
+2025/07/03 23:43:29 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:43:34 [DEBUG] Status check response: RUNNING
+2025/07/03 23:43:34 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 31
+2025/07/03 23:43:34 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:43:39 [DEBUG] Status check response: RUNNING
+2025/07/03 23:43:39 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 32
+2025/07/03 23:43:39 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:43:44 [DEBUG] Status check response: RUNNING
+2025/07/03 23:43:44 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 33
+2025/07/03 23:43:44 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:43:49 [DEBUG] Status check response: RUNNING
+2025/07/03 23:43:49 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 34
+2025/07/03 23:43:49 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:43:54 [DEBUG] Status check response: RUNNING
+2025/07/03 23:43:54 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 35
+2025/07/03 23:43:54 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:43:59 [DEBUG] Status check response: RUNNING
+2025/07/03 23:43:59 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 36
+2025/07/03 23:43:59 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:44:05 [DEBUG] Status check response: RUNNING
+2025/07/03 23:44:05 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 37
+2025/07/03 23:44:05 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:44:10 [DEBUG] Status check response: RUNNING
+2025/07/03 23:44:10 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 38
+2025/07/03 23:44:10 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:44:15 [DEBUG] Status check response: RUNNING
+2025/07/03 23:44:15 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 39
+2025/07/03 23:44:15 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:44:20 [DEBUG] Status check response: RUNNING
+2025/07/03 23:44:20 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 40
+2025/07/03 23:44:20 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:44:25 [DEBUG] Status check response: RUNNING
+2025/07/03 23:44:25 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 41
+2025/07/03 23:44:25 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:44:30 [DEBUG] Status check response: RUNNING
+2025/07/03 23:44:30 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 42
+2025/07/03 23:44:30 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:44:35 [DEBUG] Status check response: RUNNING
+2025/07/03 23:44:35 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 43
+2025/07/03 23:44:35 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:44:41 [DEBUG] Status check response: RUNNING
+2025/07/03 23:44:41 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 44
+2025/07/03 23:44:41 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:44:46 [DEBUG] Status check response: RUNNING
+2025/07/03 23:44:46 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 45
+2025/07/03 23:44:46 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:44:51 [DEBUG] Status check response: RUNNING
+2025/07/03 23:44:51 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 46
+2025/07/03 23:44:51 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:44:56 [DEBUG] Status check response: RUNNING
+2025/07/03 23:44:56 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 47
+2025/07/03 23:44:56 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:45:01 [DEBUG] Status check response: RUNNING
+2025/07/03 23:45:01 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 48
+2025/07/03 23:45:01 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:45:07 [DEBUG] Status check response: RUNNING
+2025/07/03 23:45:07 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 49
+2025/07/03 23:45:07 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:45:12 [DEBUG] Status check response: RUNNING
+2025/07/03 23:45:12 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 50
+2025/07/03 23:45:12 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:45:17 [DEBUG] Status check response: RUNNING
+2025/07/03 23:45:17 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 51
+2025/07/03 23:45:17 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:45:22 [DEBUG] Status check response: RUNNING
+2025/07/03 23:45:22 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 52
+2025/07/03 23:45:22 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:45:27 [DEBUG] Status check response: RUNNING
+2025/07/03 23:45:27 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 53
+2025/07/03 23:45:27 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:45:32 [DEBUG] Status check response: RUNNING
+2025/07/03 23:45:32 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 54
+2025/07/03 23:45:32 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:45:37 [DEBUG] Status check response: RUNNING
+2025/07/03 23:45:37 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 55
+2025/07/03 23:45:37 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:45:43 [DEBUG] Status check response: RUNNING
+2025/07/03 23:45:43 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 56
+2025/07/03 23:45:43 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:45:48 [DEBUG] Status check response: RUNNING
+2025/07/03 23:45:48 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 57
+2025/07/03 23:45:48 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:45:53 [DEBUG] Status check response: RUNNING
+2025/07/03 23:45:53 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 58
+2025/07/03 23:45:53 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:45:58 [DEBUG] Status check response: RUNNING
+2025/07/03 23:45:58 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 59
+2025/07/03 23:45:58 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:46:03 [DEBUG] Status check response: RUNNING
+2025/07/03 23:46:03 [DEBUG] Checking job run status for ID 14182771-9a19-42e0-90f3-fa91577b1e4d, attempt 60
+2025/07/03 23:46:03 [DEBUG] Current job run status: RUNNING
+  [38;5;9m[FAILED][0m in [It] - C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-003_test.go:98 [38;5;243m@ 07/03/25 23:46:08.796[0m
+2025/07/03 23:46:10 [DEBUG] Successfully detached worker 10.192.7.107 with output: Service datamigrator-worker.service is not active. Skipping stop/disable.
+Successfully disabled worker service
+2025/07/03 23:46:10 [DEBUG] Detach workers output: Successfully detached worker 10.192.7.107 with output: Service datamigrator-worker.service is not active. Skipping stop/disable.
+Successfully disabled worker service
+
+2025/07/03 23:46:10 [DEBUG] Test environment deletion complete.
+  [1mSTEP:[0m Cleanup complete. [38;5;243m@ 07/03/25 23:46:10.672[0m
+[38;5;9m+ [FAILED] [362.736 seconds][0m
+[0mRTC-003: Test discovery with single worker and restart the worker service during discovery for NFS [38;5;243mRTC-003 [38;5;9m[1m[It] RTC-003: Test discovery with single worker and restart the worker service during discovery for NFS[0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-003_test.go:32[0m
+
+  [38;5;9m[FAILED] Discovery job did not pause successfully, err: job 14182771-9a19-42e0-90f3-fa91577b1e4d did not reach state PAUSED after 60 retries
+  Unexpected error:
+      <*errors.errorString | 0xc000212a40>: 
+      job 14182771-9a19-42e0-90f3-fa91577b1e4d did not reach state PAUSED after 60 retries
+      {
+          s: "job 14182771-9a19-42e0-90f3-fa91577b1e4d did not reach state PAUSED after 60 retries",
+      }
+  occurred[0m
+  [38;5;9mIn [1m[It][0m[38;5;9m at: [1mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-003_test.go:98[0m [38;5;243m@ 07/03/25 23:46:08.796[0m
+[38;5;243m------------------------------[0m
+[0mRTC-001-002: Check worker status when worker goes down/becomes unhealthy [38;5;243mRTC-001-002 [0m[1mRTC-001-002: Check worker status when worker goes down/becomes unhealthy[0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-001-002_test.go:31[0m
+DEBUG: Request method is POST
+DEBUG: Request method is POST
+2025/07/03 23:46:10 [DEBUG] Project created with ID: c6e34b6a-9df3-4c52-952d-3bbd1e12b2df
+2025/07/03 23:46:11 [DEBUG] For worker 10.192.7.107, running script: 
+	sudo su -c '
+	export WORKER_ID=dbed94a9-10eb-4fd3-8414-7736a5f5f858
+	export WORKER_SECRET=d9a6ac78-0d04-4e01-9513-aabc624a46fa
+	export CONTROL_PLANE_IP=10.192.7.54
+	sh /opt/datamigrator/bin/worker_register.sh
+	'
+	
+DEBUG: Request method is GET
+2025/07/03 23:46:12 [DEBUG] Output from worker 10.192.7.107: [2025-07-03 18:16:12] Checking required environment variables...
+[2025-07-03 18:16:12] Required environment variables are set.
+[2025-07-03 18:16:12] Checking for existing variables in /opt/datamigrator/conf/worker.env.
+[2025-07-03 18:16:12] Creating /opt/datamigrator/conf/worker.env with necessary environment variables.
+[2025-07-03 18:16:12] /opt/datamigrator/conf/worker.env file created successfully.
+[2025-07-03 18:16:12] Starting the worker service.
+[2025-07-03 18:16:12] Attempt 1: systemctl start datamigrator-worker.service
+[2025-07-03 18:16:12] Enabling worker service to start on boot.
+[2025-07-03 18:16:12] Attempt 1: systemctl enable datamigrator-worker.service
+[2025-07-03 18:16:12] Worker service setup complete. Service started and enabled successfully.
+2025/07/03 23:46:12 [DEBUG] Successfully registered worker 10.192.7.107 with workerId: dbed94a9-10eb-4fd3-8414-7736a5f5f858
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+2025/07/03 23:46:23 [DEBUG] Worker dbed94a9-10eb-4fd3-8414-7736a5f5f858 is Online
+attachedWorkersConfig: map[dbed94a9-10eb-4fd3-8414-7736a5f5f858:{ubuntu 10.192.7.107 22 Dm@admin123}]
+2025/07/03 23:46:23 [DEBUG] All workers are Online
+2025/07/03 23:46:23 [DEBUG] Test environment setup complete and all worker are Online
+  [1mSTEP:[0m ########################## RTC-001-002 start ################################ [38;5;243m@ 07/03/25 23:46:23.043[0m
+DEBUG: Request method is GET
+  [1mSTEP:[0m Detaching worker: dbed94a9-10eb-4fd3-8414-7736a5f5f858 [38;5;243m@ 07/03/25 23:46:23.135[0m
+2025/07/03 23:46:24 [DEBUG] Worker 10.192.7.107 stopped successfully with output: Service datamigrator-worker.service is active. Stopping and disabling...
+Successfully stopped worker service
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+2025/07/03 23:49:26 [DEBUG] Worker 10.192.7.107 started successfully with output: Service datamigrator-worker.service is not active. Starting...
+Successfully started worker service
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+  [1mSTEP:[0m ########################## RTC-001-002 end ################################ [38;5;243m@ 07/03/25 23:49:36.974[0m
+2025/07/03 23:49:38 [DEBUG] Successfully detached worker 10.192.7.107 with output: Service datamigrator-worker.service is active. Stopping and disabling...
+Successfully disabled worker service
+  [1mSTEP:[0m Cleanup complete. [38;5;243m@ 07/03/25 23:49:38.888[0m
+2025/07/03 23:49:38 [DEBUG] Detach workers output: Successfully detached worker 10.192.7.107 with output: Service datamigrator-worker.service is active. Stopping and disabling...
+Successfully disabled worker service
+
+2025/07/03 23:49:38 [DEBUG] Test environment deletion complete.
+[38;5;10m+ [208.215 seconds][0m
+[38;5;243m------------------------------[0m
+[0mRTC-004: Test migration with single worker and make worker unhealthy during migration for NFS [38;5;243mRTC-004 [0m[1mRTC-004: Test migration with single worker and make worker unhealthy during migration for NFS[0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-004_test.go:32[0m
+DEBUG: Request method is POST
+DEBUG: Request method is POST
+2025/07/03 23:49:39 [DEBUG] Project created with ID: 11f9ae0a-48f4-419c-868f-bdab93f94b6a
+2025/07/03 23:49:39 [DEBUG] For worker 10.192.7.107, running script: 
+	sudo su -c '
+	export WORKER_ID=5840c533-f209-42e6-b82f-0b7bea69d4c7
+	export WORKER_SECRET=b81d18a5-bda9-4170-b409-c61735329b07
+	export CONTROL_PLANE_IP=10.192.7.54
+	sh /opt/datamigrator/bin/worker_register.sh
+	'
+	
+DEBUG: Request method is GET
+2025/07/03 23:49:40 [DEBUG] Output from worker 10.192.7.107: [2025-07-03 18:19:40] Checking required environment variables...
+[2025-07-03 18:19:40] Required environment variables are set.
+[2025-07-03 18:19:40] Checking for existing variables in /opt/datamigrator/conf/worker.env.
+[2025-07-03 18:19:40] Creating /opt/datamigrator/conf/worker.env with necessary environment variables.
+[2025-07-03 18:19:40] /opt/datamigrator/conf/worker.env file created successfully.
+[2025-07-03 18:19:40] Starting the worker service.
+[2025-07-03 18:19:40] Attempt 1: systemctl start datamigrator-worker.service
+[2025-07-03 18:19:40] Enabling worker service to start on boot.
+[2025-07-03 18:19:40] Attempt 1: systemctl enable datamigrator-worker.service
+[2025-07-03 18:19:40] Worker service setup complete. Service started and enabled successfully.
+2025/07/03 23:49:40 [DEBUG] Successfully registered worker 10.192.7.107 with workerId: 5840c533-f209-42e6-b82f-0b7bea69d4c7
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+  [1mSTEP:[0m ########################## RTC-004 start ################################ [38;5;243m@ 07/03/25 23:49:51.194[0m
+  [1mSTEP:[0m Creating the source file server [38;5;243m@ 07/03/25 23:49:51.194[0m
+DEBUG: Request method is POST
+2025/07/03 23:49:51 [DEBUG] Worker 5840c533-f209-42e6-b82f-0b7bea69d4c7 is Online
+2025/07/03 23:49:51 [DEBUG] All workers are Online
+2025/07/03 23:49:51 [DEBUG] Test environment setup complete and all worker are Online
+  [1mSTEP:[0m Source file server created with config ID: &http.Response{Status:"201 Created", StatusCode:201, Proto:"HTTP/1.1", ProtoMajor:1, ProtoMinor:1, Header:http.Header{"Access-Control-Allow-Origin":[]string{"*"}, "Connection":[]string{"keep-alive"}, "Content-Length":[]string{"1431"}, "Content-Type":[]string{"application/json; charset=utf-8"}, "Date":[]string{"Thu, 03 Jul 2025 18:19:51 GMT"}, "Etag":[]string{"W/\"597-hMHBF9AB6dVHwFygTQvj1W1aYcM\""}, "Strict-Transport-Security":[]string{"max-age=31536000; includeSubDomains"}, "X-Powered-By":[]string{"Express"}}, Body:(*http.cancelTimerBody)(0xc0002ba280), ContentLength:1431, TransferEncoding:[]string(nil), Close:false, Uncompressed:false, Trailer:http.Header(nil), Request:(*http.Request)(0xc000246c80), TLS:(*tls.ConnectionState)(0xc000122180)} [38;5;243m@ 07/03/25 23:49:51.46[0m
+  [1mSTEP:[0m Getting the source file server by config ID and fetching the volumes [38;5;243m@ 07/03/25 23:49:51.46[0m
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+ID of the volume with path '/volSrcAuto': 77470111-71ed-409d-b8bc-8f928bcbf0a0
+  [1mSTEP:[0m Creating the destination file server [38;5;243m@ 07/03/25 23:50:02.922[0m
+DEBUG: Request method is POST
+  [1mSTEP:[0m Getting the destination file server by configId [38;5;243m@ 07/03/25 23:50:03.369[0m
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+ID of the volume with path '/vol_dest_automation': 3d8e9154-3279-437b-b3be-1cb2c92c3a2f
+  [1mSTEP:[0m Creating a migration job [38;5;243m@ 07/03/25 23:50:09.344[0m
+DEBUG: Request method is POST
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+  [1mSTEP:[0m Waiting for the migration job to start running [38;5;243m@ 07/03/25 23:50:14.738[0m
+DEBUG: Request method is GET
+2025/07/03 23:50:14 [DEBUG] Status check response: READY
+2025/07/03 23:50:14 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 1
+2025/07/03 23:50:14 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/03 23:50:19 [DEBUG] Status check response: READY
+2025/07/03 23:50:19 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 2
+2025/07/03 23:50:19 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/03 23:50:25 [DEBUG] Status check response: READY
+2025/07/03 23:50:25 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 3
+2025/07/03 23:50:25 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/03 23:50:30 [DEBUG] Status check response: READY
+2025/07/03 23:50:30 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 4
+2025/07/03 23:50:30 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/03 23:50:35 [DEBUG] Status check response: READY
+2025/07/03 23:50:35 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 5
+2025/07/03 23:50:35 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/03 23:50:40 [DEBUG] Status check response: READY
+2025/07/03 23:50:40 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 6
+2025/07/03 23:50:40 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/03 23:50:45 [DEBUG] Status check response: RUNNING
+  [1mSTEP:[0m Make the worker go down by stopping the worker service [38;5;243m@ 07/03/25 23:50:45.92[0m
+2025/07/03 23:50:45 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 7
+2025/07/03 23:50:45 [DEBUG] Current job run status: RUNNING
+2025/07/03 23:50:45 [DEBUG] Job reached desired state: RUNNING.
+2025/07/03 23:50:47 [DEBUG] Worker 10.192.7.107 stopped successfully with output: Service datamigrator-worker.service is active. Stopping and disabling...
+Successfully stopped worker service
+  [1mSTEP:[0m Checking if Migration job is paused [38;5;243m@ 07/03/25 23:50:47.82[0m
+DEBUG: Request method is GET
+2025/07/03 23:50:47 [DEBUG] Status check response: RUNNING
+2025/07/03 23:50:47 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 1
+2025/07/03 23:50:47 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:50:53 [DEBUG] Status check response: RUNNING
+2025/07/03 23:50:53 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 2
+2025/07/03 23:50:53 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:50:58 [DEBUG] Status check response: RUNNING
+2025/07/03 23:50:58 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 3
+2025/07/03 23:50:58 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:51:03 [DEBUG] Status check response: RUNNING
+2025/07/03 23:51:03 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 4
+2025/07/03 23:51:03 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:51:08 [DEBUG] Status check response: RUNNING
+2025/07/03 23:51:08 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 5
+2025/07/03 23:51:08 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:51:13 [DEBUG] Status check response: RUNNING
+2025/07/03 23:51:13 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 6
+2025/07/03 23:51:13 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:51:18 [DEBUG] Status check response: RUNNING
+2025/07/03 23:51:18 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 7
+2025/07/03 23:51:18 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:51:23 [DEBUG] Status check response: RUNNING
+2025/07/03 23:51:23 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 8
+2025/07/03 23:51:23 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:51:28 [DEBUG] Status check response: RUNNING
+2025/07/03 23:51:28 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 9
+2025/07/03 23:51:28 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:51:34 [DEBUG] Status check response: RUNNING
+2025/07/03 23:51:34 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 10
+2025/07/03 23:51:34 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:51:39 [DEBUG] Status check response: RUNNING
+2025/07/03 23:51:39 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 11
+2025/07/03 23:51:39 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:51:44 [DEBUG] Status check response: RUNNING
+2025/07/03 23:51:44 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 12
+2025/07/03 23:51:44 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:51:49 [DEBUG] Status check response: RUNNING
+2025/07/03 23:51:49 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 13
+2025/07/03 23:51:49 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:51:54 [DEBUG] Status check response: RUNNING
+2025/07/03 23:51:54 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 14
+2025/07/03 23:51:54 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:51:59 [DEBUG] Status check response: RUNNING
+2025/07/03 23:51:59 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 15
+2025/07/03 23:51:59 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:52:04 [DEBUG] Status check response: RUNNING
+2025/07/03 23:52:04 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 16
+2025/07/03 23:52:04 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:52:10 [DEBUG] Status check response: RUNNING
+2025/07/03 23:52:10 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 17
+2025/07/03 23:52:10 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:52:15 [DEBUG] Status check response: RUNNING
+2025/07/03 23:52:15 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 18
+2025/07/03 23:52:15 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:52:20 [DEBUG] Status check response: RUNNING
+2025/07/03 23:52:20 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 19
+2025/07/03 23:52:20 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:52:25 [DEBUG] Status check response: RUNNING
+2025/07/03 23:52:25 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 20
+2025/07/03 23:52:25 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:52:30 [DEBUG] Status check response: RUNNING
+2025/07/03 23:52:30 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 21
+2025/07/03 23:52:30 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:52:35 [DEBUG] Status check response: RUNNING
+2025/07/03 23:52:35 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 22
+2025/07/03 23:52:35 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:52:41 [DEBUG] Status check response: RUNNING
+2025/07/03 23:52:41 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 23
+2025/07/03 23:52:41 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:52:46 [DEBUG] Status check response: RUNNING
+2025/07/03 23:52:46 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 24
+2025/07/03 23:52:46 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:52:51 [DEBUG] Status check response: RUNNING
+2025/07/03 23:52:51 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 25
+2025/07/03 23:52:51 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:52:56 [DEBUG] Status check response: RUNNING
+2025/07/03 23:52:56 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 26
+2025/07/03 23:52:56 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:53:01 [DEBUG] Status check response: RUNNING
+2025/07/03 23:53:01 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 27
+2025/07/03 23:53:01 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:53:06 [DEBUG] Status check response: RUNNING
+2025/07/03 23:53:06 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 28
+2025/07/03 23:53:06 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:53:11 [DEBUG] Status check response: RUNNING
+2025/07/03 23:53:11 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 29
+2025/07/03 23:53:11 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:53:16 [DEBUG] Status check response: RUNNING
+2025/07/03 23:53:16 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 30
+2025/07/03 23:53:16 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:53:22 [DEBUG] Status check response: RUNNING
+2025/07/03 23:53:22 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 31
+2025/07/03 23:53:22 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:53:27 [DEBUG] Status check response: RUNNING
+2025/07/03 23:53:27 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 32
+2025/07/03 23:53:27 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:53:32 [DEBUG] Status check response: RUNNING
+2025/07/03 23:53:32 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 33
+2025/07/03 23:53:32 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:53:37 [DEBUG] Status check response: RUNNING
+2025/07/03 23:53:37 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 34
+2025/07/03 23:53:37 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:53:42 [DEBUG] Status check response: RUNNING
+2025/07/03 23:53:42 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 35
+2025/07/03 23:53:42 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:53:47 [DEBUG] Status check response: RUNNING
+2025/07/03 23:53:47 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 36
+2025/07/03 23:53:47 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:53:52 [DEBUG] Status check response: RUNNING
+2025/07/03 23:53:52 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 37
+2025/07/03 23:53:52 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:53:58 [DEBUG] Status check response: RUNNING
+2025/07/03 23:53:58 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 38
+2025/07/03 23:53:58 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:54:03 [DEBUG] Status check response: RUNNING
+2025/07/03 23:54:03 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 39
+2025/07/03 23:54:03 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:54:08 [DEBUG] Status check response: RUNNING
+2025/07/03 23:54:08 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 40
+2025/07/03 23:54:08 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:54:13 [DEBUG] Status check response: RUNNING
+2025/07/03 23:54:13 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 41
+2025/07/03 23:54:13 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:54:18 [DEBUG] Status check response: RUNNING
+2025/07/03 23:54:18 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 42
+2025/07/03 23:54:18 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:54:23 [DEBUG] Status check response: RUNNING
+2025/07/03 23:54:23 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 43
+2025/07/03 23:54:23 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:54:28 [DEBUG] Status check response: RUNNING
+2025/07/03 23:54:28 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 44
+2025/07/03 23:54:28 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:54:34 [DEBUG] Status check response: RUNNING
+2025/07/03 23:54:34 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 45
+2025/07/03 23:54:34 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:54:39 [DEBUG] Status check response: RUNNING
+2025/07/03 23:54:39 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 46
+2025/07/03 23:54:39 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:54:44 [DEBUG] Status check response: RUNNING
+2025/07/03 23:54:44 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 47
+2025/07/03 23:54:44 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:54:49 [DEBUG] Status check response: RUNNING
+2025/07/03 23:54:49 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 48
+2025/07/03 23:54:49 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:54:54 [DEBUG] Status check response: RUNNING
+2025/07/03 23:54:54 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 49
+2025/07/03 23:54:54 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:54:59 [DEBUG] Status check response: RUNNING
+2025/07/03 23:54:59 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 50
+2025/07/03 23:54:59 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:55:04 [DEBUG] Status check response: RUNNING
+2025/07/03 23:55:04 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 51
+2025/07/03 23:55:04 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:55:10 [DEBUG] Status check response: RUNNING
+2025/07/03 23:55:10 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 52
+2025/07/03 23:55:10 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:55:15 [DEBUG] Status check response: RUNNING
+2025/07/03 23:55:15 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 53
+2025/07/03 23:55:15 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:55:20 [DEBUG] Status check response: RUNNING
+2025/07/03 23:55:20 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 54
+2025/07/03 23:55:20 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:55:26 [DEBUG] Status check response: RUNNING
+2025/07/03 23:55:26 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 55
+2025/07/03 23:55:26 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:55:31 [DEBUG] Status check response: RUNNING
+2025/07/03 23:55:31 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 56
+2025/07/03 23:55:31 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:55:36 [DEBUG] Status check response: RUNNING
+2025/07/03 23:55:36 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 57
+2025/07/03 23:55:36 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:55:41 [DEBUG] Status check response: RUNNING
+2025/07/03 23:55:41 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 58
+2025/07/03 23:55:41 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:55:46 [DEBUG] Status check response: RUNNING
+2025/07/03 23:55:46 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 59
+2025/07/03 23:55:46 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/03 23:55:51 [DEBUG] Status check response: RUNNING
+2025/07/03 23:55:51 [DEBUG] Checking job run status for ID 0df2031e-1efa-4e2e-9d5c-25e66baa723c, attempt 60
+2025/07/03 23:55:51 [DEBUG] Current job run status: RUNNING
+  [38;5;9m[FAILED][0m in [It] - C:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-004_test.go:123 [38;5;243m@ 07/03/25 23:55:56.697[0m
+2025/07/03 23:55:59 [DEBUG] Successfully detached worker 10.192.7.107 with output: Service datamigrator-worker.service is not active. Skipping stop/disable.
+Successfully disabled worker service
+  [1mSTEP:[0m Cleanup complete. [38;5;243m@ 07/03/25 23:55:59.587[0m
+2025/07/03 23:55:59 [DEBUG] Detach workers output: Successfully detached worker 10.192.7.107 with output: Service datamigrator-worker.service is not active. Skipping stop/disable.
+Successfully disabled worker service
+
+2025/07/03 23:55:59 [DEBUG] Test environment deletion complete.
+[38;5;9m+ [FAILED] [380.698 seconds][0m
+[0mRTC-004: Test migration with single worker and make worker unhealthy during migration for NFS [38;5;243mRTC-004 [38;5;9m[1m[It] RTC-004: Test migration with single worker and make worker unhealthy during migration for NFS[0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-004_test.go:32[0m
+
+  [38;5;9m[FAILED] Migration job did not pause successfully, err: job 0df2031e-1efa-4e2e-9d5c-25e66baa723c did not reach state PAUSED after 60 retries
+  Unexpected error:
+      <*errors.errorString | 0xc00030e260>: 
+      job 0df2031e-1efa-4e2e-9d5c-25e66baa723c did not reach state PAUSED after 60 retries
+      {
+          s: "job 0df2031e-1efa-4e2e-9d5c-25e66baa723c did not reach state PAUSED after 60 retries",
+      }
+  occurred[0m
+  [38;5;9mIn [1m[It][0m[38;5;9m at: [1mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-004_test.go:123[0m [38;5;243m@ 07/03/25 23:55:56.697[0m
+[38;5;243m------------------------------[0m
+[0mRTC-005: Test migration with 2 worker and make worker unhealthy during migration for NFS [38;5;243mRTC-005 [0m[1mRTC-005: Test migration with 2 workers and make one worker unhealthy during migration for NFS[0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-005_test.go:34[0m
+DEBUG: Request method is POST
+DEBUG: Request method is POST
+2025/07/03 23:56:00 [DEBUG] Project created with ID: 6e6c7c79-88a4-4b79-ab1f-82c441b1df5b
+2025/07/03 23:56:00 [DEBUG] For worker 10.192.7.107, running script: 
+	sudo su -c '
+	export WORKER_ID=2ecdc85d-f6c3-44b6-b7d1-d84574d30510
+	export WORKER_SECRET=0a9d157f-5220-4040-be37-94bdd4014d07
+	export CONTROL_PLANE_IP=10.192.7.54
+	sh /opt/datamigrator/bin/worker_register.sh
+	'
+	
+2025/07/03 23:56:01 [DEBUG] Output from worker 10.192.7.107: [2025-07-03 18:26:01] Checking required environment variables...
+[2025-07-03 18:26:01] Required environment variables are set.
+[2025-07-03 18:26:01] Checking for existing variables in /opt/datamigrator/conf/worker.env.
+[2025-07-03 18:26:01] Creating /opt/datamigrator/conf/worker.env with necessary environment variables.
+[2025-07-03 18:26:01] /opt/datamigrator/conf/worker.env file created successfully.
+[2025-07-03 18:26:01] Starting the worker service.
+[2025-07-03 18:26:01] Attempt 1: systemctl start datamigrator-worker.service
+[2025-07-03 18:26:01] Enabling worker service to start on boot.
+[2025-07-03 18:26:01] Attempt 1: systemctl enable datamigrator-worker.service
+[2025-07-03 18:26:01] Worker service setup complete. Service started and enabled successfully.
+DEBUG: Request method is POST
+2025/07/03 23:56:01 [DEBUG] Successfully registered worker 10.192.7.107 with workerId: 2ecdc85d-f6c3-44b6-b7d1-d84574d30510
+2025/07/03 23:56:02 [DEBUG] For worker 10.192.7.101, running script: 
+	sudo su -c '
+	export WORKER_ID=8a593ef5-29b9-4122-a99e-054674b552f3
+	export WORKER_SECRET=609f3b92-8d94-45c5-9006-880d3abf15fe
+	export CONTROL_PLANE_IP=10.192.7.54
+	sh /opt/datamigrator/bin/worker_register.sh
+	'
+	
+DEBUG: Request method is GET
+2025/07/03 23:56:05 [DEBUG] Output from worker 10.192.7.101: [2025-07-03 18:26:04] Checking required environment variables...
+[2025-07-03 18:26:04] Required environment variables are set.
+[2025-07-03 18:26:04] Checking for existing variables in /opt/datamigrator/conf/worker.env.
+[2025-07-03 18:26:04] Creating /opt/datamigrator/conf/worker.env with necessary environment variables.
+[2025-07-03 18:26:04] /opt/datamigrator/conf/worker.env file created successfully.
+[2025-07-03 18:26:04] Starting the worker service.
+[2025-07-03 18:26:04] Attempt 1: systemctl start datamigrator-worker.service
+[2025-07-03 18:26:04] Enabling worker service to start on boot.
+[2025-07-03 18:26:04] Attempt 1: systemctl enable datamigrator-worker.service
+[2025-07-03 18:26:04] Worker service setup complete. Service started and enabled successfully.
+2025/07/03 23:56:05 [DEBUG] Successfully registered worker 10.192.7.101 with workerId: 8a593ef5-29b9-4122-a99e-054674b552f3
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+2025/07/03 23:56:15 [DEBUG] Worker 2ecdc85d-f6c3-44b6-b7d1-d84574d30510 is Online
+2025/07/03 23:56:15 [DEBUG] Worker 8a593ef5-29b9-4122-a99e-054674b552f3 is Online
+2025/07/03 23:56:15 [DEBUG] All workers are Online
+2025/07/03 23:56:15 [DEBUG] Test environment setup complete and all worker are Online
+  [1mSTEP:[0m ########################## RTC-005 start ################################ [38;5;243m@ 07/03/25 23:56:15.361[0m
+  [1mSTEP:[0m Creating the source file server [38;5;243m@ 07/03/25 23:56:15.361[0m
+DEBUG: Request method is POST
+  [1mSTEP:[0m Source file server created with config ID: &http.Response{Status:"201 Created", StatusCode:201, Proto:"HTTP/1.1", ProtoMajor:1, ProtoMinor:1, Header:http.Header{"Access-Control-Allow-Origin":[]string{"*"}, "Connection":[]string{"keep-alive"}, "Content-Length":[]string{"2084"}, "Content-Type":[]string{"application/json; charset=utf-8"}, "Date":[]string{"Thu, 03 Jul 2025 18:26:15 GMT"}, "Etag":[]string{"W/\"824-RrOgPlGsazW8cw1ehc6Izn5MlwI\""}, "Strict-Transport-Security":[]string{"max-age=31536000; includeSubDomains"}, "X-Powered-By":[]string{"Express"}}, Body:(*http.cancelTimerBody)(0xc00008c680), ContentLength:2084, TransferEncoding:[]string(nil), Close:false, Uncompressed:false, Trailer:http.Header(nil), Request:(*http.Request)(0xc000246dc0), TLS:(*tls.ConnectionState)(0xc00020e240)} [38;5;243m@ 07/03/25 23:56:15.618[0m
+  [1mSTEP:[0m Getting the source file server by config ID and fetching the volumes [38;5;243m@ 07/03/25 23:56:15.618[0m
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+ID of the volume with path '/volSrcAuto': 1c535993-64d6-4bcf-8b26-15abdb54a85e
+  [1mSTEP:[0m Creating the destination file server [38;5;243m@ 07/03/25 23:56:43.63[0m
+DEBUG: Request method is POST
+  [1mSTEP:[0m Getting the destination file server by configId [38;5;243m@ 07/03/25 23:56:44.031[0m
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+ID of the volume with path '/vol_dest_automation': 8f45ed0d-2b16-43a7-afbd-88d96a47f7f4
+  [1mSTEP:[0m Creating a migration job [38;5;243m@ 07/03/25 23:56:55.388[0m
+DEBUG: Request method is POST
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+  [1mSTEP:[0m Waiting for the migration job to start running [38;5;243m@ 07/03/25 23:57:06.007[0m
+DEBUG: Request method is GET
+2025/07/03 23:57:06 [DEBUG] Status check response: READY
+2025/07/03 23:57:06 [DEBUG] Checking job run status for ID 52da8f46-7cb8-438f-a60e-b2a5a39d77d8, attempt 1
+2025/07/03 23:57:06 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/03 23:57:11 [DEBUG] Status check response: READY
+2025/07/03 23:57:11 [DEBUG] Checking job run status for ID 52da8f46-7cb8-438f-a60e-b2a5a39d77d8, attempt 2
+2025/07/03 23:57:11 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/03 23:57:16 [DEBUG] Status check response: READY
+2025/07/03 23:57:16 [DEBUG] Checking job run status for ID 52da8f46-7cb8-438f-a60e-b2a5a39d77d8, attempt 3
+2025/07/03 23:57:16 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/03 23:57:21 [DEBUG] Status check response: READY
+2025/07/03 23:57:21 [DEBUG] Checking job run status for ID 52da8f46-7cb8-438f-a60e-b2a5a39d77d8, attempt 4
+2025/07/03 23:57:21 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/03 23:57:26 [DEBUG] Status check response: RUNNING
+2025/07/03 23:57:26 [DEBUG] Checking job run status for ID 52da8f46-7cb8-438f-a60e-b2a5a39d77d8, attempt 5
+2025/07/03 23:57:26 [DEBUG] Current job run status: RUNNING
+2025/07/03 23:57:26 [DEBUG] Job reached desired state: RUNNING.
+  [1mSTEP:[0m Make one worker go down by stopping the worker service [38;5;243m@ 07/03/25 23:57:26.69[0m
+2025/07/03 23:57:29 [DEBUG] Worker 10.192.7.101 stopped successfully with output: Service datamigrator-worker.service is active. Stopping and disabling...
+Successfully stopped worker service
+  [1mSTEP:[0m Bringing the worker back online by starting the worker service [38;5;243m@ 07/03/25 23:58:29.069[0m
+  [1mSTEP:[0m Checking if Migration job is completed [38;5;243m@ 07/03/25 23:58:31.362[0m
+DEBUG: Request method is GET
+2025/07/03 23:58:31 [DEBUG] Worker 10.192.7.101 started successfully with output: Service datamigrator-worker.service is not active. Starting...
+Successfully started worker service
+2025/07/03 23:58:31 [DEBUG] Status check response: COMPLETED
+2025/07/03 23:58:31 [DEBUG] Checking job run status for ID 52da8f46-7cb8-438f-a60e-b2a5a39d77d8, attempt 1
+2025/07/03 23:58:31 [DEBUG] Current job run status: COMPLETED
+2025/07/03 23:58:31 [DEBUG] Job reached desired state: COMPLETED.
+  [1mSTEP:[0m ########################## RTC-005 end ################################ [38;5;243m@ 07/03/25 23:58:31.772[0m
+2025/07/03 23:58:36 [DEBUG] Successfully detached worker 10.192.7.101 with output: Service datamigrator-worker.service is active. Stopping and disabling...
+Successfully disabled worker service
+2025/07/03 23:58:38 [DEBUG] Successfully detached worker 10.192.7.107 with output: Service datamigrator-worker.service is active. Stopping and disabling...
+Successfully disabled worker service
+  [1mSTEP:[0m Cleanup complete. [38;5;243m@ 07/03/25 23:58:38.067[0m2025/07/03 23:58:38 [DEBUG] Detach workers output: Successfully detached worker 10.192.7.101 with output: Service datamigrator-worker.service is active. Stopping and disabling...
+Successfully disabled worker service
+
+Successfully detached worker 10.192.7.107 with output: Service datamigrator-worker.service is active. Stopping and disabling...
+Successfully disabled worker service
+
+2025/07/03 23:58:38 [DEBUG] Test environment deletion complete.
+
+[38;5;10m+ [158.479 seconds][0m
+[38;5;243m------------------------------[0m
+
+[38;5;9m[1mSummarizing 2 Failures:[0m
+  [38;5;9m[FAIL][0m [0mRTC-003: Test discovery with single worker and restart the worker service during discovery for NFS [38;5;243mRTC-003 [38;5;9m[1m[It] RTC-003: Test discovery with single worker and restart the worker service during discovery for NFS[0m
+  [38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-003_test.go:98[0m
+  [38;5;9m[FAIL][0m [0mRTC-004: Test migration with single worker and make worker unhealthy during migration for NFS [38;5;243mRTC-004 [38;5;9m[1m[It] RTC-004: Test migration with single worker and make worker unhealthy during migration for NFS[0m
+  [38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/aaj vala/ndm/ndm-api-tests/tests/regression/RTC-004_test.go:123[0m
+
+[38;5;9m[1mRan 4 of 4 Specs in 1114.755 seconds[0m
+[38;5;9m[1mFAIL![0m -- [38;5;10m[1m2 Passed[0m | [38;5;9m[1m2 Failed[0m | [38;5;11m[1m0 Pending[0m | [38;5;14m[1m0 Skipped[0m
+--- FAIL: TestRegression (1114.75s)
+FAIL
+
+Ginkgo ran 1 suite in 18m38.2809932s
+
+Test Suite Failed

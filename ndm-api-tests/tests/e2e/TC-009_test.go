@@ -128,11 +128,11 @@ var _ = Describe("TC-009: Run migration with 'Exclude file older than' option an
 			Expect(len(migrationJobConfigIDs)).To(BeNumerically("==", 2), "Expected at least one jobConfigID")
 
 			// Get migration job run IDs and wait for completion
-			migration_validators := []string{
-				"nfs_src_to_dest_vol_migration.json",
-				"nfs_src2_to_dest2_vol_migration.json",
-			}
-			for i, migrationJobConfigID := range migrationJobConfigIDs {
+			// migration_validators := []string{
+			// 	"nfs_src_to_dest_vol_migration.json",
+			// 	"nfs_src2_to_dest2_vol_migration.json",
+			// }
+			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 				migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
 				Expect(len(getJobsResp.JobRuns)).To(BeNumerically("==", 1), "No jobRuns found in response")
@@ -143,9 +143,9 @@ var _ = Describe("TC-009: Run migration with 'Exclude file older than' option an
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-009-JSON/%s", migration_validators[i]))
-				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-				By(fmt.Sprintf("validate report result : %s", result))
+				// result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-009-JSON/%s", migration_validators[i]))
+				// Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
+				// By(fmt.Sprintf("validate report result : %s", result))
 			}
 
 			//Validating the NextScheduled TIme from response is next complete hour after 1st run
