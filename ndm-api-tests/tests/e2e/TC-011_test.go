@@ -1,0 +1,183 @@
+package tests
+
+import (
+	"fmt"
+	. "ndm-api-tests/utils"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+)
+
+var _ = Describe("TC-011: Run migration with 'Upload GID/UID Mapping' option", func() {
+	var (
+		ProjectId              string
+		workerId1              string
+		workerId2              string
+		workerIds              []string
+		err                    error
+		sourceVolumePath1      string
+		destinationVolumePath1 string
+		destinationVolumePath2 string
+		headers                map[string]string
+		attachedWorkersConfig  map[string]SSHConfig
+		sourceGrpId            int
+		destinationGrpId       int
+		sourceUserId           int
+		destinationUserId      int
+		fileWithGroup          string
+		csvData                string
+	)
+
+	Context("TC-011: Run migration with 'Upload GID/UID Mapping' option", func() {
+		BeforeEach(func() {
+			numberOfWorker := 2
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+			Expect(err).To(BeNil(), "Error during test environment setup")
+			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
+			workerIds = GetWorkerIds()
+			workerId1 = workerIds[0]
+			workerId2 = workerIds[1]
+			headers = GetHeaders(AuthToken, ContentTypeJSON)
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME)
+			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME)
+			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME_1)
+			sourceGrpId = 1033
+			destinationGrpId = 1034
+			sourceUserId = 1001
+			destinationUserId = 1002
+			fileWithGroup = "sample.txt"
+			// Base64 encoded CSV data for sourceGrpId=1033, destinationGrpId=1034, sourceUserId=1001, destinationUserId=1002
+			csvData =
+				"data:text/csv;charset=utf-8;base64,Z2lkX3NvdXJjZSxnaWRfdGFyZ2V0LHVpZF9zb3VyY2UsdWlkX3RhcmdldA0KMTAzMywxMDM0LDEwMDEsMTAwMg0K"
+
+		})
+
+		It("TC-011: Run migration with 'Upload GID/UID Mapping' option", func() {
+			By("########################## TC-011 start ################################")
+
+			var sourceConfigID, sourcePathID1, sourcePathID2 string
+			var migrationJobConfigIDs []string
+			var destinationConfigID, destinationPathID1, destinationPathID2 string
+
+			By("Creating the source file server")
+			sourceParams := CreateServereParams{
+				ConfigName:       "source-file-server",
+				ConfigType:       ConfigTypeFile,
+				ProjectID:        ProjectId,
+				ServerType:       ServerTypeOtherNAS,
+				UserName:         "Root",
+				Password:         "",
+				Protocol:         ProtocolNFS,
+				ProtocolVersion:  ProtocolVersion3,
+				Host:             SOURCE_HOST_IP,
+				Workers:          []string{workerId1, workerId2},
+				WorkingDirectory: "",
+			}
+			sourceConfigID, resp, err := CreateFileServer(sourceParams, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
+			Expect(sourceConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
+			defer resp.Body.Close()
+			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
+
+			By("Getting the source file server by config ID")
+			sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+
+			sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+
+			By("Creating the destination file server")
+			destinationParams := CreateServereParams{
+				ConfigName:       "destination-file-server",
+				ConfigType:       ConfigTypeFile,
+				ProjectID:        ProjectId,
+				ServerType:       ServerTypeOtherNAS,
+				UserName:         "Root",
+				Password:         "",
+				Protocol:         ProtocolNFS,
+				ProtocolVersion:  ProtocolVersion3,
+				Host:             DESTINATION_HOST_IP,
+				Workers:          []string{workerId1, workerId2},
+				WorkingDirectory: "",
+			}
+			destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
+			Expect(destinationConfigID).NotTo(BeEmpty(), "destinationConfigID is empty")
+			defer resp.Body.Close()
+
+			By("Getting the destination file server by configId")
+			destinationPathID1, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+
+			destinationPathID2, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+
+			By("Creating a migration job by uploading GID/UID mapping csv")
+			migrationParams := MigrationJobParams{
+				FirstRunAt:         GetCurrentUTCTimestamp(),
+				FutureRunSchedule:  "",
+				SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
+				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
+				SidMapping:         false,
+				Options: map[string]interface{}{
+					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
+					"preserveAccessTime":  true,
+					"skipFile":            "0-M",
+				},
+				ExtraParams: map[string]interface{}{
+					"gidMapping": csvData,
+				},
+			}
+			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error creating migration job")
+			defer resp.Body.Close()
+			Expect(len(migrationJobConfigIDs)).To(BeNumerically(">", 0), "Expected at least one jobConfigID")
+
+			migration_validators := []string{
+				"nfs_src_to_dest_vol_migration.json",
+				"nfs_src2_to_dest2_vol_migration.json",
+			}
+			// Get migration job run IDs, wait for completion and validate the CoC migration report
+			for i, migrationJobConfigID := range migrationJobConfigIDs {
+				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
+				migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
+				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
+				defer resp.Body.Close()
+				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
+				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN, 30)
+				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
+
+				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s", migration_validators[i]))
+				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
+				By(fmt.Sprintf("validate report result : %s", result))
+			}
+
+			By("Validate mapping correctly appears on source and destination as per csv")
+			userId, groupId, err := GetFileUserGroupId(sourceVolumePath1, fileWithGroup)
+			Expect(err).NotTo(HaveOccurred(), "error while GetFileUserGroupId at source")
+
+			Expect(userId).To(Equal(sourceUserId), "fileUserId incorrect at source")
+			Expect(groupId).To(Equal(sourceGrpId), "fileGroupId incorrect at source")
+
+			userId, groupId, err = GetFileUserGroupId(destinationVolumePath1, fileWithGroup)
+			Expect(err).NotTo(HaveOccurred(), "error while GetFileUserGroupId at destination")
+
+			Expect(userId).To(Equal(destinationUserId), "fileuserId incorrect at destination")
+			Expect(groupId).To(Equal(destinationGrpId), "fileGroupId incorrect at destination")
+
+			By("########################## TC-011 end ################################")
+		})
+
+		AfterEach(func() {
+			err := ClearVolume(destinationVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
+
+			err = ClearVolume(destinationVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
+
+			err = CleanupTestEnv()
+			Expect(err).To(BeNil(), "Error during test environment cleanup")
+			By("Cleanup complete.")
+		})
+	})
+})

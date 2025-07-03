@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 type Volume struct {
@@ -434,4 +435,47 @@ func GetVolumeIDByName(volumeName, authToken, configId string) (string, error) {
 	}
 
 	return foundID, nil // Return the found ID and no error
+}
+
+// GetFileUserGroupId mounts the NFS export, stats the given file‐path
+// (relative to that export) and returns its numeric UID and GID.
+func GetFileUserGroupId(export, fileName string) (uid, gid int, err error) {
+	cfg := GetAttachedWorkerDetails()
+	sshCfg := SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     cfg.Host,
+		Port:     cfg.Port,
+		Password: NDM_VM_PASSWORD,
+	}
+
+	// Build a shell script that mounts + stats with "%u %g"
+	script := fmt.Sprintf(`
+	set -e
+	MP=$(mktemp -d -t mount.XXXXXX)
+	trap 'sudo umount "$MP" || true; rm -rf "$MP"' EXIT
+
+	sudo mount -t nfs "%[1]s" "$MP"
+	stat -c "%%u %%g" "$MP/%[2]s"
+	`, export, fileName)
+
+	out, err := sshRunScript(sshCfg, script)
+	if err != nil {
+		return 0, 0, fmt.Errorf("OwnerIDShellStat failed: %w\n%s", err, out)
+	}
+
+	parts := strings.Fields(strings.TrimSpace(out))
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("unexpected stat output: %q", out)
+	}
+
+	// parse the two numeric strings into ints
+	u, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid uid %q: %w", parts[0], err)
+	}
+	g, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid gid %q: %w", parts[1], err)
+	}
+	return u, g, nil
 }
