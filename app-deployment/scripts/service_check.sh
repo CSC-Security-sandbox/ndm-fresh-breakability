@@ -26,7 +26,7 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
 
   # Check for completion
   COMPLETED=$(sshpass -p "$PASSWORD" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            $USERNAME@$IP "sudo grep -q 'Datamigrator Application Setup Complete' /var/log/datamigrator/microk8s-boot.log && echo yes || echo no" 2>/dev/null || echo "unknown")
+            $USERNAME@$IP "sudo grep -q 'Datamigrator Application Setup Complete' /opt/datamigrator/logs/ndm-first-boot.log && echo yes || echo no" 2>/dev/null || echo "unknown")
   
   if [ "$COMPLETED" = "yes" ]; then
     echo "======================================"
@@ -37,7 +37,7 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
     
     # Display the full logs
     sshpass -p "$PASSWORD" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-    $USERNAME@$IP "sudo cat /var/log/datamigrator/microk8s-boot.log" 2>/dev/null || echo "Could not retrieve logs"
+    $USERNAME@$IP "sudo cat /opt/datamigrator/logs/ndm-first-boot.log" 2>/dev/null || echo "Could not retrieve logs"
     
     echo "======================================"
     echo "END OF LOGS"
@@ -60,7 +60,7 @@ $USERNAME@$IP "sudo systemctl status $SERVICE" 2>/dev/null
 echo "PARTIAL LOGS (LAST 50 LINES):"
 echo "======================================"
 sshpass -p "$PASSWORD" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-$USERNAME@$IP "sudo tail -n 50 /var/log/datamigrator/microk8s-boot.log" 2>/dev/null || echo "Could not retrieve logs"
+$USERNAME@$IP "sudo tail -n 50 /opt/datamigrator/logs/ndm-first-boot.log" 2>/dev/null || echo "Could not retrieve logs"
 echo "======================================"
 
 exit 1

@@ -9,6 +9,7 @@
     name:
       - nfs-common
       - smbclient
+      - xmlstarlet
     state: present
 
 - name: 2.3. Copy systemd service file for boot script

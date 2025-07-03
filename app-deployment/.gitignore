@@ -8,3 +8,7 @@ inventory.yaml
 packer-provisioner-*
 /wininstaller/winsw.exe
 /wininstaller/worker.exe
+.terraform/
+.terraform.lock*
+*.tfstate
+*.tfstate.*

@@ -58,6 +58,7 @@
       - net-tools
       - acl
       - jq
+      - xmlstarlet
     state: present
   # retries: 3
   # delay: 10
