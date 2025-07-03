@@ -23,7 +23,7 @@ const AboutNDM = ({ closeAction }): ReactElement => {
             <Box className="p-10 flex flex-col gap-2">
               <Box className="flex gap-4">
                 <Text>
-                  <b>Builder Version:</b> 2025.06.03-alpha
+                  <b>Builder Version:</b> 2025.07.01-alpha
                 </Text>
               </Box>
               <Box className="flex gap-4">

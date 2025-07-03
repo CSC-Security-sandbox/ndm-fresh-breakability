@@ -3,6 +3,22 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
 import { ResponseInterceptor } from './utils/response-handler/response-interceptor';
+/*
+const config: Config = {
+  MessageList: [
+    {
+      keys :'',
+      message: 'Success',
+      statusCode: 200,
+    }
+  ],
+  errorList: [
+    {
+
+    }
+    ]
+}
+*/
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -27,7 +43,7 @@ async function bootstrap() {
   });
   app.useGlobalPipes(new ValidationPipe());
   app.enableCors();
-  await app.listen(3000);
+  await app.listen(3001);
 }
 
 bootstrap();
