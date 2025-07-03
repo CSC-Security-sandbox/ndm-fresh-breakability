@@ -1,3 +1,5 @@
 export * from "./config/response-handler.config"
 export * from "./config/response-handler.type"
 export * from "./response-handler/response-interceptor"
+export * from "./dto/custom-error-dto"
+export * from "./dto/custom-success-dto"
