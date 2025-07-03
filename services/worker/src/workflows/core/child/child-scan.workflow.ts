@@ -2,9 +2,9 @@ import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from "src/activities/common/common.service";
 import { ScanService } from 'src/activities/core/scan/scan-activity.service';
 import { JobRunStatus } from "src/activities/discovery/enums";
-import { ChildScanWorkflowInput, ScanWorkflowOutput } from './chid-scan.workflow.type';
-import { updateJobStatusIfNotRunning } from './common/workflow-utils';
-import { create } from 'domain';
+import { updateJobStatusIfNotRunning } from '../common/workflow-utils';
+import { ChildScanWorkflowInput, ChildScanWorkflowOutput } from './chid-scan.workflow.type';
+
 
 
 const {
@@ -41,11 +41,11 @@ export function createBatches(dirsToScan , batchSize): string[][] {
   
 
 }
-export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSize = 100, dirCount = 0, fileCount = 0, isMigration = false}: ChildScanWorkflowInput): Promise<ScanWorkflowOutput> => {
+export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSize = 100, dirCount = 0, fileCount = 0, isMigration = false}: ChildScanWorkflowInput): Promise<ChildScanWorkflowOutput> => {
   
   await updateJobStatusActivity({jobRunId, status :JobRunStatus.Running});
   let state:JobRunStatus = JobRunStatus.Running;
-  const scanWorkflowOutput: ScanWorkflowOutput = {
+  const scanWorkflowOutput: ChildScanWorkflowOutput = {
     jobRunId,
     fileCount: 0,
     dirCount: 0,

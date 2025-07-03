@@ -6,8 +6,7 @@ import { CommonTaskService } from 'src/activities/core/common/common-task.servic
 import { MigrateSyncService } from "src/activities/core/migrate/migrate-sync.service";
 import { JobRunStatus } from "src/activities/discovery/enums";
 import { ScanWorkflowStatus, SyncWorkflowOutput } from './chid-scan.workflow.type';
-import { updateJobStatusIfNotRunning } from './common/workflow-utils';
-import { JobStatus as JobContextStatus } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/enums';
+import { updateJobStatusIfNotRunning } from '../common/workflow-utils';
 
 
 interface SyncWorkflowInput {

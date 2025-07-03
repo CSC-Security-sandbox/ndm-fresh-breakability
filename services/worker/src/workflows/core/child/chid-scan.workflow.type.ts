@@ -10,10 +10,11 @@ export interface ChildScanWorkflowInput {
 }
 
 export interface ChildScanWorkflowOutput {
-    jobRunId: string;
-    batchSize: number;
-    fileCount: number;
-    dirCount: number;
+  jobRunId: string;
+  status: JobRunStatus;
+  fileCount : number;
+  dirCount : number;
+  error?: string;
 }
 
 export enum ScanWorkflowStatus{    

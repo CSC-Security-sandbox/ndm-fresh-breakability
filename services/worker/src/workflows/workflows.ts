@@ -30,7 +30,7 @@ export {SpeedTestWorkflow} from '../workflows/speed-test/speed-test-workflow'
 
 export {RedisMemoryCheckWorkflow} from '../workflows/redis/redis.memorycheck.workflow'
 
-export {ChildScanWorkflow } from './core/child-scan.workflow'
-export {ChildSyncWorkflow} from './core/child-sync.workflow'
+export {ChildScanWorkflow } from './core/child/child-scan.workflow'
+export {ChildSyncWorkflow} from './core/child/child-sync.workflow'
 
 export {MigrationWorkflow} from './core/parent/migration-parent-workflow'

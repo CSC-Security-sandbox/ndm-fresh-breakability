@@ -1,14 +1,13 @@
 import * as wf from '@temporalio/workflow';
-import { MigrationTaskService } from 'src/activities/migrate/migrate.taskmanager.service';
-import { JobRunStatus } from 'src/activities/discovery/enums';
-import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
 import { CommonActivityService } from 'src/activities/common/common.service';
-import { WorkflowStatus } from '../chid-scan.workflow.type';
-import { JobReportType } from './common.types';
+import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
+import { JobRunStatus } from 'src/activities/discovery/enums';
+import { MigrationTaskService } from 'src/activities/migrate/migrate.taskmanager.service';
+
 
 
 const isReportedQuery = wf.defineQuery<boolean>('isReported');
-
+const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
 
 const {
     generateDiscoveryReport: generateDiscoveryReportActivity
@@ -24,19 +23,24 @@ const {
   updateStatus: updateStatusActivity,
   generateJobsReport: generateJobsReportActivity,
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
-  
 
-export const ReportingWorkflow = async (
+
+export  enum  JobReportType {
+  MIGRATE = 'MIGRATE_REPORTED',
+  CUT_OVER = 'CUT_OVER_REPORTED',
+  DISCOVER= 'DISCOVER_REPORTED'
+}
+
+export const handleReporting = async (
     traceId: string,
-    signal: wf.SignalDefinition<[string], string>,
-    workflowStatus: WorkflowStatus,
+    status: JobRunStatus,
   ): Promise<string> => {
     let isBlocked = true;
     let reportType : JobReportType | null 
   
     wf.setHandler(isReportedQuery, () =>!isBlocked);
   
-    wf.setHandler(signal, (input: string) => {
+    wf.setHandler(reportingSignal, (input: string) => {
       if(
             (input === JobReportType.CUT_OVER) ||
             (input === JobReportType.MIGRATE) ||
@@ -49,7 +53,7 @@ export const ReportingWorkflow = async (
     wf.log.info('Waiting for reporting signal...');
     try {
       await wf.condition(() => !isBlocked);
-      const jobRunStatus = getMappedJobRunStatus(workflowStatus, reportType);
+      const jobRunStatus = getMappedJobRunStatus(status, reportType);
       await updateStatusActivity({jobRunId: traceId, status: jobRunStatus})
       switch(reportType) {
         case JobReportType.CUT_OVER: {            
@@ -82,14 +86,10 @@ export const ReportingWorkflow = async (
   };
 
 
-  function getMappedJobRunStatus(workflowStatus: WorkflowStatus, jobType: JobReportType): JobRunStatus {
-      if (workflowStatus === WorkflowStatus.Failed) {
-        return JobRunStatus.Errored;
-      }
-      if( workflowStatus === WorkflowStatus.Completed && jobType === JobReportType.CUT_OVER) {
+  function getMappedJobRunStatus(status: JobRunStatus, jobType: JobReportType): JobRunStatus {
+      if(status === JobRunStatus.Completed && jobType === JobReportType.CUT_OVER) 
         return JobRunStatus.BLOCKED;
-      }
-      return workflowStatus === WorkflowStatus.Completed ? JobRunStatus.Completed : JobRunStatus.Stopped;
+      return status ;
   }
 
 

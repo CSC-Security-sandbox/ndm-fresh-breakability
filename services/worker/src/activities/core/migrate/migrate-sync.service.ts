@@ -46,61 +46,6 @@ export class MigrateSyncService {
     this.CHUNK_SIZE = this.configService.get('worker.migrationChunkSize') || 1024 * 1024;
   }
 
-  async calculateChecksum(filePath: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      if (!fs.existsSync(filePath)) {
-        return reject(new Error(`File not found: ${filePath}`));
-      }
-      
-      const hash = crypto.createHash('sha256');
-      const stream = fs.createReadStream(filePath);
-
-      stream.on('data', (chunk) => hash.update(chunk));
-      stream.on('end', () => resolve(hash.digest('hex')));
-      stream.on('error', (err) => reject(err));
-    });
-  }
-
-  async copyFileWithChecksum(sourceFile: string, destinationFile: string): Promise<{sourceChecksum: string, targetChecksum:string}> {
-    if (!fs.existsSync(sourceFile)) {
-      throw new Error(`Source file does not exist: ${sourceFile}`);
-    }
-
-    const destDir = path.dirname(destinationFile);
-    if (!fs.existsSync(destDir)) {
-      fs.mkdirSync(destDir, { recursive: true });
-    }
-  
-    const hash = crypto.createHash("sha256");
-  
-    await new Promise<void>((resolve, reject) => {
-      const readStream = fs.createReadStream(sourceFile, {
-        highWaterMark: this.CHUNK_SIZE,
-      });
-      const writeStream = fs.createWriteStream(destinationFile);
-  
-      readStream.on("data", (chunk) => {
-        hash.update(chunk);
-        if (!writeStream.write(chunk)) readStream.pause();
-      });
-  
-      writeStream.on("drain", () => readStream.resume());
-  
-      readStream.on("end", () => writeStream.end());
-      writeStream.on("finish", resolve);
-      readStream.on("error", reject);
-      writeStream.on("error", reject);
-
-    });
-  
-    const sourceChecksum = hash.digest("hex");
-    const targetChecksum = await this.calculateChecksum(destinationFile);
-  
-    if (sourceChecksum !== targetChecksum) {
-      throw new Error(`Checksum mismatch for file ${destinationFile}. Checksum: ${sourceChecksum} != ${targetChecksum}`);
-    }
-    return {sourceChecksum, targetChecksum};
-  }
 
 
   ensureDirectoryExists(directoryPath: string) {
@@ -110,6 +55,7 @@ export class MigrateSyncService {
   }
   
   async stampMetaData({sourcePath, metadata, command, errorType, jobContext, targetPath}: StampMetaDataInput):Promise<StampMetaDataOutput> {
+    //TODO: change the command class to replace ops with steps. 
     const stampMetaDataOutput : StampMetaDataOutput = {sourceErrors: [], targetErrors:[], errorType: errorType}
     if(metadata?.mode) {
       try {
@@ -346,6 +292,7 @@ export class MigrateSyncService {
       return syncOutput
   }
 
+  //TODO: revisit this and see what all are not used. 
   getFileInfo = async ({name, fullFilePath, relativePath, checksums, getID}: getFileInfoInput): Promise<any>  => {
       const lStat = await fs.promises.lstat(fullFilePath);
       let sid = undefined
@@ -372,6 +319,8 @@ export class MigrateSyncService {
         ...obj,
         ...checksums,
         sid
+      
+
       }
   }
   // TODO: can be this depricated in future

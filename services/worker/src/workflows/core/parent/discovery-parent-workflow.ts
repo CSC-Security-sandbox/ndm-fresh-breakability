@@ -1,171 +1,65 @@
-import * as wf from '@temporalio/workflow';
-import { ChildWorkflowCancellationType, ParentClosePolicy } from "@temporalio/workflow";
-import { CommonActivityService } from "src/activities/common/common.service";
 
-import { waitUntilRedisMemoryOk } from 'src/workflows/utils/memory-utils';
-import { CleanupWorkerWorkflow } from "src/workflows/workflows";
-import { WorkflowStatus } from '../chid-scan.workflow.type';
-import { ReportingWorkflow } from '../common/reporting-workflow';
 import { JobRunStatus } from 'src/activities/discovery/enums';
+import { waitUntilRedisMemoryOk } from 'src/workflows/utils/memory-utils';
+import { executeDiscoveryChildWorkflows } from '../common/execute-discover-child-workflows';
+import { handleReporting } from '../common/handle-reporting';
+import { executeWorkerSetup } from '../common/execute-setup-workflow';
+import { executeCleanup } from '../common/execute-cleanup-workflow';
 
-interface MigrationWorkflowInput {
+
+
+interface DiscoveryWorkflowInput {
   traceId: string;
   payload: {
     workers: string[];
   };
   options?: Record<string, any>; 
 }
-interface MigrationWorkflowOutput {
+interface DiscoveryWorkflowOutput {
   traceId: string;
   setupCompletedWorkers:string[];
   failedWorkers:string[];
-  setupFailedWorkerCount: number;
-  newAddedWorkerCount: number;
-  isScanIsRunning: boolean;
-  isSyncIsRunning: boolean; 
-  isJobFailed: boolean;
+  fileCount : number;
+  dirCount : number;
+  status: JobRunStatus
 }
-
-const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
-const actionSignal = wf.defineSignal<[string]>('action');
-
-const {
-  updateJobErrorStatus: updateJobErrorActivity,
-  updateWorkerResponse: updateWorkerResponse,
-  cleanupJobContext: cleanupJobContextActivity,
-  updateLastEntry: updateLastEntryActivity,
-} = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 
 
 export const DiscoveryWorkflow = async ({
   traceId,
   payload,
   options = {},
-}: MigrationWorkflowInput): Promise<MigrationWorkflowOutput> => {
-  console.log(`[${traceId}] Parent workflow started for ${traceId}`);
+}: DiscoveryWorkflowInput): Promise<DiscoveryWorkflowOutput> => {
+    const output: DiscoveryWorkflowOutput = {
+      traceId: traceId,
+      setupCompletedWorkers: [],
+      dirCount: 0,
+      fileCount: 0,
+      failedWorkers: [],
+      status: JobRunStatus.Ready,
+    };
+
+    // setup workers output
+    const setupWorkersExecResult = await executeWorkerSetup({jobRunId: traceId, workerIds: payload.workers, options});
+    output.setupCompletedWorkers = setupWorkersExecResult.setupCompletedWorkers;
+    output.failedWorkers = setupWorkersExecResult.failedWorkers;
 
 
-  const workFlowStatus: MigrationWorkflowOutput = {
-    failedWorkers: [],
-    setupCompletedWorkers: [],
-    setupFailedWorkerCount: 0,
-    newAddedWorkerCount: 0, 
-    isScanIsRunning: false,
-    isSyncIsRunning: false,
-    isJobFailed: false,
-    traceId: traceId,    
-  }
+    // validate Redis memory
+    await waitUntilRedisMemoryOk(traceId);
 
-  let scanWorkflow: wf.ChildWorkflowHandle<wf.Workflow>;
+    // start core scan workflow
+    const discoveryWorkflowExecResult = await executeDiscoveryChildWorkflows({jobRunId: traceId})
+    output.fileCount = discoveryWorkflowExecResult.fileCount;
+    output.dirCount = discoveryWorkflowExecResult.dirCount;
+    output.status = discoveryWorkflowExecResult.status;
 
 
-  wf.setHandler(actionSignal, async (action:string) => {
-    if(workFlowStatus.isScanIsRunning)
-      scanWorkflow.signal('scanActionSignal', action);
-    console.log(`[${traceId}] action signal called with value: ${action}`);
-  });
+    // Reporting and Report Generation
+    await handleReporting(traceId, output.status);
 
-  payload.workers.map(async (worker) => {
-    const workerFuture = await wf.startChild('SetupWorkerWorkflow', {
-      args: [ { jobRunId: traceId } ],
-      workflowId: `SetupWorkerWorkflow-${traceId}-${worker}`,
-      taskQueue: `${worker}-TaskQueue`,
-      cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-      parentClosePolicy: ParentClosePolicy.TERMINATE,
-      ...options
-    });
-    try{
-      const result = await workerFuture.result();
-      if (result?.status === 'success') {
-        workFlowStatus.setupCompletedWorkers.push(worker);
-        if(workFlowStatus.isScanIsRunning)
-          await scanWorkflow.signal('syncWorkerList', workFlowStatus.setupCompletedWorkers);
-      }
-      else {
-        workFlowStatus.setupFailedWorkerCount++;
-        await updateWorkerResponse(traceId, worker, {
-          status: 'FAILED',
-          code: 'SETUP_WORKER_FAILURE',
-          operation: 'Worker Setup Failed',
-          occurrence: 1,
-          origin: 'Worker',
-          message: result.message,
-          createdAt: new Date()
-        });
-      }
-    } catch(error) {
-      workFlowStatus.setupFailedWorkerCount++;
-      await updateWorkerResponse(traceId, worker, {
-        status: 'FAILED',
-        code: 'SETUP_WORKER_FAILURE',
-        operation: 'Worker Setup Failed',
-        occurrence: 1,
-        origin: 'Worker',
-        message: error.message,
-        createdAt: new Date()
-      });
-      console.error(`[${traceId}] Error in SetupWorkerWorkflow: ${error}`);
-    }
-  })
+    // Cleanup
+    await executeCleanup({ jobRunId: traceId, workerIds: output.setupCompletedWorkers, options });
 
-  await wf.condition(() => (workFlowStatus.setupCompletedWorkers.length > 0) || (workFlowStatus.setupFailedWorkerCount === (payload.workers.length+workFlowStatus.newAddedWorkerCount)));
-
-  if(workFlowStatus.setupFailedWorkerCount === (payload.workers.length+workFlowStatus.newAddedWorkerCount)) {
-    console.error(`Fatal error occurred for all active workers for jobRun Id: ${traceId}`)
-    await updateJobErrorActivity(traceId)
-  }
-  
-  // wait until redis has enough memory
-  await waitUntilRedisMemoryOk(traceId);
-
-  // scan workflow
-  scanWorkflow = await wf.startChild('ChildScanWorkflow', {
-    args: [ { jobRunId: traceId, workers:workFlowStatus.setupCompletedWorkers, failedWorkers: [], isMigration: false } ],
-    workflowId: `ScanWorkflow-${traceId}`,
-    taskQueue: `${traceId}-TaskQueue`,
-    cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-    parentClosePolicy: ParentClosePolicy.TERMINATE,
-  });
-  workFlowStatus.isScanIsRunning = true;
-  let scanWorkflowStatus = WorkflowStatus.Completed
-  try{
-     const scanWorkflowResult = await scanWorkflow.result()
-     scanWorkflowStatus = scanWorkflowResult.status === JobRunStatus.Completed ? WorkflowStatus.Completed : WorkflowStatus.Stopped;
-  }catch(error) {
-    scanWorkflowStatus = WorkflowStatus.Failed;
-
-  }
-  // wait for scan workflow to complete
-  workFlowStatus.isScanIsRunning = false;
-  await updateLastEntryActivity(traceId);
-
-
-  await ReportingWorkflow(traceId, reportingSignal, scanWorkflowStatus);
-
-  if (workFlowStatus.setupCompletedWorkers.length > 0) {
-    await Promise.all(
-      workFlowStatus.setupCompletedWorkers.map(async (workerId) => {
-      console.log(`[${traceId}] Starting CleanupWorkerWorkflow for workerId: ${workerId}`);
-      try {
-        return await wf.executeChild(CleanupWorkerWorkflow, {
-        args: [{ jobRunId: traceId }],
-        workflowId: `CleanupWorkerWorkflow-${traceId}-${workerId}`,
-        taskQueue: `${workerId}-TaskQueue`,
-        ...options,
-        cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-        parentClosePolicy: ParentClosePolicy.TERMINATE,
-        });
-      } catch (error) {
-          if(error instanceof wf.ActivityFailure){
-              console.error(`[${traceId}] ActivityFailure in CleanupWorkerWorkflow with message: ${error.message}`);   
-          }
-          throw error;
-                  
-      }
-    }),
-    )
-  }
-  const response = await cleanupJobContextActivity(traceId)
-  console.log(`[${traceId}] CleanupJobContextActivity response: ${response}`);
-  return workFlowStatus;
-};
+    return output
+}
