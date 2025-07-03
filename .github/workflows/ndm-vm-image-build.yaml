@@ -129,12 +129,18 @@ jobs:
           build_version: ${{ steps.build_version.outputs.build_version }}
         run: |
           REF="${GITHUB_REF}"
-          if [[ "$REF" == refs/heads/release/* ]]; then
-            REF_TYPE="releases"
-            REF_NAME="${REF#refs/heads/release/}"
-          else
+          if [[ "$REF" == "refs/heads/main" ]]; then
             REF_TYPE="branches"
             REF_NAME="main"
+          elif [[ "$REF" == refs/heads/release/* ]]; then
+            REF_TYPE="releases"
+            REF_NAME="${REF#refs/heads/release/}"
+          elif [[ "$REF" == refs/heads/* ]]; then
+            REF_TYPE="branches"
+            REF_NAME="$(echo "${REF#refs/heads/}" | sed 's#/#-#g')"
+          else
+            echo "Unsupported ref: $REF"
+            exit 1
           fi
           chmod +x ./app-deployment/scripts/get_tags.sh
           ./app-deployment/scripts/get_tags.sh $build_version "$REF_TYPE" "$REF_NAME"
@@ -489,12 +495,18 @@ jobs:
           DB_MIGRATIONS_TAG: ${{ github.event.inputs.reports_service_tag }}
         run: |
           REF="${GITHUB_REF}"
-          if [[ "$REF" == refs/heads/release/* ]]; then
-            REF_TYPE="releases"
-            REF_NAME="${REF#refs/heads/release/}"
-          else
+          if [[ "$REF" == "refs/heads/main" ]]; then
             REF_TYPE="branches"
             REF_NAME="main"
+          elif [[ "$REF" == refs/heads/release/* ]]; then
+            REF_TYPE="releases"
+            REF_NAME="${REF#refs/heads/release/}"
+          elif [[ "$REF" == refs/heads/* ]]; then
+            REF_TYPE="branches"
+            REF_NAME="$(echo "${REF#refs/heads/}" | sed 's#/#-#g')"
+          else
+            echo "Unsupported ref: $REF"
+            exit 1
           fi
           chmod +x ./app-deployment/scripts/services_manifest.sh
           ./app-deployment/scripts/services_manifest.sh services.json "$REF_TYPE" "$REF_NAME"
