@@ -10,6 +10,7 @@ import { JobRunEntity } from 'src/entities/jobrun.entity';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
 import { WorkerStatsEntity } from 'src/entities/worker-stats.entity';
+import { PathUploadsEntity } from 'src/entities/pathupload.entity';
 
 export default registerAs(
   'typeorm',
@@ -35,6 +36,7 @@ export default registerAs(
       FileServerWorkingDirectoryMappingEntity,
       WorkerJobRunMap,
       WorkerStatsEntity,
+      PathUploadsEntity
     ],
     migrations: [],
   }),
