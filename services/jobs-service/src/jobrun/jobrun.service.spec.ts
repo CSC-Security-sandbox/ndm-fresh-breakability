@@ -976,6 +976,7 @@ describe("JobRunService", () => {
             password: "source-pass",
             workingDirectory: "/source/working",
             protocolVersion: "2",
+            isValidPath: true,
           },
           targetCredential: {
             protocol: Protocol.SMB,
@@ -986,6 +987,7 @@ describe("JobRunService", () => {
             password: "target-pass",
             workingDirectory: "/target/working",
             protocolVersion: "2",
+            isValidPath: true,
           },
         },
         workers: ["worker1", "worker2"],

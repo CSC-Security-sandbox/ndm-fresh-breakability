@@ -17,6 +17,7 @@ import { CommonActivityService } from "src/activities/common/common.service";
 import { SpeedTestActivities } from "src/activities/speed-test/speed-test-activities";
 import { RedisMemoryCheckActivity } from "src/activities/redis/redis.mem.usage.check.activity";
 import { ConfigService } from "@nestjs/config";
+import { ValidatePathActivity } from "src/activities/validate-path/validate-path.service";
 
 @Injectable()
 export class WorkerOptionsService {
@@ -35,6 +36,7 @@ export class WorkerOptionsService {
     private readonly commonActivityService:CommonActivityService,
     private readonly speedTestReadActivity: SpeedTestActivities,
     private readonly  redismeorycheck: RedisMemoryCheckActivity,
+    private readonly validatePathActivity: ValidatePathActivity,
     @Inject(ConfigService) private readonly configService: ConfigService,
   ) {
     this.jobTaskActivityConcurrency = this.configService.get<number>('worker.maxActivityConcurrency') || 1;
@@ -58,6 +60,7 @@ export class WorkerOptionsService {
           updateWorkerResponse: this.commonActivityService.updateWorkerResponse.bind(this.commonActivityService),
           checkMemoryUsage : this.redismeorycheck.checkMemoryUsage.bind(this.redismeorycheck),
           cleanupJobContext: this.commonActivityService.cleanupJobContext.bind(this.commonActivityService),
+          postValidationResult: this.validatePathActivity.postValidationResult.bind(this.validatePathActivity),
         });
       case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
@@ -88,6 +91,7 @@ export class WorkerOptionsService {
             writeActivity: this.speedTestReadActivity.writeActivity.bind(this.speedTestReadActivity),
             postResultsActivity: this.speedTestReadActivity.postResultsActivity.bind(this.speedTestReadActivity),
             getJobStateAndUpdateTaskList: this.commonActivityService.getJobStateAndUpdateTaskList.bind(this.commonActivityService),
+            validatePath: this.validatePathActivity.validatePath.bind(this.validatePathActivity),
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {

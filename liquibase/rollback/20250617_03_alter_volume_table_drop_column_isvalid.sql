@@ -1,0 +1,2 @@
+ALTER TABLE volume DROP COLUMN IF EXISTS is_valid;
+ALTER TABLE volume DROP COLUMN IF EXISTS is_disabled;

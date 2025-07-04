@@ -18,12 +18,13 @@ import { WorkerThreadModule } from 'src/thread/worker.thread.module';
 import { SpeedTestActivities } from './speed-test/speed-test-activities';
 import { AuthModule } from 'src/auth/auth.module';
 import { RedisMemoryCheckActivity } from './redis/redis.mem.usage.check.activity';
+import { ValidatePathActivity } from './validate-path/validate-path.service';
 
 
 @Module({
   imports: [HttpModule, ConfigModule, WorkerThreadModule, AuthModule],
   controllers: [],
-  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService, MigrationSyncService, Logger, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities, RedisMemoryCheckActivity],
-  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationTaskService,MigrationScanService, MigrationSyncService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities,RedisMemoryCheckActivity],
+  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService, MigrationSyncService, Logger, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities, RedisMemoryCheckActivity, ValidatePathActivity],
+  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationTaskService,MigrationScanService, MigrationSyncService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities,RedisMemoryCheckActivity, ValidatePathActivity],
 })
 export class ActivitiesModule {}
