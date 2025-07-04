@@ -1,10 +1,11 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { Column, Entity, JoinColumn, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
-import { Protocol, ProtocolVersion, ServerType } from "src/constants/enums";
+import { ExportPathSource, Protocol, ProtocolVersion, ServerType } from "src/constants/enums";
 import { Base } from "./base.entity";
 import { ConfigEntity } from "./config.entity";
 import { WorkerEntity } from "./worker.entity";
 import { VolumeEntity } from "./volume.entity";
+import { PathUploadsEntity } from "./pathupload.entity";
 
 
 @Entity({name:'file_server'})
@@ -65,4 +66,11 @@ export class FileServerEntity extends Base {
         },
     })
     workers: WorkerEntity[];
+
+    @ApiProperty({ description: 'Export path source' })
+    @Column({ type: 'varchar', nullable: true,  name: 'export_path_source' })
+    exportPathSource: ExportPathSource;
+
+    @OneToMany(() => PathUploadsEntity, (upload) => upload.fileServer)
+    uploads: PathUploadsEntity[];
 }

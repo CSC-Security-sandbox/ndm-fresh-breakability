@@ -20,7 +20,8 @@ export enum WorkFlows{
     LIST_PATHS = 'ListPathsWorkflow',
     DISCOVERY = 'discoveryWorkflow',
     PRECHECK='PreCheckValidationWorkflow',
-    VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY = 'ValidateExportPathAndWorkingDirectoryWorkflow'
+    VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY = 'ValidateExportPathAndWorkingDirectoryWorkflow',
+    VALIDATE_PATHS = 'ValidatePathsWorkflow'
 }
 
 export enum Platform {
