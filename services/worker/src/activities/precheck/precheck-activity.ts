@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { Protocols, ProtocolTypes } from "src/protocols/protocols";
 import { PreCheckErrorCodes, PreCheckStatus, ServerCredential, Settings, WorkerTaskPaths } from "src/workflows/pre-check/pre-check.types";
 import { PreCheckPathOutput } from "./precheck-activity.type";
+import { ExportPathSource } from "../list-path/list-path.type";
 
 const fs = require('fs').promises;
 
@@ -58,27 +59,29 @@ export class PrecheckActivity {
     if (mountSuccess) {
       const checkPromises = [];
 
-      checkPromises.push(
-        protocol.listPaths(traceId, protocolPayload)
-          .then(pathList => {
-            if (!pathList.includes(serverPaths.pathName)) {
-              this.logger.error(`Path ${serverPaths.pathName} not found on server ${serverCredentials.host}`);
+      if(serverCredentials.exportPathSource === ExportPathSource.AUTO_DISCOVER) {
+        checkPromises.push(
+          protocol.listPaths(traceId, protocolPayload)
+            .then(pathList => {
+              if (!pathList.includes(serverPaths.pathName)) {
+                this.logger.error(`Path ${serverPaths.pathName} not found on server ${serverCredentials.host}`);
+                preCheckPathOutput.errorCodes.push(
+                  serverPaths.isSource ?
+                    PreCheckErrorCodes.SOURCE_PATH_NOT_FOUND :
+                    PreCheckErrorCodes.DESTINATION_PATH_NOT_FOUND
+                );
+              }
+            })
+            .catch(error => {
+              this.logger.error(`Error listing paths on server ${serverCredentials.host}`);
               preCheckPathOutput.errorCodes.push(
                 serverPaths.isSource ?
                   PreCheckErrorCodes.SOURCE_PATH_NOT_FOUND :
                   PreCheckErrorCodes.DESTINATION_PATH_NOT_FOUND
               );
-            }
-          })
-          .catch(error => {
-            this.logger.error(`Error listing paths on server ${serverCredentials.host}`);
-            preCheckPathOutput.errorCodes.push(
-              serverPaths.isSource ?
-                PreCheckErrorCodes.SOURCE_PATH_NOT_FOUND :
-                PreCheckErrorCodes.DESTINATION_PATH_NOT_FOUND
-            );
-          })
-      );
+            })
+          );
+      }
 
       this.logger.log(`Preserve Access Time - ${settings?.preserveAccessTime}`);
       this.logger.log(`IsDestination - ${!serverPaths?.isSource}`);

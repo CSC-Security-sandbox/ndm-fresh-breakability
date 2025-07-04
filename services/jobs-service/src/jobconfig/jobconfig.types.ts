@@ -64,7 +64,12 @@ export interface PrecheckDestination {
   errors?: string[];
 }
 
-export interface ServerCredentials{
+export enum ExportPathSource {
+  AUTO_DISCOVER = 'AUTO_DISCOVER',
+  MANUAL_UPLOAD = 'MANUAL_UPLOAD',
+}
+
+export interface ServerCredentials {
   id: string;
   host: string;
   userName: string;
@@ -72,6 +77,7 @@ export interface ServerCredentials{
   protocol: string;
   serverType: string;
   protocolVersion: string;
+  exportPathSource: ExportPathSource;
 }
 
 export interface workerWithStatus {

@@ -71,7 +71,7 @@ service:
 
 ingress:
   pathPrefix: api/v1/
-  trailingPath: "(servers|work-manager|config-docs)"
+  trailingPath: "(servers|work-manager|config-docs|paths-upload)"
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
