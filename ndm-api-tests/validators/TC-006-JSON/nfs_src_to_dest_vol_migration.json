@@ -60,12 +60,24 @@
     "target checksum": "6973233d5cdd58d19a5cf9b087d3d1e4c4b85be467151f5a7b44d634e4a0ad28"
   },
   {
+    "source path": "/volSrcAuto/modify1.text",
+    "target checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
     "source path": "/volSrcAuto/modify1.txt",
     "target checksum": "186b26b6c8cc0416482da9b9664db9d30efc944228e075f37a5b06d612dbddd6"
   },
   {
+    "source path": "/volSrcAuto/modify2.text",
+    "target checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
     "source path": "/volSrcAuto/modify2.txt",
     "target checksum": "98783cf087d863c2db7eca89ed32caabbe9a6805a5e067dd37251612fbc63fc5"
+  },
+  {
+    "source path": "/volSrcAuto/modify3.text",
+    "target checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   {
     "source path": "/volSrcAuto/modify3.txt",

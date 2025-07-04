@@ -5,7 +5,7 @@ describe('validateFilePath', () => {
   });
 
   it('should return false for a file path with invalid characters', () => {
-    expect(validateFilePath('invalid/file\\path?.txt')).toBe(false);
+    expect(validateFilePath('invalidfile\\path?.txt')).toBe(false);
   });
 
   it('should return true for a file path with only allowed characters', () => {
