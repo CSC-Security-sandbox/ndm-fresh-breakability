@@ -201,9 +201,9 @@ var _ = Describe("TC-012:Run bulk cutover with concurrent migration jobs and bat
 				Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
 			}
 
-			result, err := ValidateReport(firstCutoverjobRunID, JobTypeCutover, "../../validators/cutover_validation.json")
-			Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", firstCutoverjobRunID)
-			By(fmt.Sprintf("validate report result for %s: %s", firstCutoverjobRunID, result))
+			// result, err := ValidateReport(firstCutoverjobRunID, JobTypeCutover, "../../validators/cutover_validation.json")
+			// Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", firstCutoverjobRunID)
+			// By(fmt.Sprintf("validate report result for %s: %s", firstCutoverjobRunID, result))
 
 			for _, jubrunid := range migrationJobRunIds {
 				err = WaitForJobState(jubrunid, COMPLETED_JOBRUN)

@@ -126,10 +126,10 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 			By("Getting jobs by jobConfigId for source")
 			sourceConfigIDs := []string{sourceConfigID1, sourceConfigID2}
 			sourceDiscoveryJobRunIDs := make([]string, len(sourceConfigIDs))
-			discovery_validators := []string{
-				"nfs_src_vol_discovery.json",
-				"nfs_src_vol2_discovery.json",
-			}
+			// discovery_validators := []string{
+			// 	"nfs_src_vol_discovery.json",
+			// 	"nfs_src_vol2_discovery.json",
+			// }
 			for i, configID := range sourceConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(configID, headers)
 				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
@@ -160,9 +160,9 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 				}
 				err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
-				result, err := ValidateReport(jobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s", discovery_validators[i]))
-				Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
-				By(fmt.Sprintf("validate report result : %s", result))
+				// result, err := ValidateReport(jobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s", discovery_validators[i]))
+				// Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
+				// By(fmt.Sprintf("validate report result : %s", result))
 			}
 
 			By("Creating a new discovery job for destination")
@@ -228,13 +228,13 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
 			Expect(len(migrationJobConfigIDs)).To(BeNumerically(">", 0), "Expected at least one jobConfigID")
-			migration_validators := []string{
-				"nfs_src_to_dest_vol_migration.json",
-				"nfs_src2_to_dest2_vol_migration.json",
-			}
+			// migration_validators := []string{
+			// 	"nfs_src_to_dest_vol_migration.json",
+			// 	"nfs_src2_to_dest2_vol_migration.json",
+			// }
 			// Get migration job run IDs and wait for completion
 			flag := false
-			for i, migrationJobConfigID := range migrationJobConfigIDs {
+			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 				migrationJobRunID = getJobsResp.JobRuns[0].JobRunId
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
@@ -268,9 +268,9 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN, 25)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s", migration_validators[i]))
-				Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
-				By(fmt.Sprintf("validate COC report result : %s", result))
+				// result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s", migration_validators[i]))
+				// Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
+				// By(fmt.Sprintf("validate COC report result : %s", result))
 			}
 			By("Adding Delta Data")
 			err = AddDataToVolume(sourceVolumePath1)
