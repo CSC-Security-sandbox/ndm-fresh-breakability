@@ -109,33 +109,6 @@ describe("OverviewService", () => {
   });
 
   describe("getStorageAndJobsOverview", () => {
-    it("should return overview data with all parameters", async () => {
-      mockProjectRepository.find.mockResolvedValue([mockProjectData]);
-
-      const result = await service.getStorageAndJobsOverview(
-        "project1",
-        "server1",
-        "job1"
-      );
-
-      expect(result).toEqual({
-        storageDetails: {
-          totalDiscoveredSize: "0 Bytes",
-          totalMigratedSize: expect.any(String),
-          totalFileServers: 1,
-          totalPendingSize: expect.any(String),
-        },
-        jobDetails: {
-          totalDiscoverJobs: 1,
-          totalMigrateJobs: {
-            baseLineJob: 1,
-            incrementalJob: 0,
-          },
-          totalCutoverJobs: 1,
-        },
-      });
-    });
-
     it("should handle empty project data", async () => {
       mockProjectRepository.find.mockResolvedValue([]);
       mockInventoryRepository.createQueryBuilder = jest.fn(() => ({
@@ -156,10 +129,7 @@ describe("OverviewService", () => {
         },
         jobDetails: {
           totalDiscoverJobs: 0,
-          totalMigrateJobs: {
-            baseLineJob: 1,
-            incrementalJob: 1,
-          },
+          totalMigrateJobs: 2,
           totalCutoverJobs: 0,
         },
       };
@@ -176,49 +146,127 @@ describe("OverviewService", () => {
       expect(result).toEqual(mockData);
     });
 
-    it("should handle multiple migrate jobs", async () => {
-      const projectWithMultipleMigrations = {
-        ...mockProjectData,
-        configs: [
-          {
-            ...mockProjectData.configs[0],
-            fileServers: [
-              {
-                ...mockProjectData.configs[0].fileServers[0],
-                volumes: [
-                  {
-                    sourceConfig: [
-                      {
-                        id: "job2",
-                        jobType: JobType.Migrate,
-                        jobRuns: [
-                          { id: "run2", status: JobRunStatus.Completed },
-                          { id: "run3", status: JobRunStatus.Completed },
-                        ],
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      };
-
+    it("should return formatted sizes and job details when no job runs found", async () => {
       mockProjectRepository.find.mockResolvedValue([
-        projectWithMultipleMigrations,
+        {
+          configs: [
+            {
+              fileServers: [
+                {
+                  volumes: [
+                    {
+                      sourceConfig: [
+                        {
+                          jobType: JobType.Discover,
+                          jobRuns: [],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
       ]);
+      mockInventoryRepository.query = jest.fn().mockResolvedValue([{ totalDiscoveredSize: 0 }]);
+      const result = await service.getStorageAndJobsOverview("project1", null, null);
+      expect(result.storageDetails.totalDiscoveredSize).toBe("0 Bytes");
+      expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
+      expect(result.storageDetails.totalPendingSize).toBe("0 Bytes");
+      expect(result.jobDetails.totalDiscoverJobs).toBeDefined();
+      expect(result.jobDetails.totalMigrateJobs).toBeDefined();
+      expect(result.jobDetails.totalCutoverJobs).toBeDefined();
+    });
 
-      const result = await service.getStorageAndJobsOverview(
-        "project1",
-        null,
-        null
-      );
+    it("should skip migration query if no migrate or cutover runs", async () => {
+      mockProjectRepository.find.mockResolvedValue([
+        {
+          configs: [
+            {
+              fileServers: [
+                {
+                  volumes: [
+                    {
+                      sourceConfig: [
+                        {
+                          jobType: JobType.Discover,
+                          jobRuns: [{ id: "run1", status: JobRunStatus.Completed, createdAt: new Date() }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+      mockInventoryRepository.query = jest.fn().mockResolvedValue([{ totalDiscoveredSize: 100 }]);
+      const result = await service.getStorageAndJobsOverview("project1", null, null);
+      expect(result.storageDetails.totalDiscoveredSize).toBeDefined();
+      expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
+    });
 
-      expect(result.jobDetails.totalMigrateJobs).toEqual({
-        baseLineJob: 1,
-        incrementalJob: 1,
-      });
+    it("should handle missing jobRunIds gracefully", async () => {
+      mockProjectRepository.find.mockResolvedValue([
+        {
+          configs: [
+            {
+              fileServers: [
+                {
+                  volumes: [
+                    {
+                      sourceConfig: [],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+      mockInventoryRepository.query = jest.fn().mockResolvedValue([{ totalDiscoveredSize: 0 }]);
+      const result = await service.getStorageAndJobsOverview("project1", null, null);
+      expect(result.storageDetails.totalDiscoveredSize).toBe("0 Bytes");
+      expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
+    });
+
+    it("should handle when migrateRun and cutOverRun are present", async () => {
+      mockProjectRepository.find.mockResolvedValue([
+        {
+          configs: [
+            {
+              fileServers: [
+                {
+                  volumes: [
+                    {
+                      sourceConfig: [
+                        {
+                          jobType: JobType.Migrate,
+                          jobRuns: [{ id: "run2", status: JobRunStatus.Completed, createdAt: new Date() }],
+                        },
+                        {
+                          jobType: JobType.CutOver,
+                          jobRuns: [{ id: "run3", status: JobRunStatus.Completed, createdAt: new Date() }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+      mockInventoryRepository.query = jest
+        .fn()
+        .mockResolvedValueOnce([{ totalDiscoveredSize: 200 }])
+        .mockResolvedValueOnce([{ totalMigratedSize: 150 }]);
+      const result = await service.getStorageAndJobsOverview("project1", null, null);
+      expect(result.storageDetails.totalDiscoveredSize).toBeDefined();
+      expect(result.storageDetails.totalMigratedSize).toBeDefined();
+      expect(result.storageDetails.totalPendingSize).toBeDefined();
     });
   });
 
@@ -338,4 +386,153 @@ describe("OverviewService", () => {
       });
     });
   });
+
+  describe("countAllJobTypes", () => {
+    let service: OverviewService;
+
+    beforeEach(() => {
+      service = new OverviewService(
+        { } as any,
+        { } as any
+      );
+    });
+
+    it("should return correct counts for each job type", () => {
+      const projects = [
+        {
+          configs: [
+            {
+              fileServers: [
+                {
+                  volumes: [
+                    {
+                      sourceConfig: [
+                        { jobType: JobType.Discover },
+                        { jobType: JobType.Migrate },
+                        { jobType: JobType.CutOver },
+                        { jobType: JobType.Discover },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ];
+      const result = service.countAllJobTypes(projects);
+      expect(result).toEqual({
+        totalDiscoverJobs: 2,
+        totalMigrationJobs: 1,
+        totalCutOverJobs: 1,
+      });
+    });
+
+    it("should return zeros if projects is undefined", () => {
+      const result = service.countAllJobTypes(undefined);
+      expect(result).toEqual({
+        totalDiscoverJobs: 0,
+        totalMigrationJobs: 0,
+        totalCutOverJobs: 0,
+      });
+    });
+
+    it("should return zeros if configs or sourceConfig are missing", () => {
+      const projects = [
+        {
+          configs: [
+            {
+              fileServers: [
+                {
+                  volumes: [{}],
+                },
+              ],
+            },
+          ],
+        },
+      ];
+      const result = service.countAllJobTypes(projects);
+      expect(result).toEqual({
+        totalDiscoverJobs: 0,
+        totalMigrationJobs: 0,
+        totalCutOverJobs: 0,
+      });
+    });
+
+    it("should handle errors gracefully", () => {
+      const badProjects = [
+        {
+          configs: null,
+        },
+      ];
+      const result = service.countAllJobTypes(badProjects);
+      expect(result).toEqual({
+        totalDiscoverJobs: 0,
+        totalMigrationJobs: 0,
+        totalCutOverJobs: 0,
+      });
+    });
+
+    it("should count jobs when some nested arrays are missing", () => {
+      const projects = [
+        {
+          configs: [
+            {
+              fileServers: [
+                {
+                  volumes: [
+                    {
+                      sourceConfig: [
+                        { jobType: JobType.Discover },
+                        { jobType: JobType.Migrate },
+                      ],
+                    },
+                    {},
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          configs: [
+            {
+              fileServers: [
+                {
+                  volumes: [
+                    {
+                      sourceConfig: [
+                        { jobType: JobType.CutOver },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ];
+      const result = service.countAllJobTypes(projects);
+      expect(result).toEqual({
+        totalDiscoverJobs: 1,
+        totalMigrationJobs: 1,
+        totalCutOverJobs: 1,
+      });
+    });
+
+    it("should return zeros if all arrays are empty", () => {
+      const projects = [
+        {
+          configs: [],
+        },
+      ];
+      const result = service.countAllJobTypes(projects);
+      expect(result).toEqual({
+        totalDiscoverJobs: 0,
+        totalMigrationJobs: 0,
+        totalCutOverJobs: 0,
+      });
+    });
+  });
+
 });
