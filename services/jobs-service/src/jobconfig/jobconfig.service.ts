@@ -1110,6 +1110,8 @@ export class JobConfigService {
               id: true,
               volumePath: true,
               reachableCount: true,
+              isDisabled: true,
+              isValid: true,
             },
           },
         },
