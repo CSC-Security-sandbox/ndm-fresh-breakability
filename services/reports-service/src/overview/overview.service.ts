@@ -82,45 +82,6 @@ export class OverviewService {
 
     const scanRunDetailsStart = Date.now();
 
-    // const totalDiscoverJobs =
-    //   projectDetails?.flatMap((project) =>
-    //     project?.configs?.flatMap((config) =>
-    //       config?.fileServers?.flatMap((fileServer) =>
-    //         fileServer?.volumes?.flatMap((volume) =>
-    //           volume?.sourceConfig?.filter(
-    //             (jobConfig) => jobConfig.jobType === JobType.Discover
-    //           )
-    //         )
-    //       )
-    //     )
-    //   )?.length || 0;
-
-    // const totalMigrationJobs =
-    //   projectDetails?.flatMap((project) =>
-    //     project?.configs?.flatMap((config) =>
-    //       config?.fileServers?.flatMap((fileServer) =>
-    //         fileServer?.volumes?.flatMap((volume) =>
-    //           volume?.sourceConfig?.filter(
-    //             (jobConfig) => jobConfig.jobType === JobType.Migrate
-    //           )
-    //         )
-    //       )
-    //     )
-    //   )?.length || 0;
-
-    // const totalCutOverJobs =
-    //   projectDetails?.flatMap((project) =>
-    //     project?.configs?.flatMap((config) =>
-    //       config?.fileServers?.flatMap((fileServer) =>
-    //         fileServer?.volumes?.flatMap((volume) =>
-    //           volume?.sourceConfig?.filter(
-    //             (jobConfig) => jobConfig.jobType === JobType.CutOver
-    //           )
-    //         )
-    //       )
-    //     )
-    //   )?.length || 0;
-
     const {
       totalDiscoverJobs,
       totalMigrationJobs,
@@ -284,7 +245,7 @@ export class OverviewService {
     return overViewData;
   }
 
-  countAllJobTypes(projects) {
+  countAllJobTypes(projects: any) {
     try {
       const allConfigs =
         projects?.flatMap((project) =>
