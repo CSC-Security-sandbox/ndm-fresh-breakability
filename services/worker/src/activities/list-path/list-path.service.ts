@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import { ConfigService } from '@nestjs/config';
+import { ExportPathSource } from './list-path.type';
 
 @Injectable()
 export class ListPathActivity {
@@ -29,8 +30,11 @@ export class ListPathActivity {
     };
 
     try {
-      const protocol: Protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
-      response.paths = await protocol.listPaths(traceId, payload);
+      if(payload.exportPathSource !== ExportPathSource.MANUAL_UPLOAD) {
+        const protocol: Protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
+        response.paths = await protocol.listPaths(traceId, payload);
+        return response;
+      }
       return response;
     } catch (error) {
       return {
