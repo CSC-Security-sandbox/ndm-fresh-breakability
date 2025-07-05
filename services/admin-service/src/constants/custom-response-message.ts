@@ -8,7 +8,7 @@ export enum HTTPMethod {
   DELETE = 'DELETE',
 }
 
-export const successResponse:CustomSuccessDTO[] = [
+export const customSuccessDTOList:CustomSuccessDTO[] = [
   {
     apiEndPointKey: 'create-user',
     message: 'User Created successfully.',
@@ -31,12 +31,12 @@ export const successResponse:CustomSuccessDTO[] = [
   {
     apiEndPointKey: 'batch',
     method: HTTPMethod.POST,
-    message: 'Associate Users for the Project has been added/removed successfully',
+    message: 'Users for the Project has been added/removed successfully',
     statusCode: '200',
   },
 
 ];
-export const errorResponse:CustomErrorDTO[] = [
+export const customErrorDTOList:CustomErrorDTO[] = [
   {
     apiEndPointKey: 'batch',
     message: 'Failed to associate the users.',
@@ -44,12 +44,12 @@ export const errorResponse:CustomErrorDTO[] = [
   },
   {
     apiEndPointKey: 'projects',
-    message: 'failed to create project',
+    message: 'Failed to create project',
     statusCode: '500',
   },
   {
     apiEndPointKey: 'batch',
-    message: 'failed to associate users for the project',
+    message: 'Failed to associate users for the project',
     statusCode: '500',
   },
 ];
