@@ -46,7 +46,6 @@ const ReportDoughnutChart = () => {
     reportType: JOBS_TYPE.DISCOVERY,
   };
   const { data: reportData } = useGetReportDataQuery(payload);
-
   const summary = createSummaryMap(reportData);
 
   const fileExtensionCounts = Object.entries(summary).filter(
@@ -57,27 +56,29 @@ const ReportDoughnutChart = () => {
   /* This part ensures colors in the legend matches the exact 
   same colors in doughnut chart (random colors will be assigned 
   to the file extentions as this data will be dynamic) */
-
   const shuffledColors = [...availableChartColors]
-    .filter((c) => c !== "chart-1")
-    .sort(() => Math.random() - 0.5);
+      .filter((c) => c !== "chart-1")
+      .sort(() => Math.random() - 0.5);  // Shuffle the colors
 
   const assignedColors: Record<string, string> = {};
   fileExtensionCounts.forEach((_, index) => {
+    // Use modulo to cycle through available colors if there are more extensions than colors
     assignedColors[`chart-${index + 2}`] =
-      shuffledColors[index % shuffledColors.length];
+        shuffledColors[index % shuffledColors.length];
   });
 
+// For the chart, use the actual color names directly
   const doughnutColors = [
-    fileExtensionCounts.map((_, index) => assignedColors[`chart-${index + 2}`]),
+    fileExtensionCounts.map((_, index) => `chart-${index + 2}`),
     ["chart-1"],
   ];
 
+// For the legend, use the same direct mapping to ensure consistency
   const legendsData = [
     ...fileExtensionCounts.map(([key, value], index) => ({
       title: key,
       value,
-      color: colorClassMap[assignedColors[`chart-${index + 2}`]],
+      color: colorClassMap[`chart-${index + 2}`],
     })),
     {
       title: "Total Size (MB)",
@@ -110,7 +111,7 @@ const ReportDoughnutChart = () => {
     },
     {
       label: `${formatLargeNumber(maxPath)}/${formatLargeNumber(avgPath)}`,
-      value: "Longest Path",
+      value: "Longest File Path",
     },
   ];
 

@@ -12,8 +12,7 @@ import * as fs from "fs";
 import * as archiver from "archiver";
 import { ReportsEntity } from "src/entities/reports.entity";
 import puppeteer from "puppeteer";
-import { ReportHeaders } from "./pattern.enum";
-import { formatValue, groupAndOrder } from "../utils/group-order";
+import { groupAndOrder } from "../utils/group-order";
 import { escapeCsvValue, validateFilePath } from "src/utils/utils";
 import { ReportType, ReportValueType } from "../constants/enums";
 
@@ -42,8 +41,6 @@ export class DiscoveryService {
       if (!fs.existsSync(this.reportsDirectory)) {
         fs.mkdirSync(this.reportsDirectory, { recursive: true });
       }
-
-      this.logger.log("procedure started");
       const pdfFileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
       const pdfFilePath = path.join(this.reportsDirectory, pdfFileName);
       if (!validateFilePath(pdfFilePath)) {

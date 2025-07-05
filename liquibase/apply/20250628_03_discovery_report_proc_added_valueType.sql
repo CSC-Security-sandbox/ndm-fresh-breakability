@@ -138,7 +138,7 @@ select
                     'category',
                     'Modified',
                     'sub_category',
-                    'Capacity With Modification Time: ' || date_group,
+                    'Capacity With Modification Time ' || date_group,
                     'valueType',
                     'size',
                     'value',

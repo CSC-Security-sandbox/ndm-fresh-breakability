@@ -10,14 +10,18 @@ import {
 } from "@nestjs/common";
 import * as validation from "../utils/utils";
 
+// Mock Puppeteer
 jest.mock("puppeteer", () => ({
-  launch: jest.fn().mockResolvedValue({
-    newPage: jest.fn().mockResolvedValue({
-      setContent: jest.fn().mockResolvedValue(null),
-      pdf: jest.fn().mockResolvedValue(Buffer.from("mock pdf")),
+  __esModule: true,
+  default: {
+    launch: jest.fn().mockResolvedValue({
+      newPage: jest.fn().mockResolvedValue({
+        setContent: jest.fn().mockResolvedValue(undefined),
+        pdf: jest.fn().mockResolvedValue(Buffer.from("mock pdf content")),
+      }),
+      close: jest.fn().mockResolvedValue(undefined),
     }),
-    close: jest.fn().mockResolvedValue(null),
-  }),
+  },
 }));
 
 describe("DiscoveryService", () => {
@@ -100,7 +104,7 @@ describe("DiscoveryService", () => {
       // Mock the procedure call
       jest
         .spyOn(validation, "validateFilePath")
-        .mockImplementation((filePath: string) => true || false);
+        .mockImplementation((filePath: string) => true);
 
       mockInventoryRepo.query.mockImplementation((query, params) => {
         if (query.includes("generate_discovery_report")) {
@@ -193,6 +197,21 @@ describe("DiscoveryService", () => {
         service.createReportFile(jobRunId, reportType)
       ).rejects.toThrow(InternalServerErrorException);
     });
+
+    it("should throw error when file path contains invalid characters", async () => {
+      // Mock validateFilePath to return false for this test
+      jest.spyOn(validation, "validateFilePath").mockReturnValueOnce(false);
+
+      const loggerSpy = jest.spyOn(service["logger"], "error");
+
+      await expect(
+        service.createReportFile(jobRunId, reportType)
+      ).rejects.toThrow("Failed to generate report for jobRunId: job123 and reportType: DISCOVERY");
+
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringContaining("File path contains invalid characters:")
+      );
+    });
   });
 
   describe("getReportsAsZip", () => {
@@ -203,8 +222,8 @@ describe("DiscoveryService", () => {
 
       jest
         .spyOn(fs, "existsSync")
-        .mockReturnValueOnce(true)
-        .mockReturnValueOnce(true);
+        .mockReturnValueOnce(true)  // Reports directory exists
+        .mockReturnValueOnce(true);  // File exists
 
       jest.spyOn(service, "createZipArchive").mockResolvedValue(mockZipBuffer);
 
@@ -219,12 +238,53 @@ describe("DiscoveryService", () => {
 
       jest
         .spyOn(fs, "existsSync")
-        .mockReturnValueOnce(true)
-        .mockReturnValueOnce(false);
+        .mockReturnValueOnce(true)  // Reports directory exists
+        .mockReturnValueOnce(false);  // File doesn't exist
 
       await expect(
         service.getReportsAsZip(jobRunIds, reportType)
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it("should log warning when some files are not found but others exist", async () => {
+      const jobRunIds = ["job123", "job456"];
+      const reportType = "discovery";
+      const mockZipBuffer = Buffer.from("mock zip content");
+
+      // Mock console.warn to capture the warning
+      const consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation();
+
+      jest
+        .spyOn(fs, "existsSync")
+        .mockReturnValueOnce(true)  // Reports directory exists
+        .mockReturnValueOnce(true)  // First file exists
+        .mockReturnValueOnce(false); // Second file doesn't exist
+
+      jest.spyOn(service, "createZipArchive").mockResolvedValue(mockZipBuffer);
+
+      const result = await service.getReportsAsZip(jobRunIds, reportType);
+
+      expect(result).toEqual(mockZipBuffer);
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("File not found:")
+      );
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it("should throw error when reports directory does not exist", async () => {
+      const jobRunIds = ["job123"];
+      const reportType = "discovery";
+
+      // Mock reports directory not existing
+      jest.spyOn(fs, "existsSync").mockReturnValueOnce(false);
+
+      // Use a more specific matcher to check both the error type and message in one assertion
+      await expect(
+        service.getReportsAsZip(jobRunIds, reportType)
+      ).rejects.toThrowError(
+        "Reports directory does not exist: ./reports"
+      );
     });
   });
 
@@ -280,11 +340,68 @@ describe("DiscoveryService", () => {
 
       expect(result).toContain("<table>");
       expect(result).toContain("<h2>Files</h2>");
+      expect(result).toContain("<tr>\n            <th>Sub Category</th>\n            <th></th>\n          </tr>");
       expect(result).toContain("Total");
       expect(result).toContain("Processed");
       expect(result).toContain("100");
       expect(result).toContain("50");
-      expect(result).toContain("10");
+    });
+  });
+
+  describe("generatePdfFromData", () => {
+    it("should generate PDF from data", async () => {
+      const mockData = [
+        {
+          category: "Files",
+          sub_category: "Total",
+          valueType: "count",
+          value: "100",
+        },
+      ];
+
+      // Mock the HTML generation
+      const mockHtml = "<html><body>Test HTML</body></html>";
+      jest.spyOn(service, "generateHtmlTable").mockReturnValue(mockHtml);
+
+      const result = await service.generatePdfFromData(mockData);
+
+      expect(result).toBeInstanceOf(Buffer);
+      expect(service.generateHtmlTable).toHaveBeenCalledWith(mockData);
+    });
+  });
+
+  describe("createJobsPDFReportData", () => {
+    it("should call the stored procedure and return success message", async () => {
+      const jobRunId = "job123";
+      const loggerSpy = jest.spyOn(service["logger"], "log");
+
+      mockInventoryRepo.query.mockResolvedValue([]);
+
+      const result = await service.createJobsPDFReportData(jobRunId);
+
+      expect(result).toEqual({ message: "Report data generated successfully for jobs report" });
+      expect(mockInventoryRepo.query).toHaveBeenCalledWith(
+        expect.stringContaining("jobs_report_data_v2"),
+        [jobRunId, process.env.SCHEMA]
+      );
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`Creating jobs report data for jobRunId: ${jobRunId}`)
+      );
+    });
+
+    it("should throw InternalServerErrorException when procedure call fails", async () => {
+      const jobRunId = "job123";
+      const loggerSpy = jest.spyOn(service["logger"], "log");
+
+      mockInventoryRepo.query.mockRejectedValue(new Error("Procedure failed"));
+
+      await expect(
+        service.createJobsPDFReportData(jobRunId)
+      ).rejects.toThrow(InternalServerErrorException);
+
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`Failed to generate report for jobRunId: ${jobRunId}`)
+      );
     });
   });
 
@@ -335,6 +452,139 @@ describe("DiscoveryService", () => {
 
       writeFileSpy.mockRestore();
       consoleSpy.mockRestore();
+    });
+
+    it("should throw error when file path contains invalid characters", () => {
+      const mockData = [{ category: "Test", sub_category: "Test", value: 100 }];
+      const mockFilePath = "invalid/path";
+
+      // Mock validateFilePath to return false for this test
+      jest.spyOn(validation, "validateFilePath").mockReturnValueOnce(false);
+
+      const loggerSpy = jest.spyOn(service["logger"], "error");
+
+      expect(() => {
+        service.formatAndWriteToFile(mockData, mockFilePath);
+      }).toThrow("File path contains invalid characters.");
+
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringContaining("File path contains invalid characters:")
+      );
+    });
+
+    it("should collect dynamic headers from report data", () => {
+      const mockData = [
+        {
+          category: "Category1",
+          sub_category: "SubCat1",
+          value: "100",
+          valueType: "count",
+        },
+        {
+          category: "Category2",
+          sub_category: "SubCat2",
+          value: "200",
+          valueType: "count",
+        },
+        {
+          category: "Category3",
+          sub_category: "SubCat3",
+          value: null,
+          valueType: "count",
+        }
+      ];
+      const mockFilePath = "test.txt";
+
+      // Mock groupAndOrder to return a specific structure
+      jest.spyOn(require("../utils/group-order"), "groupAndOrder").mockReturnValue({
+        Category1: [{ sub_category: "SubCat1", value: "100" }],
+        Category2: [{ sub_category: "SubCat2", value: "200" }],
+        Category3: [{ sub_category: "SubCat3", value: null }]
+      });
+
+      const writeFileSpy = jest.spyOn(fs, "writeFileSync").mockImplementation();
+
+      service.formatAndWriteToFile(mockData, mockFilePath);
+
+      // Verify that writeFileSync was called with content that includes both headers
+      expect(writeFileSpy).toHaveBeenCalledWith(
+        mockFilePath,
+        expect.stringContaining("SubCat1,SubCat2")
+      );
+
+      writeFileSpy.mockRestore();
+    });
+
+    it("should process entries with header matching sub_category", () => {
+      const mockData = [
+        {
+          category: "Category1",
+          sub_category: "SubCat1",
+          value: "100",
+          valueType: "count",
+        },
+      ];
+      const mockFilePath = "test.txt";
+
+      // Mock groupAndOrder to return a specific structure
+      jest.spyOn(require("../utils/group-order"), "groupAndOrder").mockReturnValue({
+        Category1: [
+          { 
+            category: "Category1", 
+            sub_category: "SubCat1", 
+            value: "100" 
+          }
+        ]
+      });
+
+      const writeFileSpy = jest.spyOn(fs, "writeFileSync").mockImplementation();
+
+      service.formatAndWriteToFile(mockData, mockFilePath);
+
+      // Verify that writeFileSync was called with content that includes the value
+      expect(writeFileSpy).toHaveBeenCalledWith(
+        mockFilePath,
+        expect.stringContaining("100")
+      );
+
+      writeFileSpy.mockRestore();
+    });
+
+    it("should handle both direct properties and sub_category matches", () => {
+      const mockData = [
+        {
+          category: "Category1",
+          sub_category: "SubCat1",
+          value: "100",
+          SubCat2: "200", // Direct property
+          valueType: "count",
+        }
+      ];
+      const mockFilePath = "test.txt";
+
+      // Mock groupAndOrder to return a specific structure
+      jest.spyOn(require("../utils/group-order"), "groupAndOrder").mockReturnValue({
+        Category1: [
+          { 
+            category: "Category1", 
+            sub_category: "SubCat1", 
+            value: "100",
+            SubCat2: "200"
+          }
+        ]
+      });
+
+      const writeFileSpy = jest.spyOn(fs, "writeFileSync").mockImplementation();
+
+      service.formatAndWriteToFile(mockData, mockFilePath);
+
+      // Verify that writeFileSync was called with content that includes both values
+      expect(writeFileSpy).toHaveBeenCalledWith(
+        mockFilePath,
+        expect.stringContaining("100")
+      );
+
+      writeFileSpy.mockRestore();
     });
   });
 

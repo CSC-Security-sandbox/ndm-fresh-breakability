@@ -1,14 +1,14 @@
 import { DataItemType } from "@/app/type.interface";
 import {
   chartDataForAccessTime,
-  chartDataForFileCount,
+  chartDataForFileCount, chartDataForFileCountAccessTime,
   chartDataForFileCountCreated,
   chartDataForFileCountModified,
   chartDataForFileDepth,
-  chartDataForFileSize,
+  chartDataForFileSize, chartDataForFileSizeAccessTime,
   chartDataForFileSizeCreated,
-  chartDataForFileSizeModified,
-} from "@modules/jobs/discovery-preview/preview.decorators";
+  chartDataForFileSizeModified
+} from '@modules/jobs/discovery-preview/preview.decorators';
 
 export const availableChartColors = [
   "chart-1",
@@ -86,14 +86,14 @@ export const CHART_MAPER = (jobData: DataItemType[]) => [
 
   {
     label: "Access Time",
-    haveToggle: false,
+    haveToggle: true,
     toggleOptions: [],
-    data: chartDataForAccessTime(jobData).data,
-    categories: chartDataForAccessTime(jobData).categories,
-    countData: [],
-    countCategories: [],
-    sizeData: [],
-    sizeCategories: [],
+    data: [],
+    categories: [],
+    countData: chartDataForFileCountAccessTime(jobData).data,
+    countCategories: chartDataForFileCountAccessTime(jobData).categories,
+    sizeData: chartDataForFileSizeAccessTime(jobData).data,
+    sizeCategories: chartDataForFileSizeAccessTime(jobData).categories,
   },
 ];
 

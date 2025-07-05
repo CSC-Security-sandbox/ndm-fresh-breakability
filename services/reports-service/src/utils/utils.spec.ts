@@ -24,6 +24,7 @@ describe("validateFilePath", () => {
     expect(validateFilePath("file path with spaces.txt")).toBe(false);
   });
 });
+
 describe("escapeCsvValue", () => {
   it("should wrap value with comma in double quotes", () => {
     expect(escapeCsvValue("hello,world")).toBe('"hello,world"');
@@ -31,6 +32,7 @@ describe("escapeCsvValue", () => {
 
   it('should return false for a file path with invalid characters', () => {
     expect(validateFilePath('invalidfile\\path?.txt')).toBe(false);
+  });
   it("should wrap value with newline in double quotes", () => {
     expect(escapeCsvValue("line1\nline2")).toBe('"line1\nline2"');
   });
@@ -50,4 +52,5 @@ describe("escapeCsvValue", () => {
   it("should handle empty string", () => {
     expect(escapeCsvValue("")).toBe("");
   });
+
 });

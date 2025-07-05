@@ -4,8 +4,23 @@ import { DataItemType, FileInfo, ProcessedData } from "@/types/app.type";
   /* This convert bytes to MB */
 }
 const toMB = (value: number): number => {
-  return parseFloat((value / (1024 * 1024)).toFixed(2));
+  return parseFloat((value / (1000 * 1000)).toFixed(2));
 };
+
+const covertBytes = (bytes: number): string => {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+  let size = bytes;
+  let unitIndex = 0;
+  while (size >= 1000 && unitIndex < units.length - 1) {
+    size /= 1000;
+    unitIndex++;
+  }
+  return size === Math.floor(size)
+      ? `${size?.toFixed(0)} ${units[unitIndex]}`
+      : `${size?.toFixed(2)} ${units[unitIndex]}`;
+};
+
 
 {
   /* This function extract data for files as per space used */
@@ -63,13 +78,13 @@ export function chartDataForFileSizeModified(
   const filteredData = jsonData?.filter(
     (item) =>
       item.category === "Modified" &&
-      typeof item.value === "number" &&
-      item.sub_category.includes("Capacity With Modification Time:")
+        item['valueType'] === "size" &&
+      item.sub_category.startsWith("Capacity with Modification Time")
   );
 
   const data = filteredData?.map((item) => toMB(item.value as number));
   const categories = filteredData?.map((item) =>
-    item.sub_category.replace("Capacity With Modification Time: ", "").trim()
+    item.sub_category.replace("Capacity with Modification Time ", "").trim()
   );
 
   return { data, categories };
@@ -84,13 +99,13 @@ export function chartDataForFileCountModified(
   const filteredData = jsonData?.filter(
     (item) =>
       item.category === "Modified" &&
-      typeof item.value === "number" &&
-      item.sub_category.includes("File Count With Modification Time:")
+        item['valueType'] === "count" &&
+      item.sub_category.startsWith("File Count with Modification Time")
   );
 
   const data = filteredData?.map((item) => item.value as number);
   const categories = filteredData?.map((item) =>
-    item.sub_category.replace("File Count With Modification Time: ", "").trim()
+    item.sub_category.replace("File Count with Modification Time ", "").trim()
   );
 
   return { data, categories };
@@ -105,8 +120,8 @@ export function chartDataForFileSizeCreated(
   const filteredData = jsonData?.filter(
     (item) =>
       item.category === "Created" &&
-      typeof item.value === "number" &&
-      item.sub_category.includes("Capacity with Creation Time")
+      item['valueType'] === "size" &&
+      item.sub_category.startsWith("Capacity with Creation Time")
   );
 
   const data = filteredData?.map((item) => toMB(item.value as number));
@@ -126,13 +141,31 @@ export function chartDataForFileCountCreated(
   const filteredData = jsonData?.filter(
     (item) =>
       item.category === "Created" &&
-      typeof item.value === "number" &&
-      item.sub_category.includes("File Count with Creation Time")
+       item['valueType'] === "count" &&
+      item.sub_category.startsWith("File Count with Creation Time")
   );
-
   const data = filteredData?.map((item) => item.value as number);
   const categories = filteredData?.map((item) =>
     item.sub_category.replace("File Count with Creation Time", "").trim()
+  );
+  return { data, categories };
+}
+
+{
+  /* This function extract data for files as per count and as created */
+}
+export function chartDataForFileSizeAccessTime(
+    jsonData: DataItemType[]
+): ProcessedData {
+  const filteredData = jsonData?.filter(
+      (item) =>
+          item.category === "Access Time" &&
+          item['valueType'] === "size" &&
+          item.sub_category.startsWith("Capacity with Access Time")
+  );
+
+  const data = filteredData?.map((item) => toMB(item.value as number));
+  const categories = filteredData?.map((item) => item.sub_category.replace("Capacity with Access Time", "").trim()
   );
 
   return { data, categories };
@@ -141,11 +174,27 @@ export function chartDataForFileCountCreated(
 {
   /* This function extract data for files as per count and as created */
 }
+export function chartDataForFileCountAccessTime(
+    jsonData: DataItemType[]
+): ProcessedData {
+  const filteredData = jsonData?.filter(
+      (item) =>
+          item.category === "Access Time" &&
+          item['valueType'] === "count" &&
+          item.sub_category.startsWith("File Count with Access Time")
+  );
+  const data = filteredData?.map((item) => item.value as number);
+  const categories = filteredData?.map((item) =>
+      item.sub_category.replace("File Count with Access Time", "").trim()
+  );
+
+  return { data, categories };
+}
 export function chartDataForAccessTime(
   jsonData: DataItemType[]
 ): ProcessedData {
   const filteredData = jsonData?.filter(
-    (item) => item.category === "Access Time" && typeof item.value === "number"
+    (item) => item.category === "Access Time" && item['valueType'] === "size"
   );
 
   const data = filteredData?.map((item) => item.value as number);
@@ -164,17 +213,18 @@ export const createSummaryMap = (
   let totalSizeMB = 0;
 
   jsonData?.forEach(({ value, category, sub_category }) => {
-    if (typeof value !== "number") return;
-
     if (category === "Top File Extensions") {
-      summary[sub_category] = (summary[sub_category] || 0) + value;
+      // Extract the size value using regex
+      const sizeMatch = value.toString().match(/size\((\d+)\)/);
+      const sizeValue = sizeMatch ? parseInt(sizeMatch[1], 10) : 0;
+      summary[sub_category +' (MB)'] = (summary[sub_category] || 0) + toMB(sizeValue) ;
     }
 
     if (
       category === "File System Stats" &&
       sub_category === "Total Space Used"
     ) {
-      totalSizeMB = toMB(value);
+      totalSizeMB = toMB(typeof value === 'number' ? value :0);
     }
   });
 
@@ -221,8 +271,7 @@ export function extractBiggestFiles(
     .map((entry) => {
       const match = entry.match(/(.+?) \((\d+)\)/);
       if (!match) return null;
-
-      return { fileName: match[1].trim(), fileSize: toMB(Number(match[2])) };
+      return { fileName: match[1].trim(), fileSize: covertBytes(Number(match[2])) };
     })
     .filter(Boolean);
 }
@@ -236,22 +285,21 @@ export function extractLongestDirectoryPaths(data: DataItemType[]): FileInfo[] {
       item.category === "Biggest" &&
       item.sub_category === "Longest Directory Path"
   );
-
   if (!longestDirPaths) return [];
-
-  return (longestDirPaths?.value as string)
-    ?.split(";")
-    ?.map((entry: string) => {
-      const match = entry.match(/\/([^/]+) \((\d+)\)$/);
-      if (match) {
-        return {
-          fileName: match[1],
-          fileSize: parseInt(match[2], 10),
-        };
-      }
-      return null;
-    })
-    .filter(Boolean) as FileInfo[];
+ let longestPathCounts=  (longestDirPaths?.value as string)
+     ?.split(";")
+     ?.map((entry: string) => {
+       const match = entry.match(/\/([^/]+) \((\d+)\)$/);
+       if (match) {
+         return {
+           fileName: match[1],
+           fileSize: parseInt(match[2], 10),
+         };
+       }
+       return null;
+     })
+     .filter(Boolean) as FileInfo[];
+  return longestPathCounts;
 }
 
 {
@@ -261,7 +309,6 @@ export function extractAverageMaxDepth(jsonData: DataItemType[]) {
   const depthData = jsonData?.filter(
     (item: DataItemType) => item.category === "Depth"
   );
-
   if (depthData?.length === 0) {
     return { avgDepth: 0, maxDepth: 0 };
   }
@@ -286,16 +333,18 @@ export function extractMaxAvgFilePath(data: DataItemType[]): {
   maxPath: number;
   avgPath: number;
 } {
-  const filePathLengths = data
+   const filePathLengths = data
     ?.filter((item: DataItemType) => item.sub_category === "Longest File Path")
     ?.map((item: DataItemType) =>
       (item.value as string)
         .split(";")
-        .map((path: string) => path.trim().length)
+        .map((path: string) => {
+          const match = path.match(/\((\d+)\)/);
+         const countOfPath= match ? parseInt(match[1], 10) : null;
+         return countOfPath
+        })
     );
-
   const allLengths = filePathLengths?.flat();
-
   if (allLengths?.length === 0) return { maxPath: 0, avgPath: 0 };
 
   const maxPath = Math.max(...allLengths);
@@ -375,7 +424,6 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
   const fileServerProtocol =
     data?.find((item: DataItemType) => item.sub_category === "Protocol")
       ?.value || 0;
-
   return {
     regularFiles,
     symbolicLinks,
