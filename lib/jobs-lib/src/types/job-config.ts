@@ -11,6 +11,7 @@ export class JobConfig implements Serializable {
   destinationFileServer?: FileServerDetails;
   destinationPath?: string;
   options?:Options;
+  skipDelete?: boolean //  Set to true for incremental or cutover jobs. When true, target files will be deleted if they are not present in the source.
 
   constructor(
     jobId: string,
@@ -20,7 +21,8 @@ export class JobConfig implements Serializable {
     destinationFileServer?: FileServerDetails,
     destinationPath?: string,
     workerIds?: string[],
-    options?: Options
+    options?: Options,
+    skipDelete?: boolean
   ) {
     this.jobId = jobId;
     this.jobType = jobType;
@@ -30,6 +32,7 @@ export class JobConfig implements Serializable {
     this.destinationPath = destinationPath;
     this.workerIds = workerIds;
     this.options = options;
+    this.skipDelete = skipDelete;
   }
 
   serialize(): string {
@@ -46,5 +49,6 @@ export class JobConfig implements Serializable {
     this.destinationPath = obj.destinationPath;
     this.workerIds = obj.workerIds;
     this.options = obj.options;
+    this.skipDelete = obj.skipDelete;
   }
 }
