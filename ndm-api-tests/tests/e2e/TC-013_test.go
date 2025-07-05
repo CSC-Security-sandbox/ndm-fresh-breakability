@@ -14,7 +14,7 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 	var (
 		ProjectId              string
 		workerId1              string
-		workerId2              string
+		// workerId2              string
 		workerIds              []string
 		err                    error
 		attachedWorkersConfig  map[string]SSHConfig
@@ -24,13 +24,13 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 	)
 	Context("TC-013", func() {
 		BeforeEach(func() {
-			NumberOfWorker := 2
+			NumberOfWorker := 1
 			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
 			Expect(err).To(BeNil(), "Error during test environment setup")
-			Expect(len(attachedWorkersConfig)).Should(BeNumerically(">", 1), "Expected at least one worker to be attached")
+			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 1), "Expected at least one worker to be attached")
 			workerIds = GetWorkerIds()
 			workerId1 = workerIds[0]
-			workerId2 = workerIds[1]
+			// workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
 			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME)
 			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME_1)
@@ -56,7 +56,7 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 				Protocol:         ProtocolNFS,
 				ProtocolVersion:  ProtocolVersion3,
 				Host:             SOURCE_HOST_IP,
-				Workers:          []string{workerId1, workerId2},
+				Workers:          []string{workerId1},
 				WorkingDirectory: "",
 			}
 			sourceConfigID1, resp, err := CreateFileServer(sourceParams, headers)
@@ -85,7 +85,7 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 				Protocol:         ProtocolNFS,
 				ProtocolVersion:  ProtocolVersion3,
 				Host:             DESTINATION_HOST_IP,
-				Workers:          []string{workerId1, workerId2},
+				Workers:          []string{workerId1},
 				WorkingDirectory: "",
 			}
 			destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)

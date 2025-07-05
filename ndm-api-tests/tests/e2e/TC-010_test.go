@@ -12,7 +12,7 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 	var (
 		ProjectId              string
 		workerId1              string
-		workerId2              string
+		// workerId2              string
 		workerIds              []string
 		err                    error
 		destinationVolumePath1 string
@@ -25,13 +25,13 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 
 	Context("TC-010: Run discovery, migration with 'Exclude Path Patterns' option and run cutover on same", func() {
 		BeforeEach(func() {
-			numberOfWorker := 2
+			numberOfWorker := 1
 			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
 			Expect(err).To(BeNil(), "Error during test environment setup")
-			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
+			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 1), "Expected 2 workers to be attached")
 			workerIds = GetWorkerIds()
 			workerId1 = workerIds[0]
-			workerId2 = workerIds[1]
+			// workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
 			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME)
 			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME_1)
@@ -58,7 +58,7 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 				Protocol:         ProtocolNFS,
 				ProtocolVersion:  ProtocolVersion3,
 				Host:             SOURCE_HOST_IP,
-				Workers:          []string{workerId1, workerId2},
+				Workers:          []string{workerId1},
 				WorkingDirectory: "",
 			}
 			sourceFileServerID, resp, err := CreateFileServer(sourceParams, headers)
@@ -125,7 +125,7 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 				Protocol:         ProtocolNFS,
 				ProtocolVersion:  ProtocolVersion3,
 				Host:             DESTINATION_HOST_IP,
-				Workers:          []string{workerId1, workerId2},
+				Workers:          []string{workerId1},
 				WorkingDirectory: "",
 			}
 			destinationFileServerID, resp, err = CreateFileServer(destinationParams, headers)

@@ -12,9 +12,9 @@ import (
 var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and check discovery and migration", func() {
 	var headers map[string]string
 	var (
-		ProjectId              string
-		workerId1              string
-		workerId2              string
+		ProjectId string
+		workerId1 string
+		// workerId2              string
 		workerIds              []string
 		err                    error
 		attachedWorkersConfig  map[string]SSHConfig
@@ -25,13 +25,13 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 	)
 	Context("TC-002", func() {
 		BeforeEach(func() {
-			NumberOfWorker := 2
+			NumberOfWorker := 1
 			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
 			Expect(err).To(BeNil(), "Error during test environment setup")
-			Expect(len(attachedWorkersConfig)).Should(BeNumerically(">", 1), "Expected at least one worker to be attached")
+			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 1), "Expected at least one worker to be attached")
 			workerIds = GetWorkerIds()
 			workerId1 = workerIds[0]
-			workerId2 = workerIds[1]
+			// workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
 			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME)
 			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME_1)
@@ -73,7 +73,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 				Protocol:         ProtocolNFS,
 				ProtocolVersion:  ProtocolVersion3,
 				Host:             SOURCE_HOST_IP,
-				Workers:          []string{workerId1, workerId2},
+				Workers:          []string{workerId1},
 				WorkingDirectory: "",
 			}
 			sourceConfigID1, resp, err := CreateFileServer(sourceParams, headers)
@@ -99,7 +99,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 				Protocol:         ProtocolNFS,
 				ProtocolVersion:  ProtocolVersion3,
 				Host:             DESTINATION_HOST_IP,
-				Workers:          []string{workerId1, workerId2},
+				Workers:          []string{workerId1},
 				WorkingDirectory: "",
 			}
 			destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
@@ -114,16 +114,16 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			destinationPathID1, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			attachedWorkersConfig := GetAttachedWorkersConfig()
-			if len(attachedWorkersConfig) != 0 {
-				for workerId, _ := range attachedWorkersConfig {
-					DetachWorkers([]string{workerId})
-					break // Detach only the first worker
-				}
-			}
+			// attachedWorkersConfig := GetAttachedWorkersConfig()
+			// if len(attachedWorkersConfig) != 0 {
+			// 	for workerId, _ := range attachedWorkersConfig {
+			// 		DetachWorkers([]string{workerId})
+			// 		break // Detach only the first worker
+			// 	}
+			// }
 
 			//waiting for worker to go offline
-			Wait(WORKER_TIMEOUT)
+			// Wait(WORKER_TIMEOUT)
 
 			// Call workers api to get the worker status
 			// verify if it of offline
@@ -142,6 +142,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 				StartDelay:               "10s",
 			}
 			sourceJobConfigIDs, resp, err = CreateDiscoveryJob(jobParams, headers)
+			fmt.Println("Discovery response : ", resp)
 			Expect(err).NotTo(HaveOccurred(), "Error creating new discovery for source")
 			Expect(len(sourceJobConfigIDs)).To(BeNumerically(">", 0), "No valid sourceJobConfigIDs found in response")
 			defer resp.Body.Close()

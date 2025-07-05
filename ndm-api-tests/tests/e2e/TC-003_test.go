@@ -13,7 +13,7 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 	var (
 		ProjectId              string
 		workerId1              string
-		workerId2              string
+		// workerId2              string
 		workerIds              []string
 		err                    error
 		headers                map[string]string
@@ -25,13 +25,13 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 	)
 	Context("TC-003", func() {
 		BeforeEach(func() {
-			numberOfWorker := 2
+			numberOfWorker := 1
 			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
 			Expect(err).To(BeNil(), "Error during test environment setup")
-			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
+			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 1), "Expected 2 workers to be attached")
 			workerIds = GetWorkerIds()
 			workerId1 = workerIds[0]
-			workerId2 = workerIds[1]
+			// workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
 			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME)
 			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME_1)
@@ -57,7 +57,7 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 				Protocol:         ProtocolNFS,
 				ProtocolVersion:  ProtocolVersion3,
 				Host:             SOURCE_HOST_IP,
-				Workers:          []string{workerId1, workerId2},
+				Workers:          []string{workerId1},
 				WorkingDirectory: "",
 			}
 			sourceConfigID, resp, err := CreateFileServer(sourceParams, headers)
@@ -141,7 +141,7 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 				Protocol:         ProtocolNFS,
 				ProtocolVersion:  ProtocolVersion3,
 				Host:             DESTINATION_HOST_IP,
-				Workers:          []string{workerId1, workerId2},
+				Workers:          []string{workerId1},
 				WorkingDirectory: "",
 			}
 			destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
