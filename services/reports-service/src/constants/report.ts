@@ -39,6 +39,14 @@ export const ReportSubCategoriesHeader = {
     "Capacity with File Size: 100 MiB - 1 GiB",
     "Capacity with File Size: 1+ GiB",
   ],
+  "Depth" :[
+    "Files and Directory with depth: 0-5",
+    "Files and Directory with depth: 6-10",
+    "Files and Directory with depth: 11-15",
+    "Files and Directory with depth: 16-20",
+    "Files and Directory with depth: 21-100",
+    "Files and Directory with depth: >100"
+  ],
   "Modified":[
     "File Count with Modification Time 0-1 wk",
     "Capacity with Modification Time 0-1 wk",

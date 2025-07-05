@@ -667,7 +667,7 @@ from
                     'category',
                     'Biggest',
                     'sub_category',
-                    'Longest File Names',
+                    'Top 5 Longest File Names',
                     'valueType', 'string',
                     'value',
                     longest_file_names
@@ -676,7 +676,7 @@ from
             (
                 select
                     STRING_AGG(file_name || ' (' || length(file_name) || ')',
-                               ';') as longest_file_names
+                               '; ') as longest_file_names
                 from
                     (
                         select
@@ -698,7 +698,7 @@ from
                     'category',
                     'Biggest',
                     'sub_category',
-                    'Longest Directory Names',
+                    'Top 5 Longest Directory Names',
                     'valueType', 'string',
                     'value',
                     longest_file_names
@@ -707,7 +707,7 @@ from
             (
                 select
                     STRING_AGG(file_name || ' (' || length(file_name) || ')',
-                               ';') as longest_file_names
+                               '; ') as longest_file_names
                 from
                     (
                         select
@@ -727,7 +727,7 @@ from
                     'category',
                     'Biggest',
                     'sub_category',
-                    'Longest File Path',
+                    'Top 5 Longest File Path',
                     'valueType', 'string',
                     'value',
                     longest_file_paths
@@ -736,7 +736,7 @@ from
             (
                 select
                     STRING_AGG(path || ' (' || length(path) || ')',
-                               ';') as longest_file_paths
+                               '; ') as longest_file_paths
                 from
                     (
                         select
@@ -759,7 +759,7 @@ from
                     'category',
                     'Biggest',
                     'sub_category',
-                    'Longest Directory Path',
+                    'Top 5 Longest Directory Path',
                     'valueType', 'string',
                     'value',
                     longest_directory_paths
@@ -768,7 +768,7 @@ from
             (
                 select
                     STRING_AGG(path || ' (' || length(path) || ')',
-                               ';') as longest_directory_paths
+                               '; ') as longest_directory_paths
                 from
                     (
                         select
@@ -789,7 +789,7 @@ from
                     'category',
                     'Biggest',
                     'sub_category',
-                    'Biggest File Names',
+                    'Top 5 Biggest File Names',
                     'valueType', 'string',
                     'value',
                     biggest_file_name
@@ -798,7 +798,7 @@ from
             (
                 select
                     STRING_AGG(file_name || ' (' || file_size || ')',
-                               ';') as biggest_file_name
+                               '; ') as biggest_file_name
                 from
                     (
                         select
@@ -822,7 +822,7 @@ from
                     'category',
                     'Biggest',
                     'sub_category',
-                    'Biggest Directory With Count',
+                    'Top 5 Biggest Directory With Count',
                     'valueType', 'count',
                     'value',
                     biggest_directory_count
@@ -831,7 +831,7 @@ from
             (
                 select
                     STRING_AGG(directory || ' (' || file_count || ')',
-                               ';') as biggest_directory_count
+                               '; ') as biggest_directory_count
                 from
                     (
                         select
@@ -856,7 +856,7 @@ from
                     'category',
                     'Biggest',
                     'sub_category',
-                    'Biggest Directory With Capacity',
+                    'Top 5 Biggest Directory With Capacity',
                     'valueType', 'size',
                     'value',
                     biggest_directory_with_capcity

@@ -241,7 +241,7 @@ export function longestFileNames(
 ): { fileName: string }[] {
   const longestFileEntry = jsonData?.find(
     (item) =>
-      item.category === "Biggest" && item.sub_category === "Longest File Names"
+      item.category === "Biggest" && item.sub_category === "Top 5 Longest File Names"
   );
 
   if (!longestFileEntry || typeof longestFileEntry.value !== "string")
@@ -260,7 +260,7 @@ export function extractBiggestFiles(
 ) {
   const biggestFileEntry = jsonData?.find(
     (item) =>
-      item.category === "Biggest" && item.sub_category === "Biggest File Names"
+      item.category === "Biggest" && item.sub_category === "Top 5 Biggest File Names"
   );
 
   if (!biggestFileEntry || typeof biggestFileEntry.value !== "string")
@@ -283,7 +283,7 @@ export function extractLongestDirectoryPaths(data: DataItemType[]): FileInfo[] {
   const longestDirPaths = data?.find(
     (item: DataItemType) =>
       item.category === "Biggest" &&
-      item.sub_category === "Longest Directory Path"
+      item.sub_category === "Top 5 Longest Directory Path"
   );
   if (!longestDirPaths) return [];
  let longestPathCounts=  (longestDirPaths?.value as string)
@@ -334,7 +334,7 @@ export function extractMaxAvgFilePath(data: DataItemType[]): {
   avgPath: number;
 } {
    const filePathLengths = data
-    ?.filter((item: DataItemType) => item.sub_category === "Longest File Path")
+    ?.filter((item: DataItemType) => item.sub_category === "Top 5 Longest File Path")
     ?.map((item: DataItemType) =>
       (item.value as string)
         .split(";")
@@ -366,7 +366,7 @@ export function extractMaxAvgFileSize(data: DataItemType[]): {
   avgFileSize: number;
 } {
   const fileSizeValues = data
-    ?.filter((item: DataItemType) => item.sub_category === "Biggest File Names")
+    ?.filter((item: DataItemType) => item.sub_category === "Top 5 Biggest File Names")
     ?.map((item: DataItemType) =>
       (item.value as string).split(";").map((file: string) => {
         const match = file.trim().match(/\((\d+)\)/);
@@ -444,7 +444,7 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
 export function formatBytes(bytes: number, decimals = 2): string {
   if (bytes === 0) return "0 Bytes";
 
-  const k = 1024;
+  const k = 1000;
   const sizes = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
