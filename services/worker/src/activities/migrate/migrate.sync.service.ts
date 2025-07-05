@@ -93,9 +93,9 @@ export class MigrationSyncService {
   }
 
 
-  ensureDirectoryExists(directoryPath: string) {
+  async ensureDirectoryExists(directoryPath: string) {
     if (!fs.existsSync(directoryPath)) {
-      fs.mkdirSync(directoryPath, { recursive: true });
+      await fs.promises.mkdir(directoryPath, { recursive: true });
     }
   }
   

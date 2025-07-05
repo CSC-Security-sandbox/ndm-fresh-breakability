@@ -25,7 +25,7 @@ export async function smartCopy(source, target) {
 
   const destDir = path.dirname(target);
   if (!fs.existsSync(destDir)) {
-    fs.mkdirSync(destDir, { recursive: true });
+    await fs.promises.mkdir(destDir, { recursive: true });
   }
 
     const readStream = fs.createReadStream(source, { highWaterMark: 1024 * 1024 });
