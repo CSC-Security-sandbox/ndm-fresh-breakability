@@ -42,8 +42,6 @@ export class DiscoveryService {
       if (!fs.existsSync(this.reportsDirectory)) {
         fs.mkdirSync(this.reportsDirectory, { recursive: true });
       }
-
-      this.logger.log("procedure started");
       const pdfFileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
       const pdfFilePath = path.join(this.reportsDirectory, pdfFileName);
       if (!validateFilePath(pdfFilePath)) {
