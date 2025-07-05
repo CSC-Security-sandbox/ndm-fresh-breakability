@@ -72,10 +72,9 @@ export class SettingService {
       throw new HttpException(
         {
           message: 'SMTP server is not reachable',
-          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
           error: error.message,
         },
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
   }
@@ -125,7 +124,7 @@ export class SettingService {
       await transporter.verify();
       isVerificationSuccessful = true;
     } catch (error) {
-      console.error('SMTP Connection Failed:', error.message);
+      console.error('SMTP Connection Failed:', error);
     }
     return isVerificationSuccessful;
   }

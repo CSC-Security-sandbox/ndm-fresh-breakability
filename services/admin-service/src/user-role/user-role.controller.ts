@@ -89,7 +89,7 @@ export class UserRoleController {
     summary: 'Delete a user-role association by ID',
     description: UserRoleDescription.DeleteUserRoleDescription,
   })
-  async delete(@Param('id') id: string): Promise<void> {
+  async delete(@Param('id', NonEmptyStringPipe) id: string): Promise<void> {
     await this.userRoleService.delete(id);
   }
 
@@ -156,7 +156,7 @@ export class UserRoleController {
     summary: 'Get a user-role association by ID',
     description: UserRoleDescription.GetUserRoleByIdDescription,
   })
-  async findOne(@Param('id') id: string): Promise<UserRole> {
+  async findOne(@Param('id', NonEmptyStringPipe) id: string): Promise<UserRole> {
     return this.userRoleService.findOne(id);
   }
 

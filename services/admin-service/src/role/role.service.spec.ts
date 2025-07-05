@@ -31,6 +31,8 @@ describe('RoleService', () => {
             create: jest.fn().mockReturnValue({
               log: jest.fn(),
               error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
             }),
           } as typeof mockLoggerFactory },
       ],
@@ -169,5 +171,19 @@ describe('RoleService', () => {
     expect(repository.update).toHaveBeenCalledWith('1', {
       role_status: 'inactive',
     });
+  });
+
+  it('should log messages at different levels', () => {
+    // Get the logger instance from the service
+    const logger = (service as any).logger;
+
+    // Call the test method
+    service.test();
+
+    // Verify that each logging method was called with the correct message
+    expect(logger.log).toHaveBeenCalledWith('This is a test log message from RoleService');
+    expect(logger.error).toHaveBeenCalledWith('This is a test error message from RoleService');
+    expect(logger.warn).toHaveBeenCalledWith('This is a test warning message from RoleService');
+    expect(logger.debug).toHaveBeenCalledWith('This is a test debug message from RoleService');
   });
 });

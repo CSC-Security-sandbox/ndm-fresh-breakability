@@ -229,7 +229,7 @@ describe('ProjectService', () => {
         service.create(accountId, createProjectDto, userPermissionResponseMock),
       ).rejects.toThrow(
         new ConflictException(
-          `A project with the name Test Project already exists for this account.`,
+          `A project with the name ${createProjectDto.project_name} already exists for this account.`,
         ),
       );
     });
@@ -249,7 +249,7 @@ describe('ProjectService', () => {
       await expect(
         service.create(accountId, createProjectDto, userPermissionResponseMock),
       ).rejects.toThrow(
-        new ConflictException(`Account with 12345 not found`),
+        new ConflictException(`Account with ${accountId} not found`),
       );
     });
   });

@@ -196,7 +196,7 @@ export class ProjectController {
     summary: 'Delete Project',
     description: ProjectDescriptions.DeleteProjectById,
   })
-  delete(@Param('id') id: string) {
+  delete(@Param('id', NonEmptyStringPipe) id: string) {
     return this.projectService.delete(id);
   }
 }

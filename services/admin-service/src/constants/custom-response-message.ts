@@ -1,4 +1,4 @@
-import { CustomErrorDTO, CustomSuccessDTO } from '@local/api-handler-lib';
+import { CustomErrorDTO, CustomSuccessDTO } from '@netapp-cloud-datamigrate/api-handler-lib';
 
 export enum HTTPMethod {
   GET = 'GET',

@@ -34,7 +34,7 @@ const ManageUsers = () => {
   const [isCreateFormVisible, setIsCreateFormVisible] =
     useState<boolean>(false);
 
-  const updateUserStatusWraper = (body: { email: string; enable: boolean }) => {
+  const updateUserStatusWrapper = (body: { email: string; enable: boolean }) => {
     updateUserStatus(body)
       .unwrap()
       .then((res) => {
@@ -57,7 +57,7 @@ const ManageUsers = () => {
           email: row.email,
           enable: row.user_status !== "active",
         };
-        updateUserStatusWraper(body);
+        updateUserStatusWrapper(body);
       },
 
       disabled: permission?.userPermissions?.id === row.id || !canManageProject,
