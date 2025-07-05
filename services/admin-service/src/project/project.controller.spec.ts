@@ -10,6 +10,7 @@ import { UserRole } from '../entities/user-role.entity';
 import { randomUUID } from 'crypto';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 describe('ProjectController', () => {
   let controller: ProjectController;
@@ -56,6 +57,15 @@ describe('ProjectController', () => {
         {
           provide: getRepositoryToken(UserRole),
           useClass: Repository,
+        },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+            }),
+          },
         },
       ],
     }).compile();
@@ -342,15 +352,12 @@ describe('ProjectController', () => {
   describe('update', () => {
     it('should update a project', async () => {
       const updateDto = { project_name: 'updated test' } as any;
+      jest.spyOn(service, 'update').mockResolvedValue({message: 'Project updated successfully'});
 
-      jest.spyOn(service, 'update').mockResolvedValue();
+      const result = await controller.update('1', updateDto, userPermissionResponseMock);
 
-      await controller.update('1', updateDto, userPermissionResponseMock);
-      expect(service.update).toHaveBeenCalledWith(
-        '1',
-        updateDto,
-        userPermissionResponseMock,
-      );
+      expect(service.update).toHaveBeenCalledWith('1', updateDto, userPermissionResponseMock);
+      expect(result.message).toBe( "Project updated successfully");
     });
 
     it('should handle errors during update', async () => {

@@ -40,7 +40,10 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
 
   const { data: userData } = useGetAllUsersQuery("");
   const toEmailOptions =
-    userData?.map((user) => ({ label: user.email, value: user.email })) || [];
+    userData?.data?.items.map((user) => ({
+      label: user.email,
+      value: user.email,
+    })) || [];
 
   const { data: smtpExistingData, isLoading: smtpLoading } =
     useGetSmtpDetailsQuery("");
@@ -98,23 +101,23 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
 
     try {
       if (isEdit) {
-        await updateSmtpDataAPi(data.payLoad).unwrap();
-        notify.success("SMTP details updated successfully.");
+        const result =await updateSmtpDataAPi(data.payLoad).unwrap();
+        notify.success(result.message);
       } else {
-        await createSmtpApi(data.payLoad).unwrap();
-        notify.success("SMTP details added successfully.");
+        const result = await createSmtpApi(data.payLoad).unwrap();
+        notify.success(result.message);
       }
       dispatch(setDrawerClose());
       handleDefaultTab();
     } catch (err) {
+      const errorDetails = err?.data?.error;
       notify.error(
         <ErrorMessageContainer
           title="Error occurred."
           message={
-            err?.message ||
-            `Failed to ${isEdit ? "update" : "add"} SMTP Details.`
+              errorDetails?.message
           }
-        />
+        />,
       );
     }
   };

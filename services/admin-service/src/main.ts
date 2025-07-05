@@ -2,10 +2,14 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
+import { ResponseInterceptor } from '@local/api-handler-lib';
+import { errorResponse, successResponse } from './constants/custom-response-message';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-
+  app.useGlobalInterceptors(
+    new ResponseInterceptor(successResponse, errorResponse)// Get the instance from the container
+  );
   const config = new DocumentBuilder()
     .setTitle('Admin Service')
     .setDescription(

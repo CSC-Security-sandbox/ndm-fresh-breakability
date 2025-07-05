@@ -11,6 +11,7 @@ import { User } from '../entities/user.entity';
 import { randomUUID } from 'crypto';
 import { UserRole } from '../entities/user-role.entity';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 class MockRepository<T> extends Repository<T> {
   async save(e: any): Promise<any> {
@@ -20,6 +21,14 @@ class MockRepository<T> extends Repository<T> {
     return e;
   }
 }
+
+export const mockLoggerFactory = {
+  create: jest.fn().mockReturnValue({
+    log: jest.fn(),
+    error: jest.fn(),
+  }),
+};
+
 
 describe('ProjectService', () => {
   let service: ProjectService;
@@ -61,6 +70,12 @@ describe('ProjectService', () => {
             query: jest.fn(),
           },
         },
+        { provide: LoggerFactory, useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+            }),
+          } as typeof mockLoggerFactory },
       ],
     }).compile();
 
@@ -147,6 +162,15 @@ describe('ProjectService', () => {
       expect(accountRepository.findOneBy).toHaveBeenCalledWith({
         id: accountId,
       });
+
+
+      await expect(
+        service.create(accountId, createProjectDto, userPermissionResponseMock)
+      ).rejects.toThrow(new NotFoundException(`Account with ${accountId} not found`));
+
+      expect(accountRepository.findOneBy).toHaveBeenCalledWith({
+        id: accountId,
+      });
       expect(projectRepository.create).toHaveBeenCalledWith({
         ...createProjectDto,
         account: { id: accountId } as Account,
@@ -205,7 +229,7 @@ describe('ProjectService', () => {
         service.create(accountId, createProjectDto, userPermissionResponseMock),
       ).rejects.toThrow(
         new ConflictException(
-          `A project with the name "${createProjectDto.project_name}" already exists for this account.`,
+          `A project with the name Test Project already exists for this account.`,
         ),
       );
     });
@@ -225,7 +249,7 @@ describe('ProjectService', () => {
       await expect(
         service.create(accountId, createProjectDto, userPermissionResponseMock),
       ).rejects.toThrow(
-        new NotFoundException(`Account with ${accountId} not found`),
+        new ConflictException(`Account with 12345 not found`),
       );
     });
   });

@@ -1,17 +1,35 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Inject,
+  Injectable
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Role } from '../entities/role.entity';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class RoleService {
+  private readonly logger : LoggerService;
   constructor(
     @InjectRepository(Role)
     private roleRepository: Repository<Role>,
-  ) {}
+    @Inject(LoggerFactory) private loggerFactory: LoggerFactory,
+  ) {
+    this.logger = this.loggerFactory.create(RoleService.name);
+  }
+
+  test() {
+    this.logger.log('This is a test log message from RoleService');
+    this.logger.error('This is a test error message from RoleService');
+    this.logger.warn('This is a test warning message from RoleService');
+    this.logger.debug('This is a test debug message from RoleService');
+  }
 
   create(
     createRoleDto: CreateRoleDto,

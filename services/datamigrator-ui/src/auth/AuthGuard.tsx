@@ -97,7 +97,7 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     ) {
       try {
         const allAccounts = await getAllAccounts("").unwrap();
-        localStorage.setItem("account_id", allAccounts?.[0]?.id);
+        localStorage.setItem("account_id", allAccounts?.data?.items?.[0]?.id);
       } catch (error) {
         notify.error("Unable to fetch accounts. Please try again later.");
         console.error("Failed to fetch accounts:", error);
@@ -109,16 +109,16 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     getAllProjects(localStorage.getItem("account_id"))
       .unwrap()
       .then((resp) => {
-        dispatch(setAllProjectList(resp));
+        dispatch(setAllProjectList(resp?.data?.items));
         let selected_project_id =
           localStorage.getItem("selected_project_id") || undefined;
         if (selected_project_id) {
-          const projectIdFound = resp.find(
-            (row: ProjectApiType) => row.id === selected_project_id
+          const projectIdFound = resp?.data?.items.find(
+            (row: ProjectApiType) => row.id === selected_project_id,
           );
           if (!projectIdFound) selected_project_id = undefined;
         }
-        dispatch(setProject(selected_project_id || resp?.[0]?.id));
+        dispatch(setProject(selected_project_id || resp?.data?.items?.[0]?.id));
         setIsPageReady(true);
       });
   };
@@ -126,8 +126,11 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     if (auth.isAuthenticated) {
       (async () => {
-        const resp = await getUserPermissionsApi("").unwrap();
-        dispatch(setUserPermissions(resp));
+        const result = await getUserPermissionsApi("").unwrap();
+        const resp = result?.data?.items || {};
+        dispatch(
+          setUserPermissions({ id: result?.data?.id, roles: resp.roles || [] }),
+        );
         if (resp?.roles?.length > 0) {
           await getAccounts();
           getProjects();
@@ -160,9 +163,7 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   } else if (auth.error) {
     return <div>Oops... {auth.error.message}</div>;
   } else if (showNoProjectsPage) {
-    return (
-      <NoProjects />
-    );
+    return <NoProjects />;
   } else if (auth.isAuthenticated && !isPageReady) {
     Cookies.set("access_token", auth.user?.access_token || "");
     Cookies.set("refresh_token", auth.user?.refresh_token || "");

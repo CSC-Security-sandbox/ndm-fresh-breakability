@@ -37,16 +37,12 @@ const ManageUsers = () => {
   const updateUserStatusWraper = (body: { email: string; enable: boolean }) => {
     updateUserStatus(body)
       .unwrap()
-      .then(() => {
-        notify.success(
-          `${body.enable ? "Enabled" : "Disabled"} access for user ${
-            body.email
-          }`
-        );
+      .then((res) => {
+        notify.success(res?.message);
       })
       .catch((err) => {
-        notify.error(`Failed to update status of user ${body.email}.`);
-        console.error(err);
+        const errorDetails = err.data?.error;
+        notify.error(errorDetails?.displayMessage);
       });
   };
 
@@ -77,10 +73,10 @@ const ManageUsers = () => {
           .unwrap()
           .then((res) => {
             setIsCreateFormVisible(true);
-            setTemporaryPassword(res?.newPassword);
+            setTemporaryPassword(res?.data?.items?.newPassword);
           })
           .catch((err) => {
-            notify.error("Failed to reset password.");
+            notify.error(err.message);
             console.error({ err, level: "Generate Temporary Password." });
           });
       },
@@ -91,10 +87,9 @@ const ManageUsers = () => {
     setIsCreateFormVisible(false);
     setTemporaryPassword("");
   };
-
   const tableStateProps = {
     columns: COL_DEF_FOR_USER,
-    rows: userData,
+    rows: userData?.data?.items || [],
     isSorting: true,
     pageSize: 10,
     defaultColumnState: DEFAULT_COLUMN_STATE,

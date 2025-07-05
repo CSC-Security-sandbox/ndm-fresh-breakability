@@ -9,6 +9,8 @@ import {
 } from '@nestjs/common';
 import { UserPermissionResponse } from './user-permission-response-type';
 import { makeAxiosRequest } from 'src/utils/axios-request-utils';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../project/project.service.spec';
 
 jest.mock('axios');
 jest.mock('src/utils/axios-request-utils');
@@ -45,6 +47,12 @@ describe('AuthService', () => {
           provide: getRepositoryToken(User),
           useValue: mockUserRepository,
         },
+        { provide: LoggerFactory, useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+            }),
+          } as typeof mockLoggerFactory },
       ],
     }).compile();
 
@@ -189,7 +197,7 @@ describe('AuthService', () => {
         userPermissionResponseMock,
       ),
     ).rejects.toThrow(
-      new InternalServerErrorException('Failed to retrieve Keycloak token'),
+      new InternalServerErrorException('Failed to create user in Keycloak, error: Failed to retrieve Keycloak token'),
     );
   });
 
@@ -255,7 +263,7 @@ describe('AuthService', () => {
         data: { enabled: enable },
       }),
     );
-    expect(result.user_status).toBe('active');
+    expect(result.user.user_status).toBe('active');
   });
 
   it('should throw an error when user is found in PostgreSQL but not in Keycloak', async () => {
@@ -272,7 +280,7 @@ describe('AuthService', () => {
 
     await expect(service.setUserStatus(email, enable)).rejects.toThrow(
       new NotFoundException(
-        'Failed to update user status in Keycloak, error: User not found in Keycloak',
+        `Failed to update user status in Keycloak, error: User not found in Keycloak', Please verify the user ID and try again.`,
       ),
     );
   });
@@ -306,7 +314,7 @@ describe('AuthService', () => {
     mockUserRepository.findOne.mockResolvedValue(null);
 
     await expect(service.setUserStatus(email, enable)).rejects.toThrow(
-      new NotFoundException('User not found'),
+      new NotFoundException('User not found, Please verify the user ID and try again.'),
     );
   });
 
