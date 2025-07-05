@@ -13,8 +13,24 @@ export enum MessageKey {
 // 4. Typed MessageCatalog
 type MessageCatalogValue =
     | { message: string }
-    | ((state: string, email: string) => { message: string });
+    | ((...args: any[]) => { message: string });
 
+/*
+// Example usage of MessageCatalogValue:
+
+// Static message
+    [MessageKey.Default]: {
+        message: 'Request processed successfully.'
+    },
+    
+// Dynamic message functions
+    [MessageKey.UserWelcome]: (...args: any[]) => {
+        const [email, state, role] = args;
+        return {
+            message: `Welcome ${email}! Your ${role} account is active in ${state}.`
+        };
+    },
+*/
 export const MessageCatalog: Record<MessageKey, MessageCatalogValue> = {
     [MessageKey.Default]: {
         message: 'Request processed successfully.'
