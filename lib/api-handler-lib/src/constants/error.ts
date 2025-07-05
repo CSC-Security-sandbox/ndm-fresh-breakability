@@ -1,9 +1,9 @@
 //Error codes and their corresponding HTTP status codes
-export enum ErrorHTTPStatusMappingCode {
+export enum ErrorHTTPStatusCodeMapping {
     BAD_REQUEST = 400,
     UNAUTHORIZED = 401,
     FORBIDDEN = 403,
-    NOT_FOUND = 404,
+NOT_FOUND = 404,
     CONFLICT = 409,
     UNPROCESSABLE_ENTITY = 422,
     INTERNAL_SERVER_ERROR = 500,
