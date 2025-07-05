@@ -43,3 +43,22 @@ export const formatNumbersWithSuffix = (num: number): string => {
   }
   return num.toString();
 };
+
+export const formatSizeAndCount = (input: string): string => {
+  // Extract size value using regex
+  const sizeMatch = input.match(/size\((\d+)\)/);
+  const sizeValue = sizeMatch ? parseInt(sizeMatch[1], 10) : 0;
+
+  // Extract count value using regex
+  const countMatch = input.match(/count\((\d+)\)/);
+  const countValue = countMatch ? parseInt(countMatch[1], 10) : 0;
+
+  // Format size using the formatBytes function (already in your codebase)
+  const formattedSize = covertBytes(sizeValue);
+
+  // Format count using the formatLargeNumber function (already in your codebase)
+  const formattedCount = formatNumbersWithSuffix(countValue);
+
+  // Combine into the desired output format
+  return `size: (${formattedSize}); count: (${formattedCount})`;
+};

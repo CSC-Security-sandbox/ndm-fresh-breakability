@@ -14,7 +14,7 @@ import { ReportsEntity } from "src/entities/reports.entity";
 import puppeteer from "puppeteer";
 import { groupAndOrder } from "../utils/group-order";
 import { escapeCsvValue, validateFilePath } from "src/utils/utils";
-import { ReportType, ReportValueType } from "../constants/enums";
+import { ReportType } from "../constants/enums";
 
 @Injectable()
 export class DiscoveryService {
@@ -23,7 +23,7 @@ export class DiscoveryService {
     @InjectRepository(InventoryEntity)
     private readonly inventoryRepo: Repository<InventoryEntity>,
     @InjectRepository(ReportsEntity)
-    private readonly reportsRepo: Repository<ReportsEntity>
+    private readonly reportsRepo: Repository<ReportsEntity>,
   ) {}
 
   get getReportsDirectory(): string {
@@ -35,7 +35,7 @@ export class DiscoveryService {
 
   async createReportFile(jobRunId: string, reportType: string): Promise<any> {
     this.logger.log(
-      `Creating report for jobRunId: ${jobRunId} and reportType: ${reportType}`
+      `Creating report for jobRunId: ${jobRunId} and reportType: ${reportType}`,
     );
     try {
       if (!fs.existsSync(this.reportsDirectory)) {
@@ -45,7 +45,7 @@ export class DiscoveryService {
       const pdfFilePath = path.join(this.reportsDirectory, pdfFileName);
       if (!validateFilePath(pdfFilePath)) {
         this.logger.error(
-          `File path contains invalid characters: ${pdfFilePath}`
+          `File path contains invalid characters: ${pdfFilePath}`,
         );
         throw new Error("File path contains invalid characters.");
       } else {
@@ -55,7 +55,7 @@ export class DiscoveryService {
       const startTime = Date.now();
       await this.inventoryRepo.query(
         `CALL ${process.env.SCHEMA}.generate_discovery_report($1, $2)`,
-        [jobRunId, process.env.SCHEMA]
+        [jobRunId, process.env.SCHEMA],
       );
       this.logger.log(`procedure ended in ${Date.now() - startTime}`);
       const latestReport = await this.reportsRepo.find({
@@ -65,6 +65,9 @@ export class DiscoveryService {
       });
 
       if (latestReport?.length === 0) {
+        this.logger.error(
+          `No report data found for jobRunId: ${jobRunId} and reportType: ${reportType}`,
+        );
         throw new Error("No report data found");
       } else {
         const reportData = JSON.parse(latestReport[0]?.reportData);
@@ -82,14 +85,14 @@ export class DiscoveryService {
     } catch (error) {
       this.logger.log(error);
       throw new InternalServerErrorException(
-        `Failed to generate report for jobRunId: ${jobRunId} and reportType: ${reportType}`
+        `Failed to generate report for jobRunId: ${jobRunId} and reportType: ${reportType}`,
       );
     }
   }
   generateHtmlTable(data: any[]): string {
     const categories: { [key: string]: any[] } = groupAndOrder(
       data,
-      ReportType.DISCOVERY
+      ReportType.DISCOVERY,
     );
     let htmlString = `
       <html>
@@ -179,19 +182,19 @@ export class DiscoveryService {
     try {
       this.logger.log(`Schema used: ${process.env.SCHEMA}`);
       this.logger.log(
-        `Executing: CALL ${process.env.SCHEMA}.jobs_report_data_v2('${jobRunId}'::UUID, ${process.env.SCHEMA});`
+        `Executing: CALL ${process.env.SCHEMA}.jobs_report_data_v2('${jobRunId}'::UUID, ${process.env.SCHEMA});`,
       );
       await this.inventoryRepo.query(
         `CALL ${process.env.SCHEMA}.jobs_report_data_v2($1::UUID, $2);`,
-        [jobRunId, process.env.SCHEMA]
+        [jobRunId, process.env.SCHEMA],
       );
       return { message: "Report data generated successfully for jobs report" };
     } catch (error) {
       this.logger.log(
-        `Failed to generate report for jobRunId: ${jobRunId}, error: ${error}`
+        `Failed to generate report for jobRunId: ${jobRunId}, error: ${error}`,
       );
       throw new InternalServerErrorException(
-        `Failed to generate report for jobRunId: ${jobRunId}`
+        `Failed to generate report for jobRunId: ${jobRunId}`,
       );
     }
   }
@@ -204,7 +207,7 @@ export class DiscoveryService {
       this.logger.log(`File path validation passed: ${filePath}`);
     }
     const csvReportData = Object.values(
-      groupAndOrder(reportData, ReportType.DISCOVERY)
+      groupAndOrder(reportData, ReportType.DISCOVERY),
     ).flat();
     const dynamicHeaders = new Set<string>();
     if (csvReportData && csvReportData.length > 0) {
@@ -244,13 +247,13 @@ export class DiscoveryService {
 
   async getReportsAsZip(
     jobRunIds: string[],
-    reportType: string
+    reportType: string,
   ): Promise<Buffer> {
     const filesToZip: string[] = [];
 
     if (!fs.existsSync(this.reportsDirectory)) {
       throw new NotFoundException(
-        `Reports directory does not exist: ${this.reportsDirectory}`
+        `Reports directory does not exist: ${this.reportsDirectory}`,
       );
     }
     for (const jobRunId of jobRunIds) {
@@ -266,7 +269,7 @@ export class DiscoveryService {
 
     if (filesToZip.length === 0) {
       throw new NotFoundException(
-        "No valid report files found for the given inputs."
+        "No valid report files found for the given inputs.",
       );
     }
 
@@ -302,7 +305,7 @@ export class DiscoveryService {
 
     const data = await this.getDataFromParentPath(
       fileServerId,
-      singleRecord.path
+      singleRecord.path,
     );
     const transformedData = data.map((item) => ({
       ...item,
@@ -319,7 +322,7 @@ export class DiscoveryService {
 
   async getDiscoveryByFileServerIdAndParentPath(
     fileServerId: string,
-    parentPath: string
+    parentPath: string,
   ) {
     const data = await this.getDataFromParentPath(fileServerId, parentPath);
     return data.map((item) => ({

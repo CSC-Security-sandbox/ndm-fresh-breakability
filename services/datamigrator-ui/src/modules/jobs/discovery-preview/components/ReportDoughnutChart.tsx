@@ -106,12 +106,12 @@ const ReportDoughnutChart = () => {
 
   const maximumMap = [
     {
-      label: `${formatLargeNumber(avgDepth)}/${formatLargeNumber(maxDepth)}`,
+      label: `${formatLargeNumber(maxDepth)}/${formatLargeNumber(avgDepth)}`,
       value: "Depth",
     },
     {
       label: `${formatLargeNumber(maxPath)}/${formatLargeNumber(avgPath)}`,
-      value: "Longest File Path",
+      value: "File Path Length",
     },
   ];
 
@@ -120,10 +120,11 @@ const ReportDoughnutChart = () => {
       label: `${formatBytes(maxFileSize)}/${formatBytes(avgFileSize)}`,
       value: "Size",
     },
-    {
+      //as it is already included in the doughnut chart, we can comment this out
+    /*{
       label: `${formatLargeNumber(directories as number)}`,
       value: "Directories",
-    },
+    },*/
   ];
 
   return (

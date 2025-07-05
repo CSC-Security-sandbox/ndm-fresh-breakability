@@ -16,7 +16,7 @@ export const PDFReportHeaders = {
   ],
 };
 export enum formatStringTypeCategories {
-   Top_File_Extension="Top File Extensions"
+  Top_File_Extension = "Top File Extensions",
 }
 export const ReportSubCategoriesHeader = {
   "Number of Files": [
@@ -39,15 +39,15 @@ export const ReportSubCategoriesHeader = {
     "Capacity with File Size: 100 MiB - 1 GiB",
     "Capacity with File Size: 1+ GiB",
   ],
-  "Depth" :[
+  Depth: [
     "Files and Directory with depth: 0-5",
     "Files and Directory with depth: 6-10",
     "Files and Directory with depth: 11-15",
     "Files and Directory with depth: 16-20",
     "Files and Directory with depth: 21-100",
-    "Files and Directory with depth: >100"
+    "Files and Directory with depth: >100",
   ],
-  "Modified":[
+  Modified: [
     "File Count with Modification Time 0-1 wk",
     "Capacity with Modification Time 0-1 wk",
     "File Count with Modification Time 1 wk - 1 mo",
@@ -79,9 +79,9 @@ export const ReportSubCategoriesHeader = {
     "File Count with Modification Time 10+ yr",
     "Capacity with Modification Time 10+ yr",
     "File Count with Modification Time future",
-    "Capacity with Modification Time future"
+    "Capacity with Modification Time future",
   ],
-  "Created":[
+  Created: [
     "File Count with Creation Time 0-1 wk",
     "Capacity with Creation Time 0-1 wk",
     "File Count with Creation Time 1 wk - 1 mo",
@@ -113,9 +113,9 @@ export const ReportSubCategoriesHeader = {
     "File Count with Creation Time 10+ yr",
     "Capacity with Creation Time 10+ yr",
     "File Count with Creation Time future",
-    "Capacity with Creation Time future"
+    "Capacity with Creation Time future",
   ],
-  "Access Time":[
+  "Access Time": [
     "File Count with Access Time 0-1 wk",
     "Capacity with Access Time 0-1 wk",
     "File Count with Access Time 1 wk - 1 mo",
@@ -147,14 +147,17 @@ export const ReportSubCategoriesHeader = {
     "File Count with Access Time 10+ yr",
     "Capacity with Access Time 10+ yr",
     "File Count with Access Time future",
-    "Capacity with Access Time future"
-  ]
-
-};
-export const CategoriesWithSimilarSubCategories = {
-  Modified: "Modified",
-  Created: "Modified",
-  "Access Time": "Modified"
+    "Capacity with Access Time future",
+  ],
+  Biggest: [
+    "Top 5 Longest File Names",
+    "Top 5 Longest Directory Names",
+    "Top 5 Longest File Path",
+    "Top 5 Longest Directory Path",
+    "Top 5 Biggest File Names",
+    "Top 5 Biggest Directory With Count",
+    "Top 5 Biggest Directory With Capacity",
+  ],
 };
 
 export interface ReportEntry {

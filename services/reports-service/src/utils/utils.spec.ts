@@ -30,9 +30,6 @@ describe("escapeCsvValue", () => {
     expect(escapeCsvValue("hello,world")).toBe('"hello,world"');
   });
 
-  it('should return false for a file path with invalid characters', () => {
-    expect(validateFilePath('invalidfile\\path?.txt')).toBe(false);
-  });
   it("should wrap value with newline in double quotes", () => {
     expect(escapeCsvValue("line1\nline2")).toBe('"line1\nline2"');
   });

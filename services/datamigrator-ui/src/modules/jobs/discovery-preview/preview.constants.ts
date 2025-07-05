@@ -1,4 +1,3 @@
-import { DataItemType } from "@/app/type.interface";
 import {
   chartDataForAccessTime,
   chartDataForFileCount, chartDataForFileCountAccessTime,
@@ -9,6 +8,108 @@ import {
   chartDataForFileSizeCreated,
   chartDataForFileSizeModified
 } from '@modules/jobs/discovery-preview/preview.decorators';
+import {DataItemType} from '../../../types/app.type.ts';
+
+/**
+ * Enum for value types
+ */
+export enum ValueType {
+  COUNT = "count",
+  SIZE = "size",
+  NUMBER = "number",
+  STRING = "string",
+}
+
+/**
+ * Enum for file system categories
+ */
+export enum FileSystemCategory {
+  FILE_SYSTEM_STATS = "File System Stats",
+  SPACE_USED = "Space Used",
+  NUMBER_OF_FILES = "Number of Files",
+  DEPTH = "Depth",
+  MODIFIED = "Modified",
+  CREATED = "Created",
+  ACCESS_TIME = "Access Time",
+  BIGGEST = "Biggest",
+  TOP_FILE_EXTENSIONS = "Top File Extensions",
+  MAXIMUM_VALUES = "Maximum Values",
+  JOB_RUN_STATS = "Job Run Stats",
+  FILE_SERVER_INFO = "File Server Info",
+}
+
+/**
+ * Enum for file system subcategories
+ */
+export enum FileSystemSubCategory {
+  // File System Stats subcategories
+  REGULAR_FILES = "Regular Files",
+  SYMBOLIC_LINKS = "Symbolic Links",
+  SPECIAL_FILES = "Special Files",
+  TOTAL_COUNT = "Total Count",
+  TOTAL_SPACE_FOR_REGULAR_FILES = "Total Space for Regular Files",
+  TOTAL_SPACE_FOR_DIRECTORIES = "Total Space for Directories",
+  TOTAL_SPACE_USED = "Total Space Used",
+
+  // Maximum Values subcategories
+  MAX_FILE_SIZE = "max_file_size",
+  MAX_NAME_LENGTH = "max_name_length",
+  TOTAL_DIRECTORIES = "total_directories",
+
+  // Job Run Stats subcategories
+  TOTAL_TIME = "Total Time",
+  STATUS = "Status",
+
+  // File Server Info subcategories
+  PATH = "Path",
+  PROTOCOL = "Protocol",
+  CONFIG_NAME = "Config Name",
+
+  // Biggest subcategories
+  TOP_5_LONGEST_FILE_NAMES = "Top 5 Longest File Names",
+  TOP_5_LONGEST_DIRECTORY_NAMES = "Top 5 Longest Directory Names",
+  TOP_5_BIGGEST_FILE_NAMES = "Top 5 Biggest File Names",
+  TOP_5_LONGEST_DIRECTORY_PATH = "Top 5 Longest Directory Path",
+  TOP_5_LONGEST_FILE_PATH = "Top 5 Longest File Path",
+  TOP_5_BIGGEST_DIRECTORY_WITH_COUNT = "Top 5 Biggest Directory With Count",
+  TOP_5_BIGGEST_DIRECTORY_WITH_CAPACITY = "Top 5 Biggest Directory With Capacity",
+  FILE_PATH_SUMMARY = "File Path Summary",
+}
+
+/**
+ * Enum for byte units
+ */
+export enum ByteUnits {
+  BYTES = "Bytes",
+  KB = "KB",
+  MB = "MB",
+  GB = "GB",
+  TB = "TB",
+  PB = "PB",
+  EB = "EB",
+  ZB = "ZB",
+  YB = "YB",
+}
+
+/**
+ * Array of byte units in order
+ */
+export const BYTE_UNITS = [
+  ByteUnits.BYTES,
+  ByteUnits.KB,
+  ByteUnits.MB,
+  ByteUnits.GB,
+  ByteUnits.TB,
+  ByteUnits.PB,
+  ByteUnits.EB,
+  ByteUnits.ZB,
+  ByteUnits.YB,
+];
+
+/**
+ * Simplified array of byte units for basic conversions
+ */
+export const SIMPLIFIED_BYTE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"];
 
 export const availableChartColors = [
   "chart-1",
@@ -170,3 +271,25 @@ export const OPTIONS_FOR_CHART_TOGGLE = [
   { label: "File Count", value: "fileCount" },
   { label: "File Size", value: "fileSize" },
 ];
+
+/**
+ * Array of large number suffixes in order
+ */
+export const LARGE_NUMBER_SUFFIXES = ["", "K", "M", "B", "T", "Q", "Quint", "Sext", "Sept"];
+
+/**
+ * String constants for file size and count prefixes
+ */
+export const FILE_SIZE_PREFIX = "Capacity with File Size: ";
+export const FILE_COUNT_PREFIX = "File Count with File Size: ";
+export const MODIFICATION_TIME_SIZE_PREFIX = "Capacity with Modification Time";
+export const MODIFICATION_TIME_COUNT_PREFIX = "File Count with Modification Time";
+export const CREATION_TIME_SIZE_PREFIX = "Capacity with Creation Time";
+export const CREATION_TIME_COUNT_PREFIX = "File Count with Creation Time";
+export const ACCESS_TIME_SIZE_PREFIX = "Capacity with Access Time";
+export const ACCESS_TIME_COUNT_PREFIX = "File Count with Access Time";
+
+/**
+ * Constant for byte conversion (1000 bytes = 1 KB)
+ */
+export const BYTES_IN_KILOBYTE = 1000;

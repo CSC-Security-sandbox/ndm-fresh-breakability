@@ -453,6 +453,27 @@ aggregated_json := aggregated_json || temp_json;
 select
     jsonb_agg(
             jsonb_build_object(
+                    'category', 'Depth',
+                    'sub_category', 'Total Sum Of Depth',
+                    'valueType', 'count',
+                    'value', sunOfDepth
+            )
+    )
+into
+    temp_json
+from
+    (
+        select
+            SUM(depth) as sunOfDepth
+        from
+            temp_categorized_files
+    ) as depth_metrics;
+
+aggregated_json := aggregated_json || temp_json;
+
+select
+    jsonb_agg(
+            jsonb_build_object(
                     'category',
                     'Space Used',
                     'sub_category',
@@ -546,9 +567,9 @@ from
             temp_categorized_files
     ) as stats;
 
-aggregated_json := aggregated_json || temp_json;
+ aggregated_json := aggregated_json || temp_json;
 
-select
+ select
     jsonb_agg(
             jsonb_build_object(
                     'category',
@@ -692,6 +713,28 @@ from
                     ) subquery
 
             ) combined_results
+        union all
+        select
+            jsonb_build_object(
+                    'category',
+                    'Biggest',
+                    'sub_category',
+                    'File Path Summary',
+                    'valueType', 'string',
+                    'value',
+                    'Total Path: ' || path_count || '; Total Length: ' || total_length
+            ) as result
+        from
+            (
+                select
+                    COUNT(path) as path_count,
+                    SUM(length(path)) as total_length
+                from
+                    inventory i
+                where
+                    i.is_directory is false
+            ) as summary_result
+
         union all
         select
             jsonb_build_object(

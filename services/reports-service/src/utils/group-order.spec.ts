@@ -20,12 +20,18 @@ jest.mock("../constants/report", () => ({
     "Modified": [
       "File Count With Modification Time 0-1 wk",
       "Capacity With Modification Time 0-1 wk"
+    ],
+    "Created": [
+      "File Count with Creation Time 0-1 wk",
+      "Capacity with Creation Time 0-1 wk"
+    ],
+    "Access Time": [
+      "File Count with Access Time 0-1 wk",
+      "Capacity with Access Time 0-1 wk"
     ]
   },
-  CategoriesWithSimilarSubCategories: {
-    Modified: "Modified",
-    Created: "Modified",
-    "Access Time": "Modified"
+  formatStringTypeCategories: {
+    Top_File_Extension: "Top File Extensions"
   }
 }));
 
@@ -168,7 +174,45 @@ describe("groupAndOrder", () => {
     PDFReportHeaders[mockReportType].pop();
   });
 
-  it("should remap Created and Access Time categories to Modified", () => {
+  it("should handle time-related categories correctly", () => {
+    // Update the mock to include the subcategories we're testing
+    jest.resetModules();
+    jest.mock("../constants/report", () => ({
+      PDFReportHeaders: {
+        DISCOVER: [
+          "Number of Files",
+          "Modified",
+          "Created",
+          "Access Time",
+          "Job Run Stats"
+        ]
+      },
+      ReportSubCategoriesHeader: {
+        "Number of Files": [
+          "File Count with File Size: 0B",
+          "File Count with File Size: <8KiB"
+        ],
+        "Modified": [
+          "File Count With Modification Time 0-1 wk",
+          "Capacity With Modification Time 0-1 wk"
+        ],
+        "Created": [
+          "File Count with Creation Time 0-1 wk",
+          "File Count with Creation Time 10+ yr"
+        ],
+        "Access Time": [
+          "File Count with Access Time 0-1 wk",
+          "File Count with Access Time 5-6 yr"
+        ]
+      },
+      formatStringTypeCategories: {
+        Top_File_Extension: "Top File Extensions"
+      }
+    }));
+
+    // Re-import the functions to use the updated mock
+    const { groupAndOrder } = require("./group-order");
+
     const mockData = [
       {
         category: "Modified",
@@ -193,16 +237,47 @@ describe("groupAndOrder", () => {
     const result = groupAndOrder(mockData, mockReportType);
 
     expect(result).toHaveProperty("Modified");
+    expect(result).toHaveProperty("Created");
+    expect(result).toHaveProperty("Access Time");
 
     const modifiedEntries = result["Modified"];
     expect(modifiedEntries.length).toBe(1);
+    expect(modifiedEntries[0].value).toBe("100");
 
-    expect(modifiedEntries.some(entry => entry.category === "Modified")).toBe(true);
-    expect(modifiedEntries.some(entry => entry.category === "Created")).toBe(false);
-    expect(modifiedEntries.some(entry => entry.category === "Access Time")).toBe(false);
+    const createdEntries = result["Created"];
+    expect(createdEntries.length).toBe(1);
+    expect(createdEntries[0].value).toBe("200");
 
-    expect(result).not.toHaveProperty("Created");
-    expect(result).not.toHaveProperty("Access Time");
+    const accessTimeEntries = result["Access Time"];
+    expect(accessTimeEntries.length).toBe(1);
+    expect(accessTimeEntries[0].value).toBe("300");
+
+    // Reset the mock for other tests
+    jest.resetModules();
+    jest.mock("../constants/report", () => ({
+      PDFReportHeaders: {
+        DISCOVER: [
+          "Number of Files",
+          "Modified",
+          "Created",
+          "Access Time",
+          "Job Run Stats"
+        ]
+      },
+      ReportSubCategoriesHeader: {
+        "Number of Files": [
+          "File Count with File Size: 0B",
+          "File Count with File Size: <8KiB"
+        ],
+        "Modified": [
+          "File Count With Modification Time 0-1 wk",
+          "Capacity With Modification Time 0-1 wk"
+        ]
+      },
+      formatStringTypeCategories: {
+        Top_File_Extension: "Top File Extensions"
+      }
+    }));
   });
 
   it("should handle missing categories gracefully", () => {
@@ -219,10 +294,18 @@ describe("groupAndOrder", () => {
 
     expect(result).not.toBeNull();
     expect(result).toHaveProperty("Number of Files");
-    expect(result).not.toHaveProperty("Modified");
-    expect(result).not.toHaveProperty("Created");
-    expect(result).not.toHaveProperty("Access Time");
-    expect(result).not.toHaveProperty("Job Run Stats");
+    expect(result["Number of Files"].length).toBe(1);
+    expect(result["Number of Files"][0].value).toBe("1.02 K");
+
+    // The implementation returns empty arrays for categories in PDFReportHeaders that have no data
+    expect(result).toHaveProperty("Modified");
+    expect(result["Modified"]).toEqual([]);
+    expect(result).toHaveProperty("Created");
+    expect(result["Created"]).toEqual([]);
+    expect(result).toHaveProperty("Access Time");
+    expect(result["Access Time"]).toEqual([]);
+    expect(result).toHaveProperty("Job Run Stats");
+    expect(result["Job Run Stats"]).toEqual([]);
   });
 
   it("should log errors for entries missing required properties", () => {
