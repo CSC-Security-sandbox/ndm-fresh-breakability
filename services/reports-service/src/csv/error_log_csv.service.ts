@@ -41,10 +41,8 @@ export class ErrorLogService {
       let whereClause = "";
 
       if (jobConfigId) {
-        const jobRunIds = await this.getJobRunIds(jobConfigId);
-        if (!jobRunIds.length) return [];
-        whereClause = `o.job_run_id IN (${jobRunIds.map((_, i) => `$${i + 1}`).join(",")})`;
-        params.push(...jobRunIds);
+        whereClause = "jc.id = $1";
+        params.push(jobConfigId);
       } else {
         whereClause = "o.job_run_id = $1";
         params.push(jobRunId);
@@ -55,8 +53,9 @@ export class ErrorLogService {
       const query = `
     SELECT
       MIN(oe.id::text)           AS "Error Id",
-      (o.job_run_id)      AS "Job Run Id",
       MIN(oe.created_at)         AS "Created At",
+      (o.job_run_id)             AS "Job Run Id",
+      MIN(jc.job_type)           AS "Job Type",
       MIN(oe.error_type)         AS "Error Type",
       MIN(oe.error_message)      AS "Error Details",
       MIN(oe.file_name)          AS "File Name",
@@ -67,6 +66,8 @@ export class ErrorLogService {
       COUNT(*)                   AS "Occurrence"
     FROM datamigrator.operation_errors oe
     LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
+    LEFT JOIN datamigrator.jobrun jr ON jr.id = o.job_run_id
+    LEFT JOIN datamigrator.jobconfig jc ON jc.id = jr.job_config_id
     WHERE ${whereClause}
     GROUP BY oe.file_path, o.job_run_id
     ORDER BY MIN(oe.created_at)
@@ -80,19 +81,34 @@ export class ErrorLogService {
     }
   }
 
-  async getWorkerSetupErrors(
-    jobRunIds: string | string[]
-  ): Promise<WorkerJobRunMap[]> {
+  async getWorkerSetupErrors(jobRunIds: string | string[]): Promise<any[]> {
     try {
-      return this.workerJobRunMapRepo.find({
-        where: {
-          jobRunId: Array.isArray(jobRunIds) ? In(jobRunIds) : jobRunIds,
-          workerResponse: Raw(
-            (alias) =>
-              `${alias} IS NOT NULL AND ${alias} ->> 'code' = 'SETUP_WORKER_FAILURE' AND ${alias} ->> 'status' = 'FAILED'`
-          ),
-        },
-      });
+      let whereClause: string;
+      let params: (string | number)[];
+      if (Array.isArray(jobRunIds) && jobRunIds.length > 0) {
+        whereClause = `wjrm.job_run_id IN (${jobRunIds.map((_, i) => `$${i + 1}`).join(",")})`;
+        params = jobRunIds;
+      } else if (!Array.isArray(jobRunIds)) {
+        whereClause = "wjrm.job_run_id = $1";
+        params = [jobRunIds];
+      } else {
+        return [];
+      }
+      const query = `
+        SELECT
+          wjrm.id,
+          wjrm.job_run_id,
+          wjrm.worker_response,
+          jc.job_type
+        FROM datamigrator.worker_jobrun_mapping wjrm
+        LEFT JOIN datamigrator.jobrun jr ON jr.id = wjrm.job_run_id
+        LEFT JOIN datamigrator.jobconfig jc ON jc.id = jr.job_config_id
+        WHERE ${whereClause}
+          AND wjrm.worker_response IS NOT NULL
+          AND wjrm.worker_response ->> 'code' = 'SETUP_WORKER_FAILURE'
+          AND wjrm.worker_response ->> 'status' = 'FAILED'
+      `;
+      return this.workerJobRunMapRepo.query(query, params);
     } catch (error) {
       throw new BadRequestException(error.message);
     }
@@ -167,22 +183,40 @@ export class ErrorLogService {
     });
   }
 
+  // Helper to parse worker_response safely
+  parseWorkerResponse = (resp: any) => {
+    if (!resp) return {};
+    if (typeof resp === "string") {
+      try {
+        return JSON.parse(resp);
+      } catch {
+        return {};
+      }
+    }
+    return resp;
+  };
+
   private async fetchFormattedSetupErrors(
     jobRunId: string
   ): Promise<Record<string, any>[]> {
     try {
       const rawErrors = await this.getWorkerSetupErrors(jobRunId);
-      return rawErrors.map((err) => ({
-        "Error Id": err.id,
-        "Job Run Id": err.jobRunId,
-        "Created At": err.workerResponse.createdAt,
-        "Error Type": "FATAL_ERROR",
-        "Error Details": err.workerResponse.message,
-        Origin: err.workerResponse.origin,
-        Operation: err.workerResponse.operation,
-        Code: err.workerResponse.code,
-        Occurrence: err.workerResponse.occurrence || 1,
-      }));
+
+      return rawErrors.map((err) => {
+        const workerResponse = this.parseWorkerResponse(err.worker_response);
+        return {
+          "Error Id": err.id,
+          "Created At": workerResponse.createdAt,
+          "Job Run Id": err.job_run_id,
+          "Job Type": err.job_type,
+          "Error Type": "FATAL_ERROR",
+          "Error Details": workerResponse.message,
+          Origin: workerResponse.origin,
+          Operation: workerResponse.operation,
+          Code: workerResponse.code,
+          Occurrence: workerResponse.occurrence ?? 1,
+        };
+      });
     } catch (error) {
       throw new BadRequestException(error.message);
     }
