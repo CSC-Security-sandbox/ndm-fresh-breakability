@@ -14,7 +14,7 @@ export const ErrorLogActionButton = ({
     <Show>
       <Show.When isTrue={!data?.processing && !data?.ready}>
         <Button disabled={disabled} onClick={handleGenerate}>
-          Generate Error Logs
+          Generate Error Report
         </Button>
       </Show.When>
       <Show.Else>
@@ -23,7 +23,7 @@ export const ErrorLogActionButton = ({
         </Show.When>
         <Show.When isTrue={!data?.processing && data?.ready}>
           <Button disabled={disabled} onClick={handleDownload}>
-            Download Error Logs
+            Download Error Report
           </Button>
         </Show.When>
       </Show.Else>
