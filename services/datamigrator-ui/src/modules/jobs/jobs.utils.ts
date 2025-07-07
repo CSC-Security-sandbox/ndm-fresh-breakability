@@ -27,26 +27,14 @@ export const handleDownloadReport = async (
   }
 };
 
-export const createUrl = (body: Record<string, string | number>) => {
-  let url = "";
-  const { jobRunId, jobConfigId } = body;
-  if (jobRunId) {
-    url += `jobRunId=${jobRunId}`;
-  } else {
-    url += `jobConfigId=${jobConfigId}`;
-  }
-  return url;
-};
-
 export const handleDownloadErrorsLogs = async (
   downloadReports: (arg: any) => any,
   body: Record<string, string | number>,
   fileType: string = "CSV"
 ) => {
   try {
-    const queryParams = createUrl(body);
-    const response = await downloadReports(queryParams).unwrap();
-    const Id = body.jobRunId || body.jobConfigId;
+    const response = await downloadReports(body).unwrap();
+    const { id } = body;
     const mimeType = getMimeType(fileType);
     const extension = fileType.toLowerCase();
     const timestamp = getTimestamp();
@@ -54,7 +42,7 @@ export const handleDownloadErrorsLogs = async (
     createAndDownloadBlob(
       response,
       mimeType,
-      `error-log-${Id}-${timestamp}.${extension}`
+      `error-log-${id}-${timestamp}.${extension}`
     );
   } catch (error) {
     console.error("Failed to download Error Report:", error?.data?.message);
