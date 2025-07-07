@@ -89,3 +89,5 @@ export const InitialFileServerOverviewApiData: FileServerOverviewApi = {
 export const BULK_DISCOVERY_DEFAULT_COLUMN_STATE = {
   2: { isHidden: true },
 };
+
+export const BULK_DISCOVERY = "bulk-discovery";
