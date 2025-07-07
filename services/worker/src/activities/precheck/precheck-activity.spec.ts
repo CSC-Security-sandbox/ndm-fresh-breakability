@@ -4,6 +4,7 @@ import { Logger } from '@nestjs/common';
 import { PrecheckActivity } from './precheck-activity';
 import { Protocols } from 'src/protocols/protocols';
 import { PreCheckErrorCodes, PreCheckStatus, ServerCredential, Settings, WorkerTaskPaths } from 'src/workflows/pre-check/pre-check.types';
+import { ExportPathSource } from '../list-path/list-path.type';
 
 jest.mock('fs', () => ({
   promises: {
@@ -35,7 +36,8 @@ describe('PrecheckActivity', () => {
     protocol: 'SFTP',
     protocolVersion: '1',
     id: '',
-    serverType: ''
+    serverType: '',
+    exportPathSource: ExportPathSource.AUTO_DISCOVER
   };
   const mockSourcePath: WorkerTaskPaths = {
     pathId: 'source-path-id',

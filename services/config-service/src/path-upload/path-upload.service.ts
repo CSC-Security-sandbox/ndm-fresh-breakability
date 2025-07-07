@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import { Brackets, In, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 import { WorkflowService } from '../workflow/workflow.service';
@@ -45,17 +45,17 @@ export class PathUploadService {
   async processFileUpload(importVolumePathsDto: ImportVolumePathsDto, fileServerId: string, userDetails?: UserDetails): Promise<any> {
     try {
       const fileServer = await this.fileServerRepo.findOneBy({ id: fileServerId });
-      if (!fileServer) throw new BadRequestException('File server does not exists');
+      if (!fileServer) throw new BadRequestException('The specified file server could not be found.');
 
       if (!!fileServer && fileServer.exportPathSource !== ExportPathSource.MANUAL_UPLOAD) {
-        this.logger.warn(`File server with ID ${fileServerId} is not configured for manual import`);
-        throw new BadRequestException(`File server with ID ${fileServerId} is not configured for manual import`);
+        this.logger.warn(`The file server with ID ${fileServerId} is not set up for manual uploads.`);
+        throw new BadRequestException(`The file server with ID ${fileServerId} is not set up for manual uploads.`);
       }
 
       const parsedData = importVolumePathsDto.contents.split('\n').map(line => line.split(','));
       // check if the first line exists and is "path" if not return error if yes remove it
       if (parsedData.length === 0 || !parsedData[0][0].startsWith('path')) {
-        throw new BadRequestException('CSV file is empty or does not contain valid data. The first line should contain "path" as the header.');
+        throw new BadRequestException('The CSV file is either empty or missing a valid header. It should start with "path".');
       }
       // If the first line is "path" then remove it
       if (parsedData[0][0].startsWith('path')) parsedData.shift();
@@ -63,7 +63,7 @@ export class PathUploadService {
 
       // parsedData should contain at least one row after removing the header
       if (!parsedData.length) {
-        throw new BadRequestException('CSV file is empty or does not contain valid export paths.');
+        throw new BadRequestException('The CSV file is empty or lacks valid export paths.');
       }
 
 
@@ -139,7 +139,7 @@ export class PathUploadService {
       };
     } catch (error) {
       this.logger.error('Error processing file upload', error);
-      throw new BadRequestException('Error processing file upload: ' + error.message);
+      throw new BadRequestException('An unexpected error occurred while uploading the file. ' + error.message);
     }
   }
 
@@ -159,8 +159,8 @@ export class PathUploadService {
         .getOne();
 
       if (!fileServer) {
-        this.logger.error(`Upload with ID ${uploadId} not found`);
-        throw new Error(`Upload with ID ${uploadId} not found`);
+        this.logger.error(`No upload found with ID ${uploadId}.`);
+        throw new Error(`No upload found with ID ${uploadId}.`);
       }
       this.logger.log(`Processing export path upload with ID ${uploadId}`);
 
@@ -207,25 +207,25 @@ export class PathUploadService {
       }
     } catch (error) {
       this.logger.error('Error processing export path upload', error);
-      throw new BadRequestException('Error processing export path upload: ' + error.message);
+      throw new BadRequestException('An unexpected error occurred while uploading export paths. ' + error.message);
     }
   }
 
   async processUploadUpdate(validationResult: any[], uploadId: string) {
     const updateResult = await this.uploadRepo.findOne({ where: { uploadId } });
     if (!updateResult) {
-      this.logger.error(`Upload with ID ${uploadId} not found`);
-      throw new NotFoundException(`Upload with ID ${uploadId} not found`);
+      this.logger.error(`No upload found with ID ${uploadId}.`);
+      throw new NotFoundException(`No upload found with ID ${uploadId}.`);
     }
     if (!validationResult || !Array.isArray(validationResult) || validationResult.length === 0) {
-      this.logger.error('Validation result is empty or invalid');
-      throw new BadRequestException('Validation result is empty or invalid');
+      this.logger.error('The validation result is missing or invalid.');
+      throw new BadRequestException('The validation result is missing or invalid.');
     }
 
     const fileServerId = updateResult.fileServerId;
     const result = await this.processValidationResult(fileServerId, validationResult);
     if (!result) {
-      throw new BadRequestException('Failed to process validation result');
+      throw new BadRequestException('Unable to process the validation result.');
     }
 
     const createdBy = updateResult.createdBy || null;
@@ -388,6 +388,43 @@ export class PathUploadService {
   async createUploadDirectory(): Promise<void> {
     if (!fs.existsSync(join(process.cwd(), './uploads'))) {
       fs.mkdirSync(join(process.cwd(), './uploads'), { recursive: true });
+    }
+  }
+
+  async getUploadedPaths(fileServerId: string): Promise<{ path: string, action: string, message: string, is_valid: boolean }[]> {
+    try {
+      const uploads = await this.uploadRepo
+        .createQueryBuilder('pu')
+        .leftJoin('volume', 'v', 'v.id = pu.id')
+        .select([
+          'pu.volume_path AS path',
+          'pu.action AS action',
+          `CASE WHEN COALESCE(v.is_valid, true) THEN 'Valid' ELSE 'Invalid' END AS is_valid`,
+          'pu.validation_response AS message'
+        ])
+        .where(qb => {
+          const subQuery = qb
+            .subQuery()
+            .select('sub.upload_id')
+            .from('path_uploads', 'sub')
+            .where('sub.file_server_id = :fileServerId', { fileServerId })
+            .orderBy('sub.created_at', 'DESC')
+            .limit(1)
+            .getQuery();
+          return `pu.upload_id = ${subQuery}`;
+        })
+        .setParameter('fileServerId', fileServerId)
+        .getRawMany();
+
+      if (!uploads || uploads.length === 0) {
+        this.logger.warn(`No uploads found for file server ${fileServerId}`);
+        throw new InternalServerErrorException(`No uploads found for file server ${fileServerId}`);
+      }
+      this.logger.log(`Found ${uploads.length} uploads for file server ${fileServerId}`);
+      return uploads
+    } catch (error) {
+      this.logger.error(`Error fetching uploaded paths for file server ${fileServerId}`, error);
+      throw new InternalServerErrorException(`Error fetching uploaded paths: ${error.message}`);
     }
   }
 }

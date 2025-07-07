@@ -2,7 +2,7 @@
 import * as fs from 'fs';
 import { join } from 'path';
 import { Response } from "express";
-import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
+import { Auth, AuthWorker, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { Controller, Post, Body, Param, Request, Get, Res, Patch } from '@nestjs/common';
 import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UpdateValidationResultDto, ImportVolumePathsDto as UploadVolumePathsDto } from './dto/path-upload.dto';
@@ -51,6 +51,8 @@ export class PathUploadController {
     @ApiNotFoundResponse({ description: 'Upload Not Found' })
     @ApiBadRequestResponse({ description: 'Invalid Upload ID or Validation Result' })
     @Patch(':uploadId')
+    @ApiBearerAuth()
+    @AuthWorker()
     async updateUploadValidationResult(
         @Param('uploadId') uploadId: string,
         @Body() body: UpdateValidationResultDto,
@@ -61,16 +63,22 @@ export class PathUploadController {
     @ApiOperation({ summary: 'Download CSV File' })
     @ApiOkResponse({ description: 'CSV File Downloaded Successfully' })
     @ApiNotFoundResponse({ description: 'File Not Found' })
-    @Get('download/template')
-    async downloadCsvFile(@Res() res: Response) {
-        const headers = ['path'];
-        const records = [{ path: 'example/path/to/volume' }];
+    @Get('download/:type/:fileServerId')
+    @ApiBearerAuth()
+    @Auth(Permission.ManageConfig)
+    async downloadCsvFile(
+        @Param('type') type: 'template' | 'uploaded-paths',
+        @Res() res: Response,
+        @Param('fileServerId') fileServerId: string,
+    ) {
+        const headers = type === 'template' ? ['path'] : ['path', 'action', 'status', 'message'];
+        let records = [{ path: 'example/path/to/volume' }];
+        const fileName = type === 'template' ? 'volume_paths_template.csv' : `uploaded_paths_${fileServerId}.csv`;
+        if(type === 'uploaded-paths') records = await this.pathUploadService.getUploadedPaths(fileServerId);
         const csvContent = [headers.join(','), ...records.map(row => Object.values(row).join(','))].join('\n');
-        const fileName = 'volume_paths_template.csv';
-        
+
         // create the uploads directory if it doesn't exist
         await this.pathUploadService.createUploadDirectory();
-
         const filePath = join(process.cwd(), './uploads', fileName);
         fs.writeFileSync(filePath, csvContent);
         res.setHeader('Content-Type', 'text/csv');

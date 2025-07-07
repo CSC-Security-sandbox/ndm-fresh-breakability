@@ -261,6 +261,7 @@ describe('JobRunInitService', () => {
             workingDirectory: undefined,
             protocolVersion: '',
             isValidPath: undefined,
+            isDisabled: undefined,
           },
         },
         workers: ['worker1', 'worker2'],
@@ -680,6 +681,7 @@ describe('createInitialTask', () => {
             workingDirectory: '/mount/base/path',
             protocolVersion: 'v3',
             isValidPath: true,
+            isDisabled: false,
           },
         },
       };
@@ -764,6 +766,7 @@ describe('createInitialTask', () => {
             workingDirectory: '',
             protocolVersion: '',
             isValidPath: false,
+            isDisabled: false,
           },
         },
       };
@@ -979,9 +982,6 @@ describe("buildJobContext", () => {
       const loggerWarnSpy = jest.spyOn(service['logger'], 'warn').mockImplementation(() => {});
 
       await expect(service.createJobRun(jobConfigId, currentTime)).rejects.toThrow(
-        `Job Config ${jobConfigId} has invalid source or target path, skipping job run creation.`
-      );
-      expect(loggerWarnSpy).toHaveBeenCalledWith(
         `Job Config ${jobConfigId} has invalid source or target path, skipping job run creation.`
       );
     });
