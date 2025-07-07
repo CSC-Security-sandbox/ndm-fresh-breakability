@@ -19,6 +19,7 @@ describe('PathUploadController', () => {
     processValidationResult: jest.fn(),
     isRefreshPossible: jest.fn(),
     createUploadDirectory: jest.fn(),
+    getUploadedPaths: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -124,25 +125,6 @@ describe('PathUploadController', () => {
     });
   });
   describe('GET /download/template', () => {
-    // below is the method 
-    // const headers = ['path'];
-    // const records = [{ path: 'example/path/to/volume' }];
-    // const csvContent = [headers.join(','), ...records.map(row => Object.values(row).join(','))].join('\n');
-    // const fileName = 'volume_paths_template.csv';
-    
-    // // create the uploads directory if it doesn't exist
-    // if (!fs.existsSync(join(process.cwd(), './uploads'))) {
-    //     fs.mkdirSync(join(process.cwd(), './uploads'), { recursive: true });
-    // }
-
-    // const filePath = join(process.cwd(), './uploads', fileName);
-    // fs.writeFileSync(filePath, csvContent);
-    // res.setHeader('Content-Type', 'text/csv');
-    // res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
-    // res.sendFile(filePath);
-    // const fileStream = fs.createReadStream(filePath);
-    // fileStream.pipe(res)
-
     it('should download a CSV file with correct headers and content', async () => {
       const mockResponse: any = {
         setHeader: jest.fn(),
@@ -160,10 +142,34 @@ describe('PathUploadController', () => {
       jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
       jest.spyOn(fs, 'createReadStream').mockReturnValue({ pipe: jest.fn()} as any);
 
-      await controller.downloadCsvFile(mockResponse);
+      await controller.downloadCsvFile('template', mockResponse, '123e4567-e89b-12d3-a456-426614174000');
 
       expect(mockResponse.setHeader).toHaveBeenCalledWith('Content-Type', 'text/csv');
       expect(mockResponse.setHeader).toHaveBeenCalledWith('Content-Disposition', `attachment; filename=${fileName}`);
+      expect(mockResponse.sendFile).toHaveBeenCalled();
+    });
+
+    it('should download a CSV file for uploaded paths', async () => {
+      const mockResponse: any = {
+        setHeader: jest.fn(),
+        sendFile: jest.fn(),
+        pipe: jest.fn()
+      };
+      const headers = ['path', 'action', 'is_valid', 'message'];
+      const records = [{ path: 'example/path/to/volume', action: 'CREATE', is_valid: "Valid", message: 'Valid path' }];
+      const csvContent = [headers.join(','), ...records.map(row => Object.values(row).join(','))].join('\n');
+      const fileName = 'volume_paths_template.csv';
+      
+      // Mock the file system operations
+      jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+      jest.spyOn(fs, 'mkdirSync').mockImplementation((): any => {});
+      jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+      jest.spyOn(fs, 'createReadStream').mockReturnValue({ pipe: jest.fn()} as any);
+      jest.spyOn(mockPathUploadService, 'getUploadedPaths').mockResolvedValue(records as any[]);
+
+      await controller.downloadCsvFile('uploaded-paths', mockResponse, '123e4567-e89b-12d3-a456-426614174000');
+
+      expect(mockResponse.setHeader).toHaveBeenCalledWith('Content-Type', 'text/csv');
       expect(mockResponse.sendFile).toHaveBeenCalled();
     });
 
@@ -181,7 +187,7 @@ describe('PathUploadController', () => {
       });
       jest.spyOn(service, 'createUploadDirectory').mockResolvedValue();
 
-      await expect(controller.downloadCsvFile(mockResponse)).rejects.toThrow('File not found');
+      await expect(controller.downloadCsvFile('template', mockResponse, '123e4567-e89b-12d3-a456-426614174000')).rejects.toThrow('File not found');
     });
   })
 });

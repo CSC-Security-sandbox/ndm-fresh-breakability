@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
 import axios from 'axios';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
+import { AuthService } from 'src/auth/auth.service';
 
 jest.mock('axios');
 jest.mock('src/protocols/protocols', () => ({
@@ -18,6 +19,10 @@ jest.mock('src/protocols/protocols', () => ({
 const mockConfigService = {
     get: jest.fn(),
 };
+
+const mockAuthService = {
+    getAccessToken: jest.fn().mockResolvedValue('mocked-access-token'),
+}
 
 const mockLogger = {
     log: jest.fn(),
@@ -50,6 +55,7 @@ describe('ValidatePathActivity', () => {
         service = new ValidatePathActivity(
             mockConfigService as any as ConfigService,
             mockLogger as any as Logger,
+            mockAuthService as any as AuthService,
         );
     });
 
@@ -122,8 +128,9 @@ describe('ValidatePathActivity', () => {
             await service.postValidationResult('upload-1', { status: 'success' });
 
             expect(axios.patch).toHaveBeenCalledWith(
-                'http://worker-config-url/api/v1/path-upload/upload-1',
-                { validationResult: { status: 'success' } }
+                'http://worker-config-url/api/v1/paths-upload/upload-1',
+                { validationResult: { status: 'success' } },
+                { headers: { Authorization : 'Bearer mocked-access-token'} }
             );
             expect(mockLogger.log).toHaveBeenCalledWith(
                 '[worker-123] Validation result posted successfully for uploadId: upload-1'
