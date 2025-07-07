@@ -258,10 +258,8 @@ export class ErrorLogService {
     }
   }
 
-  async createCsvFileForJob(
-    jobRunId?: string,
-    jobConfigId?: string
-  ): Promise<any> {
+  async createCsvFileForJob(type?: string, id?: string): Promise<any> {
+    const { jobRunId, jobConfigId } = this.extractJobIdentifiers(type, id);
     await this.handleError(jobRunId, jobConfigId);
     try {
       const identifier = jobRunId || jobConfigId;
@@ -315,11 +313,11 @@ export class ErrorLogService {
   }
 
   async downloadErrorLogCsvFile(
-    jobRunId?: string,
-    jobConfigId?: string
+    type?: string,
+    id?: string
   ): Promise<StreamableFile> {
     try {
-      const identifier = jobRunId || jobConfigId;
+      const { jobRunId, jobConfigId } = this.extractJobIdentifiers(type, id);
       await this.handleError(jobRunId, jobConfigId);
       let fileName: string;
       if (jobConfigId) {
@@ -385,7 +383,7 @@ export class ErrorLogService {
 
   async getTotalErrorCountForConfig(jobConfigId: string): Promise<number> {
     try {
-      const jobRunIds = await this.getJobRunIds(jobConfigId + "jhgu");
+      const jobRunIds = await this.getJobRunIds(jobConfigId);
       if (jobRunIds.length === 0) return 0;
       const placeholders = jobRunIds.map((_, i) => `$${i + 1}`).join(",");
       const [{ count: opCount }] = await this.operationErrorRepo.query(
@@ -427,11 +425,28 @@ export class ErrorLogService {
     }
   }
 
+  // Helper to extract jobRunId or jobConfigId based on type
+  private extractJobIdentifiers(
+    type?: string,
+    id?: string
+  ): { jobRunId?: string; jobConfigId?: string } {
+    if (type === "job-run") {
+      return { jobRunId: id };
+    } else if (type === "job-config") {
+      return { jobConfigId: id };
+    } else {
+      throw new BadRequestException({
+        displayMessage: "Invalid type. Must be 'job-run' or 'job-config'.",
+      });
+    }
+  }
+
   async isCsvFileReady(
-    jobRunId?: string,
-    jobConfigId?: string
+    type?: string,
+    id?: string
   ): Promise<{ ready: boolean; processing: boolean }> {
     try {
+      const { jobRunId, jobConfigId } = this.extractJobIdentifiers(type, id);
       const identifier = jobRunId || jobConfigId;
       await this.handleError(jobRunId, jobConfigId);
       let errorCount: number;
