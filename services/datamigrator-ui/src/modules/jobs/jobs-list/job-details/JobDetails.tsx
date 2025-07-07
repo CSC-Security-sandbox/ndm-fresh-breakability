@@ -197,13 +197,13 @@ const JobDetails = () => {
     return sortedJobRuns[0]?.jobRunId;
   }, [jobConfigDetails?.jobRuns]);
 
-  const handleErrorLogsDownload = async () => {
+  const generateErrorReport = async () => {
     try {
       const queryParams = createUrl({ jobConfigId: jobId });
       await generateErrorLogs(queryParams).unwrap();
     } catch (error) {
       const errorMsg = "Error while downloading error logs.";
-      notify.error(error?.data?.message || errorMsg);
+      notify.error(error?.data?.displayMessage || errorMsg);
       console.error(`errorMsg ${error?.data?.message}`);
     }
   };
@@ -213,7 +213,7 @@ const JobDetails = () => {
       <ErrorLogActionButton
         data={data}
         disabled={errorsCount.length === 0}
-        handleGenerate={handleErrorLogsDownload}
+        handleGenerate={generateErrorReport}
         handleDownload={() =>
           handleDownloadErrorsLogs(
             downloadErrorLogs,
@@ -223,7 +223,7 @@ const JobDetails = () => {
         }
       />
     );
-  }, [jobId, downloadErrorLogs, handleErrorLogsDownload]);
+  }, [jobId, downloadErrorLogs, generateErrorReport]);
 
   return (
     <Box className="flex flex-col gap-4">
