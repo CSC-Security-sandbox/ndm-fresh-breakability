@@ -25,6 +25,7 @@ export type BulkManualUploadModalContentPropsType = {
 export type BulkManualUploadPropsType = {
   fileServerDetails: ConfigListTypeApiType;
   allExportPaths: VolumeType[];
+  handleReportDownload: () => void;
 };
 
 export type UploadFileDetailsPropsType = {
@@ -36,6 +37,6 @@ export type UploadExportPathSourceFileProps = {
   body: BlueXpFormType<BulkManualUploadModalContentPropsType>;
 };
 
-export type BulkManualUploadErrorPropsType {
+export type BulkManualUploadErrorPropsType = {
   error: string;
-}
+};
