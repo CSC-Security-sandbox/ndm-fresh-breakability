@@ -48,7 +48,9 @@ export const MountPathConfigurationTable = () => {
     downloadBulkMigrationCsv(mappingStepForm);
   };
   const checkDisabled = (row: MigrationDetailsTableConfigurationType) => {
-    return listOfNotReachableExportPaths.includes(row?.sourcePath?.sourcePathId);
+    return listOfNotReachableExportPaths.includes(
+      row?.sourcePath?.sourcePathId
+    );
   };
 
   return (
