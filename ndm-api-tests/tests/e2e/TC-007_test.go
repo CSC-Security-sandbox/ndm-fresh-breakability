@@ -117,7 +117,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
-					"skipFile":            "15-M",
+					"skipFile":            "0-M",
 				},
 			}
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
@@ -143,7 +143,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 
 				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s", migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-				LogDebug(fmt.Sprintf("validate report result : %s", result))
+				By(fmt.Sprintf("validate report result : %s", result))
 			}
 
 			// Validating the NextScheduled time from response is within +-1 minutes and is 3 minutes later than 1st run
@@ -186,9 +186,9 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, ".././validators/cutover_validation.json") // as adding delta data similar to cutover, hence using same validation json for incremental migration and cutover
+				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../../validators/cutover_validation.json") // as adding delta data similar to cutover, hence using same validation json for incremental migration and cutover
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-				LogDebug(fmt.Sprintf("validate report result : %s", result))
+				By(fmt.Sprintf("validate report result : %s", result))
 			}
 
 			By("Remove Delta data from destinations")
@@ -262,7 +262,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			LogDebug("Cleanup complete.")
+			By("Cleanup complete.")
 		})
 	})
 })

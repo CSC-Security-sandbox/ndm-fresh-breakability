@@ -144,14 +144,6 @@
     "target checksum": "c46fc8b20b4c86346f66472ebe1fe226fba71366e8a97ad7b6e4f8611a0e515a"
   },
   {
-    "source path": "/vol_src_automation2/oldfile_2.txt",
-    "target checksum": "cbae846e1e87cee9708cb4fd99eadff945cec79defcfba98ceef8abf6de2e5fc"
-  },
-  {
-    "source path": "/vol_src_automation2/oldfile.txt",
-    "target checksum": "80249d1241ed0fa30b63fed2ea6808dfe5cb13e204adb96b2c24bc13fa41a8fe"
-  },
-  {
     "source path": "/vol_src_automation2/sample_2.csv",
     "target checksum": "d48e182b47e8358775074e988bea968f5a018d619a3e00aa0113438f9dd803bd"
   },

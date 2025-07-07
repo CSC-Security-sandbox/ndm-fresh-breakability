@@ -156,19 +156,23 @@ const BulkDiscover = () => {
             />
           </Box>
         </Card>
-        <ExportPathsTable
-          jobType="bulk-discovery"
-          defaultColumnState={BULK_DISCOVERY_DEFAULT_COLUMN_STATE}
-          allExportPaths={allExportPaths.filter(
-            (row) => row.protocol === bulkDiscoveryForm.formState.protocol.value
-          )}
-          fileServerDetails={fileServerDetails}
-          showRefetch={false}
-          isRowSelectingEnabled={true}
-          setSelectedExportPathsIds={setSelectedExportPathsIds}
-          key={key}
-          notReachableExportPaths={notReachableExportPaths}
-        />
+
+        <Box className="mb-4">
+          <ExportPathsTable
+            jobType="bulk-discovery"
+            defaultColumnState={BULK_DISCOVERY_DEFAULT_COLUMN_STATE}
+            allExportPaths={allExportPaths.filter(
+              (row) =>
+                row.protocol === bulkDiscoveryForm.formState.protocol.value
+            )}
+            fileServerDetails={fileServerDetails}
+            showRefetch={false}
+            isRowSelectingEnabled={true}
+            setSelectedExportPathsIds={setSelectedExportPathsIds}
+            key={key}
+            notReachableExportPaths={notReachableExportPaths}
+          />
+        </Box>
       </Box>
       <AppFooter
         footerContent={

@@ -190,6 +190,18 @@ func fetchReport(
 			return nil, fmt.Errorf("received HTTP 500 after %d retries: %s", maxRetries, string(respBytes))
 		}
 
+		// Retry on 404 with specific message
+		if resp.StatusCode == http.StatusNotFound {
+			// Try to parse the response body as JSON to check the message
+
+			if attempt < maxRetries {
+				Wait(retryDelay)
+				continue
+			}
+			return nil, fmt.Errorf("received HTTP 404 after %d retries: %s", maxRetries, string(respBytes))
+
+		}
+
 		// For other status codes, return error immediately
 		return nil, fmt.Errorf("unexpected HTTP %d: %s", resp.StatusCode, string(respBytes))
 	}

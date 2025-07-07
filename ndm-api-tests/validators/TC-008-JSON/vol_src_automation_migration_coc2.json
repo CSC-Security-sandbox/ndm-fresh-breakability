@@ -120,22 +120,6 @@
     "target checksum": "0a289de35c83a651beeaa8541483f6905537860be7ecd1ff53d2fb57ccda67b3"
   },
   {
-    "source path": "/vol_src_automation2/.hidden1_1",
-    "target checksum": "71242619a8a44b1b646c397c598d7eb6a206484474bbfb370c2fba6569cf41dd"
-  },
-  {
-    "source path": "/vol_src_automation2/.hidden1_2",
-    "target checksum": "0f25bcce6f85a189248026beb2294149952dad6b9839e6f02d9eecd63bf65d10"
-  },
-  {
-    "source path": "/vol_src_automation2/.hidden2_1",
-    "target checksum": "93120f7141894b6436563b4be9b7493e7def877b8c38bb3ce5287e8f2de2b666"
-  },
-  {
-    "source path": "/vol_src_automation2/.hidden2_2",
-    "target checksum": "4decc2fc966ade8a156c2d08e00ec092dc50632db0666a5be4c66cbfa19877e5"
-  },
-  {
     "source path": "/vol_src_automation2/modify1.txt",
     "target checksum": "186b26b6c8cc0416482da9b9664db9d30efc944228e075f37a5b06d612dbddd6"
   },

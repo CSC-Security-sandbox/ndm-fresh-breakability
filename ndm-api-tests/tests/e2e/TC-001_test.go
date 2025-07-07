@@ -48,7 +48,6 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			var sourceJobConfigIDs, destinationJobConfigIDs, jobConfigIDs, migrationJobConfigIDs, cutoverRunIDs []string
 			var destinationConfigID, destinationPathID1, destinationPathID2 string
 
-			By("Creating the source file server")
 			Wait(20)
 			sourceParams := CreateServereParams{
 				ConfigName:       "source-file-server",
@@ -68,7 +67,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			Expect(sourceConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
-			LogDebug(fmt.Sprintf("Source file server created with config ID: %#v", resp))
+			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 			By("Getting the source file server by config ID")
 			sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID, headers)
@@ -116,7 +115,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 
 				result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s", discovery_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", sourceDiscoveryJobRunID)
-				LogDebug(fmt.Sprintf("validate report result for %s: %s", sourceDiscoveryJobRunID, result))
+				By(fmt.Sprintf("validate report result for %s: %s", sourceDiscoveryJobRunID, result))
 			}
 
 			By("Creating the destination file server")
@@ -190,7 +189,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
-					"skipFile":            "15-M",
+					"skipFile":            "0-M",
 				},
 			}
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
@@ -216,7 +215,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 
 				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s", migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-				LogDebug(fmt.Sprintf("validate report result : %s", result))
+				By(fmt.Sprintf("validate report result : %s", result))
 			}
 
 			By("Adding Delta Data")
@@ -293,7 +292,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			LogDebug("Cleanup complete.")
+			By("Cleanup complete.")
 		})
 	})
 })
