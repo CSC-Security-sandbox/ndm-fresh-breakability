@@ -34,6 +34,19 @@ export class ValidateWorkingDirectoryActivity {
       errorMessage: null
     };
 
+    const isPathExists = !!payload?.paths?.length;
+    if(!isPathExists && !payload.hasManualUpload) {
+      configStatusPayload.status = ConfigStatus.ERRORED;
+      configStatusPayload.errorMessage = ConfigError.UNABLE_TO_DETECT_EXPORT_PATH;
+      await this.updateConfigStatus(apiUrl, configStatusPayload);
+      return {
+        traceId,
+        status: 'error',
+        workerId: this.workerId,
+        message: ConfigError.UNABLE_TO_DETECT_EXPORT_PATH,
+      };
+    }
+
     if(!payload?.exportPathWorkingDirectoryProvided) {
       try {
         this.logger.log("Export Path not provided, fetching from file server");

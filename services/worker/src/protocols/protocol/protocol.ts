@@ -44,12 +44,15 @@ export abstract class Protocol {
           ?.replaceAll('${MOUNT_PATH}', payload?.path)
           ?.replaceAll('${DIR_PATH}', directoryPath)
           ?.replaceAll('${PROTOCOL_VERSION}', payload?.protocolVersion)
-        const sanitizedCommand = sanitize(command, [payload.password]);
+        
+        const filedToSanitize: string[] = [];
+        if(!!payload.password) filedToSanitize.push(payload.password);
+        const sanitizedCommand = sanitize(command, filedToSanitize);
         this.logger.debug(`command: ${sanitizedCommand}`)
         return new Promise((resolve, rejects) => {
           exec(command, (error, stdout, stderr) => {
-            const sanitizedStderr = sanitize(stderr, [payload.password]);
-            const sanitizedError = sanitize(error?.message, [payload.password]);
+            const sanitizedStderr = sanitize(stderr, filedToSanitize);
+            const sanitizedError = sanitize(error?.message, filedToSanitize);
 
             this.logger.info(
               `[${traceId}] command: ${sanitizedCommand}, stdout: ${stdout}, stderr: ${sanitizedStderr}, error: ${sanitizedError}`,
