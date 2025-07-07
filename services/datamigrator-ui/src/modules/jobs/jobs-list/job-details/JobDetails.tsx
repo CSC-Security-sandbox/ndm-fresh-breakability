@@ -28,7 +28,6 @@ import JobHeader from "@modules/jobs/jobs-list/job-details/components/JobHeader"
 import { JOB_RUN_LIST_COLUMN_DEFS } from "@modules/jobs/jobs-list/job-details/job-details.constants";
 import { useParams } from "react-router-dom";
 import {
-  createUrl,
   handleDownloadReport,
   handleDownloadErrorsLogs,
 } from "@modules/jobs/jobs.utils";
@@ -52,8 +51,6 @@ const JobDetails = () => {
   const navigate = useNavigate();
   const adhocRun = useAdhocRun();
 
-  const queryParams = createUrl({ jobConfigId: jobId });
-
   const [openConfirmation, setOpenConfirmation] = useState(false);
   const [selectedJobRunId, setSelectedJobRunId] = useState("");
   const [isFrequentInterval, setIsFrequentInterval] = useState<boolean>(false);
@@ -72,13 +69,16 @@ const JobDetails = () => {
   );
   const [downloadErrorLogs] = useLazyDownloadErrorLogsCSVQuery();
   const [generateErrorLogs] = useLazyGenerateErrorLogsQuery();
-  const { data } = useIsErrorLogsCsvReadyQuery(queryParams, {
-    pollingInterval: Number(
-      window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
-    ),
-    skipPollingIfUnfocused: true,
-    skip: !jobId,
-  });
+  const { data } = useIsErrorLogsCsvReadyQuery(
+    { type: "job-config", id: jobId },
+    {
+      pollingInterval: Number(
+        window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
+      ),
+      skipPollingIfUnfocused: true,
+      skip: !jobId,
+    }
+  );
 
   useEffect(() => {
     if (jobConfigDetails?.jobRuns?.length === 0) {
@@ -199,8 +199,7 @@ const JobDetails = () => {
 
   const generateErrorReport = async () => {
     try {
-      const queryParams = createUrl({ jobConfigId: jobId });
-      await generateErrorLogs(queryParams).unwrap();
+      await generateErrorLogs({ type: "job-config", id: jobId }).unwrap();
     } catch (error) {
       const errorMsg = "Error while downloading error logs.";
       notify.error(error?.data?.displayMessage || errorMsg);
@@ -217,7 +216,7 @@ const JobDetails = () => {
         handleDownload={() =>
           handleDownloadErrorsLogs(
             downloadErrorLogs,
-            { jobConfigId: jobId },
+            { type: "job-config", id: jobId },
             "CSV"
           )
         }

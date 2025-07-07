@@ -16,7 +16,7 @@ import {
   useLazyGenerateErrorLogsQuery,
   useLazyDownloadErrorLogsCSVQuery,
 } from "@api/reportApi";
-import { createUrl, handleDownloadErrorsLogs } from "@modules/jobs/jobs.utils";
+import { handleDownloadErrorsLogs } from "@modules/jobs/jobs.utils";
 import { ErrorLogActionButton } from "@modules/jobs/job-task-errors/components/ErrorLogActionButton";
 
 const JobTaskErrors = () => {
@@ -28,16 +28,17 @@ const JobTaskErrors = () => {
 
   const { jobId, jobRunId } = useParams<{ jobRunId: string; jobId: string }>();
 
-  const queryParams = createUrl({ jobRunId: jobRunId });
-
   // API hooks
-  const { data } = useIsErrorLogsCsvReadyQuery(queryParams, {
-    pollingInterval: Number(
-      window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
-    ),
-    skipPollingIfUnfocused: true,
-    skip: !jobRunId,
-  });
+  const { data } = useIsErrorLogsCsvReadyQuery(
+    { type: "job-run", id: jobRunId },
+    {
+      pollingInterval: Number(
+        window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
+      ),
+      skipPollingIfUnfocused: true,
+      skip: !jobRunId,
+    }
+  );
   const [downloadErrorLogs] = useLazyDownloadErrorLogsCSVQuery();
   const [getJobConfigDetailsApi] = useLazyGetJobConfigDetailsQuery();
   const [generateErrorLogs] = useLazyGenerateErrorLogsQuery();
@@ -59,8 +60,7 @@ const JobTaskErrors = () => {
 
   const generateErrorReport = async () => {
     try {
-      const queryParams = createUrl({ jobRunId: jobRunId });
-      await generateErrorLogs(queryParams).unwrap();
+      await generateErrorLogs({ type: "job-run", id: jobRunId }).unwrap();
     } catch (error) {
       const errorMsg = "Error while downloading error logs.";
       notify.error(error?.data?.message || errorMsg);
@@ -77,7 +77,11 @@ const JobTaskErrors = () => {
           data={data}
           handleGenerate={generateErrorReport}
           handleDownload={() =>
-            handleDownloadErrorsLogs(downloadErrorLogs, { jobRunId }, "CSV")
+            handleDownloadErrorsLogs(
+              downloadErrorLogs,
+              { type: "job-run", id: jobRunId },
+              "CSV"
+            )
           }
         />
       </Box>
