@@ -99,7 +99,7 @@ describe('PathUploadService', () => {
         fileSize: 1024,
       };
       jest.spyOn(fileServerRepo, 'findOneBy').mockResolvedValue(null);
-      await expect(service.processFileUpload(dto, 'non-existing-file-server-id')).rejects.toThrow('File server does not exists');
+      await expect(service.processFileUpload(dto, 'non-existing-file-server-id')).rejects.toThrow('An unexpected error occurred while uploading the file. The specified file server could not be found.');
     });
 
     it('should throw error if file server is not set for manual upload', async () => {
@@ -111,7 +111,7 @@ describe('PathUploadService', () => {
       const fileServer = new FileServerEntity();
       fileServer.exportPathSource = ExportPathSource.AUTO_DISCOVER;
       jest.spyOn(fileServerRepo, 'findOneBy').mockResolvedValue(fileServer);
-      await expect(service.processFileUpload(dto, fileServer.id)).rejects.toThrow(`File server with ID ${fileServer.id} is not configured for manual import`);
+      await expect(service.processFileUpload(dto, fileServer.id)).rejects.toThrow(`An unexpected error occurred while uploading the file. The file server with ID undefined is not set up for manual uploads.`);
     });
 
     it('should throw error if 1st line of csv file is not = path', async () => {
@@ -123,7 +123,7 @@ describe('PathUploadService', () => {
       const fileServer = new FileServerEntity();
       fileServer.exportPathSource = ExportPathSource.MANUAL_UPLOAD;
       jest.spyOn(fileServerRepo, 'findOneBy').mockResolvedValue(fileServer);
-      await expect(service.processFileUpload(dto, fileServer.id)).rejects.toThrow('CSV file is empty or does not contain valid data');
+      await expect(service.processFileUpload(dto, fileServer.id)).rejects.toThrow('An unexpected error occurred while uploading the file. The CSV file is either empty or missing a valid header. It should start with \"path\".');
     });
 
     it('should process file upload successfully', async () => {
@@ -303,7 +303,7 @@ describe('PathUploadService', () => {
     it('Should throw an error if uploadId does not exists', async () => {
       const uploadId = 'non-existing-upload-id';
       jest.spyOn(uploadRepo, 'findOne').mockResolvedValue(null);
-      await expect(service.processUploadUpdate({} as any, uploadId)).rejects.toThrow(`Upload with ID ${uploadId} not found`);
+      await expect(service.processUploadUpdate({} as any, uploadId)).rejects.toThrow(`No upload found with ID non-existing-upload-id.`);
     });
 
     it('Should throw error if validation result is not provided or is empty or is not an array', async () => {
@@ -311,9 +311,9 @@ describe('PathUploadService', () => {
       const mockUpload = new PathUploadsEntity();
       mockUpload.uploadId = uploadId;
       jest.spyOn(uploadRepo, 'findOne').mockResolvedValue(mockUpload);
-      await expect(service.processUploadUpdate(null, uploadId)).rejects.toThrow('Validation result is empty or invalid');
-      await expect(service.processUploadUpdate([], uploadId)).rejects.toThrow('Validation result is empty or invalid');
-      await expect(service.processUploadUpdate({} as any, uploadId)).rejects.toThrow('Validation result is empty or invalid');
+      await expect(service.processUploadUpdate(null, uploadId)).rejects.toThrow('The validation result is missing or invalid.');
+      await expect(service.processUploadUpdate([], uploadId)).rejects.toThrow('The validation result is missing or invalid.');
+      await expect(service.processUploadUpdate({} as any, uploadId)).rejects.toThrow('The validation result is missing or invalid.');
     })
 
     it('Should throw and error if processValidationResult method fails', async () => {
@@ -333,8 +333,8 @@ describe('PathUploadService', () => {
       mockUpload.uploadId = uploadId;
       jest.spyOn(uploadRepo, 'findOne').mockResolvedValue(mockUpload);
       jest.spyOn(service, 'processValidationResult').mockResolvedValue(null);
-      await expect(service.processUploadUpdate([{ volumePath: '/srv/nfs_share', isValid: true }], uploadId)).rejects.toThrow('Failed to process validation result');
-      await expect(service.processUploadUpdate([{ volumePath: '/srv/nfs_share', isValid: true }], uploadId)).rejects.toThrow('Failed to process validation result');
+      await expect(service.processUploadUpdate([{ volumePath: '/srv/nfs_share', isValid: true }], uploadId)).rejects.toThrow('Unable to process the validation result.');
+      await expect(service.processUploadUpdate([{ volumePath: '/srv/nfs_share', isValid: true }], uploadId)).rejects.toThrow('Unable to process the validation result.');
     });
 
     it('Should process the validation result and update the upload entry', async () => {
@@ -622,6 +622,91 @@ describe('PathUploadService', () => {
       await service.createUploadDirectory();
       expect(fs.existsSync).toHaveBeenCalledWith(uploadsPath);
       expect(mkdirSyncMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getUploadedPaths', () => {
+    it('should return uploaded paths with correct fields', async () => {
+      const mockUploadData = [
+        {
+          path: '/mnt/path1',
+          action: 'ADD',
+          is_valid: 'Valid',
+          message: 'Success',
+        },
+        {
+          path: '/mnt/path2',
+          action: 'REMOVE',
+          is_valid: 'Invalid',
+          message: 'Volume not found',
+        },
+      ];
+
+      const mockQueryBuilder: any = {
+        leftJoin: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockImplementation(fn => {
+          // simulate qb.subQuery().select... behavior
+          const qb = {
+            subQuery: () => ({
+              select: () => ({
+                from: () => ({
+                  where: () => ({
+                    orderBy: () => ({
+                      limit: () => ({
+                        getQuery: () => "'subquery'",
+                      }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          };
+          fn(qb); // simulate the subQuery
+          return mockQueryBuilder;
+        }),
+        setParameter: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue(mockUploadData),
+      };
+
+      jest.spyOn(uploadRepo, 'createQueryBuilder').mockReturnValue(mockQueryBuilder);
+
+      const result = await service.getUploadedPaths('file-server-id-123');
+
+      expect(result).toEqual(mockUploadData);
+      expect(mockQueryBuilder.getRawMany).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException if no uploads are found', async () => {
+      const mockQueryBuilder: any = {
+        leftJoin: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockImplementation(fn => {
+          const qb = {
+            subQuery: () => ({
+              select: () => ({
+                from: () => ({
+                  where: () => ({
+                    orderBy: () => ({
+                      limit: () => ({
+                        getQuery: () => "'subquery'",
+                      }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          };
+          fn(qb);
+          return mockQueryBuilder;
+        }),
+        setParameter: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      };
+
+      jest.spyOn(uploadRepo, 'createQueryBuilder').mockReturnValue(mockQueryBuilder);
+
+      await expect(service.getUploadedPaths('file-server-id-123')).rejects.toThrow('No uploads found for file server file-server-id-123');
     });
   });
 });

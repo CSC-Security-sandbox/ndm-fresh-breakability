@@ -1,5 +1,6 @@
 import { proxyActivities } from '@temporalio/workflow';
 import { ListPathActivity } from 'src/activities/list-path/list-path.service';
+import { ExportPathSource } from 'src/activities/list-path/list-path.type';
 import { ValidateWorkingDirectoryActivity } from 'src/activities/working-directory/working-directory.service';
 
 async function log(traceId: string, message: string) {
@@ -35,7 +36,8 @@ export async function ValidateWorkingDirectoryWorkerWorkflow(
   for (let data of results) {
     paths = [...data.paths];
   }
-  
+  args.payload.paths = paths;
+  args.payload['hasManualUpload'] = args.payload.listPathPayload.some((item: any) => item.exportPathSource === ExportPathSource.MANUAL_UPLOAD);
   const exportPathWorkingDirectoryProvided = args?.payload?.exportPath?.length > 0;
 
   if(exportPathWorkingDirectoryProvided) {
