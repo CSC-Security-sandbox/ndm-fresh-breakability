@@ -390,4 +390,36 @@ export class PathUploadService {
       fs.mkdirSync(join(process.cwd(), './uploads'), { recursive: true });
     }
   }
+
+  async getUploadedPaths(fileServerId: string): Promise<{ path: string, action: string, message: string, is_valid: boolean }[]> {
+   const uploads = await this.uploadRepo
+    .createQueryBuilder('pu')
+    .leftJoin('volume', 'v', 'v.id = pu.id')
+     .select([
+      'pu.volume_path AS path',
+      'pu.action AS action',
+      `CASE WHEN COALESCE(v.is_valid, true) THEN 'Valid' ELSE 'Invalid' END AS is_valid`,
+      'pu.validation_response AS message'
+    ])
+    .where(qb => {
+      const subQuery = qb
+        .subQuery()
+        .select('sub.upload_id')
+        .from('path_uploads', 'sub')
+        .where('sub.file_server_id = :fileServerId', { fileServerId })
+        .orderBy('sub.created_at', 'DESC')
+        .limit(1)
+        .getQuery();
+      return `pu.upload_id = ${subQuery}`;
+    })
+    .setParameter('fileServerId', fileServerId)
+    .getRawMany();
+
+    if (!uploads || uploads.length === 0) {
+      this.logger.warn(`No uploads found for file server ${fileServerId}`);
+      throw new NotFoundException(`No uploads found for file server ${fileServerId}`);
+    }
+    this.logger.log(`Found ${uploads.length} uploads for file server ${fileServerId}`);
+    return uploads
+  }
 }
