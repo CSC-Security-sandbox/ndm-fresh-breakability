@@ -45,5 +45,4 @@ export const ERROR_COLUMN_DEF = [
   },
 ];
 
-export const GENERATING_ERRORS_LOGS_LABEL =
-  "Generating Error Logs, please wait";
+export const GENERATING_ERRORS_LOGS_LABEL = "Generating error report";
