@@ -52,8 +52,8 @@ export const reportApi = createApi({
     }),
 
     downloadErrorLogsCSV: builder.query({
-      query: (queryParams) => ({
-        url: `job-run/download-error-csv?${queryParams}`,
+      query: ({ type, id }) => ({
+        url: `job-run/download-error-csv/${type}/${id}`,
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -63,11 +63,11 @@ export const reportApi = createApi({
     }),
 
     generateErrorLogs: builder.query({
-      query: (queryParams) => `job-run/generate-error-csv?${queryParams}`,
+      query: ({ type, id }) => `job-run/generate-error-csv/${type}/${id}`,
     }),
 
     isErrorLogsCsvReady: builder.query({
-      query: (queryParams) => `job-run/is-error-csv-ready?${queryParams}`,
+      query: ({ type, id }) => `job-run/is-error-csv-ready/${type}/${id}`,
     }),
   }),
 });
