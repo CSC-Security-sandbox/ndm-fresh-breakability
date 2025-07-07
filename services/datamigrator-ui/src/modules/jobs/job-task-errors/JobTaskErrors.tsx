@@ -57,7 +57,7 @@ const JobTaskErrors = () => {
     })();
   }, [jobId]);
 
-  const handleErrorLogsDownload = async () => {
+  const generateErrorReport = async () => {
     try {
       const queryParams = createUrl({ jobRunId: jobRunId });
       await generateErrorLogs(queryParams).unwrap();
@@ -75,7 +75,7 @@ const JobTaskErrors = () => {
 
         <ErrorLogActionButton
           data={data}
-          handleGenerate={handleErrorLogsDownload}
+          handleGenerate={generateErrorReport}
           handleDownload={() =>
             handleDownloadErrorsLogs(downloadErrorLogs, { jobRunId }, "CSV")
           }
