@@ -59,6 +59,9 @@ export interface DestinationPathsOptionsType {
   protocol: string;
   pathId: string;
   pathName: string;
+  isDisabled?: boolean;
+  isValid?: boolean;
+  reachableCount?: number;
 }
 
 export interface ProtocolFormType {

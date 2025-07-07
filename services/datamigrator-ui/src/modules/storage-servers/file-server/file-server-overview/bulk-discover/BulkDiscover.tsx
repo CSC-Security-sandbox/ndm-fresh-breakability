@@ -167,7 +167,6 @@ const BulkDiscover = () => {
             showRefetch={false}
             isRowSelectingEnabled={true}
             setSelectedExportPathsIds={setSelectedExportPathsIds}
-            key={key}
             notReachableExportPaths={notReachableExportPaths}
           />
         </Box>
