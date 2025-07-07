@@ -128,4 +128,10 @@ describe('parseExports', () => {
         const result = parseExports(output);
         expect(result).toEqual(['/export/1', '/export/2']);
     });
+    
+    it('should exclude root path ("/") from export list', () => {
+    const output = '/export/1\n/export/2\nother\n/export/3\n/';
+    const result = parseExports(output);
+    expect(result).toEqual(['/export/1', '/export/2', '/export/3']);
+    });
 });
