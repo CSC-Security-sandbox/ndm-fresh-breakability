@@ -624,4 +624,89 @@ describe('PathUploadService', () => {
       expect(mkdirSyncMock).not.toHaveBeenCalled();
     });
   });
+
+  describe('getUploadedPaths', () => {
+    it('should return uploaded paths with correct fields', async () => {
+      const mockUploadData = [
+        {
+          path: '/mnt/path1',
+          action: 'ADD',
+          is_valid: 'Valid',
+          message: 'Success',
+        },
+        {
+          path: '/mnt/path2',
+          action: 'REMOVE',
+          is_valid: 'Invalid',
+          message: 'Volume not found',
+        },
+      ];
+
+      const mockQueryBuilder: any = {
+        leftJoin: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockImplementation(fn => {
+          // simulate qb.subQuery().select... behavior
+          const qb = {
+            subQuery: () => ({
+              select: () => ({
+                from: () => ({
+                  where: () => ({
+                    orderBy: () => ({
+                      limit: () => ({
+                        getQuery: () => "'subquery'",
+                      }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          };
+          fn(qb); // simulate the subQuery
+          return mockQueryBuilder;
+        }),
+        setParameter: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue(mockUploadData),
+      };
+
+      jest.spyOn(uploadRepo, 'createQueryBuilder').mockReturnValue(mockQueryBuilder);
+
+      const result = await service.getUploadedPaths('file-server-id-123');
+
+      expect(result).toEqual(mockUploadData);
+      expect(mockQueryBuilder.getRawMany).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException if no uploads are found', async () => {
+      const mockQueryBuilder: any = {
+        leftJoin: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockImplementation(fn => {
+          const qb = {
+            subQuery: () => ({
+              select: () => ({
+                from: () => ({
+                  where: () => ({
+                    orderBy: () => ({
+                      limit: () => ({
+                        getQuery: () => "'subquery'",
+                      }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          };
+          fn(qb);
+          return mockQueryBuilder;
+        }),
+        setParameter: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      };
+
+      jest.spyOn(uploadRepo, 'createQueryBuilder').mockReturnValue(mockQueryBuilder);
+
+      await expect(service.getUploadedPaths('file-server-id-123')).rejects.toThrow('No uploads found for file server file-server-id-123');
+    });
+  });
 });
