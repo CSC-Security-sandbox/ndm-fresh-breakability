@@ -81,9 +81,12 @@ export const configApi = createApi({
         `servers/check-unique?projectId=${projectId}&configName=${configName}`,
     }),
 
-    downloadExportPathSourceTemplate: builder.query<Blob, void>({
-      query: () => ({
-        url: "paths-upload/download/template",
+    downloadExportPathSourceTemplate: builder.query<
+      Blob,
+      Record<string, string>
+    >({
+      query: ({ type, fileServerId }) => ({
+        url: `paths-upload/download/${type}/${fileServerId}`,
         responseHandler: async (response) => response.blob(),
       }),
     }),
