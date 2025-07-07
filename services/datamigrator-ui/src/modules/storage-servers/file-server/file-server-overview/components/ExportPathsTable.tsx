@@ -1,5 +1,6 @@
 import {
   configApi,
+  useLazyDownloadExportPathSourceTemplateQuery,
   useLazyRefetchConfigExportPathsQuery,
 } from "@api/configApi";
 import { Box } from "@components/container/index";
@@ -23,6 +24,8 @@ import {
   EXPORT_PATH_FILE_UPLOAD_IN_PROGRESS_TEXT,
   NO_DATA_TEXT,
 } from "@modules/storage-servers/file-server/components/steps/Credentials/export-path-source.constants";
+import { handleDownloadTemplate } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
+import { useParams } from "react-router-dom";
 
 const ExportPathsTable = ({
   fileServerDetails,
@@ -35,10 +38,14 @@ const ExportPathsTable = ({
   notReachableExportPaths,
 }: ExportPathsTablePropsType) => {
   const interval = useRef<NodeJS.Timeout | null>(null);
-  const [reFetchExportPathsApi] = useLazyRefetchConfigExportPathsQuery();
-  const [disableRefresh, setDisableRefresh] = useState<boolean>(false);
-  const [getWorkFlowStatus] = useLazyCheckConnectionRespQuery();
   const dispatch = useDispatch();
+  const { fileServerId } = useParams<{ fileServerId: string }>();
+
+  const [disableRefresh, setDisableRefresh] = useState<boolean>(false);
+
+  const [reFetchExportPathsApi] = useLazyRefetchConfigExportPathsQuery();
+  const [downloadTemplate] = useLazyDownloadExportPathSourceTemplateQuery();
+  const [getWorkFlowStatus] = useLazyCheckConnectionRespQuery();
 
   const tableStateProps = {
     columns: EXPORT_PATHS_TABLE_COLS_DEF,
@@ -122,11 +129,22 @@ const ExportPathsTable = ({
       </Button>
     </Box>
   );
+  const handleDownloadReport = () => {
+    handleDownloadTemplate(
+      () =>
+        downloadTemplate({
+          type: "uploaded-paths",
+          fileServerId: fileServerId,
+        }),
+      "uploaded_export_paths.csv"
+    );
+  };
 
   const getBulkManualUpload = () => (
     <BulkManualUploadFile
       fileServerDetails={fileServerDetails}
       allExportPaths={allExportPaths}
+      handleReportDownload={handleDownloadReport}
     />
   );
 

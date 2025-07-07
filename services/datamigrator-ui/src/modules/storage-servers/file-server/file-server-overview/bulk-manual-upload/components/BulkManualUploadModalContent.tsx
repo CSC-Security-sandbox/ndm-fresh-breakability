@@ -16,7 +16,8 @@ export const BulkManualUploadModalContent = (
   form: BlueXpFormType<BulkManualUploadModalContentPropsType>,
   exportPathSourceData: UploadedFilePropsType,
   error: string,
-  downloadTemplate: () => void
+  serverId: string,
+  downloadTemplate: (params: { type: string; fileServerId: string }) => void
 ) => {
   const hasError = form?.formErrors?.["exportPathSource.fileName"];
 
@@ -43,7 +44,11 @@ export const BulkManualUploadModalContent = (
           className="cursor-pointer"
           onClick={() =>
             handleDownloadTemplate(
-              downloadTemplate,
+              () =>
+                downloadTemplate({
+                  type: "template",
+                  fileServerId: serverId,
+                }),
               "export_paths_source_template.csv"
             )
           }

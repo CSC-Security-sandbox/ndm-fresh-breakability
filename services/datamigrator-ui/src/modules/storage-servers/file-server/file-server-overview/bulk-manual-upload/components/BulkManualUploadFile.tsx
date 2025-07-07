@@ -1,12 +1,14 @@
 import { Button, ExternalLink, Text } from "@netapp/bxp-design-system-react";
 import { Box } from "@components/container";
 import { BulkManualUploadPropsType } from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/bulk-manual-upload-file.types";
-import { BulkManualUpload } from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/BulkManualUpload";
 import { Show } from "@components/show/Show";
+import { DownloadMonochromeIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
+import { BulkManualUpload } from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/BulkManualUpload";
 
 const BulkManualUploadFile = ({
   fileServerDetails,
   allExportPaths,
+  handleReportDownload,
 }: BulkManualUploadPropsType) => {
   const { openUploadModal } = BulkManualUpload(fileServerDetails);
   const hasExportPaths = allExportPaths.length > 0;
@@ -16,9 +18,12 @@ const BulkManualUploadFile = ({
     <Box className="flex gap-2 justify-end">
       <Show>
         <Show.When isTrue={hasExportPaths}>
-          <Button disabled={!isRefreshAvailable} onClick={openUploadModal}>
-            Re-Upload Export Paths
-          </Button>
+          <Box className="flex gap-2 items-center">
+            <DownloadMonochromeIcon onClick={handleReportDownload} />
+            <Button disabled={!isRefreshAvailable} onClick={openUploadModal}>
+              Re-Upload Export Paths
+            </Button>
+          </Box>
         </Show.When>
 
         <Show.Else>
