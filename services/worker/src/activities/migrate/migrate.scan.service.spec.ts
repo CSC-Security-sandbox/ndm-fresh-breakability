@@ -8,6 +8,7 @@ import { JobContext, JobConfig, Command, CommandStatus, Task, TaskType, TaskStat
 import * as fs from 'fs';
 import { ScanContentInput } from './migrate.type';
 import { RedisClientType } from 'redis';
+import { Origin } from '../utils/utils.types';
 
 jest.mock('@temporalio/activity', () => ({
   Context: {
@@ -185,7 +186,7 @@ describe('MigrationScanService', () => {
       jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
       jest.spyOn(fs.promises, 'readdir').mockResolvedValue(expectedContents as any);
 
-      const result = await service.getDirectoryContents(directoryPath, mockJobContext as JobContext);
+      const result = await service.getDirectoryContents(directoryPath, mockJobContext as JobContext, Origin.SOURCE);
 
       expect(fs.promises.access).toHaveBeenCalledWith(directoryPath, fs.constants.R_OK);
       expect(fs.promises.readdir).toHaveBeenCalledWith(directoryPath);
@@ -199,7 +200,7 @@ describe('MigrationScanService', () => {
 
       jest.spyOn(fs.promises, 'access').mockRejectedValue(accessError);
 
-      await expect(service.getDirectoryContents(directoryPath, mockJobContext as JobContext))
+      await expect(service.getDirectoryContents(directoryPath, mockJobContext as JobContext, Origin.SOURCE))
         .rejects.toThrow('Permission denied');
 
       expect(fs.promises.access).toHaveBeenCalledWith(directoryPath, fs.constants.R_OK);
@@ -218,7 +219,7 @@ describe('MigrationScanService', () => {
         new Promise(resolve => setTimeout(() => resolve(['file.txt'] as any), 200)) // Takes 200ms
       );
 
-      await expect(service.getDirectoryContents(directoryPath, mockJobContext as JobContext))
+      await expect(service.getDirectoryContents(directoryPath, mockJobContext as JobContext, Origin.SOURCE))
         .rejects.toThrow('Server test-server is down or unreachable');
 
       // Restore original timeout
@@ -233,7 +234,7 @@ describe('MigrationScanService', () => {
       jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
       jest.spyOn(fs.promises, 'readdir').mockRejectedValue(readdirError);
 
-      await expect(service.getDirectoryContents(directoryPath, mockJobContext as JobContext))
+      await expect(service.getDirectoryContents(directoryPath, mockJobContext as JobContext, Origin.SOURCE))
         .rejects.toThrow('Read error');
 
       expect(fs.promises.access).toHaveBeenCalledWith(directoryPath, fs.constants.R_OK);
@@ -247,7 +248,7 @@ describe('MigrationScanService', () => {
       jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
       jest.spyOn(fs.promises, 'readdir').mockResolvedValue(expectedContents as any);
 
-      const result = await service.getDirectoryContents(directoryPath, mockJobContext as JobContext);
+      const result = await service.getDirectoryContents(directoryPath, mockJobContext as JobContext, Origin.SOURCE);
 
       expect(result).toEqual([]);
     });
@@ -261,7 +262,7 @@ describe('MigrationScanService', () => {
       jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
       jest.spyOn(fs.promises, 'readdir').mockResolvedValue(expectedContents as any);
 
-      const promise = service.getDirectoryContents(directoryPath, mockJobContext as JobContext);
+      const promise = service.getDirectoryContents(directoryPath, mockJobContext as JobContext, Origin.SOURCE);
 
       // Since readdir resolves immediately, we don't need to advance timers
       const result = await promise;
@@ -290,7 +291,7 @@ describe('MigrationScanService', () => {
         new Promise(resolve => setTimeout(() => resolve(['file.txt'] as any), 100)) // Takes 100ms, longer than timeout
       );
 
-      await expect(service.getDirectoryContents(directoryPath, mockJobContext as JobContext))
+      await expect(service.getDirectoryContents(directoryPath, mockJobContext as JobContext, Origin.SOURCE))
         .rejects.toThrow('Custom server error message');
 
       expect(require('../utils/utils').getServerInfoFromPath)

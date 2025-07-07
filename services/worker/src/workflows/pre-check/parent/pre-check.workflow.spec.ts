@@ -1,3 +1,4 @@
+import { ExportPathSource } from 'src/activities/list-path/list-path.type';
 import { PreCheckWorkerValidationWorkflow } from '../core/pre-check.worker.workflow';
 import { PreCheckErrorCodes, PreCheckStatus, PreCheckWorkflowRequest } from '../pre-check.types';
 import { PreCheckValidationWorkflow } from './pre-check.workflow';
@@ -53,7 +54,8 @@ describe('PreCheckValidationWorkflow', () => {
             password: 'pass1',
             protocol: 'protocol1',
             protocolVersion: '1.0',
-            serverType: 'type1'
+            serverType: 'type1',
+            exportPathSource: ExportPathSource.AUTO_DISCOVER
         }
     ];
 
@@ -286,7 +288,8 @@ describe('PreCheckValidationWorkflow', () => {
                 password: 'pass1',
                 protocol: 'sftp',
                 protocolVersion: '1.0.0',
-                serverType: 'linux'
+                serverType: 'linux',
+                exportPathSource: ExportPathSource.AUTO_DISCOVER
               },
               {
                 id: 'server-2',
@@ -295,7 +298,8 @@ describe('PreCheckValidationWorkflow', () => {
                 password: 'pass2',
                 protocol: 'sftp',
                 protocolVersion: '1.0.0',
-                serverType: 'linux'
+                serverType: 'linux',
+                exportPathSource: ExportPathSource.AUTO_DISCOVER
               }
             ],
             preChecks: [
