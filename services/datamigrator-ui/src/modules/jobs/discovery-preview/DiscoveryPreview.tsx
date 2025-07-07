@@ -42,7 +42,7 @@ const DiscoveryPreview = () => {
         downloadReports,
         jobRunId,
         JOBS_TYPE.DISCOVERY,
-        "csv"
+        "CSV"
       );
     } catch (error) {
       console.error("Error downloading CSV report:", error);
@@ -56,7 +56,7 @@ const DiscoveryPreview = () => {
         getPdfReport,
         jobRunId,
         JOBS_TYPE.DISCOVERY,
-        "pdf"
+        "PDF"
       );
     } catch (error) {
       console.error("Error downloading PDF report:", error);
