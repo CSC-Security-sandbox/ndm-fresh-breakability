@@ -44,8 +44,6 @@ env:
     value: "datamigrator"
   - name: REPORT_DOWNLOAD_LOCATION
     value: "/reports"
-  - name: ERROR_LOGS_DOWNLOAD_LOCATION
-    value: "/error-logs"
   - name: KEYCLOAK_BASE_URL
     value: "http://keycloak.keycloak.svc.cluster.local:80/keycloak"
   - name: KEYCLOAK_REALM
@@ -54,11 +52,12 @@ env:
   #   value: ""
   # - name: DB_PASSWORD # from secret
   #   value: ""
-
   - name: LOG_LEVEL
     value: "INFO"
   - name: LOG_DIR
     value: "/logs"
+  - name: ERROR_LOGS_DOWNLOAD_LOCATION
+    value: "/error-logs"
 
 service:
   type: ClusterIP
@@ -76,8 +75,10 @@ ingress:
     enabled: false
   host: ""
 
-persistentVolume:
-  enabled: true
-  name: reports-volume
-  mountPath: /reports
-  hostPath: /data/reports
+persistentVolumes:
+  - name: reports-volume
+    mountPath: /reports
+    hostPath: /data/reports
+  - name: error-logs-volume
+    mountPath: /error-logs
+    hostPath: /data/error-logs
