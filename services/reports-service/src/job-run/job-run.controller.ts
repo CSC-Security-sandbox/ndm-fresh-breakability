@@ -62,31 +62,28 @@ export class JobRunController {
     description: "Returns Error Logs using JobRunId or jobConfigId",
   })
   @ApiResponse({ status: 404, description: "Error log file not found." })
-  @Get("generate-error-csv")
+  @Get("generate-error-csv/:type/:id")
   async generateErrorCsv(
-    @Query("jobRunId") jobRunId?: string,
-    @Query("jobConfigId") jobConfigId?: string
+    @Param("id") id: string,
+    @Param("type") type: "job-run" | "job-config"
   ) {
-    return await this.errorLogService.createCsvFileForJob(
-      jobRunId,
-      jobConfigId
-    );
+    return await this.errorLogService.createCsvFileForJob(type, id);
   }
 
-  @Get("download-error-csv")
+  @Get("download-error-csv/:type/:id")
   async downloadErrorCsv(
-    @Query("jobRunId") jobRunId?: string,
-    @Query("jobConfigId") jobConfigId?: string
+    @Param("id") id: string,
+    @Param("type") type: "job-run" | "job-config"
   ): Promise<StreamableFile> {
-    return this.errorLogService.downloadErrorLogCsvFile(jobRunId, jobConfigId);
+    return this.errorLogService.downloadErrorLogCsvFile(type, id);
   }
 
-  @Get("is-error-csv-ready")
+  @Get("is-error-csv-ready/:type/:id")
   isErrorCsvReady(
-    @Query("jobRunId") jobRunId?: string,
-    @Query("jobConfigId") jobConfigId?: string
+    @Param("id") id: string,
+    @Param("type") type: "job-run" | "job-config"
   ) {
-    return this.errorLogService.isCsvFileReady(jobRunId, jobConfigId);
+    return this.errorLogService.isCsvFileReady(type, id);
   }
 
   @ApiOperation({ summary: "Get job run Details by ID" })
