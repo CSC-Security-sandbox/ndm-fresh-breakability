@@ -77,7 +77,10 @@ export class ErrorLogService {
 
       return this.operationErrorRepo.query(query, params);
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException({
+        displayMessage: "Something went wrong while fetching errors.",
+        message: error.message,
+      });
     }
   }
 
@@ -110,7 +113,10 @@ export class ErrorLogService {
       `;
       return this.workerJobRunMapRepo.query(query, params);
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException({
+        displayMessage: "Something went wrong while fetching errors.",
+        message: error.message,
+      });
     }
   }
 
@@ -178,7 +184,11 @@ export class ErrorLogService {
         writeStream.on("error", reject);
         csvStream.on("error", reject);
       } catch (error) {
-        throw new BadRequestException(error.message);
+        throw new BadRequestException({
+          displayMessage:
+            "Something went wrong while writing errors on the file.",
+          message: error.message,
+        });
       }
     });
   }
@@ -218,7 +228,11 @@ export class ErrorLogService {
         };
       });
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException({
+        displayMessage:
+          "Something went wrong while writing errors on the file.",
+        message: error.message,
+      });
     }
   }
 
@@ -280,7 +294,11 @@ export class ErrorLogService {
             try {
               fs.unlinkSync(sanitizeAndValidateFilePath(f));
             } catch (err) {
-              throw new BadRequestException(err.message);
+              throw new BadRequestException({
+                displayMessage:
+                  "Error while cleaning up old error report files.",
+                message: err.message,
+              });
             }
           }
         }
@@ -289,7 +307,10 @@ export class ErrorLogService {
       await this.writeLargeCsvToDisk(filePath, jobRunId, jobConfigId);
       return { message: "CSV generation started" };
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException({
+        displayMessage: "Error Report generation failed",
+        message: error.message,
+      });
     }
   }
 
@@ -319,7 +340,10 @@ export class ErrorLogService {
         disposition: `attachment; filename=\"${fileName}\"`,
       });
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException({
+        displayMessage: "Download Error Report failed",
+        message: error.message,
+      });
     }
   }
 
@@ -331,7 +355,11 @@ export class ErrorLogService {
       );
       return result.map((row: any) => row.id);
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException({
+        displayMessage:
+          "Error while fetching job run IDs for the given job config.",
+        message: error.message,
+      });
     }
   };
 
@@ -347,13 +375,17 @@ export class ErrorLogService {
       const workerSetupCount = await this.getWorkerSetupCount(jobRunId);
       return Number(opCount) + workerSetupCount;
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException({
+        displayMessage:
+          "Error while fetching total error count for the job run.",
+        message: error.message,
+      });
     }
   }
 
   async getTotalErrorCountForConfig(jobConfigId: string): Promise<number> {
     try {
-      const jobRunIds = await this.getJobRunIds(jobConfigId);
+      const jobRunIds = await this.getJobRunIds(jobConfigId + "jhgu");
       if (jobRunIds.length === 0) return 0;
       const placeholders = jobRunIds.map((_, i) => `$${i + 1}`).join(",");
       const [{ count: opCount }] = await this.operationErrorRepo.query(
@@ -366,7 +398,11 @@ export class ErrorLogService {
       const workerSetupCount = await this.getWorkerSetupCount(jobRunIds);
       return Number(opCount) + workerSetupCount;
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException({
+        displayMessage:
+          "Error while fetching total error count for the job config.",
+        message: error.message,
+      });
     }
   }
 
@@ -384,7 +420,10 @@ export class ErrorLogService {
         },
       });
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException({
+        displayMessage: "Error while fetching worker setup count.",
+        message: error.message,
+      });
     }
   }
 
@@ -410,7 +449,11 @@ export class ErrorLogService {
       const ready = !processing && fs.existsSync(filePath);
       return { ready, processing };
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException({
+        displayMessage:
+          "Something went wrong while checking CSV file readiness.",
+        message: error.message,
+      });
     }
   }
 }
