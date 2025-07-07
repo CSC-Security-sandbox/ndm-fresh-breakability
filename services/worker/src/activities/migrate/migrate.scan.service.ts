@@ -35,8 +35,13 @@ export class MigrationScanService {
     async getDirectoryContents(directoryPath: string, jobContext: JobContext): Promise<string[]> {
         this.logger.debug(`[${jobContext.jobRunId}] Checking directory access: ${directoryPath}`);
 
+        if (!fs.existsSync(directoryPath)) {
+            this.logger.error(`[${jobContext.jobRunId}] Directory does not exist: ${directoryPath}`);
+            return [];  
+        }
+       
         await fs.promises.access(directoryPath, fs.constants.R_OK);
-
+        
         const result = await Promise.race<string[]>([
             fs.promises.readdir(directoryPath),
 
