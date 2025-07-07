@@ -8,6 +8,7 @@ import { join } from 'path';
 import { AuthService } from 'src/auth/auth.service';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { ConfigError, ConfigStatus, ConfigStatusPayload } from './working-directory.type';
+import { ExportPathSource } from '../list-path/list-path.type';
 
 @Injectable()
 export class ValidateWorkingDirectoryActivity {
@@ -27,7 +28,6 @@ export class ValidateWorkingDirectoryActivity {
   async validateWorkingDirectory(traceId: string, payload: any): Promise<any> {
     const apiUrl = `${this.workerConfigUrl}/api/v1/work-manager/validate/working-directory`;
 
-
     const configStatusPayload: ConfigStatusPayload = {
       configId: payload.configId,
       status: null,
@@ -36,7 +36,9 @@ export class ValidateWorkingDirectoryActivity {
 
     if(!payload?.exportPathWorkingDirectoryProvided) {
       try {
+        this.logger.log("Export Path not provided, fetching from file server");
         await this.handleMountAndUnmountPaths(traceId, payload);
+        this.logger.log("Export Path fetched successfully");
         configStatusPayload.status = ConfigStatus.ACTIVE;
         configStatusPayload.errorMessage = null;
       } catch (error) {
@@ -94,6 +96,11 @@ export class ValidateWorkingDirectoryActivity {
   async handleMountAndUnmountPaths(traceId: string, payload: any): Promise<void> {
     try {
       for (const fileServer of payload.listPathPayload) {
+        if(fileServer.exportPathSource === ExportPathSource.MANUAL_UPLOAD) {
+          this.logger.log(`Skipping mounting and unmounting for MANUAL_UPLOAD type for host ${fileServer.host}`);
+          continue;
+        }
+        
         const protocol = Protocols.getProtocol(ProtocolTypes[fileServer.type]);
 
         const mountPathPayload = {
