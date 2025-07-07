@@ -4,6 +4,9 @@ import { executeCleanup } from '../common/execute-cleanup-workflow';
 import { executeMigrationChildWorkflows } from '../common/execute-migration-child-workflows';
 import { handleReporting } from '../common/handle-reporting';
 import { executeWorkerSetup } from '../common/execute-setup-workflow';
+import { error } from 'winston';
+import * as wf from '@temporalio/workflow';
+import { CommonActivityService } from 'src/activities/common/common.service';
 
 
 
@@ -22,6 +25,13 @@ interface MigrationWorkflowOutput {
   dirCount : number;
   status: JobRunStatus
 }
+
+const {
+  updateLastEntry: updateLastEntryActivity,
+} = wf.proxyActivities<CommonActivityService>({
+  startToCloseTimeout: '24h',
+  heartbeatTimeout: '2m',
+}); 
 
 
 export const MigrationWorkflow = async ({
@@ -42,23 +52,27 @@ export const MigrationWorkflow = async ({
     const setupWorkersExecResult = await executeWorkerSetup({jobRunId: traceId, workerIds: payload.workers, options});
     output.setupCompletedWorkers = setupWorkersExecResult.setupCompletedWorkers;
     output.failedWorkers = setupWorkersExecResult.failedWorkers;
-
-
     // validate Redis memory
     await waitUntilRedisMemoryOk(traceId);
 
-    // start core scan workflow
-    const discoveryWorkflowExecResult = await executeMigrationChildWorkflows({jobRunId: traceId})
-    output.fileCount = discoveryWorkflowExecResult.fileCount;
-    output.dirCount = discoveryWorkflowExecResult.dirCount;
-    output.status = discoveryWorkflowExecResult.status;
-
-
-    // Reporting and Report Generation
-    await handleReporting(traceId, output.status);
-
-    // Cleanup
-    await executeCleanup({ jobRunId: traceId, workerIds: output.setupCompletedWorkers, options });
-
+    try{
+        // start core scan workflow
+        const migrateChildWorkflowsResult = await executeMigrationChildWorkflows({jobRunId: traceId})
+        output.fileCount = migrateChildWorkflowsResult.fileCount;
+        output.dirCount = migrateChildWorkflowsResult.dirCount;
+        output.status = migrateChildWorkflowsResult.status;
+    }catch(error){        
+        // Handle specific application failure
+        console.error(`Application failure in MigrationWorkflow for traceId ${traceId}: ${error.message}`);
+        output.status = JobRunStatus.Failed;
+        
+    }finally{
+      console.log(`running cleanup and reporting`);  
+      await handleReporting(traceId, output.status);
+      //Cleanup
+      await executeCleanup({ jobRunId: traceId, workerIds: output.setupCompletedWorkers, options });
+      //Reporting and Report Generation
+     
+    }    
     return output
 }

@@ -7,6 +7,7 @@ import { RetryExceededError } from "src/errors/errors.types";
 import { ConfigService } from "@nestjs/config";
 import { BuildOrGetScanTaskInput } from "./common-task.type";
 import { uuid4 } from "@temporalio/workflow";
+import { Context } from "@temporalio/activity";
 
 
 
@@ -26,6 +27,9 @@ export class CommonTaskService {
     }
 
     async getGroupOfTasksActivity(jobRunId,  groupSize =1000): Promise<string[]> {
+      const activityContext = Context.current();      
+      const heartBeatInterval = setInterval(() => { activityContext.heartbeat({});}, 2000);
+
       let taskIds: string[] = [];
       try{
         const jobContext = await this.redisService.getJobManagerContext(jobRunId);
@@ -55,6 +59,8 @@ export class CommonTaskService {
       }catch (error) {
         this.logger.error(`Error in getGroupOfTasksActivity: ${error.message}`, error.stack);
         throw new Error(`Failed to get group of tasks activity: ${error.message}`);
+      }finally{
+        clearInterval(heartBeatInterval);
       }
       return taskIds;
     }

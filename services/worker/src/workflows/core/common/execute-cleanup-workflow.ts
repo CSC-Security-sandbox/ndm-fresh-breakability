@@ -16,8 +16,8 @@ export interface CleanUpWorkersInput {
 
 
 export const executeCleanup = async ({ jobRunId, workerIds, options}: CleanUpWorkersInput): Promise<void> => {
-    
-    await Promise.allSettled(
+    console.log(`[${jobRunId}] Starting cleanup for workers: ${workerIds.join(', ')}`);
+    const results = await Promise.allSettled(
         workerIds.map(async (workerId) => {
             try {
                 return await wf.executeChild(CleanupWorkerWorkflow, {
@@ -32,12 +32,24 @@ export const executeCleanup = async ({ jobRunId, workerIds, options}: CleanUpWor
                 if(error instanceof wf.ActivityFailure){
                     console.error(`[${jobRunId}] ActivityFailure in CleanupWorkerWorkflow with message: ${error.message}`);   
                 }
+                console.log("Errror in Cleanup Worker workflow  for workerId: ", workerId, error);
                 throw error;       
             }
         })
     )
-
-    const response = await cleanupJobContextActivity(jobRunId)
-    console.log(`[${jobRunId}] CleanupJobContextActivity response: ${response}`);
+    results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+            console.log(`[${jobRunId}] CleanupWorkerWorkflow for worker ${workerIds[index]}
+            completed successfully.`);
+        }
+    });
+    try{
+        const response = await cleanupJobContextActivity(jobRunId)    
+        console.log(`[${jobRunId}] CleanupJobContextActivity response: ${response}`);
+    }catch(error){
+        console.error(`[${jobRunId}] Error in CleanupJobContextActivity: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    
+    
     
 }

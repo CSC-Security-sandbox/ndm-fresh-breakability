@@ -65,6 +65,7 @@ export class WorkerOptionsService {
           updateWorkerResponse: this.commonActivityService.updateWorkerResponse.bind(this.commonActivityService),
           checkMemoryUsage : this.redismeorycheck.checkMemoryUsage.bind(this.redismeorycheck),
           cleanupJobContext: this.commonActivityService.cleanupJobContext.bind(this.commonActivityService),
+          isWorkflowRunningActivity: this.commonActivityService.isWorkflowRunningActivity.bind(this.commonActivityService),
         });
       case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {

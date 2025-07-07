@@ -130,7 +130,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
       await this.pushgateway.pushAdd({ jobName: `worker-${this.workerId}` });
       this.logger.debug('Metrics pushed to Pushgateway');
     } catch (err) {
-      this.logger.error('Failed to push metrics:', err.message || err);
+      //this.logger.error('Failed to push metrics:', err.message || err);
     }
   }
 

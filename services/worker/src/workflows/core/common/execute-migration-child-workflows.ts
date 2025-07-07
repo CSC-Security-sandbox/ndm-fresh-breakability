@@ -1,11 +1,14 @@
 import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
 import { JobRunStatus } from "src/activities/discovery/enums";
+import { ScanWorkflowOutput, SyncWorkflowOutput } from '../child/chid-scan.workflow.type';
+import { ScanWorkflow } from 'src/workflows/workflows';
 
 
 
 const {
   updateLastEntry: updateLastEntryActivity,
+  isWorkflowRunningActivity: isWorkflowRunningActivity,
 } = wf.proxyActivities<CommonActivityService>({
   startToCloseTimeout: '24h',
   heartbeatTimeout: '2m',
@@ -29,7 +32,6 @@ interface MigrationWorkflowExecutorOutput {
 export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkflowExecutorInput): Promise<MigrationWorkflowExecutorOutput> => {
 
     let scanWorkflow: wf.ChildWorkflowHandle<wf.Workflow>, syncWorkflow: wf.ChildWorkflowHandle<wf.Workflow>;
-    let isScanRunning: boolean = false, isSyncRunning: boolean = false, isStopped: boolean = false;
     let output: MigrationWorkflowExecutorOutput = {
         status: JobRunStatus.Running,
         fileCount: 0,
@@ -38,12 +40,12 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
         syncJobStatus: JobRunStatus.Running,
     };
 
-    wf.setHandler(actionSignal, async (action:string) => {  
-        isStopped = action === JobRunStatus.Stopped
-        if(isScanRunning)    
-            scanWorkflow.signal('scanActionSignal', action);    
-        if(isSyncRunning)
-            syncWorkflow.signal('syncActionSignal', action);
+
+        wf.setHandler(actionSignal, async (action:string) => {  
+    if(isWorkflowRunningActivity(scanWorkflow.workflowId)) 
+        scanWorkflow.signal('scanActionSignal', action);    
+    if(isWorkflowRunningActivity(syncWorkflow.workflowId))
+        syncWorkflow.signal('syncActionSignal', action);
     });
 
     scanWorkflow = await wf.startChild('ChildScanWorkflow', {
@@ -53,7 +55,7 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
         cancellationType: wf.ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
         parentClosePolicy: wf.ParentClosePolicy.TERMINATE,
     });
-    isScanRunning = true;
+
 
     syncWorkflow = await wf.startChild('ChildSyncWorkflow', {
         args: [ { jobRunId: jobRunId, isScanCompleted : false} ],
@@ -62,34 +64,35 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
         cancellationType: wf.ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
         parentClosePolicy: wf.ParentClosePolicy.TERMINATE,
     });
-    isSyncRunning = true;
 
-    try{
-        const scanWorkflowOutput = await scanWorkflow.result(); 
-        output.fileCount = scanWorkflowOutput.fileCount;
-        output.dirCount = scanWorkflowOutput.dirCount;
-        output.scanJobStatus = scanWorkflowOutput.status;
-        if(!isStopped)
-            syncWorkflow.signal('scanResultSignal', JobRunStatus.Completed);      
-    }catch(error){  
-        output.scanJobStatus = JobRunStatus.Failed;
-        if(!isStopped)
-            syncWorkflow.signal('scanResultSignal', JobRunStatus.Failed);
+    if(isWorkflowRunningActivity(scanWorkflow.workflowId) || isWorkflowRunningActivity(syncWorkflow.workflowId)) {
+        try{
+            const scanWorkflowOutput: ScanWorkflowOutput = await scanWorkflow.result(); 
+            output.fileCount = scanWorkflowOutput.fileCount;
+            output.dirCount = scanWorkflowOutput.dirCount;
+            output.scanJobStatus = scanWorkflowOutput.status;
+            if(isWorkflowRunningActivity(syncWorkflow.workflowId)){
+                console.log(`Sync workflow is running and scan completed, signaling scan result.`); 
+                syncWorkflow.signal('scanResultSignal', JobRunStatus.Completed);  
+            }    
+        }catch(error){  
+            output.scanJobStatus = JobRunStatus.Failed;
+            if(isWorkflowRunningActivity(syncWorkflow.workflowId)) {
+                console.log(`Sync workflow running but scan failed, signaling scan result.`);
+                syncWorkflow.signal('scanResultSignal', JobRunStatus.Failed);
+            }                
+        }
+        try{
+            const syncWorkflowOutput:SyncWorkflowOutput = await syncWorkflow.result(); 
+            output.syncJobStatus = syncWorkflowOutput.status;    
+        }catch(error){  
+            output.syncJobStatus = JobRunStatus.Failed;   
+            console.log(`Sync workflow failed: ${error.message}`);    
+        }
+        output.status = getUnifiedJobStatus(output.scanJobStatus, output.syncJobStatus);
     }
-    isScanRunning = false; 
-
-    try{
-        const scanWorkflowOutput = await scanWorkflow.result(); 
-        output.syncJobStatus = scanWorkflowOutput.status;    
-    }catch(error){  
-        output.syncJobStatus = JobRunStatus.Failed;
-    }
-    isSyncRunning = false
-
-    output.status = getUnifiedJobStatus(output.scanJobStatus, output.syncJobStatus);
-
+    
     await updateLastEntryActivity(jobRunId);
-
     return output
 }
 

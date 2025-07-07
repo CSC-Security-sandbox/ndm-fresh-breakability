@@ -98,9 +98,9 @@ export class HealthcheckService implements OnModuleInit {
         headers: { Authorization: `Bearer ${accessToken}` },
       }),
     ).then(() => {
-      this.logger.debug(
-        `Healthcheck results posted successfully for worker ${this.workerId}`,
-      );
+      // this.logger.debug(
+      //   `Healthcheck results posted successfully for worker ${this.workerId}`,
+      // );
     }).catch((error) => {
       const errorMessage =
         error instanceof Error ? error.message : String(error);

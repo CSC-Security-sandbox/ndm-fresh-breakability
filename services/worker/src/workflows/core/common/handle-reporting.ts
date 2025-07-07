@@ -41,6 +41,7 @@ export const handleReporting = async (
     wf.setHandler(isReportedQuery, () =>!isBlocked);
   
     wf.setHandler(reportingSignal, (input: string) => {
+      console.log("Received reporting signal with input:", input);
       if(
             (input === JobReportType.CUT_OVER) ||
             (input === JobReportType.MIGRATE) ||
@@ -53,8 +54,11 @@ export const handleReporting = async (
     wf.log.info('Waiting for reporting signal...');
     try {
       await wf.condition(() => !isBlocked);
+      
       const jobRunStatus = getMappedJobRunStatus(status, reportType);
+      console.log(`resume reporting execution: ${jobRunStatus}`);
       await updateStatusActivity({jobRunId: traceId, status: jobRunStatus})
+      console.log(`status updated: ${jobRunStatus}`);
       switch(reportType) {
         case JobReportType.CUT_OVER: {            
             await generateCOCReportActivity(traceId);
@@ -62,12 +66,11 @@ export const handleReporting = async (
             break
         }
         case JobReportType.DISCOVER: {
-            await updateStatusActivity({jobRunId: traceId, status:jobRunStatus})
             await generateDiscoveryReportActivity(traceId)
             break
         }
         case JobReportType.MIGRATE: {
-            await updateStatusActivity({jobRunId: traceId, status: jobRunStatus})
+            console.log(`Reporting for MIGRATE: ${traceId} with status: ${jobRunStatus}`);
             await generateCOCReportActivity(traceId)
             break
         }
@@ -81,7 +84,7 @@ export const handleReporting = async (
       }
       throw err;
     }
-  
+    console.log(`Reporting completed for traceId: ${traceId} with status: ${status}`);
     return 'REPORTING COMPLETED'
   };
 

@@ -61,6 +61,7 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSiz
 
   let isStopRequested = false;
   let errors: string[] = [];
+  await wf.sleep(20000); 
   while(dirsToScan.length > 0) {    
 
     if(state === JobRunStatus.Stopped as JobRunStatus) {
@@ -72,7 +73,7 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSiz
     await wf.condition(() => state !== JobRunStatus.Paused);
 
     
-      
+    await wf.sleep(15000);  
     const batches: string[][] = createBatches(dirsToScan, batchSize);
 
     let nexDirsToScan: string[] = [];

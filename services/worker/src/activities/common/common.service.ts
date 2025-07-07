@@ -8,6 +8,7 @@ import { RedisService } from "src/redis/redis.service";
 import { JobRunStatus } from "../discovery/enums";
 import { UpdateStatusInput, UpdateStatusOutput } from "../migrate/migrate.type";
 import { generateDummyErrorEntry, generateDummyFileEntry, generateDummyTaskEntry } from '../utils/utils';
+import { Connection } from '@temporalio/client';
 
 @Injectable()
 export class CommonActivityService{
@@ -131,6 +132,18 @@ export class CommonActivityService{
     await this.publishPendingTasksToStream(jobContext, jobType);
     return { jobState, isStreamOverloaded };
   }
+
+  async isWorkflowRunningActivity(workflowId: string): Promise<boolean> {
+    const connection = await Connection.connect();
+    const namespace = 'default'; // replace with your namespace if different
+    const resp = await connection.workflowService.describeWorkflowExecution({
+      namespace,
+      execution: { workflowId },
+    });
+    // Status 1 means RUNNING
+    return resp.workflowExecutionInfo?.status === 1;
+  }
+
 
   //deprecated,
   async fetchOneTask(jobContext: JobContext): Promise<Task | undefined> {
