@@ -133,7 +133,7 @@
       "/coverage",
       "/dist",
       "/test/",
-       "/src/workflows/"
+      "src/workflows/discovery/core/discovery-job-workflow.spec.ts"
     ],
     "coveragePathIgnorePatterns": [
       "/node_modules/",
@@ -141,7 +141,7 @@
       "/coverage",
       "/dist",
       "/test/",
-      "/src/workflows/",
+      "src/workflows/discovery/core/discovery-job-workflow.spec.ts",
       "src/logger/logger.service.ts"
     ]
   }
