@@ -15,7 +15,6 @@ export * from './redis/redis-job-context';
 export * from './redis/redis-context-provider';
 export * from './redis/redis-stream-collection';
 
-export * from './utils/logging';
 export * from './utils/job-utils';
 
 export * from './job-context-provider';

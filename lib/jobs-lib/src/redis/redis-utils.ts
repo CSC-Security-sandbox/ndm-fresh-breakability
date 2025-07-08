@@ -1,7 +1,5 @@
 import { createClient, RedisClientType } from 'redis';
-import { Logger } from '../utils/logging';
 
-const logger = Logger.getLogger('redis-utils');
 
 export class RedisUtils {
   static client: RedisClientType;
@@ -24,14 +22,14 @@ export class RedisUtils {
       redisClientOptions['password'] = process.env.REDIS_PASSWORD;
     }
 
-    logger.info(`Connecting to Redis at ${redisClientOptions.url}`);
+    console.log(`Connecting to Redis at ${redisClientOptions.url}`);
     this.client = createClient(redisClientOptions);
     this.client.on('error', (error) => {
-      logger.error(`Redis connection error: ${error}`);
+      console.error(`Redis connection error: ${error}`);
     });
 
     this.client.on('connect', () => {
-      logger.info('Connected to Redis');
+      console.info('Connected to Redis');
     });
   }
 }
