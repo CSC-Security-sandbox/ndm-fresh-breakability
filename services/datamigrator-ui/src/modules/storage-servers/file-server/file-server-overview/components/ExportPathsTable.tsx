@@ -19,13 +19,15 @@ import { ValidateConnectionStatus } from "@/types/app.type";
 import { useDispatch } from "react-redux";
 import { MAX_RETRY_API_ATTEMPTS } from "@/utils/constants";
 import BulkManualUploadFile from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/components/BulkManualUploadFile";
-import { hasManualUploadPath } from "@modules/storage-servers/file-server/file-server-overview/file-server.utils";
+import {
+  getFileServerId,
+  hasManualUploadPath,
+} from "@modules/storage-servers/file-server/file-server-overview/file-server.utils";
 import {
   EXPORT_PATH_FILE_UPLOAD_IN_PROGRESS_TEXT,
   NO_DATA_TEXT,
 } from "@modules/storage-servers/file-server/components/steps/Credentials/export-path-source.constants";
 import { handleDownloadTemplate } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
-import { useParams } from "react-router-dom";
 
 const ExportPathsTable = ({
   fileServerDetails,
@@ -39,7 +41,6 @@ const ExportPathsTable = ({
 }: ExportPathsTablePropsType) => {
   const interval = useRef<NodeJS.Timeout | null>(null);
   const dispatch = useDispatch();
-  const { fileServerId } = useParams<{ fileServerId: string }>();
 
   const [disableRefresh, setDisableRefresh] = useState<boolean>(false);
 
@@ -55,6 +56,12 @@ const ExportPathsTable = ({
     pageSize: 10,
     defaultColumnState: defaultColumnState,
   };
+
+  const fileServerId = useMemo(() => {
+    if (fileServerDetails?.fileServers) {
+      return getFileServerId(fileServerDetails, "NFS");
+    }
+  }, [fileServerDetails?.fileServers]);
 
   const showErrorOnRefetchFailure = (error: Error) => {
     setDisableRefresh(false);
