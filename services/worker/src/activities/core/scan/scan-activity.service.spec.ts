@@ -247,5 +247,29 @@ describe('ScanService', () => {
             await scanService.scanDirectories(input as any).catch(() => {});
             expect(clearIntervalSpy).toHaveBeenCalled();
         });
+
+        it('should throw RetryExceededError if updateAndReportTaskStatus throws RetryExceededError', async () => {
+            const input = { jobRunId: 'run-1', dirsToScan: ['/foo'], isMigration: false };
+            jest.spyOn(scanService, 'updateAndReportTaskStatus').mockImplementationOnce(() => {
+            throw new RetryExceededError('retry exceeded');
+            });
+            await expect(scanService.scanDirectories(input as any)).rejects.toBeInstanceOf(RetryExceededError);
+        });
+
+        it('should propagate error if updateAndReportTaskStatus throws FatalError', async () => {
+            const input = { jobRunId: 'run-1', dirsToScan: ['/foo'], isMigration: false };
+            jest.spyOn(scanService, 'updateAndReportTaskStatus').mockImplementationOnce(() => {
+            throw new FatalError('fatal');
+            });
+            await expect(scanService.scanDirectories(input as any)).rejects.toBeInstanceOf(FatalError);
+        });
+
+        it('should throw RetryableError if updateAndReportTaskStatus throws unknown error', async () => {
+            const input = { jobRunId: 'run-1', dirsToScan: ['/foo'], isMigration: false };
+            jest.spyOn(scanService, 'updateAndReportTaskStatus').mockImplementationOnce(() => {
+            throw new Error('unknown');
+            });
+            await expect(scanService.scanDirectories(input as any)).rejects.toBeInstanceOf(RetryableError);
+        });
     });
 });
