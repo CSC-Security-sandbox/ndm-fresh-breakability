@@ -26,6 +26,12 @@ on:
       - 'services/reports-service/**'
       - 'liquibase/**'
   workflow_dispatch:
+  workflow_call: 
+    inputs:
+      build:
+        description: 'Build to release'
+        required: true
+        type: string 
 
 permissions:
   contents: read
@@ -306,9 +312,16 @@ jobs:
       fail-fast: false
     env:
       IMAGE_NAME: ${{ secrets.ACR_NAME }}.azurecr.io/ndm-${{ matrix.service }}
-      IMAGE_TAG: ${{ github.sha }}
 
     steps:
+      - name: Set IMAGE_TAG with build suffix
+        run: |
+          if [ -n "${{ inputs.build }}" ]; then
+            echo "IMAGE_TAG=${{ github.sha }}-${{ inputs.build }}" >> $GITHUB_ENV
+          else
+            echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+          fi
+
       - name: Checkout Code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -364,6 +377,7 @@ jobs:
           GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
           DOCKER_BUILDKIT: 1
           CONTEXT: ${{ env.CONTEXT }}
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
 
       - name: Parse Base Image for ${{ matrix.service }}
         id: fetch_info
