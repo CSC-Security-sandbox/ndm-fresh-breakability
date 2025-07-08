@@ -97,6 +97,7 @@ export class PreCheckService {
                     protocol: volume.fileServer.protocol,
                     protocolVersion: volume.fileServer.protocolVersion?.replace(/^v/, ""),
                     serverType: volume.fileServer.serverType,
+                    exportPathSource: volume.fileServer.exportPathSource,
                 });
             }
         });

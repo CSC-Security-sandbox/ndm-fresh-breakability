@@ -29,3 +29,6 @@ export {SpeedTestJobWorkflow} from '../workflows/speed-test/speed-test-job-workf
 export {SpeedTestWorkflow} from '../workflows/speed-test/speed-test-workflow'
 
 export {RedisMemoryCheckWorkflow} from '../workflows/redis/redis.memorycheck.workflow'
+
+export { ValidatePathsWorkflow } from './validate-path/validate-path-workflow'
+export { ValidatePathWorkerWorkflow } from './validate-path/validate-path-worker-workflow'

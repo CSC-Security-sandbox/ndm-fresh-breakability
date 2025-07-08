@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Type } from "class-transformer";
-import { IsArray, IsEnum, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, ValidateNested } from "class-validator";
-import { ConfigurationType, Protocol, ProtocolVersion, ServerType } from "src/constants/enums";
+import { Transform, Type } from "class-transformer";
+import { IsArray, IsEnum, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, ValidateIf, ValidateNested } from "class-validator";
+import { ConfigurationType, ExportPathSource, Protocol, ProtocolVersion, ServerType } from "src/constants/enums";
 
 export class WorkingDirDTO {
     @ApiPropertyOptional({ description: 'Path Name', example: '/temp' })
@@ -65,6 +65,14 @@ export class FileServersDTO {
     @IsUUID()
     @IsOptional()
     createdBy?: string;
+
+
+    @Transform(({ obj, value }) => obj.protocol === Protocol.NFS ? value : null)
+    @ValidateIf(o => o.protocol === Protocol.NFS)
+    @IsEnum(ExportPathSource)
+    @IsOptional()
+    @ApiProperty({ description: 'Export Path Source', enum: ExportPathSource, example: ExportPathSource.AUTO_DISCOVER })
+    exportPathSource?: ExportPathSource;
 }
 
 export class ConfigDTO {
