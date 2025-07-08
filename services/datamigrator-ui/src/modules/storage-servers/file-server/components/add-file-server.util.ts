@@ -9,6 +9,7 @@ import {
   ServerTypeFormType,
   WorkingDirectoryDetailsType,
 } from "@modules/storage-servers/file-server/fileServer.interface";
+import { EXPORT_PATH_SOURCE_ENUM } from "@modules/storage-servers/file-server/components/file-server.constant";
 
 interface protocolsType {
   type: string;
@@ -106,6 +107,8 @@ export const patchCredentialsFormValue = (
     protocol: protocolValue?.protocol || "",
     userName: protocolValue?.userName || "",
     protocolVersion: protocolValue.protocolVersion,
+    exportPathSource:
+      protocolValue?.exportPathSource || EXPORT_PATH_SOURCE_ENUM.AUTO_DISCOVER,
   };
 };
 

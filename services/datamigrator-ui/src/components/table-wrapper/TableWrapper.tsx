@@ -33,6 +33,7 @@ const TableWrapper = ({
   secondaryLabel,
   isRefreshing,
   refetchTableData,
+  noDataLabel = "No Data",
   notReachableExportPaths = [],
 }: TableWrapperPropsType) => {
   const [currentFilters, setCurrentFilters] = useState<any>({});
@@ -95,7 +96,6 @@ const TableWrapper = ({
       handleSelection(selectedRows);
     }
   }, [tableState?.selectionState?.count]);
-
 
   const checkDisabled = (row) => {
     return notReachableExportPaths.includes(row?.id);
@@ -172,6 +172,7 @@ const TableWrapper = ({
           rowMenu={rowMenu}
           originalColumns={originalColumns || tableState.columns}
           isTogglingColumns={isTogglingColumns || false}
+          noDataLabel={noDataLabel}
         />
         {!isLoading && pagination?.pageRows && (
           <TablePager
