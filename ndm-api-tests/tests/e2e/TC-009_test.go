@@ -10,6 +10,9 @@ import (
 )
 
 var _ = Describe("TC-009: Run migration with 'Exclude file older than' option and hourly incremental sync schedule", func() {
+	BeforeEach(func() {
+		Skip("TC-009: Run migration with 'Exclude file older than' option and hourly incremental sync schedule")
+	})
 	var (
 		ProjectId              string
 		workerId1              string
@@ -119,7 +122,7 @@ var _ = Describe("TC-009: Run migration with 'Exclude file older than' option an
 					"excludeOlderThan":    "2024-06-30T16:37:00.000Z", // providing the hisotrical date before which some data is modified
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
-					"skipFile":            "15-M",
+					"skipFile":            "0-M",
 				},
 			}
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)

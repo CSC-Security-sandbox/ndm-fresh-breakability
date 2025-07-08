@@ -110,7 +110,7 @@ var _ = Describe("TC-012:Run bulk cutover with concurrent migration jobs and bat
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
-					"skipFile":            "15-M",
+					"skipFile":            "0-M",
 				},
 			}
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
@@ -139,7 +139,7 @@ var _ = Describe("TC-012:Run bulk cutover with concurrent migration jobs and bat
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
-					"skipFile":            "15-M",
+					"skipFile":            "0-M",
 				},
 			}
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)

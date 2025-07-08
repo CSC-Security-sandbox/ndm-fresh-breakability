@@ -1,0 +1,222 @@
+name: BDS Security Scan
+
+on:
+  schedule:
+    - cron: "30 18 * * *"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  BLACKDUCK_URL: https://blackduck.eng.netapp.com
+  PROJECT_NAME: NetApp Data Migrator
+  VERSION_NAME: 25.08_preview
+  BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
+  GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+  NODE_VERSION: 22.15.0
+  JAVA_VERSION: 17.0.11
+
+jobs:
+  prepare-matrix:
+    name: Prepare Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      has_services: ${{ steps.set-matrix.outputs.has_services }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+
+      - name: Set matrix
+        id: set-matrix
+        run: |
+          # Define all services in one place
+          declare -a ALL_SERVICES=(
+            "App Deployment:app-deployment"
+            "Auth Lib:lib/auth-lib"
+            "Jobs Lib:lib/jobs-lib"
+            "Logger Lib:lib/logger-lib"
+            "Admin Service:services/admin-service"
+            "Config Service:services/config-service"
+            "Datamigrator UI:services/datamigrator-ui"
+            "DB Writer:services/db-writer"
+            "Jobs Service:services/jobs-service"
+            "Keycloak Customizations:services/keycloak-customizations"
+            "Reports Service:services/reports-service"
+            "Worker:services/worker"
+          )
+
+          declare -a matrix_items=()
+
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "=================================================="
+            echo "Nightly scan - including all services"
+            echo "=================================================="
+            # For nightly scans, include all services
+            for service in "${ALL_SERVICES[@]}"; do
+              name="${service%%:*}"
+              path="${service##*:}"
+              matrix_items+=("{\"name\":\"$name\",\"path\":\"$path\"}")
+            done
+          else
+            echo "=================================================="
+            echo "PR scan - detecting changed files..."
+            echo "=================================================="
+            CHANGED_FILES=$(git diff --name-only origin/main...HEAD)
+            echo "$CHANGED_FILES"
+
+            # For PR scans, only include changed services
+            for service in "${ALL_SERVICES[@]}"; do
+              name="${service%%:*}"
+              path="${service##*:}"
+              
+              if echo "$CHANGED_FILES" | grep -q "^$path/"; then
+                echo "Found changes in: $name ($path)"
+                matrix_items+=("{\"name\":\"$name\",\"path\":\"$path\"}")
+              fi
+            done
+          fi
+
+          if [ ${#matrix_items[@]} -eq 0 ]; then
+            echo "matrix={\"include\":[]}" >> $GITHUB_OUTPUT
+            echo "has_services=false" >> $GITHUB_OUTPUT
+            echo "No services to scan"
+          else
+            matrix_json="{\"include\":[$(IFS=,; echo "${matrix_items[*]}")]}"
+            echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+            echo "has_services=true" >> $GITHUB_OUTPUT
+            echo "Matrix prepared with ${#matrix_items[@]} service(s)"
+          fi
+
+  black-duck-scan:
+    name: Black Duck Security Scan
+    runs-on: openlab
+    timeout-minutes: 180
+    needs: [prepare-matrix]
+    if: needs.prepare-matrix.outputs.has_services == 'true'
+    strategy:
+      matrix: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "${{ env.NODE_VERSION }}"
+          registry-url: "https://npm.pkg.github.com"
+
+      - name: Set up Java
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00
+        with:
+          distribution: temurin
+          java-version: "${{ env.JAVA_VERSION }}"
+
+      - name: Replace GitHub Token Placeholder in .npmrc (if exists)
+        working-directory: ${{ matrix.path }}
+        run: |
+          if [ -f .npmrc ]; then
+            echo ".npmrc found. Replacing GitHub token..."
+            sed -i "s|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|" .npmrc
+          else
+            echo ".npmrc not found. Skipping replacement."
+          fi
+
+      - name: Install dependencies and pkg (if package.json exists)
+        working-directory: ${{ matrix.path }}
+        run: |
+          if [ -f package.json ]; then
+            echo "Installing dependencies..."
+            npm install
+            npm install pkg -g
+          else
+            echo "package.json not found. Skipping npm install."
+          fi
+
+      - name: Run Build (if package.json exists)
+        working-directory: ${{ matrix.path }}
+        run: |
+          if [ -f package.json ]; then
+            echo "Running build..."
+            npm run build
+          else
+            echo "package.json not found. Skipping build."
+          fi
+
+      - name: Download Black Duck Detect
+        run: |
+          echo "Downloading Black Duck Detect..."
+          curl -s -L https://detect.blackduck.com/detect10.sh -o detect10.sh
+          CURL_EXIT_CODE=$?
+          if [ $CURL_EXIT_CODE -ne 0 ]; then
+            echo "Failed to download Black Duck Detect (curl error $CURL_EXIT_CODE)"
+            exit 1
+          fi
+          if ! [ -s detect10.sh ]; then
+            echo "Downloaded detect10.sh is empty."
+            exit 1
+          fi
+          chmod +x detect10.sh
+          echo "Black Duck Detect downloaded successfully"
+
+      - name: Run Black Duck Detect
+        shell: bash
+        env:
+          BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
+          JAVA_OPTS: "-Dcom.blackduck.integration.trust.cert=true -Dtrust_cert=true -Dcom.blackduck.integration.verify.ssl=false -Xmx4g"
+        run: |
+          SERVICE_NAME="${{ matrix.name }}"
+          SERVICE_PATH="${{ matrix.path }}"
+
+          echo "Starting Black Duck scan for: $SERVICE_NAME"
+          echo "Service path: $SERVICE_PATH"
+          echo "Event type: ${{ github.event_name }}"
+
+          CODE_LOCATION_NAME="${PROJECT_NAME}___${VERSION_NAME}___${SERVICE_NAME}"
+          echo "Code location: $CODE_LOCATION_NAME"
+
+          if [ ! -d "$SERVICE_PATH" ]; then
+            echo "Service path $SERVICE_PATH does not exist"
+            exit 1
+          fi
+
+          echo "Service path exists, contents:"
+          ls -la "$SERVICE_PATH"
+
+          ./detect10.sh \
+            --detect.project.name="$PROJECT_NAME" \
+            --blackduck.url="$BLACKDUCK_URL" \
+            --blackduck.api.token="$BLACKDUCK_API_TOKEN" \
+            --detect.project.version.name="$VERSION_NAME" \
+            --detect.source.path="$SERVICE_PATH" \
+            --detect.blackduck.signature.scanner.paths="$SERVICE_PATH" \
+            --detect.code.location.name="$CODE_LOCATION_NAME" \
+            --detect.cleanup=false \
+            --detect.tools=DETECTOR,SIGNATURE_SCAN \
+            --detect.detector.search.depth=25 \
+            --detect.detector.search.continue=true \
+            --blackduck.trust.cert=true \
+            --blackduck.offline.mode=false \
+            --detect.output.path="${{ github.workspace }}/blackduck-output/$SERVICE_NAME" \
+            --detect.cleanup.bdio.files=false \
+            --detect.accuracy.required=NONE \
+            --blackduck.timeout=3600   \
+            --detect.timeout=9000  \
+            --detect.wait.for.results=false \
+            --detect.risk.report.pdf=false \
+            --detect.notices.report=false \
+            --detect.vulnerability.report=false
+
+          SCAN_EXIT_CODE=$?
+
+          if [ "$SCAN_EXIT_CODE" -eq 0 ]; then
+            echo "SUCCESS: Black Duck scan completed successfully for $SERVICE_NAME"
+          else
+            echo "Scan failed with exit code: $SCAN_EXIT_CODE"
+            exit $SCAN_EXIT_CODE
+          fi

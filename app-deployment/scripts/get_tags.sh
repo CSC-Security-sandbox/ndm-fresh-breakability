@@ -37,9 +37,6 @@ echo "Outputting tags from Artifactory for all images..."
 TAG_LINES=()
 IMAGES=()
 
-if [[ "$REF_TYPE" == "releases" ]]; then
-    latest_url="${ARTIFACTORY_BASE}/services/${artifactory_service}/${REF_TYPE}/${REF_NAME}/latest.json"
-
 for mapping in "${services[@]}"; do
     IFS=":" read -r artifactory_service tag_var branch_var acr_image_name <<< "$mapping"
 
