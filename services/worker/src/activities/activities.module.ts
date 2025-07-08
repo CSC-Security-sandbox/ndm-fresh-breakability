@@ -23,10 +23,11 @@ import { MigrateSyncService } from './core/migrate/migrate-sync.service';
 import { CommonTaskService } from './core/common/common-task.service';
 import { DiscoveryScanService } from './core/scan/discovery/discovery-scan.service';
 import { ScanService } from './core/scan/scan-activity.service';
+import { JobManagerModule } from '@local/job-lib';
 
 
 @Module({
-  imports: [HttpModule, ConfigModule, WorkerThreadModule, AuthModule],
+  imports: [HttpModule, ConfigModule, WorkerThreadModule, AuthModule, JobManagerModule],
   controllers: [],
   providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService, MigrationSyncService, MigrateSyncService,MigrateScanService, Logger, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities, RedisMemoryCheckActivity,  CommonTaskService, DiscoveryScanService, ScanService],
   exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationTaskService,MigrationScanService, MigrationSyncService, MigrateSyncService, MigrateScanService,  ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities,RedisMemoryCheckActivity, CommonTaskService, DiscoveryScanService, ScanService],

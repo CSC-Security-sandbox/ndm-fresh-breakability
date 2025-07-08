@@ -6,7 +6,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
-import { JobStatus as JobContextStatus } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/enums";
+import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as parser from "cron-parser";
 import {
   CutOverStatus,
@@ -20,30 +20,24 @@ import {
 import { ScheduleStatus } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { JobConfigEntity } from "src/entities/jobconfig.entity";
+import { OperationErrorEntity } from "src/entities/operation-error.entity";
+import { OperationsEntity } from "src/entities/operation.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
-import { RedisService } from "src/redis/redis.service";
+import { ErrorRemedyService } from "src/errorremedies/errorremedies.service";
+import { SendMailService } from "src/utils/send-email";
+import { WorkersService } from "src/workers/workers.service";
 import { WorkflowService } from "src/workflow/workflow.service";
 import { SignalWorkFlowPayload } from "src/workflow/workflow.types";
-import { FindManyOptions, In, IsNull, Not, Raw, Repository, UpdateResult } from "typeorm";
+import { FindManyOptions, Raw, Repository, UpdateResult } from "typeorm";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import { JobRunDetailsDTO, JobRunDto, JobRunsDTO } from "./dto/jobrun.dto";
 import {
-  ApprovalRequestDTO,
-  JobRunActions,
-  JobRunActionsReq,
+  ApprovalRequestDTO
 } from "./dto/jobrunactions.dto";
-import { JobRunPageDto } from "./dto/jobrunpage.dto";
-import { JobRunInitService } from "./jobrun.init.service";
-import { JobRunConfig } from "./jobrun.types";
-import { FileInfo } from "@netapp-cloud-datamigrate/jobs-lib";
-import { OperationsEntity } from "src/entities/operation.entity";
 import { JobErrorQueryDto } from "./dto/jobRunErrors.dto";
-import { OperationErrorEntity } from "src/entities/operation-error.entity";
+import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { JobRunStats } from "./dto/jobstats";
-import { SendMailService } from "src/utils/send-email";
-import { ErrorRemedyService } from "src/errorremedies/errorremedies.service";
-import { WorkersService } from "src/workers/workers.service";
-import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
+import { JobRunInitService } from "./jobrun.init.service";
 @Injectable()
 export class JobRunService {
   private readonly logger = new Logger(JobRunService.name);
@@ -64,7 +58,6 @@ export class JobRunService {
     private operationErrorRepo: Repository<OperationErrorEntity>,
     private readonly configService: ConfigService,
     private readonly jobRunInitService: JobRunInitService,
-    private readonly redisService: RedisService,
     private workFlowService: WorkflowService,
     private sendMailService: SendMailService,
     private errorRemedyService: ErrorRemedyService,
@@ -157,208 +150,6 @@ export class JobRunService {
     return await this.jobRunInitService.createJobRun(jobConfig.id, new Date());
   }
 
-  //  ------------------- JobRun actions ------------------ //
-  async actions(jobRunActions: JobRunActionsReq) {
-    switch (jobRunActions.action) {
-      case JobRunActions.PAUSE:
-        return await this.pauseJobRuns(
-          jobRunActions.jobRuns,
-          PausedReason.USER_PAUSED
-        );
-      case JobRunActions.STOP:
-        return await this.stopJobRuns(jobRunActions.jobRuns);
-      case JobRunActions.RESUME:
-        return await this.resumeJobRuns(jobRunActions.jobRuns);
-      default:
-        throw new BadRequestException("Invalid Action Type");
-    }
-  }
-
-  //  ------------------- JobRun actions PAUSE ------------------ //
-  async pauseJobRuns(jobRuns: string[], reason?: PausedReason) {
-    await this.jobRunRepo.update(
-      { id: In(jobRuns) },
-      { status: JobRunStatus.Paused, pausedReason: reason }
-    );
-    for (const jobRunId of jobRuns) {
-      const jobContext = await this.redisService.getJobContext(jobRunId);
-      jobContext.jobState.status = JobContextStatus.Paused;            
-      await this.redisService.setJobContext(jobRunId, jobContext);
-
-      const workflowId = `${jobContext.jobConfig.jobType}-${jobContext.jobRunId}`
-      const signal: SignalWorkFlowPayload = {
-          payload: JobRunStatus.Paused,
-          signalName: "action",
-          workflowId: workflowId
-      };
-      try{
-        await this.workFlowService.sendSignal(signal);
-      }catch (error) {
-        this.logger.error(`Failed to send signal to workflow ${workflowId}: ${error.message}`); 
-        return {details: "Operation Failed"};
-      }
-      
-    }
-    return { details: "Operation Completed Successfully" };
-
-     
-
-
-
-
-  }
-
-  //  ------------------- JobRun actions STOP ------------------ //
-  async stopJobRuns(jobRuns: string[]) {
-    const mappings = await this.workerJobRunMapRepo.find({
-      where: { jobRunId: In(jobRuns)},
-      select: { workerId: true, jobRunId: true },
-    });
-    const worker = new Map<string, string[]>();
-    mappings.forEach((map) => {
-      worker.set(
-        map.workerId,
-        (worker.get(map.workerId) || []).concat([map.jobRunId])
-      );
-    });
-    await this.workerJobRunMapRepo.delete({ jobRunId: In(jobRuns) });
-    const jobRunConfigs = await this.jobRunRepo.find({
-      where: {
-        id: In(jobRuns),
-        status: In([JobRunStatus.Paused, JobRunStatus.Running, JobRunStatus.Ready]),
-      },
-      select: { jobConfigId: true },
-    });
-    await this.jobRunRepo.update(
-      {
-        id: In(jobRuns),
-        status: In([
-          JobRunStatus.Paused,
-          JobRunStatus.Running,
-          JobRunStatus.Ready,
-        ]),
-      },
-      { status: JobRunStatus.Stopped, endTime: new Date() }
-    );
-    await this.jobConfigRepo.update(
-      { id: In(jobRunConfigs.map((jobRun) => jobRun.jobConfigId)) },
-      { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
-    );
-    for (const jobRunId of jobRuns) {
-      const jobContext = await this.redisService.getJobContext(jobRunId);
-      let workflowId: string;
-      try {
-        workflowId = this.jobRunInitService.getWorkFlowId(
-          jobRunId,
-          jobContext.jobConfig.jobType as JobType
-        );
-
-        await this.workFlowService.terminateWorkflow(workflowId);
-        this.logger.debug(`Workflow Terminated ${workflowId}`);
-      } catch (error) {
-        this.logger.error(
-          `Failed to terminate workflow for jobRunId ${jobRunId}: ${error.message}`,
-          error.stack
-        );
-        continue; 
-      }
-
-      try {
-        jobContext.jobState.status = JobContextStatus.Stopped;
-
-        await jobContext.appendToFileList(this.dummyFileEntry());
-
-        this.logger.debug(
-          `Job Run ${jobRunId} Stopped and appended Last file entry to file list`
-        );
-
-        await this.redisService.setJobContext(jobRunId, jobContext);
-
-        await new Promise((resolve) => setTimeout(resolve, 10000));
-
-        await jobContext.cleanup();
-
-        this.logger.debug(`Cleanup completed for jobRunId ${jobRunId}`);
-      } catch (error) {
-        this.logger.error(
-          `Error during cleanup for jobRunId ${jobRunId}: ${error.message}`,
-          error.stack
-        );
-      }
-    }
-    return { details: "Operation Completed Successfully" };
-  }
-
-  dummyFileEntry() {
-    return new FileInfo(
-      "LAST_FILE",
-      "",
-      "",
-      false,
-      2048,
-      true,
-      new Date(),
-      new Date(),
-      new Date(),
-      "",
-      "",
-      "",
-      0,
-      1001,
-      1001
-    );
-  }
-
-  //  ------------------- JobRun actions RESUME ------------------ //
-  async resumeJobRuns(jobRuns: string[]) {
-    await this.jobRunRepo.update(
-      { id: In(jobRuns), status: JobRunStatus.Paused },
-      { status: JobRunStatus.Running, pausedReason: null }
-    );
-    
-    for (const jobRunId of jobRuns) {
-      const jobContext = await this.redisService.getJobContext(jobRunId);
-      jobContext.jobState.status = JobContextStatus.Running;
-      jobContext.jobState.tasks_total = jobContext.jobState.tasks_total - 1;
-      this.logger.debug( `Resuming Job Run ${jobRunId}`);
-      await this.redisService.setJobContext(jobRunId, jobContext);
-      await this.resumeJobRun(jobRunId);
-    }
-    return { details: "Operation Completed Successfully" };
-  }
-
-  async resumeJobRun(jobRunId: string) {
-    try {
-      const jobRun = await this.jobRunRepo.findOne({ where: { id: jobRunId } });
-      if (!jobRun)
-        throw new NotFoundException(`Job run with id ${jobRunId} not found`);
-      const details: JobRunConfig = await this.jobRunInitService.getJobConfig(
-        jobRun.jobConfigId
-      );
-      if (details.workers?.length === 0) {
-        this.logger.warn(
-          `Unable to create Job Run for Job Config ${jobRun.jobConfigId} does not has workers`
-        );
-        return;
-      }
-      // check if workflow already exists
-      const workflowId = this.jobRunInitService.getWorkFlowId(
-        jobRunId,
-        details.jobType
-      );
-
-      const signal: SignalWorkFlowPayload = {
-          payload: JobRunStatus.Running,
-          signalName: "action",
-          workflowId: workflowId
-      };
-      await this.workFlowService.sendSignal(signal);
-      this.logger.debug(`Workflow resumed sucessfully for ${workflowId}`);
-    } catch (error) {
-      this.logger.error(`Failed to resume Job Run ${jobRunId} ${error}`);
-      throw new Error(`Failed to resume Job Run ${jobRunId} ${error}`);
-    }
-  }
 
   //  ------------------- get JobRun Details ------------------ //
   /**
@@ -999,13 +790,25 @@ export class JobRunService {
           this.logger.warn(
             `All workers are offline for jobRunId: ${jobRunId}, thus pausing the job run`
           );
-          await this.pauseJobRuns([jobRunId], PausedReason.SYSTEM_PAUSED);
+          await this.jobRunRepo.update(
+            { id: jobRunId },
+            {
+              status: JobRunStatus.Paused,
+              pausedReason: PausedReason.SYSTEM_PAUSED,
+            }
+          );
         } else {
           if (jobRun.status === JobRunStatus.Paused) {
             this.logger.log(
               `Resuming job run ${jobRunId} as some workers are online`
             );
-            await this.resumeJobRuns([jobRunId]);
+            await this.jobRunRepo.update(
+              { id: jobRunId },
+              {
+                status: JobRunStatus.Running,
+                pausedReason: null,
+              }
+            );
           } else {
             this.logger.log(
               `Job run ${jobRunId} is running and some workers are online`

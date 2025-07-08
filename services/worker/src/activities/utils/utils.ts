@@ -6,6 +6,7 @@ import { ACL, ExcludeOrSkipParams, getFileInfoInput, GetJobConnectionInput, GetJ
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
 import { execSync } from "child_process";
+import { JobConfig } from "@local/job-lib/dist/job-manager/data-store/jobconfig/job-config";
 
 export const getChecksum = (filePath: string): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -146,6 +147,16 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobC
   commands,
   jobContext.jobConfig.destinationFileServer ?  basePrefix(jobRunId, jobContext.jobConfig.destinationFileServer.pathId) : null,
   jobContext.jobConfig.destinationFileServer ? jobContext.jobConfig.destinationFileServer.pathId: null,
+  ''
+)
+
+export const buildSyncTask = (taskType: TaskType, jobRunId: string, jobConfig: JobConfig , commands: Command[]): Task => new Task(
+  uuid4(), jobRunId, taskType, TaskStatus.PENDING,jobConfig.workerIds[0],
+  basePrefix(jobRunId, jobConfig.sourceFileServer.pathId),
+  jobConfig.sourceFileServer.pathId,
+  commands,
+  jobConfig.destinationFileServer ?  basePrefix(jobRunId, jobConfig.destinationFileServer.pathId) : null,
+  jobConfig.destinationFileServer ? jobConfig.destinationFileServer.pathId: null,
   ''
 )
 

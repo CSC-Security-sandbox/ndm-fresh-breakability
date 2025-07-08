@@ -17,31 +17,28 @@ import {
   JobStatus,
   JobType,
   Protocol,
-  TemplateType,
-  WorkFlows,
+  TemplateType
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
-import { Options } from "src/constants/types";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { JobRunEntity } from "src/entities/jobrun.entity";
 import { ProjectEntity } from "src/entities/project.entity";
-import { VolumeEntity } from "src/entities/volume.entity";
-import { nextDate } from "src/utils/mapper";
-import { WorkflowService } from "src/workflow/workflow.service";
-import { StartWorkFlowPayload } from "src/workflow/workflow.types";
-import { In, Raw, Repository } from "typeorm";
-import { validate as isUUID, v4 as uuidv4 } from "uuid";
-import { JobConfigEntity } from "../entities/jobconfig.entity";
 import {
   SpeedTestConfigEntity,
   SpeedTestConfigWorkerEntity,
 } from "src/entities/speed-test-job-config.entity";
+import { VolumeEntity } from "src/entities/volume.entity";
+import { nextDate } from "src/utils/mapper";
+import { WorkflowService } from "src/workflow/workflow.service";
+import { In, Raw, Repository } from "typeorm";
+import { validate as isUUID, v4 as uuidv4 } from "uuid";
+import { JobConfigEntity } from "../entities/jobconfig.entity";
 
 import {
-  SpeedLogEntity,
   NetworkPerformanceResultEntity,
-  SpeedTestResultEntity,
+  SpeedLogEntity,
   SpeedLogEntryEntity,
+  SpeedTestResultEntity,
 } from "../entities/speed-test-result.entity";
 
 import { BulkMigrateJobConfig } from "./dto/bulkMigrateJob.dto";
@@ -49,39 +46,31 @@ import { JobConfigDto } from "./dto/jobconfig.dto";
 import {
   JobConfigCutoverBulk,
   JobConfigDiscoverBulk,
-  JobConfigPrecheck,
-  MigrateConfig,
+  MigrateConfig
 } from "./dto/jobdicoverybulk.dto";
 import { JobConfigSpeedTest, SpeedTestResult } from "./dto/jobspeedTest.dto";
 
+import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
+import { FileServerEntity } from "src/entities/fileserver.entity";
+import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
+import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
+import { OperationErrorEntity } from "src/entities/operation-error.entity";
+import { IncidentStatus, SyncEmailEntity } from "src/entities/sync-email.entity";
+import { WorkerEntity } from "src/entities/worker.entity";
+import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
+import { JobRunStats } from "src/jobrun/dto/jobstats";
+import { ParsedMapping } from "src/utils/indentity-mapping.type";
+import { SendMailService } from "src/utils/send-email";
 import { JobListingDTO } from "./dto/joblisting.dto";
 import {
   FlattenedCutoverConfig,
   JobConfigBulkCutoverRes,
   JobConfigBulkMigrateFinalResponse,
   JobConfigBulkMigrateRes,
-  PreChecks,
-  PreCheckWorkflowOPayload,
   SpeedTestEntry,
-  SpeedTestJobRun,
-  workerWithStatus,
+  SpeedTestJobRun
 } from "./jobconfig.types";
-import { run } from "node:test";
-import { FileServerEntity } from "src/entities/fileserver.entity";
-import { WorkerEntity } from "src/entities/worker.entity";
-import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
-import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
-import { ParsedMapping } from "src/utils/indentity-mapping.type";
-import { RedisService } from "src/redis/redis.service";
-import { JobRunService } from "src/jobrun/jobrun.service";
-import { JobRunStats } from "src/jobrun/dto/jobstats";
-import { OperationErrorEntity } from "src/entities/operation-error.entity";
-import { SendMailService } from "src/utils/send-email";
-import { filterUnhealthyWorkers } from "../utils/worker-filter";
-import { filter } from "rxjs";
-import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
-import { IncidentStatus, SyncEmailEntity } from "src/entities/sync-email.entity";
-import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
+import { RedisService } from "@local/job-lib";
 
 @Injectable()
 export class JobConfigService {

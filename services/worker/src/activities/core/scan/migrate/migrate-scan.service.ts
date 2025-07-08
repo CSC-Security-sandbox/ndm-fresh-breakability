@@ -9,6 +9,7 @@ import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishCommandInput } from "./migrate-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
+import { JobManger } from "@local/job-lib";
 
 
 @Injectable()
@@ -22,6 +23,7 @@ export class MigrateScanService {
         @Inject(ConfigService) 
         private readonly configService: ConfigService,
         private readonly logger: Logger,
+        private readonly jobManager: JobManger
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
@@ -30,13 +32,13 @@ export class MigrateScanService {
     }
 
 
-    async publishCommands({ jobContext, commands}: PublishCommandInput)  {
+    async publishCommands({ jobRunId, commands}: PublishCommandInput)  {
         //TODO: make bulk publish to command stream. 
         for(const command of commands)
-            await jobContext.publishToCommandStream(command);
+            await this.jobManager.publishToCommandStream(jobRunId, command);
     }
 
-    async getDirContents({path, origin, jobContext, errorType, command}: DirContentsInput): Promise<Set<string>>{
+    async getDirContents({path, origin, jobRunId, errorType, command}: DirContentsInput): Promise<Set<string>>{
         let content = new Set<string>();
         try{
             if (!fs.existsSync(path)) {
@@ -49,19 +51,19 @@ export class MigrateScanService {
             if(error instanceof FatalError) 
                 errorType = ErrorType.FATAL_ERROR;
             const ndmError = dmError("OPERATION", origin, Operation.READ_DIR, errorType, command.commandId, error, {name: command.fPath, path: path});
-            await jobContext.publishToErrorStream(ndmError);
+            await this.jobManager.publishToErrorStream(jobRunId, ndmError);
             throw error; 
         }
         return content;
     }
 
-    async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings}: ScanDirectoryInput): Promise<ScanDirectoryOutput> { 
+    async scanDirectory({ jobRunId,  jobConfig, sourcePath, sourcePrefix, targetPath , command, settings}: ScanDirectoryInput): Promise<ScanDirectoryOutput> { 
 
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
         let commands: Command[] = [], errorType: ErrorType = command.retryCount+1 > this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
 
-        const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command});
-        const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});
+        const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobRunId, errorType, command});
+        const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobRunId, errorType, command});
 
         for (const item of sourceContent) {
             try {
@@ -76,8 +78,8 @@ export class MigrateScanService {
                     stats: sourceStat,
                     excludePatterns: settings.excludePatterns,
                     skipTime: settings.skipFile,
-                    olderThan: new Date(jobContext.jobConfig.options?.excludeOlderThan),
-                    jobType: jobContext.jobConfig.jobType
+                    olderThan: new Date(jobConfig.options?.excludeOlderThan),
+                    jobType: jobConfig.jobType
                 })) continue;
 
                 const fileInfo: FileInfo = await getFileInfo({name: item, fullFilePath: sourceContentPath, relativePath: relativeSourcePath});
@@ -87,35 +89,35 @@ export class MigrateScanService {
                     output.subDirs.push(relativeSourcePath);
                     this.logger.debug(`Scan Path ${relativeSourcePath} | parent ${sourcePath}`)
                     if(!targetContent.has(item)) {
-                        const command = this.buildCommand(sourceStat, fileInfo.path);
-                        if (command) commands.push(command);
+                        const commandSync = this.buildCommand(sourceStat, fileInfo.path);
+                        if (commandSync) commands.push(commandSync);
                     }
                 } else if (!targetContent.has(item)) {
                     output.fileCount++;
-                    const command = this.buildCommand(sourceStat, fileInfo.path);
-                    if (command) commands.push(command);
+                    const commandSync = this.buildCommand(sourceStat, fileInfo.path);
+                    if (commandSync) commands.push(commandSync);
                 } else {
                     const targetFilePath = path.join(targetPath, item);
                     if (fs.existsSync(targetFilePath)) {
                         const targetStat = fs.statSync(targetFilePath);
-                        const command = this.buildCommand(sourceStat, fileInfo.path, targetStat);
-                        if (command) commands.push(command);
+                        const commandSync = this.buildCommand(sourceStat, fileInfo.path, targetStat);
+                        if (commandSync) commands.push(commandSync);
                     }
                 }
                 if(commands.length >= this.maxMigrationCommand) {
                     const chunk = commands.splice(0, this.maxMigrationCommand);
-                    await this.publishCommands({ jobContext, commands: chunk });
+                    await this.publishCommands({ jobRunId, commands: chunk });
                 }
                 
             }catch(error) {
                 this.logger.error(`Error processing item ${item} in directory ${sourcePath}: ${error}`);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.commandId, error, {name: command.fPath, path: targetPath});
-                await jobContext.publishToErrorStream(dmErr);
+                await this.jobManager.publishToErrorStream(jobRunId, dmErr);
                 throw error; 
             }
         }
         if (commands.length > 0) {
-            await this.publishCommands({ jobContext, commands: commands });
+            await this.publishCommands({ jobRunId, commands: commands });
             commands = [];
         }
         return output

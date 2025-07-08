@@ -64,6 +64,7 @@ const stream = {
   groupReadWithoutAck: jest.fn(),
   groupReadWithoutAckDirs: jest.fn(),
   ackAndCreateTask: jest.fn(),
+  ackAndPurge: jest.fn(),
 }
 
 describe('MigrationScanService', () => {

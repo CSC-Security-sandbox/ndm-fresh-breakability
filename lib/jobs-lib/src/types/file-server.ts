@@ -1,4 +1,3 @@
-import { Protocol } from './protocols';
 import { Serializable } from './serializable';
 
 export class FileServerDetails implements Serializable {
@@ -10,8 +9,6 @@ export class FileServerDetails implements Serializable {
   path:string;
   workingDirectory:string;
   protocolVersion: string;
-
-
 
   constructor(hostname: string, protocols: Protocol[],pathId: string, path:string,username?: string, password?:string,  workingDirectory?:string, protocolVersion?: string) {
     this.hostname = hostname;
@@ -40,3 +37,39 @@ export class FileServerDetails implements Serializable {
     this.protocolVersion = obj?.protocol
   }
 }
+
+
+export enum ProtocolType {
+  SMB = 'SMB',
+  NFS = 'NFS',
+}
+
+export abstract class Protocol implements Serializable {
+  abstract type: string;
+  protected username: string;
+  protected password?: string;
+
+  constructor(username: string, password?: string) {
+    this.username = username;
+    this.password = password;
+  }
+
+  serialize(): string {
+    return JSON.stringify(this);
+  }
+
+  deserialize(json: string): void {
+    const obj = JSON.parse(json);
+    this.username = obj.username;
+    this.password = obj.password;
+  }
+}
+
+export class NFS extends Protocol {
+  type: string = ProtocolType.NFS;
+}
+
+export class SMB extends Protocol {
+  type: string = ProtocolType.SMB;
+}
+

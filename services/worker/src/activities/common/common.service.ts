@@ -1,3 +1,4 @@
+import { JobManger } from "@local/job-lib";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { GroupReaderType, JobContext, JobStatus, Task } from "@netapp-cloud-datamigrate/jobs-lib";
@@ -24,6 +25,7 @@ export class CommonActivityService{
     private readonly authService: AuthService,
     private readonly logger: Logger,
     private readonly redisService: RedisService,
+    private readonly jobManger: JobManger
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
@@ -46,10 +48,9 @@ export class CommonActivityService{
   async updateLastEntry(traceId: string): Promise<any> {
     try {
       this.logger.log(`[${traceId}] Publishing last entry for job id: ${traceId}`);
-      const jobContext = await this.redisService.getJobManagerContext(traceId);
-      await jobContext.publishToFileStream(generateDummyFileEntry);  
-      await jobContext.publishToTaskStream(generateDummyTaskEntry);
-      await jobContext.publishToErrorStream(generateDummyErrorEntry);
+      await this.jobManger.publishToFileStream(traceId, generateDummyFileEntry);  
+      await this.jobManger.publishToTaskStream(traceId,generateDummyTaskEntry);
+      await this.jobManger.publishToErrorStream(traceId, generateDummyErrorEntry);
       this.logger.log(`[${traceId}] Last entry published for job id: ${traceId}`);
       return { message: 'Job completed for job id: ' + traceId };
     } catch (error) {
