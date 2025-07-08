@@ -1,226 +1,263 @@
-
-import { Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { FileServerDetails, JobStatus } from '@netapp-cloud-datamigrate/jobs-lib';
-import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
+import { JobStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import axios from 'axios';
-import { AuthService } from 'src/auth/auth.service';
-import { WorkersConfig } from 'src/config/app.config';
+import { RetryableError } from 'src/errors/errors.types';
 import { Protocols } from 'src/protocols/protocols';
-import { RedisService } from 'src/redis/redis.service';
 import { SetupActivityService } from './setup.activity.service';
 
 jest.mock('axios');
+jest.mock('src/protocols/protocols');
+jest.mock('@netapp-cloud-datamigrate/jobs-lib');
+jest.mock('src/config/app.config', () => ({
+    WorkersConfig: { get: jest.fn() }
+}));
+
+const mockConfigService = {
+    get: jest.fn()
+};
+const mockAuthService = {
+    getAccessToken: jest.fn()
+};
+const mockRedisService = {
+    getJobManagerContext: jest.fn(),
+    getJobState: jest.fn()
+};
+const mockLogger = {
+    log: jest.fn(),
+    debug: jest.fn(),
+    error: jest.fn()
+};
+
+const mockProtocol = {
+    mountPath: jest.fn(),
+    unmountPath: jest.fn()
+};
 
 describe('SetupActivityService', () => {
-  let service: SetupActivityService;
-  let mockConfig: Partial<ConfigService>;
-  let mockAuth: Partial<AuthService>;
-  let mockRedis: Partial<RedisService>;
-  let mockLogger: Partial<Logger>;
-  let protocolMount: jest.Mock;
-  let protocolUnmount: jest.Mock;
-
-  beforeEach(() => {
-    jest.resetAllMocks();
-
-    // Mock ConfigService
-    mockConfig = {
-      get: jest.fn((key: string) => {
-        switch (key) {
-          case 'worker.workerId': return 'worker-1';
-          case 'worker.baseWorkingPath': return '/mnt/work';
-          case 'worker.connection.workerConfigUrl': return 'http://config-service';
-          default: return null;
-        }
-      }),
-    };
-
-    // Mock AuthService
-    mockAuth = {
-      getAccessToken: jest.fn().mockResolvedValue('token-123'),
-    };
-
-    // Mock RedisService
-    mockRedis = {
-      getJobContext: jest.fn(),
-      getJobState: jest.fn(),
-      setJobContext: jest.fn(),
-    };
-
-    // Mock Logger
-    mockLogger = {
-      log: jest.fn(),
-      debug: jest.fn(),
-      error: jest.fn(),
-    };
-
-    // Mock Protocols
-    protocolMount = jest.fn().mockResolvedValue(undefined);
-    protocolUnmount = jest.fn().mockResolvedValue(undefined);
-    jest.spyOn(Protocols, 'getProtocol').mockReturnValue({
-      mountPath: protocolMount,
-      unmountPath: protocolUnmount,
-    } as any);
-
-    // Mock WorkersConfig
-    jest.spyOn(WorkersConfig, 'get').mockReturnValue('/mnt/work');
-
-    service = new SetupActivityService(
-      mockConfig as ConfigService,
-      mockAuth as AuthService,
-      mockRedis as RedisService,
-      mockLogger as Logger,
-    );
-  });
-
-  describe('speedTestSetup', () => {
-    const params = {
-      jobRunId: 'job1',
-      protocolType: 'SFTP',
-      hostname: 'host1',
-      protocols: [],
-      pathId: 'pid',
-      path: '/data',
-      userName: 'user',
-      password: 'pass',
-      fileServerId: 'fs1',
-      volumeId: 'vol1',
-      tests: ['t1'],
-    } as any;
-
-    it('completes successfully', async () => {
-      (axios.post as jest.Mock).mockResolvedValue({ status: 200 });
-
-      const result = await service.speedTestSetup(params);
-
-      expect(protocolMount).toHaveBeenCalledWith('job1', expect.any(Object));
-      expect(axios.post).toHaveBeenCalledWith(
-        'http://config-service/api/v1/work-manager/update/configs',
-        { jobRunId: 'job1', workerId: 'worker-1' },
-      );
-      expect(result.status).toBe('success');
-      expect(result.fsDetails).toBeInstanceOf(FileServerDetails);
-      expect(result.tests).toEqual(['t1']);
-    });
-
-    it('returns error when mountPath fails', async () => {
-      protocolMount.mockRejectedValue(new Error('mount-error'));
-
-      const result = await service.speedTestSetup(params);
-      expect(result.status).toBe('error');
-      expect(result.message).toContain('mount-error');
-    });
-
-    it('returns error when axios fails', async () => {
-      (axios.post as jest.Mock).mockRejectedValue(new Error('post-error'));
-
-      const result = await service.speedTestSetup(params);
-      expect(result.status).toBe('error');
-      expect(result.message).toContain('post-error');
-    });
-  });
-
-  describe('setup', () => {
-    const jobRunId = 'job2';
-    let context: any;
-    let state: JobState;
+    let service: SetupActivityService;
 
     beforeEach(() => {
-      context = {
-        jobConfig: {
-          sourceFileServer: { protocols: [{ type: 'SFTP' }], hostname: 'src', username: 'u', password: 'p', path: '/src', protocolVersion: 'v1', pathId: 'sp1' },
-          destinationFileServer: { protocols: [{ type: 'SFTP' }], hostname: 'dst', username: 'du', password: 'dp', path: '/dst', protocolVersion: 'v1', pathId: 'dp1' },
-        },
-      };
-      state = new JobState([], 0, 0, [],  JobStatus.Running, []);
-      (mockRedis.getJobContext as jest.Mock).mockResolvedValue(context);
-      (mockRedis.getJobState as jest.Mock).mockResolvedValue(state);
+        jest.clearAllMocks();
+        mockConfigService.get.mockImplementation((key: string) => {
+            if (key === 'worker.workerId') return 'worker-123';
+            if (key === 'worker.baseWorkingPath') return '/mnt/worker';
+            if (key === 'worker.connection.workerConfigUrl') return 'http://worker-config';
+            return undefined;
+        });
+        (Protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+        service = new SetupActivityService(
+            mockConfigService as any,
+            mockAuthService as any,
+            mockRedisService as any,
+            mockLogger as any
+        );
     });
 
-    it('errors when no context found', async () => {
-      (mockRedis.getJobContext as jest.Mock).mockResolvedValue(null);
-
-      const result = await service.setup(jobRunId);
-      expect(result.status).toBe('error');
-      expect(result.message).toContain('Context not found');
+    describe('mountPath', () => {
+        it('should call protocol.mountPath with correct params', async () => {
+            const server = {
+                hostname: 'host',
+                username: 'user',
+                password: 'pass',
+                protocolVersion: 'v1',
+                path: '/data',
+                pathId: 'pid'
+            } as any;
+            await service.mountPath(server, mockProtocol as any, 'job-1');
+            expect(mockProtocol.mountPath).toHaveBeenCalledWith('job-1', expect.objectContaining({
+                hostname: 'host',
+                username: 'user',
+                password: 'pass',
+                protocolVersion: 'v1',
+                path: '/data',
+                mountBasePath: '/mnt/worker',
+                pathId: 'pid',
+                jobRunId: 'job-1'
+            }));
+        });
     });
 
-    it('mounts both paths and updates state', async () => {
-      (axios.post as jest.Mock).mockResolvedValue({});
-
-      await service.setup(jobRunId);
-
-      expect(protocolMount).toHaveBeenCalledTimes(2);
-      expect(axios.post).toHaveBeenCalledWith(
-        'http://config-service/api/v1/work-manager/update/configs',
-        { jobRunId, workerId: 'worker-1' },
-        { headers: { Authorization: 'Bearer token-123' } },
-      );
+    describe('unmountPath', () => {
+        it('should call protocol.unmountPath with correct params', async () => {
+            const server = {
+                hostname: 'host',
+                username: 'user',
+                password: 'pass',
+                protocolVersion: 'v1',
+                path: '/data',
+                pathId: 'pid'
+            } as any;
+            await service.unmountPath(server, mockProtocol as any, 'job-2');
+            expect(mockProtocol.unmountPath).toHaveBeenCalledWith('job-2', expect.objectContaining({
+                hostname: 'host',
+                username: 'user',
+                password: 'pass',
+                protocolVersion: 'v1',
+                path: '/data',
+                mountBasePath: '/mnt/worker',
+                pathId: 'pid',
+                jobRunId: 'job-2'
+            }));
+        });
     });
 
-    it('errors when accessToken is null', async () => {
-      (mockAuth.getAccessToken as jest.Mock).mockResolvedValue(null);
-
-      const result = await service.setup(jobRunId);
-      expect(result.status).toBe('error');
-      expect(result.message).toContain('Failed to get access token');
-    });
-  });
-
-  describe('speedTestCleanup', () => {
-    const jobRunId = 'job3';
-    let fsDetails: FileServerDetails;
-
-    beforeEach(() => {
-      fsDetails = new FileServerDetails('h', [], 'pid', '/mnt', 'u', 'p', '/mnt');
+    describe('waitFor', () => {
+        it('should resolve after given milliseconds', async () => {
+            const start = Date.now();
+            await service.waitFor(10);
+            expect(Date.now() - start).toBeGreaterThanOrEqual(10);
+        });
     });
 
-    it('unmounts successfully', async () => {
-      const res = await service.speedTestCleanup(jobRunId, fsDetails, 'SFTP');
-      expect(protocolUnmount).toHaveBeenCalledWith('job3', expect.any(Object));
-      expect(res.status).toBe('success');
+    describe('speedTestSetup', () => {
+        it('should return success on happy path', async () => {
+            const args = {
+                jobRunId: 'job-3',
+                protocolType: 'NFS',
+                hostname: 'host',
+                protocols: [],
+                pathId: 'pid',
+                path: '/data',
+                userName: 'user',
+                password: 'pass',
+                fileServerId: 'fsid',
+                volumeId: 'volid',
+                tests: []
+            } as any;
+            (require('src/config/app.config').WorkersConfig.get as jest.Mock).mockReturnValue('/mnt/worker');
+            (axios.post as jest.Mock).mockResolvedValue({});
+            mockProtocol.mountPath.mockResolvedValue(undefined);
+
+            const result = await service.speedTestSetup(args);
+
+            expect(result.status).toBe('success');
+            expect(result.workerId).toBe('worker-123');
+            expect(mockProtocol.mountPath).toHaveBeenCalled();
+            expect(axios.post).toHaveBeenCalledWith(
+                'http://worker-config/api/v1/work-manager/update/configs',
+                { jobRunId: 'job-3', workerId: 'worker-123' }
+            );
+        });
+
+        it('should return error on exception', async () => {
+            (Protocols.getProtocol as jest.Mock).mockImplementation(() => { throw new Error('fail'); });
+            const args = { jobRunId: 'job-4', protocolType: 'NFS' } as any;
+            const result = await service.speedTestSetup(args);
+            expect(result.status).toBe('error');
+            expect(result.message).toContain('fail');
+        });
     });
 
-    it('returns error when unmountPath fails', async () => {
-      protocolUnmount.mockRejectedValue(new Error('umount-error'));
-      const res = await service.speedTestCleanup(jobRunId, fsDetails, 'SFTP');
-      expect(res.status).toBe('error');
-      expect(res.message).toContain('umount-error');
-    });
-  });
+    describe('setup', () => {
+        it('should return success when context and accessToken are valid', async () => {
+            const context = {
+                jobConfig: {
+                    sourceFileServer: { protocols: [{ type: 'NFS' }] },
+                    destinationFileServer: { protocols: [{ type: 'NFS' }] }
+                }
+            };
+            mockRedisService.getJobManagerContext.mockResolvedValue(context);
+            mockAuthService.getAccessToken.mockResolvedValue('token');
+            (axios.post as jest.Mock).mockResolvedValue({});
+            mockProtocol.mountPath.mockResolvedValue(undefined);
 
-  describe('cleanup', () => {
-    const jobRunId = 'job4';
-    let context: any;
-    let state: JobState;
+            const result = await service.setup('job-5');
+            expect(result.status).toBe('success');
+            expect(mockProtocol.mountPath).toHaveBeenCalledTimes(2);
+            expect(axios.post).toHaveBeenCalledWith(
+                'http://worker-config/api/v1/work-manager/update/configs',
+                { jobRunId: 'job-5', workerId: 'worker-123' },
+                { headers: { Authorization: 'Bearer token' } }
+            );
+        });
 
-    beforeEach(() => {
-      context = { jobConfig: { sourceFileServer: { protocols: [{ type: 'SFTP' }], hostname: 'src', username: 'u', password: 'p', path: '/src', protocolVersion: 'v1', pathId: 'sp1' } } };
-      state = new JobState([], 0, 0, [], JobStatus.Running, []);
-      (mockRedis.getJobContext as jest.Mock).mockResolvedValue(context);
-      (mockRedis.getJobState as jest.Mock).mockResolvedValue(state);
+        it('should return error if context is missing', async () => {
+            mockRedisService.getJobManagerContext.mockResolvedValue(undefined);
+            const result = await service.setup('job-6');
+            expect(result.status).toBe('error');
+            expect(result.message).toContain('Context not found');
+        });
+
+        it('should return error if accessToken is missing', async () => {
+            const context = {
+                jobConfig: { sourceFileServer: { protocols: [{ type: 'NFS' }] } }
+            };
+            mockRedisService.getJobManagerContext.mockResolvedValue(context);
+            mockAuthService.getAccessToken.mockResolvedValue(undefined);
+            const result = await service.setup('job-7');
+            expect(result.status).toBe('error');
+            expect(result.message).toContain('Failed to get access token');
+        });
     });
 
-    it('errors when context missing', async () => {
-      (mockRedis.getJobContext as jest.Mock).mockResolvedValue(null);
-      const res = await service.cleanup(jobRunId);
-      expect(res.status).toBe('error');
-      expect(res.message).toContain('Context not found');
+    describe('speedTestCleanup', () => {
+        it('should return success on happy path', async () => {
+            mockProtocol.unmountPath.mockResolvedValue(undefined);
+            const result = await service.speedTestCleanup('job-8', {} as any, 'NFS');
+            expect(result.status).toBe('success');
+            expect(mockProtocol.unmountPath).toHaveBeenCalled();
+        });
+
+        it('should return error on exception', async () => {
+            (Protocols.getProtocol as jest.Mock).mockImplementation(() => { throw new Error('fail'); });
+            const result = await service.speedTestCleanup('job-9', {} as any, 'NFS');
+            expect(result.status).toBe('error');
+            expect(result.message).toContain('fail');
+        });
     });
 
-    it('unmounts source and succeeds without dest', async () => {
-      const res = await service.cleanup(jobRunId);
-      expect(protocolUnmount).toHaveBeenCalledTimes(1);
-      expect(res.status).toBe('success');
-    });
+    describe('cleanup', () => {
+        it('should return success and cleanup job context if job is not paused', async () => {
+            const context = {
+                jobConfig: {
+                    sourceFileServer: { protocols: [{ type: 'NFS' }] },
+                    destinationFileServer: { protocols: [{ type: 'NFS' }] }
+                }
+            };
+            mockRedisService.getJobManagerContext.mockResolvedValue(context);
+            mockRedisService.getJobState.mockResolvedValue({ status: JobStatus.Completed });
+            mockProtocol.unmountPath.mockResolvedValue(undefined);
 
-    it('returns error when dest unmount fails', async () => {
-      context.jobConfig.destinationFileServer = context.jobConfig.sourceFileServer;
-      protocolUnmount.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('dest-umount-fail'));
-      const res = await service.cleanup(jobRunId);
-      expect(res.status).toBe('error');
-      expect(res.message).toContain('dest-umount-fail');
+            const result = await service.cleanup('job-10');
+            expect(result.status).toBe('success');
+            expect(mockProtocol.unmountPath).toHaveBeenCalledTimes(2);
+        });
+
+        it('should return error if context is missing', async () => {
+            mockRedisService.getJobManagerContext.mockResolvedValue(undefined);
+            await expect(service.cleanup('job-11')).rejects.toThrow(RetryableError);
+        });
+
+        it('should return error if destination unmount fails', async () => {
+            const context = {
+                jobConfig: {
+                    sourceFileServer: { protocols: [{ type: 'NFS' }] },
+                    destinationFileServer: { protocols: [{ type: 'NFS' }] }
+                }
+            };
+            mockRedisService.getJobManagerContext.mockResolvedValue(context);
+            mockRedisService.getJobState.mockResolvedValue({ status: JobStatus.Completed });
+            mockProtocol.unmountPath
+                .mockResolvedValueOnce(undefined)
+                .mockImplementationOnce(() => { throw new Error('dest fail'); });
+
+            const result = await service.cleanup('job-12');
+            expect(result.status).toBe('error');
+            expect(result.message).toContain('dest fail');
+        });
+
+        it('should not cleanup job context if job is paused', async () => {
+            const context = {
+                jobConfig: {
+                    sourceFileServer: { protocols: [{ type: 'NFS' }] }
+                }
+            };
+            mockRedisService.getJobManagerContext.mockResolvedValue(context);
+            mockRedisService.getJobState.mockResolvedValue({ status: JobStatus.Paused });
+            mockProtocol.unmountPath.mockResolvedValue(undefined);
+
+            const result = await service.cleanup('job-13');
+            expect(result.status).toBe('success');
+            expect(mockLogger.log).not.toHaveBeenCalledWith(expect.stringContaining('Cleaning up job context'));
+        });
     });
-  });
 });

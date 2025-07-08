@@ -1,14 +1,14 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { Command, CommandStatus, GroupReaderType, Task, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Context } from "@temporalio/activity";
+import { Connection } from "@temporalio/client";
+import { uuid4 } from "@temporalio/workflow";
+import { RetryExceededError } from "src/errors/errors.types";
 import { RedisService } from "src/redis/redis.service";
 import { buildTask, calculateCommandHash } from "../../utils/utils";
 import { handleInitTaskInput } from "../migrate/migrate-sync.types";
-import { FatalError, RetryExceededError } from "src/errors/errors.types";
-import { ConfigService } from "@nestjs/config";
 import { BuildOrGetScanTaskInput } from "./common-task.type";
-import { uuid4 } from "@temporalio/workflow";
-import { Context } from "@temporalio/activity";
-import { Connection } from "@temporalio/client";
 
 
 @Injectable()
