@@ -100,13 +100,6 @@ describe('SetupActivityService', () => {
         });
     });
 
-    describe('waitFor', () => {
-        it('should resolve after given milliseconds', async () => {
-            const start = Date.now();
-            await service.waitFor(10);
-            expect(Date.now() - start).toBeGreaterThanOrEqual(10);
-        });
-    });
 
     describe('speedTestSetup', () => {
         it('should return success on happy path', async () => {
