@@ -15,8 +15,7 @@ import { getFileServerId } from "@modules/storage-servers/file-server/file-serve
 import { notify } from "@/components/notification/NotificationWrapper";
 import { BulkManualUploadModalContent } from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/components/BulkManualUploadModalContent";
 import { BulkManualUploadModalFooter } from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/components/BulkManualUploadModalFooter";
-import { ConfigListTypeApiType, VolumeType } from "@/types/app.type";
-import { useParams } from "react-router-dom";
+import { ConfigListTypeApiType } from "@/types/app.type";
 
 export const BulkManualUpload = (fileServerDetails: ConfigListTypeApiType) => {
   // Initialize form and state
@@ -25,7 +24,6 @@ export const BulkManualUpload = (fileServerDetails: ConfigListTypeApiType) => {
     useState<UploadedFilePropsType>();
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
-  const { fileServerId: serverId } = useParams<{ fileServerId: string }>();
 
   // API hooks
   const [downloadTemplate] = useLazyDownloadExportPathSourceTemplateQuery();
@@ -112,7 +110,7 @@ export const BulkManualUpload = (fileServerDetails: ConfigListTypeApiType) => {
         form,
         exportPathSourceData,
         error,
-        serverId,
+        fileServerId,
         downloadTemplate
       ),
       modalFooter: BulkManualUploadModalFooter(
