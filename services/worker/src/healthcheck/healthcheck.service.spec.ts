@@ -224,5 +224,111 @@ describe('HealthcheckService', () => {
         'Error in making statscheck API call: HTTP error',
       );
     });
+
+    it('should log error if getAccessToken returns null in getPayloadAndToken', async () => {
+      jest.spyOn(service, 'getHealthcheckPayload').mockResolvedValue({
+      workerId,
+      healthStatus: 'HEALTHY',
+      systemStats: {
+        cpuUsage: '0.00%',
+        memoryUsage: '0.00%',
+        memoryLimit: '0.00%',
+        diskUsage: '0.00%',
+        diskLimit: '0.00%',
+      },
+      });
+      mockedAuthService.getAccessToken.mockResolvedValueOnce(null);
+      await expect(service.getPayloadAndToken()).rejects.toThrow('Failed to get access token');
+      expect(mockedLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Error in getPayloadAndToken: Failed to get access token')
+      );
+    });
+
+    it('should log error if getHealthcheckPayload throws in getPayloadAndToken', async () => {
+      jest.spyOn(service, 'getHealthcheckPayload').mockRejectedValue(new Error('Payload error'));
+      await expect(service.getPayloadAndToken()).rejects.toThrow('Payload error');
+      expect(mockedLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Error in getPayloadAndToken: Payload error')
+      );
+    });
+
+    it('should log error if cpu.usage throws in getCpuUsageAsync', async () => {
+      mockedCpu.usage.mockRejectedValueOnce(new Error('CPU error'));
+      const cpuUsage = await (service as any).getCpuUsageAsync();
+      expect(cpuUsage).toBe(-1);
+    });
+
+    it('should return -1 for memory stats if freemem throws', () => {
+      const originalFreeMem = mockedFreeMem.mockImplementationOnce(() => { throw new Error('fail'); });
+      const stats = (service as any).getMemoryStats();
+      expect(stats).toEqual({ memoryUsage: -1, memoryLimit: -1 });
+    });
+
+    it('should return -1 for disk stats if drive.info throws', async () => {
+      mockedDrive.info.mockRejectedValueOnce(new Error('fail'));
+      const stats = await (service as any).getDiskStats();
+      expect(stats).toEqual({ diskUsage: -1, diskLimit: -1 });
+    });
+
+    it('should log error if httpService.post throws non-Error object', async () => {
+      jest.spyOn(service, 'getHealthcheckPayload').mockResolvedValue({
+      workerId,
+      healthStatus: 'HEALTHY',
+      systemStats: {
+        cpuUsage: '0.00%',
+        memoryUsage: '0.00%',
+        memoryLimit: '0.00%',
+        diskUsage: '0.00%',
+        diskLimit: '0.00%',
+      },
+      });
+      mockedHttpService.post.mockReturnValue(throwError(() => 'string error'));
+      await service.onModuleInit();
+      await triggerCronJob();
+      await new Promise((resolve) => process.nextTick(resolve));
+      expect(mockedLogger.error).toHaveBeenCalledWith(
+      'Error in making statscheck API call: string error'
+      );
+    });
+
+    it('should log debug on successful postHealthcheckResults', async () => {
+      jest.spyOn(service, 'getHealthcheckPayload').mockResolvedValue({
+      workerId,
+      healthStatus: 'HEALTHY',
+      systemStats: {
+        cpuUsage: '0.00%',
+        memoryUsage: '0.00%',
+        memoryLimit: '0.00%',
+        diskUsage: '0.00%',
+        diskLimit: '0.00%',
+      },
+      });
+      mockedHttpService.post.mockReturnValue({
+      toPromise: () => Promise.resolve({}),
+      subscribe: jest.fn(),
+      });
+      // Patch firstValueFrom to resolve immediately
+      const originalFirstValueFrom = jest.requireActual('rxjs').firstValueFrom;
+      jest.spyOn(require('rxjs'), 'firstValueFrom').mockImplementation(() => Promise.resolve({}));
+      await (service as any).postHealthcheckResults(
+      {
+        workerId,
+        healthStatus: 'HEALTHY',
+        systemStats: {
+        cpuUsage: '0.00%',
+        memoryUsage: '0.00%',
+        memoryLimit: '0.00%',
+        diskUsage: '0.00%',
+        diskLimit: '0.00%',
+        },
+      },
+      'mocked-token'
+      );
+      expect(mockedLogger.debug).toHaveBeenCalledWith(
+      `Healthcheck results posted successfully for worker ${workerId}`
+      );
+      // Restore
+      (require('rxjs').firstValueFrom as any).mockRestore?.();
+    });
   });
 });

@@ -137,5 +137,36 @@ describe('MigrationTaskService', () => {
       expect(result.status).toBe('error');
       expect(result.message).toContain('Failed to publish task');
     });
+
+    it('should publish scan task and call ackDirAndCreateTask when tasks are created', async () => {
+      const mockAckDirAndCreateTask = jest.fn();
+      const mockJobContextWithIterator = {
+      groupReadWithoutAckDirs: jest.fn(async function* () {
+        yield { data: { path: '/dir1' }, id: 'id1' };
+        yield { data: { path: '/dir2' }, id: 'id2' };
+      }),
+      ackDirAndCreateTask: mockAckDirAndCreateTask,
+      };
+      redisService.getJobContext.mockResolvedValue(mockJobContextWithIterator);
+
+      jest.mock('../utils/utils', () => ({
+      buildTask: jest.fn(() => ({ dummy: 'task' })),
+      }));
+
+      await service.publishScanTask({ jobRunId: 'job-456' });
+    });
+
+    it('should not call ackDirAndCreateTask if no tasks are created', async () => {
+      const mockAckDirAndCreateTask = jest.fn();
+      const mockJobContextWithEmptyIterator = {
+      groupReadWithoutAckDirs: jest.fn(async function* () {
+      }),
+      ackDirAndCreateTask: mockAckDirAndCreateTask,
+      };
+      redisService.getJobContext.mockResolvedValue(mockJobContextWithEmptyIterator);
+
+      const result = await service.publishScanTask({ jobRunId: 'job-999' });
+      expect(mockAckDirAndCreateTask).not.toHaveBeenCalled();
+    });
   });
 });
