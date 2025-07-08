@@ -10,9 +10,9 @@ import (
 )
 
 var _ = Describe("TC-009: Run migration with 'Exclude file older than' option and hourly incremental sync schedule", func() {
-	BeforeEach(func() {
-		Skip("TC-009: Run migration with 'Exclude file older than' option and hourly incremental sync schedule")
-	})
+	// BeforeEach(func() {
+	// 	Skip("TC-009: Run migration with 'Exclude file older than' option and hourly incremental sync schedule")
+	// })
 	var (
 		ProjectId              string
 		workerId1              string
