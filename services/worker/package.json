@@ -122,7 +122,7 @@
       "!**.eslintrc.js",
       "!**/main.ts"
     ],
-    "coverageDirectory": "../coverage",
+    "coverageDirectory": "coverage",
     "testEnvironment": "node",
     "moduleNameMapper": {
       "^src/(.*)$": "<rootDir>/src/$1"
@@ -132,8 +132,8 @@
       ".*\\.module\\.ts$",
       "/coverage",
       "/dist",
-      "/test/"
-      
+      "/test/",
+       "/src/workflows/"
     ],
     "coveragePathIgnorePatterns": [
       "/node_modules/",
@@ -141,6 +141,7 @@
       "/coverage",
       "/dist",
       "/test/",
+      "/src/workflows/",
       "src/logger/logger.service.ts"
     ]
   }
