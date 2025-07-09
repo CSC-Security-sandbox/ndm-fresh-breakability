@@ -24,6 +24,7 @@ import {
 import React from "react";
 import TemporaryPassword from "@components/top-nav-bar/setting/ManageUsers/TemporaryPassword";
 import { USER_ROLES_ENUM } from "@/types/app.type";
+import { decryptData } from "@/utils/common.utils";
 
 type CreateUserFormProps = {
   temporaryPassword: string;
@@ -68,7 +69,8 @@ const CreateUserForm = ({
 
     try {
       const createUserResponse = await createUserApi(body).unwrap();
-      setTemporaryPassword(createUserResponse.tempPassword);
+      const decryptedPassword = decryptData(createUserResponse.tempPassword);
+      setTemporaryPassword(decryptedPassword);
       if (form.formState.is_app_admin) {
         await associateUserApi({
           account_id: localStorage.getItem("account_id"),

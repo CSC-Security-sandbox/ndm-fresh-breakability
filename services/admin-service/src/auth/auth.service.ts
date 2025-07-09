@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserPermissionResponse } from './user-permission-response-type';
 import { makeAxiosRequest } from '../utils/axios-request-utils';
+import { encryptData } from '../utils/crypto-utils';
 
 @Injectable()
 export class AuthService {
@@ -89,6 +90,7 @@ export class AuthService {
     const token = await this.getKeycloakToken();
 
     try {
+      const encryptedPassword = encryptData(tempPassword);
       await makeAxiosRequest({
         method: 'POST',
         url: `${process.env.KEYCLOAK_BASE_URL}/admin/realms/${process.env.KEYCLOAK_REALM}/users`,
@@ -123,7 +125,7 @@ export class AuthService {
       user.populateWhoColumns(userPermissionResponse.user.id);
       const savedUser = await this.userRepository.save(user);
 
-      return { user: savedUser, tempPassword };
+      return { user: savedUser, tempPassword: encryptedPassword };
     } catch (error) {
       if (error instanceof ConflictException) {
         throw error;
@@ -139,6 +141,7 @@ export class AuthService {
     const token = await this.getKeycloakToken();
 
     try {
+      const encryptedPassword = encryptData(newPassword);
       const users = await makeAxiosRequest<any[]>({
         method: 'GET',
         url: `${process.env.KEYCLOAK_BASE_URL}/admin/realms/${process.env.KEYCLOAK_REALM}/users`,
@@ -165,7 +168,7 @@ export class AuthService {
         },
       });
 
-      return newPassword;
+      return encryptedPassword;
     } catch (error) {
       throw new InternalServerErrorException(
         'Failed to reset password in Keycloak, : error',
