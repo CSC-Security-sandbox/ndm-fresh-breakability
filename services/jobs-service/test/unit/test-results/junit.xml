@@ -1,0 +1,643 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="Unit Tests" tests="303" failures="0" errors="0" time="15.56">
+  <testsuite name="WorkersService" errors="0" failures="0" skipped="0" timestamp="2025-07-09T06:03:10" time="9.843" tests="14">
+    <testcase classname="WorkersService should be defined" name="WorkersService should be defined" time="0.02">
+    </testcase>
+    <testcase classname="WorkersService findAllWorkers should return paginated data with count" name="WorkersService findAllWorkers should return paginated data with count" time="0.006">
+    </testcase>
+    <testcase classname="WorkersService findAllWorkers should return data without pagination if no page and limit are provided" name="WorkersService findAllWorkers should return data without pagination if no page and limit are provided" time="0.002">
+    </testcase>
+    <testcase classname="WorkersService findAllWorkers should return an empty result when no workers are found" name="WorkersService findAllWorkers should return an empty result when no workers are found" time="0.001">
+    </testcase>
+    <testcase classname="WorkersService findAllWorkers should handle repository errors" name="WorkersService findAllWorkers should handle repository errors" time="0.033">
+    </testcase>
+    <testcase classname="WorkersService findAllWorkers should return paginated data with count for job run id" name="WorkersService findAllWorkers should return paginated data with count for job run id" time="0.001">
+    </testcase>
+    <testcase classname="WorkersService should update worker status based on health status" name="WorkersService should update worker status based on health status" time="0.002">
+    </testcase>
+    <testcase classname="WorkersService updateWorkerJobRunStatus should update isActive and save when mapping exists" name="WorkersService updateWorkerJobRunStatus should update isActive and save when mapping exists" time="0.001">
+    </testcase>
+    <testcase classname="WorkersService updateWorkerJobRunStatus should throw BadRequestException if mapping does not exist" name="WorkersService updateWorkerJobRunStatus should throw BadRequestException if mapping does not exist" time="0.008">
+    </testcase>
+    <testcase classname="WorkersService updateWorkerStatus should set status to Offline if stats is missing" name="WorkersService updateWorkerStatus should set status to Offline if stats is missing" time="0">
+    </testcase>
+    <testcase classname="WorkersService updateWorkerStatus should set status to Offline if healthStatus is missing" name="WorkersService updateWorkerStatus should set status to Offline if healthStatus is missing" time="0.001">
+    </testcase>
+    <testcase classname="WorkersService updateWorkerStatus should set status to Offline if healthStatus is not Healthy" name="WorkersService updateWorkerStatus should set status to Offline if healthStatus is not Healthy" time="0">
+    </testcase>
+    <testcase classname="WorkersService updateWorkerStatus should set status to Offline if updatedAt is older than timeout" name="WorkersService updateWorkerStatus should set status to Offline if updatedAt is older than timeout" time="0.001">
+    </testcase>
+    <testcase classname="WorkersService updateWorkerStatus should set status to Online if healthStatus is Healthy and updatedAt is recent" name="WorkersService updateWorkerStatus should set status to Online if healthStatus is Healthy and updatedAt is recent" time="0">
+    </testcase>
+  </testsuite>
+  <testsuite name="HealthcheckService" errors="0" failures="0" skipped="0" timestamp="2025-07-09T06:03:10" time="10.058" tests="5">
+    <testcase classname="HealthcheckService should be defined" name="HealthcheckService should be defined" time="0.018">
+    </testcase>
+    <testcase classname="HealthcheckService should update stats if worker and stats exist" name="HealthcheckService should update stats if worker and stats exist" time="0.002">
+    </testcase>
+    <testcase classname="HealthcheckService should create stats if worker exists but stats do not" name="HealthcheckService should create stats if worker exists but stats do not" time="0.002">
+    </testcase>
+    <testcase classname="HealthcheckService should throw an error if worker does not exist" name="HealthcheckService should throw an error if worker does not exist" time="0.011">
+    </testcase>
+    <testcase classname="HealthcheckService should log an error if an exception occurs" name="HealthcheckService should log an error if an exception occurs" time="0.005">
+    </testcase>
+  </testsuite>
+  <testsuite name="WorkersController" errors="0" failures="0" skipped="0" timestamp="2025-07-09T06:03:10" time="11.525" tests="5">
+    <testcase classname="WorkersController should be defined" name="WorkersController should be defined" time="0.055">
+    </testcase>
+    <testcase classname="WorkersController getWorkers should return a list of workers" name="WorkersController getWorkers should return a list of workers" time="0.001">
+    </testcase>
+    <testcase classname="WorkersController getWorkers should handle invalid query parameters" name="WorkersController getWorkers should handle invalid query parameters" time="0.025">
+    </testcase>
+    <testcase classname="WorkersController getWorkers updateWorkerJobRunStatus should update the worker job run status successfully" name="WorkersController getWorkers updateWorkerJobRunStatus should update the worker job run status successfully" time="0.006">
+    </testcase>
+    <testcase classname="WorkersController getWorkers updateWorkerJobRunStatus should throw an error if service throws" name="WorkersController getWorkers updateWorkerJobRunStatus should throw an error if service throws" time="0.008">
+    </testcase>
+  </testsuite>
+  <testsuite name="PreCheckService" errors="0" failures="0" skipped="0" timestamp="2025-07-09T06:03:10" time="12.179" tests="7">
+    <testcase classname="PreCheckService should return workflowId on successful precheck" name="PreCheckService should return workflowId on successful precheck" time="0.013">
+    </testcase>
+    <testcase classname="PreCheckService should return error object when workflow fails" name="PreCheckService should return error object when workflow fails" time="0.002">
+    </testcase>
+    <testcase classname="PreCheckService should return error object when no volume mapping" name="PreCheckService should return error object when no volume mapping" time="0.002">
+    </testcase>
+    <testcase classname="PreCheckService getLatestDiscoveryInventorySize should return -1 for invalid UUID" name="PreCheckService getLatestDiscoveryInventorySize should return -1 for invalid UUID" time="0.001">
+    </testcase>
+    <testcase classname="PreCheckService getLatestDiscoveryInventorySize should return -1 when no discovery job run found" name="PreCheckService getLatestDiscoveryInventorySize should return -1 when no discovery job run found" time="0.001">
+    </testcase>
+    <testcase classname="PreCheckService getLatestDiscoveryInventorySize should return 0 when inventory totalSize is null or zero" name="PreCheckService getLatestDiscoveryInventorySize should return 0 when inventory totalSize is null or zero" time="0.001">
+    </testcase>
+    <testcase classname="PreCheckService getLatestDiscoveryInventorySize should return parsed totalSize when present" name="PreCheckService getLatestDiscoveryInventorySize should return parsed totalSize when present" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="SendMailService" errors="0" failures="0" skipped="0" timestamp="2025-07-09T06:03:22" time="0.994" tests="3">
+    <testcase classname="SendMailService should send email successfully" name="SendMailService should send email successfully" time="0.002">
+    </testcase>
+    <testcase classname="SendMailService should handle failure when email sending fails" name="SendMailService should handle failure when email sending fails" time="0.003">
+    </testcase>
+    <testcase classname="SendMailService should handle axios exceptions gracefully" name="SendMailService should handle axios exceptions gracefully" time="0.003">
+    </testcase>
+  </testsuite>
+  <testsuite name="JobRunInitService" errors="0" failures="0" skipped="0" timestamp="2025-07-09T06:03:10" time="13.087" tests="23">
+    <testcase classname="JobRunInitService should be defined" name="JobRunInitService should be defined" time="0.012">
+    </testcase>
+    <testcase classname="JobRunInitService scheduleAJob should return an array of jobs" name="JobRunInitService scheduleAJob should return an array of jobs" time="0.003">
+    </testcase>
+    <testcase classname="JobRunInitService createJobRun should create a job run and return it" name="JobRunInitService createJobRun should create a job run and return it" time="0.092">
+    </testcase>
+    <testcase classname="JobRunInitService getJobConfigSpeedTest should return the job configuration for speed test" name="JobRunInitService getJobConfigSpeedTest should return the job configuration for speed test" time="0.001">
+    </testcase>
+    <testcase classname="JobRunInitService getJobConfigSpeedTest should return default values if jobConfig is not found" name="JobRunInitService getJobConfigSpeedTest should return default values if jobConfig is not found" time="0.014">
+    </testcase>
+    <testcase classname="JobRunInitService getFileServerDetails should return the merged results of speed test job config and file servers" name="JobRunInitService getFileServerDetails should return the merged results of speed test job config and file servers" time="0.003">
+    </testcase>
+    <testcase classname="JobRunInitService getFileServerDetails should throw an error if jobRun is not found" name="JobRunInitService getFileServerDetails should throw an error if jobRun is not found" time="0.018">
+    </testcase>
+    <testcase classname="JobRunInitService initiateWorkflow should start DISCOVER workflow and update jobRunRepo" name="JobRunInitService initiateWorkflow should start DISCOVER workflow and update jobRunRepo" time="0.002">
+    </testcase>
+    <testcase classname="JobRunInitService initiateWorkflow should start SPEED_TEST workflow and update jobRunRepo" name="JobRunInitService initiateWorkflow should start SPEED_TEST workflow and update jobRunRepo" time="0.002">
+    </testcase>
+    <testcase classname="JobRunInitService initiateWorkflow should start CUT_OVER workflow, update jobConfigRepo, and update jobRunRepo" name="JobRunInitService initiateWorkflow should start CUT_OVER workflow, update jobConfigRepo, and update jobRunRepo" time="0.001">
+    </testcase>
+    <testcase classname="JobRunInitService initiateWorkflow should start MIGRATE workflow (default case) and update jobRunRepo" name="JobRunInitService initiateWorkflow should start MIGRATE workflow (default case) and update jobRunRepo" time="0.001">
+    </testcase>
+    <testcase classname="JobRunInitService buildJobContext should build the job context and store it in Redis" name="JobRunInitService buildJobContext should build the job context and store it in Redis" time="0.002">
+    </testcase>
+    <testcase classname="JobRunInitService buildJobContext should handle cases where no identity mappings are found for MIGRATE job type" name="JobRunInitService buildJobContext should handle cases where no identity mappings are found for MIGRATE job type" time="0.005">
+    </testcase>
+    <testcase classname="JobRunInitService createInitialTask should create the initial task" name="JobRunInitService createInitialTask should create the initial task" time="0.001">
+    </testcase>
+    <testcase classname="JobRunInitService getWorkFlowId should return the workflow ID based on the job type DISCOVER" name="JobRunInitService getWorkFlowId should return the workflow ID based on the job type DISCOVER" time="0.002">
+    </testcase>
+    <testcase classname="JobRunInitService getWorkFlowId should return the workflow ID based on the job type CUT_OVER" name="JobRunInitService getWorkFlowId should return the workflow ID based on the job type CUT_OVER" time="0.005">
+    </testcase>
+    <testcase classname="JobRunInitService getWorkFlowId should return the workflow ID based on the job type PRECHECK" name="JobRunInitService getWorkFlowId should return the workflow ID based on the job type PRECHECK" time="0.001">
+    </testcase>
+    <testcase classname="JobRunInitService getWorkFlowId should return the workflow ID based on the job type MIGRATE" name="JobRunInitService getWorkFlowId should return the workflow ID based on the job type MIGRATE" time="0.001">
+    </testcase>
+    <testcase classname="JobRunInitService buildSpeedTestJobContext should build the job context for speed test job" name="JobRunInitService buildSpeedTestJobContext should build the job context for speed test job" time="0.006">
+    </testcase>
+    <testcase classname="JobRunInitService buildSpeedTestJobContext should throw an error if jobRun is not found" name="JobRunInitService buildSpeedTestJobContext should throw an error if jobRun is not found" time="0.001">
+    </testcase>
+    <testcase classname="JobRunInitService startStreamConsumer should start the consumer successfully on the first attempt" name="JobRunInitService startStreamConsumer should start the consumer successfully on the first attempt" time="0.001">
+    </testcase>
+    <testcase classname="JobRunInitService startStreamConsumer should handle unexpected errors gracefully" name="JobRunInitService startStreamConsumer should handle unexpected errors gracefully" time="0.001">
+    </testcase>
+    <testcase classname="JobRunInitService buildJobContext should process identity cross mappings and store them in Redis" name="JobRunInitService buildJobContext should process identity cross mappings and store them in Redis" time="0.002">
+    </testcase>
+  </testsuite>
+  <testsuite name="WorkflowService" errors="0" failures="0" skipped="0" timestamp="2025-07-09T06:03:22" time="1.419" tests="14">
+    <testcase classname="WorkflowService getClient should create and return a new client if not already created" name="WorkflowService getClient should create and return a new client if not already created" time="0.003">
+    </testcase>
+    <testcase classname="WorkflowService getClient should reuse the existing client if already created" name="WorkflowService getClient should reuse the existing client if already created" time="0.001">
+    </testcase>
+    <testcase classname="WorkflowService getClient should log an error and throw if connection fails" name="WorkflowService getClient should log an error and throw if connection fails" time="0.013">
+    </testcase>
+    <testcase classname="WorkflowService getWorkFlowRes should return completed workflow details if the workflow status is COMPLETED" name="WorkflowService getWorkFlowRes should return completed workflow details if the workflow status is COMPLETED" time="0.001">
+    </testcase>
+    <testcase classname="WorkflowService getWorkFlowRes should return pending workflow details if the workflow status is not COMPLETED" name="WorkflowService getWorkFlowRes should return pending workflow details if the workflow status is not COMPLETED" time="0.001">
+    </testcase>
+    <testcase classname="WorkflowService getWorkFlowRes should handle errors gracefully and log them" name="WorkflowService getWorkFlowRes should handle errors gracefully and log them" time="0.001">
+    </testcase>
+    <testcase classname="WorkflowService sendSignal should call signalWorkflowExecution with correct parameters" name="WorkflowService sendSignal should call signalWorkflowExecution with correct parameters" time="0.001">
+    </testcase>
+    <testcase classname="WorkflowService sendSignal should throw an error if signalWorkflowExecution fails" name="WorkflowService sendSignal should throw an error if signalWorkflowExecution fails" time="0.002">
+    </testcase>
+    <testcase classname="WorkflowService terminateWorkflow should terminate the workflow if it is still running" name="WorkflowService terminateWorkflow should terminate the workflow if it is still running" time="0.003">
+    </testcase>
+    <testcase classname="WorkflowService terminateWorkflow should not terminate the workflow if it is not running" name="WorkflowService terminateWorkflow should not terminate the workflow if it is not running" time="0.001">
+    </testcase>
+    <testcase classname="WorkflowService getWorkflowStatus should return the status of the workflow" name="WorkflowService getWorkflowStatus should return the status of the workflow" time="0.001">
+    </testcase>
+    <testcase classname="WorkflowService getWorkflowStatus should handle errors gracefully and log them" name="WorkflowService getWorkflowStatus should handle errors gracefully and log them" time="0.001">
+    </testcase>
+    <testcase classname="WorkflowService startWorkflow should start the workflow and return the handle" name="WorkflowService startWorkflow should start the workflow and return the handle" time="0.002">
+    </testcase>
+    <testcase classname="WorkflowService startWorkflow should log an error if failed to start the workflow" name="WorkflowService startWorkflow should log an error if failed to start the workflow" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="JobRunService" errors="0" failures="0" skipped="0" timestamp="2025-07-09T06:03:10" time="13.762" tests="64">
+    <testcase classname="JobRunService should update job config and job run status when cutover is rejected" name="JobRunService should update job config and job run status when cutover is rejected" time="0.02">
+    </testcase>
+    <testcase classname="JobRunService should update job config and job run status when cutover is approved" name="JobRunService should update job config and job run status when cutover is approved" time="0.003">
+    </testcase>
+    <testcase classname="JobRunService should throw NotFoundException when job run is not found" name="JobRunService should throw NotFoundException when job run is not found" time="0.049">
+    </testcase>
+    <testcase classname="JobRunService addHocRun should create a job run if job config is valid" name="JobRunService addHocRun should create a job run if job config is valid" time="0.004">
+    </testcase>
+    <testcase classname="JobRunService addHocRun should throw NotFoundException if job config does not exist" name="JobRunService addHocRun should throw NotFoundException if job config does not exist" time="0.003">
+    </testcase>
+    <testcase classname="JobRunService addHocRun should throw BadRequestException if job run is already created" name="JobRunService addHocRun should throw BadRequestException if job run is already created" time="0.005">
+    </testcase>
+    <testcase classname="JobRunService addHocRun should throw BadRequestException if job config is inactive" name="JobRunService addHocRun should throw BadRequestException if job config is inactive" time="0.002">
+    </testcase>
+    <testcase classname="JobRunService scheduleAJob should schedule jobs that match criteria" name="JobRunService scheduleAJob should schedule jobs that match criteria" time="0.003">
+    </testcase>
+    <testcase classname="JobRunService scheduleAJob should return an empty array if no jobs match" name="JobRunService scheduleAJob should return an empty array if no jobs match" time="0.003">
+    </testcase>
+    <testcase classname="JobRunService jobRunUpdateStatus should update endTime and status to Completed, and call auxiliary methods for Completed status" name="JobRunService jobRunUpdateStatus should update endTime and status to Completed, and call auxiliary methods for Completed status" time="0.009">
+    </testcase>
+    <testcase classname="JobRunService getJobConfig should retrieve and process job configuration without targetPathId" name="JobRunService getJobConfig should retrieve and process job configuration without targetPathId" time="0.003">
+    </testcase>
+    <testcase classname="JobRunService getJobConfig should retrieve and process job configuration with targetPathId" name="JobRunService getJobConfig should retrieve and process job configuration with targetPathId" time="0.002">
+    </testcase>
+    <testcase classname="JobRunService createJobRun should create a job run if workers exist" name="JobRunService createJobRun should create a job run if workers exist" time="0.004">
+    </testcase>
+    <testcase classname="JobRunService createJobRun should log a warning if no workers exist" name="JobRunService createJobRun should log a warning if no workers exist" time="0.009">
+    </testcase>
+    <testcase classname="JobRunService findAllJobRuns should return paginated data with count if undefined" name="JobRunService findAllJobRuns should return paginated data with count if undefined" time="0.004">
+    </testcase>
+    <testcase classname="JobRunService findAllJobRuns should return paginated data with count" name="JobRunService findAllJobRuns should return paginated data with count" time="0.006">
+    </testcase>
+    <testcase classname="JobRunService findAllJobRuns should return data without pagination if no page and limit are provided" name="JobRunService findAllJobRuns should return data without pagination if no page and limit are provided" time="0.005">
+    </testcase>
+    <testcase classname="JobRunService findAllJobRuns should return an empty result when no workers are found" name="JobRunService findAllJobRuns should return an empty result when no workers are found" time="0.003">
+    </testcase>
+    <testcase classname="JobRunService findAllJobRuns should handle jobRunRepo errors" name="JobRunService findAllJobRuns should handle jobRunRepo errors" time="0.01">
+    </testcase>
+    <testcase classname="JobRunService updateJobRun should update and return the updated job run when it exists" name="JobRunService updateJobRun should update and return the updated job run when it exists" time="0.003">
+    </testcase>
+    <testcase classname="JobRunService updateJobRun should throw an error when the job run does not exist" name="JobRunService updateJobRun should throw an error when the job run does not exist" time="0.002">
+    </testcase>
+    <testcase classname="JobRunService should return job runs with calculated stats" name="JobRunService should return job runs with calculated stats" time="0.003">
+    </testcase>
+    <testcase classname="JobRunService should return job runs with calculated stats scanned data as 0 for migration" name="JobRunService should return job runs with calculated stats scanned data as 0 for migration" time="0.002">
+    </testcase>
+    <testcase classname="JobRunService should handle no job runs for the given filter" name="JobRunService should handle no job runs for the given filter" time="0.007">
+    </testcase>
+    <testcase classname="JobRunService should handle missing inventory data for job runs" name="JobRunService should handle missing inventory data for job runs" time="0.002">
+    </testcase>
+    <testcase classname="JobRunService getJobRun should return job run details when it exists" name="JobRunService getJobRun should return job run details when it exists" time="0.003">
+    </testcase>
+    <testcase classname="JobRunService getJobRun should return job run details when it exists with stats" name="JobRunService getJobRun should return job run details when it exists with stats" time="0.004">
+    </testcase>
+    <testcase classname="JobRunService getJobRun should calculate job stats dynamically when job is not completed" name="JobRunService getJobRun should calculate job stats dynamically when job is not completed" time="0.003">
+    </testcase>
+    <testcase classname="JobRunService service.covertBytes should return bytes for values less than 1024" name="JobRunService service.covertBytes should return bytes for values less than 1024" time="0.003">
+    </testcase>
+    <testcase classname="JobRunService service.covertBytes should return kilobytes for values between 1024 and 1 MB" name="JobRunService service.covertBytes should return kilobytes for values between 1024 and 1 MB" time="0.002">
+    </testcase>
+    <testcase classname="JobRunService service.covertBytes should return megabytes for values between 1 MB and 1 GB" name="JobRunService service.covertBytes should return megabytes for values between 1 MB and 1 GB" time="0.005">
+    </testcase>
+    <testcase classname="JobRunService service.covertBytes should return gigabytes for values between 1 GB and 1 TB" name="JobRunService service.covertBytes should return gigabytes for values between 1 GB and 1 TB" time="0.004">
+    </testcase>
+    <testcase classname="JobRunService service.covertBytes should return terabytes for values between 1 TB and 1 PB" name="JobRunService service.covertBytes should return terabytes for values between 1 TB and 1 PB" time="0.006">
+    </testcase>
+    <testcase classname="JobRunService service.covertBytes should return petabytes for values greater than or equal to 1 PB" name="JobRunService service.covertBytes should return petabytes for values greater than or equal to 1 PB" time="0.008">
+    </testcase>
+    <testcase classname="JobRunService service.covertBytes should handle very large numbers gracefully" name="JobRunService service.covertBytes should handle very large numbers gracefully" time="0.002">
+    </testcase>
+    <testcase classname="JobRunService covertBytes should convert bytes to appropriate units" name="JobRunService covertBytes should convert bytes to appropriate units" time="0.002">
+    </testcase>
+    <testcase classname="JobRunService hasCommonWorkers should return true if common workers are found" name="JobRunService hasCommonWorkers should return true if common workers are found" time="0.005">
+    </testcase>
+    <testcase classname="JobRunService hasCommonWorkers should return false if no common workers are found" name="JobRunService hasCommonWorkers should return false if no common workers are found" time="0.003">
+    </testcase>
+    <testcase classname="JobRunService hasCommonWorkers should return false if any file server has no workers" name="JobRunService hasCommonWorkers should return false if any file server has no workers" time="0.001">
+    </testcase>
+    <testcase classname="JobRunService findJobConfigs should find job configs based on conditions" name="JobRunService findJobConfigs should find job configs based on conditions" time="0.002">
+    </testcase>
+    <testcase classname="JobRunService findJobConfigs should return empty array if no conditions are provided" name="JobRunService findJobConfigs should return empty array if no conditions are provided" time="0.007">
+    </testcase>
+    <testcase classname="JobRunService getErrorOverview should return error counts for the given job run ID" name="JobRunService getErrorOverview should return error counts for the given job run ID" time="0.002">
+    </testcase>
+    <testcase classname="JobRunService getErrorCounts should return error type counts for the given job run ID" name="JobRunService getErrorCounts should return error type counts for the given job run ID" time="0.002">
+    </testcase>
+    <testcase classname="JobRunService getErrorCounts should handle errors while fetching error type counts" name="JobRunService getErrorCounts should handle errors while fetching error type counts" time="0.016">
+    </testcase>
+    <testcase classname="JobRunService getErrorCounts should count correct setupFailedErrors for setupFailed error type" name="JobRunService getErrorCounts should count correct setupFailedErrors for setupFailed error type" time="0.008">
+    </testcase>
+    <testcase classname="JobRunService getErrorCounts should count correct setupFailedErrors for setupFailed error type when other already there" name="JobRunService getErrorCounts should count correct setupFailedErrors for setupFailed error type when other already there" time="0.008">
+    </testcase>
+    <testcase classname="JobRunService getJobRunErrors should return grouped rows + total" name="JobRunService getJobRunErrors should return grouped rows + total" time="0.004">
+    </testcase>
+    <testcase classname="JobRunService getJobRunErrors should fallback defaults when page/limit/sort/order missing" name="JobRunService getJobRunErrors should fallback defaults when page/limit/sort/order missing" time="0.002">
+    </testcase>
+    <testcase classname="JobRunService getJobRunErrors should not include worker setup errors when errorType != FATAL_ERROR" name="JobRunService getJobRunErrors should not include worker setup errors when errorType != FATAL_ERROR" time="0.002">
+    </testcase>
+    <testcase classname="JobRunService should throw NotFoundException if jobRunId is not found" name="JobRunService should throw NotFoundException if jobRunId is not found" time="0.004">
+    </testcase>
+    <testcase classname="JobRunService updateJobRunStatus should update the job run status and job config scheduler when status is not running" name="JobRunService updateJobRunStatus should update the job run status and job config scheduler when status is not running" time="0.003">
+    </testcase>
+    <testcase classname="JobRunService updateJobRunStatus should update the job run status when status is running" name="JobRunService updateJobRunStatus should update the job run status when status is running" time="0.01">
+    </testcase>
+    <testcase classname="JobRunService updateJobRunStatus should handle invalid cron expression" name="JobRunService updateJobRunStatus should handle invalid cron expression" time="0.004">
+    </testcase>
+    <testcase classname="JobRunService updateJobRunStatus should throw Error if jobRunId is not found" name="JobRunService updateJobRunStatus should throw Error if jobRunId is not found" time="0.002">
+    </testcase>
+    <testcase classname="JobRunService approveCutoverRequest should send the correct signal for approval request" name="JobRunService approveCutoverRequest should send the correct signal for approval request" time="0.001">
+    </testcase>
+    <testcase classname="JobRunService approveCutoverRequest should throw an error if sendSignal fails" name="JobRunService approveCutoverRequest should throw an error if sendSignal fails" time="0.007">
+    </testcase>
+    <testcase classname="JobRunService sendErrorRemedyEmail should send email with correct parameters" name="JobRunService sendErrorRemedyEmail should send email with correct parameters" time="0.001">
+    </testcase>
+    <testcase classname="JobRunService sendErrorRemedyEmail should throw error if sendMail fails" name="JobRunService sendErrorRemedyEmail should throw error if sendMail fails" time="0.002">
+    </testcase>
+    <testcase classname="JobRunService sendErrorRemedyEmail should not call sendMail if errorCodes is empty" name="JobRunService sendErrorRemedyEmail should not call sendMail if errorCodes is empty" time="0.004">
+    </testcase>
+    <testcase classname="JobRunService checkWorkerHealth should pause the job if all workers are offline" name="JobRunService checkWorkerHealth should pause the job if all workers are offline" time="0.005">
+    </testcase>
+    <testcase classname="JobRunService checkWorkerHealth should log error if anything goes wrong" name="JobRunService checkWorkerHealth should log error if anything goes wrong" time="0.007">
+    </testcase>
+    <testcase classname="JobRunService updateWorkerResponse should update worker response" name="JobRunService updateWorkerResponse should update worker response" time="0.004">
+    </testcase>
+    <testcase classname="JobRunService updateWorkerResponse should throw error if update got failed" name="JobRunService updateWorkerResponse should throw error if update got failed" time="0.002">
+    </testcase>
+    <testcase classname="JobRunService getWorkerSetupErrors should return worker setup errors" name="JobRunService getWorkerSetupErrors should return worker setup errors" time="0.004">
+    </testcase>
+  </testsuite>
+  <testsuite name="HealthcheckController" errors="0" failures="0" skipped="0" timestamp="2025-07-09T06:03:20" time="3.934" tests="3">
+    <testcase classname="HealthcheckController should be defined" name="HealthcheckController should be defined" time="0.003">
+    </testcase>
+    <testcase classname="HealthcheckController should return success response when service executes successfully" name="HealthcheckController should return success response when service executes successfully" time="0.001">
+    </testcase>
+    <testcase classname="HealthcheckController should return failure response and log error when service throws an error" name="HealthcheckController should return failure response and log error when service throws an error" time="0.008">
+    </testcase>
+  </testsuite>
+  <testsuite name="JobRunController" errors="0" failures="0" skipped="0" timestamp="2025-07-09T06:03:10" time="14.015" tests="13">
+    <testcase classname="JobRunController should be defined" name="JobRunController should be defined" time="0.015">
+    </testcase>
+    <testcase classname="JobRunController getJobRuns should return paginated job runs" name="JobRunController getJobRuns should return paginated job runs" time="0.002">
+    </testcase>
+    <testcase classname="JobRunController getJobRunErrors should return job run errors" name="JobRunController getJobRunErrors should return job run errors" time="0.002">
+    </testcase>
+    <testcase classname="JobRunController getJobById should return job run by id" name="JobRunController getJobById should return job run by id" time="0.001">
+    </testcase>
+    <testcase classname="JobRunController actions should call jobRunActionService.actions" name="JobRunController actions should call jobRunActionService.actions" time="0.001">
+    </testcase>
+    <testcase classname="JobRunController cutoverApprove should approve cutover request" name="JobRunController cutoverApprove should approve cutover request" time="0.001">
+    </testcase>
+    <testcase classname="JobRunController adhocRun should create ad hoc run" name="JobRunController adhocRun should create ad hoc run" time="0.001">
+    </testcase>
+    <testcase classname="JobRunController updateJobRunStatus should update job run status" name="JobRunController updateJobRunStatus should update job run status" time="0.042">
+    </testcase>
+    <testcase classname="JobRunController cutoverApproval should approve cutover" name="JobRunController cutoverApproval should approve cutover" time="0.001">
+    </testcase>
+    <testcase classname="JobRunController getErrorOverview should get error overview" name="JobRunController getErrorOverview should get error overview" time="0.001">
+    </testcase>
+    <testcase classname="JobRunController handleCron should call jobRunInitService.scheduleAJob" name="JobRunController handleCron should call jobRunInitService.scheduleAJob" time="0.001">
+    </testcase>
+    <testcase classname="JobRunController checkWorkerHealthCron should call jobRunService.checkWorkerHealth" name="JobRunController checkWorkerHealthCron should call jobRunService.checkWorkerHealth" time="0">
+    </testcase>
+    <testcase classname="JobRunController updateWorkerResponse should update worker response" name="JobRunController updateWorkerResponse should update worker response" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="JobRunActionService" errors="0" failures="0" skipped="0" timestamp="2025-07-09T06:03:20" time="4.212" tests="8">
+    <testcase classname="JobRunActionService actions should pause job runs" name="JobRunActionService actions should pause job runs" time="0.001">
+    </testcase>
+    <testcase classname="JobRunActionService actions should stop job runs" name="JobRunActionService actions should stop job runs" time="0.001">
+    </testcase>
+    <testcase classname="JobRunActionService actions should resume job runs" name="JobRunActionService actions should resume job runs" time="0">
+    </testcase>
+    <testcase classname="JobRunActionService actions should throw BadRequestException for invalid action" name="JobRunActionService actions should throw BadRequestException for invalid action" time="0.009">
+    </testcase>
+    <testcase classname="JobRunActionService signalJobRuns should signal all job runs successfully" name="JobRunActionService signalJobRuns should signal all job runs successfully" time="0">
+    </testcase>
+    <testcase classname="JobRunActionService signalJobRuns should handle signal failure" name="JobRunActionService signalJobRuns should handle signal failure" time="0.001">
+    </testcase>
+    <testcase classname="JobRunActionService resumeJobRuns should resume all job runs successfully" name="JobRunActionService resumeJobRuns should resume all job runs successfully" time="0.001">
+    </testcase>
+    <testcase classname="JobRunActionService resumeJobRuns should handle signal failure on resume" name="JobRunActionService resumeJobRuns should handle signal failure on resume" time="0">
+    </testcase>
+  </testsuite>
+  <testsuite name="nextDate" errors="0" failures="0" skipped="0" timestamp="2025-07-09T06:03:24" time="0.358" tests="9">
+    <testcase classname="nextDate nextDate should return runDate if jobType is DISCOVER and runDate is in the future" name="nextDate nextDate should return runDate if jobType is DISCOVER and runDate is in the future" time="0.001">
+    </testcase>
+    <testcase classname="nextDate nextDate should return null if jobType is DISCOVER and runDate is not in the future" name="nextDate nextDate should return null if jobType is DISCOVER and runDate is not in the future" time="0">
+    </testcase>
+    <testcase classname="nextDate nextDate should return null if jobType is DISCOVER and runDate is null" name="nextDate nextDate should return null if jobType is DISCOVER and runDate is null" time="0">
+    </testcase>
+    <testcase classname="nextDate nextDate should return the next date parsed from the cron string if jobType is MIGRATE" name="nextDate nextDate should return the next date parsed from the cron string if jobType is MIGRATE" time="0.001">
+    </testcase>
+    <testcase classname="nextDate nextDate should return null if jobType is not DISCOVER and cron string is null" name="nextDate nextDate should return null if jobType is not DISCOVER and cron string is null" time="0">
+    </testcase>
+    <testcase classname="nextDate nextDate should return null if jobType is not DISCOVER and cron string is invalid" name="nextDate nextDate should return null if jobType is not DISCOVER and cron string is invalid" time="0">
+    </testcase>
+    <testcase classname="nextDate nextDate should return runDate if jobType is CUT_OVER and runDate is in the future" name="nextDate nextDate should return runDate if jobType is CUT_OVER and runDate is in the future" time="0">
+    </testcase>
+    <testcase classname="nextDate nextDate should return null if jobType is CUT_OVER and runDate is not in the future" name="nextDate nextDate should return null if jobType is CUT_OVER and runDate is not in the future" time="0">
+    </testcase>
+    <testcase classname="nextDate nextDate should return null if jobType is CUT_OVER and runDate is null" name="nextDate nextDate should return null if jobType is CUT_OVER and runDate is null" time="0">
+    </testcase>
+  </testsuite>
+  <testsuite name="ErrorRemedyService" errors="0" failures="0" skipped="0" timestamp="2025-07-09T06:03:23" time="1.701" tests="3">
+    <testcase classname="ErrorRemedyService findByErrorCodes should return remedies for the given error codes" name="ErrorRemedyService findByErrorCodes should return remedies for the given error codes" time="0.004">
+    </testcase>
+    <testcase classname="ErrorRemedyService findByErrorCode should return remedy for a specific error code" name="ErrorRemedyService findByErrorCode should return remedy for a specific error code" time="0.001">
+    </testcase>
+    <testcase classname="ErrorRemedyService findByErrorCode should return undefined if remedy is not found" name="ErrorRemedyService findByErrorCode should return undefined if remedy is not found" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="JobConfigController" errors="0" failures="0" skipped="0" timestamp="2025-07-09T06:03:10" time="14.41" tests="18">
+    <testcase classname="JobConfigController should be defined" name="JobConfigController should be defined" time="0.018">
+    </testcase>
+    <testcase classname="JobConfigController createBulkDiscovery should throw BadRequestException if payload is invalid" name="JobConfigController createBulkDiscovery should throw BadRequestException if payload is invalid" time="0.041">
+    </testcase>
+    <testcase classname="JobConfigController createBulkDiscovery createBulkMigrate should create a new migrate job" name="JobConfigController createBulkDiscovery createBulkMigrate should create a new migrate job" time="0.003">
+    </testcase>
+    <testcase classname="JobConfigController createBulkDiscovery createBulkMigrate should throw BadRequestException if validation fails" name="JobConfigController createBulkDiscovery createBulkMigrate should throw BadRequestException if validation fails" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigController createBulkDiscovery createBulkMigrate getAllJobConfig should return job listings" name="JobConfigController createBulkDiscovery createBulkMigrate getAllJobConfig should return job listings" time="0.003">
+    </testcase>
+    <testcase classname="JobConfigController createBulkDiscovery createBulkMigrate getAllJobConfig should throw BadRequestException if projectId is missing" name="JobConfigController createBulkDiscovery createBulkMigrate getAllJobConfig should throw BadRequestException if projectId is missing" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigController createBulkDiscovery createBulkMigrate downloadTemplate should download template successfully" name="JobConfigController createBulkDiscovery createBulkMigrate downloadTemplate should download template successfully" time="0.006">
+    </testcase>
+    <testcase classname="JobConfigController createBulkDiscovery createBulkMigrate downloadTemplate should throw BadRequestException if type is not provided" name="JobConfigController createBulkDiscovery createBulkMigrate downloadTemplate should throw BadRequestException if type is not provided" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigController createBulkDiscovery createBulkMigrate downloadTemplate should throw BadRequestException if type is invalid" name="JobConfigController createBulkDiscovery createBulkMigrate downloadTemplate should throw BadRequestException if type is invalid" time="0.004">
+    </testcase>
+    <testcase classname="JobConfigController createBulkDiscovery createBulkMigrate updateJobConfig should update a job" name="JobConfigController createBulkDiscovery createBulkMigrate updateJobConfig should update a job" time="0.003">
+    </testcase>
+    <testcase classname="JobConfigController createBulkDiscovery createBulkMigrate deleteJobConfig should delete a job and return a success message" name="JobConfigController createBulkDiscovery createBulkMigrate deleteJobConfig should delete a job and return a success message" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigController createBulkDiscovery should return the result of precheck validation" name="JobConfigController createBulkDiscovery should return the result of precheck validation" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigController createBulkDiscovery checkCommonWorkersAndValidatePaths should return the result of precheck validation" name="JobConfigController createBulkDiscovery checkCommonWorkersAndValidatePaths should return the result of precheck validation" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigController createBulkDiscovery createSpeedTest with bad data should throw BadRequestException if speedTests is empty" name="JobConfigController createBulkDiscovery createSpeedTest with bad data should throw BadRequestException if speedTests is empty" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigController createBulkDiscovery createSpeedTest with bad data should call service.createSpeedTest and return the result" name="JobConfigController createBulkDiscovery createSpeedTest with bad data should call service.createSpeedTest and return the result" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigController should throw a BadRequestException for an invalid project ID" name="JobConfigController should throw a BadRequestException for an invalid project ID" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigController should throw a NotFoundException if notice board details are not found" name="JobConfigController should throw a NotFoundException if notice board details are not found" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigController should handle internal server errors" name="JobConfigController should handle internal server errors" time="0.002">
+    </testcase>
+  </testsuite>
+  <testsuite name="TasksService" errors="0" failures="0" skipped="0" timestamp="2025-07-09T06:03:24" time="0.938" tests="5">
+    <testcase classname="TasksService should be defined" name="TasksService should be defined" time="0.003">
+    </testcase>
+    <testcase classname="TasksService getTaskList should return paginated task list" name="TasksService getTaskList should return paginated task list" time="0.001">
+    </testcase>
+    <testcase classname="TasksService getTaskList should return task list without pagination if page and limit are not provided" name="TasksService getTaskList should return task list without pagination if page and limit are not provided" time="0">
+    </testcase>
+    <testcase classname="TasksService getTaskList should correctly handle filters with In() clause" name="TasksService getTaskList should correctly handle filters with In() clause" time="0.001">
+    </testcase>
+    <testcase classname="TasksService should return an empty result when no workers are found" name="TasksService should return an empty result when no workers are found" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="TasksController" errors="0" failures="0" skipped="0" timestamp="2025-07-09T06:03:23" time="1.485" tests="4">
+    <testcase classname="TasksController should be defined" name="TasksController should be defined" time="0.005">
+    </testcase>
+    <testcase classname="TasksController getTaskList should call taskService.getTaskList with correct parameters" name="TasksController getTaskList should call taskService.getTaskList with correct parameters" time="0.002">
+    </testcase>
+    <testcase classname="TasksController getTaskList should throw a BadRequestException for invalid query parameters" name="TasksController getTaskList should throw a BadRequestException for invalid query parameters" time="0.006">
+    </testcase>
+    <testcase classname="TasksController getTaskList should handle service errors gracefully" name="TasksController getTaskList should handle service errors gracefully" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="JobConfigService" errors="0" failures="0" skipped="0" timestamp="2025-07-09T06:03:10" time="14.686" tests="105">
+    <testcase classname="JobConfigService should create a speed test job successfully" name="JobConfigService should create a speed test job successfully" time="0.016">
+    </testcase>
+    <testcase classname="JobConfigService should throw an error if creating speed test job fails" name="JobConfigService should throw an error if creating speed test job fails" time="0.058">
+    </testcase>
+    <testcase classname="JobConfigService should return speed test details if no results are found" name="JobConfigService should return speed test details if no results are found" time="0.003">
+    </testcase>
+    <testcase classname="JobConfigService should return speed test results with job run details" name="JobConfigService should return speed test results with job run details" time="0.009">
+    </testcase>
+    <testcase classname="JobConfigService should return speed test results with job run details" name="JobConfigService should return speed test results with job run details" time="0.005">
+    </testcase>
+    <testcase classname="JobConfigService should return speed test details" name="JobConfigService should return speed test details" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService should throw an error if job run is not found" name="JobConfigService should throw an error if job run is not found" time="0.003">
+    </testcase>
+    <testcase classname="JobConfigService should store speed test result successfully" name="JobConfigService should store speed test result successfully" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService should throw an error if storing speed test result fails" name="JobConfigService should throw an error if storing speed test result fails" time="0.003">
+    </testcase>
+    <testcase classname="JobConfigService should fetch all speed test job runs successfully" name="JobConfigService should fetch all speed test job runs successfully" time="0.003">
+    </testcase>
+    <testcase classname="JobConfigService should throw an error if fetching speed test job runs fails" name="JobConfigService should throw an error if fetching speed test job runs fails" time="0.003">
+    </testcase>
+    <testcase classname="JobConfigService should throw an error with error.message when present" name="JobConfigService should throw an error with error.message when present" time="0.003">
+    </testcase>
+    <testcase classname="JobConfigService should fallback to default message if error.message is falsy" name="JobConfigService should fallback to default message if error.message is falsy" time="0.01">
+    </testcase>
+    <testcase classname="JobConfigService should create bulk discovery job configs successfully" name="JobConfigService should create bulk discovery job configs successfully" time="0.006">
+    </testcase>
+    <testcase classname="JobConfigService should handle empty sourcePathIds" name="JobConfigService should handle empty sourcePathIds" time="0.006">
+    </testcase>
+    <testcase classname="JobConfigService should create bulk migrate job configs successfully" name="JobConfigService should create bulk migrate job configs successfully" time="0.006">
+    </testcase>
+    <testcase classname="JobConfigService should handle Redis errors gracefully during bulk migrate" name="JobConfigService should handle Redis errors gracefully during bulk migrate" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService should process sidMapping when it is a valid string" name="JobConfigService should process sidMapping when it is a valid string" time="0.004">
+    </testcase>
+    <testcase classname="JobConfigService should throw an error if parsed mappings do not have 4 columns" name="JobConfigService should throw an error if parsed mappings do not have 4 columns" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService should process gidMapping when it is a valid string" name="JobConfigService should process gidMapping when it is a valid string" time="0.005">
+    </testcase>
+    <testcase classname="JobConfigService should return warnings if inactive job exists" name="JobConfigService should return warnings if inactive job exists" time="0.1">
+    </testcase>
+    <testcase classname="JobConfigService should delete Redis keys for job runs when keys exist" name="JobConfigService should delete Redis keys for job runs when keys exist" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService should delete Redis keys for job runs" name="JobConfigService should delete Redis keys for job runs" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService should handle empty migrateConfigs" name="JobConfigService should handle empty migrateConfigs" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService should create bulk cutover job configs successfully" name="JobConfigService should create bulk cutover job configs successfully" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService should flatten cutover config correctly" name="JobConfigService should flatten cutover config correctly" time="0.007">
+    </testcase>
+    <testcase classname="JobConfigService should throw an error if cutover already exists" name="JobConfigService should throw an error if cutover already exists" time="0.004">
+    </testcase>
+    <testcase classname="JobConfigService should throw an error if cutover already exists" name="JobConfigService should throw an error if cutover already exists" time="0.003">
+    </testcase>
+    <testcase classname="JobConfigService updateJobConfig should update job config successfully" name="JobConfigService updateJobConfig should update job config successfully" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService updateJobConfig should throw an error if job config is not found" name="JobConfigService updateJobConfig should throw an error if job config is not found" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService deleteJobConfig should delete job config successfully" name="JobConfigService deleteJobConfig should delete job config successfully" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService deleteJobConfig should throw an error if job config is not found" name="JobConfigService deleteJobConfig should throw an error if job config is not found" time="0.003">
+    </testcase>
+    <testcase classname="JobConfigService getJobConfigById should return job config by id successfully" name="JobConfigService getJobConfigById should return job config by id successfully" time="0.003">
+    </testcase>
+    <testcase classname="JobConfigService getJobConfigById should handle job runs with no stats" name="JobConfigService getJobConfigById should handle job runs with no stats" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService getJobConfigById should throw an error if job config is not found" name="JobConfigService getJobConfigById should throw an error if job config is not found" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService getJobConfigById should return jobStats for jobRun.status === JobRunStatus.COMPLETED" name="JobConfigService getJobConfigById should return jobStats for jobRun.status === JobRunStatus.COMPLETED" time="0.009">
+    </testcase>
+    <testcase classname="JobConfigService parseSize should return 0 for empty or undefined input" name="JobConfigService parseSize should return 0 for empty or undefined input" time="0.004">
+    </testcase>
+    <testcase classname="JobConfigService parseSize should return 0 for invalid format" name="JobConfigService parseSize should return 0 for invalid format" time="0.003">
+    </testcase>
+    <testcase classname="JobConfigService parseSize should correctly parse bytes (B)" name="JobConfigService parseSize should correctly parse bytes (B)" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService parseSize should correctly parse kilobytes (KB)" name="JobConfigService parseSize should correctly parse kilobytes (KB)" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService parseSize should correctly parse megabytes (MB)" name="JobConfigService parseSize should correctly parse megabytes (MB)" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService parseSize should correctly parse gigabytes (GB)" name="JobConfigService parseSize should correctly parse gigabytes (GB)" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService parseSize should correctly parse terabytes (TB)" name="JobConfigService parseSize should correctly parse terabytes (TB)" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService parseSize should correctly parse petabytes (PB)" name="JobConfigService parseSize should correctly parse petabytes (PB)" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService parseSize should handle decimal values" name="JobConfigService parseSize should handle decimal values" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService precheckValidation should perform precheck validation successfully" name="JobConfigService precheckValidation should perform precheck validation successfully" time="0.008">
+    </testcase>
+    <testcase classname="JobConfigService precheckValidation should handle source path not found" name="JobConfigService precheckValidation should handle source path not found" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService precheckValidation should handle destination path not found" name="JobConfigService precheckValidation should handle destination path not found" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService precheckValidation should handle protocol version mismatch" name="JobConfigService precheckValidation should handle protocol version mismatch" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService precheckValidation should handle no common workers found" name="JobConfigService precheckValidation should handle no common workers found" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService hasCommonWorkers should return true if common workers are found" name="JobConfigService hasCommonWorkers should return true if common workers are found" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService hasCommonWorkers should return false if no common workers are found" name="JobConfigService hasCommonWorkers should return false if no common workers are found" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService hasCommonWorkers should return false if any file server has no workers" name="JobConfigService hasCommonWorkers should return false if any file server has no workers" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService findJobConfigs should find job configs based on conditions" name="JobConfigService findJobConfigs should find job configs based on conditions" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService findJobConfigs should return empty array if no conditions are provided" name="JobConfigService findJobConfigs should return empty array if no conditions are provided" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService covertBytes should convert bytes to appropriate units" name="JobConfigService covertBytes should convert bytes to appropriate units" time="0.005">
+    </testcase>
+    <testcase classname="JobConfigService covertBytes should handle edge cases correctly" name="JobConfigService covertBytes should handle edge cases correctly" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService getTemplateFilename should return the correct template filename" name="JobConfigService getTemplateFilename should return the correct template filename" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService getTemplateFilename should return undefined if an invalid TemplateType is passed" name="JobConfigService getTemplateFilename should return undefined if an invalid TemplateType is passed" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService getAllJobConfig should return all job configs for the given project ID" name="JobConfigService getAllJobConfig should return all job configs for the given project ID" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService getAllJobConfig should return an empty array if no job configs are found for the given project ID" name="JobConfigService getAllJobConfig should return an empty array if no job configs are found for the given project ID" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService should throw BadRequestException if projectId is not a valid UUID" name="JobConfigService should throw BadRequestException if projectId is not a valid UUID" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService should throw NotFoundException if project is not found" name="JobConfigService should throw NotFoundException if project is not found" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService should throw NotFoundException if no project is found for the given project ID" name="JobConfigService should throw NotFoundException if no project is found for the given project ID" time="0.141">
+    </testcase>
+    <testcase classname="JobConfigService should throw NotFoundException if no project is found for the given project ID" name="JobConfigService should throw NotFoundException if no project is found for the given project ID" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService should return the project if found for the given project ID" name="JobConfigService should return the project if found for the given project ID" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService should handle cases where targetPath is null in job configs" name="JobConfigService should handle cases where targetPath is null in job configs" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService should return an empty array if no job configs are found" name="JobConfigService should return an empty array if no job configs are found" time="0.003">
+    </testcase>
+    <testcase classname="JobConfigService should throw BadRequestException if projectId is invalid" name="JobConfigService should throw BadRequestException if projectId is invalid" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService should throw NotFoundException if project is not found" name="JobConfigService should throw NotFoundException if project is not found" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService JobConfigService decodeBase64 should decode a valid Base64 string" name="JobConfigService JobConfigService decodeBase64 should decode a valid Base64 string" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService JobConfigService decodeBase64 should throw an error for an invalid base64 string" name="JobConfigService JobConfigService decodeBase64 should throw an error for an invalid base64 string" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService saveIdentityMappingsWithMap should save identity mappings and cross mappings" name="JobConfigService saveIdentityMappingsWithMap should save identity mappings and cross mappings" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService saveIdentityMappingsWithMap should parse blob data for SID template type" name="JobConfigService saveIdentityMappingsWithMap should parse blob data for SID template type" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService saveIdentityMappingsWithMap should parse blob data for GID template type" name="JobConfigService saveIdentityMappingsWithMap should parse blob data for GID template type" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService saveIdentityMappingsWithMap should return an empty array if blob data is empty" name="JobConfigService saveIdentityMappingsWithMap should return an empty array if blob data is empty" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService saveIdentityMappingsWithMap should return an empty array if blob data is undefined" name="JobConfigService saveIdentityMappingsWithMap should return an empty array if blob data is undefined" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService saveIdentityMappingsWithMap updateMappingsWithMap should update identity mappings and cross mappings" name="JobConfigService saveIdentityMappingsWithMap updateMappingsWithMap should update identity mappings and cross mappings" time="0.003">
+    </testcase>
+    <testcase classname="JobConfigService saveIdentityMappingsWithMap updateMappingsWithMap should update identity mappings and cross mappings if existingCrossMapping is found" name="JobConfigService saveIdentityMappingsWithMap updateMappingsWithMap should update identity mappings and cross mappings if existingCrossMapping is found" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService saveIdentityMappingsWithMap should save identity mappings and cross mappings" name="JobConfigService saveIdentityMappingsWithMap should save identity mappings and cross mappings" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService saveIdentityMappingsWithMap updateMappingsWithMap should update identity mappings and cross mappings" name="JobConfigService saveIdentityMappingsWithMap updateMappingsWithMap should update identity mappings and cross mappings" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService saveIdentityMappingsWithMap updateMappingsWithMap should update identity mappings and cross mappings" name="JobConfigService saveIdentityMappingsWithMap updateMappingsWithMap should update identity mappings and cross mappings" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService saveIdentityMappingsWithMap getNoticeBoardDetailsByProjectId should return correct counts for different job statuses" name="JobConfigService saveIdentityMappingsWithMap getNoticeBoardDetailsByProjectId should return correct counts for different job statuses" time="0.004">
+    </testcase>
+    <testcase classname="JobConfigService saveIdentityMappingsWithMap getNoticeBoardDetailsByProjectId should return zero counts when no job runs exist" name="JobConfigService saveIdentityMappingsWithMap getNoticeBoardDetailsByProjectId should return zero counts when no job runs exist" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService createBulkMigrate should return an empty array if migrateConfigs is missing" name="JobConfigService createBulkMigrate should return an empty array if migrateConfigs is missing" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService createBulkMigrate should update existing job configurations when found" name="JobConfigService createBulkMigrate should update existing job configurations when found" time="0.005">
+    </testcase>
+    <testcase classname="JobConfigService createBulkMigrate should create new job configurations when none exist" name="JobConfigService createBulkMigrate should create new job configurations when none exist" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService createBulkMigrate should handle SID mapping" name="JobConfigService createBulkMigrate should handle SID mapping" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService createBulkMigrate should handle GID mapping" name="JobConfigService createBulkMigrate should handle GID mapping" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService createBulkMigrate should continue when destinationPathId is missing" name="JobConfigService createBulkMigrate should continue when destinationPathId is missing" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService getCutoverDetailsByFileServerId should return correct cutover details for a given fileServerId" name="JobConfigService getCutoverDetailsByFileServerId should return correct cutover details for a given fileServerId" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService getCutoverDetailsByFileServerId should return an empty array if fileServerId does not match" name="JobConfigService getCutoverDetailsByFileServerId should return an empty array if fileServerId does not match" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService getCutoverDetailsByFileServerId should ensure jobConfig contains correct job type and status" name="JobConfigService getCutoverDetailsByFileServerId should ensure jobConfig contains correct job type and status" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService calculateJobRunStats should throw NotFoundException if jobRunId does not exist" name="JobConfigService calculateJobRunStats should throw NotFoundException if jobRunId does not exist" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService calculateJobRunStats should throw NotFoundException if jobRunId does not exist" name="JobConfigService calculateJobRunStats should throw NotFoundException if jobRunId does not exist" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService calculateJobRunStats should return values from inventory summary" name="JobConfigService calculateJobRunStats should return values from inventory summary" time="0.004">
+    </testcase>
+    <testcase classname="JobConfigService JobConfigService - flattenCutoverConfig should flatten a single config with multiple destination paths" name="JobConfigService JobConfigService - flattenCutoverConfig should flatten a single config with multiple destination paths" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService JobConfigService - flattenCutoverConfig should flatten multiple configs with multiple destination paths" name="JobConfigService JobConfigService - flattenCutoverConfig should flatten multiple configs with multiple destination paths" time="0">
+    </testcase>
+    <testcase classname="JobConfigService JobConfigService - flattenCutoverConfig should return an empty array when given an empty config" name="JobConfigService JobConfigService - flattenCutoverConfig should return an empty array when given an empty config" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService JobConfigService - flattenCutoverConfig should return an empty array when all destinationPathId arrays are empty" name="JobConfigService JobConfigService - flattenCutoverConfig should return an empty array when all destinationPathId arrays are empty" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService getErrorCounts should return 0 if error count is not found" name="JobConfigService getErrorCounts should return 0 if error count is not found" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService getErrorCounts should throw error" name="JobConfigService getErrorCounts should throw error" time="0.002">
+    </testcase>
+    <testcase classname="JobConfigService should count error from setupFailedErrors" name="JobConfigService should count error from setupFailedErrors" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService should count error from setupFailedErrors" name="JobConfigService should count error from setupFailedErrors" time="0.001">
+    </testcase>
+    <testcase classname="JobConfigService createBulkCutover should throw if inactive cutover already exists for source-destination pair" name="JobConfigService createBulkCutover should throw if inactive cutover already exists for source-destination pair" time="0.002">
+    </testcase>
+  </testsuite>
+</testsuites>
