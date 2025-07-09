@@ -1,4 +1,4 @@
-import { JobContext, JobContextFactory } from '@netapp-cloud-datamigrate/jobs-lib';
+import { JobContext, JobContextFactory, JobManagerContext } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 
@@ -68,7 +68,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return await contextProvider.getJobContext(traceId);
   }
 
-  async getJobManagerContext(traceId: string) {
+  async getJobManagerContext(traceId: string): Promise<JobManagerContext| null> {
     await this.ensureClient();
     const contextProvider = JobContextFactory.getJobManagerProvider('redis', this.client);
     return await contextProvider.getContext(traceId);

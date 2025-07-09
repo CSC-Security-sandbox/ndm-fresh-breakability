@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { GroupReaderType, JobContext, JobStatus, Task } from "@netapp-cloud-datamigrate/jobs-lib";
+import { GroupReaderType, JobContext, JobManagerContext, JobStatus, Task } from "@netapp-cloud-datamigrate/jobs-lib";
 import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
 import axios from 'axios';
 import { AuthService } from "src/auth/auth.service";
@@ -42,6 +42,19 @@ export class CommonActivityService{
       return { message: 'Error while cleaning up the job context: ' + traceId };
     }
   }
+
+   async cleanupJobManagerContext(traceId: string): Promise<any> {
+    try{
+      const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(traceId);
+      jobContext.cleanup()
+    }catch(error){
+      this.logger.error(`[${traceId}] Error while cleaning up the job context: ${error}`);
+      return { message: 'Error while cleaning up the job context: ' + traceId };
+    }
+  }
+
+
+
 
   async updateLastEntry(traceId: string): Promise<any> {
     try {

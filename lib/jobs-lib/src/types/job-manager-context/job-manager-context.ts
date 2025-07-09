@@ -7,7 +7,7 @@ import { GroupReaderType } from "../enums";
 
 
 
-export class JobManagerContext {
+export abstract class JobManagerContext {
     jobRunId: string;
     jobConfig: JobConfig;
     jobRunStatus: string;
@@ -24,6 +24,9 @@ export class JobManagerContext {
         if (jobRunStatus)
         this.jobRunStatus = jobRunStatus;
     }
+
+    abstract cleanup(): Promise<void>;
+    abstract init(): Promise<void>;
 
     getJobRunId(): string {
         return this.jobRunId;
