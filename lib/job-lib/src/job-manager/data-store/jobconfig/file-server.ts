@@ -1,4 +1,5 @@
-import { Serializable } from './serializable';
+import { Serializable } from './serializer';
+
 
 export class FileServerDetails implements Serializable {
   hostname: string;
@@ -9,6 +10,8 @@ export class FileServerDetails implements Serializable {
   path:string;
   workingDirectory:string;
   protocolVersion: string;
+
+
 
   constructor(hostname: string, protocols: Protocol[],pathId: string, path:string,username?: string, password?:string,  workingDirectory?:string, protocolVersion?: string) {
     this.hostname = hostname;
@@ -37,7 +40,6 @@ export class FileServerDetails implements Serializable {
     this.protocolVersion = obj?.protocol
   }
 }
-
 
 export enum ProtocolType {
   SMB = 'SMB',
@@ -72,4 +74,3 @@ export class NFS extends Protocol {
 export class SMB extends Protocol {
   type: string = ProtocolType.SMB;
 }
-
