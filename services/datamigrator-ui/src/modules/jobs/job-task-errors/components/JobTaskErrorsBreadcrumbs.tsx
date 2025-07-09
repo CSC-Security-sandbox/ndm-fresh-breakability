@@ -1,21 +1,32 @@
-import { Button, Breadcrumbs } from "@netapp/bxp-design-system-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Breadcrumbs } from "@netapp/bxp-design-system-react";
+import { useParams, useLocation, Link } from "react-router-dom";
 import { Box } from "@components/container";
 
 const JobTaskErrorsBreadcrumbs = () => {
-  const navigate = useNavigate();
-  const { jobId } = useParams<{ jobId: string }>();
+  const { jobId, jobRunId } = useParams<{ jobId: string; jobRunId: string }>();
+  const location = useLocation();
+  const isJobRunErrorsScreen = location.pathname.includes("run");
 
   return (
-    <Breadcrumbs className="mb-4">
-      <Button onClick={() => navigate("/jobs-list")} variant="text">
-        Jobs
-      </Button>
-      <Button onClick={() => navigate(`/job-details/${jobId}`)} variant="text">
-        Job Details
-      </Button>
-      <Box>Errors</Box>
-    </Breadcrumbs>
+    <>
+      {!isJobRunErrorsScreen && (
+        <Breadcrumbs>
+          <Link to="/jobs-list">Jobs</Link>
+          <Link to={`/job-details/${jobId}`}>Job Details</Link>
+
+          <Box>Errors</Box>
+        </Breadcrumbs>
+      )}
+      {isJobRunErrorsScreen && (
+        <Breadcrumbs>
+          <Link to={`/job-details/${jobId}`}>Job Details</Link>
+          <Link to={`/job-details/${jobId}/run/${jobRunId}`}>
+            Job Run Details
+          </Link>
+          <Box>Errors</Box>
+        </Breadcrumbs>
+      )}
+    </>
   );
 };
 
