@@ -61,8 +61,9 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSiz
 
   let isStopRequested = false;
   let errors: string[] = [];
+  let iterations = 0; 
   while(dirsToScan.length > 0) {    
-
+    iterations++;
     if(state === JobRunStatus.Stopped as JobRunStatus) {
       isStopRequested = true
       break;
@@ -100,6 +101,10 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSiz
     }        
     dirsToScan = nexDirsToScan;
     nexDirsToScan = []
+    if(iterations > 500 ){
+      console.warn(`ChildScanWorkflow ${jobRunId} has exceeded 500 iterations, stopping to prevent infinite loop.`);                      
+      await wf.continueAsNew({ jobRunId, dirsToScan, batchSize, dirCount, fileCount, isMigration });      
+    }
   }
 
   scanWorkflowOutput.status = isStopRequested ? JobRunStatus.Stopped : JobRunStatus.Completed;

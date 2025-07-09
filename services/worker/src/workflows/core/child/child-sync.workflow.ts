@@ -55,15 +55,16 @@ export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunSt
     });
     
     
-    let failedTasks = [];
+    let allFailedTasks = [];
     const syncWorkflowOutput: SyncWorkflowOutput = {
         jobRunId,
         status: JobRunStatus.Ready,
     }
     let continueSync = true; 
     let isManualStop = false;
+    let iterations = 0;
     while(continueSync) {
-        
+        iterations++;
         await updateJobStatusIfNotRunning(jobState, jobRunId);
         
         await wf.condition(() => jobState !== JobRunStatus.Paused);
@@ -97,11 +98,16 @@ export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunSt
                 }    
             })
         )
-        failedTasks = results.filter(result => result.error);        
+        const failedTasks = results.filter(result => result.error);
+        allFailedTasks.push(...failedTasks);
+        if(iterations > 500){
+            console.warn(`SyncWorkflow ${jobRunId} has exceeded 500 iterations, stopping to prevent infinite loop.`);                      
+            await wf.continueAsNew({ jobRunId, scanWorkflowStatus });      
+        }
     }
-    if(failedTasks.length > 0) {
+    if(allFailedTasks.length > 0) {
         syncWorkflowOutput.status = JobRunStatus.Failed;
-        console.error(`Failed tasks in this iteration: ${JSON.stringify(failedTasks)}`);
+        console.error(`Failed tasks in this iteration: ${JSON.stringify(allFailedTasks)}`);
     }else{
         syncWorkflowOutput.status = isManualStop ? JobRunStatus.Stopped : JobRunStatus.Completed;
     }
