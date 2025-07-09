@@ -1,3 +1,4 @@
+import { encode } from 'msgpack-lite';
 import { RedisHMapCollection } from './redis-hmap-collection';
 import { RedisClientType } from 'redis';
 
@@ -36,33 +37,41 @@ describe('RedisHMapCollection', () => {
             expect(redisClient.hSet).toHaveBeenCalledWith(
                 'jobRunId:mapType',
                 key,
-                JSON.stringify(value),
+                encode(value).toString('base64'), // Ensure the value is encoded to base64
             );
         });
     });
 
     describe('getAll', () => {
         it('should retrieve all values from the Redis hash map', async () => {
-            const mockData = { key1: '{"foo":"bar"}', key2: '{"baz":"qux"}' };
+            const val1 = '{"foo":"bar"}';
+            const val2 = '{"baz":"qux"}'; 
+
+            const encodedVal1 =  encode(val1).toString('base64');
+            const encodedVal2 =  encode(val2).toString('base64');
+            const mockData = { key1: encodedVal1, key2: encodedVal2 };
+
             redisClient.hGetAll.mockResolvedValue(mockData);
 
             const result = await collection.getAll();
 
             expect(redisClient.hGetAll).toHaveBeenCalledWith('jobRunId:mapType');
-            expect(result).toEqual(mockData);
+            expect(result["key1"]).toEqual(JSON.parse(val1));
+            expect(result["key2"]).toEqual(JSON.parse(val2));
         });
     });
 
     describe('getValue', () => {
         it('should retrieve a specific value from the Redis hash map', async () => {
-            const key = 'key1';
-            const mockValue = '{"foo":"bar"}';
-            redisClient.hGet.mockResolvedValue(mockValue);
+             const key = 'key1';
+             const mockValue = '{"foo":"bar"}';
+            redisClient.hGet.mockResolvedValue(encode(mockValue).toString('base64')); // Ensure the value is encoded to base64
+            await collection.setValue(key, mockValue);
 
             const result = await collection.getValue(key);
 
             expect(redisClient.hGet).toHaveBeenCalledWith('jobRunId:mapType', key);
-            expect(result).toEqual({ foo: 'bar' });
+            expect(result).toEqual(JSON.parse(mockValue)); // Ensure the value is decoded correctly
         });
 
         it('should return null if the key does not exist', async () => {
@@ -96,7 +105,13 @@ describe('RedisHMapCollection', () => {
 
     describe('getOneValue', () => {
         it('should retrieve the first key-value pair from the Redis hash map', async () => {
-            const mockData = { key1: '{"foo":"bar"}', key2: '{"baz":"qux"}' };
+
+            const val1 = '{"foo":"bar"}';
+            const val2 = '{"baz":"qux"}';
+            const encodedValue1 = encode(val1).toString('base64');
+            const encodedValue2 = encode(val2).toString('base64');
+
+            const mockData = { key1: encodedValue1, key2: encodedValue2 };
             redisClient.hGetAll.mockResolvedValue(mockData);
 
             const result = await collection.getOneValue();
@@ -117,7 +132,9 @@ describe('RedisHMapCollection', () => {
 
     describe('assignToSelf', () => {
         it('should assign an existing value to a new key and delete the old key', async () => {
-            const mockData = { key1: '{"foo":"bar"}' };
+            const val1= '{"foo":"bar"}';
+            const encodedValue1 = encode(val1).toString('base64');
+            const mockData = { key1: encodedValue1 };
             redisClient.hGetAll.mockResolvedValue(mockData);
 
             const result = await collection.assignToSelf('newKey');
@@ -126,7 +143,7 @@ describe('RedisHMapCollection', () => {
             expect(redisClient.hSet).toHaveBeenCalledWith(
                 'jobRunId:mapType',
                 'newKey',
-                '{"foo":"bar"}',
+                encode(JSON.parse(val1)).toString("base64"), // Ensure the value is encoded to base64
             );
             expect(redisClient.hDel).toHaveBeenCalledWith('jobRunId:mapType', 'key1');
             expect(result).toEqual({ foo: 'bar' });

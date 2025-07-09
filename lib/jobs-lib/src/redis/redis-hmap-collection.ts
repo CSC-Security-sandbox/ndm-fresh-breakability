@@ -3,6 +3,7 @@
 import { RedisClientType } from "redis";
 import { Serializable } from "src/types/serializable";
 import { WorkerRunningTaskMapCollection } from "./hmap-collection";
+import { encode, decode } from 'msgpack-lite';
 
 export class RedisHMapCollection<T extends Serializable> implements WorkerRunningTaskMapCollection<T> {
     jobRunId: string;
@@ -29,21 +30,30 @@ export class RedisHMapCollection<T extends Serializable> implements WorkerRunnin
         await this.redisClient.del(this.redisMapKey);
     }
 
-    async setValue(key: string, value: T): Promise<void> {
-        await this.redisClient.hSet(this.redisMapKey, key, JSON.stringify(value));
+    async setValue(key: string, value: T): Promise<void> {        
+        await this.redisClient.hSet(this.redisMapKey, key, this.encodeValue(value));
     }
 
     async setValueIfNotExists(key: string, value: T): Promise<boolean> {
-        const result = await this.redisClient.hSetNX(this.redisMapKey, key, JSON.stringify(value));
+        const result = await this.redisClient.hSetNX(this.redisMapKey, key, this.encodeValue(value));
         return result;
     }
 
     async getAll(): Promise<any> {
-        return await this.redisClient.hGetAll(this.redisMapKey);
+        const encodedData =  await this.redisClient.hGetAll(this.redisMapKey);
+        if(encodedData === null || Object.keys(encodedData).length === 0)  return {};
+        const result = {};
+        for (const [key, value] of Object.entries(encodedData)) {
+            result[key] = this.decodeValue(value);
+        }
+        return result;
     }
 
     async getValue(key: string): Promise<T | null> {
-        const value = await this.redisClient.hGet(this.redisMapKey, key);
+        const base64Data = await this.redisClient.hGet(this.redisMapKey, key);
+        if(!base64Data ) return null; 
+        const packed = Buffer.from(base64Data, 'base64'); // Ensure the value is a Buffer
+        const value = decode(packed);
         return value ? JSON.parse(value) : null;
     }
 
@@ -60,16 +70,16 @@ export class RedisHMapCollection<T extends Serializable> implements WorkerRunnin
         const keys = Object.keys(allValues);
         if (keys.length === 0) return null;
         const firstKey = keys[0];
-        const value = allValues[firstKey];
-        return { key: firstKey, value: JSON.parse(value) };
+        const value = allValues[firstKey];        
+        return { key: firstKey, value: value };
     }
 
     async assignToSelf(key: string): Promise<T | null> {
-        const existingEntry = await this.getOneValue();
-        if (!existingEntry) return null;
-        await this.setValue(key, existingEntry.value);
-        await this.deleteValue(existingEntry.key);
-        return existingEntry.value;
+        const existingValue = await this.getOneValue();
+        if (!existingValue) return null;
+        await this.redisClient.hSet(this.redisMapKey, key, this.encodeValue(existingValue.value));        
+        await this.deleteValue(existingValue.key);
+        return existingValue.value;
     }
 
     async isEmpty(): Promise<boolean> {
@@ -81,4 +91,20 @@ export class RedisHMapCollection<T extends Serializable> implements WorkerRunnin
         if (!allValues) return 0;
         return Object.keys(allValues).length;
     }
+
+
+    encodeValue(value: T): string {
+        const packed = encode(value);
+        return packed.toString('base64'); 
+    }
+
+
+    decodeValue(value: string): T | null {
+        if (!value) return null;
+        const packed = Buffer.from(value, 'base64'); 
+        const decoded = decode(packed);
+        return decoded ? JSON.parse(decoded) : null;
+    }
+
+    
 }
