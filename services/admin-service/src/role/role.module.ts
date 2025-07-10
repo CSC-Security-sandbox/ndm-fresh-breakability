@@ -14,5 +14,6 @@ import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
   ],
   controllers: [RoleController],
   providers: [RoleService],
+  exports: [RoleService],
 })
 export class RoleModule {}
