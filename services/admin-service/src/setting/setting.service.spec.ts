@@ -139,6 +139,33 @@ describe('SettingService', () => {
       expect(result).toBe(true);
     });
 
+    it('should throw an error when SMTP password decryption fails', async () => {
+      const createSettingDto: CreateSettingDto[] = [
+        {
+          settingKey: 'SMTP_PASSWORD',
+          settingValue: 'encrypted:password',
+          description: 'SMTP Password',
+          settingType: SettingType.SMTP,
+        }
+      ];
+
+      jest.mock('../utils/crypto-utils', () => ({
+        decryptData: jest.fn().mockImplementation(() => {
+          throw new Error('');
+        })
+      }));
+
+      await expect(service.create(createSettingDto)).rejects.toThrow(
+          new HttpException(
+              {
+                message: 'Error while retrieving settings: An internal error occurred',
+                statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+              },
+              HttpStatus.INTERNAL_SERVER_ERROR,
+          )
+      );
+    });
+
     it('should return false for a failed SMTP connection', async () => {
       const createSettingDto: CreateSettingDto[] = [
         {
@@ -235,6 +262,33 @@ describe('SettingService', () => {
         message: 'Setting updated successfully',
         statusCode: HttpStatus.OK,
       });
+    });
+
+    it('should throw an error when SMTP password decryption fails while updating', async () => {
+      const updateSettingDto: CreateSettingDto[] = [
+        {
+          settingKey: 'SMTP_PASSWORD',
+          settingValue: 'encrypted:password',
+          description: 'SMTP Password',
+          settingType: SettingType.SMTP,
+        }
+      ];
+
+      jest.mock('../utils/crypto-utils', () => ({
+        decryptData: jest.fn().mockImplementation(() => {
+          throw new Error('');
+        })
+      }));
+
+      await expect(service.updateSetting(updateSettingDto)).rejects.toThrow(
+          new HttpException(
+              {
+                message: 'Error while updating settings: An internal error occurred',
+                statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+              },
+              HttpStatus.INTERNAL_SERVER_ERROR,
+          )
+      );
     });
 
     it('should throw an error if setting not found', async () => {
