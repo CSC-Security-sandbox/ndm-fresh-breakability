@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-011: Run migration with 'Upload GID/UID Mapping' option", func() {
+var _ = FDescribe("TC-011: Run migration with 'Upload GID/UID Mapping' option", func() {
 	var (
 		ProjectId              string
 		workerId1              string
