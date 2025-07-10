@@ -120,3 +120,21 @@ func GetWorkerStatus(projectID string, workerIDs []string) (map[string]string, e
 	}
 	return nil, fmt.Errorf("no workers found for project ID: %s", projectID)
 }
+
+func GetAddFilesToWorkerScript(localFilePath, remoteTargetPath, workerInstance string) string {
+	script := fmt.Sprintf(`#!/bin/bash
+    set -e
+
+    SUDO_PASS="%%s"
+
+    FILE_SRC="%s"
+    FILE_DEST="%s"
+    INSTANCE="%s"
+
+    echo "Transferring $FILE_SRC to $INSTANCE:$FILE_DEST"
+    multipass transfer "$FILE_SRC" "$INSTANCE:$FILE_DEST"
+
+    echo "File successfully transferred."
+    `, localFilePath, remoteTargetPath, workerInstance)
+	return script
+}
