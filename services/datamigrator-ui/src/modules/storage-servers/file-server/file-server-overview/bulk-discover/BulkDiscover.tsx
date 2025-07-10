@@ -41,7 +41,8 @@ const BulkDiscover = () => {
     useBulkDiscoveryMutation();
   const [getAllFileServersApi] = useLazyGetAllFileServersWithVolumeQuery();
   const { selectedProjectId: projectId } = useSelectedProjectId();
-  const { fileServerDetails, allExportPaths } = useFileServerDetails();
+  const { fileServerDetails, allExportPaths, refetch, isFetching } =
+    useFileServerDetails();
   const [selectedExportPathsIds, setSelectedExportPathsIds] = useState<
     string[]
   >([]);
@@ -169,6 +170,8 @@ const BulkDiscover = () => {
             setSelectedExportPathsIds={setSelectedExportPathsIds}
             key={key}
             notReachableExportPaths={notReachableExportPaths}
+            refetch={refetch}
+            isFetching={isFetching}
           />
         </Box>
       </Box>
