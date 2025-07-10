@@ -41,20 +41,20 @@ export function createBatches(dirsToScan , batchSize): string[][] {
   
 
 }
-export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSize = 100, dirCount = 0, fileCount = 0, isMigration = false}: ChildScanWorkflowInput): Promise<ChildScanWorkflowOutput> => {
+export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSize = 100, dirCount = 0, fileCount = 0, isMigration = false, actionState=JobRunStatus.Running}: ChildScanWorkflowInput): Promise<ChildScanWorkflowOutput> => {
   
   await updateJobStatusActivity({jobRunId, status :JobRunStatus.Running});
-  let state:JobRunStatus = JobRunStatus.Running;
+  
   const scanWorkflowOutput: ChildScanWorkflowOutput = {
     jobRunId,
-    fileCount: 0,
-    dirCount: 0,
+    fileCount: dirCount,
+    dirCount: fileCount,
     status: JobRunStatus.Running,
     error: undefined,
   };
 
   wf.setHandler(actionSignal, async (action:string)=>{
-    state = action as JobRunStatus;
+    actionState = action as JobRunStatus;
     console.log(jobRunId, `action signal called with value: ${action}`);
     
   });
@@ -62,20 +62,17 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSiz
   let isStopRequested = false;
   let errors: string[] = [];
   let iterations = 0; 
-  while(dirsToScan.length > 0) {    
-    iterations++;
-    if(state === JobRunStatus.Stopped as JobRunStatus) {
+  while(dirsToScan.length > 0) {        
+    if(actionState === JobRunStatus.Stopped as JobRunStatus) {
       isStopRequested = true
       break;
     }
     // wait until the staate is paused. 
-    await updateJobStatusIfNotRunning(state, jobRunId);
-    await wf.condition(() => state !== JobRunStatus.Paused);
+    await updateJobStatusIfNotRunning(actionState, jobRunId);
+    await wf.condition(() => actionState !== JobRunStatus.Paused);
 
-    
-      
     const batches: string[][] = createBatches(dirsToScan, batchSize);
-
+    iterations+= batches.length;
     let nexDirsToScan: string[] = [];
     //TODO: make workflow failed when activity fails. 
     const results = await Promise.all(
@@ -101,9 +98,9 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSiz
     }        
     dirsToScan = nexDirsToScan;
     nexDirsToScan = []
-    if(iterations > 500 ){
+    if(iterations > 2 ){
       console.warn(`ChildScanWorkflow ${jobRunId} has exceeded 500 iterations, stopping to prevent infinite loop.`);                      
-      await wf.continueAsNew({ jobRunId, dirsToScan, batchSize, dirCount, fileCount, isMigration });      
+      await wf.continueAsNew({ jobRunId, dirsToScan, batchSize, dirCount:scanWorkflowOutput.dirCount, fileCount:scanWorkflowOutput.fileCount, isMigration, actionState });      
     }
   }
 
