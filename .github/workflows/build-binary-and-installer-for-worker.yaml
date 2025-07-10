@@ -147,6 +147,9 @@ jobs:
       NDM_NEXUS_PASSWORD: ${{ secrets.NDM_NEXUS_PASSWORD }}
       RELEASE_TAG: ${{ needs.worker-package.outputs.RELEASE_TAG }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
       - name: Download Binary Artifact
         uses: actions/download-artifact@v4
         with:
