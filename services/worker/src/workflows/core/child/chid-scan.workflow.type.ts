@@ -7,6 +7,7 @@ export interface ChildScanWorkflowInput {
     fileCount: number;
     dirCount: number;
     isMigration: boolean;
+    actionState: JobRunStatus;
 }
 
 export interface ChildScanWorkflowOutput {

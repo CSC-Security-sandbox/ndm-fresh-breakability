@@ -1,14 +1,14 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { Command, CommandStatus, GroupReaderType, Task, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Context } from "@temporalio/activity";
+import { Connection } from "@temporalio/client";
+import { uuid4 } from "@temporalio/workflow";
+import { RetryExceededError } from "src/errors/errors.types";
 import { RedisService } from "src/redis/redis.service";
 import { buildTask, calculateCommandHash } from "../../utils/utils";
 import { handleInitTaskInput } from "../migrate/migrate-sync.types";
-import { FatalError, RetryExceededError } from "src/errors/errors.types";
-import { ConfigService } from "@nestjs/config";
 import { BuildOrGetScanTaskInput } from "./common-task.type";
-import { uuid4 } from "@temporalio/workflow";
-import { Context } from "@temporalio/activity";
-import { Connection } from "@temporalio/client";
 
 
 @Injectable()
@@ -16,6 +16,7 @@ export class CommonTaskService {
 
   readonly workerId: string;
   readonly maxRetryCount: number;
+  readonly temporalAddress: string; // Default Temporal address, can be overridden in config
 
   constructor(
       @Inject(ConfigService) private readonly configService: ConfigService,
@@ -24,6 +25,7 @@ export class CommonTaskService {
     ) {
       this.workerId = this.configService.get('worker.workerId');
       this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
+      this.temporalAddress = this.configService.get('temporal.address') || 'localhost:7233'; 
     }
 
     // TO-DO : make this adaptive resource based task creation
@@ -95,7 +97,8 @@ export class CommonTaskService {
   }
 
   async isWorkflowRunningActivity(workflowId: string): Promise<boolean> {
-    const connection = await Connection.connect();
+    const connection = await Connection.connect({address: this.temporalAddress});
+    this.logger.debug(`Checking if workflow ${workflowId} is running on Temporal at ${this.temporalAddress}`);
     const namespace = 'default'; // replace with your namespace if different
     const resp = await connection.workflowService.describeWorkflowExecution({
       namespace,

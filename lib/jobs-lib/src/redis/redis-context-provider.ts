@@ -2,7 +2,6 @@ import { JobContext } from '../types/job-context';
 import { JobConfig } from '../types/job-config';
 import { RedisClientType } from 'redis';
 import { RedisJobContext, RedisSpeedTestJobContext } from './redis-job-context';
-import { Logger } from '../utils/logging';
 import { RedisDirectoryCollection, RedisErrorCollection, RedisFileCollection, RedisMigrationTasksCollection, RedisTaskCollection, RedisTaskStatsCollection, RedisUpdatedTasksCollection, RedisSpeedTestReadWriteCollection } from './redis-collections';
 import { JobState } from '../types/job-state';
 import { SpeedTestJobConfig } from 'src/types/speed-test-job-config';
@@ -11,11 +10,8 @@ import { SpeedTestJobContextProvider } from '../speed-test-job-context-provider'
 import { JobContextProvider } from 'src/job-context-provider';
 
 export class RedisJobContextProvider implements JobContextProvider {
-  private logger: Logger;
 
-  constructor(private readonly redisClient: RedisClientType) {
-    this.logger = Logger.getLogger();
-  }
+  constructor(private readonly redisClient: RedisClientType) {}
 
   async buildContext(
     jobRunId: string,
@@ -23,7 +19,7 @@ export class RedisJobContextProvider implements JobContextProvider {
     jobStatus: string,
     jobState: JobState,
   ): Promise<JobContext> {
-    this.logger.info(`Building job context for job run id: ${jobRunId}`);
+    console.log(`Building job context for job run id: ${jobRunId}`);
     const jobContext = new RedisJobContext(
       jobRunId,
       this.redisClient,
@@ -40,11 +36,11 @@ export class RedisJobContextProvider implements JobContextProvider {
     const value = await this.redisClient.get(jobRunId);
 
     if (!value) {
-      this.logger.warn(`Job context not found for job run id: ${jobRunId}`);
+      console.warn(`Job context not found for job run id: ${jobRunId}`);
       return null;
     }
 
-    this.logger.info(`Retrieved job context for job run id: ${jobRunId}`);
+    console.log(`Retrieved job context for job run id: ${jobRunId}`);
     let info = value ? jobContext.deserialize(value) : { filesInfo: { numMessages: 0, lastId: '0-0' }, 
                                                     dirsInfo: { numMessages: 0, lastId: '0-0' }, 
                                                     errorsInfo: { numMessages: 0, lastId: '0-0' },
@@ -52,7 +48,6 @@ export class RedisJobContextProvider implements JobContextProvider {
                                                     migrateTask: { numMessages: 0, lastId: '0-0' },
                                                     taskStats: { numMessages: 0, lastId: '0-0' },
                                                     updatedTaskInfo: { numMessages: 0, lastId: '0-0' } };
-    this.logger.debug('>> Deserialized:', info);
     jobContext.jobConfig = info.jobConfig;
     jobContext.jobRunStatus = info.jobRunStatus;
     jobContext.jobState = info.jobState;
@@ -70,11 +65,8 @@ export class RedisJobContextProvider implements JobContextProvider {
 
 
 export class RedisSpeedTestJobContextProvider implements SpeedTestJobContextProvider {
-  private logger: Logger;
 
-  constructor(private readonly redisClient: RedisClientType) {
-    this.logger = Logger.getLogger();
-  }
+  constructor(private readonly redisClient: RedisClientType) {}
 
   async buildContext(
     jobRunId: string,
@@ -82,7 +74,6 @@ export class RedisSpeedTestJobContextProvider implements SpeedTestJobContextProv
     jobStatus: string,
     jobState: JobState,
   ): Promise<SpeedTestJobContext> {
-    this.logger.info(`Building job context for job run id: ${jobRunId}`);
     const jobContext = new RedisSpeedTestJobContext(
       jobRunId,
       this.redisClient,
@@ -99,11 +90,10 @@ export class RedisSpeedTestJobContextProvider implements SpeedTestJobContextProv
     const value = await this.redisClient.get(jobRunId);
 
     if (!value) {
-      this.logger.warn(`Job context not found for job run id: ${jobRunId}`);
+
       return null;
     }
 
-    this.logger.info(`Retrieved job context for job run id: ${jobRunId}`);
     let info = value ? jobContext.deserialize(value) : { filesInfo: { numMessages: 0, lastId: '0-0' }, 
                                                     dirsInfo: { numMessages: 0, lastId: '0-0' }, 
                                                     errorsInfo: { numMessages: 0, lastId: '0-0' },
@@ -111,7 +101,6 @@ export class RedisSpeedTestJobContextProvider implements SpeedTestJobContextProv
                                                     migrateTask: { numMessages: 0, lastId: '0-0' },
                                                     taskStats: { numMessages: 0, lastId: '0-0' },
                                                     updatedTaskInfo: { numMessages: 0, lastId: '0-0' } };
-    this.logger.debug('>> Deserialized:', info);
     jobContext.jobConfig = info.jobConfig;
     jobContext.jobRunStatus = info.jobRunStatus;
     jobContext.jobState = info.jobState;

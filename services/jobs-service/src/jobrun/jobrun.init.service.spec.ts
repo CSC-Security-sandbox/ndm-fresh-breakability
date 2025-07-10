@@ -208,6 +208,7 @@ describe('JobRunInitService', () => {
         xGroupCreate: jest.fn().mockImplementation(() => Promise.resolve()),
         set: jest.fn().mockResolvedValue('OK'),xAdd:jest.fn().mockImplementation(()=>Promise.resolve()) } as any); 
       jest.spyOn(service,'initiateWorkflow').mockResolvedValue(undefined);
+      jest.spyOn(jobRunRepo,'update').mockResolvedValue(undefined);
       const result = await service.createJobRun(jobConfigId, currentTime);
       expect(service.getJobConfig).toHaveBeenCalledWith(jobConfigId);
     });
