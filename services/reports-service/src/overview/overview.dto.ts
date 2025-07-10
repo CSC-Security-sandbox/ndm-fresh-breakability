@@ -13,11 +13,6 @@ export interface storageDetail{
 export interface jobDetail{ 
 
     totalDiscoverJobs: number;
-    totalMigrateJobs: MigrationJobDetail;
+    totalMigrateJobs: number;
     totalCutoverJobs:number;
-}
-
-export interface MigrationJobDetail{
-    baseLineJob:number;
-    incrementalJob:number;
 }

@@ -82,14 +82,11 @@ export class OverviewService {
 
     const scanRunDetailsStart = Date.now();
 
-    const totalDiscoverJobs =
-      projectDetails
-        .flatMap((project) => project.configs || [])
-        .flatMap((config) => config.fileServers || [])
-        .flatMap((server) => server.volumes || [])
-        .flatMap((volume) => volume.sourceConfig || [])
-        .find((source) => source.jobType === JobType.Discover)?.jobRuns
-        ?.length || 0;
+    const {
+      totalDiscoverJobs,
+      totalMigrationJobs,
+      totalCutOverJobs
+    } = this.countAllJobTypes(projectDetails);
 
     const scanRunDetails = projectDetails
       ?.flatMap((project) =>
@@ -236,11 +233,8 @@ export class OverviewService {
       },
       jobDetails: {
         totalDiscoverJobs,
-        totalMigrateJobs: {
-          baseLineJob: migrateRun?.length > 0 ? 1 : 0,
-          incrementalJob: migrateRun?.length > 1 ? migrateRun.length - 1 : 0,
-        },
-        totalCutoverJobs: cutOverRun?.length,
+        totalMigrateJobs: totalMigrationJobs,
+        totalCutoverJobs: totalCutOverJobs,
       },
     };
     const getStorageAndJobsOverviewEnd = Date.now();
@@ -250,4 +244,51 @@ export class OverviewService {
     this.logger.log(`OVERVIEW DATA: ${overViewData} ms`);
     return overViewData;
   }
+
+  countAllJobTypes(projects: any) {
+    try {
+      const allConfigs =
+        projects?.flatMap((project) =>
+          project?.configs?.flatMap((config) =>
+            config?.fileServers?.flatMap((fileServer) =>
+              fileServer?.volumes?.flatMap((volume) =>
+                volume?.sourceConfig || []
+              )
+            )
+          )
+        ) || [];
+
+      let totalDiscoverJobs = 0;
+      let totalMigrationJobs = 0;
+      let totalCutOverJobs = 0;
+
+      for (const config of allConfigs) {
+        switch (config.jobType) {
+          case JobType.Discover:
+            totalDiscoverJobs++;
+            break;
+          case JobType.Migrate:
+            totalMigrationJobs++;
+            break;
+          case JobType.CutOver:
+            totalCutOverJobs++;
+            break;
+        }
+      }
+
+      return {
+        totalDiscoverJobs,
+        totalMigrationJobs,
+        totalCutOverJobs,
+      };
+    } catch (error) {
+      this.logger.error('Error counting job configs:', error?.message);
+      return {
+        totalDiscoverJobs: 0,
+        totalMigrationJobs: 0,
+        totalCutOverJobs: 0,
+      };
+    }
+  }
+  
 }
