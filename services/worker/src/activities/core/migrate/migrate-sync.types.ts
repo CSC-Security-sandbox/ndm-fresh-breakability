@@ -1,3 +1,4 @@
+import { JobConfig } from "@local/job-lib/dist/job-manager/data-store/jobconfig/job-config";
 import { Command, CommandOperation, ErrorType, JobManagerContext, MetaData, OPS_STATUS, Task, TaskStatus } from "@netapp-cloud-datamigrate/jobs-lib";
 
 export interface SyncTaskOutput {
@@ -20,9 +21,10 @@ export interface StampMetaDataInput {
     targetPath: string;
     sourcePath: string;
     metadata: MetaData; 
-    jobContext: JobManagerContext,
+    jobRunId: string;
     command: Command, 
     errorType: ErrorType
+    jobConfig: JobConfig
 }
 
 export interface StampMetaDataOutput {
@@ -35,8 +37,9 @@ export interface SyncOperationInput {
     sourcePath: string;
     targetPath: string;
     ops: Record<number, CommandOperation>;
-    jobContext: JobManagerContext;
+    jobRunId: string;
     command: Command;
+    jobConfig: JobConfig
     errorType?: ErrorType | undefined
 }
 
@@ -57,7 +60,7 @@ export interface SyncOperationOutput {
 
 export interface handleSyncTaskUpdateInput {
     taskHashId: string;
-    jobContext: JobManagerContext;
+    jobRunId: string;
     errors: {
         source: string[];
         target: string[];
@@ -69,5 +72,5 @@ export interface handleSyncTaskUpdateInput {
 
 export interface handleInitTaskInput {
     task: Task;
-    jobContext: JobManagerContext;
+    jobRunId: string;
 }

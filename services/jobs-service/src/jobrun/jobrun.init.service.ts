@@ -3,23 +3,16 @@ import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import {
   Command,
-  FileServerDetails,
-  JobConfig,
   JobContextFactory,
-  NFS,
-  SMB,
-  SpeedTestJobConfig,
   Task
 } from "@netapp-cloud-datamigrate/jobs-lib";
 import {
   IdentityTypes,
-  JobStatus as JobContextStatus,
   OPS_CMD,
   OPS_STATUS,
   TaskStatus,
-  TaskType,
+  TaskType
 } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/enums";
-import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
 import { WorkflowHandleWithFirstExecutionRunId } from "@temporalio/client";
 import axios from "axios";
 import {
@@ -35,13 +28,12 @@ import { JobConfigEntity } from "src/entities/jobconfig.entity";
 import {
   SpeedTestConfigEntity
 } from "src/entities/speed-test-job-config.entity";
-
+import { JobManger, RedisService } from "@local/job-lib";
 import { FileServerEntity } from "src/entities/fileserver.entity";
 import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
 import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
 import { JobOptionsEntity } from "src/entities/joboptions.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
-import { RedisService } from "src/redis/redis.service";
 import { filterUnhealthyWorkers } from "src/utils/worker-filter";
 import { WorkflowService } from "src/workflow/workflow.service";
 import { StartWorkFlowPayload } from "src/workflow/workflow.types";
@@ -51,6 +43,8 @@ import { v4 as uuid4 } from "uuid";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import { JobRunConfig } from "./jobrun.types";
 import { getWorkflowId } from "./jobrun.utli";
+import { JobConfig } from "@local/job-lib/dist/job-manager/data-store/jobconfig/job-config";
+import { FileServerDetails, NFS, SMB } from "@local/job-lib/dist/job-manager/data-store/jobconfig/file-server";
 
 @Injectable()
 export class JobRunInitService {
@@ -73,6 +67,7 @@ export class JobRunInitService {
     @Inject()
     private workFlowService: WorkflowService,
     private readonly configService: ConfigService,
+    private readonly jobManger: JobManger,
     private readonly redisService: RedisService,
     @InjectRepository(IdentityMappingEntity)
     private identityMappingRepo: Repository<IdentityMappingEntity>,
@@ -409,33 +404,25 @@ export class JobRunInitService {
 
   // ------------------ BuildJobContext for SpeedTest -------------------- //
   async buildSpeedTestJobContext(jobRunId: string, jobRunConfig: JobRunConfig) {
-    const jobRun = await this.jobRunRepo.findOne({
-      where: { id: jobRunId },
-      relations: ["jobConfig"],
-    });
-    if (!jobRun) {
-      throw new Error(`JobRun with id ${jobRunId} not found`);
-    }
-    const jobConfig = new SpeedTestJobConfig(jobRunId, jobRunConfig.jobType);
-    const jobState: JobState = new JobState(
-      [],
-      0,
-      1,
-      [],
-      JobContextStatus.Pending,
-      [],
-    );
-    const redisProvider = JobContextFactory.getSpeedTestProvider(
-      "redis",
-      await this.redisService.getClient(),
-    );
-    const jobContext = await redisProvider.buildContext(
-      jobRunId,
-      jobConfig,
-      JobRunStatus.Ready,
-      jobState,
-    );
-    this.redisService.setJobContext(jobRunId, jobContext);
+    // const jobRun = await this.jobRunRepo.findOne({
+    //   where: { id: jobRunId },
+    //   relations: ["jobConfig"],
+    // });
+    // if (!jobRun) {
+    //   throw new Error(`JobRun with id ${jobRunId} not found`);
+    // }
+    // const jobConfig = new SpeedTestJobConfig(jobRunId, jobRunConfig.jobType);
+    // const redisProvider = JobContextFactory.getSpeedTestProvider(
+    //   "redis",
+    //   await this.redisService.getClient(),
+    // );
+    // const jobContext = await redisProvider.buildContext(
+    //   jobRunId,
+    //   jobConfig,
+    //   JobRunStatus.Ready,
+    //   jobState,
+    // );
+    // this.redisService.setJobContext(jobRunId, jobContext);
   }
 
   // ------------------ BuildJobContext -------------------- //
@@ -551,49 +538,10 @@ export class JobRunInitService {
       },
     );
 
-    const task = await this.createInitialTask(jobRunId, jobRunConfig);
-    const redisProvider = JobContextFactory.getJobManagerProvider("redis", redisClient);
-    const jobContext = await redisProvider.buildContext(
-      jobRunId,
-      jobConfig,
-      JobRunStatus.Ready,
-    );
-
-    await this.redisService.setJobContext(jobRunId, jobContext);
+    await this.jobManger.init(jobRunId, jobConfig);
     this.logger.debug("JobContext Saved to Redis");
   }
 
-  // ------------------ CreateInitialTask -------------------- //
-  async createInitialTask(
-    jobRunId: string,
-    jobRunConfig: JobRunConfig,
-  ): Promise<Task> {
-    const commands = new Command(
-      "",
-      { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } },
-      uuid4(),
-      0,
-    );
-    const task = new Task(
-      uuid4(),
-      jobRunId,
-      TaskType.SCAN,
-      TaskStatus.PENDING,
-      jobRunConfig.workers[0],
-      `${jobRunConfig.connection.sourceCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}`,
-      jobRunConfig.connection.sourceCredential.pathId,
-      [commands],
-      jobRunConfig.jobType !== JobType.DISCOVER
-        ? `${jobRunConfig.connection.targetCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.targetCredential.pathId}`
-        : "",
-      jobRunConfig.jobType !== JobType.DISCOVER
-        ? jobRunConfig.connection.targetCredential.pathId
-        : "",
-      jobRunConfig.excludeFilePatterns,
-    );
-    this.logger.log("Initial Task created ---> ", JSON.stringify(task));
-    return task;
-  }
 
   // ------------------ StartStreamConsumer -------------------- //
   async startStreamConsumer(jobRunId: string) {

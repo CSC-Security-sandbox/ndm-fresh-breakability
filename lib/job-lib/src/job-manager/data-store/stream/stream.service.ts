@@ -58,10 +58,10 @@ export class StreamService {
         return result;
     }
 
-    async *groupReadWithoutAck(jobRunId: string, streamName: string, readerName: string, batchSize: number): AsyncGenerator<{ data: StreamRecord; id: string; }> {
+    async *groupReadWithoutAck(jobRunId: string, streamName: string, batchSize: number): AsyncGenerator<{ data: StreamRecord; id: string; }> {
         const redisClient:RedisClientType = await this.redisService.getClient();
         const streamKey = `${jobRunId}:${streamName}`;
-        let results: any = await redisClient.xReadGroup( `${jobRunId}-${this.readerGroup}`, readerName,
+        let results: any = await redisClient.xReadGroup( `${jobRunId}-${this.readerGroup}`, jobRunId,
             [{ key: streamKey, id: '>' }],
             { COUNT: batchSize, BLOCK: 500 }
             );
@@ -69,7 +69,7 @@ export class StreamService {
             console.warn(`Finding no messages to read, trying xAutoClaim`);
             results = await redisClient.xAutoClaim(
                 streamKey, `${jobRunId}-${this.readerGroup}`,
-                readerName, 50000,'0-0',
+                jobRunId, 50000,'0-0',
                 { COUNT: batchSize }
             )
             if (!results || results.length === 0) {

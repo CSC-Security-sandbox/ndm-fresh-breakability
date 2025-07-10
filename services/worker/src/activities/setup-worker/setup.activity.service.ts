@@ -1,17 +1,16 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { FileServerDetails, JobStatus } from '@netapp-cloud-datamigrate/jobs-lib';
-import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import axios from 'axios';
 import { KeycloakConfig } from 'src/config/keycloak.config';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
-import { RedisService } from 'src/redis/redis.service';
 
+import { JobManger } from '@local/job-lib';
 import { AuthService } from 'src/auth/auth.service';
 import { WorkersConfig } from 'src/config/app.config';
-import { SetupWorkerParams } from '../types/tasks';
 import { RetryableError } from 'src/errors/errors.types';
+import { SetupWorkerParams } from '../types/tasks';
+import { FileServerDetails } from '@local/job-lib/dist/job-manager/data-store/jobconfig/file-server';
 @Injectable()
 export class SetupActivityService {
 
@@ -23,7 +22,7 @@ export class SetupActivityService {
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(AuthService) private readonly authService: AuthService,
-    private readonly redisService: RedisService,
+    private readonly jobManager: JobManger,
     private readonly logger: Logger,
   ) {
     this.workerId = this.configService.get('worker.workerId');
@@ -86,19 +85,19 @@ export class SetupActivityService {
       const workingDirectory = WorkersConfig.get('baseWorkingPath');
 
       // Create FileServerDetails object with the provided arguments
-      const fsDetails = new FileServerDetails(
-        args.hostname,
-        args.protocols,
-        args.pathId,
-        args.path,
-        args.userName,
-        args.password,
-        workingDirectory
-      );
+      // const fsDetails = new FileServerDetails(
+      //   args.hostname,
+      //   args.protocols,
+      //   args.pathId,
+      //   args.path,
+      //   args.userName,
+      //   args.password,
+      //   workingDirectory
+      // );
 
       // Mount the file system path
       this.logger.debug(`[${args.jobRunId}] - [${this.workerId}] Mounting path`);
-      await this.mountPath(fsDetails, protocol, args.jobRunId);
+      // await this.mountPath(fsDetails, protocol, args.jobRunId);
 
       // Update worker configuration via an API call
       this.logger.debug(`[${args.jobRunId}] - [${this.workerId}] Updating worker configuration`);
@@ -118,7 +117,7 @@ export class SetupActivityService {
         protocolType: args.protocolType,
         workerId: this.workerId,
         message: `Worker ${this.workerId} successfully set up.`,
-        fsDetails,
+        // fsDetails,
         fileServerId: args.fileServerId,
         volumeId: args.volumeId,
         tests: args.tests,
@@ -139,28 +138,28 @@ export class SetupActivityService {
     this.logger.log(`[${jobRunId}] - [${this.workerId}] Setting up worker`);
     
     try {
-      const context = await this.redisService.getJobManagerContext(jobRunId);
-      if (!context) {
+      const jobConfig = await this.jobManager.getJobConfig(jobRunId);
+      if (!jobConfig) {
         throw new Error(`Context not found for traceId ${jobRunId}`);
       }
      
 
-      const protocolType = context.jobConfig.sourceFileServer.protocols[0].type;
+      const protocolType = jobConfig.sourceFileServer.protocols[0].type;
       const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
       // mount source path
       this.logger.log(
         `[${jobRunId}] - [${this.workerId}] Setting up worker`,
       );
       await this.mountPath(
-        context.jobConfig.sourceFileServer,
+        jobConfig.sourceFileServer,
         protocol,
         jobRunId,
       );
 
       // mount destination path if exists
-      if (context.jobConfig?.destinationFileServer)
+      if (jobConfig?.destinationFileServer)
         await this.mountPath(
-          context.jobConfig.destinationFileServer,
+          jobConfig.destinationFileServer,
           protocol,
           jobRunId,
         );
@@ -228,17 +227,17 @@ export class SetupActivityService {
 
   async cleanup(jobRunId: string): Promise<SetupOutput> {
     try {
-      const context = await this.redisService.getJobManagerContext(jobRunId);
+      const jobConfig = await this.jobManager.getJobConfig(jobRunId);
 
-      if (!context) {
+      if (!jobConfig) {
         throw new Error(`Context not found for traceId ${jobRunId}`);
       }
 
-      const protocolType = context.jobConfig.sourceFileServer.protocols[0].type;
+      const protocolType = jobConfig.sourceFileServer.protocols[0].type;
       const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
       // unmount source path
       await this.unmountPath(
-        context.jobConfig.sourceFileServer,
+        jobConfig.sourceFileServer,
         protocol,
         jobRunId,
       );
@@ -246,9 +245,9 @@ export class SetupActivityService {
 
       // unmount destination path if exists
       try {
-        if (context.jobConfig?.destinationFileServer)
+        if (jobConfig?.destinationFileServer)
           await this.unmountPath(
-            context.jobConfig.destinationFileServer,
+            jobConfig.destinationFileServer,
             protocol,
             jobRunId,
           );
@@ -262,13 +261,6 @@ export class SetupActivityService {
         };
       }
 
-      const jobState: JobState = await this.redisService.getJobState(jobRunId);
-      //TODO :: Need to looking in feature for job Paused
-      if(jobState.status !== JobStatus.Paused) {
-        this.logger.log(`[${jobRunId}] - Cleaning up job context`);
-        // await context.cleanup();
-        this.logger.log(`[${jobRunId}] - Job context cleaned up`);
-      }
       return {
         jobRunId,
         status: 'success',

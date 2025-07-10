@@ -24,7 +24,6 @@ import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { OperationsEntity } from "src/entities/operation.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { ErrorRemedyService } from "src/errorremedies/errorremedies.service";
-import { RedisService } from "src/redis/redis.service";
 import { SendMailService } from "src/utils/send-email";
 import { WorkersService } from "src/workers/workers.service";
 import { WorkflowService } from "src/workflow/workflow.service";
@@ -59,7 +58,6 @@ export class JobRunService {
     private operationErrorRepo: Repository<OperationErrorEntity>,
     private readonly configService: ConfigService,
     private readonly jobRunInitService: JobRunInitService,
-    private readonly redisService: RedisService,
     private workFlowService: WorkflowService,
     private sendMailService: SendMailService,
     private errorRemedyService: ErrorRemedyService,

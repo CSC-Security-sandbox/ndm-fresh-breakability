@@ -1,3 +1,4 @@
+import { JobConfig } from "@local/job-lib/dist/job-manager/data-store/jobconfig/job-config";
 import { Command, JobManagerContext, Task } from "@netapp-cloud-datamigrate/jobs-lib";
 
 
@@ -18,7 +19,8 @@ export interface ScanDirectoryInput {
     sourcePath: string;
     targetPath: string;
     sourcePrefix: string;
-    jobContext: JobManagerContext;
+    jobConfig: JobConfig;
+    jobRunId: string;
     command: Command;
     settings: ScanDirectorySettings;
 }
@@ -38,7 +40,7 @@ export interface ScanDirectoryOutput {
 
 export interface UpdateAndReportTaskInput {
     taskHashId: string;
-    jobContext: JobManagerContext;
+    jobRunId: string;
     errors:string[];
     task: Task,
     retryCount: number;
@@ -53,7 +55,7 @@ export interface TaskExecOutput {
 export interface TaskExecInput {
     jobRunId:string;
     task:Task;
-    jobContext: JobManagerContext;
+    jobConfig: JobConfig;
     activityId:string
     isMigration: boolean;
 }

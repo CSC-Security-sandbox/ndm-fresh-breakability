@@ -1,5 +1,5 @@
+import { JobManger, RedisService } from '@local/job-lib';
 import { Injectable, Logger } from '@nestjs/common';
-import { GroupReaderType, JobContextFactory, JobManagerContext, RedisUtils } from '@netapp-cloud-datamigrate/jobs-lib';
 import { defaultDataConverter } from '@temporalio/common';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -42,17 +42,17 @@ export class RedisConsumerService {
 
     constructor(
         private readonly inventoryService: InventoryService, // Service responsible for handling inventory-related operations
-        private readonly workflowService: WorkflowService   // Service responsible for managing workflows and signaling processes
+        private readonly workflowService: WorkflowService,   // Service responsible for managing workflows and signaling processes
+        private readonly redisService: RedisService,
+        private readonly jobManager: JobManger
     ) { }
 
 
     async onApplicationBootstrap() {
         try {
             // Initialize Redis client
-            this.redisClient = await RedisUtils.getClient();
+            this.redisClient = await this.redisService.getClient();
 
-            // Ensure Redis client is connected before proceeding
-            if (!this.redisClient.isOpen) await this.redisClient.connect();
 
             // Clear existing consumer records from Redis to avoid stale data
             await this.redisClient.del("consumers");
@@ -198,13 +198,11 @@ export class RedisConsumerService {
                 // Check if all consumers for this jobRunId are stopped
                 const isAllStopped = await this.areAllConsumersStopped(jobRunId);
                 if (isAllStopped) {
-
-                    const contextProvider = JobContextFactory.getJobManagerProvider('redis', this.redisClient);
-                    const jobContext = await contextProvider.getContext(jobRunId);
-                    if (jobContext) {
+                    const jobConfig = await this.jobManager.getJobConfig(jobRunId);
+                    if (jobConfig) {
                         this.logger.log(`[${jobRunId}] All consumers have been stopped. Sending job completion signal to the job context.`);
                         try {
-                            if(jobContext && jobContext.jobConfig.jobType != 'CUT_OVER'){
+                            if(jobConfig?.jobType && jobConfig?.jobType != 'CUT_OVER'){
                             //  await jobContext.cleanup(); 
                              this.logger.log(`[${jobRunId}] Job context cleanup completed.`);
                             }else{
@@ -378,22 +376,10 @@ export class RedisConsumerService {
     async startConsumerCall(jobRunId: string, readerName: string, consumerType: string) {
         try {
             // Ensure Redis client is connected before proceeding
-            if (!this.redisClient.isOpen) await this.redisClient.connect();
-
-            // Get the job context provider for Redis
-            const contextProvider = JobContextFactory.getJobManagerProvider("redis", this.redisClient);
-
-            // Retrieve job context using jobRunId
-            const jobContext = await contextProvider.getContext(jobRunId);
 
             // const speedTestContextProvider = JobContextFactory.getSpeedTestProvider("redis", this.redisClient);
 
             // const speedTestJobContext = await speedTestContextProvider.getJobContext(jobRunId);
-            if (!jobContext) {
-                // Stop consumer if jobContext is missing and throw an error
-                await this.stopConsumer(jobRunId, consumerType);
-                throw new Error('jobContext is null');
-            }
 
             // Generate a unique key for this consumer in Redis
             const key = this.getConsumerKey(jobRunId, consumerType);
@@ -410,13 +396,14 @@ export class RedisConsumerService {
                 this.logger.log(`[${jobRunId}] Running Process for key: ${key}`);
                 let hasData = false;
                 // Get the data reader instance
-                const reader = this.getReader(jobContext, readerName, consumerType);
+                const jobConfig = await this.jobManager.getJobConfig(jobRunId);
+                const reader = this.getReader(jobRunId, readerName, consumerType);
 
                 // Iterate over incoming data
                 for await (const data of reader) {
                     hasData = true;
 
-                    await this.processData(data, consumerType, jobRunId, jobContext);
+                    await this.processData(data, consumerType, jobRunId, jobConfig.sourceFileServer.pathId);
                 }
 
                 // If no new data is found, log and wait before checking again
@@ -450,7 +437,7 @@ export class RedisConsumerService {
      */
 
 
-    private async processData(stream: any, consumerType: string, jobRunId: string, jobContext: JobManagerContext) {
+    private async processData(stream: any, consumerType: string, jobRunId: string, pathId: string): Promise<void> {
         try {
 
             switch (consumerType) {
@@ -462,13 +449,14 @@ export class RedisConsumerService {
                         } else {
                             await this.handleErrors(stream.data);
                         }
-                        await jobContext.groupAckErrorStream([stream.id], GroupReaderType.DB_WRITER);
+                        await this.jobManager.groupAckErrorStream(jobRunId, [stream.id]);
                     } catch (e) {
                         this.logger.error(`${jobRunId} :${consumerType} Data updating error`)
                     }
                     break;
 
                 case ConsumerType.tasks:
+                    this.logger.log(JSON.stringify(stream?.data,));
                     if (stream?.data?.id === '8840625a-b818-42a8-98c8-5c05aaa19106') {
                         await this.stopConsumer(jobRunId, consumerType);
                         this.logger.log(`${consumerType} : killing `)
@@ -476,14 +464,13 @@ export class RedisConsumerService {
                         // Save task data to inventory service
                         await this.inventoryService.saveTasks(stream?.data);
                     }
-                    await jobContext.groupAckTaskStream([stream.id], GroupReaderType.DB_WRITER);
+                    await this.jobManager.groupAckTaskStream(jobRunId, [stream.id]);
                     break;
 
                 case ConsumerType.files:
                     // Handle file processing
-                    const { pathId } = jobContext.jobConfig.sourceFileServer;
-                    this.handleFiles(stream?.data, jobRunId, pathId, jobContext);
-                    await jobContext.groupAckFileStream([stream.id], GroupReaderType.DB_WRITER);
+                    this.handleFiles(stream?.data, jobRunId, pathId);
+                    await this.jobManager.groupAckFileStream(jobRunId, [stream.id]);
                     break;
 
                 // case ConsumerType.speedtestTask:
@@ -512,7 +499,7 @@ export class RedisConsumerService {
      * @param pathId - The path identifier related to the job context.
      * @param jobContext - The job context containing metadata.
      */
-    private async handleFiles(data: any, jobRunId: string, pathId: string, jobContext: any): Promise<void> {
+    private async handleFiles(data: any, jobRunId: string, pathId: string): Promise<void> {
         // Ensure processing happens sequentially
         this.processingQueue = this.processingQueue.then(async () => {
             try {
@@ -533,7 +520,8 @@ export class RedisConsumerService {
 
                     // Attempt to stop the consumer and signal workflow
                     try {
-                        const jobType = jobContext.jobConfig.jobType;
+                        // const jobType = jobContext.jobConfig.jobType;
+                        const jobType = (await this.jobManager.getJobConfig(jobRunId)).jobType;
                         const workflowId = getWorkflowId(jobRunId, jobType);
 
                         this.logger.log("----- Sending kill signal to workflow ----");
@@ -607,15 +595,15 @@ export class RedisConsumerService {
      * @returns The appropriate reader function.
      * @throws Error if the consumer type is invalid.
      */
-    private getReader(jobContext: JobManagerContext,  readerName: string, consumerType: string) {
-        if (!jobContext) {
+    private getReader(jobRunId: string,  readerName: string, consumerType: string) {
+        if (!jobRunId) {
             throw new Error("getReader: jobContext is null or undefined.");
         }
 
         const readerMap: Record<string, any> = {
-            [ConsumerType.files]: jobContext.groupReadFileStream(readerName, 500, GroupReaderType.DB_WRITER),
-            [ConsumerType.errors]: jobContext.groupReadErrorStream(readerName, 500, GroupReaderType.DB_WRITER),
-            [ConsumerType.tasks]: jobContext.groupReadTaskStream(readerName, 500, GroupReaderType.DB_WRITER),
+            [ConsumerType.files]: this.jobManager.groupReadFileStream(jobRunId, 500,),
+            [ConsumerType.errors]: this.jobManager.groupReadErrorStream(jobRunId, 500,),
+            [ConsumerType.tasks]: this.jobManager.groupReadTaskStream(jobRunId, 500,),
         };
 
         if (!(consumerType in readerMap)) {

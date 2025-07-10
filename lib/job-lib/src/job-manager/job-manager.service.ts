@@ -20,7 +20,7 @@ export class JobManger {
         await Promise.all(Object.values(Streams).map(async (streamName: string) => {
             await this.streamService.init(jobRunId, streamName);
         }));
-        const redisClient = this.redisService.getClient();
+        const redisClient = await this.redisService.getClient();
         await redisClient.set(jobRunId, jobConfig.serialize());
     }
 
@@ -30,7 +30,7 @@ export class JobManger {
             await this.streamService.cleanup(jobRunId, streamName);
         }));
         await this.hashSetService.deleteAll(jobRunId, HashSets.Tasks);  
-        const redisClient = this.redisService.getClient(); 
+        const redisClient = await this.redisService.getClient(); 
         if(await redisClient.exists(jobRunId)) {
             const keys = await redisClient.keys(`${jobRunId}*`);
             for (const key of keys) {
@@ -40,7 +40,7 @@ export class JobManger {
     }
 
     async getJobConfig(jobRunId: string): Promise<JobConfig | null> {
-        const redisClient = this.redisService.getClient();
+        const redisClient =await this.redisService.getClient();
         const jobConfigData = await redisClient.get(jobRunId);
         if (typeof jobConfigData === "string") {
             return JSON.parse(jobConfigData);
@@ -54,8 +54,8 @@ export class JobManger {
         return await this.streamService.appendToStream(jobRunId, Streams.FILES,  data );
     }
 
-    async *groupReadFileStream(jobRunId: string, readerName: string, batchSize:number): AsyncGenerator<{ data: any; id: string; }> {
-        yield* this.streamService.groupReadWithoutAck(jobRunId, Streams.FILES, readerName, batchSize);
+    async *groupReadFileStream(jobRunId: string, batchSize:number): AsyncGenerator<{ data: any; id: string; }> {
+        yield* this.streamService.groupReadWithoutAck(jobRunId, Streams.FILES, batchSize);
     }
 
     async groupAckFileStream(jobRunId: string, ids:string[]): Promise<void> {
@@ -67,8 +67,8 @@ export class JobManger {
         return await this.streamService.appendToStream(jobRunId, Streams.ERRORS,  data );
     }
 
-    async *groupReadErrorStream(jobRunId: string, readerName: string, batchSize:number): AsyncGenerator<{ data: any; id: string; }> {
-        yield* this.streamService.groupReadWithoutAck(jobRunId, Streams.ERRORS, readerName, batchSize);
+    async *groupReadErrorStream(jobRunId: string, batchSize:number): AsyncGenerator<{ data: any; id: string; }> {
+        yield* this.streamService.groupReadWithoutAck(jobRunId, Streams.ERRORS, batchSize);
     }
     
     async groupAckErrorStream(jobRunId: string, ids:string[]): Promise<void> {
@@ -80,8 +80,8 @@ export class JobManger {
         return await this.streamService.appendToStream(jobRunId, Streams.COMMANDS,  data );
     }
 
-    async *groupReadCommandStream(jobRunId: string, readerName: string, batchSize:number): AsyncGenerator<{ data: any; id: string; }> {
-        yield* this.streamService.groupReadWithoutAck(jobRunId, Streams.COMMANDS, readerName, batchSize);
+    async *groupReadCommandStream(jobRunId: string, batchSize:number): AsyncGenerator<{ data: any; id: string; }> {
+        yield* this.streamService.groupReadWithoutAck(jobRunId, Streams.COMMANDS, batchSize);
     }
 
     async groupAckCommandStream(jobRunId: string, ids:string[]): Promise<void> {
@@ -90,15 +90,15 @@ export class JobManger {
 
     // Task Stream Methods
     async publishToTaskStream(jobRunId: string, data: any): Promise<string> {
-        return await this.streamService.appendToStream(jobRunId, Streams.COMMANDS,  data );
+        return await this.streamService.appendToStream(jobRunId, Streams.TASKS,  data );
     }
 
-    async *groupReadTaskStream(jobRunId: string, readerName: string, batchSize:number): AsyncGenerator<{ data: any; id: string; }> {
-        yield* this.streamService.groupReadWithoutAck(jobRunId, Streams.COMMANDS, readerName, batchSize);
+    async *groupReadTaskStream(jobRunId: string, batchSize:number): AsyncGenerator<{ data: any; id: string; }> {
+        yield* this.streamService.groupReadWithoutAck(jobRunId, Streams.TASKS, batchSize);
     }
 
     async groupAckTaskStream(jobRunId: string, ids:string[]): Promise<void> {
-        await this.streamService.ackAndPurge(jobRunId, Streams.COMMANDS, ids);
+        await this.streamService.ackAndPurge(jobRunId, Streams.TASKS, ids);
     }
 
 
@@ -108,15 +108,15 @@ export class JobManger {
     }
 
     async setTaskIfNotExists(jobRunId: string, key: string, value: any): Promise<void> {
-        await this.hashSetService.setValue(jobRunId, HashSets.Tasks, key, value);
+        await this.hashSetService.setValueIfNotExists(jobRunId, HashSets.Tasks, key, value);
     }
 
     async getTask(jobRunId: string, key: string): Promise<any> {
         return await this.hashSetService.getValue(jobRunId, HashSets.Tasks, key);
     }
 
-    async deleteTask(key: string): Promise<void> {
-        await this.hashSetService.deleteValue(key, HashSets.Tasks, key);
+    async deleteTask(jobRunId: string, key: string): Promise<void> {
+        await this.hashSetService.deleteValue(jobRunId, HashSets.Tasks, key);
     }
 
 }

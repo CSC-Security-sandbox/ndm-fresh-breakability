@@ -2,12 +2,12 @@ import { Command, ErrorType, JobManagerContext } from "@netapp-cloud-datamigrate
 import { Origin } from "src/activities/utils/utils.types";
 
 export interface PublishCommandInput{
-    jobContext: JobManagerContext;
+    jobRunId: string;
     commands: Command[]
 }
 
 export interface DirContentsInput {
-    jobContext: JobManagerContext;
+    jobRunId: string;
     path: string;
     origin: Origin;
     errorType?: ErrorType;

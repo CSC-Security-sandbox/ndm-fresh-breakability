@@ -22,27 +22,33 @@ export class HashSetService {
 
     async setValue(jobRunId: string, hashName: string, key: string, value: any): Promise<void> {
         const redisClient: RedisClientType = await this.redisService.getClient();
-        const hashKey = `${jobRunId}:${hashName}`;
-        const bufferValue = encode(value);
-        await redisClient.hSet(hashKey, key, bufferValue.toString('base64'));
+        const hashKey = `${jobRunId}:${hashName}-map`;
+        await redisClient.hSet(hashKey, key, JSON.stringify(value));
+    }
+
+    async setValueIfNotExists(jobRunId: string, hashName: string, key: string, value: any) {
+        const redisClient: RedisClientType = await this.redisService.getClient();
+        const hashKey = `${jobRunId}:${hashName}-map`;
+        const result = await redisClient.hSetNX(hashKey, key, JSON.stringify(value));
+        return result;
     }
 
     async getValue(jobRunId: string, hashName: string, key: string): Promise<any | null> {
-        const redisClient: RedisClientType = this.redisService.getClient();
-        const hashKey = `${jobRunId}:${hashName}`;
-        const value = await redisClient.hGet(hashKey, key) as string | null;
-        return typeof value === 'string' ? decode(Buffer.from(value, 'base64')) : null;
+        const redisClient: RedisClientType = await this.redisService.getClient();
+        const hashKey = `${jobRunId}:${hashName}-map`;
+        const val  = await redisClient.hGet(hashKey, key) as string | null;
+        return val ? JSON.parse(val) : null;
     }
 
     async deleteValue(jobRunId: string, hashName: string, key: string): Promise<void> {
         const redisClient: RedisClientType = await this.redisService.getClient();
-        const hashKey = `${jobRunId}:${hashName}`;
+        const hashKey = `${jobRunId}:${hashName}-map`;
         await redisClient.hDel(hashKey, key);
     }
 
     async deleteAll(jobRunId: string, hashName: string): Promise<void> {
         const redisClient: RedisClientType = await this.redisService.getClient();
-        const hashKey = `${jobRunId}:${hashName}`;
+        const hashKey = `${jobRunId}:${hashName}-map`;
         await redisClient.del(hashKey);
     }
 

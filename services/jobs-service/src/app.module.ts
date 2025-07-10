@@ -8,8 +8,8 @@ import { JobRunModule } from "./jobrun/jobrun.module";
 import { TasksModule } from "./tasks/tasks.module";
 import { WorkerModule } from "./workers/workers.module";
 import { WorkflowModule } from "./workflow/workflow.module";
-import { RedisModule } from "./redis/redis.module";
 import { HealthcheckModule } from "./healthcheck/healthcheck.module";
+import { JobManagerModule, RedisModule } from "@local/job-lib";
 
 @Module({
   imports: [
@@ -29,6 +29,7 @@ import { HealthcheckModule } from "./healthcheck/healthcheck.module";
     WorkflowModule,
     RedisModule,
     HealthcheckModule,
+    JobManagerModule
   ],
   controllers: [],
   providers: [],
