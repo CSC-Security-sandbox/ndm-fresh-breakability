@@ -13,7 +13,7 @@ import * as systeminformation from 'systeminformation';
 export class MetricsService implements OnModuleInit, OnModuleDestroy {
   private readonly registry = new Registry();
   private readonly pushgateway = new Pushgateway(
-    `http://${process.env.FLUENT_HOST || '127.0.0.1'}:9091`,
+    `http://${process.env.CONTROL_PLANE_IP || '127.0.0.1'}:9091`,
     {},
     this.registry,
   );

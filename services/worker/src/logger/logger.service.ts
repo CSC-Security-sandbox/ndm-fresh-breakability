@@ -1,13 +1,13 @@
 import { Injectable, LoggerService } from '@nestjs/common';
-import * as fs from 'fs';
-import * as winston from 'winston';
-import 'winston-daily-rotate-file';
 import {
   DefaultLogger,
   makeTelemetryFilterString,
   Runtime,
 } from '@temporalio/worker';
 import { support as fluentSupport } from 'fluent-logger';
+import * as fs from 'fs';
+import * as winston from 'winston';
+import 'winston-daily-rotate-file';
 
 @Injectable()
 export class Logger implements LoggerService {
@@ -42,7 +42,7 @@ export class Logger implements LoggerService {
     }
 
     const fluentConfig = {
-      host: process.env.FLUENT_HOST || '192.168.64.189',
+      host: process.env.CONTROL_PLANE_IP || '192.168.64.189',
       port: process.env.FLUENT_PORT ? parseInt(process.env.FLUENT_PORT) : 32422,
       timeout: 3.0,
       reconnectInterval: 60000,

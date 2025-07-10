@@ -31,8 +31,8 @@ permissions:
   contents: read
 
 jobs:
-  deploy-and-test:
-    name: Create VM for control-plane and worker on vSphere and run API tests
+  run-ndm-api-tests:
+    name: Run E2E API Automation Tests for NDM
     runs-on: openlab
     outputs:
       control_plane_vm_ip_address: ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}
