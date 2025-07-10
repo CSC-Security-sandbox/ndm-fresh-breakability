@@ -41,10 +41,7 @@ describe('OverviewController', () => {
       },
       jobDetails: {
         totalDiscoverJobs: 1,
-        totalMigrateJobs: {
-          baseLineJob: 0,
-          incrementalJob: 0,
-        },
+        totalMigrateJobs: 0,
         totalCutoverJobs: 0,
       },
     };
