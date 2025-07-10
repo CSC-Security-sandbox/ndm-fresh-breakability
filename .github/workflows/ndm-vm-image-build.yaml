@@ -112,6 +112,8 @@ jobs:
       reports_service_branch: ${{ steps.parse-config.outputs.reports_service_branch }}
       db_migrations_tag: ${{ steps.parse-config.outputs.db_migrations_tag }}
       db_migrations_branch: ${{ steps.parse-config.outputs.db_migrations_branch }}
+      binary_name: ${{ steps.worker-binary.outputs.binary_name }}
+      binary_path: ${{ steps.worker-binary.outputs.binary_path }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -223,6 +225,36 @@ jobs:
           echo "ref_type=$REF_TYPE" >> $GITHUB_OUTPUT
           echo "ref_name=$REF_NAME" >> $GITHUB_OUTPUT
         shell: bash
+
+      - name: Display Service Tags and Branches
+        run: |
+          echo "========== SERVICE CONFIGURATION SUMMARY =========="
+          echo "worker: tag=${{ steps.parse-config.outputs.worker_tag }}, branch=${{ steps.parse-config.outputs.worker_branch }}"
+          echo "admin-service: tag=${{ steps.parse-config.outputs.admin_service_tag }}, branch=${{ steps.parse-config.outputs.admin_service_branch }}"
+          echo "config-service: tag=${{ steps.parse-config.outputs.config_service_tag }}, branch=${{ steps.parse-config.outputs.config_service_branch }}"
+          echo "datamigrator-ui: tag=${{ steps.parse-config.outputs.datamigrator_ui_tag }}, branch=${{ steps.parse-config.outputs.datamigrator_ui_branch }}"
+          echo "db-writer: tag=${{ steps.parse-config.outputs.db_writer_service_tag }}, branch=${{ steps.parse-config.outputs.db_writer_service_branch }}"
+          echo "jobs-service: tag=${{ steps.parse-config.outputs.jobs_service_tag }}, branch=${{ steps.parse-config.outputs.jobs_service_branch }}"
+          echo "keycloak-customizations: tag=${{ steps.parse-config.outputs.keycloak_customizations_tag }}, branch=${{ steps.parse-config.outputs.keycloak_customizations_branch }}"
+          echo "reports-service: tag=${{ steps.parse-config.outputs.reports_service_tag }}, branch=${{ steps.parse-config.outputs.reports_service_branch }}"
+          echo "db-migrations: tag=${{ steps.parse-config.outputs.db_migrations_tag }}, branch=${{ steps.parse-config.outputs.db_migrations_branch }}"
+          echo "build version: ${{ steps.build_version.outputs.build_version }}"
+          echo "=================================================="
+          
+          echo "## NDM VM Image Build - Service Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Tag | Branch |" >> $GITHUB_STEP_SUMMARY
+          echo "| ------- | --- | ------ |" >> $GITHUB_STEP_SUMMARY
+          echo "| worker | \`${{ steps.parse-config.outputs.worker_tag }}\` | \`${{ steps.parse-config.outputs.worker_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| admin-service | \`${{ steps.parse-config.outputs.admin_service_tag }}\` | \`${{ steps.parse-config.outputs.admin_service_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| config-service | \`${{ steps.parse-config.outputs.config_service_tag }}\` | \`${{ steps.parse-config.outputs.config_service_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| datamigrator-ui | \`${{ steps.parse-config.outputs.datamigrator_ui_tag }}\` | \`${{ steps.parse-config.outputs.datamigrator_ui_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| db-writer | \`${{ steps.parse-config.outputs.db_writer_service_tag }}\` | \`${{ steps.parse-config.outputs.db_writer_service_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| jobs-service | \`${{ steps.parse-config.outputs.jobs_service_tag }}\` | \`${{ steps.parse-config.outputs.jobs_service_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| keycloak-customizations | \`${{ steps.parse-config.outputs.keycloak_customizations_tag }}\` | \`${{ steps.parse-config.outputs.keycloak_customizations_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| reports-service | \`${{ steps.parse-config.outputs.reports_service_tag }}\` | \`${{ steps.parse-config.outputs.reports_service_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| db-migrations | \`${{ steps.parse-config.outputs.db_migrations_tag }}\` | \`${{ steps.parse-config.outputs.db_migrations_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**build version**: \`${{ steps.build_version.outputs.build_version }}\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Fetch and Replace tags and bundle docker images
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
@@ -344,7 +376,7 @@ jobs:
             echo "Using latest worker version: $SELECTED_VERSION"
           else
             echo "Using specified worker tag: $WORKER_TAG"
-            SELECTED_VERSION="$WORKER_TAG"
+            SELECTED_VERSION="${WORKER_TAG::7}"
           fi
           
           echo "SELECTED_VERSION=$SELECTED_VERSION" >> $GITHUB_ENV
@@ -356,6 +388,7 @@ jobs:
             ARTIFACT_PATH="${BASE_PATH}/${REF_TYPE}/${REF_NAME}/${SELECTED_VERSION}"
           fi
           
+          echo "binary_path=$ARTIFACT_PATH" >> $GITHUB_OUTPUT
           BINARY_PATH="${ARTIFACT_PATH}/datamigrator-worker-${SELECTED_VERSION}.zip"
           
           echo "Downloading worker binary from Artifactory..."
@@ -367,8 +400,29 @@ jobs:
             echo "Error: Failed to download worker binary or file is empty"
             exit 1
           fi
-          
           echo "Worker binary downloaded successfully."
+
+          echo "Downloading windows worker installer from Artifactory..."
+          curl -s -o "windows-worker-installer.exe" \
+            -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACT_PATH}/windows-worker-installer-${SELECTED_VERSION}.exe"
+
+          if [ ! -f "windows-worker-installer.exe" ] || [ ! -s "windows-worker-installer.exe" ]; then
+            echo "Error: Failed to download windows worker installer or file is empty"
+            exit 1
+          fi
+          echo "Windows worker installer downloaded successfully."
+
+          echo "Downloading worker.env from Artifactory..."
+          curl -s -o "worker.env" \
+            -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACT_PATH}/worker-${SELECTED_VERSION}.env"
+
+          if [ ! -f "worker.env" ] || [ ! -s "worker.env" ]; then
+            echo "Error: Failed to download worker.env or file is empty"
+            exit 1
+          fi
+          echo "Worker environment file downloaded successfully."
           
           mkdir -p $GITHUB_WORKSPACE/worker_bin
           unzip worker.zip -d $GITHUB_WORKSPACE/worker_bin
@@ -378,10 +432,45 @@ jobs:
             NEW_BINARY_NAME="datamigrator-worker-${BUILD_VERSION}"
             mv "$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" "$GITHUB_WORKSPACE/worker_bin/pkg/$NEW_BINARY_NAME"
             echo "Renamed binary to $NEW_BINARY_NAME"
+            # Create tar.gz archive to preserve file integrity
+            tar -czf "$GITHUB_WORKSPACE/worker_bin/pkg/${NEW_BINARY_NAME}.tar.gz" -C "$GITHUB_WORKSPACE/worker_bin/pkg" "$NEW_BINARY_NAME"
+            echo "Created tarball ${NEW_BINARY_NAME}.tar.gz"
           else
             echo "Binary not found!"
             ls -la $GITHUB_WORKSPACE/worker_bin/pkg/
             exit 1
+          fi
+          echo "binary_name=$NEW_BINARY_NAME" >> $GITHUB_OUTPUT
+
+          # Upload assets to Artifactory
+          if [[ ! "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/worker"
+            BINARY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/worker/${NEW_BINARY_NAME}.tar.gz"
+            INSTALLER_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/worker/windows-worker-installer-${BUILD_VERSION}.exe"
+            ENV_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/worker/worker-${BUILD_VERSION}.env"
+            
+            for REPO_PATH in "cicd/ndm" "team/ndm"; do
+              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${BINARY_PATH}"
+              echo "Uploading worker binary tarball to $TARGET_URL..."
+              curl --silent --show-error --fail --request PUT --upload-file "$GITHUB_WORKSPACE/worker_bin/pkg/${NEW_BINARY_NAME}.tar.gz" \
+                "$TARGET_URL" \
+                -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+              echo "Worker binary tarball uploaded successfully to $TARGET_URL."
+
+              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${INSTALLER_PATH}"
+              echo "Uploading Windows worker installer to $TARGET_URL..."
+              curl --silent --show-error --fail --request PUT --upload-file "windows-worker-installer.exe" \
+                "$TARGET_URL" \
+                -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+              echo "Windows worker installer uploaded successfully to $TARGET_URL."
+
+              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ENV_PATH}"
+              echo "Uploading worker environment file to $TARGET_URL..."
+              curl --silent --show-error --fail --request PUT --upload-file "worker.env" \
+                "$TARGET_URL" \
+                -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+              echo "Worker environment file uploaded successfully to $TARGET_URL."
+            done
           fi
 
       - name: Upload Ansible vars.yaml
@@ -704,24 +793,12 @@ jobs:
           ./app-deployment/scripts/services_manifest.sh services.json "${{ env.ref_type }}" "${{ env.ref_name }}"
           echo "services_json=$(cat services.json)" >> $GITHUB_OUTPUT
 
-          CHARTS_DIR="app-deployment/artifacts"
           BUILD_TYPE="${{ env.build_type }}"
           BUILD_VERSION="${{ env.build_version }}"
 
-          CHARTS_JSON="["
-          for f in "$CHARTS_DIR"/*.tgz; do
-            fname=$(basename "$f")
-            chart_name="${fname%-${BUILD_VERSION}.tgz}"
-            if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
-              chart_path="releases/${BUILD_VERSION}/helm/$fname"
-            else
-              chart_path="builds/$BUILD_TYPE/$BUILD_VERSION/helm/$fname"
-            fi
-            CHARTS_JSON="${CHARTS_JSON}{\"name\":\"$chart_name\",\"version\":\"$BUILD_VERSION\",\"path\":\"$chart_path\"},"
-          done
-          CHARTS_JSON="${CHARTS_JSON%,}]"
-          echo "$CHARTS_JSON" > charts.json
-          echo "charts_json=$CHARTS_JSON" >> $GITHUB_OUTPUT
+          CHART_JSON="{\"name\":\"datamigrator\",\"version\":\"$BUILD_VERSION\",\"path\":\"$HELM_PATH\"}"
+          echo "$CHART_JSON" > chart.json
+          echo "chart_json=$CHART_JSON" >> $GITHUB_OUTPUT
 
           PROVIDER="${{ matrix.provider }}"
           COMPONENT="${{ matrix.component }}"
@@ -731,24 +808,8 @@ jobs:
           SHORT_COMMIT="${GITHUB_SHA::7}"
           RUN_ID="${GITHUB_RUN_ID}"
           WORKFLOW_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
-          CHARTS_JSON=$(cat charts.json)
+          CHART_JSON=$(cat chart.json)
           SERVICES_JSON=$(cat services.json)
-
-          cat > metadata.json <<EOF
-          {
-            "build_version": "$BUILD_VERSION",
-            "provider": "$PROVIDER",
-            "component": "$COMPONENT",
-            "image_name": "$IMAGE_NAME",
-            "build_timestamp": "$BUILD_TIMESTAMP",
-            "commit": "$COMMIT",
-            "short_commit": "$SHORT_COMMIT",
-            "workflow_run_id": "$RUN_ID",
-            "workflow_run_url": "$WORKFLOW_RUN_URL",
-            "charts": $CHARTS_JSON,
-            "services": $SERVICES_JSON
-          }
-          EOF
 
           ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
@@ -761,6 +822,25 @@ jobs:
             DOCKER_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/docker/datamigrator-$BUILD_VERSION.tar"
             HELM_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/helm/datamigrator-$BUILD_VERSION.tgz"
           fi
+
+          cat > metadata.json <<EOF
+          {
+            "build_version": "$BUILD_VERSION",
+            "provider": "$PROVIDER",
+            "component": "$COMPONENT",
+            "image_name": "$IMAGE_NAME",
+            "build_timestamp": "$BUILD_TIMESTAMP",
+            "commit": "$COMMIT",
+            "short_commit": "$SHORT_COMMIT",
+            "workflow_run_id": "$RUN_ID",
+            "workflow_run_url": "$WORKFLOW_RUN_URL",
+            "chart": $CHART_JSON,
+            "services": {
+              "path": "$DOCKER_PATH",
+              "items": $SERVICES_JSON
+            }
+          }
+          EOF
 
           cat > latest.json <<EOF
           {
@@ -806,6 +886,8 @@ jobs:
         run: |
           set -e
           BUILD_VERSION="${{ env.build_version }}"
+          BINARY_NAME="${{ needs.package-artifacts.outputs.binary_name }}"
+          BINARY_PATH="${{ needs.package-artifacts.outputs.binary_path }}"
           PROVIDER="${{ matrix.provider }}"
           COMPONENT="${{ matrix.component }}"
           IMAGE_NAME="${{ steps.image-info.outputs.image_name }}"
@@ -820,6 +902,8 @@ jobs:
             "build_version": "$BUILD_VERSION",
             "provider": "$PROVIDER",
             "component": "$COMPONENT",
+            "binary_name": "$BINARY_NAME",
+            "binary_path": "$BINARY_PATH",
             "image_name": "$IMAGE_NAME",
             "build_timestamp": "$BUILD_TIMESTAMP",
             "commit": "$COMMIT",
@@ -843,6 +927,8 @@ jobs:
             "build_version": "$BUILD_VERSION",
             "provider": "$PROVIDER",
             "component": "$COMPONENT",
+            "binary_name": "$BINARY_NAME",
+            "binary_path": "$BINARY_PATH",
             "commit": "${GITHUB_SHA}",
             "short_commit": "${GITHUB_SHA::7}",
             "timestamp": "$ISO_TIME",
