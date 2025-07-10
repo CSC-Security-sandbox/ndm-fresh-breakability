@@ -1,19 +1,33 @@
 import {
   configApi,
+  useLazyDownloadExportPathSourceTemplateQuery,
   useLazyRefetchConfigExportPathsQuery,
 } from "@api/configApi";
 import { Box } from "@components/container/index";
 import { notify } from "@components/notification/NotificationWrapper";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
 import ReFreshExportPathsTime from "@modules/storage-servers/file-server/file-server-overview/components/ReFreshExportPathsTime";
-import { EXPORT_PATHS_TABLE_COLS_DEF } from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
+import {
+  BULK_DISCOVERY,
+  EXPORT_PATHS_TABLE_COLS_DEF,
+} from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
 import { ExportPathsTablePropsType } from "@modules/storage-servers/file-server/file-server-overview/overview.interface";
 import { Button } from "@netapp/bxp-design-system-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLazyCheckConnectionRespQuery } from "@api/workerManagerApi";
 import { ValidateConnectionStatus } from "@/types/app.type";
 import { useDispatch } from "react-redux";
 import { MAX_RETRY_API_ATTEMPTS } from "@/utils/constants";
+import BulkManualUploadFile from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/components/BulkManualUploadFile";
+import {
+  getFileServerId,
+  hasManualUploadPath,
+} from "@modules/storage-servers/file-server/file-server-overview/file-server.utils";
+import {
+  EXPORT_PATH_FILE_UPLOAD_IN_PROGRESS_TEXT,
+  NO_DATA_TEXT,
+} from "@modules/storage-servers/file-server/components/steps/Credentials/export-path-source.constants";
+import { handleDownloadTemplate } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
 
 const ExportPathsTable = ({
   fileServerDetails,
@@ -22,14 +36,18 @@ const ExportPathsTable = ({
   isRowSelectingEnabled = false,
   setSelectedExportPathsIds,
   defaultColumnState,
+  jobType,
   notReachableExportPaths,
 }: ExportPathsTablePropsType) => {
   const interval = useRef<NodeJS.Timeout | null>(null);
-  const [reFetchExportPathsApi] = useLazyRefetchConfigExportPathsQuery();
-  const [disableRefresh, setDisableRefresh] = useState<boolean>(false);
-  const [getWorkFlowStatus] = useLazyCheckConnectionRespQuery();
   const dispatch = useDispatch();
-  
+
+  const [disableRefresh, setDisableRefresh] = useState<boolean>(false);
+
+  const [reFetchExportPathsApi] = useLazyRefetchConfigExportPathsQuery();
+  const [downloadTemplate] = useLazyDownloadExportPathSourceTemplateQuery();
+  const [getWorkFlowStatus] = useLazyCheckConnectionRespQuery();
+
   const tableStateProps = {
     columns: EXPORT_PATHS_TABLE_COLS_DEF,
     rows: allExportPaths,
@@ -38,6 +56,12 @@ const ExportPathsTable = ({
     pageSize: 10,
     defaultColumnState: defaultColumnState,
   };
+
+  const fileServerId = useMemo(() => {
+    if (fileServerDetails?.fileServers) {
+      return getFileServerId(fileServerDetails, "NFS");
+    }
+  }, [fileServerDetails?.fileServers]);
 
   const showErrorOnRefetchFailure = (error: Error) => {
     setDisableRefresh(false);
@@ -95,27 +119,68 @@ const ExportPathsTable = ({
     };
   }, []);
 
+  const isManualUploadPath = useMemo(() => {
+    if (fileServerDetails?.fileServers)
+      return hasManualUploadPath(fileServerDetails);
+  }, [fileServerDetails?.fileServers]);
+
   const FETCHING_DETAILS = (
     <Box className="flex gap-3 justify-end">
       <ReFreshExportPathsTime fileServerDetails={fileServerDetails} />
       <Button
         variant="text"
         onClick={handleRefetchExportPaths}
-        disabled={disableRefresh}
+        disabled={!fileServerDetails?.isRefreshAvailable || disableRefresh}
       >
         Click here to refresh
       </Button>
     </Box>
   );
+  const handleDownloadReport = () => {
+    handleDownloadTemplate(
+      () =>
+        downloadTemplate({
+          type: "uploaded-paths",
+          fileServerId: fileServerId,
+        }),
+      "uploaded_export_paths.csv"
+    );
+  };
+
+  const getBulkManualUpload = () => (
+    <BulkManualUploadFile
+      fileServerDetails={fileServerDetails}
+      allExportPaths={allExportPaths}
+      handleReportDownload={handleDownloadReport}
+    />
+  );
+
+  const contentValue = useMemo(() => {
+    if (jobType === BULK_DISCOVERY) return "";
+
+    if (!isManualUploadPath) return showRefetch ? FETCHING_DETAILS : "";
+
+    return allExportPaths.length > 0 ? getBulkManualUpload() : "";
+  }, [isManualUploadPath, showRefetch, allExportPaths]);
+
+  const getDataLabel = useCallback(() => {
+    if (jobType === BULK_DISCOVERY) return NO_DATA_TEXT;
+
+    if (fileServerDetails?.isUploadInProgress)
+      return EXPORT_PATH_FILE_UPLOAD_IN_PROGRESS_TEXT;
+
+    return isManualUploadPath ? getBulkManualUpload() : NO_DATA_TEXT;
+  }, [fileServerDetails, isManualUploadPath]);
 
   return (
     <TableWrapper
       tableStateProps={tableStateProps}
-      content={showRefetch ? FETCHING_DETAILS : ""}
+      content={contentValue}
       showLabel={false}
       handleSelection={
         isRowSelectingEnabled ? setSelectedExportPathsIds : undefined
       }
+      noDataLabel={getDataLabel()}
       notReachableExportPaths={notReachableExportPaths}
     />
   );
