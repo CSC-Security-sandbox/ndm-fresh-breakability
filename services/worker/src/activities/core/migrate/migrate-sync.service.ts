@@ -2,10 +2,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CommandStatus, ErrorType, FileInfo, JobManagerContext, OPS_STATUS, Task, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { Context } from '@temporalio/activity';
-import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
-import { CommonActivityService } from 'src/activities/common/common.service';
 import { ShellService } from 'src/activities/common/shell.service';
 import { ACL, getFileInfoInput, Operation, Origin } from 'src/activities/utils/utils.types';
 import { CommandConfig, CommandPattern } from 'src/config/command.config';
@@ -14,8 +12,8 @@ import { RedisService } from 'src/redis/redis.service';
 import { WorkerThreadService } from 'src/thread/worker.thread.service';
 import { OPS_CMD, } from '../../migrate/migrate.type';
 import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, getUserACLs, isFatalError, isSourceFatalError } from '../../utils/utils';
-import { handleSyncTaskUpdateInput, StampMetaDataInput, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate-sync.types';
 import { CommonTaskService } from '../common/common-task.service';
+import { handleSyncTaskUpdateInput, StampMetaDataInput, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate-sync.types';
 
 
 // const isRandomTrue = (probability: number) => {

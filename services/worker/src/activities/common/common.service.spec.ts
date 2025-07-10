@@ -99,22 +99,6 @@ describe('CommonActivityService', () => {
     });
   });
 
-  describe('updateLastEntry', () => {
-    it('should publish last entries', async () => {
-      const res = await service.updateLastEntry(traceId);
-      expect(mockContext.appendToFileList).toHaveBeenCalled();
-      expect(redisService.setJobContext).toHaveBeenCalledWith(traceId, mockContext);
-      expect(res).toEqual({ message: 'Job completed for job id: ' + traceId });
-    });
-
-    it('should handle error', async () => {
-      (mockContext.appendToFileList as jest.Mock).mockRejectedValueOnce(new Error('err'));
-      const res = await service.updateLastEntry(traceId);
-      expect(logger.error).toHaveBeenCalled();
-      expect(res).toEqual({ message: 'Error while marking the job as completed : ' + traceId });
-    });
-  });
-
   describe('updateStatus', () => {
     it('should update status successfully', async () => {
       (axios.patch as jest.Mock).mockResolvedValue({});
@@ -309,6 +293,54 @@ describe('CommonActivityService', () => {
       await service.publishPendingTasksToStream(mockContext, 'SYNC');
       expect(mockContext.appendToTaskList).not.toHaveBeenCalled();
       expect(mockContext.appendToMigrationTask).not.toHaveBeenCalled();
+      });
+
+      it('should handle errors when appending scan tasks to stream', async () => {
+        const scanTasks = { t1: JSON.stringify({ id: 't1' }) };
+        mockContext.getAllRunningScanTasks = jest.fn().mockResolvedValue(scanTasks);
+        mockContext.appendToTaskList = jest.fn().mockRejectedValueOnce(new Error('append error'));
+        mockContext.deleteAllScanTasks = jest.fn().mockResolvedValue(undefined);
+        await service.publishPendingTasksToStream(mockContext, 'SCAN');
+        expect(logger.error).toHaveBeenCalledWith(
+          `[${mockContext.jobRunId}] Failed to append Scan task to stream: Error: append error`
+        );
+        expect(mockContext.deleteAllScanTasks).toHaveBeenCalled();
+      });
+
+      it('should handle errors when appending sync tasks to stream', async () => {
+        const syncTasks = { s1: JSON.stringify({ id: 's1' }) };
+        mockContext.getAllRunningSyncTasks = jest.fn().mockResolvedValue(syncTasks);
+        mockContext.appendToMigrationTask = jest.fn().mockRejectedValueOnce(new Error('sync error'));
+        mockContext.deleteAllSyncTasks = jest.fn().mockResolvedValue(undefined);
+        await service.publishPendingTasksToStream(mockContext, 'SYNC');
+        expect(logger.error).toHaveBeenCalledWith(
+          `[${mockContext.jobRunId}] Failed to append Sync task to stream: Error: sync error`
+        );
+        expect(mockContext.deleteAllSyncTasks).toHaveBeenCalled();
+      });
+
+      describe('updateLastEntry', () => {
+        it('should publish last entries successfully', async () => {
+          const jobManagerContext = {
+        publishToFileStream: jest.fn().mockResolvedValue(undefined),
+        publishToTaskStream: jest.fn().mockResolvedValue(undefined),
+        publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+          };
+          redisService.getJobManagerContext = jest.fn().mockResolvedValue(jobManagerContext);
+          const res = await service.updateLastEntry(traceId);
+          expect(redisService.getJobManagerContext).toHaveBeenCalledWith(traceId);
+          expect(jobManagerContext.publishToFileStream).toHaveBeenCalled();
+          expect(jobManagerContext.publishToTaskStream).toHaveBeenCalled();
+          expect(jobManagerContext.publishToErrorStream).toHaveBeenCalled();
+          expect(res).toEqual({ message: 'Job completed for job id: ' + traceId });
+        });
+
+        it('should handle error when publishing last entry', async () => {
+          redisService.getJobManagerContext = jest.fn().mockRejectedValueOnce(new Error('fail'));
+          const res = await service.updateLastEntry(traceId);
+          expect(logger.error).toHaveBeenCalled();
+          expect(res).toEqual({ message: 'Error while marking the job as completed : ' + traceId });
+        });
       });
     });
 

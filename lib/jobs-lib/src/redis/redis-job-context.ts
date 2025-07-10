@@ -12,7 +12,6 @@ import {
   RedisSpeedTestReadWriteCollection,
   RedisUpdatedTasksCollection
 } from './redis-collections';
-import { Logger } from '../utils/logging';
 import { SpeedTestJobContext } from '../types/speed-test-job-context';
 import { SpeedTestJobConfig } from '../types/speed-test-job-config';
 import { RedisHMapCollection } from './redis-hmap-collection';
@@ -20,7 +19,6 @@ import { RedisHMapCollection } from './redis-hmap-collection';
 
 export class RedisJobContext extends JobContext {
   redisClient: RedisClientType;
-  logger: Logger;
 
   constructor(
     jobRunId: string,
@@ -31,7 +29,6 @@ export class RedisJobContext extends JobContext {
   ) {
     super(jobRunId, jobConfig, jobRunStatus, jobState);
     this.redisClient = redisClient;
-    this.logger = Logger.getLogger(jobRunId);
 
     this.filesInfo = new RedisFileCollection(jobRunId, 0, '0-0', redisClient);
     this.dirsInfo = new RedisDirectoryCollection(jobRunId,0,'0-0',redisClient,);
@@ -47,7 +44,7 @@ export class RedisJobContext extends JobContext {
   async init(): Promise<void> {
     for (const key of [this.jobRunId, `stats:${this.jobRunId}`]) {
       if (await this.redisClient.exists(key)) {
-        this.logger.info(`Cleaning up existing key: ${key}`);
+        console.log(`Cleaning up existing key: ${key}`);
         await this.redisClient.del(key);
       }
     }
@@ -61,7 +58,6 @@ export class RedisJobContext extends JobContext {
       this.migrateTask,
       this.updatedTaskInfo
     ]) {
-        this.logger.info(`Initializing collection: ${collection.streamKey}`);
         await collection.init();  
     }
 
@@ -87,7 +83,7 @@ export class RedisJobContext extends JobContext {
   async cleanup(): Promise<void> {
     if (await this.redisClient.exists(this.jobRunId)) {
       const keys = await this.redisClient.keys(`${this.jobRunId}*`);
-      this.logger.info(`Cleaning up existing keys for: ${this.jobRunId} | keys : ${keys}`);
+      console.log(`Cleaning up existing keys for: ${this.jobRunId} | keys : ${keys}`);
       for (const key of keys) await this.redisClient.del(key);
     }
 
@@ -102,7 +98,6 @@ export class RedisJobContext extends JobContext {
 
 export class RedisSpeedTestJobContext extends SpeedTestJobContext {
   redisClient: RedisClientType;
-  logger: Logger;
 
   constructor(
     jobRunId: string,
@@ -113,7 +108,6 @@ export class RedisSpeedTestJobContext extends SpeedTestJobContext {
   ) {
     super(jobRunId, jobConfig, jobRunStatus, jobState);
     this.redisClient = redisClient;
-    this.logger = Logger.getLogger(jobRunId);
 
     this.filesInfo = new RedisFileCollection(jobRunId, 0, '0-0', redisClient);
     this.dirsInfo = new RedisDirectoryCollection(jobRunId,0,'0-0',redisClient,);
@@ -128,7 +122,7 @@ export class RedisSpeedTestJobContext extends SpeedTestJobContext {
   async init(): Promise<void> {
     for (const key of [this.jobRunId, `stats:${this.jobRunId}`]) {
       if (await this.redisClient.exists(key)) {
-        this.logger.info(`Cleaning up existing key: ${key}`);
+        console.log(`Cleaning up existing key: ${key}`);
         await this.redisClient.del(key);
       }
     }
@@ -142,7 +136,7 @@ export class RedisSpeedTestJobContext extends SpeedTestJobContext {
       this.migrateTask,
       this.updatedTaskInfo
     ]) {
-        this.logger.info(`Initializing collection: ${collection.streamKey}`);
+        console.log(`Initializing collection: ${collection.streamKey}`);
         await collection.init();  
     }
 
@@ -167,7 +161,7 @@ export class RedisSpeedTestJobContext extends SpeedTestJobContext {
 
   async cleanup(): Promise<void> {
     if (await this.redisClient.exists(this.jobRunId)) {
-      this.logger.info(
+      console.log(
         `Cleaning up existing state for Job Run Id: ${this.jobRunId}`,
       );
       await this.redisClient.del(this.jobRunId);
