@@ -51,7 +51,7 @@ const DestinationFileServer = ({
       }
       getOptionLabel={(option) => option?.pathName || ""}
       getOptionDisabled={(option) =>
-        option.isDisabled || !option.isValid || option.reachableCount === 0
+        option?.isDisabled || !option?.isValid || option?.reachableCount === 0
       }
       className="w-full"
       size="small"
