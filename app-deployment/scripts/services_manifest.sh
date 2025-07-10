@@ -5,34 +5,36 @@
 set -euo pipefail
 
 ARTIFACTORY_BASE="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/manifests"
-REF_TYPE=${2:-branches}
-REF_NAME=${3:-main}
-ACR_NAME="datamigratedev"
-OUTPUT_JSON=${1:-services.json}
+OUTPUT_JSON=$1
+REF_TYPE=$2
+REF_NAME=$3
 
 services=(
-    "admin-service:admin_service_tag:ndm-admin-service"
-    "config-service:config_service_tag:ndm-config-service"
-    "datamigrator-ui:datamigrator_ui_tag:ndm-datamigrator-ui"
-    "db-writer:db_writer_service_tag:ndm-db-writer"
-    "db-migrations:db_migrations_tag:ndm-db-migrations"
-    "jobs-service:jobs_service_tag:ndm-jobs-service"
-    "reports-service:reports_service_tag:ndm-reports-service"
-    "keycloak-customizations:keycloak_customizations_tag:ndm-keycloak-customizations"
+    "admin-service:admin_service_tag:admin_service_branch:ndm-admin-service"
+    "config-service:config_service_tag:config_service_branch:ndm-config-service"
+    "datamigrator-ui:datamigrator_ui_tag:datamigrator_ui_branch:ndm-datamigrator-ui"
+    "db-writer:db_writer_service_tag:db_writer_service_branch:ndm-db-writer"
+    "db-migrations:db_migrations_tag:db_migrations_branch:ndm-db-migrations"
+    "jobs-service:jobs_service_tag:jobs_service_branch:ndm-jobs-service"
+    "reports-service:reports_service_tag:reports_service_branch:ndm-reports-service"
+    "keycloak-customizations:keycloak_customizations_tag:keycloak_customizations_branch:ndm-keycloak-customizations"
 )
 
 SERVICES_JSON="["
 for mapping in "${services[@]}"; do
-    IFS=":" read -r artifactory_service tag_var acr_image_name <<< "$mapping"
-    env_tag_var="$(echo "$tag_var" | tr '[:lower:]' '[:upper:]')"
-    custom_tag="${!env_tag_var:-}"
+    IFS=":" read -r artifactory_service tag_var branch_var acr_image_name <<< "$mapping"
 
-    if [[ -n "$custom_tag" ]]; then
-        short_sha="${custom_tag:0:7}"
-        meta_url="${ARTIFACTORY_BASE}/services/${artifactory_service}/${REF_TYPE}/${REF_NAME}/${short_sha}/metadata.json"
-        json=$(curl -sf "$meta_url")
-    else
-        latest_url="${ARTIFACTORY_BASE}/services/${artifactory_service}/${REF_TYPE}/${REF_NAME}/latest.json"
+    env_tag_var="$(echo "$tag_var" | tr '[:lower:]' '[:upper:]')"
+    env_branch_var="$(echo "$branch_var" | tr '[:lower:]' '[:upper:]')"
+    tag="${!env_tag_var:-}"
+    branch="${!env_branch_var:-}"
+
+    if [[ "$tag" == "latest" ]]; then
+        if [[ "$REF_TYPE" == "releases" ]]; then
+            latest_url="${ARTIFACTORY_BASE}/services/${artifactory_service}/${REF_TYPE}/${REF_NAME}/latest.json"
+        else
+            latest_url="${ARTIFACTORY_BASE}/services/${artifactory_service}/${REF_TYPE}/${branch}/latest.json"
+        fi
         latest_json=$(curl -sf "$latest_url")
         meta_path=$(echo "$latest_json" | jq -r '.metadata_path // empty')
         if [[ -n "$meta_path" ]]; then
@@ -41,8 +43,16 @@ for mapping in "${services[@]}"; do
         else
             json="$latest_json"
         fi
+    else
+        short_sha="${tag:0:7}"
+        if [[ "$REF_TYPE" == "releases" ]]; then
+            meta_url="${ARTIFACTORY_BASE}/services/${artifactory_service}/${REF_TYPE}/${REF_NAME}/${short_sha}/metadata.json"
+        else
+            meta_url="${ARTIFACTORY_BASE}/services/${artifactory_service}/${REF_TYPE}/${branch}/${short_sha}/metadata.json"
+        fi
+        json=$(curl -sf "$meta_url")
     fi
-
+    
     # Extract fields from metadata.json
     commit=$(echo "$json" | jq -r '.commit // empty')
     short_commit=$(echo "$json" | jq -r '.short_commit // empty')

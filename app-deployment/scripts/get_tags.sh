@@ -3,11 +3,11 @@
 set -euo pipefail
 
 ARTIFACTORY_BASE="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/manifests"
-REF_TYPE=${2:-branches}
-REF_NAME=${3:-main}
 ACR_NAME="datamigratedev"
 TAR_PREFIX="datamigrator"
 VERSION=$1
+REF_TYPE=$2
+REF_NAME=$3
 
 ARCH=$(uname -m)
 if [ "$ARCH" = "x86_64" ]; then
@@ -20,43 +20,54 @@ else
 fi
 echo "Detected architecture: $ARCH, using platform: $PLATFORM"
 
-# Explicit mapping: artifactory_name:vars_yaml_tag:acr_image_name
+# Explicit mapping: artifactory_name:vars_tag:vars_tag:acr_image_name
 services=(
-    "admin-service:admin_service_tag:ndm-admin-service"
-    "config-service:config_service_tag:ndm-config-service"
-    "datamigrator-ui:datamigrator_ui_tag:ndm-datamigrator-ui"
-    "db-writer:db_writer_service_tag:ndm-db-writer"
-    "db-migrations:db_migrations_tag:ndm-db-migrations"
-    "jobs-service:jobs_service_tag:ndm-jobs-service"
-    "reports-service:reports_service_tag:ndm-reports-service"
-    "keycloak-customizations:keycloak_customizations_tag:ndm-keycloak-customizations"
+    "admin-service:admin_service_tag:admin_service_branch:ndm-admin-service"
+    "config-service:config_service_tag:config_service_branch:ndm-config-service"
+    "datamigrator-ui:datamigrator_ui_tag:datamigrator_ui_branch:ndm-datamigrator-ui"
+    "db-writer:db_writer_service_tag:db_writer_service_branch:ndm-db-writer"
+    "db-migrations:db_migrations_tag:db_migrations_branch:ndm-db-migrations"
+    "jobs-service:jobs_service_tag:jobs_service_branch:ndm-jobs-service"
+    "reports-service:reports_service_tag:reports_service_branch:ndm-reports-service"
+    "keycloak-customizations:keycloak_customizations_tag:keycloak_customizations_branch:ndm-keycloak-customizations"
 )
 
 echo "Outputting tags from Artifactory for all images..."
 
 TAG_LINES=()
 IMAGES=()
+
 for mapping in "${services[@]}"; do
-    IFS=":" read -r artifactory_service tag_var acr_image_name <<< "$mapping"
+    IFS=":" read -r artifactory_service tag_var branch_var acr_image_name <<< "$mapping"
 
     # Environment variable name is the uppercase of the tag_var
     env_tag_var="$(echo "$tag_var" | tr '[:lower:]' '[:upper:]')"
-    custom_tag="${!env_tag_var:-}"
+    env_branch_var="$(echo "$branch_var" | tr '[:lower:]' '[:upper:]')"
+    tag="${!env_tag_var:-}"
+    branch="${!env_branch_var:-}"
 
-    if [[ -n "$custom_tag" ]]; then
-        short_sha="${custom_tag:0:7}"
-        meta_url="${ARTIFACTORY_BASE}/services/${artifactory_service}/${REF_TYPE}/${REF_NAME}/${short_sha}/metadata.json"
-        echo "[INFO] Fetching $meta_url"
-        json=$(curl -sf "$meta_url")
-        image_tag=$(echo "$json" | jq -r '.image_tag')
-        if [[ "$image_tag" != "$custom_tag" ]]; then
-            echo "[WARNING] image_tag in metadata.json ($image_tag) does not match requested custom tag ($custom_tag) for $artifactory_service"
+    if [[ "$tag" == "latest" ]]; then
+        if [[ "$REF_TYPE" == "releases" ]]; then
+            latest_url="${ARTIFACTORY_BASE}/services/${artifactory_service}/${REF_TYPE}/${REF_NAME}/latest.json"
+        else
+            latest_url="${ARTIFACTORY_BASE}/services/${artifactory_service}/${REF_TYPE}/${branch}/latest.json"
         fi
-    else
-        latest_url="${ARTIFACTORY_BASE}/services/${artifactory_service}/${REF_TYPE}/${REF_NAME}/latest.json"
         echo "[INFO] Fetching $latest_url"
         json=$(curl -sf "$latest_url")
         image_tag=$(echo "$json" | jq -r '.image_tag')
+    else
+        short_sha="${tag:0:7}"
+        if [[ "$REF_TYPE" == "releases" ]]; then
+            meta_url="${ARTIFACTORY_BASE}/services/${artifactory_service}/${REF_TYPE}/${REF_NAME}/${short_sha}/metadata.json"
+        else
+            meta_url="${ARTIFACTORY_BASE}/services/${artifactory_service}/${REF_TYPE}/${branch}/${short_sha}/metadata.json"
+        fi
+        echo "[INFO] Fetching $meta_url"
+        json=$(curl -sf "$meta_url")
+        image_tag=$(echo "$json" | jq -r '.image_tag')
+        if [[ "$image_tag" != "$tag" ]]; then
+            echo "[WARNING] image_tag in metadata.json ($image_tag) does not match requested custom tag ($tag) for $artifactory_service"
+        fi
     fi
 
     if [[ -z "$image_tag" || "$image_tag" == "null" ]]; then
@@ -75,8 +86,8 @@ done
 VARS_YAML="app-deployment/ansible/control-plane/config/group_vars/vars.yaml"
 {
   echo "# Microservices release tags of docker images"
-  for tag in "${TAG_LINES[@]}"; do
-    echo "$tag"
+  for tg in "${TAG_LINES[@]}"; do
+    echo "$tg"
   done
 } > "$VARS_YAML"
 
