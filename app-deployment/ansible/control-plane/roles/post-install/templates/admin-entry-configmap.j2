@@ -24,6 +24,7 @@ data:
     MAPPER_NAME="datamigrate-permissions-mapper"
     MAPPER_USER_ATTRIBUTE="user"
     MAPPER_CLAIM_NAME="user"
+    CONTROL_PLANE_IP=${NODE_IP}
 
     extract_token() {
         local response="$1"
@@ -99,7 +100,7 @@ data:
         description: 'Client for ${REALM_NAME} realm',
         surrogateAuthRequired: false,
         enabled: true,
-        redirectUris: ['*'],
+        redirectUris: ['http://${CONTROL_PLANE_IP}/*', 'https://${CONTROL_PLANE_IP}/*'],
         webOrigins: ['*'],
         clientAuthenticatorType: 'client-secret',
         secret: '${CLIENT_SECRET}',

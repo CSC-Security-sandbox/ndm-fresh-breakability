@@ -23,13 +23,15 @@ const ExportPathsTable = ({
   setSelectedExportPathsIds,
   defaultColumnState,
   notReachableExportPaths,
+  refetch,
+  isFetching,
 }: ExportPathsTablePropsType) => {
   const interval = useRef<NodeJS.Timeout | null>(null);
   const [reFetchExportPathsApi] = useLazyRefetchConfigExportPathsQuery();
   const [disableRefresh, setDisableRefresh] = useState<boolean>(false);
   const [getWorkFlowStatus] = useLazyCheckConnectionRespQuery();
   const dispatch = useDispatch();
-  
+
   const tableStateProps = {
     columns: EXPORT_PATHS_TABLE_COLS_DEF,
     rows: allExportPaths,
@@ -113,6 +115,8 @@ const ExportPathsTable = ({
       tableStateProps={tableStateProps}
       content={showRefetch ? FETCHING_DETAILS : ""}
       showLabel={false}
+      refetchTableData={refetch}
+      isRefreshing={isFetching}
       handleSelection={
         isRowSelectingEnabled ? setSelectedExportPathsIds : undefined
       }

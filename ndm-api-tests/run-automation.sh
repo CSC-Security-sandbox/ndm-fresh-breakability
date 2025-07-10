@@ -10,11 +10,12 @@ report_file="test_report.txt"
 
 # Function to run tests and log output
 run_tests() {
-    local test_type=$1
-    local test_path=$2
-
-    echo " \n\n Running $test_type tests  \n\n" | tee -a "$report_file"
-    ginkgo run  -v "$test_path" | tee -a "$report_file"
+    local test_type="$1"
+    local test_path="$2"
+    local timeout="${3:-3h}"  # Defaults to 3 hours if not passed
+ 
+    echo -e "Running ${test_type} tests" | tee -a "$report_file"
+    ginkgo run -v --timeout="$timeout" "$test_path" | tee -a "$report_file"
 }
 
 # Run regression tests

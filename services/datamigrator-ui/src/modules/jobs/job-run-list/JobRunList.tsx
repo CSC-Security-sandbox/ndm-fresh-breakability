@@ -58,7 +58,7 @@ const JobRunList = () => {
   const [downloadReportApi] = useDownloadReportsMutation();
   const [getPdfReportApi] = useGetPdfReportMutation();
   const canDownloadReport = hasPermission(
-    USER_PERMISSION_TYPE_ENUM.AgentDeployment
+    USER_PERMISSION_TYPE_ENUM.Reports
   );
 
   const canUpdateStatus = hasPermission(USER_PERMISSION_TYPE_ENUM.ManageJob);

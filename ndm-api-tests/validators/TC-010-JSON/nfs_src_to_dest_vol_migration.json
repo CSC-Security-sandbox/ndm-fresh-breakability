@@ -1,0 +1,88 @@
+[
+  {
+    "source path": "/volSrcAuto/folder",
+    "target checksum": ""
+  },
+  {
+    "source path": "/volSrcAuto/folder/folder2",
+    "target checksum": ""
+  },
+ 
+  {
+    "source path": "/volSrcAuto/folder/folder2/folder3",
+    "target checksum": ""
+  },
+  
+  {
+    "source path": "/volSrcAuto/hardlink_to_csv",
+    "target checksum": "81a56595eaa10873888a18bcd4055b18eea488d30afb1cf3b3adb780e910e3a9"
+  },
+  {
+    "source path": "/volSrcAuto/hardlink_to_doc",
+    "target checksum": "4fe5772820c2ece551b75e6442a2c05c937e98f4571893ca9506ab0e6de85a4c"
+  },
+  {
+    "source path": "/volSrcAuto/hardlink_to_jpg",
+    "target checksum": "9d4f87cf6cf3c531ec4f08c6f075e433151870d66da85bc272b8032c2fbd6eba"
+  },
+  {
+    "source path": "/volSrcAuto/hardlink_to_json",
+    "target checksum": "8410822b80f2dbd3b9058278f88a54c12d8de8ae230fd7effa9ab9badbff0fef"
+  },
+  {
+    "source path": "/volSrcAuto/hardlink_to_mp3",
+    "target checksum": "c814c2e2a3fd2314ac9010c50d2d56aee679a9b9ea72d4e27dd82a95fc017568"
+  },
+  {
+    "source path": "/volSrcAuto/hardlink_to_mp4",
+    "target checksum": "d2f5596a8ea632df1021e167519cc9e40f6a3083b657fa301d7cca6009745540"
+  },
+  {
+    "source path": "/volSrcAuto/hardlink_to_pdf",
+    "target checksum": "d608176bb8f9d709c81c54d521125e51813acba511a5beede5a5a0ae09d786a9"
+  },
+  {
+    "source path": "/volSrcAuto/hardlink_to_png",
+    "target checksum": "3f17c6358b164c4bdbca2a81b210cad39de61beb66abbb934211ccc9fe12737f"
+  },
+  {
+    "source path": "/volSrcAuto/hardlink_to_txt",
+    "target checksum": "6973233d5cdd58d19a5cf9b087d3d1e4c4b85be467151f5a7b44d634e4a0ad28"
+  },
+  {
+    "source path": "/volSrcAuto/symlink_to_csv",
+    "target checksum": "81a56595eaa10873888a18bcd4055b18eea488d30afb1cf3b3adb780e910e3a9"
+  },
+  {
+    "source path": "/volSrcAuto/symlink_to_doc",
+    "target checksum": "4fe5772820c2ece551b75e6442a2c05c937e98f4571893ca9506ab0e6de85a4c"
+  },
+  {
+    "source path": "/volSrcAuto/symlink_to_jpg",
+    "target checksum": "9d4f87cf6cf3c531ec4f08c6f075e433151870d66da85bc272b8032c2fbd6eba"
+  },
+  {
+    "source path": "/volSrcAuto/symlink_to_json",
+    "target checksum": "8410822b80f2dbd3b9058278f88a54c12d8de8ae230fd7effa9ab9badbff0fef"
+  },
+  {
+    "source path": "/volSrcAuto/symlink_to_mp3",
+    "target checksum": "c814c2e2a3fd2314ac9010c50d2d56aee679a9b9ea72d4e27dd82a95fc017568"
+  },
+  {
+    "source path": "/volSrcAuto/symlink_to_mp4",
+    "target checksum": "d2f5596a8ea632df1021e167519cc9e40f6a3083b657fa301d7cca6009745540"
+  },
+  {
+    "source path": "/volSrcAuto/symlink_to_pdf",
+    "target checksum": "d608176bb8f9d709c81c54d521125e51813acba511a5beede5a5a0ae09d786a9"
+  },
+  {
+    "source path": "/volSrcAuto/symlink_to_png",
+    "target checksum": "3f17c6358b164c4bdbca2a81b210cad39de61beb66abbb934211ccc9fe12737f"
+  },
+  {
+    "source path": "/volSrcAuto/symlink_to_txt",
+    "target checksum": "6973233d5cdd58d19a5cf9b087d3d1e4c4b85be467151f5a7b44d634e4a0ad28"
+  }
+]

@@ -197,7 +197,7 @@ export class SMBProtocol extends Protocol {
           return {
             traceId,
             status: 'error',
-            protocolType: ProtocolTypes.NFS,
+            protocolType: ProtocolTypes.SMB,
             hostname: payload.hostname,
             workerId: this.workerId,
             message: `[${traceId}] Error creating directory: ${error.message}`,

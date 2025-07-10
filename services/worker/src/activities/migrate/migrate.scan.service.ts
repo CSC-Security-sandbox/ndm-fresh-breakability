@@ -32,8 +32,13 @@ export class MigrationScanService {
         this.operationTimeout = this.configService.get('worker.operationTimeout') || 5000;
     }
 
-    async getDirectoryContents(directoryPath: string, jobContext: JobContext): Promise<string[]> {
+    async getDirectoryContents(directoryPath: string, jobContext: JobContext, origin: Origin): Promise<string[]> {
         this.logger.debug(`[${jobContext.jobRunId}] Checking directory access: ${directoryPath}`);
+
+        if (origin === Origin.DESTINATION && !fs.existsSync(directoryPath)) {
+            this.logger.error(`[${jobContext.jobRunId}] Directory does not exist: ${directoryPath}`);
+            return [];
+        }
 
         await fs.promises.access(directoryPath, fs.constants.R_OK);
 
@@ -67,7 +72,7 @@ export class MigrationScanService {
         let sourceContent: Set<string> =  new Set(), targetContent: Set<string> = new Set();
         
         try {
-            sourceContent = new Set<string>(await this.getDirectoryContents(sourcePath, jobContext));
+            sourceContent = new Set<string>(await this.getDirectoryContents(sourcePath, jobContext, Origin.SOURCE));
         }catch(error) {
             const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, errorType, command.commandId, error, {name: command.fPath, path: sourcePath});
             await jobContext.appendToErrorList(dmErr);
@@ -76,7 +81,7 @@ export class MigrationScanService {
         }
 
         try {
-            targetContent = new Set<string>(await this.getDirectoryContents(targetPath, jobContext));           
+            targetContent = new Set<string>(await this.getDirectoryContents(targetPath, jobContext,Origin.DESTINATION));
         }
         catch(error) {
             const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.commandId, error, {name: command.fPath, path: targetPath});
