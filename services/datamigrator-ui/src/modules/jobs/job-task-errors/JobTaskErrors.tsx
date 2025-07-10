@@ -9,7 +9,7 @@ import ErrorsListTable from "@modules/jobs/job-task-errors/components/ErrorsList
 import JobTaskDetails from "@modules/jobs/job-task-errors/components/JobTaskDetails";
 import JobTaskErrorsBreadcrumbs from "@modules/jobs/job-task-errors/components/JobTaskErrorsBreadcrumbs";
 import JobTaskErrorsTabs from "@modules/jobs/job-task-errors/components/JobTaskErrorsTabs";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   useIsErrorLogsCsvReadyQuery,
@@ -28,6 +28,9 @@ const JobTaskErrors = () => {
 
   const { jobId, jobRunId } = useParams<{ jobRunId: string; jobId: string }>();
 
+  const [showGeneratingReportBtn, setShowGeneratingReportBtn] =
+    useState<Record<string, boolean>>();
+
   // API hooks
   const { data } = useIsErrorLogsCsvReadyQuery(
     { type: "job-run", id: jobRunId },
@@ -42,6 +45,12 @@ const JobTaskErrors = () => {
   const [downloadErrorLogs] = useLazyDownloadErrorLogsCSVQuery();
   const [getJobConfigDetailsApi] = useLazyGetJobConfigDetailsQuery();
   const [generateErrorLogs] = useLazyGenerateErrorLogsQuery();
+
+  useEffect(() => {
+    if (data?.ready || data?.processing) {
+      setShowGeneratingReportBtn({});
+    }
+  }, [data]);
 
   useEffect(() => {
     (async () => {
@@ -61,6 +70,11 @@ const JobTaskErrors = () => {
   const generateErrorReport = async () => {
     try {
       await generateErrorLogs({ type: "job-run", id: jobRunId }).unwrap();
+      setShowGeneratingReportBtn({
+        ready: false,
+        processing: true,
+      });
+      notify.success("Error Report generation started successfully.");
     } catch (error) {
       const errorMsg = "Error while downloading error logs.";
       notify.error(error?.data?.message || errorMsg);
@@ -68,13 +82,20 @@ const JobTaskErrors = () => {
     }
   };
 
+  const isDisplayGeneratingLabel = useMemo(() => {
+    const hasReportData =
+      showGeneratingReportBtn && Object.keys(showGeneratingReportBtn).length;
+
+    return hasReportData ? showGeneratingReportBtn : data;
+  }, [showGeneratingReportBtn]);
+
   return (
     <Box className="flex flex-col gap-8">
       <Box className="flex flex-row justify-between items-center">
         <JobTaskErrorsBreadcrumbs />
 
         <ErrorLogActionButton
-          data={data}
+          data={isDisplayGeneratingLabel}
           handleGenerate={generateErrorReport}
           handleDownload={() =>
             handleDownloadErrorsLogs(
