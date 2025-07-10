@@ -14,35 +14,42 @@ export class LoggerService {
     this.parentContext = context;
   }
 
-  log(message: string, trackId?: string, context?: string) {
-    this.logger.log('info', {
-      context: context ?? this.parentContext ?? LoggerService.name,
-      trackId: trackId ?? this.requestContext.getTrackId(),
-      message,
-    });
+  log(message: string, data?: string | object) {
+    this.logger.log('info', this.formatMessage(message, data));
   }
 
-  error(message: string, trackId?: string, context?: string) {
-    this.logger.log('error', {
-      context: context ?? this.parentContext ?? LoggerService.name,
-      trackId: trackId ?? this.requestContext.getTrackId(),
-      message,
-    });
+  error(message: string, data?: string | object) {
+    this.logger.log('error', this.formatMessage(message, data));
   }
 
-  debug(message: string, trackId?: string, context?: string) {
-    this.logger.log('debug', {
-      context: context ?? this.parentContext ?? LoggerService.name,
-      trackId: trackId ?? this.requestContext.getTrackId(),
-      message,
-    });
+  debug(message: string, data?: string | object) {
+    this.logger.log('debug', this.formatMessage(message, data));
   }
 
-  warn(message: string, trackId?: string, context?: string) {
-    this.logger.log('warn', {
-      context: context ?? this.parentContext ?? LoggerService.name,
-      trackId: trackId ?? this.requestContext.getTrackId(),
-      message,
-    });
+  warn(message: string, data?: string | object) {
+    this.logger.log('warn', this.formatMessage(message, data));
+  }
+
+  private formatMessage(message: string, data?: string | object): object {
+    const trackId =
+        data && typeof data === 'object' && 'trackId' in data
+            ? (data as any).trackId
+            : this.requestContext.getTrackId();
+    const baseLog = {
+      message: message,
+      context: this.parentContext ?? LoggerService.name,
+      trackId: trackId,
+    };
+
+    // Handle both string and object for data
+    if(data){
+      if (typeof data === 'string') {
+        return { ...baseLog, data: data };
+      } else {
+        return { ...baseLog, data };
+      }
+    }
+
+    return baseLog;
   }
 }

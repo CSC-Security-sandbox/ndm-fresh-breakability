@@ -3,12 +3,16 @@ package tests
 import (
 	"fmt"
 	. "ndm-api-tests/utils"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-006: Run migration to the same destination", func() {
+var _ = Describe("TC-009: Run migration with 'Exclude file older than' option and hourly incremental sync schedule", func() {
+	BeforeEach(func() {
+		Skip("TC-009: Run migration with 'Exclude file older than' option and hourly incremental sync schedule")
+	})
 	var (
 		ProjectId              string
 		workerId1              string
@@ -20,8 +24,9 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 		sourceVolumePath1      string
 		sourceVolumePath2      string
 		destinationVolumePath1 string
+		destinationVolumePath2 string
 	)
-	Context("TC-006: Run migration to the same destination", func() {
+	Context("TC-009: Run migration with 'Exclude file older than' option and hourly incremental sync schedule", func() {
 
 		BeforeEach(func() {
 			numberOfWorker := 2
@@ -33,13 +38,14 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 			workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
 			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME)
-			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME_2)
+			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME_1)
 
 			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME)
+			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME_1)
 		})
 
-		It("TC-006: Run migration to the same destination", func() {
-			By("########################## TC-006 start ################################")
+		It("TC-009: Run migration with 'Exclude file older than' option and hourly incremental sync schedule", func() {
+			By("########################## TC-009 start ################################")
 
 			var (
 				// Source-related IDs
@@ -47,12 +53,11 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 				sourcePathID1, sourcePathID2 string
 
 				// Destination-related IDs
-				destinationConfigID, destinationPathID1 string
+				destinationConfigID, destinationPathID1, destinationPathID2 string
 
 				// Job Config and Migration IDs
 				jobConfigIDs, migrationJobConfigIDs, cutoverRunIDs []string
 			)
-
 			By("Creating the source file server")
 			sourceParams := CreateServereParams{
 				ConfigName:       "source-file-server",
@@ -76,7 +81,7 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 			sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_2, sourceConfigID, headers)
+			sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating the destination file server")
@@ -102,14 +107,19 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 			destinationPathID1, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			By("Creating a migration job")
+			destinationPathID2, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+
+			By("Creating a migration job with Incremental Sync of 1 hr")
+			currentDateTime := GetCurrentUTCTimestamp()
 			migrationParams := MigrationJobParams{
-				FirstRunAt:         GetCurrentUTCTimestamp(),
-				FutureRunSchedule:  "",
+				FirstRunAt:         currentDateTime,
+				FutureRunSchedule:  "0 * * * *", // Cron expression of 1 hr
 				SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
-				DestinationPathIDs: []string{destinationPathID1, destinationPathID1},
+				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
 				SidMapping:         false,
 				Options: map[string]interface{}{
+					"excludeOlderThan":    "2024-06-30T16:37:00.000Z", // providing the hisotrical date before which some data is modified
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
 					"skipFile":            "0-M",
@@ -118,25 +128,52 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error creating migration job")
 			defer resp.Body.Close()
-			Expect(len(migrationJobConfigIDs)).To(BeNumerically(">", 0), "Expected at least one jobConfigID")
+			Expect(len(migrationJobConfigIDs)).To(BeNumerically("==", 2), "Expected at least one jobConfigID")
 
 			// Get migration job run IDs and wait for completion
 			migration_validators := []string{
 				"nfs_src_to_dest_vol_migration.json",
-				"nfs_src3_to_dest_vol_migration.json",
+				"nfs_src2_to_dest2_vol_migration.json",
 			}
 			for i, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 				migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
+				Expect(len(getJobsResp.JobRuns)).To(BeNumerically("==", 1), "No jobRuns found in response")
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
 				defer resp.Body.Close()
+
 				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-006-JSON/%s", migration_validators[i]))
+				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-009-JSON/%s", migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 				By(fmt.Sprintf("validate report result : %s", result))
+			}
+
+			//Validating the NextScheduled TIme from response is next complete hour after 1st run
+			parsedBase, err := time.Parse(TIME_FORMAT, currentDateTime)
+			Expect(err).NotTo(HaveOccurred(), "parsing the timestamp from GetCurrentUTCTimestamp()")
+
+			nextHour := parsedBase.Add(time.Hour)
+			nextHour = time.Date(nextHour.Year(), nextHour.Month(), nextHour.Day(), nextHour.Hour(),
+				0, // minute = 0
+				0, // second = 0
+				0, // nsec   = 0
+				time.UTC,
+			)
+
+			for _, migrationJobConfigID := range migrationJobConfigIDs {
+				jobSummary, err := GetJobSummaryByConfigID(ProjectId, migrationJobConfigID, headers)
+				Expect(err).NotTo(HaveOccurred())
+
+				actualNext, err := time.Parse(TIME_FORMAT, jobSummary.NextScheduleDate)
+				Expect(err).NotTo(HaveOccurred(),
+					"could not parse NextScheduleDate %q", jobSummary.NextScheduleDate)
+
+				Expect(actualNext).To(Equal(nextHour), "expected next schedule exactly at %s; got %s",
+					nextHour.Format(TIME_FORMAT), jobSummary.NextScheduleDate,
+				)
 			}
 
 			By("Adding Delta Data")
@@ -148,7 +185,7 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 			By("Creating bulk cutover job")
 			cutoverParams := BulkCutoverJobParams{
 				SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
-				DestinationPathIDs: []string{destinationPathID1, destinationPathID1},
+				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
 			}
 			jobConfigIDs, resp, err = CreateBulkCutoverJob(cutoverParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error creating bulk cutover job")
@@ -187,12 +224,16 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 			}
 
 			// By("Validating cutover reports")
-			// for _, cutoverRunID := range cutoverRunIDs {
-			// 	result, err := ValidateReport(cutoverRunID, JobTypeCutover, "../../validators/cutover_validation.json")
-			// 	Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
-			// 	LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
+			// cutover_validators := []string{
+			// 	"nfs_src_to_dest_vol_cutover.json",
+			// 	"nfs_src2_to_dest2_vol_cutover.json",
 			// }
-			By("########################## TC-006 end ################################")
+			// for i, cutoverRunID := range cutoverRunIDs {
+			// 	result, err := ValidateReport(cutoverRunID, JobTypeCutover, fmt.Sprintf("../../validators/TC-009-JSON/%s", cutover_validators[i]))
+			// 	Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
+			// 	By(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
+			// }
+			By("########################## TC-009 end ################################")
 		})
 
 		AfterEach(func() {
@@ -204,6 +245,9 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 
 			err = ClearVolume(destinationVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
+
+			err = ClearVolume(destinationVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")

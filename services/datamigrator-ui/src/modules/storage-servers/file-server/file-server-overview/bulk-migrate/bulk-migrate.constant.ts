@@ -201,3 +201,9 @@ export const PRECHECK_STATUS = {
 };
 
 export const OFFLINE_STATUS = "offline";
+
+export const BULK_MIGRATE_STEPS_IDS = {
+  mapping: 0,
+  options: 1,
+  review: 2,
+};

@@ -4,6 +4,8 @@
     name:
       - snapd
     state: latest
+  retries: 5
+  delay: 60
 
 # Install MicroK8s
 - name: 4.2. Install MicroK8s

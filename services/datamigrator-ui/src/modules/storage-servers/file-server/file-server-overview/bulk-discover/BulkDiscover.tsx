@@ -88,7 +88,6 @@ const BulkDiscover = () => {
         allFileServers.forEach((config) => {
           config?.fileServers?.flatMap((fileServer) =>
             fileServer?.volumes?.map((volume) => {
-              console.log(volume);
               if (volume?.reachableCount === 0) {
                 notReachableExportPaths.push(volume.id);
               }
@@ -158,20 +157,23 @@ const BulkDiscover = () => {
             />
           </Box>
         </Card>
-        <ExportPathsTable
-          defaultColumnState={BULK_DISCOVERY_DEFAULT_COLUMN_STATE}
-          allExportPaths={allExportPaths.filter(
-            (row) => row.protocol === bulkDiscoveryForm.formState.protocol.value
-          )}
-          fileServerDetails={fileServerDetails}
-          showRefetch={false}
-          refetch={refetch}
-          isFetching={isFetching}
-          isRowSelectingEnabled={true}
-          setSelectedExportPathsIds={setSelectedExportPathsIds}
-          key={key}
-          notReachableExportPaths={notReachableExportPaths}
-        />
+        <Box className="mb-4">
+          <ExportPathsTable
+            defaultColumnState={BULK_DISCOVERY_DEFAULT_COLUMN_STATE}
+            allExportPaths={allExportPaths.filter(
+              (row) =>
+                row.protocol === bulkDiscoveryForm.formState.protocol.value
+            )}
+            fileServerDetails={fileServerDetails}
+            showRefetch={false}
+            isRowSelectingEnabled={true}
+            setSelectedExportPathsIds={setSelectedExportPathsIds}
+            key={key}
+            notReachableExportPaths={notReachableExportPaths}
+            refetch={refetch}
+            isFetching={isFetching}
+          />
+        </Box>
       </Box>
       <AppFooter
         footerContent={
