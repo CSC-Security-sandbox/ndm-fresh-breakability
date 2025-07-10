@@ -55,6 +55,8 @@ const JobDetails = () => {
   const [selectedJobRunId, setSelectedJobRunId] = useState("");
   const [isFrequentInterval, setIsFrequentInterval] = useState<boolean>(false);
 
+  const [showGeneratingReportBtn, setShowGeneratingReportBtn] =
+    useState<Record<string, boolean>>();
   const {
     data: jobConfigDetails,
     isLoading,
@@ -96,9 +98,7 @@ const JobDetails = () => {
   const [downloadReportApi] = useDownloadReportsMutation();
   const [getPdfReportApi] = useGetPdfReportMutation();
 
-  const canDownloadReport = hasPermission(
-    USER_PERMISSION_TYPE_ENUM.Reports
-  );
+  const canDownloadReport = hasPermission(USER_PERMISSION_TYPE_ENUM.Reports);
 
   const [updateStatus, { isLoading: isUpdating }] =
     useUpdateJobRunStatusMutation();
@@ -202,9 +202,20 @@ const JobDetails = () => {
     return sortedJobRuns[0]?.jobRunId;
   }, [jobConfigDetails?.jobRuns]);
 
+  useEffect(() => {
+    if (data?.ready || data?.processing) {
+      setShowGeneratingReportBtn({});
+    }
+  }, [data]);
+
   const generateErrorReport = async () => {
     try {
       await generateErrorLogs({ type: "job-config", id: jobId }).unwrap();
+      setShowGeneratingReportBtn({
+        ready: false,
+        processing: true,
+      });
+      notify.success("Error Report generation started successfully.");
     } catch (error) {
       const errorMsg = "Error while downloading error logs.";
       notify.error(error?.data?.displayMessage || errorMsg);
@@ -212,10 +223,17 @@ const JobDetails = () => {
     }
   };
 
+  const isDisplayGeneratingLabel = useMemo(() => {
+    const hasReportData =
+      showGeneratingReportBtn && Object.keys(showGeneratingReportBtn).length;
+
+    return hasReportData ? showGeneratingReportBtn : data;
+  }, [showGeneratingReportBtn]);
+
   const errorLogContent = useMemo(() => {
     return (
       <ErrorLogActionButton
-        data={data}
+        data={isDisplayGeneratingLabel}
         disabled={errorsCount.length === 0}
         handleGenerate={generateErrorReport}
         handleDownload={() =>
