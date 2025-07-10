@@ -1,4 +1,5 @@
 import { FILE_SERVER_STATUS, JOB_CONFIG_STATUS_ENUM, JOBS_TYPE } from "@/types/app.type";
+import crypto from 'crypto';
 
 export const getJobType = (type: JOBS_TYPE) => {
   switch (type) {
@@ -123,5 +124,34 @@ export const getFileServerStatusFormat = (status: FILE_SERVER_STATUS) => {
       return "In Progress";
     default:
       return toTitleCase(status);
+  }
+};
+
+export const decryptData = (encryptedWithIv: string): string => {
+  try {
+    const [ivHex, encryptedPassword] = encryptedWithIv.split(':');
+    const iv = Buffer.from(ivHex, 'hex');
+    const keyString = window?.env?.VITE_KEYCLOAK_CLIENT_SECRET || import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET;
+    const key = crypto.createHash('sha256').update(keyString).digest();
+    const decipher = crypto.createDecipheriv('aes-256-ctr', key, iv);
+    let decrypted = decipher.update(encryptedPassword, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (error) {
+    throw new Error('An internal error occurred');
+  }
+};
+
+export const encryptData = (data: string): string => {
+  try {
+    const iv = crypto.randomBytes(16);
+    const keyString = window?.env?.VITE_KEYCLOAK_CLIENT_SECRET || import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET;
+    const key = crypto.createHash('sha256').update(keyString).digest();
+    const cipher = crypto.createCipheriv('aes-256-ctr', key, iv);
+    let encrypted = cipher.update(data, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    return `${iv.toString('hex')}:${encrypted}`;
+  } catch (error) {
+    throw new Error('An internal error occurred');
   }
 };
