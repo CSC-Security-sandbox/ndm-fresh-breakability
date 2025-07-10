@@ -259,12 +259,7 @@ export class ConfigurationService {
         }))
       }
 
-      if (
-        config.errorMessage &&
-        config.errorMessage.includes(
-          ProtocolVersionError.PROTOCOL_VERSION_ERROR,
-        )
-      ) {
+      if ([ConfigStatus.ERRORED, ConfigStatus.DRAFT].includes(config.status)) {
         if (config.fileServers) {
           config.fileServers = config.fileServers.map((server) => ({
             ...server,
