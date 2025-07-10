@@ -48,10 +48,10 @@ export const MigrationWorkflow = async ({
     await waitUntilRedisMemoryOk(traceId);
 
     // start core scan workflow
-    const discoveryWorkflowExecResult = await executeMigrationChildWorkflows({jobRunId: traceId})
-    output.fileCount = discoveryWorkflowExecResult.fileCount;
-    output.dirCount = discoveryWorkflowExecResult.dirCount;
-    output.status = discoveryWorkflowExecResult.status;
+    const migrationWorkflowExecResult = await executeMigrationChildWorkflows({jobRunId: traceId})
+    output.fileCount = migrationWorkflowExecResult.fileCount;
+    output.dirCount = migrationWorkflowExecResult.dirCount;
+    output.status = migrationWorkflowExecResult.status;
 
 
     // Reporting and Report Generation
