@@ -74,7 +74,7 @@ const JobDetails = () => {
   const [getPdfReportApi] = useGetPdfReportMutation();
 
   const canDownloadReport = hasPermission(
-    USER_PERMISSION_TYPE_ENUM.AgentDeployment
+    USER_PERMISSION_TYPE_ENUM.Reports
   );
 
   const [updateStatus, { isLoading: isUpdating }] =
