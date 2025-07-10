@@ -1,8 +1,9 @@
 import { MigrationDetailsTableConfigurationType } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.interface";
 import { downloadBulkMigrationCsv } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
 import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
-import { Box, Button } from "@mui/material";
+import { Box } from "@mui/material";
 import {
+  Button,
   SearchWidget,
   Table,
   TablePager,
@@ -47,7 +48,9 @@ export const MountPathConfigurationTable = () => {
     downloadBulkMigrationCsv(mappingStepForm);
   };
   const checkDisabled = (row: MigrationDetailsTableConfigurationType) => {
-    return listOfNotReachableExportPaths.includes(row?.sourcePath?.sourcePathId);
+    return listOfNotReachableExportPaths.includes(
+      row?.sourcePath?.sourcePathId
+    );
   };
 
   return (
@@ -55,8 +58,13 @@ export const MountPathConfigurationTable = () => {
       <Box className="flex justify-end my-3">
         <Box className="flex gap-3 items-center">
           <SearchWidget setFilter={updateTextFilter} />
-          <Button variant="icon" onClick={handleTableDownload}>
-            <DownloadMonochromeIcon />
+          <Button
+            className="px-3"
+            variant="icon"
+            disabled={pagination?.pageRows === undefined}
+            onClick={handleTableDownload}
+          >
+            <DownloadMonochromeIcon onClick={handleTableDownload} />
           </Button>
         </Box>
       </Box>

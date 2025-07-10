@@ -82,6 +82,7 @@ export type WorkerIdWithNameType = {
 };
 
 export interface CredentialsValidationSchemaType {
+  id?: string;
   userName: string;
   password: string;
   protocol: string;
@@ -89,6 +90,7 @@ export interface CredentialsValidationSchemaType {
     label: string;
     value: string;
   };
+  exportPathSource: string;
 }
 
 // FOR JOB CONFIG STEP (4th)
@@ -116,17 +118,6 @@ export interface ConfigPayloadType {
   fileServers: FileServerType[];
   createdBy?: string;
   workingDirectory: WorkingDirectoryDetailsType;
-}
-
-export interface CredentialsValidationSchemaType {
-  id?: string;
-  userName: string;
-  password: string;
-  protocol: string;
-  protocolVersion: {
-    label: string;
-    value: string;
-  };
 }
 
 export interface ServerTypeFormType {
