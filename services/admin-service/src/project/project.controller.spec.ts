@@ -10,6 +10,7 @@ import { UserRole } from '../entities/user-role.entity';
 import { randomUUID } from 'crypto';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 describe('ProjectController', () => {
   let controller: ProjectController;
@@ -57,6 +58,15 @@ describe('ProjectController', () => {
           provide: getRepositoryToken(UserRole),
           useClass: Repository,
         },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+            }),
+          },
+        }
       ],
     }).compile();
 

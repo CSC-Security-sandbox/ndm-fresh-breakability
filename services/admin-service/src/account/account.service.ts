@@ -1,17 +1,28 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, Repository } from 'typeorm';
 import { Account } from '../entities/account.entity';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
+import {
+  LoggerFactory,
+  LoggerService
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class AccountService {
+  private readonly logger: LoggerService;
   constructor(
     @InjectRepository(Account)
     private accountRepository: Repository<Account>,
-  ) {}
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(AccountService.name);
+  }
 
   create(
     createAccountDto: CreateAccountDto,
