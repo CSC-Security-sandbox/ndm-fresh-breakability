@@ -1,18 +1,31 @@
-import {HttpException, HttpStatus, Injectable, Logger} from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Inject,
+} from '@nestjs/common';
 import { CreateSettingDto } from './dto/create-setting.dto';
 import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Transporter } from 'nodemailer';
 import * as nodemailer from 'nodemailer';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 import { decryptData } from 'src/utils/crypto-utils';
 
 @Injectable()
 export class SettingService {
+  private readonly logger: LoggerService;
   constructor(
     @InjectRepository(GlobalSettings)
     private settingsRepo: Repository<GlobalSettings>,
-  ) {}
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(SettingService.name);
+  }
   async create(createSettingDto: CreateSettingDto[]) {
 
     for (const setting of createSettingDto) {
@@ -38,7 +51,7 @@ export class SettingService {
       ) {
         const isSMTPConnectionSuccessful =
           await this.testSMTPConnection(createSettingDto);
-        console.log('isSMTPConnectionSuccessful:', isSMTPConnectionSuccessful);
+        this.logger.log(`isSMTPConnectionSuccessful: ${isSMTPConnectionSuccessful}`);
         if (!isSMTPConnectionSuccessful) {
           throw new HttpException(
             {
@@ -70,13 +83,13 @@ export class SettingService {
       );
 
       return {
-        message: 'Settings created successfully',
+        message: 'SMTP details added successfully.',
         statusCode: HttpStatus.CREATED,
       };
     } catch (error) {
       throw new HttpException(
         {
-          message: 'Error while creating settings',
+          message: 'Error while creating SMTP settings',
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
           error: error.message,
         },
@@ -130,7 +143,7 @@ export class SettingService {
       await transporter.verify();
       isVerificationSuccessful = true;
     } catch (error) {
-      console.error('SMTP Connection Failed:', error.message);
+      this.logger.error('SMTP Connection Failed:', error.message);
     }
     return isVerificationSuccessful;
   }

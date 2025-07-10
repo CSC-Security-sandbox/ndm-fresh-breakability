@@ -12,6 +12,8 @@ import { randomUUID } from 'crypto';
 import { CreateUserRoleDto } from './dto/create-user-role.dto';
 import { UserRoleMap, UserRoleRelationDto } from './dto/user-role.dto';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../test-utils/logger-mocks';
 
 class MockRepository<T> extends Repository<T> {
   async save(e: any): Promise<any> {
@@ -48,6 +50,10 @@ describe('UserRoleService', () => {
         },
         { provide: getRepositoryToken(Account), useClass: Repository },
         { provide: getRepositoryToken(UserRole), useClass: Repository },
+        { 
+          provide: LoggerFactory, 
+          useValue: mockLoggerFactory
+        },
       ],
     }).compile();
 
@@ -242,6 +248,7 @@ describe('UserRoleService', () => {
       roleRepositoryMock as any,
       userRoleRepositoryMock as any,
       projectRepositoryMock as any,
+      mockLoggerFactory as any,
     );
 
     await expect(service.batchCreate(userRoleRelationDto)).rejects.toThrow(

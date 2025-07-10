@@ -12,6 +12,8 @@ import { Role } from '../entities/role.entity';
 import { UserRole } from '../entities/user-role.entity';
 import { RolePermission } from '../entities/role-permission.entity';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../test-utils/logger-mocks';
 
 describe('UserService', () => {
   let service: UserService;
@@ -47,6 +49,10 @@ describe('UserService', () => {
         {
           provide: getRepositoryToken(Account),
           useClass: Repository,
+        },
+        { 
+          provide: LoggerFactory, 
+          useValue: mockLoggerFactory
         },
       ],
     }).compile();

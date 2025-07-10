@@ -7,6 +7,8 @@ import { UpdatePermissionDto } from './dto/update-permission.dto';
 import { randomUUID } from 'crypto';
 import { PermissionService } from './permission.service';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../test-utils/logger-mocks';
 
 describe('PermissionService', () => {
   let service: PermissionService;
@@ -19,6 +21,10 @@ describe('PermissionService', () => {
         {
           provide: getRepositoryToken(Permission),
           useClass: Repository,
+        },
+        { 
+          provide: LoggerFactory, 
+          useValue: mockLoggerFactory
         },
       ],
     }).compile();

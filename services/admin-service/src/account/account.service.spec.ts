@@ -8,6 +8,8 @@ import { UpdateAccountDto } from './dto/update-account.dto';
 import { randomUUID } from 'crypto';
 import { Project } from '../entities/project.entity';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../test-utils/logger-mocks';
 
 describe('AccountService', () => {
   let service: AccountService;
@@ -25,8 +27,15 @@ describe('AccountService', () => {
           provide: getRepositoryToken(Project),
           useClass: Repository,
         },
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
+        },
       ],
-    }).compile();
+    })
+    .overrideProvider(LoggerFactory)
+    .useValue(mockLoggerFactory)
+    .compile();
 
     service = module.get<AccountService>(AccountService);
     repository = module.get<Repository<Account>>(getRepositoryToken(Account));

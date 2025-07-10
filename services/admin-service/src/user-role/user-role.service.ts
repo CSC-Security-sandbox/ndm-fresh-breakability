@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindManyOptions, FindOptionsWhere, In } from 'typeorm';
 import { CreateUserRoleDto } from './dto/create-user-role.dto';
@@ -14,9 +18,14 @@ import {
   UserRoleRelationDto,
 } from './dto/user-role.dto';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
+import {
+  LoggerService,
+  LoggerFactory,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class UserRoleService {
+  private readonly logger: LoggerService;
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
@@ -28,7 +37,10 @@ export class UserRoleService {
     private readonly accountRepository: Repository<Account>,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
-  ) {}
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(UserRoleService.name);
+  }
 
   async batchCreate(userRoleRelationDto: UserRoleRelationDto) {
     //  --------------- validate Details -------------/

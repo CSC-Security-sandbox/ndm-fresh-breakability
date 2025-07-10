@@ -3,6 +3,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
   ConflictException,
+  Inject,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { User } from '../entities/user.entity';
@@ -11,13 +12,21 @@ import { Repository } from 'typeorm';
 import { UserPermissionResponse } from './user-permission-response-type';
 import { makeAxiosRequest } from '../utils/axios-request-utils';
 import { encryptData } from '../utils/crypto-utils';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class AuthService {
+  private readonly logger: LoggerService;
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
-  ) {}
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(AuthService.name);
+  }
 
   public async getKeycloakToken() {
     try {
@@ -180,7 +189,7 @@ export class AuthService {
   async setUserStatus(email: string, enable: boolean): Promise<User> {
     const user = await this.userRepository.findOne({ where: { email } });
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException(`User not found, Please verify the user ID and try again.`);
     }
 
     user.user_status = enable ? 'active' : 'inactive';
@@ -197,7 +206,7 @@ export class AuthService {
       });
 
       if (users.length === 0) {
-        throw new NotFoundException('User not found in Keycloak');
+        throw new NotFoundException('User not found in Keycloak, Please verify the user ID and try again.');
       }
 
       const keycloakUser = users[0];

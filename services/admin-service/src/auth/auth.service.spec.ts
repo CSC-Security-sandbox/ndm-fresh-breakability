@@ -9,6 +9,8 @@ import {
 } from '@nestjs/common';
 import { UserPermissionResponse } from './user-permission-response-type';
 import { makeAxiosRequest } from 'src/utils/axios-request-utils';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../test-utils/logger-mocks';
 
 jest.mock('axios');
 jest.mock('src/utils/axios-request-utils');
@@ -48,6 +50,10 @@ describe('AuthService', () => {
         {
           provide: getRepositoryToken(User),
           useValue: mockUserRepository,
+        },
+        { 
+          provide: LoggerFactory, 
+          useValue: mockLoggerFactory
         },
       ],
     }).compile();
@@ -277,7 +283,7 @@ describe('AuthService', () => {
 
     await expect(service.setUserStatus(email, enable)).rejects.toThrow(
       new NotFoundException(
-        'Failed to update user status in Keycloak, error: User not found in Keycloak',
+        'Failed to update user status in Keycloak, error: User not found in Keycloak, Please verify the user ID and try again.',
       ),
     );
   });
@@ -311,7 +317,7 @@ describe('AuthService', () => {
     mockUserRepository.findOne.mockResolvedValue(null);
 
     await expect(service.setUserStatus(email, enable)).rejects.toThrow(
-      new NotFoundException('User not found'),
+      new NotFoundException('User not found, Please verify the user ID and try again.'),
     );
   });
 
