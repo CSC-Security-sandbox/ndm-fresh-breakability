@@ -66,10 +66,7 @@ export const WORKERS_PATHS_TABLE_COLS_DEF = [
 export const InitialFileServerOverviewApiData: FileServerOverviewApi = {
   jobDetails: {
     totalDiscoverJobs: 0,
-    totalMigrateJobs: {
-      baseLineJob: 0,
-      incrementalJob: 0,
-    },
+    totalMigrateJobs: 0,
     totalCutoverJobs: 0,
   },
   storageDetails: {
