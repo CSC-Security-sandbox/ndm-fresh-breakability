@@ -19,6 +19,9 @@ export class HealthcheckService {
   async createOrUpdateHealthCheckStats(
     healthStats: HealthcheckStats,
   ): Promise<void> {
+    const queryRunner = this.workerStatsEntity.manager.connection.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
     try {
       // Implement the logic to create or update health check stats
       const { workerId, healthStatus, systemStats } = healthStats;
@@ -47,12 +50,13 @@ export class HealthcheckService {
         });
       }
       await this.workerStatsEntity.save(statsEntity);
+      await queryRunner.commitTransaction();
     } catch (error) {
-      this.logger.error(
-        "Error creating or updating health check stats:",
-        error,
-      );
-      throw error;
+        await queryRunner.rollbackTransaction();
+        this.logger.error('Error creating or updating health check stats:', error);
+        throw error;
+    } finally {
+        await queryRunner.release();
     }
   }
 }

@@ -50,6 +50,14 @@ async onModuleInit(): Promise<void> {
   async ensureClient(): Promise<void> {
     if (!this.client || !this.client.isOpen) {
       this.logger.warn('Redis client not initialized. Attempting to reconnect...');
+      // Close existing client if it exists but is not open
+      if (this.client && !this.client.isOpen) {
+        try {
+          await this.client.quit();
+        } catch (error) {
+          this.logger.error('Error closing existing client:', error);
+        }
+      }
       await this.createClient();
     }
   }

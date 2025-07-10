@@ -49,6 +49,8 @@ export class WorkflowService {
         } catch (error) {
             this.logger.error(`Failed to start workflow: ${error}`);
         }
+
+        
     }
 
     async getWorkFlowRes(id: string) {
