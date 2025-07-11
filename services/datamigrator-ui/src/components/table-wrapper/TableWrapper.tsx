@@ -92,7 +92,7 @@ const TableWrapper = ({
         (key) => tableState?.selectionState.rows[key] === true
       );
 
-      handleSelection(selectedRows);
+      handleSelection(selectedRows, tableState?.rows || []);
     }
   }, [tableState?.selectionState?.count]);
 
