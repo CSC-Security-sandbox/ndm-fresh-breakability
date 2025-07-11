@@ -1,11 +1,9 @@
 import { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
-import { WorkflowCoverage } from '@temporalio/nyc-test-coverage';
 import { ReportingWorkflow, isReportedQuery } from './reporting.workflow';
 import { JobReportType } from './reporting.types';
 import * as wf from '@temporalio/workflow';
 
-const workflowCoverage = new WorkflowCoverage();
 
 const mockedActivities = {
     generateDiscoveryReport: jest.fn(),
@@ -33,7 +31,7 @@ describe('ReportingWorkflow', () => {
             await worker?.shutdown();
         }
         await testEnv.teardown();
-        workflowCoverage.mergeIntoGlobalCoverage();
+        // workflowCoverage.mergeIntoGlobalCoverage();
     });
 
     beforeEach(async () => {
@@ -44,12 +42,12 @@ describe('ReportingWorkflow', () => {
         const traceId = 'test-discover-report-workflow-1';
         const signalDefinition = wf.defineSignal<[string]>('signal');
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./reporting.workflow'),
             activities: mockedActivities,
             taskQueue: 'test-task-queue',
-        }));
+        });
 
 
         await worker.runUntil(async () => {
@@ -71,12 +69,12 @@ describe('ReportingWorkflow', () => {
         const traceId = 'test-cutover-report-workflow-1';
         const signalDefinition = wf.defineSignal<[string]>('signal');
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./reporting.workflow'),
             activities: mockedActivities,
             taskQueue: 'test-task-queue',
-        }));
+        });
 
         await worker.runUntil(async () => {
             const reportingWorkflowHandle = await testEnv.client.workflow.start(ReportingWorkflow, {
@@ -98,12 +96,12 @@ describe('ReportingWorkflow', () => {
         const traceId = 'test-migrate-report-workflow-1';
         const signalDefinition = wf.defineSignal<[string]>('signal');
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./reporting.workflow'),
             activities: mockedActivities,
             taskQueue: 'test-task-queue',
-        }));
+        });
 
         await worker.runUntil(async () => {
             const reportingWorkflowHandle = await testEnv.client.workflow.start(ReportingWorkflow, {
@@ -124,12 +122,12 @@ describe('ReportingWorkflow', () => {
         const traceId = 'test-error-report-workflow-1';
         const signalDefinition = wf.defineSignal<[string]>('signal');
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./reporting.workflow'),
             activities: mockedActivities,
             taskQueue: 'test-task-queue',
-        }));
+        });
 
         await worker.runUntil(async () => {
             const reportingWorkflowHandle = await testEnv.client.workflow.start(ReportingWorkflow, {

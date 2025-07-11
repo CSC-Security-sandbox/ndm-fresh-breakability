@@ -5,9 +5,7 @@ import { DiscoveryJobWorkflow, syncWorkerListSignal } from './discovery-job-work
 import { DiscoverPathOutput } from 'src/activities/discovery/discovery.type';
 import { temporal } from '@temporalio/proto';
 import { ApplicationFailure } from '@temporalio/common';
-import { WorkflowCoverage } from '@temporalio/nyc-test-coverage';
 
-const workflowCoverage = new WorkflowCoverage();
 
 describe('DiscoveryJobWorkflow', () => {
     let env: TestWorkflowEnvironment;
@@ -51,7 +49,7 @@ describe('DiscoveryJobWorkflow', () => {
             await worker?.shutdown();
         }
         await env.teardown();
-        workflowCoverage.mergeIntoGlobalCoverage();
+        // workflowCoverage.mergeIntoGlobalCoverage();
     });
 
     beforeEach(async () => {
@@ -93,7 +91,7 @@ describe('DiscoveryJobWorkflow', () => {
         }
      });
 
-    worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+    worker = await Worker.create({
         connection: env.nativeConnection,
         workflowsPath: require.resolve('./discovery-job-workflow'),
         activities: {
@@ -109,7 +107,7 @@ describe('DiscoveryJobWorkflow', () => {
 
         },
         taskQueue: 'test-task-queue',
-    }));
+    });
 
     await worker.runUntil(async () => {         
         const handle = await env.client.workflow.start(DiscoveryJobWorkflow,{
@@ -170,7 +168,7 @@ describe('DiscoveryJobWorkflow', () => {
     mockPublishTask.mockResolvedValue();
 
 
-    worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+    worker = await Worker.create({
         connection: env.nativeConnection,
         workflowsPath: require.resolve('./discovery-job-workflow'),
         activities: {
@@ -185,7 +183,7 @@ describe('DiscoveryJobWorkflow', () => {
             hasRunningScanTask: hasRunningScanTaskActivity,
         },
         taskQueue: 'test-task-queue',
-    }));
+    });
     await worker.runUntil(async () => {
         const result = await env.client.workflow.execute(DiscoveryJobWorkflow,{
             args: [{
@@ -215,7 +213,7 @@ describe('DiscoveryJobWorkflow', () => {
     });
 
     hasRunningScanTaskActivity.mockResolvedValue(true);
-    worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+    worker = await Worker.create({
         connection: env.nativeConnection,
         workflowsPath: require.resolve('./discovery-job-workflow'),
         activities: {
@@ -230,7 +228,7 @@ describe('DiscoveryJobWorkflow', () => {
             hasRunningScanTask: hasRunningScanTaskActivity,
         },
         taskQueue: 'test-task-queue',
-    }));
+    });
     await worker.runUntil(async () => {
         const result = await env.client.workflow.execute(DiscoveryJobWorkflow,{
             args: [{
@@ -260,7 +258,7 @@ describe('DiscoveryJobWorkflow', () => {
     });
     hasRunningScanTaskActivity.mockResolvedValue(true);
 
-    worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+    worker = await Worker.create({
         connection: env.nativeConnection,
         workflowsPath: require.resolve('./discovery-job-workflow'),
         activities: {
@@ -275,7 +273,7 @@ describe('DiscoveryJobWorkflow', () => {
             hasRunningScanTask: hasRunningScanTaskActivity,
         },
         taskQueue: 'test-task-queue',
-    }));
+    });
     await worker.runUntil(async () => {
         const result = await env.client.workflow.execute(DiscoveryJobWorkflow,{
             args: [{
@@ -330,7 +328,7 @@ describe('DiscoveryJobWorkflow', () => {
         }
      });
 
-    worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+    worker = await Worker.create({
         connection: env.nativeConnection,
         workflowsPath: require.resolve('./discovery-job-workflow'),
         activities: {
@@ -346,7 +344,7 @@ describe('DiscoveryJobWorkflow', () => {
 
         },
         taskQueue: 'test-task-queue',
-    }));
+    });
     await worker.runUntil(async () => {         
         const handle = await env.client.workflow.start(DiscoveryJobWorkflow,{
             args: [{
@@ -379,7 +377,7 @@ describe('DiscoveryJobWorkflow', () => {
             nonRetryable: true,
         });
     });
-    worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+    worker = await Worker.create({
         connection: env.nativeConnection,
         workflowsPath: require.resolve('./discovery-job-workflow'),
         activities: {
@@ -394,7 +392,7 @@ describe('DiscoveryJobWorkflow', () => {
             hasRunningScanTask: hasRunningScanTaskActivity,
         },
         taskQueue: 'test-task-queue',
-    }));
+    });
     await worker.runUntil(async () => {
         const result = await env.client.workflow.execute(DiscoveryJobWorkflow,{
             args: [{

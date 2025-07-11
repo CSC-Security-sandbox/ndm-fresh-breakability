@@ -1,9 +1,7 @@
 import { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
-import { WorkflowCoverage } from '@temporalio/nyc-test-coverage';
 import { RedisMemoryCheckWorkflow } from './redis.memorycheck.workflow';
 
-const workflowCoverage = new WorkflowCoverage();
 
 jest.mock('@temporalio/workflow', () => ({
     ...jest.requireActual('@temporalio/workflow'),
@@ -30,7 +28,7 @@ describe('RedisMemoryCheckWorkflow', () => {
         if (testEnv) {
             await testEnv.teardown();
         }
-        workflowCoverage.mergeIntoGlobalCoverage();
+        // workflowCoverage.mergeIntoGlobalCoverage();
     });
 
     beforeEach(async () => {
@@ -49,12 +47,12 @@ describe('RedisMemoryCheckWorkflow', () => {
 
         mockedActivities.checkMemoryUsage.mockReturnValue(true)
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./redis.memorycheck.workflow'),
             activities: mockedActivities,
             taskQueue: 'test-task-queue',
-        }));
+        });
 
         await worker.runUntil(async () => {
             const memoryCheckWorkflowHandle = await testEnv.client.workflow.start(RedisMemoryCheckWorkflow, {
@@ -80,12 +78,12 @@ describe('RedisMemoryCheckWorkflow', () => {
             return Promise.resolve(true);
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./redis.memorycheck.workflow'),
             activities: mockedActivities,
             taskQueue: 'test-task-queue',
-        }));
+        });
 
         await worker.runUntil(async () => {
             const memoryCheckWorkflowHandle = await testEnv.client.workflow.start(RedisMemoryCheckWorkflow, {

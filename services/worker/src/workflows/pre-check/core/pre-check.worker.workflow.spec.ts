@@ -1,9 +1,6 @@
 import { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
-import { WorkflowCoverage } from '@temporalio/nyc-test-coverage';
 import { PreCheckWorkerValidationWorkflow } from './pre-check.worker.workflow';
-
-const workflowCoverage = new WorkflowCoverage();
 
 const mockedActivities = {
     preCheckPath: jest.fn(),
@@ -28,7 +25,7 @@ describe('PreCheckWorkerValidationWorkflow', () => {
             await worker?.shutdown();
         }
         await testEnv.teardown();
-        workflowCoverage.mergeIntoGlobalCoverage();
+        // workflowCoverage.mergeIntoGlobalCoverage();
     });
     
     beforeEach(async () => {
@@ -57,12 +54,12 @@ describe('PreCheckWorkerValidationWorkflow', () => {
             path: '/source/path'
         }]);
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./pre-check.worker.workflow'),
             activities: mockedActivities,
             taskQueue: 'pre-check-task-queue',
-        }));
+        });
 
         await worker.runUntil(async () => {
             const workflowHandle = await testEnv.client.workflow.start(PreCheckWorkerValidationWorkflow, {

@@ -1,10 +1,8 @@
 import { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
-import { WorkflowCoverage } from '@temporalio/nyc-test-coverage';
 import { ValidateWorkerConnectionWorkflow } from './validate-worker-connection.workflow';
 import { JobServiceJobType } from 'src/activities/discovery/enums';
 
-const workflowCoverage = new WorkflowCoverage();
 
 const mockedActivities = {
   validate: jest.fn(),
@@ -30,7 +28,7 @@ describe('ValidateWorkerConnectionWorkflow', () => {
             await worker?.shutdown();
         }
         await testEnv.teardown();
-        workflowCoverage.mergeIntoGlobalCoverage();
+        // workflowCoverage.mergeIntoGlobalCoverage();
     });
 
     beforeEach(async () => {
@@ -44,12 +42,12 @@ describe('ValidateWorkerConnectionWorkflow', () => {
         mockedActivities.validate.mockResolvedValue({ success: true });
         jest.spyOn(console, 'log').mockImplementation(() => {});
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./validate-worker-connection.workflow'),
             activities: mockedActivities,
             taskQueue: 'test-task-queue',
-        }));
+        });
 
         await worker.runUntil(async () => {
             const workflowHandle = await testEnv.client.workflow.start(ValidateWorkerConnectionWorkflow, {

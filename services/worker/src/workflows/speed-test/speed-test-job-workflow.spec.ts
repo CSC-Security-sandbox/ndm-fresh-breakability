@@ -1,11 +1,9 @@
 import { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { temporal } from '@temporalio/proto';
-import { WorkflowCoverage } from '@temporalio/nyc-test-coverage';
 import { SpeedTestJobWorkflow } from './speed-test-job-workflow';
 import { JobRunStatus } from 'src/activities/discovery/enums';
 
-const workflowCoverage = new WorkflowCoverage();
 
 const mockedActivities = {
     readActivity: jest.fn(),
@@ -35,7 +33,7 @@ describe('SpeedTestJobWorkflow', () => {
             await worker?.shutdown();
         }
         await testEnv.teardown();
-        workflowCoverage.mergeIntoGlobalCoverage();
+        // workflowCoverage.mergeIntoGlobalCoverage();
     });
 
     beforeEach(async () => {
@@ -55,12 +53,12 @@ describe('SpeedTestJobWorkflow', () => {
 
         mockedActivities.updateStatus.mockResolvedValue({});
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./speed-test-job-workflow'),
             activities: mockedActivities,
             taskQueue: 'test-task-queue',
-        }));
+        });
 
         await worker.runUntil(async () => {
             const workflowHandle = await testEnv.client.workflow.start(SpeedTestJobWorkflow, {
@@ -100,12 +98,12 @@ describe('SpeedTestJobWorkflow', () => {
             readResultId: 'read-result-id'
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./speed-test-job-workflow'),
             activities: mockedActivities,
             taskQueue: 'test-task-queue',
-        }));
+        });
 
         await worker.runUntil(async () => {
             const workflowHandle = await testEnv.client.workflow.start(SpeedTestJobWorkflow, {
@@ -144,12 +142,12 @@ describe('SpeedTestJobWorkflow', () => {
             readResultId: 'read-result-id'
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./speed-test-job-workflow'),
             activities: mockedActivities,
             taskQueue: 'test-task-queue',
-        }));
+        });
 
         await worker.runUntil(async () => {
             const workflowHandle = await testEnv.client.workflow.start(SpeedTestJobWorkflow, {
@@ -188,12 +186,12 @@ describe('SpeedTestJobWorkflow', () => {
             readResultId: 'read-result-id'
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./speed-test-job-workflow'),
             activities: mockedActivities,
             taskQueue: 'test-task-queue',
-        }));
+        });
 
         await worker.runUntil(async () => {
             const workflowHandle = await testEnv.client.workflow.start(SpeedTestJobWorkflow, {
@@ -237,12 +235,12 @@ describe('SpeedTestJobWorkflow', () => {
         mockedActivities.readActivity.mockResolvedValue({});
         mockedActivities.networkPerformanceActivity.mockResolvedValue({});
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./speed-test-job-workflow'),
             activities: mockedActivities,
             taskQueue: 'test-task-queue',
-        }));
+        });
 
         await worker.runUntil(async () => {
             const workflowHandle = await testEnv.client.workflow.start(SpeedTestJobWorkflow, {

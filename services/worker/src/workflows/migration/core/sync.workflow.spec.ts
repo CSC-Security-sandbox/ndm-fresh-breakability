@@ -1,10 +1,7 @@
 import { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { SyncWorkflow, syncWorkerListSignal, isScanCompletedSignal } from './sync.workflow';
-import { WorkflowCoverage } from '@temporalio/nyc-test-coverage';
 import { JobRunStatus } from 'src/activities/discovery/enums';
-
-const workflowCoverage = new WorkflowCoverage();
 
 const mockedActivities = {
     syncTask: jest.fn(),
@@ -35,7 +32,7 @@ describe('SyncWorkflow', () => {
             await worker?.shutdown();
         }
         await testEnv.teardown();
-        workflowCoverage.mergeIntoGlobalCoverage();
+        // workflowCoverage.mergeIntoGlobalCoverage();
     });
 
     beforeEach(async () => {
@@ -71,12 +68,12 @@ describe('SyncWorkflow', () => {
             }
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./sync.workflow'),
             activities: mockedActivities,
             taskQueue: 'test-task-queue',
-        }));
+        });
 
         await worker.runUntil(async () => {
             const syncWorkflowHandle = await testEnv.client.workflow.start(SyncWorkflow, {
@@ -109,12 +106,12 @@ describe('SyncWorkflow', () => {
             status: JobRunStatus.Running
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./sync.workflow'),
             activities: mockedActivities,
             taskQueue: 'test-task-queue',
-        }));
+        });
 
         await worker.runUntil(async () => {
             const syncWorkflowHandle = await testEnv.client.workflow.start(SyncWorkflow, {
@@ -142,12 +139,12 @@ describe('SyncWorkflow', () => {
             status: JobRunStatus.Stopped
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./sync.workflow'),
             activities: mockedActivities,
             taskQueue: 'test-task-queue',
-        }));
+        });
 
         await worker.runUntil(async () => {
             const syncWorkflowHandle = await testEnv.client.workflow.start(SyncWorkflow, {
@@ -173,12 +170,12 @@ describe('SyncWorkflow', () => {
             status: JobRunStatus.Paused
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./sync.workflow'),
             activities: mockedActivities,
             taskQueue: 'test-task-queue',
-        }));
+        });
 
         await worker.runUntil(async () => {
             const syncWorkflowHandle = await testEnv.client.workflow.start(SyncWorkflow, {
@@ -221,12 +218,12 @@ describe('SyncWorkflow', () => {
             }
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./sync.workflow'),
             activities: mockedActivities,
             taskQueue: 'test-task-queue',
-        }));
+        });
 
         await worker.runUntil(async () => {
             const syncWorkflowHandle = await testEnv.client.workflow.start(SyncWorkflow, {
@@ -280,12 +277,12 @@ describe('SyncWorkflow', () => {
             }
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: testEnv.nativeConnection,
             workflowsPath: require.resolve('./sync.workflow'),
             activities: mockedActivities,
             taskQueue: 'test-task-queue',
-        }));
+        });
 
         await worker.runUntil(async () => {
             const syncWorkflowHandle = await testEnv.client.workflow.start(SyncWorkflow, {
