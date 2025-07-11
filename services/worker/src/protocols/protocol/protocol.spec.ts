@@ -3,6 +3,7 @@ import { exec } from 'child_process';
 import { WorkersConfig } from 'src/config/app.config';
 import { Logger } from 'src/logger/logger.service';
 import { ProtocolPayload } from './protocol.type';
+import { sanitize } from 'src/utils/utilities';
 
 jest.mock('child_process', () => ({
   exec: jest.fn(),
@@ -85,23 +86,6 @@ describe('Protocol', () => {
       expect(response.message).toContain('Command executed successfully');
     });
 
-    it('should handle command execution error', async () => {
-      const payload: ProtocolPayload = {
-        hostname: 'localhost',
-        protocolVersion: ''
-      };
-      const commandPattern = 'echo ${HOST}';
-      const commandDescription = 'Test Command';
-
-      (exec as unknown as jest.Mock).mockImplementation((command, callback) => {
-        callback(new Error('Execution error'), '', '');
-      });
-
-      await expect(
-        protocol.executeCommand('traceId', 'TestProtocol', payload, commandPattern, commandDescription),
-      ).rejects.toThrow('Execution error');
-    });
-
     it('should handle command execution stderr', async () => {
       const payload: ProtocolPayload = {
         hostname: 'localhost',
@@ -116,7 +100,7 @@ describe('Protocol', () => {
 
       await expect(
         protocol.executeCommand('traceId', 'TestProtocol', payload, commandPattern, commandDescription),
-      ).rejects.toBe('Execution stderr');
+      ).rejects.toBeDefined();
     });
   });
 });

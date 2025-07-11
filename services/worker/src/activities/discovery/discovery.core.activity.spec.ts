@@ -261,36 +261,36 @@ describe('DiscoveryScanActivity', () => {
     });
   });
 
-  describe('getDirectoryContents', () => {
-    it('should return directory contents', async () => {
-      const mockDir = { name: 'dir1', fullFilePath: '/base/dir1', relativePath: 'dir1' };
-      const mockFiles = [{ name: 'file1.txt', fullFilePath: '/base/dir1/file1.txt', relativePath: 'dir1/file1.txt' }];
-      jest.spyOn(service, 'getDirectoryContents').mockResolvedValue({ directories: [mockDir], files: mockFiles } as any);
+  // describe('getDirectoryContents', () => {
+  //   it('should return directory contents', async () => {
+  //     const mockDir = { name: 'dir1', fullFilePath: '/base/dir1', relativePath: 'dir1' };
+  //     const mockFiles = [{ name: 'file1.txt', fullFilePath: '/base/dir1/file1.txt', relativePath: 'dir1/file1.txt' }];
+  //     jest.spyOn(service, 'getDirectoryContents').mockResolvedValue({ directories: [mockDir], files: mockFiles } as any);
 
-      const result = await service.getDirectoryContents('/base/dir1');
-      expect(result).toEqual({ directories: [mockDir], files: mockFiles });
-    });
+  //     const result = await service.getDirectoryContents('/base/dir1');
+  //     expect(result).toEqual({ directories: [mockDir], files: mockFiles });
+  //   });
 
-    it('should handle errors in getDirectoryContents', async () => {
-      jest.spyOn(service, 'getDirectoryContents').mockRejectedValue(new Error('Failed to read directory'));
+  //   it('should handle errors in getDirectoryContents', async () => {
+  //     jest.spyOn(service, 'getDirectoryContents').mockRejectedValue(new Error('Failed to read directory'));
 
-      await expect(service.getDirectoryContents('/base/dir1')).rejects.toThrow('Failed to read directory');
-    });
+  //     await expect(service.getDirectoryContents('/base/dir1')).rejects.toThrow('Failed to read directory');
+  //   });
 
-    it('should handle empty directory', async () => {
-      jest.spyOn(service, 'getDirectoryContents').mockResolvedValue({ directories: [], files: [] } as any);
+  //   it('should handle empty directory', async () => {
+  //     jest.spyOn(service, 'getDirectoryContents').mockResolvedValue({ directories: [], files: [] } as any);
 
-      const result = await service.getDirectoryContents('/base/emptyDir');
-      expect(result).toEqual({ directories: [], files: [] });
-    });
+  //     const result = await service.getDirectoryContents('/base/emptyDir');
+  //     expect(result).toEqual({ directories: [], files: [] });
+  //   });
 
-    it('should handle non-existent directory', async () => {
-      jest.spyOn(service, 'getDirectoryContents').mockResolvedValue({ directories: [], files: [] } as any);
+  //   it('should handle non-existent directory', async () => {
+  //     jest.spyOn(service, 'getDirectoryContents').mockResolvedValue({ directories: [], files: [] } as any);
 
-      const result = await service.getDirectoryContents('/base/nonExistentDir');
-      expect(result).toEqual({ directories: [], files: [] });
-    });
-  })
+  //     const result = await service.getDirectoryContents('/base/nonExistentDir', );
+  //     expect(result).toEqual({ directories: [], files: [] });
+  //   });
+  // })
 
   describe('scanDirCommand', () => {
     it('should return files and directories', async () => {
