@@ -6,12 +6,19 @@ const RadioButtonGroup = ({
   options,
   form,
   name,
+  disabled = false,
 }: RadioButtonGroupPropsType) => {
   return (
     <RenderEach
       renderList={options}
       renderItem={({ label, value }) => (
-        <RadioButton key={value} form={form} name={name} value={value}>
+        <RadioButton
+          key={value}
+          form={form}
+          name={name}
+          value={value}
+          disabled={disabled}
+        >
           {label}
         </RadioButton>
       )}

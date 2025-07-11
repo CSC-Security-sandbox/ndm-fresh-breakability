@@ -11,7 +11,9 @@ import RadioButtonGroup from "@components/RadioButton/RadioButtonGroup";
 import { EXPORT_PATH_SOURCE_ENUM } from "@modules/storage-servers/file-server/components/file-server.constant";
 
 const ExportPathSource = () => {
-  const { nfsCredentialsForm } = useContext(CommonFileServerContext);
+  const { nfsCredentialsForm, isJobRunning } = useContext(
+    CommonFileServerContext
+  );
   const isManualUpload =
     nfsCredentialsForm.formState.exportPathSource ===
     EXPORT_PATH_SOURCE_ENUM.MANUAL_UPLOAD;
@@ -27,6 +29,7 @@ const ExportPathSource = () => {
         <Text> Export Paths Retrieval Mechanism</Text>
         <Box className="flex gap-16">
           <RadioButtonGroup
+            disabled={isJobRunning}
             options={RADIO_OPTIONS}
             form={nfsCredentialsForm}
             name="exportPathSource"
