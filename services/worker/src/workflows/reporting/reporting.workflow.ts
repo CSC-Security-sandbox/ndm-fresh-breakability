@@ -1,9 +1,9 @@
 import * as wf from '@temporalio/workflow';
 import { JobReportType } from './reporting.types';
-import { MigrationTaskService } from 'src/activities/migrate/migrate.taskmanager.service';
-import { JobRunStatus } from 'src/activities/discovery/enums';
-import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
-import { CommonActivityService } from 'src/activities/common/common.service';
+import { MigrationTaskService } from '../../activities/migrate/migrate.taskmanager.service';
+import { JobRunStatus } from '../../activities/discovery/enums';
+import { DiscoveryActivity } from '../../activities/discovery/discovery.activities';
+import { CommonActivityService } from '../../activities/common/common.service';
 import { isErrored } from 'stream';
 
 export const isReportedQuery = wf.defineQuery<boolean>('isReported');

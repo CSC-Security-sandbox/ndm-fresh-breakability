@@ -1,230 +1,485 @@
-import { Logger } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import axios from 'axios';
 import * as fs from 'fs';
 import { AuthService } from 'src/auth/auth.service';
-
+import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import { ConfigError, ConfigStatus } from './working-directory.type';
 import { ValidateWorkingDirectoryActivity } from './working-directory.service';
 
+// Mock Temporal dependencies to avoid native binary issues
+jest.mock('@temporalio/core-bridge', () => ({}));
+jest.mock('@temporalio/worker', () => ({}));
+jest.mock('@temporalio/activity', () => ({}));
+
+// Mock other dependencies
 jest.mock('axios');
+jest.mock('fs');
 jest.mock('src/protocols/protocols');
 
+const mockedAxios = axios as jest.Mocked<typeof axios>;
+const mockedFs = fs as jest.Mocked<typeof fs>;
+
 describe('ValidateWorkingDirectoryActivity', () => {
-  let configService: Partial<ConfigService>;
-  let logger: Partial<Logger>;
-  let authService: Partial<AuthService>;
-  let activity: ValidateWorkingDirectoryActivity;
+  let service: ValidateWorkingDirectoryActivity;
+  let configService: jest.Mocked<ConfigService>;
+  let logger: jest.Mocked<Logger>;
+  let authService: jest.Mocked<AuthService>;
+  let mockProtocol: any;
 
-  const dummyToken = 'token123';
+  beforeEach(async () => {
+    // Reset all mocks
+    jest.clearAllMocks();
 
-  beforeEach(() => {
-    configService = {
-      get: jest.fn((key: string) => {
+    // Create mock protocol
+    mockProtocol = {
+      mountPath: jest.fn(),
+      unmountPath: jest.fn(),
+    };
+
+    // Mock Protocols.getProtocol
+    jest.mocked(Protocols.getProtocol).mockReturnValue(mockProtocol);
+
+    // Create mock config service with immediate return values
+    const mockConfigService = {
+      get: jest.fn().mockImplementation((key: string) => {
         switch (key) {
           case 'worker.workerId':
-            return 'worker-1';
+            return 'test-worker-id';
           case 'worker.baseWorkingPath':
-            return '/base/path';
+            return '/base/working/path';
           case 'worker.connection.workerConfigUrl':
-            return 'http://config.url';
+            return 'http://test-url';
           default:
-            return null;
+            return undefined;
         }
       }),
     };
-    logger = {
-      log: jest.fn(),
-      error: jest.fn(),
-    };
-    authService = {
-      getAccessToken: jest.fn().mockResolvedValue(dummyToken),
-    };
-    activity = new ValidateWorkingDirectoryActivity(
-      configService as ConfigService,
-      logger as Logger,
-      authService as AuthService,
-    );
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        ValidateWorkingDirectoryActivity,
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
+        },
+        {
+          provide: Logger,
+          useValue: {
+            log: jest.fn(),
+            error: jest.fn(),
+          },
+        },
+        {
+          provide: AuthService,
+          useValue: {
+            getAccessToken: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+
+    service = module.get<ValidateWorkingDirectoryActivity>(ValidateWorkingDirectoryActivity);
+    configService = module.get(ConfigService);
+    logger = module.get(Logger);
+    authService = module.get(AuthService);
   });
 
-  afterEach(() => {
-    jest.resetAllMocks();
-  });
-
-  it('should succeed when handleMountAndUnmountPaths resolves', async () => {
-    // Arrange
-    const traceId = 'trace-1';
-    const payload: any = { configId: 'cfg-1', exportPathWorkingDirectoryProvided: false, listPathPayload: [] };
-    jest.spyOn(activity as any, 'handleMountAndUnmountPaths').mockResolvedValue(undefined);
-    (axios.post as jest.Mock).mockResolvedValue({ status: 200 });
-
-    // Act
-    const result = await activity.validateWorkingDirectory(traceId, payload);
-
-    // Assert
-    expect((activity as any).handleMountAndUnmountPaths).toHaveBeenCalledWith(traceId, payload);
-    expect(axios.post).toHaveBeenCalledWith(
-      'http://config.url/api/v1/work-manager/validate/working-directory',
-      expect.objectContaining({ status: ConfigStatus.ACTIVE, configId: payload.configId }),
-      expect.objectContaining({ headers: expect.objectContaining({ Authorization: `Bearer ${dummyToken}` })}),
-    );
-    expect(result.status).toBe('success');
-    expect(result.workerId).toBe('worker-1');
-    expect(result.message).toContain('validated successfully');
-  });
-
-  it('should error when handleMountAndUnmountPaths rejects with NFS protocol error', async () => {
-    // Arrange
-    const traceId = 'trace-2';
-    const payload: any = { configId: 'cfg-2', exportPathWorkingDirectoryProvided: false, listPathPayload: [] };
-    const err = new Error('illegal NFS version value: xyz');
-    jest.spyOn(activity as any, 'handleMountAndUnmountPaths').mockRejectedValue(err);
-    (axios.post as jest.Mock).mockResolvedValue({ status: 200 });
-
-    // Act
-    const result = await activity.validateWorkingDirectory(traceId, payload);
-
-    // Assert
-    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error while mounting:'),);
-    expect(axios.post).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ status: ConfigStatus.ERRORED, errorMessage: ConfigError.PROTOCOL_NOT_SUPPORTED }),
-      expect.any(Object),
-    );
-    expect(result.status).toBe('error');
-    expect(result.message).toContain(ConfigError.PROTOCOL_NOT_SUPPORTED);
-  });
-
-  it('should error when exportPathWorkingDirectoryProvided true and exportPathPresent false', async () => {
-    // Arrange
-    const traceId = 'trace-3';
-    const payload: any = { configId: 'cfg-3', exportPathWorkingDirectoryProvided: true, exportPathPresent: false };
-    (axios.post as jest.Mock).mockResolvedValue({ status: 200 });
-
-    // Act
-    const result = await activity.validateWorkingDirectory(traceId, payload);
-
-    // Assert
-    expect(logger.log).toHaveBeenCalledWith('Invalid Export Path');
-    expect(axios.post).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ status: ConfigStatus.ERRORED, errorMessage: ConfigError.INVALID_EXPORT_PATH }),
-      expect.any(Object),
-    );
-    expect(result.status).toBe('error');
-    expect(result.message).toContain(ConfigError.INVALID_EXPORT_PATH);
-  });
-
-  it('should validate directory successfully when isValidDirectory returns true', async () => {
-    // Arrange
-    const traceId = 'trace-4';
-    const payload: any = {
-      configId: 'cfg-4',
-      exportPathWorkingDirectoryProvided: true,
+  describe('validateWorkingDirectory', () => {
+    const mockPayload = {
+      configId: 'test-config-id',
+      exportPathWorkingDirectoryProvided: false,
       exportPathPresent: true,
-      listPathPayload: [],
-      exportPath: '/export',
-      workingDirectory: 'workdir',
+      exportPath: '/export/path',
+      workingDirectory: 'working-dir',
+      fetchedPath: '/fetched/path',
+      listPathPayload: [
+        {
+          type: 'NFS',
+          host: 'test-host',
+          username: 'test-user',
+          password: 'test-pass',
+          protocolVersion: '3',
+        },
+      ],
     };
-    jest.spyOn(activity as any, 'isValidDirectory').mockResolvedValue(true);
-    (axios.post as jest.Mock).mockResolvedValue({ status: 200 });
 
-    // Act
-    const result = await activity.validateWorkingDirectory(traceId, payload);
+    it('should handle successful mount and unmount when exportPathWorkingDirectoryProvided is false', async () => {
+      const payload = { ...mockPayload, exportPathWorkingDirectoryProvided: false };
+      authService.getAccessToken.mockResolvedValue('test-token');
+      mockedAxios.post.mockResolvedValue({ data: {} });
+      mockProtocol.mountPath.mockResolvedValue(undefined);
+      mockProtocol.unmountPath.mockResolvedValue(undefined);
 
-    // Assert
-    expect(logger.log).toHaveBeenCalledWith('Valid Export Path');
-    expect(logger.log).toHaveBeenCalledWith('Started validating working directory');
-    expect((activity as any).isValidDirectory).toHaveBeenCalledWith(payload, traceId);
-    expect(result.status).toBe('success');
-    expect(result.message).toContain('validated successfully');
-  });
+      const result = await service.validateWorkingDirectory('trace-id', payload);
 
-  it('should error when isValidDirectory returns false', async () => {
-    // Arrange
-    const traceId = 'trace-5';
-    const payload: any = {
-      configId: 'cfg-5',
-      exportPathWorkingDirectoryProvided: true,
-      exportPathPresent: true,
-      listPathPayload: [],
-      exportPath: '/export',
-      workingDirectory: 'workdir',
-    };
-    jest.spyOn(activity as any, 'isValidDirectory').mockResolvedValue(false);
-    (axios.post as jest.Mock).mockResolvedValue({ status: 200 });
-
-    // Act
-    const result = await activity.validateWorkingDirectory(traceId, payload);
-
-    // Assert
-    expect(axios.post).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ status: ConfigStatus.ERRORED, errorMessage: ConfigError.INVALID_WORKING_DIRECTORY }),
-      expect.any(Object),
-    );
-    expect(result.status).toBe('error');
-    expect(result.message).toContain(ConfigError.INVALID_WORKING_DIRECTORY);
-  });
-
-  it('should error when isValidDirectory throws an error', async () => {
-    // Arrange
-    const traceId = 'trace-6';
-    const payload: any = {
-      configId: 'cfg-6',
-      exportPathWorkingDirectoryProvided: true,
-      exportPathPresent: true,
-      listPathPayload: [],
-      exportPath: '/export',
-      workingDirectory: 'workdir',
-    };
-    const err = new Error('RPC prog. not avail error');
-    jest.spyOn(activity as any, 'isValidDirectory').mockRejectedValue(err);
-    (axios.post as jest.Mock).mockResolvedValue({ status: 200 });
-
-    // Act
-    const result = await activity.validateWorkingDirectory(traceId, payload);
-
-    // Assert
-    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Working directory validation error:'),);
-    expect(axios.post).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ status: ConfigStatus.ERRORED, errorMessage: ConfigError.PROTOCOL_NOT_SUPPORTED }),
-      expect.any(Object),
-    );
-    expect(result.status).toBe('error');
-    expect(result.message).toContain(ConfigError.PROTOCOL_NOT_SUPPORTED);
-  });
-
-  describe('checkWritable', () => {
-    const dir = '/some/dir';
-
-    it('returns true when write succeeds', () => {
-      jest.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
-      jest.spyOn(fs, 'unlinkSync').mockImplementation(() => undefined);
-
-      const result = activity.checkWritable(dir);
-      expect(result).toBe(true);
-      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('is writable'));
+      expect(mockProtocol.mountPath).toHaveBeenCalled();
+      expect(mockProtocol.unmountPath).toHaveBeenCalled();
+      expect(result.status).toBe('success');
+      expect(result.message).toContain('validated successfully');
     });
 
-    it('returns false when write fails', () => {
-      const error = new Error('perm denied');
-      jest.spyOn(fs, 'writeFileSync').mockImplementation(() => { throw error; });
+    it('should handle mount error when exportPathWorkingDirectoryProvided is false', async () => {
+      const payload = { ...mockPayload, exportPathWorkingDirectoryProvided: false };
+      const mountError = new Error('Mount failed');
+      authService.getAccessToken.mockResolvedValue('test-token');
+      mockedAxios.post.mockResolvedValue({ data: {} });
+      mockProtocol.mountPath.mockRejectedValue(mountError);
 
-      const result = activity.checkWritable(dir);
-      expect(result).toBe(false);
+      const result = await service.validateWorkingDirectory('trace-id', payload);
+
+      expect(result.status).toBe('error');
+      expect(result.message).toContain('Validation failed');
+    });
+
+    it('should handle invalid export path when exportPathPresent is false', async () => {
+      const payload = { ...mockPayload, exportPathWorkingDirectoryProvided: true, exportPathPresent: false };
+      authService.getAccessToken.mockResolvedValue('test-token');
+      mockedAxios.post.mockResolvedValue({ data: {} });
+
+      const result = await service.validateWorkingDirectory('trace-id', payload);
+
+      expect(logger.log).toHaveBeenCalledWith('Invalid Export Path');
+      expect(result.status).toBe('error');
+      expect(result.message).toContain(ConfigError.INVALID_EXPORT_PATH);
+    });
+
+    it('should handle valid directory validation successfully', async () => {
+      const payload = { ...mockPayload, exportPathWorkingDirectoryProvided: true };
+      authService.getAccessToken.mockResolvedValue('test-token');
+      mockedAxios.post.mockResolvedValue({ data: {} });
+      
+      // Mock isValidDirectory to return true
+      jest.spyOn(service, 'isValidDirectory').mockResolvedValue(true);
+
+      const result = await service.validateWorkingDirectory('trace-id', payload);
+
+      expect(logger.log).toHaveBeenCalledWith('Valid Export Path');
+      expect(logger.log).toHaveBeenCalledWith('Started validating working directory');
+      expect(result.status).toBe('success');
+    });
+
+    it('should handle invalid directory validation', async () => {
+      const payload = { ...mockPayload, exportPathWorkingDirectoryProvided: true };
+      authService.getAccessToken.mockResolvedValue('test-token');
+      mockedAxios.post.mockResolvedValue({ data: {} });
+      
+      // Mock isValidDirectory to return false
+      jest.spyOn(service, 'isValidDirectory').mockResolvedValue(false);
+
+      const result = await service.validateWorkingDirectory('trace-id', payload);
+
+      expect(result.status).toBe('error');
+      expect(result.message).toContain(ConfigError.INVALID_WORKING_DIRECTORY);
+    });
+
+    it('should handle directory validation error', async () => {
+      const payload = { ...mockPayload, exportPathWorkingDirectoryProvided: true };
+      const validationError = new Error('Validation error');
+      authService.getAccessToken.mockResolvedValue('test-token');
+      mockedAxios.post.mockResolvedValue({ data: {} });
+      
+      // Mock isValidDirectory to throw error
+      jest.spyOn(service, 'isValidDirectory').mockRejectedValue(validationError);
+
+      const result = await service.validateWorkingDirectory('trace-id', payload);
+
+      expect(result.status).toBe('error');
+      expect(logger.error).toHaveBeenCalledWith('Working directory validation error: Validation error');
+    });
+  });
+
+  describe('getNfsMountErrorMessage', () => {
+    it('should return PROTOCOL_NOT_SUPPORTED for illegal NFS version error', () => {
+      const error = { message: 'illegal NFS version value' };
+      const result = service['getNfsMountErrorMessage'](error);
+      expect(result).toBe(ConfigError.PROTOCOL_NOT_SUPPORTED);
+    });
+
+    it('should return PROTOCOL_NOT_SUPPORTED for RPC prog not avail error', () => {
+      const error = { message: 'RPC prog. not avail' };
+      const result = service['getNfsMountErrorMessage'](error);
+      expect(result).toBe(ConfigError.PROTOCOL_NOT_SUPPORTED);
+    });
+
+    it('should return PROTOCOL_NOT_SUPPORTED for Protocol not supported error', () => {
+      const error = { message: 'Protocol not supported for something' };
+      const result = service['getNfsMountErrorMessage'](error);
+      expect(result).toBe(ConfigError.PROTOCOL_NOT_SUPPORTED);
+    });
+
+    it('should return original error message for other errors', () => {
+      const error = { message: 'Some other error' };
+      const result = service['getNfsMountErrorMessage'](error);
+      expect(result).toBe('Some other error');
+    });
+  });
+
+  describe('handleMountAndUnmountPaths', () => {
+    const mockPayload = {
+      fetchedPath: '/fetched/path',
+      listPathPayload: [
+        {
+          type: 'NFS',
+          host: 'test-host',
+          username: 'test-user',
+          password: 'test-pass',
+          protocolVersion: '3',
+        },
+      ],
+    };
+
+    it('should successfully mount and unmount paths', async () => {
+      mockProtocol.mountPath.mockResolvedValue(undefined);
+      mockProtocol.unmountPath.mockResolvedValue(undefined);
+
+      await service.handleMountAndUnmountPaths('trace-id', mockPayload);
+
+      expect(mockProtocol.mountPath).toHaveBeenCalledWith('trace-id', {
+        hostname: 'test-host',
+        username: 'test-user',
+        password: 'test-pass',
+        protocolVersion: '3',
+        path: '/fetched/path',
+        mountBasePath: service.baseWorkingPath,
+        pathId: 'trace-id',
+        jobRunId: 'trace-id',
+      });
+      expect(mockProtocol.unmountPath).toHaveBeenCalled();
+      expect(logger.log).toHaveBeenCalledWith('Mounting export path for host test-host');
+      expect(logger.log).toHaveBeenCalledWith('Mounted export path successfully');
+      expect(logger.log).toHaveBeenCalledWith('Unmounting export path for host test-host');
+      expect(logger.log).toHaveBeenCalledWith('Unmounted export path successfully');
+    });
+
+    it('should handle mount error and rethrow', async () => {
+      const mountError = new Error('Mount failed');
+      mockProtocol.mountPath.mockRejectedValue(mountError);
+
+      await expect(service.handleMountAndUnmountPaths('trace-id', mockPayload))
+        .rejects.toThrow('Mount failed');
+
+      expect(logger.error).toHaveBeenCalledWith('Error while mounting the path - Mount failed');
+    });
+
+    it('should handle mount error without message and rethrow', async () => {
+      const mountError = 'String error';
+      mockProtocol.mountPath.mockRejectedValue(mountError);
+
+      await expect(service.handleMountAndUnmountPaths('trace-id', mockPayload))
+        .rejects.toThrow('String error');
+
+      expect(logger.error).toHaveBeenCalledWith('Error while mounting the path - String error');
     });
   });
 
   describe('updateConfigStatus', () => {
-    it('throws if axios.post fails', async () => {
-      (axios.post as jest.Mock).mockRejectedValue({ response: { data: 'fail-data' } });
-      const apiUrl = 'http://some.url';
-      const payload = { configId: 'cfg', status: ConfigStatus.ACTIVE };
+    const mockPayload = {
+      configId: 'test-config-id',
+      status: ConfigStatus.ACTIVE,
+      errorMessage: null,
+    };
 
-      await expect(activity.updateConfigStatus(apiUrl, payload as any)).rejects.toThrow('API Error: fail-data');
-      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('API Error:'),);
+    it('should successfully update config status', async () => {
+      authService.getAccessToken.mockResolvedValue('test-token');
+      mockedAxios.post.mockResolvedValue({ data: {} });
+
+      await service.updateConfigStatus('http://test-url/api', mockPayload);
+
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'http://test-url/api',
+        mockPayload,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer test-token',
+          },
+        }
+      );
+    });
+
+    it('should handle API error with response data', async () => {
+      authService.getAccessToken.mockResolvedValue('test-token');
+      const apiError = {
+        response: { data: 'API Error Response' },
+        message: 'Network Error',
+      };
+      mockedAxios.post.mockRejectedValue(apiError);
+
+      await expect(service.updateConfigStatus('http://test-url/api', mockPayload))
+        .rejects.toThrow('API Error: API Error Response');
+
+      expect(logger.error).toHaveBeenCalledWith('API Error: API Error Response');
+    });
+
+    it('should handle API error without response data', async () => {
+      authService.getAccessToken.mockResolvedValue('test-token');
+      const apiError = {
+        message: 'Network Error',
+      };
+      mockedAxios.post.mockRejectedValue(apiError);
+
+      await expect(service.updateConfigStatus('http://test-url/api', mockPayload))
+        .rejects.toThrow('API Error: Network Error');
+
+      expect(logger.error).toHaveBeenCalledWith('API Error: Network Error');
+    });
+  });
+
+  describe('isValidDirectory', () => {
+    const mockPayload = {
+      exportPath: '/export/path',
+      workingDirectory: 'working-dir',
+      listPathPayload: [
+        {
+          type: 'NFS',
+          host: 'test-host',
+          username: 'test-user',
+          password: 'test-pass',
+          protocolVersion: '3',
+        },
+      ],
+    };
+
+    it('should return true for valid and writable directory', async () => {
+      mockProtocol.mountPath.mockResolvedValue(undefined);
+      mockProtocol.unmountPath.mockResolvedValue(undefined);
+      mockedFs.existsSync.mockReturnValue(true);
+      jest.spyOn(service, 'checkWritable').mockReturnValue(true);
+
+      const result = await service.isValidDirectory(mockPayload, 'trace-id');
+
+      expect(result).toBe(true);
+      // The path is constructed using path.join, so we need to expect the actual path construction
+      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('Working Directory exists:'));
+      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('working-dir'));
+    });
+
+    it('should return false for non-existent directory', async () => {
+      mockProtocol.mountPath.mockResolvedValue(undefined);
+      mockProtocol.unmountPath.mockResolvedValue(undefined);
+      mockedFs.existsSync.mockReturnValue(false);
+
+      const result = await service.isValidDirectory(mockPayload, 'trace-id');
+
+      expect(result).toBe(false);
+      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('Working Directory does not exist:'));
+      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('working-dir'));
+    });
+
+    it('should throw error for directory without write permission', async () => {
+      mockProtocol.mountPath.mockResolvedValue(undefined);
+      mockProtocol.unmountPath.mockResolvedValue(undefined);
+      mockedFs.existsSync.mockReturnValue(true);
+      jest.spyOn(service, 'checkWritable').mockReturnValue(false);
+
+      await expect(service.isValidDirectory(mockPayload, 'trace-id'))
+        .rejects.toThrow('Provided working directory working-dir has no writable permission');
+    });
+
+    it('should handle multiple file servers and break on first valid one', async () => {
+      const payloadWithMultipleServers = {
+        ...mockPayload,
+        listPathPayload: [
+          {
+            type: 'NFS',
+            host: 'test-host-1',
+            username: 'test-user-1',
+            password: 'test-pass-1',
+            protocolVersion: '3',
+          },
+          {
+            type: 'NFS',
+            host: 'test-host-2',
+            username: 'test-user-2',
+            password: 'test-pass-2',
+            protocolVersion: '3',
+          },
+        ],
+      };
+
+      mockProtocol.mountPath.mockResolvedValue(undefined);
+      mockProtocol.unmountPath.mockResolvedValue(undefined);
+      mockedFs.existsSync.mockReturnValue(true);
+      jest.spyOn(service, 'checkWritable').mockReturnValue(true);
+
+      const result = await service.isValidDirectory(payloadWithMultipleServers, 'trace-id');
+
+      expect(result).toBe(true);
+      // Should only call mount/unmount once because it breaks after first valid directory
+      expect(mockProtocol.mountPath).toHaveBeenCalledTimes(1);
+      expect(mockProtocol.unmountPath).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle validation error and rethrow', async () => {
+      const validationError = new Error('Validation failed');
+      mockProtocol.mountPath.mockRejectedValue(validationError);
+
+      await expect(service.isValidDirectory(mockPayload, 'trace-id'))
+        .rejects.toThrow('Validation failed');
+
+      expect(logger.error).toHaveBeenCalledWith('Working Directory validation error: Validation failed');
+    });
+
+    it('should handle validation error without message and rethrow', async () => {
+      const validationError = 'String validation error';
+      mockProtocol.mountPath.mockRejectedValue(validationError);
+
+      await expect(service.isValidDirectory(mockPayload, 'trace-id'))
+        .rejects.toThrow('String validation error');
+
+      expect(logger.error).toHaveBeenCalledWith('Working Directory validation error: String validation error');
+    });
+  });
+
+  describe('checkWritable', () => {
+    it('should return true for writable directory', () => {
+      // Mock writeFileSync and unlinkSync to succeed
+      const mockWriteFileSync = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+      const mockUnlinkSync = jest.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
+
+      const result = service.checkWritable('/test/directory');
+
+      expect(mockWriteFileSync).toHaveBeenCalledWith('/test/directory/.nfs_write_test', '');
+      expect(mockUnlinkSync).toHaveBeenCalledWith('/test/directory/.nfs_write_test');
+      expect(result).toBe(true);
+      expect(logger.log).toHaveBeenCalledWith('Success: Directory /test/directory is writable.');
+      
+      // Restore mocks
+      mockWriteFileSync.mockRestore();
+      mockUnlinkSync.mockRestore();
+    });
+
+    it('should return false for non-writable directory', () => {
+      const writeError = new Error('Permission denied');
+      
+      // Mock writeFileSync to throw error
+      const mockWriteFileSync = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {
+        throw writeError;
+      });
+
+      const result = service.checkWritable('/test/directory');
+
+      expect(result).toBe(false);
+      expect(logger.error).toHaveBeenCalledWith('Error: No write permission for directory /test/directory - Permission denied');
+      
+      // Restore mock
+      mockWriteFileSync.mockRestore();
+    });
+  });
+
+  describe('Constructor', () => {
+    it('should initialize with correct configuration values', () => {
+      // The service should have been initialized with the config values
+      expect(service.workerId).toBe('test-worker-id');
+      expect(service.baseWorkingPath).toBe('/base/working/path');
+      expect(service.workerConfigUrl).toBe('http://test-url');
+      
+      // Verify that configService.get was called with the correct keys
+      expect(configService.get).toHaveBeenCalledWith('worker.workerId');
+      expect(configService.get).toHaveBeenCalledWith('worker.baseWorkingPath');
+      expect(configService.get).toHaveBeenCalledWith('worker.connection.workerConfigUrl');
     });
   });
 });

@@ -1,10 +1,10 @@
 import { ContinueAsNew, continueAsNew, proxyActivities } from "@temporalio/workflow";
-import { JobRunStatus } from "src/activities/discovery/enums";
-import { MigrationScanService } from "src/activities/migrate/migrate.scan.service";
-import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanager.service";
+import { JobRunStatus } from "../../../activities/discovery/enums";
+import { MigrationScanService } from "../../../activities/migrate/migrate.scan.service";
+import { MigrationTaskService } from "../../../activities/migrate/migrate.taskmanager.service";
 import * as wf from '@temporalio/workflow';
-import { CommonActivityService } from "src/activities/common/common.service";
-import { ScanPathOutput } from "src/activities/migrate/migrate.type";
+import { CommonActivityService } from "../../../activities/common/common.service";
+import { ScanPathOutput } from "../../../activities/migrate/migrate.type";
 import { sleep } from '@temporalio/workflow';
 
 async function log(traceId: string, message: string) {

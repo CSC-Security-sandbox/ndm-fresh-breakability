@@ -3,11 +3,11 @@ import {
     ChildWorkflowCancellationType,
     ParentClosePolicy, defineSignal
 } from "@temporalio/workflow";
-import { CommonActivityService } from "src/activities/common/common.service";
-import { JobRunStatus } from "src/activities/discovery/enums";
-import { CleanupWorkerWorkflow, ReportingWorkflow } from "src/workflows/workflows";
+import { CommonActivityService } from "../../../activities/common/common.service";
+import { JobRunStatus } from "../../../activities/discovery/enums";
+import { CleanupWorkerWorkflow, ReportingWorkflow } from "../../../workflows/workflows";
 import { DiscoveryJobRequest } from "./discovery-workflow.type";
-import { waitUntilRedisMemoryOk } from 'src/workflows/utils/memory-utils';
+import { waitUntilRedisMemoryOk } from '../../../workflows/utils/memory-utils';
 
 interface DiscoveryWorkflowOutput {
     traceId: string;
