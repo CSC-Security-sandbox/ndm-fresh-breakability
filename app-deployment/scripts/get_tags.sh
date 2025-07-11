@@ -20,7 +20,7 @@ else
 fi
 echo "Detected architecture: $ARCH, using platform: $PLATFORM"
 
-# Explicit mapping: artifactory_name:vars_tag:vars_tag:acr_image_name
+# Explicit mapping: artifactory_name:vars_tag:vars_branch:acr_image_name
 services=(
     "admin-service:admin_service_tag:admin_service_branch:ndm-admin-service"
     "config-service:config_service_tag:config_service_branch:ndm-config-service"

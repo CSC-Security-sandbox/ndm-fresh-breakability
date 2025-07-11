@@ -1,4 +1,4 @@
-name: Build and Push to ACR on PR Merge
+name: Build and Push Services to ACR
 
 on:
   pull_request:
@@ -395,7 +395,12 @@ jobs:
           if [ -n "${{ inputs.build }}" ]; then
             echo "IMAGE_TAG=${{ github.sha }}-${{ inputs.build }}" >> $GITHUB_ENV
           else
-            echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+            if [ "${{ github.ref_name }}" = "main" ]; then
+              echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+            else
+              BRANCH_TAG=$(echo "${{ github.ref_name }}" | sed 's#/#-#g')
+              echo "IMAGE_TAG=${{ github.sha }}-${BRANCH_TAG}" >> $GITHUB_ENV
+            fi
           fi
 
       - name: Checkout Code
@@ -584,9 +589,15 @@ jobs:
           REF_NAME: ${{ needs.build-and-push.outputs.ref_name }}
         run: |
           METADATA_PATH="services/${{ matrix.service }}/$REF_TYPE/$REF_NAME/${GITHUB_SHA::7}/metadata.json"
-          curl --silent --show-error --fail --request PUT --upload-file metadata.json \
-            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/manifests/${METADATA_PATH}" \
-            -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}"
+          for REPO_PATH in "cicd/ndm" "team/ndm"; do
+            TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/manifests/${METADATA_PATH}"
+            echo "Uploading metadata.json to $TARGET_URL..."
+            curl --silent --show-error --fail --request PUT --upload-file metadata.json \
+              "$TARGET_URL" \
+              -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}"
+            echo "metadata.json uploaded successfully to $TARGET_URL."
+          done
+
       - name: Upload latest.json pointer to Artifactory
         env:
           NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
@@ -595,9 +606,14 @@ jobs:
           REF_NAME: ${{ needs.build-and-push.outputs.ref_name }}
         run: |
           LATEST_PATH="services/${{ matrix.service }}/$REF_TYPE/$REF_NAME/latest.json"
-          curl --silent --show-error --fail --request PUT --upload-file latest.json \
-            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/manifests/${LATEST_PATH}" \
-            -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}"
+          for REPO_PATH in "cicd/ndm" "team/ndm"; do
+            TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/manifests/${LATEST_PATH}"
+            echo "Uploading latest.json to $TARGET_URL..."
+            curl --silent --show-error --fail --request PUT --upload-file latest.json \
+              "$TARGET_URL" \
+              -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}"
+            echo "latest.json uploaded successfully to $TARGET_URL."
+          done
 
   build-details:
     runs-on: ubuntu-latest
@@ -633,3 +649,22 @@ jobs:
           echo "$IMAGE_TAGS" | jq '.'
           echo ""
           echo "Copy the above JSON and paste it into the 'services_config' input of the NDM VM image build workflow."
+          
+          echo "## NDM Service Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Built Services" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Image Tag | Branch |" >> $GITHUB_STEP_SUMMARY
+          echo "| ------- | --------- | ------ |" >> $GITHUB_STEP_SUMMARY
+          
+          # Add each service to the table
+          echo "$IMAGE_TAGS" | jq -r 'to_entries[] | "| \(.key) | `\(.value.tag)` | `\(.value.branch)` |"' >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Services Configuration JSON" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Copy this JSON and paste it into the 'services_config' input of the NDM VM image build workflow:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+          echo "$IMAGE_TAGS" | jq '.' >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
