@@ -87,4 +87,4 @@ export const BULK_DISCOVERY_DEFAULT_COLUMN_STATE = {
   2: { isHidden: true },
 };
 
-export const BULK_DISCOVERY = "bulk-discovery";
+export const BULK_DISCOVERY = "bulk_discover";
