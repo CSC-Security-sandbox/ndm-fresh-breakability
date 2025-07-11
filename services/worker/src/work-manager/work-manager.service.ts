@@ -28,7 +28,7 @@ export class WorkManagerService {
 
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
-        @Inject(HttpService) private readonly httpService: HttpService,
+        @Inject(HttpService) private readonly httpService: HttpService, 
         @Inject (LoggerFactory) loggerFactory: LoggerFactory,
         @Inject(WorkerOptionsService) private readonly workerOptions: WorkerOptionsService,
         @Inject(AuthService) private readonly authService: AuthService,

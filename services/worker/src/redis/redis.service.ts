@@ -3,7 +3,6 @@ import { JobContext, JobContextFactory } from '@netapp-cloud-datamigrate/jobs-li
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import { createClient, RedisClientType } from 'redis';
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
-
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private client: RedisClientType;

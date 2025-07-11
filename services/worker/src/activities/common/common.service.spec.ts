@@ -73,12 +73,12 @@ describe('CommonActivityService', () => {
       warn: jest.fn(),
       info: jest.fn(),
     };
-
+  
     const mockLoggerFactory = {
       create: jest.fn().mockReturnValue(mockLogger),
     };
-
-    logger = mockLogger;
+  
+    logger = mockLogger; 
 
     redisService = {
       getJobContext: jest.fn().mockResolvedValue(mockContext),

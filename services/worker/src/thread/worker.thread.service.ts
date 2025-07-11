@@ -6,17 +6,14 @@ import { MigrateFile, OperationBand, ThreadOperation, ThreadTask, ThreadTaskInpu
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
-export class WorkerThreadService{
+export class WorkerThreadService {
     private totalThreads: number;
     private activeTasks: Map<string, ThreadTask> = new Map();
-    
     private operationBands : Map<string, OperationBand> = new Map<string, OperationBand>();
-    
     private workers: Worker[] = [];
     private availableWorkers: Worker[] = [];
     private workerDetails: Map<number, WorkerDetails> = new Map<number, WorkerDetails>();
-
-    private sizes = [];
+    private sizes = []
     private readonly logger: LoggerService;
 
     constructor(

@@ -118,7 +118,7 @@ describe('WorkerOptionsService', () => {
     warn: jest.fn(),
     info: jest.fn(),
   };
-
+      
   const mockLoggerFactory = {
     create: jest.fn().mockReturnValue(mockLogger),
   };

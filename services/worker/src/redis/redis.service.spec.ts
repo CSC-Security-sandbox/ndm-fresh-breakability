@@ -34,8 +34,6 @@ describe('RedisService', () => {
       hGet: jest.fn().mockResolvedValue('identity'),
     };
     (createClient as jest.Mock).mockReturnValue(mockClient);
-    // service = new RedisService();
-
 
     const mockLogger = {
       log: jest.fn(),
@@ -47,11 +45,11 @@ describe('RedisService', () => {
       parentContext: {} as any,
       setParentContext: jest.fn(),
     } as unknown as LoggerService;
-
+  
     loggerFactory = {
       create: jest.fn().mockReturnValue(mockLogger),
     } as unknown as LoggerFactory;
-
+  
     service = new RedisService(loggerFactory);
   });
 

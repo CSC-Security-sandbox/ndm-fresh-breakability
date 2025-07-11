@@ -5,10 +5,10 @@ import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-stat
 import axios from 'axios';
 import { AuthService } from 'src/auth/auth.service';
 import { WorkersConfig } from 'src/config/app.config';
-import { Protocols } from 'src/protocols/protocols';
 import { RedisService } from 'src/redis/redis.service';
 import { SetupActivityService } from './setup.activity.service';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { Protocols } from 'src/protocols/protocols';
 import { SMBProtocol } from '../../protocols/smb/smb.protocol';
 import { NFSProtocol } from '../../protocols/nfs/nfs.protocol';
 
@@ -20,9 +20,9 @@ describe('SetupActivityService', () => {
   let mockConfig: Partial<ConfigService>;
   let mockAuth: Partial<AuthService>;
   let mockRedis: Partial<RedisService>;
-  let protocols: Protocols;
   let protocolMount: jest.Mock;
   let protocolUnmount: jest.Mock;
+  let protocols: Protocols;
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -38,6 +38,9 @@ describe('SetupActivityService', () => {
         }
       }),
     };
+        
+    // Mock WorkersConfig
+    new WorkersConfig(mockConfig as ConfigService);
 
     // Mock WorkersConfig
     new WorkersConfig(mockConfig as ConfigService);
@@ -60,12 +63,12 @@ describe('SetupActivityService', () => {
 
     loggerFactory = {
       create: jest.fn().mockReturnValue({
-        log: jest.fn(),
-        debug: jest.fn(),
-        error: jest.fn(),
-      }),
+      log: jest.fn(),
+      debug: jest.fn(),
+      error: jest.fn(),
+    }),
     } as any;
-
+  
     protocols = new Protocols(
       new NFSProtocol(loggerFactory),
       new SMBProtocol(loggerFactory)
@@ -75,7 +78,7 @@ describe('SetupActivityService', () => {
       mountPath: protocolMount,
       unmountPath: protocolUnmount,
     } as any);
-
+  
     service = new SetupActivityService(
       mockConfig as ConfigService,
       mockAuth as AuthService,

@@ -66,13 +66,13 @@ export abstract class Protocol {
             if (error) {
               response.message = `[${protocolType}] [${commandDescription}] Failed. Hostname: ${payload.hostname} Worker: ${this.workerId}. Error: ${sanitizedError}`;
               response.status = 'error';
-              return rejects((sanitizedError));
+              return rejects(sanitizedError);
             }
       
             if (stderr) {
               response.message = `[${protocolType}] [${commandDescription}] Failed. Hostname: ${payload.hostname} Worker: ${this.workerId}. Error: ${sanitizedStderr}`;
               response.status = 'error';
-              return rejects((sanitizedStderr));
+              return rejects(sanitizedStderr);
             }
       
             response.message = `${stdout}`;

@@ -41,7 +41,7 @@ describe('DiscoveryScanActivity', () => {
   const mockLoggerFactory = {
     create: jest.fn().mockReturnValue(mockLoggerInstance),
   } as unknown as LoggerFactory;
-
+    
   const mockRedis = { getJobContext: jest.fn(), setJobContext: jest.fn() } as any as RedisService;
   const mockCommon = { fetchOneTask: jest.fn(), addFailedWorkerToJobState: jest.fn() } as any as CommonActivityService;
   const mockConfig = { get: jest.fn() } as any as ConfigService;
@@ -57,6 +57,9 @@ describe('DiscoveryScanActivity', () => {
       }
     });
 
+    mockLoggerFactory.create = jest.fn().mockReturnValue(mockLoggerInstance);
+
+    service = new DiscoveryScanActivity(mockLoggerFactory, mockRedis, mockConfig, mockCommon);
     mockLoggerFactory.create = jest.fn().mockReturnValue(mockLoggerInstance);
 
     service = new DiscoveryScanActivity(mockLoggerFactory, mockRedis, mockConfig, mockCommon);

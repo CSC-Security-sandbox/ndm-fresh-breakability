@@ -35,27 +35,24 @@ describe('NFSProtocol', () => {
     };
 
     mockLoggerFactory.create = jest.fn().mockReturnValue(mockLogger); 
-
+    
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NFSProtocol,
-        { provide: LoggerFactory, useValue: {
-          create: jest.fn().mockReturnValue({
-            log: jest.fn(),
-            error: jest.fn(),
-          }),
-        } as typeof mockLoggerFactory },
+        { provide: LoggerFactory,
+          useValue: mockLoggerFactory
+        },
       ],
     }).compile();
 
     loggerFactory = module.get<LoggerFactory>(LoggerFactory); 
-        
+
     jest.spyOn(Runtime, 'install').mockImplementation((options: RuntimeOptions) => {
       return null;
     });
 
     nfsProtocol = new NFSProtocol(loggerFactory);
-    (nfsProtocol as any).logger = mockLogger;
+    // (nfsProtocol as any).logger = mockLogger;
   });
 
   describe('validateConnection', () => {

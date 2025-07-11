@@ -1,5 +1,5 @@
-import { ShellService } from './shell.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { ShellService } from './shell.service';
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 
 jest.mock('child_process', () => ({

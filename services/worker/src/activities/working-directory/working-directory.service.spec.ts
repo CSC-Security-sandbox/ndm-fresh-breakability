@@ -47,6 +47,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
   beforeEach(async () => {
     // Reset all mocks
     jest.clearAllMocks();
+  const dummyToken = 'token123';
 
     // Create mock protocol
     mockProtocol = {

@@ -52,12 +52,13 @@ describe('SMBProtocol', () => {
       error: jest.fn(),
       log: jest.fn(), // Add this line
     };
+
     const mockLoggerFactory = {
       create: jest.fn().mockReturnValue(mockLogger),
     };
-
+  
     loggerFactory = mockLoggerFactory as unknown as LoggerFactory;
-    
+  
     smbProtocol = new SMBProtocol(loggerFactory);
     (smbProtocol as any).logger = mockLogger;
     (smbProtocol as any).platform = 'win32';

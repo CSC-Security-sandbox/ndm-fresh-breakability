@@ -40,7 +40,7 @@ describe('DiscoveryActivity', () => {
     const mockLoggerFactory = {
       create: jest.fn().mockReturnValue(logger),
     };
-
+  
     configService = { get: jest.fn().mockImplementation(key => key === 'worker.workerId' ? 'worker-x' : 'http://report') };
     authService = { getAccessToken: jest.fn().mockResolvedValue('token-abc') };
     const fakeContext = createJobContext();
@@ -52,6 +52,10 @@ describe('DiscoveryActivity', () => {
         DiscoveryActivity,
         { provide: ConfigService, useValue: configService },
         { provide: AuthService, useValue: authService },
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
+        },
         {
           provide: LoggerFactory,
           useValue: mockLoggerFactory,

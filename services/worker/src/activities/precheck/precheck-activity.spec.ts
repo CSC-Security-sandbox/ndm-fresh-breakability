@@ -26,6 +26,7 @@ jest.mock('src/protocols/protocols');
 jest.mock('@temporalio/worker', () => ({
   Worker: jest.fn(),
 }));
+
 describe('PrecheckActivity', () => {
   let service: PrecheckActivity;
   let mockConfigService: Partial<ConfigService>;
@@ -63,18 +64,18 @@ describe('PrecheckActivity', () => {
       get: jest.fn((key: string) => {
         switch (key) {
           case 'worker.workerId':
-            return 'test-worker-id';
+          return 'test-worker-id';
           case 'worker.baseWorkingPath':
-            return '/base/working/path';
+          return '/base/working/path';
           default:
-            return null;
+          return null;
         }
       }),
     };
-
+  
     WorkersConfig.configService = mockConfigService as ConfigService;
     CommandConfig.configService = mockConfigService as ConfigService;
-
+  
     loggerFactory = {
         create: jest.fn().mockReturnValue({
         log: jest.fn(),
@@ -82,14 +83,14 @@ describe('PrecheckActivity', () => {
         error: jest.fn(),
       }),
     } as any;
-
+    
     logger = loggerFactory.create(PrecheckActivity.name);
 
     protocols = new Protocols(
       new NFSProtocol(loggerFactory),
       new SMBProtocol(loggerFactory)
     );
-
+  
     mockProtocol = {
       validateConnection: jest.fn().mockResolvedValue(true),
       mountPath: jest.fn().mockResolvedValue(true),
@@ -98,6 +99,8 @@ describe('PrecheckActivity', () => {
       getAvailableDiskSpace: jest.fn().mockResolvedValue({ size: 0 }),
       unmountPath: jest.fn().mockResolvedValue(true),
     };
+    
+    (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
 
     (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
 
@@ -105,7 +108,6 @@ describe('PrecheckActivity', () => {
       providers: [
         PrecheckActivity,
         { provide: ConfigService, useValue: mockConfigService },
-        // { provide: Logger, useValue: mockLogger },
         {
           provide: LoggerFactory,
           useValue: loggerFactory,

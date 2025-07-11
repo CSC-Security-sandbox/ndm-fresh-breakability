@@ -25,6 +25,7 @@ jest.mock('@temporalio/activity', () => ({
     },
 }))
 
+
 describe('MigrationSyncService', () => {
     let service: MigrationSyncService;
     let redisService: RedisService;
@@ -44,6 +45,7 @@ describe('MigrationSyncService', () => {
     const mockLoggerFactory = {
         create: jest.fn().mockReturnValue(mockLoggerInstance),
     } as unknown as LoggerFactory;
+        
 
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({

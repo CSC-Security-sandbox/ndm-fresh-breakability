@@ -119,6 +119,7 @@ describe('ListPathActivity', () => {
          message: `Failed to List Path for ${payload.hostname} of type ${protocolType}: Error: Protocol error`,
        });
        expect(mockProtocol.listPaths).toHaveBeenCalledWith(traceId, payload);
+
        expect(logger.log).toHaveBeenCalledWith(
          `[${traceId}] List Path for ${payload.hostname} of type ${protocolType} from test-worker-id`,
        );
