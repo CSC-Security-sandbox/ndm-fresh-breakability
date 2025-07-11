@@ -9,12 +9,14 @@ export const ErrorLogActionButton = ({
   handleGenerate,
   handleDownload,
   disabled = false,
+  generateLabel,
+  downloadLabel,
 }: ErrorLogActionButtonPropsType) => {
   return (
     <Show>
       <Show.When isTrue={!data?.processing && !data?.ready}>
         <Button disabled={disabled} onClick={handleGenerate}>
-          Generate Error Report
+          {generateLabel}
         </Button>
       </Show.When>
       <Show.Else>
@@ -23,7 +25,7 @@ export const ErrorLogActionButton = ({
         </Show.When>
         <Show.When isTrue={!data?.processing && data?.ready}>
           <Button disabled={disabled} onClick={handleDownload}>
-            Download Error Report
+            {downloadLabel}
           </Button>
         </Show.When>
       </Show.Else>
