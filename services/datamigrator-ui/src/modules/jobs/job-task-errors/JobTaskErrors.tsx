@@ -18,6 +18,10 @@ import {
 } from "@api/reportApi";
 import { handleDownloadErrorsLogs } from "@modules/jobs/jobs.utils";
 import { ErrorLogActionButton } from "@modules/jobs/job-task-errors/components/ErrorLogActionButton";
+import {
+  DOWNLOAD_ERROR_REPORT,
+  GENERATE_ERROR_REPORT,
+} from "@modules/jobs/job-task-errors/jobTaskErrors.constant";
 
 const JobTaskErrors = () => {
   const [jobConfigDetails, setJobConfigDetails] =
@@ -95,6 +99,8 @@ const JobTaskErrors = () => {
         <JobTaskErrorsBreadcrumbs />
 
         <ErrorLogActionButton
+          generateLabel={GENERATE_ERROR_REPORT}
+          downloadLabel={DOWNLOAD_ERROR_REPORT}
           data={isDisplayGeneratingLabel}
           handleGenerate={generateErrorReport}
           handleDownload={() =>
