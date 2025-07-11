@@ -593,7 +593,7 @@ describe('SMBProtocol', () => {
             expect(result).toEqual({
               traceId: mockTraceId,
               status: 'error',
-              protocolType: ProtocolTypes.NFS,
+              protocolType: ProtocolTypes.SMB,
               hostname: payload.hostname,
               workerId: (smbProtocol as any).workerId,
               message: `[${mockTraceId}] Error creating directory: ${error.message}`,

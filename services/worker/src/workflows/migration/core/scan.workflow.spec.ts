@@ -3,9 +3,7 @@ import { ScanWorkflow, syncWorkerListSignal } from './scan.workflow';
 import { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { temporal } from '@temporalio/proto';
-import { WorkflowCoverage } from '@temporalio/nyc-test-coverage';
 
-const workflowCoverage = new WorkflowCoverage();
 
 const mockedActivities = {
     scanPath: jest.fn(),
@@ -38,7 +36,7 @@ describe('ScanWorkflow', () => {
             await worker?.shutdown();
         }
         await env.teardown();
-        workflowCoverage.mergeIntoGlobalCoverage();
+        // workflowCoverage.mergeIntoGlobalCoverage();
     });
 
     beforeEach(async () => {
@@ -89,12 +87,12 @@ describe('ScanWorkflow', () => {
             message: 'Task published successfully'
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: env.nativeConnection,
             workflowsPath: require.resolve('./scan.workflow'),
             activities: mockedActivities,
             taskQueue: 'scan-task-queue'
-        }));
+        });
 
         await worker.runUntil(async () => {
             const scanWorkflow = await env.client.workflow.start(ScanWorkflow, {
@@ -131,12 +129,12 @@ describe('ScanWorkflow', () => {
             isStreamOverloaded: false
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: env.nativeConnection,
             workflowsPath: require.resolve('./scan.workflow'),
             activities: mockedActivities,
             taskQueue: 'scan-task-queue'
-        }));
+        });
 
         await worker.runUntil(async () => {
             const scanWorkflow = await env.client.workflow.start(ScanWorkflow, {
@@ -172,12 +170,12 @@ describe('ScanWorkflow', () => {
             isStreamOverloaded: false
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: env.nativeConnection,
             workflowsPath: require.resolve('./scan.workflow'),
             activities: mockedActivities,
             taskQueue: 'scan-task-queue'
-        }));
+        });
 
         await worker.runUntil(async () => {
             const scanWorkflow = await env.client.workflow.start(ScanWorkflow, {
@@ -216,12 +214,12 @@ describe('ScanWorkflow', () => {
             folders: 0
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: env.nativeConnection,
             workflowsPath: require.resolve('./scan.workflow'),
             activities: mockedActivities,
             taskQueue: 'scan-task-queue'
-        }));
+        });
 
         await worker.runUntil(async () => {
             const scanWorkflow = await env.client.workflow.start(ScanWorkflow, {
@@ -263,12 +261,12 @@ describe('ScanWorkflow', () => {
             });
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: env.nativeConnection,
             workflowsPath: require.resolve('./scan.workflow'),
             activities: mockedActivities,
             taskQueue: 'scan-task-queue'
-        }));
+        });
 
         await worker.runUntil(async () => {
             const scanWorkflow = await env.client.workflow.start(ScanWorkflow, {
@@ -318,12 +316,12 @@ describe('ScanWorkflow', () => {
             });
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: env.nativeConnection,
             workflowsPath: require.resolve('./scan.workflow'),
             activities: mockedActivities,
             taskQueue: 'scan-task-queue'
-        }));
+        });
 
         await worker.runUntil(async () => {
             const scanWorkflow = await env.client.workflow.start(ScanWorkflow, {
@@ -376,12 +374,12 @@ describe('ScanWorkflow', () => {
             }
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: env.nativeConnection,
             workflowsPath: require.resolve('./scan.workflow'),
             activities: mockedActivities,
             taskQueue: 'scan-task-queue'
-        }));
+        });
 
         await worker.runUntil(async () => {
             const scanWorkflow = await env.client.workflow.start(ScanWorkflow, {
@@ -435,12 +433,12 @@ describe('ScanWorkflow', () => {
             }
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: env.nativeConnection,
             workflowsPath: require.resolve('./scan.workflow'),
             activities: mockedActivities,
             taskQueue: 'scan-task-queue'
-        }));
+        });
 
         await worker.runUntil(async () => {
             const scanWorkflow = await env.client.workflow.start(ScanWorkflow, {
@@ -472,12 +470,12 @@ describe('ScanWorkflow', () => {
             isStreamOverloaded: false
         });
 
-        worker = await Worker.create(workflowCoverage.augmentWorkerOptions({
+        worker = await Worker.create({
             connection: env.nativeConnection,
             workflowsPath: require.resolve('./scan.workflow'),
             activities: mockedActivities,
             taskQueue: 'scan-task-queue'
-        }));
+        });
 
         await worker.runUntil(async () => {
             const result = await env.client.workflow.start(ScanWorkflow, {

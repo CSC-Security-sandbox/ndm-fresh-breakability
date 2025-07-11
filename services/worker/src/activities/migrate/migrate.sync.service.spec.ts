@@ -1066,5 +1066,98 @@ describe('MigrationSyncService', () => {
             jest.spyOn(service, 'calculateChecksum').mockResolvedValue('different');
             await expect(service.copyFileWithChecksum('sourceFile', 'destFile')).rejects.toThrow('Checksum mismatch');
         });
+
+        it('should copy file and return checksums when source and target match', async () => {
+            const mockSourceFile = '/mock/source.txt';
+            const mockDestFile = '/mock/dest.txt';
+            const fileContent = Buffer.from('Hello World');
+            const expectedChecksum = crypto.createHash('sha256').update(fileContent).digest('hex');
+
+            jest.spyOn(fs, 'existsSync').mockImplementation((filePath: string) => true);
+            jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
+            const stream = new (require('stream')).Readable();
+            stream.push(fileContent);
+            stream.push(null);
+            return stream;
+            });
+            jest.spyOn(fs, 'createWriteStream').mockImplementation(() => {
+            const stream = new (require('stream')).Writable();
+            stream._write = (chunk, encoding, callback) => callback();
+            return stream;
+            });
+            jest.spyOn(service, 'calculateChecksum').mockResolvedValue(expectedChecksum);
+
+            const result = await service.copyFileWithChecksum(mockSourceFile, mockDestFile);
+            expect(result.sourceChecksum).toBe(expectedChecksum);
+            expect(result.targetChecksum).toBe(expectedChecksum);
+        });
+
+        it('should pause and resume readStream if writeStream buffer is full', async () => {
+            const mockSourceFile = '/mock/source.txt';
+            const mockDestFile = '/mock/dest.txt';
+            const fileContent = Buffer.from('Hello World');
+            const expectedChecksum = crypto.createHash('sha256').update(fileContent).digest('hex');
+
+            jest.spyOn(fs, 'existsSync').mockImplementation((filePath: string) => true);
+
+            // Mock readStream and writeStream with pause/resume
+            const events: Record<string, Function[]> = {};
+            const readStream = {
+            on: jest.fn(function (event, cb) {
+                events[event] = events[event] || [];
+                events[event].push(cb);
+                return this;
+            }),
+            pause: jest.fn(),
+            resume: jest.fn(),
+            };
+            const writeStream = {
+            write: jest.fn(() => false), // Simulate buffer full
+            on: jest.fn(function (event, cb) {
+                events[event] = events[event] || [];
+                events[event].push(cb);
+                return this;
+            }),
+            end: jest.fn(),
+            };
+
+            jest.spyOn(fs, 'createReadStream').mockReturnValue(readStream as any);
+            jest.spyOn(fs, 'createWriteStream').mockReturnValue(writeStream as any);
+            jest.spyOn(service, 'calculateChecksum').mockResolvedValue(expectedChecksum);
+
+            // Simulate the data event
+            setTimeout(() => {
+            events['data'].forEach(cb => cb(fileContent));
+            events['end'].forEach(cb => cb());
+            events['drain'].forEach(cb => cb());
+            events['finish'].forEach(cb => cb());
+            }, 10);
+
+            const result = await service.copyFileWithChecksum(mockSourceFile, mockDestFile);
+            expect(readStream.pause).toHaveBeenCalled();
+            expect(readStream.resume).toHaveBeenCalled();
+            expect(result.sourceChecksum).toBe(expectedChecksum);
+            expect(result.targetChecksum).toBe(expectedChecksum);
+        });
+
+
+        it('should create destination directory if it does not exist', async () => {
+            jest.spyOn(fs, 'existsSync').mockImplementation((filePath: string) => filePath.includes('source'));
+            const mkdirSyncSpy = jest.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined);
+            jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
+            const stream = new (require('stream')).Readable();
+            stream.push('abc');
+            stream.push(null);
+            return stream;
+            });
+            jest.spyOn(fs, 'createWriteStream').mockImplementation(() => {
+            const stream = new (require('stream')).Writable();
+            stream._write = (chunk, encoding, callback) => callback();
+            return stream;
+            });
+            jest.spyOn(service, 'calculateChecksum').mockResolvedValue('abc');
+            await expect(service.copyFileWithChecksum('sourceFile', 'destDir/destFile')).rejects.toThrow('Checksum mismatch');
+            expect(mkdirSyncSpy).toHaveBeenCalled();
+        });
     });
 });

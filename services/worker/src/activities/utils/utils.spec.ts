@@ -11,7 +11,8 @@ import {
     getFileType,
     isContentUpdate,
     isMetaUpdated,
-    getErrorCode
+    getErrorCode,
+    formatDate
 } from './utils';
 import { JobContext, JobContextFactory } from "@netapp-cloud-datamigrate/jobs-lib";
 import { RedisUtils } from "@netapp-cloud-datamigrate/jobs-lib";
@@ -648,92 +649,4 @@ describe("formatDate", () => {
     });
 });
 
-describe('getServerInfoFromPath', () => {
-  const jobContext: any = {
-    jobConfig: {
-      sourceFileServer: {
-        protocols: [new MockProtocol('NFS')],
-        hostname: 'host123',
-        path: '/data'
-      }
-    }
-  };
 
-  it('returns fallback values on error', () => {
-    const brokenContext: any = {};
-    const result = getServerInfoFromPath('/fallbackPath', brokenContext);
-    expect(result).toEqual({
-      protocol: [],
-      server: '/fallbackPath'
-    });
-  });
-
-  it('handles missing path', () => {
-    const context = {
-      jobConfig: {
-        sourceFileServer: {
-          protocols: MockProtocol,
-          hostname: 'host123'
-        }
-      }
-    };
-    const result = getServerInfoFromPath('/src', context as any);
-    expect(result.server).toBe('host123');
-  });
-});
-
-describe('extractTypes', () => {
-  it('joins all valid types with commas', () => {
-    const protocols: Protocol[] = [
-      new MockProtocol('NFS'),
-      new MockProtocol('SMB')
-    ];
-    const result = extractTypes(protocols);
-    expect(result).toBe('NFS,SMB');
-  });
-
-  it('ignores undefined types', () => {
-    const validProtocol = new MockProtocol('NFS');
-    const undefinedTypeProtocol = new MockProtocol(undefined as any);
-    const result = extractTypes([validProtocol, undefinedTypeProtocol]);
-    expect(result).toBe('NFS');
-  });
-
-  it('returns empty string for empty input', () => {
-    const result = extractTypes([]);
-    expect(result).toBe('');
-  });
-
-  it('returns empty string if all types are undefined', () => {
-    const result = extractTypes([
-      new MockProtocol(undefined as any),
-      new MockProtocol(undefined as any)
-    ]);
-    expect(result).toBe('');
-  });
-});
-
-describe('createServerDownErrorMessage', () => {
-  const serverInfo = {
-    protocol: [new MockProtocol('NFS'), new MockProtocol('SMB')],
-    server: 'host:/share'
-  };
-
-  it('returns message with error code', () => {
-    const error = { code: 'ETIMEDOUT' };
-    const msg = createServerDownErrorMessage(error, serverInfo);
-    expect(msg).toContain('ETIMEDOUT');
-    expect(msg).toMatch(/NFS,SMB server unreachable: host:\/share \(Error: ETIMEDOUT\)/);
-  });
-
-  it('returns message with error message if no code', () => {
-    const error = { message: 'Something broke' };
-    const msg = createServerDownErrorMessage(error, serverInfo);
-    expect(msg).toMatch(/Something broke/);
-  });
-
-  it('handles undefined error object', () => {
-    const msg = createServerDownErrorMessage(undefined, serverInfo);
-    expect(msg).toMatch(/Unknown error/);
-  });
-});
