@@ -1,7 +1,7 @@
 import { proxyActivities } from '@temporalio/workflow';
-import { JobServiceJobType } from 'src/activities/discovery/enums';
-import { SetupActivityService } from 'src/activities/setup-worker/setup.activity.service';
-import { SetupWorkerParams } from 'src/activities/types/tasks';
+import { JobServiceJobType } from '../../activities/discovery/enums';
+import { SetupActivityService } from '../../activities/setup-worker/setup.activity.service';
+import { SetupWorkerParams } from '../../activities/types/tasks';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);

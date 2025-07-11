@@ -116,4 +116,100 @@ describe('WorkerThreadService', () => {
       expect(worker.terminate).toHaveBeenCalled();
     });
   });
+
+  it('should get tasks from the correct band and fallback to others', () => {
+    service['sizes'] = [
+      { name: '1kb', maxFetch: 2 },
+      { name: '1mb', maxFetch: 2 },
+      { name: '10mb', maxFetch: 2 },
+    ];
+    service['operationBands'] = new Map([
+      [
+        '1kb',
+        {
+          numberOfThreads: 1,
+          task: [
+            {
+              id: 'a',
+              data: {},
+              Operation: ThreadOperation.COPY_FILE,
+              resolve: jest.fn(),
+              reject: jest.fn(),
+            },
+            {
+              id: 'b',
+              data: {},
+              Operation: ThreadOperation.COPY_FILE,
+              resolve: jest.fn(),
+              reject: jest.fn(),
+            },
+          ],
+        },
+      ],
+      [
+        '1mb',
+        {
+          numberOfThreads: 1,
+          task: [
+            {
+              id: 'c',
+              data: {},
+              Operation: ThreadOperation.COPY_FILE,
+              resolve: jest.fn(),
+              reject: jest.fn(),
+            },
+          ],
+        },
+      ],
+      ['10mb', { numberOfThreads: 1, task: [] }],
+    ]);
+    // Should fetch from 1kb
+    let tasks = service.getTasks('1kb');
+    expect(tasks.map(t => t.id)).toEqual(['a', 'b']);
+    // Should fetch from 1mb (only one task)
+    tasks = service.getTasks('1mb');
+    expect(tasks.map(t => t.id)).toEqual(['c']);
+    // Should fallback to previous bands (all empty now)
+    tasks = service.getTasks('10mb');
+    expect(tasks).toEqual([]);
+  });
+
+  it('should handle worker exit and remove tasks', () => {
+    const task = {
+      id: 'op3',
+      data: { sourcePath: 'src', destinationPath: 'dest', operationId: 'op3' },
+      Operation: ThreadOperation.COPY_FILE,
+      resolve: jest.fn(),
+      reject: jest.fn(),
+    };
+    service['activeTasks'].set('op3', task);
+    const worker = service['workers'][1];
+    service['workerDetails'].set(worker.threadId, {
+      operationBand: '1kb',
+      operatingTasks: ['op3'],
+    });
+
+    worker.emit('exit', 1);
+
+    expect(task.reject).toHaveBeenCalled();
+    expect(service['activeTasks'].has('op3')).toBeFalsy();
+  });
+
+  it('should not fail if handleWorkerThreadError is called with unknown processId', () => {
+    expect(() => service['handleWorkerThreadError'](99999)).not.toThrow();
+  });
+
+  it('should not process queue if no available workers', () => {
+    service['availableWorkers'] = [];
+    // Should not throw or do anything
+    expect(() => service['processQueue']()).not.toThrow();
+  });
+
+  it('should push worker back if no tasks available in processQueue', () => {
+    const worker = service['availableWorkers'][0];
+    // Mock getTasks to return empty
+    jest.spyOn(service, 'getTasks').mockReturnValueOnce([]);
+    service['processQueue']();
+    expect(service['availableWorkers']).toContain(worker);
+  });
 });
