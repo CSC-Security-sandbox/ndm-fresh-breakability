@@ -8,8 +8,9 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 import { randomUUID } from 'crypto';
 import { Project } from '../entities/project.entity';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
+import { NotFoundException } from '@nestjs/common';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
-import { mockLoggerFactory } from '../test-utils/logger-mocks';
+import { mockLoggerFactory, resetLoggerMocks } from '../test-utils/logger-mocks';
 
 describe('RoleService', () => {
   let service: RoleService;
@@ -17,6 +18,8 @@ describe('RoleService', () => {
   let projectRepository: Repository<Project>;
 
   beforeEach(async () => {
+    resetLoggerMocks();
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RoleService,
@@ -28,9 +31,9 @@ describe('RoleService', () => {
           provide: getRepositoryToken(Project),
           useClass: Repository,
         },
-        { 
-          provide: LoggerFactory, 
-          useValue: mockLoggerFactory
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
         },
       ],
     }).compile();
@@ -143,33 +146,176 @@ describe('RoleService', () => {
     expect(repository.findOneBy).toHaveBeenCalledWith({ id: '1' });
   });
 
+  it('should throw NotFoundException when role not found in findOne', async () => {
+    jest.spyOn(repository, 'findOneBy').mockResolvedValue(null);
+
+    await expect(service.findOne('nonexistent')).rejects.toThrow(NotFoundException);
+    expect(repository.findOneBy).toHaveBeenCalledWith({ id: 'nonexistent' });
+  });
+
   it('should update an role', async () => {
     const updateRoleDto: UpdateRoleDto = {
       role_name: 'test',
     };
 
-    jest.spyOn(repository, 'update').mockResolvedValue(undefined);
+    const mockRole = { id: '1', role_name: 'existing' };
+    jest.spyOn(repository, 'findOneBy').mockResolvedValue(mockRole as any);
+    jest.spyOn(repository, 'update').mockResolvedValue(undefined as any);
 
     await service.update('1', updateRoleDto, userPermissionResponseMock);
+    expect(repository.findOneBy).toHaveBeenCalledWith({ id: '1' });
     expect(repository.update).toHaveBeenCalledWith('1', {
       ...updateRoleDto,
       updated_by: expect.any(String),
     });
   });
 
+  it('should throw NotFoundException when updating non-existent role', async () => {
+    const updateRoleDto: UpdateRoleDto = { role_name: 'test' };
+
+    jest.spyOn(repository, 'findOneBy').mockResolvedValue(null);
+
+    await expect(service.update('nonexistent', updateRoleDto, userPermissionResponseMock))
+      .rejects.toThrow(NotFoundException);
+    expect(repository.findOneBy).toHaveBeenCalledWith({ id: 'nonexistent' });
+  });
+
   it('should delete an role', async () => {
-    jest.spyOn(repository, 'delete').mockResolvedValue(undefined);
+    const mockRole = { id: '1', role_name: 'test' };
+    jest.spyOn(repository, 'findOneBy').mockResolvedValue(mockRole as any);
+    jest.spyOn(repository, 'delete').mockResolvedValue({ affected: 1 } as any);
 
     await service.delete('1');
+    expect(repository.findOneBy).toHaveBeenCalledWith({ id: '1' });
     expect(repository.delete).toHaveBeenCalledWith('1');
   });
 
+  it('should throw NotFoundException when deleting non-existent role', async () => {
+    jest.spyOn(repository, 'findOneBy').mockResolvedValue(null);
+
+    await expect(service.delete('nonexistent')).rejects.toThrow(NotFoundException);
+    expect(repository.findOneBy).toHaveBeenCalledWith({ id: 'nonexistent' });
+  });
+
   it('should inactivate an role', async () => {
-    jest.spyOn(repository, 'update').mockResolvedValue(undefined);
+    const mockRole = { id: '1', role_name: 'test' };
+    jest.spyOn(repository, 'findOneBy').mockResolvedValue(mockRole as any);
+    jest.spyOn(repository, 'update').mockResolvedValue(undefined as any);
 
     await service.inactivate('1');
+    expect(repository.findOneBy).toHaveBeenCalledWith({ id: '1' });
     expect(repository.update).toHaveBeenCalledWith('1', {
       role_status: 'inactive',
+    });
+  });
+
+  it('should throw NotFoundException when inactivating non-existent role', async () => {
+    jest.spyOn(repository, 'findOneBy').mockResolvedValue(null);
+
+    await expect(service.inactivate('nonexistent')).rejects.toThrow(NotFoundException);
+    expect(repository.findOneBy).toHaveBeenCalledWith({ id: 'nonexistent' });
+  });
+
+  // Database error handling tests
+  describe('Database Error Handling', () => {
+    const createRoleDto: CreateRoleDto = {
+      role_name: 'test',
+    };
+
+    const updateRoleDto: UpdateRoleDto = {
+      role_name: 'updated test',
+    };
+
+    const mockRole = {
+      id: '1',
+      role_name: 'test',
+      role_status: 'active',
+      created_at: new Date(),
+      created_by: randomUUID(),
+      updated_at: new Date(),
+      updated_by: randomUUID(),
+      projects: [],
+      user_roles: [],
+      role_permissions: [],
+      populateWhoColumns: jest.fn(),
+    };
+
+    beforeEach(() => {
+      resetLoggerMocks();
+    });
+
+    it('should handle database errors in create and log them', async () => {
+      const dbError = new Error('Database connection failed');
+      jest.spyOn(repository, 'create').mockReturnValue(mockRole as any);
+      jest.spyOn(repository, 'save').mockRejectedValue(dbError);
+
+      await expect(service.create(createRoleDto, userPermissionResponseMock))
+        .rejects.toThrow('Database connection failed');
+
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Failed to create role for user',
+        dbError
+      );
+    });
+
+    it('should handle database errors in findAll and log them', async () => {
+      const dbError = new Error('Database query failed');
+      jest.spyOn(repository, 'find').mockRejectedValue(dbError);
+
+      await expect(service.findAll()).rejects.toThrow('Database query failed');
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Failed to retrieve roles list',
+        dbError
+      );
+    });
+
+    it('should handle database errors in findOne and log them', async () => {
+      const dbError = new Error('Database connection failed');
+      jest.spyOn(repository, 'findOneBy').mockRejectedValue(dbError);
+
+      await expect(service.findOne('1')).rejects.toThrow('Database connection failed');
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Failed to retrieve role',
+        dbError
+      );
+    });
+
+    it('should handle database errors in update and log them', async () => {
+      const dbError = new Error('Database update failed');
+      jest.spyOn(repository, 'findOneBy').mockResolvedValue(mockRole);
+      jest.spyOn(repository, 'update').mockRejectedValue(dbError);
+
+      await expect(service.update('1', updateRoleDto, userPermissionResponseMock))
+        .rejects.toThrow('Database update failed');
+
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Failed to update role',
+        dbError
+      );
+    });
+
+    it('should handle database errors in delete and log them', async () => {
+      const dbError = new Error('Database delete failed');
+      jest.spyOn(repository, 'findOneBy').mockResolvedValue(mockRole);
+      jest.spyOn(repository, 'delete').mockRejectedValue(dbError);
+
+      await expect(service.delete('1')).rejects.toThrow('Database delete failed');
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Failed to delete role',
+        dbError
+      );
+    });
+
+    it('should handle database errors in inactivate and log them', async () => {
+      const dbError = new Error('Database update failed');
+      jest.spyOn(repository, 'findOneBy').mockResolvedValue(mockRole);
+      jest.spyOn(repository, 'update').mockRejectedValue(dbError);
+
+      await expect(service.inactivate('1')).rejects.toThrow('Database update failed');
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Failed to inactivate role',
+        dbError
+      );
     });
   });
 });

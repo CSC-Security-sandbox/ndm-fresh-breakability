@@ -12,6 +12,7 @@ import { Account } from '../entities/account.entity';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../test-utils/logger-mocks';
 
 describe('UserRoleController', () => {
   let controller: UserRoleController;
@@ -63,13 +64,8 @@ describe('UserRoleController', () => {
         { provide: getRepositoryToken(Account), useClass: Repository },
         {
           provide: LoggerFactory,
-          useValue: {
-            create: jest.fn().mockReturnValue({
-              log: jest.fn(),
-              error: jest.fn(),
-            }),
-          },
-        }
+          useValue: mockLoggerFactory,
+        },
       ],
     }).compile();
 
