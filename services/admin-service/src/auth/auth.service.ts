@@ -14,7 +14,7 @@ import { makeAxiosRequest } from '../utils/axios-request-utils';
 import { encryptData } from '../utils/crypto-utils';
 import {
   LoggerFactory,
-  LoggerService,
+  LoggerService
 } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
@@ -30,6 +30,8 @@ export class AuthService {
 
   public async getKeycloakToken() {
     try {
+      this.logger.log('Requesting Keycloak token');
+
       const data = await makeAxiosRequest<{ access_token: string }>({
         method: 'POST',
         url: `${process.env.KEYCLOAK_BASE_URL}/realms/master/protocol/openid-connect/token`,
@@ -42,6 +44,7 @@ export class AuthService {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
+      this.logger.log('Successfully obtained Keycloak token');
       return data.access_token;
     } catch (error) {
       throw new InternalServerErrorException(

@@ -6,7 +6,7 @@ import { Repository } from 'typeorm';
 import { SettingType } from 'src/setting/dto/create-setting.dto';
 import { SyncEmail, IncidentStatus } from 'src/entities/sync-email.entity';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
-import { mockLoggerFactory } from '../test-utils/logger-mocks';
+import { mockLoggerFactory, resetLoggerMocks, mockLoggerService } from '../test-utils/logger-mocks';
 
 enum EmailContentStatus {
   FIRING = 'firing',
@@ -43,9 +43,9 @@ describe('EmailService', () => {
             update: jest.fn().mockResolvedValue({}),
           },
         },
-        { 
-          provide: LoggerFactory, 
-          useValue: mockLoggerFactory
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
         },
       ],
     }).compile();
@@ -65,6 +65,7 @@ describe('EmailService', () => {
   });
   afterEach(() => {
     jest.clearAllMocks();
+    resetLoggerMocks();
   });
   describe('setupAndSendMail', () => {
     it('should successfully setup transporter and send email', async () => {
@@ -522,7 +523,7 @@ describe('EmailService', () => {
       );
     });
 
-    it('should throw an error when email sending fails but still try to save data', async () => {
+    it('should throw an error when email sending fails and not save data', async () => {
       const emailContent = {
         status: EmailContentStatus.FIRING,
         alerts: [
@@ -550,7 +551,8 @@ describe('EmailService', () => {
       ).rejects.toThrow(`Error sending email: ${errorMessage}`);
 
       expect((service as any).transporter.sendMail).toHaveBeenCalled();
-      expect(syncEmailRepo.save).toHaveBeenCalled();
+      // Since email sending failed, database save should not be called
+      expect(syncEmailRepo.save).not.toHaveBeenCalled();
     });
 
     it('should handle missing alert data gracefully', async () => {

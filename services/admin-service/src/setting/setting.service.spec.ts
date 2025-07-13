@@ -8,7 +8,7 @@ import * as nodemailer from 'nodemailer';
 import { SettingType } from './dto/create-setting.dto';
 import { CreateSettingDto } from './dto/create-setting.dto';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
-import { mockLoggerFactory } from '../test-utils/logger-mocks';
+import { mockLoggerFactory, resetLoggerMocks, mockLoggerService } from '../test-utils/logger-mocks';
 
 const mockSettingsRepo = {
   find: jest.fn(),
@@ -38,9 +38,9 @@ describe('SettingService', () => {
           provide: getRepositoryToken(GlobalSettings),
           useValue: mockSettingsRepo,
         },
-        { 
-          provide: LoggerFactory, 
-          useValue: mockLoggerFactory
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
         },
       ],
     }).compile();
@@ -52,6 +52,7 @@ describe('SettingService', () => {
   });
 
   afterEach(() => {
+    resetLoggerMocks();
     jest.clearAllMocks();
   });
 

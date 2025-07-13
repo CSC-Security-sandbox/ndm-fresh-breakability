@@ -12,12 +12,7 @@ import { Project } from '../entities/project.entity';
 import { Account } from '../entities/account.entity';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
-export const mockLoggerFactory = {
-  create: jest.fn().mockReturnValue({
-    log: jest.fn(),
-    error: jest.fn(),
-  }),
-};
+import { mockLoggerFactory, resetLoggerMocks } from '../test-utils/logger-mocks';
 
 describe('RolePermissionService', () => {
   let service: RolePermissionService;
@@ -46,7 +41,7 @@ describe('RolePermissionService', () => {
         { provide: getRepositoryToken(Project), useClass: Repository },
         { provide: getRepositoryToken(Account), useClass: Repository },
         { provide: getRepositoryToken(UserRole), useClass: Repository },
-        { provide: LoggerFactory, useValue: mockLoggerFactory},
+        { provide: LoggerFactory, useValue: mockLoggerFactory },
       ],
     }).compile();
 
@@ -406,29 +401,32 @@ describe('RolePermissionService', () => {
   describe('delete', () => {
     it('should delete a role permission', async () => {
       const id = 'role-permission-id';
+      const mockRolePermission = { id, role: { id: 'role-1' }, permission: { id: 'permission-1' } };
 
+      jest.spyOn(rolePermissionRepository, 'findOneBy').mockResolvedValue(mockRolePermission as any);
       jest
         .spyOn(rolePermissionRepository, 'delete')
         .mockResolvedValue({ affected: 1 } as any);
 
       await service.delete(id);
 
+      expect(rolePermissionRepository.findOneBy).toHaveBeenCalledWith({ id });
       expect(rolePermissionRepository.delete).toHaveBeenCalledWith(id);
     });
 
     it('should throw NotFoundException if role permission not found', async () => {
       const id = 'role-permission-id';
 
-      jest
-        .spyOn(rolePermissionRepository, 'delete')
-        .mockResolvedValue({ affected: 0 } as any);
+      jest.spyOn(rolePermissionRepository, 'findOneBy').mockResolvedValue(null);
 
       await expect(service.delete(id)).rejects.toThrow(NotFoundException);
     });
 
     it('should handle errors in delete operation', async () => {
       const id = 'role-permission-id';
+      const mockRolePermission = { id, role: { id: 'role-1' }, permission: { id: 'permission-1' } };
 
+      jest.spyOn(rolePermissionRepository, 'findOneBy').mockResolvedValue(mockRolePermission as any);
       jest
         .spyOn(rolePermissionRepository, 'delete')
         .mockRejectedValue(new Error('Database error'));
@@ -461,6 +459,97 @@ describe('RolePermissionService', () => {
       jest.spyOn(rolePermissionRepository, 'findOne').mockResolvedValue(null);
 
       await expect(service.findOne(id)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // Database error handling tests
+  describe('Database Error Handling', () => {
+    const createRolePermissionDto = {
+      role_id: 'role-1',
+      permission_id: 'permission-1',
+    };
+
+    const updateRolePermissionDto = {
+      permission_id: 'permission-2',
+    };
+
+    const mockRolePermission = {
+      id: '1',
+      role_id: 'role-1',
+      permission_id: 'permission-1',
+      role: { id: 'role-1' } as any,
+      permission: { id: 'permission-1' } as any,
+      created_at: new Date(),
+      created_by: 'user-id',
+      updated_at: new Date(),
+      updated_by: 'user-id',
+      populateWhoColumns: jest.fn(),
+    };
+
+    beforeEach(() => {
+      resetLoggerMocks();
+    });
+
+    it('should handle database errors in create and log them', async () => {
+      const dbError = new Error('Database connection failed');
+      jest.spyOn(roleRepository, 'findOneBy').mockResolvedValue({ id: 'role-1' } as any);
+      jest.spyOn(permissionRepository, 'findOneBy').mockResolvedValue({ id: 'permission-1' } as any);
+      jest.spyOn(rolePermissionRepository, 'create').mockReturnValue(mockRolePermission as any);
+      jest.spyOn(rolePermissionRepository, 'save').mockRejectedValue(dbError);
+
+      await expect(service.create('role-1', createRolePermissionDto, userPermissionResponseMock))
+        .rejects.toThrow('Database connection failed');
+
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Failed to create role permission',
+        dbError
+      );
+    });
+
+    it('should handle database errors in findAll and log them', async () => {
+      const dbError = new Error('Database query failed');
+      jest.spyOn(rolePermissionRepository, 'find').mockRejectedValue(dbError);
+
+      await expect(service.findAll()).rejects.toThrow('Database query failed');
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Failed to retrieve role permissions list',
+        dbError
+      );
+    });
+
+    it('should handle database errors in findOne and log them', async () => {
+      const dbError = new Error('Database connection failed');
+      jest.spyOn(rolePermissionRepository, 'findOne').mockRejectedValue(dbError);
+
+      await expect(service.findOne('1')).rejects.toThrow('Database connection failed');
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Failed to retrieve role permission',
+        dbError
+      );
+    });
+
+    it('should handle database errors in update and log them', async () => {
+      const dbError = new Error('Database update failed');
+      jest.spyOn(rolePermissionRepository, 'findOneBy').mockRejectedValue(dbError);
+
+      await expect(service.update('1', updateRolePermissionDto))
+        .rejects.toThrow('Database update failed');
+
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Failed to update role permission',
+        dbError
+      );
+    });
+
+    it('should handle database errors in delete and log them', async () => {
+      const dbError = new Error('Database delete failed');
+      jest.spyOn(rolePermissionRepository, 'findOneBy').mockRejectedValue(dbError);
+
+      await expect(service.delete('1')).rejects.toThrow('Database delete failed');
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Failed to delete role permission',
+        dbError
+      );
     });
   });
 });

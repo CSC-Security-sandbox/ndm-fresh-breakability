@@ -7,38 +7,50 @@ import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { SyncEmail } from 'src/entities/sync-email.entity';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory, resetLoggerMocks, mockLoggerService } from '../test-utils/logger-mocks';
+
 jest.mock('nodemailer-express-handlebars', () => ({
   __esModule: true,
   default: jest.fn(() => ({
     use: jest.fn(),
   })),
 }));
+
 describe('EmailController', () => {
   let controller: EmailController;
   let service: EmailService;
 
+  const mockGlobalSettingsRepo = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    save: jest.fn(),
+  };
+
+  const mockSyncEmailRepo = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    save: jest.fn(),
+  };
+
   beforeEach(async () => {
+    resetLoggerMocks();
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [EmailController],
       providers: [
         EmailService,
         {
           provide: getRepositoryToken(GlobalSettings),
-          useClass: Repository,
+          useValue: mockGlobalSettingsRepo,
         },
         {
           provide: getRepositoryToken(SyncEmail),
-          useClass: Repository,
+          useValue: mockSyncEmailRepo,
         },
         {
           provide: LoggerFactory,
-          useValue: {
-            create: jest.fn().mockReturnValue({
-              log: jest.fn(),
-              error: jest.fn(),
-            }),
-          },
-        }
+          useValue: mockLoggerFactory,
+        },
       ],
     }).compile();
 
