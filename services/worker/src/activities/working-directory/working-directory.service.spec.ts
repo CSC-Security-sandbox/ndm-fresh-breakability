@@ -144,7 +144,6 @@ describe('ValidateWorkingDirectoryActivity', () => {
 
     service = module.get<ValidateWorkingDirectoryActivity>(ValidateWorkingDirectoryActivity);
     configService = module.get(ConfigService);
-    // logger = module.get(Logger);
     loggerFactory = module.get<LoggerFactory>(LoggerFactory);
     logger = module.get<LoggerService>(LoggerService);
     authService = module.get(AuthService);
