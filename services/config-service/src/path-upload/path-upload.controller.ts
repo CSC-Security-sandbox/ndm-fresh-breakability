@@ -84,7 +84,7 @@ export class PathUploadController {
 
         // create the uploads directory if it doesn't exist
         await this.pathUploadService.createUploadDirectory();
-        const uploadsDir = join(process.cwd(), 'uploads');
+        const uploadsDir = join('/uploads');
         const filePath = join(uploadsDir, basename(fileName));
         fs.writeFileSync(filePath, csvContent, { encoding: 'utf8' });
         res.setHeader('Content-Type', 'text/csv');
