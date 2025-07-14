@@ -1242,6 +1242,7 @@ export class JobConfigService {
         'jobconfig.updated_at AS "updated_at"',
       ])
       .addSelect("COUNT(jobRun.id)", "totalRuns")
+      .addSelect("ARRAY_AGG(jobRun.id)", "jobRunIds")
       .where("sourceConfig.projectId = :projectId", { projectId })
       .orWhere("targetConfig.projectId = :projectId", { projectId })
       .groupBy("jobconfig.id")
@@ -1260,7 +1261,7 @@ export class JobConfigService {
       .getRawMany();
 
     const payload: JobListingDTO[] = [];
-    allJobsDetails.forEach((job) => {
+    for(const job of allJobsDetails) {
         let nextScheduleDate: Date | null = null;
 
       if (job.jobconfigstatus === JobStatus.Active) {
@@ -1274,6 +1275,9 @@ export class JobConfigService {
           nextScheduleDate = null;
         }
       }
+
+      const allErrorCounts = await Promise.all(job.jobRunIds.map(id => this.getErrorCounts(id)));
+      const errorCount = allErrorCounts.flat().map(e => e.count).reduce((a, b) => Number(a) + Number(b), 0) || 0;
 
       payload.push({
         jobConfigId: job.jobconfigid,
@@ -1292,15 +1296,15 @@ export class JobConfigService {
               protocol: job.targetprotocol,
             }
           : {},
-        errors: 0,
+        errors: errorCount,
         totalRuns: job.totalRuns,
         configName: job.configname,
         createdAt: job.createdAt,
         updatedAt: job.updated_at,
       });
-    });
+    };
     return payload;
-  }
+  };
 
   private templates = {
     sid: "sid_template.csv",
