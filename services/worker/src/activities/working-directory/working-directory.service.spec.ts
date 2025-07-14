@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-// import { Logger } from '@nestjs/common';
 import axios from 'axios';
 import * as fs from 'fs';
 import { AuthService } from 'src/auth/auth.service';
@@ -94,24 +93,24 @@ describe('ValidateWorkingDirectoryActivity', () => {
       new SMBProtocol(loggerFactory)
     );
 
-    // Mock Protocols.getProtocol
-    jest.mocked(protocols.getProtocol).mockReturnValue(mockProtocol);
+    // // Mock Protocols.getProtocol
+    // jest.mocked(protocols.getProtocol).mockReturnValue(mockProtocol);
 
-    // Create mock config service with immediate return values
-    const mockConfigService = {
-      get: jest.fn().mockImplementation((key: string) => {
-        switch (key) {
-          case 'worker.workerId':
-            return 'test-worker-id';
-          case 'worker.baseWorkingPath':
-            return '/base/working/path';
-          case 'worker.connection.workerConfigUrl':
-            return 'http://test-url';
-          default:
-            return undefined;
-        }
-      }),
-    };
+    // // Create mock config service with immediate return values
+    // const mockConfigService = {
+    //   get: jest.fn().mockImplementation((key: string) => {
+    //     switch (key) {
+    //       case 'worker.workerId':
+    //         return 'test-worker-id';
+    //       case 'worker.baseWorkingPath':
+    //         return '/base/working/path';
+    //       case 'worker.connection.workerConfigUrl':
+    //         return 'http://test-url';
+    //       default:
+    //         return undefined;
+    //     }
+    //   }),
+    // };
 
     const mockProtocols = {
       getProtocol: jest.fn(),
