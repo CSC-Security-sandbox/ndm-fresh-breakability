@@ -116,7 +116,12 @@ const NextAndSubmitButton = () => {
 
   const handleNextClick = async () => {
     if (selectedWorkerIds?.length === 0) {
-      goToNextStep();
+      // Remove this if else and keep only gotoNextStep once speed test is enabled
+      if (currentStepIndex === 2) {
+        handleFinish();
+      } else {
+        goToNextStep();
+      }
     } else if (currentStepIndex === 2) {
       const selectedSet = new Set(selectedWorkerIds);
       const validatedSet = new Set(nfsValidatedWorkersIds);
@@ -124,13 +129,16 @@ const NextAndSubmitButton = () => {
       const areIdsEqual =
         selectedSet.size === validatedSet.size &&
         Array.from(selectedSet).every((id) => validatedSet.has(id));
-
       if (areIdsEqual) {
-        goToNextStep();
+        // Remove handleFinish and enable goToNextStep once speed test is enabled
+        // goToNextStep();
+        handleFinish();
       } else {
         const resp = await handleValidateConnection();
         if (resp.errorMessageList.length === 0) {
-          goToNextStep();
+          // Remove handleFinish and enable goToNextStep once speed test is enabled
+          // goToNextStep();
+          handleFinish();
         }
       }
     } else {
@@ -138,11 +146,35 @@ const NextAndSubmitButton = () => {
     }
   };
 
-  return (
+  // Uncomment this and remove the below return and handleProccedAndFinish method once decided to enable speed test
+  /* return (
     <>
       {currentStepIndex === 3 ? (
         <Button
           onClick={handleFinish}
+          style={{ width: 152 }}
+          isSubmitting={validateConnectionLoader || disableNextButton}
+        >
+          Finish
+        </Button>
+      ) : (
+        <Button
+          onClick={handleProceed}
+          disabled={getDisableStatus()}
+          isSubmitting={validateConnectionLoader}
+          style={{ width: 152 }}
+        >
+          Proceed
+        </Button>
+      )}
+    </>
+  ); */
+
+  return (
+    <>
+      {currentStepIndex === 2 ? (
+        <Button
+          onClick={handleProceed}
           style={{ width: 152 }}
           isSubmitting={validateConnectionLoader || disableNextButton}
         >

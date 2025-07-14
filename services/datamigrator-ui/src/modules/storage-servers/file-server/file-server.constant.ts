@@ -17,7 +17,7 @@ export const STEPS_MAP = {
   "server-type": ServerType,
   "credentials-details": Credentials,
   "validate-connection": ValidateConnection,
-  "job-config": JobConfig,
+  // "job-config": JobConfig, //Uncomment this when decided to enable speed test
 };
 
 export const STEPS_PATHS = {
@@ -25,7 +25,7 @@ export const STEPS_PATHS = {
     { label: "Server Type", key: "server-type" },
     { label: "Credentials", key: "credentials-details" },
     { label: "Workers", key: "validate-connection" },
-    { label: "Job Config", key: "job-config" },
+    // { label: "Job Config", key: "job-config" }, //Uncomment this when decided to enable speed test
   ],
 };
 
