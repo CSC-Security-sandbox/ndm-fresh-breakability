@@ -268,6 +268,29 @@ describe('ConfigurationService', () => {
       expect(result).toEqual(mockConfig);
     });
 
+    it('should return config with masked password when valid ID is passed', async () => {
+      const mockConfigWithPassword = {
+        ...mockConfig,
+        fileServers: [
+          {
+            id: 'fileServer1',
+            host: 'localhost',
+            protocol: 'NFS',
+            userName: 'testUser',
+            password: 'actualPassword',
+            workers: [],
+          },
+        ],
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfigWithPassword);
+
+      const result = await service.getConfigById(mockConfig.id);
+
+      expect(result.fileServers[0].password).toBe('********');
+      expect(result.fileServers[0].password).not.toBe('actualPassword');
+    });
+
     it('should throw BadRequestException if invalid UUID is passed', async () => {
       await expect(service.getConfigById('invalid-uuid')).rejects.toThrow(
         BadRequestException,

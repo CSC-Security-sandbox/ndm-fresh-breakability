@@ -274,7 +274,13 @@ export class ConfigurationService {
           }));
         }
       }
-
+      // Mask sensitive information
+      if (config?.fileServers) {
+        config.fileServers = config.fileServers.map((fileServer) => ({
+          ...fileServer,
+          password: '',
+        }));
+      }
       return config;
     } catch (error) {
       this.logger.error(`Error fetching config by ID: ${error.message}`);
