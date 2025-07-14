@@ -15,14 +15,6 @@ import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, getUs
 import { CommonTaskService } from '../common/common-task.service';
 import { handleSyncTaskUpdateInput, StampMetaDataInput, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate-sync.types';
 
-
-// const isRandomTrue = (probability: number) => {
-//   if (probability < 0 || probability > 1) {
-//     throw new Error('Probability must be between 0 and 1');
-//   }
-//   return Math.random() < probability;
-// };
-
 @Injectable()
 export class MigrateSyncService {
   readonly workerId: string;
@@ -179,7 +171,6 @@ export class MigrateSyncService {
     if (syncOperation.ops[0] && syncOperation.ops[0].status !== OPS_STATUS.COMPLETED) {
       if(syncOperation.ops[0].cmd === OPS_CMD.COPY_CONTENT) {
         try {
-          // if(isRandomTrue(0.10)) throw new Error("Random Error for testing");
           syncOperation.checksums = await this.workerThreadService.migrateWorkerThread({
             sourcePath, destinationPath: targetPath, operationId: command.commandId, size: syncOperation.ops[1].metadata?.size ?? 0
           });

@@ -20,9 +20,6 @@ export async function calculateChecksum(filePath) {
     }
   }
   
-
-  
-  
 }
 
 export async function smartCopy(source, target) {
