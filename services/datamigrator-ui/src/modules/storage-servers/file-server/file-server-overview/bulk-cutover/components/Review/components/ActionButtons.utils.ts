@@ -14,20 +14,23 @@ export const hasUniqueStatus = (
   if (uniqueStatuses.length === 1) {
     const [uniqueStatus] = uniqueStatuses;
 
-    if (uniqueStatus === JOB_STATUS_TYPE_ENUM.STOPPED) {
-      return statuses; // All buttons disabled
+    switch (uniqueStatus) {
+      case JOB_STATUS_TYPE_ENUM.STOPPED:
+        return statuses; // All buttons disabled
+      case JOB_STATUS_TYPE_ENUM.READY:
+        return { ...statuses, STOPPED: false }; // All buttons disabled except STOPPED
+      default:
+        if (uniqueStatus in statuses) {
+          return Object.fromEntries(
+            Object.keys(statuses).map((status) => [status, status === uniqueStatus])
+          ) as Record<StatusType, boolean>;
+        }
     }
-
-    if (uniqueStatus === JOB_STATUS_TYPE_ENUM.READY) {
-      statuses.STOPPED = false;
-      return statuses; // All buttons disabled except STOPPED
-    }
-
-    if (uniqueStatus in statuses) {
-      return Object.fromEntries(
-        Object.keys(statuses).map((status) => [status, status === uniqueStatus])
-      ) as Record<StatusType, boolean>;
-    }
+  } else if (uniqueStatuses.length === 2 &&
+    uniqueStatuses.includes(JOB_STATUS_TYPE_ENUM.READY) &&
+    uniqueStatuses.includes(JOB_STATUS_TYPE_ENUM.RUNNING)
+  ) {
+      return { ...statuses, STOPPED: false }; // If both READY and RUNNING are present, enable only STOPPED
   }
 
   // Disable all buttons for multiple statuses
