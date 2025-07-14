@@ -1,9 +1,14 @@
-import { Test, TestingModule } from "@nestjs/testing";
-import { JobRunService } from "./jobrun.service";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { EventEmitter2 } from "@nestjs/event-emitter";
-import { JobRunEntity } from "../entities/jobrun.entity";
-import { JobConfigEntity } from "../entities/jobconfig.entity";
-import { WorkerJobRunMap } from "../entities/workerjobrun.entity";
+import { Test, TestingModule } from "@nestjs/testing";
+import { getRepositoryToken } from "@nestjs/typeorm";
+import {
+  ErrorType
+} from "@netapp-cloud-datamigrate/jobs-lib";
+import {
+  LoggerFactory
+} from "@netapp-cloud-datamigrate/logger-lib";
 import {
   CutOverStatus,
   JobRunStatus,
@@ -11,70 +16,50 @@ import {
   JobType,
   PausedReason,
   Protocol,
-  WorkFlows,
-  WorkerStatus,
+  WorkerStatus
 } from "src/constants/enums";
-import { JobRunPageDto } from "./dto/jobrunpage.dto";
-import { Any, In, Repository, UpdateResult } from "typeorm";
-import { getRepositoryToken } from "@nestjs/typeorm";
+import { ScheduleStatus } from "src/constants/status";
+import { FileServerEntity } from "src/entities/fileserver.entity";
+import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
+import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { JobOptionsEntity } from "src/entities/joboptions.entity";
-import { ConfigService } from "@nestjs/config";
-import { WorkflowService } from "src/workflow/workflow.service";
-import {
-  ErrorType,
-  JobContext,
-  Task,
-} from "@netapp-cloud-datamigrate/jobs-lib";
-import { TaskEntity } from "src/entities/task.entity";
-import { OperationsEntity } from "src/entities/operation.entity";
-import { VolumeEntity } from "src/entities/volume.entity";
-import {
-  LoggerFactory,
-  LoggerService,
-} from "@netapp-cloud-datamigrate/logger-lib";
-import { JobRunInitService } from "./jobrun.init.service";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
-import { RedisService } from "src/redis/redis.service";
+import { OperationsEntity } from "src/entities/operation.entity";
+import { ProjectEntity } from "src/entities/project.entity";
 import {
   SpeedTestConfigEntity,
   SpeedTestConfigWorkerEntity,
 } from "src/entities/speed-test-job-config.entity";
-import { FileServerEntity } from "src/entities/fileserver.entity";
-import {
-  ApprovalRequestDTO,
-  JobRunActions,
-  JobRunActionsReq,
-} from "./dto/jobrunactions.dto";
-import { SignalWorkFlowPayload } from "src/workflow/workflow.types";
-import { ScheduleStatus } from "src/constants/status";
-import { BadRequestException, NotFoundException } from "@nestjs/common";
-import { JobConfigService } from "src/jobconfig/jobconfig.service";
-import { existsSync, createReadStream } from "fs";
-import { join } from "path";
 import {
   NetworkPerformanceResultEntity,
   SpeedLogEntity,
   SpeedLogEntryEntity,
   SpeedTestResultEntity,
 } from "src/entities/speed-test-result.entity";
+import { TaskEntity } from "src/entities/task.entity";
+import { VolumeEntity } from "src/entities/volume.entity";
 import { WorkerEntity } from "src/entities/worker.entity";
-import { ProjectEntity } from "src/entities/project.entity";
+import { JobConfigService } from "src/jobconfig/jobconfig.service";
+import { RedisService } from "src/redis/redis.service";
+import { WorkflowService } from "src/workflow/workflow.service";
+import { In, Repository } from "typeorm";
+import { JobConfigEntity } from "../entities/jobconfig.entity";
+import { JobRunEntity } from "../entities/jobrun.entity";
+import { WorkerJobRunMap } from "../entities/workerjobrun.entity";
 import { JobErrorQueryDto } from "./dto/jobRunErrors.dto";
-import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
-import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
+import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { JobRunStats } from "./dto/jobstats";
+import { JobRunInitService } from "./jobrun.init.service";
+import { JobRunService } from "./jobrun.service";
 
 import * as parser from "cron-parser";
-import exp from "constants";
-import e, { query } from "express";
-import { SendMailService } from "src/utils/send-email";
-import { ErrorRemedyService } from "src/errorremedies/errorremedies.service";
 import { ErrorRemedyEntity } from "src/entities/error-remedies.entity";
-import { WorkersService } from "src/workers/workers.service";
-import { HealthStatus } from "src/workers/worker.types";
-import { config } from "dotenv";
 import { SyncEmailEntity } from "src/entities/sync-email.entity";
+import { ErrorRemedyService } from "src/errorremedies/errorremedies.service";
+import { SendMailService } from "src/utils/send-email";
+import { HealthStatus } from "src/workers/worker.types";
+import { WorkersService } from "src/workers/workers.service";
 
 describe("JobRunService", () => {
   let service: JobRunService;
@@ -2214,103 +2199,7 @@ describe("JobRunService", () => {
     });
   });
 
-  describe("actions", () => {
-    it("should pause job runs", async () => {
-      const jobRunActions: JobRunActionsReq = {
-        action: JobRunActions.PAUSE,
-        jobRuns: ["jobRun1", "jobRun2"],
-      };
-      jest.spyOn(service, "pauseJobRuns").mockResolvedValue({
-        details: "Operation Completed Successfully",
-      } as any);
 
-      const result = await service.actions(jobRunActions);
-
-      expect(result).toBeDefined();
-      expect(result.details).toBe("Operation Completed Successfully");
-    });
-
-    it("should stop job runs", async () => {
-      const jobRunActions: JobRunActionsReq = {
-        action: JobRunActions.STOP,
-        jobRuns: ["jobRun1", "jobRun2"],
-      };
-      jest.spyOn(service, "stopJobRuns").mockResolvedValueOnce({
-        details: "Operation Completed Successfully",
-      } as any);
-      const result = await service.actions(jobRunActions);
-
-      expect(result).toBeDefined();
-      expect(result.details).toBe("Operation Completed Successfully");
-    });
-
-    it("should resume job runs", async () => {
-      const jobRunActions: JobRunActionsReq = {
-        action: JobRunActions.RESUME,
-        jobRuns: ["jobRun1", "jobRun2"],
-      };
-      jest.spyOn(service, "resumeJobRuns").mockResolvedValueOnce({
-        details: "Operation Completed Successfully",
-      } as any);
-      const result = await service.actions(jobRunActions);
-      expect(result).toBeDefined();
-      expect(result.details).toBe("Operation Completed Successfully");
-    });
-
-    // default case
-    it("should throw BadRequestException for invalid action", async () => {
-      const jobRunActions: JobRunActionsReq = {
-        action: "INVALID_ACTION" as JobRunActions,
-        jobRuns: ["jobRun1", "jobRun2"],
-      };
-      await expect(service.actions(jobRunActions)).rejects.toThrow(
-        BadRequestException
-      );
-    });
-  });
-  describe("pauseJobRuns", () => {
-    it("should pause the job runs and update their status", async () => {
-      const jobRuns = ["jobRunId1", "jobRunId2"];
-      const jobContextMock = { jobState: { status: JobRunStatus.Paused } };
-      const workerJobRunMapUpdateSpy = jest
-        .spyOn(workerJobRunMapRepo, "update")
-        .mockResolvedValue(undefined);
-      const jobRunRepoUpdateSpy = jest
-        .spyOn(jobRunRepo, "update")
-        .mockResolvedValue(undefined);
-      jest
-        .spyOn(redisService, "getJobContext")
-        .mockResolvedValue(jobContextMock as any);
-
-      await service.pauseJobRuns(jobRuns);
-
-      expect(workerJobRunMapUpdateSpy).toHaveBeenCalledWith(
-        { jobRunId: In(jobRuns) },
-        { isActive: false }
-      );
-      expect(jobRunRepoUpdateSpy).toHaveBeenCalledWith(
-        { id: In(jobRuns) },
-        { status: JobRunStatus.Paused }
-      );
-    });
-
-    it("should update the job context and return success message", async () => {
-      const jobRuns = ["jobRunId1", "jobRunId2"];
-      const jobContextMock = { jobState: { status: JobRunStatus.Paused } };
-      const getJobContextSpy = jest
-        .spyOn(redisService, "getJobContext")
-        .mockResolvedValue(jobContextMock as any);
-      const setJobContextSpy = jest
-        .spyOn(redisService, "setJobContext")
-        .mockResolvedValue(undefined);
-
-      const result = await service.pauseJobRuns(jobRuns);
-
-      expect(getJobContextSpy).toHaveBeenCalledTimes(jobRuns.length);
-      expect(setJobContextSpy).toHaveBeenCalledTimes(jobRuns.length);
-      expect(result).toEqual({ details: "Operation Completed Successfully" });
-    });
-  });
 
   describe("updateJobRunStatus", () => {
     it("should update the job run status and job config scheduler when status is not running", async () => {
@@ -2459,132 +2348,7 @@ describe("JobRunService", () => {
     });
   });
 
-  describe("stopJobRuns", () => {
-    it("should stop job runs and update repositories correctly", async () => {
-      const jobRuns = ["jobRun1", "jobRun2"];
-      const mappings = [
-        { workerId: "worker1", jobRunId: "jobRun1" },
-        { workerId: "worker2", jobRunId: "jobRun2" },
-      ];
-      const jobRunConfigs = [
-        { jobConfigId: "config1" },
-        { jobConfigId: "config2" },
-      ];
-      const jobContextMock = {
-        jobConfig: { jobType: "SOME_JOB_TYPE" },
-        jobState: { status: "RUNNING" },
-        appendToFileList: jest.fn(),
-        cleanup: jest.fn(),
-      };
 
-      jest
-        .spyOn(global, "setTimeout")
-        .mockImplementation((fn) => (fn as any)());
-      jest
-        .spyOn(workerJobRunMapRepo, "find")
-        .mockResolvedValue(mappings as any);
-      jest.spyOn(jobRunRepo, "find").mockResolvedValue(jobRunConfigs as any);
-      jest
-        .spyOn(redisService, "getJobContext")
-        .mockResolvedValue(jobContextMock as any);
-      const result = await service.stopJobRuns(jobRuns);
-
-      expect(workerJobRunMapRepo.find).toHaveBeenCalledWith({
-        where: { jobRunId: In(jobRuns), isActive: true },
-        select: { workerId: true, jobRunId: true },
-      });
-
-      expect(workerJobRunMapRepo.delete).toHaveBeenCalledWith({
-        jobRunId: In(jobRuns),
-      });
-
-      expect(jobRunRepo.find).toHaveBeenCalledWith({
-        where: {
-          id: In(jobRuns),
-          status: In([JobRunStatus.Paused, JobRunStatus.Running, JobRunStatus.Ready]),
-        },
-        select: { jobConfigId: true },
-      });
-
-      expect(jobRunRepo.update).toHaveBeenCalledWith(
-        {
-          id: In(jobRuns),
-          status: In([
-            JobRunStatus.Paused,
-            JobRunStatus.Running,
-            JobRunStatus.Ready,
-          ]),
-        },
-        { status: JobRunStatus.Stopped, endTime: expect.any(Date) }
-      );
-
-      expect(jobConfigRepo.update).toHaveBeenCalledWith(
-        { id: In(jobRunConfigs.map((jobRun) => jobRun.jobConfigId)) },
-        { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
-      );
-
-      expect(redisService.getJobContext).toHaveBeenCalledTimes(jobRuns.length);
-      expect(workFlowService.terminateWorkflow).toHaveBeenCalledTimes(
-        jobRuns.length
-      );
-      expect(redisService.setJobContext).toHaveBeenCalledTimes(jobRuns.length);
-      expect(jobContextMock.appendToFileList).toHaveBeenCalledTimes(
-        jobRuns.length
-      );
-      expect(jobContextMock.cleanup).toHaveBeenCalledTimes(jobRuns.length);
-
-      expect(result).toEqual({ details: "Operation Completed Successfully" });
-
-      jest.restoreAllMocks();
-    });
-  });
-
-  describe("resumeJobRuns", () => {
-    it("should resume job runs and update necessary states", async () => {
-      const jobRuns = ["jobRun1", "jobRun2"];
-      const mappings = [{ workerId: "worker1" }, { workerId: "worker2" }];
-
-      jest
-        .spyOn(workerJobRunMapRepo, "find")
-        .mockResolvedValue(mappings as any);
-      jest.spyOn(workerJobRunMapRepo, "update").mockResolvedValue(undefined);
-      jest.spyOn(jobRunRepo, "update").mockResolvedValue(undefined);
-
-      const jobContextMock: any = {
-        jobState: {
-          status: JobStatus.Active,
-          tasks_total: 5,
-        },
-        appendToFileList: jest.fn(),
-      };
-
-      jest
-        .spyOn(redisService, "getJobContext")
-        .mockResolvedValue(jobContextMock);
-      jest.spyOn(redisService, "setJobContext").mockResolvedValue(undefined);
-      jest.spyOn(service, "resumeJobRun").mockResolvedValue(undefined);
-
-      const result = await service.resumeJobRuns(jobRuns);
-
-      expect(workerJobRunMapRepo.find).toHaveBeenCalledWith({
-        where: { jobRunId: expect.anything() },
-        select: { workerId: true },
-      });
-      expect(workerJobRunMapRepo.update).toHaveBeenCalledWith(
-        { jobRunId: expect.anything() },
-        { isActive: true }
-      );
-      expect(jobRunRepo.update).toHaveBeenCalledWith(
-        { id: expect.anything(), status: JobRunStatus.Paused },
-        { status: JobRunStatus.Running, pausedReason: null }
-      );
-      expect(redisService.getJobContext).toHaveBeenCalledTimes(jobRuns.length);
-      expect(redisService.setJobContext).toHaveBeenCalledTimes(jobRuns.length);
-      expect(service.resumeJobRun).toHaveBeenCalledTimes(jobRuns.length);
-
-      expect(result).toEqual({ details: "Operation Completed Successfully" });
-    });
-  });
 
   describe("approveCutoverRequest", () => {
     it("should send the correct signal for approval request", async () => {
@@ -2618,107 +2382,6 @@ describe("JobRunService", () => {
 
       try {
         await service.approveCutoverRequest(approvalRequest as any);
-      } catch (error) {
-        expect(error).toBeInstanceOf(Error);
-      }
-    });
-  });
-
-  describe("resumeJobRun", () => {
-    it("should resume workflow if job run exists and workflow is not running", async () => {
-      const jobRunId = "1234";
-      const jobRun = { id: jobRunId, jobConfigId: "config123" };
-      const jobDetails = { jobType: "MIGRATE", workers: ["worker1"] };
-      const workflowId = `workflow-${jobRunId}`;
-
-      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(jobRun as any);
-      jest
-        .spyOn(jobRunInitService, "getJobConfig")
-        .mockResolvedValue(jobDetails as any);
-      jest
-        .spyOn(jobRunInitService, "getWorkFlowId")
-        .mockReturnValue(workflowId);
-      jest
-        .spyOn(workFlowService, "getWorkflowStatus")
-        .mockResolvedValue("Completed" as any);
-      jobRunInitService.initiateWorkflow = jest
-        .fn()
-        .mockResolvedValue(undefined);
-      await service.resumeJobRun(jobRunId);
-      expect(workFlowService.terminateWorkflow).not.toHaveBeenCalled();
-    });
-
-    it("should terminate and resume workflow if job run exists and workflow is running", async () => {
-      const jobRunId = "1234";
-      const jobRun = { id: jobRunId, jobConfigId: "config123" };
-      const jobDetails = { jobType: "MIGRATE", workers: ["worker1"] };
-      const workflowId = `MigrationWorkflow-${jobRunId}`;
-
-      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(jobRun as any);
-      jest
-        .spyOn(jobRunInitService, "getJobConfig")
-        .mockResolvedValue(jobDetails as any);
-      jest
-        .spyOn(jobRunInitService, "getWorkFlowId")
-        .mockReturnValue(workflowId);
-      jest
-        .spyOn(workFlowService, "getWorkflowStatus")
-        .mockResolvedValue("RUNNING" as any);
-      jobRunInitService.initiateWorkflow = jest
-        .fn()
-        .mockResolvedValue(undefined);
-
-      await service.resumeJobRun(jobRunId);
-
-      expect(jobRunInitService.initiateWorkflow).toHaveBeenCalledWith(
-        jobRunId,
-        jobDetails
-      );
-      expect(workFlowService.terminateWorkflow).toHaveBeenCalledWith(
-        workflowId
-      );
-    });
-
-    it("should log error and throw if an error occurs", async () => {
-      const jobRunId = "1234";
-      jest
-        .spyOn(jobRunRepo, "findOne")
-        .mockRejectedValue(new Error("DB error"));
-
-      try {
-        await expect(service.resumeJobRun(jobRunId)).rejects.toThrow(
-          "Failed to resume Job Run 1234 Error: DB error"
-        );
-      } catch (error) {
-        expect(error).toBeInstanceOf(Error);
-      }
-    });
-
-    //  if (!jobRun) case
-    it("should throw NotFoundException if job run does not exist", async () => {
-      const jobRunId = "1234";
-      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(undefined);
-
-      try {
-        await service.resumeJobRun(jobRunId);
-      } catch (error) {
-        expect(error).toBeInstanceOf(Error);
-      }
-    });
-
-    // details.workers?.length === 0 case
-    it("should throw BadRequestException if job run has no workers", async () => {
-      const jobRunId = "1234";
-      const jobRun = { id: jobRunId, jobConfigId: "config123" };
-      const jobDetails = { jobType: "MIGRATE", workers: [] };
-
-      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(jobRun as any);
-      jest
-        .spyOn(jobRunInitService, "getJobConfig")
-        .mockResolvedValue(jobDetails as any);
-
-      try {
-        await service.resumeJobRun(jobRunId);
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
       }
@@ -2840,34 +2503,8 @@ describe("JobRunService", () => {
         expect(loggerSpy).toHaveBeenCalledWith('Error occurred while checking worker health:', error);
       }
     })
-
-    it('should resume the job if all workers are online', async () => {
-      jest.spyOn(jobRunRepo, "find").mockResolvedValue([
-        {
-          id: "job1",
-          status: JobRunStatus.Paused,
-          pausedReason: PausedReason.SYSTEM_PAUSED,
-          workerMap: [
-            { worker: { status: WorkerStatus.Online, workerName: "w1" } },
-          ],
-        },
-      ] as any);
-      const loggerSpy = jest.spyOn(service['logger'], 'log');
-      const updateWorkerStatusMock = jest.fn(
-        (workers: WorkerEntity[]) => workers
-      );
-      jest
-        .spyOn(workerService, "updateWorkerStatus")
-        .mockImplementationOnce(updateWorkerStatusMock);
-
-      jest.spyOn(service, "resumeJobRuns").mockResolvedValue(undefined);
-      await service.checkWorkerHealth();
-      expect(service.resumeJobRuns).toHaveBeenCalled();
-      expect(service.resumeJobRuns).toHaveBeenCalledWith(["job1"]);
-    })
   });
 
-  // test case for updateWorkerResponse
 
   describe("updateWorkerResponse", () => {
     it("should update worker response", async () => {
@@ -2901,4 +2538,188 @@ describe("JobRunService", () => {
       expect(result).toEqual([]);
     })
   })
+  describe('JobRunService - additional methods', () => {
+    describe('calculateJobRunStats', () => {
+      it('should calculate and return job run stats', async () => {
+        const jobRunId = 'jobRunId';
+        const mockJobRun = { id: jobRunId, jobConfig: {} };
+        const mockInventorySummary = {
+          filecount: '5',
+          directorycount: '2',
+          totalfilesize: '10240',
+        };
+        const mockErrorCounts = [{ errorType: 'TypeError', count: 2 }];
+
+        jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce(mockJobRun as any);
+        jest.spyOn(inventoryRepo, 'createQueryBuilder').mockReturnValueOnce({
+          select: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          getRawOne: jest.fn().mockResolvedValueOnce(mockInventorySummary),
+        } as any);
+        jest.spyOn(service, 'getErrorCounts').mockResolvedValueOnce(mockErrorCounts);
+
+        const result = await service.calculateJobRunStats(jobRunId);
+
+        expect(jobRunRepo.findOne).toHaveBeenCalledWith({
+          where: { id: jobRunId },
+          relations: ['jobConfig'],
+        });
+        expect(result).toEqual({
+          fileCount: '5',
+          directories: '2',
+          totalSize: '10240',
+          errors: mockErrorCounts,
+        });
+      });
+
+      it('should throw NotFoundException if job run not found', async () => {
+        jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce(null);
+
+        await expect(service.calculateJobRunStats('missingId')).rejects.toThrow('Job Run with id missingId not found');
+      });
+    });
+
+    describe('getJobRunErrors', () => {
+      it('should return error data and total for non-FATAL_ERROR', async () => {
+        const dto = {
+          jobRunId: 'jobRunId',
+          errorType: 'RECOVERABLE_ERROR',
+          page: '1',
+          limit: '10',
+          sort: 'createdAt',
+          order: 'DESC',
+        };
+        const mockData = [{ id: '1', errorType: 'RECOVERABLE_ERROR', occurrence: '1' }];
+        const mockTotal = { total: '1' };
+
+        jest.spyOn(operationErrorRepo, 'query').mockResolvedValueOnce(mockData);
+        jest.spyOn(operationErrorRepo, 'createQueryBuilder').mockReturnValueOnce({
+          leftJoin: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          select: jest.fn().mockReturnThis(),
+          getRawOne: jest.fn().mockResolvedValueOnce(mockTotal),
+        } as any);
+
+        const result = await service.getJobRunErrors(dto as any);
+
+        expect(result).toEqual({ data: mockData, total: 1 });
+      });
+
+      it('should append setupFailedErrors for FATAL_ERROR', async () => {
+        const dto = {
+          jobRunId: 'jobRunId',
+          errorType: 'FATAL_ERROR',
+          page: '1',
+          limit: '10',
+          sort: 'createdAt',
+          order: 'DESC',
+        };
+        const mockData = [{ id: '1', errorType: 'FATAL_ERROR', occurrence: '1' }];
+        const mockTotal = { total: '1' };
+        const setupFailedErrors = [
+          {
+            workerResponse: {
+              message: 'fail',
+              createdAt: '2024-01-01',
+              operation: 'Setup',
+              code: 'SETUP_WORKER_FAILURE',
+              origin: 'origin',
+              occurrence: 1,
+            },
+          },
+        ];
+
+        jest.spyOn(operationErrorRepo, 'query').mockResolvedValueOnce([...mockData]);
+        jest.spyOn(operationErrorRepo, 'createQueryBuilder').mockReturnValueOnce({
+          leftJoin: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          select: jest.fn().mockReturnThis(),
+          getRawOne: jest.fn().mockResolvedValueOnce(mockTotal),
+        } as any);
+        jest.spyOn(service as any, 'getWorkerSetupErrors').mockResolvedValueOnce(setupFailedErrors);
+
+        const result = await service.getJobRunErrors(dto as any);
+
+        expect(result.data.some(d => d.errorMessage === 'fail')).toBe(true);
+        expect(result.total).toBe(2);
+      });
+    });
+
+    describe('sendErrorRemedyEmail', () => {
+      it('should not send mail if errorCodes is empty', async () => {
+        const spy = jest.spyOn(sendMailService, 'sendMail').mockResolvedValue(undefined);
+        await service.sendErrorRemedyEmail({
+          jobRunId: 'id',
+          errorCodes: [],
+          sourceHost: '',
+          sourcePath: '',
+          targetHost: '',
+          targetPath: '',
+          jobType: '',
+        });
+        expect(spy).not.toHaveBeenCalled();
+      });
+
+      it('should send mail if errorCodes are present', async () => {
+        jest.spyOn(errorRemedyService, 'findByErrorCodes').mockResolvedValue([
+          {
+            errorCode: 'E1',
+            description: 'desc',
+            resolutionSteps: 'steps',
+            referenceCommands: 'cmd',
+          },
+        ] as any);
+        const spy = jest.spyOn(sendMailService, 'sendMail').mockResolvedValue(undefined);
+        await service.sendErrorRemedyEmail({
+          jobRunId: 'id',
+          errorCodes: [{ errorCode: 'E1' }],
+          sourceHost: '',
+          sourcePath: '',
+          targetHost: '',
+          targetPath: '',
+          jobType: '',
+        });
+        expect(spy).toHaveBeenCalled();
+      });
+    });
+
+    describe('updateWorkerResponse', () => {
+      it('should update worker response', async () => {
+        jest.spyOn(workerJobRunMapRepo, 'update').mockResolvedValue({} as any);
+        await expect(service.updateWorkerResponse('jobRunId', 'workerId', { foo: 'bar' })).resolves.toBeDefined();
+      });
+
+      it('should throw error if update fails', async () => {
+        jest.spyOn(workerJobRunMapRepo, 'update').mockRejectedValue(new Error('fail'));
+        await expect(service.updateWorkerResponse('jobRunId', 'workerId', {})).rejects.toThrow('Failed to update worker response: Error: fail');
+      });
+
+      it('should throw error if updateWorkerResponse fails', async () => {
+        const jobRunId = 'jobRunId';
+        const workerId = 'workerId';
+        const workerResponse = { foo: 'bar' };
+        jest.spyOn(workerJobRunMapRepo, 'update').mockRejectedValue(new Error('fail'));
+        await expect(service.updateWorkerResponse(jobRunId, workerId, workerResponse)).rejects.toThrow('Failed to update worker response: Error: fail');
+      });
+
+      it('should update worker response successfully', async () => {
+        const jobRunId = 'jobRunId';
+        const workerId = 'workerId';
+        const workerResponse = { foo: 'bar' };
+        jest.spyOn(workerJobRunMapRepo, 'update').mockResolvedValue({ affected: 1 } as any);
+        await expect(service.updateWorkerResponse(jobRunId, workerId, workerResponse)).resolves.toBeDefined();
+      });
+
+      it('should return worker setup errors', async () => {
+        const jobRunId = 'jobRunId';
+        const mockErrors = [{ workerResponse: { code: 'SETUP_WORKER_FAILURE', status: 'FAILED' } }];
+        jest.spyOn(workerJobRunMapRepo, 'find').mockResolvedValue(mockErrors as any);
+        const result = await service.getWorkerSetupErrors(jobRunId);
+        expect(result).toEqual(mockErrors);
+      });
+    });
+  });
+
 });

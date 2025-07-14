@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { FindManyOptions, Repository } from "typeorm";
 
@@ -7,6 +7,7 @@ import { WorkersStatusPageDto } from "./dto/workers.page.dto";
 import { WorkerStatus } from "src/constants/enums";
 import { HealthStatus } from "./worker.types";
 import { ConfigService } from "@nestjs/config";
+import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 
 @Injectable()
 export class WorkersService {
@@ -14,6 +15,8 @@ export class WorkersService {
   constructor(
     @InjectRepository(WorkerEntity)
     private readonly WorkerEntity: Repository<WorkerEntity>,
+     @InjectRepository(WorkerJobRunMap)
+    private readonly workerJobRunMap: Repository<WorkerJobRunMap>,
     private readonly configService: ConfigService,
   ) {}
 
@@ -90,5 +93,20 @@ export class WorkersService {
     }
     const workerWithStatusUpdated = this.updateWorkerStatus(data);
     return { data: workerWithStatusUpdated, total };
+  }
+
+
+  async updateWorkerJobRunStatus(workerId: string, jobrunId: string, active: boolean) {
+    const workerJobMap = await this.workerJobRunMap.findOne({
+      where: {
+        workerId: workerId,
+        jobRunId: jobrunId,
+      }
+    })
+    if(!workerJobMap)
+      throw new BadRequestException(`Worker Job Run mapping not found for workerId: ${workerId} and jobrunId: ${jobrunId}`);
+
+    workerJobMap.isActive = active;
+    return await this.workerJobRunMap.save(workerJobMap);
   }
 }

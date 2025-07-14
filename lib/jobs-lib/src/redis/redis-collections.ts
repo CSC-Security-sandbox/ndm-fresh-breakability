@@ -1,5 +1,5 @@
 import { GroupReaderType } from 'src/types/enums';
-import { DMError, FileInfo, SpeedTestReadWriteInfo, Task, TaskStats } from '../types/metadata-types';
+import { Command, DMError, FileInfo, SpeedTestReadWriteInfo, Task, TaskStats } from '../types/metadata-types';
 import {
   DirectoryCollection,
   ErrorCollection,
@@ -8,7 +8,8 @@ import {
   TaskStatsCollection,
   UpdatedTaskCollection,
   SpeedTestReadWriteCollection,
-  MigrationTaskCollection
+  MigrationTaskCollection,
+  CommandCollection
 } from '../types/stream-collection';
 import { JobUtils } from '../utils/job-utils';
 import { RedisStreamCollection } from './redis-stream-collection';
@@ -187,6 +188,25 @@ export class RedisMigrationTasksCollection
     super(
       jobRunId,
       JobUtils.getRedisKey(jobRunId, 'migration-tasks'),
+      numMessages,
+      lastId,
+      redisClient,
+    );
+  }
+}
+
+
+export class RedisCommandCollection extends RedisStreamCollection<Command> 
+implements CommandCollection {
+  constructor(
+    jobRunId: string,
+    numMessages: number,
+    lastId: string,
+    redisClient: any,
+  ) {
+    super(
+      jobRunId,
+      JobUtils.getRedisKey(jobRunId, 'commands'),
       numMessages,
       lastId,
       redisClient,
