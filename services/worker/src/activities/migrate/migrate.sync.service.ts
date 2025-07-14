@@ -393,6 +393,7 @@ export class MigrationSyncService {
 
   getFileInfo = async ({name, fullFilePath, relativePath, checksums, getID}: getFileInfoInput): Promise<any>  => {
       const lStat = await fs.promises.lstat(fullFilePath);
+      const isDirectory = lStat.isDirectory();
       let sid = undefined
       if(getID && process.platform == 'win32' && lStat.isFile())
         sid = this.getSID(fullFilePath);
@@ -400,15 +401,15 @@ export class MigrationSyncService {
           name,
           relativePath,
           relativePath,
-          lStat.isDirectory(),
+          isDirectory,
           lStat.size,
-          !lStat.isDirectory(),
+          !isDirectory,
           lStat.birthtime,
           lStat.mtime,
           lStat.atime,
           path.extname(fullFilePath),
-          getFilePermissions(lStat),
-          getFileType(lStat),
+          getFilePermissions(lStat, isDirectory),
+          getFileType(lStat, isDirectory),
           relativePath.split('/').length - 2,
           lStat.uid,
           lStat.gid,

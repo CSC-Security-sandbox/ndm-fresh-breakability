@@ -116,7 +116,7 @@ describe('utils', () => {
                 isDirectory: jest.fn().mockReturnValue(false)
             } as unknown as fs.Stats;
 
-            const result = getFilePermissions(mockStats);
+            const result = getFilePermissions(mockStats, mockStats.isDirectory());
             expect(result).toBe('-rw-r--r--');
         });
 
@@ -126,7 +126,7 @@ describe('utils', () => {
                 isDirectory: jest.fn().mockReturnValue(true)
             } as unknown as fs.Stats;
 
-            const result = getFilePermissions(mockStats);
+            const result = getFilePermissions(mockStats, mockStats.isDirectory());
             expect(result).toBe('drwxr-xr-x');
         });
 
@@ -149,7 +149,7 @@ describe('utils', () => {
                     mode,
                     isDirectory: jest.fn().mockReturnValue(isDir)
                 } as unknown as fs.Stats;
-                expect(getFilePermissions(mockStats)).toBe(expected);
+                expect(getFilePermissions(mockStats, mockStats.isDirectory())).toBe(expected);
             });
         });
     });
@@ -422,7 +422,7 @@ describe('utils', () => {
                 isCharacterDevice: () => false,
                 isBlockDevice: () => false
             } as unknown as fs.Stats;
-            expect(getFileType(stats)).toBe(FileType.SYMBOLIC_LINK);
+            expect(getFileType(stats, stats.isDirectory())).toBe(FileType.SYMBOLIC_LINK);
         });
 
         it('should return FILE for regular files', () => {
@@ -435,7 +435,7 @@ describe('utils', () => {
                 isCharacterDevice: () => false,
                 isBlockDevice: () => false
             } as unknown as fs.Stats;
-            expect(getFileType(stats)).toBe(FileType.FILE);
+            expect(getFileType(stats, stats.isDirectory())).toBe(FileType.FILE);
         });
 
         it('should return DIRECTORY for directories', () => {
@@ -448,7 +448,7 @@ describe('utils', () => {
                 isCharacterDevice: () => false,
                 isBlockDevice: () => false
             } as unknown as fs.Stats;
-            expect(getFileType(stats)).toBe(FileType.DIRECTORY);
+            expect(getFileType(stats, stats.isDirectory())).toBe(FileType.DIRECTORY);
         });
 
         it('should return SOCKET for sockets', () => {
@@ -461,7 +461,7 @@ describe('utils', () => {
                 isCharacterDevice: () => false,
                 isBlockDevice: () => false
             } as unknown as fs.Stats;
-            expect(getFileType(stats)).toBe(FileType.SOCKET);
+            expect(getFileType(stats, stats.isDirectory())).toBe(FileType.SOCKET);
         });
 
         it('should return FIFO for FIFO pipes', () => {
@@ -474,7 +474,7 @@ describe('utils', () => {
                 isCharacterDevice: () => false,
                 isBlockDevice: () => false
             } as unknown as fs.Stats;
-            expect(getFileType(stats)).toBe(FileType.FIFO);
+            expect(getFileType(stats, stats.isDirectory())).toBe(FileType.FIFO);
         });
 
         it('should return CHARACTER_DEVICE for character devices', () => {
@@ -487,7 +487,7 @@ describe('utils', () => {
                 isCharacterDevice: () => true,
                 isBlockDevice: () => false
             } as unknown as fs.Stats;
-            expect(getFileType(stats)).toBe(FileType.CHARACTER_DEVICE);
+            expect(getFileType(stats, stats.isDirectory())).toBe(FileType.CHARACTER_DEVICE);
         });
 
         it('should return BLOCK_DEVICE for block devices', () => {
@@ -500,7 +500,7 @@ describe('utils', () => {
                 isCharacterDevice: () => false,
                 isBlockDevice: () => true
             } as unknown as fs.Stats;
-            expect(getFileType(stats)).toBe(FileType.BLOCK_DEVICE);
+            expect(getFileType(stats, stats.isDirectory())).toBe(FileType.BLOCK_DEVICE);
         });
 
         it('should return UNKNOWN for unknown file types', () => {
@@ -513,7 +513,7 @@ describe('utils', () => {
                 isCharacterDevice: () => false,
                 isBlockDevice: () => false
             } as unknown as fs.Stats;
-            expect(getFileType(stats)).toBe(FileType.UNKNOWN);
+            expect(getFileType(stats, stats.isDirectory())).toBe(FileType.UNKNOWN);
         });
     });
 
