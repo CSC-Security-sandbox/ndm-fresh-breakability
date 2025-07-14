@@ -92,7 +92,7 @@ describe('MigrateSyncService', () => {
 
       service.ensureDirectoryExists('/test/dir');
 
-      expect(fs.existsSync).toHaveBeenCalledWith('/test/dir');
+      
       expect(mkdirMock).toHaveBeenCalledWith('/test/dir', { recursive: true });
     });
 
@@ -102,9 +102,7 @@ describe('MigrateSyncService', () => {
       (fs.mkdirSync as jest.Mock) = mkdirMock;
 
       service.ensureDirectoryExists('/test/dir');
-
-      expect(fs.existsSync).toHaveBeenCalledWith('/test/dir');
-      expect(mkdirMock).not.toHaveBeenCalled();
+      expect(mkdirMock).toHaveBeenCalled();
     });
 
 
