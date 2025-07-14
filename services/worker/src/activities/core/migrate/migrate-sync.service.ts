@@ -46,10 +46,8 @@ export class MigrateSyncService {
 
 
 
-  ensureDirectoryExists(directoryPath: string) {
-    if (!fs.existsSync(directoryPath)) {
-      fs.mkdirSync(directoryPath, { recursive: true });
-    }
+  ensureDirectoryExists(directoryPath: string) {    
+      fs.mkdirSync(directoryPath, { recursive: true });    
   }
   
   async stampMetaData({sourcePath, metadata, command, errorType, jobContext, targetPath}: StampMetaDataInput):Promise<StampMetaDataOutput> {
