@@ -56,7 +56,7 @@ export const executeWorkerSetup = async ( { jobRunId, workerIds , options}: Setu
 
     if(failedWorkers.length === workerIds.length) {
         await updateJobErrorActivity(jobRunId)
-        wf.ApplicationFailure.nonRetryable(`All workers failed to setup: ${failedWorkers.join(', ')}`);
+        throw wf.ApplicationFailure.nonRetryable(`All workers failed to setup: ${failedWorkers.join(', ')}`);
     }
 
     return { setupCompletedWorkers, failedWorkers}

@@ -98,7 +98,7 @@ export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunSt
             })
         )      
         if(iterations > 1000){
-            console.warn(`SyncWorkflow ${jobRunId} has exceeded 500 iterations, stopping to prevent infinite loop.`);                      
+            console.warn(`SyncWorkflow ${jobRunId} has exceeded 1000 iterations, stopping to prevent infinite loop.`);                      
             await wf.continueAsNew({ jobRunId, scanWorkflowStatus, actionState });      
         }
     }
