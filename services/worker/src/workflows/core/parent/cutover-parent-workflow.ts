@@ -59,7 +59,7 @@ export const CutOverWorkFlow = async ({
     await handleReporting(traceId, output.status);
 
 
-    // Waiting for approveal  
+    // Waiting for approval  
     await waitForApproval(traceId)
     // Cleanup
     await executeCleanup({ jobRunId: traceId, workerIds: output.setupCompletedWorkers, options });
