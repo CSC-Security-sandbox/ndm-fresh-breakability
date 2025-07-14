@@ -47,8 +47,8 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSiz
   
   const scanWorkflowOutput: ChildScanWorkflowOutput = {
     jobRunId,
-    fileCount: dirCount,
-    dirCount: fileCount,
+    fileCount: fileCount,
+    dirCount: dirCount,
     status: JobRunStatus.Running,
     error: undefined,
   };
@@ -99,7 +99,7 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSiz
     dirsToScan = nexDirsToScan;
     nexDirsToScan = []
     if(iterations > 1000 ){
-      console.warn(`ChildScanWorkflow ${jobRunId} has exceeded 500 iterations, stopping to prevent infinite loop.`);                      
+      console.warn(`ChildScanWorkflow ${jobRunId} has exceeded 1000 iterations, stopping to prevent infinite loop.`);                      
       await wf.continueAsNew({ jobRunId, dirsToScan, batchSize, dirCount:scanWorkflowOutput.dirCount, fileCount:scanWorkflowOutput.fileCount, isMigration, actionState });      
     }
   }

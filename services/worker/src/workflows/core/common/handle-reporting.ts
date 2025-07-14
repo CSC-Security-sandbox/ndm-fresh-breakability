@@ -36,7 +36,7 @@ export const handleReporting = async (
     status: JobRunStatus,
   ): Promise<string> => {
     let isBlocked = true;
-    let reportType : JobReportType | null 
+    let reportType : JobReportType | null = null;
   
     wf.setHandler(isReportedQuery, () =>!isBlocked);
   
@@ -46,7 +46,7 @@ export const handleReporting = async (
             (input === JobReportType.MIGRATE) ||
             (input === JobReportType.DISCOVER) 
         ) 
-        reportType = input
+        reportType = input;
         isBlocked = false;
     });
 
