@@ -1,189 +1,167 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { WorkerOptionsService } from './worker-options.factory.service';
 import { WorkFlowType } from './worker-options.types';
 import { WorkFlowOptions } from './worker-options.factory';
-import { ConfigService } from '@nestjs/config';
-import { NativeConnection } from '@temporalio/worker';
-import { WorkerOptionsService } from './worker-options.factory.service';
-import { WorkerConfiguration } from '../work-manager.types';
-import { ListPathActivity } from 'src/activities/list-path/list-path.service';
-import { ValidateConnectionActivity } from 'src/activities/validate-connection/validate-connection.service';
-import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
-import { DiscoveryScanActivity } from 'src/activities/discovery/discovery.core.activity';
-import { SetupActivityService } from 'src/activities/setup-worker/setup.activity.service';
-import { MigrationScanService } from 'src/activities/migrate/migrate.scan.service';
-import { MigrationTaskService } from 'src/activities/migrate/migrate.taskmanager.service';
-import { MigrationSyncService } from 'src/activities/migrate/migrate.sync.service';
-import { ValidateWorkingDirectoryActivity } from 'src/activities/working-directory/working-directory.service';
-import { PrecheckActivity } from 'src/activities/precheck/precheck-activity';
-import { CommonActivityService } from 'src/activities/common/common.service';
-import { SpeedTestActivities } from 'src/activities/speed-test/speed-test-activities';
-import { RedisMemoryCheckActivity } from 'src/activities/redis/redis.mem.usage.check.activity';
-import { ScanService } from 'src/activities/core/scan/scan-activity.service';
-import { CommonTaskService } from 'src/activities/core/common/common-task.service';
-import { MigrateSyncService } from 'src/activities/core/migrate/migrate-sync.service';
-
-const bindMock = jest.fn().mockReturnValue({
-  bind: jest.fn(),
-})
-
-const listPathActivityServiceMock = {
-  listPath: bindMock,
-}
-const validateConnectionServiceMock = {
-  validate: bindMock
-}
-
-const discoveryActivityMock = {
-  getWorkerId: bindMock,
-  generateDiscoveryReport: bindMock,
-  publishTask: bindMock,
-  discoveryStatusUpdate: bindMock,
-  discoveryProcess: bindMock,
-  scanActivity: bindMock,
-  publishLastEntry: bindMock,
-  fetchTasks: bindMock,
-}
-const discoveryScanActivityMock = {
-  scanActivity: bindMock,
-}
-const setupActivityServiceMock = {
-  setup: bindMock,
-  cleanup: bindMock,
-  speedTestSetup: bindMock,
-  speedTestCleanup: bindMock,
-}
-const migrationScanServiceMock = {
-  scanPath: bindMock,
-}
-const migrationTaskServiceMock = {
-  updateCutOverStatus: bindMock,
-  generateCOCReport: bindMock,
-  publishScanTask: bindMock,
-  fetchScanTask: bindMock,
-  fetchMigrationTask: bindMock,
-  updateStatus: bindMock,
-}
-
-const migrationSyncServiceMock = {
-  syncTask:  bindMock
-}
-
-const validateWorkingDirectoryActivityMock = {
-  validateWorkingDirectory:  bindMock,
-  isValidDirectory: bindMock,
-  updateConfigStatus: bindMock,
-}
-
-const precheckActivityMock = {
-  preCheckPath: bindMock,
-}
-
-const commonActivityServiceMock = {
-  getJobState: bindMock,
-  setJobState: bindMock,
-  updateStatus: bindMock,
-  updateLastEntry: bindMock,
-  generateJobsReport: bindMock,
-  updateJobErrorStatus: bindMock,
-  updateWorkerResponse: bindMock,
-  cleanupJobContext: bindMock,
-  getJobStateWithStreamLoad: bindMock,
-  getJobStateAndUpdateTaskList: bindMock,
-  hasRunningScanTask: bindMock,
-  hasRunningSyncTask: bindMock,
-}
-
-const speedTestReadActivityMock = {
-  readActivity: bindMock,
-  networkPerformanceActivity: bindMock,
-  writeActivity: bindMock,
-  postResultsActivity: bindMock,
-  speedTestSetup: bindMock
-}
-
-const mockConfigService = {
-  get: jest.fn().mockReturnValue(5),
-};
-
-const redismeorycheckactivityMock = {
-  checkMemoryUsage: bindMock,
-}
-
-const MigrateSyncServiceMock = {
-  syncTaskActivity: bindMock,
-}
-
-const CommonTaskServiceMock = {
-  getGroupOfTasksActivity: bindMock,
-  isWorkflowRunningActivity: bindMock,
-}
-
-const ScanServiceMock = {
-  scanDirectories: bindMock, 
-}
 
 describe('WorkerOptionsService', () => {
   let service: WorkerOptionsService;
-  const mockConnection = {} as NativeConnection;
+  let mockDeps: any;
+  let mockConfigService: any;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        WorkerOptionsService,
-        { provide: ListPathActivity, useValue: listPathActivityServiceMock},
-        { provide: ValidateConnectionActivity, useValue: validateConnectionServiceMock },
-        { provide: DiscoveryActivity, useValue: discoveryActivityMock },
-        { provide: DiscoveryScanActivity, useValue: discoveryScanActivityMock },
-        { provide: SetupActivityService, useValue: setupActivityServiceMock },
-        { provide: MigrationScanService, useValue: migrationScanServiceMock },
-        { provide: MigrationTaskService, useValue: migrationTaskServiceMock },
-        { provide: MigrationSyncService, useValue: migrationSyncServiceMock },
-        { provide: ValidateWorkingDirectoryActivity, useValue: validateWorkingDirectoryActivityMock },
-        { provide: PrecheckActivity, useValue: precheckActivityMock },
-        { provide: CommonActivityService, useValue: commonActivityServiceMock },
-        { provide: SpeedTestActivities, useValue: speedTestReadActivityMock },
-        { provide: RedisMemoryCheckActivity, useValue: redismeorycheckactivityMock },
-        { provide: ConfigService, useValue: mockConfigService },
-        { provide: ScanService, useValue: ScanServiceMock },
-        { provide: CommonTaskService, useValue: CommonTaskServiceMock },
-        { provide: MigrateSyncService, useValue: MigrateSyncServiceMock },
-      ],
-    }).compile();
+  beforeEach(() => {
+    mockDeps = {
+      listPathActivityService: { listPath: jest.fn() },
+      validateConnectionService: { validate: jest.fn() },
+      discoveryActivities: {
+        getWorkerId: jest.fn(),
+        generateDiscoveryReport: jest.fn(),
+        publishTask: jest.fn(),
+        discoveryStatusUpdate: jest.fn(),
+        publishLastEntry: jest.fn(),
+      },
+      discoveryScanActivity: { scanActivity: jest.fn() },
+      setupActivityService: {
+        setup: jest.fn(),
+        cleanup: jest.fn(),
+        speedTestSetup: jest.fn(),
+        speedTestCleanup: jest.fn(),
+      },
+      migrationScanService: { scanPath: jest.fn() },
+      migrationTaskService: {
+        updateCutOverStatus: jest.fn(),
+        generateCOCReport: jest.fn(),
+        publishScanTask: jest.fn(),
+      },
+      migrationSyncService: { syncTask: jest.fn() },
+      validateWorkingDirectoryActivity: {
+        validateWorkingDirectory: jest.fn(),
+        isValidDirectory: jest.fn(),
+        updateConfigStatus: jest.fn(),
+      },
+      precheckActivity: { preCheckPath: jest.fn() },
+      commonActivityService: {
+        getJobState: jest.fn(),
+        setJobState: jest.fn(),
+        updateStatus: jest.fn(),
+        updateLastEntry: jest.fn(),
+        generateJobsReport: jest.fn(),
+        updateJobErrorStatus: jest.fn(),
+        updateWorkerResponse: jest.fn(),
+        cleanupJobContext: jest.fn(),
+        getJobStateAndUpdateTaskList: jest.fn(),
+        getJobStateWithStreamLoad: jest.fn(),
+        hasRunningScanTask: jest.fn(),
+        hasRunningSyncTask: jest.fn(),
+      },
+      speedTestReadActivity: {
+        readActivity: jest.fn(),
+        networkPerformanceActivity: jest.fn(),
+        writeActivity: jest.fn(),
+        postResultsActivity: jest.fn(),
+      },
+      redismeorycheck: { checkMemoryUsage: jest.fn() },
+      migrateSyncService: { syncTaskActivity: jest.fn() },
+      commonTaskService: {
+        isWorkflowRunningActivity: jest.fn(),
+        getGroupOfTasksActivity: jest.fn(),
+      },
+      scanService: { scanDirectories: jest.fn() },
+      validatePathActivity: {
+        postValidationResult: jest.fn(),
+        validatePath: jest.fn(),
+      },
+    };
 
-    service = module.get<WorkerOptionsService>(WorkerOptionsService);
+    mockConfigService = {
+      get: jest.fn().mockReturnValue(5),
+    };
+
+    service = new WorkerOptionsService(
+      mockDeps.listPathActivityService,
+      mockDeps.validateConnectionService,
+      mockDeps.discoveryActivities,
+      mockDeps.discoveryScanActivity,
+      mockDeps.setupActivityService,
+      mockDeps.migrationScanService,
+      mockDeps.migrationTaskService,
+      mockDeps.migrationSyncService,
+      mockDeps.validateWorkingDirectoryActivity,
+      mockDeps.precheckActivity,
+      mockDeps.commonActivityService,
+      mockDeps.speedTestReadActivity,
+      mockDeps.redismeorycheck,
+      mockDeps.migrateSyncService,
+      mockDeps.commonTaskService,
+      mockDeps.scanService,
+      mockDeps.validatePathActivity,
+      mockConfigService,
+    );
   });
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('should set jobTaskActivityConcurrency from config', () => {
     expect(service.jobTaskActivityConcurrency).toBe(5);
   });
 
-  it('should return options for PARENT_WORKFLOW', () => {
-    const config:WorkerConfiguration = { configName: WorkFlowType.PARENT_WORKFLOW, dynamicTaskQueue: false, taskQueueId: '-TaskQueue', workerId: 'worker1' };
-    const options = service.createWorkerOptions('id1', config, 'worker1', mockConnection);
-    expect(options).toBeInstanceOf(WorkFlowOptions);
-    expect((options as any).taskQueue).toBe('ParentWorkflow-TaskQueue');
+  it('should create WorkFlowOptions for PARENT_WORKFLOW', () => {
+    const config = { configName: WorkFlowType.PARENT_WORKFLOW };
+    const result = service.createWorkerOptions(
+      'id1',
+      config as any,
+      'worker1',
+      {} as any,
+    );
+    expect(result).toBeInstanceOf(WorkFlowOptions);
+    expect(result.taskQueue).toBe('ParentWorkflow-TaskQueue');
+    // expect(result.config).toBe(config);
+    expect(result.activities.getWorkerId).toBeDefined();
+    expect(result.activities.checkMemoryUsage).toBeDefined();
+    expect(result.activities.postValidationResult).toBeDefined();
   });
 
-  it('should return options for WORKER_SPECIFIC_WORKFLOW', () => {
-    const config = { configName: WorkFlowType.WORKER_SPECIFIC_WORKFLOW, dynamicTaskQueue: false, taskQueueId: '-TaskQueue', workerId: 'worker1' };
-    const options = service.createWorkerOptions('id2', config, 'worker2', mockConnection);
-    expect(options).toBeInstanceOf(WorkFlowOptions);
-    expect((options as any).taskQueue).toBe('TaskQueue');
+  it('should create WorkFlowOptions for WORKER_SPECIFIC_WORKFLOW', () => {
+    const config = { configName: WorkFlowType.WORKER_SPECIFIC_WORKFLOW };
+    const result = service.createWorkerOptions(
+      'id2',
+      config as any,
+      'worker2',
+      {} as any,
+    );
+    expect(result).toBeInstanceOf(WorkFlowOptions);
+    expect(result.taskQueue).toBe('TaskQueue');
+    // expect(result.config).toBe(config);
+    expect(result.activities.listPath).toBeDefined();
+    expect(result.activities.validate).toBeDefined();
+    expect(result.activities.validatePath).toBeDefined();
   });
 
-  it('should return options for JOB_SPECIFIC_WORKFLOW', () => {
-    const config = { configName: WorkFlowType.JOB_SPECIFIC_WORKFLOW, dynamicTaskQueue: false, taskQueueId: '-TaskQueue', workerId: 'worker1'};
-    const options = service.createWorkerOptions('id3', config, 'worker3', mockConnection);
-    expect(options).toBeInstanceOf(WorkFlowOptions);
-    expect((options as any).taskQueue).toBe('TaskQueue');
+  it('should create WorkFlowOptions for JOB_SPECIFIC_WORKFLOW', () => {
+    const config = { configName: WorkFlowType.JOB_SPECIFIC_WORKFLOW };
+    const result = service.createWorkerOptions(
+      'id3',
+      config as any,
+      'worker3',
+      {} as any,
+    );
+    expect(result).toBeInstanceOf(WorkFlowOptions);
+    expect(result.taskQueue).toBe('TaskQueue');
+    // expect(result.config).toBe(config);
+    expect(result.activities.publishTask).toBeDefined();
+    expect(result.activities.syncTaskActivity).toBeDefined();
+    expect(result.activities.scanDirectories).toBeDefined();
+    // expect(result.activityConcurrency).toBe(5);
   });
 
   it('should return undefined for unknown workflow type', () => {
-    const config = { configName: 'UNKNOWN_WORKFLOW' };
-    const options = service.createWorkerOptions('id4', config as any, 'worker4', mockConnection);
-    expect(options).toBeUndefined();
+    const config = { configName: 'UNKNOWN' };
+    const result = service.createWorkerOptions(
+      'id4',
+      config as any,
+      'worker4',
+      {} as any,
+    );
+    expect(result).toBeUndefined();
   });
-
-
 });

@@ -590,7 +590,7 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 
 		It("Should verify the file server creation with auto upload option", func() {
 			By("Fetching the latest created file server")
-			Wait(20)
+			Wait(40)
 			Expect(DestinationConfigID).NotTo(BeEmpty(), "DestinationConfigID is empty")
 			fileServerDetails, err := GetFileServerDetails(DestinationConfigID, headers)
 

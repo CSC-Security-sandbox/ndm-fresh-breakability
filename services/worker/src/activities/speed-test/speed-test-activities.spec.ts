@@ -8,6 +8,8 @@ import { WorkersConfig } from 'src/config/app.config';
 import * as ping from 'ping';
 import { FileServerDetails, NFS } from '@netapp-cloud-datamigrate/jobs-lib';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
+import * as fs from 'fs';
+import * as path from 'path';
 
 jest.mock('ping', () => ({
   promise: {
@@ -523,6 +525,42 @@ describe('SpeedTestActivities', () => {
 
       expect(mockCreateFile).toHaveBeenCalledWith('/tmp/traceId/volumeId', 'testFile.bin', traceId, resultId);
       expect(result).toBe('mockWriteResult');
+    });
+
+    describe('ensureDirectoryExists', () => {
+      it('should resolve if directory exists', async () => {
+      jest.spyOn(fs.promises, 'lstat').mockResolvedValue({} as any);
+      await expect((speedTestActivities as any).ensureDirectoryExists('/tmp')).resolves.toBeUndefined();
+      });
+
+      it('should throw error if directory does not exist', async () => {
+      jest.spyOn(fs.promises, 'lstat').mockRejectedValue(new Error('not found'));
+      await expect((speedTestActivities as any).ensureDirectoryExists('/tmp')).rejects.toThrow('Directory does not exist: /tmp');
+      });
+    });
+
+    describe('createFileIfNotExists', () => {
+      it('should call createFile if file does not exist', async () => {
+      const openSpy = jest.spyOn(fs.promises, 'open').mockResolvedValue({} as any);
+      const createFileSpy = jest.spyOn(speedTestActivities, 'createFile').mockResolvedValue('created');
+      await speedTestActivities.createFileIfNotExists('/tmp', 'file', 'job', 'result');
+      expect(openSpy).toHaveBeenCalledWith(path.join('/tmp', 'file'), 'wx');
+      expect(createFileSpy).toHaveBeenCalledWith('/tmp', 'file', 'job', 'result');
+      });
+
+      it('should not throw if file already exists', async () => {
+      const error: any = new Error('exists');
+      error.code = 'EEXIST';
+      jest.spyOn(fs.promises, 'open').mockRejectedValue(error);
+      await expect(speedTestActivities.createFileIfNotExists('/tmp', 'file', 'job', 'result')).resolves.toBeUndefined();
+      });
+
+      it('should throw if open fails with other error', async () => {
+      const error: any = new Error('fail');
+      error.code = 'OTHER';
+      jest.spyOn(fs.promises, 'open').mockRejectedValue(error);
+      await expect(speedTestActivities.createFileIfNotExists('/tmp', 'file', 'job', 'result')).rejects.toThrow('fail');
+      });
     });
   });
 });
