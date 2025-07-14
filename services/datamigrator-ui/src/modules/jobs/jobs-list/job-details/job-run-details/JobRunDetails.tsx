@@ -102,7 +102,7 @@ const JobRunDetails = () => {
   const [getPdfReportApi] = useGetPdfReportMutation();
 
   const canDownloadReport = hasPermission(
-    USER_PERMISSION_TYPE_ENUM.AgentDeployment
+    USER_PERMISSION_TYPE_ENUM.Reports
   );
   const reportActionButtons =
     jobRunDetails && canDownloadReport

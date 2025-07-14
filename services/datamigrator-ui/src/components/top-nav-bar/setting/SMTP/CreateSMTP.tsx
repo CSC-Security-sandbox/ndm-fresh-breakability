@@ -94,9 +94,8 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
   }, [smtpLoading, smtpExistingData, isEdit]);
 
   const handleCreateSMTP = async () => {
-    const data = smtpData(smtpForm.formState);
-
     try {
+      const data = smtpData(smtpForm.formState);
       if (isEdit) {
         await updateSmtpDataAPi(data.payLoad).unwrap();
         notify.success("SMTP details updated successfully.");

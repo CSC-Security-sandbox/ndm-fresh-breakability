@@ -1,15 +1,15 @@
 import { proxyActivities, continueAsNew, ContinueAsNew } from '@temporalio/workflow';
-import { SpeedTestActivities } from 'src/activities/speed-test/speed-test-activities';
-import { CommonActivityService } from 'src/activities/common/common.service';
-import { JobRunStatus, TaskStatus } from 'src/activities/discovery/enums';
-import { SpeedTestOutput } from 'src/activities/speed-test/speed-test.type';
+import { SpeedTestActivities } from '../../activities/speed-test/speed-test-activities';
+import { CommonActivityService } from '../../activities/common/common.service';
+import { JobRunStatus, TaskStatus } from '../../activities/discovery/enums';
+import { SpeedTestOutput } from '../../activities/speed-test/speed-test.type';
 
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
 }
 
-const { readActivity, writeActivity, networkPerformanceActivity , postResultsActivity} = proxyActivities<SpeedTestActivities>({ startToCloseTimeout: '300s' });
+const { readActivity, writeActivity, networkPerformanceActivity , postResultsActivity} = proxyActivities<SpeedTestActivities>({ startToCloseTimeout: '300s', retry: { maximumAttempts: 3 } });
 
 const { 
   updateStatus: updateStatusActivity,

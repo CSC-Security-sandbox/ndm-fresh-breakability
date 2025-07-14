@@ -1,10 +1,11 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import {HttpException, HttpStatus, Injectable, Logger} from '@nestjs/common';
 import { CreateSettingDto } from './dto/create-setting.dto';
 import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Transporter } from 'nodemailer';
 import * as nodemailer from 'nodemailer';
+import { decryptData } from 'src/utils/crypto-utils';
 
 @Injectable()
 export class SettingService {
@@ -13,6 +14,23 @@ export class SettingService {
     private settingsRepo: Repository<GlobalSettings>,
   ) {}
   async create(createSettingDto: CreateSettingDto[]) {
+
+    for (const setting of createSettingDto) {
+      if (setting.settingKey === 'SMTP_PASSWORD' && setting.settingValue) {
+        try {
+          setting.settingValue = decryptData(setting.settingValue);
+        } catch (error) {
+          throw new HttpException(
+              {
+                message: `Error while retrieving settings: ${error.message}`,
+                statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+              },
+              HttpStatus.INTERNAL_SERVER_ERROR,
+          );
+        }
+      }
+    }
+
     try {
       if (
         createSettingDto.length > 0 &&
@@ -129,7 +147,8 @@ export class SettingService {
         acc[type].push({
           id: setting.id,
           settingKey: setting.settingKey,
-          settingValue: setting.settingValue,
+          // Do not send SMTP_PASSWORD in any response to protect sensitive data.
+          settingValue: setting.settingKey === 'SMTP_PASSWORD' ? '' : setting.settingValue,
           description: setting.description,
           settingType: setting.settingType,
         });
@@ -159,6 +178,23 @@ export class SettingService {
     });
   }
   async updateSetting(updateSettingDto: CreateSettingDto[]) {
+
+    for (const setting of updateSettingDto) {
+      if (setting.settingKey === 'SMTP_PASSWORD' && setting.settingValue) {
+        try {
+          setting.settingValue = decryptData(setting.settingValue);
+        } catch (error) {
+          throw new HttpException(
+              {
+                message: `Error while updating settings: ${error.message}`,
+                statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+              },
+              HttpStatus.INTERNAL_SERVER_ERROR,
+          );
+        }
+      }
+    }
+
     try {
       for (const settingObj of updateSettingDto) {
         const setting = await this.settingsRepo.findOne({

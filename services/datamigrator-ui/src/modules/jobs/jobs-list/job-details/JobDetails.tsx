@@ -56,7 +56,13 @@ const JobDetails = () => {
   const [isFrequentInterval, setIsFrequentInterval] = useState<boolean>(false);
   const [showGeneratingReportBtn, setShowGeneratingReportBtn] =
     useState<Record<string, boolean>>();
-  const { data: jobConfigDetails, isLoading } = useGetJobConfigDetailsQuery(
+
+  const {
+    data: jobConfigDetails,
+    isLoading,
+    refetch,
+    isFetching,
+  } = useGetJobConfigDetailsQuery(
     { jobConfigId: jobId },
     {
       pollingInterval: isFrequentInterval
@@ -92,9 +98,7 @@ const JobDetails = () => {
   const [downloadReportApi] = useDownloadReportsMutation();
   const [getPdfReportApi] = useGetPdfReportMutation();
 
-  const canDownloadReport = hasPermission(
-    USER_PERMISSION_TYPE_ENUM.AgentDeployment
-  );
+  const canDownloadReport = hasPermission(USER_PERMISSION_TYPE_ENUM.Reports);
 
   const [updateStatus, { isLoading: isUpdating }] =
     useUpdateJobRunStatusMutation();
@@ -298,6 +302,8 @@ const JobDetails = () => {
         content={errorLogContent}
         isTogglingColumns={true}
         originalColumns={JOB_RUN_LIST_COLUMN_DEFS}
+        refetchTableData={refetch}
+        isRefreshing={isFetching}
       />
     </Box>
   );

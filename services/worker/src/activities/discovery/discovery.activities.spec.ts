@@ -7,6 +7,7 @@ import { WorkersConfig } from 'src/config/app.config';
 import { RedisService } from 'src/redis/redis.service';
 import { CommonActivityService } from '../common/common.service';
 import { DiscoveryActivity } from './discovery.activities';
+import * as utils from '../utils/utils';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -64,11 +65,47 @@ describe('DiscoveryActivity', () => {
 
 
   describe('publishTask', () => {
+    const mockedJobContext = {
+     jobRunId: '1234',
+      jobConfig: {},
+      appendToUpdatedTaskList: jest.fn(),
+      appendToTaskList: jest.fn(),
+      appendToFileList: jest.fn(),
+      appendToDirList: jest.fn(),
+      appendToErrorList: jest.fn(),
+      appendToMigrationTask: jest.fn(),
+      appendToTaskStats: jest.fn(),
+      appendToTaskStatsList: jest.fn(),
+      jobState: {
+        workers: [],
+        tasks_completed: 1,
+        tasks_total: 2,
+        workers_agreed: [],
+        status: 'RUNNING',
+        failedWorkers: []
+      },
+      jobRunStatus: 'RUNNING',
+      updatedTaskInfo: {
+        lastId: 'task-id'
+      },
+      migrateTask: {
+        lastId: 'task-id',
+      }
+    }
     it('should handle errors and return error response', async () => {
       (redisService.getJobContext as jest.Mock).mockRejectedValueOnce(new Error('ctx fail'));
       const result = await service.publishTask(traceId);
       expect(logger.error).toHaveBeenCalledWith(`[${traceId}] Error in publishing task: ctx fail`);
       expect(result).toEqual({ traceId, status: 'error', message: `Failed to publish task for Job run id ${traceId} : Error: ctx fail` });
+    });
+
+    it('Should publish discovery task successfully', async () => {
+      jest.spyOn(utils, 'buildTask').mockReturnValue({
+        type: 'SCAN',
+        jobRunId: 'job-123',
+        jobContext: mockedJobContext,
+      } as any);
+      const result = await service.publishTask({ jobContext: mockedJobContext, commands: [] } as any);
     });
   });
 

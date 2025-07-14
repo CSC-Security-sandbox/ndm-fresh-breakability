@@ -1,84 +1,84 @@
-name: Build and Push to ACR on PR Merge
+name: Build and Push Services to ACR
 
 on:
   pull_request:
     branches:
       - main
     paths:
-      - 'services/admin-service/**'
-      - 'services/config-service/**'
-      - 'services/db-writer/**'
-      - 'services/datamigrator-ui/**'
-      - 'services/jobs-service/**'
-      - 'services/keycloak-customizations/**'
-      - 'services/reports-service/**'
-      - 'liquibase/**'
+      - "services/admin-service/**"
+      - "services/config-service/**"
+      - "services/db-writer/**"
+      - "services/datamigrator-ui/**"
+      - "services/jobs-service/**"
+      - "services/keycloak-customizations/**"
+      - "services/reports-service/**"
+      - "liquibase/**"
   push:
     branches:
       - main
     paths:
-      - 'services/admin-service/**'
-      - 'services/config-service/**'
-      - 'services/db-writer/**'
-      - 'services/datamigrator-ui/**'
-      - 'services/jobs-service/**'
-      - 'services/keycloak-customizations/**'
-      - 'services/reports-service/**'
-      - 'liquibase/**'
+      - "services/admin-service/**"
+      - "services/config-service/**"
+      - "services/db-writer/**"
+      - "services/datamigrator-ui/**"
+      - "services/jobs-service/**"
+      - "services/keycloak-customizations/**"
+      - "services/reports-service/**"
+      - "liquibase/**"
   workflow_dispatch:
     inputs:
       admin-service:
-        description: 'admin-service'
+        description: "admin-service"
         required: false
         type: boolean
         default: false
       config-service:
-        description: 'config-service'
+        description: "config-service"
         required: false
         type: boolean
         default: false
       db-writer:
-        description: 'db-writer'
+        description: "db-writer"
         required: false
         type: boolean
         default: false
       datamigrator-ui:
-        description: 'datamigrator-ui'
+        description: "datamigrator-ui"
         required: false
         type: boolean
         default: false
       jobs-service:
-        description: 'jobs-service'
+        description: "jobs-service"
         required: false
         type: boolean
         default: false
       keycloak-customizations:
-        description: 'keycloak-customizations'
+        description: "keycloak-customizations"
         required: false
         type: boolean
         default: false
       reports-service:
-        description: 'reports-service'
+        description: "reports-service"
         required: false
         type: boolean
         default: false
       db-migrations:
-        description: 'db-migrations (liquibase)'
+        description: "db-migrations (liquibase)"
         required: false
         type: boolean
         default: false
       all-services:
-        description: 'all services'
+        description: "all services"
         required: false
         type: boolean
         default: true
-  
-  workflow_call: 
+
+  workflow_call:
     inputs:
       build:
-        description: 'Build to release'
+        description: "Build to release"
         required: true
-        type: string 
+        type: string
 
 permissions:
   contents: read
@@ -232,21 +232,21 @@ jobs:
         uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37
         continue-on-error: true
         with:
-          image-ref: '${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}'
-          format: 'json'
-          output: 'trivy-results-${{ matrix.service }}.json'
-          exit-code: '1'
-          severity: 'CRITICAL,HIGH'
+          image-ref: "${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+          format: "json"
+          output: "trivy-results-${{ matrix.service }}.json"
+          exit-code: "1"
+          severity: "CRITICAL,HIGH"
           ignore-unfixed: false
 
       - name: Convert Trivy JSON to SARIF and Table format
         run: |
           FILE="trivy-results-${{ matrix.service }}.json"
-      
+
           if [ -f "$FILE" ]; then
             echo "Converting $FILE to SARIF"
             trivy convert --format sarif --output trivy-results-${{ matrix.service }}.sarif "$FILE"
-      
+
             echo "Converting $FILE to table"
             trivy convert --format table --output trivy-table-${{ matrix.service }}.txt "$FILE"
           else
@@ -270,7 +270,7 @@ jobs:
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@bc02a25f6449997c5e9d5a368879b28f56ae19a1
         with:
-          sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
+          sarif_file: "trivy-results-${{ matrix.service }}.sarif"
 
       - name: Generate Trivy Vulnerability Summary
         id: summary
@@ -344,7 +344,7 @@ jobs:
               newBody = `${botComment.body}
             ---
             ## :hourglass: Trivy Scan Run at ${runTime}
-      
+
             ${summary}${securityLine}`;
               // Update the existing comment
               await github.rest.issues.updateComment({
@@ -357,7 +357,7 @@ jobs:
               // Create a new comment for this service
               newBody = `${marker}
             ## :hourglass: Trivy Scan Run at ${runTime}
-      
+
             ${summary}${securityLine}`;
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
@@ -395,7 +395,12 @@ jobs:
           if [ -n "${{ inputs.build }}" ]; then
             echo "IMAGE_TAG=${{ github.sha }}-${{ inputs.build }}" >> $GITHUB_ENV
           else
-            echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+            if [ "${{ github.ref_name }}" = "main" ]; then
+              echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+            else
+              BRANCH_TAG=$(echo "${{ github.ref_name }}" | sed 's#/#-#g')
+              echo "IMAGE_TAG=${{ github.sha }}-${BRANCH_TAG}" >> $GITHUB_ENV
+            fi
           fi
 
       - name: Checkout Code
@@ -584,9 +589,15 @@ jobs:
           REF_NAME: ${{ needs.build-and-push.outputs.ref_name }}
         run: |
           METADATA_PATH="services/${{ matrix.service }}/$REF_TYPE/$REF_NAME/${GITHUB_SHA::7}/metadata.json"
-          curl --silent --show-error --fail --request PUT --upload-file metadata.json \
-            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/manifests/${METADATA_PATH}" \
-            -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}"
+          for REPO_PATH in "cicd/ndm" "team/ndm"; do
+            TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/manifests/${METADATA_PATH}"
+            echo "Uploading metadata.json to $TARGET_URL..."
+            curl --silent --show-error --fail --request PUT --upload-file metadata.json \
+              "$TARGET_URL" \
+              -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}"
+            echo "metadata.json uploaded successfully to $TARGET_URL."
+          done
+
       - name: Upload latest.json pointer to Artifactory
         env:
           NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
@@ -595,9 +606,14 @@ jobs:
           REF_NAME: ${{ needs.build-and-push.outputs.ref_name }}
         run: |
           LATEST_PATH="services/${{ matrix.service }}/$REF_TYPE/$REF_NAME/latest.json"
-          curl --silent --show-error --fail --request PUT --upload-file latest.json \
-            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/manifests/${LATEST_PATH}" \
-            -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}"
+          for REPO_PATH in "cicd/ndm" "team/ndm"; do
+            TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/manifests/${LATEST_PATH}"
+            echo "Uploading latest.json to $TARGET_URL..."
+            curl --silent --show-error --fail --request PUT --upload-file latest.json \
+              "$TARGET_URL" \
+              -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}"
+            echo "latest.json uploaded successfully to $TARGET_URL."
+          done
 
   build-details:
     runs-on: ubuntu-latest
@@ -613,7 +629,7 @@ jobs:
           SERVICES=$(echo "${{ toJSON(needs.determine-matrix.outputs.matrix) }}" | jq -r '.service | join(",")')
           echo "Built services: $SERVICES"
           echo ""
-          
+
           IMAGE_TAGS="{}" 
           # Process each service's metadata.json
           for dir in artifacts/build-artifacts-*/; do
@@ -628,8 +644,27 @@ jobs:
               fi
             fi
           done
-          
+
           echo "Image tags for NDM VM image build:"
           echo "$IMAGE_TAGS" | jq '.'
           echo ""
           echo "Copy the above JSON and paste it into the 'services_config' input of the NDM VM image build workflow."
+
+          echo "## NDM Service Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Built Services" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Image Tag | Branch |" >> $GITHUB_STEP_SUMMARY
+          echo "| ------- | --------- | ------ |" >> $GITHUB_STEP_SUMMARY
+
+          # Add each service to the table
+          echo "$IMAGE_TAGS" | jq -r 'to_entries[] | "| \(.key) | `\(.value.tag)` | `\(.value.branch)` |"' >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Services Configuration JSON" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Copy this JSON and paste it into the 'services_config' input of the NDM VM image build workflow:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+          echo "$IMAGE_TAGS" | jq '.' >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

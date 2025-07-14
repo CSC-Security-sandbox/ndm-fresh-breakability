@@ -1,11 +1,15 @@
 import useFileServerDetails from "@/hooks/useFileServerDetails";
-import { BlueXpFormType, JOBS_TYPE, AllFileServerWithVolumesApiType } from "@/types/app.type";
+import {
+  BlueXpFormType,
+  JOBS_TYPE,
+  AllFileServerWithVolumesApiType,
+} from "@/types/app.type";
 import { getOptionsFromArray } from "@/utils/common.utils";
 import { INITIAL_VALUE_EXCLUDE_PATH_PATTERN } from "@/utils/constants";
-import { 
+import {
   useBulkDiscoveryMutation,
-  useLazyGetAllFileServersWithVolumeQuery
- } from "@api/jobsApi";
+  useLazyGetAllFileServersWithVolumeQuery,
+} from "@api/jobsApi";
 import { Box } from "@components/container/index";
 import AppFooter from "@components/layout/app-footer/AppFooter";
 import { notify } from "@components/notification/NotificationWrapper";
@@ -37,12 +41,15 @@ const BulkDiscover = () => {
     useBulkDiscoveryMutation();
   const [getAllFileServersApi] = useLazyGetAllFileServersWithVolumeQuery();
   const { selectedProjectId: projectId } = useSelectedProjectId();
-  const { fileServerDetails, allExportPaths } = useFileServerDetails();
+  const { fileServerDetails, allExportPaths, refetch, isFetching } =
+    useFileServerDetails();
   const [selectedExportPathsIds, setSelectedExportPathsIds] = useState<
     string[]
   >([]);
   const [key, setKey] = useState(nanoid());
-  const [notReachableExportPaths, setNotReachableExportPaths] = useState<string[]>([]);
+  const [notReachableExportPaths, setNotReachableExportPaths] = useState<
+    string[]
+  >([]);
   const options = useMemo(() => {
     return getOptionsFromArray(
       fileServerDetails?.fileServers?.map((data) => data.protocol) || [
@@ -81,12 +88,11 @@ const BulkDiscover = () => {
         allFileServers.forEach((config) => {
           config?.fileServers?.flatMap((fileServer) =>
             fileServer?.volumes?.map((volume) => {
-              console.log(volume);
               if (volume?.reachableCount === 0) {
                 notReachableExportPaths.push(volume.id);
               }
             })
-          )
+          );
         });
         setNotReachableExportPaths(notReachableExportPaths);
       } catch (error) {
@@ -151,18 +157,23 @@ const BulkDiscover = () => {
             />
           </Box>
         </Card>
-        <ExportPathsTable
-          defaultColumnState={BULK_DISCOVERY_DEFAULT_COLUMN_STATE}
-          allExportPaths={allExportPaths.filter(
-            (row) => row.protocol === bulkDiscoveryForm.formState.protocol.value
-          )}
-          fileServerDetails={fileServerDetails}
-          showRefetch={false}
-          isRowSelectingEnabled={true}
-          setSelectedExportPathsIds={setSelectedExportPathsIds}
-          key={key}
-          notReachableExportPaths={notReachableExportPaths}
-        />
+        <Box className="mb-4">
+          <ExportPathsTable
+            defaultColumnState={BULK_DISCOVERY_DEFAULT_COLUMN_STATE}
+            allExportPaths={allExportPaths.filter(
+              (row) =>
+                row.protocol === bulkDiscoveryForm.formState.protocol.value
+            )}
+            fileServerDetails={fileServerDetails}
+            showRefetch={false}
+            isRowSelectingEnabled={true}
+            setSelectedExportPathsIds={setSelectedExportPathsIds}
+            key={key}
+            notReachableExportPaths={notReachableExportPaths}
+            refetch={refetch}
+            isFetching={isFetching}
+          />
+        </Box>
       </Box>
       <AppFooter
         footerContent={

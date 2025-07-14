@@ -8,9 +8,9 @@ import { SetupWorkerWorkflow } from '../setup/setup-worker-workflow';
 import { CleanupWorkerWorkflow } from '../setup/cleanup-worker-workflow';
 import { SpeedTestJobWorkflow } from './speed-test-job-workflow';
 import * as wf from '@temporalio/workflow';
-import { CommonActivityService } from 'src/activities/common/common.service';
-import { TaskStatus } from 'src/activities/discovery/enums';
-import { JobServiceJobType } from 'src/activities/discovery/enums';
+import { CommonActivityService } from '../../activities/common/common.service';
+import { TaskStatus } from '../../activities/discovery/enums';
+import { JobServiceJobType } from '../../activities/discovery/enums';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);

@@ -259,12 +259,7 @@ export class ConfigurationService {
         }))
       }
 
-      if (
-        config.errorMessage &&
-        config.errorMessage.includes(
-          ProtocolVersionError.PROTOCOL_VERSION_ERROR,
-        )
-      ) {
+      if ([ConfigStatus.ERRORED, ConfigStatus.DRAFT].includes(config.status)) {
         if (config.fileServers) {
           config.fileServers = config.fileServers.map((server) => ({
             ...server,
@@ -791,6 +786,22 @@ export class ConfigurationService {
       const removedWorkers = existingWorkers.filter(
         (worker) => !newWorkers.includes(worker.workerId),
       );
+
+      const addedWorkerIds = newWorkers.filter(
+        (workerId) => !existingWorkers.some((w) => w.workerId === workerId),
+      );
+
+      const addedWorkers =
+        addedWorkerIds.length > 0
+          ? await this.WorkerEntity.find({
+              select: {
+                workerId: true,
+                workerName: true,
+              },
+              where: { workerId: In(addedWorkerIds) },
+            })
+          : [];
+
       if (allUnHealthy) {
         config.status = ConfigStatus.ERRORED;
         config.errorMessage = ConfigErrorMsg.ERRORED;
@@ -800,7 +811,7 @@ export class ConfigurationService {
       if (allUnHealthy) {
         return update;
       }
-        const htmlContent = `
+      const htmlContent = `
             <p>Hello</p>
             <p>Config ${update.configName} has been updated successfully</p>
             ${
@@ -811,6 +822,15 @@ export class ConfigurationService {
               `
                 : ''
             }
+ ${
+   addedWorkers?.length > 0
+     ? `
+        <p>Below is the list of newly associated workers:</p>
+        ${addedWorkers.map((worker) => `<p>Worker Name: ${worker?.workerName}</p>`).join('')}
+      `
+     : ''
+ }
+
            `;
 
         const payload = { body: htmlContent };

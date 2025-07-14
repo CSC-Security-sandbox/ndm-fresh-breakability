@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 type Volume struct {
@@ -189,6 +190,11 @@ func ClearVolume(export string) error {
 
 	script := fmt.Sprintf(`
 	set -e
+
+	# Clean up any previous mount
+	sudo umount -f "%s" 2>/dev/null || true
+	sudo rm -rf "%s"
+
 	sudo mkdir -p "%s"
 	sudo mount -t nfs "%s" "%s"
 
@@ -203,7 +209,8 @@ func ClearVolume(export string) error {
 
 	sudo umount "%s"
 	sudo rm -rf "%s"
-	`, destMount, export, destMount,
+`, destMount, destMount,
+		destMount, export, destMount,
 		destMount, destMount, destMount,
 		destMount,
 		destMount,
@@ -231,31 +238,30 @@ func AddDataToVolume(export string) error {
 	deltaDir := "/" + DeltaFolder
 
 	script := fmt.Sprintf(`
-	set -e
+set -e
 
-	# Clean up any previous run
-	sudo rm -rf "%s"
-	sudo rm -rf "%s"
+# Clean up any previous run
+sudo rm -rf "%s"
+sudo rm -rf "%s"
 
-	# Create delta directory and generate 100 txt files of 100KB each
-	sudo mkdir -p "%s"
-	for i in $(seq -w 1 100); do
-		sudo dd if=/dev/urandom of="%s/file${i}.txt" bs=100K count=1 status=none
-	done
+# Create delta directory and generate 100 txt files of 100KB each
+sudo mkdir -p "%s"
+for i in $(seq -w 1 100); do
+	sudo dd if=/dev/zero of="%s/file${i}.txt" bs=100K count=1 status=none
+done
 
-	# Mount export NFS export
-	sudo mkdir -p "%s"
-	sudo mount -t nfs "%s" "%s"
+# Mount export NFS export
+sudo mkdir -p "%s"
+sudo mount -t nfs "%s" "%s"
 
-	# Copy delta to the mounted export
-	sudo cp -a "%s" "%s/"
+# Copy delta to the mounted export
+sudo cp -a "%s" "%s/"
 
-	# Unmount and cleanup
-	sudo umount "%s"
-	sudo rm -rf "%s"
-	sudo rm -rf "%s"
-	`, deltaDir, destMount, deltaDir, deltaDir, destMount, export, destMount, deltaDir, destMount, destMount, deltaDir, destMount)
-
+# Unmount and cleanup
+sudo umount "%s"
+sudo rm -rf "%s"
+sudo rm -rf "%s"
+`, deltaDir, destMount, deltaDir, deltaDir, destMount, export, destMount, deltaDir, destMount, destMount, deltaDir, destMount)
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
 		return fmt.Errorf("AddDataToFileserver failed: %w\noutput: %s", err, output)
@@ -362,10 +368,10 @@ func RestoreOriginalDataOnVolume(export string) error {
     sudo mkdir -p "%s"
     sudo mount -t nfs "%s" "%s"
 
-    # Remove appended lines from each file
-    sudo sed -i '/^# MODIFIED LINE/d' "%s/modify1.text"
-    sudo sed -i '/^# MODIFIED LINE/d' "%s/modify2.text"
-    sudo sed -i '/^# MODIFIED LINE/d' "%s/modify3.text"
+    # Empty each file
+    sudo truncate -s 0 "%s/modify1.text"
+    sudo truncate -s 0 "%s/modify2.text"
+    sudo truncate -s 0 "%s/modify3.text"
 
     # Unmount and cleanup
     sudo umount "%s"
@@ -375,7 +381,6 @@ func RestoreOriginalDataOnVolume(export string) error {
 		destMount,
 		destMount,
 		destMount, destMount)
-
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
 		return fmt.Errorf("RestoreOriginalDataOnVolume failed: %w\noutput: %s", err, output)
@@ -430,4 +435,47 @@ func GetVolumeIDByName(volumeName, authToken, configId string) (string, error) {
 	}
 
 	return foundID, nil // Return the found ID and no error
+}
+
+// GetFileUserGroupId mounts the NFS export, stats the given file‐path
+// (relative to that export) and returns its numeric UID and GID.
+func GetFileUserGroupId(export, fileName string) (uid, gid int, err error) {
+	cfg := GetAttachedWorkerDetails()
+	sshCfg := SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     cfg.Host,
+		Port:     cfg.Port,
+		Password: NDM_VM_PASSWORD,
+	}
+
+	// Build a shell script that mounts + stats with "%u %g"
+	script := fmt.Sprintf(`
+	set -e
+	MP=$(mktemp -d -t mount.XXXXXX)
+	trap 'sudo umount "$MP" || true; rm -rf "$MP"' EXIT
+
+	sudo mount -t nfs "%[1]s" "$MP"
+	stat -c "%%u %%g" "$MP/%[2]s"
+	`, export, fileName)
+
+	out, err := sshRunScript(sshCfg, script)
+	if err != nil {
+		return 0, 0, fmt.Errorf("OwnerIDShellStat failed: %w\n%s", err, out)
+	}
+
+	parts := strings.Fields(strings.TrimSpace(out))
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("unexpected stat output: %q", out)
+	}
+
+	// parse the two numeric strings into ints
+	u, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid uid %q: %w", parts[0], err)
+	}
+	g, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid gid %q: %w", parts[1], err)
+	}
+	return u, g, nil
 }

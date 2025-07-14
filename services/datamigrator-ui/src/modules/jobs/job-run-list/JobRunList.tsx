@@ -50,6 +50,8 @@ const JobRunList = () => {
     []
   );
 
+  const [filteredJobRunList, setFilteredJobRunList] = useState<JobRunApiType[]>([]);
+
   const [updateStatus, { isLoading: isUpdating }] =
     useUpdateJobRunStatusMutation();
 
@@ -58,7 +60,7 @@ const JobRunList = () => {
   const [downloadReportApi] = useDownloadReportsMutation();
   const [getPdfReportApi] = useGetPdfReportMutation();
   const canDownloadReport = hasPermission(
-    USER_PERMISSION_TYPE_ENUM.AgentDeployment
+    USER_PERMISSION_TYPE_ENUM.Reports
   );
 
   const canUpdateStatus = hasPermission(USER_PERMISSION_TYPE_ENUM.ManageJob);
@@ -138,6 +140,11 @@ const JobRunList = () => {
     defaultSortState: { sortOrder: "desc", column: "startTime" },
   };
 
+  const handleSelections = (selectedRowIds: string[], _filteredJobRunList: JobRunApiType[]) => {
+    setJobRunListSelectedIds(selectedRowIds);
+    setFilteredJobRunList(_filteredJobRunList)
+  }
+
   return (
     <>
       {openConfirmation && (
@@ -155,14 +162,14 @@ const JobRunList = () => {
           <ActionButtons
             selectedRowIds={jobRunListSelectedIds}
             showResumeButton={true}
-            rows={jobRunList}
+            rows={filteredJobRunList}
           />
         }
         isTogglingColumns={true}
         originalColumns={JOB_RUN_LIST_COLUMN_DEFS}
         showFilters={true}
         columnsToFilter={COLUMNS_TO_FILTER_DEFS}
-        handleSelection={setJobRunListSelectedIds}
+        handleSelection={handleSelections}
         refetchTableData={refetch}
         isRefreshing={isFetching}
       />

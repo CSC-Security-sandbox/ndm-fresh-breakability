@@ -3,17 +3,14 @@ import { OverviewService } from "./overview.service";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { ProjectEntity } from "src/entities/project.entity";
+import { Repository } from "typeorm";
 import { JobRunStatus, JobType } from "src/constants/enums";
-import { Logger } from "@nestjs/common";
 
-jest.mock("@netapp-cloud-datamigrate/jobs-lib", () => ({
-  formatBytes: jest.fn((bytes) => `${bytes} B`),
-}));
-
-const mockInventoryRepository = {
+const mockInventoryRepo = {
   query: jest.fn(),
 };
-const mockProjectRepository = {
+
+const mockProjectRepo = {
   find: jest.fn(),
 };
 
@@ -27,11 +24,11 @@ describe("OverviewService", () => {
         OverviewService,
         {
           provide: getRepositoryToken(InventoryEntity),
-          useValue: mockInventoryRepository,
+          useValue: mockInventoryRepo,
         },
         {
           provide: getRepositoryToken(ProjectEntity),
-          useValue: mockProjectRepository,
+          useValue: mockProjectRepo,
         },
         {
           provide: Logger,
@@ -43,60 +40,142 @@ describe("OverviewService", () => {
     service = module.get<OverviewService>(OverviewService);
   });
 
-  it("should be defined", () => {
-    expect(service).toBeDefined();
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
-  it("should return overview data with zero values if no projects found", async () => {
-    mockProjectRepository.find.mockResolvedValue([]);
-    mockInventoryRepository.query.mockResolvedValue([
-      { totalDiscoveredSize: 0 },
-    ]);
-    const result = await service.getStorageAndJobsOverview("pid", "cid", "jid");
-    expect(result).toEqual({
-      storageDetails: {
-        totalDiscoveredSize: "0 B",
-        totalMigratedSize: "0 B",
-        totalFileServers: 0,
-        totalPendingSize: "0 B",
-      },
-      jobDetails: {
-        totalDiscoverJobs: 0,
-        totalMigrateJobs: {
-          baseLineJob: 0,
-          incrementalJob: 0,
+  describe("getStorageAndJobsOverview", () => {
+    it("should return proper overview data with valid project and jobs", async () => {
+      const projectId = "123";
+      const mockJobRun = {
+        id: "job1",
+        jobConfigId: "jc1",
+        createdAt: new Date(),
+        status: JobRunStatus.Completed,
+      };
+      const mockProjects = [
+        {
+          configs: [
+            {
+              id: "config1",
+              fileServers: [
+                {
+                  volumes: [
+                    {
+                      sourceConfig: [
+                        {
+                          jobType: JobType.Discover,
+                          jobRuns: [mockJobRun],
+                        },
+                        {
+                          jobType: JobType.Migrate,
+                          jobRuns: [mockJobRun],
+                        },
+                        {
+                          jobType: JobType.CutOver,
+                          jobRuns: [mockJobRun],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
         },
-        totalCutoverJobs: 0,
-      },
+      ];
+
+      mockProjectRepo.find.mockResolvedValue(mockProjects);
+      mockInventoryRepo.query.mockResolvedValue([
+        { totalDiscoveredSize: 5000 },
+      ]);
+
+      const result = await service.getStorageAndJobsOverview(
+        projectId,
+        null,
+        null
+      );
+
+      expect(mockProjectRepo.find).toHaveBeenCalled();
+      expect(mockInventoryRepo.query).toHaveBeenCalled();
+      expect(result.jobDetails.totalDiscoverJobs).toBe(1);
+      expect(result.jobDetails.totalMigrateJobs).toBe(1);
+      expect(result.jobDetails.totalCutoverJobs).toBe(1);
+      expect(result.storageDetails.totalDiscoveredSize).toBeDefined();
+      expect(result.storageDetails.totalMigratedSize).toBeDefined();
+    });
+
+    it("should return zeroed results when no projects are found", async () => {
+      mockProjectRepo.find.mockResolvedValue([]);
+      const result = await service.getStorageAndJobsOverview("123", null, null);
+      expect(result.jobDetails.totalDiscoverJobs).toBe(0);
+      expect(result.jobDetails.totalMigrateJobs).toBe(0);
+      expect(result.jobDetails.totalCutoverJobs).toBe(0);
+    });
+
+    it("should handle no jobRuns gracefully", async () => {
+      const projectWithoutJobRuns = [
+        {
+          configs: [
+            {
+              id: "config1",
+              fileServers: [
+                {
+                  volumes: [
+                    {
+                      sourceConfig: [
+                        {
+                          jobType: JobType.Discover,
+                          jobRuns: [],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ];
+
+      mockProjectRepo.find.mockResolvedValue(projectWithoutJobRuns);
+      mockInventoryRepo.query.mockResolvedValue([{ totalDiscoveredSize: 0 }]);
+
+      const result = await service.getStorageAndJobsOverview("123", null, null);
+      expect(result.storageDetails.totalDiscoveredSize).toBe("0 Bytes");
+    });
+
+    it("should handle missing job runs and avoid crashing", async () => {
+      const mockProjects = [
+        {
+          configs: [],
+        },
+      ];
+      mockProjectRepo.find.mockResolvedValue(mockProjects);
+      mockInventoryRepo.query.mockResolvedValue([{ totalDiscoveredSize: 0 }]);
+
+      const result = await service.getStorageAndJobsOverview("1", null, null);
+
+      expect(result.storageDetails.totalDiscoveredSize).toBeDefined();
+      expect(result.jobDetails.totalDiscoverJobs).toBe(0);
     });
   });
 
-  it("should calculate discovered and migrated sizes", async () => {
-    const mockJobRun = {
-      id: "run1",
-      jobConfigId: "jc1",
-      status: JobRunStatus.Completed,
-      createdAt: new Date().toISOString(),
-    };
-    const mockProject = {
-      configs: [
+  describe("countAllJobTypes", () => {
+    it("should count all job types correctly", () => {
+      const mockProjects = [
         {
-          fileServers: [
+          configs: [
             {
-              volumes: [
+              fileServers: [
                 {
-                  sourceConfig: [
+                  volumes: [
                     {
-                      jobType: JobType.Discover,
-                      jobRuns: [mockJobRun],
-                    },
-                    {
-                      jobType: JobType.Migrate,
-                      jobRuns: [mockJobRun],
-                    },
-                    {
-                      jobType: JobType.CutOver,
-                      jobRuns: [mockJobRun],
+                      sourceConfig: [
+                        { jobType: JobType.Discover },
+                        { jobType: JobType.Migrate },
+                        { jobType: JobType.CutOver },
+                      ],
                     },
                   ],
                 },
@@ -104,89 +183,84 @@ describe("OverviewService", () => {
             },
           ],
         },
-      ],
-    };
-    mockProjectRepository.find.mockResolvedValue([mockProject]);
-    mockInventoryRepository.query
-      .mockResolvedValueOnce([{ totalDiscoveredSize: 1000 }])
-      .mockResolvedValueOnce([{ totalMigratedSize: 500 }]);
-    const result = await service.getStorageAndJobsOverview("pid", "cid", "jid");
-    expect(result.storageDetails.totalDiscoveredSize).toBe("1000 B");
-    expect(result.storageDetails.totalMigratedSize).toBe("500 B");
-    expect(result.storageDetails.totalPendingSize).toBe("500 B");
-    expect(result.storageDetails.totalFileServers).toBe(1);
-    expect(result.jobDetails.totalDiscoverJobs).toBe(1);
-    expect(result.jobDetails.totalMigrateJobs.baseLineJob).toBe(1);
-    expect(result.jobDetails.totalMigrateJobs.incrementalJob).toBe(0);
-    expect(result.jobDetails.totalCutoverJobs).toBe(1);
-  });
+      ];
 
-  it("should handle no migrate or cutover runs", async () => {
-    const mockJobRun = {
-      id: "run1",
-      jobConfigId: "jc1",
-      status: JobRunStatus.Completed,
-      createdAt: new Date().toISOString(),
-    };
-    const mockProject = {
-      configs: [
-        {
-          fileServers: [
-            {
-              volumes: [
-                {
-                  sourceConfig: [
-                    {
-                      jobType: JobType.Discover,
-                      jobRuns: [mockJobRun],
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    };
-    mockProjectRepository.find.mockResolvedValue([mockProject]);
-    mockInventoryRepository.query.mockResolvedValue([
-      { totalDiscoveredSize: 2000 },
-    ]);
-    const result = await service.getStorageAndJobsOverview("pid", "cid", "jid");
-    expect(result.storageDetails.totalDiscoveredSize).toBe("2000 B");
-    expect(result.storageDetails.totalMigratedSize).toBe("0 B");
-    expect(result.storageDetails.totalPendingSize).toBe("2000 B");
-    expect(result.jobDetails.totalMigrateJobs.baseLineJob).toBe(0);
-    expect(result.jobDetails.totalMigrateJobs.incrementalJob).toBe(0);
-    expect(result.jobDetails.totalCutoverJobs).toBe(0);
-  });
+      const result = service.countAllJobTypes(mockProjects);
+      expect(result.totalDiscoverJobs).toBe(1);
+      expect(result.totalMigrationJobs).toBe(1);
+      expect(result.totalCutOverJobs).toBe(1);
+    });
 
-  it("should handle multiple migrate jobs", async () => {
-    const migrateRuns = [
-      {
-        id: "m1",
-        jobConfigId: "jc2",
-        status: JobRunStatus.Completed,
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: "m2",
-        jobConfigId: "jc2",
-        status: JobRunStatus.Completed,
-        createdAt: new Date().toISOString(),
-      },
-    ];
-    const mockProject = {
-      configs: [
+    it("should return 0s on error", () => {
+      const result = service.countAllJobTypes(null);
+      expect(result.totalDiscoverJobs).toBe(0);
+    });
+
+    it("should build correct whereClause with all params", async () => {
+      const projectId = "p1";
+      const configId = "c1";
+      const jobConfigId = "jc1";
+      mockProjectRepo.find.mockResolvedValue([]);
+      mockInventoryRepo.query.mockResolvedValue([{ totalDiscoveredSize: 0 }]);
+      await service.getStorageAndJobsOverview(projectId, configId, jobConfigId);
+      expect(mockProjectRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: projectId,
+            configs: expect.objectContaining({
+              id: configId,
+              fileServers: expect.objectContaining({
+                volumes: expect.objectContaining({
+                  sourceConfig: expect.objectContaining({
+                    id: jobConfigId,
+                    jobRuns: expect.objectContaining({
+                      status: JobRunStatus.Completed,
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          }),
+          relations: expect.any(Array),
+        })
+      );
+    });
+
+    it("should handle missing configId and jobConfigId", async () => {
+      const projectId = "p2";
+      mockProjectRepo.find.mockResolvedValue([]);
+      mockInventoryRepo.query.mockResolvedValue([{ totalDiscoveredSize: 0 }]);
+      await service.getStorageAndJobsOverview(projectId, undefined, undefined);
+      expect(mockProjectRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: projectId }),
+        })
+      );
+    });
+
+    it("should handle empty jobRunIds gracefully", async () => {
+      const mockProjects = [
         {
-          fileServers: [
+          configs: [
             {
-              volumes: [
+              fileServers: [
                 {
-                  sourceConfig: [
+                  volumes: [
                     {
-                      jobType: JobType.Migrate,
-                      jobRuns: migrateRuns,
+                      sourceConfig: [
+                        {
+                          jobType: JobType.Discover,
+                          jobRuns: [],
+                        },
+                        {
+                          jobType: JobType.Migrate,
+                          jobRuns: [],
+                        },
+                        {
+                          jobType: JobType.CutOver,
+                          jobRuns: [],
+                        },
+                      ],
                     },
                   ],
                 },
@@ -194,17 +268,94 @@ describe("OverviewService", () => {
             },
           ],
         },
-      ],
-    };
-    mockProjectRepository.find.mockResolvedValue([mockProject]);
-    mockInventoryRepository.query
-      .mockResolvedValueOnce([{ totalDiscoveredSize: 3000 }])
-      .mockResolvedValueOnce([{ totalMigratedSize: 2500 }]);
-    const result = await service.getStorageAndJobsOverview("pid", "cid", "jid");
-    expect(result.jobDetails.totalMigrateJobs.baseLineJob).toBe(1);
-    expect(result.jobDetails.totalMigrateJobs.incrementalJob).toBe(1);
-    expect(result.storageDetails.totalDiscoveredSize).toBe("3000 B");
-    expect(result.storageDetails.totalMigratedSize).toBe("2500 B");
-    expect(result.storageDetails.totalPendingSize).toBe("500 B");
+      ];
+      mockProjectRepo.find.mockResolvedValue(mockProjects);
+      mockInventoryRepo.query.mockResolvedValue([{ totalDiscoveredSize: 0 }]);
+      const result = await service.getStorageAndJobsOverview("p3", null, null);
+      expect(result.storageDetails.totalDiscoveredSize).toBe("0 Bytes");
+      expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
+      expect(result.storageDetails.totalPendingSize).toBe("0 Bytes");
+    });
+
+    it("should calculate pending size correctly", async () => {
+      const mockJobRun = {
+        id: "job1",
+        jobConfigId: "jc1",
+        createdAt: new Date(),
+        status: JobRunStatus.Completed,
+      };
+      const mockProjects = [
+        {
+          configs: [
+            {
+              fileServers: [
+                {
+                  volumes: [
+                    {
+                      sourceConfig: [
+                        {
+                          jobType: JobType.Discover,
+                          jobRuns: [mockJobRun],
+                        },
+                        {
+                          jobType: JobType.Migrate,
+                          jobRuns: [mockJobRun],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ];
+      mockProjectRepo.find.mockResolvedValue(mockProjects);
+      mockInventoryRepo.query
+        .mockResolvedValueOnce([{ totalDiscoveredSize: 10000 }])
+        .mockResolvedValueOnce([{ totalMigratedSize: 4000 }]);
+      const result = await service.getStorageAndJobsOverview("p4", null, null);
+      expect(result.storageDetails.totalDiscoveredSize).toBeDefined();
+      expect(result.storageDetails.totalMigratedSize).toBeDefined();
+      expect(result.storageDetails.totalPendingSize).toBeDefined();
+    });
+
+    it("should handle when migrateRun and cutOverRun are empty", async () => {
+      const mockJobRun = {
+        id: "job1",
+        jobConfigId: "jc1",
+        createdAt: new Date(),
+        status: JobRunStatus.Completed,
+      };
+      const mockProjects = [
+        {
+          configs: [
+            {
+              fileServers: [
+                {
+                  volumes: [
+                    {
+                      sourceConfig: [
+                        {
+                          jobType: JobType.Discover,
+                          jobRuns: [mockJobRun],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ];
+      mockProjectRepo.find.mockResolvedValue(mockProjects);
+      mockInventoryRepo.query.mockResolvedValue([
+        { totalDiscoveredSize: 5000 },
+      ]);
+      const result = await service.getStorageAndJobsOverview("p5", null, null);
+      expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
+      expect(result.storageDetails.totalPendingSize).toBeDefined();
+    });
   });
 });

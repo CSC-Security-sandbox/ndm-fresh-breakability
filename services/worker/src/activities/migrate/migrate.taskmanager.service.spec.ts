@@ -7,6 +7,7 @@ import { AuthService } from 'src/auth/auth.service';
 import { RedisService } from 'src/redis/redis.service';
 import { MigrationTaskService } from './migrate.taskmanager.service';
 import { CutOverStatus } from './migrate.type';
+import * as utils from '../utils/utils';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -23,6 +24,8 @@ describe('MigrationTaskService', () => {
     tasksInfo: { lastId: null },
     groupReadTasks: jest.fn(),
     groupReadMigrationTask: jest.fn(),
+    groupReadWithoutAckDirs: jest.fn(),
+    ackDirAndCreateTask: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -74,6 +77,47 @@ describe('MigrationTaskService', () => {
       redisService.getJobContext.mockRejectedValue(new Error('Redis error'));
       const result = await service.publishScanTask({ jobRunId: 'job-123' });
       expect(result.status).toBe('error');
+    });
+
+    it('Should build task with correct parameters', async () => {
+      redisService.getJobContext.mockResolvedValue(mockJobContext);
+
+      mockJobContext.groupReadWithoutAckDirs = jest.fn(async function* () {
+        yield { data: { path: '/dir1' }, id: 'stream-1' };
+        yield { data: { path: '/dir2' }, id: 'stream-2' };
+      });
+
+      jest.spyOn(utils, 'buildTask').mockReturnValue({
+        type: 'SCAN',
+        jobRunId: 'job-123',
+        jobContext: mockJobContext,
+        commands: [ ]
+      } as any);
+
+      const result = await service.publishScanTask({ jobRunId: 'job-123' });
+      expect(result.status).toBe('success');
+      expect(mockJobContext.ackDirAndCreateTask).toHaveBeenCalled();
+    })
+
+    it('should handle task creation when groupReadWithoutAckDirs return more than pushTaskDirSize', async () => {
+      redisService.getJobContext.mockResolvedValue(mockJobContext);
+
+      mockJobContext.groupReadWithoutAckDirs = jest.fn(async function* () {
+        yield { data: { path: '/dir1' }, id: 'stream-1' };
+        yield { data: { path: '/dir2' }, id: 'stream-2' };
+        yield { data: { path: '/dir3' }, id: 'stream-3' };
+      });
+
+      jest.spyOn(utils, 'buildTask').mockReturnValue({
+        type: 'SCAN',
+        jobRunId: 'job-123',
+        jobContext: mockJobContext,
+        commands: [ ]
+      } as any);
+
+      const result = await service.publishScanTask({ jobRunId: 'job-123' });
+      expect(result.status).toBe('success');
+      expect(mockJobContext.ackDirAndCreateTask).toHaveBeenCalled();
     });
   });
 

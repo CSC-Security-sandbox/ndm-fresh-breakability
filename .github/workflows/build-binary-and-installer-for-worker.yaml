@@ -5,16 +5,16 @@ on:
     branches:
       - main
     paths:
-      - 'services/worker/**'
+      - "services/worker/**"
   workflow_dispatch:
-  workflow_call: 
+  workflow_call:
     inputs:
       build:
-        description: 'Build to release'
+        description: "Build to release"
         required: true
         type: string
 
-permissions: 
+permissions:
   contents: read
 
 jobs:
@@ -40,7 +40,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: "18"
 
       - name: Replace GitHub Token Placeholder in .npmrc
         run: |
@@ -48,16 +48,16 @@ jobs:
 
       - name: Install dependencies and pkg
         run: npm install && npm install pkg -g
-      
+
       - name: Run Build
         run: npm run build
 
       - name: Build binary
         run: npm run pkg
-    
+
       - name: Zip pkg folder
         run: zip -r pkg.zip pkg
-      
+
       - name: Set Release Tag
         id: set_release_tag
         run: |
@@ -81,65 +81,65 @@ jobs:
       GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
       RELEASE_TAG: ${{ needs.worker-package.outputs.RELEASE_TAG }}
     steps:
-        - name: Checkout code
-          uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-        - name: Download Binary Artifact
-          uses: actions/download-artifact@v4
-          with:
-            name: worker-binary-${{ env.RELEASE_TAG }}
-            path: pkg
+      - name: Download Binary Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: worker-binary-${{ env.RELEASE_TAG }}
+          path: pkg
 
-        - name: Extract Binary
-          shell: pwsh
-          run: |
-            Expand-Archive -Path "pkg\pkg.zip" -DestinationPath "pkg" -Force
+      - name: Extract Binary
+        shell: pwsh
+        run: |
+          Expand-Archive -Path "pkg\pkg.zip" -DestinationPath "pkg" -Force
 
-        - name: Prepare Installer Directory
-          shell: pwsh
-          run: |
-            New-Item -ItemType Directory -Force -Path wininstaller
-            Move-Item -Path "./pkg/pkg/worker-win-x64.exe" -Destination "wininstaller\worker.exe" -Force
+      - name: Prepare Installer Directory
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path wininstaller
+          Move-Item -Path "./pkg/pkg/worker-win-x64.exe" -Destination "wininstaller\worker.exe" -Force
 
-        - name: Copy environment file
-          shell: pwsh
-          run: |
-            Write-Host "Current working directory: $(Get-Location)"
-            Copy-Item -Path "app-deployment/ansible/worker/roles/configure-worker/templates/worker.env.j2" -Destination "wininstaller\worker.env.j2" -Force
-            Copy-Item -Path "services/worker/wininstaller/installer.iss" -Destination "wininstaller\installer.iss" -Force
-            Copy-Item -Path "services/worker/wininstaller/service.xml" -Destination "wininstaller\service.xml" -Force
-  
-        - name: Download WinSW and rename
-          shell: pwsh
-          run: |
-            # Download a specific version of WinSW (adjust version if needed)
-            Invoke-WebRequest -Uri "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe" -OutFile "wininstaller\winsw.exe"
-  
-        - name: List files in wininstaller directory
-          shell: pwsh
-          run: |
-            Write-Host "Files in wininstaller directory:"
-            Get-ChildItem -Path "wininstaller" | ForEach-Object { Write-Host "  - $($_.Name)" }
-  
-        - name: Install Inno Setup
-          shell: pwsh
-          run: choco install innosetup -y
-  
-        - name: Build Windows Installer with Inno Setup
-          shell: cmd
-          run: |
-            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "wininstaller\installer.iss"
+      - name: Copy environment file
+        shell: pwsh
+        run: |
+          Write-Host "Current working directory: $(Get-Location)"
+          Copy-Item -Path "app-deployment/ansible/worker/roles/configure-worker/templates/worker.env.j2" -Destination "wininstaller\worker.env.j2" -Force
+          Copy-Item -Path "services/worker/wininstaller/installer.iss" -Destination "wininstaller\installer.iss" -Force
+          Copy-Item -Path "services/worker/wininstaller/service.xml" -Destination "wininstaller\service.xml" -Force
 
-        - name: Upload Installer Artifact
-          uses: actions/upload-artifact@v4
-          with:
-            name: windows-installer-${{ env.RELEASE_TAG }}
-            path: wininstaller\datamigrator-worker-setup.exe
+      - name: Download WinSW and rename
+        shell: pwsh
+        run: |
+          # Download a specific version of WinSW (adjust version if needed)
+          Invoke-WebRequest -Uri "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe" -OutFile "wininstaller\winsw.exe"
+
+      - name: List files in wininstaller directory
+        shell: pwsh
+        run: |
+          Write-Host "Files in wininstaller directory:"
+          Get-ChildItem -Path "wininstaller" | ForEach-Object { Write-Host "  - $($_.Name)" }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y
+
+      - name: Build Windows Installer with Inno Setup
+        shell: cmd
+        run: |
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "wininstaller\installer.iss"
+
+      - name: Upload Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-${{ env.RELEASE_TAG }}
+          path: wininstaller\datamigrator-worker-setup.exe
 
   release:
     runs-on: openlab
     needs: [worker-package, build]
-    permissions: 
+    permissions:
       contents: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -147,6 +147,9 @@ jobs:
       NDM_NEXUS_PASSWORD: ${{ secrets.NDM_NEXUS_PASSWORD }}
       RELEASE_TAG: ${{ needs.worker-package.outputs.RELEASE_TAG }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Download Binary Artifact
         uses: actions/download-artifact@v4
         with:
@@ -208,7 +211,7 @@ jobs:
               "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}/worker-${{ env.RELEASE_TAG }}.env" \
               -u "${{ env.NDM_NEXUS_USERNAME }}":"${{ env.NDM_NEXUS_PASSWORD }}"
           done
-          
+
           # Create and upload metadata for latest version
           ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           METADATA_PATH="${ARTIFACTORY_PATH}/metadata.json"
@@ -223,7 +226,7 @@ jobs:
             "published_by": "${{ github.actor }}"
           }
           EOF
-  
+
           # If not release branch
           if [[ ! "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
             for REPO_PATH in "cicd/ndm" "team/ndm"; do
@@ -252,8 +255,56 @@ jobs:
             curl --silent --show-error --fail --request PUT --upload-file artifacts/metadata.json \
               "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${METADATA_PATH}" \
               -u "${{ env.NDM_NEXUS_USERNAME }}":"${{ env.NDM_NEXUS_PASSWORD }}"
-          done  
+          done
 
+  build-details:
+    runs-on: openlab
+    needs: [worker-package, release]
+    env:
+      RELEASE_TAG: ${{ needs.worker-package.outputs.RELEASE_TAG }}
+    steps:
+      - name: Collect and display build details
+        run: |
+          echo "Build details for worker binary and installer:"
+          echo "Release Tag: ${{ env.RELEASE_TAG }}"
+          echo "Binary Artifact: worker-${{ env.RELEASE_TAG }}.zip"
+          echo "Windows Installer Artifact: windows-worker-installer-${{ env.RELEASE_TAG }}.exe"
+          echo "Worker Environment File: worker-${{ env.RELEASE_TAG }}.env"
 
+          echo ""
+          echo "Worker config for NDM VM image build:"
+          echo "{" 
+          echo "  \"worker\": {"
+          echo "    \"tag\": \"${GITHUB_SHA}\","
+          echo "    \"branch\": \"${GITHUB_REF_NAME}\""
+          echo "  }"
+          echo "}"
+          echo ""
+          echo "Copy the above JSON and paste it into the 'services_config' input of the NDM VM image build workflow."
 
+          echo "## Worker Binary Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Artifact | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| -------- | ----- |" >> $GITHUB_STEP_SUMMARY
+          echo "| Release Tag | \`${{ env.RELEASE_TAG }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${GITHUB_SHA}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | \`${GITHUB_REF_NAME}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Binary Artifact | \`worker-${{ env.RELEASE_TAG }}.zip\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Windows Installer | \`windows-worker-installer-${{ env.RELEASE_TAG }}.exe\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment File | \`worker-${{ env.RELEASE_TAG }}.env\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
+          echo "### Worker Configuration for NDM VM Image Build" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Copy this JSON and paste it into the 'services_config' input of the NDM VM image build workflow:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+          echo "{" >> $GITHUB_STEP_SUMMARY
+          echo "  \"worker\": {" >> $GITHUB_STEP_SUMMARY
+          echo "    \"tag\": \"${GITHUB_SHA}\"," >> $GITHUB_STEP_SUMMARY
+          echo "    \"branch\": \"${GITHUB_REF_NAME}\"" >> $GITHUB_STEP_SUMMARY
+          echo "  }" >> $GITHUB_STEP_SUMMARY
+          echo "}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

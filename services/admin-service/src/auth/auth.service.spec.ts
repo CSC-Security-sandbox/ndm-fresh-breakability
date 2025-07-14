@@ -12,6 +12,10 @@ import { makeAxiosRequest } from 'src/utils/axios-request-utils';
 
 jest.mock('axios');
 jest.mock('src/utils/axios-request-utils');
+jest.mock('../utils/crypto-utils', () => ({
+  encryptData: jest.fn().mockImplementation((text) => `encrypted:${text}`)
+}));
+
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -91,7 +95,8 @@ describe('AuthService', () => {
 
     expect(makeAxiosRequest).toHaveBeenCalled();
     expect(tempPassword).toBeDefined();
-    expect(tempPassword).toHaveLength(12);
+    // The length of the temporary password is validated as 22 because we are returning encrypted password
+    expect(tempPassword).toHaveLength(22);
     expect(user.first_name).toBe(firstName);
     expect(user.last_name).toBe(lastName);
   });

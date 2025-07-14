@@ -296,7 +296,7 @@ func GetDetachWorkerScript() string {
 	echo "$SUDO_PASS" | sudo -S sed -i '/^KEYCLOAK_BASE_URL=/d' "$ENV_FILE"
 	echo "$SUDO_PASS" | sudo -S sed -i '/^WORKER_ID=/d' "$ENV_FILE"
 	echo "$SUDO_PASS" | sudo -S sed -i '/^WORKER_SECRET=/d' "$ENV_FILE"
-	echo "$SUDO_PASS" | sudo -S sed -i '/^FLUENT_HOST=/d' "$ENV_FILE"
+	echo "$SUDO_PASS" | sudo -S sed -i '/^CONTROL_PLANE_IP=/d' "$ENV_FILE"
 	echo "$SUDO_PASS" | sudo -S sed -i '/^REDIS_HOST=/d' "$ENV_FILE"
 	echo "$SUDO_PASS" | sudo -S sed -i '/^REDIS_USERNAME=/d' "$ENV_FILE"
 	echo "$SUDO_PASS" | sudo -S sed -i '/^REDIS_PASSWORD=/d' "$ENV_FILE"
