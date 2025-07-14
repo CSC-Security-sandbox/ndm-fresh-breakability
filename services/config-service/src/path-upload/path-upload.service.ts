@@ -386,8 +386,8 @@ export class PathUploadService {
   }
 
   async createUploadDirectory(): Promise<void> {
-    if (!fs.existsSync(join(process.cwd(), './uploads'))) {
-      fs.mkdirSync(join(process.cwd(), './uploads'), { recursive: true });
+    if (!fs.existsSync('/uploads')) {
+      fs.mkdirSync('/uploads', { recursive: true });
     }
   }
 

@@ -1194,6 +1194,11 @@ export class ConfigurationService {
           { id: fileServer.id },
           { isRefreshed: true },
         );
+        
+        // Disable volumes that are no longer in the completed payload
+        const validPaths = new Set(pathsMap[fileServer.protocol].paths);
+        const pathsToDisable = fileServer.volumes.filter(vol => !validPaths.has(vol.volumePath)).map(vol => vol.volumePath);
+        if (pathsToDisable.length > 0) await this.volumes.update({ fileServerId: fileServer.id, volumePath: In(pathsToDisable) }, { isDisabled: true });
       }
 
       // update job configurations to inactive if any volume is disabled or invalid associated with it

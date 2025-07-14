@@ -2732,6 +2732,166 @@ describe("JobRunService", () => {
         const result = await service.getWorkerSetupErrors(jobRunId);
         expect(result).toEqual(mockErrors);
       });
+
+      it('should call workerJobRunMapRepo.find with correct Raw for getWorkerSetupErrors', async () => {
+        const jobRunId = 'jobRunId';
+        const expectedRaw = expect.any(Function);
+        const mockResult = [{ workerResponse: { code: 'SETUP_WORKER_FAILURE', status: 'FAILED' } }];
+        jest.spyOn(workerJobRunMapRepo, 'find').mockResolvedValue(mockResult as any);
+
+        const result = await service.getWorkerSetupErrors(jobRunId);
+        expect(result).toEqual(mockResult);
+      });
+
+      it('should call workerJobRunMapRepo.update and return result in updateWorkerResponse', async () => {
+        const jobRunId = 'jobRunId';
+        const workerId = 'workerId';
+        const workerResponse = { foo: 'bar' };
+        const mockUpdateResult = { affected: 1 };
+        jest.spyOn(workerJobRunMapRepo, 'update').mockResolvedValue(mockUpdateResult as any);
+
+        const result = await service.updateWorkerResponse(jobRunId, workerId, workerResponse);
+
+        expect(workerJobRunMapRepo.update).toHaveBeenCalledWith(
+          { jobRunId, workerId },
+          { workerResponse }
+        );
+        expect(result).toBe(mockUpdateResult);
+      });
+
+      it('should throw error and log if workerJobRunMapRepo.update fails in updateWorkerResponse', async () => {
+        const jobRunId = 'jobRunId';
+        const workerId = 'workerId';
+        const workerResponse = { foo: 'bar' };
+        const error = new Error('fail');
+        const loggerSpy = jest.spyOn(service['logger'], 'error');
+        jest.spyOn(workerJobRunMapRepo, 'update').mockRejectedValue(error);
+
+        await expect(service.updateWorkerResponse(jobRunId, workerId, workerResponse))
+          .rejects.toThrow('Failed to update worker response: Error: fail');
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `Error occurred while updating worker response for jobRunId ${jobRunId} and workerId ${workerId}: ${error}`
+        );
+      });
+
+      describe('checkWorkerHealth', () => {
+        let jobRunRepoFindSpy: jest.SpyInstance;
+        let jobRunRepoUpdateSpy: jest.SpyInstance;
+        let workerServiceUpdateWorkerStatusSpy: jest.SpyInstance;
+        let loggerLogSpy: jest.SpyInstance;
+        let loggerWarnSpy: jest.SpyInstance;
+        let loggerErrorSpy: jest.SpyInstance;
+
+        beforeEach(() => {
+          jobRunRepoFindSpy = jest.spyOn(jobRunRepo, 'find');
+          jobRunRepoUpdateSpy = jest.spyOn(jobRunRepo, 'update').mockResolvedValue(undefined);
+          workerServiceUpdateWorkerStatusSpy = jest.spyOn(workerService, 'updateWorkerStatus');
+          loggerLogSpy = jest.spyOn(service['logger'], 'log');
+          loggerWarnSpy = jest.spyOn(service['logger'], 'warn');
+          loggerErrorSpy = jest.spyOn(service['logger'], 'error');
+        });
+
+        afterEach(() => {
+          jest.clearAllMocks();
+        });
+
+        it('should do nothing if no running job runs are found', async () => {
+          jobRunRepoFindSpy.mockResolvedValue([]);
+          await service.checkWorkerHealth();
+          expect(jobRunRepoFindSpy).toHaveBeenCalled();
+          expect(jobRunRepoUpdateSpy).not.toHaveBeenCalled();
+          expect(loggerLogSpy).toHaveBeenCalledWith('Checking the health of workers');
+          expect(loggerLogSpy).toHaveBeenCalled();
+        });
+
+        it('should warn and continue if a jobRun has no workers', async () => {
+          jobRunRepoFindSpy.mockResolvedValue([
+            { id: 'job1', workerMap: [], status: JobRunStatus.Running }
+          ]);
+          await service.checkWorkerHealth();
+          expect(loggerWarnSpy).toHaveBeenCalledWith('No workers found for jobRunId: job1');
+          expect(jobRunRepoUpdateSpy).not.toHaveBeenCalled();
+        });
+
+        it('should pause job run if all workers are offline', async () => {
+          const jobRun = {
+            id: 'job2',
+            workerMap: [
+              { worker: { status: WorkerStatus.Offline } },
+              { worker: { status: WorkerStatus.Offline } }
+            ],
+            status: JobRunStatus.Running
+          };
+          jobRunRepoFindSpy.mockResolvedValue([jobRun]);
+          workerServiceUpdateWorkerStatusSpy.mockReturnValue([
+            { status: WorkerStatus.Offline },
+            { status: WorkerStatus.Offline }
+          ]);
+          await service.checkWorkerHealth();
+          expect(loggerWarnSpy).toHaveBeenCalledWith(
+            'All workers are offline for jobRunId: job2, thus pausing the job run'
+          );
+          expect(jobRunRepoUpdateSpy).toHaveBeenCalledWith(
+            { id: 'job2' },
+            { status: JobRunStatus.Paused, pausedReason: PausedReason.SYSTEM_PAUSED }
+          );
+        });
+
+        it('should resume job run if some workers are online and job is paused', async () => {
+          const jobRun = {
+            id: 'job3',
+            workerMap: [
+              { worker: { status: WorkerStatus.Online } },
+              { worker: { status: WorkerStatus.Offline } }
+            ],
+            status: JobRunStatus.Paused
+          };
+          jobRunRepoFindSpy.mockResolvedValue([jobRun]);
+          workerServiceUpdateWorkerStatusSpy.mockReturnValue([
+            { status: WorkerStatus.Online },
+            { status: WorkerStatus.Offline }
+          ]);
+          await service.checkWorkerHealth();
+          expect(loggerLogSpy).toHaveBeenCalledWith(
+            'Resuming job run job3 as some workers are online'
+          );
+          expect(jobRunRepoUpdateSpy).toHaveBeenCalledWith(
+            { id: 'job3' },
+            { status: JobRunStatus.Running, pausedReason: null }
+          );
+        });
+
+        it('should log that job run is running and some workers are online', async () => {
+          const jobRun = {
+            id: 'job4',
+            workerMap: [
+              { worker: { status: WorkerStatus.Online } },
+              { worker: { status: WorkerStatus.Offline } }
+            ],
+            status: JobRunStatus.Running
+          };
+          jobRunRepoFindSpy.mockResolvedValue([jobRun]);
+          workerServiceUpdateWorkerStatusSpy.mockReturnValue([
+            { status: WorkerStatus.Online },
+            { status: WorkerStatus.Offline }
+          ]);
+          await service.checkWorkerHealth();
+          expect(loggerLogSpy).toHaveBeenCalledWith(
+            'Job run job4 is running and some workers are online'
+          );
+          expect(jobRunRepoUpdateSpy).not.toHaveBeenCalledWith(
+            { id: 'job4' },
+            { status: JobRunStatus.Running, pausedReason: null }
+          );
+        });
+
+        it('should log error if exception is thrown', async () => {
+          const error = new Error('test error');
+          jobRunRepoFindSpy.mockRejectedValue(error);
+          await service.checkWorkerHealth();
+          expect(loggerErrorSpy).toHaveBeenCalled()
+        });
+      });
     });
   describe("updateWorkerResponse", () => {
     it("should update worker response successfully", async () => {
