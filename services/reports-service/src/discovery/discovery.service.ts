@@ -13,7 +13,7 @@ import * as archiver from "archiver";
 import { ReportsEntity } from "src/entities/reports.entity";
 import puppeteer from "puppeteer";
 import { ReportHeaders } from "./pattern.enum";
-import { validateFilePath } from 'src/utils/utils';
+import { validateFilePath, escapeReportData, sanitizeReportData } from 'src/utils/utils';
 
 @Injectable()
 export class DiscoveryService {
@@ -158,8 +158,13 @@ export class DiscoveryService {
   }
 
   async generatePdfFromData(reportData: any[]): Promise<Buffer> {
-    const htmlOutput = this.generateHtmlTable(reportData);
-    
+
+    // Sanitize and escape the report data to prevent XSS attacks
+    const sanitizedData = sanitizeReportData(reportData);
+    const escapedData = escapeReportData(sanitizedData);
+
+    const htmlOutput = this.generateHtmlTable(escapedData);
+
     const browser = await puppeteer.launch({
       headless: true,
       args: [
@@ -325,5 +330,5 @@ export class DiscoveryService {
     return await this.inventoryRepo.find({
       where: { fileServerPathId: fileServerId, parentPath: parentPath },
     });
-  };
+  };   
 }
