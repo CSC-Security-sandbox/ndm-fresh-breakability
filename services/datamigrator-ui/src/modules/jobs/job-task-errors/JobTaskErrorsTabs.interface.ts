@@ -18,4 +18,6 @@ export type ErrorLogActionButtonPropsType = {
   handleGenerate: () => void;
   handleDownload: () => void;
   disabled?: boolean;
+  generateLabel: string;
+  downloadLabel: string;
 };

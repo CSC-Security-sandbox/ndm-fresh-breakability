@@ -44,6 +44,10 @@ import {
   useLazyDownloadErrorLogsCSVQuery,
 } from "@api/reportApi";
 import { ErrorLogActionButton } from "@modules/jobs/job-task-errors/components/ErrorLogActionButton";
+import {
+  DOWNLOAD_BULK_ERROR_REPORT,
+  GENERATE_BULK_ERROR_REPORT,
+} from "@modules/jobs/job-task-errors/jobTaskErrors.constant";
 
 const JobDetails = () => {
   const LOWER_TIME_INTERVAL_FOR_IN_PROGRESS = 5000; // 5 seconds
@@ -57,6 +61,8 @@ const JobDetails = () => {
   const [showGeneratingReportBtn, setShowGeneratingReportBtn] =
     useState<Record<string, boolean>>();
 
+  const [showGeneratingReportBtn, setShowGeneratingReportBtn] =
+    useState<Record<string, boolean>>();
   const {
     data: jobConfigDetails,
     isLoading,
@@ -233,6 +239,8 @@ const JobDetails = () => {
   const errorLogContent = useMemo(() => {
     return (
       <ErrorLogActionButton
+        generateLabel={GENERATE_BULK_ERROR_REPORT}
+        downloadLabel={DOWNLOAD_BULK_ERROR_REPORT}
         data={isDisplayGeneratingLabel}
         disabled={errorsCount.length === 0}
         handleGenerate={generateErrorReport}
