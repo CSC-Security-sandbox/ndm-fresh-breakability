@@ -3,6 +3,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 import { PathUploadService } from './path-upload.service';
 import { ImportVolumePathsDto as UploadVolumePathsDto } from './dto/path-upload.dto';
+
+jest.mock('fs');
 import * as fs from 'fs';
 
 
@@ -137,10 +139,11 @@ describe('PathUploadController', () => {
       const fileName = 'volume_paths_template.csv';
       
       // Mock the file system operations
-      jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-      jest.spyOn(fs, 'mkdirSync').mockImplementation((): any => {});
-      jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
-      jest.spyOn(fs, 'createReadStream').mockReturnValue({ pipe: jest.fn()} as any);
+      const mockCreateReadStream = jest.fn().mockReturnValue({ pipe: jest.fn() });
+      (fs.existsSync as jest.Mock).mockReturnValue(false);
+      (fs.mkdirSync as jest.Mock).mockImplementation(() => {});
+      (fs.writeFileSync as jest.Mock).mockImplementation(() => {});
+      (fs.createReadStream as jest.Mock).mockImplementation(mockCreateReadStream);
 
       await controller.downloadCsvFile('template', mockResponse, '123e4567-e89b-12d3-a456-426614174000');
 
@@ -161,10 +164,9 @@ describe('PathUploadController', () => {
       const fileName = 'volume_paths_template.csv';
       
       // Mock the file system operations
-      jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-      jest.spyOn(fs, 'mkdirSync').mockImplementation((): any => {});
-      jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
-      jest.spyOn(fs, 'createReadStream').mockReturnValue({ pipe: jest.fn()} as any);
+      (fs.existsSync as jest.Mock).mockReturnValue(false);
+      (fs.mkdirSync as jest.Mock).mockImplementation(() => {});
+      (fs.writeFileSync as jest.Mock).mockImplementation(() => {});
       jest.spyOn(mockPathUploadService, 'getUploadedPaths').mockResolvedValue(records as any[]);
 
       await controller.downloadCsvFile('uploaded-paths', mockResponse, '123e4567-e89b-12d3-a456-426614174000');
@@ -179,12 +181,14 @@ describe('PathUploadController', () => {
         sendFile: jest.fn(),
         pipe: jest.fn()
       };
-      jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-      jest.spyOn(fs, 'mkdirSync').mockImplementation((): any => {});
-      jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
-      jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
+      
+      (fs.existsSync as jest.Mock).mockReturnValue(false);
+      (fs.mkdirSync as jest.Mock).mockImplementation(() => {});
+      (fs.writeFileSync as jest.Mock).mockImplementation(() => {});
+      (fs.createReadStream as jest.Mock).mockImplementation(() => {
         throw new Error('File not found');
       });
+
       jest.spyOn(service, 'createUploadDirectory').mockResolvedValue();
 
       await expect(controller.downloadCsvFile('template', mockResponse, '123e4567-e89b-12d3-a456-426614174000')).rejects.toThrow('File not found');

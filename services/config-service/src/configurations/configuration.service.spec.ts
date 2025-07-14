@@ -48,6 +48,7 @@ const mockFileServer = {
   id: uuidv4(),
   host: 'localhost',
   serverType: 'Type1',
+  password: "",
   workers: [],
   volumes: [],
 };
