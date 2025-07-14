@@ -23,7 +23,6 @@ export async function calculateChecksum(filePath) {
 }
 
 export async function smartCopy(source, target) {
-
   if (!fs.existsSync(source)) {
     throw new Error(`Source file does not exist: ${source}`);
   }
@@ -37,19 +36,18 @@ export async function smartCopy(source, target) {
     let hash = crypto.createHash('sha256');
     readStream.on('data', (chunk) => hash.update(chunk));
 
-    const targetChecksum  = await new Promise((resolve, reject) => {
+    const sourceCheckSum  = await new Promise((resolve, reject) => {
       readStream.pipe(writeStream)
         .on('error', reject)
         .on('finish', () => {
           resolve( hash?.digest('hex'));
         });
     });
-    //TODO: i think we need to calcualte checksum of destination here not source. clarify?
-    const sourceChecksum = await calculateChecksum(source);
-    if (sourceChecksum !== targetChecksum) {
-      throw new Error(`Checksum mismatch for file ${target}. Checksum: ${sourceChecksum} != ${targetChecksum}`);
+    const targetCheckSum = await calculateChecksum(target);
+    if (targetCheckSum !== sourceCheckSum) {
+      throw new Error(`Checksum mismatch for file ${target}. Checksum: ${targetCheckSum} != ${sourceCheckSum}`);
     }
-    return {sourceChecksum, targetChecksum};
+    return {sourceChecksum: sourceCheckSum, targetChecksum: targetCheckSum};
   }catch(error){
     throw error; 
   }finally{
@@ -57,7 +55,7 @@ export async function smartCopy(source, target) {
       readStream.destroy();
     }
     if(writeStream && !writeStream.destroyed){
-      writeStream.end();
+      writeStream.destroy();
     }
   }
   }
