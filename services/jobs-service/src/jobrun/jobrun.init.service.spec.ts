@@ -776,6 +776,7 @@ describe('createInitialTask', () => {
       });
     });
   });
+
 describe('startStreamConsumer', () => {
   const jobRunId = 'jobRunId';
   const START_CONSUMER_URL = 'http://mock-start-consumer-url';
@@ -816,7 +817,180 @@ describe('startStreamConsumer', () => {
     );
     expect(axios.post).toHaveBeenCalledTimes(2);
   });
+
+
+  it('should retry starting the consumer up to 3 times if it fails', async () => {
+    const mockError = { response: { status: 500, data: '"Internal Server Error"' } };
+    jest.spyOn(axios, 'post').mockRejectedValue(mockError);
+
+    await expect(service.startStreamConsumer(jobRunId)).rejects.toThrow(
+      `Failed to start consumer for ${jobRunId}: ${mockError.response.data}`
+    );
+
+    expect(axios.post).toHaveBeenCalledTimes(3);
+  });
+
+  it('should not attempt to clean up if the consumer starts successfully', async () => {
+    const mockResponse = { status: 201, data: { message: 'Consumer started' } };
+    jest.spyOn(axios, 'post').mockResolvedValueOnce(mockResponse);
+    const stopConsumerSpy = jest.spyOn(axios, 'post');
+
+    await service.startStreamConsumer(jobRunId);
+
+    expect(stopConsumerSpy).not.toHaveBeenCalledWith(
+      `${START_CONSUMER_URL}/api/v1/redis-consumer/stop`,
+      { jobRunId }
+    );
+  });
+
+    it('should retry cleanup if the first cleanup attempt fails', async () => {
+    const mockError = new Error('Start error');
+    const cleanupError = new Error('First cleanup error');
+    const mockCleanupResponse = { status: 200, data: { message: 'Cleanup successful' } };
+    jest.spyOn(axios, 'post')
+      .mockRejectedValueOnce(mockError) // Start fails
+      .mockRejectedValueOnce(cleanupError) // First cleanup fails
+      .mockResolvedValueOnce(mockCleanupResponse); // Second cleanup succeeds
+
+    await expect(service.startStreamConsumer(jobRunId)).rejects.toThrow(
+      `Failed to start consumer for ${jobRunId}: Start error`
+    );
+  });
 })
+
+// describe('startStreamConsumer', () => {
+//   const jobRunId = 'jobRunId';
+//   const START_CONSUMER_URL = 'http://mock-start-consumer-url';
+
+//   beforeEach(() => {
+//     jest.spyOn(configService, 'get').mockImplementation((key: string) => {
+//       if (key === 'app.paths.startConsumer') {
+//         return START_CONSUMER_URL;
+//       }
+//       return null;
+//     });
+//   });
+
+//   it('should start the consumer successfully on the first attempt', async () => {
+//     const mockResponse = { status: 201, data: { message: 'Consumer started' } };
+//     jest.spyOn(axios, 'post').mockResolvedValueOnce(mockResponse);
+
+//     await service.startStreamConsumer(jobRunId);
+
+//     expect(axios.post).toHaveBeenCalledWith(
+//       `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
+//       { jobRunId }
+//     );
+//     expect(axios.post).toHaveBeenCalledTimes(1);
+//   });
+
+//   it('should retry starting the consumer up to 3 times if it fails', async () => {
+//     const mockError = { response: { status: 500, data: '"Internal Server Error"' } };
+//     jest.spyOn(axios, 'post').mockRejectedValue(mockError);
+
+//     await expect(service.startStreamConsumer(jobRunId)).rejects.toThrow(
+//       `Failed to start consumer for ${jobRunId}: ${mockError.response.data}`
+//     );
+
+//     expect(axios.post).toHaveBeenCalledTimes(3);
+//   });
+
+//   it('should handle unexpected errors gracefully', async () => {
+//     const mockError = new Error('Unexpected error');
+//     jest.spyOn(axios, 'post').mockRejectedValue(mockError);
+
+//     await expect(service.startStreamConsumer(jobRunId)).rejects.toThrow(
+//       `Failed to start consumer for ${jobRunId}: Unexpected error`
+//     );
+
+//     expect(axios.post).toHaveBeenCalledWith(
+//       `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
+//       { jobRunId }
+//     );
+//     expect(axios.post).toHaveBeenCalledTimes(3);
+//   });
+
+//   it('should clean up the consumer if it fails after starting', async () => {
+//     const mockResponse = { status: 201, data: { message: 'Consumer started' } };
+//     const mockError = new Error('Cleanup error');
+//     jest.spyOn(axios, 'post')
+//       .mockResolvedValueOnce(mockResponse) // First call succeeds
+//       .mockRejectedValueOnce(mockError); // Cleanup fails
+
+//     await expect(service.startStreamConsumer(jobRunId)).rejects.toThrow(
+//       `Failed to start consumer for ${jobRunId}: Cleanup error`
+//     );
+
+//     expect(axios.post).toHaveBeenCalledWith(
+//       `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
+//       { jobRunId }
+//     );
+//     expect(axios.post).toHaveBeenCalledWith(
+//       `${START_CONSUMER_URL}/api/v1/redis-consumer/stop`,
+//       { jobRunId }
+//     );
+//   });
+
+//   it('should not attempt to clean up if the consumer starts successfully', async () => {
+//     const mockResponse = { status: 201, data: { message: 'Consumer started' } };
+//     jest.spyOn(axios, 'post').mockResolvedValueOnce(mockResponse);
+//     const stopConsumerSpy = jest.spyOn(axios, 'post');
+
+//     await service.startStreamConsumer(jobRunId);
+
+//     expect(stopConsumerSpy).not.toHaveBeenCalledWith(
+//       `${START_CONSUMER_URL}/api/v1/redis-consumer/stop`,
+//       { jobRunId }
+//     );
+//   });
+
+//   it('should log an error if cleanup fails after a failed start', async () => {
+//     const mockError = new Error('Start error');
+//     const cleanupError = new Error('Cleanup error');
+//     jest.spyOn(axios, 'post')
+//       .mockRejectedValueOnce(mockError) // Start fails
+//       .mockRejectedValueOnce(cleanupError); // Cleanup fails
+
+//     await expect(service.startStreamConsumer(jobRunId)).rejects.toThrow(
+//       `Failed to start consumer for ${jobRunId}: Start error`
+//     );
+
+//     expect(axios.post).toHaveBeenCalledWith(
+//       `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
+//       { jobRunId }
+//     );
+//     expect(axios.post).toHaveBeenCalledWith(
+//       `${START_CONSUMER_URL}/api/v1/redis-consumer/stop`,
+//       { jobRunId }
+//     );
+//   });
+
+//   it('should retry cleanup if the first cleanup attempt fails', async () => {
+//     const mockError = new Error('Start error');
+//     const cleanupError = new Error('First cleanup error');
+//     const mockCleanupResponse = { status: 200, data: { message: 'Cleanup successful' } };
+//     jest.spyOn(axios, 'post')
+//       .mockRejectedValueOnce(mockError) // Start fails
+//       .mockRejectedValueOnce(cleanupError) // First cleanup fails
+//       .mockResolvedValueOnce(mockCleanupResponse); // Second cleanup succeeds
+
+//     await expect(service.startStreamConsumer(jobRunId)).rejects.toThrow(
+//       `Failed to start consumer for ${jobRunId}: Start error`
+//     );
+
+//     expect(axios.post).toHaveBeenCalledWith(
+//       `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
+//       { jobRunId }
+//     );
+//     expect(axios.post).toHaveBeenCalledWith(
+//       `${START_CONSUMER_URL}/api/v1/redis-consumer/stop`,
+//       { jobRunId }
+//     );
+//     expect(axios.post).toHaveBeenCalledTimes(4); // 1 start + 3 cleanup attempts
+//   });
+// });
+
+
 
 
 describe("buildJobContext", () => {

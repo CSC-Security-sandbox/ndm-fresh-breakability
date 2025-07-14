@@ -598,37 +598,61 @@ export class JobRunInitService {
   // ------------------ StartStreamConsumer -------------------- //
   async startStreamConsumer(jobRunId: string) {
     this.logger.log("Starting Stream Consumer for jobRunId:", jobRunId);
+    const START_CONSUMER_URL = this.configService.get<string>(
+      "app.paths.startConsumer",
+    );
+    let started = false;
+    let response;
     try {
-      const START_CONSUMER_URL = this.configService.get<string>(
-        "app.paths.startConsumer",
-      );
-      let response = await axios.post(
-        `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
-        { jobRunId },
-      );
       let count = 0;
-      while (response.status !== 201 && count < 3) {
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+      do {
         response = await axios.post(
           `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
           { jobRunId },
         );
+        if (response.status === 201) {
+          this.logger.log(`Consumer started successfully for ${jobRunId}`);
+          started = true; // Mark as started
+          break;
+        }
         count++;
-      }
-      if (response.status !== 201)
+        if (count < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+        }
+      } while (response.status !== 201 && count < 3);
+  
+      if (!started) {
         throw new Error(
-          `Failed to start consumer after retries, ${response.data}`,
+          `Failed to start consumer after retries, ${JSON.stringify(response?.data)}`,
         );
+      }
       this.logger.log(`Started consumer for ${jobRunId}:`, response.data);
       return response.data;
     } catch (error) {
       this.logger.error(
         `Failed to start consumer for ${jobRunId}:`,
-        error.message,
+        error?.response?.data || error.message || error,
       );
       throw new Error(
-        `Failed to start consumer for ${jobRunId}: ${error.message}`,
+        `Failed to start consumer for ${jobRunId}: ${error?.response?.data || error.message || error}`,
       );
+    } finally {
+      // If started but something failed after, attempt to stop/cleanup the consumer
+      if (started === false && response) {
+        try {
+          this.logger.log(`Attempting to stop/cleanup consumer for ${jobRunId}`);
+          await axios.post(
+            `${START_CONSUMER_URL}/api/v1/redis-consumer/stop`,
+            { jobRunId },
+          );
+          this.logger.log(`Stopped/cleaned up consumer for ${jobRunId}`);
+        } catch (cleanupError) {
+          this.logger.error(
+            `Failed to cleanup consumer for ${jobRunId}:`,
+            cleanupError?.response?.data || cleanupError.message || cleanupError,
+          );
+        }
+      }
     }
   }
 
