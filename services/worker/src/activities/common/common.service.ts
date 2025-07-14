@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { RedisService } from "src/redis/redis.service";
 import { generateDummyErrorEntry, generateDummyFileEntry, generateDummyTaskEntry } from '../utils/utils';
@@ -9,6 +9,10 @@ import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-stat
 import { GroupReaderType, JobContext, JobStatus, Task } from "@netapp-cloud-datamigrate/jobs-lib";
 import { HttpService } from "@nestjs/axios";
 import { AuthService } from "src/auth/auth.service";
+import {
+  LoggerFactory,
+  LoggerService
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class CommonActivityService{
@@ -18,12 +22,13 @@ export class CommonActivityService{
   readonly workerJobServiceUrl: string;
   readonly reportServiceUrl: string;
   readonly migrationTaskLimit: number;
-  
+  private readonly logger : LoggerService;
+
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly httpService: HttpService,
     private readonly authService: AuthService,
-    private readonly logger: Logger,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly redisService: RedisService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
@@ -31,6 +36,7 @@ export class CommonActivityService{
     this.reportServiceUrl = this.configService.get('worker.connection.workerReportServiceUrl');
     this.migrationTaskLimit = this.configService.get('worker.migrationTaskStreamLimit');
     this.fetchTaskBatch = 50, this.pushTaskDirSize = 500;
+    this.logger = loggerFactory.create(CommonActivityService.name);
   }
 
   async cleanupJobContext(traceId: string): Promise<any> {

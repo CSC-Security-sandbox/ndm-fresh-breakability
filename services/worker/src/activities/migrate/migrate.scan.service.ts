@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Command, CommandStatus, ErrorType, FileInfo, JobContext, MetaData, OPS_CMD, OPS_STATUS, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { uuid4 } from "@temporalio/workflow";
@@ -10,7 +10,7 @@ import { basePrefix, buildTask, createServerDownErrorMessage, dmError, getFileIn
 import { Operation, Origin } from "../utils/utils.types";
 import { PublishMigrationTaskInput, ScanContentInput, ScanContentOutput, ScanPathInput, ScanPathOutput } from "./migrate.type";
 import { Context } from '@temporalio/activity';
-
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class MigrationScanService {
@@ -19,9 +19,11 @@ export class MigrationScanService {
     readonly maxMigrationCommand : number;
     readonly maxConcurrency: number;
     readonly operationTimeout: number;
+    private readonly logger: LoggerService;
+
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
-        private readonly logger: Logger,
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
         private readonly redisService: RedisService,
         private readonly commonService: CommonActivityService
     ) {
@@ -30,6 +32,7 @@ export class MigrationScanService {
         this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100;   
         this.operationTimeout = this.configService.get('worker.operationTimeout') || 5000;
+        this.logger = loggerFactory.create(MigrationScanService.name);
     }
 
     async getDirectoryContents(directoryPath: string, jobContext: JobContext, origin: Origin): Promise<string[]> {

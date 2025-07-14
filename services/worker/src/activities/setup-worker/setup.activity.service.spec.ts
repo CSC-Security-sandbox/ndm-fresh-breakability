@@ -1,5 +1,4 @@
 
-import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { FileServerDetails, JobStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
@@ -9,7 +8,11 @@ import { WorkersConfig } from 'src/config/app.config';
 import { Protocols } from 'src/protocols/protocols';
 import { RedisService } from 'src/redis/redis.service';
 import { SetupActivityService } from './setup.activity.service';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { SMBProtocol } from '../../protocols/smb/smb.protocol';
+import { NFSProtocol } from '../../protocols/nfs/nfs.protocol';
 
+let loggerFactory: LoggerFactory;
 jest.mock('axios');
 
 describe('SetupActivityService', () => {
@@ -17,7 +20,7 @@ describe('SetupActivityService', () => {
   let mockConfig: Partial<ConfigService>;
   let mockAuth: Partial<AuthService>;
   let mockRedis: Partial<RedisService>;
-  let mockLogger: Partial<Logger>;
+  let protocols: Protocols;
   let protocolMount: jest.Mock;
   let protocolUnmount: jest.Mock;
 
@@ -36,6 +39,9 @@ describe('SetupActivityService', () => {
       }),
     };
 
+    // Mock WorkersConfig
+    new WorkersConfig(mockConfig as ConfigService);
+
     // Mock AuthService
     mockAuth = {
       getAccessToken: jest.fn().mockResolvedValue('token-123'),
@@ -48,29 +54,34 @@ describe('SetupActivityService', () => {
       setJobContext: jest.fn(),
     };
 
-    // Mock Logger
-    mockLogger = {
-      log: jest.fn(),
-      debug: jest.fn(),
-      error: jest.fn(),
-    };
-
     // Mock Protocols
     protocolMount = jest.fn().mockResolvedValue(undefined);
     protocolUnmount = jest.fn().mockResolvedValue(undefined);
-    jest.spyOn(Protocols, 'getProtocol').mockReturnValue({
+
+    loggerFactory = {
+      create: jest.fn().mockReturnValue({
+        log: jest.fn(),
+        debug: jest.fn(),
+        error: jest.fn(),
+      }),
+    } as any;
+
+    protocols = new Protocols(
+      new NFSProtocol(loggerFactory),
+      new SMBProtocol(loggerFactory)
+    );
+
+    jest.spyOn(protocols, 'getProtocol').mockReturnValue({
       mountPath: protocolMount,
       unmountPath: protocolUnmount,
     } as any);
-
-    // Mock WorkersConfig
-    jest.spyOn(WorkersConfig, 'get').mockReturnValue('/mnt/work');
 
     service = new SetupActivityService(
       mockConfig as ConfigService,
       mockAuth as AuthService,
       mockRedis as RedisService,
-      mockLogger as Logger,
+      loggerFactory as LoggerFactory,
+      protocols as Protocols,
     );
   });
 

@@ -18,6 +18,7 @@ import { PrecheckActivity } from 'src/activities/precheck/precheck-activity';
 import { CommonActivityService } from 'src/activities/common/common.service';
 import { SpeedTestActivities } from 'src/activities/speed-test/speed-test-activities';
 import { RedisMemoryCheckActivity } from 'src/activities/redis/redis.mem.usage.check.activity';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 const bindMock = jest.fn().mockReturnValue({
   bind: jest.fn(),
@@ -110,6 +111,18 @@ describe('WorkerOptionsService', () => {
   let service: WorkerOptionsService;
   const mockConnection = {} as NativeConnection;
 
+  const mockLogger = {
+    log: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    warn: jest.fn(),
+    info: jest.fn(),
+  };
+
+  const mockLoggerFactory = {
+    create: jest.fn().mockReturnValue(mockLogger),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -128,6 +141,7 @@ describe('WorkerOptionsService', () => {
         { provide: SpeedTestActivities, useValue: speedTestReadActivityMock },
         { provide: RedisMemoryCheckActivity, useValue: redismeorycheckactivityMock },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: LoggerFactory, useValue: mockLoggerFactory }, 
       ],
     }).compile();
 

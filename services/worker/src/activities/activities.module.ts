@@ -1,5 +1,5 @@
 import { HttpModule } from '@nestjs/axios';
-import { Logger, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { RedisService } from 'src/redis/redis.service';
 import { DiscoveryScanActivity } from './discovery/discovery.core.activity';
@@ -18,12 +18,52 @@ import { WorkerThreadModule } from 'src/thread/worker.thread.module';
 import { SpeedTestActivities } from './speed-test/speed-test-activities';
 import { AuthModule } from 'src/auth/auth.module';
 import { RedisMemoryCheckActivity } from './redis/redis.mem.usage.check.activity';
-
+import { ProtocolsModule } from '../protocols/protocols.module'; 
+import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Module({
-  imports: [HttpModule, ConfigModule, WorkerThreadModule, AuthModule],
+  imports: [
+    HttpModule,
+    ConfigModule,
+    WorkerThreadModule,
+    AuthModule,
+    ProtocolsModule,
+    LoggerModule.forRoot()
+  ],
   controllers: [],
-  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService, MigrationSyncService, Logger, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities, RedisMemoryCheckActivity],
-  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationTaskService,MigrationScanService, MigrationSyncService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities,RedisMemoryCheckActivity],
+  providers: [
+    ValidateConnectionActivity,
+    ListPathActivity,
+    DiscoveryActivity,
+    RedisService,
+    DiscoveryScanActivity,
+    SetupActivityService,
+    MigrationScanService,
+    MigrationTaskService,
+    MigrationSyncService,
+    ValidateWorkingDirectoryActivity,
+    PrecheckActivity,
+    CommonActivityService,
+    ShellService,
+    SpeedTestActivities,
+    RedisMemoryCheckActivity,
+  ],
+  exports: [
+    ValidateConnectionActivity,
+    ListPathActivity,
+    DiscoveryActivity,
+    RedisService,
+    DiscoveryScanActivity,
+    SetupActivityService,
+    MigrationTaskService,
+    MigrationScanService,
+    MigrationSyncService,
+    ValidateWorkingDirectoryActivity,
+    PrecheckActivity,
+    CommonActivityService,
+    ShellService,
+    SpeedTestActivities,
+    RedisMemoryCheckActivity
+  ],
 })
 export class ActivitiesModule {}

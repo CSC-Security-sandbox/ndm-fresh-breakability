@@ -1,5 +1,5 @@
 import { ShellService } from './shell.service';
-import { Logger } from '@nestjs/common';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 
 jest.mock('child_process', () => ({
@@ -8,7 +8,8 @@ jest.mock('child_process', () => ({
 
 describe('ShellService', () => {
   let service: ShellService;
-  let logger: Logger;
+  let loggerFactory: LoggerFactory;
+  let mockLogger: LoggerService;
   let mockProcesses: ChildProcessWithoutNullStreams[] = [];
 
   const createMockProcess = () => {
@@ -54,13 +55,22 @@ describe('ShellService', () => {
       return mockProcess;
     });
 
-    logger = {
+    mockLogger = {
       log: jest.fn(),
       warn: jest.fn(),
       error: jest.fn(),
-    } as unknown as Logger;
+      debug: jest.fn(),
+      requestContext: jest.fn(),
+      parentContext: jest.fn(),
+      setParentContext: jest.fn(),
+    } as unknown as LoggerService;
 
-    service = new ShellService(logger);
+    const mockLoggerFactory = {
+      create: jest.fn().mockReturnValue(mockLogger),
+    };
+
+    loggerFactory = mockLoggerFactory as unknown as LoggerFactory;
+    service = new ShellService(loggerFactory);
     service.onModuleInit();
   });
 

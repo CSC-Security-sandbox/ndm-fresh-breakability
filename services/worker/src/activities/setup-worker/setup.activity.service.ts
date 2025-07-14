@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { FileServerDetails, JobStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
@@ -7,29 +7,32 @@ import { KeycloakConfig } from 'src/config/keycloak.config';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { RedisService } from 'src/redis/redis.service';
-
 import { AuthService } from 'src/auth/auth.service';
 import { WorkersConfig } from 'src/config/app.config';
 import { SetupWorkerParams } from '../types/tasks';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+
 @Injectable()
 export class SetupActivityService {
-
+  private readonly logger: LoggerService;
   readonly keycloakConfig: KeycloakConfig;
   readonly tokenRequest: string;
   readonly workerId: string;
   readonly workerConfigUrl: string;
   readonly baseWorkingPath: string;
+
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(AuthService) private readonly authService: AuthService,
     private readonly redisService: RedisService,
-    private readonly logger: Logger,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    private readonly protocols: Protocols
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
     this.workerConfigUrl = this.configService.get('worker.connection.workerConfigUrl');
+    this.logger = loggerFactory.create(SetupActivityService.name);
   }
-
   
   async mountPath(
     server: FileServerDetails,
@@ -78,7 +81,7 @@ export class SetupActivityService {
 
     try {
       // Retrieve the protocol based on the protocol type
-      const protocol = Protocols.getProtocol(ProtocolTypes[args.protocolType]);
+      const protocol = this.protocols.getProtocol(ProtocolTypes[args.protocolType]);
       this.logger.debug(`[${args.jobRunId}] - [${this.workerId}] Protocol resolved: ${args.protocolType}`);
 
       // Get the base working directory from the configuration
@@ -142,10 +145,8 @@ export class SetupActivityService {
       if (!context) {
         throw new Error(`Context not found for traceId ${jobRunId}`);
       }
-     
-
       const protocolType = context.jobConfig.sourceFileServer.protocols[0].type;
-      const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
+      const protocol = this.protocols.getProtocol(ProtocolTypes[protocolType]);
       // mount source path
       this.logger.log(
         `[${jobRunId}] - [${this.workerId}] Setting up worker`,
@@ -197,8 +198,7 @@ export class SetupActivityService {
 
   async speedTestCleanup(jobRunId: string, fsDetails:FileServerDetails, protocolType:string): Promise<any> {
     try {
-
-      const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
+      const protocol = this.protocols.getProtocol(ProtocolTypes[protocolType]);
       // unmount source path
       await this.unmountPath(
         fsDetails,
@@ -233,9 +233,8 @@ export class SetupActivityService {
       if (!context) {
         throw new Error(`Context not found for traceId ${jobRunId}`);
       }
-
       const protocolType = context.jobConfig.sourceFileServer.protocols[0].type;
-      const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
+      const protocol = this.protocols.getProtocol(ProtocolTypes[protocolType]);
       // unmount source path
       await this.unmountPath(
         context.jobConfig.sourceFileServer,

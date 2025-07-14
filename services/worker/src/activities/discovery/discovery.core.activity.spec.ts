@@ -1,5 +1,4 @@
 
-import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CommandStatus, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { RedisService } from 'src/redis/redis.service';
@@ -9,7 +8,7 @@ import { DiscoveryScanActivity } from './discovery.core.activity';
 import { Dirent } from 'fs';
 import * as fs from 'fs';
 import { ScanDirCommandInput } from './discovery.type';
-
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 jest.mock('@temporalio/activity', () => ({
   Context: {
@@ -18,11 +17,6 @@ jest.mock('@temporalio/activity', () => ({
     }))
   },
 }))
-
-const mockLogger = { log: jest.fn(), debug: jest.fn(), error: jest.fn() } as any as Logger;
-const mockRedis = { getJobContext: jest.fn(), setJobContext: jest.fn() } as any as RedisService;
-const mockCommon = { fetchOneTask: jest.fn(), addFailedWorkerToJobState: jest.fn() } as any as CommonActivityService;
-const mockConfig = { get: jest.fn() } as any as ConfigService;
 
 jest.mock('@temporalio/activity', () => ({
   Context: {
@@ -33,6 +27,24 @@ jest.mock('@temporalio/activity', () => ({
 describe('DiscoveryScanActivity', () => {
   let service: DiscoveryScanActivity;
   let basePrefixSpy: jest.SpyInstance;
+
+  const mockLoggerInstance: LoggerService = {
+    log: jest.fn(),
+    debug: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    requestContext: {} as any,
+    parentContext: {} as any,
+    setParentContext: jest.fn(),
+  } as unknown as LoggerService;
+
+  const mockLoggerFactory = {
+    create: jest.fn().mockReturnValue(mockLoggerInstance),
+  } as unknown as LoggerFactory;
+
+  const mockRedis = { getJobContext: jest.fn(), setJobContext: jest.fn() } as any as RedisService;
+  const mockCommon = { fetchOneTask: jest.fn(), addFailedWorkerToJobState: jest.fn() } as any as CommonActivityService;
+  const mockConfig = { get: jest.fn() } as any as ConfigService;
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -45,7 +57,9 @@ describe('DiscoveryScanActivity', () => {
       }
     });
 
-    service = new DiscoveryScanActivity(mockLogger, mockRedis, mockConfig, mockCommon);
+    mockLoggerFactory.create = jest.fn().mockReturnValue(mockLoggerInstance);
+
+    service = new DiscoveryScanActivity(mockLoggerFactory, mockRedis, mockConfig, mockCommon);
     basePrefixSpy = jest.spyOn(utils, 'basePrefix').mockReturnValue('/base/');
 
     // Mock utils
@@ -160,7 +174,7 @@ describe('DiscoveryScanActivity', () => {
       // Simulate an error in discover
       jest.spyOn(service, 'discover').mockResolvedValue({ isFatal: false, files: 0, folders: 0, errors: new Set('Test error'), success: 0 } as any);
       await service.scanActivity({ jobRunId: 'job1', failedWorkers: [] });
-      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('[job1] Discovery Scan Activity ERRORED.'));
+      expect(mockLoggerInstance.error).toHaveBeenCalledWith(expect.stringContaining('[job1] Discovery Scan Activity ERRORED.'));
     });
   });
 

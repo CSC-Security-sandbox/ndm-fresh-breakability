@@ -2,7 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { WorkerThreadService } from './worker.thread.service';
 import { WorkerThreadOutput, ThreadOperation, MigrateFile } from './worker.thread.type';
 import { ConfigService } from '@nestjs/config';
-import { Logger } from '@nestjs/common';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../auth/auth.service.spec';
 
 jest.mock('worker_threads', () => {
   const EventEmitter = require('events');
@@ -20,7 +21,8 @@ jest.mock('worker_threads', () => {
 describe('WorkerThreadService', () => {
   let service: WorkerThreadService;
   let configService: ConfigService;
-  let logger: Logger;
+  let loggerFactory: LoggerFactory;
+  let logger: LoggerService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -31,15 +33,16 @@ describe('WorkerThreadService', () => {
           useValue: { get: jest.fn().mockReturnValue(5) },
         },
         {
-          provide: Logger,
-          useValue: new Logger(),
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
         },
       ],
     }).compile();
 
     service = module.get<WorkerThreadService>(WorkerThreadService);
     configService = module.get<ConfigService>(ConfigService);
-    logger = module.get<Logger>(Logger);
+    loggerFactory = module.get<LoggerFactory>(LoggerFactory);
+    logger = mockLoggerFactory.create(WorkerThreadService.name);
   });
 
   afterEach(() => {

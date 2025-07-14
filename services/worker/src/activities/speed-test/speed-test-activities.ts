@@ -1,6 +1,6 @@
 
 import { CommandStatus, DMError, FileServerDetails, JobContext, JobStatus, OPS_STATUS, SpeedTestReadWriteInfo, TaskStats, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import * as path from 'path';
 import * as fs from 'fs';
 // import * as net from 'net';
@@ -12,7 +12,7 @@ import { getErrorCode, getFilePermissions, getFileType, shouldExclude } from '..
 import { WorkersConfig } from 'src/config/app.config';
 import axios from 'axios';
 import { SpeedTestOutput } from './speed-test.type';
-
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 interface RoundTripDelay {
   min: number;
@@ -27,10 +27,14 @@ export interface NetworkMetrics {
 
 @Injectable()
 export class SpeedTestActivities {
+  private readonly logger: LoggerService;
+
   constructor(
-    private readonly logger: Logger,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly redisService: RedisService,
-  ) {}
+  ) {
+    this.logger = loggerFactory.create(SpeedTestActivities.name);
+  }
 
   async readActivity(payload: any, traceId: string, volumeId:string, resultId:string): Promise<SpeedTestOutput> {
     const output: SpeedTestOutput = { errors: [], success: false, result: null };    

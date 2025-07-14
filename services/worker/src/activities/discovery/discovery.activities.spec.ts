@@ -1,5 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { AuthService } from 'src/auth/auth.service';
@@ -7,6 +6,7 @@ import { WorkersConfig } from 'src/config/app.config';
 import { RedisService } from 'src/redis/redis.service';
 import { CommonActivityService } from '../common/common.service';
 import { DiscoveryActivity } from './discovery.activities';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import * as utils from '../utils/utils';
 
 jest.mock('axios');
@@ -17,7 +17,7 @@ describe('DiscoveryActivity', () => {
   let service: DiscoveryActivity;
   let configService: Partial<ConfigService>;
   let authService: Partial<AuthService>;
-  let logger: Partial<Logger>;
+  let logger: Partial<LoggerService>;
   let redisService: Partial<RedisService>;
   let commonService: Partial<CommonActivityService>;
 
@@ -35,9 +35,14 @@ describe('DiscoveryActivity', () => {
   });
 
   beforeEach(async () => {
+    logger = { log: jest.fn(), error: jest.fn() };
+
+    const mockLoggerFactory = {
+      create: jest.fn().mockReturnValue(logger),
+    };
+
     configService = { get: jest.fn().mockImplementation(key => key === 'worker.workerId' ? 'worker-x' : 'http://report') };
     authService = { getAccessToken: jest.fn().mockResolvedValue('token-abc') };
-    logger = { log: jest.fn(), error: jest.fn() };
     const fakeContext = createJobContext();
     redisService = { getJobContext: jest.fn().mockResolvedValue(fakeContext), setJobContext: jest.fn() };
     commonService = { getJobState: jest.fn().mockResolvedValue({ tasks_total: 0, tasks_completed: 0, workers: [], workers_agreed: [], status: undefined }) };
@@ -47,7 +52,10 @@ describe('DiscoveryActivity', () => {
         DiscoveryActivity,
         { provide: ConfigService, useValue: configService },
         { provide: AuthService, useValue: authService },
-        { provide: Logger, useValue: logger },
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
+        },
         { provide: RedisService, useValue: redisService },
         { provide: CommonActivityService, useValue: commonService },
       ],
@@ -61,8 +69,6 @@ describe('DiscoveryActivity', () => {
       await expect(service.getWorkerId()).resolves.toBe('worker-x');
     });
   });
-
-
 
   describe('publishTask', () => {
     const mockedJobContext = {

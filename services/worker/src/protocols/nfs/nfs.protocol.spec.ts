@@ -9,6 +9,11 @@ import { Logger, Runtime, RuntimeOptions } from '@temporalio/worker';
 import { ProtocolTypes } from '../protocols';
 import { CommandPattern } from 'src/config/command.config';
 import * as os from 'os';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from 'src/auth/auth.service.spec';
+import { Test, TestingModule } from '@nestjs/testing';
+
+let loggerFactory: LoggerFactory;
 
 jest.mock('net');
 jest.mock('./nfs.utils');
@@ -17,10 +22,7 @@ describe('NFSProtocol', () => {
   let nfsProtocol: NFSProtocol;
   let mockLogger: Partial<Logger>;
 
-  beforeEach(() => {
-    jest.spyOn(Runtime, 'install').mockImplementation((options: RuntimeOptions) => {
-      return null;
-    });
+  beforeEach(async () => {
     const configService = new ConfigService();
     jest.spyOn(configService, 'get').mockReturnValue('test-worker');
     WorkersConfig.configService = configService;
@@ -31,7 +33,28 @@ describe('NFSProtocol', () => {
       error: jest.fn(),
       log: jest.fn(),
     };
-    nfsProtocol = new NFSProtocol();
+
+    mockLoggerFactory.create = jest.fn().mockReturnValue(mockLogger); 
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        NFSProtocol,
+        { provide: LoggerFactory, useValue: {
+          create: jest.fn().mockReturnValue({
+            log: jest.fn(),
+            error: jest.fn(),
+          }),
+        } as typeof mockLoggerFactory },
+      ],
+    }).compile();
+
+    loggerFactory = module.get<LoggerFactory>(LoggerFactory); 
+        
+    jest.spyOn(Runtime, 'install').mockImplementation((options: RuntimeOptions) => {
+      return null;
+    });
+
+    nfsProtocol = new NFSProtocol(loggerFactory);
     (nfsProtocol as any).logger = mockLogger;
   });
 
@@ -52,8 +75,8 @@ describe('NFSProtocol', () => {
       const result = await nfsProtocol.validateConnection('traceId', options);
 
       expect(result).toBe('Connection established');
-      expect(mockLogger.info).toHaveBeenCalledWith('[traceId] Attempting to connect... Protocol: NFS');
-      expect(mockLogger.info).toHaveBeenCalledWith('[traceId] Connection established for Protocol: NFS');
+      expect(mockLogger.log).toHaveBeenCalledWith('[traceId] Attempting to connect... Protocol: NFS');
+      expect(mockLogger.log).toHaveBeenCalledWith('[traceId] Connection established for Protocol: NFS');
     });
 
     it('should handle connection error', async () => {
@@ -123,8 +146,8 @@ describe('NFSProtocol', () => {
       const result = await nfsProtocol.getProtocolVersions('traceId', payload);
 
       expect(result).toEqual(['NFSv3', 'NFSv4']);
-      expect(mockLogger.info).toHaveBeenCalledWith('[traceId] Getting protocols for localhost of type NFS from test-worker');
-      expect(mockLogger.info).toHaveBeenCalledWith('[traceId] NFSv3\nNFSv4');
+      expect(mockLogger.log).toHaveBeenCalledWith('[traceId] Getting protocols for localhost of type NFS from test-worker');
+      expect(mockLogger.log).toHaveBeenCalledWith('[traceId] NFSv3\nNFSv4');
     });
   });
 
@@ -141,8 +164,8 @@ describe('NFSProtocol', () => {
       const result = await nfsProtocol.listPaths('traceId', payload);
 
       expect(result).toEqual(['/export/path1', '/export/path2']);
-      expect(mockLogger.info).toHaveBeenCalledWith('[traceId] Getting list paths for localhost of type NFS from test-worker');
-      expect(mockLogger.info).toHaveBeenCalledWith('[traceId] /export/path1\n/export/path2');
+      expect(mockLogger.log).toHaveBeenCalledWith('[traceId] Getting list paths for localhost of type NFS from test-worker');
+      expect(mockLogger.log).toHaveBeenCalledWith('[traceId] /export/path1\n/export/path2');
     });
   });
 
@@ -158,7 +181,7 @@ describe('NFSProtocol', () => {
       (nfsProtocol as any).executeCommand = jest.fn().mockResolvedValue(mockResponse);
 
       const result = await nfsProtocol.unmountPath('traceId', payload);
-      expect(mockLogger.info).toHaveBeenCalled();
+      expect(mockLogger.log).toHaveBeenCalled();
       expect(result).toBe(mockResponse);
     });
   })
@@ -185,7 +208,7 @@ describe('NFSProtocol', () => {
         verbose: jest.fn()
       } as unknown as jest.Mocked<Logger>;
   
-      nfsProtocol = new NFSProtocol();
+      nfsProtocol = new NFSProtocol(loggerFactory);
       (nfsProtocol as any).logger = loggerMock;
       (nfsProtocol as any).platform = 'linux';
       (nfsProtocol as any).workerId = 'test-worker-id';
@@ -216,7 +239,7 @@ describe('NFSProtocol', () => {
       expect((nfsProtocol as any).getCommandPattern).toHaveBeenCalledWith(CommandPattern.AVAILABLE_DISK_SPACE);
   
       expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] Checking available disk space at path: ${mockPayload.path}`);
-      expect(loggerMock.info).toHaveBeenCalledWith(`[${mockTraceId}] ${mockResponse.message}`);
+      expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] ${mockResponse.message}`);
       expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] Available space at ${mockPayload.path}: 1024000 bytes`);
   
       expect(loggerMock.log).toHaveBeenCalledWith(`response of getAvailableDiskSpace in nfs.protocol ${JSON.stringify(mockResponse)}`);
@@ -291,13 +314,16 @@ describe('NFSProtocol - getTotalUsedMemory', () => {
   } as ProtocolPayload;
 
   beforeEach(() => {
-    nfsProtocol = new NFSProtocol();
+    nfsProtocol = new NFSProtocol(loggerFactory);
     nfsProtocol['executeCommand'] = jest.fn();
-    nfsProtocol['logger'] = {
-      log: jest.fn(),
-      info: jest.fn(),
-      error: jest.fn(),
-    } as any;
+    Object.defineProperty(nfsProtocol, 'logger', {
+      value: {
+        log: jest.fn(),
+        info: jest.fn(),
+        error: jest.fn(),
+      },
+      writable: false,
+    });
   });
 
   it('should throw error if df output is malformed', async () => {

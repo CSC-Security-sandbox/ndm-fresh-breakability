@@ -3,15 +3,15 @@ import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { NativeConnection, Worker } from '@temporalio/worker';
 import { of } from 'rxjs';
-import { Logger } from 'src/logger/logger.service';
 import { WorkManagerService } from './work-manager.service';
 import { WorkerConfiguration, WorkerState } from './work-manager.types';
 import { WorkerOptionsService } from './factory/worker-options.factory.service';
 import { AuthService } from 'src/auth/auth.service';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../auth/auth.service.spec';
 
 jest.mock('@nestjs/axios');
 jest.mock('@nestjs/config');
-jest.mock('src/logger/logger.service');
 jest.mock('./factory/worker-options.factory');
 jest.mock('src/utils/worker-manager.mappers', () => ({
   getWorkerIdentity: (config: any) => `${config.workerId}-${config.configName}`,
@@ -34,7 +34,8 @@ describe('WorkManagerService', () => {
   let httpService: HttpService;
   let configService: ConfigService;
   let authService: AuthService;
-  let logger: Logger;
+  let loggerFactory: LoggerFactory;
+  let logger: LoggerService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -73,14 +74,8 @@ describe('WorkManagerService', () => {
             }),
           },
         },
-        {
-          provide: Logger,
-          useValue: {
-            info: jest.fn(),
-            error: jest.fn(),
-            warn: jest.fn(),
-            debug: jest.fn(),
-          },
+        { provide: LoggerFactory,
+          useValue: mockLoggerFactory,
         },
         {
           provide: WorkerOptionsService,
@@ -93,7 +88,8 @@ describe('WorkManagerService', () => {
     authService = module.get<AuthService>(AuthService);
     httpService = module.get<HttpService>(HttpService);
     configService = module.get<ConfigService>(ConfigService);
-    logger = module.get<Logger>(Logger);
+    loggerFactory = module.get<LoggerFactory>(LoggerFactory);
+    logger = loggerFactory.create(WorkManagerService.name);
   });
 
   it('should be defined', () => {
@@ -274,7 +270,7 @@ describe('WorkManagerService', () => {
     it('should establish a connection to Temporal and log startup info', async () => {
       (NativeConnection.connect as jest.Mock).mockResolvedValue('connected');
       await service.onApplicationBootstrap();
-      expect(logger.info).toHaveBeenCalledWith('[onApplicationBootstrap] - Starting Worker Service');
+      expect(logger.log).toHaveBeenCalledWith('[onApplicationBootstrap] - Starting Worker Service');
       expect(service['connection']).toEqual('connected');
     });
 

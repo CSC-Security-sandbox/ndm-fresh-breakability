@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { NativeConnection } from "@temporalio/worker";
 import { DiscoveryScanActivity } from "src/activities/discovery/discovery.core.activity";
 import { DiscoveryActivity } from "src/activities/discovery/discovery.activities";
@@ -17,10 +17,13 @@ import { CommonActivityService } from "src/activities/common/common.service";
 import { SpeedTestActivities } from "src/activities/speed-test/speed-test-activities";
 import { RedisMemoryCheckActivity } from "src/activities/redis/redis.mem.usage.check.activity";
 import { ConfigService } from "@nestjs/config";
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class WorkerOptionsService {
   readonly jobTaskActivityConcurrency : number;
+  private readonly logger: LoggerService;
+
   constructor(
     private readonly listPathActivityService: ListPathActivity,
     private readonly validateConnectionService: ValidateConnectionActivity,
@@ -36,9 +39,11 @@ export class WorkerOptionsService {
     private readonly speedTestReadActivity: SpeedTestActivities,
     private readonly  redismeorycheck: RedisMemoryCheckActivity,
     @Inject(ConfigService) private readonly configService: ConfigService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
   ) {
     this.jobTaskActivityConcurrency = this.configService.get<number>('worker.maxActivityConcurrency') || 1;
-    Logger.log(`WorkerOptionsService initialized with jobTaskActivityConcurrency: ${this.jobTaskActivityConcurrency}`, WorkerOptionsService.name);
+    this.logger = loggerFactory.create(WorkerOptionsService.name);
+    this.logger.log(`WorkerOptionsService initialized with jobTaskActivityConcurrency: ${this.jobTaskActivityConcurrency}`, WorkerOptionsService.name);
   }
 
   createWorkerOptions(id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) {

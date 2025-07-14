@@ -1,12 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { Logger } from '@nestjs/common';
+// import { Logger } from '@nestjs/common';
 import axios from 'axios';
 import * as fs from 'fs';
 import { AuthService } from 'src/auth/auth.service';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import { ConfigError, ConfigStatus } from './working-directory.type';
 import { ValidateWorkingDirectoryActivity } from './working-directory.service';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { SMBProtocol } from '../../protocols/smb/smb.protocol';
+import { NFSProtocol } from '../../protocols/nfs/nfs.protocol';
+import { WorkersConfig } from 'src/config/app.config';
+import { CommandConfig } from 'src/config/command.config';
 
 // Mock Temporal dependencies to avoid native binary issues
 jest.mock('@temporalio/core-bridge', () => ({}));
@@ -23,10 +28,21 @@ const mockedFs = fs as jest.Mocked<typeof fs>;
 
 describe('ValidateWorkingDirectoryActivity', () => {
   let service: ValidateWorkingDirectoryActivity;
-  let configService: jest.Mocked<ConfigService>;
-  let logger: jest.Mocked<Logger>;
   let authService: jest.Mocked<AuthService>;
   let mockProtocol: any;
+  let configService: Partial<ConfigService>;
+  let loggerFactory: LoggerFactory;
+  let activity: ValidateWorkingDirectoryActivity;
+  let protocols: Protocols;
+  let logger: LoggerService;
+  // let configService: jest.Mocked<ConfigService>;
+  // let logger: jest.Mocked<Logger>;
+
+  const mockLogger = {
+    info: jest.fn(),
+    error: jest.fn(),
+    log: jest.fn(),
+  };
 
   beforeEach(async () => {
     // Reset all mocks
@@ -39,7 +55,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
     };
 
     // Mock Protocols.getProtocol
-    jest.mocked(Protocols.getProtocol).mockReturnValue(mockProtocol);
+    jest.mocked(protocols.getProtocol).mockReturnValue(mockProtocol);
 
     // Create mock config service with immediate return values
     const mockConfigService = {
@@ -57,6 +73,49 @@ describe('ValidateWorkingDirectoryActivity', () => {
       }),
     };
 
+    WorkersConfig.configService = configService as ConfigService;
+    CommandConfig.configService = configService as ConfigService;
+
+    // Create mock protocol
+    mockProtocol = {
+      mountPath: jest.fn(),
+      unmountPath: jest.fn(),
+    };
+
+    const mockLoggerFactory = {
+      create: jest.fn().mockReturnValue(mockLogger),
+    };
+  
+    loggerFactory = mockLoggerFactory as unknown as LoggerFactory;
+  
+    protocols = new Protocols(
+      new NFSProtocol(loggerFactory),
+      new SMBProtocol(loggerFactory)
+    );
+
+    // Mock Protocols.getProtocol
+    jest.mocked(protocols.getProtocol).mockReturnValue(mockProtocol);
+
+    // Create mock config service with immediate return values
+    const mockConfigService = {
+      get: jest.fn().mockImplementation((key: string) => {
+        switch (key) {
+          case 'worker.workerId':
+            return 'test-worker-id';
+          case 'worker.baseWorkingPath':
+            return '/base/working/path';
+          case 'worker.connection.workerConfigUrl':
+            return 'http://test-url';
+          default:
+            return undefined;
+        }
+      }),
+    };
+
+    const mockProtocols = {
+      getProtocol: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ValidateWorkingDirectoryActivity,
@@ -64,12 +123,10 @@ describe('ValidateWorkingDirectoryActivity', () => {
           provide: ConfigService,
           useValue: mockConfigService,
         },
+        { provide: LoggerService, useValue: mockLogger },
         {
-          provide: Logger,
-          useValue: {
-            log: jest.fn(),
-            error: jest.fn(),
-          },
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
         },
         {
           provide: AuthService,
@@ -77,13 +134,20 @@ describe('ValidateWorkingDirectoryActivity', () => {
             getAccessToken: jest.fn(),
           },
         },
+        {
+          provide: Protocols,
+          useValue: mockProtocols,
+        },
       ],
     }).compile();
 
     service = module.get<ValidateWorkingDirectoryActivity>(ValidateWorkingDirectoryActivity);
     configService = module.get(ConfigService);
-    logger = module.get(Logger);
+    // logger = module.get(Logger);
+    loggerFactory = module.get<LoggerFactory>(LoggerFactory);
+    logger = module.get<LoggerService>(LoggerService);
     authService = module.get(AuthService);
+    protocols = module.get(Protocols);
   });
 
   describe('validateWorkingDirectory', () => {
@@ -140,7 +204,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
 
       const result = await service.validateWorkingDirectory('trace-id', payload);
 
-      expect(logger.log).toHaveBeenCalledWith('Invalid Export Path');
+      expect(mockLogger.log).toHaveBeenCalledWith('Invalid Export Path');
       expect(result.status).toBe('error');
       expect(result.message).toContain(ConfigError.INVALID_EXPORT_PATH);
     });
@@ -155,8 +219,8 @@ describe('ValidateWorkingDirectoryActivity', () => {
 
       const result = await service.validateWorkingDirectory('trace-id', payload);
 
-      expect(logger.log).toHaveBeenCalledWith('Valid Export Path');
-      expect(logger.log).toHaveBeenCalledWith('Started validating working directory');
+      expect(mockLogger.log).toHaveBeenCalledWith('Valid Export Path');
+      expect(mockLogger.log).toHaveBeenCalledWith('Started validating working directory');
       expect(result.status).toBe('success');
     });
 
@@ -186,7 +250,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
       const result = await service.validateWorkingDirectory('trace-id', payload);
 
       expect(result.status).toBe('error');
-      expect(logger.error).toHaveBeenCalledWith('Working directory validation error: Validation error');
+      expect(mockLogger.error).toHaveBeenCalledWith('Working directory validation error: Validation error');
     });
   });
 
@@ -247,10 +311,10 @@ describe('ValidateWorkingDirectoryActivity', () => {
         jobRunId: 'trace-id',
       });
       expect(mockProtocol.unmountPath).toHaveBeenCalled();
-      expect(logger.log).toHaveBeenCalledWith('Mounting export path for host test-host');
-      expect(logger.log).toHaveBeenCalledWith('Mounted export path successfully');
-      expect(logger.log).toHaveBeenCalledWith('Unmounting export path for host test-host');
-      expect(logger.log).toHaveBeenCalledWith('Unmounted export path successfully');
+      expect(mockLogger.log).toHaveBeenCalledWith('Mounting export path for host test-host');
+      expect(mockLogger.log).toHaveBeenCalledWith('Mounted export path successfully');
+      expect(mockLogger.log).toHaveBeenCalledWith('Unmounting export path for host test-host');
+      expect(mockLogger.log).toHaveBeenCalledWith('Unmounted export path successfully');
     });
 
     it('should handle mount error and rethrow', async () => {
@@ -260,7 +324,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
       await expect(service.handleMountAndUnmountPaths('trace-id', mockPayload))
         .rejects.toThrow('Mount failed');
 
-      expect(logger.error).toHaveBeenCalledWith('Error while mounting the path - Mount failed');
+      expect(mockLogger.error).toHaveBeenCalledWith('Error while mounting the path - Mount failed');
     });
 
     it('should handle mount error without message and rethrow', async () => {
@@ -270,7 +334,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
       await expect(service.handleMountAndUnmountPaths('trace-id', mockPayload))
         .rejects.toThrow('String error');
 
-      expect(logger.error).toHaveBeenCalledWith('Error while mounting the path - String error');
+      expect(mockLogger.error).toHaveBeenCalledWith('Error while mounting the path - String error');
     });
   });
 
@@ -310,7 +374,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
       await expect(service.updateConfigStatus('http://test-url/api', mockPayload))
         .rejects.toThrow('API Error: API Error Response');
 
-      expect(logger.error).toHaveBeenCalledWith('API Error: API Error Response');
+      expect(mockLogger.error).toHaveBeenCalledWith('API Error: API Error Response');
     });
 
     it('should handle API error without response data', async () => {
@@ -323,7 +387,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
       await expect(service.updateConfigStatus('http://test-url/api', mockPayload))
         .rejects.toThrow('API Error: Network Error');
 
-      expect(logger.error).toHaveBeenCalledWith('API Error: Network Error');
+      expect(mockLogger.error).toHaveBeenCalledWith('API Error: Network Error');
     });
   });
 
@@ -352,8 +416,8 @@ describe('ValidateWorkingDirectoryActivity', () => {
 
       expect(result).toBe(true);
       // The path is constructed using path.join, so we need to expect the actual path construction
-      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('Working Directory exists:'));
-      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('working-dir'));
+      expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('Working Directory exists:'));
+      expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('working-dir'));
     });
 
     it('should return false for non-existent directory', async () => {
@@ -364,8 +428,8 @@ describe('ValidateWorkingDirectoryActivity', () => {
       const result = await service.isValidDirectory(mockPayload, 'trace-id');
 
       expect(result).toBe(false);
-      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('Working Directory does not exist:'));
-      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('working-dir'));
+      expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('Working Directory does not exist:'));
+      expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('working-dir'));
     });
 
     it('should throw error for directory without write permission', async () => {
@@ -419,7 +483,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
       await expect(service.isValidDirectory(mockPayload, 'trace-id'))
         .rejects.toThrow('Validation failed');
 
-      expect(logger.error).toHaveBeenCalledWith('Working Directory validation error: Validation failed');
+      expect(mockLogger.error).toHaveBeenCalledWith('Working Directory validation error: Validation failed');
     });
 
     it('should handle validation error without message and rethrow', async () => {
@@ -429,7 +493,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
       await expect(service.isValidDirectory(mockPayload, 'trace-id'))
         .rejects.toThrow('String validation error');
 
-      expect(logger.error).toHaveBeenCalledWith('Working Directory validation error: String validation error');
+      expect(mockLogger.error).toHaveBeenCalledWith('Working Directory validation error: String validation error');
     });
   });
 
@@ -444,7 +508,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
       expect(mockWriteFileSync).toHaveBeenCalledWith('/test/directory/.nfs_write_test', '');
       expect(mockUnlinkSync).toHaveBeenCalledWith('/test/directory/.nfs_write_test');
       expect(result).toBe(true);
-      expect(logger.log).toHaveBeenCalledWith('Success: Directory /test/directory is writable.');
+      expect(mockLogger.log).toHaveBeenCalledWith('Success: Directory /test/directory is writable.');
       
       // Restore mocks
       mockWriteFileSync.mockRestore();
@@ -462,7 +526,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
       const result = service.checkWritable('/test/directory');
 
       expect(result).toBe(false);
-      expect(logger.error).toHaveBeenCalledWith('Error: No write permission for directory /test/directory - Permission denied');
+      expect(mockLogger.error).toHaveBeenCalledWith('Error: No write permission for directory /test/directory - Permission denied');
       
       // Restore mock
       mockWriteFileSync.mockRestore();

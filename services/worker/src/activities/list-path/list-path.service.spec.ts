@@ -1,42 +1,69 @@
 import { Test, TestingModule } from '@nestjs/testing';
- import { ConfigService } from '@nestjs/config';
- import { Logger } from '@nestjs/common';
- import { ListPathActivity } from './list-path.service';
- import { Protocols } from 'src/protocols/protocols';
+import { ConfigService } from '@nestjs/config';
+import { ListPathActivity } from './list-path.service';
+import { Protocols } from 'src/protocols/protocols';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+
+jest.mock('src/protocols/protocols');
  
- jest.mock('src/protocols/protocols');
+describe('ListPathActivity', () => {
+  let service: ListPathActivity;
+  let configService: ConfigService;
+  let loggerFactory: LoggerFactory;
+  let logger: LoggerService;
+  let protocols: Protocols;
  
- describe('ListPathActivity', () => {
-   let service: ListPathActivity;
-   let configService: ConfigService;
-   let logger: Logger;
- 
-   beforeEach(async () => {
-     const module: TestingModule = await Test.createTestingModule({
-       providers: [
-         ListPathActivity,
-         {
+  beforeEach(async () => {
+    const mockConfigService = {
+      get: jest.fn((key) => {
+        if (key === 'worker.workerId') return 'test-worker-id';
+        return null;
+      }),
+    };
+
+    const mockProtocols = {
+      getProtocol: jest.fn(),
+    };
+
+    const mockLogger: Partial<LoggerService> = {
+      log: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+    };
+
+    const mockLoggerFactory = {
+      create: jest.fn().mockReturnValue(mockLogger),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        ListPathActivity,
+        {
            provide: ConfigService,
-           useValue: {
-             get: jest.fn((key) => {
-               if (key === 'worker.workerId') return 'test-worker-id';
-               return null;
-             }),
-           },
-         },
-         {
-           provide: Logger,
-           useValue: {
-             log: jest.fn(),
-           },
-         },
-       ],
-     }).compile();
+           useValue: mockConfigService,
+        },
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
+        },
+        {
+          provide: Protocols,
+          useValue: mockProtocols,
+        },
+        {
+          provide: LoggerService,
+          useValue: mockLogger as LoggerService,
+        },
+      ],
+    }).compile();
  
-     service = module.get<ListPathActivity>(ListPathActivity);
-     configService = module.get<ConfigService>(ConfigService);
-     logger = module.get<Logger>(Logger);
-   });
+    service = module.get<ListPathActivity>(ListPathActivity);
+    configService = module.get<ConfigService>(ConfigService);
+    loggerFactory = module.get<LoggerFactory>(LoggerFactory);
+    logger = module.get<LoggerService>(LoggerService);
+    protocols = module.get<Protocols>(Protocols);
+  });
  
    it('should be defined', () => {
      expect(service).toBeDefined();
@@ -55,7 +82,7 @@ import { Test, TestingModule } from '@nestjs/testing';
        const mockProtocol = {
          listPaths: jest.fn().mockResolvedValue(['path1', 'path2']),
        };
-       (Protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+       (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
  
        const result = await service.listPath(traceId, protocolType, payload);
  
@@ -78,7 +105,7 @@ import { Test, TestingModule } from '@nestjs/testing';
        const mockProtocol = {
          listPaths: jest.fn().mockRejectedValue(new Error('Protocol error')),
        };
-       (Protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+       (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
  
        const result = await service.listPath(traceId, protocolType, payload);
  

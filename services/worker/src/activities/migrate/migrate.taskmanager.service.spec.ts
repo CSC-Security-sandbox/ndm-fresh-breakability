@@ -1,5 +1,4 @@
 import { HttpService } from '@nestjs/axios';
-import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import axios from 'axios';
@@ -8,6 +7,8 @@ import { RedisService } from 'src/redis/redis.service';
 import { MigrationTaskService } from './migrate.taskmanager.service';
 import { CutOverStatus } from './migrate.type';
 import * as utils from '../utils/utils';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../../auth/auth.service.spec';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -47,7 +48,10 @@ describe('MigrationTaskService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MigrationTaskService,
-        Logger,
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
+        },
         { provide: ConfigService, useValue: configService },
         { provide: RedisService, useValue: redisService },
         { provide: AuthService, useValue: authService },

@@ -1,13 +1,14 @@
 import { exec } from "child_process";
 import { WorkersConfig } from "src/config/app.config";
-
-import { Logger } from "src/logger/logger.service";
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 import { ProtocolPayload } from "./protocol.type";
 import { sanitize } from "src/utils/utilities";
 
-
 export abstract class Protocol {
-    protected logger = new  Logger();
+    protected readonly logger: LoggerService;
     protected workerId = WorkersConfig.get('workerId');
     protected baseMountDir = WorkersConfig.get('baseMountDir');
     protected platform: NodeJS.Platform = WorkersConfig.get('platform');
@@ -21,6 +22,12 @@ export abstract class Protocol {
     abstract getTotalUsedMemory(traceId: string, payload: ProtocolPayload): Promise<any>;
     abstract getAvailableDiskSpace(traceId: string, payload: ProtocolPayload): Promise<any>;
 
+    constructor(loggerFactory: LoggerFactory) {
+      this.logger = loggerFactory.create(this.constructor.name);
+    }
+
+    abstract connect(): void;
+
     public async executeCommand(
         traceId: string,
         protocolType: string,
@@ -28,7 +35,8 @@ export abstract class Protocol {
         commandPattern: string,
         commandDescription: string,
       ): Promise<any> {
-      const directoryPath= `${payload?.mountBasePath}/${payload?.jobRunId}/${payload?.pathId}`;
+
+      const directoryPath = `${payload?.mountBasePath}/${payload?.jobRunId}/${payload?.pathId}`;
         const response = {
           traceId: traceId,
           status: 'success',
@@ -51,20 +59,20 @@ export abstract class Protocol {
             const sanitizedStderr = sanitize(stderr, [payload.password]);
             const sanitizedError = sanitize(error?.message, [payload.password]);
 
-            this.logger.info(
+            this.logger.log(
               `[${traceId}] command: ${sanitizedCommand}, stdout: ${stdout}, stderr: ${sanitizedStderr}, error: ${sanitizedError}`,
             );
       
             if (error) {
               response.message = `[${protocolType}] [${commandDescription}] Failed. Hostname: ${payload.hostname} Worker: ${this.workerId}. Error: ${sanitizedError}`;
               response.status = 'error';
-              return rejects(sanitizedError);
+              return rejects((sanitizedError));
             }
       
             if (stderr) {
               response.message = `[${protocolType}] [${commandDescription}] Failed. Hostname: ${payload.hostname} Worker: ${this.workerId}. Error: ${sanitizedStderr}`;
               response.status = 'error';
-              return rejects(sanitizedStderr);
+              return rejects((sanitizedStderr));
             }
       
             response.message = `${stdout}`;
