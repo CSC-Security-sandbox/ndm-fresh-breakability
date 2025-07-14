@@ -60,9 +60,6 @@ const JobDetails = () => {
   const [isFrequentInterval, setIsFrequentInterval] = useState<boolean>(false);
   const [showGeneratingReportBtn, setShowGeneratingReportBtn] =
     useState<Record<string, boolean>>();
-
-  const [showGeneratingReportBtn, setShowGeneratingReportBtn] =
-    useState<Record<string, boolean>>();
   const {
     data: jobConfigDetails,
     isLoading,
