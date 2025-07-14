@@ -5,6 +5,7 @@ import { InventoryEntity } from "src/entities/inventory.entity";
 import { ProjectEntity } from "src/entities/project.entity";
 import { Repository } from "typeorm";
 import { JobRunStatus, JobType } from "src/constants/enums";
+import { Logger } from "@nestjs/common";
 
 const mockInventoryRepo = {
   query: jest.fn(),
