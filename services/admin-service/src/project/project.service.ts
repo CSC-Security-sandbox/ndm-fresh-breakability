@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -12,9 +13,14 @@ import { Account } from '../entities/account.entity';
 import { User } from '../entities/user.entity';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
 import { UserRole } from '../entities/user-role.entity';
+import {
+  LoggerFactory,
+  LoggerService
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class ProjectService {
+  private readonly logger: LoggerService;
   constructor(
     @InjectRepository(Project)
     private readonly projectRepository: Repository<Project>,
@@ -24,25 +30,32 @@ export class ProjectService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
-  ) {}
+    @Inject(LoggerFactory)loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(ProjectService.name);
+  }
 
   async create(
     accountId: string,
     createProjectDto: CreateProjectDto,
     userPermissionResponse: UserPermissionResponse,
   ): Promise<Project> {
+    this.logger.log(`starting to create project for account ${accountId}`);
     const account = await this.accountRepository.findOneBy({ id: accountId });
     if (!account) {
+      this.logger.error(`Account with ${accountId} not found`);
       throw new NotFoundException(`Account with ${accountId} not found`);
     }
 
+    this.logger.log(`starting to find "${createProjectDto.project_name}" project for account ${accountId}`);
     const existingProject = await this.projectRepository.findOneBy({
       project_name: createProjectDto.project_name,
     });
 
     if (existingProject) {
+      this.logger.error(`A project with the name "${createProjectDto.project_name}" already exists for this account.`);
       throw new ConflictException(
-        `A project with the name "${createProjectDto.project_name}" already exists for this account.`,
+        `A project with the name ${createProjectDto.project_name} already exists for this account.`,
       );
     }
 
@@ -58,16 +71,19 @@ export class ProjectService {
     id: string,
     updateProjectDto: UpdateProjectDto,
     userPermissionResponse: UserPermissionResponse,
-  ): Promise<void> {
+  ):Promise<{message :string}> {
     await this.projectRepository.update(id, {
       ...updateProjectDto,
       updated_by: userPermissionResponse.user.id,
     });
+    this.logger.log(`Done updating the project ${id} with update data ${JSON.stringify(updateProjectDto)}`);
+    return{ message: `Project updated successfully` };
   }
 
   async delete(id: string): Promise<void> {
     const result = await this.projectRepository.delete(id);
     if (result.affected === 0) {
+      this.logger.error(`Project with ${id} not found`);
       throw new NotFoundException(`Project with ${id} not found`);
     }
   }
@@ -78,6 +94,7 @@ export class ProjectService {
     });
 
     if (!project) {
+      this.logger.error(`Project with ${id} not found`);
       throw new NotFoundException(`Project with ${id} not found`);
     }
 
@@ -150,6 +167,7 @@ export class ProjectService {
     });
 
     if (!account) {
+      this.logger.error(`Account with ${account_id} not found`);
       throw new NotFoundException(`Account with ${account_id} not found`);
     }
 

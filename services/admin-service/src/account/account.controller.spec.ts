@@ -7,6 +7,7 @@ import { Account } from '../entities/account.entity';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 describe('AccountController', () => {
   let controller: AccountController;
@@ -41,6 +42,15 @@ describe('AccountController', () => {
         {
           provide: JwtService,
           useValue: mockJwtService,
+        },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+            }),
+          },
         },
       ],
     }).compile();
