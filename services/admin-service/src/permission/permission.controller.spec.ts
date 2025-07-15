@@ -6,7 +6,6 @@ import { PermissionController } from './permission.controller';
 import { PermissionService } from './permission.service';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
-import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 describe('PermissionController', () => {
   let controller: PermissionController;
@@ -42,15 +41,6 @@ describe('PermissionController', () => {
           provide: JwtService,
           useValue: mockJwtService,
         },
-        {
-          provide: LoggerFactory,
-          useValue: {
-            create: jest.fn().mockReturnValue({
-              log: jest.fn(),
-              error: jest.fn(),
-            }),
-          },
-        }
       ],
     }).compile();
 
