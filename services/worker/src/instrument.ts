@@ -6,15 +6,14 @@ import { NodeSDK } from '@opentelemetry/sdk-node';
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
-import {MetricReader, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import { MetricReader, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 
 import { Resource } from '@opentelemetry/resources';
+import { SpanExporter } from '@opentelemetry/sdk-trace-node';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
-import { SpanExporter, ConsoleSpanExporter } from '@opentelemetry/sdk-trace-node';
-import { trace } from '@opentelemetry/api';
 
-import { OTLPTraceExporter as OTLPTraceExporterHttp } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPMetricExporter as OTLPMetricExporterHttp } from '@opentelemetry/exporter-metrics-otlp-http';
+import { OTLPTraceExporter as OTLPTraceExporterHttp } from '@opentelemetry/exporter-trace-otlp-http';
 
 const otelEndpoint = process.env.OTEL_COLLECTOR_ENDPOINT || '127.0.0.1:4318';
 

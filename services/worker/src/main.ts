@@ -11,7 +11,7 @@ function initializeRuntime(defaultLogger: DefaultLogger) {
    
       logging: {
           forward: {},
-          filter: makeTelemetryFilterString({ core: 'WARN' }),
+          filter: makeTelemetryFilterString({ core: 'TRACE', other: 'DEBUG' }),
       },   
     }    
   });
@@ -30,9 +30,3 @@ async function bootstrap() {
   logger.info( `Worker Service Started.\n Worker ID: ${workerId}\nProcess Id: ${processId}`);
 }
 bootstrap();
-
-
-
-
-
-

@@ -1,2 +1,0 @@
-require('./instrument');
-require('./main');
