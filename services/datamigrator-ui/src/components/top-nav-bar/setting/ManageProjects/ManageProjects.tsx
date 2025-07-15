@@ -46,7 +46,7 @@ const ManageProject = () => {
 
   const tableStateProps = {
     columns: COL_DEF_FOR_PROJECT,
-    rows: projectList?.data?.items,
+    rows: projectList,
     isSorting: true,
     pageSize: 10,
   };
@@ -70,10 +70,7 @@ const ManageProject = () => {
             <PermissionAuth
               permissionName={USER_PERMISSION_TYPE_ENUM.DeleteProject}
             >
-              <Button
-                onClick={() => setIsCreateFormVisible(true)}
-                className="ml-4"
-              >
+              <Button onClick={() => setIsCreateFormVisible(true)} className="ml-4">
                 Add Project
               </Button>
             </PermissionAuth>

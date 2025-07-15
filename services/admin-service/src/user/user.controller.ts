@@ -21,7 +21,6 @@ import {
 import { UserDescriptions } from '../swagger/swagger-summary';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
-import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
 
 @ApiTags('users')
 @Controller('/api/v1/users')
@@ -116,7 +115,7 @@ export class UserController {
     summary: 'Get User by ID',
     description: UserDescriptions.GetUserById,
   })
-  findOne(@Param('id', NonEmptyStringPipe) id: string) {
+  findOne(@Param('id') id: string) {
     return this.userService.findOne(id);
   }
 
@@ -128,7 +127,7 @@ export class UserController {
     description: UserDescriptions.UpdateUserById,
   })
   update(
-    @Param('id', NonEmptyStringPipe) id: string,
+    @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
     @Request() userPermissions: UserPermissionResponse,
   ) {
@@ -142,7 +141,7 @@ export class UserController {
     summary: 'Delete User by ID',
     description: UserDescriptions.DeleteUserById,
   })
-  delete(@Param('id', NonEmptyStringPipe) id: string) {
+  delete(@Param('id') id: string) {
     return this.userService.delete(id);
   }
 
@@ -153,7 +152,7 @@ export class UserController {
     summary: 'Inactivate User By Id',
     description: UserDescriptions.InactivateUserById,
   })
-  inactivate(@Param('id', NonEmptyStringPipe) id: string) {
+  inactivate(@Param('id') id: string) {
     return this.userService.inactivate(id);
   }
 }

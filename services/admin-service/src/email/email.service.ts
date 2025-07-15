@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  Inject,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as nodemailer from 'nodemailer';
 import * as path from 'path';
@@ -13,24 +10,16 @@ import { NOTIFICATION_TYPE } from './dto/notification.type';
 
 import { IncidentStatus, SyncEmail } from 'src/entities/sync-email.entity';
 import { EmailContentStatus } from 'src/constants/email-content.enum';
-import {
-  LoggerFactory,
-  LoggerService
-} from '@netapp-cloud-datamigrate/logger-lib';
-
 @Injectable()
 export class EmailService {
-  private readonly logger : LoggerService;
+  private readonly logger = new Logger(EmailService.name);
   transporter: nodemailer.Transporter;
   constructor(
     @InjectRepository(GlobalSettings)
     private settingsRepo: Repository<GlobalSettings>,
     @InjectRepository(SyncEmail)
     private syncEmailRepo: Repository<SyncEmail>,
-    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
-  ) {
-    this.logger = loggerFactory.create(EmailService.name);
-  }
+  ) {}
   async setupAndSendMail(emailContent: any, notificationType: string) {
     try {
       await this.setupTransporter(emailContent, notificationType);

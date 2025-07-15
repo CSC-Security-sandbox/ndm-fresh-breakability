@@ -1,7 +1,7 @@
 import {
   Injectable,
-  Inject,
   InternalServerErrorException,
+  Logger,
   BadRequestException,
 } from '@nestjs/common';
 import axios from 'axios';
@@ -13,27 +13,19 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { KeycloakAdminConfig } from 'src/config/keycloak.config';
 import { WorkerRegisterConfig } from 'src/config/workerregister.config';
-import {
-  LoggerFactory,
-  LoggerService,
-} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class WorkerRegistrationService {
-  private readonly logger: LoggerService;
+  private readonly logger = new Logger(WorkerRegistrationService.name);
 
   readonly keycloak: KeycloakAdminConfig;
   readonly workerRegisterConfig: WorkerRegisterConfig;
 
-  constructor(
-    private readonly configService: ConfigService,
-    @Inject (LoggerFactory) loggerFactory: LoggerFactory,
-  ) {
+  constructor(private readonly configService: ConfigService) {
     this.keycloak =
       this.configService.get<KeycloakAdminConfig>('keycloakAdmin');
     this.workerRegisterConfig =
       this.configService.get<WorkerRegisterConfig>('workerRegister');
-    this.logger = loggerFactory.create(WorkerRegistrationService.name);
   }
 
   async getAdminAccessToken(): Promise<string> {

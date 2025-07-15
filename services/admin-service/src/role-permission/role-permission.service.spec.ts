@@ -11,13 +11,6 @@ import { UserRole } from '../entities/user-role.entity';
 import { Project } from '../entities/project.entity';
 import { Account } from '../entities/account.entity';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
-import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
-export const mockLoggerFactory = {
-  create: jest.fn().mockReturnValue({
-    log: jest.fn(),
-    error: jest.fn(),
-  }),
-};
 
 describe('RolePermissionService', () => {
   let service: RolePermissionService;
@@ -46,7 +39,6 @@ describe('RolePermissionService', () => {
         { provide: getRepositoryToken(Project), useClass: Repository },
         { provide: getRepositoryToken(Account), useClass: Repository },
         { provide: getRepositoryToken(UserRole), useClass: Repository },
-        { provide: LoggerFactory, useValue: mockLoggerFactory},
       ],
     }).compile();
 

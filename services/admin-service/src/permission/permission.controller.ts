@@ -16,7 +16,6 @@ import { PermissionService } from './permission.service';
 import { PermissionDescription } from '../swagger/swagger-summary';
 import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
-import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
 
 @ApiTags('permissions')
 @Controller('/api/v1/permission')
@@ -59,7 +58,7 @@ export class PermissionController {
     summary: 'Retrieve Permission by ID',
     description: PermissionDescription.GetPermissionByIdDescription,
   })
-  findOne(@Param('id', NonEmptyStringPipe) id: string) {
+  findOne(@Param('id') id: string) {
     return this.permissionService.findOne(id);
   }
 
@@ -71,7 +70,7 @@ export class PermissionController {
     description: PermissionDescription.UpdatePermissionDescription,
   })
   update(
-    @Param('id', NonEmptyStringPipe) id: string,
+    @Param('id') id: string,
     @Body() updatePermissionDto: UpdatePermissionDto,
     @Request() userPermissionResponse: UserPermissionResponse,
   ) {
@@ -89,7 +88,7 @@ export class PermissionController {
     summary: 'Delete Permission',
     description: PermissionDescription.DeletePermissionDescription,
   })
-  delete(@Param('id', NonEmptyStringPipe) id: string) {
+  delete(@Param('id') id: string) {
     return this.permissionService.delete(id);
   }
 
@@ -100,7 +99,7 @@ export class PermissionController {
     summary: 'Inactivate Permission',
     description: PermissionDescription.InactivatePermissionDescription,
   })
-  inactivate(@Param('id', NonEmptyStringPipe) id: string) {
+  inactivate(@Param('id') id: string) {
     return this.permissionService.inactivate(id);
   }
 }

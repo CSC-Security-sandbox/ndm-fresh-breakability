@@ -6,9 +6,6 @@ import {
 } from "@store/reducer/commonComponentSlice";
 import { useDispatch } from "react-redux";
 import WorkerInstallationContent from "@components/top-nav-bar/setting/ManageProjects/WorkerInstallationContent";
-import {notify} from '@components/notification/NotificationWrapper.tsx';
-import ErrorMessageContainer from '@components/container/ErrorMessageContainer.tsx';
-import React from 'react';
 
 const WorkerInstallation = ({
   label,
@@ -22,38 +19,27 @@ const WorkerInstallation = ({
     useLazyGenerateSecretForWorkerQuery();
 
   const showWorkerInstructions = async () => {
-      try {
-      const generateSecretAPIResult = await generateSecretAPI({
-          projectId: project_id,
-      }).unwrap();
-      const data = generateSecretAPIResult?.data?.items;
-      dispatch(
-          setModalProps({
-              isOpen: true,
-              modalHeader: `Worker Installation Instructions`,
-              modalContent: (
-                  <WorkerInstallationContent
-                      workerId={data?.workerId}
-                      workerSecret={data?.workerSecret}
-                      controlPlaneIp={data?.controlPlaneIp}
-                      isLoading={isLoading}
-                      isError={isError}
-                  />
-              ),
-              modalFooter: (
-                  <Button onClick={() => dispatch(setModalClose())}>Close</Button>
-              ),
-          }),
-      );
-  }catch (err: any) {
-          notify.error(
-              <ErrorMessageContainer
-                  title="Failed to create Project."
-                  message={err.data.message}
-              />,
-          );
-          console.error({ err, level: "Create Project" });
-      }
+    const data = await generateSecretAPI({
+      projectId: project_id,
+    }).unwrap();
+    dispatch(
+      setModalProps({
+        isOpen: true,
+        modalHeader: `Worker Installation Instructions`,
+        modalContent: (
+          <WorkerInstallationContent
+            workerId={data?.workerId}
+            workerSecret={data?.workerSecret}
+            controlPlaneIp={data?.controlPlaneIp}
+            isLoading={isLoading}
+            isError={isError}
+          />
+        ),
+        modalFooter: (
+          <Button onClick={() => dispatch(setModalClose())}>Close</Button>
+        ),
+      })
+    );
   };
 
   return (

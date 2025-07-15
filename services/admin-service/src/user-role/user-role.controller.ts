@@ -24,7 +24,6 @@ import { UserRoleDescription } from '../swagger/swagger-summary';
 import { UserRoleRelationDto } from './dto/user-role.dto';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
-import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
 
 @ApiTags('user roles')
 @Controller('/api/v1/user-roles')
@@ -71,7 +70,7 @@ export class UserRoleController {
     description: UserRoleDescription.UpdateUserRoleDescription,
   })
   async update(
-    @Param('id', NonEmptyStringPipe) id: string,
+    @Param('id') id: string,
     @Body() updateUserRoleDto: UpdateUserRoleDto,
     @Request() userPermissionResponse: UserPermissionResponse,
   ): Promise<void> {
@@ -89,7 +88,7 @@ export class UserRoleController {
     summary: 'Delete a user-role association by ID',
     description: UserRoleDescription.DeleteUserRoleDescription,
   })
-  async delete(@Param('id', NonEmptyStringPipe) id: string): Promise<void> {
+  async delete(@Param('id') id: string): Promise<void> {
     await this.userRoleService.delete(id);
   }
 
@@ -156,7 +155,7 @@ export class UserRoleController {
     summary: 'Get a user-role association by ID',
     description: UserRoleDescription.GetUserRoleByIdDescription,
   })
-  async findOne(@Param('id', NonEmptyStringPipe) id: string): Promise<UserRole> {
+  async findOne(@Param('id') id: string): Promise<UserRole> {
     return this.userRoleService.findOne(id);
   }
 
