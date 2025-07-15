@@ -15,14 +15,6 @@ import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, getUs
 import { CommonTaskService } from '../common/common-task.service';
 import { handleSyncTaskUpdateInput, StampMetaDataInput, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate-sync.types';
 
-
-// const isRandomTrue = (probability: number) => {
-//   if (probability < 0 || probability > 1) {
-//     throw new Error('Probability must be between 0 and 1');
-//   }
-//   return Math.random() < probability;
-// };
-
 @Injectable()
 export class MigrateSyncService {
   readonly workerId: string;
@@ -46,10 +38,8 @@ export class MigrateSyncService {
 
 
 
-  ensureDirectoryExists(directoryPath: string) {
-    if (!fs.existsSync(directoryPath)) {
-      fs.mkdirSync(directoryPath, { recursive: true });
-    }
+  ensureDirectoryExists(directoryPath: string) {    
+      fs.mkdirSync(directoryPath, { recursive: true });    
   }
   
   async stampMetaData({sourcePath, metadata, command, errorType, jobContext, targetPath}: StampMetaDataInput):Promise<StampMetaDataOutput> {
@@ -181,7 +171,6 @@ export class MigrateSyncService {
     if (syncOperation.ops[0] && syncOperation.ops[0].status !== OPS_STATUS.COMPLETED) {
       if(syncOperation.ops[0].cmd === OPS_CMD.COPY_CONTENT) {
         try {
-          // if(isRandomTrue(0.10)) throw new Error("Random Error for testing");
           syncOperation.checksums = await this.workerThreadService.migrateWorkerThread({
             sourcePath, destinationPath: targetPath, operationId: command.commandId, size: syncOperation.ops[1].metadata?.size ?? 0
           });
@@ -293,6 +282,7 @@ export class MigrateSyncService {
   //TODO: revisit this and see what all are not used. 
   getFileInfo = async ({name, fullFilePath, relativePath, checksums, getID}: getFileInfoInput): Promise<any>  => {
       const lStat = await fs.promises.lstat(fullFilePath);
+      const isDirectory:boolean = lStat.isDirectory();
       let sid = undefined
       if(getID && process.platform == 'win32' && lStat.isFile())
         sid = this.getSID(fullFilePath);
@@ -300,15 +290,15 @@ export class MigrateSyncService {
           name,
           relativePath,
           relativePath,
-          lStat.isDirectory(),
+          isDirectory,
           lStat.size,
-          !lStat.isDirectory(),
+          !isDirectory,
           lStat.birthtime,
           lStat.mtime,
           lStat.atime,
           path.extname(fullFilePath),
-          getFilePermissions(lStat),
-          getFileType(lStat),
+          getFilePermissions(lStat, isDirectory),
+          getFileType(lStat, isDirectory),
           relativePath.split('/').length - 2,
           lStat.uid,
           lStat.gid,
