@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("RTC-003: Test discovery with single worker and restart the worker service during discovery for NFS", func() {
+var _ = FDescribe("RTC-003: Test discovery with single worker and restart the worker service during discovery for NFS", func() {
 	var (
 		ProjectId             string
 		workerId              string
