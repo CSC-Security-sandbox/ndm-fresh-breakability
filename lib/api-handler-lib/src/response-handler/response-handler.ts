@@ -22,7 +22,7 @@ export class ResponseHandler {
    * @returns A structured success response with status code, message, and data.
    */
   static success<T>(request: Request, controllerResponseData: T, customSuccessDTOList: CustomSuccessDTO[]): HandlerResponse<T> {
-    
+
     const message = setSuccessMessage(request, controllerResponseData, customSuccessDTOList);
     const formatedResponse = formatResponseData(controllerResponseData);
     return {
