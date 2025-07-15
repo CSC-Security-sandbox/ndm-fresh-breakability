@@ -1,29 +1,221 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
-
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
-
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+# API Handler Library
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+The API Handler Library standardizes API responses and error handling for NestJS applications. It provides a consistent
+structure for both success and error responses, making it easier for frontend applications to process API responses.
+
+## Features
+
+- Standardized response format for all API endpoints
+- Consistent error handling with appropriate HTTP status codes
+- Custom success and error messages based on API endpoints
+- Request tracking with unique IDs
+- Support for pagination metadata
+
+## Installation
+
+```bash
+$ npm install @netapp-cloud-datamigrate/api-handler-lib
+```
+
+## Configuration
+
+This library uses a NetApp-Cloud-DataMigrate npm registry at `https://npm.pkg.github.com`. Make sure this registry is
+running and accessible when publishing or installing the library.
+
+Add the following to your `.npmrc` file:
+
+```
+@NetApp-Cloud-DataMigrate:registry=https://npm.pkg.github.com
+```
+
+## Usage
+
+### 1. Import the module in your NestJS application
+
+```typescript
+// app.module.ts
+import {Module} from '@nestjs/common';
+import {ConfigModule} from '@nestjs/config';
+import responseHandlerConfig from '@netapp-cloud-datamigrate/api-handler-lib';
+
+@Module({
+    imports: [
+        ConfigModule.forRoot({
+            load: [responseHandlerConfig],
+        }),
+        // other modules
+    ],
+    // ...
+})
+export class AppModule {
+}
+```
+
+### 2. Define custom success and error DTOs
+
+```typescript
+// success-messages.ts
+import {CustomSuccessDTO} from '@netapp-cloud-datamigrate/api-handler-lib';
+
+export const successDTOList: CustomSuccessDTO[] = [
+    {
+        apiEndPointKey: 'users',
+        method: 'GET',
+        message: 'Users retrieved successfully',
+        statusCode: '200'
+    },
+    {
+        apiEndPointKey: 'create-user',
+        method: 'POST',
+        message: 'User created successfully',
+        statusCode: '201'
+    },
+    // Add more success DTOs as needed
+];
+```
+
+```typescript
+// error-messages.ts
+import {CustomErrorDTO} from '@netapp-cloud-datamigrate/api-handler-lib';
+
+export const errorDTOList: CustomErrorDTO[] = [
+    {
+        apiEndPointKey: 'users',
+        message: 'Failed to retrieve users',
+        statusCode: '500',
+        correctiveAction: 'Please try again later'
+    },
+    {
+        apiEndPointKey: 'create-user',
+        message: 'Failed to create user',
+        statusCode: '400',
+        correctiveAction: 'Please check your input data and try again'
+    },
+    // Add more error DTOs as needed
+];
+```
+
+### 3. Use the ResponseInterceptor in your controllers
+
+```typescript
+// users.controller.ts
+import {Controller, Get, UseInterceptors} from '@nestjs/common';
+import {ResponseInterceptor} from '@netapp-cloud-datamigrate/api-handler-lib';
+import {successDTOList} from './success-messages';
+import {errorDTOList} from './error-messages';
+import {UsersService} from './users.service';
+
+@Controller('users')
+@UseInterceptors(new ResponseInterceptor(successDTOList, errorDTOList))
+export class UsersController {
+    constructor(private readonly usersService: UsersService) {
+    }
+
+    @Get()
+    findAll() {
+        return this.usersService.findAll();
+    }
+
+    // other controller methods
+}
+```
+
+### 4. Global usage with APP_INTERCEPTOR
+
+```typescript
+// app.module.ts
+import {Module} from '@nestjs/common';
+import {APP_INTERCEPTOR} from '@nestjs/core';
+import {ResponseInterceptor} from '@netapp-cloud-datamigrate/api-handler-lib';
+import {successDTOList} from './success-messages';
+import {errorDTOList} from './error-messages';
+
+@Module({
+    // ...
+    providers: [
+        {
+            provide: APP_INTERCEPTOR,
+            useValue: new ResponseInterceptor(successDTOList, errorDTOList),
+        },
+    ],
+})
+export class AppModule {
+}
+```
+
+## Response Format
+
+### Success Response
+
+```json
+{
+  "trackId": "unique-request-id",
+  "message": "Users retrieved successfully",
+  "data": {
+    "items": [
+      {
+        "id": 1,
+        "name": "John Doe"
+      },
+      {
+        "id": 2,
+        "name": "Jane Smith"
+      }
+    ],
+    "meta": {
+      "total": 100,
+      "page": 1,
+      "pageSize": 10,
+      "hasMore": true
+    }
+  }
+}
+```
+
+### Error Response
+
+```json
+{
+  "trackId": "unique-request-id",
+  "message": "Failed to create user",
+  "error": {
+    "code": "400",
+    "message": "Failed to create user",
+    "correctiveAction": "Please check your input data and try again"
+  }
+}
+```
+
+## Publishing Updates
+
+When making changes to this library, follow these steps to ensure your changes are properly published and available to
+consuming projects:
+
+1. Make your changes to the library code
+2. Update the version number in `package.json` (follow semantic versioning)
+3. Build the library: `npm run build`
+4. Publish the library: `npm publish`
+
+## Consuming Projects
+
+When updating to a new version of this library in a consuming project:
+
+1. Update the version number in the project's `package.json`
+2. Clear npm cache: `npm cache clean --force`
+3. Install the updated package: `npm install`
+
+## Troubleshooting
+
+If updates to the library are not being reflected in consuming projects:
+
+1. Ensure the version in the library's `package.json` has been incremented
+2. Make sure the library was built before publishing (`npm run build`)
+3. Check that the consuming project's `package.json` references the correct version
+4. Clear npm cache in the consuming project: `npm cache clean --force`
+5. Delete `node_modules` and `package-lock.json` in the consuming project if necessary
+6. Run `npm install` in the consuming project
 
 ## Project setup
 
@@ -31,68 +223,12 @@
 $ npm install
 ```
 
-## Compile and run the project
+## Build the library
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+$ npm run build
 ```
-
-## Run tests
-
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
 
 ## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+ISC
