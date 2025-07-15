@@ -42,32 +42,39 @@ const JobDetails = () => {
   const { jobId } = useParams<{ jobId: string }>();
   const [openConfirmation, setOpenConfirmation] = useState(false);
   const [selectedJobRunId, setSelectedJobRunId] = useState("");
-  const [ isFrequentInterval, setIsFrequentInterval ] = useState<boolean>(false);
+  const [isFrequentInterval, setIsFrequentInterval] = useState<boolean>(false);
 
-  const { data: jobConfigDetails, isLoading } = useGetJobConfigDetailsQuery(
+  const {
+    data: jobConfigDetails,
+    isLoading,
+    refetch,
+    isFetching,
+  } = useGetJobConfigDetailsQuery(
     { jobConfigId: jobId },
     {
-      pollingInterval: isFrequentInterval ? LOWER_TIME_INTERVAL_FOR_IN_PROGRESS : Number(
-        window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
-      ),
+      pollingInterval: isFrequentInterval
+        ? LOWER_TIME_INTERVAL_FOR_IN_PROGRESS
+        : Number(
+            window?.env?.VITE_TIME_INTERVAL ||
+              import.meta.env.VITE_TIME_INTERVAL
+          ),
       skipPollingIfUnfocused: true,
     }
   );
 
   useEffect(() => {
-    if(jobConfigDetails?.jobRuns?.length === 0) {
+    if (jobConfigDetails?.jobRuns?.length === 0) {
       setIsFrequentInterval(true);
     } else {
       setIsFrequentInterval(false);
     }
   }, [jobConfigDetails?.jobRuns?.length]);
-  
 
   const [downloadReportApi] = useDownloadReportsMutation();
   const [getPdfReportApi] = useGetPdfReportMutation();
 
   const canDownloadReport = hasPermission(
-    USER_PERMISSION_TYPE_ENUM.AgentDeployment
+    USER_PERMISSION_TYPE_ENUM.Reports
   );
 
   const [updateStatus, { isLoading: isUpdating }] =
@@ -161,7 +168,7 @@ const JobDetails = () => {
       const dateB = new Date(b.startTime).getTime();
       return dateB - dateA;
     });
-    
+
     return sortedJobRuns[0]?.jobRunId;
   }, [jobConfigDetails?.jobRuns]);
 
@@ -220,6 +227,8 @@ const JobDetails = () => {
         content={<></>}
         isTogglingColumns={true}
         originalColumns={JOB_RUN_LIST_COLUMN_DEFS}
+        refetchTableData={refetch}
+        isRefreshing={isFetching}
       />
     </Box>
   );

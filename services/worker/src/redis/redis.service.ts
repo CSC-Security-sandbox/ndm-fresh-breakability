@@ -1,6 +1,7 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { JobContext, JobContextFactory } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+
 import { createClient, RedisClientType } from 'redis';
 
 @Injectable()
@@ -67,6 +68,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return await contextProvider.getJobContext(traceId);
   }
 
+  async getJobManagerContext(traceId: string) {
+    await this.ensureClient();
+    const contextProvider = JobContextFactory.getJobManagerProvider('redis', this.client);
+    return await contextProvider.getContext(traceId);
+  }
+
   async getSpeedTestJobContext(traceId: string) {
     await this.ensureClient();
     const contextProvider = JobContextFactory.getSpeedTestProvider('redis', this.client);
@@ -99,8 +106,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async getOwnerIdentity(jobContext: JobContext, id: string, type: 'SID' | 'UID' | 'GID') {
-    return await this.client.hGet(`${jobContext.jobRunId}:mapping`, `${type}:${id}`)
+  async getOwnerIdentity(jobRunId: string, id: string, type: 'SID' | 'UID' | 'GID') {
+    return await this.client.hGet(`${jobRunId}:mapping`, `${type}:${id}`)
   }
 
   async getMemoryInfo(): Promise<{ used_memory: number; total_system_memory: number }> {

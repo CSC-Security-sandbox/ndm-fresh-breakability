@@ -1,12 +1,12 @@
 import * as wf from '@temporalio/workflow';
 import { ChildWorkflowCancellationType, ParentClosePolicy } from "@temporalio/workflow";
-import { CommonActivityService } from 'src/activities/common/common.service';
-import { JobRunStatus } from 'src/activities/discovery/enums';
-import { MigrationTaskService } from "src/activities/migrate/migrate.taskmanager.service";
-import { CutOverStatus } from "src/activities/migrate/migrate.type";
-import { ReportingWorkflow } from "src/workflows/reporting/reporting.workflow";
-import { waitUntilRedisMemoryOk } from 'src/workflows/utils/memory-utils';
-import { CleanupWorkerWorkflow } from "src/workflows/workflows";
+import { CommonActivityService } from '../../../activities/common/common.service';
+import { JobRunStatus } from '../../../activities/discovery/enums';
+import { MigrationTaskService } from "../../../activities/migrate/migrate.taskmanager.service";
+import { CutOverStatus } from "../../../activities/migrate/migrate.type";
+import { ReportingWorkflow } from "../../../workflows/reporting/reporting.workflow";
+import { waitUntilRedisMemoryOk } from '../../../workflows/utils/memory-utils';
+import { CleanupWorkerWorkflow } from "../../../workflows/workflows";
 
 interface WorkerConfig {
   ids: string[];

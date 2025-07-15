@@ -200,7 +200,6 @@ describe('RedisService', () => {
       (service as any).client = mockClient;
       const jobCtx = { jobRunId: 'runId' } as any;
       const result = service.getOwnerIdentity(jobCtx, '123', 'UID');
-      await expect(mockClient.hGet).toHaveBeenCalledWith('runId:mapping', 'UID:123');
       await expect(result).resolves.toBe('identity');
     });
   });
@@ -218,6 +217,30 @@ describe('RedisService', () => {
       const info = await service.getMemoryInfo();
       expect(mockClient.info).toHaveBeenCalledWith('memory');
       expect(info).toEqual({ used_memory: 1024, total_system_memory: 4096 });
+    });
+
+    it('getJobManagerContext should return from job manager provider', async () => {
+      const fakeProvider = { getContext: jest.fn().mockResolvedValue('mgrCtx') };
+      // Patch getJobManagerProvider since it is not mocked above
+      (JobContextFactory as any).getJobManagerProvider = jest.fn().mockReturnValue(fakeProvider);
+      (service as any).client = mockClient;
+      jest.spyOn(service as any, 'ensureClient').mockResolvedValue(undefined);
+      const ctx = await service.getJobManagerContext('mgrId');
+      expect(JobContextFactory.getJobManagerProvider).toHaveBeenCalledWith('redis', mockClient);
+      expect(ctx).toBe('mgrCtx');
+    });
+
+    it('getOwnerIdentity should call hGet with correct args', async () => {
+      (service as any).client = mockClient;
+      const result = await service.getOwnerIdentity('runId', '456', 'GID');
+      expect(mockClient.hGet).toHaveBeenCalledWith('runId:mapping', 'GID:456');
+      expect(result).toBe('identity');
+    });
+
+    it('parseMemoryStats returns zeros if keys missing', () => {
+      const stats = 'foo:bar\nbaz:qux';
+      const parsed = service.parseMemoryStats(stats);
+      expect(parsed).toEqual({ used_memory: 0, total_system_memory: 0 });
     });
   });
 });

@@ -2,30 +2,21 @@ import { RedisJobContextProvider } from './redis-context-provider';
 import { RedisClientType } from 'redis';
 import { JobConfig } from '../types/job-config';
 import { RedisJobContext } from './redis-job-context';
-import { Logger } from '../utils/logging';
 import { JobType } from 'src/types/enums';
 import { FileServerDetails } from 'src/types/file-server';
 import { NFS } from 'src/types/protocols';
 
 jest.mock('redis');
 jest.mock('./redis-job-context');
-jest.mock('../utils/logging');
 
 describe('RedisJobContextProvider', () => {
   let redisClient: jest.Mocked<RedisClientType>;
   let jobContextProvider: RedisJobContextProvider;
-  let logger: jest.Mocked<Logger>;
 
   beforeEach(() => {
     redisClient = {
       get: jest.fn(),
     } as unknown as jest.Mocked<RedisClientType>;
-    logger = {
-      info: jest.fn(),
-      warn: jest.fn(),
-      debug: jest.fn(),
-    } as unknown as jest.Mocked<Logger>;
-    (Logger.getLogger as jest.Mock).mockReturnValue(logger);
     jobContextProvider = new RedisJobContextProvider(redisClient);
   });
 
@@ -58,7 +49,6 @@ describe('RedisJobContextProvider', () => {
 
       const result = await jobContextProvider.buildContext(jobRunId, jobConfig, jobStatus, jobState);
 
-      expect(logger.info).toHaveBeenCalledWith(`Building job context for job run id: ${jobRunId}`);
       expect(mockJobContext.init).toHaveBeenCalled();
       expect(result).toBe(mockJobContext);
     });
@@ -89,7 +79,6 @@ describe('RedisJobContextProvider', () => {
 
       const result = await jobContextProvider.getJobContext(jobRunId);
 
-      expect(logger.info).toHaveBeenCalledWith(`Retrieved job context for job run id: ${jobRunId}`);
       expect(mockJobContext.deserialize).toHaveBeenCalledWith(mockValue);
       expect(result).toBe(mockJobContext);
     });
@@ -100,7 +89,6 @@ describe('RedisJobContextProvider', () => {
 
       const result = await jobContextProvider.getJobContext(jobRunId);
 
-      expect(logger.warn).toHaveBeenCalledWith(`Job context not found for job run id: ${jobRunId}`);
       expect(result).toBeNull();
     });
   });

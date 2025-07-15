@@ -43,5 +43,24 @@ describe('WorkersController', () => {
 
       await expect(controller.getWorkers(query)).rejects.toThrow('Invalid parameters');
     });
+
+    describe('updateWorkerJobRunStatus', () => {
+      it('should update the worker job run status successfully', async () => {
+      const params = { workerId: 'worker1', jobrunId: 'jobrun1', active: true };
+      const updateResult = { success: true };
+      service.updateWorkerJobRunStatus = jest.fn().mockResolvedValue(updateResult);
+
+      const result = await controller.updateWorkerJobRunStatus(params as any);
+      expect(service.updateWorkerJobRunStatus).toHaveBeenCalledWith('worker1', 'jobrun1', true);
+      expect(result).toEqual(updateResult);
+      });
+
+      it('should throw an error if service throws', async () => {
+      const params = { workerId: 'worker1', jobrunId: 'jobrun1', active: false };
+      service.updateWorkerJobRunStatus = jest.fn().mockRejectedValue(new Error('Not found'));
+
+      await expect(controller.updateWorkerJobRunStatus(params as any)).rejects.toThrow('Not found');
+      });
+    });
   });
 });

@@ -1,6 +1,7 @@
 import { PreCheckWorkerValidationWorkflow } from '../core/pre-check.worker.workflow';
 import { PreCheckErrorCodes, PreCheckStatus, PreCheckWorkflowRequest } from '../pre-check.types';
 import { PreCheckValidationWorkflow } from './pre-check.workflow';
+const mockExecuteChild = require('@temporalio/workflow').executeChild as jest.Mock;
 
 jest.mock('@temporalio/workflow', () => ({
     executeChild: jest.fn(),
@@ -324,7 +325,111 @@ describe('PreCheckValidationWorkflow', () => {
         expect(result[0].destination[0].status).toBe(PreCheckStatus.FAILED);
         expect(result[0].destination[0].errors).toContain(PreCheckErrorCodes.ALL_COMMON_WORKERS_UNHEALTHY);
       });
-      
 
-    
+    it('should return empty array if no preChecks are provided', async () => {
+        const request = {
+            payload: {
+                serverCredentials: [
+                    {
+                        id: 'server-1',
+                        host: 'host1',
+                        userName: 'user1',
+                        password: 'pass1',
+                        protocol: 'sftp',
+                        protocolVersion: '1.0.0',
+                        serverType: 'linux'
+                    }
+                ],
+                preChecks: [],
+                settings: { preserveAccessTime: false }
+            },
+            traceId: 'trace-1'
+        };
+        const result = await PreCheckValidationWorkflow(request as any);
+        expect(result).toEqual([]);
+    });
+
+    it('should fail destination if no common workers', async () => {
+        const request = {
+            payload: {
+                serverCredentials: [
+                    {
+                        id: 'server-1',
+                        host: 'host1',
+                        userName: 'user1',
+                        password: 'pass1',
+                        protocol: 'sftp',
+                        protocolVersion: '1.0.0',
+                        serverType: 'linux'
+                    },
+                    {
+                        id: 'server-2',
+                        host: 'host2',
+                        userName: 'user2',
+                        password: 'pass2',
+                        protocol: 'sftp',
+                        protocolVersion: '1.0.0',
+                        serverType: 'linux'
+                    }
+                ],
+                preChecks: [
+                    {
+                        pathId: 'source-path-1',
+                        serverId: 'server-1',
+                        pathName: 'Source Path 1',
+                        destinations: [
+                            {
+                                pathId: 'dest-path-1',
+                                serverId: 'server-2',
+                                pathName: 'Destination Path 1',
+                                workers: []
+                            }
+                        ]
+                    }
+                ],
+                settings: { preserveAccessTime: false }
+            },
+            traceId: 'trace-2'
+        };
+        const result = await PreCheckValidationWorkflow(request as any);
+        expect(result[0].destination[0].status).toBe(PreCheckStatus.FAILED);
+        expect(result[0].destination[0].errors).toContain(PreCheckErrorCodes.NO_COMMON_WORKERS);
+    });
+
+    it('should mark source as failed if worker response marks it failed', async () => {
+        const request = {
+            payload: {
+                serverCredentials: [
+                    {
+                        id: 'server-1',
+                        host: 'host1',
+                        userName: 'user1',
+                        password: 'pass1',
+                        protocol: 'sftp',
+                        protocolVersion: '1.0.0',
+                        serverType: 'linux'
+                    }
+                ],
+                preChecks: [
+                    {
+                        pathId: 'source-path-1',
+                        serverId: 'server-1',
+                        pathName: 'Source Path 1',
+                        destinations: []
+                    }
+                ],
+                settings: { preserveAccessTime: false }
+            },
+            traceId: 'trace-5'
+        };
+        // Mock executeChild to resolve with failed source
+        mockExecuteChild.mockResolvedValueOnce({
+            workerId: 'worker-1',
+            paths: [
+                { pathId: 'source-path-1', status: PreCheckStatus.FAILED, errorCodes: [PreCheckErrorCodes.SOURCE_PATH_NOT_FOUND], sourceDataSize: 0 }
+            ]
+        });
+        const result = await PreCheckValidationWorkflow(request as any);
+        expect(result[0].status).toBe(PreCheckStatus.SUCCESS);
+    });
 });

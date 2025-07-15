@@ -17,6 +17,7 @@ import { hasPermission } from "@/auth/auth.utils";
 import { useSelector } from "react-redux";
 import { RootStateType } from "@store/store";
 import { DEFAULT_COLUMN_STATE } from "@components/top-nav-bar/setting/ManageUsers/ManageUsers.constant";
+import { decryptData } from "@/utils/common.utils";
 
 const ManageUsers = () => {
   const [updateUserStatus] = useUpdateUserStatusMutation();
@@ -77,7 +78,7 @@ const ManageUsers = () => {
           .unwrap()
           .then((res) => {
             setIsCreateFormVisible(true);
-            setTemporaryPassword(res?.newPassword);
+            setTemporaryPassword(decryptData(res?.newPassword));
           })
           .catch((err) => {
             notify.error("Failed to reset password.");

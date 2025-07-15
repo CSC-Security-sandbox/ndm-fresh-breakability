@@ -10,7 +10,9 @@ export enum JobType {
 export enum OPS_CMD {
   COPY_CONTENT = 'cc',
   STAMP_META  = 'sm',
-  COPY_DIR = 'cd'
+  COPY_DIR = 'cd',
+  REMOVE_DIR = 'rd', // This is used to remove directories
+  REMOVE_FILE = 'rf' // This is used to remove files
 }
 
 export enum OPS_STATUS {

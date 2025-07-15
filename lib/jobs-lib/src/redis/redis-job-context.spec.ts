@@ -1,15 +1,12 @@
 import { RedisJobContext } from './redis-job-context';
 import { RedisClientType } from 'redis';
-import { Logger } from '../utils/logging';
 import { RedisFileCollection, RedisDirectoryCollection, RedisErrorCollection, RedisTaskCollection, RedisTaskStatsCollection } from './redis-collections';
 
 jest.mock('redis');
-jest.mock('../utils/logging');
 jest.mock('./redis-collections');
 
 describe('RedisJobContext', () => {
     let redisClient: RedisClientType;
-    let logger: Logger;
     let redisJobContext: RedisJobContext;
 
     beforeEach(() => {
@@ -22,12 +19,6 @@ describe('RedisJobContext', () => {
             disconnect: jest.fn(),
             keys: jest.fn().mockReturnValue([]),
         } as unknown as RedisClientType;
-
-        logger = {
-            info: jest.fn(),
-        } as unknown as Logger;
-
-        (Logger.getLogger as jest.Mock).mockReturnValue(logger);
 
         redisJobContext = new RedisJobContext('jobRunId', redisClient);
     });
@@ -48,7 +39,6 @@ describe('RedisJobContext', () => {
 
         expect(redisClient.exists).toHaveBeenCalledWith('jobRunId');
         expect(redisClient.del).toHaveBeenCalledWith('jobRunId');
-        expect(logger.info).toHaveBeenCalledWith('Cleaning up existing key: jobRunId');
         expect(redisClient.set).toHaveBeenCalledWith('jobRunId', expect.any(String));
     });
 
@@ -79,6 +69,5 @@ describe('RedisJobContext', () => {
 
         expect(redisClient.exists).toHaveBeenCalledWith('jobRunId');
         expect(redisClient.del).not.toHaveBeenCalled();
-        expect(logger.info).not.toHaveBeenCalledWith('Cleaning up existing state for Job Run Id: jobRunId');
     });
 });

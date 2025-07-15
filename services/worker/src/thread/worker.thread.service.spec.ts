@@ -116,4 +116,147 @@ describe('WorkerThreadService', () => {
       expect(worker.terminate).toHaveBeenCalled();
     });
   });
+
+
+  it('should get tasks from the correct band and fallback to other bands', () => {
+    service['operationBands'].forEach((band) => band.task = []);
+    service['operationBands'].get('1kb').task.push({ id: 't1', data: {}, Operation: ThreadOperation.COPY_FILE, resolve: jest.fn(), reject: jest.fn() });
+    service['operationBands'].get('1mb').task.push({ id: 't2', data: {}, Operation: ThreadOperation.COPY_FILE, resolve: jest.fn(), reject: jest.fn() });
+    service['operationBands'].get('10mb').task = [];
+    service['operationBands'].get('100mb').task = [];
+    service['operationBands'].get('1gb').task = [];
+
+    // Should get from 1kb
+    let tasks = service.getTasks('1kb');
+    expect(tasks.length).toBe(1);
+    expect(tasks[0].id).toBe('t1');
+
+    // Should get from 1mb
+    tasks = service.getTasks('1mb');
+    expect(tasks.length).toBe(1);
+    expect(tasks[0].id).toBe('t2');
+
+    // Should fallback to previous band (none left, so empty)
+    tasks = service.getTasks('10mb');
+    expect(tasks.length).toBe(0);
+  });
+
+  it('should handle worker exit and reject tasks', () => {
+    const task = {
+      id: 'op3',
+      data: { sourcePath: 'src', destinationPath: 'dest', operationId: 'op3' },
+      Operation: ThreadOperation.COPY_FILE,
+      resolve: jest.fn(),
+      reject: jest.fn(),
+    };
+    service['activeTasks'].set('op3', task);
+    const worker = service['workers'][1];
+    service['workerDetails'].set(worker.threadId, {
+      operationBand: '1kb',
+      operatingTasks: ['op3'],
+    });
+
+    worker.emit('exit', 1);
+
+    expect(task.reject).toHaveBeenCalledWith('op3');
+    expect(service['activeTasks'].has('op3')).toBeFalsy();
+  });
+
+  it('should not fail if handleWorkerThreadError called with unknown processId', () => {
+    expect(() => service['handleWorkerThreadError'](99999)).not.toThrow();
+  });
+
+  it('should not process queue if no available workers', () => {
+    service['availableWorkers'] = [];
+    const spy = jest.spyOn(service as any, 'getTasks');
+    (service as any).processQueue();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('should push worker back if no tasks are available', () => {
+    const worker = service['availableWorkers'].pop();
+    // Remove all tasks from all bands
+    service['operationBands'].forEach((band) => band.task = []);
+    (service as any).processQueue();
+    expect(service['availableWorkers']).toBeDefined();
+  });
+
+  it('should use default sizes if configService.get("worker.thread.threadBand") throws', async () => {
+    // Arrange
+    const configServiceMock = {
+      get: jest.fn((key: string) => {
+        if (key === 'worker.thread.threadBand') throw new Error('bad config');
+        if (key === 'worker.thread.threadCount') return 3;
+        return undefined;
+      }),
+    };
+    const loggerMock = { log: jest.fn(), error: jest.fn() };
+    const WorkerThreadServiceModule = (await import('./worker.thread.service')).WorkerThreadService;
+    const service = new WorkerThreadServiceModule(configServiceMock as any, loggerMock as any);
+
+    // Assert
+    expect(service['sizes']).toBeDefined()
+  });
+
+  it('assignThreads should distribute threads as expected for >5 threads', () => {
+    service['sizes'] = [
+      { name: "1kb", maxFetch: 1500 },
+      { name: "1mb", maxFetch: 1000 },
+      { name: "10mb", maxFetch: 100 },
+      { name: "100mb", maxFetch: 10 },
+      { name: "1gb", maxFetch: 1 }
+    ];
+    service['totalThreads'] = 7;
+    const bands = service.assignThreads();
+    const total = Array.from(bands.values()).reduce((acc, band) => acc + band.numberOfThreads, 0);
+    expect(total).toBe(7);
+  });
+
+  it('processQueue should call postMessage with correct input', () => {
+    const worker = service['availableWorkers'][0];
+    const spy = jest.spyOn(worker, 'postMessage');
+    const task = {
+      id: 'op4',
+      data: { sourcePath: 'src', destinationPath: 'dest', operationId: 'op4' },
+      Operation: ThreadOperation.COPY_FILE,
+      resolve: jest.fn(),
+      reject: jest.fn(),
+    };
+    service['operationBands'].get('1kb').task.push(task);
+    service['workerDetails'].set(worker.threadId, { operationBand: '1kb', operatingTasks: [] });
+
+    (service as any).processQueue();
+
+    expect(service['activeTasks'].has('op4')).toBeTruthy();
+  });
+
+  it('should reject task if worker emits message with isRejected', async () => {
+    const migrateFile: MigrateFile = {
+      sourcePath: 'source.txt',
+      destinationPath: 'dest.txt',
+      operationId: 'op5',
+      size: 500,
+    };
+
+    const worker = service['availableWorkers'][0];
+
+    setImmediate(() => {
+      const fakeOutput: WorkerThreadOutput = {
+        isResolved: false,
+        isRejected: true,
+        id: 'op5',
+        data: { error: 'fail' },
+        Operation: ThreadOperation.COPY_FILE,
+      };
+      worker.emit('message', [fakeOutput]);
+    });
+
+    await expect(service.migrateWorkerThread(migrateFile)).rejects.toEqual({ error: 'fail' });
+  });
+
+  it('getTasks should return empty array if all bands are empty', () => {
+    service['operationBands'].forEach((band) => band.task = []);
+    const tasks = service.getTasks('1kb');
+    expect(tasks).toEqual([]);
+  });
 });

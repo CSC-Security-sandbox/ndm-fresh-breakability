@@ -23,6 +23,8 @@ export interface BulkCutOverContextProviderType {
   isSubmittingBulkCutover: boolean;
   isFetching: boolean;
   refetch: () => void;
+  isCutOverPathsFetching: boolean;
+  refetchCutOverPaths: () => void;
 }
 export interface bulkCutOverFormType {
   isSelectPathConformed: false;

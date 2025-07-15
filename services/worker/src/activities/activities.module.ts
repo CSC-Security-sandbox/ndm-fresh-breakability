@@ -18,12 +18,17 @@ import { WorkerThreadModule } from 'src/thread/worker.thread.module';
 import { SpeedTestActivities } from './speed-test/speed-test-activities';
 import { AuthModule } from 'src/auth/auth.module';
 import { RedisMemoryCheckActivity } from './redis/redis.mem.usage.check.activity';
+import {MigrateScanService} from './core/scan/migrate/migrate-scan.service';
+import { MigrateSyncService } from './core/migrate/migrate-sync.service';
+import { CommonTaskService } from './core/common/common-task.service';
+import { DiscoveryScanService } from './core/scan/discovery/discovery-scan.service';
+import { ScanService } from './core/scan/scan-activity.service';
 
 
 @Module({
   imports: [HttpModule, ConfigModule, WorkerThreadModule, AuthModule],
   controllers: [],
-  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService, MigrationSyncService, Logger, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities, RedisMemoryCheckActivity],
-  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationTaskService,MigrationScanService, MigrationSyncService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities,RedisMemoryCheckActivity],
+  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService, MigrationSyncService, MigrateSyncService,MigrateScanService, Logger, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities, RedisMemoryCheckActivity,  CommonTaskService, DiscoveryScanService, ScanService],
+  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationTaskService,MigrationScanService, MigrationSyncService, MigrateSyncService, MigrateScanService,  ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities,RedisMemoryCheckActivity, CommonTaskService, DiscoveryScanService, ScanService],
 })
 export class ActivitiesModule {}

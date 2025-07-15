@@ -2,9 +2,7 @@ import { FileServerOverviewApi } from "@/types/app.type";
 import { Box } from "@components/container/index";
 import {
   DoughnutChart,
-  MetricItemAdvance,
 } from "@netapp/bxp-design-system-react";
-import Divider from "@mui/material/Divider";
 import LegendWrapper from "@components/chartInfo/LegendWrapper";
 import { Tooltip } from "@netapp/bxp-design-system-react";
 import React, { useMemo } from "react";
@@ -29,24 +27,21 @@ import {
 */
 
 interface LegendItemProps {
-	    title: string;
-	    value: number;
-	    color: string;
-	    className?: string;
-	  }
-	
+  title: string;
+  value: number;
+  color: string;
+  className?: string;
+}
 
 const JobChart = ({
   jobDetails: {
     totalDiscoverJobs,
-    totalMigrateJobs: { baseLineJob, incrementalJob },
+    totalMigrateJobs,
     totalCutoverJobs,
   },
 }: {
   jobDetails: FileServerOverviewApi["jobDetails"];
 }) => {
-  const totalMigrateJobs = baseLineJob + incrementalJob;
-
   const totalSize = useMemo(() => {
     return calculateTotal([
       totalMigrateJobs,
@@ -57,29 +52,19 @@ const JobChart = ({
 
   const formattedTotal = (total: number) => formatTotal(total, "");
 
-  // Custom legend item component to reduce repetition
-  const LegendItem = ({ title, value, color, className = "" }: LegendItemProps) => (
-    <Box className={`flex items-baseline ${className}`}>
-      <Box className={`w-6 h-6 rounded-md mx-2 ${color}`} />
-      <MetricItemAdvance label={title} value={value} unit="" />
-    </Box>
-  );
-
   return (
     <>
       {totalSize.toString().length > 3 && <Tooltip>{totalSize}</Tooltip>}
       <DoughnutChart
         unit=""
         label="Total Jobs"
-        colors={[
-          ["chart-4", "chart-6", "chart-9"],
-          ["chart-1", "chart-2", "chart-6", "chart-9"],
-        ]}
+        colors={
+          ["chart-4", "chart-6", "chart-9"]
+        }
         valueFormatter={formattedTotal}
-        data={[
-          [totalMigrateJobs, totalDiscoverJobs, totalCutoverJobs],
-          [baseLineJob, incrementalJob, totalDiscoverJobs, totalCutoverJobs],
-        ]}
+        data={
+          [totalMigrateJobs, totalDiscoverJobs, totalCutoverJobs]
+        }
       />
       <Box className="flex gap-4 w-full flex-wrap items-center">
         <LegendWrapper
@@ -94,32 +79,12 @@ const JobChart = ({
           color="bg-purple-500"
           unit=""
         />
-
-        <Box className="flex items-center gap-2">
-          <LegendItem
-            title="Migration Jobs"
-            value={totalMigrateJobs}
-            color="bg-teal-500"
-          />
-
-          <LegendItem
-            title="Baseline"
-            value={baseLineJob}
-            color="bg-blue-800"
-          />
-
-          <Divider
-            orientation="vertical"
-            flexItem
-            style={{ margin: "0.5rem 0.5rem" }}
-          />
-
-          <LegendItem
-            title="Incremental"
-            value={incrementalJob}
-            color="bg-blue-400"
-          />
-        </Box>
+        <LegendWrapper
+          title="Migration Jobs"
+          value={totalCutoverJobs}
+          color="bg-teal-500"
+          unit=""
+        />
       </Box>
     </>
   );

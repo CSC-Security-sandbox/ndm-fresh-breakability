@@ -92,10 +92,9 @@ const TableWrapper = ({
         (key) => tableState?.selectionState.rows[key] === true
       );
 
-      handleSelection(selectedRows);
+      handleSelection(selectedRows, tableState?.rows || []);
     }
   }, [tableState?.selectionState?.count]);
-
 
   const checkDisabled = (row) => {
     return notReachableExportPaths.includes(row?.id);
@@ -145,7 +144,7 @@ const TableWrapper = ({
                 variant="icon"
                 isSubmitting={isRefreshing}
                 onClick={!isRefreshing ? refetchTableData : undefined}
-                className="w-[16px] h-[16px]"
+                className="w-[17px] h-[17px]"
               >
                 <RefreshIcon />
               </Button>

@@ -1,16 +1,15 @@
 
-import { CommandStatus, DMError, FileServerDetails, JobContext, JobStatus, OPS_STATUS, SpeedTestReadWriteInfo, TaskStats, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { Injectable, Logger } from '@nestjs/common';
-import * as path from 'path';
+import { FileServerDetails, SpeedTestReadWriteInfo, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
+import * as path from 'path';
 // import * as net from 'net';
 import * as ping from 'ping';
 // import * as raw from 'raw-socket';
-import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
-import { RedisService } from 'src/redis/redis.service';
-import { getErrorCode, getFilePermissions, getFileType, shouldExclude } from '../utils/utils';
-import { WorkersConfig } from 'src/config/app.config';
 import axios from 'axios';
+import { WorkersConfig } from 'src/config/app.config';
+import { RedisService } from 'src/redis/redis.service';
+import { getErrorCode } from '../utils/utils';
 import { SpeedTestOutput } from './speed-test.type';
 
 

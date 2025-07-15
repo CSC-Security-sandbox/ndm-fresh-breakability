@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from 'path';
-import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, Protocol, RedisUtils, Task, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, JobManagerContext, RedisUtils, Task, TaskStatus, TaskType, Protocol } from "@netapp-cloud-datamigrate/jobs-lib";
 import { ACL, ExcludeOrSkipParams, getFileInfoInput, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
@@ -21,13 +21,13 @@ export const getChecksum = (filePath: string): Promise<string> => {
 export const removePrefix = (str: string, prefix: string): string => 
     str.startsWith(prefix) ? str.slice(prefix.length, 1000) : str;
 
-export const getFilePermissions = (stats: fs.Stats) : string =>{
+export const getFilePermissions = (stats: fs.Stats, isDirectory: boolean) : string =>{
     const mode = stats.mode;
     const owner = (mode & 0o700) >> 6;
     const group = (mode & 0o070) >> 3;
     const others = mode & 0o007;
     const toRWX = (perm: number) => `${perm & 4 ? 'r' : '-'}${perm & 2 ? 'w' : '-'}${perm & 1 ? 'x' : '-'}`;
-    const typePrefix = stats.isDirectory() ? 'd' : '-';
+    const typePrefix = isDirectory ? 'd' : '-';
     return `${typePrefix}${toRWX(owner)}${toRWX(group)}${toRWX(others)}`;
 }
 
@@ -88,14 +88,14 @@ export const getJobConnection = async ({jobRunId}: GetJobConnectionInput): Promi
 }
 
 
-export function getFileType(stats: fs.Stats): FileType {
+export function getFileType(stats: fs.Stats, isDirectory:boolean): FileType {
     switch (true) {
+      case isDirectory:
+        return FileType.DIRECTORY;
       case stats.isSymbolicLink():
         return FileType.SYMBOLIC_LINK;
       case stats.isFile():
-        return FileType.FILE;
-      case stats.isDirectory():
-        return FileType.DIRECTORY;
+        return FileType.FILE;      
       case stats.isSocket():
         return FileType.SOCKET;
       case stats.isFIFO():
@@ -112,6 +112,7 @@ export function getFileType(stats: fs.Stats): FileType {
 
   export const getFileInfo = async ({name, fullFilePath, relativePath, checksums, getID}: getFileInfoInput): Promise<any>  => {
     const lStat = await fs.promises.lstat(fullFilePath);
+    const isDirectory:boolean = lStat.isDirectory();
     let sid = undefined
     if(getID && process.platform == 'win32' && lStat.isFile())
       sid = getSID(fullFilePath);
@@ -119,15 +120,15 @@ export function getFileType(stats: fs.Stats): FileType {
         name,
         relativePath,
         relativePath,
-        lStat.isDirectory(),
+        isDirectory,
         lStat.size,
-        !lStat.isDirectory(),
+        !isDirectory,
         lStat.birthtime,
         lStat.mtime,
         lStat.atime,
         path.extname(fullFilePath),
-        getFilePermissions(lStat),
-        getFileType(lStat),
+        getFilePermissions(lStat, isDirectory),
+        getFileType(lStat, isDirectory),
         relativePath.split('/').length - 2,
         lStat.uid,
         lStat.gid,
@@ -139,7 +140,7 @@ export function getFileType(stats: fs.Stats): FileType {
     }
 }
 
-export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobContext, commands: Command[]): Task => new Task(
+export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobContext | JobManagerContext, commands: Command[]): Task => new Task(
   uuid4(), jobRunId, taskType, TaskStatus.PENDING, jobContext.jobConfig.workerIds[0],
   basePrefix(jobRunId, jobContext.jobConfig.sourceFileServer.pathId),
   jobContext.jobConfig.sourceFileServer.pathId,
@@ -317,3 +318,11 @@ export const getUserACLs = (line: string, path:string): ACL[] => {
     .filter((item): item is ACL => item !== null);
 };
 
+
+export const  calculateCommandHash = (commands: Command[]): string => {
+  const commandIds = commands.map(cmd => cmd.commandId);
+  commandIds.sort(); // Sort to ensure consistent order
+  const concatenatedIds = commandIds.join(',');
+  return crypto.createHash('sha256').update(concatenatedIds).digest('hex');
+
+}

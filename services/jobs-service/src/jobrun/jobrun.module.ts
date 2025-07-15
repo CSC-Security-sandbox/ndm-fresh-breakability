@@ -31,6 +31,7 @@ import { ErrorRemedyService } from 'src/errorremedies/errorremedies.service';
 import { ErrorRemedyEntity } from 'src/entities/error-remedies.entity';
 import { WorkersService } from 'src/workers/workers.service';
 import { SyncEmailEntity } from 'src/entities/sync-email.entity';
+import { JobRunActionService } from './jobrun-action.service';
 
 
 @Module({
@@ -41,7 +42,7 @@ import { SyncEmailEntity } from 'src/entities/sync-email.entity';
         WorkerModule,
         RedisModule
     ],
-    providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService, WorkerEntity,SendMailService, ErrorRemedyService,WorkersService],
+    providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService, WorkerEntity,SendMailService, ErrorRemedyService,WorkersService, JobRunActionService],
     controllers: [JobRunController]
 })
 export class JobRunModule {}

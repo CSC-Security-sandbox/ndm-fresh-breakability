@@ -224,5 +224,60 @@ describe('HealthcheckService', () => {
         'Error in making statscheck API call: HTTP error',
       );
     });
+
+    it('should log error if getAccessToken returns null in getPayloadAndToken', async () => {
+      jest.spyOn(service, 'getHealthcheckPayload').mockResolvedValue({
+      workerId,
+      healthStatus: 'HEALTHY',
+      systemStats: {
+        cpuUsage: '0.00%',
+        memoryUsage: '0.00%',
+        memoryLimit: '0.00%',
+        diskUsage: '0.00%',
+        diskLimit: '0.00%',
+      },
+      });
+      mockedAuthService.getAccessToken.mockResolvedValueOnce(null);
+      await expect(service.getPayloadAndToken()).rejects.toThrow('Failed to get access token');
+      expect(mockedLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Error in getPayloadAndToken: Failed to get access token')
+      );
+    });
+
+    it('should log error if getHealthcheckPayload throws in getPayloadAndToken', async () => {
+      jest.spyOn(service, 'getHealthcheckPayload').mockRejectedValue(new Error('Payload error'));
+      await expect(service.getPayloadAndToken()).rejects.toThrow('Payload error');
+      expect(mockedLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Error in getPayloadAndToken: Payload error')
+      );
+    });
+
+    it('should handle error in postHealthcheckResults and log it', async () => {
+      const payload = {
+      workerId,
+      healthStatus: 'HEALTHY',
+      systemStats: {
+        cpuUsage: '0.00%',
+        memoryUsage: '0.00%',
+        memoryLimit: '0.00%',
+        diskUsage: '0.00%',
+        diskLimit: '0.00%',
+      },
+      };
+      const error = new Error('post error');
+      mockedHttpService.post.mockReturnValueOnce(throwError(() => error));
+      // @ts-ignore: access private method for test
+      await service['postHealthcheckResults'](payload, 'token');
+      await new Promise((resolve) => process.nextTick(resolve));
+      expect(mockedLogger.error).toHaveBeenCalledWith(
+      'Error in making statscheck API call: post error'
+      );
+    });
+
+    it('should return -1 for cpu usage if cpu.usage throws', async () => {
+      mockedCpu.usage.mockRejectedValueOnce(new Error('CPU error'));
+      const stats = await service.getSystemStats();
+      expect(stats.cpuUsage).toBe('-1');
+    });
   });
 });

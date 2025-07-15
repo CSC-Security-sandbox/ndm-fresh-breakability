@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  InternalServerErrorException,
-  NotFoundException,
-  Logger,
-} from "@nestjs/common";
+import { Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import * as path from "path";
 import { InventoryEntity } from "../entities/inventory.entity";
@@ -13,7 +8,7 @@ import * as archiver from "archiver";
 import { ReportsEntity } from "src/entities/reports.entity";
 import puppeteer from "puppeteer";
 import { groupAndOrder } from "../utils/group-order";
-import { escapeCsvValue, validateFilePath } from "src/utils/utils";
+import { escapeCsvValue, escapeReportData, validateFilePath } from "src/utils/utils";
 import { ReportType } from "../constants/enums";
 
 @Injectable()
@@ -63,6 +58,11 @@ export class DiscoveryService {
         order: { createdAt: "DESC" },
         take: 1,
       });
+      this.logger.log(
+        `Latest report fetched for jobRunId: ${jobRunId} and latestReport: ${JSON.stringify(
+          latestRepor,
+        )},
+      );
 
       if (latestReport?.length === 0) {
         this.logger.error(
@@ -155,8 +155,11 @@ export class DiscoveryService {
   }
 
   async generatePdfFromData(reportData: any[]): Promise<Buffer> {
-    const htmlOutput = this.generateHtmlTable(reportData);
+    // Sanitize and escape the report data to prevent XSS attacks
+    const sanitizedData = sanitizeReportData(reportData);
+    const escapedData = escapeReportData(sanitizedData);
 
+    const htmlOutput = this.generateHtmlTable(escapedData);
     const browser = await puppeteer.launch({
       headless: true,
       args: [
@@ -166,7 +169,7 @@ export class DiscoveryService {
         "--disable-dev-shm-usage",
         "--disable-accelerated-2d-canvas",
       ],
-      // executablePath: "/opt/homebrew/bin/chromium",
+      executablePath: "/opt/homebrew/bin/chromium",
       protocolTimeout: 60000,
     });
     const page = await browser.newPage();

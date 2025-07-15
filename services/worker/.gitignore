@@ -62,3 +62,5 @@ package-lock.json
 pkg/
 
 .npmrc
+
+.env.*

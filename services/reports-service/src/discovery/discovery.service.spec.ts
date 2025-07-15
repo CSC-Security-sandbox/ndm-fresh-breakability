@@ -1,28 +1,28 @@
-import { Test, TestingModule } from "@nestjs/testing";
-import { DiscoveryService } from "./discovery.service";
-import { getRepositoryToken } from "@nestjs/typeorm";
-import { InventoryEntity } from "../entities/inventory.entity";
-import { ReportsEntity } from "../entities/reports.entity";
-import * as fs from "fs";
-import {
-  InternalServerErrorException,
-  NotFoundException,
-} from "@nestjs/common";
-import * as validation from "../utils/utils";
+import { Test, TestingModule } from '@nestjs/testing';
+import { DiscoveryService } from './discovery.service';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { InventoryEntity } from '../entities/inventory.entity';
+import { ReportsEntity } from '../entities/reports.entity';
+import * as fs from 'fs';
+import { InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import * as validation from '../utils/utils';
+import * as puppeteer from 'puppeteer';
 
-// Mock Puppeteer
-jest.mock("puppeteer", () => ({
-  __esModule: true,
-  default: {
+jest.mock('puppeteer', () => {
+  const mockPuppeteer = {
     launch: jest.fn().mockResolvedValue({
       newPage: jest.fn().mockResolvedValue({
-        setContent: jest.fn().mockResolvedValue(undefined),
-        pdf: jest.fn().mockResolvedValue(Buffer.from("mock pdf content")),
+        setContent: jest.fn().mockResolvedValue(null),
+        pdf: jest.fn().mockResolvedValue(Buffer.from('mock pdf')),
       }),
-      close: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(null),
     }),
-  },
-}));
+  };
+  return {
+    ...mockPuppeteer,
+    default: mockPuppeteer,
+  };
+});
 
 describe("DiscoveryService", () => {
   let service: DiscoveryService;
@@ -66,6 +66,9 @@ describe("DiscoveryService", () => {
       save: jest.fn(),
     };
 
+    const mockSanitizeHtml = jest.fn((str: string) => str);
+    const mockEscapeHtml = jest.fn((str: string) => str);
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DiscoveryService,
@@ -76,6 +79,14 @@ describe("DiscoveryService", () => {
         {
           provide: getRepositoryToken(ReportsEntity),
           useValue: mockReportsRepo,
+        },
+        {
+          provide: 'SANITIZE_HTML',
+          useValue: mockSanitizeHtml,
+        },
+        {
+          provide: 'ESCAPE_HTML',
+          useValue: mockEscapeHtml,
         },
       ],
     }).compile();
@@ -529,10 +540,10 @@ describe("DiscoveryService", () => {
       // Mock groupAndOrder to return a specific structure
       jest.spyOn(require("../utils/group-order"), "groupAndOrder").mockReturnValue({
         Category1: [
-          { 
-            category: "Category1", 
-            sub_category: "SubCat1", 
-            value: "100" 
+          {
+            category: "Category1",
+            sub_category: "SubCat1",
+            value: "100"
           }
         ]
       });
@@ -565,9 +576,9 @@ describe("DiscoveryService", () => {
       // Mock groupAndOrder to return a specific structure
       jest.spyOn(require("../utils/group-order"), "groupAndOrder").mockReturnValue({
         Category1: [
-          { 
-            category: "Category1", 
-            sub_category: "SubCat1", 
+          {
+            category: "Category1",
+            sub_category: "SubCat1",
             value: "100",
             SubCat2: "200"
           }
@@ -610,6 +621,37 @@ describe("DiscoveryService", () => {
     it("should return default directory when environment variable is not set", () => {
       delete process.env.REPORT_DOWNLOAD_LOCATION;
       expect(service.getReportsDirectory).toBe("./reports");
+    });
+  });
+
+  describe('generatePdfFromData', () => {
+    it('should sanitize and escape HTML in report data', async () => {
+      const maliciousData = [
+        {
+          category: '<script>alert("xss")</script>',
+          sub_category: 'Total <b>Files</b>',
+          value: '<img src=x onerror=alert(1)>'
+        }
+      ];
+
+      const mockPdfBuffer = Buffer.from('mock pdf');
+      const mockSetContent = jest.fn().mockResolvedValue(undefined);
+      const mockPdf = jest.fn().mockResolvedValue(mockPdfBuffer);
+      const mockNewPage = jest.fn().mockResolvedValue({
+        setContent: mockSetContent,
+        pdf: mockPdf,
+      });
+      const mockClose = jest.fn().mockResolvedValue(undefined);
+      (puppeteer.launch as jest.Mock).mockResolvedValue({
+        newPage: mockNewPage,
+        close: mockClose,
+      });
+
+      await service.generatePdfFromData(maliciousData);
+
+      const htmlArg = mockSetContent.mock.calls[0][0];
+      expect(htmlArg).not.toContain('<script>');
+      expect(htmlArg).not.toContain('<img');
     });
   });
 });

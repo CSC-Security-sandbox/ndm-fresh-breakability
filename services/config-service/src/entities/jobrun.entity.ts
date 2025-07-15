@@ -5,16 +5,20 @@ import { WorkerConfiguration } from 'src/constants/types';
 import { JobConfigEntity } from './jobconfig.entity';
 import { WorkerJobRunMap } from './workerjobrun.entity';
 
+// ---------- Job Run -----------/
 export enum JobRunStatus {
   Ready = 'READY',
-  Pending = 'PENDING',
   Running = 'RUNNING',
   Paused = 'PAUSED',
+  Pausing = 'PAUSING',
   Stopped = 'STOPPED',
+  Stopping = 'STOPPING',
   Completed = 'COMPLETED',
   Failed = 'FAILED',
-  Errored = 'ERRORED'
+  Errored = 'ERRORED',
+  Blocked = 'BLOCKED'
 }
+
 
 @Entity({ name: 'jobrun' })
 export class JobRunEntity extends Base {
@@ -23,7 +27,7 @@ export class JobRunEntity extends Base {
   id: string;
 
   @ApiProperty({ description: 'Job Run status' })
-  @Column({ type: 'enum', enum: JobRunStatus, default: JobRunStatus.Pending, name:'status' })
+  @Column({ type: 'enum', enum: JobRunStatus, default: JobRunStatus.Ready, name:'status' })
   status: JobRunStatus;
 
   @ApiProperty({ description: 'Start time of the job' })

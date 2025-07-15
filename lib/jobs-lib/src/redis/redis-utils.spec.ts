@@ -1,19 +1,10 @@
 import { RedisUtils } from './redis-utils';
 import { createClient, RedisClientType } from 'redis';
-import { Logger } from '../utils/logging';
 
 jest.mock('redis', () => ({
   createClient: jest.fn(),
 }));
 
-jest.mock('../utils/logging', () => ({
-  Logger: {
-    getLogger: jest.fn().mockReturnValue({
-      info: jest.fn(),
-      error: jest.fn(),
-    }),
-  },
-}));
 
 describe('RedisUtils', () => {
   let mockClient: RedisClientType;

@@ -2,37 +2,49 @@ name: Release Workflow
 
 on:
   workflow_dispatch:
-    inputs:
-      build:
-        description: 'Build to release'
-        required: true
-        type: string
-
-permissions:
+    
+permissions: 
   contents: write
-   
+  actions: read
+  pull-requests: write
+  security-events: write
+  id-token: write
+  
 jobs:
   check-branch:
     runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.extract_build.outputs.build }}
     steps:
       - name: Ensure branch is release/**
         if: ${{ !startsWith(github.ref, 'refs/heads/release/') }}
         run: |
           echo "This workflow can only be run on release/** branches."
           exit 1
+          
+      - name: Extract build from branch name
+        id: extract_build
+        run: |
+          BRANCH_NAME="${GITHUB_REF#refs/heads/release/}"
+          echo "build=$BRANCH_NAME" >> $GITHUB_OUTPUT
 
   build-docker-images:
     needs: check-branch
     uses: ./.github/workflows/build-push-service-images.yaml
     with:
-      build: ${{ github.event.inputs.build }}
+      build: ${{ needs.check-branch.outputs.build }}
+    secrets: inherit
 
   build-worker-binary:
     needs: check-branch
     uses: ./.github/workflows/build-binary-and-installer-for-worker.yaml
     with:
-      build: ${{ github.event.inputs.build }}
+      build: ${{ needs.check-branch.outputs.build }}
+    secrets: inherit
   
   build-vm-images:
-    needs: check-branch
+    needs: [check-branch, build-worker-binary, build-docker-images]
     uses: ./.github/workflows/ndm-vm-image-build.yaml
+    with:
+      build: ${{ needs.check-branch.outputs.build }}
+    secrets: inherit

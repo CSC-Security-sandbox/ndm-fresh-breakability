@@ -9,7 +9,7 @@ export {SetupWorkerWorkflow} from '../workflows/setup/setup-worker-workflow'
 export {CleanupWorkerWorkflow} from '../workflows/setup/cleanup-worker-workflow'
 
 export {DiscoveryJobWorkflow} from './discovery/core/discovery-job-workflow'
-export {DiscoveryWorkflow} from '../workflows/discovery/parent/discovery-workflow'
+export {DiscoveryWorkflow} from './core/parent/discovery-parent-workflow'
 
 export {PreCheckValidationWorkflow} from '../workflows/pre-check/parent/pre-check.workflow'
 export {PreCheckWorkerValidationWorkflow} from './pre-check/core/pre-check.worker.workflow'
@@ -17,11 +17,8 @@ export {PreCheckWorkerValidationWorkflow} from './pre-check/core/pre-check.worke
 export { ValidateWorkingDirectoryWorkflow} from './working-directory/working-directory.workflow';
 export { ValidateWorkingDirectoryWorkerWorkflow } from './working-directory/working-directory-worker.workflow';
 
-export {MigrationWorkflow} from '../workflows/migration/parent/migration-job-workflow'
-export {CutOverWorkFlow, WaitingForApproval} from '../workflows/migration/parent/cutover-job-workflow'
-
-export {ScanWorkflow} from '../workflows/migration/core/scan.workflow'
-export {SyncWorkflow} from '../workflows/migration/core/sync.workflow'
+export {ScanWorkflow} from './migration/core/scan.workflow'
+export {SyncWorkflow} from './migration/core/sync.workflow'
 
 export {ReportingWorkflow} from '../workflows/reporting/reporting.workflow'
 
@@ -29,3 +26,11 @@ export {SpeedTestJobWorkflow} from '../workflows/speed-test/speed-test-job-workf
 export {SpeedTestWorkflow} from '../workflows/speed-test/speed-test-workflow'
 
 export {RedisMemoryCheckWorkflow} from '../workflows/redis/redis.memorycheck.workflow'
+
+export {ChildScanWorkflow } from './core/child/child-scan.workflow'
+export {ChildSyncWorkflow} from './core/child/child-sync.workflow'
+
+export {waitForApproval} from './core/common/waiting-approval'
+export {MigrationWorkflow} from './core/parent/migration-parent-workflow'
+export {CutOverWorkFlow} from './core/parent/cutover-parent-workflow'
+
