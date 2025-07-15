@@ -1,16 +1,10 @@
-import {
-    CallHandler,
-    ExecutionContext,
-    Injectable,
-    NestInterceptor,
-    Inject,
-} from '@nestjs/common';
-import { Observable, catchError, map, throwError } from 'rxjs';
-import { Request, Response } from 'express';
-import { ResponseHandler } from './response-handler';
+import {CallHandler, ExecutionContext, Inject, Injectable, NestInterceptor} from '@nestjs/common';
+import {catchError, map, Observable, throwError} from 'rxjs';
+import {Request, Response} from 'express';
+import {ResponseHandler} from './response-handler';
 import {CustomErrorDTO} from '../dto/custom-error-dto';
 import {CustomSuccessDTO} from '../dto/custom-success-dto';
-import {LoggerFactory, LoggerService} from "@netapp-cloud-datamigrate/logger-lib";
+import {LoggerFactory, LoggerService} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class ResponseInterceptor<T> implements NestInterceptor<T, any> {
@@ -28,7 +22,7 @@ export class ResponseInterceptor<T> implements NestInterceptor<T, any> {
     const request = httpArgumentsHost.getRequest<Request>();
     return next.handle().pipe(
         map((controllerResponse) => {
-          const result = ResponseHandler.success(request, controllerResponse, this.successDTOList);
+            const result = ResponseHandler.success(request, controllerResponse, this.successDTOList, this.logger);
           response.status(result.statusCode);
           result.data.trackId = request['trackId'];
           this.logger.log(`Final response from interceptor \n JSON.stringify(${result})`);

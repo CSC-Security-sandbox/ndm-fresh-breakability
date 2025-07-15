@@ -1,23 +1,19 @@
-import Box from "@/components/container/Box";
-import TableWrapper from "@components/table-wrapper/TableWrapper";
-import { notify } from "@components/notification/NotificationWrapper";
-import {
-  useGetAllUsersQuery,
-  useResetPasswordMutation,
-  useUpdateUserStatusMutation,
-} from "@api/userApi";
-import { COL_DEF_FOR_USER } from "@/constant/app.constants";
-import { Collapse } from "@mui/material";
-import { Button } from "@netapp/bxp-design-system-react";
-import { useState } from "react";
-import CreateUserForm from "@components/top-nav-bar/setting/ManageUsers/CreateUserForm";
-import PermissionAuth from "@/auth/PermissionAuth";
-import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
-import { hasPermission } from "@/auth/auth.utils";
-import { useSelector } from "react-redux";
-import { RootStateType } from "@store/store";
-import { DEFAULT_COLUMN_STATE } from "@components/top-nav-bar/setting/ManageUsers/ManageUsers.constant";
-import { decryptData } from "@/utils/common.utils";
+import Box from '@/components/container/Box';
+import TableWrapper from '@components/table-wrapper/TableWrapper';
+import {notify} from '@components/notification/NotificationWrapper';
+import {useGetAllUsersQuery, useResetPasswordMutation, useUpdateUserStatusMutation} from '@api/userApi';
+import {COL_DEF_FOR_USER} from '@/constant/app.constants';
+import {Collapse} from '@mui/material';
+import {Button} from '@netapp/bxp-design-system-react';
+import {useState} from 'react';
+import CreateUserForm from '@components/top-nav-bar/setting/ManageUsers/CreateUserForm';
+import PermissionAuth from '@/auth/PermissionAuth';
+import {USER_PERMISSION_TYPE_ENUM} from '@auth/permissionAuth.constant';
+import {hasPermission} from '@/auth/auth.utils';
+import {useSelector} from 'react-redux';
+import {RootStateType} from '@store/store';
+import {DEFAULT_COLUMN_STATE} from '@components/top-nav-bar/setting/ManageUsers/ManageUsers.constant';
+import {decryptData} from '@/utils/common.utils';
 
 const ManageUsers = () => {
   const [updateUserStatus] = useUpdateUserStatusMutation();
@@ -42,8 +38,9 @@ const ManageUsers = () => {
         notify.success(res?.message);
       })
       .catch((err) => {
+        console.log('error', err);
         const errorDetails = err.data?.error;
-        notify.error(errorDetails?.displayMessage);
+        notify.error(errorDetails?.message);
       });
   };
 

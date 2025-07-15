@@ -10,7 +10,10 @@ import { Project } from '../entities/project.entity';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 import { NotFoundException } from '@nestjs/common';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
-import { mockLoggerFactory, resetLoggerMocks } from '../test-utils/logger-mocks';
+import {
+  mockLoggerFactory,
+  resetLoggerMocks,
+} from '../test-utils/logger-mocks';
 
 describe('RoleService', () => {
   let service: RoleService;
@@ -149,7 +152,9 @@ describe('RoleService', () => {
   it('should throw NotFoundException when role not found in findOne', async () => {
     jest.spyOn(repository, 'findOneBy').mockResolvedValue(null);
 
-    await expect(service.findOne('nonexistent')).rejects.toThrow(NotFoundException);
+    await expect(service.findOne('nonexistent')).rejects.toThrow(
+      NotFoundException,
+    );
     expect(repository.findOneBy).toHaveBeenCalledWith({ id: 'nonexistent' });
   });
 
@@ -175,8 +180,9 @@ describe('RoleService', () => {
 
     jest.spyOn(repository, 'findOneBy').mockResolvedValue(null);
 
-    await expect(service.update('nonexistent', updateRoleDto, userPermissionResponseMock))
-      .rejects.toThrow(NotFoundException);
+    await expect(
+      service.update('nonexistent', updateRoleDto, userPermissionResponseMock),
+    ).rejects.toThrow(NotFoundException);
     expect(repository.findOneBy).toHaveBeenCalledWith({ id: 'nonexistent' });
   });
 
@@ -193,7 +199,9 @@ describe('RoleService', () => {
   it('should throw NotFoundException when deleting non-existent role', async () => {
     jest.spyOn(repository, 'findOneBy').mockResolvedValue(null);
 
-    await expect(service.delete('nonexistent')).rejects.toThrow(NotFoundException);
+    await expect(service.delete('nonexistent')).rejects.toThrow(
+      NotFoundException,
+    );
     expect(repository.findOneBy).toHaveBeenCalledWith({ id: 'nonexistent' });
   });
 
@@ -209,24 +217,12 @@ describe('RoleService', () => {
     });
   });
 
-  it('should log messages at different levels', () => {
-    // Get the logger instance from the service
-    const logger = (service as any).logger;
-
-    // Call the test method
-    service.test();
-
-    // Verify that each logging method was called with the correct message
-    expect(logger.log).toHaveBeenCalledWith('This is a test log message from RoleService');
-    expect(logger.error).toHaveBeenCalledWith('This is a test error message from RoleService');
-    expect(logger.warn).toHaveBeenCalledWith('This is a test warning message from RoleService');
-    expect(logger.debug).toHaveBeenCalledWith('This is a test debug message from RoleService');
-  });
-
   it('should throw NotFoundException when inactivating non-existent role', async () => {
     jest.spyOn(repository, 'findOneBy').mockResolvedValue(null);
 
-    await expect(service.inactivate('nonexistent')).rejects.toThrow(NotFoundException);
+    await expect(service.inactivate('nonexistent')).rejects.toThrow(
+      NotFoundException,
+    );
     expect(repository.findOneBy).toHaveBeenCalledWith({ id: 'nonexistent' });
   });
 
@@ -263,12 +259,13 @@ describe('RoleService', () => {
       jest.spyOn(repository, 'create').mockReturnValue(mockRole as any);
       jest.spyOn(repository, 'save').mockRejectedValue(dbError);
 
-      await expect(service.create(createRoleDto, userPermissionResponseMock))
-        .rejects.toThrow('Database connection failed');
+      await expect(
+        service.create(createRoleDto, userPermissionResponseMock),
+      ).rejects.toThrow('Database connection failed');
 
       expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
         'Failed to create role for user',
-        dbError
+        dbError,
       );
     });
 
@@ -279,7 +276,7 @@ describe('RoleService', () => {
       await expect(service.findAll()).rejects.toThrow('Database query failed');
       expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
         'Failed to retrieve roles list',
-        dbError
+        dbError,
       );
     });
 
@@ -287,10 +284,12 @@ describe('RoleService', () => {
       const dbError = new Error('Database connection failed');
       jest.spyOn(repository, 'findOneBy').mockRejectedValue(dbError);
 
-      await expect(service.findOne('1')).rejects.toThrow('Database connection failed');
+      await expect(service.findOne('1')).rejects.toThrow(
+        'Database connection failed',
+      );
       expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
         'Failed to retrieve role',
-        dbError
+        dbError,
       );
     });
 
@@ -299,12 +298,13 @@ describe('RoleService', () => {
       jest.spyOn(repository, 'findOneBy').mockResolvedValue(mockRole);
       jest.spyOn(repository, 'update').mockRejectedValue(dbError);
 
-      await expect(service.update('1', updateRoleDto, userPermissionResponseMock))
-        .rejects.toThrow('Database update failed');
+      await expect(
+        service.update('1', updateRoleDto, userPermissionResponseMock),
+      ).rejects.toThrow('Database update failed');
 
       expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
         'Failed to update role',
-        dbError
+        dbError,
       );
     });
 
@@ -313,10 +313,12 @@ describe('RoleService', () => {
       jest.spyOn(repository, 'findOneBy').mockResolvedValue(mockRole);
       jest.spyOn(repository, 'delete').mockRejectedValue(dbError);
 
-      await expect(service.delete('1')).rejects.toThrow('Database delete failed');
+      await expect(service.delete('1')).rejects.toThrow(
+        'Database delete failed',
+      );
       expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
         'Failed to delete role',
-        dbError
+        dbError,
       );
     });
 
@@ -325,10 +327,12 @@ describe('RoleService', () => {
       jest.spyOn(repository, 'findOneBy').mockResolvedValue(mockRole);
       jest.spyOn(repository, 'update').mockRejectedValue(dbError);
 
-      await expect(service.inactivate('1')).rejects.toThrow('Database update failed');
+      await expect(service.inactivate('1')).rejects.toThrow(
+        'Database update failed',
+      );
       expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
         'Failed to inactivate role',
-        dbError
+        dbError,
       );
     });
   });

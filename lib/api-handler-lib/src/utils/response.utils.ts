@@ -8,8 +8,8 @@ import {LoggerService} from '@netapp-cloud-datamigrate/logger-lib';
 
 // This library provides a utility function to set messages based on request and data.
 export const setSuccessMessage = <T, msg extends string>
-(req :Request, controllerResponseData: T, customSuccessDTOList: CustomSuccessDTO[]): msg => {
-
+(req: Request, controllerResponseData: T, customSuccessDTOList: CustomSuccessDTO[], logger: LoggerService): msg => {
+    
     let responseMessage =  MessageCatalog[MessageKey.Default]['message'];
 
     if (req.path) {
