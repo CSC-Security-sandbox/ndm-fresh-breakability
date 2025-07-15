@@ -1,4 +1,4 @@
-import { TaskMap } from "src/redis/hmap-collection";
+import { DirMap, TaskMap } from "src/redis/hmap-collection";
 import { JobConfig } from "../job-config";
 import { CommandCollection, ErrorCollection, FileCollection, TaskCollection } from "../stream-collection";
 import { Command, DMError, FileInfo, Task } from "../metadata-types";
@@ -7,7 +7,7 @@ import { GroupReaderType } from "../enums";
 
 
 
-export class JobManagerContext {
+export  class JobManagerContext {
     jobRunId: string;
     jobConfig: JobConfig;
     jobRunStatus: string;
@@ -16,6 +16,7 @@ export class JobManagerContext {
     commandStream: CommandCollection;
     taskStream: TaskCollection;
     taskMap: TaskMap;
+    dirBatchMap: DirMap;
 
     constructor(jobRunId: string, jobConfig?: JobConfig, jobRunStatus?: string) {
         this.jobRunId = jobRunId;
@@ -106,6 +107,18 @@ export class JobManagerContext {
     async deleteTask(key: string): Promise<void> {
         await this.taskMap.deleteValue(key);
     }
+
+    async setBatchDir(key: string , value: any): Promise<void> {
+        await this.dirBatchMap.setValue(key, value);
+    }
+
+    async getBatchDir(key: string): Promise<any | null> {
+        return await this.dirBatchMap.getValue(key);
+    }
+
+    async deleteBatchDir(key: string): Promise<void> {
+        await this.dirBatchMap.deleteValue(key);
+    }
     
     serialize(): string {
         const data = {
@@ -120,4 +133,7 @@ export class JobManagerContext {
         return JSON.parse(json);
     }
 
+    async initializeInstance(): Promise<void>{ }
+
+    async cleanup(): Promise<void> {}
 }

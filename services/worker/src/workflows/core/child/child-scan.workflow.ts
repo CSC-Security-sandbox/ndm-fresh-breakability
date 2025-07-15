@@ -3,7 +3,9 @@ import { CommonActivityService } from "src/activities/common/common.service";
 import { ScanService } from 'src/activities/core/scan/scan-activity.service';
 import { JobRunStatus } from "src/activities/discovery/enums";
 import { updateJobStatusIfNotRunning } from '../common/workflow-utils';
-import { ChildScanWorkflowInput, ChildScanWorkflowOutput } from './chid-scan.workflow.type';
+import { ChildScanWorkflowInput, ChildScanWorkflowOutput, CreateBatchInput, ExecuteBatchScanInput, ExecuteBatchScansOutput } from './chid-scan.workflow.type';
+import { ScanActivityInput, ScanActivityOutput } from 'src/activities/core/scan/scan-activity.type';
+import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 
 
 
@@ -13,6 +15,11 @@ const {
   startToCloseTimeout: '24h',
   heartbeatTimeout: '2m',
 });
+
+
+const {
+  createInitialDirBatch: createInitialDirBatchActivity,
+} = wf.proxyActivities<CommonTaskService>({ startToCloseTimeout: '10m' });
 
 const {
     scanDirectories: scanDirectories,
@@ -32,18 +39,16 @@ const {
 const actionSignal = wf.defineSignal<[string]>('scanActionSignal');
 
 
-export function createBatches(dirsToScan , batchSize): string[][] {
-   const batches: string[][] = [];
-    for (let i = 0; i < dirsToScan.length; i += batchSize) {
-      batches.push(dirsToScan.slice(i, i + batchSize));
-    }
-    return batches;
-  
+const MAX_CONCURRENT_BATCHES = 1500;
 
-}
-export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSize = 100, dirCount = 0, fileCount = 0, isMigration = false, actionState=JobRunStatus.Running}: ChildScanWorkflowInput): Promise<ChildScanWorkflowOutput> => {
-  
+export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], preBatchDirs = [], batchSize = 100, dirCount = 0, fileCount = 0, isMigration = false, actionState = JobRunStatus.Running, isInitialScan = true}: ChildScanWorkflowInput): Promise<ChildScanWorkflowOutput> => {
+
   await updateJobStatusActivity({jobRunId, status :JobRunStatus.Running});
+
+  if(isInitialScan)  {
+    const id = await createInitialDirBatchActivity({dirsToScan, jobRunId});
+    preBatchDirs.push(id);
+  }
   
   const scanWorkflowOutput: ChildScanWorkflowOutput = {
     jobRunId,
@@ -62,45 +67,30 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSiz
   let isStopRequested = false;
   let errors: string[] = [];
   let iterations = 0; 
-  while(dirsToScan.length > 0) {        
+
+  while(preBatchDirs.length > 0) {        
     if(actionState === JobRunStatus.Stopped as JobRunStatus) {
       isStopRequested = true
       break;
     }
-    // wait until the staate is paused. 
+
+    // wait until the state is paused. 
     await updateJobStatusIfNotRunning(actionState, jobRunId);
     await wf.condition(() => actionState !== JobRunStatus.Paused);
 
-    const batches: string[][] = createBatches(dirsToScan, batchSize);
-    iterations+= batches.length;
-    let nexDirsToScan: string[] = [];
-    //TODO: make workflow failed when activity fails. 
-    const results = await Promise.all(
-      batches.map(async (dirs) =>{
-        try{
-            return await scanDirectories({jobRunId, dirsToScan: dirs, isMigration});
-        }catch(error){
-            if(error instanceof wf.ActivityFailure)  {
-              console.error(`Activity failed for jobRunId: ${jobRunId}, dirs: ${dirs}, error: ${error.message}`);
-              errors.push(`Activity failed for jobRunId: ${jobRunId}, dirs: ${dirs}, error: ${error.message}`);
-             return { jobRunId, fileCount: 0, dirCount: 0, subDirs: [], error: error.message || 'Activity failed error' };
-          }
-          throw error
-          // TODO: handle error
-        }
-      }));
+    iterations+= preBatchDirs.length
 
-    for(const result of results){
-      scanWorkflowOutput.fileCount += result.fileCount; // Add file count from the result.
-      scanWorkflowOutput.dirCount += result.dirCount; // Add directory count from the result.
-      console.log(`results : ${JSON.stringify(result.subDirs)}`)
-      nexDirsToScan.push(...result.subDirs)
-    }        
-    dirsToScan = nexDirsToScan;
-    nexDirsToScan = []
-    if(iterations > 1000 ){
+    const batchExecResults: ExecuteBatchScansOutput = await executeBatchScan({ batches: preBatchDirs, batchSize, isMigration, jobRunId,  });
+    scanWorkflowOutput.fileCount += batchExecResults.fileCount;
+    scanWorkflowOutput.dirCount += batchExecResults.dirCount;
+    preBatchDirs = batchExecResults.batchDirs;
+
+    if(iterations > 30 ){
       console.warn(`ChildScanWorkflow ${jobRunId} has exceeded 1000 iterations, stopping to prevent infinite loop.`);                      
-      await wf.continueAsNew({ jobRunId, dirsToScan, batchSize, dirCount:scanWorkflowOutput.dirCount, fileCount:scanWorkflowOutput.fileCount, isMigration, actionState });      
+      await wf.continueAsNew({ 
+        isInitialScan: false,
+        jobRunId, dirsToScan, batchSize, preBatchDirs, dirCount:scanWorkflowOutput.dirCount, fileCount:scanWorkflowOutput.fileCount, isMigration, actionState 
+      });      
     }
   }
 
@@ -110,3 +100,44 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], batchSiz
   return  scanWorkflowOutput;
 }
 
+
+export const executeBatchScan = async ({ batchSize, batches, isMigration, jobRunId}: ExecuteBatchScanInput): Promise<ExecuteBatchScansOutput> => {
+  const output: ExecuteBatchScansOutput = {
+    fileCount: 0,
+    dirCount: 0,
+    batchDirs: [],
+    error: undefined,
+  };
+
+
+  for (let i = 0; i < batches.length; i += MAX_CONCURRENT_BATCHES) {
+    const batchSlice = batches.slice(i, i + MAX_CONCURRENT_BATCHES);
+    const batchResults = await Promise.all(
+      batchSlice.map(async (batchId) => {
+        try {
+          return await scanDirectories({batchSize, isMigration, jobRunId, preBatchedId: batchId});
+        } catch (error) {
+          if (error instanceof wf.ActivityFailure) {
+            return {
+              jobRunId: jobRunId,
+              fileCount: 0,
+              dirCount: 0,
+              subDirs: [],
+              error: error.message || 'Activity failed error',
+              batchDirs: [],
+            };
+          }
+          throw error;
+        }
+      })
+    );
+
+    for(const result of batchResults){
+      output.fileCount += result.fileCount;
+      output.dirCount += result.dirCount; 
+      output.batchDirs.push(...result.batchDirs);
+    }  
+  }
+
+  return output;
+}

@@ -119,47 +119,6 @@ describe('ScanService', () => {
         });
     });
 
-    describe('executeTask', () => {
-        it('should execute discovery scan and aggregate results', async () => {
-            const task = { ...mockTask, commands: [{ fPath: '/foo', retryCount: 0 }] };
-            const result = await scanService.executeTask({
-                activityId: 'activity-1',
-                jobContext: mockJobContext as any,
-                jobRunId: 'run-1',
-                task,
-                isMigration: false,
-            }as any);
-            expect(discoveryScanService.scanDirectory).toHaveBeenCalled();
-            expect(result.result.fileCount).toBe(1);
-            expect(result.result.dirCount).toBe(1);
-            expect(result.errors).toEqual([]);
-        });
-
-        it('should execute migrate scan when isMigration is true', async () => {
-            const task = { ...mockTask, commands: [{ fPath: '/foo', retryCount: 0 }] };
-            await scanService.executeTask({
-                activityId: 'activity-1',
-                jobContext: mockJobContext as any,
-                jobRunId: 'run-1',
-                task,
-                isMigration: true,
-            }as any);
-            expect(migrateScanService.scanDirectory).toHaveBeenCalled();
-        });
-
-        it('should collect errors from scanDirectory', async () => {
-            discoveryScanService.scanDirectory.mockRejectedValueOnce({ code: 'ERR1' });
-            const task = { ...mockTask, commands: [{ fPath: '/foo', retryCount: 0 }] };
-            const result = await scanService.executeTask({
-                activityId: 'activity-1',
-                jobContext: mockJobContext as any,
-                jobRunId: 'run-1',
-                task,
-                isMigration: false,
-            } as any);
-            expect(result.errors).toEqual(['ERR1']);
-        });
-    });
 
     describe('updateAndReportTaskStatus', () => {
         it('should complete task if no errors', async () => {
@@ -214,62 +173,184 @@ describe('ScanService', () => {
             }as any)).rejects.toBeInstanceOf(RetryableError);
             expect(mockJobContext.deleteTask).not.toHaveBeenCalled();
         });
-    });
 
-    describe('scanDirectories', () => {
-        beforeEach(() => {
-            jest.useFakeTimers();
         });
 
-        it('should scan directories and return output', async () => {
-            const input = { jobRunId: 'run-1', dirsToScan: ['/foo'], isMigration: false };
-            const result = await scanService.scanDirectories(input as any);
-            expect(result).toHaveProperty('dirCount');
-            expect(commonTaskService.buildOrGetValidScanTask).toHaveBeenCalled();
-            expect(mockJobContext.publishToTaskStream).toHaveBeenCalled();
+        describe('executeTask', () => {
+        it('should execute discovery scan and aggregate results', async () => {
+            const task = { ...mockTask, commands: [{ fPath: '/foo', retryCount: 0 }, { fPath: '/bar', retryCount: 0 }] };
+            const jobContext = { ...mockJobContext, setTask: jest.fn() };
+            jest.spyOn(scanService, 'getScanSettings').mockReturnValue({
+            skipFile: '2d',
+            excludePatterns: ['node_modules', '.git'],
+            });
+            jest.spyOn(scanService, 'handleDirsReturn').mockResolvedValue({ subDirs: [], batchDirs: ['batch1'] });
+
+            const result = await scanService.executeTask({
+            activityId: 'activity-1',
+            jobContext: jobContext as any,
+            jobRunId: 'job-1',
+            task,
+            isMigration: false,
+            batchSize: 10,
+            } as any);
+
+            expect(discoveryScanService.scanDirectory).toHaveBeenCalledTimes(2);
+            expect(result.result.fileCount).toBe(2);
+            expect(result.result.dirCount).toBe(2);
+            expect(result.result.batchDirs).toEqual(['batch1']);
+            expect(result.errors).toEqual([]);
+        });
+
+        it('should execute migrate scan and aggregate results', async () => {
+            const task = { ...mockTask, commands: [{ fPath: '/foo', retryCount: 0 }, { fPath: '/bar', retryCount: 0 }] };
+            const jobContext = { ...mockJobContext, setTask: jest.fn() };
+            jest.spyOn(scanService, 'getScanSettings').mockReturnValue({
+            skipFile: '2d',
+            excludePatterns: ['node_modules', '.git'],
+            });
+            jest.spyOn(scanService, 'handleDirsReturn').mockResolvedValue({ subDirs: [], batchDirs: ['batch1'] });
+
+            const result = await scanService.executeTask({
+            activityId: 'activity-1',
+            jobContext: jobContext as any,
+            jobRunId: 'job-1',
+            task,
+            isMigration: true,
+            batchSize: 10,
+            } as any);
+
+            expect(migrateScanService.scanDirectory).toHaveBeenCalledTimes(2);
+            expect(result.result.fileCount).toBe(2);
+            expect(result.result.dirCount).toBe(2);
+            expect(result.result.batchDirs).toEqual(['batch1']);
+            expect(result.errors).toEqual([]);
+        });
+
+        it('should collect errors from scanDirectory', async () => {
+            const task = { ...mockTask, commands: [{ fPath: '/foo', retryCount: 0 }] };
+            const jobContext = { ...mockJobContext, setTask: jest.fn() };
+            discoveryScanService.scanDirectory.mockRejectedValueOnce({ code: 'ERR_CODE' });
+            jest.spyOn(scanService, 'getScanSettings').mockReturnValue({
+            skipFile: '2d',
+            excludePatterns: ['node_modules', '.git'],
+            });
+            jest.spyOn(scanService, 'handleDirsReturn').mockResolvedValue({ subDirs: [], batchDirs: [] });
+
+            const result = await scanService.executeTask({
+            activityId: 'activity-1',
+            jobContext: jobContext as any,
+            jobRunId: 'job-1',
+            task,
+            isMigration: false,
+            batchSize: 10,
+            } as any);
+
+            expect(result.errors).toEqual(['ERR_CODE']);
+            expect(result.result.fileCount).toBe(0);
+            expect(result.result.dirCount).toBe(0);
+        });
+        });
+
+        describe('handleDirsReturn', () => {
+        it('should batch subDirs correctly', async () => {
+            const jobContext = { setBatchDir: jest.fn().mockResolvedValue(undefined) };
+            const subDirs = ['a', 'b', 'c', 'd'];
+            const batchSize = 2;
+            const hashMock = jest.spyOn(require('src/activities/utils/checksum-utils'), 'calculateHash');
+            hashMock.mockImplementation((arr: string[]) => arr.join('-hash'));
+
+            const result = await scanService.handleDirsReturn({
+            batchSize,
+            subDirs: [...subDirs],
+            jobContext: jobContext as any,
+            });
+
+            expect(result.batchDirs.length).toBe(2);
+            expect(jobContext.setBatchDir).toHaveBeenCalledTimes(2);
+        });
+
+        it('should handle empty subDirs', async () => {
+            const jobContext = { setBatchDir: jest.fn().mockResolvedValue(undefined) };
+            const result = await scanService.handleDirsReturn({
+            batchSize: 2,
+            subDirs: [],
+            jobContext: jobContext as any,
+            });
+            expect(result.batchDirs.length).toBe(0);
+            expect(jobContext.setBatchDir).not.toHaveBeenCalled();
+        });
+        });
+
+        describe('scanDirectories', () => {
+        it('should run scanDirectories and return output', async () => {
+            const scanResult = {
+            result: { dirCount: 1, fileCount: 1, subDirs: [], jobRunId: 'job-1', batchDirs: [] },
+            errors: [],
+            retryCount: 0,
+            };
+            jest.spyOn(scanService, 'executeTask').mockResolvedValue(scanResult as any);
+            jest.spyOn(scanService, 'updateAndReportTaskStatus').mockResolvedValue(undefined);
+
+            const result = await scanService.scanDirectories({
+            jobRunId: 'job-1',
+            isMigration: false,
+            batchSize: 10,
+            preBatchedId: undefined,
+            });
+
+            expect(result).toEqual(scanResult.result);
+            expect(scanService.executeTask).toHaveBeenCalled();
+            expect(scanService.updateAndReportTaskStatus).toHaveBeenCalled();
+        });
+
+        it('should delete batch dir if preBatchedId is provided', async () => {
+            const scanResult = {
+            result: { dirCount: 1, fileCount: 1, subDirs: [], jobRunId: 'job-1', batchDirs: [] },
+            errors: [],
+            retryCount: 0,
+            };
+            jest.spyOn(scanService, 'executeTask').mockResolvedValue(scanResult as any);
+            jest.spyOn(scanService, 'updateAndReportTaskStatus').mockResolvedValue(undefined);
+            const deleteBatchDir = jest.fn();
+            (mockJobContext as any).deleteBatchDir = deleteBatchDir;
+
+            await scanService.scanDirectories({
+            jobRunId: 'job-1',
+            isMigration: false,
+            batchSize: 10,
+            preBatchedId: 'batch-123',
+            });
+
+            expect(deleteBatchDir).toHaveBeenCalledWith('batch-123');
         });
 
         it('should throw RetryableError on unknown error', async () => {
-            redisService.getJobManagerContext.mockRejectedValueOnce(new Error('fail'));
-            const input = { jobRunId: 'run-1', dirsToScan: ['/foo'], isMigration: false };
-            await expect(scanService.scanDirectories(input as any)).rejects.toBeInstanceOf(RetryableError);
+            jest.spyOn(scanService, 'executeTask').mockRejectedValue(new Error('fail'));
+            await expect(scanService.scanDirectories({
+            jobRunId: 'job-1',
+            isMigration: false,
+            batchSize: 10,
+            preBatchedId: undefined,
+            })).rejects.toBeInstanceOf(RetryableError);
         });
 
-        it('should rethrow FatalError', async () => {
-            redisService.getJobManagerContext.mockRejectedValueOnce(new FatalError('fatal'));
-            const input = { jobRunId: 'run-1', dirsToScan: ['/foo'], isMigration: false };
-            await expect(scanService.scanDirectories(input as any)).rejects.toBeInstanceOf(FatalError);
-        });
+        it('should rethrow FatalError and RetryExceededError', async () => {
+            jest.spyOn(scanService, 'executeTask').mockRejectedValue(new FatalError('fatal'));
+            await expect(scanService.scanDirectories({
+            jobRunId: 'job-1',
+            isMigration: false,
+            batchSize: 10,
+            preBatchedId: undefined,
+            })).rejects.toBeInstanceOf(FatalError);
 
-        it('should clear heartbeat interval', async () => {
-            const input = { jobRunId: 'run-1', dirsToScan: ['/foo'], isMigration: false };
-            const clearIntervalSpy = jest.spyOn(global, 'clearInterval');
-            await scanService.scanDirectories(input as any).catch(() => {});
-            expect(clearIntervalSpy).toHaveBeenCalled();
+            jest.spyOn(scanService, 'executeTask').mockRejectedValue(new RetryExceededError('retry exceeded'));
+            await expect(scanService.scanDirectories({
+            jobRunId: 'job-1',
+            isMigration: false,
+            batchSize: 10,
+            preBatchedId: undefined,
+            })).rejects.toBeInstanceOf(RetryExceededError);
         });
-
-        it('should throw RetryExceededError if updateAndReportTaskStatus throws RetryExceededError', async () => {
-            const input = { jobRunId: 'run-1', dirsToScan: ['/foo'], isMigration: false };
-            jest.spyOn(scanService, 'updateAndReportTaskStatus').mockImplementationOnce(() => {
-            throw new RetryExceededError('retry exceeded');
-            });
-            await expect(scanService.scanDirectories(input as any)).rejects.toBeInstanceOf(RetryExceededError);
-        });
-
-        it('should propagate error if updateAndReportTaskStatus throws FatalError', async () => {
-            const input = { jobRunId: 'run-1', dirsToScan: ['/foo'], isMigration: false };
-            jest.spyOn(scanService, 'updateAndReportTaskStatus').mockImplementationOnce(() => {
-            throw new FatalError('fatal');
-            });
-            await expect(scanService.scanDirectories(input as any)).rejects.toBeInstanceOf(FatalError);
-        });
-
-        it('should throw RetryableError if updateAndReportTaskStatus throws unknown error', async () => {
-            const input = { jobRunId: 'run-1', dirsToScan: ['/foo'], isMigration: false };
-            jest.spyOn(scanService, 'updateAndReportTaskStatus').mockImplementationOnce(() => {
-            throw new Error('unknown');
-            });
-            await expect(scanService.scanDirectories(input as any)).rejects.toBeInstanceOf(RetryableError);
         });
     });
-});

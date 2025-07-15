@@ -2,6 +2,7 @@ import { CommandStatus, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { RetryExceededError } from 'src/errors/errors.types';
 import { CommonTaskService } from './common-task.service';
 const { Connection } = require('@temporalio/client');
+const { calculateHash } = require('src/activities/utils/checksum-utils');
 
 jest.mock('@temporalio/activity', () => ({
     Context: {
@@ -103,45 +104,6 @@ describe('CommonTaskService', () => {
         });
     });
 
-    describe('buildOrGetValidScanTask', () => {
-        let jobContext: any;
-        beforeEach(() => {
-            jobContext = {
-                getTask: jest.fn(),
-                setTaskIfNotExists: jest.fn(),
-            };
-        });
-
-        it('should return existing task if found', async () => {
-            const task = { id: 't1', commands: [], status: TaskStatus.PENDING };
-            jobContext.getTask.mockResolvedValue(task);
-            service.ensureTaskValid = jest.fn().mockResolvedValue(task);
-
-            const result = await service.buildOrGetValidScanTask({
-                dirToScans: [],
-                jobContext,
-                taskHashId: 'hash',
-                jobRunId: 'job',
-            });
-            expect(result).toBe(task);
-            expect(jobContext.setTaskIfNotExists).not.toHaveBeenCalled();
-        });
-
-        it('should create and return new task if not found', async () => {
-            jobContext.getTask.mockResolvedValue(undefined);
-            jobContext.setTaskIfNotExists.mockResolvedValue(undefined);
-            service.ensureTaskValid = jest.fn().mockResolvedValue({ id: 't2' });
-
-            const result = await service.buildOrGetValidScanTask({
-                dirToScans: ['a', 'b'],
-                jobContext,
-                taskHashId: 'hash',
-                jobRunId: 'job',
-            });
-            expect(jobContext.setTaskIfNotExists).toHaveBeenCalled();
-            expect(result).toEqual({ id: 't2' });
-        });
-    });
 
     describe('ensureTaskValid', () => {
         let jobContext: any;
@@ -213,5 +175,85 @@ describe('CommonTaskService', () => {
             const result = await service.isWorkflowRunningActivity('wf-2');
             expect(result).toBe(false);
         });
-    });
+
+        it('should return false if workflowExecutionInfo is undefined', async () => {
+            const mockDescribe = jest.fn().mockResolvedValue({
+            workflowExecutionInfo: undefined,
+            });
+            const mockConnection = {
+            workflowService: {
+                describeWorkflowExecution: mockDescribe,
+            },
+            };
+            Connection.connect.mockResolvedValue(mockConnection);
+
+            const result = await service.isWorkflowRunningActivity('wf-3');
+            expect(result).toBe(false);
+        });
+
+        it('should throw if Connection.connect fails', async () => {
+            Connection.connect.mockRejectedValue(new Error('connection error'));
+            await expect(service.isWorkflowRunningActivity('wf-err')).rejects.toThrow('connection error');
+        });
+        });
+
+        describe('buildOrGetValidScanTask', () => {
+        let jobContext: any;
+        beforeEach(() => {
+            jobContext = {
+            getTask: jest.fn(),
+            getBatchDir: jest.fn(),
+            setTaskIfNotExists: jest.fn(),
+            };
+            service.ensureTaskValid = jest.fn(async ({ task }) => task);
+        });
+
+        it('should return existing task if found', async () => {
+            const existingTask = { id: 'existing', commands: [] };
+            jobContext.getTask.mockResolvedValue(existingTask);
+
+            const result = await service.buildOrGetValidScanTask({
+            jobContext,
+            taskHashId: 'hash1',
+            jobRunId: 'job1',
+            preBatchedId: undefined,
+            } as any);
+
+            expect(result).toBe(existingTask);
+            expect(jobContext.getTask).toHaveBeenCalledWith('hash1');
+            expect(jobContext.getBatchDir).not.toHaveBeenCalled();
+        });
+
+        it('should create new task from batch if not found', async () => {
+            jobContext.getTask.mockResolvedValue(undefined);
+            jobContext.getBatchDir.mockResolvedValue(['dir1', 'dir2']);
+            jobContext.setTaskIfNotExists.mockResolvedValue(undefined);
+
+            const result = await service.buildOrGetValidScanTask({
+            jobContext,
+            taskHashId: 'hash2',
+            jobRunId: 'job2',
+            preBatchedId: 'batch1',
+            } as any);
+
+            expect(jobContext.getBatchDir).toHaveBeenCalledWith('batch1');
+            expect(jobContext.setTaskIfNotExists).toHaveBeenCalled();
+            expect(result).toHaveProperty('commands');
+        });
+
+        it('should call setTaskIfNotExists even if batch is undefined', async () => {
+            jobContext.getTask.mockResolvedValue(undefined);
+            jobContext.getBatchDir.mockResolvedValue(undefined);
+            jobContext.setTaskIfNotExists.mockResolvedValue(undefined);
+
+            await service.buildOrGetValidScanTask({
+            jobContext,
+            taskHashId: 'hash3',
+            jobRunId: 'job3',
+            preBatchedId: 'batch2',
+            } as any);
+
+            expect(jobContext.setTaskIfNotExists).toHaveBeenCalled();
+        });
+        });
 });

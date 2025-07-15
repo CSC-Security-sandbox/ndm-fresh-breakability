@@ -35,8 +35,8 @@ export class CommonActivityService{
 
   async cleanupJobContext(traceId: string): Promise<any> {
     try{
-      const jobContext = await this.redisService.getJobContext(traceId);
-      jobContext.cleanup()
+      const jobContext = await this.redisService.getJobManagerContext(traceId);
+      await jobContext.cleanup();
     }catch(error){
       this.logger.error(`[${traceId}] Error while cleaning up the job context: ${error}`);
       return { message: 'Error while cleaning up the job context: ' + traceId };
