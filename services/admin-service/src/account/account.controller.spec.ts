@@ -4,7 +4,7 @@ import { AccountController } from './account.controller';
 import { AccountService } from './account.service';
 import { Repository } from 'typeorm';
 import { Account } from '../entities/account.entity';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';

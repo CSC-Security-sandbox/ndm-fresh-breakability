@@ -15,6 +15,7 @@ import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RoleDescription } from '../swagger/swagger-summary';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
 import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
+import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
 
 @ApiTags('roles')
 @Controller('/api/v1/roles')
@@ -54,7 +55,7 @@ export class RoleController {
     summary: 'Get Role by ID',
     description: RoleDescription.GetRoleByIdDescription,
   })
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', NonEmptyStringPipe) id: string) {
     return this.roleService.findOne(id);
   }
 
@@ -66,7 +67,7 @@ export class RoleController {
     description: RoleDescription.UpdateRoleDescription,
   })
   update(
-    @Param('id') id: string,
+    @Param('id', NonEmptyStringPipe) id: string,
     @Body() updateRoleDto: UpdateRoleDto,
     @Request() userPermissionResponse: UserPermissionResponse,
   ) {
@@ -80,7 +81,7 @@ export class RoleController {
     summary: 'Delete Role by ID',
     description: RoleDescription.DeleteRoleDescription,
   })
-  delete(@Param('id') id: string) {
+  delete(@Param('id', NonEmptyStringPipe) id: string) {
     return this.roleService.delete(id);
   }
 
@@ -91,7 +92,7 @@ export class RoleController {
     summary: 'Inactivate Role',
     description: RoleDescription.InactivateRoleDescription,
   })
-  inactivate(@Param('id') id: string) {
+  inactivate(@Param('id', NonEmptyStringPipe) id: string) {
     return this.roleService.inactivate(id);
   }
 }

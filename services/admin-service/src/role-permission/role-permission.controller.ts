@@ -22,6 +22,7 @@ import {
 import { RolePermissionDescription } from '../swagger/swagger-summary';
 import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
+import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
 
 @ApiTags('role-permissions')
 @Controller('/api/v1/role-permissions')
@@ -107,7 +108,7 @@ export class RolePermissionController {
     summary: 'Get a role-permission association by ID',
     description: RolePermissionDescription.GetRolePermissionByIdDescription,
   })
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', NonEmptyStringPipe) id: string) {
     return this.rolePermissionService.findOne(id);
   }
 
@@ -119,7 +120,7 @@ export class RolePermissionController {
     description: RolePermissionDescription.UpdateRolePermissionDescription,
   })
   update(
-    @Param('id') id: string,
+    @Param('id', NonEmptyStringPipe) id: string,
     @Body() updateRolePermissionDto: UpdateRolePermissionDto,
   ) {
     return this.rolePermissionService.update(id, updateRolePermissionDto);
@@ -132,7 +133,7 @@ export class RolePermissionController {
     summary: 'Delete a role-permission association by ID',
     description: RolePermissionDescription.DeleteRolePermissionDescription,
   })
-  delete(@Param('id') id: string) {
+  delete(@Param('id', NonEmptyStringPipe) id: string) {
     return this.rolePermissionService.delete(id);
   }
 }

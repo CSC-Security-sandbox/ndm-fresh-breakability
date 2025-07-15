@@ -9,11 +9,7 @@ import { useParams } from "react-router-dom";
 
 const useFileServerDetails = () => {
   const { fileServerId } = useParams<{ fileServerId: string }>();
-  const {
-    data: _fileServerDetails,
-    refetch,
-    isFetching,
-  } = useGetFileServerByIdQuery(
+  const { data: _fileServerDetails } = useGetFileServerByIdQuery(
     { fileServerId },
     {
       pollingInterval: Number(
@@ -62,8 +58,6 @@ const useFileServerDetails = () => {
     fileServerDetails,
     allExportPaths,
     allWorkersList,
-    refetch,
-    isFetching,
   };
 };
 
