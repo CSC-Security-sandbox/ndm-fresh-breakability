@@ -3,6 +3,7 @@ import {
   capitalize,
   formatSeconds,
   formatNumbersWithSuffix,
+  formatSizeAndCount,
 } from "./mapper";
 
 describe("covertBytes", () => {
@@ -102,5 +103,26 @@ describe("formatNumbersWithSuffix", () => {
   it("should return the number as string for numbers < 1,000", () => {
     expect(formatNumbersWithSuffix(999)).toBe("999");
     expect(formatNumbersWithSuffix(0)).toBe("0");
+  });
+});
+
+describe("formatSizeAndCount", () => {
+  it("should format size and count correctly", () => {
+    expect(formatSizeAndCount("size(1024)count(1000)")).toBe("size: (1.02 KB); count: (1.00 K)");
+    expect(formatSizeAndCount("size(1048576)count(100000)")).toBe("size: (1.05 MB); count: (1.00 L)");
+  });
+
+  it("should handle zero values", () => {
+    expect(formatSizeAndCount("size(0)count(0)")).toBe("size: (0 B); count: (0)");
+  });
+
+  it("should handle missing values", () => {
+    expect(formatSizeAndCount("size()count()")).toBe("size: (0 B); count: (0)");
+    expect(formatSizeAndCount("")).toBe("size: (0 B); count: (0)");
+  });
+
+  it("should handle only size or only count", () => {
+    expect(formatSizeAndCount("size(1024)")).toBe("size: (1.02 KB); count: (0)");
+    expect(formatSizeAndCount("count(1000)")).toBe("size: (0 B); count: (1.00 K)");
   });
 });
