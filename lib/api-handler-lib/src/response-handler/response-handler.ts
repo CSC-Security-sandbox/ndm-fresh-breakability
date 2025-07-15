@@ -21,9 +21,9 @@ export class ResponseHandler {
    * @param customSuccessDTOList - List of custom success DTOs to map API endpoints to messages.
    * @returns A structured success response with status code, message, and data.
    */
-  static success<T>(request: Request, controllerResponseData: T, customSuccessDTOList: CustomSuccessDTO[], logger: LoggerService): HandlerResponse<T> {
+  static success<T>(request: Request, controllerResponseData: T, customSuccessDTOList: CustomSuccessDTO[]): HandlerResponse<T> {
     
-    const message = setSuccessMessage(request, controllerResponseData, customSuccessDTOList, logger);
+    const message = setSuccessMessage(request, controllerResponseData, customSuccessDTOList);
     const formatedResponse = formatResponseData(controllerResponseData);
     return {
       statusCode: 200,

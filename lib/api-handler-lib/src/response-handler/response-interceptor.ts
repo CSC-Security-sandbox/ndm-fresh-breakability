@@ -28,7 +28,7 @@ export class ResponseInterceptor<T> implements NestInterceptor<T, any> {
     const request = httpArgumentsHost.getRequest<Request>();
     return next.handle().pipe(
         map((controllerResponse) => {
-          const result = ResponseHandler.success(request, controllerResponse, this.successDTOList, this.logger);
+          const result = ResponseHandler.success(request, controllerResponse, this.successDTOList);
           response.status(result.statusCode);
           result.data.trackId = request['trackId'];
           this.logger.log(`Final response from interceptor \n JSON.stringify(${result})`);
