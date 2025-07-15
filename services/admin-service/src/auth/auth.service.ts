@@ -92,6 +92,7 @@ export class AuthService {
     userPermissionResponse: UserPermissionResponse,
   ): Promise<{ user: User; tempPassword: string }> {
     // Check if user already exists in the database
+    try {
     const existingUser = await this.userRepository.findOne({ where: { email: username } });
     if (existingUser) {
       throw new ConflictException(
@@ -100,8 +101,6 @@ export class AuthService {
     }
     const tempPassword = this.generateRandomPassword(12);
     const token = await this.getKeycloakToken();
-
-    try {
       const encryptedPassword = encryptData(tempPassword);
       await makeAxiosRequest({
         method: 'POST',
@@ -189,7 +188,7 @@ export class AuthService {
     }
   }
 
-  async setUserStatus(email: string, enable: boolean): Promise<User> {
+  async setUserStatus(email: string, enable: boolean): Promise<{message:string,user : User}> {
     const user = await this.userRepository.findOne({ where: { email } });
     if (!user) {
       throw new NotFoundException(`User not found, Please verify the user ID and try again.`);
@@ -233,8 +232,8 @@ export class AuthService {
           },
         });
       }
-
-      return user;
+      const state = enable ? 'enabled' : 'disabled';
+      return { message: `Access has been successfully ${state} for a user: ${email}`, user};
     } catch (error) {
       throw new InternalServerErrorException(
         `Failed to update user status in Keycloak, error: ${error.message}`,

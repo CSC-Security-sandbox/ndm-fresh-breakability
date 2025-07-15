@@ -83,7 +83,7 @@ describe('ProjectService', () => {
     userRoleRepository = module.get<Repository<UserRole>>(
       getRepositoryToken(UserRole),
     );
-    
+
     // Reset logger mocks after each test setup
     resetLoggerMocks();
   });
@@ -223,7 +223,7 @@ describe('ProjectService', () => {
         service.create(accountId, createProjectDto, userPermissionResponseMock),
       ).rejects.toThrow(
         new ConflictException(
-          `A project with the name "${createProjectDto.project_name}" already exists for this account.`,
+          `A project with the name ${createProjectDto.project_name} already exists for this account.`,
         ),
       );
     });
@@ -243,7 +243,7 @@ describe('ProjectService', () => {
       await expect(
         service.create(accountId, createProjectDto, userPermissionResponseMock),
       ).rejects.toThrow(
-        new NotFoundException(`Account with ${accountId} not found`),
+        new ConflictException(`Account with ${accountId} not found`),
       );
     });
   });

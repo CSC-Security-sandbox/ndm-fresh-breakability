@@ -32,8 +32,8 @@ describe('WorkerRegistrationService', () => {
             get: jest.fn().mockReturnValue(mockKeycloakConfig),
           },
         },
-        { 
-          provide: LoggerFactory, 
+        {
+          provide: LoggerFactory,
           useValue: mockLoggerFactory
         },
       ],

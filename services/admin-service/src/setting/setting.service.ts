@@ -85,17 +85,16 @@ export class SettingService {
       );
 
       return {
-        message: 'Settings created successfully',
+        message: 'SMTP details added successfully.',
         statusCode: HttpStatus.CREATED,
       };
     } catch (error) {
       throw new HttpException(
         {
-          message: 'Error while creating settings',
-          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: 'SMTP server is not reachable',
           error: error.message,
         },
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
   }

@@ -100,6 +100,40 @@ describe('EmailService', () => {
       });
     });
   });
+
+  describe('setupAndSendMailForSuccessEvents', () => {
+    it('should successfully setup transporter and send email', async () => {
+      const emailContent = {
+        alerts: [
+          {
+            labels: { severity: 'high', pod: 'test-pod' },
+            annotations: {
+              description: 'Test description',
+              summary: 'Test summary',
+            },
+          },
+        ],
+      };
+
+      jest.spyOn(service, 'setupTransporter').mockResolvedValue(undefined);
+      const result = await service.setupAndSendMailForSuccessEvents(emailContent, 'SUCCESS');
+      expect(result).toEqual({
+        message: 'Email sent successfully',
+        statusCode: 200,
+      });
+    });
+    it('should return error message if setupTransporter fails', async () => {
+      const emailContent = { alerts: [] };
+      jest
+        .spyOn(service, 'setupTransporter')
+        .mockRejectedValue(new Error('Transporter setup failed'));
+      const result = await service.setupAndSendMailForSuccessEvents(emailContent, 'SUCCESS');
+      expect(result).toEqual({
+        message: 'Transporter setup failed',
+        statusCode: 500,
+      });
+    });
+  });
   describe('setupTransporter', () => {
     it('should setup transporter successfully with valid SMTP settings', async () => {
       const smtpSettings = [
@@ -192,6 +226,142 @@ describe('EmailService', () => {
         service.setupTransporter({ alerts: [] }, 'SUCCESS'),
       ).rejects.toThrow(Error);
     });
+    it('should call sendEmailForFailureEvents when notificationType is FAILURE', async () => {
+      const smtpSettings = [
+        {
+          settingKey: 'SMTP_HOST',
+          settingValue: 'smtp.gmail.com',
+          settingType: SettingType.SMTP,
+          id: '1',
+          created_at: new Date(),
+          created_by: '',
+          updated_at: new Date(),
+          updated_by: '',
+          populateWhoColumns: jest.fn(),
+        },
+        {
+          settingKey: 'SMTP_PORT',
+          settingValue: '587',
+          settingType: SettingType.SMTP,
+          id: '2',
+          created_at: new Date(),
+          created_by: '',
+          updated_at: new Date(),
+          updated_by: '',
+          populateWhoColumns: jest.fn(),
+        },
+        {
+          settingKey: 'SMTP_FROM_EMAIL',
+          settingValue: 'from@example.com',
+          settingType: SettingType.SMTP,
+          id: '3',
+          created_at: new Date(),
+          created_by: '',
+          updated_at: new Date(),
+          updated_by: '',
+          populateWhoColumns: jest.fn(),
+        },
+        {
+          settingKey: 'SMTP_TO_EMAIL',
+          settingValue: 'to@example.com',
+          settingType: SettingType.SMTP,
+          id: '4',
+          created_at: new Date(),
+          created_by: '',
+          updated_at: new Date(),
+          updated_by: '',
+          populateWhoColumns: jest.fn(),
+        },
+      ];
+
+      jest.spyOn(settingsRepo, 'find').mockResolvedValue(smtpSettings);
+      const transporterMock = {
+        verify: jest.fn().mockResolvedValue(true),
+        sendMail: jest.fn().mockResolvedValue({}),
+        use: jest.fn(),
+      };
+      (service as any).transporter = transporterMock;
+
+      const sendEmailForFailureEventsSpy = jest.spyOn(service, 'sendEmailForFailureEvents').mockResolvedValue(undefined);
+      const emailContent = { alerts: [{ status: 'firing' }] };
+
+      await service.setupTransporter(emailContent, 'FAILURE');
+
+      expect(sendEmailForFailureEventsSpy).toHaveBeenCalledWith(
+        emailContent,
+        'from@example.com',
+        'to@example.com'
+      );
+    });
+
+    it('should call sendEmailForSuccessEvent when notificationType is not FAILURE', async () => {
+      const smtpSettings = [
+        {
+          settingKey: 'SMTP_HOST',
+          settingValue: 'smtp.gmail.com',
+          settingType: SettingType.SMTP,
+          id: '1',
+          created_at: new Date(),
+          created_by: '',
+          updated_at: new Date(),
+          updated_by: '',
+          populateWhoColumns: jest.fn(),
+        },
+        {
+          settingKey: 'SMTP_PORT',
+          settingValue: '587',
+          settingType: SettingType.SMTP,
+          id: '2',
+          created_at: new Date(),
+          created_by: '',
+          updated_at: new Date(),
+          updated_by: '',
+          populateWhoColumns: jest.fn(),
+        },
+        {
+          settingKey: 'SMTP_FROM_EMAIL',
+          settingValue: 'from@example.com',
+          settingType: SettingType.SMTP,
+          id: '3',
+          created_at: new Date(),
+          created_by: '',
+          updated_at: new Date(),
+          updated_by: '',
+          populateWhoColumns: jest.fn(),
+        },
+        {
+          settingKey: 'SMTP_TO_EMAIL',
+          settingValue: 'to@example.com',
+          settingType: SettingType.SMTP,
+          id: '4',
+          created_at: new Date(),
+          created_by: '',
+          updated_at: new Date(),
+          updated_by: '',
+          populateWhoColumns: jest.fn(),
+        },
+      ];
+
+      jest.spyOn(settingsRepo, 'find').mockResolvedValue(smtpSettings);
+      const transporterMock = {
+        verify: jest.fn().mockResolvedValue(true),
+        sendMail: jest.fn().mockResolvedValue({}),
+        use: jest.fn(),
+      };
+      (service as any).transporter = transporterMock;
+
+      const sendEmailForSuccessEventSpy = jest.spyOn(service, 'sendEmailForSuccessEvent').mockResolvedValue(undefined);
+      const emailContent = { alerts: [{ status: 'resolved' }] };
+
+      await service.setupTransporter(emailContent, 'SUCCESS');
+
+      expect(sendEmailForSuccessEventSpy).toHaveBeenCalledWith(
+        emailContent,
+        'from@example.com',
+        'to@example.com'
+      );
+    });
+
     it('should throw an error if transporter setup fails', async () => {
       const smtpSettings = [
         {
@@ -304,17 +474,6 @@ describe('EmailService', () => {
         {
           settingKey: 'SMTP_PASSWORD',
           settingValue: 'pass',
-          settingType: SettingType.SMTP,
-          id: '1',
-          created_at: new Date(),
-          created_by: '',
-          updated_at: new Date(),
-          updated_by: '',
-          populateWhoColumns: jest.fn(),
-        },
-        {
-          settingKey: 'SMTP_FROM_EMAIL',
-          settingValue: 'from@example.com',
           settingType: SettingType.SMTP,
           id: '1',
           created_at: new Date(),

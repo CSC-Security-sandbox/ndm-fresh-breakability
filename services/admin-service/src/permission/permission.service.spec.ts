@@ -22,8 +22,8 @@ describe('PermissionService', () => {
           provide: getRepositoryToken(Permission),
           useClass: Repository,
         },
-        { 
-          provide: LoggerFactory, 
+        {
+          provide: LoggerFactory,
           useValue: mockLoggerFactory
         },
       ],

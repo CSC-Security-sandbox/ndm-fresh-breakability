@@ -55,7 +55,7 @@ export class ProjectService {
     if (existingProject) {
       this.logger.error(`A project with the name "${createProjectDto.project_name}" already exists for this account.`);
       throw new ConflictException(
-        `A project with the name "${createProjectDto.project_name}" already exists for this account.`,
+        `A project with the name ${createProjectDto.project_name} already exists for this account.`,
       );
     }
 
@@ -71,12 +71,13 @@ export class ProjectService {
     id: string,
     updateProjectDto: UpdateProjectDto,
     userPermissionResponse: UserPermissionResponse,
-  ): Promise<void> {
+  ):Promise<{message :string}> {
     await this.projectRepository.update(id, {
       ...updateProjectDto,
       updated_by: userPermissionResponse.user.id,
     });
     this.logger.log(`Done updating the project ${id} with update data ${JSON.stringify(updateProjectDto)}`);
+    return{ message: `Project updated successfully` };
   }
 
   async delete(id: string): Promise<void> {

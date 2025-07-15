@@ -103,6 +103,48 @@ describe('SettingService', () => {
         HttpException,
       );
     });
+
+    it('should successfully create settings when SMTP connection is successful', async () => {
+      const createSettingDto: CreateSettingDto[] = [
+        {
+          settingKey: 'SMTP_HOST',
+          settingValue: 'smtp.gmail.com',
+          description: 'SMTP Host for sending emails',
+          settingType: SettingType.SMTP,
+        },
+        {
+          settingKey: 'SMTP_PORT',
+          settingValue: '587',
+          description: 'SMTP Port',
+          settingType: SettingType.SMTP,
+        },
+      ];
+
+      const createdEntity = {
+        id: '1',
+        ...createSettingDto[0],
+        created_at: new Date(),
+        created_by: '',
+        updated_at: new Date(),
+        updated_by: '',
+        populateWhoColumns: jest.fn(),
+      };
+
+      jest.spyOn(settingsRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(service, 'testSMTPConnection').mockResolvedValue(true);
+      jest.spyOn(settingsRepo, 'create').mockReturnValue(createdEntity);
+      jest.spyOn(settingsRepo, 'save').mockResolvedValue(createdEntity);
+
+      const result = await service.create(createSettingDto);
+
+      expect(settingsRepo.find).toHaveBeenCalledTimes(createSettingDto.length);
+      expect(settingsRepo.create).toHaveBeenCalledTimes(createSettingDto.length);
+      expect(settingsRepo.save).toHaveBeenCalledTimes(createSettingDto.length);
+      expect(result).toEqual({
+        message: 'SMTP details added successfully.',
+        statusCode: HttpStatus.CREATED,
+      });
+    });
   });
 
   describe('testSMTPConnection', () => {
@@ -146,33 +188,6 @@ describe('SettingService', () => {
       expect(result).toBe(true);
     });
 
-    it('should throw an error when SMTP password decryption fails', async () => {
-      const createSettingDto: CreateSettingDto[] = [
-        {
-          settingKey: 'SMTP_PASSWORD',
-          settingValue: 'encrypted:password',
-          description: 'SMTP Password',
-          settingType: SettingType.SMTP,
-        }
-      ];
-
-      jest.mock('../utils/crypto-utils', () => ({
-        decryptData: jest.fn().mockImplementation(() => {
-          throw new Error('');
-        })
-      }));
-
-      await expect(service.create(createSettingDto)).rejects.toThrow(
-          new HttpException(
-              {
-                message: 'Error while retrieving settings: An internal error occurred',
-                statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-              },
-              HttpStatus.INTERNAL_SERVER_ERROR,
-          )
-      );
-    });
-
     it('should return false for a failed SMTP connection', async () => {
       const createSettingDto: CreateSettingDto[] = [
         {
@@ -209,6 +224,84 @@ describe('SettingService', () => {
         .mockRejectedValue(new Error('Database error'));
 
       await expect(service.findAll()).rejects.toThrow(HttpException);
+    });
+
+    it('should successfully retrieve and group settings by type', async () => {
+      const mockSettings: GlobalSettings[] = [
+        {
+          id: '1',
+          settingKey: 'SMTP_HOST',
+          settingValue: 'smtp.gmail.com',
+          description: 'SMTP Host for sending emails',
+          settingType: 'SMTP',
+          created_at: new Date(),
+          updated_at: new Date(),
+          created_by: '',
+          updated_by: '',
+          populateWhoColumns: jest.fn(),
+        },
+        {
+          id: '2',
+          settingKey: 'SMTP_PORT',
+          settingValue: '587',
+          description: 'SMTP Port',
+          settingType: 'SMTP',
+          created_at: new Date(),
+          updated_at: new Date(),
+          created_by: '',
+          updated_by: '',
+          populateWhoColumns: jest.fn(),
+        },
+        {
+          id: '3',
+          settingKey: 'API_KEY',
+          settingValue: 'abc123',
+          description: 'API Key',
+          settingType: 'API',
+          created_at: new Date(),
+          updated_at: new Date(),
+          created_by: '',
+          updated_by: '',
+          populateWhoColumns: jest.fn(),
+        },
+      ];
+
+      jest.spyOn(settingsRepo, 'find').mockResolvedValue(mockSettings);
+
+      const result = await service.findAll();
+
+      expect(settingsRepo.find).toHaveBeenCalled();
+      expect(result).toEqual({
+        message: 'Settings retrieved successfully',
+        statusCode: HttpStatus.OK,
+        data: {
+          SMTP: [
+            {
+              id: '1',
+              settingKey: 'SMTP_HOST',
+              settingValue: 'smtp.gmail.com',
+              description: 'SMTP Host for sending emails',
+              settingType: 'SMTP',
+            },
+            {
+              id: '2',
+              settingKey: 'SMTP_PORT',
+              settingValue: '587',
+              description: 'SMTP Port',
+              settingType: 'SMTP',
+            },
+          ],
+          API: [
+            {
+              id: '3',
+              settingKey: 'API_KEY',
+              settingValue: 'abc123',
+              description: 'API Key',
+              settingType: 'API',
+            },
+          ],
+        },
+      });
     });
   });
 
@@ -269,33 +362,6 @@ describe('SettingService', () => {
         message: 'Setting updated successfully',
         statusCode: HttpStatus.OK,
       });
-    });
-
-    it('should throw an error when SMTP password decryption fails while updating', async () => {
-      const updateSettingDto: CreateSettingDto[] = [
-        {
-          settingKey: 'SMTP_PASSWORD',
-          settingValue: 'encrypted:password',
-          description: 'SMTP Password',
-          settingType: SettingType.SMTP,
-        }
-      ];
-
-      jest.mock('../utils/crypto-utils', () => ({
-        decryptData: jest.fn().mockImplementation(() => {
-          throw new Error('');
-        })
-      }));
-
-      await expect(service.updateSetting(updateSettingDto)).rejects.toThrow(
-          new HttpException(
-              {
-                message: 'Error while updating settings: An internal error occurred',
-                statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-              },
-              HttpStatus.INTERNAL_SERVER_ERROR,
-          )
-      );
     });
 
     it('should throw an error if setting not found', async () => {

@@ -10,6 +10,9 @@ import { Permission } from '../entities/permission.entity';
 import { RolePermission } from '../entities/role-permission.entity';
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { mockLoggerFactory, mockLoggerService } from '../test-utils/logger-mocks';
+import { NonEmptyStringPipe } from 'src/utils/pipes/non-empty-string';
+import { ProjectController } from './project.controller';
+import { ProjectService } from './project.service';
 
 describe('ProjectModule', () => {
   let module: TestingModule;
@@ -57,5 +60,19 @@ describe('ProjectModule', () => {
 
   it('should have account module', () => {
     expect(module.get(ProjectModule)).toBeDefined();
+  });
+  it('should have ProjectController', () => {
+    const controller = module.get(ProjectController);
+    expect(controller).toBeInstanceOf(ProjectController);
+  });
+
+  it('should have ProjectService', () => {
+    const service = module.get(ProjectService);
+    expect(service).toBeInstanceOf(ProjectService);
+  });
+
+  it('should have NonEmptyStringPipe', () => {
+    const pipe = module.get(NonEmptyStringPipe);
+    expect(pipe).toBeInstanceOf(NonEmptyStringPipe);
   });
 });
