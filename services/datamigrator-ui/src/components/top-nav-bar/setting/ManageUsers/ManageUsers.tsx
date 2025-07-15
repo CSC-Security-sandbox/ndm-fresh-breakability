@@ -35,15 +35,19 @@ const ManageUsers = () => {
   const [isCreateFormVisible, setIsCreateFormVisible] =
     useState<boolean>(false);
 
-  const updateUserStatusWrapper = (body: { email: string; enable: boolean }) => {
+  const updateUserStatusWraper = (body: { email: string; enable: boolean }) => {
     updateUserStatus(body)
       .unwrap()
-      .then((res) => {
-        notify.success(res?.message);
+      .then(() => {
+        notify.success(
+          `${body.enable ? "Enabled" : "Disabled"} access for user ${
+            body.email
+          }`
+        );
       })
       .catch((err) => {
-        const errorDetails = err.data?.error;
-        notify.error(errorDetails?.displayMessage);
+        notify.error(`Failed to update status of user ${body.email}.`);
+        console.error(err);
       });
   };
 
@@ -58,7 +62,7 @@ const ManageUsers = () => {
           email: row.email,
           enable: row.user_status !== "active",
         };
-        updateUserStatusWrapper(body);
+        updateUserStatusWraper(body);
       },
 
       disabled: permission?.userPermissions?.id === row.id || !canManageProject,
@@ -74,10 +78,10 @@ const ManageUsers = () => {
           .unwrap()
           .then((res) => {
             setIsCreateFormVisible(true);
-            setTemporaryPassword(decryptData(res?.data?.items?.newPassword));
+            setTemporaryPassword(decryptData(res?.newPassword));
           })
           .catch((err) => {
-            notify.error(err.message);
+            notify.error("Failed to reset password.");
             console.error({ err, level: "Generate Temporary Password." });
           });
       },
@@ -88,9 +92,10 @@ const ManageUsers = () => {
     setIsCreateFormVisible(false);
     setTemporaryPassword("");
   };
+
   const tableStateProps = {
     columns: COL_DEF_FOR_USER,
-    rows: userData?.data?.items || [],
+    rows: userData,
     isSorting: true,
     pageSize: 10,
     defaultColumnState: DEFAULT_COLUMN_STATE,

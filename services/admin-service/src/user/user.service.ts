@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  Inject,
-  NotFoundException, } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, IsNull, Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
@@ -13,14 +10,9 @@ import { Project } from '../entities/project.entity';
 import { Role } from '../entities/role.entity';
 import { RolePermission } from '../entities/role-permission.entity';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
-import {
-  LoggerFactory,
-  LoggerService,
-} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class UserService {
-  private readonly logger: LoggerService;
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
@@ -39,11 +31,7 @@ export class UserService {
 
     @InjectRepository(Account)
     private accountRepository: Repository<Account>,
-
-    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
-  ) {
-    this.logger = loggerFactory.create(UserService.name);
-  }
+  ) {}
 
   create(
     createUserDto: CreateUserDto,

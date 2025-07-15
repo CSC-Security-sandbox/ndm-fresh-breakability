@@ -6,7 +6,6 @@ import { Repository } from 'typeorm';
 import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { SyncEmail } from 'src/entities/sync-email.entity';
-import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 jest.mock('nodemailer-express-handlebars', () => ({
   __esModule: true,
   default: jest.fn(() => ({
@@ -30,15 +29,6 @@ describe('EmailController', () => {
           provide: getRepositoryToken(SyncEmail),
           useClass: Repository,
         },
-        {
-          provide: LoggerFactory,
-          useValue: {
-            create: jest.fn().mockReturnValue({
-              log: jest.fn(),
-              error: jest.fn(),
-            }),
-          },
-        }
       ],
     }).compile();
 

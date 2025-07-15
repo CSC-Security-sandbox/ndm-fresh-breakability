@@ -1,28 +1,17 @@
-import {
-  Injectable,
-  Inject,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Permission } from '../entities/permission.entity';
 import { CreatePermissionDto } from './dto/create-permission.dto';
 import { UpdatePermissionDto } from './dto/update-permission.dto';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
-import {
-  LoggerFactory,
-  LoggerService
-} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class PermissionService {
-  private readonly logger: LoggerService;
   constructor(
     @InjectRepository(Permission)
     private permissionRepository: Repository<Permission>,
-    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
-  ) {
-    this.logger = loggerFactory.create(PermissionService.name);
-  }
+  ) {}
 
   create(
     createPermissionDto: CreatePermissionDto,

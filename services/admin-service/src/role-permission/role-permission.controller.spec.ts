@@ -12,7 +12,6 @@ import { Account } from '../entities/account.entity';
 import { UserRole } from '../entities/user-role.entity';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
-import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 describe('RolePermissionController', () => {
   let controller: RolePermissionController;
@@ -61,15 +60,6 @@ describe('RolePermissionController', () => {
         { provide: getRepositoryToken(Project), useClass: Repository },
         { provide: getRepositoryToken(Account), useClass: Repository },
         { provide: getRepositoryToken(UserRole), useClass: Repository },
-        {
-          provide: LoggerFactory,
-          useValue: {
-            create: jest.fn().mockReturnValue({
-              log: jest.fn(),
-              error: jest.fn(),
-            }),
-          },
-        }
       ],
     }).compile();
 
