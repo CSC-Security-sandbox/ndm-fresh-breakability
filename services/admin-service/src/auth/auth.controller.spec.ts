@@ -177,10 +177,7 @@ describe('AuthController', () => {
 
       const result = await authController.setUserStatus(mockUserStatusDto);
 
-      expect(result).toEqual({
-        message: `User enabled successfully`,
-        user: mockUser,
-      });
+      expect(result).toEqual(mockUser);
       expect(mockAuthService.setUserStatus).toHaveBeenCalledWith(
         mockUserStatusDto.email,
         mockUserStatusDto.enable,
@@ -203,10 +200,7 @@ describe('AuthController', () => {
 
       const result = await authController.setUserStatus(mockUserStatusDto);
 
-      expect(result).toEqual({
-        message: `User disabled successfully`,
-        user: mockUser,
-      });
+      expect(result).toEqual(mockUser);
       expect(mockAuthService.setUserStatus).toHaveBeenCalledWith(
         mockUserStatusDto.email,
         mockUserStatusDto.enable,

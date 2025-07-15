@@ -3,6 +3,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
   ConflictException,
+  Inject,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { User } from '../entities/user.entity';
@@ -10,14 +11,21 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserPermissionResponse } from './user-permission-response-type';
 import { makeAxiosRequest } from '../utils/axios-request-utils';
-import { encryptData } from '../utils/crypto-utils';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class AuthService {
+  private readonly logger: LoggerService;
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
-  ) {}
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(AuthService.name);
+  }
 
   public async getKeycloakToken() {
     try {
@@ -80,6 +88,7 @@ export class AuthService {
     userPermissionResponse: UserPermissionResponse,
   ): Promise<{ user: User; tempPassword: string }> {
     // Check if user already exists in the database
+    try {
     const existingUser = await this.userRepository.findOne({ where: { email: username } });
     if (existingUser) {
       throw new ConflictException(
@@ -89,8 +98,7 @@ export class AuthService {
     const tempPassword = this.generateRandomPassword(12);
     const token = await this.getKeycloakToken();
 
-    try {
-      const encryptedPassword = encryptData(tempPassword);
+
       await makeAxiosRequest({
         method: 'POST',
         url: `${process.env.KEYCLOAK_BASE_URL}/admin/realms/${process.env.KEYCLOAK_REALM}/users`,
@@ -125,7 +133,7 @@ export class AuthService {
       user.populateWhoColumns(userPermissionResponse.user.id);
       const savedUser = await this.userRepository.save(user);
 
-      return { user: savedUser, tempPassword: encryptedPassword };
+      return { user: savedUser, tempPassword };
     } catch (error) {
       if (error instanceof ConflictException) {
         throw error;
@@ -141,7 +149,6 @@ export class AuthService {
     const token = await this.getKeycloakToken();
 
     try {
-      const encryptedPassword = encryptData(newPassword);
       const users = await makeAxiosRequest<any[]>({
         method: 'GET',
         url: `${process.env.KEYCLOAK_BASE_URL}/admin/realms/${process.env.KEYCLOAK_REALM}/users`,
@@ -168,7 +175,7 @@ export class AuthService {
         },
       });
 
-      return encryptedPassword;
+      return newPassword;
     } catch (error) {
       throw new InternalServerErrorException(
         'Failed to reset password in Keycloak, : error',
@@ -177,10 +184,10 @@ export class AuthService {
     }
   }
 
-  async setUserStatus(email: string, enable: boolean): Promise<User> {
+  async setUserStatus(email: string, enable: boolean): Promise<{message:string,user : User}> {
     const user = await this.userRepository.findOne({ where: { email } });
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException(`User not found, Please verify the user ID and try again.`);
     }
 
     user.user_status = enable ? 'active' : 'inactive';
@@ -197,7 +204,7 @@ export class AuthService {
       });
 
       if (users.length === 0) {
-        throw new NotFoundException('User not found in Keycloak');
+        throw new NotFoundException(`User not found in Keycloak', Please verify the user ID and try again.`);
       }
 
       const keycloakUser = users[0];
@@ -221,8 +228,8 @@ export class AuthService {
           },
         });
       }
-
-      return user;
+      const state = enable ? 'enabled' : 'disabled';
+      return { message: `Access has been successfully ${state} for a user: ${email}`, user};
     } catch (error) {
       throw new InternalServerErrorException(
         `Failed to update user status in Keycloak, error: ${error.message}`,

@@ -22,6 +22,7 @@ import {
 import { AccountDescription } from '../swagger/swagger-summary';
 import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
+import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
 
 @ApiTags('accounts')
 @Controller('/api/v1/accounts')
@@ -103,7 +104,7 @@ export class AccountController {
     summary: 'Get Account by account id',
     description: AccountDescription.getAccountByIdDescription,
   })
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', NonEmptyStringPipe) id: string) {
     return this.accountService.findOne(id);
   }
 
@@ -115,7 +116,7 @@ export class AccountController {
     description: AccountDescription.UpdateAccountDescription,
   })
   update(
-    @Param('id') id: string,
+    @Param('id', NonEmptyStringPipe) id: string,
     @Body() updateAccountDto: UpdateAccountDto,
     @Request() userPermissionResponse: UserPermissionResponse,
   ) {
@@ -133,7 +134,7 @@ export class AccountController {
     summary: 'Delete Account',
     description: AccountDescription.DeleteAccountDescription,
   })
-  delete(@Param('id') id: string) {
+  delete(@Param('id', NonEmptyStringPipe) id: string) {
     return this.accountService.delete(id);
   }
 }

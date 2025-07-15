@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 describe('SettingController', () => {
   let controller: SettingController;
@@ -42,6 +43,15 @@ describe('SettingController', () => {
           provide: JwtService,
           useValue: mockJwtService,
         },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+            }),
+          },
+        }
       ],
     }).compile();
 

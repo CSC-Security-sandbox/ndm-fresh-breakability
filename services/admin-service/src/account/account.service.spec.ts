@@ -8,7 +8,14 @@ import { UpdateAccountDto } from './dto/update-account.dto';
 import { randomUUID } from 'crypto';
 import { Project } from '../entities/project.entity';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
+export const mockLoggerFactory = {
+  create: jest.fn().mockReturnValue({
+    log: jest.fn(),
+    error: jest.fn(),
+  }),
+};
 describe('AccountService', () => {
   let service: AccountService;
   let repository: Repository<Account>;
@@ -25,6 +32,7 @@ describe('AccountService', () => {
           provide: getRepositoryToken(Project),
           useClass: Repository,
         },
+        { provide: LoggerFactory, useValue: mockLoggerFactory},
       ],
     }).compile();
 

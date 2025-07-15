@@ -1,36 +1,31 @@
-import {HttpException, HttpStatus, Injectable, Logger} from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Inject,
+} from '@nestjs/common';
 import { CreateSettingDto } from './dto/create-setting.dto';
 import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Transporter } from 'nodemailer';
 import * as nodemailer from 'nodemailer';
-import { decryptData } from 'src/utils/crypto-utils';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class SettingService {
+  private readonly logger: LoggerService;
   constructor(
     @InjectRepository(GlobalSettings)
     private settingsRepo: Repository<GlobalSettings>,
-  ) {}
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(SettingService.name);
+  }
   async create(createSettingDto: CreateSettingDto[]) {
-
-    for (const setting of createSettingDto) {
-      if (setting.settingKey === 'SMTP_PASSWORD' && setting.settingValue) {
-        try {
-          setting.settingValue = decryptData(setting.settingValue);
-        } catch (error) {
-          throw new HttpException(
-              {
-                message: `Error while retrieving settings: ${error.message}`,
-                statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-              },
-              HttpStatus.INTERNAL_SERVER_ERROR,
-          );
-        }
-      }
-    }
-
     try {
       if (
         createSettingDto.length > 0 &&
@@ -70,17 +65,16 @@ export class SettingService {
       );
 
       return {
-        message: 'Settings created successfully',
+        message: 'SMTP details added successfully.',
         statusCode: HttpStatus.CREATED,
       };
     } catch (error) {
       throw new HttpException(
         {
-          message: 'Error while creating settings',
-          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: 'SMTP server is not reachable',
           error: error.message,
         },
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
   }
@@ -130,7 +124,7 @@ export class SettingService {
       await transporter.verify();
       isVerificationSuccessful = true;
     } catch (error) {
-      console.error('SMTP Connection Failed:', error.message);
+      console.error('SMTP Connection Failed:', error);
     }
     return isVerificationSuccessful;
   }
@@ -147,8 +141,7 @@ export class SettingService {
         acc[type].push({
           id: setting.id,
           settingKey: setting.settingKey,
-          // Do not send SMTP_PASSWORD in any response to protect sensitive data.
-          settingValue: setting.settingKey === 'SMTP_PASSWORD' ? '' : setting.settingValue,
+          settingValue: setting.settingValue,
           description: setting.description,
           settingType: setting.settingType,
         });
@@ -178,23 +171,6 @@ export class SettingService {
     });
   }
   async updateSetting(updateSettingDto: CreateSettingDto[]) {
-
-    for (const setting of updateSettingDto) {
-      if (setting.settingKey === 'SMTP_PASSWORD' && setting.settingValue) {
-        try {
-          setting.settingValue = decryptData(setting.settingValue);
-        } catch (error) {
-          throw new HttpException(
-              {
-                message: `Error while updating settings: ${error.message}`,
-                statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-              },
-              HttpStatus.INTERNAL_SERVER_ERROR,
-          );
-        }
-      }
-    }
-
     try {
       for (const settingObj of updateSettingDto) {
         const setting = await this.settingsRepo.findOne({
