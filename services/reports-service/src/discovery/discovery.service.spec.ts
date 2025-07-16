@@ -4,37 +4,41 @@
 const launchMock = jest.fn().mockResolvedValue({
   newPage: jest.fn().mockResolvedValue({
     setContent: jest.fn().mockResolvedValue(null),
-    pdf: jest.fn().mockResolvedValue(Buffer.from('mock pdf')),
+    pdf: jest.fn().mockResolvedValue(Buffer.from("mock pdf")),
   }),
   close: jest.fn().mockResolvedValue(null),
 });
 
-jest.mock('puppeteer', () => ({
+jest.mock("puppeteer", () => ({
   __esModule: true,
   default: { launch: launchMock },
   launch: launchMock,
 }));
 
-import { Test, TestingModule } from '@nestjs/testing';
-import { DiscoveryService } from './discovery.service';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { InventoryEntity } from '../entities/inventory.entity';
-import { ReportsEntity } from '../entities/reports.entity';
-import * as fs from 'fs';
-import * as path from 'path';
-import { InternalServerErrorException, NotFoundException } from '@nestjs/common';
-import * as validation from 'src/utils/utils';
+import { Test, TestingModule } from "@nestjs/testing";
+import { DiscoveryService } from "./discovery.service";
+import { getRepositoryToken } from "@nestjs/typeorm";
+import { InventoryEntity } from "../entities/inventory.entity";
+import { ReportsEntity } from "../entities/reports.entity";
+import * as fs from "fs";
+import * as path from "path";
+import {
+  InternalServerErrorException,
+  NotFoundException,
+} from "@nestjs/common";
+import * as validation from "src/utils/utils";
+import puppeteer from "puppeteer";
 
-describe('DiscoveryService', () => {
+describe("DiscoveryService", () => {
   let service: DiscoveryService;
   let mockInventoryRepo;
   let mockReportsRepo;
 
   const dummyRecord = {
-    fileServerPathId: 'server1',
-    path: '/root/path1',
-    parentPath: '/root',
-    name: 'path1',
+    fileServerPathId: "server1",
+    path: "/root/path1",
+    parentPath: "/root",
+    name: "path1",
   };
 
   const mockReportData = [
@@ -53,12 +57,16 @@ describe('DiscoveryService', () => {
     },
   ]
   const reportEntries = [
-    { category: 'Cat1', sub_category: 'Sub1', value: '10' },
-    { category: 'Cat1', sub_category: 'Sub2', value: '20' },
+    { category: "Cat1", sub_category: "Sub1", value: "10" },
+    { category: "Cat1", sub_category: "Sub2", value: "20" },
   ];
 
   beforeEach(async () => {
-    mockInventoryRepo = { findOne: jest.fn(), find: jest.fn(), query: jest.fn() };
+    mockInventoryRepo = {
+      findOne: jest.fn(),
+      find: jest.fn(),
+      query: jest.fn(),
+    };
     mockReportsRepo = { find: jest.fn(), save: jest.fn() };
 
     const mockSanitizeHtml = jest.fn((str: string) => str);
@@ -83,27 +91,33 @@ describe('DiscoveryService', () => {
           provide: "ESCAPE_HTML",
           useValue: mockEscapeHtml,
         },
-        { provide: getRepositoryToken(InventoryEntity), useValue: mockInventoryRepo },
-        { provide: getRepositoryToken(ReportsEntity), useValue: mockReportsRepo },
+        {
+          provide: getRepositoryToken(InventoryEntity),
+          useValue: mockInventoryRepo,
+        },
+        {
+          provide: getRepositoryToken(ReportsEntity),
+          useValue: mockReportsRepo,
+        },
       ],
     }).compile();
 
     service = module.get<DiscoveryService>(DiscoveryService);
 
-    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-    jest.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined);
-    jest.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
+    jest.spyOn(fs, "existsSync").mockReturnValue(true);
+    jest.spyOn(fs, "mkdirSync").mockImplementation(() => undefined);
+    jest.spyOn(fs, "writeFileSync").mockImplementation(() => undefined);
   });
 
   afterEach(() => jest.resetAllMocks());
 
-  it('should be defined', () => {
+  it("should be defined", () => {
     expect(service).toBeDefined();
   });
 
-  describe('createReportFile', () => {
-    const jobRunId = 'job123';
-    const reportType = 'DISCOVERY';
+  describe("createReportFile", () => {
+    const jobRunId = "job123";
+    const reportType = "DISCOVERY";
 
     beforeEach(() => {
       // Mock the procedure call
@@ -164,34 +178,53 @@ describe('DiscoveryService', () => {
       ];
 
       jest.spyOn(validation, 'validateFilePath').mockReturnValue(true);
+      jest.spyOn(validation, "validateFilePath").mockReturnValue(true);
       mockInventoryRepo.query.mockResolvedValue([]);
       mockReportsRepo.find.mockResolvedValue([
-        { reportData: JSON.stringify(reportEntries), jobRunId, reportType, createdAt: new Date() },
+        {
+          reportData: JSON.stringify(reportEntries),
+          jobRunId,
+          reportType,
+          createdAt: new Date(),
+        },
       ]);
     });
 
-    it('writes CSV and PDF and returns success message', async () => {
-      jest.spyOn(service, 'generatePdfFromData').mockResolvedValue(Buffer.from('pdf'));
+    it("writes CSV and PDF and returns success message", async () => {
+      jest
+        .spyOn(service, "generatePdfFromData")
+        .mockResolvedValue(Buffer.from("pdf"));
       const res = await service.createReportFile(jobRunId, reportType);
-      expect(res).toEqual({ message: 'Report generated successfully' });
+      expect(res).toEqual({ message: "Report generated successfully" });
       expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
     });
 
-    it('creates directory if missing', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValueOnce(false).mockReturnValueOnce(true);
-      jest.spyOn(service, 'generatePdfFromData').mockResolvedValue(Buffer.from('pdf'));
+    it("creates directory if missing", async () => {
+      jest
+        .spyOn(fs, "existsSync")
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(true);
+      jest
+        .spyOn(service, "generatePdfFromData")
+        .mockResolvedValue(Buffer.from("pdf"));
       await service.createReportFile(jobRunId, reportType);
-      expect(fs.mkdirSync).toHaveBeenCalledWith(service.getReportsDirectory, { recursive: true });
+      expect(fs.mkdirSync).toHaveBeenCalledWith(service.getReportsDirectory, {
+        recursive: true,
+      });
     });
 
-    it('throws InternalServerErrorException on proc failure', async () => {
-      mockInventoryRepo.query.mockRejectedValue(new Error('fail'));
-      await expect(service.createReportFile(jobRunId, reportType)).rejects.toThrow(InternalServerErrorException);
+    it("throws InternalServerErrorException on proc failure", async () => {
+      mockInventoryRepo.query.mockRejectedValue(new Error("fail"));
+      await expect(
+        service.createReportFile(jobRunId, reportType)
+      ).rejects.toThrow(InternalServerErrorException);
     });
 
-    it('throws if no report data', async () => {
+    it("throws if no report data", async () => {
       mockReportsRepo.find.mockResolvedValue([]);
-      await expect(service.createReportFile(jobRunId, reportType)).rejects.toThrow(InternalServerErrorException);
+      await expect(
+        service.createReportFile(jobRunId, reportType)
+      ).rejects.toThrow(InternalServerErrorException);
     });
 
     it("should throw error when file path contains invalid characters", async () => {
@@ -212,16 +245,16 @@ describe('DiscoveryService', () => {
     });
   });
 
-  describe('generateHtmlTable', () => {
-    it('builds correct HTML', () => {
+  describe("generateHtmlTable", () => {
+    it("builds correct HTML", () => {
       const html = service.generateHtmlTable(reportEntries);
-      expect(html).toContain('<table>');
-      expect(html).toContain('Cat1');
-      expect(html).toContain('Sub2');
+      expect(html).toContain("<table>");
+      expect(html).toContain("Cat1");
+      expect(html).toContain("Sub2");
     });
 
-    it('handles empty data', () => {
-      expect(service.generateHtmlTable([])).toContain('Data Summary');
+    it("handles empty data", () => {
+      expect(service.generateHtmlTable([])).toContain("Data Summary");
     });
 
     it("should log warning when some files are not found but others exist", async () => {
@@ -264,20 +297,24 @@ describe('DiscoveryService', () => {
     });
   });
 
-  describe('generatePdfFromData', () => {
-
-    it('throws if launch fails', async () => {
-      launchMock.mockRejectedValueOnce(new Error('bad'));
-      await expect(service.generatePdfFromData(reportEntries)).rejects.toThrow('bad');
+  describe("generatePdfFromData", () => {
+    it("throws if launch fails", async () => {
+      launchMock.mockRejectedValueOnce(new Error("bad"));
+      await expect(service.generatePdfFromData(reportEntries)).rejects.toThrow(
+        "bad"
+      );
     });
   });
 
-  describe('formatAndWriteToFile', () => {
-    it('writes CSV with values', () => {
-      const filePath = 'test.csv';
-      jest.spyOn(validation, 'validateFilePath').mockReturnValue(true);
+  describe("formatAndWriteToFile", () => {
+    it("writes CSV with values", () => {
+      const filePath = "test.csv";
+      jest.spyOn(validation, "validateFilePath").mockReturnValue(true);
       service.formatAndWriteToFile(reportEntries, filePath);
-      expect(fs.writeFileSync).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('10,20'));
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.stringContaining("10,20")
+      );
     });
 
       const groupAndOrderSpy = jest
@@ -373,39 +410,49 @@ describe('DiscoveryService', () => {
     it('throws on invalid path', () => {
       jest.spyOn(validation, 'validateFilePath').mockReturnValue(false);
       expect(() => service.formatAndWriteToFile(reportEntries, 'bad')).toThrow();
+    it("throws on invalid path", () => {
+      jest.spyOn(validation, "validateFilePath").mockReturnValue(false);
+      expect(() =>
+        service.formatAndWriteToFile(reportEntries, "bad")
+      ).toThrow();
     });
   });
 
-  describe('createJobsPDFReportData', () => {
-    it('executes repo.query and returns success', async () => {
+  describe("createJobsPDFReportData", () => {
+    it("executes repo.query and returns success", async () => {
       mockInventoryRepo.query.mockResolvedValue([]);
-      const res = await service.createJobsPDFReportData('j1');
-      expect(res).toEqual({ message: expect.stringContaining('jobs report') });
+      const res = await service.createJobsPDFReportData("j1");
+      expect(res).toEqual({ message: expect.stringContaining("jobs report") });
     });
 
-    it('throws on failure', async () => {
+    it("throws on failure", async () => {
       mockInventoryRepo.query.mockRejectedValue(new Error());
-      await expect(service.createJobsPDFReportData('j1')).rejects.toThrow(InternalServerErrorException);
+      await expect(service.createJobsPDFReportData("j1")).rejects.toThrow(
+        InternalServerErrorException
+      );
     });
   });
 
-  describe('getDiscovery methods', () => {
-    it('getDiscoveryByFileServerId returns nested structure', async () => {
+  describe("getDiscovery methods", () => {
+    it("getDiscoveryByFileServerId returns nested structure", async () => {
       mockInventoryRepo.findOne.mockResolvedValue(dummyRecord);
       mockInventoryRepo.find.mockResolvedValue([dummyRecord]);
-      const res = await service.getDiscoveryByFileServerId('server1');
-      expect(res[0].root).toBe('path1');
+      const res = await service.getDiscoveryByFileServerId("server1");
+      expect(res[0].root).toBe("path1");
     });
 
-    it('getDiscoveryByFileServerIdAndParentPath returns childs array', async () => {
+    it("getDiscoveryByFileServerIdAndParentPath returns childs array", async () => {
       mockInventoryRepo.find.mockResolvedValue([dummyRecord]);
-      const res = await service.getDiscoveryByFileServerIdAndParentPath('server1','/root');
+      const res = await service.getDiscoveryByFileServerIdAndParentPath(
+        "server1",
+        "/root"
+      );
       expect(res[0].childs).toEqual([]);
     });
 
-    it('getDataFromParentPath calls repo.find', async () => {
+    it("getDataFromParentPath calls repo.find", async () => {
       mockInventoryRepo.find.mockResolvedValue([dummyRecord]);
-      const res = await service.getDataFromParentPath('server1','/root');
+      const res = await service.getDataFromParentPath("server1", "/root");
       expect(res).toEqual([dummyRecord]);
     });
   });
@@ -597,18 +644,32 @@ describe('DiscoveryService', () => {
     it('throws if directory missing', async () => {
       jest.spyOn(fs, 'existsSync').mockReturnValueOnce(false);
       await expect(service.getReportsAsZip(['j'], reportType)).rejects.toThrow(NotFoundException);
+  describe("getReportsAsZip", () => {
+    const reportType = "discovery";
+    it("throws if directory missing", async () => {
+      jest.spyOn(fs, "existsSync").mockReturnValueOnce(false);
+      await expect(service.getReportsAsZip(["j"], reportType)).rejects.toThrow(
+        NotFoundException
+      );
     });
 
-    it('throws if no files found', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValueOnce(true).mockReturnValueOnce(false);
-      await expect(service.getReportsAsZip(['j'], reportType)).rejects.toThrow(NotFoundException);
+    it("throws if no files found", async () => {
+      jest
+        .spyOn(fs, "existsSync")
+        .mockReturnValueOnce(true)
+        .mockReturnValueOnce(false);
+      await expect(service.getReportsAsZip(["j"], reportType)).rejects.toThrow(
+        NotFoundException
+      );
     });
 
-    it('returns buffer when files exist', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      jest.spyOn(service, 'createZipArchive').mockResolvedValue(Buffer.from('z'));
-      const buf = await service.getReportsAsZip(['j'], reportType);
-      expect(buf.toString()).toBe('z');
+    it("returns buffer when files exist", async () => {
+      jest.spyOn(fs, "existsSync").mockReturnValue(true);
+      jest
+        .spyOn(service, "createZipArchive")
+        .mockResolvedValue(Buffer.from("z"));
+      const buf = await service.getReportsAsZip(["j"], reportType);
+      expect(buf.toString()).toBe("z");
     });
   });
 
