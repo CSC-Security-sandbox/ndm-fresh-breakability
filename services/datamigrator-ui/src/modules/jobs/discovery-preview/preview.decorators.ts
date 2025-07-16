@@ -1,57 +1,130 @@
-import { DataItemType, FileInfo, ProcessedData } from "@/types/app.type";
+import {DataItemType, FileInfo, ProcessedData} from '@/types/app.type';
+import {
+  ACCESS_TIME_COUNT_PREFIX,
+  ACCESS_TIME_SIZE_PREFIX,
+  BYTE_UNITS,
+  BYTES_IN_KILOBYTE,
+  CREATION_TIME_COUNT_PREFIX,
+  CREATION_TIME_SIZE_PREFIX,
+  FILE_COUNT_PREFIX,
+  FILE_SIZE_PREFIX,
+  FileSystemCategory,
+  FileSystemSubCategory,
+  LARGE_NUMBER_SUFFIXES,
+  MODIFICATION_TIME_COUNT_PREFIX,
+  MODIFICATION_TIME_SIZE_PREFIX,
+  SIMPLIFIED_BYTE_UNITS,
+  ValueType
+} from '@modules/jobs/discovery-preview/preview.constants';
+import {getRegExp, StringComparisonPattern} from '@modules/jobs/discovery-preview/string-comparison.enum';
 
 {
   /* This convert bytes to MB */
 }
 const toMB = (value: number): number => {
-  return parseFloat((value / (1024 * 1024)).toFixed(2));
+  return parseFloat((value / (BYTES_IN_KILOBYTE * BYTES_IN_KILOBYTE)).toFixed(2));
 };
+
+const covertBytes = (bytes: number): string => {
+  if (bytes === 0) return "0 B";
+  let size = bytes;
+  let unitIndex = 0;
+  while (size >= BYTES_IN_KILOBYTE && unitIndex < SIMPLIFIED_BYTE_UNITS.length - 1) {
+    size /= BYTES_IN_KILOBYTE;
+    unitIndex++;
+  }
+  return size === Math.floor(size)
+      ? `${size?.toFixed(0)} ${SIMPLIFIED_BYTE_UNITS[unitIndex]}`
+      : `${size?.toFixed(2)} ${SIMPLIFIED_BYTE_UNITS[unitIndex]}`;
+};
+
+/**
+ * Generic function to extract chart data based on filtering criteria
+ * @param jsonData The source data array to process
+ * @param filterOptions Options for filtering the data
+ * @param valueTransform Optional function to transform values
+ * @param prefixToRemove Optional prefix to remove from category names
+ * @returns Processed data with arrays for data values and category names
+ */
+export function extractChartData(
+    jsonData: DataItemType[],
+    filterOptions: {
+      category: string;
+      valueType?: string;
+      subCategoryPrefix?: string;
+    },
+    valueTransform?: (value: number) => number,
+    prefixToRemove?: string
+): ProcessedData {
+  // Filter data based on provided criteria
+  let filteredData = jsonData?.filter((item) => {
+    // Always filter by category
+    const categoryMatch = item.category === filterOptions.category;
+
+    // Optionally filter by valueType
+    const valueTypeMatch = filterOptions.valueType
+        ? item['valueType'] === filterOptions.valueType
+        : true;
+
+    // Optionally filter by subCategory prefix
+    const prefixMatch = filterOptions.subCategoryPrefix
+        ? item.sub_category.startsWith(filterOptions.subCategoryPrefix)
+        : true;
+
+    return categoryMatch && valueTypeMatch && prefixMatch;
+  });
+
+  // Extract and transform values
+  const data = filteredData?.map((item) => {
+    const value = item.value as number;
+    return valueTransform ? valueTransform(value) : value;
+  });
+
+  // Extract and process categories
+  const categories = filteredData?.map((item) => {
+    let category = item.sub_category;
+    if (prefixToRemove) {
+      category = category.replace(prefixToRemove, '').trim();
+    }
+    return category;
+  });
+
+  return {data, categories};
+}
+
 
 {
   /* This function extract data for files as per space used */
 }
 export function chartDataForFileSize(jsonData: DataItemType[]): ProcessedData {
-  const filteredData = jsonData?.filter(
-    (item) => item.category === "Space Used" && typeof item.value === "number"
+  return extractChartData(
+      jsonData,
+      {category: FileSystemCategory.SPACE_USED},
+      toMB,
+      FILE_SIZE_PREFIX
   );
-
-  const data = filteredData?.map((item) => toMB(item.value as number));
-  const categories = filteredData?.map((item) =>
-    item.sub_category.replace("Capacity with File Size: ", "").trim()
-  );
-
-  return { data, categories };
 }
 
 {
   /* This function extract data for files as per file count */
 }
 export function chartDataForFileCount(jsonData: DataItemType[]): ProcessedData {
-  const filteredData = jsonData?.filter(
-    (item) =>
-      item.category === "Number of Files" && typeof item.value === "number"
+  return extractChartData(
+      jsonData,
+      {category: FileSystemCategory.NUMBER_OF_FILES},
+      undefined,
+      FILE_COUNT_PREFIX
   );
-
-  const data = filteredData?.map((item) => item.value as number);
-  const categories = filteredData?.map((item) =>
-    item.sub_category.replace("File Count with File Size: ", "").trim()
-  );
-
-  return { data, categories };
 }
 
 {
   /* This function extract data for files as per file depth */
 }
 export function chartDataForFileDepth(jsonData: DataItemType[]): ProcessedData {
-  const filteredData = jsonData?.filter(
-    (item) => item.category === "Depth" && typeof item.value === "number"
+  return extractChartData(
+      jsonData,
+      {category: FileSystemCategory.DEPTH}
   );
-
-  const data = filteredData?.map((item) => item.value as number);
-  const categories = filteredData?.map((item) => item.sub_category.trim());
-
-  return { data, categories };
 }
 
 {
@@ -60,19 +133,16 @@ export function chartDataForFileDepth(jsonData: DataItemType[]): ProcessedData {
 export function chartDataForFileSizeModified(
   jsonData: DataItemType[]
 ): ProcessedData {
-  const filteredData = jsonData?.filter(
-    (item) =>
-      item.category === "Modified" &&
-      typeof item.value === "number" &&
-      item.sub_category.includes("Capacity With Modification Time:")
+  return extractChartData(
+      jsonData,
+      {
+        category: FileSystemCategory.MODIFIED,
+        valueType: ValueType.SIZE,
+        subCategoryPrefix: MODIFICATION_TIME_SIZE_PREFIX
+      },
+      toMB,
+      MODIFICATION_TIME_SIZE_PREFIX + ' '
   );
-
-  const data = filteredData?.map((item) => toMB(item.value as number));
-  const categories = filteredData?.map((item) =>
-    item.sub_category.replace("Capacity With Modification Time: ", "").trim()
-  );
-
-  return { data, categories };
 }
 
 {
@@ -81,19 +151,16 @@ export function chartDataForFileSizeModified(
 export function chartDataForFileCountModified(
   jsonData: DataItemType[]
 ): ProcessedData {
-  const filteredData = jsonData?.filter(
-    (item) =>
-      item.category === "Modified" &&
-      typeof item.value === "number" &&
-      item.sub_category.includes("File Count With Modification Time:")
+  return extractChartData(
+      jsonData,
+      {
+        category: FileSystemCategory.MODIFIED,
+        valueType: ValueType.COUNT,
+        subCategoryPrefix: MODIFICATION_TIME_COUNT_PREFIX
+      },
+      undefined,
+      MODIFICATION_TIME_COUNT_PREFIX + ' '
   );
-
-  const data = filteredData?.map((item) => item.value as number);
-  const categories = filteredData?.map((item) =>
-    item.sub_category.replace("File Count With Modification Time: ", "").trim()
-  );
-
-  return { data, categories };
 }
 
 {
@@ -102,19 +169,16 @@ export function chartDataForFileCountModified(
 export function chartDataForFileSizeCreated(
   jsonData: DataItemType[]
 ): ProcessedData {
-  const filteredData = jsonData?.filter(
-    (item) =>
-      item.category === "Created" &&
-      typeof item.value === "number" &&
-      item.sub_category.includes("Capacity with Creation Time")
+  return extractChartData(
+      jsonData,
+      {
+        category: FileSystemCategory.CREATED,
+        valueType: ValueType.SIZE,
+        subCategoryPrefix: CREATION_TIME_SIZE_PREFIX
+      },
+      toMB,
+      CREATION_TIME_SIZE_PREFIX
   );
-
-  const data = filteredData?.map((item) => toMB(item.value as number));
-  const categories = filteredData?.map((item) =>
-    item.sub_category.replace("Capacity with Creation Time", "").trim()
-  );
-
-  return { data, categories };
 }
 
 {
@@ -123,35 +187,67 @@ export function chartDataForFileSizeCreated(
 export function chartDataForFileCountCreated(
   jsonData: DataItemType[]
 ): ProcessedData {
-  const filteredData = jsonData?.filter(
-    (item) =>
-      item.category === "Created" &&
-      typeof item.value === "number" &&
-      item.sub_category.includes("File Count with Creation Time")
+  return extractChartData(
+      jsonData,
+      {
+        category: FileSystemCategory.CREATED,
+        valueType: ValueType.COUNT,
+        subCategoryPrefix: CREATION_TIME_COUNT_PREFIX
+      },
+      undefined,
+      CREATION_TIME_COUNT_PREFIX
   );
-
-  const data = filteredData?.map((item) => item.value as number);
-  const categories = filteredData?.map((item) =>
-    item.sub_category.replace("File Count with Creation Time", "").trim()
-  );
-
-  return { data, categories };
 }
 
 {
-  /* This function extract data for files as per count and as created */
+  /* This function extract data for files as per size and access time */
+}
+export function chartDataForFileSizeAccessTime(
+    jsonData: DataItemType[]
+): ProcessedData {
+  return extractChartData(
+      jsonData,
+      {
+        category: FileSystemCategory.ACCESS_TIME,
+        valueType: ValueType.SIZE,
+        subCategoryPrefix: ACCESS_TIME_SIZE_PREFIX
+      },
+      toMB,
+      ACCESS_TIME_SIZE_PREFIX
+  );
+}
+
+{
+  /* This function extract data for files as per count and access time */
+}
+export function chartDataForFileCountAccessTime(
+    jsonData: DataItemType[]
+): ProcessedData {
+  return extractChartData(
+      jsonData,
+      {
+        category: FileSystemCategory.ACCESS_TIME,
+        valueType: ValueType.COUNT,
+        subCategoryPrefix: ACCESS_TIME_COUNT_PREFIX
+      },
+      undefined,
+      ACCESS_TIME_COUNT_PREFIX
+  );
+}
+
+{
+  /* This function extract data for files by access time */
 }
 export function chartDataForAccessTime(
   jsonData: DataItemType[]
 ): ProcessedData {
-  const filteredData = jsonData?.filter(
-    (item) => item.category === "Access Time" && typeof item.value === "number"
+  return extractChartData(
+      jsonData,
+      {
+        category: FileSystemCategory.ACCESS_TIME,
+        valueType: ValueType.SIZE
+      }
   );
-
-  const data = filteredData?.map((item) => item.value as number);
-  const categories = filteredData?.map((item) => item.sub_category.trim());
-
-  return { data, categories };
 }
 
 {
@@ -164,17 +260,18 @@ export const createSummaryMap = (
   let totalSizeMB = 0;
 
   jsonData?.forEach(({ value, category, sub_category }) => {
-    if (typeof value !== "number") return;
-
-    if (category === "Top File Extensions") {
-      summary[sub_category] = (summary[sub_category] || 0) + value;
+    if (category === FileSystemCategory.TOP_FILE_EXTENSIONS) {
+      // Extract the size value using regex
+      const sizeMatch = value.toString().match(getRegExp(StringComparisonPattern.SIZE_EXTRACTION));
+      const sizeValue = sizeMatch ? parseInt(sizeMatch[1], 10) : 0;
+      summary[sub_category +' (MB)'] = (summary[sub_category] || 0) + toMB(sizeValue) ;
     }
 
     if (
-      category === "File System Stats" &&
-      sub_category === "Total Space Used"
+      category === FileSystemCategory.FILE_SYSTEM_STATS &&
+      sub_category === FileSystemSubCategory.TOTAL_SPACE_USED
     ) {
-      totalSizeMB = toMB(value);
+      totalSizeMB = toMB(typeof value === 'number' ? value :0);
     }
   });
 
@@ -191,13 +288,13 @@ export function longestFileNames(
 ): { fileName: string }[] {
   const longestFileEntry = jsonData?.find(
     (item) =>
-      item.category === "Biggest" && item.sub_category === "Longest File Names"
+      item.category === FileSystemCategory.BIGGEST && item.sub_category === FileSystemSubCategory.TOP_5_LONGEST_FILE_NAMES
   );
 
-  if (!longestFileEntry || typeof longestFileEntry.value !== "string")
+  if (!longestFileEntry || typeof longestFileEntry.value !== ValueType.STRING)
     return [];
 
-  return longestFileEntry.value.split(";").map((entry) => ({
+  return longestFileEntry.value.toString().split(";").map((entry) => ({
     fileName: entry.split(" (")[0].trim(),
   }));
 }
@@ -210,19 +307,18 @@ export function extractBiggestFiles(
 ) {
   const biggestFileEntry = jsonData?.find(
     (item) =>
-      item.category === "Biggest" && item.sub_category === "Biggest File Names"
+      item.category === FileSystemCategory.BIGGEST && item.sub_category === FileSystemSubCategory.TOP_5_BIGGEST_FILE_NAMES
   );
 
-  if (!biggestFileEntry || typeof biggestFileEntry.value !== "string")
+  if (!biggestFileEntry || typeof biggestFileEntry.value !== ValueType.STRING)
     return [];
 
-  return biggestFileEntry.value
+  return biggestFileEntry.value.toString()
     .split(";")
     .map((entry) => {
-      const match = entry.match(/(.+?) \((\d+)\)/);
+      const match = entry.match(getRegExp(StringComparisonPattern.FILE_NAME_SIZE));
       if (!match) return null;
-
-      return { fileName: match[1].trim(), fileSize: toMB(Number(match[2])) };
+      return { fileName: match[1].trim(), fileSize: covertBytes(Number(match[2])) };
     })
     .filter(Boolean);
 }
@@ -233,25 +329,24 @@ export function extractBiggestFiles(
 export function extractLongestDirectoryPaths(data: DataItemType[]): FileInfo[] {
   const longestDirPaths = data?.find(
     (item: DataItemType) =>
-      item.category === "Biggest" &&
-      item.sub_category === "Longest Directory Path"
+      item.category === FileSystemCategory.BIGGEST &&
+      item.sub_category === FileSystemSubCategory.TOP_5_LONGEST_DIRECTORY_PATH
   );
-
   if (!longestDirPaths) return [];
-
-  return (longestDirPaths?.value as string)
-    ?.split(";")
-    ?.map((entry: string) => {
-      const match = entry.match(/\/([^/]+) \((\d+)\)$/);
-      if (match) {
-        return {
-          fileName: match[1],
-          fileSize: parseInt(match[2], 10),
-        };
-      }
-      return null;
-    })
-    .filter(Boolean) as FileInfo[];
+ let longestPathCounts=  (longestDirPaths?.value as string)
+     ?.split(";")
+     ?.map((entry: string) => {
+       const match = entry.match(getRegExp(StringComparisonPattern.DIRECTORY_NAME_SIZE));
+       if (match) {
+         return {
+           fileName: match[1],
+           fileSize: parseInt(match[2], 10),
+         };
+       }
+       return null;
+     })
+     .filter(Boolean) as FileInfo[];
+  return longestPathCounts;
 }
 
 {
@@ -259,9 +354,8 @@ export function extractLongestDirectoryPaths(data: DataItemType[]): FileInfo[] {
 }
 export function extractAverageMaxDepth(jsonData: DataItemType[]) {
   const depthData = jsonData?.filter(
-    (item: DataItemType) => item.category === "Depth"
+    (item: DataItemType) => item.category === FileSystemCategory.DEPTH
   );
-
   if (depthData?.length === 0) {
     return { avgDepth: 0, maxDepth: 0 };
   }
@@ -269,7 +363,6 @@ export function extractAverageMaxDepth(jsonData: DataItemType[]) {
   const maxDepth = Math.max(
     ...depthData.map((item: DataItemType) => item.value as number)
   );
-
   const total = depthData?.reduce(
     (sum: number, item: DataItemType) => sum + (item.value as number),
     0
@@ -286,22 +379,50 @@ export function extractMaxAvgFilePath(data: DataItemType[]): {
   maxPath: number;
   avgPath: number;
 } {
-  const filePathLengths = data
-    ?.filter((item: DataItemType) => item.sub_category === "Longest File Path")
+   const filePathLengths = data
+    ?.filter((item: DataItemType) => item.sub_category === FileSystemSubCategory.TOP_5_LONGEST_FILE_PATH)
     ?.map((item: DataItemType) =>
       (item.value as string)
         .split(";")
-        .map((path: string) => path.trim().length)
+        .map((path: string) => {
+          const match = path.match(getRegExp(StringComparisonPattern.NUMBER_IN_PARENTHESES));
+         const countOfPath= match ? parseInt(match[1], 10) : null;
+         return countOfPath
+        })
     );
-
   const allLengths = filePathLengths?.flat();
-
   if (allLengths?.length === 0) return { maxPath: 0, avgPath: 0 };
 
   const maxPath = Math.max(...allLengths);
-  const avgPath =
-    allLengths?.reduce((acc: number, length: number) => acc + length, 0) /
-    allLengths?.length;
+  const filePathSummary = data?.find((item: DataItemType) =>
+      item.sub_category === FileSystemSubCategory.FILE_PATH_SUMMARY
+  );
+
+// Initialize variables
+  let totalLength = 0;
+  let totalPath = 0;
+
+// Process the value if found
+  if (filePathSummary) {
+    const parts = (filePathSummary.value as string).split(";");
+
+    // Process each part
+    parts.forEach(path => {
+      // Extract Total Length
+      const lengthMatch = path.match(getRegExp(StringComparisonPattern.TOTAL_LENGTH));
+      if (lengthMatch) {
+        totalLength = parseInt(lengthMatch[1], 10);
+      }
+
+      // Extract Total Path
+      const pathMatch = path.match(getRegExp(StringComparisonPattern.TOTAL_PATH));
+      if (pathMatch) {
+        totalPath = parseInt(pathMatch[1], 10);
+      }
+    });
+  }
+
+  const avgPath =totalLength / totalPath
 
   return {
     maxPath,
@@ -317,10 +438,10 @@ export function extractMaxAvgFileSize(data: DataItemType[]): {
   avgFileSize: number;
 } {
   const fileSizeValues = data
-    ?.filter((item: DataItemType) => item.sub_category === "Biggest File Names")
+    ?.filter((item: DataItemType) => item.sub_category === FileSystemSubCategory.TOP_5_BIGGEST_FILE_NAMES)
     ?.map((item: DataItemType) =>
       (item.value as string).split(";").map((file: string) => {
-        const match = file.trim().match(/\((\d+)\)/);
+        const match = file.trim().match(getRegExp(StringComparisonPattern.NUMBER_IN_PARENTHESES));
         return match ? parseInt(match[1], 10) : 0;
       })
     );
@@ -330,10 +451,9 @@ export function extractMaxAvgFileSize(data: DataItemType[]): {
   if (allFileSizes?.length === 0) return { maxFileSize: 0, avgFileSize: 0 };
 
   const maxFileSize = Math.max(...allFileSizes);
-  const avgFileSize =
-    allFileSizes?.reduce((acc: number, size: number) => acc + size, 0) /
-    allFileSizes?.length;
+    const {totalSpaceUsed,totalCount} = extractSystemFileStatAndDirectories(data);
 
+  const avgFileSize = parseInt(totalSpaceUsed as string)/ parseInt(totalCount as string);
   return {
     maxFileSize,
     avgFileSize,
@@ -345,37 +465,36 @@ export function extractMaxAvgFileSize(data: DataItemType[]): {
 }
 export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
   const regularFiles =
-    data?.find((item: DataItemType) => item.sub_category === "Regular Files")
+    data?.find((item: DataItemType) => item.sub_category === FileSystemSubCategory.REGULAR_FILES)
       ?.value || 0;
   const symbolicLinks =
-    data?.find((item: DataItemType) => item.sub_category === "Symbolic Links")
+    data?.find((item: DataItemType) => item.sub_category === FileSystemSubCategory.SYMBOLIC_LINKS)
       ?.value || 0;
   const totalCount =
-    data?.find((item: DataItemType) => item.sub_category === "Total Count")
+    data?.find((item: DataItemType) => item.sub_category === FileSystemSubCategory.TOTAL_COUNT)
       ?.value || 0;
   const totalSpaceUsed =
-    data?.find((item: DataItemType) => item.sub_category === "Total Space Used")
+    data?.find((item: DataItemType) => item.sub_category === FileSystemSubCategory.TOTAL_SPACE_USED)
       ?.value || 0;
   const directories =
     data?.find(
-      (item: DataItemType) => item.sub_category === "total_directories"
+      (item: DataItemType) => item.sub_category === FileSystemSubCategory.TOTAL_DIRECTORIES
     )?.value || 0;
   const jobRunStatus =
-    data?.find((item: DataItemType) => item.sub_category === "Status")?.value ||
+    data?.find((item: DataItemType) => item.sub_category === FileSystemSubCategory.STATUS)?.value ||
     0;
   const scanTime =
-    data?.find((item: DataItemType) => item.sub_category === "Total Time")
+    data?.find((item: DataItemType) => item.sub_category === FileSystemSubCategory.TOTAL_TIME)
       ?.value || 0;
   const fileServerName =
-    data?.find((item: DataItemType) => item.sub_category === "Config Name")
+    data?.find((item: DataItemType) => item.sub_category === FileSystemSubCategory.CONFIG_NAME)
       ?.value || 0;
   const fileServerPath =
-    data?.find((item: DataItemType) => item.sub_category === "Path")?.value ||
+    data?.find((item: DataItemType) => item.sub_category === FileSystemSubCategory.PATH)?.value ||
     0;
   const fileServerProtocol =
-    data?.find((item: DataItemType) => item.sub_category === "Protocol")
+    data?.find((item: DataItemType) => item.sub_category === FileSystemSubCategory.PROTOCOL)
       ?.value || 0;
-
   return {
     regularFiles,
     symbolicLinks,
@@ -396,12 +515,11 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
 export function formatBytes(bytes: number, decimals = 2): string {
   if (bytes === 0) return "0 Bytes";
 
-  const k = 1024;
-  const sizes = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+  const k = BYTES_IN_KILOBYTE;
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${
-    sizes[i] || sizes[0]
+    BYTE_UNITS[i] || BYTE_UNITS[0]
   }`;
 }
 
@@ -411,10 +529,9 @@ export function formatBytes(bytes: number, decimals = 2): string {
 export function formatLargeNumber(num: number, decimals = 2): string {
   if (num === 0) return "0";
 
-  const sizes = ["", "K", "M", "B", "T", "Q", "Quint", "Sext", "Sept"];
   const i = Math.floor(Math.log10(num) / 3);
 
-  const formattedNumber = (num / Math.pow(1000, i)).toFixed(decimals);
+  const formattedNumber = (num / Math.pow(BYTES_IN_KILOBYTE, i)).toFixed(decimals);
 
-  return `${parseFloat(formattedNumber)}${sizes[i]}`;
+  return `${parseFloat(formattedNumber)}${LARGE_NUMBER_SUFFIXES[i]}`;
 }

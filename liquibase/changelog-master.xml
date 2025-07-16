@@ -327,7 +327,7 @@
       </rollback>
    </changeSet>
 
-     <changeSet id="20250427_proc_updated_for_capacity_job_report_with_kb_mb_gb_pb.sql" author="singhlalit">
+   <changeSet id="20250427_proc_updated_for_capacity_job_report_with_kb_mb_gb_pb.sql" author="singhlalit">
       <sqlFile path="liquibase/20250427_proc_updated_for_capacity_job_report_with_kb_mb_gb_pb.sql" splitStatements="false"/>
       <rollback>
       </rollback>
@@ -339,5 +339,17 @@
          <sqlFile path="liquibase/20250629_01_remove_listusers_permission_from_project_viewer_role_rollback.sql" splitStatements="false"/>
       </rollback>
    </changeSet>
+
+   <changeSet id="20250628_03_discovery_report_proc_added_valueType.sql" author="gm67249">
+        <sqlFile path="liquibase/20250628_03_discovery_report_proc_added_valueType.sql" splitStatements="false"/>
+        <rollback>
+        </rollback>
+    </changeSet>
+
+   <changeSet id="20250706_04_discovery_report_proc_added_Top_File_Extensions.sql" author="gm67249">
+        <sqlFile path="liquibase/20250706_04_discovery_report_proc_added_Top_File_Extensions.sql" splitStatements="false"/>
+        <rollback>
+        </rollback>
+    </changeSet>
 
 </databaseChangeLog>
