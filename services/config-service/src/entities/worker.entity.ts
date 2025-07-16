@@ -35,7 +35,7 @@ export class WorkerEntity extends Base  {
   status: WorkerStatus;
 
   @ApiProperty({ description: 'platform' })
-  @Column({ type: 'varchar', name:'platform' ,nullable: true })
+  @Column({ type: 'enum', name:'platform' ,nullable: true,enum: Platform })
   platform: Platform;
 
   @ApiProperty({ description: 'workerNumber' })

@@ -80,7 +80,7 @@ export class WorkerEntity extends Base {
   stats: WorkerStatsEntity;
   
   @ApiProperty({ description: 'platform' })
-  @Column({ type: 'varchar', name:'platform' ,nullable: true })
+  @Column({ type: 'enum', enum:Platform, name:'platform' ,nullable: true })
   platform: Platform;
 
 }

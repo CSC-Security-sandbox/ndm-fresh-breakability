@@ -333,14 +333,14 @@
       </rollback>
    </changeSet>
 
-   <changeSet id="20250628_01_add_platform_column_worker_table.sql" author="akunal">
+   <changeSet id="20250628_01_add_platform_column_worker_table" author="akunal">
       <sqlFile path="liquibase/20250628_01_add_platform_column_worker_table.sql" splitStatements="false"/>
       <rollback>
         <sqlFile path="liquibase/20250628_01_add_platform_column_worker_table_rollback.sql" />
       </rollback>
    </changeSet>
 
-   <changeSet id="20250629_01_remove_listusers_permission_from_project_viewer_role.sql" author="aniketd">
+   <changeSet id="20250629_01_remove_listusers_permission_from_project_viewer_role" author="aniketd">
       <sqlFile path="liquibase/20250629_01_remove_listusers_permission_from_project_viewer_role.sql" splitStatements="false"/>
       <rollback>
          <sqlFile path="liquibase/20250629_01_remove_listusers_permission_from_project_viewer_role_rollback.sql" splitStatements="false"/>
