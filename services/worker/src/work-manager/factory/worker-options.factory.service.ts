@@ -20,7 +20,7 @@ import { ValidateWorkingDirectoryActivity } from "src/activities/working-directo
 import { WorkerConfiguration } from "../work-manager.types";
 import { WorkFlowOptions } from "./worker-options.factory";
 import { WorkFlowType } from "./worker-options.types";
-
+import { ValidatePathActivity } from "src/activities/validate-path/validate-path.service";
 
 @Injectable()
 export class WorkerOptionsService {
@@ -42,6 +42,7 @@ export class WorkerOptionsService {
     private readonly migrateSyncService:  MigrateSyncService,
     private readonly commonTaskService: CommonTaskService,
     private readonly scanService: ScanService,
+    private readonly validatePathActivity: ValidatePathActivity,
     @Inject(ConfigService) private readonly configService: ConfigService,
   ) {
     this.jobTaskActivityConcurrency = this.configService.get<number>('worker.maxActivityConcurrency') || 1;
@@ -66,6 +67,7 @@ export class WorkerOptionsService {
           checkMemoryUsage : this.redismeorycheck.checkMemoryUsage.bind(this.redismeorycheck),
           cleanupJobContext: this.commonActivityService.cleanupJobContext.bind(this.commonActivityService),
           isWorkflowRunningActivity: this.commonTaskService.isWorkflowRunningActivity.bind(this.commonTaskService),
+          postValidationResult: this.validatePathActivity.postValidationResult.bind(this.validatePathActivity),
         });
       case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
@@ -96,6 +98,7 @@ export class WorkerOptionsService {
             writeActivity: this.speedTestReadActivity.writeActivity.bind(this.speedTestReadActivity),
             postResultsActivity: this.speedTestReadActivity.postResultsActivity.bind(this.speedTestReadActivity),
             getJobStateAndUpdateTaskList: this.commonActivityService.getJobStateAndUpdateTaskList.bind(this.commonActivityService),
+            validatePath: this.validatePathActivity.validatePath.bind(this.validatePathActivity),
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {

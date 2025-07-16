@@ -16,19 +16,19 @@ import {
   ConfigStatus,
   ProtocolVersionError,
   WorkerStatus,
-  WorkFlows,
+  WorkFlows
 } from 'src/constants/enums';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
-import { JobStatus, JobType } from 'src/entities/jobconfig.entity';
-import { JobRunStatus } from 'src/entities/jobrun.entity';
+import { JobConfigEntity, JobStatus, JobType } from 'src/entities/jobconfig.entity';
+import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 import { WorkflowService } from 'src/workflow/workflow.service';
 import { ConfigDTO } from './dto/config.dto';
 import { ValidateExportPathAndWorkingDirectoryDTO } from './dto/validate-export-path-working-directory.dto';
-import { FindAllConfigPageDto, FileServerInfo } from './dto/findallconfig.dto';
+import { FindAllConfigPageDto } from './dto/findallconfig.dto';
 import {
   CreateRequestDto,
   Options,
@@ -50,6 +50,7 @@ import { isWorkerHealthy } from 'src/utils/transformers';
 import sanitizeHtml from 'sanitize-html';
 import escapeHtml from 'escape-html';
 
+import { PathUploadsEntity } from 'src/entities/pathupload.entity';
 @Injectable()
 export class ConfigurationService {
   private logger: LoggerService;
@@ -73,6 +74,15 @@ export class ConfigurationService {
     private readonly workFlowService: WorkflowService,
     private readonly sendMailService: SendMailService,
     private readonly configService: ConfigService,
+
+    @InjectRepository(JobConfigEntity)
+    private readonly jobConfigRepo: Repository<JobConfigEntity>,
+
+    @InjectRepository(JobRunEntity)
+    private readonly jobRunRepo: Repository<JobRunEntity>,
+
+    @InjectRepository(PathUploadsEntity)
+    private readonly pathUploadsRepo: Repository<PathUploadsEntity>,
   ) {
     this.logger = this.loggerFactory.create(ConfigurationService.name);
     this.timeout = this.configService.get<number>('app.worker.healthCheckStatusTimout');
@@ -95,6 +105,7 @@ export class ConfigurationService {
         'config.configName',
         'config.status',
         'workingDirectory.workingDirectory',
+        'fileServer.exportPathSource',
       ])
       .getMany();
 
@@ -162,6 +173,7 @@ export class ConfigurationService {
             createdAt: true,
             createdBy: true,
             protocolVersion: true,
+            exportPathSource: true,
           },
         },
         relations: {
@@ -213,6 +225,7 @@ export class ConfigurationService {
             password: true,
             isRefreshed: true,
             protocolVersion: true,
+            exportPathSource: true,
             workers: {
               workerId: true,
               workerName: true,
@@ -224,6 +237,9 @@ export class ConfigurationService {
             volumes: {
               id: true,
               volumePath: true,
+              isValid: true,
+              isDisabled: true,
+              reachableCount: true,
               jobConfig: {
                 id: true,
                 jobType: true,
@@ -252,13 +268,20 @@ export class ConfigurationService {
         },
       });
 
+      const uploads = await this.pathUploadsRepo.find({
+        where: { fileServerId: In(config.fileServers.map(fs => fs.id)), id: In(config.fileServers.flatMap(fs => fs.volumes.map(v => v.id))) },
+      });
 
       if (!config)
         throw new NotFoundException(`Config for id ${id} not found.`);
 
-      if(config?.fileServers){
+      if(config?.fileServers) {
         config.fileServers = config.fileServers.map((fileServer) => ({
           ...fileServer,
+          volumes: fileServer.volumes.map((volume) => ({
+            ...volume,
+            validationResult: uploads.find(upload => upload.id === volume.id)?.validationResponse || '',
+          })),
           workers: fileServer.workers.map((worker) => ({
             ...worker,
             status: isWorkerHealthy(worker.stats.updatedAt, this.timeout) ? WorkerStatus.Online : WorkerStatus.Offline
@@ -281,7 +304,10 @@ export class ConfigurationService {
           password: '',
         }));
       }
-      return config;
+      const isUploadInProgress = await this.isUploadInProgress(config.fileServers.map(fs => fs.id));
+      const isRefreshAvailable = !isUploadInProgress && await this.isRefreshPossible(config.id);
+
+      return { ...config, isRefreshAvailable, isUploadInProgress };
     } catch (error) {
       this.logger.error(`Error fetching config by ID: ${error.message}`);
       if (
@@ -361,9 +387,12 @@ export class ConfigurationService {
             host: true,
             serverType: true,
             protocol: true,
+            exportPathSource: true,
             volumes: {
               id: true,
               volumePath: true,
+              isValid: true,
+              isDisabled: true,
               jobConfig: {
                 id: true,
                 jobType: true,
@@ -378,6 +407,8 @@ export class ConfigurationService {
           id: configId,
           fileServers: {
             volumes: {
+              isValid: true,
+              isDisabled: false,
               jobConfig: {
                 status: JobStatus.Active,
               },
@@ -470,6 +501,8 @@ export class ConfigurationService {
         select: {
           id: true,
           volumePath: true,
+          isValid: true,
+          isDisabled: true,
           fileServer: {
             id: true,
             config: {
@@ -485,7 +518,7 @@ export class ConfigurationService {
       }
 
       return new Map(
-        volumeDetails.map((volume) => [
+        volumeDetails.filter(v => v.isValid && !v.isDisabled).map((volume) => [
           volume.id,
           {
             id: volume.id,
@@ -589,6 +622,7 @@ export class ConfigurationService {
             },
             protocol: fileServer.protocol,
             workers: workers.map((it) => it.workerId),
+            exportPathSource: fileServer.exportPathSource,
           });
           return this.fileServerEntity.create({
             host: fileServer.host.trim(),
@@ -601,6 +635,7 @@ export class ConfigurationService {
             password: fileServer?.password,
             isRefreshed: false,
             volumes: [],
+            exportPathSource: fileServer.exportPathSource,
           });
         },
       );
@@ -778,6 +813,7 @@ export class ConfigurationService {
           password: update.password,
           updatedBy: userId,
           isRefreshed: false,
+          exportPathSource: update.exportPathSource,
         });
       });
 
@@ -906,6 +942,7 @@ export class ConfigurationService {
           host: fileServer?.host.trim(),
           username: fileServer?.userName,
           password: fileServer?.password,
+          exportPathSource: fileServer.exportPathSource,
         };
         listPathPayload.push(payload);
       });
@@ -982,6 +1019,12 @@ export class ConfigurationService {
     if (!isUUID(configId)) {
       throw new BadRequestException('Invalid UUID format');
     }
+    // check refresh eligibility
+    const isRefreshAvailable = await this.isRefreshPossible(configId);
+    if(!isRefreshAvailable) {
+      this.logger.warn(`Refresh not available for configId: ${configId}`);
+      throw new BadRequestException('Refresh not available for this configuration.');
+    }
     try {
       const config = await this.configEntity.findOne({
         where: { id: configId },
@@ -1009,6 +1052,7 @@ export class ConfigurationService {
           type: fileServer.protocol,
           username: fileServer.userName,
           password: fileServer.password,
+          exportPathSource: fileServer.exportPathSource,
         });
         fileServer?.workers?.forEach((worker) => {
           if (!payload.workerIds.includes(worker.workerId))
@@ -1119,14 +1163,13 @@ export class ConfigurationService {
         },
       });
       const fileServersIds = config.fileServers.map(it=>it.id)
-      await this.volumes.update({fileServerId: In(fileServersIds)}, {reachableCount: 0})     
       for (let fileServer of config.fileServers) {
         await this.volumes.update(
           {
             fileServerId: fileServer.id,
             volumePath: In(pathsMap[fileServer.protocol].paths),
           },
-          { reachableCount: pathsMap[fileServer.protocol].workers },
+          { reachableCount: pathsMap[fileServer.protocol].workers, isValid: true, isDisabled: false },
         );
 
         const existingPaths = new Set(
@@ -1140,6 +1183,8 @@ export class ConfigurationService {
                 fileServerId: fileServer.id,
                 reachableCount: pathsMap[fileServer.protocol].workers,
                 volumePath: path,
+                isValid: true,
+                isDisabled: false,
                 createdBy: config.updatedBy ?? config.createdBy,
               }),
             );
@@ -1149,6 +1194,31 @@ export class ConfigurationService {
           { id: fileServer.id },
           { isRefreshed: true },
         );
+        
+        // Disable volumes that are no longer in the completed payload
+        const validPaths = new Set(pathsMap[fileServer.protocol].paths);
+        const pathsToDisable = fileServer.volumes.filter(vol => !validPaths.has(vol.volumePath)).map(vol => vol.volumePath);
+        if (pathsToDisable.length > 0) await this.volumes.update({ fileServerId: fileServer.id, volumePath: In(pathsToDisable) }, { isDisabled: true });
+      }
+
+      // update job configurations to inactive if any volume is disabled or invalid associated with it
+      const volumeIds = await this.volumes.
+        createQueryBuilder('volume')
+        .select('volume.id')
+        .where('volume.file_server_id IN (:...fileServersIds)', { fileServersIds: fileServersIds })
+        .andWhere('volume.is_valid = :isValid', { isValid: false })
+        .orWhere('volume.is_disabled = :isDisabled', { isDisabled: true })
+        .getMany();
+
+      if( volumeIds.length > 0) {
+        const volumeIdList = volumeIds.map(vol => vol.id);
+        await this.jobConfigRepo
+        .createQueryBuilder('jobConfig')
+        .update()
+        .set({ status:  JobStatus.InActive })
+        .where('jobConfig.source_path_id IN (:...volumeIds) OR jobConfig.target_path_id IN (:...volumeIds)', { volumeIds: volumeIdList })
+        .andWhere('jobConfig.status = :status', { status: JobStatus.Active })
+        .execute();
       }
 
       await this.configEntity.update({ id }, { scannedDate: new Date() });
@@ -1161,6 +1231,85 @@ export class ConfigurationService {
         throw error;
       }
       throw new InternalServerErrorException('Failed to update paths.');
+    }
+  }
+
+  async isRefreshPossible(configId: string): Promise<boolean> {
+    const fileServers = await this.configEntity.find({
+      where: { id: configId },
+      relations: { fileServers: { volumes: true } },
+    });
+
+    const volumeIds = fileServers.flatMap(fs => fs.fileServers.flatMap(v => v.volumes.map(vol => vol.id))); // volume ids from all file servers
+    if (volumeIds.length === 0) {
+      this.logger.warn(`No valid volumes found for config ID ${configId}.`);
+      return true; // No volumes means no jobs, so refresh is possible
+    }
+
+    /*
+      fetch all the job configurations that has any of the volumeIds in
+      their sourcePathId or targetPathId and status is ACTIVE
+    */
+    const jobConfigs = await this.jobConfigRepo
+      .createQueryBuilder('jobConfig')
+      .where('jobConfig.source_path_id IN (:...volumeIds) OR jobConfig.target_path_id IN (:...volumeIds)', { volumeIds })
+      .andWhere('jobConfig.status = :status', { status: 'ACTIVE' })
+      .getMany();
+    
+    // check if any job config has schedule as SCHEDULING if yes then return false
+    if (jobConfigs.some(jc => jc.scheduler === 'SCHEDULING')) {
+      this.logger.warn(`Refresh is not possible for configuration ${configId} as there are jobs with SCHEDULING status`);
+      return false;
+    }
+    
+    // check if futureScheduleAt is not null for any job config, if yes then return false
+    if (jobConfigs.some(jc => !!jc.futureScheduleAt)) {
+      this.logger.warn(`Refresh is not possible for configuration ${configId} as there are jobs with futureScheduleAt set`);
+      return false;
+    }
+
+    // fetch all the jobs that are in running state for above job configurations
+    const runningJobs = await this.jobRunRepo.count({
+      where: {
+        jobConfigId: In(jobConfigs.map(jc => jc.id)),
+        status: In([JobRunStatus.Running, JobRunStatus.Ready, JobRunStatus.Paused]),
+      }
+    })
+
+    if (runningJobs > 0) {
+      this.logger.warn(`Refresh is not possible for configuration ${configId} as there are running jobs`);
+      return false;
+    }
+    
+    this.logger.log(`Refresh is possible for configuration ${configId}`); 
+    return true;
+  }
+
+  async isUploadInProgress(fileServerIds: string[]): Promise<boolean> {
+    try {
+      const latestUpload = await this.pathUploadsRepo.findOne({
+        where: { fileServerId: In(fileServerIds) },
+        order: { createdAt: 'DESC' },
+        select: ['uploadId'],
+      })
+      const uploadId = latestUpload?.uploadId;
+      if (!uploadId) {
+        this.logger.warn(`No uploads found for file server IDs: ${fileServerIds.join(', ')}`);
+        return false;
+      }
+
+      const workflowId = WorkFlows.VALIDATE_PATHS + '-' + uploadId;
+      const workflowRes = await this.workFlowService.getWorkFlowRes(workflowId);
+      if (!workflowRes) {
+        this.logger.warn(`No workflow found for upload ID: ${uploadId}`);
+        return false;
+      }
+      const isUploadInProgress = workflowRes.status === WorkflowExecutionStatus.RUNNING;
+      this.logger.log(`Upload with ID ${uploadId} is in progress: ${isUploadInProgress}`);
+      return isUploadInProgress;
+    } catch (error) {
+      this.logger.error(`Error checking upload in progress: ${error.message}`);
+      return false;
     }
   }
 }
