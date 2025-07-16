@@ -175,7 +175,7 @@ describe("OverviewService", () => {
       const result = await service.getStorageAndJobsOverview(
         "project1",
         null,
-        nul,
+        null,
       );
       expect(result.storageDetails.totalDiscoveredSize).toBe("0 Bytes");
       expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
@@ -220,7 +220,7 @@ describe("OverviewService", () => {
       const result = await service.getStorageAndJobsOverview(
         "project1",
         null,
-        nll,
+        nul,
       );
       expect(result.storageDetails.totalDiscoveredSize).toBeDefined();
       expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
@@ -272,9 +272,9 @@ describe("OverviewService", () => {
                             {
                               id: "run2",
                               status: JobRunStatus.Completed,
-                              createdAt: new Date(,
-                            ,
-                          ,
+                              createdAt: new Date(),
+                            },
+                          ],
                         },
                         {
                           jobType: JobType.CutOver,
@@ -282,9 +282,9 @@ describe("OverviewService", () => {
                             {
                               id: "run3",
                               status: JobRunStatus.Completed,
-                              createdAt: new Date()
-                            }
-                          ]
+                              createdAt: new Date(,
+                            },
+                          ],
                         },
                       ],
                     },
