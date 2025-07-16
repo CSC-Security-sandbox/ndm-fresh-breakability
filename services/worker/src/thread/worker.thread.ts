@@ -23,9 +23,6 @@ export async function calculateChecksum(filePath) {
 }
 
 export async function smartCopy(source, target) {
-  if (!fs.existsSync(source)) {
-    throw new Error(`Source file does not exist: ${source}`);
-  }
   const destDir = path.dirname(target);  
   fs.mkdirSync(destDir, { recursive: true });
   let readStream: fs.ReadStream = null; 
