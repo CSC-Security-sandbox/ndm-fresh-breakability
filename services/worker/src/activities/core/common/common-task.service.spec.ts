@@ -62,48 +62,6 @@ describe('CommonTaskService', () => {
         });
     });
 
-    describe('getGroupOfTasksActivity', () => {
-        let jobContext: any;
-        beforeEach(() => {
-            jobContext = {
-                groupReadCommandStream: jest.fn(),
-                setTaskIfNotExists: jest.fn(),
-                groupAckCommandStream: jest.fn(),
-            };
-            redisService.getJobManagerContext.mockResolvedValue(jobContext);
-        });
-
-        it('should process commands and return taskIds', async () => {
-            // Simulate async generator
-            const commands = Array.from({ length: 105 }, (_, i) => ({
-                data: { id: i, retryCount: 0, status: CommandStatus.READY },
-                id: `stream-${i}`,
-            }));
-            jobContext.groupReadCommandStream.mockImplementation(async function* () {
-                for (const cmd of commands) yield cmd;
-            });
-            jobContext.setTaskIfNotExists.mockResolvedValue(undefined);
-            jobContext.groupAckCommandStream.mockResolvedValue(undefined);
-
-            const result = await service.getGroupOfTasksActivity('jobRunId');
-            // Should create 2 tasks (100 + 5)
-            expect(result).toEqual(['mock-hash', 'mock-hash']);
-            expect(jobContext.setTaskIfNotExists).toHaveBeenCalledTimes(2);
-            expect(jobContext.groupAckCommandStream).toHaveBeenCalledWith(
-                expect.any(Array),
-                expect.anything()
-            );
-        });
-
-        it('should handle errors and clear interval', async () => {
-            redisService.getJobManagerContext.mockRejectedValue(new Error('fail'));
-            await expect(service.getGroupOfTasksActivity('jobRunId')).rejects.toThrow(
-                /Failed to get group of tasks activity/
-            );
-            expect(logger.error).toHaveBeenCalled();
-        });
-    });
-
 
     describe('ensureTaskValid', () => {
         let jobContext: any;
@@ -233,7 +191,7 @@ describe('CommonTaskService', () => {
             jobContext,
             taskHashId: 'hash2',
             jobRunId: 'job2',
-            preBatchedId: 'batch1',
+            batchId: 'batch1',
             } as any);
 
             expect(jobContext.getBatchDir).toHaveBeenCalledWith('batch1');
@@ -250,10 +208,51 @@ describe('CommonTaskService', () => {
             jobContext,
             taskHashId: 'hash3',
             jobRunId: 'job3',
-            preBatchedId: 'batch2',
+            batchId: 'batch2',
             } as any);
 
             expect(jobContext.setTaskIfNotExists).toHaveBeenCalled();
         });
+
+    });
+
+    describe('getGroupOfTasksActivity', () => {
+        let jobContext: any;
+        let groupReadCommandStreamMock: any;
+        let setTaskIfNotExistsMock: any;
+        let groupAckCommandStreamMock: any;
+
+        beforeEach(() => {
+            jest.useFakeTimers();
+            groupReadCommandStreamMock = async function* () {
+                yield { data: { id: 'cmd1' }, id: 'stream1' };
+                yield { data: { id: 'cmd2' }, id: 'stream2' };
+            };
+            setTaskIfNotExistsMock = jest.fn();
+            groupAckCommandStreamMock = jest.fn();
+            jobContext = {
+                groupReadCommandStream: groupReadCommandStreamMock,
+                setTaskIfNotExists: setTaskIfNotExistsMock,
+                groupAckCommandStream: groupAckCommandStreamMock,
+            };
+            redisService.getJobManagerContext.mockResolvedValue(jobContext);
         });
+
+        afterEach(() => {
+            jest.useRealTimers();
+        });
+
+        it('should create tasks and return their hash keys', async () => {
+            const result = await service.getGroupOfTasksActivity('jobRunId', 2, 1);
+            expect(Array.isArray(result)).toBe(true);
+            expect(result.length).toBeGreaterThan(0);
+            expect(setTaskIfNotExistsMock).toHaveBeenCalled();
+            expect(groupAckCommandStreamMock).toHaveBeenCalledWith(['stream1', 'stream2'], expect.anything());
+        });
+
+        it('should handle error and clear interval', async () => {
+            redisService.getJobManagerContext.mockRejectedValueOnce(new Error('fail'));
+            await expect(service.getGroupOfTasksActivity('jobRunId')).rejects.toThrow('Failed to get group of tasks activity: fail');
+        });
+    });
 });

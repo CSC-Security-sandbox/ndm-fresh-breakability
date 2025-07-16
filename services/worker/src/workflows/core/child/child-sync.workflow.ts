@@ -5,16 +5,18 @@ import { CommonActivityService } from 'src/activities/common/common.service';
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 import { MigrateSyncService } from "src/activities/core/migrate/migrate-sync.service";
 import { JobRunStatus } from "src/activities/discovery/enums";
-import { ScanWorkflowStatus, SyncWorkflowOutput } from './chid-scan.workflow.type';
 import { updateJobStatusIfNotRunning } from '../common/workflow-utils';
+import { SyncWorkflowOutput } from './chid-scan.workflow.type';
 
 
 interface SyncWorkflowInput {
     jobRunId: string;
     scanWorkflowStatus: JobRunStatus;
     actionState: JobRunStatus; 
+    workerConcurrency?: number;
 }
 
+const ITERATION_LIMIT = 1000;
 const {
     updateLastEntry: updateLastEntryActivity,
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h', heartbeatTimeout: '2m',});
@@ -41,7 +43,7 @@ function isScanFinished(scanWorkflowStatus: JobRunStatus) : boolean {
     return scanWorkflowStatus === JobRunStatus.Completed || scanWorkflowStatus === JobRunStatus.Failed;
 }
 
-export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunStatus.Running, actionState = JobRunStatus.Running } : SyncWorkflowInput) : Promise<SyncWorkflowOutput>=> {
+export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunStatus.Running, actionState = JobRunStatus.Running, workerConcurrency= 20 } : SyncWorkflowInput) : Promise<SyncWorkflowOutput>=> {
     console.log(`Starting SyncWorkflow ${jobRunId}`)
 
     
@@ -74,7 +76,7 @@ export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunSt
             break;
         }
 
-        const taskIds: string[] = await getGroupOfTasksActivity(jobRunId, 1000);
+        const taskIds: string[] = await getGroupOfTasksActivity(jobRunId, 1000, workerConcurrency);
         iterations+= taskIds.length;
         if(taskIds.length === 0 && isScanFinished(scanWorkflowStatus)) {
             console.log(`No more tasks to process in SyncWorkflow ${jobRunId}.`);
@@ -97,7 +99,7 @@ export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunSt
                 }    
             })
         )      
-        if(iterations > 1000){
+        if(iterations > ITERATION_LIMIT){
             console.warn(`SyncWorkflow ${jobRunId} has exceeded 1000 iterations, stopping to prevent infinite loop.`);                      
             await wf.continueAsNew({ jobRunId, scanWorkflowStatus, actionState });      
         }

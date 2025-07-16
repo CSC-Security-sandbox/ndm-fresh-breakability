@@ -5,7 +5,7 @@ export interface BuildOrGetScanTaskInput {
     taskHashId: string;
     jobContext: JobManagerContext;
     jobRunId: string;
-    preBatchedId?: string;
+    batchId?: string;
 }
 
 export interface CreateInitBatchInput {

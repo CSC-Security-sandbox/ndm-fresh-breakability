@@ -30,17 +30,18 @@ export class CommonTaskService {
     }
 
     // TO-DO : make this adaptive resource based task creation
-    async getGroupOfTasksActivity(jobRunId,  groupSize = 1000): Promise<string[]> {
+    async getGroupOfTasksActivity(jobRunId,  groupSize = 1000, workerConcurrency = 20): Promise<string[]> {
       const activityContext = Context.current();      
       const heartBeatInterval = setInterval(() => { activityContext.heartbeat({});}, 2000);
       let taskIds: string[] = [];
+      const commandsInTask = Math.floor(groupSize/ workerConcurrency);
       try{
         const jobContext = await this.redisService.getJobManagerContext(jobRunId);
         let commands:Command[] = [], streamIds = [];
         for await (const {data, id} of jobContext.groupReadCommandStream(jobRunId, groupSize, GroupReaderType.WORKER)) {
           commands.push(data);
           streamIds.push(id);
-          if (commands.length >= 100) {
+          if (commands.length >= commandsInTask) {
             const task = buildTask(TaskType.MIGRATE, jobRunId, jobContext, commands);
             const hashKey = calculateCommandHash(commands); 
             taskIds.push(hashKey);
@@ -69,10 +70,10 @@ export class CommonTaskService {
     }
 
   
-  async buildOrGetValidScanTask({jobContext , taskHashId , jobRunId, preBatchedId}: BuildOrGetScanTaskInput): Promise<Task> {
+  async buildOrGetValidScanTask({jobContext , taskHashId , jobRunId, batchId}: BuildOrGetScanTaskInput): Promise<Task> {
     let task: Task | undefined = await jobContext.getTask(taskHashId);
-    if(!task && preBatchedId) {
-      const batch = await jobContext.getBatchDir(preBatchedId);
+    if(!task && batchId) {
+      const batch = await jobContext.getBatchDir(batchId);
       if(batch) {
         const commands = batch.map(dir => new Command(dir, {}, `${uuid4()}`, 0));
         task =  buildTask(TaskType.SCAN, jobRunId, jobContext, commands);

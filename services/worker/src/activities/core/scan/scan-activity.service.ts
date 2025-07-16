@@ -8,7 +8,7 @@ import { RedisService } from "src/redis/redis.service";
 import { CommonTaskService } from "../common/common-task.service";
 import { DiscoveryScanService } from "./discovery/discovery-scan.service";
 import { MigrateScanService } from "./migrate/migrate-scan.service";
-import { HandleDIRInput, HandleDIROutput, ScanActivityInput, ScanActivityOutput, ScanDirectoryInput, ScanDirectoryOutput, ScanDirectorySettings, TaskExecInput, TaskExecOutput, UpdateAndReportTaskInput } from './scan-activity.type';
+import { BatchSubDirInput, BatchSubDirOutput, ScanActivityInput, ScanActivityOutput, ScanDirectoryInput, ScanDirectoryOutput, ScanDirectorySettings, TaskExecInput, TaskExecOutput, UpdateAndReportTaskInput } from './scan-activity.type';
 import { calculateHash } from "src/activities/utils/checksum-utils";
 
 
@@ -37,7 +37,7 @@ export class ScanService {
     }
 
 
-    async scanDirectories ({jobRunId, isMigration, batchSize, preBatchedId}: ScanActivityInput): Promise<ScanActivityOutput>  {
+    async scanDirectories ({jobRunId, isMigration, batchSize, batchId}: ScanActivityInput): Promise<ScanActivityOutput>  {
         const scanActivityContext = Context.current();
         const heartbeatInterval = setInterval(() => {
             scanActivityContext.heartbeat({});
@@ -50,7 +50,7 @@ export class ScanService {
                 taskHashId: scanActivityContext.info.activityId,
                 jobContext,
                 jobRunId,
-                preBatchedId
+                batchId
             });
 
             task.status = TaskStatus.RUNNING;
@@ -75,7 +75,7 @@ export class ScanService {
             }                        
             await this.updateAndReportTaskStatus(updateAndReportTaskInput)  
 
-            if(preBatchedId) await jobContext.deleteBatchDir(preBatchedId);
+            if(batchId) await jobContext.deleteBatchDir(batchId);
             return result.result;
 
         }catch(error){
@@ -136,7 +136,7 @@ export class ScanService {
                 })
             )
         }
-        const { batchDirs, subDirs }: HandleDIROutput = await this.handleDirsReturn({subDirs: output.subDirs, batchSize, jobContext});
+        const { batchDirs, subDirs }: BatchSubDirOutput = await this.batchSubDirs({subDirs: output.subDirs, batchSize, jobContext});
         output.subDirs = subDirs;
         output.batchDirs = batchDirs;
         return {result:output, errors, retryCount}
@@ -166,7 +166,7 @@ export class ScanService {
         
     }
 
-    async handleDirsReturn({batchSize, subDirs, jobContext}: HandleDIRInput): Promise<HandleDIROutput> {
+    async batchSubDirs({batchSize, subDirs, jobContext}: BatchSubDirInput): Promise<BatchSubDirOutput> {
         const batchDirsId: string[] = []
         while(subDirs.length > batchSize) {
             const batchDirs: string[] = subDirs.splice(0, batchSize);

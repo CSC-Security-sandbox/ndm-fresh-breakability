@@ -5,7 +5,7 @@ export interface ScanActivityInput {
     jobRunId: string;
     isMigration: boolean;
     batchSize: number;
-    preBatchedId: string;
+    batchId: string;
 }
 
 export interface ScanActivityOutput {
@@ -62,13 +62,13 @@ export interface TaskExecInput {
     batchSize: number;
 }
 
-export interface HandleDIRInput {
+export interface BatchSubDirInput {
     subDirs: string[];
     batchSize: number;
     jobContext: JobManagerContext;
 }
 
-export interface HandleDIROutput {
+export interface BatchSubDirOutput {
     subDirs: string[];
     batchDirs: string[];
 }

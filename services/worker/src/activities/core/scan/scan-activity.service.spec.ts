@@ -184,7 +184,7 @@ describe('ScanService', () => {
             skipFile: '2d',
             excludePatterns: ['node_modules', '.git'],
             });
-            jest.spyOn(scanService, 'handleDirsReturn').mockResolvedValue({ subDirs: [], batchDirs: ['batch1'] });
+            jest.spyOn(scanService, 'batchSubDirs').mockResolvedValue({ subDirs: [], batchDirs: ['batch1'] });
 
             const result = await scanService.executeTask({
             activityId: 'activity-1',
@@ -209,7 +209,7 @@ describe('ScanService', () => {
             skipFile: '2d',
             excludePatterns: ['node_modules', '.git'],
             });
-            jest.spyOn(scanService, 'handleDirsReturn').mockResolvedValue({ subDirs: [], batchDirs: ['batch1'] });
+            jest.spyOn(scanService, 'batchSubDirs').mockResolvedValue({ subDirs: [], batchDirs: ['batch1'] });
 
             const result = await scanService.executeTask({
             activityId: 'activity-1',
@@ -235,7 +235,7 @@ describe('ScanService', () => {
             skipFile: '2d',
             excludePatterns: ['node_modules', '.git'],
             });
-            jest.spyOn(scanService, 'handleDirsReturn').mockResolvedValue({ subDirs: [], batchDirs: [] });
+            jest.spyOn(scanService, 'batchSubDirs').mockResolvedValue({ subDirs: [], batchDirs: [] });
 
             const result = await scanService.executeTask({
             activityId: 'activity-1',
@@ -260,7 +260,7 @@ describe('ScanService', () => {
             const hashMock = jest.spyOn(require('src/activities/utils/checksum-utils'), 'calculateHash');
             hashMock.mockImplementation((arr: string[]) => arr.join('-hash'));
 
-            const result = await scanService.handleDirsReturn({
+            const result = await scanService.batchSubDirs({
             batchSize,
             subDirs: [...subDirs],
             jobContext: jobContext as any,
@@ -272,7 +272,7 @@ describe('ScanService', () => {
 
         it('should handle empty subDirs', async () => {
             const jobContext = { setBatchDir: jest.fn().mockResolvedValue(undefined) };
-            const result = await scanService.handleDirsReturn({
+            const result = await scanService.batchSubDirs({
             batchSize: 2,
             subDirs: [],
             jobContext: jobContext as any,
@@ -296,7 +296,7 @@ describe('ScanService', () => {
             jobRunId: 'job-1',
             isMigration: false,
             batchSize: 10,
-            preBatchedId: undefined,
+            batchId: undefined,
             });
 
             expect(result).toEqual(scanResult.result);
@@ -319,7 +319,7 @@ describe('ScanService', () => {
             jobRunId: 'job-1',
             isMigration: false,
             batchSize: 10,
-            preBatchedId: 'batch-123',
+            batchId: 'batch-123',
             });
 
             expect(deleteBatchDir).toHaveBeenCalledWith('batch-123');
@@ -331,7 +331,7 @@ describe('ScanService', () => {
             jobRunId: 'job-1',
             isMigration: false,
             batchSize: 10,
-            preBatchedId: undefined,
+            batchId: undefined,
             })).rejects.toBeInstanceOf(RetryableError);
         });
 
@@ -341,7 +341,7 @@ describe('ScanService', () => {
             jobRunId: 'job-1',
             isMigration: false,
             batchSize: 10,
-            preBatchedId: undefined,
+            batchId: undefined,
             })).rejects.toBeInstanceOf(FatalError);
 
             jest.spyOn(scanService, 'executeTask').mockRejectedValue(new RetryExceededError('retry exceeded'));
@@ -349,7 +349,7 @@ describe('ScanService', () => {
             jobRunId: 'job-1',
             isMigration: false,
             batchSize: 10,
-            preBatchedId: undefined,
+            batchId: undefined,
             })).rejects.toBeInstanceOf(RetryExceededError);
         });
         });

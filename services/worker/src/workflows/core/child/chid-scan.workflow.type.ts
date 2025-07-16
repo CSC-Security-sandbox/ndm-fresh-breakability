@@ -4,13 +4,14 @@ import { JobRunStatus } from "src/activities/discovery/enums";
 export interface ChildScanWorkflowInput {
     jobRunId: string;
     dirsToScan: string[];
-    preBatchDirs: string[];
+    dirBatchIds: string[];
     batchSize: number;
     fileCount: number;
     dirCount: number;
     isMigration: boolean;
     actionState: JobRunStatus;
-    isInitialScan?: boolean;
+    isInitialScan?: boolean;  
+    workerConcurrency?: number
 }
 
 export interface ChildScanWorkflowOutput {
@@ -63,6 +64,6 @@ export interface ExecuteBatchScanInput  {
   batches: string[];
   jobRunId: string;
   isMigration: boolean;
-  batchSize: number;
+  batchSize: number;  
 }
 
