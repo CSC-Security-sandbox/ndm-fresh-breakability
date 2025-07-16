@@ -15,12 +15,12 @@ vsphere_folder                         = "ova-build"
 vsphere_set_host_for_datastore_uploads = false
 
 // CPU Settings
-vm_cpu_count    = 8
+vm_cpu_count    = 4
 vm_cpu_cores    = 1
 vm_cpu_hot_add  = false
 
 // Memory Settings
-vm_mem_size     = 32768
+vm_mem_size     = 16384
 vm_mem_hot_add  = false
 
 // Disk Settings
