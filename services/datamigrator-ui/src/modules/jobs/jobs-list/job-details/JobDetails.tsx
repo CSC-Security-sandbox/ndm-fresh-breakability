@@ -58,6 +58,7 @@ const JobDetails = () => {
   const [openConfirmation, setOpenConfirmation] = useState(false);
   const [selectedJobRunId, setSelectedJobRunId] = useState("");
   const [isFrequentInterval, setIsFrequentInterval] = useState<boolean>(false);
+
   const [showGeneratingReportBtn, setShowGeneratingReportBtn] =
     useState<Record<string, boolean>>();
   const {
