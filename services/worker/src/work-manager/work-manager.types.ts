@@ -22,3 +22,10 @@ export enum WorkFlows{
     PRECHECK='PreCheckValidationWorkflow',
     VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY = 'ValidateExportPathAndWorkingDirectoryWorkflow'
 }
+
+export enum Platform {
+    LINUX = 'LINUX',
+    WINDOWS = 'WINDOWS',
+    MACOS = 'MACOS',
+    OTHER = 'OTHER'
+}

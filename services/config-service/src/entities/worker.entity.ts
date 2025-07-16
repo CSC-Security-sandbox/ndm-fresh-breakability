@@ -1,6 +1,6 @@
 import { Entity, Column, PrimaryColumn, ManyToOne, JoinColumn, ManyToMany, OneToMany, OneToOne } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
-import { WorkerStatus } from 'src/constants/enums';
+import { Platform, WorkerStatus } from 'src/constants/enums';
 import { WorkerConfiguration } from 'src/constants/types';
 import { Base } from './base.entity';
 import { ProjectEntity } from './project.entity';
@@ -34,6 +34,10 @@ export class WorkerEntity extends Base  {
   @Column({ type: 'varchar', name:'status' })
   status: WorkerStatus;
 
+  @ApiProperty({ description: 'platform' })
+  @Column({ type: 'varchar', name:'platform' ,nullable: true })
+  platform: Platform;
+
   @ApiProperty({ description: 'workerNumber' })
   @Column({ type: 'int', generated: 'increment', name: 'worker_number' })
   workerNumber: number;
@@ -51,4 +55,5 @@ export class WorkerEntity extends Base  {
     cascade: true,
   })
   stats: WorkerStatsEntity;
+
 }

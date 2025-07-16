@@ -11,7 +11,7 @@ import {
   OneToOne,
 } from "typeorm";
 import { ApiProperty } from "@nestjs/swagger";
-import { WorkerStatus } from "src/constants/enums";
+import { Platform, WorkerStatus } from "src/constants/enums";
 import { Base } from "./base.entity";
 import { ProjectEntity } from "./project.entity";
 import { FileServerEntity } from "./fileserver.entity";
@@ -78,4 +78,9 @@ export class WorkerEntity extends Base {
     cascade: true,
   })
   stats: WorkerStatsEntity;
+  
+  @ApiProperty({ description: 'platform' })
+  @Column({ type: 'varchar', name:'platform' ,nullable: true })
+  platform: Platform;
+
 }

@@ -160,3 +160,10 @@ export enum PausedReason {
     USER_PAUSED = 'USER_PAUSED',
     SYSTEM_PAUSED = 'SYSTEM_PAUSED'
 }
+
+export enum Platform {
+    LINUX = 'LINUX',
+    WINDOWS = 'WINDOWS',
+    MACOS = 'MACOS',
+    OTHER = 'OTHER'
+}
