@@ -55,3 +55,10 @@ export enum WorkFlows{
 export enum ProtocolVersionError{
     PROTOCOL_VERSION_ERROR = 'The server does not support to provided protocol version. Please use a valid protocol version.'
 }
+
+export enum Platform {
+    LINUX = 'LINUX',
+    WINDOWS = 'WINDOWS',
+    MACOS = 'MACOS',
+    OTHER = 'OTHER'
+}

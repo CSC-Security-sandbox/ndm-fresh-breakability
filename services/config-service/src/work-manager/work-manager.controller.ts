@@ -7,6 +7,7 @@ import { WorkManagerService } from './work-manager.service';
 import { CreateRequestDto } from './dto/validate-connection.dto';
 import { ConfigStatusPayloadDTO } from './dto/validate-export-path.dto';
 
+
 @Controller('work-manager')
 export class WorkManagerController {
     readonly logger = new Logger(WorkManagerController.name)
@@ -20,8 +21,8 @@ export class WorkManagerController {
     @AuthWorker()
     @Get('config')
     async getConfiguration(@ClientIp() ip: string, @Req() req: any): Promise<WorkerConfiguration[]> {
-        this.logger.debug(`Fetching configuration for worker ID: ${req['worker_id']} from IP: ${ip} for project ID: ${req['project_id']}`);
-        return await this.workManagerService.getConfiguration(req['worker_id'], ip, req['project_id'])
+        this.logger.debug(`Fetching configuration for worker ID: ${req['worker_id']} from IP: ${ip} for project ID: ${req['project_id']} on platform: ${ req?.headers['x-client-platform']}`);
+        return await this.workManagerService.getConfiguration(req['worker_id'], ip, req['project_id'], req?.headers['x-client-platform'])
     }
 
   @ApiOperation({ summary: 'Create a new request' })
