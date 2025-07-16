@@ -8,7 +8,11 @@ import * as nodemailer from 'nodemailer';
 import { SettingType } from './dto/create-setting.dto';
 import { CreateSettingDto } from './dto/create-setting.dto';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
-import { mockLoggerFactory, resetLoggerMocks, mockLoggerService } from '../test-utils/logger-mocks';
+import {
+  mockLoggerFactory,
+  resetLoggerMocks,
+  mockLoggerService,
+} from '../test-utils/logger-mocks';
 
 const mockSettingsRepo = {
   find: jest.fn(),
@@ -153,23 +157,24 @@ describe('SettingService', () => {
           settingValue: 'encrypted:password',
           description: 'SMTP Password',
           settingType: SettingType.SMTP,
-        }
+        },
       ];
 
       jest.mock('../utils/crypto-utils', () => ({
         decryptData: jest.fn().mockImplementation(() => {
           throw new Error('');
-        })
+        }),
       }));
 
       await expect(service.create(createSettingDto)).rejects.toThrow(
-          new HttpException(
-              {
-                message: 'Error while retrieving settings: An internal error occurred',
-                statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-              },
-              HttpStatus.INTERNAL_SERVER_ERROR,
-          )
+        new HttpException(
+          {
+            message:
+              'Error while retrieving settings: An internal error occurred',
+            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          },
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        ),
       );
     });
 
@@ -257,6 +262,8 @@ describe('SettingService', () => {
         updated_by: '',
         populateWhoColumns: jest.fn(),
       };
+
+      jest.spyOn(service, 'testSMTPConnection').mockResolvedValue(true);
       jest.spyOn(settingsRepo, 'findOne').mockResolvedValue(existingSetting);
       jest.spyOn(settingsRepo, 'save').mockResolvedValue({
         ...existingSetting,
@@ -271,6 +278,30 @@ describe('SettingService', () => {
       });
     });
 
+    it('should throw an error if SMTP connection fails during update', async () => {
+      const updateSettingDto: CreateSettingDto[] = [
+        {
+          settingKey: 'SMTP_HOST',
+          settingValue: 'invalid-host',
+          description: 'Invalid SMTP Host',
+          settingType: SettingType.SMTP,
+        },
+      ];
+
+      jest.spyOn(service, 'testSMTPConnection').mockResolvedValue(false);
+
+      await expect(service.updateSetting(updateSettingDto)).rejects.toThrow(
+        new HttpException(
+          {
+            message: 'Error updating setting',
+            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+            error: 'SMTP connection test failed',
+          },
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        ),
+      );
+    });
+
     it('should throw an error when SMTP password decryption fails while updating', async () => {
       const updateSettingDto: CreateSettingDto[] = [
         {
@@ -278,23 +309,24 @@ describe('SettingService', () => {
           settingValue: 'encrypted:password',
           description: 'SMTP Password',
           settingType: SettingType.SMTP,
-        }
+        },
       ];
 
       jest.mock('../utils/crypto-utils', () => ({
         decryptData: jest.fn().mockImplementation(() => {
           throw new Error('');
-        })
+        }),
       }));
 
       await expect(service.updateSetting(updateSettingDto)).rejects.toThrow(
-          new HttpException(
-              {
-                message: 'Error while updating settings: An internal error occurred',
-                statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-              },
-              HttpStatus.INTERNAL_SERVER_ERROR,
-          )
+        new HttpException(
+          {
+            message:
+              'Error while updating settings: An internal error occurred',
+            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          },
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        ),
       );
     });
 

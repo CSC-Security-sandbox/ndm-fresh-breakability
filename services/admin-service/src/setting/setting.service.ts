@@ -1,9 +1,4 @@
-import {
-  HttpException,
-  HttpStatus,
-  Injectable,
-  Inject,
-} from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Inject } from '@nestjs/common';
 import { CreateSettingDto } from './dto/create-setting.dto';
 import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { Repository } from 'typeorm';
@@ -27,8 +22,34 @@ export class SettingService {
   ) {
     this.logger = loggerFactory.create(SettingService.name);
   }
-  async create(createSettingDto: CreateSettingDto[]) {
 
+  private async validateSMTPConnection(
+    settingsDto: CreateSettingDto[],
+  ): Promise<void> {
+    if (
+      settingsDto.length > 0 &&
+      settingsDto.some((setting) => setting.settingType === 'SMTP')
+    ) {
+      const isSMTPConnectionSuccessful =
+        await this.testSMTPConnection(settingsDto);
+      this.logger.log(
+        `isSMTPConnectionSuccessful: ${isSMTPConnectionSuccessful}`,
+      );
+
+      if (!isSMTPConnectionSuccessful) {
+        throw new HttpException(
+          {
+            message: 'SMTP connection test failed',
+            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+            error: 'SMTP connection test failed',
+          },
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+    }
+  }
+
+  async create(createSettingDto: CreateSettingDto[]) {
     for (const setting of createSettingDto) {
       if (setting.settingKey === 'SMTP_PASSWORD' && setting.settingValue) {
         try {
@@ -36,34 +57,20 @@ export class SettingService {
         } catch (error) {
           this.logger.error('Error while retrieving settings', error);
           throw new HttpException(
-              {
-                message: `Error while retrieving settings: ${error.message}`,
-                statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-              },
-              HttpStatus.INTERNAL_SERVER_ERROR,
+            {
+              message: `Error while retrieving settings: ${error.message}`,
+              statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+              error: error.message,
+            },
+            HttpStatus.INTERNAL_SERVER_ERROR,
           );
         }
       }
     }
 
     try {
-      if (
-        createSettingDto.length > 0 &&
-        createSettingDto.some((setting) => setting.settingType === 'SMTP')
-      ) {
-        const isSMTPConnectionSuccessful =
-          await this.testSMTPConnection(createSettingDto);
-        this.logger.log(`isSMTPConnectionSuccessful: ${isSMTPConnectionSuccessful}`);
-        if (!isSMTPConnectionSuccessful) {
-          throw new HttpException(
-            {
-              message: 'SMTP connection test failed',
-              statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-            },
-            HttpStatus.INTERNAL_SERVER_ERROR,
-          );
-        }
-      }
+      // Validate SMTP connection
+      await this.validateSMTPConnection(createSettingDto);
 
       const createdSettings = await Promise.all(
         createSettingDto.map(async (setting) => {
@@ -75,6 +82,7 @@ export class SettingService {
               {
                 message: `Setting with key ${setting.settingKey} already exists`,
                 statusCode: HttpStatus.BAD_REQUEST,
+                error: `Setting with key ${setting.settingKey} already exists`,
               },
               HttpStatus.BAD_REQUEST,
             );
@@ -182,7 +190,8 @@ export class SettingService {
           id: setting.id,
           settingKey: setting.settingKey,
           // Do not send SMTP_PASSWORD in any response to protect sensitive data.
-          settingValue: setting.settingKey === 'SMTP_PASSWORD' ? '' : setting.settingValue,
+          settingValue:
+            setting.settingKey === 'SMTP_PASSWORD' ? '' : setting.settingValue,
           description: setting.description,
           settingType: setting.settingType,
         });
@@ -225,7 +234,6 @@ export class SettingService {
     }
   }
   async updateSetting(updateSettingDto: CreateSettingDto[]) {
-
     for (const setting of updateSettingDto) {
       if (setting.settingKey === 'SMTP_PASSWORD' && setting.settingValue) {
         try {
@@ -233,17 +241,21 @@ export class SettingService {
         } catch (error) {
           this.logger.error('Error while updating settings', error);
           throw new HttpException(
-              {
-                message: `Error while updating settings: ${error.message}`,
-                statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-              },
-              HttpStatus.INTERNAL_SERVER_ERROR,
+            {
+              message: `Error while updating settings: ${error.message}`,
+              statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+              error: error.message,
+            },
+            HttpStatus.INTERNAL_SERVER_ERROR,
           );
         }
       }
     }
 
     try {
+      // Validate SMTP connection
+      await this.validateSMTPConnection(updateSettingDto);
+
       for (const settingObj of updateSettingDto) {
         const setting = await this.settingsRepo.findOne({
           where: { settingKey: settingObj.settingKey },
@@ -253,6 +265,7 @@ export class SettingService {
             {
               message: `Setting with key ${settingObj.settingKey} not found`,
               statusCode: HttpStatus.NOT_FOUND,
+              error: `Setting with key ${settingObj.settingKey} not found`,
             },
             HttpStatus.NOT_FOUND,
           );
