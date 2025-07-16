@@ -1,22 +1,22 @@
-import { DataItemType, FileInfo, ProcessedData } from "@/types/app.type";
-import { 
-  ACCESS_TIME_COUNT_PREFIX, 
-  ACCESS_TIME_SIZE_PREFIX, 
-  BYTE_UNITS, 
-  BYTES_IN_KILOBYTE, 
-  CREATION_TIME_COUNT_PREFIX, 
-  CREATION_TIME_SIZE_PREFIX, 
-  FILE_COUNT_PREFIX, 
-  FILE_SIZE_PREFIX, 
-  LARGE_NUMBER_SUFFIXES, 
-  MODIFICATION_TIME_COUNT_PREFIX, 
-  MODIFICATION_TIME_SIZE_PREFIX, 
-  SIMPLIFIED_BYTE_UNITS, 
-  FileSystemCategory, 
-  FileSystemSubCategory, 
-  ValueType 
-} from "@modules/jobs/discovery-preview/preview.constants";
-import { StringComparisonPattern, getRegExp } from "@modules/jobs/discovery-preview/string-comparison.enum";
+import {DataItemType, FileInfo, ProcessedData} from '@/types/app.type';
+import {
+  ACCESS_TIME_COUNT_PREFIX,
+  ACCESS_TIME_SIZE_PREFIX,
+  BYTE_UNITS,
+  BYTES_IN_KILOBYTE,
+  CREATION_TIME_COUNT_PREFIX,
+  CREATION_TIME_SIZE_PREFIX,
+  FILE_COUNT_PREFIX,
+  FILE_SIZE_PREFIX,
+  FileSystemCategory,
+  FileSystemSubCategory,
+  LARGE_NUMBER_SUFFIXES,
+  MODIFICATION_TIME_COUNT_PREFIX,
+  MODIFICATION_TIME_SIZE_PREFIX,
+  SIMPLIFIED_BYTE_UNITS,
+  ValueType
+} from '@modules/jobs/discovery-preview/preview.constants';
+import {getRegExp, StringComparisonPattern} from '@modules/jobs/discovery-preview/string-comparison.enum';
 
 {
   /* This convert bytes to MB */
@@ -38,52 +38,93 @@ const covertBytes = (bytes: number): string => {
       : `${size?.toFixed(2)} ${SIMPLIFIED_BYTE_UNITS[unitIndex]}`;
 };
 
+/**
+ * Generic function to extract chart data based on filtering criteria
+ * @param jsonData The source data array to process
+ * @param filterOptions Options for filtering the data
+ * @param valueTransform Optional function to transform values
+ * @param prefixToRemove Optional prefix to remove from category names
+ * @returns Processed data with arrays for data values and category names
+ */
+export function extractChartData(
+    jsonData: DataItemType[],
+    filterOptions: {
+      category: string;
+      valueType?: string;
+      subCategoryPrefix?: string;
+    },
+    valueTransform?: (value: number) => number,
+    prefixToRemove?: string
+): ProcessedData {
+  // Filter data based on provided criteria
+  let filteredData = jsonData?.filter((item) => {
+    // Always filter by category
+    const categoryMatch = item.category === filterOptions.category;
+
+    // Optionally filter by valueType
+    const valueTypeMatch = filterOptions.valueType
+        ? item['valueType'] === filterOptions.valueType
+        : true;
+
+    // Optionally filter by subCategory prefix
+    const prefixMatch = filterOptions.subCategoryPrefix
+        ? item.sub_category.startsWith(filterOptions.subCategoryPrefix)
+        : true;
+
+    return categoryMatch && valueTypeMatch && prefixMatch;
+  });
+
+  // Extract and transform values
+  const data = filteredData?.map((item) => {
+    const value = item.value as number;
+    return valueTransform ? valueTransform(value) : value;
+  });
+
+  // Extract and process categories
+  const categories = filteredData?.map((item) => {
+    let category = item.sub_category;
+    if (prefixToRemove) {
+      category = category.replace(prefixToRemove, '').trim();
+    }
+    return category;
+  });
+
+  return {data, categories};
+}
+
 
 {
   /* This function extract data for files as per space used */
 }
 export function chartDataForFileSize(jsonData: DataItemType[]): ProcessedData {
-  const filteredData = jsonData?.filter(
-    (item) => item.category === FileSystemCategory.SPACE_USED && typeof item.value === ValueType.NUMBER
+  return extractChartData(
+      jsonData,
+      {category: FileSystemCategory.SPACE_USED},
+      toMB,
+      FILE_SIZE_PREFIX
   );
-
-  const data = filteredData?.map((item) => toMB(item.value as number));
-  const categories = filteredData?.map((item) =>
-    item.sub_category.replace(FILE_SIZE_PREFIX, "").trim()
-  );
-
-  return { data, categories };
 }
 
 {
   /* This function extract data for files as per file count */
 }
 export function chartDataForFileCount(jsonData: DataItemType[]): ProcessedData {
-  const filteredData = jsonData?.filter(
-    (item) =>
-      item.category === FileSystemCategory.NUMBER_OF_FILES && typeof item.value === ValueType.NUMBER
+  return extractChartData(
+      jsonData,
+      {category: FileSystemCategory.NUMBER_OF_FILES},
+      undefined,
+      FILE_COUNT_PREFIX
   );
-
-  const data = filteredData?.map((item) => item.value as number);
-  const categories = filteredData?.map((item) =>
-    item.sub_category.replace(FILE_COUNT_PREFIX, "").trim()
-  );
-
-  return { data, categories };
 }
 
 {
   /* This function extract data for files as per file depth */
 }
 export function chartDataForFileDepth(jsonData: DataItemType[]): ProcessedData {
-  const filteredData = jsonData?.filter(
-    (item) => item.category === FileSystemCategory.DEPTH && typeof item.value === ValueType.NUMBER
+  return extractChartData(
+      jsonData,
+      {category: FileSystemCategory.DEPTH}
   );
-
-  const data = filteredData?.map((item) => item.value as number);
-  const categories = filteredData?.map((item) => item.sub_category.trim());
-
-  return { data, categories };
 }
 
 {
@@ -92,19 +133,16 @@ export function chartDataForFileDepth(jsonData: DataItemType[]): ProcessedData {
 export function chartDataForFileSizeModified(
   jsonData: DataItemType[]
 ): ProcessedData {
-  const filteredData = jsonData?.filter(
-    (item) =>
-      item.category === FileSystemCategory.MODIFIED &&
-        item['valueType'] === ValueType.SIZE &&
-      item.sub_category.startsWith(MODIFICATION_TIME_SIZE_PREFIX)
+  return extractChartData(
+      jsonData,
+      {
+        category: FileSystemCategory.MODIFIED,
+        valueType: ValueType.SIZE,
+        subCategoryPrefix: MODIFICATION_TIME_SIZE_PREFIX
+      },
+      toMB,
+      MODIFICATION_TIME_SIZE_PREFIX + ' '
   );
-
-  const data = filteredData?.map((item) => toMB(item.value as number));
-  const categories = filteredData?.map((item) =>
-    item.sub_category.replace(MODIFICATION_TIME_SIZE_PREFIX + " ", "").trim()
-  );
-
-  return { data, categories };
 }
 
 {
@@ -113,19 +151,16 @@ export function chartDataForFileSizeModified(
 export function chartDataForFileCountModified(
   jsonData: DataItemType[]
 ): ProcessedData {
-  const filteredData = jsonData?.filter(
-    (item) =>
-      item.category === FileSystemCategory.MODIFIED &&
-        item['valueType'] === ValueType.COUNT &&
-      item.sub_category.startsWith(MODIFICATION_TIME_COUNT_PREFIX)
+  return extractChartData(
+      jsonData,
+      {
+        category: FileSystemCategory.MODIFIED,
+        valueType: ValueType.COUNT,
+        subCategoryPrefix: MODIFICATION_TIME_COUNT_PREFIX
+      },
+      undefined,
+      MODIFICATION_TIME_COUNT_PREFIX + ' '
   );
-
-  const data = filteredData?.map((item) => item.value as number);
-  const categories = filteredData?.map((item) =>
-    item.sub_category.replace(MODIFICATION_TIME_COUNT_PREFIX + " ", "").trim()
-  );
-
-  return { data, categories };
 }
 
 {
@@ -134,19 +169,16 @@ export function chartDataForFileCountModified(
 export function chartDataForFileSizeCreated(
   jsonData: DataItemType[]
 ): ProcessedData {
-  const filteredData = jsonData?.filter(
-    (item) =>
-      item.category === FileSystemCategory.CREATED &&
-      item['valueType'] === ValueType.SIZE &&
-      item.sub_category.startsWith(CREATION_TIME_SIZE_PREFIX)
+  return extractChartData(
+      jsonData,
+      {
+        category: FileSystemCategory.CREATED,
+        valueType: ValueType.SIZE,
+        subCategoryPrefix: CREATION_TIME_SIZE_PREFIX
+      },
+      toMB,
+      CREATION_TIME_SIZE_PREFIX
   );
-
-  const data = filteredData?.map((item) => toMB(item.value as number));
-  const categories = filteredData?.map((item) =>
-    item.sub_category.replace(CREATION_TIME_SIZE_PREFIX, "").trim()
-  );
-
-  return { data, categories };
 }
 
 {
@@ -155,69 +187,67 @@ export function chartDataForFileSizeCreated(
 export function chartDataForFileCountCreated(
   jsonData: DataItemType[]
 ): ProcessedData {
-  const filteredData = jsonData?.filter(
-    (item) =>
-      item.category === FileSystemCategory.CREATED &&
-       item['valueType'] === ValueType.COUNT &&
-      item.sub_category.startsWith(CREATION_TIME_COUNT_PREFIX)
+  return extractChartData(
+      jsonData,
+      {
+        category: FileSystemCategory.CREATED,
+        valueType: ValueType.COUNT,
+        subCategoryPrefix: CREATION_TIME_COUNT_PREFIX
+      },
+      undefined,
+      CREATION_TIME_COUNT_PREFIX
   );
-  const data = filteredData?.map((item) => item.value as number);
-  const categories = filteredData?.map((item) =>
-    item.sub_category.replace(CREATION_TIME_COUNT_PREFIX, "").trim()
-  );
-  return { data, categories };
 }
 
 {
-  /* This function extract data for files as per count and as created */
+  /* This function extract data for files as per size and access time */
 }
 export function chartDataForFileSizeAccessTime(
     jsonData: DataItemType[]
 ): ProcessedData {
-  const filteredData = jsonData?.filter(
-      (item) =>
-          item.category === FileSystemCategory.ACCESS_TIME &&
-          item['valueType'] === ValueType.SIZE &&
-          item.sub_category.startsWith(ACCESS_TIME_SIZE_PREFIX)
+  return extractChartData(
+      jsonData,
+      {
+        category: FileSystemCategory.ACCESS_TIME,
+        valueType: ValueType.SIZE,
+        subCategoryPrefix: ACCESS_TIME_SIZE_PREFIX
+      },
+      toMB,
+      ACCESS_TIME_SIZE_PREFIX
   );
-
-  const data = filteredData?.map((item) => toMB(item.value as number));
-  const categories = filteredData?.map((item) => item.sub_category.replace(ACCESS_TIME_SIZE_PREFIX, "").trim()
-  );
-
-  return { data, categories };
 }
 
 {
-  /* This function extract data for files as per count and as created */
+  /* This function extract data for files as per count and access time */
 }
 export function chartDataForFileCountAccessTime(
     jsonData: DataItemType[]
 ): ProcessedData {
-  const filteredData = jsonData?.filter(
-      (item) =>
-          item.category === FileSystemCategory.ACCESS_TIME &&
-          item['valueType'] === ValueType.COUNT &&
-          item.sub_category.startsWith(ACCESS_TIME_COUNT_PREFIX)
+  return extractChartData(
+      jsonData,
+      {
+        category: FileSystemCategory.ACCESS_TIME,
+        valueType: ValueType.COUNT,
+        subCategoryPrefix: ACCESS_TIME_COUNT_PREFIX
+      },
+      undefined,
+      ACCESS_TIME_COUNT_PREFIX
   );
-  const data = filteredData?.map((item) => item.value as number);
-  const categories = filteredData?.map((item) =>
-      item.sub_category.replace(ACCESS_TIME_COUNT_PREFIX, "").trim()
-  );
+}
 
-  return { data, categories };
+{
+  /* This function extract data for files by access time */
 }
 export function chartDataForAccessTime(
   jsonData: DataItemType[]
 ): ProcessedData {
-  const filteredData = jsonData?.filter(
-    (item) => item.category === FileSystemCategory.ACCESS_TIME && item['valueType'] === ValueType.SIZE
+  return extractChartData(
+      jsonData,
+      {
+        category: FileSystemCategory.ACCESS_TIME,
+        valueType: ValueType.SIZE
+      }
   );
-
-  const data = filteredData?.map((item) => item.value as number);
-  const categories = filteredData?.map((item) => item.sub_category.trim());
-
-  return { data, categories };
 }
 
 {

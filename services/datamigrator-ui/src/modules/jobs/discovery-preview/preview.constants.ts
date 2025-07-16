@@ -1,10 +1,11 @@
 import {
-  chartDataForAccessTime,
-  chartDataForFileCount, chartDataForFileCountAccessTime,
+  chartDataForFileCount,
+  chartDataForFileCountAccessTime,
   chartDataForFileCountCreated,
   chartDataForFileCountModified,
   chartDataForFileDepth,
-  chartDataForFileSize, chartDataForFileSizeAccessTime,
+  chartDataForFileSize,
+  chartDataForFileSizeAccessTime,
   chartDataForFileSizeCreated,
   chartDataForFileSizeModified
 } from '@modules/jobs/discovery-preview/preview.decorators';
@@ -80,7 +81,7 @@ export enum FileSystemSubCategory {
  * Enum for byte units
  */
 export enum ByteUnits {
-  BYTES = "Bytes",
+  BYTES = 'B',
   KB = "KB",
   MB = "MB",
   GB = "GB",
@@ -109,7 +110,7 @@ export const BYTE_UNITS = [
 /**
  * Simplified array of byte units for basic conversions
  */
-export const SIMPLIFIED_BYTE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"];
+export const SIMPLIFIED_BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
 
 export const availableChartColors = [
   "chart-1",
