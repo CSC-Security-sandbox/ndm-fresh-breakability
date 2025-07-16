@@ -220,7 +220,7 @@ describe("OverviewService", () => {
       const result = await service.getStorageAndJobsOverview(
         "project1",
         null,
-        nul,
+        null,
       );
       expect(result.storageDetails.totalDiscoveredSize).toBeDefined();
       expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
