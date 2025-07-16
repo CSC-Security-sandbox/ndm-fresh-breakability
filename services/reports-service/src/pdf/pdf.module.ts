@@ -8,7 +8,7 @@ import { DiscoveryService } from 'src/discovery/discovery.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([InventoryEntity, ReportsEntity]),
+    TypeOrmModule.forFeature([InventoryEntity, ReportsEntity]), 
 ],
   controllers: [PdfController],
   providers: [PdfService, DiscoveryService],

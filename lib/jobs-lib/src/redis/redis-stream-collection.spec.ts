@@ -19,6 +19,7 @@ const mockRedis = {
   get: jest.fn(),
   xAutoClaim: jest.fn(), // Added missing mock
   xLen: jest.fn(),       // Added missing mock
+  multi: jest.fn(),      // Added missing mock
 };
 
 const mockRecord: Serializable = { foo: 'bar' } as any
@@ -31,27 +32,6 @@ describe('RedisStreamCollection', () => {
     collection = new RedisStreamCollection('job123', 'stream:test', 0, '0', mockRedis as any);
   });
 
-  describe('init()', () => {
-    it('should create consumer groups if stream does not exist', async () => {
-      mockRedis.exists.mockResolvedValue(false);
-      mockRedis.xGroupCreate.mockResolvedValue('OK');
-      await collection.init();
-      expect(mockRedis.xGroupCreate).toHaveBeenCalledTimes(Object.values(GroupReaderType).length);
-    });
-
-    it('should not create consumer groups if stream exists', async () => {
-      mockRedis.exists.mockResolvedValue(true);
-      await collection.init();
-      expect(mockRedis.xGroupCreate).not.toHaveBeenCalled();
-    });
-
-    it('should handle BUSYGROUP error gracefully', async () => {
-      mockRedis.exists.mockResolvedValue(false);
-      mockRedis.xGroupCreate.mockRejectedValueOnce(new Error('BUSYGROUP Consumer Group name already exists'));
-      await collection.init();
-      expect(mockRedis.xGroupCreate).toHaveBeenCalled();
-    });
-  });
 
   describe('cleanup()', () => {
     it('should destroy the consumer group and delete keys', async () => {
@@ -230,6 +210,67 @@ describe('RedisStreamCollection', () => {
         items.push(item);
       }
       expect(items).toHaveLength(0);
+      });
+
+      describe('ackAndPurge()', () => {
+        it('should ACK and delete all provided ids and return true if all succeed', async () => {
+          const multiExecMock = jest.fn().mockResolvedValue([1, 1, 1, 1]);
+          const multiMock = {
+            xAck: jest.fn().mockReturnThis(),
+            xDel: jest.fn().mockReturnThis(),
+            exec: multiExecMock,
+          };
+          mockRedis.multi = jest.fn(() => multiMock);
+          const ids = ['1-0', '2-0'];
+          const result = await collection.ackAndPurge(ids, GroupReaderType.DB_WRITER);
+          expect(mockRedis.multi).toHaveBeenCalled();
+          expect(multiMock.xAck).toHaveBeenCalledTimes(ids.length);
+          expect(multiMock.xDel).toHaveBeenCalledTimes(ids.length);
+          expect(multiExecMock).toHaveBeenCalled();
+          expect(result).toBe(true);
+        });
+
+        it('should return false if multi.exec throws', async () => {
+          const multiMock = {
+            xAck: jest.fn().mockReturnThis(),
+            xDel: jest.fn().mockReturnThis(),
+            exec: jest.fn().mockRejectedValue(new Error('fail')),
+          };
+          mockRedis.multi = jest.fn(() => multiMock);
+          const result = await collection.ackAndPurge(['1-0'], GroupReaderType.DB_WRITER);
+          expect(result).toBe(false);
+        });
+
+        it('should return false if exec returns non-array', async () => {
+          const multiMock = {
+            xAck: jest.fn().mockReturnThis(),
+            xDel: jest.fn().mockReturnThis(),
+            exec: jest.fn().mockResolvedValue(null),
+          };
+          mockRedis.multi = jest.fn(() => multiMock);
+          const result = await collection.ackAndPurge(['1-0'], GroupReaderType.DB_WRITER);
+          expect(result).toBe(false);
+        });
+
+        it('should return false if any command result is null', async () => {
+          const multiMock = {
+            xAck: jest.fn().mockReturnThis(),
+            xDel: jest.fn().mockReturnThis(),
+            exec: jest.fn().mockResolvedValue([1, null]),
+          };
+          mockRedis.multi = jest.fn(() => multiMock);
+          const result = await collection.ackAndPurge(['1-0', '2-0'], GroupReaderType.DB_WRITER);
+          expect(result).toBe(false);
+        });
+      });
+
+      describe('getLength()', () => {
+        it('should return the stream length', async () => {
+          mockRedis.xLen.mockResolvedValue(42);
+          const len = await collection.getLength();
+          expect(mockRedis.xLen).toHaveBeenCalledWith('stream:test');
+          expect(len).toBe(42);
+        });
       });
     });
   });

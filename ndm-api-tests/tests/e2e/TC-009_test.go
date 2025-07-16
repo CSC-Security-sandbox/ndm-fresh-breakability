@@ -7,12 +7,10 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/robfig/cron/v3"
 )
 
 var _ = Describe("TC-009: Run migration with 'Exclude file older than' option and hourly incremental sync schedule", func() {
-	BeforeEach(func() {
-		Skip("TC-009: Run migration with 'Exclude file older than' option and hourly incremental sync schedule")
-	})
 	var (
 		ProjectId              string
 		workerId1              string
@@ -155,14 +153,9 @@ var _ = Describe("TC-009: Run migration with 'Exclude file older than' option an
 			parsedBase, err := time.Parse(TIME_FORMAT, currentDateTime)
 			Expect(err).NotTo(HaveOccurred(), "parsing the timestamp from GetCurrentUTCTimestamp()")
 
-			nextHour := parsedBase.Add(time.Hour)
-			nextHour = time.Date(nextHour.Year(), nextHour.Month(), nextHour.Day(), nextHour.Hour(),
-				0, // minute = 0
-				0, // second = 0
-				0, // nsec   = 0
-				time.UTC,
-			)
-
+			sched, err := cron.ParseStandard("0 * * * *")
+			Expect(err).NotTo(HaveOccurred(), "parsing cron expression")
+			nextHour := sched.Next(parsedBase)
 			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				jobSummary, err := GetJobSummaryByConfigID(ProjectId, migrationJobConfigID, headers)
 				Expect(err).NotTo(HaveOccurred())

@@ -2665,6 +2665,7 @@ describe("JobConfigService", () => {
       const date = new Date();
       const mockAllJobsDetails = [
         {
+          jobRunIds: ["jobrunid-1", "jobrunid-2"],
           jobconfigid: "jobConfigId1",
           jobtype: "MIGRATE",
           jobconfigstatus: "Active",
@@ -2696,6 +2697,7 @@ describe("JobConfigService", () => {
       jest
         .spyOn(require("src/utils/mapper"), "nextDate")
         .mockReturnValue(new Date());
+      jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
 
       const result = await service.getAllJobConfig(mockProjectId);
 
@@ -2826,6 +2828,7 @@ describe("JobConfigService", () => {
     const date = new Date();
     const mockAllJobsDetails = [
       {
+        jobRunIds: ["jobrunid-1", "jobrunid-2"],
         jobconfigid: "jobConfigId1",
         jobtype: "MIGRATE",
         jobconfigstatus: "Active",
@@ -2857,6 +2860,8 @@ describe("JobConfigService", () => {
     jest
       .spyOn(require("src/utils/mapper"), "nextDate")
       .mockReturnValue(new Date());
+
+    jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
 
     const result = await service.getAllJobConfig(mockProjectId);
 

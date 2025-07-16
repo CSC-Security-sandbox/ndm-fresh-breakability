@@ -215,10 +215,13 @@ jobs:
           echo "build_type=${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}" >> $GITHUB_OUTPUT
 
           REF="${GITHUB_REF}"
-          if [[ "$REF" == refs/heads/release/* ]]; then
+          if [[ "$REF" == "refs/heads/main" ]]; then
+            REF_TYPE="branches"
+            REF_NAME="main"
+          elif [[ "$REF" == refs/heads/release/* ]]; then
             REF_TYPE="releases"
             REF_NAME="${REF#refs/heads/release/}"
-          else
+          elif [[ "$REF" == refs/heads/* ]]; then
             REF_TYPE="branches"
             REF_NAME="main"
           fi

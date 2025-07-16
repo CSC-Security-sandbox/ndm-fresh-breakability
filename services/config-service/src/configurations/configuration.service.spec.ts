@@ -38,6 +38,11 @@ const mockConfig = {
   configName: 'Test Config',
   configType: 'Type1',
 };
+const mockSanitizedConfig = { 
+  id: uuidv4(),
+  configName: 'My Config Name',
+  configType: 'Type1',
+};
 const mockFileServer = {
   id: uuidv4(),
   host: 'localhost',
@@ -60,6 +65,7 @@ const mockConfigRepository = {
 const mockProjectRepository = {
   findOne: jest.fn(),
 };
+
 
 const mockFileServerRepository = {
   create: jest.fn(),
@@ -260,6 +266,29 @@ describe('ConfigurationService', () => {
       const result = await service.getConfigById(mockConfig.id);
 
       expect(result).toEqual(mockConfig);
+    });
+
+    it('should return config with masked password when valid ID is passed', async () => {
+      const mockConfigWithPassword = {
+        ...mockConfig,
+        fileServers: [
+          {
+            id: 'fileServer1',
+            host: 'localhost',
+            protocol: 'NFS',
+            userName: 'testUser',
+            password: 'actualPassword',
+            workers: [],
+          },
+        ],
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfigWithPassword);
+
+      const result = await service.getConfigById(mockConfig.id);
+
+      expect(result.fileServers[0].password).toBe('********');
+      expect(result.fileServers[0].password).not.toBe('actualPassword');
     });
 
     it('should throw BadRequestException if invalid UUID is passed', async () => {
@@ -467,6 +496,69 @@ describe('ConfigurationService', () => {
   });
 
   describe('createConfiguration', () => {
+    it('should sanitize configName before saving', async () => {    
+      mockConfigRepository.create.mockReturnValue({
+          ...mockSanitizedConfig,
+          fileServers: [mockFileServer],
+      });
+      mockWorkerRepository.find.mockResolvedValue([mockWorker]);
+      jest
+        .spyOn(service, 'isConfigNameUnique')
+        .mockResolvedValue({ isUnique: true });
+
+      const createConfigDTO = {
+        projectId: '123456',
+        createdBy: '123123',
+        stage: '',
+        workingDirectory: {
+          pathName: '/temp',
+          pathId: '123123',
+          workingDirectory: '/working/dir',
+        },
+        configName: '   <b>  My <i>Config</i> Name  </b>   ',
+        configType: ConfigurationType.file,
+        fileServers: [
+          {
+            host: 'localhost',
+            protocolVersion: ProtocolVersion.NFSv3,
+            serverType: ServerType.emc,
+            workers: [mockWorker.id],
+            volumes: [
+              {
+                volumePath: '/new-path',
+                isIncluded: true,
+                createdBy: '1234567',
+              },
+            ],
+            createdBy: '1234567',
+            protocol: Protocol.NFS,
+            userName: 'TEST',
+          },
+        ],
+      };
+
+      const sanitizedConfigName = 'My Config Name';
+      const savedConfig = { id: uuidv4(), ...createConfigDTO, configName: sanitizedConfigName };
+      mockConfigRepository.save.mockResolvedValue(savedConfig);
+      mockConfigRepository.findOne.mockResolvedValue(savedConfig);
+      jest.spyOn(service, 'startValidateWorkingDirectoryWorkflow').mockResolvedValue(undefined);
+      jest.spyOn(service, 'isAllWorkerUnHealthy').mockResolvedValue(false);
+      jest.spyOn(service, 'refreshConfig').mockResolvedValue(undefined);
+
+      const result = await service.createConfiguration(
+        createConfigDTO,
+        uuidv4(),
+        uuidv4(),
+      );
+
+      expect(mockConfigRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          configName: sanitizedConfigName,
+        })
+      );
+      expect(result.configName).toBe(sanitizedConfigName);
+    });
+    
     it('should create and save a new configuration', async () => {
       mockConfigRepository.create.mockReturnValue({
         ...mockConfig,
@@ -2912,6 +3004,29 @@ describe('ConfigurationService', () => {
           userName: updateConfigDTO.fileServers[0].userName,
         }),
       );
+    });
+  });
+
+  describe('isConfigNameUnique', () => {
+    it('should remove HTML tags and trim whitespace from configName before checking uniqueness', async () => {
+      const projectId = 'project-uuid';
+      const configName = '   <b>  My <i>Config</i> Name  </b>   ';
+      mockProjectRepository.findOne.mockResolvedValue({ id: projectId });
+      mockConfigRepository.findOne.mockResolvedValue(null);
+
+    const result = await service.isConfigNameUnique(projectId, configName);
+      expect(result).toEqual({ isUnique: true });
+    });
+
+
+    it('should handle configName with only HTML tags and whitespace', async () => {
+      const projectId = 'project-uuid';
+      const configName = '   <div><span></span></div>   ';
+      mockProjectRepository.findOne.mockResolvedValue({ id: projectId });
+      mockConfigRepository.findOne.mockResolvedValue(null);
+
+      const result = await service.isConfigNameUnique(projectId, configName);
+      expect(result).toEqual({ isUnique: true });
     });
   });
 });
