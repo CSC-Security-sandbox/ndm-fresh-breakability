@@ -146,17 +146,18 @@ export class SettingService {
           pass: passwordSetting.settingValue,
         };
       }
-
+      
+      let transporter: Transporter | null = null;
       try {
-        const transporter: Transporter = nodemailer.createTransport({
+        transporter = nodemailer.createTransport({
           host: smtpConfig.host,
           port: parseInt(smtpConfig.port),
           secure: smtpConfig.secure,
           auth: smtpConfig.auth
             ? {
-                user: smtpConfig.auth.user,
-                pass: smtpConfig.auth.pass,
-              }
+              user: smtpConfig.auth.user,
+              pass: smtpConfig.auth.pass,
+            }
             : undefined,
           socketTimeout: 5000,
           connectionTimeout: 5000,
@@ -168,8 +169,16 @@ export class SettingService {
       } catch (smtpError) {
         this.logger.error('SMTP Connection Failed', smtpError);
         isVerificationSuccessful = false;
+      } finally {
+        // Always close transporter to prevent memory leaks
+        if (transporter) {
+          try {
+            transporter.close();
+          } catch (closeError) {
+            this.logger.error('Error closing SMTP transporter:', closeError.message);
+          }
+        }
       }
-
       return isVerificationSuccessful;
     } catch (error) {
       this.logger.error('Error during SMTP connection test', error);
