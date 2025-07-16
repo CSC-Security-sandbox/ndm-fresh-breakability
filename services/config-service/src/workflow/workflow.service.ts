@@ -28,6 +28,9 @@ export class WorkflowService implements OnModuleDestroy{
             return this.client;
         } catch (error) {
             this.logger.error(`Failed to connect to Temporal: ${error}`);
+            if (this.connection) {
+                await this.connection.close();
+            }
             throw error;
         }
     }

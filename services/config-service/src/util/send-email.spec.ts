@@ -41,7 +41,11 @@ describe("SendMailService", () => {
 
     const result = await service.sendMail(emailBody);
 
-    expect(mockPost).toHaveBeenCalledWith("http://mock-email-service/api/v1/email/internal", emailBody);
+    expect(mockPost).toHaveBeenCalledWith(
+      'http://mock-email-service/api/v1/email/internal',
+      emailBody,
+      { timeout: 30000 },
+    );
     expect(result).toEqual(mockResponse.data);
   });
 
@@ -52,8 +56,12 @@ describe("SendMailService", () => {
 
     const result = await service.sendMail(emailBody);
 
-    expect(mockPost).toHaveBeenCalledWith("http://mock-email-service/api/v1/email/internal", emailBody);
-    expect(result).toBeUndefined(); 
+    expect(mockPost).toHaveBeenCalledWith(
+      'http://mock-email-service/api/v1/email/internal',
+      emailBody,
+      { timeout: 30000 },
+    );
+    expect(result).toBeUndefined();
   });
 
   it("should handle axios exceptions gracefully", async () => {
@@ -63,7 +71,11 @@ describe("SendMailService", () => {
 
     const result = await service.sendMail(emailBody);
 
-    expect(mockPost).toHaveBeenCalledWith("http://mock-email-service/api/v1/email/internal", emailBody);
+    expect(mockPost).toHaveBeenCalledWith(
+      'http://mock-email-service/api/v1/email/internal',
+      emailBody,
+      { timeout: 30000 },
+    );
     expect(result).toBeUndefined();
   });
 });
