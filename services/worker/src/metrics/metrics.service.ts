@@ -1,5 +1,5 @@
 import { HttpService } from '@nestjs/axios';
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import {
   collectDefaultMetrics,
   Counter,
@@ -8,6 +8,7 @@ import {
   Registry,
 } from 'prom-client';
 import * as systeminformation from 'systeminformation';
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class MetricsService implements OnModuleInit, OnModuleDestroy {
@@ -57,9 +58,12 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     registers: [this.registry],
   });
 
-  private readonly logger = new Logger(MetricsService.name);
+  private readonly logger: LoggerService;
 
-  constructor(private readonly httpService: HttpService) {
+  constructor(
+    private readonly httpService: HttpService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
     collectDefaultMetrics({
       register: this.registry,
       prefix: 'worker_',
@@ -78,6 +82,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         return Promise.reject(error);
       },
     );
+    this.logger = loggerFactory.create(MetricsService.name);
   }
 
   private incrementHttpCounter(config: any, statusCode: number | string) {

@@ -1,6 +1,9 @@
 import { CommandStatus, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { RetryExceededError } from 'src/errors/errors.types';
 import { CommonTaskService } from './common-task.service';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLogger } from 'src/auth/auth.service.spec';
+
 const { Connection } = require('@temporalio/client');
 const { calculateHash } = require('src/activities/utils/checksum-utils');
 
@@ -34,9 +37,14 @@ jest.mock('../../utils/utils', () => ({
 describe('CommonTaskService', () => {
     let service: CommonTaskService;
     let configService: any;
-    let logger: any;
+    let loggerFactory: LoggerFactory;
+    let logger: Partial<LoggerService>;
     let redisService: any;
 
+    const mockLoggerFactory: Partial<LoggerFactory> = {
+        create: jest.fn().mockReturnValue(mockLogger),
+    };
+  
     beforeEach(() => {
         configService = {
             get: jest.fn((key) => {
@@ -45,14 +53,11 @@ describe('CommonTaskService', () => {
                 return undefined;
             }),
         };
-        logger = {
-            debug: jest.fn(),
-            error: jest.fn(),
-        };
+        logger = mockLogger;
         redisService = {
             getJobManagerContext: jest.fn(),
         };
-        service = new CommonTaskService(configService, logger, redisService);
+        service = new CommonTaskService(configService, mockLoggerFactory as LoggerFactory, redisService);
     });
 
     describe('constructor', () => {

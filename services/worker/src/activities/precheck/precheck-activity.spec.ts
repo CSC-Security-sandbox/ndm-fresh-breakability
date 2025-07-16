@@ -1,10 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { Logger } from '@nestjs/common';
 import { PrecheckActivity } from './precheck-activity';
 import { Protocols } from 'src/protocols/protocols';
 import { PreCheckErrorCodes, PreCheckStatus, ServerCredential, Settings, WorkerTaskPaths } from 'src/workflows/pre-check/pre-check.types';
 import { ExportPathSource } from '../list-path/list-path.type';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { SMBProtocol } from '../../protocols/smb/smb.protocol';
+import { NFSProtocol } from '../../protocols/nfs/nfs.protocol';
+import { mockLoggerFactory } from '../../auth/auth.service.spec';
+import { WorkersConfig } from 'src/config/app.config';
+import { CommandConfig } from 'src/config/command.config';
+
+let loggerFactory: LoggerFactory;
+let protocols: Protocols;
 
 jest.mock('fs', () => ({
   promises: {
@@ -22,7 +30,7 @@ jest.mock('@temporalio/worker', () => ({
 describe('PrecheckActivity', () => {
   let service: PrecheckActivity;
   let mockConfigService: Partial<ConfigService>;
-  let mockLogger: Partial<Logger>;
+  let logger: LoggerService;
   let mockProtocol: any;
 
   const mockTraceId = 'test-trace-id';
@@ -53,16 +61,6 @@ describe('PrecheckActivity', () => {
   };
 
   beforeEach(async () => {
-    mockProtocol = {
-      validateConnection: jest.fn().mockResolvedValue(true),
-      mountPath: jest.fn().mockResolvedValue(true),
-      listPaths: jest.fn().mockResolvedValue([]),
-      getTotalUsedMemory: jest.fn().mockResolvedValue(0),
-      getAvailableDiskSpace: jest.fn().mockResolvedValue({ size: 0 }),
-      unmountPath: jest.fn().mockResolvedValue(true),
-    };
-    
-    (Protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
     mockConfigService = {
       get: jest.fn((key: string) => {
         switch (key) {
@@ -76,17 +74,44 @@ describe('PrecheckActivity', () => {
       }),
     };
 
-    mockLogger = {
-      log: jest.fn(),
-      error: jest.fn(),
-      debug: jest.fn(),
+    WorkersConfig.configService = mockConfigService as ConfigService;
+    CommandConfig.configService = mockConfigService as ConfigService;
+
+    loggerFactory = {
+        create: jest.fn().mockReturnValue({
+        log: jest.fn(),
+        debug: jest.fn(),
+        error: jest.fn(),
+      }),
+    } as any;
+
+    logger = loggerFactory.create(PrecheckActivity.name); 
+
+    protocols = new Protocols(
+      new NFSProtocol(loggerFactory),
+      new SMBProtocol(loggerFactory)
+    );
+
+    mockProtocol = {
+      validateConnection: jest.fn().mockResolvedValue(true),
+      mountPath: jest.fn().mockResolvedValue(true),
+      listPaths: jest.fn().mockResolvedValue([]),
+      getTotalUsedMemory: jest.fn().mockResolvedValue(0),
+      getAvailableDiskSpace: jest.fn().mockResolvedValue({ size: 0 }),
+      unmountPath: jest.fn().mockResolvedValue(true),
     };
 
+    (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+    
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PrecheckActivity,
         { provide: ConfigService, useValue: mockConfigService },
-        { provide: Logger, useValue: mockLogger },
+        {
+          provide: LoggerFactory,
+          useValue: loggerFactory,
+        },
+        { provide: Protocols, useValue: protocols },
       ],
     }).compile();
 
@@ -135,7 +160,7 @@ describe('PrecheckActivity', () => {
 
       expect(result.status).toBe(PreCheckStatus.FAILED);
       expect(result.errorCodes).toContain(PreCheckErrorCodes.SOURCE_PATH_MOUNT_FAILED);
-      expect(mockLogger.error).toHaveBeenCalledWith(
+      expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Error mounting path')
       );
     });
@@ -225,7 +250,7 @@ describe('PrecheckActivity', () => {
 
       expect(result.status).toBe(PreCheckStatus.FAILED);
       expect(result.sourceDataSize).toBeUndefined();
-      expect(mockLogger.error).toHaveBeenCalledWith(
+      expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Error while calculating source data size')
       );
     });
@@ -251,7 +276,7 @@ describe('PrecheckActivity', () => {
 
       expect(result.status).toBe(PreCheckStatus.FAILED);
       expect(result.destinationAvailableSpace).toBeUndefined();
-      expect(mockLogger.error).toHaveBeenCalledWith(
+      expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Error while calculating destination available space')
       );
     });
@@ -277,7 +302,7 @@ describe('PrecheckActivity', () => {
       );
 
       expect(result.status).toBe(PreCheckStatus.FAILED);
-      expect(mockLogger.error).toHaveBeenCalledWith(
+      expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Error unmounting path')
       );
     });

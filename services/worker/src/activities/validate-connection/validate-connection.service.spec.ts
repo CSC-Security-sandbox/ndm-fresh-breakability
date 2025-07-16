@@ -3,17 +3,19 @@ import { ValidateConnectionActivity } from './validate-connection.service';
 import { ConfigService } from '@nestjs/config';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
-import { Logger } from '@nestjs/common';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLogger } from 'src/auth/auth.service.spec';
 
 jest.mock('src/protocols/protocols'); // Mock Protocols module
 
 describe('ValidateConnectionActivity', () => {
   let service: ValidateConnectionActivity;
   let mockConfigService: Partial<ConfigService>;
-  let mockLogger: { log: jest.Mock };
+  let protocols: Protocols;
+  let configService: ConfigService;
+  let loggerFactory: LoggerFactory;
 
   beforeEach(async () => {
-    mockLogger = { log: jest.fn() };
     mockConfigService = {
       get: jest.fn().mockReturnValue('test-worker-id'),
     };
@@ -22,11 +24,25 @@ describe('ValidateConnectionActivity', () => {
       providers: [
         ValidateConnectionActivity,
         { provide: ConfigService, useValue: mockConfigService },
-        { provide: Logger, useValue: mockLogger },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue(mockLogger),
+          },
+        },
+        {
+          provide: Protocols,
+          useValue: {
+            getProtocol: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<ValidateConnectionActivity>(ValidateConnectionActivity);
+    configService = module.get<ConfigService>(ConfigService);
+    loggerFactory = module.get<LoggerFactory>(LoggerFactory);
+    protocols = module.get<Protocols>(Protocols);
   });
 
   it('should validate connection successfully and fetch paths and versions', async () => {
@@ -41,7 +57,7 @@ describe('ValidateConnectionActivity', () => {
       getProtocolVersions: jest.fn().mockResolvedValue(['v1', 'v2']),
     };
 
-    (Protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+    (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
 
     const response = await service.validate(traceId, protocolType, payload, feature);
 
@@ -63,7 +79,7 @@ describe('ValidateConnectionActivity', () => {
       getProtocolVersions: jest.fn(),
     };
 
-    (Protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+    (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
 
     const response = await service.validate(traceId, protocolType, payload, feature);
 
@@ -82,7 +98,7 @@ describe('ValidateConnectionActivity', () => {
       validateConnection: jest.fn().mockRejectedValue(new Error('Validation error')),
     };
 
-    (Protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+    (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
 
     const response = await service.validate(traceId, protocolType, payload, feature);
 
@@ -101,7 +117,7 @@ describe('ValidateConnectionActivity', () => {
       listPaths: jest.fn().mockRejectedValue(new Error('Fetch paths error')),
     };
 
-    (Protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+    (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
 
     const response = await service.validate(traceId, protocolType, payload, feature);
 
@@ -120,7 +136,7 @@ describe('ValidateConnectionActivity', () => {
       getProtocolVersions: jest.fn().mockRejectedValue(new Error('Fetch versions error')),
     };
 
-    (Protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+    (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
 
     const response = await service.validate(traceId, protocolType, payload, feature);
 

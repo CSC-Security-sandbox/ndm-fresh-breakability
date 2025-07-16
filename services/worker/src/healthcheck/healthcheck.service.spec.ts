@@ -1,12 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HealthcheckService } from './healthcheck.service';
-import { Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import { throwError } from 'rxjs';
 import { AuthService } from 'src/auth/auth.service';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../auth/auth.service.spec';
 
 let cronJobStore: CronJob | undefined;
 
@@ -26,7 +27,8 @@ describe('HealthcheckService', () => {
   let service: HealthcheckService;
   let httpService: HttpService;
   let configService: ConfigService;
-  let logger: Logger;
+  let loggerFactory: LoggerFactory;
+  let logger: LoggerService;
   let schedulerRegistry: SchedulerRegistry;
   const workerId = 'test-worker';
   const healthCheckInterval = 5;
@@ -39,7 +41,7 @@ describe('HealthcheckService', () => {
       return null;
     }),
   };
-  const mockedLogger = { error: jest.fn(), debug: jest.fn(), log: jest.fn() };
+  const mockedLogger = mockLoggerFactory.create(HealthcheckService.name);
   const mockedTotalMem = jest.fn((): number => 8 * 1024 * 1024 * 1024);
   const mockedFreeMem = jest.fn((): number => 4 * 1024 * 1024 * 1024);
   const mockedCpu = { usage: jest.fn(() => Promise.resolve(50)) };
@@ -56,7 +58,10 @@ describe('HealthcheckService', () => {
         HealthcheckService,
         { provide: HttpService, useValue: mockedHttpService },
         { provide: ConfigService, useValue: mockedConfigService },
-        { provide: Logger, useValue: mockedLogger },
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
+        },
         { provide: 'totalmem', useValue: mockedTotalMem },
         { provide: 'freemem', useValue: mockedFreeMem },
         { provide: 'cpu', useValue: mockedCpu },
@@ -68,7 +73,8 @@ describe('HealthcheckService', () => {
     service = module.get<HealthcheckService>(HealthcheckService);
     httpService = module.get<HttpService>(HttpService);
     configService = module.get<ConfigService>(ConfigService);
-    logger = module.get<Logger>(Logger);
+    loggerFactory = module.get<LoggerFactory>(LoggerFactory);
+    logger = loggerFactory.create(HealthcheckService.name);
     schedulerRegistry = module.get<SchedulerRegistry>(SchedulerRegistry);
     jest.clearAllMocks();
     cronJobStore = undefined;
@@ -134,7 +140,10 @@ describe('HealthcheckService', () => {
           HealthcheckService,
           { provide: HttpService, useValue: mockedHttpService },
           { provide: ConfigService, useValue: mockedConfigService },
-          { provide: Logger, useValue: mockedLogger },
+          {
+            provide: LoggerFactory,
+            useValue: mockLoggerFactory,
+          },
           { provide: 'totalmem', useValue: brokenTotalMem },
           { provide: 'freemem', useValue: brokenFreeMem },
           { provide: 'cpu', useValue: mockedCpu },

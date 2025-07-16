@@ -1,4 +1,3 @@
-import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as fs from 'fs';
@@ -8,6 +7,10 @@ import { RedisService } from 'src/redis/redis.service';
 import { WorkerThreadService } from 'src/thread/worker.thread.service';
 import { CommonTaskService } from '../common/common-task.service';
 import { MigrateSyncService } from './migrate-sync.service';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../../../auth/auth.service.spec';
+
+let loggerFactory: LoggerFactory;
 
 jest.mock('fs');
 jest.mock('path');
@@ -18,6 +21,8 @@ describe('MigrateSyncService', () => {
   let shellService: ShellService;
   let workerThreadService: WorkerThreadService;
   let commonTaskService: CommonTaskService;
+  let loggerFactory: LoggerFactory;
+  let logger: LoggerService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -63,13 +68,9 @@ describe('MigrateSyncService', () => {
           },
         },
         {
-          provide: Logger,
-          useValue: {
-            error: jest.fn(),
-            warn: jest.fn(),
-            debug: jest.fn(),
-          },
-        },
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
+        }
       ],
     }).compile();
 

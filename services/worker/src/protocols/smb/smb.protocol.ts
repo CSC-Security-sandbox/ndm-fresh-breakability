@@ -4,12 +4,18 @@ import { Protocol } from '../protocol/protocol';
 import { CommandOutput, ProtocolPayload } from '../protocol/protocol.type';
 import { handleConnectionError, parseLinMacShares, parseProtocolVersions, parseWindowsShares } from './smb.utils';
 import * as fs from 'fs';
+import { Injectable } from '@nestjs/common';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
-
+@Injectable()
 export class SMBProtocol extends Protocol {
  
   protected getCommandPattern( key : string): string {
     return CommandConfig.getSMBCommand(this.platform, key)
+  }
+
+  constructor(private readonly loggerFactory: LoggerFactory) {
+    super(loggerFactory); // Pass to abstract class protocol
   }
 
   // --------------------------- Validate Connection -------------------------- //
@@ -19,7 +25,7 @@ export class SMBProtocol extends Protocol {
 
   // --------------------------- Get Protocol Versions -------------------------- //
   async getProtocolVersions(traceId: string, payload: ProtocolPayload): Promise<any> {
-    this.logger.info(`[${traceId}] Getting protocols for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,);
+    this.logger.log(`[${traceId}] Getting protocols for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,);
     return this.executeCommand(
       traceId,
       ProtocolTypes.SMB,
@@ -27,7 +33,7 @@ export class SMBProtocol extends Protocol {
       this.getCommandPattern(CommandPattern.VERSION_DETAIL),
       'SMB Get Protocol Versions',
     ).then((response) => {
-      this.logger.info(`[${traceId}] ${response.message}`);
+      this.logger.log(`[${traceId}] ${response.message}`);
       return parseProtocolVersions(response.message);
     });    
   }
@@ -42,7 +48,7 @@ export class SMBProtocol extends Protocol {
         this.getCommandPattern(CommandPattern.LIST_PATHS),
         'SMB Show Shares',
       )
-      this.logger.info(`[${traceId}] ${response.message} ${response.status}`);
+      this.logger.log(`[${traceId}] ${response.message} ${response.status}`);
       return parseLinMacShares(response.message);
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -74,7 +80,7 @@ export class SMBProtocol extends Protocol {
           'SMB Show Shares',
         );
 
-        this.logger.info(`[${traceId}] ${response.message}`);
+        this.logger.log(`[${traceId}] ${response.message}`);
         return parseWindowsShares(response.message);
       }
     }
@@ -87,7 +93,7 @@ export class SMBProtocol extends Protocol {
 
   // --------------------------- List Paths -------------------------- //
   async listPaths(traceId: string, payload: ProtocolPayload): Promise<any> {
-    this.logger.info(`[${traceId}] Getting list paths for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}, platform: ${this.platform}`);
+    this.logger.log(`[${traceId}] Getting list paths for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}, platform: ${this.platform}`);
     switch(this.platform){
       case 'darwin':
         return await this.listPathLinMac(traceId, payload)
@@ -112,7 +118,7 @@ export class SMBProtocol extends Protocol {
         'SMB Mounted Folder size',
       ).then((response) => {
         this.logger.log(`response of executeCommand in getTotalUsedMemory - ${JSON.stringify(response)}`);
-        this.logger.info(`[${traceId}] ${response.message}`);
+        this.logger.log(`[${traceId}] ${response.message}`);
         return parseInt(response.message.trim()) || 0;
       });
     } catch (error) {
@@ -134,7 +140,7 @@ export class SMBProtocol extends Protocol {
           'SMB Available Disk Space',
         ).then((response) => {
           this.logger.log(`response of getAvailableDiskSpace in smb.protocol ${JSON.stringify(response)}`);
-          this.logger.info(`[${traceId}] ${response.message}`);
+          this.logger.log(`[${traceId}] ${response.message}`);
           const available = parseInt(response.message.trim(), 10);
           this.logger.log(`[${traceId}] Available space at ${payload?.path}: ${available} bytes`);
           return { size: available };
@@ -148,7 +154,7 @@ export class SMBProtocol extends Protocol {
 
 
   async unmountPath(traceId: string, payload: any): Promise<any> {
-    this.logger.info(
+    this.logger.log(
       `[${traceId}] Unmounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
     const response = await this.executeCommand(
@@ -167,23 +173,23 @@ export class SMBProtocol extends Protocol {
         this.getCommandPattern(CommandPattern.UNLINK_PATH),
         'SMB Show Shares',
       );
-      this.logger.info(`[${traceId}] ${response.message}`);
+      this.logger.log(`[${traceId}] ${response.message}`);
     }
 
     // if (response['status'] === 'success') {
     //   const mountDir = `${this.baseMountDir}/${payload.jobRunId}`;
     //   if (fs.existsSync(mountDir)) {
     //     fs.rmdirSync(mountDir, { recursive: false });
-    //     this.logger.info(`[${traceId}] Directory removed: ${mountDir}`);
+    //     this.logger.log(`[${traceId}] Directory removed: ${mountDir}`);
     //   } else {
-    //     this.logger.info(`[${traceId}] Directory does not exist: ${mountDir}`);
+    //     this.logger.log(`[${traceId}] Directory does not exist: ${mountDir}`);
     //   }
       return response;
     // }
   }
 
   async mountPath(traceId: string, payload: any): Promise<any> {
-    this.logger.info(
+    this.logger.log(
       `[${traceId}] Mounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
 
@@ -191,7 +197,7 @@ export class SMBProtocol extends Protocol {
     if (!fs.existsSync(mountDir)) {
       try{
         fs.mkdirSync(mountDir,{ recursive: true });
-        this.logger.info(`[${traceId}] Directory created: ${mountDir}`);
+        this.logger.log(`[${traceId}] Directory created: ${mountDir}`);
         } catch (error) {
           this.logger.error(`[${traceId}] Error creating directory------?: ${error.message}`);
           return {
@@ -221,14 +227,14 @@ export class SMBProtocol extends Protocol {
         'SMB Show Shares',
       );
 
-      this.logger.info(`[${traceId}] ${response.message}`);
+      this.logger.log(`[${traceId}] ${response.message}`);
       return response;
     }
 
   }
   
   async disconnectSession(traceId: string, payload: ProtocolPayload): Promise<any> {
-    this.logger.info(
+    this.logger.log(
       `[${traceId}] disconnecting session  ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
     const response  = await this.executeCommand(

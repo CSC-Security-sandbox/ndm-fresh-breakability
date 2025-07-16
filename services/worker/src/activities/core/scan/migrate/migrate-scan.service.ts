@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Command, ErrorType, FileInfo, JobManagerContext, MetaData, OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
 import { uuid4 } from "@temporalio/workflow";
@@ -9,7 +9,7 @@ import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishCommandInput } from "./migrate-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
-
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class MigrateScanService {
@@ -17,16 +17,18 @@ export class MigrateScanService {
     readonly maxMigrationCommand : number;
     readonly maxConcurrency: number;
     readonly maxRetryCount: number;
+    private readonly logger: LoggerService;
 
     constructor(
         @Inject(ConfigService) 
         private readonly configService: ConfigService,
-        private readonly logger: Logger,
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100; 
-        this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;  
+        this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
+        this.logger = loggerFactory.create(MigrateScanService.name);
     }
 
 

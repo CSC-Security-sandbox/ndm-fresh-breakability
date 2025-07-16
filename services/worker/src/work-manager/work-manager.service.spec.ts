@@ -1,11 +1,21 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { NativeConnection, Worker } from '@temporalio/worker';
+import { of } from 'rxjs';
 import { WorkManagerService } from './work-manager.service';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
-import { Logger } from 'src/logger/logger.service';
 import { WorkerOptionsService } from './factory/worker-options.factory.service';
 import { AuthService } from 'src/auth/auth.service';
-import { of } from 'rxjs';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../auth/auth.service.spec';
+
+jest.mock('@nestjs/axios');
+jest.mock('@nestjs/config');
+jest.mock('./factory/worker-options.factory');
+jest.mock('src/utils/worker-manager.mappers', () => ({
+  getWorkerIdentity: (config: any) => `${config.workerId}-${config.configName}`,
+  getPlatform: jest.fn(() => 'LINUX'), // or whatever platform string you expect
+}));
 
 jest.mock('@temporalio/worker', () => ({
   Worker: {
@@ -25,9 +35,10 @@ describe('WorkManagerService', () => {
   let service: WorkManagerService;
   let configService: any;
   let httpService: any;
-  let logger: any;
   let workerOptions: any;
   let authService: any;
+  let loggerFactory: LoggerFactory;
+  let logger: LoggerService;
 
   beforeEach(async () => {
     configService = {
@@ -45,12 +56,6 @@ describe('WorkManagerService', () => {
     httpService = {
       get: jest.fn(),
     };
-    logger = {
-      info: jest.fn(),
-      debug: jest.fn(),
-      error: jest.fn(),
-      log: jest.fn(),
-    };
     workerOptions = {
       createWorkerOptions: jest.fn().mockReturnValue({ taskQueue: 'tq', identity: 'id' }),
     };
@@ -63,13 +68,20 @@ describe('WorkManagerService', () => {
         WorkManagerService,
         { provide: ConfigService, useValue: configService },
         { provide: HttpService, useValue: httpService },
-        { provide: Logger, useValue: logger },
+        { provide: LoggerFactory,
+          useValue: mockLoggerFactory,
+        },
         { provide: WorkerOptionsService, useValue: workerOptions },
         { provide: AuthService, useValue: authService },
       ],
     }).compile();
 
     service = module.get<WorkManagerService>(WorkManagerService);
+    authService = module.get<AuthService>(AuthService);
+    httpService = module.get<HttpService>(HttpService);
+    configService = module.get<ConfigService>(ConfigService);
+    loggerFactory = module.get<LoggerFactory>(LoggerFactory);
+    logger = loggerFactory.create(WorkManagerService.name);
   });
 
   afterEach(() => {

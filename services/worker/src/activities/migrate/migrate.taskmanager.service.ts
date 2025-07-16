@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Command, GroupReaderType, JobContext, OPS_CMD, OPS_STATUS, Task, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { uuid4 } from '@temporalio/workflow';
@@ -7,10 +7,11 @@ import { AuthService } from 'src/auth/auth.service';
 import { RedisService } from 'src/redis/redis.service';
 import { buildTask } from '../utils/utils';
 import { PublishScanTaskInput, PublishScanTaskOutput, UpdateCutOverStatusInput, UpdateStatusOutput } from './migrate.type';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class MigrationTaskService{
-
+  private readonly logger: LoggerService;
   readonly workerId: string;
   readonly pushTaskDirSize: number;
   readonly workerJobServiceUrl: string;
@@ -18,7 +19,7 @@ export class MigrationTaskService{
   
   constructor(
       @Inject(ConfigService) private readonly configService: ConfigService,
-      private readonly logger: Logger,
+      @Inject(LoggerFactory) loggerFactory: LoggerFactory,
       private readonly redisService: RedisService,
       private readonly authService: AuthService,
   ) {
@@ -26,6 +27,7 @@ export class MigrationTaskService{
       this.workerJobServiceUrl = this.configService.get('worker.connection.workerJobServiceUrl');
       this.reportServiceUrl = this.configService.get('worker.connection.workerReportServiceUrl');
       this.pushTaskDirSize = this.configService.get('worker.maxScanCommand') || 500;
+      this.logger = loggerFactory.create(MigrationTaskService.name);
   }
 
   async publishScanTask({ jobRunId }: PublishScanTaskInput): Promise<PublishScanTaskOutput> {
