@@ -282,7 +282,7 @@ describe("OverviewService", () => {
                             {
                               id: "run3",
                               status: JobRunStatus.Completed,
-                              createdAt: new Date(,
+                              createdAt: new Date(),
                             },
                           ],
                         },
