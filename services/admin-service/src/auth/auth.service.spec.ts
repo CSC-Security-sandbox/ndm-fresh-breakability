@@ -9,6 +9,8 @@ import {
 } from '@nestjs/common';
 import { UserPermissionResponse } from './user-permission-response-type';
 import { makeAxiosRequest } from 'src/utils/axios-request-utils';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../test-utils/logger-mocks';
 
 jest.mock('axios');
 jest.mock('src/utils/axios-request-utils');
@@ -48,6 +50,10 @@ describe('AuthService', () => {
         {
           provide: getRepositoryToken(User),
           useValue: mockUserRepository,
+        },
+        { 
+          provide: LoggerFactory, 
+          useValue: mockLoggerFactory
         },
       ],
     }).compile();
@@ -95,7 +101,6 @@ describe('AuthService', () => {
 
     expect(makeAxiosRequest).toHaveBeenCalled();
     expect(tempPassword).toBeDefined();
-    // The length of the temporary password is validated as 22 because we are returning encrypted password
     expect(tempPassword).toHaveLength(22);
     expect(user.first_name).toBe(firstName);
     expect(user.last_name).toBe(lastName);
@@ -277,7 +282,7 @@ describe('AuthService', () => {
 
     await expect(service.setUserStatus(email, enable)).rejects.toThrow(
       new NotFoundException(
-        'Failed to update user status in Keycloak, error: User not found in Keycloak',
+        'Failed to update user status in Keycloak, error: User not found in Keycloak, Please verify the user ID and try again.',
       ),
     );
   });
@@ -311,7 +316,7 @@ describe('AuthService', () => {
     mockUserRepository.findOne.mockResolvedValue(null);
 
     await expect(service.setUserStatus(email, enable)).rejects.toThrow(
-      new NotFoundException('User not found'),
+      new NotFoundException('User not found, Please verify the user ID and try again.'),
     );
   });
 
@@ -337,5 +342,78 @@ describe('AuthService', () => {
         'Failed to update user status in Keycloak, error: Keycloak update error',
       ),
     );
+  });
+
+  // Database error handling tests
+  describe('Database Error Handling', () => {
+    it('should handle errors in getKeycloakToken', async () => {
+      const axiosError = new Error('Network connection failed');
+      
+      // Create a new service instance without the spy to test the actual implementation
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          AuthService,
+          {
+            provide: getRepositoryToken(User),
+            useValue: mockUserRepository,
+          },
+          { provide: LoggerFactory, useValue: mockLoggerFactory },
+        ],
+      }).compile();
+      
+      const testService = module.get<AuthService>(AuthService);
+      (makeAxiosRequest as jest.Mock).mockRejectedValue(axiosError);
+
+      await expect(testService.getKeycloakToken()).rejects.toThrow(
+        new InternalServerErrorException('Failed to get Keycloak token, error: Network connection failed')
+      );
+    });
+
+    it('should handle database errors in inviteUser and log them', async () => {
+      const username = 'user@example.com';
+      const firstName = 'John';
+      const lastName = 'Doe';
+      const dbError = new Error('Database connection failed');
+
+      mockUserRepository.findOne.mockResolvedValue(null); // User doesn't exist
+      (makeAxiosRequest as jest.Mock).mockResolvedValue(mockKeycloakResponse); // Keycloak succeeds
+      mockUserRepository.create.mockReturnValue({
+        email: username,
+        first_name: firstName,
+        last_name: lastName,
+        populateWhoColumns: jest.fn(),
+      });
+      mockUserRepository.save.mockRejectedValue(dbError); // Database fails
+
+      await expect(
+        service.inviteUser(username, firstName, lastName, userPermissionResponseMock)
+      ).rejects.toThrow(
+        new InternalServerErrorException('Failed to create user in Keycloak, error: Database connection failed')
+      );
+    });
+
+    it('should handle repository findOne errors in setUserStatus', async () => {
+      const email = 'user@example.com';
+      const enable = true;
+      const dbError = new Error('Database query failed');
+
+      mockUserRepository.findOne.mockRejectedValue(dbError);
+
+      await expect(service.setUserStatus(email, enable)).rejects.toThrow(dbError);
+    });
+
+    it('should handle repository save errors in setUserStatus', async () => {
+      const email = 'user@example.com';
+      const enable = true;
+      const user = new User();
+      user.email = email;
+      user.user_status = 'inactive';
+      const dbError = new Error('Save operation failed');
+
+      mockUserRepository.findOne.mockResolvedValue(user);
+      mockUserRepository.save.mockRejectedValue(dbError);
+
+      await expect(service.setUserStatus(email, enable)).rejects.toThrow(dbError);
+    });
   });
 });

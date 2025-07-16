@@ -8,11 +8,14 @@ import { User } from '../entities/user.entity';
 import { Role } from '../entities/role.entity';
 import { Permission } from '../entities/permission.entity';
 import { RolePermission } from '../entities/role-permission.entity';
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory, mockLoggerService } from '../test-utils/logger-mocks';
 
 describe('ProjectModule', () => {
   let module: TestingModule;
 
   beforeEach(async () => {
+    // Environment variables are already set in test-setup.ts
     module = await Test.createTestingModule({
       imports: [
         TypeOrmModule.forRoot({
@@ -40,7 +43,12 @@ describe('ProjectModule', () => {
         ]),
         ProjectModule,
       ],
-    }).compile();
+    })
+    .overrideProvider(LoggerFactory)
+    .useValue(mockLoggerFactory)
+    .overrideProvider(LoggerService)
+    .useValue(mockLoggerService)
+    .compile();
   });
 
   it('should be defined', () => {

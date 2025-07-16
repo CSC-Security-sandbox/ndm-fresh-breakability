@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, IsNull, Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
@@ -10,9 +14,14 @@ import { Project } from '../entities/project.entity';
 import { Role } from '../entities/role.entity';
 import { RolePermission } from '../entities/role-permission.entity';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
+import {
+  LoggerFactory,
+  LoggerService
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class UserService {
+  private readonly logger: LoggerService;
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
@@ -31,18 +40,39 @@ export class UserService {
 
     @InjectRepository(Account)
     private accountRepository: Repository<Account>,
-  ) {}
 
-  create(
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(UserService.name);
+  }
+
+  async create(
     createUserDto: CreateUserDto,
     userPermissions: UserPermissionResponse,
   ): Promise<User> {
-    const user = this.userRepository.create({
-      ...createUserDto,
-      user_status: 'active',
-    });
-    user.populateWhoColumns(userPermissions.user.id);
-    return this.userRepository.save(user);
+    try {
+      this.logger.log('Creating new user', {
+        requestorUserId: userPermissions.user.id,
+        userData: { ...createUserDto, password: '[REDACTED]' }
+      });
+
+      const user = this.userRepository.create({
+        ...createUserDto,
+        user_status: 'active',
+      });
+      user.populateWhoColumns(userPermissions.user.id);
+      const savedUser = await this.userRepository.save(user);
+
+      this.logger.log('User created successfully', {
+        userId: savedUser.id,
+        requestorUserId: userPermissions.user.id
+      });
+
+      return savedUser;
+    } catch (error) {
+      this.logger.error('Failed to create user', error);
+      throw error;
+    }
   }
 
   async findAll(
@@ -52,21 +82,29 @@ export class UserService {
     sortOrder: 'ASC' | 'DESC' = 'ASC',
     filter: Partial<CreateUserDto> = {},
   ): Promise<User[]> {
-    const options: FindManyOptions<User> = {
-      skip: (page - 1) * limit,
-      take: limit,
-      order: { [sortField]: sortOrder },
-      where: filter,
-    };
+    try {
+      this.logger.log('Retrieving users list', {
+        page,
+        limit,
+        sortField,
+        sortOrder
+      });
 
-    const users = await this.userRepository.find(options);
+      const options: FindManyOptions<User> = {
+        skip: (page - 1) * limit,
+        take: limit,
+        order: { [sortField]: sortOrder },
+        where: filter,
+      };
 
-    const transformedUsers = await Promise.all(
-      users.map(async (user) => {
-        const createdByUser = await this.userRepository.findOne({
-          where: { id: user.created_by },
-          select: ['id', 'email', 'user_status'],
-        });
+      const users = await this.userRepository.find(options);
+
+      const transformedUsers = await Promise.all(
+        users.map(async (user) => {
+          const createdByUser = await this.userRepository.findOne({
+            where: { id: user.created_by },
+            select: ['id', 'email', 'user_status'],
+          });
 
         const updatedByUser = await this.userRepository.findOne({
           where: { id: user.updated_by },
@@ -89,11 +127,38 @@ export class UserService {
       }),
     );
 
+    this.logger.log('Successfully retrieved users', {
+      count: transformedUsers.length,
+      page,
+      limit
+    });
     return transformedUsers;
+    } catch (error) {
+      this.logger.error('Failed to retrieve users list', error);
+      throw error;
+    }
   }
 
   async findOne(id: string): Promise<User> {
-    return await this.userRepository.findOneBy({ id: id });
+    try {
+      this.logger.log(`Retrieving user by ID: ${id}`);
+
+      const user = await this.userRepository.findOneBy({ id: id });
+
+      if (!user) {
+        this.logger.warn('User not found', { userId: id });
+        throw new NotFoundException(`User with ID ${id} not found`);
+      }
+
+      this.logger.log('Successfully retrieved user', { userId: id });
+      return user;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      this.logger.error('Failed to retrieve user', error);
+      throw error;
+    }
   }
 
   async update(
@@ -101,67 +166,152 @@ export class UserService {
     updateUserDto: UpdateUserDto,
     userPermissions: UserPermissionResponse,
   ): Promise<void> {
-    await this.userRepository.update(id, {
-      ...updateUserDto,
-      updated_by: userPermissions.user.id,
-    });
+    try {
+      this.logger.log('Updating user', {
+        userId: id,
+        requestorUserId: userPermissions.user.id
+      });
+
+      // Check if user exists first
+      const existingUser = await this.userRepository.findOneBy({ id });
+      if (!existingUser) {
+        this.logger.warn('User not found for update', { userId: id });
+        throw new NotFoundException(`User with ID ${id} not found`);
+      }
+
+      await this.userRepository.update(id, {
+        ...updateUserDto,
+        updated_by: userPermissions.user.id,
+      });
+
+      this.logger.log('Successfully updated user', { userId: id });
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      this.logger.error('Failed to update user', error);
+      throw error;
+    }
   }
 
   async delete(id: string): Promise<void> {
-    const user = await this.userRepository.findOne({
-      where: { id },
-      relations: ['user_roles'],
-    });
+    try {
+      this.logger.log('Deleting user', { userId: id });
 
-    if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found`);
+      const user = await this.userRepository.findOne({
+        where: { id },
+        relations: ['user_roles'],
+      });
+
+      if (!user) {
+        this.logger.warn('User not found for deletion', { userId: id });
+        throw new NotFoundException(`User with ID ${id} not found`);
+      }
+
+      await this.userRepository.remove(user);
+
+      this.logger.log('Successfully deleted user', { userId: id });
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      this.logger.error('Failed to delete user', error);
+      throw error;
     }
-
-    await this.userRepository.remove(user);
   }
 
   async inactivate(id: string): Promise<void> {
-    await this.userRepository.update(id, {
-      user_status: 'inactive',
-    });
+    try {
+      this.logger.log('Inactivating user', { userId: id });
+
+      // Check if user exists first
+      const existingUser = await this.userRepository.findOneBy({ id });
+      if (!existingUser) {
+        this.logger.warn('User not found for inactivation', { userId: id });
+        throw new NotFoundException(`User with ID ${id} not found`);
+      }
+
+      await this.userRepository.update(id, {
+        user_status: 'inactive',
+      });
+
+      this.logger.log('Successfully inactivated user', { userId: id });
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      this.logger.error('Failed to inactivate user', error);
+      throw error;
+    }
   }
 
   async getUserProjectsAndPermissions(email: string, projectId?: string) {
-    const user = await this.userRepository.findOne({
-      where: { email },
-      relations: ['user_roles', 'user_roles.role', 'user_roles.project'],
-    });
+    try {
+      this.logger.log('Getting user projects and permissions', {
+        email: email.substring(0, 3) + '***', // Partially redact email for privacy
+        projectId
+      });
 
-    if (!user) {
-      throw new NotFoundException(`User with email ${email} not found`);
-    }
+      const user = await this.userRepository.findOne({
+        where: { email },
+        relations: ['user_roles', 'user_roles.role', 'user_roles.project'],
+      });
 
-    if (projectId) {
-      const userRolesInProject = user.user_roles.filter(
-        (userRole) => userRole.project?.id === projectId,
-      );
-      if (userRolesInProject.length === 0) {
-        throw new NotFoundException(
-          `User has no role in project with ID ${projectId}`,
-        );
+      if (!user) {
+        this.logger.warn('User not found for permissions retrieval', { email: email.substring(0, 3) + '***' });
+        throw new NotFoundException(`User with email ${email} not found`);
       }
-      return {
-        projectId,
-        projectName: userRolesInProject[0]?.project.project_name,
-        role: userRolesInProject[0]?.role.role_name,
-        permissionsOfProject: await this.getPermissionsByRoles(
-          userRolesInProject[0]?.role.id,
-        ),
-      };
-    } else {
-      return await Promise.all(
-        user.user_roles.map(async (ur) => ({
-          projectId: ur.project?.id || null,
-          projectName: ur.project?.project_name || null,
-          role: ur.role.role_name,
-          permissionsOfProject: await this.getPermissionsByRoles(ur.role.id),
-        })),
-      );
+
+      if (projectId) {
+        const userRolesInProject = user.user_roles.filter(
+          (userRole) => userRole.project?.id === projectId,
+        );
+        if (userRolesInProject.length === 0) {
+          this.logger.warn('User has no role in specified project', {
+            email: email.substring(0, 3) + '***',
+            projectId
+          });
+          throw new NotFoundException(
+            `User has no role in project with ID ${projectId}`,
+          );
+        }
+
+        const result = {
+          projectId,
+          projectName: userRolesInProject[0]?.project.project_name,
+          role: userRolesInProject[0]?.role.role_name,
+          permissionsOfProject: await this.getPermissionsByRoles(
+            userRolesInProject[0]?.role.id,
+          ),
+        };
+
+        this.logger.log('Successfully retrieved user project permissions', {
+          email: email.substring(0, 3) + '***',
+          projectId
+        });
+        return result;
+      } else {
+        const result = await Promise.all(
+          user.user_roles.map(async (ur) => ({
+            projectId: ur.project?.id || null,
+            projectName: ur.project?.project_name || null,
+            role: ur.role.role_name,
+            permissionsOfProject: await this.getPermissionsByRoles(ur.role.id),
+          })),
+        );
+
+        this.logger.log('Successfully retrieved user projects and permissions', {
+          email: email.substring(0, 3) + '***',
+          projectCount: result.length
+        });
+        return result;
+      }
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      this.logger.error('Failed to get user projects and permissions', error);
+      throw error;
     }
   }
 

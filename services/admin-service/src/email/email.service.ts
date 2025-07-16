@@ -1,4 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as nodemailer from 'nodemailer';
 import * as path from 'path';
@@ -10,20 +13,30 @@ import { NOTIFICATION_TYPE } from './dto/notification.type';
 
 import { IncidentStatus, SyncEmail } from 'src/entities/sync-email.entity';
 import { EmailContentStatus } from 'src/constants/email-content.enum';
+import {
+  LoggerFactory,
+  LoggerService
+} from '@netapp-cloud-datamigrate/logger-lib';
+
 @Injectable()
 export class EmailService {
-  private readonly logger = new Logger(EmailService.name);
+  private readonly logger: LoggerService;
   transporter: nodemailer.Transporter;
   constructor(
     @InjectRepository(GlobalSettings)
     private settingsRepo: Repository<GlobalSettings>,
     @InjectRepository(SyncEmail)
     private syncEmailRepo: Repository<SyncEmail>,
-  ) {}
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(EmailService.name);
+  }
+
   async setupAndSendMail(emailContent: any, notificationType: string) {
     try {
       await this.setupTransporter(emailContent, notificationType);
     } catch (error) {
+      this.logger.error('Error setting up and sending email', error);
       return { message: error.message, statusCode: 500 };
     }
     return { message: 'Email sent successfully', statusCode: 200 };
@@ -106,65 +119,90 @@ export class EmailService {
   }
 
   async sendEmailForFailureEvents(emailContent: any, from: string, to: string) {
-    const { alerts } = emailContent;
-    const status = alerts[0]?.status || 'unknown';
-    const isResolved = status === 'resolved';
-    const severity = alerts[0]?.labels?.severity || 'unknown';
-    const podName = alerts[0]?.labels?.pod || null;
-    const instanceName = alerts[0]?.labels?.instance || null;
-    const alertName = alerts[0]?.labels?.alertname || 'N/A';
-    const description =
-      alerts[0]?.annotations?.description || 'No description available.';
-    const summary = alerts[0]?.annotations?.summary || 'No summary available.';
-    const mailOptions = {
-      from: from,
-      to: to,
-      subject: `DataMigrator Alert - Severity: ${severity}`,
-      template: 'failure',
-      context: {
-        isResolved,
-        severity,
-        podName,
-        instanceName,
-        description,
-        summary,
-      },
-    };
-
-    const syncEmail = new SyncEmail();
-    syncEmail.mailContent = emailContent;
-    syncEmail.incidentStatus = IncidentStatus.OPEN;
-    syncEmail.description = description;
-    syncEmail.summary = summary;
-    syncEmail.alertSource = podName ?? instanceName;
-    syncEmail.alertName = alertName;
-
     try {
-      await this.transporter.sendMail(mailOptions);
-    } catch (error) {
-      this.logger.error(`Error sending email: ${error.message}`);
-      throw new Error(`Error sending email: ${error.message}`);
-    } finally {
-      if (emailContent.status === EmailContentStatus.FIRING) {
-        await this.syncEmailRepo.save(syncEmail);
-      } else {
-        await this.syncEmailRepo.update(
-          {
-            incidentStatus: IncidentStatus.OPEN,
-            alertSource: podName ?? instanceName,
-            alertName: alertName,
-          },
-          { incidentStatus: IncidentStatus.CLOSED },
-        );
+      const { alerts } = emailContent;
+      const status = alerts[0]?.status || 'unknown';
+      const isResolved = status === 'resolved';
+      const severity = alerts[0]?.labels?.severity || 'unknown';
+      const podName = alerts[0]?.labels?.pod || null;
+      const instanceName = alerts[0]?.labels?.instance || null;
+      const alertName = alerts[0]?.labels?.alertname || 'N/A';
+      const description =
+        alerts[0]?.annotations?.description || 'No description available.';
+      const summary = alerts[0]?.annotations?.summary || 'No summary available.';
+
+      this.logger.log('Sending failure notification email', {
+        alertName,
+        severity,
+        podName: podName || instanceName
+      });
+
+      const mailOptions = {
+        from: from,
+        to: to,
+        subject: `DataMigrator Alert - Severity: ${severity}`,
+        template: 'failure',
+        context: {
+          isResolved,
+          severity,
+          podName,
+          instanceName,
+          description,
+          summary,
+        },
+      };
+
+      const syncEmail = new SyncEmail();
+      syncEmail.mailContent = emailContent;
+      syncEmail.incidentStatus = IncidentStatus.OPEN;
+      syncEmail.description = description;
+      syncEmail.summary = summary;
+      syncEmail.alertSource = podName ?? instanceName;
+      syncEmail.alertName = alertName;
+
+      try {
+        await this.transporter.sendMail(mailOptions);
+        this.logger.log('Failure notification email sent successfully', { alertName });
+      } catch (emailError) {
+        this.logger.error('Error sending email', emailError);
+        throw new Error(`Error sending email: ${emailError.message}`);
       }
+
+      try {
+        if (emailContent.status === EmailContentStatus.FIRING) {
+          await this.syncEmailRepo.save(syncEmail);
+          this.logger.log('Sync email record saved', { alertName });
+        } else {
+          await this.syncEmailRepo.update(
+            {
+              incidentStatus: IncidentStatus.OPEN,
+              alertSource: podName ?? instanceName,
+              alertName: alertName,
+            },
+            { incidentStatus: IncidentStatus.CLOSED },
+          );
+          this.logger.log('Sync email record updated to closed', { alertName });
+        }
+      } catch (dbError) {
+        this.logger.error('Error updating sync email database record', dbError);
+        // Don't throw here as the email was already sent successfully
+      }
+    } catch (error) {
+      this.logger.error('Error in sendEmailForFailureEvents', error);
+      throw error;
     }
   }
 
   async getSMTPSettings() {
-    const smtpSettings: GlobalSettings[] = await this.settingsRepo.find({
-      where: { settingType: SettingType.SMTP },
-    });
-    return smtpSettings;
+    try {
+      const smtpSettings: GlobalSettings[] = await this.settingsRepo.find({
+        where: { settingType: SettingType.SMTP },
+      });
+      return smtpSettings;
+    } catch (error) {
+      this.logger.error('Error getting SMTP settings', error);
+      throw new Error(`Error getting SMTP settings: ${error.message}`);
+    }
   }
 
   async setupAndSendMailForSuccessEvents(
@@ -174,40 +212,55 @@ export class EmailService {
     try {
       await this.setupTransporter(emailContent, notificationType);
     } catch (error) {
+      this.logger.error('Error setting up and sending mail for success events', error);
       return { message: error.message, statusCode: 500 };
     }
     return { message: 'Email sent successfully', statusCode: 200 };
   }
 
   async setupTemplateBasdOnNotificationType(templateName: string) {
-    this.transporter.use(
-      'compile',
-      hbs({
-        viewEngine: {
-          extname: '.hbs',
-          layoutsDir: path.join(__dirname, '../../templates/views'),
-          defaultLayout: templateName,
-        },
-        viewPath: path.join(__dirname, '../../templates/views'),
-        extName: '.hbs',
-      }),
-    );
+    try {
+      this.logger.log('Setting up email template', { templateName });
+
+      this.transporter.use(
+        'compile',
+        hbs({
+          viewEngine: {
+            extname: '.hbs',
+            layoutsDir: path.join(__dirname, '../../templates/views'),
+            defaultLayout: templateName,
+          },
+          viewPath: path.join(__dirname, '../../templates/views'),
+          extName: '.hbs',
+        }),
+      );
+
+      this.logger.log('Email template setup completed', { templateName });
+    } catch (error) {
+      this.logger.error('Error setting up email template', error);
+      throw new Error(`Error setting up email template: ${error.message}`);
+    }
   }
   async sendEmailForSuccessEvent(content: any, from: string, to: string) {
-    const body = content?.body;
-    const mailOptions = {
-      from: from,
-      to: to,
-      subject: `DataMigrator Alert`,
-      template: 'success',
-      context: {
-        body,
-      },
-    };
     try {
+      const body = content?.body;
+
+      this.logger.log('Sending success notification email');
+
+      const mailOptions = {
+        from: from,
+        to: to,
+        subject: `DataMigrator Alert`,
+        template: 'success',
+        context: {
+          body,
+        },
+      };
+
       await this.transporter.sendMail(mailOptions);
+      this.logger.log('Success notification email sent successfully');
     } catch (error) {
-      console.error('Error sending email:', error.message);
+      this.logger.error('Error sending success email', error);
       throw new Error(`Error sending email: ${error.message}`);
     }
   }

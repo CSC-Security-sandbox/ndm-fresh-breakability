@@ -1,4 +1,9 @@
-import {HttpException, HttpStatus, Injectable, Logger} from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Inject,
+} from '@nestjs/common';
 import { CreateSettingDto } from './dto/create-setting.dto';
 import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { Repository } from 'typeorm';
@@ -6,13 +11,22 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Transporter } from 'nodemailer';
 import * as nodemailer from 'nodemailer';
 import { decryptData } from 'src/utils/crypto-utils';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class SettingService {
+  private readonly logger: LoggerService;
+
   constructor(
     @InjectRepository(GlobalSettings)
     private settingsRepo: Repository<GlobalSettings>,
-  ) {}
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(SettingService.name);
+  }
   async create(createSettingDto: CreateSettingDto[]) {
 
     for (const setting of createSettingDto) {
@@ -20,6 +34,7 @@ export class SettingService {
         try {
           setting.settingValue = decryptData(setting.settingValue);
         } catch (error) {
+          this.logger.error('Error while retrieving settings', error);
           throw new HttpException(
               {
                 message: `Error while retrieving settings: ${error.message}`,
@@ -38,7 +53,7 @@ export class SettingService {
       ) {
         const isSMTPConnectionSuccessful =
           await this.testSMTPConnection(createSettingDto);
-        console.log('isSMTPConnectionSuccessful:', isSMTPConnectionSuccessful);
+        this.logger.log(`isSMTPConnectionSuccessful: ${isSMTPConnectionSuccessful}`);
         if (!isSMTPConnectionSuccessful) {
           throw new HttpException(
             {
@@ -87,52 +102,71 @@ export class SettingService {
   async testSMTPConnection(
     createSettingDto: CreateSettingDto[],
   ): Promise<boolean> {
-    let isVerificationSuccessful: boolean = false;
-    const smtpConfig: any = {
-      host: createSettingDto.find(
-        (setting) => setting.settingKey === 'SMTP_HOST',
-      ).settingValue,
-      port: createSettingDto.find(
-        (setting) => setting.settingKey === 'SMTP_PORT',
-      ).settingValue,
-      secure: false,
-    };
-    if (
-      createSettingDto.find(
-        (setting) => setting.settingKey === 'SMTP_USER_NAME',
-      )?.settingValue &&
-      createSettingDto.find((setting) => setting.settingKey === 'SMTP_PASSWORD')
-        ?.settingValue
-    ) {
-      smtpConfig.auth = {
-        user: createSettingDto.find(
-          (setting) => setting.settingKey === 'SMTP_USER_NAME',
-        )?.settingValue,
-        pass: createSettingDto.find(
-          (setting) => setting.settingKey === 'SMTP_PASSWORD',
-        )?.settingValue,
-      };
-    }
     try {
-      const transporter: Transporter = nodemailer.createTransport({
-        host: smtpConfig.host,
-        port: parseInt(smtpConfig.port),
-        secure: smtpConfig.secure,
-        auth: smtpConfig.auth
-          ? {
-              user: smtpConfig.auth.user,
-              pass: smtpConfig.auth.pass,
-            }
-          : undefined,
-        socketTimeout: 5000,
-        connectionTimeout: 5000,
-      });
-      await transporter.verify();
-      isVerificationSuccessful = true;
+      this.logger.log('Testing SMTP connection');
+
+      let isVerificationSuccessful: boolean = false;
+
+      const hostSetting = createSettingDto.find(
+        (setting) => setting.settingKey === 'SMTP_HOST',
+      );
+      const portSetting = createSettingDto.find(
+        (setting) => setting.settingKey === 'SMTP_PORT',
+      );
+
+      if (!hostSetting || !portSetting) {
+        this.logger.error('Missing required SMTP configuration (host or port)');
+        return false;
+      }
+
+      const smtpConfig: any = {
+        host: hostSetting.settingValue,
+        port: portSetting.settingValue,
+        secure: false,
+      };
+
+      const userNameSetting = createSettingDto.find(
+        (setting) => setting.settingKey === 'SMTP_USER_NAME',
+      );
+      const passwordSetting = createSettingDto.find(
+        (setting) => setting.settingKey === 'SMTP_PASSWORD',
+      );
+
+      if (userNameSetting?.settingValue && passwordSetting?.settingValue) {
+        smtpConfig.auth = {
+          user: userNameSetting.settingValue,
+          pass: passwordSetting.settingValue,
+        };
+      }
+
+      try {
+        const transporter: Transporter = nodemailer.createTransport({
+          host: smtpConfig.host,
+          port: parseInt(smtpConfig.port),
+          secure: smtpConfig.secure,
+          auth: smtpConfig.auth
+            ? {
+                user: smtpConfig.auth.user,
+                pass: smtpConfig.auth.pass,
+              }
+            : undefined,
+          socketTimeout: 5000,
+          connectionTimeout: 5000,
+        });
+
+        await transporter.verify();
+        isVerificationSuccessful = true;
+        this.logger.log('SMTP connection test successful');
+      } catch (smtpError) {
+        this.logger.error('SMTP Connection Failed', smtpError);
+        isVerificationSuccessful = false;
+      }
+
+      return isVerificationSuccessful;
     } catch (error) {
-      console.error('SMTP Connection Failed:', error.message);
+      this.logger.error('Error during SMTP connection test', error);
+      return false;
     }
-    return isVerificationSuccessful;
   }
 
   async findAll() {
@@ -161,6 +195,7 @@ export class SettingService {
         data: groupedSettings,
       };
     } catch (error) {
+      this.logger.error('Error retrieving settings', error);
       throw new HttpException(
         {
           message: 'Error retrieving settings',
@@ -173,9 +208,21 @@ export class SettingService {
   }
 
   async findOne(settingType: string) {
-    return await this.settingsRepo.find({
-      where: { settingType: settingType },
-    });
+    try {
+      return await this.settingsRepo.find({
+        where: { settingType: settingType },
+      });
+    } catch (error) {
+      this.logger.error('Error finding settings by type', error);
+      throw new HttpException(
+        {
+          message: 'Error finding settings',
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          error: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
   async updateSetting(updateSettingDto: CreateSettingDto[]) {
 
@@ -184,6 +231,7 @@ export class SettingService {
         try {
           setting.settingValue = decryptData(setting.settingValue);
         } catch (error) {
+          this.logger.error('Error while updating settings', error);
           throw new HttpException(
               {
                 message: `Error while updating settings: ${error.message}`,
@@ -218,6 +266,7 @@ export class SettingService {
         statusCode: HttpStatus.OK,
       };
     } catch (error) {
+      this.logger.error('Error updating setting', error);
       throw new HttpException(
         {
           message: 'Error updating setting',

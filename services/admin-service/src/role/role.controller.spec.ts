@@ -6,6 +6,8 @@ import { Repository } from 'typeorm';
 import { Role } from '../entities/role.entity';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../test-utils/logger-mocks';
 
 describe('RoleController', () => {
   let controller: RoleController;
@@ -40,6 +42,10 @@ describe('RoleController', () => {
         {
           provide: JwtService,
           useValue: mockJwtService,
+        },
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
         },
       ],
     }).compile();
