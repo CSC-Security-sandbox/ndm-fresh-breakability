@@ -17,6 +17,7 @@ jest.mock('fs', () => {
         promises: {
             readdir: jest.fn(),
             lstat: jest.fn(),
+            stat: jest.fn(),
         },
     };
 });

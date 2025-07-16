@@ -91,14 +91,27 @@ export class MigrateScanService {
                         const command = this.buildCommand(sourceStat, fileInfo.path);
                         if (command) commands.push(command);
                     }
-                } else if (!targetContent.has(item)) {
+                } 
+                 else if (sourceStat.isSymbolicLink()) {
+                    if (!targetContent.has(item)) {
+                        const command = this.buildCommand(sourceStat, fileInfo.path);
+                        if (command) commands.push(command);
+                    }
+                }
+                else if (!targetContent.has(item)) {
                     output.fileCount++;
                     const command = this.buildCommand(sourceStat, fileInfo.path);
                     if (command) commands.push(command);
                 } else {
                     const targetFilePath = path.join(targetPath, item);
                     if (fs.existsSync(targetFilePath)) {
-                        const targetStat = fs.statSync(targetFilePath);
+                       const targetStatLstat = await fs.promises.lstat(targetFilePath);
+                        let targetStat: fs.Stats;
+                        if (targetStatLstat.isSymbolicLink()) {
+                            targetStat = targetStatLstat;
+                        } else {
+                            targetStat = await fs.promises.stat(targetFilePath);
+                        }
                         const command = this.buildCommand(sourceStat, fileInfo.path, targetStat);
                         if (command) commands.push(command);
                     }
