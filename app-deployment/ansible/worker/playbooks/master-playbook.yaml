@@ -1,13 +1,12 @@
 - name: 1. Configure user access on VM
   import_playbook: configure-user.yaml
-  when: unified_plane is not defined
 
 - name: 2. Configure VM by upgrading packages
   import_playbook: configure-vm.yaml
 
 - name: 3. Configure cloud init
   import_playbook: configure-cloud-init.yaml
-  when: local_cluster is not defined or unified_plane is not defined
+  when: local_cluster is not defined
 
 - name: 4. Configure Worker
   import_playbook: configure-worker.yaml
