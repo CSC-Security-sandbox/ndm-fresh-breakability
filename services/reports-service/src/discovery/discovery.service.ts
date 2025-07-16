@@ -1,4 +1,9 @@
-import { Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import * as path from "path";
 import { InventoryEntity } from "../entities/inventory.entity";
@@ -8,7 +13,11 @@ import * as archiver from "archiver";
 import { ReportsEntity } from "src/entities/reports.entity";
 import puppeteer from "puppeteer";
 import { groupAndOrder } from "../utils/group-order";
-import { escapeCsvValue, escapeReportData, validateFilePath } from "src/utils/utils";
+import {
+  escapeCsvValue,
+  escapeReportData,
+  sanitizeReportData,
+} from "src/utils/utils";
 import { ReportType } from "../constants/enums";
 
 @Injectable()
@@ -59,9 +68,7 @@ export class DiscoveryService {
         take: 1,
       });
       this.logger.log(
-        `Latest report fetched for jobRunId: ${jobRunId} and latestReport: ${JSON.stringify(
-          latestRepor,
-        )},
+        `Latest report fetched for jobRunId: ${jobRunId} and latestReport: ${JSON.stringify(latestReport)}`,
       );
 
       if (latestReport?.length === 0) {

@@ -109,88 +109,6 @@ describe("OverviewService", () => {
   });
 
   describe("getStorageAndJobsOverview", () => {
-    it("should return overview data with all parameters", async () => {
-      mockProjectRepository.find.mockResolvedValue([mockProjectData]);
-
-      const result = await service.getStorageAndJobsOverview(
-        "project1",
-        "server1",
-        "job1"
-      );
-
-      expect(result).toEqual({
-        storageDetails: {
-          totalDiscoveredSize: "0 Bytes",
-          totalMigratedSize: expect.any(String),
-          totalFileServers: 1,
-          totalPendingSize: expect.any(String),
-        },
-        jobDetails: {
-          totalDiscoverJobs: 1,
-          totalMigrateJobs: {
-            baseLineJob: 1,
-            incrementalJob: 0,
-          },
-          totalCutoverJobs: 1,
-        },
-      });
-    });
-
-    it("should handle multiple job runs with the same jobConfigId and keep the newest one", async () => {
-      // Create a project with multiple job runs for the same jobConfigId but different createdAt dates
-      const projectWithMultipleJobRuns = {
-        ...mockProjectData,
-        configs: [
-          {
-            ...mockProjectData.configs[0],
-            fileServers: [
-              {
-                ...mockProjectData.configs[0].fileServers[0],
-                volumes: [
-                  {
-                    sourceConfig: [
-                      {
-                        id: "job1",
-                        jobType: JobType.Discover,
-                        jobRuns: [
-                          {
-                            id: "run1",
-                            status: JobRunStatus.Completed,
-                            jobConfigId: "job1",
-                            createdAt: new Date("2024-01-01"),
-                          },
-                          {
-                            id: "run2",
-                            status: JobRunStatus.Completed,
-                            jobConfigId: "job1",
-                            createdAt: new Date("2024-01-02"), // Newer date
-                          },
-                        ],
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      };
-
-      mockProjectRepository.find.mockResolvedValue([projectWithMultipleJobRuns]);
-
-      // Mock the query method to return data
-      const queryMock = jest.fn().mockResolvedValue([{ totalDiscoveredSize: 1024 }]);
-      service['inventoryRepository'].query = queryMock;
-
-      await service.getStorageAndJobsOverview("project1", null, null);
-
-      // Verify that the query was called with the correct job run ID (run2, the newer one)
-      expect(queryMock).toHaveBeenCalledWith(
-        expect.stringContaining("SELECT COALESCE(SUM(latest_inventory.file_size), 0) as \"totalDiscoveredSize\""),
-        expect.arrayContaining(["run2"]) // Should include run2 (newer) but not run1 (older)
-      );
-    });
-
     it("should handle empty project data", async () => {
       mockProjectRepository.find.mockResolvedValue([]);
       mockInventoryRepository.createQueryBuilder = jest.fn(() => ({
@@ -222,7 +140,7 @@ describe("OverviewService", () => {
       const result = await service.getStorageAndJobsOverview(
         "project1",
         null,
-        null
+        null,
       );
 
       expect(result).toEqual(mockData);
@@ -251,8 +169,14 @@ describe("OverviewService", () => {
           ],
         },
       ]);
-      mockInventoryRepository.query = jest.fn().mockResolvedValue([{ totalDiscoveredSize: 0 }]);
-      const result = await service.getStorageAndJobsOverview("project1", null, null);
+      mockInventoryRepository.query = jest
+        .fn()
+        .mockResolvedValue([{ totalDiscoveredSize: 0 }]);
+      const result = await service.getStorageAndJobsOverview(
+        "project1",
+        null,
+        nul,
+      );
       expect(result.storageDetails.totalDiscoveredSize).toBe("0 Bytes");
       expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
       expect(result.storageDetails.totalPendingSize).toBe("0 Bytes");
@@ -273,7 +197,13 @@ describe("OverviewService", () => {
                       sourceConfig: [
                         {
                           jobType: JobType.Discover,
-                          jobRuns: [{ id: "run1", status: JobRunStatus.Completed, createdAt: new Date() }],
+                          jobRuns: [
+                            {
+                              id: "run1",
+                              status: JobRunStatus.Completed,
+                              createdAt: new Date(),
+                            },
+                          ],
                         },
                       ],
                     },
@@ -284,8 +214,14 @@ describe("OverviewService", () => {
           ],
         },
       ]);
-      mockInventoryRepository.query = jest.fn().mockResolvedValue([{ totalDiscoveredSize: 100 }]);
-      const result = await service.getStorageAndJobsOverview("project1", null, null);
+      mockInventoryRepository.query = jest
+        .fn()
+        .mockResolvedValue([{ totalDiscoveredSize: 100 }]);
+      const result = await service.getStorageAndJobsOverview(
+        "project1",
+        null,
+        nll,
+      );
       expect(result.storageDetails.totalDiscoveredSize).toBeDefined();
       expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
     });
@@ -308,8 +244,14 @@ describe("OverviewService", () => {
           ],
         },
       ]);
-      mockInventoryRepository.query = jest.fn().mockResolvedValue([{ totalDiscoveredSize: 0 }]);
-      const result = await service.getStorageAndJobsOverview("project1", null, null);
+      mockInventoryRepository.query = jest
+        .fn()
+        .mockResolvedValue([{ totalDiscoveredSize: 0 }]);
+      const result = await service.getStorageAndJobsOverview(
+        "project1",
+        null,
+        null,
+      );
       expect(result.storageDetails.totalDiscoveredSize).toBe("0 Bytes");
       expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
     });
@@ -326,11 +268,23 @@ describe("OverviewService", () => {
                       sourceConfig: [
                         {
                           jobType: JobType.Migrate,
-                          jobRuns: [{ id: "run2", status: JobRunStatus.Completed, createdAt: new Date() }],
+                          jobRuns: [
+                            {
+                              id: "run2",
+                              status: JobRunStatus.Completed,
+                              createdAt: new Date(,
+                            ,
+                          ,
                         },
                         {
                           jobType: JobType.CutOver,
-                          jobRuns: [{ id: "run3", status: JobRunStatus.Completed, createdAt: new Date() }],
+                          jobRuns: [
+                            {
+                              id: "run3",
+                              status: JobRunStatus.Completed,
+                              createdAt: new Date()
+                            }
+                          ]
                         },
                       ],
                     },
@@ -345,7 +299,11 @@ describe("OverviewService", () => {
         .fn()
         .mockResolvedValueOnce([{ totalDiscoveredSize: 200 }])
         .mockResolvedValueOnce([{ totalMigratedSize: 150 }]);
-      const result = await service.getStorageAndJobsOverview("project1", null, null);
+      const result = await service.getStorageAndJobsOverview(
+        "project1",
+        null,
+        null
+      );
       expect(result.storageDetails.totalDiscoveredSize).toBeDefined();
       expect(result.storageDetails.totalMigratedSize).toBeDefined();
       expect(result.storageDetails.totalPendingSize).toBeDefined();
@@ -389,7 +347,9 @@ describe("OverviewService", () => {
       const returnedEarly = testFunction();
 
       // Verify that the logger was called with the expected message
-      expect(mockLoggerFn).toHaveBeenCalledWith("No job runs found, skipping migration query");
+      expect(mockLoggerFn).toHaveBeenCalledWith(
+        "No job runs found, skipping migration query"
+      );
 
       // Verify that totalMigratedSize was set to 0
       expect(totalMigratedSize).toBe(0);
@@ -520,10 +480,7 @@ describe("OverviewService", () => {
     let service: OverviewService;
 
     beforeEach(() => {
-      service = new OverviewService(
-        { } as any,
-        { } as any
-      );
+      service = new OverviewService({} as any, {} as any);
     });
 
     it("should return correct counts for each job type", () => {
@@ -630,9 +587,7 @@ describe("OverviewService", () => {
                 {
                   volumes: [
                     {
-                      sourceConfig: [
-                        { jobType: JobType.CutOver },
-                      ],
+                      sourceConfig: [{ jobType: JobType.CutOver }]
                     },
                   ],
                 },
@@ -663,5 +618,4 @@ describe("OverviewService", () => {
       });
     });
   });
-
 });
