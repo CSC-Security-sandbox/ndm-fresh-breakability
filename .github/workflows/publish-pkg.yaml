@@ -80,6 +80,8 @@ jobs:
       - name: Install dependencies
         working-directory: lib/${{ github.event.inputs.lib_name }}
         run: npm i && npm run build
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
 
       - name: Update version in package.json
         working-directory: lib/${{ github.event.inputs.lib_name }}
