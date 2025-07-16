@@ -15,7 +15,7 @@ import { UserPermissionResponse } from '../auth/user-permission-response-type';
 import { UserRole } from '../entities/user-role.entity';
 import {
   LoggerFactory,
-  LoggerService
+  LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
@@ -47,15 +47,19 @@ export class ProjectService {
       throw new NotFoundException(`Account with ${accountId} not found`);
     }
 
-    this.logger.log(`starting to find "${createProjectDto.project_name}" project for account ${accountId}`);
+    this.logger.log(
+      `starting to find "${createProjectDto.project_name}" project for account ${accountId}`,
+    );
     const existingProject = await this.projectRepository.findOneBy({
       project_name: createProjectDto.project_name,
     });
 
     if (existingProject) {
-      this.logger.error(`A project with the name "${createProjectDto.project_name}" already exists for this account.`);
-      throw new ConflictException(
+      this.logger.error(
         `A project with the name "${createProjectDto.project_name}" already exists for this account.`,
+      );
+      throw new ConflictException(
+        `A project with the name ${createProjectDto.project_name} already exists for this account.`,
       );
     }
 
@@ -71,12 +75,15 @@ export class ProjectService {
     id: string,
     updateProjectDto: UpdateProjectDto,
     userPermissionResponse: UserPermissionResponse,
-  ): Promise<void> {
+  ): Promise<{ message: string }> {
     await this.projectRepository.update(id, {
       ...updateProjectDto,
       updated_by: userPermissionResponse.user.id,
     });
-    this.logger.log(`Done updating the project ${id} with update data ${JSON.stringify(updateProjectDto)}`);
+    this.logger.log(
+      `Done updating the project ${id} with update data ${JSON.stringify(updateProjectDto)}`,
+    );
+    return { message: `Project updated successfully` };
   }
 
   async delete(id: string): Promise<void> {

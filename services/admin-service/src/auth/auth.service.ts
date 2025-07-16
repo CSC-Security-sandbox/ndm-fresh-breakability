@@ -1,9 +1,9 @@
 import {
+  ConflictException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
-  ConflictException,
-  Inject,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { User } from '../entities/user.entity';
@@ -14,7 +14,7 @@ import { makeAxiosRequest } from '../utils/axios-request-utils';
 import { encryptData } from '../utils/crypto-utils';
 import {
   LoggerFactory,
-  LoggerService
+  LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
@@ -92,16 +92,17 @@ export class AuthService {
     userPermissionResponse: UserPermissionResponse,
   ): Promise<{ user: User; tempPassword: string }> {
     // Check if user already exists in the database
-    const existingUser = await this.userRepository.findOne({ where: { email: username } });
-    if (existingUser) {
-      throw new ConflictException(
-        `Cannot create user: the email id '${username}' already exists.`
-      );
-    }
-    const tempPassword = this.generateRandomPassword(12);
-    const token = await this.getKeycloakToken();
-
     try {
+      const existingUser = await this.userRepository.findOne({
+        where: { email: username },
+      });
+      if (existingUser) {
+        throw new ConflictException(
+          `Cannot create user: the email id '${username}' already exists.`,
+        );
+      }
+      const tempPassword = this.generateRandomPassword(12);
+      const token = await this.getKeycloakToken();
       const encryptedPassword = encryptData(tempPassword);
       await makeAxiosRequest({
         method: 'POST',
@@ -189,10 +190,15 @@ export class AuthService {
     }
   }
 
-  async setUserStatus(email: string, enable: boolean): Promise<User> {
+  async setUserStatus(
+    email: string,
+    enable: boolean,
+  ): Promise<{ message: string; user: User }> {
     const user = await this.userRepository.findOne({ where: { email } });
     if (!user) {
-      throw new NotFoundException(`User not found, Please verify the user ID and try again.`);
+      throw new NotFoundException(
+        `User not found, Please verify the user ID and try again.`,
+      );
     }
 
     user.user_status = enable ? 'active' : 'inactive';
@@ -209,7 +215,9 @@ export class AuthService {
       });
 
       if (users.length === 0) {
-        throw new NotFoundException('User not found in Keycloak, Please verify the user ID and try again.');
+        throw new NotFoundException(
+          'User not found in Keycloak, Please verify the user ID and try again.',
+        );
       }
 
       const keycloakUser = users[0];
@@ -233,8 +241,11 @@ export class AuthService {
           },
         });
       }
-
-      return user;
+      const state = enable ? 'enabled' : 'disabled';
+      return {
+        message: `Access has been successfully ${state} for a user: ${email}`,
+        user,
+      };
     } catch (error) {
       throw new InternalServerErrorException(
         `Failed to update user status in Keycloak, error: ${error.message}`,

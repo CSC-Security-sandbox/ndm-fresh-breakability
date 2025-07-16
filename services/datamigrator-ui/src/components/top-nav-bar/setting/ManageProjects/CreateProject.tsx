@@ -1,39 +1,40 @@
 /* eslint-disable */
-import { useEffect, useState } from "react";
+import React, {useEffect, useState} from 'react';
 import {
   Button,
+  Card,
   FormFieldInputNew,
   FormFieldTextArea,
-  Layout,
-  Card,
   Heading,
-  WizardFooter,
-  Tooltip,
+  Layout,
   Text,
-} from "@netapp/bxp-design-system-react";
-import Box from "@/components/container/Box";
-import AssociateUsers from "@components/top-nav-bar/setting/ManageProjects/components/AssociateUsers";
-import { ASSOCIATE_USER_FORM_VALIDATION_SCHEMA } from "@components/top-nav-bar/setting/ManageProjects/ManageProjects.constant";
+  Tooltip,
+  useForm,
+  WizardFooter
+} from '@netapp/bxp-design-system-react';
+import Box from '@/components/container/Box';
+import AssociateUsers from '@components/top-nav-bar/setting/ManageProjects/components/AssociateUsers';
 import {
-  useGetAllRolesQuery,
+  ASSOCIATE_USER_FORM_VALIDATION_SCHEMA
+} from '@components/top-nav-bar/setting/ManageProjects/ManageProjects.constant';
+import {
   useAssociateUserBatchMutation,
-  useLazyGetAllUserRolesQuery,
+  useGetAllRolesQuery,
   useGetAllUsersQuery,
-} from "@api/userApi";
-import { useForm } from "@netapp/bxp-design-system-react";
+  useLazyGetAllUserRolesQuery
+} from '@api/userApi';
 import {
   AssociatedUsersOptionsType,
   BlueXpFormType,
   CreateProjectPropsType,
   USER_ROLES_ENUM,
   USER_STATUS_ENUM,
-  UserApiType,
-} from "@/types/app.type";
-import withCreateProject from "@/hoc/withCreateProject";
-import React from "react";
-import ErrorMessageContainer from "@components/container/ErrorMessageContainer";
-import { notify } from "@components/notification/NotificationWrapper";
-import { Show } from "@components/show/Show";
+  UserApiType
+} from '@/types/app.type';
+import withCreateProject from '@/hoc/withCreateProject';
+import ErrorMessageContainer from '@components/container/ErrorMessageContainer';
+import {notify} from '@components/notification/NotificationWrapper';
+import {Show} from '@components/show/Show';
 
 const CreateProjectForm = ({
   closeAction,
@@ -44,8 +45,12 @@ const CreateProjectForm = ({
   resetForm: resetProjectForm,
   handleUpdateProject,
 }: CreateProjectPropsType) => {
-  const { data: users, isLoading: usersLoading } = useGetAllUsersQuery("");
-  const { data: roles, isLoading: rolesLoading } = useGetAllRolesQuery("");
+  const {data: getAllUserResult, isLoading: usersLoading} =
+      useGetAllUsersQuery('');
+  const {data: getAllRoleSResult, isLoading: rolesLoading} =
+      useGetAllRolesQuery('');
+  const users = getAllUserResult?.data?.items || [];
+  const roles = getAllRoleSResult?.data?.items || [];
   const editMode = !!editSelectedProject?.id;
   const [getAllAssociatedUser] = useLazyGetAllUserRolesQuery();
   const [associatedUsers, setAssociatedUsers] = useState<
@@ -66,8 +71,8 @@ const CreateProjectForm = ({
           const res = await getAllAssociatedUser({
             project_id: editSelectedProject?.id,
           }).unwrap();
-          const tempAssociatedUsers: AssociatedUsersOptionsType[] = res?.map(
-            (userRoles: any) => ({
+          const tempAssociatedUsers: AssociatedUsersOptionsType[] =
+              res?.data.items.map((userRoles: any) => ({
               user: {
                 label: userRoles?.user?.email,
                 value: userRoles?.user?.id,
@@ -76,14 +81,12 @@ const CreateProjectForm = ({
                 label: userRoles?.role?.role_name,
                 value: userRoles?.role?.id,
               },
-            })
-          );
+              }));
           setAssociatedUsers(tempAssociatedUsers);
         } catch (error) {
+          const errorData = error?.data || {};
           setFailedToFetchAssociateUsers(true);
-          notify.error(
-            "Failed to get list of associated users for this project."
-          );
+          notify.error(errorData.message);
           console.error({ error, level: "Get Associate user list" });
         }
       })();
@@ -97,10 +100,6 @@ const CreateProjectForm = ({
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [associatedUserWithProjectBatch] = useAssociateUserBatchMutation();
-  const message = `Project - "${
-    createProjectForm.formState.project_name
-  }" successfully ${editMode ? "updated" : "created"}.`;
-
   const handleAssociateUsers = async (projectId: string) => {
     const body = {
       project_id: projectId,
@@ -110,21 +109,26 @@ const CreateProjectForm = ({
         role_id: role.value,
       })),
     };
-    await associatedUserWithProjectBatch(body).unwrap();
+    let response = await associatedUserWithProjectBatch(body).unwrap();
+    return response;
   };
 
   const handleSubmitCreateProject = async () => {
     setIsLoading(true);
+    let message: string = '';
     try {
-      const response = await handleCreateProject();
+      const handleCreateProjectResult = await handleCreateProject();
+      const response = handleCreateProjectResult.data;
 
       try {
-        await handleAssociateUsers(response.id);
+        const handleAssociateUsersResult = await handleAssociateUsers(response.id);
+        message = handleCreateProjectResult.message + ' and ' + handleAssociateUsersResult['message'];
         resetProjectForm();
         notify.success(message);
       } catch (err) {
+        // improvement needs to be done here to handle the error better
         notify.warning(
-          `Project - "${createProjectForm.formState.project_name}" successfully created. But failed to associate the users.`
+            `Project - "${createProjectForm.formState.project_name}" successfully created. But failed to associate the users.`
         );
         console.error({ err, level: "Associate User" });
       }
@@ -145,17 +149,21 @@ const CreateProjectForm = ({
 
   const handleSubmitUpdateProject = async () => {
     setIsLoading(true);
+    let message: string = '';
     try {
-      await handleUpdateProject(editSelectedProject?.id);
+      let result = await handleUpdateProject(editSelectedProject?.id);
       try {
-        await handleAssociateUsers(editSelectedProject?.id);
+        let associateUserResult = await handleAssociateUsers(
+            editSelectedProject?.id
+        );
+        message = result.message + ' and ' + associateUserResult['message'];
         resetProjectForm();
         notify.success(message);
         handleClose();
         submitAction && submitAction();
       } catch (err) {
         notify.warning(
-          `Project - "${createProjectForm.formState.project_name}" successfully updated. But failed to update the list of associated users.`
+            `Project - "${createProjectForm.formState.project_name}" successfully updated. But failed to update the list of associated users.`
         );
         console.error({ err, level: "Associate User" });
       }
@@ -163,8 +171,8 @@ const CreateProjectForm = ({
       notify.error(
         <ErrorMessageContainer
           title="Error occurred."
-          message={err?.message || "Failed to update Project."}
-        />
+          message={err?.message}
+        />,
       );
       console.error({ err, level: "Update Project" });
     }
@@ -194,20 +202,6 @@ const CreateProjectForm = ({
     setAssociatedUsers([]);
     closeAction();
   };
-
-  // const showWorkerInstructions = () => {
-  //   dispatch(
-  //     setModalProps({
-  //       isOpen: true,
-  //       modalHeader: `Steps to install the Worker`,
-  //       modalContent: <WorkerInstructions />,
-  //       modalFooter: (
-  //         <Button onClick={() => dispatch(setModalClose())}>Close</Button>
-  //       ),
-  //     })
-  //   );
-  // };
-
   return (
     <Layout.Page>
       <Layout.Content>
