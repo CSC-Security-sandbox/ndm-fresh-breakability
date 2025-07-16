@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Command, ErrorType, FileInfo, MetaData, OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, ErrorType, FileInfo, JobManagerContext, MetaData, OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
 import * as path from "path";
@@ -55,7 +55,8 @@ export class MigrateScanService {
         return content;
     }
 
-    async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings}: ScanDirectoryInput): Promise<ScanDirectoryOutput> { 
+    
+    async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings , targetPrefix}: ScanDirectoryInput): Promise<ScanDirectoryOutput> { 
 
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
         let commands: Command[] = [], errorType: ErrorType = command.retryCount+1 > this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
@@ -102,6 +103,7 @@ export class MigrateScanService {
                         if (command) commands.push(command);
                     }
                 }
+                //TODO: this is duplicated many times, need to refactor.
                 if(commands.length >= this.maxMigrationCommand) {
                     const chunk = commands.splice(0, this.maxMigrationCommand);
                     await this.publishCommands({ jobContext, commands: chunk });
@@ -114,6 +116,19 @@ export class MigrateScanService {
                 throw error; 
             }
         }
+        if (jobContext?.jobConfig?.skipDelete === false) {
+            //TODO: remove command as it is not required. 
+            await this.processDeletedItems({
+                sourceContent,
+                targetContent,
+                targetPath,
+                targetPrefix,
+                jobContext,
+                errorType,
+                command,
+                commands
+            });
+        }
         if (commands.length > 0) {
             await this.publishCommands({ jobContext, commands: commands });
             commands = [];
@@ -122,6 +137,15 @@ export class MigrateScanService {
     }
 
     buildCommand = (sFile: fs.Stats, fPath: string, dFile?: fs.Stats): Command | undefined => {
+         if (!sFile) {
+            return new Command(
+                fPath,{
+                    0: { cmd: dFile.isDirectory() ? OPS_CMD.REMOVE_DIR:  OPS_CMD.REMOVE_FILE, status: OPS_STATUS.READY }
+            },
+                uuid4(),
+                0
+            );
+        }
         const metadata: MetaData =  { 
             size: sFile.size,
             mtime: sFile.mtime,
@@ -145,5 +169,40 @@ export class MigrateScanService {
             );
 
         return undefined;
+    }
+    async processDeletedItems({ sourceContent, targetContent, targetPath, targetPrefix, jobContext, errorType, command, commands }: {
+        sourceContent: Set<string>,
+        targetContent: Set<string>,
+        targetPath: string,
+        targetPrefix: string,
+        jobContext: JobManagerContext,
+        errorType: ErrorType,
+        command: Command,
+        commands: Command[]
+    }) {
+        for (const targetItem of targetContent) {
+            if (!sourceContent.has(targetItem)) {
+                const targetContentPath = path.join(targetPath, targetItem);
+                try {
+                    if (fs.existsSync(targetContentPath)) {
+                        const targetStat = await fs.promises.lstat(targetContentPath);
+                        const relativeSourcePath = removePrefix(targetContentPath, targetPrefix);
+                        const deleteCommand = this.buildCommand(null, relativeSourcePath, targetStat);
+                        if (deleteCommand) {
+                            commands.push(deleteCommand);
+                        }
+                    }
+                    if (commands.length >= this.maxMigrationCommand) {
+                        const chunk = commands.splice(0, this.maxMigrationCommand);
+                        await this.publishCommands({ jobContext, commands: chunk });
+                    }
+                } catch (error) {
+                    this.logger.error(`[${jobContext.jobRunId}] Error processing  ${targetContentPath}: ${error}`);
+                    const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.commandId, error, { name: command.fPath, path: targetPath });
+                    await jobContext.publishToErrorStream(dmErr);
+                    throw error;
+                }
+            }
+        }
     }
 }

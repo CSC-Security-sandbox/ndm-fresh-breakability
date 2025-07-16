@@ -493,5 +493,75 @@ describe('MigrateScanService', () => {
             expect(result.subDirs).toHaveLength(0);
             expect(jobContext.publishToCommandStream).not.toHaveBeenCalled();
         });
+        it('should skip delete when skipDelete is true', async () => {
+            jobContext.jobConfig.skipDelete = true;
+
+            (fs.existsSync as jest.Mock).mockImplementation((p: string) => true);
+            (fs.promises.readdir as jest.Mock).mockImplementation(async (p: string) => {
+                if (p === '/src') return [];
+                if (p === '/dst') return ['file1', 'file2'];
+                return [];
+            });
+            await service.scanDirectory(commandInput);
+            expect(jobContext.publishToCommandStream).not.toHaveBeenCalled();
+        });
+
+        it('should handle command publishing in chunks during delete processing', async () => {
+            jobContext.jobConfig.skipDelete = false;
+            service = new MigrateScanService(configService, logger);
+            (service as any).maxMigrationCommand = 2;
+
+            (fs.existsSync as jest.Mock).mockReturnValue(true);
+            (fs.promises.readdir as jest.Mock).mockImplementation(async (p: string) => {
+                if (p === '/src') return [];
+                if (p === '/dst') return ['file1', 'file2', 'file3'];
+                return [];
+            });
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 777,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+            });
+            (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+
+            commandInput.targetPrefix = '/dst';
+            await service.scanDirectory(commandInput);
+            expect(jobContext.publishToCommandStream).toHaveBeenCalledTimes(3);
+        });
+
+
+        it('should handle empty source directory', async () => {
+            (fs.existsSync as jest.Mock).mockReturnValue(true);
+            (fs.promises.readdir as jest.Mock).mockResolvedValue([]);
+
+            const result = await service.scanDirectory(commandInput);
+
+            expect(result.fileCount).toBe(0);
+            expect(result.dirCount).toBe(0);
+            expect(result.subDirs).toEqual([]);
+            expect(jobContext.publishToCommandStream).not.toHaveBeenCalled();
+        });
+
+        it('should handle target directory that does not exist during delete processing', async () => {
+            jobContext.jobConfig.skipDelete = false;
+
+            (fs.existsSync as jest.Mock).mockImplementation((p: string) => {
+                if (p === '/dst') return false;
+                return true;
+            });
+            (fs.promises.readdir as jest.Mock).mockResolvedValue([]);
+
+            const result = await service.scanDirectory(commandInput);
+
+            expect(result).toBeDefined();
+            expect(jobContext.publishToCommandStream).not.toHaveBeenCalled();
+        });
     });
 });

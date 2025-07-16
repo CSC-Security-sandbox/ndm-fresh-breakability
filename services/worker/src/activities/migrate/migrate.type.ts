@@ -59,7 +59,9 @@ export interface PublishScanTaskOutput{
 export enum OPS_CMD {
     COPY_CONTENT = 'cc',
     STAMP_META  = 'sm',
-    COPY_DIR = 'cd'
+    COPY_DIR = 'cd',
+    REMOVE_FILE = 'rf',
+    REMOVE_DIR = 'rd',
 }
 
 export interface FetchMigrationTaskInput {

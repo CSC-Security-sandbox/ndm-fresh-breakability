@@ -810,6 +810,7 @@ describe("JobRunService", () => {
         excludeOlderThan: undefined,
         workers: ["worker-1"], //filtering the  worker with no stats as it is categorized as unhealthy
         jobType: "DATA_TRANSFER",
+        skipDelete: false,
       });
     });
 
@@ -938,6 +939,7 @@ describe("JobRunService", () => {
         skipFile: undefined,
         excludeFilePatterns: undefined,
         excludeOlderThan: undefined,
+        skipDelete: false,
       });
     });
   });
@@ -2720,6 +2722,212 @@ describe("JobRunService", () => {
         expect(result).toEqual(mockErrors);
       });
     });
+  describe("updateWorkerResponse", () => {
+    it("should update worker response successfully", async () => {
+      const mockJobRunId = "jobRunId";
+      const mockWorkerId = "workerId";
+      const mockWorkerResponse = { status: "SUCCESS", message: "Worker setup completed" };
+
+      jest.spyOn(workerJobRunMapRepo, "update").mockResolvedValue({ affected: 1 } as any);
+
+      const result = await service.updateWorkerResponse(mockJobRunId, mockWorkerId, mockWorkerResponse);
+
+      expect(workerJobRunMapRepo.update).toHaveBeenCalledWith(
+        { jobRunId: mockJobRunId, workerId: mockWorkerId },
+        { workerResponse: mockWorkerResponse }
+      );
+      expect(result.affected).toBe(1);
+    });
   });
 
+
+  describe("sendErrorRemedyEmail", () => {
+    it("should send error remedy email with proper format", async () => {
+      const mockParams = {
+        jobRunId: "jobRunId",
+        sourcePath: "/source/path",
+        targetPath: "/target/path",
+        sourceHost: "source-host",
+        targetHost: "target-host",
+        jobType: JobType.MIGRATE,
+        errorCodes: [{ errorCode: "ERR001" }]
+      };
+      const mockErrorRemedies = [{
+        errorCode: "ERR001",
+        description: "Test error",
+        resolutionSteps: "Fix the error",
+        referenceCommands: "command1"
+      }];
+
+      jest.spyOn(errorRemedyService, "findByErrorCodes").mockResolvedValue(mockErrorRemedies as any);
+      jest.spyOn(sendMailService, "sendMail").mockResolvedValue(undefined);
+
+      await service.sendErrorRemedyEmail(mockParams);
+
+      expect(errorRemedyService.findByErrorCodes).toHaveBeenCalledWith(["ERR001"]);
+      expect(sendMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining("Error Code: ERR001")
+        })
+      );
+    });
+  });
+
+  describe("checkWorkerHealth", () => {
+    it("should pause job run when all workers are offline", async () => {
+      const mockJobRun = {
+        id: "jobRunId",
+        status: JobRunStatus.Running,
+        workerMap: [{
+          worker: {
+            id: "worker1",
+            status: WorkerStatus.Offline,
+            stats: {}
+          }
+        }]
+      };
+
+      jest.spyOn(jobRunRepo, "find").mockResolvedValue([mockJobRun] as any);
+      jest.spyOn(workerService, "updateWorkerStatus").mockReturnValue([
+        { status: WorkerStatus.Offline }
+      ] as any);
+      jest.spyOn(jobRunRepo, "update").mockResolvedValue({ affected: 1 } as any);
+
+      await service.checkWorkerHealth();
+
+      expect(jobRunRepo.update).toHaveBeenCalledWith(
+        { id: mockJobRun.id },
+        {
+          status: JobRunStatus.Paused,
+          pausedReason: PausedReason.SYSTEM_PAUSED
+        }
+      );
+    });
+  });
+  describe("updateWorkerResponse", () => {
+    it("should update worker response successfully", async () => {
+      const mockJobRunId = "jobRunId";
+      const mockWorkerId = "workerId";
+      const mockWorkerResponse = { status: "SUCCESS", message: "Worker completed" };
+      const mockUpdateResult = { affected: 1 } as any;
+
+      jest.spyOn(workerJobRunMapRepo, "update").mockResolvedValue(mockUpdateResult);
+
+      const result = await service.updateWorkerResponse(mockJobRunId, mockWorkerId, mockWorkerResponse);
+
+      expect(workerJobRunMapRepo.update).toHaveBeenCalledWith(
+        { jobRunId: mockJobRunId, workerId: mockWorkerId },
+        { workerResponse: mockWorkerResponse }
+      );
+      expect(result).toEqual(mockUpdateResult);
+    });
+
+    it("should throw error when update fails", async () => {
+      const mockJobRunId = "jobRunId";
+      const mockWorkerId = "workerId";
+      const mockWorkerResponse = { status: "FAILED" };
+      const mockError = new Error("Database error");
+
+      jest.spyOn(workerJobRunMapRepo, "update").mockRejectedValue(mockError);
+
+      await expect(
+        service.updateWorkerResponse(mockJobRunId, mockWorkerId, mockWorkerResponse)
+      ).rejects.toThrow("Failed to update worker response: Error: Database error");
+    });
+  });
+
+  describe("getWorkerSetupErrors", () => {
+   
+
+    it("should return empty array when no setup errors found", async () => {
+      const mockJobRunId = "jobRunId";
+
+      jest.spyOn(workerJobRunMapRepo, "find").mockResolvedValue([]);
+
+      const result = await service.getWorkerSetupErrors(mockJobRunId);
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe("sendErrorRemedyEmail", () => {
+    it("should send error remedy email when error codes exist", async () => {
+      const mockParams = {
+        jobRunId: "jobRunId",
+        sourcePath: "/source/path",
+        targetPath: "/target/path",
+        sourceHost: "source-host",
+        targetHost: "target-host",
+        jobType: JobType.MIGRATE,
+        errorCodes: [{ errorCode: "ERR001" }, { errorCode: "ERR002" }]
+      };
+
+      const mockErrorRemedies = [
+        {
+          errorCode: "ERR001",
+          description: "Error 1 description",
+          resolutionSteps: "Fix error 1",
+          referenceCommands: "command1"
+        },
+        {
+          errorCode: "ERR002",
+          description: "Error 2 description",
+          resolutionSteps: "Fix error 2",
+          referenceCommands: null
+        }
+      ];
+
+      jest.spyOn(errorRemedyService, "findByErrorCodes").mockResolvedValue(mockErrorRemedies as any);
+      jest.spyOn(sendMailService, "sendMail").mockResolvedValue(undefined);
+
+      await service.sendErrorRemedyEmail(mockParams);
+
+      expect(errorRemedyService.findByErrorCodes).toHaveBeenCalledWith(["ERR001", "ERR002"]);
+      expect(sendMailService.sendMail).toHaveBeenCalledWith({
+        body: expect.stringContaining("The following MIGRATE job (jobRunId) has errored")
+      });
+    });
+
+    it("should not send email when no error codes provided", async () => {
+      const mockParams = {
+        jobRunId: "jobRunId",
+        sourcePath: "/source/path",
+        targetPath: "/target/path",
+        sourceHost: "source-host",
+        targetHost: "target-host",
+        jobType: JobType.MIGRATE,
+        errorCodes: []
+      };
+
+      const errorRemedySpy = jest.spyOn(errorRemedyService, "findByErrorCodes");
+      const sendMailSpy = jest.spyOn(sendMailService, "sendMail");
+
+      await service.sendErrorRemedyEmail(mockParams);
+
+      expect(errorRemedySpy).not.toHaveBeenCalled();
+      expect(sendMailSpy).not.toHaveBeenCalled();
+    });
+
+    it("should handle null error codes", async () => {
+      const mockParams = {
+        jobRunId: "jobRunId",
+        sourcePath: "/source/path",
+        targetPath: "/target/path",
+        sourceHost: "source-host",
+        targetHost: "target-host",
+        jobType: JobType.MIGRATE,
+        errorCodes: null
+      };
+
+      const errorRemedySpy = jest.spyOn(errorRemedyService, "findByErrorCodes");
+      const sendMailSpy = jest.spyOn(sendMailService, "sendMail");
+
+      await service.sendErrorRemedyEmail(mockParams);
+
+      expect(errorRemedySpy).not.toHaveBeenCalled();
+      expect(sendMailSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  });
 });

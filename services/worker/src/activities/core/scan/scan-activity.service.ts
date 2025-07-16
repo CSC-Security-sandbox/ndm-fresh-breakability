@@ -105,6 +105,7 @@ export class ScanService {
                         settings,
                         sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
                         sourcePrefix: baseSourcePrefixPath,
+                        targetPrefix: baseTargetPrefixPath,
                         targetPath: `${baseTargetPrefixPath}${command.fPath}`,
                         jobContext,
                         command
