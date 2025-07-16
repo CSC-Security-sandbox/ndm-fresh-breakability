@@ -6,7 +6,10 @@ import { Repository } from 'typeorm';
 import { SettingType } from 'src/setting/dto/create-setting.dto';
 import { IncidentStatus, SyncEmail } from 'src/entities/sync-email.entity';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
-import { mockLoggerFactory, resetLoggerMocks } from '../test-utils/logger-mocks';
+import {
+  mockLoggerFactory,
+  resetLoggerMocks,
+} from '../test-utils/logger-mocks';
 
 enum EmailContentStatus {
   FIRING = 'firing',
@@ -288,15 +291,17 @@ describe('EmailService', () => {
       };
       (service as any).transporter = transporterMock;
 
-      const sendEmailForFailureEventsSpy = jest.spyOn(service, 'sendEmailForFailureEvents').mockResolvedValue(undefined);
+      const sendEmailForFailureEventsSpy = jest
+        .spyOn(service, 'sendEmailForFailureEvents')
+        .mockResolvedValue(undefined);
       const emailContent = { alerts: [{ status: 'firing' }] };
 
       await service.setupTransporter(emailContent, 'FAILURE');
 
       expect(sendEmailForFailureEventsSpy).toHaveBeenCalledWith(
         emailContent,
-  ,      'from@example.com',
-        'to@example.com'
+        'from@example.com',
+        'to@example.com',
       );
     });
 
@@ -356,15 +361,17 @@ describe('EmailService', () => {
       };
       (service as any).transporter = transporterMock;
 
-      const sendEmailForSuccessEventSpy = jest.spyOn(service, 'sendEmailForSuccessEvent').mockResolvedValue(undefined);
+      const sendEmailForSuccessEventSpy = jest
+        .spyOn(service, 'sendEmailForSuccessEvent')
+        .mockResolvedValue(undefined);
       const emailContent = { alerts: [{ status: 'resolved' }] };
 
       await service.setupTransporter(emailContent, 'SUCCESS');
 
       expect(sendEmailForSuccessEventSpy).toHaveBeenCalledWith(
         emailContent,
-  ,      'from@example.com',
-        'to@example.com'
+        'from@example.com',
+        'to@example.com',
       );
     });
 

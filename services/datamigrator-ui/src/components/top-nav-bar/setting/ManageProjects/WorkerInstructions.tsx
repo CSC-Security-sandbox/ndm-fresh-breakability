@@ -45,11 +45,11 @@ const WorkerInstallation = ({
       } catch (err: any) {
           notify.error(
               <ErrorMessageContainer
-                  title="Failed to create Project."
+                  title="Failed to generate worker secret."
                   message={err.data.message}
               />
           );
-          console.error({err, level: 'Create Project'});
+          console.error({err, level: 'Failed to generate worker secret.'});
       }
   };
 

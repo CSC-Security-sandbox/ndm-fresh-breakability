@@ -66,7 +66,7 @@ describe('ProjectController', () => {
               error: jest.fn(),
             }),
           },
-        }
+        },
       ],
     }).compile();
 
@@ -362,8 +362,12 @@ describe('ProjectController', () => {
         userPermissionResponseMock,
       );
 
-      expect(service.update).toHaveBeenCalledWith('1', updateDto, userPermissionResponseMock);
- 'Project updated successfully'Be("Project updated successfully");
+      expect(service.update).toHaveBeenCalledWith(
+        '1',
+        updateDto,
+        userPermissionResponseMock,
+      );
+      expect(result.message).toBe('Project updated successfully');
     });
 
     it('should handle errors during update', async () => {
