@@ -170,6 +170,13 @@ export class MigrateSyncService {
     const syncOperation: SyncOperationOutput = {errors : {source: new Set<string>(), target: new Set<string>() },  ops, status: OPS_STATUS.COMPLETED , errorType : errorType }
     if (syncOperation.ops[0] && syncOperation.ops[0].status !== OPS_STATUS.COMPLETED) {
       if(syncOperation.ops[0].cmd === OPS_CMD.COPY_CONTENT) {
+        if (!this.validateSourceExist(sourcePath)) {
+          syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.ERROR, error: `Source path does not exist: ${sourcePath}` };
+          this.logger.error(`Source path does not exist: ${sourcePath}`);
+          const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.COPY_CONTENT, syncOperation.errorType, command.commandId, new Error(`Source path does not exist: ${sourcePath}`), {name: command.fPath, path: sourcePath});
+          await jobContext.publishToErrorStream(dmErr);
+          return syncOperation;
+        }
         try {
           syncOperation.checksums = await this.workerThreadService.migrateWorkerThread({
             sourcePath, destinationPath: targetPath, operationId: command.commandId, size: syncOperation.ops[1].metadata?.size ?? 0
@@ -396,6 +403,13 @@ export class MigrateSyncService {
       this.logger.log(`File ${targetPath} does not exist, skipping unlink.`);
     }
   }
+  validateSourceExist(sourcePath: string):boolean {
+    if (!fs.existsSync(sourcePath)) {
+    this.logger.error(`Source path does not exist: ${sourcePath}`);
+    return false;
+    }
+    return true;
+    }
   
 }
 
