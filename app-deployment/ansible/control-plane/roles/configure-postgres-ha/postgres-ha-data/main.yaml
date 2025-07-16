@@ -1,0 +1,20 @@
+---
+
+- name: delete postgres-ha-data directory if uninstall flag is defined 
+  become: yes
+  file:
+    path: /data/postgres-ha-data
+    state: absent
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"   
+    mode: 0755
+  when: postgres_ha_uninstall is defined
+
+- name: create postgres-ha-data directory 
+  become: yes
+  file:
+    path: /data/postgres-ha-data
+    state: directory
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"   
+    mode: 0755

@@ -114,6 +114,7 @@
 - name: Generate password for postgres
   become: yes
   shell: |
+    export POSTGRES_REPLICATION_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
     export POSTGRES_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
     export POSTGRES_DMADMIN_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
     export KEYCLOAK_POSTGRES_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
@@ -122,6 +123,7 @@
     kubectl exec openbao-0 -n openbao -- bao kv put secrets/postgres-secrets/postgres-creds \
       POSTGRES_USER="postgres" \
       POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+      POSTGRES_REPLICATION_PASSWORD="${POSTGRES_REPLICATION_PASSWORD}" \
       POSTGRES_DMADMIN_USER="dmadmin" \
       POSTGRES_DMADMIN_PASSWORD="${POSTGRES_DMADMIN_PASSWORD}" \
       KEYCLOAK_POSTGRES_USER="kcadmin" \

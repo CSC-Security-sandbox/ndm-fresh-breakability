@@ -38,7 +38,7 @@ env:
   - name: DB_NAME
     value: "datamigrator"
   - name: DB_HOST
-    value: "postgresql.postgres.svc.cluster.local"
+    value: "postgresql-primary.postgres.svc.cluster.local"
 
   # - name: DB_USER # from secret
   #   value: ""

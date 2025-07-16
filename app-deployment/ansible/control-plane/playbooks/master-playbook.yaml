@@ -27,8 +27,11 @@
 - name: Configure openbao
   import_playbook: configure-openbao.yaml
 
-- name: Configure postgres
-  import_playbook: configure-postgres.yaml
+# - name: Configure postgres
+#   import_playbook: configure-postgres.yaml
+
+- name: Configure postgres-ha
+  import_playbook: configure-postgres-ha.yaml
 
 - name: Configure prometheus
   import_playbook: configure-prometheus.yaml

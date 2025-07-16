@@ -1,6 +1,6 @@
 ##reference: https://artifacthub.io/packages/helm/bitnami/postgresql?modal=values
 
-architecture: standalone
+architecture: replication
 global:
   postgresql:
     auth:
@@ -10,6 +10,7 @@ global:
       secretKeys:
         adminPasswordKey: postgres-password
         userPasswordKey: password
+        replicationPasswordKey: replication-password
 
 primary:
   persistence:
@@ -68,4 +69,18 @@ volumePermissions:
   enabled: true
 
 readReplicas:
-    replicaCount: 0
+  replicaCount: 3
+  extendedConfiguration: |
+    max_connections = 1000
+    tcp_keepalives_idle = 180
+    tcp_keepalives_interval = 10
+    tcp_keepalives_count = 5
+    shared_buffers = 768MB
+    work_mem = 16MB
+    maintenance_work_mem = 256MB
+    max_parallel_workers_per_gather = 2
+    parallel_tuple_cost = 0.1
+    parallel_setup_cost = 500
+    wal_buffers = 8MB
+    checkpoint_completion_target = 0.9
+    max_wal_size = 1GB

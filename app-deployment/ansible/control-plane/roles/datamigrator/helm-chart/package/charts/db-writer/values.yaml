@@ -47,7 +47,7 @@ env:
   - name: DB_PORT
     value: "5432"
   - name: DB_HOST
-    value: "postgresql.postgres.svc.cluster.local"
+    value: "postgresql-primary.postgres.svc.cluster.local"
   # - name: DB_USER # from secret
   #   value: ""
   # - name: DB_PASSWORD # from secret

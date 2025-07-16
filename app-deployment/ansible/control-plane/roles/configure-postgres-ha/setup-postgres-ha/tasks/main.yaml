@@ -1,20 +1,18 @@
 ---
-- name: Creates postgres directory
+- name: Creates postgres HA directory
   become: yes
   file:
-    path: $HOME/postgres
+    path: $HOME/postgres-ha
     state: directory
 
 - name: generate random passwords for postgres
   become: yes
   shell: |
     export POSTGRES_ROOT_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.POSTGRES_PASSWORD)
-    export POSTGRES_REPLICATION_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.POSTGRES_REPLICATION_PASSWORD)
     export DMADMIN_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.POSTGRES_DMADMIN_PASSWORD)
     export KEYCLOAK_POSTGRES_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.KEYCLOAK_POSTGRES_PASSWORD)
     export LIQUIBASE_POSTGRES_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.LIQUIBASE_POSTGRES_PASSWORD)
     export TEMPORAL_POSTGRES_PASSWORD=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/postgres-secrets/postgres-creds | jq -r .data.TEMPORAL_POSTGRES_PASSWORD)
-    echo "REPLICATION_PASSWORD:$POSTGRES_REPLICATION_PASSWORD"
     echo "ROOT_PASSWORD:$POSTGRES_ROOT_PASSWORD"
     echo "DMADMIN_PASSWORD:$DMADMIN_PASSWORD"
     echo "KEYCLOAK_POSTGRES_PASSWORD:$KEYCLOAK_POSTGRES_PASSWORD"
@@ -28,8 +26,6 @@
   set_fact:
     postgres_root_password: "{{ (postgres_passwords.stdout_lines | select('match', 'ROOT_PASSWORD:.*') | map('regex_replace', 'ROOT_PASSWORD:(.*)', '\\1') | list | first) }}"
     postgres_root_password_base64: "{{ (postgres_passwords.stdout_lines | select('match', 'ROOT_PASSWORD:.*') | map('regex_replace', 'ROOT_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
-    postgres_replication_password: "{{ (postgres_passwords.stdout_lines | select('match', 'REPLICATION_PASSWORD:.*') | map('regex_replace', 'REPLICATION_PASSWORD:(.*)', '\\1') | list | first) }}"
-    postgres_replication_password_base64: "{{ (postgres_passwords.stdout_lines | select('match', 'REPLICATION_PASSWORD:.*') | map('regex_replace', 'REPLICATION_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
     dmadmin_password: "{{ (postgres_passwords.stdout_lines | select('match', 'DMADMIN_PASSWORD:.*') | map('regex_replace', 'DMADMIN_PASSWORD:(.*)', '\\1') | list | first) }}"
     dmadmin_password_base64: "{{ (postgres_passwords.stdout_lines | select('match', 'DMADMIN_PASSWORD:.*') | map('regex_replace', 'DMADMIN_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
     keycloak_postgres_password: "{{ (postgres_passwords.stdout_lines | select('match', 'KEYCLOAK_POSTGRES_PASSWORD:.*') | map('regex_replace', 'KEYCLOAK_POSTGRES_PASSWORD:(.*)', '\\1') | list | first) }}"
@@ -39,71 +35,71 @@
     temporal_postgres_password: "{{ (postgres_passwords.stdout_lines | select('match', 'TEMPORAL_POSTGRES_PASSWORD:.*') | map('regex_replace', 'TEMPORAL_POSTGRES_PASSWORD:(.*)', '\\1') | list | first) }}"
     temporal_postgres_password_base64: "{{ (postgres_passwords.stdout_lines | select('match', 'TEMPORAL_POSTGRES_PASSWORD:.*') | map('regex_replace', 'TEMPORAL_POSTGRES_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
 
-- name: postgres-namespace template
+- name: postgres-ha-namespace template
   become: yes
-  template: src=./templates/postgres-namespace.j2 dest=$HOME/postgres/postgres-namespace.yaml
+  template: src=./templates/postgres-ha-namespace.j2 dest=$HOME/postgres-ha/postgres-ha-namespace.yaml
 
-- name: postgres-storageclass template
-  become: yes
-  template: src=./templates/postgres-storageclass.j2 dest=$HOME/postgres/postgres-storageclass.yaml
+# - name: postgres-storageclass template
+#   become: yes
+#   template: src=./templates/postgres-storageclass.j2 dest=$HOME/postgres-ha/postgres-storageclass.yaml
 
-- name: postgres-primary-pv template
-  become: yes
-  template: src=./templates/postgres-primary-pv.j2 dest=$HOME/postgres/postgres-primary-pv.yaml
+# - name: postgres-primary-pv template
+#   become: yes
+#   template: src=./templates/postgres-primary-pv.j2 dest=$HOME/postgres-ha/postgres-primary-pv.yaml
 
-- name: postgres config map template
-  become: yes
-  template: src=./templates/postgres-configmap.j2 dest=$HOME/postgres/postgres-configmap.yaml
+# - name: postgres config map template
+#   become: yes
+#   template: src=./templates/postgres-configmap.j2 dest=$HOME/postgres-ha/postgres-configmap.yaml
 
 - name: postgres-secret template
   become: yes
-  template: src=./templates/postgres-secret.j2 dest=$HOME/postgres/postgres-secret.yaml
+  template: src=./templates/postgres-ha-secret.j2 dest=$HOME/postgres-ha/postgres-ha-secret.yaml
 
-- name: postgres-values template
+- name: postgres-ha-values template
   become: yes
-  template: src=./templates/postgres-values.j2 dest=$HOME/postgres/postgres-values.yaml
+  template: src=./templates/postgres-ha-values.j2 dest=$HOME/postgres-ha/postgres-ha-values.yaml
 
 - name: Cleanup service account
   become: yes
   shell: |
-    kubectl delete serviceaccount -n postgres postgres-sa
+    kubectl delete serviceaccount -n postgres postgres-ha-sa
   when: postgres_uninstall is defined
 
 - name: remove previous installation
   become: yes
   shell: |
-    helm delete postgresql --namespace "postgres"
+    helm delete postgresql-ha --namespace "postgres"
     kubectl delete pvc --all --namespace "postgres"
-    kubectl delete -f $HOME/postgres/postgres-configmap.yaml
-    kubectl delete -f $HOME/postgres/postgres-primary-pv.yaml
-    kubectl delete -f $HOME/postgres/postgres-storageclass.yaml
-    kubectl delete -f $HOME/postgres/postgres-secret.yaml
-    kubectl delete -f $HOME/postgres/postgres-namespace.yaml
-  when: postgres_uninstall is defined
+    # kubectl delete -f $HOME/postgres-ha/postgres-configmap.yaml
+    # kubectl delete -f $HOME/postgres-ha/postgres-primary-pv.yaml
+    # kubectl delete -f $HOME/postgres-ha/postgres-storageclass.yaml
+    kubectl delete -f $HOME/postgres-ha/postgres-ha-secret.yaml
+    kubectl delete -f $HOME/postgres-ha/postgres-ha-namespace.yaml
+  when: postgres_ha_uninstall is defined
   args:
     chdir: $HOME
 
 - name: setup namespace, persistentvolume for postgres
   become: yes
   shell: |
-    kubectl apply -f $HOME/postgres/postgres-namespace.yaml
-    kubectl apply -f $HOME/postgres/postgres-storageclass.yaml
-    kubectl apply -f $HOME/postgres/postgres-primary-pv.yaml
-    kubectl apply -f $HOME/postgres/postgres-configmap.yaml
-    kubectl apply -f $HOME/postgres/postgres-secret.yaml
+    kubectl apply -f $HOME/postgres-ha/postgres-ha-namespace.yaml
+    # kubectl apply -f $HOME/postgres-ha/postgres-storageclass.yaml
+    # kubectl apply -f $HOME/postgres-ha/postgres-primary-pv.yaml
+    # kubectl apply -f $HOME/postgres-ha/postgres-configmap.yaml
+    kubectl apply -f $HOME/postgres-ha/postgres-ha-secret.yaml
   args:
     chdir: $HOME
 
 - name: Create service account
   become: yes
   shell: |
-    kubectl create serviceaccount -n postgres postgres-sa
+    kubectl create serviceaccount -n postgres postgres-ha-sa
 
-- name: Deploy postgres helm chart
+- name: Deploy postgres HA helm chart
   become: yes
   shell: |
 
-    helm upgrade --install postgresql oci://registry-1.docker.io/bitnamicharts/postgresql -f $HOME/postgres/postgres-values.yaml --version "{{ postgres_version }}" --namespace "postgres"
+    helm upgrade --install postgresql-ha oci://registry-1.docker.io/bitnamicharts/postgresql-ha -f $HOME/postgres-ha/postgres-ha-values.yaml --version "{{ postgres_ha_version }}" --namespace "postgres"
     exit 0
   args:
     executable: /bin/bash

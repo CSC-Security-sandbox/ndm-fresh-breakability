@@ -1,10 +1,16 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-    name: postgres-init-config
-    namespace: postgres
-data:
-  
+## PostgreSQL HA configuration
+
+postgresql:
+  replicaCount: 3 
+  username: postgres
+  password: "postgres-password"
+  database: postgres
+        
+  persistence:
+    enabled: true
+    size: 8Gi
+
+  initdbScripts:
     createSchema.sql: |
         CREATE ROLE keycloak_role;
         CREATE ROLE liquibase_role;
@@ -54,3 +60,33 @@ data:
             GRANT ALL PRIVILEGES ON SEQUENCES TO dmadmin_role;
         ALTER DEFAULT PRIVILEGES FOR ROLE liquibase IN SCHEMA datamigrator
             GRANT ALL PRIVILEGES ON FUNCTIONS TO dmadmin_role;
+             
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+
+pgpool:
+  connectionLifeTime: "30s"
+  customUsers:
+    usernames: "temporal"
+    passwords: "{{ temporal_postgres_password }}"
+
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+    successThreshold: 1
+    
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+    successThreshold: 1

@@ -117,6 +117,7 @@ ports_to_open:
   - tcp 9091
 
 postgres_version: 16.2.5
+postgres_ha_version: 16.0.20
 postgres_data_volume_size: 30Gi
 
 openbao_version: 0.9.0
