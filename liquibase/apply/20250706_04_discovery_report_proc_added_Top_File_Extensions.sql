@@ -7,11 +7,6 @@ CREATE OR REPLACE PROCEDURE generate_discovery_report(
  LANGUAGE plpgsql
 AS $procedure$
 declare
-    aggregated_json JSONB := '[]';
-
-temp_json JSONB;
-
-declare
 aggregated_json JSONB := '[]';
 
 temp_json JSONB;
