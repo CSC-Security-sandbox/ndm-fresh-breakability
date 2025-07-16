@@ -11,7 +11,7 @@ import {
   RegisterWorkerResponseDto,
 } from './dto/register-worker.dto';
 import { WorkerRegistrationService } from './worker-registration.service';
-import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
+import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 
 @ApiTags('worker-registration')
 @Controller('/api/v1/worker-registration')
@@ -20,7 +20,7 @@ export class WorkerRegistrationController {
     private readonly workerRegistrationService: WorkerRegistrationService,
   ) {}
 
-  @Auth()
+  @Auth(Permission.AgentDeployment)
   @ApiBearerAuth()
   @Post()
   @ApiOperation({

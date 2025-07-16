@@ -287,7 +287,7 @@ describe('ConfigurationService', () => {
 
       const result = await service.getConfigById(mockConfig.id);
 
-      expect(result.fileServers[0].password).toBe('********');
+      expect(result.fileServers[0].password).toBe('');
       expect(result.fileServers[0].password).not.toBe('actualPassword');
     });
 

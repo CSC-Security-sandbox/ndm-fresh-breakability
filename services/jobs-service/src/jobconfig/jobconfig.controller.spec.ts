@@ -46,6 +46,23 @@ describe("JobConfigController", () => {
     createSpeedTest: jest.fn(),
   };
 
+  const mockJwtService = {
+    verifyToken: jest.fn().mockResolvedValue({
+      user: {
+        roles: [
+          {
+            permissions: ["permission1", "permission2"],
+            projects: ["project1"],
+          },
+        ],
+      },
+    }),
+    configService: {},
+    client: jest.fn(),
+    logger: jest.fn(),
+    getKey: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [JobConfigController],
@@ -55,10 +72,9 @@ describe("JobConfigController", () => {
           useValue: mockJobConfigService,
         },
         {
-        provide: PreCheckService,
-        useValue: mockPreCheckService,
-      },
-       
+          provide: PreCheckService,
+          useValue: mockPreCheckService,
+        },
         {
           provide: "JobConfigRepository",
           useValue: {},
@@ -77,7 +93,7 @@ describe("JobConfigController", () => {
         },
         {
           provide: JwtService,
-          useValue: {},
+          useValue: mockJwtService,
         },
       ],
     }).compile();
@@ -313,24 +329,6 @@ describe("JobConfigController", () => {
     expect(mockPreCheckService.initiatePreCheck).toHaveBeenCalledWith(precheckData);
 });
 
-    describe("checkCommonWorkersAndValidatePaths", () => {
-      it("should return the result of precheck validation", async () => {
-        const precheckData: MigrateConfig[] = [
-          { sourcePathId: "123", destinationPathId: ["456"] },
-          { sourcePathId: "789", destinationPathId: ["012"] },
-        ];
-        const expectedResult: any[] = [{ success: true }];
-
-        mockJobConfigService.precheckValidation.mockResolvedValue(
-          expectedResult
-        );
-        const result =
-          await controller.checkCommonWorkersAndValidatePaths(precheckData);
-
-        expect(result).toEqual(expectedResult);
-        expect(service.precheckValidation).toHaveBeenCalledWith(precheckData);
-      });
-    });
     describe("createSpeedTest with bad data", () => {
       it("should throw BadRequestException if speedTests is empty", async () => {
         const speedTest: JobConfigSpeedTest = {

@@ -2276,9 +2276,19 @@ describe("JobRunService", () => {
       const jobRunId = "1";
       const status = JobRunStatus.Running;
       const jobRunDetails = { id: jobRunId, jobConfigId: "1" };
+    
+      const jobConfigDetails = {
+        id: "1",
+        futureScheduleAt: "0 0 * * *",
+        jobType: JobType.MIGRATE,
+      };
 
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(jobRunDetails as any);
       jest.spyOn(jobRunRepo, "update").mockResolvedValue(undefined);
+      jest.spyOn(sendMailService, "sendMail").mockResolvedValue(undefined);
+      jest
+        .spyOn(jobConfigRepo, "findOne")
+        .mockResolvedValue(jobConfigDetails as any);
 
       await service.updateJobRunStatus(jobRunId, status);
 
@@ -2333,7 +2343,6 @@ describe("JobRunService", () => {
       expect(jobConfigRepo.update).not.toHaveBeenCalled();
       expect(jobRunRepo.update).not.toHaveBeenCalled();
     });
-
     // !jobRunDetails case
     it("should throw Error if jobRunId is not found", async () => {
       const jobRunId = "nonexistent-jobRunId";
