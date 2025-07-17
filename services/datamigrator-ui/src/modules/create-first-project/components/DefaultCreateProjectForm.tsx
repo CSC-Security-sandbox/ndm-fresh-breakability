@@ -1,17 +1,10 @@
-import { Box } from "@components/container/index";
-import AppFooter from "@/components/layout/app-footer/AppFooter";
-import withCreateProject from "@/hoc/withCreateProject";
-import { setProject } from "@store/reducer/appSlice";
-import {
-  Button,
-  Card,
-  FormFieldInputNew,
-  Layout,
-  TabHeader,
-  FormFieldTextArea,
-} from "@netapp/bxp-design-system-react";
-import { BlueXpFormType } from "@/types/app.type";
-import { useDispatch } from "react-redux";
+import {Box} from '@components/container/index';
+import AppFooter from '@/components/layout/app-footer/AppFooter';
+import withCreateProject from '@/hoc/withCreateProject';
+import {setProject} from '@store/reducer/appSlice';
+import {Button, Card, FormFieldInputNew, FormFieldTextArea, Layout, TabHeader} from '@netapp/bxp-design-system-react';
+import {BlueXpFormType} from '@/types/app.type';
+import {useDispatch} from 'react-redux';
 
 interface DefaultCreateProjectFormType {
   createProjectForm: BlueXpFormType<DefaultCreateProjectFormType>;
@@ -26,7 +19,7 @@ const DefaultCreateProjectForm = ({
 
   const handleProjectCreation = async () => {
     const response: any = await handleCreateProject();
-    dispatch(setProject(response?.id || ""));
+    dispatch(setProject(response?.data.id || ''));
   };
 
   const FOOTER_CONTENT = (
