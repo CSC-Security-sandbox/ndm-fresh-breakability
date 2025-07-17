@@ -19,6 +19,7 @@ export const MountPathConfigurationTable = () => {
     setSelectedReviewIds,
     mappingStepTableState,
     listOfNotReachableExportPaths,
+    sourceDisabledPaths,
   } = useContext(BulkMigrateContext);
 
   const { setFieldValue } = mappingStepForm;
@@ -48,8 +49,9 @@ export const MountPathConfigurationTable = () => {
     downloadBulkMigrationCsv(mappingStepForm);
   };
   const checkDisabled = (row: MigrationDetailsTableConfigurationType) => {
-    return listOfNotReachableExportPaths.includes(
-      row?.sourcePath?.sourcePathId
+    return (
+      listOfNotReachableExportPaths.includes(row?.sourcePath?.sourcePathId) ||
+      sourceDisabledPaths.includes(row?.sourcePath?.sourcePathId)
     );
   };
 
