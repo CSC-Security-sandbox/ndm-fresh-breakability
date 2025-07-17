@@ -79,19 +79,7 @@ export enum Platform {
     MACOS = 'MACOS',
     OTHER = 'OTHER'
 }
-export enum UploadPathAction {
-    CREATE = 'CREATE',
-    DUPLICATE = 'DUPLICATE',
-    DELETE = 'DELETE',
-}
 
-export enum ExportPathSource {
-    AUTO_DISCOVER = 'AUTO_DISCOVER',
-    MANUAL_UPLOAD = 'MANUAL_UPLOAD',
-}
 
-export enum ScheduleStatus {
-    SCHEDULING = 'SCHEDULING',
-    SCHEDULED = 'SCHEDULED',
-    READY_TO_BE_SCHEDULED = 'READY_TO_BE_SCHEDULED'
-}
+
+
