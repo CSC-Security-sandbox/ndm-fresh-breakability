@@ -1,10 +1,10 @@
-import { HttpException, HttpStatus, Injectable, Inject } from '@nestjs/common';
+import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { CreateSettingDto } from './dto/create-setting.dto';
 import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Transporter } from 'nodemailer';
 import * as nodemailer from 'nodemailer';
+import { Transporter } from 'nodemailer';
 import { decryptData } from 'src/utils/crypto-utils';
 import {
   LoggerFactory,
@@ -93,17 +93,16 @@ export class SettingService {
       );
 
       return {
-        message: 'Settings created successfully',
+        message: 'SMTP details added successfully.',
         statusCode: HttpStatus.CREATED,
       };
     } catch (error) {
       throw new HttpException(
         {
-          message: 'Error while creating settings',
-          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: 'SMTP server is not reachable',
           error: error.message,
         },
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
   }

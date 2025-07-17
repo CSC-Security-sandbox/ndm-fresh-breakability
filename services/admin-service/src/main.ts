@@ -2,13 +2,23 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
+import { ResponseInterceptor } from '@netapp-cloud-datamigrate/api-handler-lib';
+import {
+  customErrorDTOList,
+  customSuccessDTOList,
+} from './constants/custom-response-message';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
-  // Use console.log for bootstrap logging since LoggerFactory is scoped
-  console.log('[Bootstrap] Starting admin service...');
-
+  const loggerFactory = app.resolve(LoggerFactory);
+  app.useGlobalInterceptors(
+    new ResponseInterceptor(
+      customSuccessDTOList,
+      customErrorDTOList,
+      await loggerFactory,
+    ),
+  );
   // Enable graceful shutdown
   app.enableShutdownHooks();
 

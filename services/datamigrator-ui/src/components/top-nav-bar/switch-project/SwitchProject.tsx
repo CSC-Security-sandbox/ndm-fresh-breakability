@@ -1,18 +1,18 @@
 /* eslint-disable */
-import { useDispatch, useSelector } from "react-redux";
-import useAccountDetails from "@/hooks/useAccountDetails";
-import useSelectedProjectId from "@hooks/useSelectedProjectId";
-import Box from "@/components/container/Box";
-import { useGetAllProjectsQuery } from "@api/projectApi";
-import { drawerFunctions } from "@components/side-drawer/SideDrawer.utils";
-import { Button, Chevron } from "@netapp/bxp-design-system-react";
-import { RootStateType } from "@store/store";
-import SwitchProjectContent from "@components/top-nav-bar/switch-project/SwitchProjectContent";
+import {useDispatch, useSelector} from 'react-redux';
+import useAccountDetails from '@/hooks/useAccountDetails';
+import useSelectedProjectId from '@hooks/useSelectedProjectId';
+import Box from '@/components/container/Box';
+import {useGetAllProjectsQuery} from '@api/projectApi';
+import {drawerFunctions} from '@components/side-drawer/SideDrawer.utils';
+import {Button, Chevron} from '@netapp/bxp-design-system-react';
+import {RootStateType} from '@store/store';
+import SwitchProjectContent from '@components/top-nav-bar/switch-project/SwitchProjectContent';
 
 const SwitchProject = () => {
   const { selectedProjectId } = useSelectedProjectId();
   const { accountDetails } = useAccountDetails();
-  const { data: projectList } = useGetAllProjectsQuery(accountDetails?.id);
+  const {data: projectListItems} = useGetAllProjectsQuery(accountDetails?.id);
 
   const dispatch = useDispatch();
   const drawerProps = useSelector(
@@ -21,8 +21,9 @@ const SwitchProject = () => {
   const isActive = drawerProps.isOpen && drawerProps.id === "SwitchProject";
 
   const { openDrawer } = drawerFunctions(drawerProps, dispatch);
+  const projectList = projectListItems?.data?.items || [];
   const selectedProjectName = projectList?.find(
-    (row: any) => row.id === selectedProjectId
+      (row: any) => row.id === selectedProjectId
   )?.project_name;
 
   const showSwitchProject = () =>

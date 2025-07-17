@@ -1,15 +1,15 @@
-import { Button } from "@netapp/bxp-design-system-react";
-import { useState } from "react";
-import Box from "@/components/container/Box";
-import TableWrapper from "@components/table-wrapper/TableWrapper";
-import { COL_DEF_FOR_PROJECT } from "@/constant/app.constants";
-import CreateProjectForm from "@components/top-nav-bar/setting/ManageProjects/CreateProject";
-import useAccountDetails from "@/hooks/useAccountDetails";
-import { useGetAllProjectsQuery } from "@api/projectApi";
-import { hasPermission } from "@/auth/auth.utils";
-import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
-import PermissionAuth from "@/auth/PermissionAuth";
-import { Collapse } from "@mui/material";
+import {Button} from '@netapp/bxp-design-system-react';
+import {useState} from 'react';
+import Box from '@/components/container/Box';
+import TableWrapper from '@components/table-wrapper/TableWrapper';
+import {COL_DEF_FOR_PROJECT} from '@/constant/app.constants';
+import CreateProjectForm from '@components/top-nav-bar/setting/ManageProjects/CreateProject';
+import useAccountDetails from '@/hooks/useAccountDetails';
+import {useGetAllProjectsQuery} from '@api/projectApi';
+import {hasPermission} from '@/auth/auth.utils';
+import {USER_PERMISSION_TYPE_ENUM} from '@auth/permissionAuth.constant';
+import PermissionAuth from '@/auth/PermissionAuth';
+import {Collapse} from '@mui/material';
 
 const ManageProject = () => {
   const [editSelectedProject, setEditSelectedProject] = useState();
@@ -46,7 +46,7 @@ const ManageProject = () => {
 
   const tableStateProps = {
     columns: COL_DEF_FOR_PROJECT,
-    rows: projectList,
+    rows: projectList?.data?.items,
     isSorting: true,
     pageSize: 10,
   };

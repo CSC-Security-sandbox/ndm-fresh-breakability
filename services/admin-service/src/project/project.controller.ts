@@ -1,11 +1,11 @@
 import {
-  Controller,
-  Get,
-  Post,
   Body,
-  Patch,
-  Param,
+  Controller,
   Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
   Query,
   Request,
 } from '@nestjs/common';
@@ -22,6 +22,7 @@ import {
 import { ProjectDescriptions } from '../swagger/swagger-summary';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
+import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
 
 @ApiTags('projects')
 @Controller('/api/v1/projects')
@@ -165,7 +166,7 @@ export class ProjectController {
     summary: 'Get Project by project id',
     description: ProjectDescriptions.GetProjectById,
   })
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', NonEmptyStringPipe) id: string) {
     return this.projectService.findOne(id);
   }
 
@@ -177,7 +178,7 @@ export class ProjectController {
     description: ProjectDescriptions.UpdateProjectById,
   })
   update(
-    @Param('id') id: string,
+    @Param('id', NonEmptyStringPipe) id: string,
     @Body() updateProjectDto: UpdateProjectDto,
     @Request() userPermissionResponse: UserPermissionResponse,
   ) {
@@ -195,7 +196,7 @@ export class ProjectController {
     summary: 'Delete Project',
     description: ProjectDescriptions.DeleteProjectById,
   })
-  delete(@Param('id') id: string) {
+  delete(@Param('id', NonEmptyStringPipe) id: string) {
     return this.projectService.delete(id);
   }
 }

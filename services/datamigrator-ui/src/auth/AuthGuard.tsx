@@ -1,18 +1,18 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import Cookies from "js-cookie";
-import { useEffect, useState, useRef } from "react";
-import { useAuth } from "react-oidc-context";
-import { useDispatch } from "react-redux";
-import { setUserPermissions } from "@store/reducer/permissionSlice";
-import { useLazyGetUserPermissionsQuery } from "@api/permissionApi";
-import useAccountDetails from "@hooks/useAccountDetails";
-import { useLazyGetAllProjectsQuery } from "@api/projectApi";
-import { setAllProjectList, setProject } from "@store/reducer/appSlice";
-import { useRefreshUserTokenMutation } from "@api/userApi";
-import { notify } from "@components/notification/NotificationWrapper";
-import { ProjectApiType } from "@/types/app.type";
-import { useLazyGetAllAccountsQuery } from "@api/accountApi";
-import NoProjects from "@components/500/NoProjects";
+import Cookies from 'js-cookie';
+import {useEffect, useRef, useState} from 'react';
+import {useAuth} from 'react-oidc-context';
+import {useDispatch} from 'react-redux';
+import {setUserPermissions} from '@store/reducer/permissionSlice';
+import {useLazyGetUserPermissionsQuery} from '@api/permissionApi';
+import useAccountDetails from '@hooks/useAccountDetails';
+import {useLazyGetAllProjectsQuery} from '@api/projectApi';
+import {setAllProjectList, setProject} from '@store/reducer/appSlice';
+import {useRefreshUserTokenMutation} from '@api/userApi';
+import {notify} from '@components/notification/NotificationWrapper';
+import {ProjectApiType} from '@/types/app.type';
+import {useLazyGetAllAccountsQuery} from '@api/accountApi';
+import NoProjects from '@components/500/NoProjects';
 
 const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const auth = useAuth();
@@ -97,7 +97,7 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     ) {
       try {
         const allAccounts = await getAllAccounts("").unwrap();
-        localStorage.setItem("account_id", allAccounts?.[0]?.id);
+        localStorage.setItem('account_id', allAccounts?.data?.items?.[0]?.id);
       } catch (error) {
         notify.error("Unable to fetch accounts. Please try again later.");
         console.error("Failed to fetch accounts:", error);
@@ -109,16 +109,16 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     getAllProjects(localStorage.getItem("account_id"))
       .unwrap()
       .then((resp) => {
-        dispatch(setAllProjectList(resp));
+        dispatch(setAllProjectList(resp?.data?.items));
         let selected_project_id =
           localStorage.getItem("selected_project_id") || undefined;
         if (selected_project_id) {
-          const projectIdFound = resp.find(
-            (row: ProjectApiType) => row.id === selected_project_id
+          const projectIdFound = resp?.data?.items.find(
+              (row: ProjectApiType) => row.id === selected_project_id
           );
           if (!projectIdFound) selected_project_id = undefined;
         }
-        dispatch(setProject(selected_project_id || resp?.[0]?.id));
+        dispatch(setProject(selected_project_id || resp?.data?.items?.[0]?.id));
         setIsPageReady(true);
       });
   };
@@ -126,8 +126,11 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     if (auth.isAuthenticated) {
       (async () => {
-        const resp = await getUserPermissionsApi("").unwrap();
-        dispatch(setUserPermissions(resp));
+        const result = await getUserPermissionsApi('').unwrap();
+        const resp = result?.data?.items || {};
+        dispatch(
+            setUserPermissions({id: result?.data?.id, roles: resp.roles || []})
+        );
         if (resp?.roles?.length > 0) {
           await getAccounts();
           getProjects();
