@@ -1,19 +1,18 @@
-import { useGetAllProjectsQuery } from "@api/projectApi";
-import { Box } from "@components/container";
-import SideBar from "@components/side-bar/SideBar";
-import TabHeaderWrapper from "@components/tab-header-wrapper/TabHeaderWrapper";
-import TopNavBar from "@components/top-nav-bar/TopNavBar";
-import useAccountDetails from "@hooks/useAccountDetails";
-import CreateFirstProject from "@modules/create-first-project/CreateFirstProject";
-import { Outlet } from "react-router-dom";
+import {useGetAllProjectsQuery} from '@api/projectApi';
+import {Box} from '@components/container';
+import SideBar from '@components/side-bar/SideBar';
+import TabHeaderWrapper from '@components/tab-header-wrapper/TabHeaderWrapper';
+import TopNavBar from '@components/top-nav-bar/TopNavBar';
+import useAccountDetails from '@hooks/useAccountDetails';
+import CreateFirstProject from '@modules/create-first-project/CreateFirstProject';
+import {Outlet} from 'react-router-dom';
 
 const Layout = () => {
   const { accountDetails } = useAccountDetails();
   const { data: projectList } = useGetAllProjectsQuery(accountDetails?.id);
-
   return (
     <>
-      {!projectList || projectList?.length === 0 ? (
+      {!projectList?.data?.items || projectList?.data?.items?.length === 0 ? (
         <CreateFirstProject />
       ) : (
         <>

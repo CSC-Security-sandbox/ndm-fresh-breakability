@@ -7,8 +7,8 @@
  * Form - <form_name>FormType e.g. CreateProjectFormType
  */
 
-import { ReactNode } from "react";
-import { WorkingDirectoryDetailsType } from "@modules/storage-servers/file-server/fileServer.interface";
+import {ReactNode} from 'react';
+import {WorkingDirectoryDetailsType} from '@modules/storage-servers/file-server/fileServer.interface';
 
 export type GraphLoaderType = {
   label: string;
@@ -255,9 +255,17 @@ export interface CreateProjectFormType {
   start_date: any;
 }
 
+export interface CreateProjectResponseType {
+  data: {
+    id: string;
+    items: any;
+    // Add other properties as needed based on the actual API response
+  };
+}
+
 interface CreateProjectHOCType {
   createProjectForm: BlueXpFormType<CreateProjectFormType>;
-  handleCreateProject: Function;
+  handleCreateProject: () => Promise<CreateProjectResponseType>;
   resetForm: Function;
   handleUpdateProject: Function;
 }
