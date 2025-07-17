@@ -23,4 +23,9 @@ export const WORKERS_COLUMN_DEF = [
         active: value.toLocaleLowerCase() === "online",
       }),
   },
+    {
+    header: "Platform",
+    accessor: "platform",
+    id: 4
+  },
 ];

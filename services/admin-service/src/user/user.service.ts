@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindManyOptions, IsNull, Repository } from 'typeorm';
+import { FindManyOptions, IsNull, Repository, In } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -99,33 +99,47 @@ export class UserService {
 
       const users = await this.userRepository.find(options);
 
-      const transformedUsers = await Promise.all(
-        users.map(async (user) => {
-          const createdByUser = await this.userRepository.findOne({
-            where: { id: user.created_by },
-            select: ['id', 'email', 'user_status'],
-          });
+    if (users.length === 0) {
+      return [];
+    }
 
-        const updatedByUser = await this.userRepository.findOne({
-          where: { id: user.updated_by },
-          select: ['id', 'email', 'user_status'],
-        });
+    // Bulk fetch created_by and updated_by users to avoid N+1 queries
+    const createdByIds = [...new Set(users.map(u => u.created_by).filter(Boolean))];
+    const updatedByIds = [...new Set(users.map(u => u.updated_by).filter(Boolean))];
+    const userIds = users.map(u => u.id);
 
-        const userRole = await this.userRoleRepository.findOne({
-          where: { userId: user.id, projectId: IsNull() },
-          select: ['roleId', 'projectId'],
-        });
+    const [createdByUsers, updatedByUsers, userRoles] = await Promise.all([
+      createdByIds.length > 0 ? this.userRepository.find({
+        where: { id: In(createdByIds) },
+        select: ['id', 'email', 'user_status'],
+      }) : [],
+      updatedByIds.length > 0 ? this.userRepository.find({
+        where: { id: In(updatedByIds) },
+        select: ['id', 'email', 'user_status'],
+      }) : [],
+      this.userRoleRepository.find({
+        where: { userId: In(userIds), projectId: IsNull() },
+        select: ['userId', 'roleId', 'projectId'],
+      })
+    ]);
 
-        const isAppAdmin = !!userRole;
+    // Create maps for efficient lookups
+    const createdByMap = new Map<string, User>();
+    createdByUsers.forEach(user => createdByMap.set(user.id, user));
 
-        return {
-          ...user,
-          isAppAdmin,
-          created_by: createdByUser,
-          updated_by: updatedByUser,
-        } as any;
-      }),
-    );
+    const updatedByMap = new Map<string, User>();
+    updatedByUsers.forEach(user => updatedByMap.set(user.id, user));
+
+    const userRoleMap = new Map<string, boolean>();
+    userRoles.forEach(role => userRoleMap.set(role.userId, true));
+
+    // Transform users with the fetched data
+    const transformedUsers = users.map(user => ({
+      ...user,
+      isAppAdmin: userRoleMap.has(user.id),
+      created_by: createdByMap.get(user.created_by) || null,
+      updated_by: updatedByMap.get(user.updated_by) || null,
+    })) as any[];
 
     this.logger.log('Successfully retrieved users', {
       count: transformedUsers.length,
@@ -262,51 +276,61 @@ export class UserService {
         throw new NotFoundException(`User with email ${email} not found`);
       }
 
-      if (projectId) {
-        const userRolesInProject = user.user_roles.filter(
-          (userRole) => userRole.project?.id === projectId,
-        );
-        if (userRolesInProject.length === 0) {
-          this.logger.warn('User has no role in specified project', {
-            email: email.substring(0, 3) + '***',
-            projectId
-          });
-          throw new NotFoundException(
-            `User has no role in project with ID ${projectId}`,
-          );
-        }
-
-        const result = {
-          projectId,
-          projectName: userRolesInProject[0]?.project.project_name,
-          role: userRolesInProject[0]?.role.role_name,
-          permissionsOfProject: await this.getPermissionsByRoles(
-            userRolesInProject[0]?.role.id,
-          ),
-        };
-
-        this.logger.log('Successfully retrieved user project permissions', {
+    if (projectId) {
+      const userRolesInProject = user.user_roles.filter(
+        (userRole) => userRole.project?.id === projectId,
+      );
+      if (userRolesInProject.length === 0) {
+        this.logger.warn('User has no role in specified project', {
           email: email.substring(0, 3) + '***',
           projectId
         });
-        return result;
-      } else {
-        const result = await Promise.all(
-          user.user_roles.map(async (ur) => ({
-            projectId: ur.project?.id || null,
-            projectName: ur.project?.project_name || null,
-            role: ur.role.role_name,
-            permissionsOfProject: await this.getPermissionsByRoles(ur.role.id),
-          })),
+        throw new NotFoundException(
+          `User has no role in project with ID ${projectId}`,
         );
-
-        this.logger.log('Successfully retrieved user projects and permissions', {
-          email: email.substring(0, 3) + '***',
-          projectCount: result.length
-        });
-        return result;
       }
-    } catch (error) {
+
+      const result = {
+        projectId,
+        projectName: userRolesInProject[0]?.project.project_name,
+        role: userRolesInProject[0]?.role.role_name,
+        permissionsOfProject: await this.getPermissionsByRoles(
+          userRolesInProject[0]?.role.id,
+        ),
+      };
+
+      this.logger.log('Successfully retrieved user project permissions', {
+        email: email.substring(0, 3) + '***',
+        projectId
+      });
+      return result;
+    } else {
+      // Bulk fetch all permissions for all roles to avoid N+1 queries
+      const roleIds = [...new Set(user.user_roles.map(ur => ur.role.id))];
+      const allRolePermissions = await this.rolePermissionRepository.find({
+        where: { role: { id: In(roleIds) } },
+        relations: ['permission', 'role'],
+      });
+
+      // Create a map of roleId -> permissions for efficient lookup
+      const rolePermissionsMap = new Map<string, string[]>();
+      allRolePermissions.forEach(rp => {
+        const roleId = rp.role.id;
+        if (!rolePermissionsMap.has(roleId)) {
+          rolePermissionsMap.set(roleId, []);
+        }
+        rolePermissionsMap.get(roleId)!.push(rp.permission.permission_name);
+      });
+
+      // Transform user roles with pre-fetched permissions
+      return user.user_roles.map(ur => ({
+        projectId: ur.project?.id || null,
+        projectName: ur.project?.project_name || null,
+        role: ur.role.role_name,
+        permissionsOfProject: rolePermissionsMap.get(ur.role.id) || [],
+      }));
+    }
+  } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
       }

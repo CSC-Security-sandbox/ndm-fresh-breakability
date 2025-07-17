@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post,
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import {SpeedTestConfigEntity } from "src/entities/speed-test-job-config.entity"
-import { Auth, Permission } from "@netapp-cloud-datamigrate/auth-lib";
+import { Auth, Permission, AuthWorker } from "@netapp-cloud-datamigrate/auth-lib";
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
@@ -24,6 +24,8 @@ export class JobConfigController {
 
   @ApiOperation({ summary: 'Create a new discovery job' })
   @ApiResponse({ status: 201, description: 'Discovery job has been successfully created.' })
+  @Auth(Permission.ManageJob) 
+  @ApiBearerAuth()
   @Post('/bulk-discovery')
   async createBulkDiscovery(@Body() bulkDiscovery: JobConfigDiscoverBulk): Promise<JobConfigEntity[]> {
     if (!bulkDiscovery.sourcePathIds || bulkDiscovery.sourcePathIds.length === 0) {
@@ -35,6 +37,8 @@ export class JobConfigController {
 
   @ApiOperation({ summary: 'Create a new Speed Test job' })
   @ApiResponse({ status: 201, description: 'Speed Test job has been successfully created.' })
+  @Auth(Permission.ManageJob) 
+  @ApiBearerAuth()
   @Post('/speed-test')
   async createSpeedTest(@Body() speedTest: JobConfigSpeedTest): Promise<SpeedTestConfigEntity[]> {
     if (!speedTest.speedTests || speedTest.speedTests.length === 0) {
@@ -47,6 +51,8 @@ export class JobConfigController {
 
   @ApiOperation({ summary: 'Get all Speed test jobs' })
   @ApiResponse({ status: 200, description: 'Returns a list of all Speed jobs Runs.' })
+  @Auth(Permission.ViewJob)
+  @ApiBearerAuth()
   @Get('/speed-test')
   async getAllSpeedTestJobConfig(): Promise<SpeedTestJobRun[]> {
     return await this.jobConfigService.getAllSpeedTestJobRuns();
@@ -54,6 +60,8 @@ export class JobConfigController {
 
   @ApiOperation({ summary: 'Store Speed test Result' })
   @ApiResponse({ status: 200, description: 'Speed test Result has been successfully Stored.' })
+  @AuthWorker()
+  @ApiBearerAuth()
   @Post('/speed-test/store-result')
   async storeSpeedTestResult(@Body() speedTestResult: SpeedTestResult): Promise<any>{
     return this.jobConfigService.storeSpeedTestResult(speedTestResult);
@@ -62,6 +70,8 @@ export class JobConfigController {
   @ApiOperation({ summary: 'Get speedtest by ID' })
   @ApiResponse({ status: 200, description: 'Returns a job by its ID.' })
   @ApiResponse({ status: 404, description: 'Job not found.' })
+  @Auth(Permission.ViewJob)
+  @ApiBearerAuth()
   @Get('/speed-test/:id')
   async getSpeedTestById(@Param('id') id: string): Promise<SpeedTestEntry> {
     return await this.jobConfigService.getSpeedTestById(id);
@@ -71,6 +81,8 @@ export class JobConfigController {
   @ApiResponse({ status: 201, description: 'Migrate job has been successfully created.' })
   @ApiResponse({ status: 500, description: 'Internal Server Error - Unexpected error occurred.' })
   @ApiResponse({ status: 400, description: 'Bad Request - Invalid input data.' })
+  @ApiBearerAuth()
+  @Auth(Permission.ManageJob)
   @Post('/bulk-migrate')
   async createBulkMigrate(@Body() bulkMigrate: BulkMigrateJobConfig): Promise<JobConfigBulkMigrateFinalResponse> {
     return await this.jobConfigService.createBulkMigrate(bulkMigrate);
@@ -80,6 +92,8 @@ export class JobConfigController {
   @ApiResponse({ status: 201, description: 'Cutover job has been successfully created.' })
   @ApiResponse({ status: 500, description: 'Internal Server Error - Unexpected error occurred.' })
   @ApiResponse({ status: 400, description: 'Bad Request - Invalid input data.' })
+  @ApiBearerAuth()
+  @Auth(Permission.ManageJob)
   @Post('/bulk-cutover')
   async createBulkCutover(@Body() bulkCutover: JobConfigCutoverBulk): Promise<JobConfigBulkCutoverRes[]> {
     return await this.jobConfigService.createBulkCutover(bulkCutover);
@@ -89,6 +103,8 @@ export class JobConfigController {
   @ApiResponse({ status: 200, description: 'Precheck is passed' })
   @ApiResponse({ status: 500, description: 'Internal Server Error - Unexpected error occurred.' })
   @ApiResponse({ status: 400, description: 'Bad Request - Invalid input data.' })
+  @ApiBearerAuth()
+  @Auth(Permission.ManageJob)
   @Post('/precheck')
   async precheck(@Body() precheckData: JobConfigPrecheck) { 
     return  await this.preCheckService.initiatePreCheck(precheckData);
@@ -97,6 +113,8 @@ export class JobConfigController {
   @ApiOperation({ summary: 'Get all jobs' })
   @ApiResponse({ status: 200, description: 'Returns a list of all jobs.' })
   @ApiQuery({name:'projectId',required:true,description:'Project Id',type:String})
+  @ApiBearerAuth()
+  @Auth(Permission.ViewJob)
   @Get()
   async getAllJobConfig(@Query('projectId')projectId:string): Promise<JobListingDTO[]> {
     if(!projectId){
@@ -109,18 +127,16 @@ export class JobConfigController {
   @ApiResponse({ status: 200, description: 'Returns a job by its ID.' })
   @ApiResponse({ status: 404, description: 'Job not found.' })
   @Get(':id')
+  @Auth(Permission.ViewJob)
+  @ApiBearerAuth()
   async getJobConfigById(@Param('id') id: string): Promise<any> {
     return await this.jobConfigService.getJobConfigById(id);
   }
 
-  @ApiOperation({ summary: 'Get Cutover details' })
-  @ApiResponse({ status: 200, description: 'Cutover details Found' })
-  @ApiResponse({ status: 404, description: 'Cutover details Not Found' })
-  @Get('cutover/:fileServerId')
-  async getCutoverDetailsByFileServerId(@Param('fileServerId') fileServerId: string) {
-      return await this.jobConfigService.getCutoverDetailsByFileServerId(fileServerId);
-  }
 
+  @ApiOperation({ summary: 'Download Mapping template' })
+  @ApiBearerAuth()
+  @Auth(Permission.ManageJob)
   @Get("download-template/:type")
   async downloadTemplate(
     @Res() res: Response,
@@ -141,6 +157,8 @@ export class JobConfigController {
   @ApiOperation({ summary: 'Get Configs and Volumes by project ID' })
   @ApiResponse({ status: 200, description: 'Configuration Found' })
   @ApiResponse({ status: 404, description: 'Configuration Not Found' })
+  @ApiBearerAuth()
+  @Auth(Permission.ViewJob)
   @Get('project/:projectId')
   async getConfigurationsByProjectId(@Param('projectId') projectId: string) {
       return await this.jobConfigService.getConfigsByProjectId(projectId);
@@ -151,6 +169,8 @@ export class JobConfigController {
   @ApiResponse({ status: 400, description: 'Invalid project ID' })
   @ApiResponse({ status: 404, description: 'Notice board not found' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
+  @ApiBearerAuth()
+  @Auth(Permission.Reports)
   @Get('notice-board/:projectId')
   async getNoticeBoardDetailsByProjectId(@Param('projectId') projectId: string) {
     return await this.jobConfigService.getNoticeBoardDetailsByProjectId(projectId);
@@ -161,6 +181,8 @@ export class JobConfigController {
   @ApiOperation({ summary: 'Update a job by ID' })
   @ApiResponse({ status: 200, description: 'The job has been successfully updated.' })
   @ApiResponse({ status: 404, description: 'Job not found.' })
+  @ApiBearerAuth()
+  @Auth(Permission.ManageConfig)
   @Patch(':id')
   async updateJobConfig(
     @Param('id') id: string,
@@ -172,16 +194,11 @@ export class JobConfigController {
   @ApiOperation({ summary: 'Delete a job by ID' })
   @ApiResponse({ status: 200, description: 'The job has been successfully deleted.' })
   @ApiResponse({ status: 404, description: 'Job not found.' })
+  @ApiBearerAuth()
+  @Auth(Permission.ManageConfig)
   @Delete(':id')
   async deleteJobConfig(@Param('id') id: string): Promise<{ message: string }> {
     return await this.jobConfigService.deleteJobConfig(id);
   }
-
-  @ApiOperation({ summary: 'Precheck Validation' })
-  @Post('precheck/validate')
-  async checkCommonWorkersAndValidatePaths(@Body() precheckData: MigrateConfig[]) {
-    return await this.jobConfigService.precheckValidation(precheckData);
-  }
-
 }
 

@@ -31,6 +31,7 @@ export interface JobRunConfig{
     preserveAccessTime: boolean
     workers: string[],
     skipFile?: string,
+    skipDelete?: boolean,
 }
 
 

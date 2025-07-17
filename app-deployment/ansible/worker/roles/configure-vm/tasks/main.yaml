@@ -11,6 +11,27 @@
       - smbclient
     state: present
 
+# Disable ICMP redirects for security
+- name: Disable ICMP redirects
+  sysctl:
+    name: "{{ item }}"
+    value: '0'
+    state: present
+    reload: yes
+    sysctl_set: yes
+  loop:
+    # Disable sending of ICMP redirects
+    - net.ipv4.conf.all.send_redirects
+    - net.ipv4.conf.default.send_redirects
+    # Disable acceptance of ICMP redirects
+    - net.ipv4.conf.all.accept_redirects
+    - net.ipv4.conf.default.accept_redirects
+    - net.ipv6.conf.all.accept_redirects
+    - net.ipv6.conf.default.accept_redirects
+    # Disable secure ICMP redirects
+    - net.ipv4.conf.all.secure_redirects
+    - net.ipv4.conf.default.secure_redirects
+
 - name: 2.3. Copy systemd service file for boot script
   become: yes
   template:

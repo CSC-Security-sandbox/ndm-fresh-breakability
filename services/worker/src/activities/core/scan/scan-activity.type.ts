@@ -18,6 +18,7 @@ export interface ScanDirectoryInput {
     sourcePath: string;
     targetPath: string;
     sourcePrefix: string;
+    targetPrefix:string
     jobContext: JobManagerContext;
     command: Command;
     settings: ScanDirectorySettings;

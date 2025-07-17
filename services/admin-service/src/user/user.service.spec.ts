@@ -29,27 +29,54 @@ describe('UserService', () => {
         UserService,
         {
           provide: getRepositoryToken(User),
-          useClass: Repository,
+          useValue: {
+            create: jest.fn(),
+            save: jest.fn(),
+            find: jest.fn(),
+            findOne: jest.fn(),
+            findOneBy: jest.fn(),
+            update: jest.fn(),
+            delete: jest.fn(),
+            remove: jest.fn(),
+            findAndCount: jest.fn(),
+          },
         },
         {
           provide: getRepositoryToken(UserRole),
-          useClass: Repository,
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+            save: jest.fn(),
+            create: jest.fn(),
+          },
         },
         {
           provide: getRepositoryToken(Project),
-          useClass: Repository,
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+          },
         },
         {
           provide: getRepositoryToken(Role),
-          useClass: Repository,
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+          },
         },
         {
           provide: getRepositoryToken(RolePermission),
-          useClass: Repository,
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+          },
         },
         {
           provide: getRepositoryToken(Account),
-          useClass: Repository,
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+          },
         },
         { provide: LoggerFactory, useValue: mockLoggerFactory },
       ],
@@ -178,17 +205,16 @@ describe('UserService', () => {
       },
     ];
 
-    jest.spyOn(userRepository, 'find').mockResolvedValue(users);
+    jest.spyOn(userRepository, 'find')
+      .mockResolvedValueOnce(users) // First call - main query
+      .mockResolvedValueOnce([]) // Second call - createdByUsers (empty because no matching IDs)
+      .mockResolvedValueOnce([]); // Third call - updatedByUsers (empty because no matching IDs)
 
-    jest.spyOn(userRepository, 'findOne').mockResolvedValue(users[0]);
-
-    jest
-      .spyOn(userRoleRepository, 'findOne')
-      .mockResolvedValue({ roleId: '1' } as UserRole);
-
-    jest
-      .spyOn(roleRepository, 'findOne')
-      .mockResolvedValue({ role_name: 'App Admin' } as Role);
+    // Mock the UserRole repository find method for the findAll method
+    jest.spyOn(userRoleRepository, 'find').mockResolvedValue([
+      { userId: '1', roleId: '1', projectId: null } as UserRole,
+      { userId: '2', roleId: '2', projectId: null } as UserRole,
+    ]);
 
     const result = await service.findAll();
     expect(userRepository.find).toHaveBeenCalled();
@@ -283,13 +309,22 @@ describe('UserService', () => {
     const permissions2 = ['read'];
 
     jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
-    jest
-      .spyOn(service, 'getPermissionsByRoles')
-      .mockImplementation((roleId: string) => {
-        if (roleId === 'role-id-1') return Promise.resolve(permissions1);
-        if (roleId === 'role-id-2') return Promise.resolve(permissions2);
-        return Promise.resolve([]);
-      });
+    
+    // Mock the rolePermissionRepository.find method for allRolePermissions
+    jest.spyOn(rolePermissionRepository, 'find').mockResolvedValue([
+      {
+        role: { id: 'role-id-1' },
+        permission: { permission_name: 'read' },
+      } as any,
+      {
+        role: { id: 'role-id-1' },
+        permission: { permission_name: 'write' },
+      } as any,
+      {
+        role: { id: 'role-id-2' },
+        permission: { permission_name: 'read' },
+      } as any,
+    ]);
 
     const result = await service.getUserProjectsAndPermissions(email);
 

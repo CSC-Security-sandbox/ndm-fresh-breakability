@@ -1,6 +1,7 @@
 import {
   Injectable,
   Inject,
+  OnModuleDestroy,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as nodemailer from 'nodemailer';
@@ -19,7 +20,7 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
-export class EmailService {
+export class EmailService implements OnModuleDestroy {
   private readonly logger: LoggerService;
   transporter: nodemailer.Transporter;
   constructor(
@@ -32,17 +33,43 @@ export class EmailService {
     this.logger = loggerFactory.create(EmailService.name);
   }
 
+  async onModuleDestroy() {
+    if (this.transporter) {
+      try {
+        this.transporter.close();
+        this.logger.log('Email transporter closed successfully');
+      } catch (error) {
+        this.logger.error('Error closing email transporter', error);
+      }
+    }
+  }
+
+  private async closeTransporter() {
+    if (this.transporter) {
+      try {
+        this.transporter.close();
+        this.logger.debug('Transporter closed');
+      } catch (error) {
+        this.logger.error('Error closing transporter', error);
+      }
+    }
+  }
   async setupAndSendMail(emailContent: any, notificationType: string) {
     try {
       await this.setupTransporter(emailContent, notificationType);
     } catch (error) {
       this.logger.error('Error setting up and sending email', error);
+      // Ensure cleanup even if setup fails
+      await this.closeTransporter();
       return { message: error.message, statusCode: 500 };
     }
     return { message: 'Email sent successfully', statusCode: 200 };
   }
   async setupTransporter(emailContent: any, notificationType: string) {
     try {
+      // Close existing transporter if exists to prevent memory leaks
+      await this.closeTransporter();
+
       const smtpSettings = await this.getSMTPSettings();
       const smtpConfig: any = {
         host: smtpSettings.find((setting) => setting.settingKey === 'SMTP_HOST')
@@ -82,7 +109,24 @@ export class EmailService {
           : undefined,
         socketTimeout: 5000,
         connectionTimeout: 5000,
+        // Add connection pooling to prevent resource leaks
+        pool: true,
+        maxConnections: 3,
+        maxMessages: 100,
+        rateDelta: 1000,
+        rateLimit: 5,
       });
+
+      // Add error handling for transporter
+      this.transporter.on('error', (error) => {
+        this.logger.error('Transporter error:', error);
+      });
+
+      // Add idle event handler for cleanup
+      this.transporter.on('idle', () => {
+        this.logger.debug('Transporter is idle');
+      });
+
       const templateName =
         notificationType === NOTIFICATION_TYPE.FAILURE ? 'failure' : 'success';
       this.setupTemplateBasdOnNotificationType(templateName);
@@ -108,6 +152,9 @@ export class EmailService {
         );
       }
     } catch (error) {
+      // Clean up transporter on error to prevent leaks
+      await this.closeTransporter();
+
       this.logger.error(
         'Error setting up SMTP transporter and sending mail:',
         error.message,
@@ -115,6 +162,9 @@ export class EmailService {
       throw new Error(
         `Error setting up SMTP transporter and sending mail: ${error.message}`,
       );
+    } finally {
+      // Always close transporter after use to prevent connection leaks
+      await this.closeTransporter();
     }
   }
 

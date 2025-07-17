@@ -216,6 +216,8 @@ export class JobRunInitService {
     }
     const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
     const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
+    const skipDelete : boolean = !(jobConfig?.futureScheduleAt !== null || jobConfig?.jobType === JobType.CUT_OVER);
+
 
     const details: JobRunConfig = {
       preserveAccessTime: jobConfig.preserveAccessTime,
@@ -246,6 +248,7 @@ export class JobRunInitService {
         .map((worker) => worker.workerId),
       jobType: jobConfig.jobType,
       skipFile: jobConfig.skipFile,
+      skipDelete: skipDelete,
     };
 
     if (jobConfig.targetPathId) {
@@ -566,6 +569,7 @@ export class JobRunInitService {
           : "",
         isIdentityMappingAvailable: isIdentityMapping,
       },
+      jobRunConfig.skipDelete,
     );
 
     const task = await this.createInitialTask(jobRunId, jobRunConfig);

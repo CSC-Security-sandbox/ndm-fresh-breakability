@@ -31,6 +31,10 @@ describe('PdfService', () => {
       find: jest.fn()
     };
 
+    mockDiscoveryService = {
+      createJobsPDFReportData: jest.fn()
+    };
+
     mockPage = {
       setContent: jest.fn().mockResolvedValue(null),
       pdf: jest.fn().mockResolvedValue(Buffer.from('mockPdfBuffer')),
@@ -113,10 +117,10 @@ describe('PdfService', () => {
       const jobRunId = '../escape';
       const reportType = ReportType.DISCOVERY;
       const filePath = '/some/other/path/escape-discovery-report.pdf';
-   
+
       jest.spyOn(path, 'join').mockReturnValue(filePath);
       jest.spyOn(path, 'resolve').mockReturnValue('/mock/reports');
-   
+
       await expect(pdfService.generatePdf(jobRunId, reportType)).rejects.toThrow(
         'Invalid file path'
       );
@@ -124,6 +128,76 @@ describe('PdfService', () => {
   });
 
   describe("generateJobsReportPdf", () => {
+    it("should throw an error and call createJobsPDFReportData when report data is not found", async () => {
+      const jobRunId = "test-jobRunId";
+
+      // Mock empty result from reports query
+      jest.spyOn(mockReportsRepo, "query").mockResolvedValue([]);
+      jest.spyOn(mockInventoryRepo, "query").mockResolvedValue([]);
+
+      // Expect the function to throw an HttpException
+      await expect(pdfService.generateJobsReportPdf(jobRunId)).rejects.toThrow(
+        "Failed to generate jobs report"
+      );
+
+      // Verify that discoveryService.createJobsPDFReportData was called
+      expect(mockDiscoveryService.createJobsPDFReportData).toHaveBeenCalledWith(jobRunId);
+    });
+
+    it("should successfully generate a PDF with proper customerInfo and puppeteer workflow", async () => {
+      const jobRunId = "test-jobRunId";
+      const mockProjectData = [{ project_name: "Test Project" }];
+      const mockReportData = {
+        report_data: JSON.stringify({
+          summary: [{ source: { job_type: "MIGRATE" } }],
+          last_iteration: {},
+          last_errors: {},
+        }),
+      };
+
+      // Mock repository responses
+      jest.spyOn(mockInventoryRepo, "query").mockResolvedValue(mockProjectData);
+      jest.spyOn(mockReportsRepo, "query").mockResolvedValue([mockReportData]);
+
+      // Mock file system and template operations
+      jest.spyOn(path, "join").mockReturnValue("/mock/template/path.hbs");
+      jest.spyOn(fs, "readFileSync").mockReturnValue("<html>{{customerInfo.projectName}}</html>");
+      jest.spyOn(hbs, "compile").mockReturnValue((data) => `<html>${data.customerInfo.projectName}</html>`);
+
+      // Execute the method
+      const result = await pdfService.generateJobsReportPdf(jobRunId);
+
+      // Verify the result
+      expect(result).toEqual(Buffer.from("mockPdfBuffer"));
+
+      // Verify puppeteer was used correctly
+      expect(puppeteer.launch).toHaveBeenCalledWith(expect.objectContaining({
+        headless: true,
+        args: expect.arrayContaining([
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-gpu",
+          "--disable-dev-shm-usage",
+          "--disable-accelerated-2d-canvas"
+        ]),
+        executablePath: "/usr/bin/chromium-browser",
+        protocolTimeout: 60000,
+      }));
+
+      // Verify page operations
+      expect(mockBrowser.newPage).toHaveBeenCalled();
+      expect(mockPage.setContent).toHaveBeenCalled();
+      expect(mockPage.pdf).toHaveBeenCalledWith({ 
+        format: 'A4', 
+        printBackground: true, 
+        scale: 0.6, 
+        landscape: true 
+      });
+
+      // Verify browser was closed
+      expect(mockBrowser.close).toHaveBeenCalled();
+    });
+
     it("should throw an error if the report data is invalid", async () => {
       const jobRunId = "test-jobRunId";
 

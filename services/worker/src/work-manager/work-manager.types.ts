@@ -23,3 +23,10 @@ export enum WorkFlows{
     VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY = 'ValidateExportPathAndWorkingDirectoryWorkflow',
     VALIDATE_PATHS = 'ValidatePathsWorkflow'
 }
+
+export enum Platform {
+    LINUX = 'LINUX',
+    WINDOWS = 'WINDOWS',
+    MACOS = 'MACOS',
+    OTHER = 'OTHER'
+}

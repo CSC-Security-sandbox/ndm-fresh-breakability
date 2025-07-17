@@ -8,12 +8,29 @@ import { JobErrorQueryDto } from './dto/jobRunErrors.dto';
 import { JobRunActionsReq, ApprovalRequestDTO } from './dto/jobrunactions.dto';
 import { AdHocRunDTO } from './dto/adhockjobrun.dto';
 import { CutOverStatus, JobRunStatus } from 'src/constants/enums';
+import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('JobRunController', () => {
   let controller: JobRunController;
   let jobRunService: jest.Mocked<JobRunService>;
   let jobRunInitService: jest.Mocked<JobRunInitService>;
   let jobRunActionService: jest.Mocked<JobRunActionService>;
+  const mockJwtService = {
+    verifyToken: jest.fn().mockResolvedValue({
+      user: {
+        roles: [
+          {
+            permissions: ["permission1", "permission2"],
+            projects: ["project1"],
+          },
+        ],
+      },
+    }),
+    configService: {},
+    client: jest.fn(),
+    logger: jest.fn(),
+    getKey: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -33,6 +50,10 @@ describe('JobRunController', () => {
             checkWorkerHealth: jest.fn(),
             updateWorkerResponse: jest.fn(),
           },
+        },
+        {
+          provide: JwtService,
+          useValue: mockJwtService,
         },
         {
           provide: JobRunInitService,

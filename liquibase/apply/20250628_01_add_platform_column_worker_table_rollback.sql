@@ -1,0 +1,1 @@
+ALTER TABLE worker DROP COLUMN IF EXISTS platform;

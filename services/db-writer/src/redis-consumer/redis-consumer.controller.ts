@@ -1,16 +1,18 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
-import { ApiBody, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiExcludeController, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ConsumerDto } from './redis-consumer.dto';
 import { RedisConsumerService } from './redis-consumer.service';
 import { ConsumerType } from '../enum/redis-consumer.enum';
-
 @ApiTags('Redis Consumer') // Swagger tag for grouping APIs
 @Controller('redis-consumer')
+@ApiExcludeController() // Exclude this controller from Swagger documentation
 export class RedisConsumerController {
     constructor(private redisConsumerService: RedisConsumerService) {}
 
     /**
      * Start a consumer for a specific job.
+     * UnAuthenticated as this endpoint is called internally by the jobs service.
+     * Marked as hidden from the Swagger documentation using @ApiExcludeController.
      */
     @Post('start')
     @ApiBody({ description: 'Consumer Details', type: ConsumerDto })
@@ -25,6 +27,8 @@ export class RedisConsumerController {
 
     /**
      * Stop a consumer for a specific job.
+     * UnAuthenticated as this endpoint is called internally by the jobs service.
+     * Marked as hidden from the Swagger documentation using @ApiExcludeController.
      */
     @Post('stop')
     @ApiQuery({ name: 'jobRunId', type: String, description: 'The ID of the job run.' })
@@ -44,6 +48,8 @@ export class RedisConsumerController {
 
     /**
      * List all active consumers.
+     * UnAuthenticated as this endpoint is called internally by the jobs service.
+     * Marked as hidden from the Swagger documentation using @ApiExcludeController.
      */
     @Get('active-consumers')
     @ApiResponse({ status: 200, description: 'List of active consumers retrieved successfully.' })
@@ -53,6 +59,11 @@ export class RedisConsumerController {
         return { success: true, data: activeConsumers };
     }
 
+    /**
+     * Check if a specific consumer is running.
+     * UnAuthenticated as this endpoint is called internally by the jobs service.
+     * Marked as hidden from the Swagger documentation using @ApiExcludeController.
+     */
     @Get('is-running')
     @ApiQuery({ name: 'jobRunId', type: String, description: 'The ID of the job run.' })
     @ApiQuery({ name: 'consumerType', enum: ConsumerType, description: 'The type of consumer to check.' })

@@ -73,3 +73,9 @@ export enum ScheduleStatus {
     SCHEDULED = 'SCHEDULED',
     READY_TO_BE_SCHEDULED = 'READY_TO_BE_SCHEDULED'
 }
+export enum Platform {
+    LINUX = 'LINUX',
+    WINDOWS = 'WINDOWS',
+    MACOS = 'MACOS',
+    OTHER = 'OTHER'
+}

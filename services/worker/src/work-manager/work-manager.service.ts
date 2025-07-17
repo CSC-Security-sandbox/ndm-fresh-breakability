@@ -4,13 +4,14 @@ import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NativeConnection, Worker } from '@temporalio/worker';
 import { firstValueFrom, retry, timeout, timer } from 'rxjs';
-import { WorkerConfiguration, WorkerState } from './work-manager.types';
-import { getWorkerIdentity } from 'src/utils/worker-manager.mappers';
+import { Platform, WorkerConfiguration, WorkerState } from './work-manager.types';
+import { getPlatform, getWorkerIdentity } from 'src/utils/worker-manager.mappers';
 import { Logger } from 'src/logger/logger.service';
 import { KeycloakConfig } from 'src/config/keycloak.config';
 import { WorkerOptionsService } from './factory/worker-options.factory.service';
 import { AuthService } from 'src/auth/auth.service';
 import { Connection } from '@temporalio/client';
+
 
 
 
@@ -26,6 +27,7 @@ export class WorkManagerService {
     private readonly workerStartupTimeout: number;
     private taskQueuesToMonitor =  [];
     private temporalClientConnection: Connection = null;
+    private platform: Platform
 
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
@@ -38,6 +40,7 @@ export class WorkManagerService {
         this.workerConfigUrl = `${this.configService.get('worker.connection.workerConfigUrl')}`;
         this.workerId = this.configService.get('worker.workerId');
         this.workerStartupTimeout = this.configService.get('worker.workerStartupTimeout');
+        this.platform = getPlatform(this.configService.get('worker.platform'));
     }
     async onApplicationBootstrap() {
         this.logger.info('[onApplicationBootstrap] - Starting Worker Service');
@@ -57,14 +60,23 @@ export class WorkManagerService {
             this.logger.debug('Already loading configurations, skipping this cycle.');
             return;
         }
+        this.logger.log(`Fetching configurations for platform: ${this.platform}`);
+
         try {
             this.loadingConfigs = true;
             const accessToken = await this.authService.getAccessToken();
             if (!accessToken) throw new Error('Access token is null');
             const response = await firstValueFrom(
-                this.httpService.get(`${this.workerConfigUrl}/api/v1/work-manager/config`, {
-                   headers: { Authorization: `Bearer ${accessToken}` }, timeout: 5000,
-                })
+                this.httpService.get(
+                    `${this.workerConfigUrl}/api/v1/work-manager/config`,
+                    {
+                        headers: { 
+                            Authorization: `Bearer ${accessToken}`,
+                            'x-client-platform': this.platform,
+                        },
+                        timeout: 5000,
+                    }
+                )
             );
             if (response.status !== 200) {
                 throw new Error(`Failed to fetch configurations. Status: ${response.status}`);
