@@ -1,11 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
-  const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
+  
+  // Use console.log for bootstrap logging since LoggerFactory is scoped
+  console.log('[Bootstrap] Starting admin service...');
 
   // Enable graceful shutdown
   app.enableShutdownHooks();
@@ -32,33 +34,31 @@ async function bootstrap() {
   app.enableCors();
   
   const server = await app.listen(3000);
-  logger.log('Admin Service is running on port 3000');
+  console.log('[Bootstrap] Admin Service is running on port 3000');
 
-  // Graceful shutdown handling
+  // Handle graceful shutdown - NestJS will handle most of the cleanup
   const gracefulShutdown = async (signal: string) => {
-    logger.log(`Received ${signal}, starting graceful shutdown...`);
-    
+    console.log(`[Bootstrap] Received ${signal}, starting graceful shutdown...`);
+
     try {
-      // Close the HTTP server
+      // Close the HTTP server first to stop accepting new requests
       await new Promise<void>((resolve, reject) => {
         server.close((err) => {
           if (err) {
             reject(err);
           } else {
-            logger.log('HTTP server closed');
+            console.log('[Bootstrap] HTTP server closed');
             resolve();
           }
         });
       });
-
-      // Close the NestJS application
-      await app.close();
-      logger.log('NestJS application closed');
       
-      // Exit process
+      // NestJS will handle the rest of the cleanup automatically
+      await app.close();
+      console.log('[Bootstrap] Application shut down successfully');
       process.exit(0);
     } catch (error) {
-      logger.error('Error during graceful shutdown:', error);
+      console.error('[Bootstrap] Error during graceful shutdown:', error);
       process.exit(1);
     }
   };
@@ -69,7 +69,6 @@ async function bootstrap() {
 }
 
 bootstrap().catch((error) => {
-  const logger = new Logger('Bootstrap');
-  logger.error('Failed to start application:', error);
+  console.error('[Bootstrap] Failed to start application:', error);
   process.exit(1);
 });
