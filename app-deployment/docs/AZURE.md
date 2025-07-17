@@ -138,7 +138,7 @@ This guide will help you navigate the Azure UI to create a Virtual Machine (VM) 
 
 - To check boot service logs:
   ```sh
-  tail -10f /var/log/datamigrator/microk8s-boot.log
+  tail -10f /opt/datamigrator/logs/ndm-first-boot.log
   ```
 
 ### Verify Application Status

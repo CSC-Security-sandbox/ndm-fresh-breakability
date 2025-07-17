@@ -64,8 +64,8 @@ jobs:
           mkdir -p $GITHUB_WORKSPACE/credentials
 
           echo "Setting VM credentials..."
-          VM_USERNAME=$(echo "${{ secrets.VSPHERE_BUILD_USERNAME }}" | base64 --decode)
-          VM_PASSWORD=$(echo "${{ secrets.VSPHERE_BUILD_PASSWORD }}" | base64 --decode)
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
 
           # Write to GITHUB_ENV
           echo "VM_USERNAME=$VM_USERNAME" >> $GITHUB_ENV
@@ -85,6 +85,8 @@ jobs:
 
           echo "TF_VAR_worker_ovf_template_name=$WORKER_TEMPLATE" >> $GITHUB_ENV
           echo "TF_VAR_control_plane_ovf_template_name=$CONTROL_PLANE_TEMPLATE" >> $GITHUB_ENV
+          echo "TF_VAR_ssh_user=$VM_USERNAME" >> $GITHUB_ENV
+          echo "TF_VAR_ssh_pass=$VM_PASSWORD" >> $GITHUB_ENV
 
       - name: Initialize Terraform
         run: |

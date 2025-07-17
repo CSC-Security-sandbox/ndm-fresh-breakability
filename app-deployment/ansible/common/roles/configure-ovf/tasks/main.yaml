@@ -1,0 +1,37 @@
+---
+- name: Copy custom OVF scripts to /opt/datamigrator/bin
+  copy:
+    src: "./templates/{{ item }}"
+    dest: "/opt/datamigrator/bin/{{ item }}"
+    mode: '0755'
+    owner: root
+    group: root
+  loop:
+    - getOvfProperty.sh
+    - setup.sh
+    - setup-01-user.sh
+    - setup-02-network.sh
+
+- name: Copy 00-disable-cloud-init-networking.cfg to /etc/cloud/cloud.cfg.d
+  copy:
+    src: "./templates/00-disable-cloud-init-networking.cfg"
+    dest: "/etc/cloud/cloud.cfg.d/00-disable-cloud-init-networking.cfg"
+    mode: '0644'
+    owner: root
+    group: root
+
+- name: Copy first-boot-customization.service to systemd
+  copy:
+    src: "./templates/first-boot-customization.service"
+    dest: "/etc/systemd/system/first-boot-customization.service"
+    mode: '0644'
+    owner: root
+    group: root
+
+- name: Reload systemd daemon
+  command: systemctl daemon-reload
+
+- name: Enable first-boot-customization.service
+  systemd:
+    name: first-boot-customization.service
+    enabled: yes

@@ -9,6 +9,7 @@
     name:
       - nfs-common
       - smbclient
+      - xmlstarlet
     state: present
 
 # Disable ICMP redirects for security

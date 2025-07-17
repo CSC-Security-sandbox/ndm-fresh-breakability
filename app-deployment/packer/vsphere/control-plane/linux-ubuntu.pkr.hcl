@@ -530,6 +530,12 @@ variable "additional_packages" {
   default     = []
 }
 
+variable "destroy_vm_post_build" {
+  type        = bool
+  description = "Destroy the virtual machine after the build."
+  default     = true
+}
+
 //  BLOCK: data
 //  Defines the data sources.
 
@@ -540,11 +546,11 @@ data "git-commit" "cwd-head" {}
 //  Defines the local variables.
 
 locals {
-  build_by          = "Built by: HashiCorp Packer ${packer.version}"
+  product_name      = "NetApp DataMigrator Control Plane"
   build_date        = formatdate("YYYY-MM-DD hh:mm ZZZ", timestamp())
   formatted_timestamp = formatdate("DD-MM-YYYY-hh-mm-ss", timestamp())
   build_version     = substr(data.git-commit.cwd-head.hash, 0, 8)
-  build_description = "Version: ${local.build_version}\nBuilt on: ${local.build_date}\n${local.build_by}"
+  build_description = "Product: ${local.product_name}\nVendor: NetApp Inc.\nVersion: ${var.build_version}\nBuilt on: ${local.build_date}"
   iso_paths = {
     content_library = "${var.common_iso_content_library}/${var.iso_content_library_item}/${var.iso_file}",
     datastore       = "[${var.common_iso_datastore}] ${var.iso_datastore_path}/${var.iso_file}"
@@ -626,6 +632,7 @@ source "vsphere-iso" "linux-ubuntu" {
   reattach_cdroms      = var.vm_cdrom_count
   tools_upgrade_policy = var.common_tools_upgrade_policy
   notes                = local.build_description
+  destroy              = var.destroy_vm_post_build
 
   // Removable Media Settings
   iso_paths    = var.common_iso_content_library_enabled ? [local.iso_paths.content_library] : [local.iso_paths.datastore]
@@ -708,7 +715,8 @@ build {
       "--extra-vars", "ansible_username=${var.build_username}",
       "--extra-vars", "ansible_key='${var.build_key}'",
       "--extra-vars", "enable_cloudinit=${var.vm_guest_os_cloudinit}",
-      "--extra-vars", "build_version=${var.build_version}"
+      "--extra-vars", "build_version=${var.build_version}",
+      "--extra-vars", "vsphere_build=true"
     ]
   }
   provisioner "ansible" {
@@ -726,7 +734,8 @@ build {
       "--extra-vars", "ansible_username=${var.build_username}",
       "--extra-vars", "ansible_key='${var.build_key}'",
       "--extra-vars", "enable_cloudinit=${var.vm_guest_os_cloudinit}",
-      "--extra-vars", "build_version=${var.build_version}"
+      "--extra-vars", "build_version=${var.build_version}",
+      "--extra-vars", "vsphere_build=true",
     ]
   }
 
@@ -744,7 +753,8 @@ build {
       "--extra-vars", "ansible_username=${var.build_username}",
       "--extra-vars", "ansible_key='${var.build_key}'",
       "--extra-vars", "enable_cloudinit=${var.vm_guest_os_cloudinit}",
-      "--extra-vars", "build_version=${var.build_version}"
+      "--extra-vars", "build_version=${var.build_version}",
+      "--extra-vars", "vsphere_build=true"
     ]
   }
 
@@ -775,6 +785,20 @@ build {
         vsphere_endpoint         = var.vsphere_endpoint
         vsphere_folder           = var.vsphere_folder
       }
+    }
+
+    post-processor "shell-local" {
+      inline = [
+        "../ovf-customizer/scripts/add_ovf_properties.sh \\",
+        "  \"${local.ovf_export_path}\" \\",
+        "  \"${local.product_name}\" \\",
+        "  \"${var.build_version}\" \\",
+        "  \"${var.vsphere_endpoint}\" \\",
+        "  \"${var.vsphere_username}\" \\",
+        "  \"${var.vsphere_password}\" \\",
+        "  \"${var.vsphere_insecure_connection}\" \\",
+        "  \"${var.common_content_library}\" \\"
+      ]
     }
   }
 }
