@@ -1,13 +1,16 @@
 import { Injectable, LoggerService } from '@nestjs/common';
-import * as fs from 'fs';
-import * as winston from 'winston';
-import 'winston-daily-rotate-file';
 import {
   DefaultLogger,
   makeTelemetryFilterString,
   Runtime,
 } from '@temporalio/worker';
-import { support as fluentSupport } from 'fluent-logger';
+import * as fs from 'fs';
+import * as winston from 'winston';
+import 'winston-daily-rotate-file';
+
+import TransportStream = require('winston-transport');
+
+import { FluentClient } from "@fluent-org/logger";
 
 @Injectable()
 export class Logger implements LoggerService {
@@ -41,21 +44,25 @@ export class Logger implements LoggerService {
       fs.mkdirSync(Logger.logDir);
     }
 
-    const fluentConfig = {
-      host: process.env.CONTROL_PLANE_IP || '192.168.64.189',
-      port: process.env.FLUENT_PORT ? parseInt(process.env.FLUENT_PORT) : 32422,
-      timeout: 3.0,
-      reconnectInterval: 60000,
+    const fluentClient = new FluentClient("worker", {
+      socket: {
+        host: process.env.CONTROL_PLANE_IP || "192.168.64.189",
+        port: process.env.FLUENT_PORT ? parseInt(process.env.FLUENT_PORT) : 32422,
+        timeout: 3000,
+      },
       security: {
         clientHostname: process.env.FLUENT_CLIENT_HOST || 'worker-client',
         sharedKey:
           process.env.FLUENT_SHARED_KEY || 'secure_communication_is_awesome',
       },
-      requireAckResponse: false,
-    };
+    });
 
-    const fluentTransport = fluentSupport.winstonTransport();
-    const fluent = new fluentTransport('worker.tag', fluentConfig);
+    class FluentWinstonTransport extends TransportStream {
+      log(info: any, callback: () => void) {
+        fluentClient.emit("worker.log", info);
+        callback();
+      }
+    }
 
     this.loggerInstance = winston.createLogger({
       level: Logger.logLevel,
@@ -66,7 +73,7 @@ export class Logger implements LoggerService {
       ),
       transports: [
         new winston.transports.Console(),
-        // fluent,
+        new FluentWinstonTransport(),
         // new winston.transports.DailyRotateFile({
         //   filename: `${Logger.logDir}/${Logger.workerId}-%DATE%.log`,
         //   datePattern: 'YYYY-MM-DD',
