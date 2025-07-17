@@ -122,6 +122,9 @@ export function withBulkMigrateCreateForm(
 
     const [listOfNotReachableExportPaths, setListOfNotReachableExportPaths] =
       useState<string[]>([]);
+    const [sourceDisabledPaths, setSourceDisabledPaths] = useState<string[]>(
+      []
+    );
 
     useEffect(() => {
       mappingStepForm.validateForm();
@@ -169,6 +172,7 @@ export function withBulkMigrateCreateForm(
             });
           });
           const notReachableVolumes = [];
+          const sourceDisabledPathsHashSet = [];
           allFileServers.forEach((config) => {
             const _destinationPaths: DestinationPathsOptionsType[] = [];
             config?.fileServers?.flatMap((fileServer) =>
@@ -184,8 +188,12 @@ export function withBulkMigrateCreateForm(
                 if (volume?.reachableCount === 0) {
                   notReachableVolumes.push(volume.id);
                 }
+                if (volume?.isDisabled) {
+                  sourceDisabledPathsHashSet.push(volume.id);
+                }
               })
             );
+            setSourceDisabledPaths(sourceDisabledPathsHashSet);
             setListOfNotReachableExportPaths(notReachableVolumes);
             _fileServerDetailsMap.set(config?.id, _destinationPaths);
           });
@@ -597,6 +605,7 @@ export function withBulkMigrateCreateForm(
       setFileName,
       fileName,
       listOfNotReachableExportPaths,
+      sourceDisabledPaths,
     };
 
     return <WrappedComponent {...props} {...createBulkMigrateHelpers} />;
