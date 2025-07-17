@@ -3,8 +3,9 @@ import { Command, JobManagerContext, Task } from "@netapp-cloud-datamigrate/jobs
 
 export interface ScanActivityInput {
     jobRunId: string;
-    dirsToScan: string[];
     isMigration: boolean;
+    batchSize: number;
+    batchId: string;
 }
 
 export interface ScanActivityOutput {
@@ -12,6 +13,7 @@ export interface ScanActivityOutput {
     fileCount: number;
     dirCount: number;
     subDirs: string[];
+    batchDirs: string[];
 }
 
 export interface ScanDirectoryInput {
@@ -57,4 +59,16 @@ export interface TaskExecInput {
     jobContext: JobManagerContext;
     activityId:string
     isMigration: boolean;
+    batchSize: number;
+}
+
+export interface BatchSubDirInput {
+    subDirs: string[];
+    batchSize: number;
+    jobContext: JobManagerContext;
+}
+
+export interface BatchSubDirOutput {
+    subDirs: string[];
+    batchDirs: string[];
 }

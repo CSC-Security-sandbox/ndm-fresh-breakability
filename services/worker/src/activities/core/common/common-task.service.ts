@@ -8,7 +8,8 @@ import { RetryExceededError } from "src/errors/errors.types";
 import { RedisService } from "src/redis/redis.service";
 import { buildTask, calculateCommandHash } from "../../utils/utils";
 import { handleInitTaskInput } from "../migrate/migrate-sync.types";
-import { BuildOrGetScanTaskInput } from "./common-task.type";
+import { BuildOrGetScanTaskInput, CreateInitBatchInput } from "./common-task.type";
+import { calculateHash } from "src/activities/utils/checksum-utils";
 
 
 @Injectable()
@@ -29,17 +30,18 @@ export class CommonTaskService {
     }
 
     // TO-DO : make this adaptive resource based task creation
-    async getGroupOfTasksActivity(jobRunId,  groupSize = 1000): Promise<string[]> {
+    async getGroupOfTasksActivity(jobRunId,  groupSize = 1000, workerConcurrency = 20): Promise<string[]> {
       const activityContext = Context.current();      
       const heartBeatInterval = setInterval(() => { activityContext.heartbeat({});}, 2000);
       let taskIds: string[] = [];
+      const commandsInTask = Math.floor(groupSize/ workerConcurrency);
       try{
         const jobContext = await this.redisService.getJobManagerContext(jobRunId);
         let commands:Command[] = [], streamIds = [];
         for await (const {data, id} of jobContext.groupReadCommandStream(jobRunId, groupSize, GroupReaderType.WORKER)) {
           commands.push(data);
           streamIds.push(id);
-          if (commands.length >= 100) {
+          if (commands.length >= commandsInTask) {
             const task = buildTask(TaskType.MIGRATE, jobRunId, jobContext, commands);
             const hashKey = calculateCommandHash(commands); 
             taskIds.push(hashKey);
@@ -68,11 +70,14 @@ export class CommonTaskService {
     }
 
   
-  async buildOrGetValidScanTask({dirToScans, jobContext , taskHashId , jobRunId}: BuildOrGetScanTaskInput): Promise<Task> {
+  async buildOrGetValidScanTask({jobContext , taskHashId , jobRunId, batchId}: BuildOrGetScanTaskInput): Promise<Task> {
     let task: Task | undefined = await jobContext.getTask(taskHashId);
-    if(!task) {
-      const commands: Command[] = dirToScans.map(dir => new Command(dir, {}, `${uuid4()}`,0));
-      task =  buildTask(TaskType.SCAN, jobRunId, jobContext, commands);
+    if(!task && batchId) {
+      const batch = await jobContext.getBatchDir(batchId);
+      if(batch) {
+        const commands = batch.map(dir => new Command(dir, {}, `${uuid4()}`, 0));
+        task =  buildTask(TaskType.SCAN, jobRunId, jobContext, commands);
+      }
       await jobContext.setTaskIfNotExists(taskHashId, task);
     }
     task = await this.ensureTaskValid({task, jobContext});
@@ -108,5 +113,12 @@ export class CommonTaskService {
     return resp.workflowExecutionInfo?.status === 1;
   }
 
+
+  async createInitialDirBatch({dirsToScan, jobRunId}: CreateInitBatchInput): Promise<string>  {
+    const jobContext = await this.redisService.getJobManagerContext(jobRunId);
+    const batchId: string = calculateHash(dirsToScan);
+    await jobContext.setBatchDir(batchId, dirsToScan);
+    return batchId;
+  }
     
 }

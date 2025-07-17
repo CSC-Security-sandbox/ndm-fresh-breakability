@@ -6,6 +6,7 @@ import { Logger } from '@nestjs/common';
 
 jest.mock('worker_threads', () => {
   const EventEmitter = require('events');
+const WorkerThreadServiceModule = require('./worker.thread.service').WorkerThreadService;
   class FakeWorker extends EventEmitter {
     threadId = Math.floor(Math.random() * 1000);
     postMessage = jest.fn();
@@ -259,4 +260,26 @@ describe('WorkerThreadService', () => {
     const tasks = service.getTasks('1kb');
     expect(tasks).toEqual([]);
   });
+
+  it('getTaskBand should return correct band name for different sizes', () => {
+    // Default sizes: 1kb, 1mb, 10mb, 100mb, 1gb
+    service['sizes'] = [
+      { name: "1kb", maxFetch: 1500 },
+      { name: "1mb", maxFetch: 1000 },
+      { name: "10mb", maxFetch: 100 },
+      { name: "100mb", maxFetch: 10 },
+      { name: "1gb", maxFetch: 1 }
+    ];
+
+    expect(service.getTaskBand(500)).toBe('1kb');
+    expect(service.getTaskBand(1024)).toBe('1kb');
+    expect(service.getTaskBand(1025)).toBe('1mb');
+    expect(service.getTaskBand(1048576)).toBe('1mb');
+    expect(service.getTaskBand(1048577)).toBe('10mb');
+    expect(service.getTaskBand(10485760)).toBe('10mb');
+    expect(service.getTaskBand(10485761)).toBe('100mb');
+    expect(service.getTaskBand(104857600)).toBe('100mb');
+    expect(service.getTaskBand(104857601)).toBe('1gb');
+  });
+
 });

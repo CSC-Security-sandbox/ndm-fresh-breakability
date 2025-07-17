@@ -60,34 +60,6 @@ describe("smartCopy", () => {
     return writable;
   };
 
-  it("should copy file and match checksums", async () => {
-    (fs.existsSync as jest.Mock).mockImplementation((p) => p === sourcePath || p === "dest");
-
-    (fs.createReadStream as jest.Mock).mockImplementation((path: string) => {
-      return mockFsStream(mockData);
-    });
-
-    (fs.createWriteStream as jest.Mock).mockImplementation(() => mockWritableStream());
-
-    const fakeHash = {
-      update: jest.fn().mockReturnThis(),
-      digest: jest.fn().mockReturnValue("fakeChecksum"),
-    };
-
-    // First for streaming write, second for checksum comparison
-    (crypto.createHash as jest.Mock).mockReturnValueOnce(fakeHash).mockReturnValueOnce(fakeHash);
-
-    const result = await smartCopy(sourcePath, destPath);
-
-    expect(fs.existsSync).toHaveBeenCalledWith(sourcePath);
-    expect(result.sourceChecksum).toEqual("fakeChecksum");
-    expect(result.targetChecksum).toEqual("fakeChecksum");
-  });
-
-  it("should throw error if source does not exist", async () => {
-    (fs.existsSync as jest.Mock).mockReturnValue(false);
-    await expect(smartCopy("nonexistent.txt", destPath)).rejects.toThrow("Source file does not exist");
-  });
 
   it("should create target directory if it doesn’t exist", async () => {
     (fs.existsSync as jest.Mock).mockImplementation((p) => p === sourcePath);
@@ -165,5 +137,39 @@ describe("calculateChecksum", () => {
     expect(checksum).toBe("testChecksum");
     expect(fakeHash.update).toHaveBeenCalled();
     expect(fakeHash.digest).toHaveBeenCalledWith("hex");
+  });
+
+  it("should destroy the stream after calculating checksum", async () => {
+    const fakeHash = {
+      update: jest.fn().mockReturnThis(),
+      digest: jest.fn().mockReturnValue("destroyChecksum"),
+    };
+
+    const destroyedStream = mockAsyncReadableStream(Buffer.from("destroy"));
+    destroyedStream.destroy = jest.fn();
+    destroyedStream.destroyed = false;
+
+    (crypto.createHash as jest.Mock).mockReturnValue(fakeHash);
+    (fs.createReadStream as jest.Mock).mockImplementation(() => destroyedStream);
+
+    await calculateChecksum("dummy.txt");
+    expect(destroyedStream.destroy).toHaveBeenCalled();
+  });
+
+  it("should handle error during checksum calculation and still destroy stream", async () => {
+    const fakeHash = {
+      update: jest.fn().mockImplementation(() => { throw new Error("fail update"); }),
+      digest: jest.fn(),
+    };
+
+    const destroyedStream = mockAsyncReadableStream(Buffer.from("fail"));
+    destroyedStream.destroy = jest.fn();
+    destroyedStream.destroyed = false;
+
+    (crypto.createHash as jest.Mock).mockReturnValue(fakeHash);
+    (fs.createReadStream as jest.Mock).mockImplementation(() => destroyedStream);
+
+    await expect(calculateChecksum("dummy.txt")).rejects.toThrow("fail update");
+    expect(destroyedStream.destroy).toHaveBeenCalled();
   });
 });

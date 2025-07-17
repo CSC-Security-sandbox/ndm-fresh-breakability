@@ -1,7 +1,7 @@
 import * as wf from '@temporalio/workflow';
-import { ChildScanWorkflowOutput, WorkflowStatus } from '../child/chid-scan.workflow.type';
-import { JobRunStatus } from 'src/activities/discovery/enums';
 import { CommonActivityService } from 'src/activities/common/common.service';
+import { JobRunStatus } from 'src/activities/discovery/enums';
+import { ChildScanWorkflowOutput } from '../child/chid-scan.workflow.type';
 
 
 interface DiscoveryWorkflowExecutorInput {
