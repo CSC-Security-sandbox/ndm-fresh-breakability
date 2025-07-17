@@ -329,8 +329,10 @@ export const handleDownloadTemplate = async (
 
     URL.revokeObjectURL(link.href);
   } catch (error) {
-    console.error("Failed to download the template: ", error);
-    notify.error("Failed to downlod the template.");
+    const errorMessage =
+      error?.data?.message || "Failed to download the template: ";
+    console.error(errorMessage);
+    notify.error(errorMessage);
   }
 };
 
