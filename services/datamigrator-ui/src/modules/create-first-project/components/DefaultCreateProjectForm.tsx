@@ -3,12 +3,12 @@ import AppFooter from '@/components/layout/app-footer/AppFooter';
 import withCreateProject from '@/hoc/withCreateProject';
 import {setProject} from '@store/reducer/appSlice';
 import {Button, Card, FormFieldInputNew, FormFieldTextArea, Layout, TabHeader} from '@netapp/bxp-design-system-react';
-import {BlueXpFormType} from '@/types/app.type';
+import {BlueXpFormType, CreateProjectResponseType} from '@/types/app.type';
 import {useDispatch} from 'react-redux';
 
 interface DefaultCreateProjectFormType {
   createProjectForm: BlueXpFormType<DefaultCreateProjectFormType>;
-  handleCreateProject: () => void;
+  handleCreateProject: () => Promise<CreateProjectResponseType>;
 }
 
 const DefaultCreateProjectForm = ({
@@ -18,8 +18,8 @@ const DefaultCreateProjectForm = ({
   const dispatch = useDispatch();
 
   const handleProjectCreation = async () => {
-    const response: any = await handleCreateProject();
-    dispatch(setProject(response?.data.id || ''));
+    const response: CreateProjectResponseType = await handleCreateProject();
+    dispatch(setProject(response?.data?.id || ''));
   };
 
   const FOOTER_CONTENT = (

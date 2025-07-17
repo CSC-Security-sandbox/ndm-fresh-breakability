@@ -1,12 +1,9 @@
 /* eslint-disable */
-import { BlueXpFormType } from "@/types/app.type";
-import {
-  useCreateProjectMutation,
-  useUpdateProjectMutation,
-} from "@api/projectApi";
-import { useForm } from "@netapp/bxp-design-system-react";
-import * as Yup from "yup";
-import useAccountDetails from "@/hooks/useAccountDetails";
+import {BlueXpFormType, CreateProjectResponseType} from '@/types/app.type';
+import {useCreateProjectMutation, useUpdateProjectMutation} from '@api/projectApi';
+import {useForm} from '@netapp/bxp-design-system-react';
+import * as Yup from 'yup';
+import useAccountDetails from '@/hooks/useAccountDetails';
 
 const CREATE_PROJECT_VALIDATION_SCHEMA = Yup.object({
   project_name: Yup.string().required("Project Name is required"),
@@ -38,7 +35,7 @@ const withCreateProject = (WrappedComponent: any) => {
       CREATE_PROJECT_VALIDATION_SCHEMA
     );
 
-    const handleCreateProject = async () => {
+    const handleCreateProject = async (): Promise<CreateProjectResponseType> => {
       return await createProjectApi({
         ...createProjectForm?.formState,
         account_id: accountDetails?.id,
