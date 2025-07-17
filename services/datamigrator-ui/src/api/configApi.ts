@@ -87,7 +87,13 @@ export const configApi = createApi({
     >({
       query: ({ type, fileServerId }) => ({
         url: `paths-upload/download/${type}/${fileServerId}`,
-        responseHandler: async (response) => response.blob(),
+        responseHandler: async (response) => {
+          if (!response.ok) {
+            const errorText = await response.text();
+            return JSON.parse(errorText);
+          }
+          return response.blob();
+        },
       }),
     }),
 
