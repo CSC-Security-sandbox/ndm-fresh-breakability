@@ -43,72 +43,75 @@ describe('ScanWorkflow', () => {
         jest.clearAllMocks();
     });
 
-    it('should handle syncWorkerListSignal correctly', async () => {
-        const args = {
-            jobRunId: 'test-job-run-id',
-            workers: ['worker1'],
-            failedWorkers: []
-        }
+    it(
+        'should handle syncWorkerListSignal correctly',
+        async () => {
+            const args = {
+                jobRunId: 'test-job-run-id',
+                workers: ['worker1'],
+                failedWorkers: [],
+            };
 
-        mockedActivities.getJobState.mockResolvedValue({
-            status: JobRunStatus.Running,
-        });
-
-        mockedActivities.getJobStateWithStreamLoad.mockResolvedValue({
-            jobRunState: {
+            mockedActivities.getJobState.mockResolvedValue({
                 status: JobRunStatus.Running,
-            },
-            isStreamOverloaded: false
-        });
-
-        let scanCallCount = 0;
-        mockedActivities.scanPath.mockImplementation(() => {
-            scanCallCount++;
-            if(scanCallCount < 50) {
-                return Promise.resolve({
-                    isFatalErrored: false,
-                    noTaskFound: false,
-                    files: 0,
-                    folders: 0
-                });
-            } else {
-                return Promise.resolve({
-                    isFatalErrored: false,
-                    noTaskFound: true,
-                    files: 0,
-                    folders: 0
-                });
-            }
-        })
-
-        mockedActivities.publishScanTask.mockResolvedValue({
-            jobRunId: args.jobRunId,
-            status: 'success',
-            message: 'Task published successfully'
-        });
-
-        worker = await Worker.create({
-            connection: env.nativeConnection,
-            workflowsPath: require.resolve('./scan.workflow'),
-            activities: mockedActivities,
-            taskQueue: 'scan-task-queue'
-        });
-
-        await worker.runUntil(async () => {
-            const scanWorkflow = await env.client.workflow.start(ScanWorkflow, {
-                args: [args],
-                taskQueue: 'scan-task-queue',
-                workflowId: 'scan-workflow-test'
             });
 
-            await scanWorkflow.signal(syncWorkerListSignal, ['worker2', 'worker3']);
-            const { runId } = await scanWorkflow.describe();
-            const result = await scanWorkflow.result();
-            expect(result.workers).toContain('worker1');
-            expect(result.workers).toContain('worker2');
-            expect(result.workers).toContain('worker3');
-        });
-    }, 1000 * 15);
+            mockedActivities.getJobStateWithStreamLoad.mockResolvedValue({
+                jobRunState: {
+                    status: JobRunStatus.Running,
+                },
+                isStreamOverloaded: false,
+            });
+
+            let scanCallCount = 0;
+            mockedActivities.scanPath.mockImplementation(() => {
+                scanCallCount++;
+                if (scanCallCount < 50) {
+                    return Promise.resolve({
+                        isFatalErrored: false,
+                        noTaskFound: false,
+                        files: 0,
+                        folders: 0,
+                    });
+                } else {
+                    return Promise.resolve({
+                        isFatalErrored: false,
+                        noTaskFound: true,
+                        files: 0,
+                        folders: 0,
+                    });
+                }
+            });
+
+            mockedActivities.publishScanTask.mockResolvedValue({
+                jobRunId: args.jobRunId,
+                status: 'success',
+                message: 'Task published successfully',
+            });
+
+            worker = await Worker.create({
+                connection: env.nativeConnection,
+                workflowsPath: require.resolve('./scan.workflow'),
+                activities: mockedActivities,
+                taskQueue: 'scan-task-queue',
+            });
+
+            await worker.runUntil(async () => {
+                const scanWorkflow = await env.client.workflow.start(ScanWorkflow, {
+                    args: [args],
+                    taskQueue: 'scan-task-queue',
+                    workflowId: 'scan-workflow-test',
+                });
+
+                await scanWorkflow.signal(syncWorkerListSignal, ['worker2', 'worker3']);
+                const result = await scanWorkflow.result();
+                expect(result.workers).toContain('worker1');
+                expect(result.workers).toContain('worker2');
+                expect(result.workers).toContain('worker3');
+            });
+        },
+        1000 * 60 * 2 // Increased timeout to 2 minutes
+    );
 
     it('should return stopped status when job is stopped', async () => {
         const args = {

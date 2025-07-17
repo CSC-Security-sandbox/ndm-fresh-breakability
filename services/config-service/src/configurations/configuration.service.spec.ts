@@ -351,6 +351,7 @@ describe('ConfigurationService', () => {
 
       expect(result.fileServers[0].password).toBe('');
       expect(result.fileServers[0].password).not.toBe('actualPassword');
+      expect(result).toEqual({ ...mockConfig, fileServers: [mockFileServer], isRefreshAvailable: true, isUploadInProgress: false });
     });
 
     it('should throw BadRequestException if invalid UUID is passed', async () => {
