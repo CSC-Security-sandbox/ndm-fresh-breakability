@@ -1,16 +1,10 @@
-import {
-    CallHandler,
-    ExecutionContext,
-    Injectable,
-    NestInterceptor,
-    Inject,
-} from '@nestjs/common';
-import { Observable, catchError, map, throwError } from 'rxjs';
-import { Request, Response } from 'express';
-import { ResponseHandler } from './response-handler';
+import {CallHandler, ExecutionContext, Inject, Injectable, NestInterceptor, Optional} from '@nestjs/common';
+import {catchError, map, Observable, throwError} from 'rxjs';
+import {Request, Response} from 'express';
+import {ResponseHandler} from './response-handler';
 import {CustomErrorDTO} from '../dto/custom-error-dto';
 import {CustomSuccessDTO} from '../dto/custom-success-dto';
-import {LoggerFactory, LoggerService} from "@netapp-cloud-datamigrate/logger-lib";
+import {LoggerFactory, LoggerService} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class ResponseInterceptor<T> implements NestInterceptor<T, any> {
@@ -18,7 +12,7 @@ export class ResponseInterceptor<T> implements NestInterceptor<T, any> {
     constructor(
       private readonly successDTOList: CustomSuccessDTO[],
       private readonly errorDTOList: CustomErrorDTO[],
-      @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+      @Optional() @Inject(LoggerFactory) loggerFactory: LoggerFactory
 ) {
         this.logger = loggerFactory.create(ResponseInterceptor.name);
     }
