@@ -23,7 +23,7 @@ const JobErrors = ({ latestJobRunId }: { latestJobRunId: string }) => {
   const handlerErrorNavigation = useCallback(() => {
     if (latestJobRunId) {
       // FOR JOB DETAILS SCREEN
-      navigate(`run/${latestJobRunId}/errors`);
+      navigate(`${latestJobRunId}/errors`);
     } else {
       // FOR JOB RUN DETAILS SCREEN
       navigate(`errors`);
