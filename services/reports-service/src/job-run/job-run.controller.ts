@@ -1,11 +1,9 @@
 import {
-  BadRequestException,
   Controller,
   Get,
   Param,
   Query,
   SerializeOptions,
-  StreamableFile,
   Logger,
 } from "@nestjs/common";
 import {
@@ -13,6 +11,7 @@ import {
   ApiOperation,
   ApiResponse,
   ApiTags,
+  ApiBearerAuth,
 } from "@nestjs/swagger";
 import { JobRunService } from "./job-run.service";
 import {
@@ -20,7 +19,11 @@ import {
   JobRunDetailsResponseDto,
   serializeJobRunDetailsResponse,
 } from "./dto/job-rundetails.dto";
-import { ErrorLogService } from "src/csv/error_log_csv.service";
+import {
+  Auth,
+  AuthWorker,
+  Permission,
+} from "@netapp-cloud-datamigrate/auth-lib";
 
 @ApiTags("job-run")
 @Controller("job-run")
@@ -41,6 +44,8 @@ export class JobRunController {
     description: "Job run report not found for the provided JobRunId.",
   })
   @SerializeOptions({ type: JobReportResponseDto })
+  @Auth(Permission.Reports)
+  @ApiBearerAuth()
   @Get("job-report")
   async getJobReportById(
     @Query("jobRunId") jobRunId: string,
@@ -91,6 +96,8 @@ export class JobRunController {
   })
   @ApiResponse({ status: 404, description: "Job run not found." })
   @SerializeOptions({ type: JobRunDetailsResponseDto })
+  @Auth(Permission.Reports)
+  @ApiBearerAuth()
   @Get(":id")
   async getJobStatsId(@Param("id") id: string) {
     const response = await this.jobRunService.getJobStatsId(id);
@@ -103,6 +110,8 @@ export class JobRunController {
   @ApiOperation({ summary: "Get COC Report by JobRunId" })
   @ApiOkResponse({ description: "Returns a COC report by its JobRunId." })
   @ApiResponse({ status: 404, description: "COC report not found." })
+  @AuthWorker()
+  @ApiBearerAuth()
   @Get("coc-report/:jobRunId")
   async getCocReportByJobRunId(@Param("jobRunId") jobRunId: string) {
     this.logger.debug(`Fetching COC report for JobRunId: ${jobRunId}`);

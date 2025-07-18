@@ -31,7 +31,7 @@ import { ErrorRemedyService } from 'src/errorremedies/errorremedies.service';
 import { ErrorRemedyEntity } from 'src/entities/error-remedies.entity';
 import { WorkersService } from 'src/workers/workers.service';
 import { SyncEmailEntity } from 'src/entities/sync-email.entity';
-import { JobRunActionService } from './jobrun-action.service';
+import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';import { JobRunActionService } from './jobrun-action.service';
 
 
 @Module({
@@ -40,7 +40,8 @@ import { JobRunActionService } from './jobrun-action.service';
         ScheduleModule.forRoot(),
         TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity,JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity, FileServerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, OperationErrorEntity, WorkerEntity,IdentityConfigCrossMappingEntity,IdentityMappingEntity, ErrorRemedyEntity, SyncEmailEntity]),
         WorkerModule,
-        RedisModule
+        RedisModule,
+        AuthKeycloakModule
     ],
     providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService, WorkerEntity,SendMailService, ErrorRemedyService,WorkersService, JobRunActionService],
     controllers: [JobRunController]

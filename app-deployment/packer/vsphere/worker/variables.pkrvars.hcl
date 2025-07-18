@@ -1,6 +1,9 @@
 // Project Settings
 project_name = "datamigrator"
 
+// Packer Settings
+destroy_vm_post_build = true
+
 // vSphere Credentials
 vsphere_insecure_connection = true
 
@@ -15,12 +18,12 @@ vsphere_folder                         = "ova-build"
 vsphere_set_host_for_datastore_uploads = false
 
 // CPU Settings
-vm_cpu_count    = 8
+vm_cpu_count    = 4
 vm_cpu_cores    = 1
 vm_cpu_hot_add  = false
 
 // Memory Settings
-vm_mem_size     = 32768
+vm_mem_size     = 16384
 vm_mem_hot_add  = false
 
 // Disk Settings
@@ -29,14 +32,14 @@ vm_disk_size    = 102400
 // Default Account Credentials
 
 // Virtual Machine Settings
-common_vm_version           = 21
+common_vm_version           = 14
 common_tools_upgrade_policy = false
 common_remove_cdrom         = true
 
 // Template and Content Library Settings
 common_template_conversion         = false
 common_content_library             = "datamigrator-ovf-builds"
-common_content_library_enabled     = true
+common_content_library_enabled     = false
 common_content_library_ovf         = true
 common_content_library_destroy     = true
 common_content_library_skip_export = false

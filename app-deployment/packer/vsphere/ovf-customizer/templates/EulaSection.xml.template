@@ -1,0 +1,13 @@
+<EulaSection>
+  <Info ovf:msgid="installation.info">Installation Instructions</Info>
+  <!-- Blank lines within License block are intentional to draw the user to the importance of the text in the display -->
+
+
+
+
+  <License ovf:msgid="eulaSection.license">
+
+By deploying this appliance, you accept the terms of this license.
+
+</License>
+</EulaSection>

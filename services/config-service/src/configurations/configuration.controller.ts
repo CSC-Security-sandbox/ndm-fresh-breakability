@@ -79,10 +79,11 @@ export class ConfigurationController{
         return await this.configurationService.isConfigNameUnique(projectId, configName);
     }
 
-    @ApiOperation({ summary: 'Get Workflow Result' }) 
+    @ApiOperation({ summary: 'Get Updated list of exports/shared paths' }) 
     @ApiResponse({ status: 200, description: 'Request created successfully' })
+    @Auth(Permission.ManageConfig)
     @Get('/refresh/:id')
-    async refreshConfig(@Param('id') id: string,  @Request() userDetails: UserDetails) {
+    async refreshConfig(@Param('id') id: string ,  @Request() userDetails: UserDetails) {
         return await this.configurationService.refreshConfig(id, userDetails?.trackId)
     }
 

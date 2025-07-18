@@ -12,6 +12,8 @@ import { randomUUID } from 'crypto';
 import { CreateUserRoleDto } from './dto/create-user-role.dto';
 import { UserRoleMap, UserRoleRelationDto } from './dto/user-role.dto';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory, resetLoggerMocks } from '../test-utils/logger-mocks';
 
 class MockRepository<T> extends Repository<T> {
   async save(e: any): Promise<any> {
@@ -48,6 +50,7 @@ describe('UserRoleService', () => {
         },
         { provide: getRepositoryToken(Account), useClass: Repository },
         { provide: getRepositoryToken(UserRole), useClass: Repository },
+        { provide: LoggerFactory, useValue: mockLoggerFactory },
       ],
     }).compile();
 
@@ -214,38 +217,13 @@ describe('UserRoleService', () => {
       users: [{ user_id: 'user-1', role_id: 'role-1' }],
     };
 
-    const accountRepositoryMock = {
-      findOne: jest.fn(),
-    };
-    const roleRepositoryMock = {
-      findOne: jest.fn(),
-    };
-    const userRepositoryMock = {
-      findOne: jest.fn(),
-    };
-    const userRoleRepositoryMock = {
-      findOne: jest.fn(),
-    };
-    const projectRepositoryMock = {
-      findOne: jest.fn(),
-    };
-
-    accountRepositoryMock.findOne.mockResolvedValue(undefined);
-
-    projectRepositoryMock.findOne.mockResolvedValue({
+    jest.spyOn(accountRepository, 'findOne').mockResolvedValue(undefined);
+    jest.spyOn(projectRepository, 'findOne').mockResolvedValue({
       id: userRoleRelationDto.project_id,
     });
 
-    const service = new UserRoleService(
-      userRepositoryMock as any,
-      accountRepositoryMock as any,
-      roleRepositoryMock as any,
-      userRoleRepositoryMock as any,
-      projectRepositoryMock as any,
-    );
-
     await expect(service.batchCreate(userRoleRelationDto)).rejects.toThrow(
-      new NotFoundException('project with ID project-1 not found'),
+      new NotFoundException('Account with ID account-1 not found'),
     );
   });
 
@@ -1041,5 +1019,36 @@ describe('UserRoleService', () => {
 
     expect(result).toEqual(expected);
     expect(userRepository.findAndCount).toHaveBeenCalled();
+  });
+
+  // Database error handling tests
+  describe('Database Error Handling', () => {
+    beforeEach(() => {
+      resetLoggerMocks();
+    });
+
+    it('should handle database errors in findAll and log them', async () => {
+      const dbError = new Error('Database query failed');
+      jest.spyOn(userRoleRepository, 'find').mockRejectedValue(dbError);
+
+      await expect(service.findAll()).rejects.toThrow('Database query failed');
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Error finding user roles',
+        dbError
+      );
+    });
+
+    it('should handle database errors in fetchUsersAndRoles and log them', async () => {
+      const dbError = new Error('Database query failed');
+      jest.spyOn(userRepository, 'findAndCount').mockRejectedValue(dbError);
+
+      await expect(service.fetchUsersAndRoles(1, 10, 'id', 'ASC', { user_id: '1' }))
+        .rejects.toThrow('Database query failed');
+
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Error fetching users and roles',
+        dbError
+      );
+    });
   });
 });

@@ -15,7 +15,7 @@ import { WorkflowService } from 'src/workflow/workflow.service';
 import { ConfigService } from '@nestjs/config';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { SendMailService } from 'src/util/send-email';
-import { WorkerStatus, WorkFlowType, WorkFlows } from 'src/constants/enums';
+import { WorkerStatus, WorkFlowType, WorkFlows, Platform } from 'src/constants/enums';
 import { WorkerConfiguration } from 'src/constants/types';
 
 describe('WorkManagerService', () => {
@@ -146,7 +146,7 @@ describe('WorkManagerService', () => {
       (workerRepo.findOne as jest.Mock).mockResolvedValue(workerFromDb);
       (jobRunRepo.find as jest.Mock).mockResolvedValue(jobRunConfig);
 
-      const result = await service.getConfiguration(workerId, ip, projectId);
+      const result = await service.getConfiguration(workerId, ip, projectId,Platform.WINDOWS);
       expect(result).toEqual([{ key: 'value1' }, { key: 'value2' }]);
       // Verify that debug logging is called for each workerMap entry
       expect(logger.debug).toHaveBeenCalledTimes(2);
@@ -175,7 +175,7 @@ describe('WorkManagerService', () => {
       (workerRepo.save as jest.Mock).mockResolvedValue(savedWorker);
       (workerRepo.update as jest.Mock).mockResolvedValue({});
 
-      const result = await service.getConfiguration(workerId, ip, projectId);
+      const result = await service.getConfiguration(workerId, ip, projectId,Platform.LINUX);
       expect(result).toEqual(savedWorker.metaConfig);
       expect(sendMailService.sendMail).toHaveBeenCalledWith({
         body: `<p>Hello</p> The Seceret Client Id ${workerId} has been used from address ${ip} <p></p>`,
@@ -183,13 +183,13 @@ describe('WorkManagerService', () => {
       // Ensure update worker name is called after saving
       expect(workerRepo.update).toHaveBeenCalledWith(
         { workerId: savedWorker.workerId },
-        { workerName: `Worker-${savedWorker.workerNumber}` },
+        { workerName: `nfs-worker-${savedWorker.workerNumber}` },
       );
     });
 
     it('should throw an error if something fails', async () => {
       (workerRepo.findOne as jest.Mock).mockRejectedValue(new Error('DB error'));
-      await expect(service.getConfiguration(workerId, ip, projectId)).rejects.toThrow(
+      await expect(service.getConfiguration(workerId, ip, projectId,Platform.LINUX)).rejects.toThrow(
         'Error while fetching worker configuration',
       );
       expect(logger.error).toHaveBeenCalled();

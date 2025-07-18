@@ -1,21 +1,22 @@
 import {
-  Controller,
-  Get,
-  Post,
   Body,
-  Patch,
-  Param,
+  Controller,
   Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
   Request,
 } from '@nestjs/common';
 
 import { CreatePermissionDto } from './dto/create-permission.dto';
 import { UpdatePermissionDto } from './dto/update-permission.dto';
-import { ApiBody, ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PermissionService } from './permission.service';
 import { PermissionDescription } from '../swagger/swagger-summary';
 import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
+import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
 
 @ApiTags('permissions')
 @Controller('/api/v1/permission')
@@ -58,7 +59,7 @@ export class PermissionController {
     summary: 'Retrieve Permission by ID',
     description: PermissionDescription.GetPermissionByIdDescription,
   })
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', NonEmptyStringPipe) id: string) {
     return this.permissionService.findOne(id);
   }
 
@@ -70,7 +71,7 @@ export class PermissionController {
     description: PermissionDescription.UpdatePermissionDescription,
   })
   update(
-    @Param('id') id: string,
+    @Param('id', NonEmptyStringPipe) id: string,
     @Body() updatePermissionDto: UpdatePermissionDto,
     @Request() userPermissionResponse: UserPermissionResponse,
   ) {
@@ -88,7 +89,7 @@ export class PermissionController {
     summary: 'Delete Permission',
     description: PermissionDescription.DeletePermissionDescription,
   })
-  delete(@Param('id') id: string) {
+  delete(@Param('id', NonEmptyStringPipe) id: string) {
     return this.permissionService.delete(id);
   }
 
@@ -99,7 +100,7 @@ export class PermissionController {
     summary: 'Inactivate Permission',
     description: PermissionDescription.InactivatePermissionDescription,
   })
-  inactivate(@Param('id') id: string) {
+  inactivate(@Param('id', NonEmptyStringPipe) id: string) {
     return this.permissionService.inactivate(id);
   }
 }

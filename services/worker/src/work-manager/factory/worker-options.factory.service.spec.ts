@@ -116,6 +116,7 @@ const MigrateSyncServiceMock = {
 const CommonTaskServiceMock = {
   getGroupOfTasksActivity: bindMock,
   isWorkflowRunningActivity: bindMock,
+  createInitialDirBatch: bindMock,
 }
 
 const ScanServiceMock = {

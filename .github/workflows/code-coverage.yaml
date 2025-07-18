@@ -33,7 +33,9 @@ jobs:
         run: |
           all_services=( "db-writer" "reports-service" "admin-service" "config-service" "jobs-service" "worker" )
 
-          base_sha="${{ github.event.pull_request.base.sha }}"
+          base_branch="${{ github.event.pull_request.base.ref }}"
+          git fetch origin "$base_branch"
+          base_sha=$(git rev-parse origin/$base_branch)
           head_sha="${{ github.sha }}"
           affected_services=()
           for service in "${all_services[@]}"; do

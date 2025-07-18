@@ -99,3 +99,9 @@ export enum PausedReason {
   USER_PAUSED = "USER_PAUSED",
   SYSTEM_PAUSED = "SYSTEM_PAUSED",
 }
+export enum ReportValueType {
+  SIZE = "size",
+  TIME = "time",
+  COUNT = "count",
+  STRING = "string",
+}

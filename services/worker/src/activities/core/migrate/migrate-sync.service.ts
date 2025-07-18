@@ -170,6 +170,13 @@ export class MigrateSyncService {
     const syncOperation: SyncOperationOutput = {errors : {source: new Set<string>(), target: new Set<string>() },  ops, status: OPS_STATUS.COMPLETED , errorType : errorType }
     if (syncOperation.ops[0] && syncOperation.ops[0].status !== OPS_STATUS.COMPLETED) {
       if(syncOperation.ops[0].cmd === OPS_CMD.COPY_CONTENT) {
+        if (!this.validateSourceExist(sourcePath)) {
+          syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.ERROR, error: `Source path does not exist: ${sourcePath}` };
+          this.logger.error(`Source path does not exist: ${sourcePath}`);
+          const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.COPY_CONTENT, syncOperation.errorType, command.commandId, new Error(`Source path does not exist: ${sourcePath}`), {name: command.fPath, path: sourcePath});
+          await jobContext.publishToErrorStream(dmErr);
+          return syncOperation;
+        }
         try {
           syncOperation.checksums = await this.workerThreadService.migrateWorkerThread({
             sourcePath, destinationPath: targetPath, operationId: command.commandId, size: syncOperation.ops[1].metadata?.size ?? 0
@@ -198,6 +205,18 @@ export class MigrateSyncService {
           return syncOperation
         }
       }
+    }
+    if (syncOperation.ops[0].cmd === OPS_CMD.REMOVE_DIR || syncOperation.ops[0].cmd === OPS_CMD.REMOVE_FILE) {
+      if (syncOperation.ops[0]?.status !== OPS_STATUS.COMPLETED) {
+        await this.removeFileOrDirectory({
+          targetPath,
+          ops,
+          syncOperation,
+          command,
+          jobContext
+        });
+      }
+      return syncOperation
     }
     if (syncOperation.ops[1]?.status !== OPS_STATUS.COMPLETED) {
       const result = await this.stampMetaData({targetPath, sourcePath, metadata: ops[1].metadata, jobContext, command, errorType})
@@ -263,7 +282,7 @@ export class MigrateSyncService {
           command.status = CommandStatus.ERROR;
           syncOperationOp.errors.source.forEach(error => syncOutput.errors.source.push(error));
           syncOperationOp.errors.target.forEach(error => syncOutput.errors.target.push(error));
-        } else {
+        } else if(command.ops[0].cmd != OPS_CMD.REMOVE_DIR && command.ops[0].cmd != OPS_CMD.REMOVE_FILE) {
           const fileInfo: FileInfo = await this.getFileInfo({
             name: command.fPath,
             fullFilePath: `${task.tPath}${command.fPath}`,
@@ -272,8 +291,11 @@ export class MigrateSyncService {
             getID: jobContext.jobConfig.options.isIdentityMappingAvailable
           });
           command.status = CommandStatus.COMPLETED;
-          await jobContext.publishToFileStream(fileInfo);          
+          await jobContext.publishToFileStream(fileInfo);
+        } else {
+          command.status = CommandStatus.COMPLETED;
         }
+
         await jobContext.setTask(taskHashId, task);
       }
       return syncOutput
@@ -353,5 +375,41 @@ export class MigrateSyncService {
       `Sync Task Update Failed: ${errors.source.length} source errors and ${errors.target.length} target errors with retry count ${retryCount}`
     );
   }
+
+  async removeFileOrDirectory({ targetPath, ops, syncOperation, command, jobContext }: { targetPath: string; ops: any; syncOperation: SyncOperationOutput; command: any; jobContext: JobManagerContext }): Promise<void> {
+    try {
+      if (syncOperation.ops[0].cmd === OPS_CMD.REMOVE_DIR) {
+        await fs.promises.rm(targetPath, { recursive: true, force: true });
+      } else {
+        await this.safeUnlink(targetPath);
+      }
+      syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.COMPLETED };
+
+    } catch (error) {
+      syncOperation.ops[0] = { ...ops[0], status: OPS_STATUS.ERROR, error: error.message };
+      this.logger.error(`Removing ${syncOperation.ops[0].cmd === OPS_CMD.REMOVE_DIR ? 'DIR' : 'FILE'} from ${targetPath}`);
+      const dmErr = dmError("OPERATION", Origin.DESTINATION, syncOperation.ops[0].cmd === OPS_CMD.REMOVE_DIR ? Operation.REMOVE_DIR : Operation.REMOVE_FILE, syncOperation.errorType, command.commandId, error, { name: command.fPath, path: targetPath });
+      await jobContext.publishToErrorStream(dmErr);
+      this.logger.error(`Error in SyncOperation ${syncOperation.ops[0].cmd === OPS_CMD.REMOVE_DIR ? 'Dir' : 'File'}: ${error.message}`);
+    }
+  }
+  async safeUnlink(targetPath) {
+    try {
+      await fs.promises.unlink(targetPath);
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        throw err;
+      }
+      this.logger.log(`File ${targetPath} does not exist, skipping unlink.`);
+    }
+  }
+  validateSourceExist(sourcePath: string):boolean {
+    if (!fs.existsSync(sourcePath)) {
+    this.logger.error(`Source path does not exist: ${sourcePath}`);
+    return false;
+    }
+    return true;
+    }
+  
 }
 

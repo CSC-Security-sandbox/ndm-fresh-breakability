@@ -1,16 +1,20 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ProjectService } from './project.service';
-import { FindOperator, Repository } from 'typeorm';
+import { DeleteResult, FindOperator, Repository } from 'typeorm';
 import { Project } from '../entities/project.entity';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { Account } from '../entities/account.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import { DeleteResult } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { randomUUID } from 'crypto';
 import { UserRole } from '../entities/user-role.entity';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import {
+  mockLoggerService,
+  resetLoggerMocks,
+} from '../test-utils/logger-mocks';
 
 class MockRepository<T> extends Repository<T> {
   async save(e: any): Promise<any> {
@@ -61,6 +65,12 @@ describe('ProjectService', () => {
             query: jest.fn(),
           },
         },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue(mockLoggerService),
+          },
+        },
       ],
     }).compile();
 
@@ -75,6 +85,9 @@ describe('ProjectService', () => {
     userRoleRepository = module.get<Repository<UserRole>>(
       getRepositoryToken(UserRole),
     );
+
+    // Reset logger mocks after each test setup
+    resetLoggerMocks();
   });
 
   const userPermissionResponseMock = {
@@ -147,6 +160,15 @@ describe('ProjectService', () => {
       expect(accountRepository.findOneBy).toHaveBeenCalledWith({
         id: accountId,
       });
+      await expect(
+        service.create(accountId, createProjectDto, userPermissionResponseMock),
+      ).rejects.toThrow(
+        new NotFoundException(`Account with ${accountId} not found`),
+      );
+
+      expect(accountRepository.findOneBy).toHaveBeenCalledWith({
+        id: accountId,
+      });
       expect(projectRepository.create).toHaveBeenCalledWith({
         ...createProjectDto,
         account: { id: accountId } as Account,
@@ -205,7 +227,7 @@ describe('ProjectService', () => {
         service.create(accountId, createProjectDto, userPermissionResponseMock),
       ).rejects.toThrow(
         new ConflictException(
-          `A project with the name "${createProjectDto.project_name}" already exists for this account.`,
+          `A project with the name ${createProjectDto.project_name} already exists for this account.`,
         ),
       );
     });

@@ -8,7 +8,10 @@ import { RedisService } from "src/redis/redis.service";
 import { CommonTaskService } from "../common/common-task.service";
 import { DiscoveryScanService } from "./discovery/discovery-scan.service";
 import { MigrateScanService } from "./migrate/migrate-scan.service";
-import { ScanActivityInput, ScanActivityOutput, ScanDirectoryInput, ScanDirectoryOutput, ScanDirectorySettings, TaskExecInput, TaskExecOutput, UpdateAndReportTaskInput } from './scan-activity.type';
+import { BatchSubDirInput, BatchSubDirOutput, ScanActivityInput, ScanActivityOutput, ScanDirectoryInput, ScanDirectoryOutput, ScanDirectorySettings, TaskExecInput, TaskExecOutput, UpdateAndReportTaskInput } from './scan-activity.type';
+import { calculateHash } from "src/activities/utils/checksum-utils";
+
+
 
 
 
@@ -25,7 +28,7 @@ export class ScanService {
         private readonly redisService: RedisService,
         private readonly commonTaskService: CommonTaskService,
         private readonly migrateScanService: MigrateScanService,
-        private readonly  discoveryScanService: DiscoveryScanService
+        private readonly  discoveryScanService: DiscoveryScanService,
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
@@ -34,7 +37,7 @@ export class ScanService {
     }
 
 
-    async scanDirectories ({jobRunId, dirsToScan, isMigration}: ScanActivityInput): Promise<ScanActivityOutput>  {
+    async scanDirectories ({jobRunId, isMigration, batchSize, batchId}: ScanActivityInput): Promise<ScanActivityOutput>  {
         const scanActivityContext = Context.current();
         const heartbeatInterval = setInterval(() => {
             scanActivityContext.heartbeat({});
@@ -44,10 +47,10 @@ export class ScanService {
             const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
             
             let task = await this.commonTaskService.buildOrGetValidScanTask({
-                dirToScans: dirsToScan,
                 taskHashId: scanActivityContext.info.activityId,
                 jobContext,
-                jobRunId
+                jobRunId,
+                batchId
             });
 
             task.status = TaskStatus.RUNNING;
@@ -59,7 +62,8 @@ export class ScanService {
                 jobContext,
                 jobRunId,
                 task,
-                isMigration
+                isMigration,
+                batchSize
             });
 
             const updateAndReportTaskInput: UpdateAndReportTaskInput = {
@@ -69,7 +73,9 @@ export class ScanService {
                 task,
                 retryCount: result.retryCount
             }                        
-            await this.updateAndReportTaskStatus(updateAndReportTaskInput)    
+            await this.updateAndReportTaskStatus(updateAndReportTaskInput)  
+
+            if(batchId) await jobContext.deleteBatchDir(batchId);
             return result.result;
 
         }catch(error){
@@ -91,10 +97,10 @@ export class ScanService {
         return settings;
     }
 
-    async executeTask({activityId, jobContext, jobRunId, task, isMigration}: TaskExecInput): Promise<TaskExecOutput>{
+    async executeTask({activityId, jobContext, jobRunId, task, isMigration, batchSize}: TaskExecInput): Promise<TaskExecOutput>{
         const baseSourcePrefixPath = basePrefix(jobRunId, task.sPathId);
         const baseTargetPrefixPath = basePrefix(jobRunId, task.tPathId);
-        const output: ScanActivityOutput = { dirCount: 0, fileCount: 0, subDirs: [], jobRunId: jobRunId }    
+        const output: ScanActivityOutput = { dirCount: 0, fileCount: 0, subDirs: [], jobRunId: jobRunId, batchDirs: [] };    
         let errors: string[] = [], retryCount: number = 0;        
         const settings = this.getScanSettings(jobContext);
         for (let i = 0; i < task.commands.length; i += this.maxConcurrency) {
@@ -105,6 +111,7 @@ export class ScanService {
                         settings,
                         sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
                         sourcePrefix: baseSourcePrefixPath,
+                        targetPrefix: baseTargetPrefixPath,
                         targetPath: `${baseTargetPrefixPath}${command.fPath}`,
                         jobContext,
                         command
@@ -129,6 +136,9 @@ export class ScanService {
                 })
             )
         }
+        const { batchDirs, subDirs }: BatchSubDirOutput = await this.batchSubDirs({subDirs: output.subDirs, batchSize, jobContext});
+        output.subDirs = subDirs;
+        output.batchDirs = batchDirs;
         return {result:output, errors, retryCount}
     }
 
@@ -154,5 +164,21 @@ export class ScanService {
         }
         throw new RetryableError(`Sync Task Update Failed: ${errors.length} source errors with retry count ${retryCount} With Retryable Error`);
         
+    }
+
+    async batchSubDirs({batchSize, subDirs, jobContext}: BatchSubDirInput): Promise<BatchSubDirOutput> {
+        const batchDirsId: string[] = []
+        while(subDirs.length > batchSize) {
+            const batchDirs: string[] = subDirs.splice(0, batchSize);
+            const batchId: string = calculateHash(batchDirs)
+            batchDirsId.push(batchId);
+            await jobContext.setBatchDir(batchId, batchDirs);
+        }
+        if(subDirs.length > 0) {
+            const batchId: string = calculateHash(subDirs);
+            batchDirsId.push(batchId);
+            await jobContext.setBatchDir(batchId, subDirs);
+        }
+        return { subDirs: [], batchDirs: batchDirsId };
     }
 }

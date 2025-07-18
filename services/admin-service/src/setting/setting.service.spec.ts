@@ -5,8 +5,12 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
-import { SettingType } from './dto/create-setting.dto';
-import { CreateSettingDto } from './dto/create-setting.dto';
+import { CreateSettingDto, SettingType } from './dto/create-setting.dto';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import {
+  mockLoggerFactory,
+  resetLoggerMocks,
+} from '../test-utils/logger-mocks';
 
 const mockSettingsRepo = {
   find: jest.fn(),
@@ -36,6 +40,10 @@ describe('SettingService', () => {
           provide: getRepositoryToken(GlobalSettings),
           useValue: mockSettingsRepo,
         },
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
+        },
       ],
     }).compile();
 
@@ -46,6 +54,7 @@ describe('SettingService', () => {
   });
 
   afterEach(() => {
+    resetLoggerMocks();
     jest.clearAllMocks();
   });
 
@@ -95,6 +104,50 @@ describe('SettingService', () => {
       await expect(service.create(createSettingDto)).rejects.toThrow(
         HttpException,
       );
+    });
+
+    it('should successfully create settings when SMTP connection is successful', async () => {
+      const createSettingDto: CreateSettingDto[] = [
+        {
+          settingKey: 'SMTP_HOST',
+          settingValue: 'smtp.gmail.com',
+          description: 'SMTP Host for sending emails',
+          settingType: SettingType.SMTP,
+        },
+        {
+          settingKey: 'SMTP_PORT',
+          settingValue: '587',
+          description: 'SMTP Port',
+          settingType: SettingType.SMTP,
+        },
+      ];
+
+      const createdEntity = {
+        id: '1',
+        ...createSettingDto[0],
+        created_at: new Date(),
+        created_by: '',
+        updated_at: new Date(),
+        updated_by: '',
+        populateWhoColumns: jest.fn(),
+      };
+
+      jest.spyOn(settingsRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(service, 'testSMTPConnection').mockResolvedValue(true);
+      jest.spyOn(settingsRepo, 'create').mockReturnValue(createdEntity);
+      jest.spyOn(settingsRepo, 'save').mockResolvedValue(createdEntity);
+
+      const result = await service.create(createSettingDto);
+
+      expect(settingsRepo.find).toHaveBeenCalledTimes(createSettingDto.length);
+      expect(settingsRepo.create).toHaveBeenCalledTimes(
+        createSettingDto.length,
+      );
+      expect(settingsRepo.save).toHaveBeenCalledTimes(createSettingDto.length);
+      expect(result).toEqual({
+        message: 'SMTP details added successfully.',
+        statusCode: HttpStatus.CREATED,
+      });
     });
   });
 
@@ -146,23 +199,24 @@ describe('SettingService', () => {
           settingValue: 'encrypted:password',
           description: 'SMTP Password',
           settingType: SettingType.SMTP,
-        }
+        },
       ];
 
       jest.mock('../utils/crypto-utils', () => ({
         decryptData: jest.fn().mockImplementation(() => {
           throw new Error('');
-        })
+        }),
       }));
 
       await expect(service.create(createSettingDto)).rejects.toThrow(
-          new HttpException(
-              {
-                message: 'Error while retrieving settings: An internal error occurred',
-                statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-              },
-              HttpStatus.INTERNAL_SERVER_ERROR,
-          )
+        new HttpException(
+          {
+            message:
+              'Error while retrieving settings: An internal error occurred',
+            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          },
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        ),
       );
     });
 
@@ -202,6 +256,84 @@ describe('SettingService', () => {
         .mockRejectedValue(new Error('Database error'));
 
       await expect(service.findAll()).rejects.toThrow(HttpException);
+    });
+
+    it('should successfully retrieve and group settings by type', async () => {
+      const mockSettings: GlobalSettings[] = [
+        {
+          id: '1',
+          settingKey: 'SMTP_HOST',
+          settingValue: 'smtp.gmail.com',
+          description: 'SMTP Host for sending emails',
+          settingType: 'SMTP',
+          created_at: new Date(),
+          updated_at: new Date(),
+          created_by: '',
+          updated_by: '',
+          populateWhoColumns: jest.fn(),
+        },
+        {
+          id: '2',
+          settingKey: 'SMTP_PORT',
+          settingValue: '587',
+          description: 'SMTP Port',
+          settingType: 'SMTP',
+          created_at: new Date(),
+          updated_at: new Date(),
+          created_by: '',
+          updated_by: '',
+          populateWhoColumns: jest.fn(),
+        },
+        {
+          id: '3',
+          settingKey: 'API_KEY',
+          settingValue: 'abc123',
+          description: 'API Key',
+          settingType: 'API',
+          created_at: new Date(),
+          updated_at: new Date(),
+          created_by: '',
+          updated_by: '',
+          populateWhoColumns: jest.fn(),
+        },
+      ];
+
+      jest.spyOn(settingsRepo, 'find').mockResolvedValue(mockSettings);
+
+      const result = await service.findAll();
+
+      expect(settingsRepo.find).toHaveBeenCalled();
+      expect(result).toEqual({
+        message: 'Settings retrieved successfully',
+        statusCode: HttpStatus.OK,
+        data: {
+          SMTP: [
+            {
+              id: '1',
+              settingKey: 'SMTP_HOST',
+              settingValue: 'smtp.gmail.com',
+              description: 'SMTP Host for sending emails',
+              settingType: 'SMTP',
+            },
+            {
+              id: '2',
+              settingKey: 'SMTP_PORT',
+              settingValue: '587',
+              description: 'SMTP Port',
+              settingType: 'SMTP',
+            },
+          ],
+          API: [
+            {
+              id: '3',
+              settingKey: 'API_KEY',
+              settingValue: 'abc123',
+              description: 'API Key',
+              settingType: 'API',
+            },
+          ],
+        },
+      });
     });
   });
 
@@ -250,6 +382,8 @@ describe('SettingService', () => {
         updated_by: '',
         populateWhoColumns: jest.fn(),
       };
+
+      jest.spyOn(service, 'testSMTPConnection').mockResolvedValue(true);
       jest.spyOn(settingsRepo, 'findOne').mockResolvedValue(existingSetting);
       jest.spyOn(settingsRepo, 'save').mockResolvedValue({
         ...existingSetting,
@@ -264,6 +398,30 @@ describe('SettingService', () => {
       });
     });
 
+    it('should throw an error if SMTP connection fails during update', async () => {
+      const updateSettingDto: CreateSettingDto[] = [
+        {
+          settingKey: 'SMTP_HOST',
+          settingValue: 'invalid-host',
+          description: 'Invalid SMTP Host',
+          settingType: SettingType.SMTP,
+        },
+      ];
+
+      jest.spyOn(service, 'testSMTPConnection').mockResolvedValue(false);
+
+      await expect(service.updateSetting(updateSettingDto)).rejects.toThrow(
+        new HttpException(
+          {
+            message: 'Error updating setting',
+            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+            error: 'SMTP connection test failed',
+          },
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        ),
+      );
+    });
+
     it('should throw an error when SMTP password decryption fails while updating', async () => {
       const updateSettingDto: CreateSettingDto[] = [
         {
@@ -271,23 +429,24 @@ describe('SettingService', () => {
           settingValue: 'encrypted:password',
           description: 'SMTP Password',
           settingType: SettingType.SMTP,
-        }
+        },
       ];
 
       jest.mock('../utils/crypto-utils', () => ({
         decryptData: jest.fn().mockImplementation(() => {
           throw new Error('');
-        })
+        }),
       }));
 
       await expect(service.updateSetting(updateSettingDto)).rejects.toThrow(
-          new HttpException(
-              {
-                message: 'Error while updating settings: An internal error occurred',
-                statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-              },
-              HttpStatus.INTERNAL_SERVER_ERROR,
-          )
+        new HttpException(
+          {
+            message:
+              'Error while updating settings: An internal error occurred',
+            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          },
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        ),
       );
     });
 

@@ -35,4 +35,9 @@ export class RedisJobManagerProvider {
         await jobManager.initializeInstance()
         return jobManager
     }
+
+    async cleanupContext(jobRunId: string): Promise<void> {
+        const jobManager = new RedisJobManagerContext(this.redisClient, jobRunId);
+        await jobManager.cleanup();
+    }
 }

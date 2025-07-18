@@ -334,6 +334,12 @@ describe("JobRunService", () => {
     it("should throw NotFoundException if job run does not exist", async () => {
       mockJobRunRepo.findOne.mockResolvedValue(null);
 
+      await expect(service.getJobStatsId('non-existent-id'))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+
+
       await expect(service.getJobStatsId("non-existent-id")).rejects.toThrow(
         NotFoundException
       );
@@ -500,12 +506,69 @@ describe("JobRunService", () => {
 
     it("should throw a NotFoundException if the job type is Discover", async () => {
       mockJobRun.jobConfig.jobType = JobType.Discover;
+      mockJobRunRepo.findOne.mockResolvedValue({
+        ...mockJobRun,
+        jobConfig: { jobType: JobType.Discover }
+      });
 
       await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow(
         new NotFoundException(
-          `Error while generating report for jobRunId: ${jobRunId}`
+          `Error while generating report for jobRunId: 12345`
         )
       );
+    });
+
+    it("should throw a NotAcceptableException for invalid file path", async () => {
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      jest.spyOn(path, 'join').mockReturnValue(`../invalid/${jobRunId}-coc-report.csv`);
+
+      await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow(
+        `Error while generating report for jobRunId: 12345`
+      );
+    });
+
+    it("should successfully generate and return the file path", async () => {
+      // Setup mocks
+      mockJobRunRepo.findOne.mockResolvedValue({
+        ...mockJobRun,
+        jobConfig: { jobType: JobType.Migrate }
+      });
+      jest.spyOn(path, 'join').mockReturnValue(mockFilePath);
+
+      // First existsSync returns false (file doesn't exist yet), second returns true (file was created)
+      const existsSyncMock = jest.spyOn(fs, "existsSync");
+      existsSyncMock.mockReturnValueOnce(false).mockReturnValueOnce(true);
+
+      // Mock CSV generation
+      mockCsvService.generateCsv.mockResolvedValue(undefined);
+
+      // Mock file reading
+      const mockBuffer = Buffer.from('test data');
+      jest.spyOn(fs, 'readFileSync').mockReturnValue(mockBuffer);
+
+      // Mock repository operations
+      mockReportsRepo.create.mockReturnValue({});
+      mockReportsRepo.save.mockResolvedValue({});
+
+      // Call the method
+      const result = await service.getCocReportByJobRunId(jobRunId);
+
+      // Verify the result
+      expect(result).toBe(mockFilePath);
+
+      // Verify the mocks were called correctly
+      expect(mockCsvService.generateCsv).toHaveBeenCalledWith(mockFilePath, jobRunId);
+      expect(mockJobRunRepo.update).toHaveBeenCalledWith(
+        { id: jobRunId }, 
+        { isReportReady: true }
+      );
+      expect(fs.readFileSync).toHaveBeenCalledWith(mockFilePath);
+      expect(mockReportsRepo.create).toHaveBeenCalledWith({
+        jobRunId,
+        reportData: expect.any(String),
+        reportType: ReportType.COC,
+      });
+      expect(mockReportsRepo.save).toHaveBeenCalled();
     });
 
     it("should throw an error if file generation fails after creating the CSV", async () => {
@@ -690,6 +753,23 @@ describe("JobRunService", () => {
         const result = await service.getJobStatsId(jobId);
         expect(result.task.success).toBe(5);
         expect(result.task.failed).toBe(2);
+      });
+    });
+  });
+
+  describe("getJobSubStatus", () => {
+    const jobRunId = "12345";
+
+    it("should return the job sub status", async () => {
+      const mockSubStatus = { subStatus: "SOME_STATUS" };
+      mockJobRunRepo.findOne.mockResolvedValue(mockSubStatus);
+
+      const result = await service.getJobSubStatus(jobRunId);
+
+      expect(result).toEqual(mockSubStatus);
+      expect(mockJobRunRepo.findOne).toHaveBeenCalledWith({
+        where: { id: jobRunId },
+        select: ["subStatus"],
       });
     });
   });

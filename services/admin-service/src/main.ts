@@ -2,9 +2,25 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
+import { ResponseInterceptor } from '@netapp-cloud-datamigrate/api-handler-lib';
+import {
+  customErrorDTOList,
+  customSuccessDTOList,
+} from './constants/custom-response-message';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const loggerFactory = app.resolve(LoggerFactory);
+  app.useGlobalInterceptors(
+    new ResponseInterceptor(
+      customSuccessDTOList,
+      customErrorDTOList,
+      await loggerFactory,
+    ),
+  );
+  // Enable graceful shutdown
+  app.enableShutdownHooks();
 
   const config = new DocumentBuilder()
     .setTitle('Admin Service')
@@ -26,7 +42,43 @@ async function bootstrap() {
   });
   app.useGlobalPipes(new ValidationPipe());
   app.enableCors();
-  await app.listen(3000);
+  
+  const server = await app.listen(3000);
+  console.log('[Bootstrap] Admin Service is running on port 3000');
+
+  // Handle graceful shutdown - NestJS will handle most of the cleanup
+  const gracefulShutdown = async (signal: string) => {
+    console.log(`[Bootstrap] Received ${signal}, starting graceful shutdown...`);
+
+    try {
+      // Close the HTTP server first to stop accepting new requests
+      await new Promise<void>((resolve, reject) => {
+        server.close((err) => {
+          if (err) {
+            reject(err);
+          } else {
+            console.log('[Bootstrap] HTTP server closed');
+            resolve();
+          }
+        });
+      });
+      
+      // NestJS will handle the rest of the cleanup automatically
+      await app.close();
+      console.log('[Bootstrap] Application shut down successfully');
+      process.exit(0);
+    } catch (error) {
+      console.error('[Bootstrap] Error during graceful shutdown:', error);
+      process.exit(1);
+    }
+  };
+
+  // Handle process termination signals
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
-bootstrap();
+bootstrap().catch((error) => {
+  console.error('[Bootstrap] Failed to start application:', error);
+  process.exit(1);
+});

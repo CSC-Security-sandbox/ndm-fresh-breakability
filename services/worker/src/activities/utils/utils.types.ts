@@ -30,6 +30,8 @@ export enum Operation {
     READ_FILE = 'Read File',
     STAMP_META = 'Update Metadata',
     STAMP_TIME = 'Update a-time',
+    REMOVE_FILE = 'Remove File',
+    REMOVE_DIR = 'Remove Directory',
 }
 
 export interface getFileInfoInput {

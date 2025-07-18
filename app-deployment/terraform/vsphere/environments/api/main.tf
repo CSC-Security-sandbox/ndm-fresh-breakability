@@ -19,6 +19,8 @@ module "control-plane" {
   num_cores_per_socket   = var.num_cores_per_socket
   memory_mb              = var.control_plane.memory_mb
   disk                   = var.control_plane_disks
+  ssh_user               = var.ssh_user
+  ssh_pass               = var.ssh_pass
 }
 
 module "worker" {
@@ -43,4 +45,6 @@ module "worker" {
   num_cores_per_socket   = var.num_cores_per_socket
   memory_mb              = var.worker.memory_mb
   disk                   = var.worker_disks
+  ssh_user               = var.ssh_user
+  ssh_pass               = var.ssh_pass
 }

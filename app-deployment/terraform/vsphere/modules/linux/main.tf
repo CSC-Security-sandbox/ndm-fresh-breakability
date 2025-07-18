@@ -69,6 +69,13 @@ resource "vsphere_virtual_machine" "vm" {
     }
   }
 
+  vapp {
+    properties = {
+      "ssh_user" = var.ssh_user
+      "ssh_pass" = var.ssh_pass
+    }
+  }
+
   # Disk settings
   disk {
     label            = var.disk.label

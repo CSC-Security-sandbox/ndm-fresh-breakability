@@ -84,21 +84,6 @@ describe('CommonActivityService', () => {
     service = module.get<CommonActivityService>(CommonActivityService);
   });
 
-  describe('cleanupJobContext', () => {
-    it('should cleanup successfully', async () => {
-      await service.cleanupJobContext(traceId);
-      expect(redisService.getJobContext).toHaveBeenCalledWith(traceId);
-      expect(mockContext.cleanup).toHaveBeenCalled();
-    });
-
-    it('should handle error', async () => {
-      (redisService.getJobContext as jest.Mock).mockRejectedValueOnce(new Error('fail'));
-      const res = await service.cleanupJobContext(traceId);
-      expect(logger.error).toHaveBeenCalled();
-      expect(res).toEqual({ message: 'Error while cleaning up the job context: ' + traceId });
-    });
-  });
-
   describe('updateStatus', () => {
     it('should update status successfully', async () => {
       (axios.patch as jest.Mock).mockResolvedValue({});
@@ -340,6 +325,23 @@ describe('CommonActivityService', () => {
           const res = await service.updateLastEntry(traceId);
           expect(logger.error).toHaveBeenCalled();
           expect(res).toEqual({ message: 'Error while marking the job as completed : ' + traceId });
+        });
+
+        it('should handle error when cleaning up job context', async () => {
+          redisService.getJobManagerContext = jest.fn().mockRejectedValueOnce(new Error('fail'));
+          const res = await service.cleanupJobContext(traceId);
+          expect(logger.error).toHaveBeenCalledWith(
+            `[${traceId}] Error while cleaning up the job context: Error: fail`
+          );
+          expect(res).toEqual({ message: 'Error while cleaning up the job context: ' + traceId });
+        });
+
+        it('should cleanup job context successfully', async () => {
+          const jobManagerContext = { cleanup: jest.fn().mockResolvedValue(undefined) };
+          redisService.getJobManagerContext = jest.fn().mockResolvedValue(jobManagerContext);
+          const res = await service.cleanupJobContext(traceId);
+          expect(jobManagerContext.cleanup).toHaveBeenCalled();
+          expect(res).toBeUndefined();
         });
       });
     });

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Request } from '@nestjs/common';
+import { Body, Controller, Get, Post, Request } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
@@ -105,10 +105,6 @@ export class AuthController {
   })
   async setUserStatus(@Body() userStatusDto: UserStatusDto) {
     const { email, enable } = userStatusDto;
-    const user = await this.authService.setUserStatus(email, enable);
-    return {
-      message: `User ${enable ? 'enabled' : 'disabled'} successfully`,
-      user,
-    };
+    return await this.authService.setUserStatus(email, enable);
   }
 }

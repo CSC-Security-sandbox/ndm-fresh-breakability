@@ -1,0 +1,17 @@
+[Unit]
+Description=First Boot Customization (User & Network)
+After=network.target ssh.service
+Wants=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+Group=root
+ExecStart=/opt/datamigrator/bin/setup.sh
+ExecStartPost=/bin/systemctl disable first-boot-customization.service
+StandardOutput=append:/opt/datamigrator/logs/firstboot-setup.log
+StandardError=append:/opt/datamigrator/logs/firstboot-setup.log
+
+[Install]
+WantedBy=multi-user.target

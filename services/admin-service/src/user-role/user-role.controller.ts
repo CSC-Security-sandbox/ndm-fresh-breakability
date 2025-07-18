@@ -1,11 +1,11 @@
 import {
-  Controller,
-  Post,
   Body,
-  Param,
-  Patch,
+  Controller,
   Delete,
   Get,
+  Param,
+  Patch,
+  Post,
   Query,
   Request,
 } from '@nestjs/common';
@@ -14,16 +14,17 @@ import { CreateUserRoleDto } from './dto/create-user-role.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { UserRole } from '../entities/user-role.entity';
 import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
   ApiQuery,
   ApiTags,
-  ApiOperation,
-  ApiBody,
-  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { UserRoleDescription } from '../swagger/swagger-summary';
 import { UserRoleRelationDto } from './dto/user-role.dto';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
+import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
 
 @ApiTags('user roles')
 @Controller('/api/v1/user-roles')
@@ -70,7 +71,7 @@ export class UserRoleController {
     description: UserRoleDescription.UpdateUserRoleDescription,
   })
   async update(
-    @Param('id') id: string,
+    @Param('id', NonEmptyStringPipe) id: string,
     @Body() updateUserRoleDto: UpdateUserRoleDto,
     @Request() userPermissionResponse: UserPermissionResponse,
   ): Promise<void> {
@@ -88,7 +89,7 @@ export class UserRoleController {
     summary: 'Delete a user-role association by ID',
     description: UserRoleDescription.DeleteUserRoleDescription,
   })
-  async delete(@Param('id') id: string): Promise<void> {
+  async delete(@Param('id', NonEmptyStringPipe) id: string): Promise<void> {
     await this.userRoleService.delete(id);
   }
 
@@ -155,7 +156,9 @@ export class UserRoleController {
     summary: 'Get a user-role association by ID',
     description: UserRoleDescription.GetUserRoleByIdDescription,
   })
-  async findOne(@Param('id') id: string): Promise<UserRole> {
+  async findOne(
+    @Param('id', NonEmptyStringPipe) id: string,
+  ): Promise<UserRole> {
     return this.userRoleService.findOne(id);
   }
 

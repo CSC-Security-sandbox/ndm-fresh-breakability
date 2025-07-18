@@ -1,16 +1,21 @@
 [Unit]
 Description=MicroK8s Boot Service (First Boot Only)
-After=network-online.target
+After=network-online.target{% if vsphere_build | default(false) %} first-boot-customization.service{% endif %}
+
+{% if vsphere_build | default(false) %}
+Requires=first-boot-customization.service
+ConditionPathExists=/opt/datamigrator/lock/ovf_customization.done
+{% endif %}
 
 [Service]
 Type=oneshot
 ExecStart=/opt/datamigrator/bin/microk8s-boot.sh
 ExecStartPost=/usr/bin/wall "Datamigrator Application Setup Complete"
-ExecStartPost=/bin/sh -c '/bin/echo "[$(date "+%%Y-%%m-%%d %%H:%%M:%%S")] Datamigrator Application Setup Complete" >> /var/log/datamigrator/microk8s-boot.log'
+ExecStartPost=/bin/sh -c '/bin/echo "[$(date "+%%Y-%%m-%%d %%H:%%M:%%S")] Datamigrator Application Setup Complete" >> /opt/datamigrator/logs/ndm-first-boot.log'
 User=root
 Group=root
-StandardOutput=append:/var/log/datamigrator/microk8s-boot.log
-StandardError=append:/var/log/datamigrator/microk8s-boot.log
+StandardOutput=append:/opt/datamigrator/logs/ndm-first-boot.log
+StandardError=append:/opt/datamigrator/logs/ndm-first-boot.log
 
 [Install]
 WantedBy=multi-user.target

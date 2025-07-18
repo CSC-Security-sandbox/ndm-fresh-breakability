@@ -108,7 +108,9 @@ jobs:
           services=( "db-writer" "keycloak-customizations" "reports-service" "admin-service" "config-service" "datamigrator-ui" "jobs-service" )
           targets=()
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base_sha="${{ github.event.pull_request.base.sha }}"
+            base_branch="${{ github.event.pull_request.base.ref }}"
+            git fetch origin "$base_branch"
+            base_sha=$(git rev-parse origin/$base_branch)
             head_sha="${{ github.sha }}"
             for service in "${services[@]}"; do
               if git diff --name-only "$base_sha" "$head_sha" | grep -q "^services/$service/"; then

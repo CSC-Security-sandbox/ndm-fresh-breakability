@@ -1,8 +1,9 @@
 import {
+  ConflictException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
-  ConflictException,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { User } from '../entities/user.entity';
@@ -11,16 +12,26 @@ import { Repository } from 'typeorm';
 import { UserPermissionResponse } from './user-permission-response-type';
 import { makeAxiosRequest } from '../utils/axios-request-utils';
 import { encryptData } from '../utils/crypto-utils';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class AuthService {
+  private readonly logger: LoggerService;
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
-  ) {}
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(AuthService.name);
+  }
 
   public async getKeycloakToken() {
     try {
+      this.logger.log('Requesting Keycloak token');
+
       const data = await makeAxiosRequest<{ access_token: string }>({
         method: 'POST',
         url: `${process.env.KEYCLOAK_BASE_URL}/realms/master/protocol/openid-connect/token`,
@@ -33,6 +44,7 @@ export class AuthService {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
+      this.logger.log('Successfully obtained Keycloak token');
       return data.access_token;
     } catch (error) {
       throw new InternalServerErrorException(
@@ -80,16 +92,17 @@ export class AuthService {
     userPermissionResponse: UserPermissionResponse,
   ): Promise<{ user: User; tempPassword: string }> {
     // Check if user already exists in the database
-    const existingUser = await this.userRepository.findOne({ where: { email: username } });
-    if (existingUser) {
-      throw new ConflictException(
-        `Cannot create user: the email id '${username}' already exists.`
-      );
-    }
-    const tempPassword = this.generateRandomPassword(12);
-    const token = await this.getKeycloakToken();
-
     try {
+      const existingUser = await this.userRepository.findOne({
+        where: { email: username },
+      });
+      if (existingUser) {
+        throw new ConflictException(
+          `Cannot create user: the email id '${username}' already exists.`,
+        );
+      }
+      const tempPassword = this.generateRandomPassword(12);
+      const token = await this.getKeycloakToken();
       const encryptedPassword = encryptData(tempPassword);
       await makeAxiosRequest({
         method: 'POST',
@@ -177,10 +190,15 @@ export class AuthService {
     }
   }
 
-  async setUserStatus(email: string, enable: boolean): Promise<User> {
+  async setUserStatus(
+    email: string,
+    enable: boolean,
+  ): Promise<{ message: string; user: User }> {
     const user = await this.userRepository.findOne({ where: { email } });
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException(
+        `User not found, Please verify the user ID and try again.`,
+      );
     }
 
     user.user_status = enable ? 'active' : 'inactive';
@@ -197,7 +215,9 @@ export class AuthService {
       });
 
       if (users.length === 0) {
-        throw new NotFoundException('User not found in Keycloak');
+        throw new NotFoundException(
+          'User not found in Keycloak, Please verify the user ID and try again.',
+        );
       }
 
       const keycloakUser = users[0];
@@ -221,8 +241,11 @@ export class AuthService {
           },
         });
       }
-
-      return user;
+      const state = enable ? 'enabled' : 'disabled';
+      return {
+        message: `Access has been successfully ${state} for a user: ${email}`,
+        user,
+      };
     } catch (error) {
       throw new InternalServerErrorException(
         `Failed to update user status in Keycloak, error: ${error.message}`,

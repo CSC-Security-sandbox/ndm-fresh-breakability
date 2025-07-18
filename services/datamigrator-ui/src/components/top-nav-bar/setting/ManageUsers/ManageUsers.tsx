@@ -1,23 +1,19 @@
-import Box from "@/components/container/Box";
-import TableWrapper from "@components/table-wrapper/TableWrapper";
-import { notify } from "@components/notification/NotificationWrapper";
-import {
-  useGetAllUsersQuery,
-  useResetPasswordMutation,
-  useUpdateUserStatusMutation,
-} from "@api/userApi";
-import { COL_DEF_FOR_USER } from "@/constant/app.constants";
-import { Collapse } from "@mui/material";
-import { Button } from "@netapp/bxp-design-system-react";
-import { useState } from "react";
-import CreateUserForm from "@components/top-nav-bar/setting/ManageUsers/CreateUserForm";
-import PermissionAuth from "@/auth/PermissionAuth";
-import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
-import { hasPermission } from "@/auth/auth.utils";
-import { useSelector } from "react-redux";
-import { RootStateType } from "@store/store";
-import { DEFAULT_COLUMN_STATE } from "@components/top-nav-bar/setting/ManageUsers/ManageUsers.constant";
-import { decryptData } from "@/utils/common.utils";
+import Box from '@/components/container/Box';
+import TableWrapper from '@components/table-wrapper/TableWrapper';
+import {notify} from '@components/notification/NotificationWrapper';
+import {useGetAllUsersQuery, useResetPasswordMutation, useUpdateUserStatusMutation} from '@api/userApi';
+import {COL_DEF_FOR_USER} from '@/constant/app.constants';
+import {Collapse} from '@mui/material';
+import {Button} from '@netapp/bxp-design-system-react';
+import {useState} from 'react';
+import CreateUserForm from '@components/top-nav-bar/setting/ManageUsers/CreateUserForm';
+import PermissionAuth from '@/auth/PermissionAuth';
+import {USER_PERMISSION_TYPE_ENUM} from '@auth/permissionAuth.constant';
+import {hasPermission} from '@/auth/auth.utils';
+import {useSelector} from 'react-redux';
+import {RootStateType} from '@store/store';
+import {DEFAULT_COLUMN_STATE} from '@components/top-nav-bar/setting/ManageUsers/ManageUsers.constant';
+import {decryptData} from '@/utils/common.utils';
 
 const ManageUsers = () => {
   const [updateUserStatus] = useUpdateUserStatusMutation();
@@ -35,19 +31,16 @@ const ManageUsers = () => {
   const [isCreateFormVisible, setIsCreateFormVisible] =
     useState<boolean>(false);
 
-  const updateUserStatusWraper = (body: { email: string; enable: boolean }) => {
+  const updateUserStatusWrapper = (body: { email: string; enable: boolean }) => {
     updateUserStatus(body)
       .unwrap()
-      .then(() => {
-        notify.success(
-          `${body.enable ? "Enabled" : "Disabled"} access for user ${
-            body.email
-          }`
-        );
+        .then((res) => {
+          notify.success(res?.message);
       })
       .catch((err) => {
-        notify.error(`Failed to update status of user ${body.email}.`);
-        console.error(err);
+        console.log('error', err);
+        const errorDetails = err.data?.error;
+        notify.error(errorDetails?.message);
       });
   };
 
@@ -62,7 +55,7 @@ const ManageUsers = () => {
           email: row.email,
           enable: row.user_status !== "active",
         };
-        updateUserStatusWraper(body);
+        updateUserStatusWrapper(body);
       },
 
       disabled: permission?.userPermissions?.id === row.id || !canManageProject,
@@ -78,10 +71,10 @@ const ManageUsers = () => {
           .unwrap()
           .then((res) => {
             setIsCreateFormVisible(true);
-            setTemporaryPassword(decryptData(res?.newPassword));
+            setTemporaryPassword(decryptData(res?.data?.items?.newPassword));
           })
           .catch((err) => {
-            notify.error("Failed to reset password.");
+            notify.error(err.message);
             console.error({ err, level: "Generate Temporary Password." });
           });
       },
@@ -92,10 +85,9 @@ const ManageUsers = () => {
     setIsCreateFormVisible(false);
     setTemporaryPassword("");
   };
-
   const tableStateProps = {
     columns: COL_DEF_FOR_USER,
-    rows: userData,
+    rows: userData?.data?.items || [],
     isSorting: true,
     pageSize: 10,
     defaultColumnState: DEFAULT_COLUMN_STATE,

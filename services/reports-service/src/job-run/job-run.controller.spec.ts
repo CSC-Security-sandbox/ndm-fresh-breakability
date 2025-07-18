@@ -1,24 +1,37 @@
 import { Test, TestingModule } from "@nestjs/testing";
+import { serializeJobRunDetailsResponse } from "./dto/job-rundetails.dto";
 import { JobRunController } from "./job-run.controller";
 import { JobRunService } from "./job-run.service";
-import { ErrorLogService } from "src/csv/error_log_csv.service";
-import { Logger, StreamableFile } from "@nestjs/common";
+import { Logger } from "@nestjs/common";
+import { JwtService } from "@netapp-cloud-datamigrate/auth-lib";
+
+const mockJobRunService = {
+  getJobStatsId: jest.fn(),
+  jobRunReportByJobRunId: jest.fn(),
+  getJobSubStatus: jest.fn(),
+};
+
+const mockJwtService = {
+  verifyToken: jest.fn().mockResolvedValue({
+    user: {
+      roles: [
+        {
+          permissions: ["permission1", "permission2"],
+          projects: ["project1"],
+        },
+      ],
+    },
+  }),
+  configService: {},
+  client: jest.fn(),
+  logger: jest.fn(),
+  getKey: jest.fn(),
+};
 
 describe("JobRunController", () => {
   let controller: JobRunController;
   let jobRunService: jest.Mocked<JobRunService>;
   let errorLogService: jest.Mocked<ErrorLogService>;
-
-  const mockResponse = { some: "data" };
-  const mockCsvFile = new StreamableFile(Buffer.from("file content"));
-
-  const mockLogger = {
-    log: jest.fn(),
-    error: jest.fn(),
-    warn: jest.fn(),
-    debug: jest.fn(),
-    verbose: jest.fn(),
-  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -26,25 +39,13 @@ describe("JobRunController", () => {
       providers: [
         {
           provide: JobRunService,
-          useValue: {
-            jobRunReportByJobRunId: jest.fn(),
-            getJobStatsId: jest.fn(),
-            getJobSubStatus: jest.fn(),
-            getCocReportByJobRunId: jest.fn(),
-          },
+          useValue: mockJobRunService,
         },
         {
-          provide: ErrorLogService,
-          useValue: {
-            createCsvFileForJob: jest.fn(),
-            downloadErrorLogCsvFile: jest.fn(),
-            isCsvFileReady: jest.fn(),
-          },
+          provide: JwtService,
+          useValue: mockJwtService,
         },
-        {
-          provide: Logger,
-          useValue: mockLogger,
-        },
+        Logger,
       ],
     }).compile();
 

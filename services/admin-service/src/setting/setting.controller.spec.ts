@@ -7,6 +7,8 @@ import { Repository } from 'typeorm';
 import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory, resetLoggerMocks, mockLoggerService } from '../test-utils/logger-mocks';
 
 describe('SettingController', () => {
   let controller: SettingController;
@@ -29,18 +31,30 @@ describe('SettingController', () => {
     getKey: jest.fn(),
   };
 
+  const mockGlobalSettingsRepo = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    save: jest.fn(),
+  };
+
   beforeEach(async () => {
+    resetLoggerMocks();
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SettingController],
       providers: [
         SettingService,
         {
           provide: getRepositoryToken(GlobalSettings),
-          useClass: Repository,
+          useValue: mockGlobalSettingsRepo,
         },
         {
           provide: JwtService,
           useValue: mockJwtService,
+        },
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
         },
       ],
     }).compile();

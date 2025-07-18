@@ -1726,35 +1726,7 @@ export class JobConfigService {
     }
   }
 
-  async getCutoverDetailsByFileServerId(fileServerId: string) {
-    return [
-      {
-        protocol: Protocol.NFS,
-        sourcePath: {
-          id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-          sourcePathName: "/source/test",
-        },
-        destinationFileServer: {
-          id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-          destinationFileServerName: "fileServer1",
-        },
-        destinationPath: {
-          id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-          destinationPathName: "/destination/test",
-        },
-        jobConfig: [
-          {
-            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-            jobType: JobType.MIGRATE,
-            jobRunDetails: {
-              id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-              status: JobRunStatus.Completed,
-            },
-          },
-        ],
-      },
-    ];
-  }
+
   async calculateJobRunStats(jobRunId: string): Promise<JobRunStats> {
     const jobRun = await this.jobRunRepo.findOne({
       where: { id: jobRunId },

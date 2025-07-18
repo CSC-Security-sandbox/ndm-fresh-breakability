@@ -126,6 +126,7 @@ export class WorkerOptionsService {
           syncTaskActivity: this.migrateSyncService.syncTaskActivity.bind(this.migrateSyncService),
           getGroupOfTasksActivity: this.commonTaskService.getGroupOfTasksActivity.bind(this.commonTaskService),
           scanDirectories: this.scanService.scanDirectories.bind(this.scanService),
+          createInitialDirBatch: this.commonTaskService.createInitialDirBatch.bind(this.commonTaskService),
         }, this.jobTaskActivityConcurrency);
       default:
         return undefined;
