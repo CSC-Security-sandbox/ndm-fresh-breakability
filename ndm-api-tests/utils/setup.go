@@ -108,6 +108,11 @@ func InitTestEnv() {
 }
 
 func SetupTestEnv(workerCount int) (string, map[string]SSHConfig, error) {
+	if PROTOCOL_TYPE == ProtocolSMB {
+		// TODO : To be replaced with SMB code.
+		return SetupTestEnv(workerCount)
+	}
+
 	// Create the project first.
 	projectId, err := createProject(AuthToken, AccountId)
 	if err != nil {
@@ -148,6 +153,11 @@ func SetupTestEnv(workerCount int) (string, map[string]SSHConfig, error) {
 }
 
 func CleanupTestEnv() error {
+
+	if PROTOCOL_TYPE == ProtocolSMB {
+		// To be replaced with SMB code.
+		return CleanupTestEnv()
+	}
 
 	output, err := DetachAllWorkers()
 	if err != nil {

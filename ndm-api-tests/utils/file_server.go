@@ -213,6 +213,11 @@ func GetExportPathID(
 
 // ClearVolume removes all data from the NFS export mounted on the VM.
 func ClearVolume(export string) error {
+	if PROTOCOL_TYPE == ProtocolSMB {
+		// To be replaced with SMB code.
+		return ClearVolume(export)
+	}
+
 	destMount := "/mnt/remove_data"
 
 	config := GetAttachedWorkerDetails()
@@ -262,6 +267,11 @@ func ClearVolume(export string) error {
 // AddDataToVolume creates a delta directory with 100 text files of 100KB each,
 func AddDataToVolume(export string) error {
 
+	if PROTOCOL_TYPE == ProtocolSMB {
+		// To be replaced with SMB code.
+		return AddDataToVolume(export)
+	}
+
 	config := GetAttachedWorkerDetails()
 
 	sshConfig = SSHConfig{
@@ -307,6 +317,11 @@ sudo rm -rf "%s"
 
 // RemoveDeltaFromVolume removes the delta directory from the NFS export mounted on the VM.
 func RemoveDeltaFromVolume(export string) error {
+	if PROTOCOL_TYPE == ProtocolSMB {
+		// To be replaced with SMB code.
+		return RemoveDeltaFromVolume(export)
+	}
+
 	config := GetAttachedWorkerDetails()
 
 	sshConfig = SSHConfig{
