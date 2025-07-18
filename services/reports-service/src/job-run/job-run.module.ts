@@ -11,6 +11,7 @@ import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { TaskEntity } from "src/entities/task.entity";
 import { JobRunEntity } from "src/entities/jobrun.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
+import { AuthKeycloakModule } from "@netapp-cloud-datamigrate/auth-lib";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
       OperationErrorEntity,
       WorkerJobRunMap,
     ]),
+    AuthKeycloakModule,
   ],
   controllers: [JobRunController],
   providers: [JobRunService, CsvService, Logger, ErrorLogService],
