@@ -1,17 +1,19 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Param,
   Query,
   SerializeOptions,
+  StreamableFile,
   Logger,
 } from "@nestjs/common";
 import {
+  ApiBearerAuth,
   ApiOkResponse,
   ApiOperation,
   ApiResponse,
   ApiTags,
-  ApiBearerAuth,
 } from "@nestjs/swagger";
 import { JobRunService } from "./job-run.service";
 import {
@@ -19,6 +21,7 @@ import {
   JobRunDetailsResponseDto,
   serializeJobRunDetailsResponse,
 } from "./dto/job-rundetails.dto";
+import { ErrorLogService } from "src/csv/error_log_csv.service";
 import {
   Auth,
   AuthWorker,
