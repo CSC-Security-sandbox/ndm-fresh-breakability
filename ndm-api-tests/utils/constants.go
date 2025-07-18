@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"log"
 	"os"
 )
@@ -177,7 +176,6 @@ func UpdateConfVariables(protocolType, sourceVolumesArgs, destinationVolumesArgs
 	SOURCE_VOLUMES = GetVolumesFromArgs(sourceVolumesArgs)
 	DESTINATION_VOLUMES = GetVolumesFromArgs(destinationVolumesArgs)
 
-	fmt.Println("@@@@ UpdateConfigVar", NDM_WORKERS_HOST)
 	NDM_WORKERS_HOST = NFS_NDM_WORKERS_HOST
 	NDM_WORKERS_USER_NAME = NFS_NDM_WORKERS_USER_NAME
 	NDM_WORKERS_PORT = NFS_NDM_WORKERS_PORT
