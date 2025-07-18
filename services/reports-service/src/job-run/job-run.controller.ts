@@ -9,6 +9,7 @@ import {
   Logger,
 } from "@nestjs/common";
 import {
+  ApiBearerAuth,
   ApiOkResponse,
   ApiOperation,
   ApiResponse,
@@ -21,6 +22,11 @@ import {
   serializeJobRunDetailsResponse,
 } from "./dto/job-rundetails.dto";
 import { ErrorLogService } from "src/csv/error_log_csv.service";
+import {
+  Auth,
+  AuthWorker,
+  Permission,
+} from "@netapp-cloud-datamigrate/auth-lib";
 
 @ApiTags("job-run")
 @Controller("job-run")
