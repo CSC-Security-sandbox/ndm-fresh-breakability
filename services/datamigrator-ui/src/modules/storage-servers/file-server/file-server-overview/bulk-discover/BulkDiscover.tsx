@@ -5,7 +5,7 @@ import {
   AllFileServerWithVolumesApiType,
 } from "@/types/app.type";
 import { getOptionsFromArray } from "@/utils/common.utils";
-import { INITIAL_VALUE_EXCLUDE_PATH_PATTERN } from "@/utils/constants";
+import { INITIAL_VALUE_EXCLUDE_PATH_PATTERN } from "@/constant/app.constants";
 import {
   useBulkDiscoveryMutation,
   useLazyGetAllFileServersWithVolumeQuery,
