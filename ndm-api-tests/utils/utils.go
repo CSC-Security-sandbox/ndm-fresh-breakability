@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/ssh"
 )
@@ -879,7 +878,8 @@ func CleanupUsers(authToken, keycloakToken string) error {
 
 // AutoGenerateProjectName generates a unique project name using a UUID.
 func AutoGenerateProjectName(prefix string) string {
-	return fmt.Sprintf("%s_project_%s", prefix, uuid.New().String())
+	currentTimeStamp := time.Now().Format("20060102_150405")
+	return fmt.Sprintf("%s_project_%s", prefix, currentTimeStamp)
 }
 
 func Wait(delay int) {
@@ -1043,4 +1043,19 @@ func GetFutureUTCTimestamp(timeInterval int) string {
 	return time.Now().UTC().
 		Add(time.Duration(timeInterval) * time.Second).
 		Format(TIME_FORMAT)
+}
+
+func GetVolumesFromArgs(volumes string) []string {
+	split := strings.Split(volumes, ",")
+	if len(split) == 0 {
+		return []string{}
+	}
+
+	res := []string{}
+
+	for _, s := range split {
+		res = append(res, strings.TrimSpace(s))
+	}
+
+	return res
 }
