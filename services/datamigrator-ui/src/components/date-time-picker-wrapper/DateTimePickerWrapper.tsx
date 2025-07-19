@@ -17,15 +17,22 @@ const DateTimePickerWrapper = ({
   const [error, setError] = useState<string | null>("");
 
   const errorMessage = useMemo(() => {
+    // Get validation error from form schema first
+    const formErrors = bulkDiscoveryForm?.formErrors as any;
+    const formError = formErrors?.firstRunAt;
+    if (formError && typeof formError === "string") {
+      return formError;
+    }
+
+    // Fallback to date picker errors
     switch (error) {
       case "disablePast":
         return "You can't select a date in the past";
-
       default: {
         return "";
       }
     }
-  }, [error]);
+  }, [error, bulkDiscoveryForm?.formErrors]);
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -37,6 +44,7 @@ const DateTimePickerWrapper = ({
           slotProps={{
             textField: {
               helperText: errorMessage,
+              error: !!errorMessage,
             },
           }}
           onError={(newError) => setError(newError)}

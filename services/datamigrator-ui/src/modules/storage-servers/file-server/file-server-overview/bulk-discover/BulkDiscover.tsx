@@ -74,6 +74,20 @@ const BulkDiscover = () => {
     BULK_DISCOVERY_FORM_SCHEMA
   );
 
+  // Update firstRunAt based on scheduleTime
+  useEffect(() => {
+    const isScheduledLater =
+      bulkDiscoveryForm.formState.scheduleTime !== "start_now";
+    const newFirstRunAt = isScheduledLater
+      ? dayjs.utc().add(5, "minute")
+      : dayjs.utc();
+
+    bulkDiscoveryForm.resetForm({
+      ...bulkDiscoveryForm.formState,
+      firstRunAt: newFirstRunAt,
+    });
+  }, [bulkDiscoveryForm.formState.scheduleTime]);
+
   useEffect(() => {
     setSelectedExportPathsIds([]);
     setKey(nanoid());

@@ -11,6 +11,10 @@ import {
 import { REVIEW_LIST_COLUMN_DEFS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import { AllFileServerWithVolumesApiType } from "@/types/app.type";
 import { notify } from "@components/notification/NotificationWrapper";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+
+dayjs.extend(utc);
 
 export const downloadBulkMigrationCsv = async (
   mappingStepForm: FormikProps<MappingStepFormikFormType>,
@@ -153,6 +157,30 @@ export const validateMappingStepForm = (values: MappingStepFormikFormType) => {
     values.selectedMountPathsId.length === 0
   ) {
     errors.selectedMountPathsId = "At least one path must be selected";
+  }
+
+  // Validate schedule date when scheduling for later
+  if (values.scheduleTime === "schedule_date") {
+    if (!values.scheduledDateTime) {
+      errors.scheduledDateTime =
+        "Date and time is required when scheduling for later";
+    } else {
+      const now = dayjs.utc();
+      const scheduledDateTime = dayjs.utc(values.scheduledDateTime);
+
+      // Check if date is in the future
+      if (scheduledDateTime.isBefore(now)) {
+        errors.scheduledDateTime =
+          "Scheduled date and time must be in the future";
+      } else {
+        // Check if date is at least 1 minute from now
+        const minimumTime = now.add(1, "minute");
+        if (scheduledDateTime.isBefore(minimumTime)) {
+          errors.scheduledDateTime =
+            "Scheduled date and time must be at least 1 minute from now";
+        }
+      }
+    }
   }
 
   if (
