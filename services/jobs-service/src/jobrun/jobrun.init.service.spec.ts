@@ -185,6 +185,7 @@ describe('JobRunInitService', () => {
           password: 'password',
           host: 'localhost',
           workingDirectory: '/mount/base/path',
+          isValidPath: true,
         },
         targetCredential: {
           pathId: 'targetPathId',
@@ -193,6 +194,7 @@ describe('JobRunInitService', () => {
           password: 'password',
           host: 'localhost',
           workingDirectory: '/mount/base/path',
+          isValidPath: true,
         },
       };
       const jobRunRecord = {};
@@ -257,8 +259,10 @@ describe('JobRunInitService', () => {
             username: 'username',
             password: 'password',
             host: 'localhost',
-            workingDirectory: undefined, // Assuming `mountBasePath` is defined in the service
+            workingDirectory: undefined,
             protocolVersion: '',
+            isValidPath: undefined,
+            isDisabled: undefined,
           },
         },
         workers: ['worker1', 'worker2'],
@@ -677,6 +681,8 @@ describe('createInitialTask', () => {
             host: 'localhost',
             workingDirectory: '/mount/base/path',
             protocolVersion: 'v3',
+            isValidPath: true,
+            isDisabled: false,
           },
         },
       };
@@ -760,6 +766,8 @@ describe('createInitialTask', () => {
             host: '',
             workingDirectory: '',
             protocolVersion: '',
+            isValidPath: false,
+            isDisabled: false,
           },
         },
       };
@@ -955,6 +963,93 @@ describe("buildJobContext", () => {
         `${mapType}:${mapping.sourceMapping}`,
         mapping.targetMapping
       );
+    });
+  });
+
+  describe('createJobRun', () => {
+    it('should throw NotFoundException if source or target path is invalid', async () => {
+      const jobConfigId = 'jobConfigId';
+      const currentTime = new Date();
+      const details = {
+        jobType: JobType.DISCOVER,
+        workers: ['worker1'],
+        connection: {
+          sourceCredential: { isValidPath: false },
+          targetCredential: { isValidPath: false },
+        },
+      } as any;
+
+      jest.spyOn(service, 'getJobConfig').mockResolvedValue(details);
+      const loggerWarnSpy = jest.spyOn(service['logger'], 'warn').mockImplementation(() => {});
+
+      await expect(service.createJobRun(jobConfigId, currentTime)).rejects.toThrow(
+        `Job Config ${jobConfigId} has invalid source or target path, skipping job run creation.`
+      );
+    });
+
+    it('should return undefined if no workers are present', async () => {
+      const jobConfigId = 'jobConfigId';
+      const currentTime = new Date();
+      const details = {
+        jobType: JobType.DISCOVER,
+        workers: [],
+        connection: {
+          sourceCredential: { isValidPath: true },
+          targetCredential: { isValidPath: true },
+        },
+      } as any;
+
+      jest.spyOn(service, 'getJobConfig').mockResolvedValue(details);
+      const loggerWarnSpy = jest.spyOn(service['logger'], 'warn').mockImplementation(() => {});
+
+      const result = await service.createJobRun(jobConfigId, currentTime);
+      expect(result).toBeUndefined();
+      expect(loggerWarnSpy).toHaveBeenCalledWith(
+        `Unable to create Job Run for Job Config ${jobConfigId} does not has workers`
+      );
+    });
+  });
+
+  describe('getJobConfig', () => {
+    it('should call getJobConfigSpeedTest if jobType is SPEED_TEST', async () => {
+      const jobConfigId = 'jobConfigId';
+      const jobConfig = { jobType: JobType.SPEED_TEST } as any;
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(jobConfig);
+      const getJobConfigSpeedTestSpy = jest.spyOn(service, 'getJobConfigSpeedTest').mockResolvedValue({} as any);
+
+      await service.getJobConfig(jobConfigId);
+      expect(getJobConfigSpeedTestSpy).toHaveBeenCalledWith(jobConfigId);
+    });
+  });
+
+  describe('getFileServerDetails', () => {
+    it('should merge file server details correctly', async () => {
+      const jobRunId = 'jobRunId';
+      const jobRun = { jobConfigId: 'jobConfigId' };
+      const speedTestJobConfig = [
+        { fileServer: 'fs1', workerEntities: [], jobConfig: {} },
+      ];
+      const fileServers = [
+        {
+          id: 'fs1',
+          host: 'host',
+          userName: 'user',
+          password: 'pass',
+          protocol: Protocol.NFS,
+          config: { configName: 'fsName' },
+          volumes: ['vol1'],
+          workingDirectory: '/dir',
+          workers: [],
+        },
+      ];
+
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(jobRun as any);
+      jest.spyOn(speedTestConfigRepo, 'find').mockResolvedValue(speedTestJobConfig as any);
+      jest.spyOn(fileServerRepo, 'find').mockResolvedValue(fileServers as any);
+
+      const result = await service.getFileServerDetails(jobRunId);
+      expect(result[0].fileServerDetails.fileServerId).toBe('fs1');
+      expect(result[0].fileServerDetails.fileServerName).toBe('fsName');
     });
   });
 });

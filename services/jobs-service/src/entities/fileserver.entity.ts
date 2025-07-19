@@ -6,6 +6,7 @@ import { Base } from "./base.entity";
 import { ConfigEntity } from "./config.entity";
 import { VolumeEntity } from "./volume.entity";
 import { FileServerWorkingDirectoryMappingEntity } from "./fileserver_workingdirectory_mapping.entity";
+import { ExportPathSource } from "src/jobconfig/jobconfig.types";
 
 @Entity({name:'file_server'})
 export class FileServerEntity extends Base {
@@ -69,4 +70,8 @@ export class FileServerEntity extends Base {
     @OneToOne(() => FileServerWorkingDirectoryMappingEntity, mapping => mapping.fileServer)
     @JoinColumn({ name: 'config_id' })
     workingDirectory: FileServerWorkingDirectoryMappingEntity;
+
+    @ApiProperty({ description: 'Export path source' })
+    @Column({ type: 'varchar', nullable: true,  name: 'export_path_source' })
+    exportPathSource: ExportPathSource;
 }

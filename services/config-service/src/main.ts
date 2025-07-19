@@ -4,16 +4,19 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { json } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
-
+  
+  const jsonPayloadLimit = configService.get<string>('app.options.jsonPayloadLimit');
   const host: string = configService.get<string>('app.http.host');
   const port: number = configService.get<number>('app.http.port');
 
+  app.use(json({ limit: jsonPayloadLimit }));
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  app.setGlobalPrefix('api/v1')
+  app.setGlobalPrefix('api/v1');
   
   const serverEndpoint = `http://${host}:${port}`;
   app.useGlobalPipes(new ValidationPipe())
