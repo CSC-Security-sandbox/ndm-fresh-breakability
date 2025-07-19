@@ -8,7 +8,10 @@ import {
   MigrationDetailsTableConfigurationType,
   PreCheckStatusType,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.interface";
-import { REVIEW_LIST_COLUMN_DEFS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
+import {
+  REVIEW_LIST_COLUMN_DEFS,
+  SCHEDULE_OPTIONS,
+} from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import { AllFileServerWithVolumesApiType } from "@/types/app.type";
 import { notify } from "@components/notification/NotificationWrapper";
 import dayjs from "dayjs";
@@ -160,7 +163,7 @@ export const validateMappingStepForm = (values: MappingStepFormikFormType) => {
   }
 
   // Validate schedule date when scheduling for later
-  if (values.scheduleTime === "schedule_date") {
+  if (values.scheduleTime === SCHEDULE_OPTIONS?.SCHEDULE_DATE) {
     if (!values.scheduledDateTime) {
       errors.scheduledDateTime =
         "Date and time is required when scheduling for later";
