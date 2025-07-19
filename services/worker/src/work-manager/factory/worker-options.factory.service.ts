@@ -20,6 +20,7 @@ import { ValidateWorkingDirectoryActivity } from "src/activities/working-directo
 import { WorkerConfiguration } from "../work-manager.types";
 import { WorkFlowOptions } from "./worker-options.factory";
 import { WorkFlowType } from "./worker-options.types";
+import { SyncService } from "src/activities/core/migrate/sync-activity.service";
 
 
 @Injectable()
@@ -39,9 +40,10 @@ export class WorkerOptionsService {
     private readonly commonActivityService:CommonActivityService,
     private readonly speedTestReadActivity: SpeedTestActivities,
     private readonly redismeorycheck: RedisMemoryCheckActivity,
-    private readonly migrateSyncService:  MigrateSyncService,
     private readonly commonTaskService: CommonTaskService,
     private readonly scanService: ScanService,
+    private readonly syncService: SyncService,
+    
     @Inject(ConfigService) private readonly configService: ConfigService,
   ) {
     this.jobTaskActivityConcurrency = this.configService.get<number>('worker.maxActivityConcurrency') || 1;
@@ -123,7 +125,7 @@ export class WorkerOptionsService {
           hasRunningSyncTask: this.commonActivityService.hasRunningSyncTask.bind(this.commonActivityService),
           // for new migration workflow 
 
-          syncTaskActivity: this.migrateSyncService.syncTaskActivity.bind(this.migrateSyncService),
+          syncTaskActivity: this.syncService.syncTaskActivity.bind(this.syncService),
           getGroupOfTasksActivity: this.commonTaskService.getGroupOfTasksActivity.bind(this.commonTaskService),
           scanDirectories: this.scanService.scanDirectories.bind(this.scanService),
           createInitialDirBatch: this.commonTaskService.createInitialDirBatch.bind(this.commonTaskService),

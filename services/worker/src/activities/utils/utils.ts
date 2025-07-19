@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from 'path';
-import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, JobManagerContext, RedisUtils, Task, TaskStatus, TaskType, Protocol } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, JobManagerContext, RedisUtils, Task, TaskStatus, TaskType, Protocol, Cmd } from "@netapp-cloud-datamigrate/jobs-lib";
 import { ACL, ExcludeOrSkipParams, getFileInfoInput, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
@@ -319,8 +319,8 @@ export const getUserACLs = (line: string, path:string): ACL[] => {
 };
 
 
-export const  calculateCommandHash = (commands: Command[]): string => {
-  const commandIds = commands.map(cmd => cmd.commandId);
+export const  calculateCommandHash = (commands: Cmd[]): string => {
+  const commandIds = commands.map(cmd => cmd.id);
   commandIds.sort(); // Sort to ensure consistent order
   const concatenatedIds = commandIds.join(',');
   return crypto.createHash('sha256').update(concatenatedIds).digest('hex');

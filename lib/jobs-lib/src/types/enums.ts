@@ -9,10 +9,17 @@ export enum JobType {
 
 export enum OPS_CMD {
   COPY_CONTENT = 'cc',
-  STAMP_META  = 'sm',
+  STAMP_META  = 'sm', // deprecated
+  COPY_FILE = 'cf',
   COPY_DIR = 'cd',
   REMOVE_DIR = 'rd', // This is used to remove directories
-  REMOVE_FILE = 'rf' // This is used to remove files
+  REMOVE_FILE = 'rf', // This is used to remove files
+  STAMP_ACCESS_MODIFIED_TIME = 'samt',
+  STAMP_PERMISSION = 'sp',
+  STAMP_BIRTH_TIME = 'sbt',
+  STAMP_GID_UID = 'sgu',
+  STAMP_SID = 'ss',
+  PRESERVE_ACCESS_MODIFIED_TIME = 'pamt',
 }
 
 export enum OPS_STATUS {

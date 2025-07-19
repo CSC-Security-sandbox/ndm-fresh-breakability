@@ -77,7 +77,6 @@ export class MigrateSyncService {
         await jobContext.publishToErrorStream(dmErr);
       }
     }
-    
     if(metadata.gid && metadata.uid && process.platform  !== 'win32') {
       try {
         let gid = metadata.gid?.toString();
@@ -291,12 +290,12 @@ export class MigrateSyncService {
             getID: jobContext.jobConfig.options.isIdentityMappingAvailable
           });
           command.status = CommandStatus.COMPLETED;
-          await jobContext.publishToFileStream(fileInfo);
+          // await jobContext.publishToFileStream(fileInfo);
         } else {
           command.status = CommandStatus.COMPLETED;
         }
 
-        await jobContext.setTask(taskHashId, task);
+        // await jobContext.setTask(taskHashId, task);
       }
       return syncOutput
   }

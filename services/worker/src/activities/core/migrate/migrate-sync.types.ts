@@ -1,4 +1,4 @@
-import { Command, CommandOperation, ErrorType, JobManagerContext, MetaData, OPS_STATUS, Task, TaskStatus } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, CommandOperation, ErrorType, JobManagerContext, MetaData, OPS_STATUS, Task, TaskInfo, TaskStatus } from "@netapp-cloud-datamigrate/jobs-lib";
 
 export interface SyncTaskOutput {
     errors: {
@@ -62,12 +62,12 @@ export interface handleSyncTaskUpdateInput {
         source: string[];
         target: string[];
     }
-    task: Task,
+    task: TaskInfo,
     retryCount: number;
 }
 
 
 export interface handleInitTaskInput {
-    task: Task;
+    task: TaskInfo;
     jobContext: JobManagerContext;
 }

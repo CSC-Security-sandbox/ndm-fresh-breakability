@@ -34,16 +34,15 @@ export class DiscoveryScanService {
         }catch(error){
             if(error instanceof FatalError) 
                 errorType = ErrorType.FATAL_ERROR;
-            const ndmError = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, errorType, command.commandId, error, {name: command.fPath, path: path});
+            const ndmError = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, errorType, command.id, error, {name: command.fPath, path: path});
             await jobContext.publishToErrorStream(ndmError);
             throw error; 
         }
         return content;
     }
 
-    async scanDirectory({ jobContext, sourcePath, sourcePrefix, command, settings}: ScanDirectoryInput): Promise<ScanDirectoryOutput> {
+    async scanDirectory({ jobContext, sourcePath, sourcePrefix, command, settings, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> {
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
-        const errorType: ErrorType = command.retryCount+1 > this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
         const sourceContent = await this.getDirContents({path: sourcePath, jobContext, errorType, command});
         try {
             for (const item of sourceContent) {
@@ -60,8 +59,8 @@ export class DiscoveryScanService {
                 })) continue;
 
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
-                const fileInfo: FileInfo = await getFileInfo({ name: item.name, fullFilePath: sourceContentPath, relativePath: relativeSourcePath });
-                await jobContext.publishToFileStream(fileInfo);
+                // const fileInfo: FileInfo = await getFileInfo({ name: item.name, fullFilePath: sourceContentPath, relativePath: relativeSourcePath });
+                // await jobContext.publishToFileStream(fileInfo);
                 
                 if (sourceStat.isDirectory()) {
                     if(sourceStat.isSymbolicLink()) continue;
@@ -70,7 +69,7 @@ export class DiscoveryScanService {
                 } else output.fileCount++;
             }
         }catch(error) {
-            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.commandId, error, {name: command.fPath, path: sourcePath});
+            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.id, error, {name: command.fPath, path: sourcePath});
             await jobContext.publishToErrorStream(dmErr);
             throw error; 
         }

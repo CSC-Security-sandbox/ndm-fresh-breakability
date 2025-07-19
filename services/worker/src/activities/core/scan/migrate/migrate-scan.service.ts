@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Command, ErrorType, FileInfo, JobManagerContext, MetaData, OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Cmd, CmdMeta, Command, CommandStatus, ErrorType, FileInfo, ItemMeta, JobManagerContext, MetaData, Operations, Ops, OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
 import * as path from "path";
@@ -48,7 +48,7 @@ export class MigrateScanService {
         }catch(error){
             if(error instanceof FatalError) 
                 errorType = ErrorType.FATAL_ERROR;
-            const ndmError = dmError("OPERATION", origin, Operation.READ_DIR, errorType, command.commandId, error, {name: command.fPath, path: path});
+            const ndmError = dmError("OPERATION", origin, Operation.READ_DIR, errorType, command.id, error, {name: command.fPath, path: path});
             await jobContext.publishToErrorStream(ndmError);
             throw error; 
         }
@@ -56,10 +56,10 @@ export class MigrateScanService {
     }
 
     
-    async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings , targetPrefix}: ScanDirectoryInput): Promise<ScanDirectoryOutput> { 
+    async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings , targetPrefix, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> { 
 
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
-        let commands: Command[] = [], errorType: ErrorType = command.retryCount+1 > this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
+        let commands: Cmd[] = [];
 
         const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command});
         const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});
@@ -124,7 +124,7 @@ export class MigrateScanService {
                 
             }catch(error) {
                 this.logger.error(`Error processing item ${item} in directory ${sourcePath}: ${error}`);
-                const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.commandId, error, {name: command.fPath, path: targetPath});
+                const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.id, error, {name: command.fPath, path: targetPath});
                 await jobContext.publishToErrorStream(dmErr);
                 throw error; 
             }
@@ -149,40 +149,7 @@ export class MigrateScanService {
         return output
     }
 
-    buildCommand = (sFile: fs.Stats, fPath: string, dFile?: fs.Stats): Command | undefined => {
-         if (!sFile) {
-            return new Command(
-                fPath,{
-                    0: { cmd: dFile.isDirectory() ? OPS_CMD.REMOVE_DIR:  OPS_CMD.REMOVE_FILE, status: OPS_STATUS.READY }
-            },
-                uuid4(),
-                0
-            );
-        }
-        const metadata: MetaData =  { 
-            size: sFile.size,
-            mtime: sFile.mtime,
-            mode: sFile.mode,
-            uid: sFile.uid,
-            gid: sFile.gid,
-            atime: sFile.atime,
-            ctime: sFile.ctime,
-            birthtime: sFile.birthtime,
-            sid: undefined
-        } 
-        if (isContentUpdate(sFile, dFile) ) 
-            return new Command(
-                fPath,
-                {
-                    0: { cmd: sFile.isDirectory() ? OPS_CMD.COPY_DIR:  OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY },
-                    1: { cmd: OPS_CMD.STAMP_META, status: OPS_STATUS.READY, metadata}
-                },
-                uuid4(),
-                0
-            );
 
-        return undefined;
-    }
     async processDeletedItems({ sourceContent, targetContent, targetPath, targetPrefix, jobContext, errorType, command, commands }: {
         sourceContent: Set<string>,
         targetContent: Set<string>,
@@ -190,8 +157,8 @@ export class MigrateScanService {
         targetPrefix: string,
         jobContext: JobManagerContext,
         errorType: ErrorType,
-        command: Command,
-        commands: Command[]
+        command: Cmd,
+        commands: Cmd[]
     }) {
         for (const targetItem of targetContent) {
             if (!sourceContent.has(targetItem)) {
@@ -211,11 +178,51 @@ export class MigrateScanService {
                     }
                 } catch (error) {
                     this.logger.error(`[${jobContext.jobRunId}] Error processing  ${targetContentPath}: ${error}`);
-                    const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.commandId, error, { name: command.fPath, path: targetPath });
+                    const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.id, error, { name: command.fPath, path: targetPath });
                     await jobContext.publishToErrorStream(dmErr);
                     throw error;
                 }
             }
         }
+    }
+
+    buildCommand = (sFile: fs.Stats, fPath: string, dFile?: fs.Stats): Cmd | undefined => {
+         if (!sFile) {
+            return new Cmd(
+                uuid4(),
+                fPath,
+                CommandStatus.READY,
+                dFile.isDirectory(),
+                {
+                    [dFile.isDirectory() ? OPS_CMD.REMOVE_DIR:  OPS_CMD.REMOVE_FILE] : 
+                    { status: OPS_STATUS.READY, params: {} }
+                }
+            )
+        }
+        const metadata: CmdMeta =  { 
+            size: sFile.size,
+            mtime: sFile.mtime,
+            mode: sFile.mode,
+            uid: sFile.uid,
+            gid: sFile.gid,
+            atime: sFile.atime,
+            ctime: sFile.ctime,
+            birthtime: sFile.birthtime,
+            sid: undefined
+        } 
+        if (isContentUpdate(sFile, dFile) ) {
+            return new Cmd (
+                uuid4(),
+                fPath,
+                CommandStatus.READY,
+                sFile.isDirectory(),
+                {
+                    [sFile.isDirectory() ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_CONTENT]: { status: OPS_STATUS.READY, params: {} },
+                    [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: { } }
+                },
+                metadata,
+            )
+        }
+        return undefined;
     }
 }
