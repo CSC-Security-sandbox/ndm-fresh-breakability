@@ -18,6 +18,7 @@ import { useFileServerForm } from "@modules/storage-servers/file-server/context/
 import { MountPathsOptionsListType } from "@modules/storage-servers/file-server/fileServer.interface";
 import { ComponentType, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { EXPORT_PATH_SOURCE_ENUM } from "@modules/storage-servers/file-server/components/file-server.constant";
 
 export function withEditFileServer(WrappedComponent: ComponentType<any>) {
   return function WithEditFileServerComponent(props: any) {
@@ -84,6 +85,9 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
             value: nfsCredentialsInitialValues.protocolVersion || "",
             label: nfsCredentialsInitialValues.protocolVersion || "",
           },
+          exportPathSource:
+            nfsCredentialsInitialValues.exportPathSource ||
+            EXPORT_PATH_SOURCE_ENUM.AUTO_DISCOVER,
         })
       );
 
@@ -146,12 +150,13 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
         nfsAndSmbWorkersList.push(worker?.workerId);
       });
 
-      credentials?.volumes?.forEach((path) => {
-        nfsAndSmbVolumeList.push({
-          label: path.volumePath,
-          value: path.id,
-        });
-      });
+      if (credentials?.volumes) {
+        nfsAndSmbVolumeList.push(
+          ...credentials.volumes
+            .filter((volume) => volume?.isValid)
+            .map(({ volumePath, id }) => ({ label: volumePath, value: id }))
+        );
+      }
     };
 
     const handleEditConfiguration = async () => {

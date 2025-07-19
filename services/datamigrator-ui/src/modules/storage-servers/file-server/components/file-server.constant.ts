@@ -18,6 +18,11 @@ export const HOST_CREDENTIALS_VALIDATION_SCHEMA = Yup.object().shape({
   host: Yup.string().required("Hostname is required"),
 });
 
+export enum EXPORT_PATH_SOURCE_ENUM {
+  AUTO_DISCOVER = "AUTO_DISCOVER",
+  MANUAL_UPLOAD = "MANUAL_UPLOAD",
+}
+
 export const NFS_CREDENTIALS_VALIDATION_SCHEMA = Yup.object().shape({
   userName: Yup.string().required("NFS Username is required"),
   protocolVersion: Yup.object({
@@ -27,6 +32,9 @@ export const NFS_CREDENTIALS_VALIDATION_SCHEMA = Yup.object().shape({
   protocol: Yup.string()
     .oneOf(["NFS"], "Invalid protocol selected")
     .required("Protocol selection is required"),
+  exportPathSource: Yup.string()
+    .oneOf(Object.values(EXPORT_PATH_SOURCE_ENUM), "Invalid selection.")
+    .required("Export Path Source is required."),
 });
 
 export const SMB_CREDENTIALS_VALIDATION_SCHEMA = Yup.object().shape({
@@ -122,6 +130,7 @@ export const INITIAL_VALUE_NFS_CREDENTIALS_FORM = {
     label: "",
     value: "",
   },
+  exportPathSource: EXPORT_PATH_SOURCE_ENUM.AUTO_DISCOVER,
 };
 
 export const INITIAL_VALUE_JOB_CONFIG = {
