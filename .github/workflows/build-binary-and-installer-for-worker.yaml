@@ -19,11 +19,8 @@ permissions:
 
 jobs:
   worker-package:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: services/worker
-
+    runs-on: openlab
+    
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -32,31 +29,22 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          sparse-checkout: |
-            services/worker
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-
-      - name: Replace GitHub Token Placeholder in .npmrc
+      - name: Download pre-built binary for testing
         run: |
-          sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc
-
-      - name: Install dependencies and pkg
-        run: npm install && npm install pkg -g
-      
-      - name: Run Build
-        run: npm run build
-
-      - name: Build binary
-        run: npm run pkg
-    
-      - name: Zip pkg folder
-        run: zip -r pkg.zip pkg
+          echo "Downloading pre-built worker binary from Artifactory for testing..."
+          curl -o pkg.zip \
+            -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/builds/worker/branches/main/dca938d/datamigrator-worker-dca938d.zip"
+          
+          echo "Verifying download..."
+          if [ ! -f "pkg.zip" ] || [ ! -s "pkg.zip" ]; then
+            echo "Error: Failed to download worker binary or file is empty"
+            exit 1
+          fi
+          
+          echo "Worker binary downloaded successfully"
+          ls -la pkg.zip
       
       - name: Set Release Tag
         id: set_release_tag
@@ -71,7 +59,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: worker-binary-${{ steps.set_release_tag.outputs.RELEASE_TAG }}
-          path: services/worker/pkg.zip
+          path: pkg.zip
 
   build:
     runs-on: windows-latest
@@ -88,31 +76,61 @@ jobs:
           uses: actions/download-artifact@v4
           with:
             name: worker-binary-${{ env.RELEASE_TAG }}
-            path: pkg
+            path: .
 
         - name: Extract Binary
           shell: pwsh
           run: |
-            Expand-Archive -Path "pkg\pkg.zip" -DestinationPath "pkg" -Force
+            Expand-Archive -Path "pkg.zip" -DestinationPath "pkg" -Force
 
         - name: Prepare Installer Directory
           shell: pwsh
           run: |
             New-Item -ItemType Directory -Force -Path wininstaller
+            New-Item -ItemType Directory -Force -Path wininstaller\redist
+            New-Item -ItemType Directory -Force -Path wininstaller\fluentd
             Move-Item -Path "./pkg/pkg/worker-win-x64.exe" -Destination "wininstaller\worker.exe" -Force
 
-        - name: Copy environment file
+        - name: Download Redistributables
+          shell: pwsh
+          run: |
+            # Download VC++ Redistributable
+            Write-Host "Downloading VC++ Redistributable..."
+            Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "wininstaller\redist\vc_redist.x64.exe"
+            
+            # Download fluent-package MSI
+            Write-Host "Downloading fluent-package..."
+            Invoke-WebRequest -Uri "https://s3.amazonaws.com/packages.treasuredata.com/5/windows/fluent-package-5.2.0-x64.msi" -OutFile "wininstaller\redist\fluent-package-5.2.0-x64.msi"
+
+            # Verify downloads
+            Write-Host "Verifying downloads..."
+            if (Test-Path "wininstaller\redist\vc_redist.x64.exe") {
+                $vcSize = (Get-Item "wininstaller\redist\vc_redist.x64.exe").Length
+                Write-Host "VC++ Redistributable downloaded: $vcSize bytes"
+            } else {
+                throw "VC++ Redistributable download failed"
+            }
+
+            if (Test-Path "wininstaller\redist\fluent-package-5.2.0-x64.msi") {
+                $fluentSize = (Get-Item "wininstaller\redist\fluent-package-5.2.0-x64.msi").Length
+                Write-Host "fluent-package downloaded: $fluentSize bytes"
+            } else {
+                throw "fluent-package download failed"
+            }
+
+        - name: Copy environment file and installer files
           shell: pwsh
           run: |
             Write-Host "Current working directory: $(Get-Location)"
             Copy-Item -Path "app-deployment/ansible/worker/roles/configure-worker/templates/worker.env.j2" -Destination "wininstaller\worker.env.j2" -Force
             Copy-Item -Path "services/worker/wininstaller/installer.iss" -Destination "wininstaller\installer.iss" -Force
             Copy-Item -Path "services/worker/wininstaller/service.xml" -Destination "wininstaller\service.xml" -Force
+            Copy-Item -Path "services/worker/wininstaller/fluent.conf" -Destination "wininstaller\fluent.conf" -Force
   
         - name: Download WinSW and rename
           shell: pwsh
           run: |
-            # Download a specific version of WinSW (adjust version if needed)
+            # Download a specific version of WinSW
             Invoke-WebRequest -Uri "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe" -OutFile "wininstaller\winsw.exe"
   
         - name: List files in wininstaller directory
