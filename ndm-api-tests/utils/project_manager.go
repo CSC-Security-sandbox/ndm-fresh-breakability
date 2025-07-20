@@ -25,7 +25,11 @@ func createProject(authToken string, accountId string) (string, error) {
 		return "", err
 	}
 
-	projectID, ok := jsonResponse["id"].(string)
+	dataMap, ok := jsonResponse["data"].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("data not found in response in createProject")
+	}
+	projectID, ok := dataMap["id"].(string)
 	if !ok {
 		return "", fmt.Errorf("id not found in response in createProject")
 	}

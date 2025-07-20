@@ -210,7 +210,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				defer resp.Body.Close()
 				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
-				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN, 30)
+				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
 				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s", migration_validators[i]))
@@ -246,7 +246,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				cutoverRunID := getJobsResp.JobRuns[0].JobRunId
 				Expect(cutoverRunID).NotTo(BeEmpty(), "Expected a valid cutoverID for config %s", cutoverRunID)
 
-				WaitForJobState(cutoverRunID, BLOCKED_JOBRUN, 30)
+				WaitForJobState(cutoverRunID, BLOCKED_JOBRUN)
 				// Fetch the latest status
 				getJobsResp, resp, err = GetJobRunDetails(jobConfigID, headers)
 				Expect(err).NotTo(HaveOccurred(), "cutoverRunID job did not reach BLOCKED state")

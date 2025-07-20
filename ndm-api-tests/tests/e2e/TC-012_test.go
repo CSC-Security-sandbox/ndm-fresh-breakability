@@ -126,7 +126,7 @@ var _ = Describe("TC-012:Run bulk cutover with concurrent migration jobs and bat
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
 
-			err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN, 25)
+			err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 			Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
 			By("Creating a second migration job")

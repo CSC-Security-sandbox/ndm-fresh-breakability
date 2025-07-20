@@ -183,6 +183,9 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 				list = append(list, migrationJobRunID)
 				err = HandleJobRunStateChange(migrationJobRunID, "STOP", list)
 				Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
+
+				err = WaitForJobState(migrationJobRunID, STOP_JOBRUN)
+				Expect(err).NotTo(HaveOccurred(), "Migration job did not stop or complete")
 			}
 
 			err = WaitForJobState(firstCutoverjobRunID, BLOCKED_JOBRUN)
