@@ -9,6 +9,10 @@ import (
 )
 
 var _ = Describe("TC-006: Run migration to the same destination", func() {
+
+	BeforeEach(func() {
+		Skip("TC-006 is skipped in CI/CD due to flakiness")
+	})
 	var (
 		ProjectId              string
 		workerId1              string

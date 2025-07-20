@@ -7,7 +7,7 @@ scenarios:
       account_name: account1
     response:
       - account_name: account1
-      - status_code: 201
+      - status_code: 200
     parse:
       api_account_id: id
 

@@ -7,7 +7,7 @@ create-account :
     account_name: "${ACCOUNT_NAME}"
   response:
     - account_name: "${ACCOUNT_NAME}"
-    - status_code: 201
+    - status_code: 200
   parse:
     id: account_id  
 

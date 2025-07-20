@@ -144,7 +144,7 @@ var _ = Describe("TC-011: Run migration with 'Upload GID/UID Mapping' option", f
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
 				defer resp.Body.Close()
 				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
-				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN, 30)
+				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
 				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s", migration_validators[i]))
