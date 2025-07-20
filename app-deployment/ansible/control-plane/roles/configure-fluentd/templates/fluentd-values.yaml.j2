@@ -245,7 +245,7 @@ fileConfigs:
         enable_ruby true
         <record>
           # Extract project ID from logs; default to no-project
-          project_id ${begin; match_data = record['log'].to_s.match(/project[_-]?id[:\s=]+([a-zA-Z0-9\-_]+)/i); match_data ? match_data[1] : "no-project"; rescue; "no-project"; end}
+          project_id ${begin; match_data = record['log'].to_s.match(/projectId=([a-zA-Z0-9\-_]+)/); match_data ? match_data[1] : "no-project"; rescue; "no-project"; end}
           
           # Determine service type
           service_name ${begin; container = record['container_name'].to_s.downcase; case container; when /db-writer/; "db-writer"; when /config-service/; "config-service"; when /db-migrations/; "db-migrations"; when /datamigrator-ui/; "datamigrator-ui"; when /reports-service/; "reports-service"; when /admin-service/; "admin-service"; when /jobs-service/; "jobs-service"; when /keycloak-customizations/; "keycloak-customizations"; else; container; end; rescue; record['container_name'].to_s; end}
@@ -256,7 +256,7 @@ fileConfigs:
 
       <match **>
         @type file
-        path /ndm-logs/${project_id}/%Y-%m-%d/${component_type}/${service_name}
+        path /ndm-logs/%Y-%m-%d/${project_id}/${component_type}/${service_name}
         append true
         <buffer time,project_id,component_type,service_name>
           @type file
