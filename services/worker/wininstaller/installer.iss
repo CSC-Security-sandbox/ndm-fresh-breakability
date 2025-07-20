@@ -19,14 +19,13 @@ SetupLogging=yes
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-; Your existing application files
 Source: "worker.exe"; DestDir: "{app}\binary"; Flags: ignoreversion
 Source: "winsw.exe"; DestDir: "{app}"; DestName: "DatamigratorWorker.exe"; Flags: ignoreversion
 Source: "service.xml"; DestDir: "{app}"; DestName: "DatamigratorWorker.xml"; Flags: ignoreversion
 Source: "worker.env.j2"; DestDir: "{tmp}";
 Source: "redist\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
-Source: "redist\fluent-package-5.2.0-x64.msi"; DestDir: "{tmp}"; Flags: deleteafterinstall
-Source: "fluent.conf"; DestDir: "{tmp}";
+Source: "fluentd\fluent-package-5.2.0-x64.msi"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "fluentd.conf"; DestDir: "{tmp}";
 
 [Dirs]
 Name: "{app}\logs"
@@ -91,7 +90,7 @@ end;
 
 function FluentPackageNeedsInstall: Boolean;
 begin
-  Result := not DirExists('C:\opt\fluent') and not FileExists('C:\opt\fluent\bin\fluentd.exe');
+  Result := not RegKeyExists(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\fluent-package');
 end;
 
 function InstallVCRedist(): Boolean;
@@ -144,8 +143,8 @@ var
   TemplateFile: String;
   TempContent: String;
 begin
-  TemplateFile := ExpandConstant('{tmp}\fluent.conf');
-  ConfigFile := 'C:\opt\fluent\etc\fluent\fluent.conf';
+  TemplateFile := ExpandConstant('{tmp}\fluentd.conf');
+  ConfigFile := 'C:\opt\fluent\etc\fluent\fluentd.conf';
   
   Log('Creating Fluentd configuration from template...');
   
@@ -181,7 +180,7 @@ begin
   if not Exec('net.exe', 'start fluentdwinsvc', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
   begin
     Log('Failed to start fluentdwinsvc service with code: ' + IntToStr(ResultCode));
-    MsgBox('Fluentd service installed but failed to start automatically. ' + #13#10 + 
+    MsgBox('fluentdwinsvc installed but failed to start automatically. ' + #13#10 + 
            'You can start it manually from Windows Services or by running: net start fluentdwinsvc', 
            mbInformation, MB_OK);
     Result := False;
@@ -189,6 +188,18 @@ begin
   else
   begin
     Log('fluentdwinsvc service started successfully');
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ResultCode: Integer;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    Log('Stopping fluentdwinsvc service (keeping fluent-package installed)...');
+    Exec('net.exe', 'stop fluentdwinsvc', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Log('Fluentd service stopped. Fluentd remains installed for future worker installations.');
   end;
 end;
 
@@ -200,6 +211,7 @@ var
   ConfigPath: String;
   TemplatePath: String;
   CountMatch: Integer;
+  ResultCode: Integer;
 begin
   if CurStep = ssPostInstall then
   begin
@@ -259,6 +271,7 @@ begin
       
     if FluentPackageNeedsInstall then
     begin
+      Log('fluent-package not found, installing...');
       if InstallFluentPackage then
       begin
         CreateFluentdConfig();
@@ -267,7 +280,36 @@ begin
     end
     else
     begin
-      Log('fluent-package is already installed, updating configuration');
+      Log('fluent-package is already installed, updating configuration...');
+      
+      // Check if service is running
+      if Exec('sc.exe', 'query fluentdwinsvc', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      begin
+        if ResultCode = 0 then
+        begin
+          Log('fluentdwinsvc service is running, stopping it...');
+          if not Exec('net.exe', 'stop fluentdwinsvc', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+          begin
+            Log('Failed to stop fluentdwinsvc service with code: ' + IntToStr(ResultCode));
+          end
+          else
+          begin
+            Log('fluentdwinsvc service stopped successfully');
+          end;
+          Sleep(2000);
+        end
+        else
+        begin
+          Log('fluentdwinsvc service is not running');
+        end;
+      end
+      else
+      begin
+        Log('Could not query fluentdwinsvc service status, attempting to stop anyway...');
+        Exec('net.exe', 'stop fluentdwinsvc', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+        Sleep(2000);
+      end;
+
       CreateFluentdConfig();
       StartFluentdService();
     end;

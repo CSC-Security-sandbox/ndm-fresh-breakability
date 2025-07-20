@@ -19,8 +19,11 @@ permissions:
 
 jobs:
   worker-package:
-    runs-on: openlab
-    
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/worker
+
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -29,22 +32,31 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          sparse-checkout: |
+            services/worker
 
-      - name: Download pre-built binary for testing
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Replace GitHub Token Placeholder in .npmrc
         run: |
-          echo "Downloading pre-built worker binary from Artifactory for testing..."
-          curl -o pkg.zip \
-            -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
-            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/builds/worker/branches/main/dca938d/datamigrator-worker-dca938d.zip"
-          
-          echo "Verifying download..."
-          if [ ! -f "pkg.zip" ] || [ ! -s "pkg.zip" ]; then
-            echo "Error: Failed to download worker binary or file is empty"
-            exit 1
-          fi
-          
-          echo "Worker binary downloaded successfully"
-          ls -la pkg.zip
+          sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc
+
+      - name: Install dependencies and pkg
+        run: npm install && npm install pkg -g
+      
+      - name: Run Build
+        run: npm run build
+
+      - name: Build binary
+        run: npm run pkg
+    
+      - name: Zip pkg folder
+        run: zip -r pkg.zip pkg
       
       - name: Set Release Tag
         id: set_release_tag
@@ -59,8 +71,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: worker-binary-${{ steps.set_release_tag.outputs.RELEASE_TAG }}
-          path: pkg.zip
-
+          path: services/worker/pkg.zip
+          
   build:
     runs-on: windows-latest
     needs: worker-package
@@ -100,7 +112,7 @@ jobs:
             
             # Download fluent-package MSI
             Write-Host "Downloading fluent-package..."
-            Invoke-WebRequest -Uri "https://s3.amazonaws.com/packages.treasuredata.com/5/windows/fluent-package-5.2.0-x64.msi" -OutFile "wininstaller\redist\fluent-package-5.2.0-x64.msi"
+            Invoke-WebRequest -Uri "https://s3.amazonaws.com/packages.treasuredata.com/5/windows/fluent-package-5.2.0-x64.msi" -OutFile "wininstaller\fluentd\fluent-package-5.2.0-x64.msi"
 
             # Verify downloads
             Write-Host "Verifying downloads..."
@@ -111,8 +123,8 @@ jobs:
                 throw "VC++ Redistributable download failed"
             }
 
-            if (Test-Path "wininstaller\redist\fluent-package-5.2.0-x64.msi") {
-                $fluentSize = (Get-Item "wininstaller\redist\fluent-package-5.2.0-x64.msi").Length
+            if (Test-Path "wininstaller\fluentd\fluent-package-5.2.0-x64.msi") {
+                $fluentSize = (Get-Item "wininstaller\fluentd\fluent-package-5.2.0-x64.msi").Length
                 Write-Host "fluent-package downloaded: $fluentSize bytes"
             } else {
                 throw "fluent-package download failed"
@@ -125,7 +137,7 @@ jobs:
             Copy-Item -Path "app-deployment/ansible/worker/roles/configure-worker/templates/worker.env.j2" -Destination "wininstaller\worker.env.j2" -Force
             Copy-Item -Path "services/worker/wininstaller/installer.iss" -Destination "wininstaller\installer.iss" -Force
             Copy-Item -Path "services/worker/wininstaller/service.xml" -Destination "wininstaller\service.xml" -Force
-            Copy-Item -Path "services/worker/wininstaller/fluent.conf" -Destination "wininstaller\fluent.conf" -Force
+            Copy-Item -Path "services/worker/wininstaller/fluentd.conf" -Destination "wininstaller\fluentd.conf" -Force
   
         - name: Download WinSW and rename
           shell: pwsh
