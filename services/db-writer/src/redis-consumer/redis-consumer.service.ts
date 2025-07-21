@@ -21,6 +21,8 @@ export class RedisConsumerService implements OnModuleDestroy {
     private batchSize: number = parseInt(process.env.BATCH_SIZE) || 500;
     private jobConsumerMap: Map<string, FileConsumerContext> = new Map();
     private readonly batchTimeoutMs = process.env.BATCH_TIMEOUT_MS ? parseInt(process.env.BATCH_TIMEOUT_MS) : 5000;
+    private readonly maxRetries: number = process.env.MAX_RETRIES ? parseInt(process.env.MAX_RETRIES) : 3;
+    private lastErrorAndTaskId: string = process.env.LAST_ERROR_AND_TASK_ID || '8840625a-b818-42a8-98c8-5c05aaa19106';
 
 
     constructor(
@@ -580,7 +582,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             switch (consumerType) {
                 case ConsumerType.errors:
                     try {
-                        if (stream?.data?.tasks?.taskId === '8840625a-b818-42a8-98c8-5c05aaa19106') {
+                        if (stream?.data?.tasks?.taskId === this.lastErrorAndTaskId) {
                             await this.stopConsumer(jobRunId, ConsumerType.errors);
                         } else {
                             await this.processErrorData(stream.data);
@@ -592,7 +594,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                     break;
 
                 case ConsumerType.tasks:
-                    if (stream?.data?.id === '8840625a-b818-42a8-98c8-5c05aaa19106') {
+                    if (stream?.data?.id === this.lastErrorAndTaskId) {
                         await this.stopConsumer(jobRunId, ConsumerType.tasks);
                     } else {
                         await this.inventoryService.saveTasks(stream?.data);
@@ -655,10 +657,9 @@ export class RedisConsumerService implements OnModuleDestroy {
     }
     
     private async signalWorkflowKill(jobContext: JobManagerContext, jobRunId: string) {
-        const maxRetries = 3;
         const retryDelay = 1000; // 1 second delay between retries
         
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
             try {
                 const jobType = jobContext.jobConfig.jobType;
                 const workflowId = getWorkflowId(jobRunId, jobType);
@@ -676,15 +677,15 @@ export class RedisConsumerService implements OnModuleDestroy {
                 return; // Success, exit the retry loop
 
             } catch (error) {
-                this.logger.error(`Error signaling workflow for jobRunId=${jobRunId} on attempt ${attempt}/${maxRetries}:`, error);
-                
-                if (attempt === maxRetries) {
-                    this.logger.error(`Failed to signal workflow for jobRunId=${jobRunId} after ${maxRetries} attempts`);
+                this.logger.error(`Error signaling workflow for jobRunId=${jobRunId} on attempt ${attempt}/${this.maxRetries}:`, error);
+
+                if (attempt === this.maxRetries) {
+                    this.logger.error(`Failed to signal workflow for jobRunId=${jobRunId} after ${this.maxRetries} attempts`);
                     throw error; // Re-throw to handle in caller after all retries exhausted
                 }
                 
                 // Wait before retrying (except on the last attempt)
-                if (attempt < maxRetries) {
+                if (attempt < this.maxRetries) {
                     this.logger.log(`Retrying workflow signal for jobRunId=${jobRunId} in ${retryDelay}ms...`);
                     await new Promise(resolve => setTimeout(resolve, retryDelay));
                 }
