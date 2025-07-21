@@ -74,7 +74,7 @@ export class RedisConsumerService implements OnModuleDestroy {
     async cleanupResources(): Promise<void> {
         try {
             this.logger.log('Starting comprehensive cleanup');
-            
+
             // Clean up all job consumer contexts and their timers
             if (this.jobConsumerMap.size > 0) {
                 for (const [jobRunId, context] of this.jobConsumerMap.entries()) {
@@ -82,19 +82,19 @@ export class RedisConsumerService implements OnModuleDestroy {
                         clearTimeout(context.flushTimer);
                         context.flushTimer = null;
                     }
-                    
+
                     if (context.errorRecoveryTimers && context.errorRecoveryTimers.size > 0) {
                         for (const timer of context.errorRecoveryTimers) {
                             clearTimeout(timer);
                         }
                         context.errorRecoveryTimers.clear();
                     }
-                    
+
                     if (context.records.length > 0) {
                         context.records.length = 0;
                     }
                 }
-                
+
                 this.jobConsumerMap.clear();
             }
 
@@ -102,7 +102,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             if (this.activeWorkers.size > 0) {
                 this.activeWorkers.clear();
             }
-            
+
             if (this.redisClient) {
                 await redisUtils.releaseClient(this.redisClient);
                 this.redisClient = null;
@@ -318,16 +318,16 @@ export class RedisConsumerService implements OnModuleDestroy {
                 const match = key.match(/^db-writer:(.+):$/);
                 if (!match) continue;
                 const jobId = match[1];
-                
+
                 const consumerStatuses: Record<string, ReaderStatus> = await this.getAllConsumerStatuses(jobId);
-                
+
                 if (Object.values(consumerStatuses).some(status => status === 'active')) {
                     if (this.activeWorkers.get(jobId)) {
                         continue;
                     }
-                    
+
                     this.activeWorkers.set(jobId, true);
-                    
+
                     this.createConsumerWorkerThread(jobId)
                         .then(() => {
                             this.activeWorkers.delete(jobId);
@@ -335,7 +335,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                         .catch(error => {
                             this.logger.error(`Error in worker thread for job ${jobId}: ${error.message}`);
                             this.activeWorkers.delete(jobId);
-                            
+
                             for (const [consumerType, status] of Object.entries(consumerStatuses)) {
                                 if (status === 'active') {
                                     this.stopConsumer(jobId, consumerType).catch(stopError => {
@@ -348,11 +348,11 @@ export class RedisConsumerService implements OnModuleDestroy {
                     if (this.activeWorkers.has(jobId)) {
                         this.activeWorkers.delete(jobId);
                     }
-                    
+
                     await this.removeJobFromRedis(jobId);
                 }
             }
-            
+
         } catch (err) {
             this.logger.error(`Error in cron: ${err.message}`);
         }
@@ -375,13 +375,13 @@ export class RedisConsumerService implements OnModuleDestroy {
         this.logger.log(`Creating worker thread for job ${jobRunId}`);
         return new Promise((resolve, reject) => {
             const workerPath = path.join(__dirname, '../../dist/redis-consumer/consumerWorker.js');
-            
+
             const worker = new Worker(workerPath, {
                 workerData: { jobRunId }
             });
 
             worker.on('message', (result) => {
-                
+
                 if (result.success) {
                     this.logger.log(`Worker thread completed successfully for job ${jobRunId}`);
                     resolve();
@@ -398,7 +398,7 @@ export class RedisConsumerService implements OnModuleDestroy {
 
             worker.on('exit', (code) => {
                 worker.removeAllListeners();
-                
+
                 if (code !== 0) {
                     this.logger.error(`Worker stopped unexpectedly with exit code ${code} for job ${jobRunId}`);
                 } else {
@@ -483,7 +483,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             let dataCount = 0;
             let totalFilesReceived = 0;
             let iterationCount = 0;
-            
+
             while (await this.isConsumerRunning(jobRunId, consumerType)) {
                 iterationCount++;
 
@@ -497,7 +497,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                         dataCount++;
                         batchFilesReceived++;
                         totalFilesReceived++;
-                        
+
                         hasData = true;
                         await this.processStreamData(data, consumerType, jobRunId, jobContext);
                     }
@@ -508,17 +508,17 @@ export class RedisConsumerService implements OnModuleDestroy {
 
                 } catch (readerError) {
                     this.logger.error(`Reader error in iteration ${iterationCount} for job ${jobRunId}: ${readerError.message}`);
-                    
+
                     await new Promise(resolve => {
                         const timeout = setTimeout(resolve, 5000);
-                        
+
                         const context = this.jobConsumerMap.get(jobRunId);
                         if (context) {
                             if (!context.errorRecoveryTimers) {
                                 context.errorRecoveryTimers = new Set();
                             }
                             context.errorRecoveryTimers.add(timeout);
-                            
+
                             setTimeout(() => {
                                 context.errorRecoveryTimers?.delete(timeout);
                             }, 5000);
@@ -544,14 +544,14 @@ export class RedisConsumerService implements OnModuleDestroy {
             const context = this.jobConsumerMap.get(jobRunId);
             if (context && context.records.length > 0) {
                 this.logger.warn(`${context.records.length} unprocessed files remaining for job ${jobRunId}`);
-                
+
                 try {
                     await this.flushInventory(jobRunId, jobContext);
                 } catch (flushError) {
                     this.logger.error(`Failed to flush remaining records during cleanup for job ${jobRunId}:`, flushError);
                 }
             }
-            
+
             this.jobConsumerMap.delete(jobRunId);
             await this.removeConsumer(jobRunId, consumerType);
             jobContext = null;
@@ -559,7 +559,7 @@ export class RedisConsumerService implements OnModuleDestroy {
         }
     }
 
-   
+
 
     /**
      * Processes individual stream data based on consumer type
@@ -655,10 +655,10 @@ export class RedisConsumerService implements OnModuleDestroy {
 
         return reader;
     }
-    
+
     private async signalWorkflowKill(jobContext: JobManagerContext, jobRunId: string) {
         const retryDelay = 1000; // 1 second delay between retries
-        
+
         for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
             try {
                 const jobType = jobContext.jobConfig.jobType;
@@ -683,7 +683,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                     this.logger.error(`Failed to signal workflow for jobRunId=${jobRunId} after ${this.maxRetries} attempts`);
                     throw error; // Re-throw to handle in caller after all retries exhausted
                 }
-                
+
                 // Wait before retrying (except on the last attempt)
                 if (attempt < this.maxRetries) {
                     this.logger.log(`Retrying workflow signal for jobRunId=${jobRunId} in ${retryDelay}ms...`);
@@ -736,7 +736,20 @@ export class RedisConsumerService implements OnModuleDestroy {
         }
 
         const context = this.jobConsumerMap.get(jobRunId)!;
-        
+
+        // Handle last file signal
+        if (data.fileName === this.lastFile) {
+            this.logger.log(`Last file detected for job ${jobRunId}, triggering final flush and workflow signal`);
+            await this.flushInventory(jobRunId, jobContext);
+            try {
+                await this.signalWorkflowKill(jobContext, jobRunId);
+            } catch (error) {
+                this.logger.error(`Failed to signal workflow for job ${jobRunId}:`, error);
+            }
+            await this.stopConsumer(jobRunId, ConsumerType.files);
+            return; // Exit without pushing this record
+        }
+
         const recordWithStreamId = { ...data, streamId: fileId };
         context.records.push(recordWithStreamId);
 
@@ -753,20 +766,12 @@ export class RedisConsumerService implements OnModuleDestroy {
                     clearTimeout(context.flushTimer);
                     context.flushTimer = null;
                 }
-                
+
                 this.logger.log(`Timeout reached, flushing inventory for job ${jobRunId}`);
                 this.flushInventory(jobRunId, jobContext).catch(err => {
                     this.logger.error(`Timeout flush failed for job ${jobRunId}:`, err);
                 });
             }, this.batchTimeoutMs);
-        }
-
-        // Handle last file signal
-        if (data.fileName === this.lastFile) {
-            this.logger.log(`Last file detected for job ${jobRunId}, triggering final flush and workflow signal`);
-            await this.flushInventory(jobRunId, jobContext);
-            await this.signalWorkflowKill(jobContext, jobRunId);
-            await this.stopConsumer(jobRunId, ConsumerType.files);
         }
     }
 
@@ -792,7 +797,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             this.logger.warn(`No context found for flush operation in job ${jobRunId}`);
             return;
         }
-        
+
         if (context.records.length === 0) {
             return;
         }
@@ -814,11 +819,11 @@ export class RedisConsumerService implements OnModuleDestroy {
             const streamIds = records
                 .map(r => r.streamId)
                 .filter(id => id);
-            
+
             if (streamIds.length !== records.length) {
                 this.logger.warn(`Stream ID count mismatch for job ${jobRunId}! Records: ${records.length}, Stream IDs: ${streamIds.length}`);
             }
-            
+
             if (streamIds.length > 0) {
                 await jobContext.groupAckFileStream(streamIds, GroupReaderType.DB_WRITER);
                 this.logger.log(`Successfully flushed and acknowledged ${streamIds.length} records for job ${jobRunId}`);
@@ -828,7 +833,7 @@ export class RedisConsumerService implements OnModuleDestroy {
 
         } catch (err) {
             this.logger.error(`Batch write failed for job ${jobRunId}:`, err);
-            
+
             // Put records back for retry
             context.records.unshift(...records);
             this.logger.warn(`Restored ${records.length} records to queue for retry in job ${jobRunId}`);
@@ -856,7 +861,7 @@ export class RedisConsumerService implements OnModuleDestroy {
         try {
             const consumerStatuses = await this.getAllConsumerStatuses(jobRunId);
             const activeConsumers = Object.keys(consumerStatuses).filter(type => consumerStatuses[type] === 'active');
-            
+
             if (activeConsumers.length > 0) {
                 this.logger.log(`Found ${activeConsumers.length} active consumers to stop for job ${jobRunId}: ${activeConsumers.join(', ')}`);
             }
@@ -873,7 +878,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                     clearTimeout(context.flushTimer);
                     this.logger.log(`Cleared flush timer for job ${jobRunId}`);
                 }
-                
+
                 if (context.errorRecoveryTimers && context.errorRecoveryTimers.size > 0) {
                     for (const timer of context.errorRecoveryTimers) {
                         clearTimeout(timer);
@@ -881,11 +886,11 @@ export class RedisConsumerService implements OnModuleDestroy {
                     context.errorRecoveryTimers.clear();
                     this.logger.log(`Cleared error recovery timers for job ${jobRunId}`);
                 }
-                
+
                 if (context.records.length > 0) {
                     this.logger.warn(`Found ${context.records.length} unprocessed records during shutdown for job ${jobRunId}`);
                 }
-                
+
                 this.jobConsumerMap.delete(jobRunId);
             }
 

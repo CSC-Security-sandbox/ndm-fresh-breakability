@@ -29,7 +29,11 @@ async function performCleanup() {
         // Clean up RedisConsumerService
         if (redisConsumerService) {
             logger.log('Cleaning up RedisConsumerService');
-            await redisConsumerService.cleanupResources();
+            try {
+                await redisConsumerService.cleanupResources();
+            } catch (error) {
+                logger.error('Error during RedisConsumerService cleanup:', error);
+            }
             redisConsumerService = null;
         }
 
@@ -46,13 +50,8 @@ async function performCleanup() {
         if (dataSource) {
             logger.log('Releasing database connection');
             await dbPool.releaseConnection();
+            dataSource = null;
         }
-
-        // Manual garbage collection if enabled (needs --expose-gc)
-        if (global.gc) {
-            global.gc();
-        }
-        
         logger.log('Worker cleanup completed');
     } catch (error) {
         logger.error('Error during cleanup:', error);
