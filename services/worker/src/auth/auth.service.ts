@@ -3,7 +3,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { lastValueFrom } from 'rxjs';
 import { KeycloakConfig } from 'src/config/keycloak.config';
-import { Logger } from 'src/logger/logger.service';
+import {
+    LoggerFactory,
+    LoggerService,
+  } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class AuthService {
@@ -13,11 +16,12 @@ export class AuthService {
     private accessToken: string | null = null;
     private expiresAt: number = 0; 
     readonly workerId: string;
+    private readonly logger: LoggerService;
 
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
         @Inject(HttpService) private readonly httpService: HttpService,
-        @Inject(Logger) private readonly logger: Logger,
+        @Inject (LoggerFactory) loggerFactory: LoggerFactory,
     ) {
         this.workerId = this.configService.get('worker.workerId');
         this.keycloakConfig = this.configService.get<KeycloakConfig>('keycloak');
@@ -26,6 +30,7 @@ export class AuthService {
         tokenData.append('client_secret', this.keycloakConfig.workerSecret);
         tokenData.append('grant_type', 'client_credentials')
         this.tokenRequest = tokenData.toString()
+        this.logger = loggerFactory.create(AuthService.name);
     }
     
     async getAccessToken(): Promise<string | null> {

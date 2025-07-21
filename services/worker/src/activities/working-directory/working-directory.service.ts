@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from "axios";
 import * as fs from 'fs';
@@ -9,20 +9,25 @@ import { AuthService } from 'src/auth/auth.service';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { ConfigError, ConfigStatus, ConfigStatusPayload } from './working-directory.type';
 import { ExportPathSource } from '../list-path/list-path.type';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class ValidateWorkingDirectoryActivity {
   readonly workerId: string;
   readonly baseWorkingPath: string;
   readonly workerConfigUrl: string;
+  private readonly logger: LoggerService;
+
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
-    private readonly logger: Logger,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly authService: AuthService,
+    private readonly protocols: Protocols
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
     this.workerConfigUrl = this.configService.get('worker.connection.workerConfigUrl');
+    this.logger = loggerFactory.create(ValidateWorkingDirectoryActivity.name);
   }
 
   async validateWorkingDirectory(traceId: string, payload: any): Promise<any> {
@@ -114,7 +119,7 @@ export class ValidateWorkingDirectoryActivity {
           continue;
         }
         
-        const protocol = Protocols.getProtocol(ProtocolTypes[fileServer.type]);
+        const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
 
         const mountPathPayload = {
           hostname: fileServer.host,
@@ -162,7 +167,7 @@ export class ValidateWorkingDirectoryActivity {
 
     try {
       for (const fileServer of payload.listPathPayload) {
-        const protocol = Protocols.getProtocol(ProtocolTypes[fileServer.type]);
+        const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
 
         const mountPathPayload = {
           hostname: fileServer.host,

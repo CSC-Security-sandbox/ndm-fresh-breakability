@@ -1,12 +1,13 @@
 import { RedisMemoryCheckActivity } from './redis.mem.usage.check.activity';
-import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
+let loggerFactory: LoggerFactory;
 describe('RedisMemoryCheckActivity', () => {
   let redisMemoryCheckActivity: RedisMemoryCheckActivity;
   let mockRedisService: { getMemoryInfo: jest.Mock };
   // for making all logger methods optional
-  let mockLogger: Partial<Logger>; 
+  let logger: LoggerService;
   // for making all config methods optional
   let mockConfigService: Partial<ConfigService>;
 
@@ -18,18 +19,28 @@ describe('RedisMemoryCheckActivity', () => {
       getMemoryInfo: jest.fn()
     };
 
-    mockLogger = {
-      log: jest.fn(),
-      error: jest.fn()
-    };
-
     mockConfigService = {
       get: jest.fn().mockReturnValue(memoryUsageThreshold)
     };
 
+    loggerFactory = {
+      create: jest.fn().mockReturnValue({
+        log: jest.fn(),
+        error: jest.fn(),
+        warn: jest.fn(),
+        debug: jest.fn(),
+        verbose: jest.fn(),
+        requestContext: {} as any,
+        parentContext: {} as any,
+        setParentContext: jest.fn(),
+      }),
+    } as unknown as LoggerFactory;
+
+    logger = loggerFactory.create(RedisMemoryCheckActivity.name);
+
     redisMemoryCheckActivity = new RedisMemoryCheckActivity(
       mockRedisService as any,
-      mockLogger as Logger,
+      loggerFactory as LoggerFactory,
       mockConfigService as ConfigService
     );
   });
@@ -43,7 +54,7 @@ describe('RedisMemoryCheckActivity', () => {
 
     const result = await redisMemoryCheckActivity.checkMemoryUsage();
     expect(result).toBe(true);
-    expect(mockLogger.log).toHaveBeenCalledWith(
+    expect(logger.log).toHaveBeenCalledWith(
       `Redis Memory Usage : ${JSON.stringify(memoryInfo)}`
     );
   });
@@ -57,7 +68,7 @@ describe('RedisMemoryCheckActivity', () => {
 
     const result = await redisMemoryCheckActivity.checkMemoryUsage();
     expect(result).toBe(false);
-    expect(mockLogger.log).toHaveBeenCalledWith(
+    expect(logger.log).toHaveBeenCalledWith(
       `Redis Memory Usage : ${JSON.stringify(memoryInfo)}`
     );
   });
@@ -67,7 +78,7 @@ describe('RedisMemoryCheckActivity', () => {
     mockRedisService.getMemoryInfo.mockRejectedValue(new Error(errorMsg));
 
     await expect(redisMemoryCheckActivity.checkMemoryUsage()).rejects.toThrow(errorMsg);
-    expect(mockLogger.error).toHaveBeenCalledWith(
+    expect(logger.error).toHaveBeenCalledWith(
       `Error fetching Redis memory info: Error: ${errorMsg}`
     );
   });

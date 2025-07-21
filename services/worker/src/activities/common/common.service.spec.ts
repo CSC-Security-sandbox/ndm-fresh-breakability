@@ -3,12 +3,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { AuthService } from 'src/auth/auth.service';
-import { Logger } from '@nestjs/common';
 import { RedisService } from 'src/redis/redis.service';
 import axios from 'axios';
 import { JobRunStatus } from '../discovery/enums';
 import { JobContext } from '@netapp-cloud-datamigrate/jobs-lib';
 import { CommonActivityService } from './common.service';
+import {
+  LoggerFactory,
+  LoggerService
+} from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLogger } from 'src/auth/auth.service.spec';
 
 jest.mock('axios');
 
@@ -17,7 +21,7 @@ describe('CommonActivityService', () => {
   let configService: Partial<ConfigService>;
   let httpService: Partial<HttpService>;
   let authService: Partial<AuthService>;
-  let logger: Partial<Logger>;
+  let logger: Partial<LoggerService>;
   let redisService: Partial<RedisService>;
   let mockContext: any;
 
@@ -64,7 +68,12 @@ describe('CommonActivityService', () => {
     };
     httpService = {};
     authService = { getAccessToken: jest.fn().mockResolvedValue('token') };
-    logger = { log: jest.fn(), error: jest.fn(), debug: jest.fn(), warn: jest.fn() } as unknown as Logger;
+
+    const mockLoggerFactory = {
+      create: jest.fn().mockReturnValue(mockLogger),
+    };
+
+    logger = mockLogger;
     redisService = {
       getJobContext: jest.fn().mockResolvedValue(mockContext),
       setJobContext: jest.fn(),
@@ -76,7 +85,10 @@ describe('CommonActivityService', () => {
         { provide: ConfigService, useValue: configService },
         { provide: HttpService, useValue: httpService },
         { provide: AuthService, useValue: authService },
-        { provide: Logger, useValue: logger },
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
+        },
         { provide: RedisService, useValue: redisService },
       ],
     }).compile();

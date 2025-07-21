@@ -6,14 +6,11 @@ import { NativeConnection, Worker } from '@temporalio/worker';
 import { firstValueFrom, retry, timeout, timer } from 'rxjs';
 import { Platform, WorkerConfiguration, WorkerState } from './work-manager.types';
 import { getPlatform, getWorkerIdentity } from 'src/utils/worker-manager.mappers';
-import { Logger } from 'src/logger/logger.service';
 import { KeycloakConfig } from 'src/config/keycloak.config';
 import { WorkerOptionsService } from './factory/worker-options.factory.service';
 import { AuthService } from 'src/auth/auth.service';
 import { Connection } from '@temporalio/client';
-
-
-
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class WorkManagerService {
@@ -28,22 +25,23 @@ export class WorkManagerService {
     private taskQueuesToMonitor =  [];
     private temporalClientConnection: Connection = null;
     private platform: Platform
+    private readonly logger: LoggerService;
 
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
         @Inject(HttpService) private readonly httpService: HttpService,
-        @Inject(Logger) private readonly logger: Logger,
+        @Inject (LoggerFactory) loggerFactory: LoggerFactory,
         @Inject(WorkerOptionsService) private readonly workerOptions: WorkerOptionsService,
         @Inject(AuthService) private readonly authService: AuthService,
     ) {
-
         this.workerConfigUrl = `${this.configService.get('worker.connection.workerConfigUrl')}`;
         this.workerId = this.configService.get('worker.workerId');
         this.workerStartupTimeout = this.configService.get('worker.workerStartupTimeout');
         this.platform = getPlatform(this.configService.get('worker.platform'));
+        this.logger = loggerFactory.create(WorkManagerService.name);
     }
     async onApplicationBootstrap() {
-        this.logger.info('[onApplicationBootstrap] - Starting Worker Service');
+        this.logger.log('[onApplicationBootstrap] - Starting Worker Service');
         try {
             this.connection = await NativeConnection.connect(this.configService.get('temporal'));
             this.temporalClientConnection = await Connection.connect(this.configService.get('temporal'));
@@ -103,14 +101,14 @@ export class WorkManagerService {
         }
         for(let [id, worker] of this.activeWorkers) {
             if(!activeConfigs.has(id)) {
-                this.logger.info(`Stopping worker ${id}`)
+                this.logger.log(`Stopping worker ${id}`)
                 await this.shutdownWorker(worker, false)
                 this.activeWorkers.delete(id)
                 activeConfigs.delete(id)
             }
         }
         for(let [id, config] of configsToStart) {
-            this.logger.info(`Starting worker ${id} ${JSON.stringify(config)}`)
+            this.logger.log(`Starting worker ${id} ${JSON.stringify(config)}`)
             const workerOptions = this.workerOptions.createWorkerOptions(id, config, this.workerId, this.connection)
             await this.startWorker(id, workerOptions)
             configsToStart.delete(id);
@@ -127,7 +125,7 @@ export class WorkManagerService {
                 //sleep 
                 await new Promise((resolve) => setTimeout( resolve, this.workerStartupTimeout));
             }
-            this.logger.info(`Worker ${id} started successfully`);
+            this.logger.log(`Worker ${id} started successfully`);
             this.activeWorkers.set(id, worker);
             this.taskQueuesToMonitor.push({queueName: workerOptions.taskQueue, workerId: id})       
         } catch (err) {
@@ -167,12 +165,12 @@ export class WorkManagerService {
             });
             const pollers = response.pollers || [];
             if (pollers.length == 0) {
-                this.logger.info(`No active workers for task queue: ${taskQueue.queueName}`);
+                this.logger.log(`No active workers for task queue: ${taskQueue.queueName}`);
                 workerToShutDown.push(this.activeWorkers.get(taskQueue.workerId));
             }
         }       
         for(const worker of workerToShutDown) {
-            this.logger.info(`Shutting down worker ${worker.options.identity}`);
+            this.logger.log(`Shutting down worker ${worker.options.identity}`);
             try{
                 await this.shutdownWorker(worker, true);
             }catch(err){

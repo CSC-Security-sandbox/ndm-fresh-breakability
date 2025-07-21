@@ -18,6 +18,11 @@ import { ValidatePathActivity } from 'src/activities/validate-path/validate-path
 import { ConfigService } from '@nestjs/config';
 import { WorkerOptionsService } from './worker-options.factory.service';
 import { Test, TestingModule } from '@nestjs/testing';
+import { MigrateSyncService } from 'src/activities/core/migrate/migrate-sync.service';
+import { CommonTaskService } from 'src/activities/core/common/common-task.service';
+import { ScanService } from 'src/activities/core/scan/scan-activity.service';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from 'src/auth/auth.service.spec';
 
 jest.mock('../../workflows/workflows', () => ({}), { virtual: true });
 
@@ -30,6 +35,25 @@ describe('WorkFlowOptions', () => {
     configName: 'default',
     workerId  : 'default-worker',
   };
+  const migrateSyncServiceMock = {
+    syncTaskActivity: jest.fn(),
+  };
+
+  const commonTaskServiceMock = {
+    performCommonTask: jest.fn(), // Add any methods you expect to call
+  };
+
+  const configServiceMock = {
+    get: jest.fn((key: string) => {
+      if (key === 'worker.maxActivityConcurrency') return 5;
+      return null;
+    }),
+  };
+
+  const scanServiceMock = {
+    scan: jest.fn(), // Add expected methods here too
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -47,8 +71,12 @@ describe('WorkFlowOptions', () => {
         { provide: CommonActivityService, useValue: {} },
         { provide: SpeedTestActivities, useValue: {} },
         { provide: RedisMemoryCheckActivity, useValue: {} },
-        { provide: ConfigService, useValue: {} },
-        { provide:  ValidatePathActivity, useValue: {  validatePath: {},  postValidationResult: {} } },
+        { provide: ConfigService, useValue: configServiceMock },
+        { provide: ValidatePathActivity, useValue: {  validatePath: {},  postValidationResult: {} } },
+        { provide: MigrateSyncService, useValue: migrateSyncServiceMock },
+        { provide: CommonTaskService, useValue: commonTaskServiceMock },
+        { provide: ScanService, useValue: scanServiceMock },
+        {provide: LoggerFactory, useValue: mockLoggerFactory },
       ],
     }).compile();
   });

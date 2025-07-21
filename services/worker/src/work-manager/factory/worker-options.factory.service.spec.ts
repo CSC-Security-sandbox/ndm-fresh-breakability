@@ -21,6 +21,9 @@ import { RedisMemoryCheckActivity } from 'src/activities/redis/redis.mem.usage.c
 import { ScanService } from 'src/activities/core/scan/scan-activity.service';
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 import { MigrateSyncService } from 'src/activities/core/migrate/migrate-sync.service';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLogger } from 'src/auth/auth.service.spec';
+import { ValidatePathActivity } from 'src/activities/validate-path/validate-path.service';
 
 const bindMock = jest.fn().mockReturnValue({
   bind: jest.fn(),
@@ -114,18 +117,28 @@ const MigrateSyncServiceMock = {
 }
 
 const CommonTaskServiceMock = {
-  getGroupOfTasksActivity: bindMock,
-  isWorkflowRunningActivity: bindMock,
-  createInitialDirBatch: bindMock,
-}
+  getGroupOfTasksActivity: jest.fn(),
+  isWorkflowRunningActivity: jest.fn(),
+  createInitialDirBatch: jest.fn(),
+};
 
 const ScanServiceMock = {
   scanDirectories: bindMock, 
 }
 
+
+const validatePathActivityMock = {
+  validatePath: jest.fn(),
+  postValidationResult: jest.fn(),
+};
+
 describe('WorkerOptionsService', () => {
   let service: WorkerOptionsService;
   const mockConnection = {} as NativeConnection;
+
+  const mockLoggerFactory = {
+    create: jest.fn().mockReturnValue(mockLogger),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -148,6 +161,8 @@ describe('WorkerOptionsService', () => {
         { provide: ScanService, useValue: ScanServiceMock },
         { provide: CommonTaskService, useValue: CommonTaskServiceMock },
         { provide: MigrateSyncService, useValue: MigrateSyncServiceMock },
+        { provide: LoggerFactory, useValue: mockLoggerFactory },
+        { provide: ValidatePathActivity, useValue: validatePathActivityMock },
       ],
     }).compile();
 

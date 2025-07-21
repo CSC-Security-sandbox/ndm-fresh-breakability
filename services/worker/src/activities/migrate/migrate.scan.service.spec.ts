@@ -3,13 +3,14 @@ import { MigrationScanService } from './migrate.scan.service';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from 'src/redis/redis.service';
 import { CommonActivityService } from '../common/common.service';
-import { Logger } from "@nestjs/common";
 import { JobContext, JobConfig, Command, CommandStatus, Task, TaskType, TaskStatus, FileServerDetails, NFS, OPS_CMD, ErrorType } from "@netapp-cloud-datamigrate/jobs-lib"
 import * as fs from 'fs';
 import { ScanContentInput } from './migrate.type';
 import { RedisClientType } from 'redis';
 import * as utils from '../utils/utils';
 import { Origin } from '../utils/utils.types';
+import { mockLoggerFactory } from 'src/auth/auth.service.spec';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 jest.mock('@temporalio/activity', () => ({
   Context: {
@@ -72,6 +73,8 @@ const stream = {
 describe('MigrationScanService', () => {
   let redisClient: RedisClientType;
 
+  let mockLogger = mockLoggerFactory.create('MigrationScanService');
+
   beforeEach(() => {
     redisClient = {
       exists: jest.fn(),
@@ -92,7 +95,6 @@ describe('MigrationScanService', () => {
   let mockConfigService: Partial<ConfigService>;
   let mockRedisService: Partial<RedisService>;
   let mockCommonService: Partial<CommonActivityService>;
-  let mockLogger: Partial<Logger>;
 
   class TestJobContext extends JobContext {
     constructor(jobRunId: string, jobConfig?: JobConfig, jobRunStatus?: string) {
@@ -118,8 +120,6 @@ describe('MigrationScanService', () => {
   }
 
   beforeEach(async () => {
-    mockLogger = { debug: jest.fn(), log: jest.fn(), error: jest.fn() };
-
     mockConfigService = {
       get: jest.fn((key) => {
         switch (key) {
@@ -148,7 +148,7 @@ describe('MigrationScanService', () => {
       providers: [
         MigrationScanService,
         { provide: ConfigService, useValue: mockConfigService },
-        { provide: Logger, useValue: mockLogger }, // Ensure Logger is provided
+        { provide: LoggerFactory, useValue: mockLoggerFactory},
         { provide: RedisService, useValue: mockRedisService },
         { provide: CommonActivityService, useValue: mockCommonService },
       ],

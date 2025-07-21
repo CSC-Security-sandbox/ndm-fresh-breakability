@@ -1,5 +1,4 @@
 
-import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CommandStatus, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { RedisService } from 'src/redis/redis.service';
@@ -9,7 +8,8 @@ import { DiscoveryScanActivity } from './discovery.core.activity';
 import { Dirent } from 'fs';
 import * as fs from 'fs';
 import { ScanDirCommandInput } from './discovery.type';
-
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLogger } from 'src/auth/auth.service.spec';
 
 jest.mock('@temporalio/activity', () => ({
   Context: {
@@ -18,11 +18,6 @@ jest.mock('@temporalio/activity', () => ({
     }))
   },
 }))
-
-const mockLogger = { log: jest.fn(), debug: jest.fn(), error: jest.fn() } as any as Logger;
-const mockRedis = { getJobContext: jest.fn(), setJobContext: jest.fn() } as any as RedisService;
-const mockCommon = { fetchOneTask: jest.fn(), addFailedWorkerToJobState: jest.fn() } as any as CommonActivityService;
-const mockConfig = { get: jest.fn() } as any as ConfigService;
 
 jest.mock('@temporalio/activity', () => ({
   Context: {
@@ -33,6 +28,10 @@ jest.mock('@temporalio/activity', () => ({
 describe('DiscoveryScanActivity', () => {
   let service: DiscoveryScanActivity;
   let basePrefixSpy: jest.SpyInstance;
+
+  const mockRedis = { getJobContext: jest.fn(), setJobContext: jest.fn() } as any as RedisService;
+  const mockCommon = { fetchOneTask: jest.fn(), addFailedWorkerToJobState: jest.fn() } as any as CommonActivityService;
+  const mockConfig = { get: jest.fn() } as any as ConfigService;
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -45,7 +44,12 @@ describe('DiscoveryScanActivity', () => {
       }
     });
 
-    service = new DiscoveryScanActivity(mockLogger, mockRedis, mockConfig, mockCommon);
+    const mockLoggerFactory = {
+      create: jest.fn().mockReturnValue(mockLogger),
+    } as unknown as LoggerFactory;
+
+    service = new DiscoveryScanActivity(mockLoggerFactory, mockRedis, mockConfig, mockCommon);
+    mockLoggerFactory.create = jest.fn().mockReturnValue(mockLogger);
     basePrefixSpy = jest.spyOn(utils, 'basePrefix').mockReturnValue('/base/');
 
     // Mock utils
