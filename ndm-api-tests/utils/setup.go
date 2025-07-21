@@ -110,6 +110,7 @@ func InitTestEnv() {
 func SetupTestEnv(workerCount int) (string, map[string]SSHConfig, error) {
 	if PROTOCOL_TYPE == ProtocolSMB {
 		// TODO : To be replaced with SMB code.
+		// SMB-specific setup logic is not implemented yet.
 		return SetupTestEnv(workerCount)
 	}
 
@@ -156,6 +157,7 @@ func CleanupTestEnv() error {
 
 	if PROTOCOL_TYPE == ProtocolSMB {
 		// To be replaced with SMB code.
+		// SMB-specific cleanup logic is not implemented yet.
 		return CleanupTestEnv()
 	}
 
