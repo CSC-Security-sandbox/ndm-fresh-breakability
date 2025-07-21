@@ -37,6 +37,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import useAdhocRun from "@hooks/useAdhocRun";
 import { Show } from "@components/show/Show";
 import JobErrors from "@modules/jobs/jobs-list/job-details/components/JobErrors";
+import { GENERATING_REPORT_LABEL } from "@modules/jobs/jobs-list/job-details/job-details.constants";
 
 const JobRunDetails = () => {
   const navigate = useNavigate();
@@ -182,7 +183,7 @@ const JobRunDetails = () => {
                   isJobStatusValid(jobRunDetails?.status)
                 }
               >
-                <ReportsGeneratingLoader />
+                <ReportsGeneratingLoader label={GENERATING_REPORT_LABEL} />
               </Show.When>
 
               <Show.When
