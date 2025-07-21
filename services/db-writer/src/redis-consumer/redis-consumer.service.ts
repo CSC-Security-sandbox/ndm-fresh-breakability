@@ -59,15 +59,16 @@ export class RedisConsumerService implements OnModuleDestroy {
 
     /**
      * Comprehensive cleanup method to release all resources and prevent memory leaks
+     * Saves any remaining records to database before cleanup
      * Clears all job consumer contexts, timers, worker tracking, and Redis connections
      * Performs garbage collection if available
      * 
      * Working: 
-     * 1. Clears all flush timers for active jobs
-     * 2. Clears error recovery timers
-     * 3. Empties pending records
-     * 4. Releases Redis client connection
-     * 5. Triggers garbage collection
+     * 1. Saves any remaining records in jobConsumerMap to database
+     * 2. Clears all flush timers for active jobs
+     * 3. Clears error recovery timers
+     * 4. Empties pending records
+     * 5. Releases Redis client connection
      * 
      * @returns {Promise<void>}
      */
@@ -75,9 +76,23 @@ export class RedisConsumerService implements OnModuleDestroy {
         try {
             this.logger.log('Starting comprehensive cleanup');
 
-            // Clean up all job consumer contexts and their timers
+            // Save any remaining records to database before cleanup
             if (this.jobConsumerMap.size > 0) {
+                this.logger.log(`Found ${this.jobConsumerMap.size} job contexts with potential unsaved records`);
+                
                 for (const [jobRunId, context] of this.jobConsumerMap.entries()) {
+                    // Save remaining records to database if any exist
+                    if (context.records.length > 0) {
+                        this.logger.warn(`Saving ${context.records.length} unsaved records for job ${jobRunId} during cleanup`);
+                        try {
+                            await this.inventoryService.createInventory(context.records, context.jobRunId, context.pathId);
+                            this.logger.log(`Successfully saved ${context.records.length} records for job ${jobRunId} during cleanup`);
+                        } catch (saveError) {
+                            this.logger.error(`Failed to save ${context.records.length} records for job ${jobRunId} during cleanup:`, saveError);
+                        }
+                    }
+
+                    // Clear timers
                     if (context.flushTimer) {
                         clearTimeout(context.flushTimer);
                         context.flushTimer = null;
@@ -90,6 +105,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                         context.errorRecoveryTimers.clear();
                     }
 
+                    // Clear records array
                     if (context.records.length > 0) {
                         context.records.length = 0;
                     }
@@ -109,10 +125,6 @@ export class RedisConsumerService implements OnModuleDestroy {
             }
 
             this.accumulatedRecords.length = 0;
-
-            if (global.gc) {
-                global.gc();
-            }
 
             this.logger.log('RedisConsumerService cleanup completed');
         } catch (error) {
