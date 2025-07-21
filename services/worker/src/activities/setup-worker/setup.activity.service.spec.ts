@@ -3,6 +3,12 @@ import axios from 'axios';
 import { RetryableError } from 'src/errors/errors.types';
 import { Protocols } from 'src/protocols/protocols';
 import { SetupActivityService } from './setup.activity.service';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { SMBProtocol } from '../../protocols/smb/smb.protocol';
+import { NFSProtocol } from '../../protocols/nfs/nfs.protocol';
+import { mockLogger } from 'src/auth/auth.service.spec';
+
+let loggerFactory: LoggerFactory;
 
 jest.mock('axios');
 jest.mock('src/protocols/protocols');
@@ -21,11 +27,6 @@ const mockRedisService = {
     getJobManagerContext: jest.fn(),
     getJobState: jest.fn()
 };
-const mockLogger = {
-    log: jest.fn(),
-    debug: jest.fn(),
-    error: jest.fn()
-};
 
 const mockProtocol = {
     mountPath: jest.fn(),
@@ -34,21 +35,42 @@ const mockProtocol = {
 
 describe('SetupActivityService', () => {
     let service: SetupActivityService;
+    let protocols: Protocols;
 
     beforeEach(() => {
         jest.clearAllMocks();
+
         mockConfigService.get.mockImplementation((key: string) => {
             if (key === 'worker.workerId') return 'worker-123';
             if (key === 'worker.baseWorkingPath') return '/mnt/worker';
             if (key === 'worker.connection.workerConfigUrl') return 'http://worker-config';
             return undefined;
         });
-        (Protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+
+        loggerFactory = {
+            create: jest.fn().mockReturnValue({
+                log: jest.fn(),
+                debug: jest.fn(),
+                error: jest.fn(),
+            }),
+        } as any;
+
+        protocols = new Protocols(
+            new NFSProtocol(loggerFactory),
+            new SMBProtocol(loggerFactory)
+        );
+
+        jest.spyOn(protocols, 'getProtocol').mockReturnValue({
+            mountPath: mockProtocol.mountPath,
+            unmountPath: mockProtocol.unmountPath,
+          } as any);
+          
         service = new SetupActivityService(
             mockConfigService as any,
             mockAuthService as any,
             mockRedisService as any,
-            mockLogger as any
+            loggerFactory as LoggerFactory,
+            protocols as Protocols,
         );
     });
 
@@ -132,7 +154,7 @@ describe('SetupActivityService', () => {
         });
 
         it('should return error on exception', async () => {
-            (Protocols.getProtocol as jest.Mock).mockImplementation(() => { throw new Error('fail'); });
+            (protocols.getProtocol as jest.Mock).mockImplementation(() => { throw new Error('fail'); });
             const args = { jobRunId: 'job-4', protocolType: 'NFS' } as any;
             const result = await service.speedTestSetup(args);
             expect(result.status).toBe('error');
@@ -191,7 +213,7 @@ describe('SetupActivityService', () => {
         });
 
         it('should return error on exception', async () => {
-            (Protocols.getProtocol as jest.Mock).mockImplementation(() => { throw new Error('fail'); });
+            (protocols.getProtocol as jest.Mock).mockImplementation(() => { throw new Error('fail'); });
             const result = await service.speedTestCleanup('job-9', {} as any, 'NFS');
             expect(result.status).toBe('error');
             expect(result.message).toContain('fail');

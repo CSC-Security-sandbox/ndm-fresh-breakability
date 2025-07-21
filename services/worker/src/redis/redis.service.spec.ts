@@ -1,6 +1,8 @@
 import { RedisService } from './redis.service';
 import { JobContextFactory } from '@netapp-cloud-datamigrate/jobs-lib';
 import { createClient, RedisClientType } from 'redis';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLogger } from 'src/auth/auth.service.spec';
 
 jest.mock('redis', () => ({
   createClient: jest.fn(),
@@ -16,6 +18,7 @@ jest.mock('@netapp-cloud-datamigrate/jobs-lib', () => ({
 describe('RedisService', () => {
   let service: RedisService;
   let mockClient: any;
+  let loggerFactory: LoggerFactory;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -31,7 +34,12 @@ describe('RedisService', () => {
       hGet: jest.fn().mockResolvedValue('identity'),
     };
     (createClient as jest.Mock).mockReturnValue(mockClient);
-    service = new RedisService();
+
+    loggerFactory = {
+      create: jest.fn().mockReturnValue(mockLogger),
+    } as unknown as LoggerFactory;
+
+    service = new RedisService(loggerFactory);
   });
 
   describe('onModuleInit', () => {
