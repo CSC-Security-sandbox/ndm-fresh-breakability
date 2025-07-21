@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from 'path';
-import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, JobManagerContext, RedisUtils, Task, TaskStatus, TaskType, Protocol, Cmd } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, JobManagerContext, RedisUtils, Task, TaskStatus, TaskType, Protocol, Cmd, ItemInfo, TaskInfo } from "@netapp-cloud-datamigrate/jobs-lib";
 import { ACL, ExcludeOrSkipParams, getFileInfoInput, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
@@ -156,8 +156,41 @@ export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats) => (dFile && sF
 )
 
 export const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false,  2048, true, new Date(), new Date(), new Date(), "", "", "", 0, 1001, 1001);
+export const generateDummyItemEntry: ItemInfo = new ItemInfo(
+  "LAST_FILE", // fileName
+  false, // isDirectory
+  false, // isSymbolicLink
+  0, // depth
+  "", // extension
+  "file", // fileType
+  {
+    birthTime: new Date(),
+    modifiedTime: new Date(),
+    accessTime: new Date(),
+    permission: "rwxr-xr-x",  // permission
+    checksum: "dummy-checksum-source" // checksum
+  }, // sourceMeta
+  {
+    birthTime: new Date(),
+    modifiedTime: new Date(),
+    accessTime: new Date(),
+    permission: "rwxr-xr-x", // permission  
+    checksum: "dummy-checksum-target" // checksum
+  }, // targeMeta
+  2048 // size
+);
 
 export const generateDummyTaskEntry: Task = new Task('8840625a-b818-42a8-98c8-5c05aaa19106', '', TaskType.MIGRATE, TaskStatus.ERRORED, '', '', '', [], '', '', '');
+export const generateDummyTaskInfoEntry: TaskInfo = new TaskInfo(
+  '8840625a-b818-42a8-98c8-5c05aaa19106', 
+  '',
+  TaskType.MIGRATE,
+  TaskStatus.ERRORED, 
+  'worker-12345',
+  'sourcePathId-12345',
+  [],
+  'destinationPathId-12345',
+);
 
 export const generateDummyErrorEntry: DMError = new DMError({ taskId: '8840625a-b818-42a8-98c8-5c05aaa19106', errorCode: '', errorMessage: '', errorType: ErrorType.FATAL_ERROR, taskType: '' });
 

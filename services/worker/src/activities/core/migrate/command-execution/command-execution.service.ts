@@ -1,8 +1,8 @@
 
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { ItemInfo, ItemMeta, OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
-import { Logger } from "@temporalio/worker";
+
 import * as fs from "fs";
 import * as path from 'path';
 import { dmError, getFilePermissions, getFileType } from "src/activities/utils/utils";
@@ -59,7 +59,6 @@ export class CommandExecService {
             targetErrors.push(...metaResult.targetErrors);
             await this.publishFileInfo(input);
         }
-
         return { sourceErrors, targetErrors, cmd: input.command }  ;
     }
 
@@ -96,6 +95,7 @@ export class CommandExecService {
                 command.ops[OPS_CMD.COPY_FILE].status = OPS_STATUS.COMPLETED;
                 output.shouldStampMeta = true;
             } catch (error) {
+                this.logger.debug(`Command : ${JSON.stringify(command)}`);
                 command.ops[OPS_CMD.COPY_FILE].status = OPS_STATUS.ERROR;
                 this.logger.error(`Copying DIR from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
@@ -152,32 +152,36 @@ export class CommandExecService {
         const sourceMeta: ItemMeta = {
             accessTime: sourceStats.atime,
             birthTime: sourceStats.birthtime,
-            extension: path.extname(sourcePath),
             modifiedTime: sourceStats.mtime,
             permission: getFilePermissions(sourceStats, sourceStats.isDirectory()),
             checksum : command.ops?.[OPS_CMD.COPY_FILE]?.params?.checksums?.sourceChecksum ?? '',
-
+            uid: sourceStats.uid,
+            gid: sourceStats.gid,
         }
+
         const targetStats = await fs.promises.lstat(targetPath);
         const targetMeta: ItemMeta = {
             accessTime: targetStats.atime,
             birthTime: targetStats.birthtime,
-            extension: path.extname(targetPath),
             modifiedTime: targetStats.mtime,
             permission: getFilePermissions(targetStats, targetStats.isDirectory()),
             checksum : command.ops?.[OPS_CMD.COPY_FILE]?.params?.checksums?.targetChecksum ?? '',
+            uid: targetStats.uid,
+            gid: targetStats.gid,
         }
+
         const itemInfo = new ItemInfo(
             command.fPath,
-            command.isDir,
+            targetStats.isDirectory(),
             targetStats.isSymbolicLink(),
             command.fPath.split('/').length - 2,
-            targetMeta.extension,
+            path.extname(sourcePath),
             getFileType(targetStats, targetStats.isDirectory()),
             sourceMeta,
             targetMeta,
             targetStats.size
         )
+
         await jobContext.publishToFileStream(itemInfo);
     }
 

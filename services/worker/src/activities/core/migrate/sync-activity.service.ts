@@ -1,8 +1,7 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CommandStatus, ErrorType, JobManagerContext, Task, TaskInfo, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { Context } from '@temporalio/activity';
-import { Logger } from "@temporalio/worker";
 import { basePrefix, isFatalError, isSourceFatalError } from "src/activities/utils/utils";
 import { FatalError, RetryableError, RetryExceededError } from "src/errors/errors.types";
 import { RedisService } from "src/redis/redis.service";

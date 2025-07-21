@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import {
+  ItemInfo,
   OperationError,
   Task,
   TaskError,
@@ -45,28 +46,28 @@ export class InventoryService {
   ) {
 
   }
-  mapSourceToTarget(file: any, jobRunId: string, pathId: string): any {
+  mapSourceToTarget(file: ItemInfo, jobRunId: string, pathId: string): any {
     if (!file) {
       throw new Error('Invalid file object: Cannot map undefined or null file');
     }
     return {
-      path: file.path ?? '',
+      path: file.file_name ?? '', // TODO - rename
       isDirectory: file.isDirectory ?? false,
-      sourceChecksum: file?.sourceChecksum ?? null,
-      targetChecksum: file?.targetChecksum ?? null,
-      parentPath: file?.parentPath ?? '',
+      sourceChecksum: file?.sourceMeta?.checksum ?? null,
+      targetChecksum: file?.targetMeta?.checksum ?? null,
+      parentPath: file?.file_name ?? '', // TODO - ADD parentPath
       depth: file?.depth ?? 0,
-      fileName: file?.fileName ?? '',
-      uid: file?.uid ? file.uid.toString() : '',
-      gid: file?.gid ? file.gid.toString() : '',
-      fileSize: file?.fileSize ? BigInt(file.fileSize).toString() : '0',
+      fileName: file?.file_name ?? '', // TO-DO add fileName
+      uid: file?.targetMeta?.uid?.toString() ?? file?.sourceMeta?.uid?.toString() ?? '',
+      gid: file?.targetMeta?.gid?.toString() ?? file?.sourceMeta?.gid?.toString() ?? '',
+      fileSize: file?.size ? BigInt(file.size).toString() : '0',
       extension: file?.extension ?? '',
       fileType: file?.fileType ?? null,
-      modifiedTime: file?.modifiedTime ?? null,
-      accessTime: file?.accessTime ?? null,
-      permission: file?.permission ?? '',
+      modifiedTime: file?.targetMeta?.modifiedTime ?? file?.sourceMeta?.modifiedTime ?? null,
+      accessTime: file?.targetMeta?.accessTime ?? file?.sourceMeta?.accessTime ?? null,
+      permission: file?.targetMeta?.permission ?? file?.sourceMeta?.permission ?? null,
       jobRunId: jobRunId,
-      birthTime: file?.birthTime ?? null,
+      birthTime: file?.targetMeta?.birthTime ?? file?.sourceMeta?.birthTime ?? null,
       pathId: pathId,
     };
   }
@@ -87,14 +88,14 @@ export class InventoryService {
   }
 
 
-  async createInventory(data: CreateInventory[], jobRunId: string, pathId: string) {
+  async createInventory(data: ItemInfo[], jobRunId: string, pathId: string) {
     if (!data || data.length === 0) {
       this.logger.warn('No inventory data received, skipping insert.');
       return;
     }
 
     const batchSize = 500; // Adjust batch size as needed
-    const failedRecords: CreateInventory[] = [];
+    const failedRecords: ItemInfo[] = [];
 
     for (let i = 0; i < data.length; i += batchSize) {
       const batch = data.slice(i, i + batchSize);
@@ -109,8 +110,7 @@ export class InventoryService {
             }, {} as Record<string, any>)
         );
         
-        const inventoryRecords = await this.inventoryRepo.upsert(mappedData, ['path', 'jobRunId', 'isDirectory']);
-        this.logger.log(`Successfully inserted ${inventoryRecords.raw} inventory records`);
+        await this.inventoryRepo.upsert(mappedData, ['path', 'jobRunId', 'isDirectory']);
       } catch (err) {
         this.logger.error(`Failed to save inventory records in batch: ${err.message}`, err.stack);
         failedRecords.push(...batch);
@@ -142,7 +142,6 @@ export class InventoryService {
       });
 
       await this.operationErrorRepo.save(operationError);
-      this.logger.log(`Successfully saved operation operationError record`);
     } catch (err) {
       this.logger.error(
         `Failed to save operation error records: ${err.message}`,
@@ -247,7 +246,6 @@ export class InventoryService {
       if (operationBatches.length > 0) {
         await Promise.all(operationBatches.map(batch => this.operationRepo.upsert(batch,["id"])));
       }
-      this.logger.log(`✅ Task and operations saved successfully for jobRunId: ${jobRunId}`);
     } catch (err) {
       this.logger.error(`❌ Failed to save task records: ${err.message}`, err.stack);
     }

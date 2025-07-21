@@ -517,7 +517,7 @@ export class RedisConsumerService {
         this.processingQueue = this.processingQueue.then(async () => {
             try {
                 // If processing the same file as the last processed one
-                if (data.fileName === this.lastFile) {
+                if (data.file_name === this.lastFile) {
                     this.logger.log(`Last File call detected: ${data.fileName}`);
 
                     // Process any remaining records before stopping

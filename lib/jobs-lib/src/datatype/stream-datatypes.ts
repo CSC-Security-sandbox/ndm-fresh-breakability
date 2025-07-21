@@ -10,8 +10,9 @@ export class ItemInfo implements Serializable {
     extension: string;
     fileType: string;
     sourceMeta: ItemMeta;
-    targeMeta: ItemMeta;
+    targetMeta: ItemMeta;
     size: number;
+    
 
     constructor(
         file_name: string,
@@ -21,7 +22,7 @@ export class ItemInfo implements Serializable {
         extension: string,
         fileType: string,
         sourceMeta: ItemMeta,
-        targeMeta: ItemMeta,
+        targetMeta: ItemMeta,
         size: number
     ) {
         this.file_name = file_name;
@@ -31,7 +32,7 @@ export class ItemInfo implements Serializable {
         this.extension = extension;
         this.fileType = fileType;
         this.sourceMeta = sourceMeta;
-        this.targeMeta = targeMeta;
+        this.targetMeta = targetMeta;
         this.size = size;
     }
 
@@ -48,9 +49,12 @@ export interface ItemMeta{
     birthTime: Date;
     modifiedTime: Date;
     accessTime: Date;
-    extension: string;
     permission: string;
-    checksum: string
+    sid?: string;
+    uid?: number;
+    gid?: number;
+    checksum?: string
+
 }
 
 

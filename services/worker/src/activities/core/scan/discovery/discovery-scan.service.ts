@@ -1,12 +1,12 @@
 import { Inject } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { ErrorType, FileInfo } from "@netapp-cloud-datamigrate/jobs-lib";
+import { ErrorType, FileInfo, ItemInfo, ItemMeta } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as fs from 'fs';
 import * as path from 'path';
-import { dmError, getFileInfo, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
+import { dmError, getFileInfo, getFilePermissions, getFileType, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
-import { DirContentsInput } from "./discovery-scan.type";
+import { DirContentsInput, PublishItemInfoInput } from "./discovery-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
 
 
@@ -59,8 +59,9 @@ export class DiscoveryScanService {
                 })) continue;
 
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
-                // const fileInfo: FileInfo = await getFileInfo({ name: item.name, fullFilePath: sourceContentPath, relativePath: relativeSourcePath });
-                // await jobContext.publishToFileStream(fileInfo);
+                await this.publishFileInfo({
+                    stats: sourceStat, command, jobContext, fPath: sourceContentPath, relativeSourcePath
+                });
                 
                 if (sourceStat.isDirectory()) {
                     if(sourceStat.isSymbolicLink()) continue;
@@ -77,4 +78,25 @@ export class DiscoveryScanService {
     }
     
     
+    async publishFileInfo({jobContext, stats, fPath, relativeSourcePath}: PublishItemInfoInput): Promise<void> {
+            const sourceMeta: ItemMeta = {
+                accessTime: stats.atime,
+                birthTime: stats.birthtime,
+                modifiedTime: stats.mtime,
+                permission: getFilePermissions(stats, stats.isDirectory()),
+            }
+            const itemInfo = new ItemInfo(
+                relativeSourcePath,
+                stats.isDirectory(),
+                stats.isSymbolicLink(),
+                relativeSourcePath.split('/').length - 2,
+                path.extname(fPath),
+                getFileType(stats, stats.isDirectory()),
+                sourceMeta,
+                sourceMeta,
+                stats.size
+            )
+            await jobContext.publishToFileStream(itemInfo);
+        }
+
 }
