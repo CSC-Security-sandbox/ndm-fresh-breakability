@@ -53,7 +53,7 @@ run_tests() {
 
 run_tests "regression" "./tests/regression"
 
-run_tests "end-to-end" "./tests/e2e" "/srv/nfs_share,/srv/nfs_share_utkarsh" "/srv/nfs_share,/srv/nfs_share_utkarsh" "UMV"
+run_tests "end-to-end" "./tests/e2e" "/srv/nfs_share,/srv/nfs_share_utkarsh" "/srv/nfs_share,/srv/nfs_share_utkarsh" "NFS"
 #run_tests "end-to-end" "./tests/e2e" "/srv/nfs_share, /srv/nfs_share_utkarsh" "/srv/nfs_share, /srv/nfs_share_utkarsh" "SMB" "3h"
 
 #run_tests "smoke" "./tests/smoke" "vol1,vol2" "vol3,vol4" "3h" "NFS"

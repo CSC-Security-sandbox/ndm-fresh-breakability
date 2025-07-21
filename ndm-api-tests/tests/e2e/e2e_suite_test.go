@@ -12,7 +12,7 @@ import (
 var ProtocolType, SourceVolumesArgs, DestinationVolumesArgs string
 
 func init() {
-	flag.StringVar(&ProtocolType, "protocol_type", "jdjd", "Enter protocol_type (SMB / NFS)")
+	flag.StringVar(&ProtocolType, "protocol_type", "NFS", "Enter protocol_type (SMB / NFS)")
 	flag.StringVar(&SourceVolumesArgs, "src_volumes", "", "Enter comma separated source volumes")
 	flag.StringVar(&DestinationVolumesArgs, "dest_volumes", "", "Enter comma separated destination volumes")
 }
