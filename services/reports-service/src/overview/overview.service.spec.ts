@@ -140,7 +140,7 @@ describe("OverviewService", () => {
       const result = await service.getStorageAndJobsOverview(
         "project1",
         null,
-        null,
+        null
       );
 
       expect(result).toEqual(mockData);
@@ -175,7 +175,7 @@ describe("OverviewService", () => {
       const result = await service.getStorageAndJobsOverview(
         "project1",
         null,
-        null,
+        null
       );
       expect(result.storageDetails.totalDiscoveredSize).toBe("0 Bytes");
       expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
@@ -220,7 +220,7 @@ describe("OverviewService", () => {
       const result = await service.getStorageAndJobsOverview(
         "project1",
         null,
-        null,
+        null
       );
       expect(result.storageDetails.totalDiscoveredSize).toBeDefined();
       expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
@@ -250,7 +250,7 @@ describe("OverviewService", () => {
       const result = await service.getStorageAndJobsOverview(
         "project1",
         null,
-        null,
+        null
       );
       expect(result.storageDetails.totalDiscoveredSize).toBe("0 Bytes");
       expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
@@ -587,7 +587,7 @@ describe("OverviewService", () => {
                 {
                   volumes: [
                     {
-                      sourceConfig: [{ jobType: JobType.CutOver }]
+                      sourceConfig: [{ jobType: JobType.CutOver }],
                     },
                   ],
                 },
