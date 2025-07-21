@@ -49,11 +49,9 @@ const BulkMigrateScheduleComponent = ({
   }, [values?.scheduleTime]);
 
   const errorMessage = useMemo(() => {
-    if (
-      errors?.scheduledDateTime &&
-      typeof errors?.scheduledDateTime === "string"
-    ) {
-      return errors?.scheduledDateTime;
+    const scheduledError = errors?.scheduledDateTime;
+    if (typeof scheduledError === "string") {
+      return scheduledError;
     }
 
     if (pickerError === "disablePast") {
@@ -86,7 +84,7 @@ const BulkMigrateScheduleComponent = ({
           />
         </Box>
       </RadioGroup>
-      {values.scheduleTime === SCHEDULE_OPTIONS.SCHEDULE_DATE && (
+      {values.scheduleTime === SCHEDULE_OPTIONS?.SCHEDULE_DATE && (
         <Box className="flex gap-3 mt-3">
           <LocalizationProvider dateAdapter={AdapterDayjs}>
             <DateTimePicker

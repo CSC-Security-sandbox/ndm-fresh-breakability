@@ -11,6 +11,7 @@ import {
 import {
   REVIEW_LIST_COLUMN_DEFS,
   SCHEDULE_OPTIONS,
+  TIMESTAMP_VALIDATION,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import { AllFileServerWithVolumesApiType } from "@/types/app.type";
 import { notify } from "@components/notification/NotificationWrapper";
@@ -163,24 +164,23 @@ export const validateMappingStepForm = (values: MappingStepFormikFormType) => {
   }
 
   // Validate schedule date when scheduling for later
-  if (values.scheduleTime === SCHEDULE_OPTIONS?.SCHEDULE_DATE) {
-    if (!values.scheduledDateTime) {
-      errors.scheduledDateTime =
-        "Date and time is required when scheduling for later";
+  if (values?.scheduleTime === SCHEDULE_OPTIONS?.SCHEDULE_DATE) {
+    if (!values?.scheduledDateTime) {
+      errors.scheduledDateTime = TIMESTAMP_VALIDATION?.SCHEDULE_LATER_TIMESTAMP;
     } else {
       const now = dayjs.utc();
-      const scheduledDateTime = dayjs.utc(values.scheduledDateTime);
+      const scheduledDateTime = dayjs.utc(values?.scheduledDateTime);
 
       // Check if date is in the future
       if (scheduledDateTime.isBefore(now)) {
         errors.scheduledDateTime =
-          "Scheduled date and time must be in the future";
+          TIMESTAMP_VALIDATION?.SCHEDULE_FUTURE_TIMESTAMP;
       } else {
         // Check if date is at least 1 minute from now
         const minimumTime = now.add(1, "minute");
         if (scheduledDateTime.isBefore(minimumTime)) {
           errors.scheduledDateTime =
-            "Scheduled date and time must be at least 1 minute from now";
+            TIMESTAMP_VALIDATION?.SCHEDULE_ONE_MINUTE_AHEAD_TIMESTAMP;
         }
       }
     }

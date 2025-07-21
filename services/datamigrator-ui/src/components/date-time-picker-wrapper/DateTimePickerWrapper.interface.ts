@@ -12,3 +12,7 @@ export interface DateTimePickerWrapperPropsType {
   disablePast?: boolean;
   timeSteps?: { minutes?: number; hours?: number; seconds?: number };
 }
+
+export interface FormErrors {
+  firstRunAt?: string;
+}
