@@ -2,23 +2,17 @@
 
 set -e  # Exit on any error
 
-# Prepare the report file
-report_file="test_report.txt"
-
-# Clear or create the report file
-: > "$report_file"
-
 # ------------------ USAGE ------------------
 # Usage:
 # run_tests <test_type> <test_path> <src_volumes> <dest_volumes> [protocol_type] [timeout]
 #
 # Arguments:
-#   test_type      : Mandatory (e.g., regression, smoke, end-to-end)
-#   test_path      : Mandatory (path to test directory)
-#   src_volumes    : Mandatory (comma-separated list)
-#   dest_volumes   : Mandatory (comma-separated list)
-#   protocol_type  : Optional (default: "NFS")
-#   timeout        : Optional (default: "3h")
+#   test_type      : Mandatory (e.g., regression, smoke, end-to-end)
+#   test_path      : Mandatory (path to test directory)
+#   src_volumes    : Mandatory (comma-separated list)
+#   dest_volumes   : Mandatory (comma-separated list)
+#   protocol_type  : Optional (default: "NFS")
+#   timeout        : Optional (default: "3h")
 # -------------------------------------------
 
 # Function to run tests and log output
@@ -36,22 +30,71 @@ run_tests() {
         return 1
     fi
 
-    echo -e "\nRunning ${test_type} tests" | tee -a "$report_file"
+    # Format date and time
+    local date_folder
+    date_folder=$(date "+%Y-%m-%d")
 
-    echo "ginkgo run -v --timeout="$timeout" "$test_path" -- \
-        --protocol_type="$protocol_type" \
-        --src_volumes="$src_volumes" \
-        --dest_volumes="$dest_volumes" | tee -a "$report_file""
+    local epoch_time
+    epoch_time=$(date +%s)
 
+    local run_id
+    run_id="${test_type}-${protocol_type}-${epoch_time}"
+
+
+    local protocol_dir
+    protocol_dir=$(echo "$protocol_type" | tr '[:lower:]' '[:upper:]')
+
+
+    # Create folders
+    # log file location - reports/date/protocol_type/test-type-protocol-type-epoch-time.log 
+    # eg reports/2025-07-22/NFS/end-to-end-NFS-1753166831.log
+    local output_dir="reports/${date_folder}/${protocol_dir}"
+    mkdir -p "$output_dir"
+
+    # Final log file path
+    local report_file="${output_dir}/${run_id}.log"
+
+    # Function to print log in format
+    print_log_banner() {
+        local label="$1"
+        local duration="$2"
+        echo -e "\n================================================================================"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ${label} ${test_type} tests"
+        echo "Protocol type         : ${protocol_type}"
+        echo "Test Path             : ${test_path}"
+        echo "Source Volumes        : ${src_volumes}"
+        echo "Dest Volumes          : ${dest_volumes}"
+        echo "Timeout               : ${timeout}"
+        echo "Log File Location     : ${report_file}"
+        [[ -n "$duration" ]] && echo "Total Duration        : ${duration}"
+        echo "================================================================================"
+    }
+
+    local start_time
+    start_time=$(date +%s)
+
+    # Print header
+    print_log_banner "Starting" | tee -a "$report_file"
+
+    # Run Ginkgo test and log output
     ginkgo run -v --timeout="$timeout" "$test_path" -- \
         --protocol_type="$protocol_type" \
         --src_volumes="$src_volumes" \
         --dest_volumes="$dest_volumes" | tee -a "$report_file"
+
+    local end_time
+    end_time=$(date +%s)
+
+    local total_seconds=$((end_time - start_time))
+    local minutes=$((total_seconds / 60))
+    local seconds=$((total_seconds % 60))
+    local formatted_duration="${minutes}m ${seconds}s"
+
+    # Print footer
+    print_log_banner "Completed" "$formatted_duration" | tee -a "$report_file"
 }
 
-# Test runs
-
-run_tests "regression" "./tests/regression"
+# ------------------ Test Runs ------------------
 
 run_tests "end-to-end" "./tests/e2e" "/srv/nfs_share,/srv/nfs_share_utkarsh" "/srv/nfs_share,/srv/nfs_share_utkarsh" "NFS"
 #run_tests "end-to-end" "./tests/e2e" "/srv/nfs_share, /srv/nfs_share_utkarsh" "/srv/nfs_share, /srv/nfs_share_utkarsh" "SMB" "3h"
