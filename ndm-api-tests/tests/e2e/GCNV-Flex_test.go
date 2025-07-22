@@ -261,7 +261,7 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 
 			cutoverRunID := jobConfigDetails.JobRuns[0].JobRunId
 
-			waitErr := WaitForJobState(cutoverRunID, BLOCKED_JOBRUN, 30)
+			waitErr := WaitForJobState(cutoverRunID, BLOCKED_JOBRUN)
 			Expect(waitErr).NotTo(HaveOccurred(), "cutoverRunID job did not reach BLOCKED state")
 
 			By("Getting the job run details after reaching BLOCKED state")
