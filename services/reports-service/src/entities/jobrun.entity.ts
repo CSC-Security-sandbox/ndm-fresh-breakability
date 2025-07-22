@@ -1,11 +1,22 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
-import { Base } from './base.entity';
-import { InventoryEntity } from './inventory.entity';
-import { JobConfigEntity } from './jobconfig.entity';
-import { JobRunStatus } from 'src/constants/enums';
-import { WorkerJobRunMap } from './jobrunworker.entity';
-import { TaskEntity } from './task.entity';
+import { ApiProperty } from "@nestjs/swagger";
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+  OneToOne,
+  PrimaryGeneratedColumn,
+} from "typeorm";
+import { Base } from "./base.entity";
+import { JobConfigEntity } from "./jobconfig.entity";
+import { WorkerJobRunMap } from "./workerjobrun.entity";
+import { JobRunStatus, PausedReason } from "src/constants/enums";
+import { InventoryEntity } from "./inventory.entity";
+import { TaskEntity } from "./task.entity";
+import { JobOptionsEntity } from "./joboptions.entity";
+import { WorkerConfiguration } from "src/constants/types";
+import { JobRunStats } from "src/job-run/dto/job-rundetails.dto";
 
 @Entity({ name: "jobrun" })
 export class JobRunEntity extends Base {
@@ -17,7 +28,7 @@ export class JobRunEntity extends Base {
   @Column({ type: "varchar", name: "status" })
   status: JobRunStatus;
 
-  @Column({ type: 'text', name: "sub_status", nullable: true }) 
+  @Column({ type: "text", name: "sub_status", nullable: true })
   subStatus: string;
 
   @ApiProperty({ description: "Start time of the job" })
@@ -51,7 +62,20 @@ export class JobRunEntity extends Base {
     cascade: true,
     eager: false,
   })
+  inventoryDetails: InventoryEntity[];
+
+  @OneToMany(() => TaskEntity, (task) => task.jobRun, {
+    cascade: true,
+    eager: false,
+  })
+  tasks: TaskEntity[];
   inventories: InventoryEntity[];
+
+  @OneToMany(() => WorkerJobRunMap, (workerMap) => workerMap.jobRun, {
+    cascade: true,
+    eager: false,
+  })
+  workerMap: WorkerJobRunMap[];
 
   @OneToMany(() => WorkerJobRunMap, (workerMap) => workerMap.jobRun, {
     cascade: true,
@@ -59,9 +83,21 @@ export class JobRunEntity extends Base {
   })
   worker: WorkerJobRunMap[];
 
-  @OneToMany(() => TaskEntity, (task) => task.jobRun, {
+  @OneToOne(() => JobOptionsEntity, (jobOption) => jobOption.jobRun, {
     cascade: true,
     eager: false,
   })
-  tasks: TaskEntity[];
+  options: JobOptionsEntity;
+
+  @Column({ type: "json", nullable: true, name: "meta_config" })
+  metaConfig: WorkerConfiguration[];
+
+  @Column({ type: "text", nullable: true, name: "workflow_id" })
+  workFlowId: string;
+
+  @Column({ type: "json", nullable: true, name: "job_stats" })
+  jobStats: JobRunStats;
+
+  @Column({ type: "text", nullable: true, name: "paused_reason" })
+  pausedReason: PausedReason;
 }

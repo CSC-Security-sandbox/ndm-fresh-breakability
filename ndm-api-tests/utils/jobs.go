@@ -340,6 +340,11 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 			LogDebug("Job reached desired state: " + desiredJobState + ".")
 			return nil
 		}
+
+		if status == COMPLETED_JOBRUN || status == BLOCKED_JOBRUN {
+			LogDebug("Job reached desired state: " + status + ".")
+			return nil
+		}
 		Wait(DefaultPollInterval)
 
 	}

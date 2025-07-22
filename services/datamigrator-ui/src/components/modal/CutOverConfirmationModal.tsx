@@ -59,7 +59,7 @@ export default function CutoverConfirmationModal({
                     downloadReportApi,
                     jobRunId,
                     ReportENUM.COC,
-                    "csv"
+                    "CSV"
                   )
                 }
                 variant="text"

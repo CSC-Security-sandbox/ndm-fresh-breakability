@@ -1,5 +1,6 @@
 import { proxyActivities } from '@temporalio/workflow';
 import { ListPathActivity } from 'src/activities/list-path/list-path.service';
+import { ExportPathSource } from 'src/activities/list-path/list-path.type';
 import { ValidateWorkingDirectoryActivity } from 'src/activities/working-directory/working-directory.service';
 
 async function log(traceId: string, message: string) {
@@ -18,12 +19,14 @@ export async function ValidateWorkingDirectoryWorkerWorkflow(
   args: any,
 ): Promise<any> {
   log(args.traceId, `Starting ListPathWorkerWorkflow in ValidateWorkingDirectoryWorkerWorkflow with args: ${JSON.stringify(args)}`);
+  
   const results = await Promise.all(
     args.payload.listPathPayload.map(async (data: any) => {
       return await listPathActivity(args.traceId, data.type, {
         hostname: data.host,
         username: data.username,
-        password: data.password
+        password: data.password,
+        exportPathSource: data.exportPathSource,
       });
     }),
   );
@@ -33,12 +36,12 @@ export async function ValidateWorkingDirectoryWorkerWorkflow(
   for (let data of results) {
     paths = [...data.paths];
   }
-  
+  args.payload.paths = paths;
+  args.payload['hasManualUpload'] = args.payload.listPathPayload.some((item: any) => item.exportPathSource === ExportPathSource.MANUAL_UPLOAD);
   const exportPathWorkingDirectoryProvided = args?.payload?.exportPath?.length > 0;
 
   if(exportPathWorkingDirectoryProvided) {
-    const exportPath = paths.includes(args.payload.exportPath);
-    args.payload['exportPathPresent'] = exportPath;
+    args.payload['exportPathPresent'] = !!args.payload.exportPath;
   }
 
   args.payload['exportPathWorkingDirectoryProvided'] = exportPathWorkingDirectoryProvided;

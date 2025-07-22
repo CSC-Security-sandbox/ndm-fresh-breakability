@@ -18,5 +18,8 @@ export default registerAs(
       healthCheckStatusTimout:
         parseInt(process.env.HEALTHCHECK_STATUS_TIMEOUT_SEC) || 60,
     },
+    options: {
+      jsonPayloadLimit: process.env.JSON_PAYLOAD_LIMIT || '5mb'
+    }
   }),
 );

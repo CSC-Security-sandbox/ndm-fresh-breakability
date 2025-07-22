@@ -1,3 +1,5 @@
+import { ExportPathSource } from "src/activities/list-path/list-path.type";
+
 export interface PreCheckWorkflowRequest {
   traceId: string;
   payload: {
@@ -35,6 +37,7 @@ export interface ServerCredential {
   protocol: string;
   protocolVersion: string;
   serverType: string;
+  exportPathSource: ExportPathSource;
 }
 
 interface WorkflowOptions {

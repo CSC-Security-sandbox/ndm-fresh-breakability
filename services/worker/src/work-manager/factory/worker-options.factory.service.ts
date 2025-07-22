@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NativeConnection } from "@temporalio/worker";
 import { CommonActivityService } from "src/activities/common/common.service";
@@ -20,11 +20,14 @@ import { ValidateWorkingDirectoryActivity } from "src/activities/working-directo
 import { WorkerConfiguration } from "../work-manager.types";
 import { WorkFlowOptions } from "./worker-options.factory";
 import { WorkFlowType } from "./worker-options.types";
-
+import { ValidatePathActivity } from "src/activities/validate-path/validate-path.service";
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class WorkerOptionsService {
   readonly jobTaskActivityConcurrency : number;
+  private readonly logger: LoggerService;
+
   constructor(
     private readonly listPathActivityService: ListPathActivity,
     private readonly validateConnectionService: ValidateConnectionActivity,
@@ -42,10 +45,13 @@ export class WorkerOptionsService {
     private readonly migrateSyncService:  MigrateSyncService,
     private readonly commonTaskService: CommonTaskService,
     private readonly scanService: ScanService,
+    private readonly validatePathActivity: ValidatePathActivity,
     @Inject(ConfigService) private readonly configService: ConfigService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
   ) {
     this.jobTaskActivityConcurrency = this.configService.get<number>('worker.maxActivityConcurrency') || 1;
-    Logger.log(`WorkerOptionsService initialized with jobTaskActivityConcurrency: ${this.jobTaskActivityConcurrency}`, WorkerOptionsService.name);
+    this.logger = loggerFactory.create(WorkerOptionsService.name);
+    this.logger.log(`WorkerOptionsService initialized with jobTaskActivityConcurrency: ${this.jobTaskActivityConcurrency}`, WorkerOptionsService.name);
   }
 
   createWorkerOptions(id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) {
@@ -66,6 +72,7 @@ export class WorkerOptionsService {
           checkMemoryUsage : this.redismeorycheck.checkMemoryUsage.bind(this.redismeorycheck),
           cleanupJobContext: this.commonActivityService.cleanupJobContext.bind(this.commonActivityService),
           isWorkflowRunningActivity: this.commonTaskService.isWorkflowRunningActivity.bind(this.commonTaskService),
+          postValidationResult: this.validatePathActivity.postValidationResult.bind(this.validatePathActivity),
         });
       case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
@@ -96,6 +103,7 @@ export class WorkerOptionsService {
             writeActivity: this.speedTestReadActivity.writeActivity.bind(this.speedTestReadActivity),
             postResultsActivity: this.speedTestReadActivity.postResultsActivity.bind(this.speedTestReadActivity),
             getJobStateAndUpdateTaskList: this.commonActivityService.getJobStateAndUpdateTaskList.bind(this.commonActivityService),
+            validatePath: this.validatePathActivity.validatePath.bind(this.validatePathActivity),
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {

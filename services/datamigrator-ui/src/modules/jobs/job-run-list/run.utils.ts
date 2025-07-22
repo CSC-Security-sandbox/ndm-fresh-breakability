@@ -96,6 +96,8 @@ export const getReportActions = (
       JOB_STATUS_TYPE_ENUM.BLOCKED,
       JOB_STATUS_TYPE_ENUM.APPROVED,
       JOB_STATUS_TYPE_ENUM.REJECTED,
+      JOB_STATUS_TYPE_ENUM.ERRORED,
+      JOB_STATUS_TYPE_ENUM.FAILED,
     ].includes(row.status) && row.isReportReady;
 
   switch (row.jobType) {
@@ -111,7 +113,7 @@ export const getReportActions = (
               downloadReportApi,
               row.jobRunId,
               ReportENUM.DISCOVERY,
-              "csv"
+              "CSV"
             );
           },
           disabled: !isReportReady,
@@ -126,7 +128,7 @@ export const getReportActions = (
               getPdfReportApi,
               row.jobRunId,
               ReportENUM.DISCOVERY,
-              "pdf"
+              "PDF"
             );
           },
           disabled: !isReportReady,
@@ -141,7 +143,7 @@ export const getReportActions = (
               downloadReportApi,
               row.jobRunId,
               ReportENUM.COC,
-              "csv"
+              "CSV"
             );
           },
           disabled: !isReportReady,
@@ -156,7 +158,7 @@ export const getReportActions = (
               downloadReportApi,
               row.jobRunId,
               ReportENUM.COC,
-              "csv"
+              "CSV"
             );
           },
           disabled: !isReportReady,
@@ -168,7 +170,7 @@ export const getReportActions = (
               getPdfReportApi,
               row.jobRunId,
               ReportENUM.JOBS_REPORT,
-              "pdf"
+              "PDF"
             );
           },
           disabled: !isReportReady,

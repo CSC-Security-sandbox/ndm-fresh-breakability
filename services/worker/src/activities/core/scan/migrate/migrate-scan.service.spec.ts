@@ -1,4 +1,3 @@
-import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Command, ErrorType } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
@@ -6,6 +5,8 @@ import { getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip } from 
 import { Origin } from 'src/activities/utils/utils.types';
 import { FatalError } from 'src/errors/errors.types';
 import { MigrateScanService } from './migrate-scan.service';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLogger } from 'src/auth/auth.service.spec';
 
 // --- Mocks ---
 jest.mock('fs', () => {
@@ -41,9 +42,14 @@ jest.mock('src/activities/utils/utils', () => ({
 describe('MigrateScanService', () => {
     let service: MigrateScanService;
     let configService: ConfigService;
-    let logger: Logger;
+    let logger: Partial<LoggerService>;
+    let redisService: any;
     let jobContext: any;
     let commandInput: any;
+
+    const mockLoggerFactory: Partial<LoggerFactory> = {
+        create: jest.fn().mockReturnValue(mockLogger),
+    };
 
     beforeEach(() => {
         configService = {
@@ -58,12 +64,9 @@ describe('MigrateScanService', () => {
             }),
         } as any;
 
-        logger = {
-            debug: jest.fn(),
-            error: jest.fn(),
-        } as any;
+        logger = mockLogger;
 
-        service = new MigrateScanService(configService, logger);
+        service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory);
 
         jobContext = {
             publishToErrorStream: jest.fn(),
@@ -509,7 +512,7 @@ describe('MigrateScanService', () => {
 
         it('should handle command publishing in chunks during delete processing', async () => {
             jobContext.jobConfig.skipDelete = false;
-            service = new MigrateScanService(configService, logger);
+            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory);
             (service as any).maxMigrationCommand = 2;
 
             (fs.existsSync as jest.Mock).mockReturnValue(true);

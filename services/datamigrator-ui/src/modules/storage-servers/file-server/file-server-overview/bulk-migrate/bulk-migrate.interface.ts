@@ -59,6 +59,9 @@ export interface DestinationPathsOptionsType {
   protocol: string;
   pathId: string;
   pathName: string;
+  isDisabled?: boolean;
+  isValid?: boolean;
+  reachableCount?: number;
 }
 
 export interface ProtocolFormType {
@@ -134,10 +137,12 @@ export interface BulkMigrateContextType {
   setFileName: (arg: string) => void;
   fileName: string;
   listOfNotReachableExportPaths: string[];
+  sourceDisabledPaths: string[];
 }
 
 export interface ErrorsValidateMappingStepFormType {
   selectedMountPathsId?: string;
+  scheduledDateTime?: string;
   migrationDetailsTableConfigurationValue?: Array<{
     destinationFileServerDetails?: {
       destinationFileServerName?: string;

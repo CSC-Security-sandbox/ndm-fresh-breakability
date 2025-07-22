@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CommandStatus, ErrorType, FileInfo, JobManagerContext, OPS_STATUS, Task, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { Context } from '@temporalio/activity';
@@ -14,6 +14,7 @@ import { OPS_CMD, } from '../../migrate/migrate.type';
 import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, getUserACLs, isFatalError, isSourceFatalError } from '../../utils/utils';
 import { CommonTaskService } from '../common/common-task.service';
 import { handleSyncTaskUpdateInput, StampMetaDataInput, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate-sync.types';
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class MigrateSyncService {
@@ -21,10 +22,11 @@ export class MigrateSyncService {
   readonly CHUNK_SIZE: number;
   readonly maxRetryCount: number;
   readonly maxConcurrency: number;
-  
+  private readonly logger : LoggerService;
+
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
-    private readonly logger: Logger,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly redisService: RedisService,
     private readonly shellService: ShellService,
     private readonly workerThreadService: WorkerThreadService,
@@ -34,6 +36,7 @@ export class MigrateSyncService {
     this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
     this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100;
     this.CHUNK_SIZE = this.configService.get('worker.migrationChunkSize') || 1024 * 1024;
+    this.logger = loggerFactory.create(MigrateSyncService.name);
   }
 
 

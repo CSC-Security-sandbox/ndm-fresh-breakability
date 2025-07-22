@@ -79,3 +79,29 @@ export enum ReportValueType {
   COUNT = "count",
   STRING = "string",
 }
+// ---------- Operations -----------/
+export enum OperationStatus {
+  READY = "READY",
+  IN_PROCESS = "IN_PROCESS",
+  ERROR = "ERROR",
+  COMPLETED = "COMPLETED",
+}
+
+export enum OperationType {
+  SCAN = "SCAN",
+}
+
+export enum ProtocolVersion {
+  NFSv3 = "v3",
+  NFSv4_0 = "v4.0",
+  NFSv4_1 = "v4.1",
+  NFSv4_2 = "v4.2",
+  SMBv2_0 = "v2.0",
+  SMBv3_0 = "v3.0",
+  SMBv3_1_1 = "v3.1.1",
+}
+
+export enum PausedReason {
+  USER_PAUSED = "USER_PAUSED",
+  SYSTEM_PAUSED = "SYSTEM_PAUSED",
+}

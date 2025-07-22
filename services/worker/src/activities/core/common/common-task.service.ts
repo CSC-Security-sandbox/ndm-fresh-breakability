@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Command, CommandStatus, GroupReaderType, Task, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { Context } from "@temporalio/activity";
@@ -10,23 +10,24 @@ import { buildTask, calculateCommandHash } from "../../utils/utils";
 import { handleInitTaskInput } from "../migrate/migrate-sync.types";
 import { BuildOrGetScanTaskInput, CreateInitBatchInput } from "./common-task.type";
 import { calculateHash } from "src/activities/utils/checksum-utils";
-
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class CommonTaskService {
-
+  private readonly logger : LoggerService;
   readonly workerId: string;
   readonly maxRetryCount: number;
   readonly temporalAddress: string; // Default Temporal address, can be overridden in config
 
   constructor(
       @Inject(ConfigService) private readonly configService: ConfigService,
-      private readonly logger: Logger,
+      @Inject(LoggerFactory) loggerFactory: LoggerFactory,
       private readonly redisService: RedisService,
     ) {
       this.workerId = this.configService.get('worker.workerId');
       this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
-      this.temporalAddress = this.configService.get('temporal.address') || 'localhost:7233'; 
+      this.temporalAddress = this.configService.get('temporal.address') || 'localhost:7233';
+      this.logger = loggerFactory.create(CommonTaskService.name);
     }
 
     // TO-DO : make this adaptive resource based task creation

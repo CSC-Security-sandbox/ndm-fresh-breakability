@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Command, GroupReaderType, OPS_CMD, OPS_STATUS, Task, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { uuid4 } from '@temporalio/workflow';
@@ -7,24 +7,26 @@ import { AuthService } from 'src/auth/auth.service';
 import { WorkersConfig } from 'src/config/app.config';
 import { RedisService } from 'src/redis/redis.service';
 import { buildTask, generateDummyFileEntry } from '../utils/utils';
-
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class DiscoveryActivity {
   readonly workerId: string;
   readonly reportServiceUrl: string;
   readonly directoryBatchSize: number;
-
   readonly tokenRequest: string
+  private readonly logger: LoggerService;
+
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(AuthService) private readonly authService: AuthService,
-    private readonly logger: Logger,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly redisService: RedisService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.reportServiceUrl = this.configService.get('worker.connection.workerReportServiceUrl');
     this.directoryBatchSize = this.configService.get('worker.maxScanCommand') || 500;
+    this.logger = loggerFactory.create(DiscoveryActivity.name);
   }
   
   async getWorkerId(): Promise<string> {
