@@ -96,6 +96,8 @@ export const getReportActions = (
       JOB_STATUS_TYPE_ENUM.BLOCKED,
       JOB_STATUS_TYPE_ENUM.APPROVED,
       JOB_STATUS_TYPE_ENUM.REJECTED,
+      JOB_STATUS_TYPE_ENUM.ERRORED,
+      JOB_STATUS_TYPE_ENUM.FAILED,
     ].includes(row.status) && row.isReportReady;
 
   switch (row.jobType) {
