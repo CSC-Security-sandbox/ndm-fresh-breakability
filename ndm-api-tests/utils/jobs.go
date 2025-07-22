@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 type GetJobResponse struct {
@@ -314,7 +315,6 @@ func GetJobRunDetails(jobConfigID string, headers map[string]string, needRetryAt
 }
 
 // WaitForJobState polls the job run status until it matches the desired state or times out.
-
 func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int) error {
 	// Determine the number of retries to use
 	retryCount := MaxPollRetries
@@ -324,13 +324,11 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 
 	for i := 0; i < retryCount; i++ {
 		status, err := checkJobRunStatus(jobRunID)
-
-		LogDebug(fmt.Sprintf("Checking job run status for ID %s, attempt %d", jobRunID, i+1))
 		if err != nil {
 			return err
 		}
 
-		LogDebug(fmt.Sprintf("Current job run status: %s", status))
+		LogDebug(fmt.Sprintf("Current job run status for ID %s = %s, attempt %d", jobRunID, status, i+1))
 
 		if status == ERRORED_JOBRUN {
 			return fmt.Errorf("job %s entered ERRORED state", jobRunID)
@@ -365,7 +363,7 @@ func HandleJobRunStateChange(jobRunID, stateType string, jobRunIDs []string) err
 			LogDebug("Job is paused. Resuming operation.")
 			return ChangeJobRunState(stateType, jobRunIDs)
 		}
-		LogDebug("No paused job run found or not RESUME. Sending state change.")
+		LogDebug("No paused job run found or not RESUME. Sending state change")
 		return ChangeJobRunState(stateType, jobRunIDs)
 
 	case PAUSE_JOBRUN:
@@ -378,10 +376,10 @@ func HandleJobRunStateChange(jobRunID, stateType string, jobRunIDs []string) err
 				LogDebug("Job is running. Pausing JobRun.")
 				return ChangeJobRunState(stateType, jobRunIDs)
 			}
-			LogError(fmt.Sprintf("JobRun is not in running state. Current state: %s", status))
+			LogDebug(fmt.Sprintf("JobRun is not in running state. Current state: %s", status))
 			Wait(DefaultPollInterval)
 		}
-		return fmt.Errorf("job run did not reach RUNNING state after %d retries", MaxPollRetries)
+		return fmt.Errorf("Job run did not reach RUNNING state after %d retries", MaxPollRetries)
 	default:
 		return fmt.Errorf("unsupported job run state: %s", stateType)
 	}
@@ -406,7 +404,6 @@ func checkJobRunStatus(jobRunID string) (string, error) {
 	if err := json.Unmarshal(body, &temp); err != nil {
 		return "", fmt.Errorf("error parsing JSON: %v", err)
 	}
-	LogDebug(fmt.Sprintf("Status check response: %s", temp.Status))
 	return temp.Status, nil
 }
 
@@ -419,7 +416,6 @@ func ChangeJobRunState(action string, jobRunIDs []string) error {
 		"jobRuns": jobRunIDs,
 	}
 
-	LogDebug(fmt.Sprintf("change job run status payload: %v", payload))
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("error marshaling JSON: %v", err)
@@ -430,11 +426,11 @@ func ChangeJobRunState(action string, jobRunIDs []string) error {
 		return fmt.Errorf("error calling API: %v", err)
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	_, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("error reading response body: %v", err)
 	}
-	LogDebug(fmt.Sprintf("ChangeJobRunStateAPI response body: %s", body))
+	LogDebug(fmt.Sprintf("State of Job Run IDs [%s] is changed to %s", strings.Join(jobRunIDs, ","), action))
 	return nil
 }
 

@@ -164,7 +164,6 @@ func fetchReport(
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		// 4) send POST
 		resp, err := SendAPIRequest(http.MethodPost, url, bodyBytes, headers)
-		fmt.Println("report api response : ", resp)
 		if err != nil {
 			return nil, fmt.Errorf("POST %s: %w", url, err)
 		}

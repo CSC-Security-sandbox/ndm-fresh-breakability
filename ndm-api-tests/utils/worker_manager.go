@@ -172,6 +172,7 @@ func AttachWorkers(count int, authToken, accountId, projectId string) (map[strin
 	if getAttachedWorkerCount() != count {
 		return nil, errors.New("failed to attach the required number of workers")
 	}
+	LogDebug(fmt.Sprintf("Total Worker Attached : %d", len(attachedWorkersConfig)))
 	return attachedWorkersConfig, nil
 }
 
@@ -192,13 +193,12 @@ func GetAttachedWorkerDetails() SSHConfig {
 
 // DetachWorkers detaches all attached workers by running the SSH detach script on each worker.
 // If a count is provided, it detaches that many workers from the start of the attachedWorkers slice.
-func DetachWorkers(workerIdsToDelete []string) (string, error) {
-	var outputBuilder strings.Builder
+func DetachWorkers(workerIdsToDelete []string) error {
 	var detachErrors []string
 
 	// Detach the specified worker by ID.
 	if len(workerIdsToDelete) == 0 {
-		return "", errors.New("no worker ID provided for detachment")
+		return errors.New("no worker ID provided for detachment")
 	}
 
 	for workerId, workerConfig := range attachedWorkersConfig {
@@ -208,28 +208,26 @@ func DetachWorkers(workerIdsToDelete []string) (string, error) {
 				if err != nil {
 					msg := fmt.Sprintf("Failed to detach worker %s: %v", workerConfig.Host, err)
 					LogError(msg, err)
-					outputBuilder.WriteString(msg + "\n")
 					detachErrors = append(detachErrors, msg)
 				} else {
 					msg := fmt.Sprintf("Successfully detached worker %s with output: %s", workerConfig.Host, output)
 					// Remove the worker from the attachedWorkersConfig map.
 					delete(attachedWorkersConfig, workerId)
 					LogDebug(msg)
-					outputBuilder.WriteString(msg + "\n")
 				}
 			}
 		}
 	}
 	if len(detachErrors) > 0 {
-		return outputBuilder.String(), errors.New(strings.Join(detachErrors, "; "))
+		return errors.New(strings.Join(detachErrors, "; "))
 	}
-	return outputBuilder.String(), nil
+	return nil
 }
 
 // DetachAllWorkers detaches all currently attached workers.
-func DetachAllWorkers() (string, error) {
+func DetachAllWorkers() error {
 	if len(attachedWorkersConfig) == 0 {
-		return "", errors.New("no workers currently attached")
+		return errors.New("no workers currently attached")
 	}
 
 	// Collect all worker IDs to delete.

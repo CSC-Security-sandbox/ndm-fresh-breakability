@@ -201,7 +201,7 @@ func UpdateConfVariables(protocolType, sourceVolumesArgs, destinationVolumesArgs
 		PROTOCOL_USERNAME = NFS_PROTOCOL_USERNAME
 		PROTOCOL_PASSWORD = NFS_PROTOCOL_PASSWORD
 	default:
-		log.Fatalf("Invalid protocol type: %s", protocolType)
+		LogFatalf("Invalid protocol type: %s", protocolType)
 	}
 
 	initWorkers(NDM_WORKERS_HOST, NDM_WORKERS_PORT, NDM_WORKERS_PASSWORD, NDM_WORKERS_USER_NAME)

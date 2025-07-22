@@ -96,24 +96,16 @@ run_tests() {
 
 # Test runs
 
-#End-to-End Testing
-
-run_tests "end-to-end" "./tests/e2e" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
-
-run_tests "end-to-end" "./tests/e2e" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "SMB"
-
-
-
 #Regression Testing
-
 run_tests "regression" "./tests/regression" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
-
 run_tests "regression" "./tests/regression" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "SMB"
 
 
+#End-to-End Testing
+run_tests "end-to-end" "./tests/e2e" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
+run_tests "end-to-end" "./tests/e2e" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "SMB"
+
 
 #Smoke Testing
-
 run_tests "smoke" "./tests/smoke" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
-
 run_tests "smoke" "./tests/smoke" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "SMB"

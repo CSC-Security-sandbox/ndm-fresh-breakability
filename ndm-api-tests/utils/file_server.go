@@ -498,7 +498,6 @@ func GetVolumeID(response FileServerInfo, volumePath string) (string, error) {
 	for _, fileServer := range response.FileServers {
 		for _, volume := range fileServer.Volumes {
 			if volume.VolumePath == volumePath {
-				fmt.Printf("ID of the volume with path '%s': %s\n", volumePath, volume.ID)
 				return volume.ID, nil // Return the found ID and no error
 			}
 		}

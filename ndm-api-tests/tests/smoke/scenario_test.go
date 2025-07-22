@@ -34,7 +34,6 @@ var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 			"source_host_IP":      SOURCE_HOST_IP,
 			"destination_host_IP": DESTINATION_HOST_IP,
 		}
-		fmt.Println("Initialization complete.")
 	})
 
 	It("executes scenario files", func() {
@@ -78,7 +77,6 @@ var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 					configId := sharedVars["configId"].(string)
 					volumeID, err := GetExportPathID(volumeTypeStr, volumeName, configId, GetHeaders(AuthToken, ContentTypeJSON))
 					if err != nil {
-						fmt.Printf("Error handling volume for '%s': %v\n", scData.Name, err)
 						continue
 					}
 					switch volumeTypeStr {
@@ -87,10 +85,10 @@ var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 					case "destination":
 						sharedVars["destinationPathId"] = volumeID
 					default:
-						fmt.Printf("Unexpected scData.Type: %s\n", volumeTypeStr)
+						LogDebug(fmt.Sprintf("Unexpected Volume Type: %s\n", volumeTypeStr))
 						continue
 					}
-					fmt.Printf("Successfully handled volume for '%s', found ID: %s\n", scData.Name, volumeID)
+					LogDebug(fmt.Sprintf("Successfully handled volume for '%s', found ID: %s\n", scData.Name, volumeID))
 					continue
 
 				case LOGOUT_USER:
@@ -126,6 +124,6 @@ var _ = Describe("API Scenarios (Sequential from YAML Files)", func() {
 	It("executes cleanup", func() {
 		err := CleanupTestEnv()
 		Expect(err).To(BeNil(), "Error during test environment cleanup")
-		fmt.Println("Cleanup complete.")
+		LogDebug("Cleanup complete.")
 	})
 })

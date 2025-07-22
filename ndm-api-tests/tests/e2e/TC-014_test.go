@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = FDescribe("TC-0014: Run incremental sync schedule migration for verifying partial deletion is mirrored", func() {
+var _ = Describe("TC-0014: Run incremental sync schedule migration for verifying partial deletion is mirrored", func() {
 	var (
 		ProjectId              string
 		workerId1              string
@@ -26,8 +26,6 @@ var _ = FDescribe("TC-0014: Run incremental sync schedule migration for verifyin
 
 	Context("TC-0014: Run incremental sync schedule migration for verifying partial deletion is mirrored", func() {
 		BeforeEach(func() {
-			Expect(string(PROTOCOL_TYPE)).Should(SatisfyAny(Equal("SMB"), Equal("NFS")), "Expected PROTOCOL_TYPE to be either SMB or NFS")
-
 			numberOfWorker := 2
 
 			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)

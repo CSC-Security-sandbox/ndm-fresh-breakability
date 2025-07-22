@@ -161,12 +161,11 @@ func CleanupTestEnv() error {
 		return CleanupTestEnv()
 	}
 
-	output, err := DetachAllWorkers()
+	err := DetachAllWorkers()
 	if err != nil {
 		return fmt.Errorf("failed to detach workers: %w", err)
 	}
 
-	LogDebug(fmt.Sprintf("Detach workers output: %s", output))
 	LogDebug("Test environment deletion complete.")
 	return nil
 }

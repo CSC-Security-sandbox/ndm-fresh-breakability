@@ -484,8 +484,6 @@ func SendAPIRequest(method, url string, body []byte, headers map[string]string) 
 		return nil, err
 	}
 
-	fmt.Printf("DEBUG: Request method is %s\n", req.Method)
-
 	for key, value := range headers {
 		req.Header.Set(key, value)
 	}

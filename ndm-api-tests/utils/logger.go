@@ -18,3 +18,9 @@ func LogError(msg string, err ...error) {
 func LogFatalf(format string, args ...interface{}) {
 	log.Fatalf("[FATAL] "+format, args...)
 }
+
+func HandleRepetitiveLogs(logFunc func(), iteration int) {
+	if iteration%5 == 0 {
+		logFunc()
+	}
+}
