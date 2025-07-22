@@ -207,3 +207,23 @@ export const BULK_MIGRATE_STEPS_IDS = {
   options: 1,
   review: 2,
 };
+
+export const SCHEDULE_OPTIONS = {
+  START_NOW: "start_now",
+  SCHEDULE_DATE: "schedule_date",
+};
+
+export const DEFAULT_MINUTES_AHEAD = {
+  START_NOW: 1,
+  SCHEDULE_DATE: 5,
+};
+
+export const DATE_FORMAT = "DD/MM/YYYY hh:mm:A UTC";
+
+export const TIMESTAMP_VALIDATION = {
+  SCHEDULE_FUTURE_TIMESTAMP: "Scheduled date and time must be in the future",
+  SCHEDULE_LATER_TIMESTAMP:
+    "Date and time is required when scheduling for later",
+  SCHEDULE_ONE_MINUTE_AHEAD_TIMESTAMP:
+    "Scheduled date and time must be at least 1 minute from now",
+};

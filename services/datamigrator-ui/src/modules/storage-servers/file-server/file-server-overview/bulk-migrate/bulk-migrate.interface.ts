@@ -142,6 +142,7 @@ export interface BulkMigrateContextType {
 
 export interface ErrorsValidateMappingStepFormType {
   selectedMountPathsId?: string;
+  scheduledDateTime?: string;
   migrationDetailsTableConfigurationValue?: Array<{
     destinationFileServerDetails?: {
       destinationFileServerName?: string;
