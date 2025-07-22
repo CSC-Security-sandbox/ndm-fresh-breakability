@@ -2,24 +2,24 @@ import React, {useEffect, useState} from 'react';
 import {Box} from '@components/container/index';
 import {notify} from '@components/notification/NotificationWrapper';
 import {
-  Button,
-  Card,
-  FormFieldInputNew,
-  FormFieldSelect,
-  Heading,
-  Layout,
-  useForm,
-  WizardFooter
+    Button,
+    Card,
+    FormFieldInputNew,
+    FormFieldSelect,
+    Heading,
+    Layout,
+    useForm,
+    WizardFooter
 } from '@netapp/bxp-design-system-react';
 import {
-  CREATE_SMTP_FORM_VALIDATION_SCHEMA,
-  INITIAL_SMTP_FORM_STATE
+    CREATE_SMTP_FORM_VALIDATION_SCHEMA,
+    INITIAL_SMTP_FORM_STATE
 } from '@components/top-nav-bar/setting/SMTP/SMTP.constants';
 import {
-  useCreateSmtpMutation,
-  useGetAllUsersQuery,
-  useGetSmtpDetailsQuery,
-  useUpdateSmtpDataMutation
+    useCreateSmtpMutation,
+    useGetAllUsersQuery,
+    useGetSmtpDetailsQuery,
+    useUpdateSmtpDataMutation
 } from '@api/userApi';
 import {useDispatch} from 'react-redux';
 import {setDrawerClose} from '@store/reducer/commonComponentSlice';
@@ -45,10 +45,10 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
         value: user.email
       })) || [];
 
-  const { data: smtpExistingData, isLoading: smtpLoading } =
+    const {data: smtpResult, isLoading: smtpLoading} =
     useGetSmtpDetailsQuery("");
   const [isEdit, setIsEdit] = useState<boolean>(false);
-
+    const smtpExistingData = smtpResult?.data?.items;
   const objectData: smtpValuesType = {
     SMTP_HOST: "",
     SMTP_PORT: "",
@@ -94,7 +94,7 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
       setIsEdit(true);
       smtpForm.resetForm(getFormData(smtpValues));
     }
-  }, [smtpLoading, smtpExistingData, isEdit]);
+  }, [smtpLoading, smtpResult, isEdit]);
 
   const handleCreateSMTP = async () => {
     const data = smtpData(smtpForm.formState);
