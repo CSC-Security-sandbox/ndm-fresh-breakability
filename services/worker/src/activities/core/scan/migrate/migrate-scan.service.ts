@@ -217,7 +217,7 @@ export class MigrateScanService {
                 CommandStatus.READY,
                 sFile.isDirectory(),
                 {
-                    [sFile.isDirectory() ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_CONTENT]: { status: OPS_STATUS.READY, params: {} },
+                    [sFile.isDirectory() ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE]: { status: OPS_STATUS.READY, params: {} },
                     [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: { } }
                 },
                 metadata,

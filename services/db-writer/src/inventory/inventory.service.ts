@@ -226,7 +226,7 @@ export class InventoryService {
       if (Array.isArray(commands) && commands.length > 0) {
         for (let i = 0; i < commands.length; i += batchSize) {
           const batch = commands.slice(i, i + batchSize).map((command: any) => ({
-            id: command.commandId,
+            id: command.id,
             taskId,
             jobRunId,
             sPathId,

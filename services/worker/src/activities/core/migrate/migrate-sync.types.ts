@@ -63,7 +63,6 @@ export interface handleSyncTaskUpdateInput {
         target: string[];
     }
     task: TaskInfo,
-    retryCount: number;
 }
 
 

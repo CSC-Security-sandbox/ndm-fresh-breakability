@@ -55,9 +55,12 @@ export class StampMetaService {
             output.sourceErrors.push(...preserveTimeOutput.sourceErrors);
             output.targetErrors.push(...preserveTimeOutput.targetErrors);
 
-            input.command.ops[OPS_CMD.STAMP_META].status = OPS_STATUS.COMPLETED;
         }
-
+        
+        if(output.sourceErrors.length > 0 || output.targetErrors.length > 0) 
+            input.command.ops[OPS_CMD.STAMP_META].status = OPS_STATUS.ERROR;
+        else
+            input.command.ops[OPS_CMD.STAMP_META].status = OPS_STATUS.COMPLETED;
 
         return output;
     }
@@ -67,7 +70,9 @@ export class StampMetaService {
         if(command.metadata?.mode) {
             try {
                 await fs.promises.chmod(targetPath, command.metadata.mode);
+                throw new Error(`chmod not implemented for ${process.platform}`);
             } catch(error) {
+
                 this.logger.error(`Stamping Permission from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, {name: command.fPath, path: targetPath});
                 await jobContext.publishToErrorStream(dmErr);
@@ -85,7 +90,7 @@ export class StampMetaService {
                     const birthtime = new Date(command.metadata.birthtime) 
                     var dateString = new Date(birthtime.getTime() - birthtime.getTimezoneOffset() * 60000);
                     var birth_time = dateString.toISOString().replace("T", " ").substr(0, 19);
-                    const birthtimeCommand = `(Get-Item '${targetPath}').CreationTime = [System.DateTime]::ParseExact('${birth_time}', 'yyyy-MM-dd HH:mm:ss', $null)`;
+                    const birthtimeCommand = `(tem.DateTime]::ParseExact('${birth_time}', 'yyyy-MMGet-Item '${targetPath}').CreationTime = [Sys-dd HH:mm:ss', $null)`;
                     await this.shellService.runCommand(birthtimeCommand);
                 }else if(command?.isDir === false) {
                     const birthtimeCommand = `touch -t ${formatDate(new Date(command.metadata.birthtime))} ${targetPath}`;
@@ -162,7 +167,7 @@ export class StampMetaService {
 
     async stampSIDtoObject({command, jobContext, sourcePath, targetPath, errorType}: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
-        if(process.platform !== 'win32') {
+        if(process.platform === 'win32') {
             try{
                 command.metadata.sid = await this.getRawSID(sourcePath);
             }catch(error) {
@@ -176,7 +181,9 @@ export class StampMetaService {
                 const usersAcls:ACL[] = getUserACLs(command.metadata.sid, sourcePath)
                 await Promise.all(
                     usersAcls.map(async (userAcl) => {
-                    const user = !jobContext.jobConfig.options.isIdentityMappingAvailable ?  userAcl.user : await this.redisService.getOwnerIdentity(jobContext.jobRunId, userAcl.user, 'SID');
+                    const user = !jobContext.jobConfig.options.isIdentityMappingAvailable ? 
+                        userAcl.user : 
+                            await this.redisService.getOwnerIdentity(jobContext.jobRunId, userAcl.user, 'SID');
                     if (user) {
                         const commandExec = command?.isDir === false
                         ? CommandPattern.SET_SID_FOR_OBJECT

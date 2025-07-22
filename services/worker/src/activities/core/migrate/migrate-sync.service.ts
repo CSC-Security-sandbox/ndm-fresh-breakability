@@ -245,7 +245,7 @@ export class MigrateSyncService {
       task.workerId = this.workerId;
       await jobContext.publishToTaskStream(task);
       syncOutput = await this.executeSyncTask(taskId, task, jobContext);
-      await this.updateAndReportTaskStatus({ taskHashId: taskId, jobContext, errors: syncOutput.errors, task, retryCount: syncOutput.retryCount });
+      await this.updateAndReportTaskStatus({ taskHashId: taskId, jobContext, errors: syncOutput.errors, task});
       syncOutput.status = TaskStatus.COMPLETED;
     } catch (error) {
         if(error instanceof FatalError) throw error;
@@ -339,7 +339,7 @@ export class MigrateSyncService {
   }
 
 
-  async updateAndReportTaskStatus({ errors, jobContext, taskHashId, task, retryCount }: handleSyncTaskUpdateInput): Promise<void> {
+  async updateAndReportTaskStatus({ errors, jobContext, taskHashId, task }: handleSyncTaskUpdateInput): Promise<void> {
     const allCompleted = task.commands.every(cmd => cmd.status === CommandStatus.COMPLETED);
 
     if (allCompleted) {
@@ -359,11 +359,11 @@ export class MigrateSyncService {
     if (isFatalErrored) {
       await jobContext.deleteTask(taskHashId);
       throw new FatalError(
-        `Sync Task Update Failed: ${errors.source.length} source errors and ${errors.target.length} target errors with retry count ${retryCount}`
+        `Sync Task Update Failed: ${errors.source.length} source errors and ${errors.target.length} target errors with retry count ${task.retryCount}`
       );
     }
 
-    if (retryCount >= this.maxRetryCount) {
+    if (task.retryCount >= this.maxRetryCount) {
       await jobContext.deleteTask(taskHashId);
       throw new RetryExceededError(
         `Task ${task.id} has exceeded maximum retry count of ${this.maxRetryCount}`
@@ -371,7 +371,7 @@ export class MigrateSyncService {
     }
 
     throw new RetryableError(
-      `Sync Task Update Failed: ${errors.source.length} source errors and ${errors.target.length} target errors with retry count ${retryCount}`
+      `Sync Task Update Failed: ${errors.source.length} source errors and ${errors.target.length} target errors with retry count ${task.retryCount}`
     );
   }
 

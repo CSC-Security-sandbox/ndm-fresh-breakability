@@ -1,15 +1,15 @@
+import { CommandStatus, ErrorType, JobManagerContext, TaskInfo, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { CommandStatus, ErrorType, JobManagerContext, Task, TaskInfo, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { Context } from '@temporalio/activity';
 import { basePrefix, isFatalError, isSourceFatalError } from "src/activities/utils/utils";
 import { FatalError, RetryableError, RetryExceededError } from "src/errors/errors.types";
 import { RedisService } from "src/redis/redis.service";
 import { CommonTaskService } from "../common/common-task.service";
 import { CommandExecService } from "./command-execution/command-execution.service";
-import { handleSyncTaskUpdateInput, SyncOperationInput, SyncOperationOutput } from "./migrate-sync.types";
-import { SyncTaskInput, SyncTaskOutput } from "./sync-activity.type";
 import { CommandExecInput, CommandExecOutput } from "./command-execution/command-execution.type";
+import { handleSyncTaskUpdateInput } from "./migrate-sync.types";
+import { SyncTaskInput, SyncTaskOutput } from "./sync-activity.type";
 
 @Injectable()
 export class SyncService {
@@ -34,7 +34,7 @@ export class SyncService {
      async syncTaskActivity({ jobRunId, taskId }: SyncTaskInput): Promise<SyncTaskOutput> {
         const syncActivityCtx = Context.current();
         const heartBeatInterval = setInterval(() => { syncActivityCtx.heartbeat({});}, 2000);
-        let syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0, retryCount: 0};
+        let syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0};
         const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
         let task = undefined;
         try {
@@ -49,7 +49,7 @@ export class SyncService {
           task.workerId = this.workerId;
           await jobContext.publishToTaskStream(task);
           syncOutput = await this.executeSyncTask(taskId, task, jobContext);
-          await this.updateAndReportTaskStatus({ taskHashId: taskId, jobContext, errors: syncOutput.errors, task, retryCount: syncOutput.retryCount });
+          await this.updateAndReportTaskStatus({ taskHashId: taskId, jobContext, errors: syncOutput.errors, task });
           syncOutput.status = TaskStatus.COMPLETED;
         } catch (error) {
             if(error instanceof FatalError) throw error;
@@ -62,13 +62,13 @@ export class SyncService {
     }
 
 
-    executeSyncTask = async (taskHashId:string, task: TaskInfo, jobContext: JobManagerContext, ): Promise<SyncTaskOutput> => {
-        const syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0, retryCount: 0};
+    executeSyncTask = async (taskHashId:string, task: TaskInfo, jobContext: JobManagerContext ): Promise<SyncTaskOutput> => {
+        const syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0};
         const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
         const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
-        const errorType = task.retryCount + 1 >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
+        const errorType = ++task.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
 
-        for (const [index, command] of task.commands.entries()) {
+        for (const command of task.commands) {
             if (command.status === CommandStatus.COMPLETED) continue;
 
             const scanInput: CommandExecInput = {
@@ -80,19 +80,15 @@ export class SyncService {
             };
 
             const output: CommandExecOutput = await this.commandExecService.executeCommand(scanInput);
-            if (output.sourceErrors.length > 0 || output.sourceErrors.length > 0) {
-                command.status = CommandStatus.ERROR;
-                output.sourceErrors.forEach(error => syncOutput.errors.source.push(error));
-                output.sourceErrors.forEach(error => syncOutput.errors.target.push(error));
-            } else command.status = CommandStatus.COMPLETED;
-
+            syncOutput.errors.source.push(...output.sourceErrors);
+            syncOutput.errors.target.push(...output.targetErrors);
             await jobContext.setTask(taskHashId, task);
         }
         return syncOutput
     }
 
     
-    async updateAndReportTaskStatus({ errors, jobContext, taskHashId, task, retryCount }: handleSyncTaskUpdateInput): Promise<void> {
+    async updateAndReportTaskStatus({ errors, jobContext, taskHashId, task }: handleSyncTaskUpdateInput): Promise<void> {
         const allCompleted = task.commands.every(cmd => cmd.status === CommandStatus.COMPLETED);
     
         if (allCompleted) {
@@ -112,11 +108,11 @@ export class SyncService {
         if (isFatalErrored) {
           await jobContext.deleteTask(taskHashId);
           throw new FatalError(
-            `Sync Task Update Failed: ${errors.source.length} source errors and ${errors.target.length} target errors with retry count ${retryCount}`
+            `Sync Task Update Failed: ${errors.source.length} source errors and ${errors.target.length} target errors with retry count ${task.retryCount}`
           );
         }
     
-        if (retryCount >= this.maxRetryCount) {
+        if (task.retryCount >= this.maxRetryCount) {
           await jobContext.deleteTask(taskHashId);
           throw new RetryExceededError(
             `Task ${task.id} has exceeded maximum retry count of ${this.maxRetryCount}`
@@ -124,7 +120,7 @@ export class SyncService {
         }
     
         throw new RetryableError(
-          `Sync Task Update Failed: ${errors.source.length} source errors and ${errors.target.length} target errors with retry count ${retryCount}`
+          `Sync Task Update Failed: ${errors.source.length} source errors and ${errors.target.length} target errors with retry count ${task.retryCount}`
         );
     }
 

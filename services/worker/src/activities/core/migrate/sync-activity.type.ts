@@ -14,7 +14,6 @@ export interface SyncTaskOutput {
     };
     status: TaskStatus;
     error: number,
-    retryCount: number;
 }
 
 
