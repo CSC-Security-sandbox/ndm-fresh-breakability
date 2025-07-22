@@ -97,6 +97,7 @@ ports_to_open:
   - tcp 179
   - tcp 443
   - tcp 2379:2381
+  - tcp 4318
   - tcp 5432
   - tcp 6379
   - tcp 6443
@@ -146,3 +147,5 @@ fluentbit_data_volume_size: 10Gi
 
 fluentd_version: 0.5.2
 fluentd_data_volume_size: 10Gi
+
+otel_collector_version: 0.125.0
