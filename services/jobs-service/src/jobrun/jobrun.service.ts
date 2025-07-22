@@ -453,7 +453,7 @@ export class JobRunService {
     return allJobsRuns;
   }
 
-  covertBytes(bytes: number): string {
+  convertBytes(bytes: number): string {
     const bytesInKB = 1000;
     const bytesInMB = bytesInKB * 1000;
     const bytesInGB = bytesInMB * 1000;
