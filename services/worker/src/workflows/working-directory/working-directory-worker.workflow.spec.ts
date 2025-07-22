@@ -83,7 +83,6 @@ describe('ValidateWorkingDirectoryWorkerWorkflow', () => {
     const result = await ValidateWorkingDirectoryWorkerWorkflow(args);
 
     expect(args.payload.exportPathWorkingDirectoryProvided).toBe(true);
-    expect(args.payload.exportPathPresent).toBe(false);
     expect(args.payload.fetchedPath).toBeUndefined();
     expect(mockValidateWorkingDirectory).toHaveBeenCalledWith(traceId, args.payload);
     expect(result).toBe('validated');

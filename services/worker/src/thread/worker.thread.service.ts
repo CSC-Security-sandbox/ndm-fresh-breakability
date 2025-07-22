@@ -1,9 +1,9 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import * as path from 'path';
 import { Worker } from 'worker_threads';
 import { MigrateFile, OperationBand, ThreadOperation, ThreadTask, ThreadTaskInput, WorkerDetails, WorkerThreadOutput } from "./worker.thread.type";
-
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class WorkerThreadService{
@@ -17,10 +17,11 @@ export class WorkerThreadService{
     private workerDetails: Map<number, WorkerDetails> = new Map<number, WorkerDetails>();
 
     private sizes = []
+    private readonly logger: LoggerService;
 
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
-        private readonly logger: Logger,
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     ){   
         const defaultSizes = [
                         { name: "1kb", maxFetch: 1500 },
@@ -30,6 +31,8 @@ export class WorkerThreadService{
                         { name: "1gb", maxFetch: 1 }
                     ];
         this.totalThreads = this.configService.get('worker.thread.threadCount') || 5;
+        this.logger = loggerFactory.create(WorkerThreadService.name);
+
         try {
             const configValue = this.configService.get('worker.thread.threadBand');
             const parsedSizes = configValue.split(';').map((size) => {

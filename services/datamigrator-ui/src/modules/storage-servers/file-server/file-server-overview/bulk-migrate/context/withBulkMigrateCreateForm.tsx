@@ -120,7 +120,11 @@ export function withBulkMigrateCreateForm(
       onSubmit: () => {},
     });
 
-    const [listOfNotReachableExportPaths, setListOfNotReachableExportPaths] = useState<string[]>([]);
+    const [listOfNotReachableExportPaths, setListOfNotReachableExportPaths] =
+      useState<string[]>([]);
+    const [sourceDisabledPaths, setSourceDisabledPaths] = useState<string[]>(
+      []
+    );
 
     useEffect(() => {
       mappingStepForm.validateForm();
@@ -167,23 +171,29 @@ export function withBulkMigrateCreateForm(
               });
             });
           });
-
           const notReachableVolumes = [];
+          const sourceDisabledPathsHashSet = [];
           allFileServers.forEach((config) => {
             const _destinationPaths: DestinationPathsOptionsType[] = [];
-
-            config?.fileServers?.flatMap((fileServer) => 
+            config?.fileServers?.flatMap((fileServer) =>
               fileServer?.volumes?.map((volume) => {
                 _destinationPaths.push({
                   protocol: fileServer.protocol,
                   pathId: volume?.id,
                   pathName: volume?.volumePath,
-                })
+                  isDisabled: volume?.isDisabled,
+                  isValid: volume?.isValid,
+                  reachableCount: volume?.reachableCount,
+                });
                 if (volume?.reachableCount === 0) {
                   notReachableVolumes.push(volume.id);
                 }
+                if (volume?.isDisabled) {
+                  sourceDisabledPathsHashSet.push(volume.id);
+                }
               })
             );
+            setSourceDisabledPaths(sourceDisabledPathsHashSet);
             setListOfNotReachableExportPaths(notReachableVolumes);
             _fileServerDetailsMap.set(config?.id, _destinationPaths);
           });
@@ -329,7 +339,10 @@ export function withBulkMigrateCreateForm(
       const offlineWorkers = availableWorkers.filter(
         (w: WorkerType) => w.status && w.status.toLowerCase() === OFFLINE_STATUS
       );
-      if (availableWorkers.length > 0 && offlineWorkers.length === availableWorkers.length) {
+      if (
+        availableWorkers.length > 0 &&
+        offlineWorkers.length === availableWorkers.length
+      ) {
         throw new Error(
           `All workers are offline. Please ensure at least one worker is online before proceeding.`
         );
@@ -592,6 +605,7 @@ export function withBulkMigrateCreateForm(
       setFileName,
       fileName,
       listOfNotReachableExportPaths,
+      sourceDisabledPaths,
     };
 
     return <WrappedComponent {...props} {...createBulkMigrateHelpers} />;

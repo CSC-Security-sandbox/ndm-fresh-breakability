@@ -1,9 +1,10 @@
 import { Protocol } from './protocol';
 import { exec } from 'child_process';
 import { WorkersConfig } from 'src/config/app.config';
-import { Logger } from 'src/logger/logger.service';
 import { ProtocolPayload } from './protocol.type';
 import { sanitize } from 'src/utils/utilities';
+import { mockLoggerFactory } from '../../auth/auth.service.spec';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 jest.mock('child_process', () => ({
   exec: jest.fn(),
@@ -26,7 +27,9 @@ jest.mock('src/config/app.config', () => ({
   },
 }));
 
-jest.mock('src/logger/logger.service');
+jest.mock('src/utils/utilities', () => ({
+  sanitize: (input: string) => input, // bypass sanitization
+}));
 
 class TestProtocol extends Protocol {
   getTotalUsedMemory(traceId: string, payload: ProtocolPayload): Promise<any> {
@@ -60,7 +63,7 @@ describe('Protocol', () => {
   let protocol: TestProtocol;
 
   beforeEach(() => {
-    protocol = new TestProtocol();
+    protocol = new TestProtocol(mockLoggerFactory as unknown as LoggerFactory);
   });
 
   describe('executeCommand', () => {

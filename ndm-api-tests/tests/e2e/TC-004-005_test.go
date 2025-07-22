@@ -145,10 +145,10 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 
 					err = HandleJobRunStateChange(jobRunID, "PAUSE", list)
 					Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
-
+					Wait(1)
 					err = HandleJobRunStateChange(jobRunID, "RESUME", list)
 					Expect(err).NotTo(HaveOccurred(), "Error while resume job run ID")
-
+					Wait(1)
 					err = HandleJobRunStateChange(jobRunID, "STOP", list)
 					Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
 
@@ -202,11 +202,11 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 			for i, jobRunID := range destinationDiscoveryJobRunIDs {
 
 				if i == 0 {
-					err = WaitForJobState(jobRunID, COMPLETED_JOBRUN, 25)
+					err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Destination discovery job %d did not complete", i+1))
 					continue
 				}
-				err = WaitForJobState(jobRunID, COMPLETED_JOBRUN, 25)
+				err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Destination discovery job %d did not complete", i+1))
 			}
 
@@ -248,14 +248,16 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 
 					err = HandleJobRunStateChange(migrationJobRunID, "PAUSE", list)
 					Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
-
+					Wait(1)
 					err = HandleJobRunStateChange(migrationJobRunID, "RESUME", list)
 					Expect(err).NotTo(HaveOccurred(), "Error while resume job run ID")
-
+					Wait(1)
 					err = HandleJobRunStateChange(migrationJobRunID, "STOP", list)
 					Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
 					flag = true
 
+					err=WaitForJobState(migrationJobRunID, "STOPPED")
+					Expect(err).NotTo(HaveOccurred(), "Job did not reach STOPPED state")
 					adHocJobRunId, resp, err := TriggerAdHocJobRun(migrationJobConfigID)
 					Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
 					defer resp.Body.Close()
@@ -265,7 +267,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 
 				}
 
-				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN, 25)
+				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
 				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s", migration_validators[i]))
@@ -306,13 +308,14 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 
 					err = HandleJobRunStateChange(jobRunID, "PAUSE", list)
 					Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
-
+					Wait(1)
 					err = HandleJobRunStateChange(jobRunID, "RESUME", list)
 					Expect(err).NotTo(HaveOccurred(), "Error while resume job run ID")
-
+					Wait(1)
 					err = HandleJobRunStateChange(jobRunID, "STOP", list)
 					Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
-
+					err = WaitForJobState(jobRunID, "STOPPED")
+					Expect(err).NotTo(HaveOccurred(), "Cutover job did not complete")
 					adHocJobRunId, resp, err := TriggerAdHocJobRun(jobConfigID)
 					Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
 					defer resp.Body.Close()

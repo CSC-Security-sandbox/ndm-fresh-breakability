@@ -19,4 +19,5 @@ export type TableWrapperPropsType = {
   isRefreshing?: boolean;
   refetchTableData?: () => void;
   notReachableExportPaths?: string[];
+  noDataLabel?: string;
 };

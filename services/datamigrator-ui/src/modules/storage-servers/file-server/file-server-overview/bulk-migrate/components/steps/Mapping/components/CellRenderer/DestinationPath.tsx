@@ -50,6 +50,9 @@ const DestinationFileServer = ({
         !mappingStepForm?.values?.selectedMountPathsId?.includes(String(row.id))
       }
       getOptionLabel={(option) => option?.pathName || ""}
+      getOptionDisabled={(option) =>
+        option?.isDisabled || !option?.isValid || option?.reachableCount === 0
+      }
       className="w-full"
       size="small"
       value={
@@ -70,16 +73,14 @@ const DestinationFileServer = ({
           helperText={error ? "" : ""}
         />
       )}
-      renderOption={(props, option) => (
-        <>
-          {row?.protocol === option.protocol && (
-            <li {...props} key={option?.pathId}>
-              <Tooltip nowrap>{option?.pathName}</Tooltip>
-              {option?.pathName}
-            </li>
-          )}
-        </>
-      )}
+      renderOption={(props, option) =>
+        row?.protocol === option.protocol ? (
+          <li {...props} key={option?.pathId}>
+            <Tooltip nowrap>{option?.pathName}</Tooltip>
+            {option?.pathName}
+          </li>
+        ) : null
+      }
     />
   );
 };

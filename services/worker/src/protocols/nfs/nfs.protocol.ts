@@ -5,10 +5,18 @@ import * as net from 'net';
 import { ProtocolTypes } from 'src/protocols/protocols';
 import { ProtocolPayload } from 'src/protocols/protocol/protocol.type'; 
 import * as fs from 'fs';
+import { Injectable } from '@nestjs/common';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+
+@Injectable()
 export class NFSProtocol extends Protocol {
 
   protected getCommandPattern( key : string): string {
     return CommandConfig.getNFSCommand(this.platform, key)
+  }
+
+  constructor(private readonly loggerFactory: LoggerFactory) {
+    super(loggerFactory); // Pass to abstract class protocol
   }
 
   // --------------------------- Validate Connection -------------------------- //
@@ -16,7 +24,7 @@ export class NFSProtocol extends Protocol {
     const client = new net.Socket();
     const timeout = 2000;
     try {
-      this.logger.info(`[${traceId}] Attempting to connect... Protocol: ${ProtocolTypes.NFS}`);
+      this.logger.log(`[${traceId}] Attempting to connect... Protocol: ${ProtocolTypes.NFS}`);
       await new Promise<void>((resolve, reject) => {
           const timer = setTimeout(() => {
             client.destroy();
@@ -32,7 +40,7 @@ export class NFSProtocol extends Protocol {
           });
       });
 
-      this.logger.info(`[${traceId}] Connection established for Protocol: ${ProtocolTypes.NFS}`);
+      this.logger.log(`[${traceId}] Connection established for Protocol: ${ProtocolTypes.NFS}`);
       return 'Connection established';
     } catch (error) {
         this.logger.error(`Error during connection: ${error.message}`);
@@ -45,7 +53,7 @@ export class NFSProtocol extends Protocol {
 
   // --------------------------- Get Protocol Versions -------------------------- //
   async getProtocolVersions(traceId: string, payload: ProtocolPayload): Promise<string[]> {
-    this.logger.info(
+    this.logger.log(
       `[${traceId}] Getting protocols for ${payload.hostname} of type ${ProtocolTypes.NFS} from ${this.workerId}`,
     );
     return this.executeCommand(
@@ -55,7 +63,7 @@ export class NFSProtocol extends Protocol {
       this.getCommandPattern(CommandPattern.VERSION_DETAIL),
       'NFS Get Protocols',
     ).then((response) => {
-      this.logger.info(`[${traceId}] ${response.message}`);
+      this.logger.log(`[${traceId}] ${response.message}`);
       return parseProtocolVersions(response.message);
     });
   }
@@ -63,7 +71,7 @@ export class NFSProtocol extends Protocol {
 
   // --------------------------- List Paths -------------------------- //
   async listPaths(traceId: string, payload: ProtocolPayload): Promise<string[]> {
-    this.logger.info(
+    this.logger.log(
       `[${traceId}] Getting list paths for ${payload.hostname} of type ${ProtocolTypes.NFS} from ${this.workerId}`,
     );
     return this.executeCommand(
@@ -73,7 +81,7 @@ export class NFSProtocol extends Protocol {
       this.getCommandPattern(CommandPattern.LIST_PATHS),
       'NFS Show Mount',
     ).then((response) => {
-      this.logger.info(`[${traceId}] ${response.message}`);
+      this.logger.log(`[${traceId}] ${response.message}`);
       return parseExports(response.message);
     });
   }
@@ -90,7 +98,7 @@ export class NFSProtocol extends Protocol {
         'NFS path Available Disk Space',
       ).then((response) => {
         this.logger.log(`response of getAvailableDiskSpace in nfs.protocol ${JSON.stringify(response)}`);
-        this.logger.info(`[${traceId}] ${response.message}`);
+        this.logger.log(`[${traceId}] ${response.message}`);
         const availableBytes = parseInt(response.message.trim(), 10);
         this.logger.log(`[${traceId}] Available space at ${payload?.path}: ${availableBytes} bytes`);
         return { size: availableBytes };
@@ -114,7 +122,7 @@ export class NFSProtocol extends Protocol {
         'NFS Mounted Folder size',
       ).then((response) => {
         this.logger.log(`response of executeCommand in getTotalUsedMemory - ${JSON.stringify(response)}`);
-        this.logger.info(`[${traceId}] ${response.message}`);
+        this.logger.log(`[${traceId}] ${response.message}`);
 
         let usedBytes: number;
 
@@ -139,7 +147,7 @@ export class NFSProtocol extends Protocol {
   }
 
   async unmountPath(traceId: string, payload: any): Promise<any> {
-    this.logger.info(
+    this.logger.log(
       `[${traceId}] Unmounting path for ${payload.hostname} of type ${ProtocolTypes.NFS} from ${this.workerId} with payload: ${JSON.stringify(payload)}`,
     );
 
@@ -155,9 +163,9 @@ export class NFSProtocol extends Protocol {
       const mountDir = `${payload.mountBasePath}/${payload.jobRunId}/${payload.pathId}`;
       if (fs.existsSync(mountDir) && mountDir.startsWith(payload.mountBasePath)) {
         fs.rmdirSync(mountDir, { recursive: true });
-        this.logger.info(`[${traceId}] Directory removed: ${mountDir}`);
+        this.logger.log(`[${traceId}] Directory removed: ${mountDir}`);
       } else {
-        this.logger.info(`[${traceId}] Directory does not exist: ${mountDir}`);
+        this.logger.log(`[${traceId}] Directory does not exist: ${mountDir}`);
       }
       
       return response;
@@ -171,7 +179,7 @@ export class NFSProtocol extends Protocol {
 
     const mountDir = `${payload.mountBasePath}/${payload.jobRunId}/${payload.pathId}`;
     if (fs.existsSync(mountDir)) {
-      this.logger.info(`[${traceId}] Directory already exists: ${mountDir}`);
+      this.logger.log(`[${traceId}] Directory already exists: ${mountDir}`);
       return {
         traceId,
         status: 'error',
@@ -183,7 +191,7 @@ export class NFSProtocol extends Protocol {
     } else {
       try{
       fs.mkdirSync(mountDir,{ recursive: true });
-      this.logger.info(`[${traceId}] Directory created: ${mountDir}`);
+      this.logger.log(`[${traceId}] Directory created: ${mountDir}`);
       } catch (error) {
         this.logger.error(`[${traceId}] Error creating directory------?: ${error.message}`);
         return {
@@ -205,7 +213,7 @@ export class NFSProtocol extends Protocol {
       'NFS Mount',
     );
     await new Promise((resolve) => setTimeout(resolve, 5000));
-    this.logger.info(`[${traceId}] Mount result: ${JSON.stringify(mountResult)}`);  
+    this.logger.log(`[${traceId}] Mount result: ${JSON.stringify(mountResult)}`);  
     return mountResult;
   }
   disconnectSession(traceId: string, payload: ProtocolPayload): Promise<any> {

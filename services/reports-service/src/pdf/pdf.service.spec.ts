@@ -1,19 +1,19 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { PdfService } from './pdf.service';
-import { InventoryEntity } from 'src/entities/inventory.entity';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { ReportsEntity } from 'src/entities/reports.entity';
-import { ReportType } from 'src/constants/enums';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as puppeteer from 'puppeteer';
-import { Browser, Page } from 'puppeteer';
+import { Test, TestingModule } from "@nestjs/testing";
+import { PdfService } from "./pdf.service";
+import { InventoryEntity } from "src/entities/inventory.entity";
+import { getRepositoryToken } from "@nestjs/typeorm";
+import { ReportsEntity } from "src/entities/reports.entity";
+import { ReportType } from "src/constants/enums";
+import * as fs from "fs";
+import * as path from "path";
+import * as puppeteer from "puppeteer";
+import { Browser, Page } from "puppeteer";
 import * as hbs from "hbs";
-import { DiscoveryService } from 'src/discovery/discovery.service';
+import { DiscoveryService } from "src/discovery/discovery.service";
 
-jest.mock('puppeteer');
+jest.mock("puppeteer");
 
-describe('PdfService', () => {
+describe("PdfService", () => {
   let pdfService: PdfService;
   let mockInventoryRepo;
   let mockReportsRepo;
@@ -23,21 +23,21 @@ describe('PdfService', () => {
 
   beforeEach(async () => {
     mockInventoryRepo = {
-      query: jest.fn()
+      query: jest.fn(),
     };
 
     mockReportsRepo = {
       query: jest.fn(),
-      find: jest.fn()
+      find: jest.fn(),
     };
 
     mockDiscoveryService = {
-      createJobsPDFReportData: jest.fn()
+      createJobsPDFReportData: jest.fn(),
     };
 
     mockPage = {
       setContent: jest.fn().mockResolvedValue(null),
-      pdf: jest.fn().mockResolvedValue(Buffer.from('mockPdfBuffer')),
+      pdf: jest.fn().mockResolvedValue(Buffer.from("mockPdfBuffer")),
       close: jest.fn().mockResolvedValue(null),
     };
 
@@ -69,18 +69,20 @@ describe('PdfService', () => {
     pdfService = module.get<PdfService>(PdfService);
   });
 
-  describe('generatePdf', () => {
-    it('should generate and save new PDF if report type is JOBS_RREPORT', async () => {
-      const jobRunId = 'test-jobRunId';
+  describe("generatePdf", () => {
+    it("should generate and save new PDF if report type is JOBS_RREPORT", async () => {
+      const jobRunId = "test-jobRunId";
       const reportType = ReportType.JOBS_RREPORT;
-      const pdfBuffer = Buffer.from('newPdfBuffer');
-      const filePath = '/mock/reports/report.pdf';
+      const pdfBuffer = Buffer.from("newPdfBuffer");
+      const filePath = "/mock/reports/report.pdf";
 
-      jest.spyOn(path, 'join').mockReturnValue(filePath);
-      jest.spyOn(pdfService, 'generateJobsReportPdf').mockResolvedValue(pdfBuffer);
-      jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-      jest.spyOn(fs, 'writeFileSync').mockImplementation();
-      jest.spyOn(path, 'resolve').mockReturnValue('/mock/reports');
+      jest.spyOn(path, "join").mockReturnValue(filePath);
+      jest
+        .spyOn(pdfService, "generateJobsReportPdf")
+        .mockResolvedValue(pdfBuffer);
+      jest.spyOn(fs, "existsSync").mockReturnValue(false);
+      jest.spyOn(fs, "writeFileSync").mockImplementation();
+      jest.spyOn(path, "resolve").mockReturnValue("/mock/reports");
 
       const result = await pdfService.generatePdf(jobRunId, reportType);
 
@@ -109,21 +111,21 @@ describe('PdfService', () => {
       const jobRunId = "test-jobRunId";
       const reportType = "INVALID_REPORT_TYPE" as unknown as ReportType;
 
-      await expect(pdfService.generatePdf(jobRunId, reportType)).rejects.toThrow(
-        "Report not found, try again later"
-      );
+      await expect(
+        pdfService.generatePdf(jobRunId, reportType)
+      ).rejects.toThrow("Report not found, try again later");
     });
     it("should throw error if file path escapes reports directory", async () => {
-      const jobRunId = '../escape';
+      const jobRunId = "../escape";
       const reportType = ReportType.DISCOVERY;
-      const filePath = '/some/other/path/escape-discovery-report.pdf';
+      const filePath = "/some/other/path/escape-discovery-report.pdf";
 
-      jest.spyOn(path, 'join').mockReturnValue(filePath);
-      jest.spyOn(path, 'resolve').mockReturnValue('/mock/reports');
+      jest.spyOn(path, "join").mockReturnValue(filePath);
+      jest.spyOn(path, "resolve").mockReturnValue("/mock/reports");
 
-      await expect(pdfService.generatePdf(jobRunId, reportType)).rejects.toThrow(
-        'Invalid file path'
-      );
+      await expect(
+        pdfService.generatePdf(jobRunId, reportType)
+      ).rejects.toThrow("Invalid file path");
     });
   });
 
@@ -141,7 +143,9 @@ describe('PdfService', () => {
       );
 
       // Verify that discoveryService.createJobsPDFReportData was called
-      expect(mockDiscoveryService.createJobsPDFReportData).toHaveBeenCalledWith(jobRunId);
+      expect(mockDiscoveryService.createJobsPDFReportData).toHaveBeenCalledWith(
+        jobRunId
+      );
     });
 
     it("should successfully generate a PDF with proper customerInfo and puppeteer workflow", async () => {
@@ -161,8 +165,14 @@ describe('PdfService', () => {
 
       // Mock file system and template operations
       jest.spyOn(path, "join").mockReturnValue("/mock/template/path.hbs");
-      jest.spyOn(fs, "readFileSync").mockReturnValue("<html>{{customerInfo.projectName}}</html>");
-      jest.spyOn(hbs, "compile").mockReturnValue((data) => `<html>${data.customerInfo.projectName}</html>`);
+      jest
+        .spyOn(fs, "readFileSync")
+        .mockReturnValue("<html>{{customerInfo.projectName}}</html>");
+      jest
+        .spyOn(hbs, "compile")
+        .mockReturnValue(
+          (data) => `<html>${data.customerInfo.projectName}</html>`
+        );
 
       // Execute the method
       const result = await pdfService.generateJobsReportPdf(jobRunId);
@@ -171,27 +181,29 @@ describe('PdfService', () => {
       expect(result).toEqual(Buffer.from("mockPdfBuffer"));
 
       // Verify puppeteer was used correctly
-      expect(puppeteer.launch).toHaveBeenCalledWith(expect.objectContaining({
-        headless: true,
-        args: expect.arrayContaining([
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-gpu",
-          "--disable-dev-shm-usage",
-          "--disable-accelerated-2d-canvas"
-        ]),
-        executablePath: "/usr/bin/chromium-browser",
-        protocolTimeout: 60000,
-      }));
+      expect(puppeteer.launch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headless: true,
+          args: expect.arrayContaining([
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-gpu",
+            "--disable-dev-shm-usage",
+            "--disable-accelerated-2d-canvas",
+          ]),
+          executablePath: "/usr/bin/chromium-browser",
+          protocolTimeout: 60000,
+        })
+      );
 
       // Verify page operations
       expect(mockBrowser.newPage).toHaveBeenCalled();
       expect(mockPage.setContent).toHaveBeenCalled();
-      expect(mockPage.pdf).toHaveBeenCalledWith({ 
-        format: 'A4', 
-        printBackground: true, 
-        scale: 0.6, 
-        landscape: true 
+      expect(mockPage.pdf).toHaveBeenCalledWith({
+        format: "A4",
+        printBackground: true,
+        scale: 0.6,
+        landscape: true,
       });
 
       // Verify browser was closed
@@ -281,7 +293,9 @@ describe('PdfService', () => {
       jest.spyOn(path, "join").mockReturnValue("/mock/template/path.hbs");
       jest.spyOn(fs, "readFileSync").mockReturnValue("<html></html>");
       jest.spyOn(hbs, "compile").mockReturnValue(() => "<html></html>");
-      jest.spyOn(puppeteer, "launch").mockRejectedValue(new Error("Launch error"));
+      jest
+        .spyOn(puppeteer, "launch")
+        .mockRejectedValue(new Error("Launch error"));
 
       await expect(pdfService.generateJobsReportPdf(jobRunId)).rejects.toThrow(
         "Failed to generate jobs report"
@@ -291,7 +305,5 @@ describe('PdfService', () => {
 });
 
 function normalizeHtml(html: string): string {
-  return html
-    .replace(/\s+/g, ' ') 
-    .trim();             
+  return html.replace(/\s+/g, " ").trim();
 }

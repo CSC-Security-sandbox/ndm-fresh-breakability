@@ -94,9 +94,26 @@ run_tests() {
     print_log_banner "Completed" "$formatted_duration" | tee -a "$report_file"
 }
 
-# ------------------ Test Runs ------------------
+# Test runs
 
-run_tests "end-to-end" "./tests/e2e" "/srv/nfs_share,/srv/nfs_share_utkarsh" "/srv/nfs_share,/srv/nfs_share_utkarsh" "NFS"
-#run_tests "end-to-end" "./tests/e2e" "/srv/nfs_share, /srv/nfs_share_utkarsh" "/srv/nfs_share, /srv/nfs_share_utkarsh" "SMB" "3h"
+#End-to-End Testing
 
-#run_tests "smoke" "./tests/smoke" "vol1,vol2" "vol3,vol4" "3h" "NFS"
+run_tests "end-to-end" "./tests/e2e" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
+
+run_tests "end-to-end" "./tests/e2e" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "SMB"
+
+
+
+#Regression Testing
+
+run_tests "regression" "./tests/regression" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
+
+run_tests "regression" "./tests/regression" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "SMB"
+
+
+
+#Smoke Testing
+
+run_tests "smoke" "./tests/smoke" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
+
+run_tests "smoke" "./tests/smoke" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "SMB"

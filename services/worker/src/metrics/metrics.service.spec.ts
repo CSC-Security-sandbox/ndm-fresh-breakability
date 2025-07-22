@@ -2,6 +2,8 @@ import { HttpService } from '@nestjs/axios';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Gauge } from 'prom-client';
 import { MetricsService } from './metrics.service';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../auth/auth.service.spec';
 
 describe('MetricsService', () => {
   let service: MetricsService;
@@ -18,6 +20,10 @@ describe('MetricsService', () => {
       providers: [
         MetricsService,
         { provide: HttpService, useValue: setupHttpServiceMock() },
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
+        }
       ],
     }).compile();
     service = module.get<MetricsService>(MetricsService);
