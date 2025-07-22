@@ -7,6 +7,7 @@ WORKDIR /app/liquibase
 
 COPY changelog-master.xml /app/liquibase/
 COPY apply/*.sql /app/liquibase/
+COPY rollback/*.sql /app/liquibase/
 COPY --chmod=755 entrypoint.sh /app/
 
 ENTRYPOINT ["/app/entrypoint.sh"]

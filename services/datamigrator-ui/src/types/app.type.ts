@@ -724,7 +724,10 @@ export interface BlueXpTableStateType<T> {
 export interface JobErrorType {
   id: string;
   errorCode: string;
-  errorMessage: string;
+  errorMessage: string;        // Original system message
+  displayMessage?: string;     // User-friendly mapped message
+  resolutionSteps?: string;    // Resolution steps from error_remedies
+  referenceCommands?: string;  // Diagnostic commands
   fileName: string;
   filePath: string;
   createdAt: string;
