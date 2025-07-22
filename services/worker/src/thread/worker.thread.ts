@@ -28,6 +28,7 @@ export async function smartCopy(source, target) {
   let readStream: fs.ReadStream = null; 
   let writeStream: fs.WriteStream = null; 
   try{
+    // TODO: make this chunk size configurable or based on the file size
     readStream = fs.createReadStream(source, { highWaterMark: 1024 * 1024 });
     writeStream = fs.createWriteStream(target);
     let hash = crypto.createHash('sha256');
