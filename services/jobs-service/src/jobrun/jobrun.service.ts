@@ -555,10 +555,10 @@ export class JobRunService {
         }
       }
       this.logger.log("job Run Stats", JSON.stringify(jobRunStats));
-      await this.jobRunRepo.update(
-        { id: jobRunId },
-        { status: status, endTime: new Date(), jobStats: jobRunStats }
-      );
+      const terminalStatuses = [JobRunStatus.Completed, JobRunStatus.Failed, JobRunStatus.Errored, JobRunStatus.Stopped, JobRunStatus.Blocked];
+      const updateData: Partial<JobRunEntity> = { status: status, jobStats: jobRunStats };
+      if (terminalStatuses.includes(status)) { updateData.endTime = new Date(); }
+      await this.jobRunRepo.update({ id: jobRunId }, updateData);
     } else {
       if (
         jobConfig &&
