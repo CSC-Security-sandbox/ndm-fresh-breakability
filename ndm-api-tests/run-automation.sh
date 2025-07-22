@@ -38,7 +38,7 @@ run_tests() {
     epoch_time=$(date +%s)
 
     local run_id
-    run_id="${test_type}-${protocol_type}-${epoch_time}"
+    run_id="${test_type}_${epoch_time}"
 
 
     local protocol_dir
