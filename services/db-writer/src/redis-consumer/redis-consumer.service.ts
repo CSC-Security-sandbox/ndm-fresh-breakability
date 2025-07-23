@@ -8,6 +8,13 @@ import { ConsumerType, StreamStatus, WorkFlows } from '../enum/redis-consumer.en
 import { InventoryService } from '../inventory/inventory.service';
 import { WorkflowService } from '../workflow/workflow.service';
 
+
+
+export const redisUtils = new RedisUtils({
+    minConnections: 1,
+    maxConnections: 10,
+});
+
 const getWorkflowId = (jobRunId: string, jobType: string) => {
     if (jobType === 'CUT_OVER') return `${WorkFlows.CUT_OVER}-${jobRunId}`;
     if (jobType === 'MIGRATE') return `${WorkFlows.MIGRATE}-${jobRunId}`;
@@ -49,7 +56,7 @@ export class RedisConsumerService {
     async onApplicationBootstrap() {
         try {
             // Initialize Redis client
-            this.redisClient = await RedisUtils.getClient();
+            this.redisClient = await redisUtils.getClient();
 
             // Ensure Redis client is connected before proceeding
             if (!this.redisClient.isOpen) await this.redisClient.connect();

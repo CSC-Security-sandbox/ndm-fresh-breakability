@@ -19,18 +19,21 @@ import { SpeedTestActivities } from './speed-test/speed-test-activities';
 import { AuthModule } from 'src/auth/auth.module';
 import { RedisMemoryCheckActivity } from './redis/redis.mem.usage.check.activity';
 import {MigrateScanService} from './core/scan/migrate/migrate-scan.service';
-import { MigrateSyncService } from './core/migrate/migrate-sync.service';
 import { CommonTaskService } from './core/common/common-task.service';
 import { DiscoveryScanService } from './core/scan/discovery/discovery-scan.service';
 import { ScanService } from './core/scan/scan-activity.service';
 import { ValidatePathActivity } from './validate-path/validate-path.service';
 import { ProtocolsModule } from '../protocols/protocols.module'; 
 import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
+import { CommandExecService } from './core/migrate/command-execution/command-execution.service';
+import { SyncService } from './core/migrate/sync-activity.service';
+import { StampMetaService } from './core/migrate/command-execution/stamp-meta.service';
+
 
 @Module({
-  imports: [HttpModule, ConfigModule, WorkerThreadModule, AuthModule, ProtocolsModule ,LoggerModule.forRoot()],
+  imports: [LoggerModule.forRoot(), HttpModule, ConfigModule, WorkerThreadModule, AuthModule, ProtocolsModule ],
   controllers: [],
-  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService, MigrationSyncService, MigrateSyncService,MigrateScanService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities, RedisMemoryCheckActivity,  CommonTaskService, DiscoveryScanService, ScanService, ValidatePathActivity],
-  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationTaskService,MigrationScanService, MigrationSyncService, MigrateSyncService, MigrateScanService,  ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities,RedisMemoryCheckActivity, CommonTaskService, DiscoveryScanService, ScanService, ValidatePathActivity],
+  providers: [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationScanService, MigrationTaskService, MigrationSyncService,MigrateScanService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities, RedisMemoryCheckActivity,  CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity],
+  exports:  [ValidateConnectionActivity, ListPathActivity, DiscoveryActivity, RedisService, DiscoveryScanActivity, SetupActivityService, MigrationTaskService,MigrationScanService, MigrationSyncService, MigrateScanService,  ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities,RedisMemoryCheckActivity, CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity],
 })
 export class ActivitiesModule {}
