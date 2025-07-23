@@ -125,9 +125,4 @@ export class CommonTaskService {
     return batchId;
   }
 
-  async getGroupTaskConfigActivity(): Promise<{ groupSize: number, commandsInTask: number }> {
-    const groupSize = this.configService.get<number>('worker.groupSize') || 1000;
-    const commandsInTask = this.configService.get<number>('worker.commandsInTask') || 100;
-    return { groupSize, commandsInTask };
-  }    
 }
