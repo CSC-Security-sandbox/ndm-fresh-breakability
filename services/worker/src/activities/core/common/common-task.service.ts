@@ -18,6 +18,8 @@ export class CommonTaskService {
   readonly workerId: string;
   readonly maxRetryCount: number;
   readonly temporalAddress: string; // Default Temporal address, can be overridden in config
+  readonly groupSize: number;
+  readonly commandsInTask: number;
 
   constructor(
       @Inject(ConfigService) private readonly configService: ConfigService,
@@ -27,22 +29,23 @@ export class CommonTaskService {
       this.workerId = this.configService.get('worker.workerId');
       this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
       this.temporalAddress = this.configService.get('temporal.address') || 'localhost:7233';
+      this.groupSize = this.configService.get<number>('worker.groupSize') || 1000;
+      this.commandsInTask = this.configService.get<number>('worker.commandsInTask') || 100;
       this.logger = loggerFactory.create(CommonTaskService.name);
     }
 
     // TO-DO : make this adaptive resource based task creation
-    async getGroupOfTasksActivity(jobRunId,  groupSize = 1000, workerConcurrency = 20): Promise<string[]> {
+    async getGroupOfTasksActivity(jobRunId): Promise<string[]> {
       const activityContext = Context.current();      
       const heartBeatInterval = setInterval(() => { activityContext.heartbeat({});}, 2000);
-      let taskIds: string[] = [];
-      const commandsInTask = Math.floor(groupSize/ workerConcurrency);
+      let taskIds: string[] = [];      
       try{
         const jobContext = await this.redisService.getJobManagerContext(jobRunId);
         let commands:Command[] = [], streamIds = [];
-        for await (const {data, id} of jobContext.groupReadCommandStream(jobRunId, groupSize, GroupReaderType.WORKER)) {
+        for await (const {data, id} of jobContext.groupReadCommandStream(jobRunId, this.groupSize, GroupReaderType.WORKER)) {
           commands.push(data);
           streamIds.push(id);
-          if (commands.length >= commandsInTask) {
+          if (commands.length >= this.commandsInTask) {
             const task = buildTask(TaskType.MIGRATE, jobRunId, jobContext, commands);
             const hashKey = calculateCommandHash(commands); 
             taskIds.push(hashKey);
@@ -121,5 +124,10 @@ export class CommonTaskService {
     await jobContext.setBatchDir(batchId, dirsToScan);
     return batchId;
   }
-    
+
+  async getGroupTaskConfigActivity(): Promise<{ groupSize: number, commandsInTask: number }> {
+    const groupSize = this.configService.get<number>('worker.groupSize') || 1000;
+    const commandsInTask = this.configService.get<number>('worker.commandsInTask') || 100;
+    return { groupSize, commandsInTask };
+  }    
 }
