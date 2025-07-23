@@ -248,7 +248,7 @@ describe('CommonTaskService', () => {
         });
 
         it('should create tasks and return their hash keys', async () => {
-            const result = await service.getGroupOfTasksActivity('jobRunId', 2, 1);
+            const result = await service.getGroupOfTasksActivity('jobRunId');
             expect(Array.isArray(result)).toBe(true);
             expect(result.length).toBeGreaterThan(0);
             expect(setTaskIfNotExistsMock).toHaveBeenCalled();
