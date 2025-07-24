@@ -116,7 +116,7 @@ export class JobRunInitService {
         );
       }
     }
-    return jobs;
+    return true;
   }
 
   // ------------------ Create job run  -------------------- //

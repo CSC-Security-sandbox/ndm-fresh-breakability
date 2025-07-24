@@ -21,8 +21,3 @@ export interface MigrationConflictValidationResult {
     dependencies?: any[];
     message?: string;
 }
-
-// Legacy types for backward compatibility
-export type CircularDependencyCheckConfig = MigrationConflictCheckConfig;
-export type CircularDependencyCheckData = MigrationConflictCheckData;
-export type CircularDependencyValidationResult = MigrationConflictValidationResult;
