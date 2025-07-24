@@ -25,7 +25,6 @@ const Auth = ({ permissionName, children }: AuthProps) => {
   useEffect(() => {
     const fetchUserPermissions = async () => {
       setHasPermission(false);
-
       const userPermissions = permissionCurrent(selectedProjectId);
       if (userPermissions?.includes(permissionName)) {
         setHasPermission(true);
