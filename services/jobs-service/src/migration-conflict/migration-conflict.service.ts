@@ -143,7 +143,7 @@ export class MigrationConflictService {
                     jobRunIds: activeDependencies,
                     sourcePathId: config.sourcePathId,
                     targetPathId: job.targetPath.volumePath,
-                    sourceServerId: 'unknown-source-server', // Since we don't have source server info for the new config
+                    sourceServerId: '',
                     targetServerId: job.targetPath.fileServer.config.configName,
                 });
             }
