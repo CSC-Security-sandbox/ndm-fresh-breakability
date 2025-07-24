@@ -111,7 +111,7 @@ func SetupTestEnv(workerCount int) (string, map[string]SSHConfig, error) {
 	if PROTOCOL_TYPE == ProtocolSMB {
 		// TODO : To be replaced with SMB code.
 		// SMB-specific setup logic is not implemented yet.
-		return SetupTestEnv(workerCount)
+		return "", nil, fmt.Errorf("SMB-specific logic is not implemented")
 	}
 
 	// Create the project first.
@@ -158,7 +158,7 @@ func CleanupTestEnv() error {
 	if PROTOCOL_TYPE == ProtocolSMB {
 		// To be replaced with SMB code.
 		// SMB-specific cleanup logic is not implemented yet.
-		return CleanupTestEnv()
+		return fmt.Errorf("SMB-specific logic is not implemented")
 	}
 
 	err := DetachAllWorkers()

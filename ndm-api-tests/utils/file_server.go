@@ -215,7 +215,7 @@ func GetExportPathID(
 func ClearVolume(export string) error {
 	if PROTOCOL_TYPE == ProtocolSMB {
 		// To be replaced with SMB code.
-		return ClearVolume(export)
+		return fmt.Errorf("SMB-specific logic is not implemented")
 	}
 
 	destMount := "/mnt/remove_data"
@@ -268,7 +268,7 @@ func ClearVolume(export string) error {
 func RemovePartialDeltaFromVolume(export string, fileCount int) error {
 	if PROTOCOL_TYPE == ProtocolSMB {
 		// To be replaced with SMB code.
-		return RemovePartialDeltaFromVolume(export, fileCount)
+		return fmt.Errorf("SMB-specific logic is not implemented")
 	}
 	config := GetAttachedWorkerDetails()
 
@@ -323,7 +323,7 @@ func AddDataToVolume(export string) error {
 
 	if PROTOCOL_TYPE == ProtocolSMB {
 		// To be replaced with SMB code.
-		return AddDataToVolume(export)
+		return fmt.Errorf("SMB-specific logic is not implemented")
 	}
 
 	config := GetAttachedWorkerDetails()
@@ -373,7 +373,7 @@ sudo rm -rf "%s"
 func RemoveDeltaFromVolume(export string) error {
 	if PROTOCOL_TYPE == ProtocolSMB {
 		// To be replaced with SMB code.
-		return RemoveDeltaFromVolume(export)
+		return fmt.Errorf("SMB-specific logic is not implemented")
 	}
 
 	config := GetAttachedWorkerDetails()
