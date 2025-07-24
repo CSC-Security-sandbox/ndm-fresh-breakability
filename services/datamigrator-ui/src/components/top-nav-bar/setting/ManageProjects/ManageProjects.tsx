@@ -11,7 +11,7 @@ import PermissionAuth from '@/auth/PermissionAuth';
 import {Collapse} from '@mui/material';
 import {useSelector} from 'react-redux';
 import {RootStateType} from '@store/store';
-import {USER_ROLES_ENUM} from '@/types/app.type';
+import { getProjectPermissions } from '@/utils/common.utils';
 
 const ManageProject = () => {
   const [editSelectedProject, setEditSelectedProject] = useState();
@@ -28,14 +28,12 @@ const ManageProject = () => {
     setEditSelectedProject(undefined);
     setIsCreateFormVisible(false);
   };
-  const permission = useSelector(
-    (state: RootStateType) => state.permissionSlice
+  const userPermissions = useSelector(
+    (state: RootStateType) => state.permissionSlice?.userPermissions
   );
   
   const canManageProject = (projectId: string) : boolean => {
-    return permission?.userPermissions?.roles?.find(
-            (role) => role.projects.includes(projectId) || (role.role_name === USER_ROLES_ENUM.APP_ADMIN && role.projects.length === 0)
-          )?.permissions?.includes(USER_PERMISSION_TYPE_ENUM.UpdateProject) ?? false;
+    return getProjectPermissions(projectId, userPermissions)?.includes(USER_PERMISSION_TYPE_ENUM.UpdateProject) ?? false;
   };
 
   const rowMenu = (row) => {
