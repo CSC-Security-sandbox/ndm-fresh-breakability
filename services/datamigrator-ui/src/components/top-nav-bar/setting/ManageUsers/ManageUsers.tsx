@@ -44,7 +44,8 @@ const ManageUsers = () => {
       });
   };
 
-  const canManageProject: boolean = hasPermission(
+  
+  const canManageUser: boolean = hasPermission(
     USER_PERMISSION_TYPE_ENUM.CreateUser
   );
   const rowMenu = (row: any) => [
@@ -58,11 +59,11 @@ const ManageUsers = () => {
         updateUserStatusWrapper(body);
       },
 
-      disabled: permission?.userPermissions?.id === row.id || !canManageProject,
+      disabled: permission?.userPermissions?.id === row.id || !canManageUser,
     },
     {
       label: "Reset Password",
-      disabled: row.user_status !== "active" || !canManageProject,
+      disabled: row.user_status !== "active" || !canManageUser,
       onClick: () => {
         const body = {
           email: row.email,
