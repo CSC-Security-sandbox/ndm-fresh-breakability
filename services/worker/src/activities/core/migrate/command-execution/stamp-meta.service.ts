@@ -246,7 +246,7 @@ export class StampMetaService {
             this.logger.error(`Error stamping hidden attribute for ${sourcePath}: ${error.message}`);
             // const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
             // await jobContext.publishToErrorStream(dmErr);
-            // output.sourceErrors.push(error.code);
+            //output.sourceErrors.push(error.code);
         }
         return output;
     }
