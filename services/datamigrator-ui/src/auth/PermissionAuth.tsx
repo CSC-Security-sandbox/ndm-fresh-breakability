@@ -30,7 +30,6 @@ const Auth = ({ permissionName, children }: AuthProps) => {
       if (userPermissions?.includes(permissionName)) {
         setHasPermission(true);
       }
-      
       setLoading(false);
     };
 
