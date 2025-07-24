@@ -6,10 +6,12 @@ import {COL_DEF_FOR_PROJECT} from '@/constant/app.constants';
 import CreateProjectForm from '@components/top-nav-bar/setting/ManageProjects/CreateProject';
 import useAccountDetails from '@/hooks/useAccountDetails';
 import {useGetAllProjectsQuery} from '@api/projectApi';
-import {hasPermission} from '@/auth/auth.utils';
 import {USER_PERMISSION_TYPE_ENUM} from '@auth/permissionAuth.constant';
 import PermissionAuth from '@/auth/PermissionAuth';
 import {Collapse} from '@mui/material';
+import {useSelector} from 'react-redux';
+import {RootStateType} from '@store/store';
+import {USER_ROLES_ENUM} from '@/types/app.type';
 
 const ManageProject = () => {
   const [editSelectedProject, setEditSelectedProject] = useState();
@@ -26,10 +28,15 @@ const ManageProject = () => {
     setEditSelectedProject(undefined);
     setIsCreateFormVisible(false);
   };
-
-  const canManageProject: boolean = hasPermission(
-    USER_PERMISSION_TYPE_ENUM.UpdateProject
+  const permission = useSelector(
+    (state: RootStateType) => state.permissionSlice
   );
+  
+  const canManageProject = (projectId: string) : boolean => {
+    return permission?.userPermissions?.roles?.find(
+            (role) => role.projects.includes(projectId) || (role.role_name === USER_ROLES_ENUM.APP_ADMIN && role.projects.length === 0)
+          )?.permissions?.includes(USER_PERMISSION_TYPE_ENUM.UpdateProject) ?? false;
+  };
 
   const rowMenu = (row) => {
     return [
@@ -39,7 +46,7 @@ const ManageProject = () => {
           setEditSelectedProject(row);
           setIsCreateFormVisible(true);
         },
-        disabled: !canManageProject,
+        disabled: !canManageProject(row.id),
       },
     ];
   };
@@ -68,7 +75,7 @@ const ManageProject = () => {
           label="Projects"
           content={
             <PermissionAuth
-              permissionName={USER_PERMISSION_TYPE_ENUM.DeleteProject}
+              permissionName={USER_PERMISSION_TYPE_ENUM.ManageProject}
             >
               <Button onClick={() => setIsCreateFormVisible(true)} className="ml-4">
                 Add Project
