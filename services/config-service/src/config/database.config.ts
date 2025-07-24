@@ -11,6 +11,7 @@ import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
 import { WorkerStatsEntity } from 'src/entities/worker-stats.entity';
 import { PathUploadsEntity } from 'src/entities/pathupload.entity';
+import { SupportBundleEntity } from 'src/entities/support-bundle-log.entity';
 
 export default registerAs(
   'typeorm',
@@ -36,7 +37,8 @@ export default registerAs(
       FileServerWorkingDirectoryMappingEntity,
       WorkerJobRunMap,
       WorkerStatsEntity,
-      PathUploadsEntity
+      PathUploadsEntity,
+      SupportBundleEntity,
     ],
     migrations: [],
   }),
