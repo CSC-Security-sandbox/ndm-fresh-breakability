@@ -14,6 +14,7 @@ Compression=lzma
 SolidCompression=yes
 PrivilegesRequired=admin
 SetupLogging=yes
+UsePreviousAppDir=no
 
 
 [Languages]
@@ -36,23 +37,57 @@ var
   ConfigWorkerID: String;
   ConfigWorkerSecret: String;
 
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
+  
+  ConfigWorkerID := ExpandConstant('{param:WORKERID|''}');
+  ConfigWorkerSecret := ExpandConstant('{param:WORKERSECRET|''}');
+  ConfigControlPlaneIP := ExpandConstant('{param:CONTROLPLANEIP|''}');
+  
+  if WizardSilent() then
+  begin
+    if (ConfigWorkerID = '') or (ConfigWorkerSecret = '') or (ConfigControlPlaneIP = '') then
+    begin
+      Log('Error: Silent installation requires all parameters: WORKERID, WORKERSECRET, CONTROLPLANEIP');
+      Result := False;
+      Exit;
+    end;
+    Log('Silent installation with parameters: Worker ID=' + ConfigWorkerID + ', Control Plane IP=' + ConfigControlPlaneIP);
+  end
+  else
+  begin
+    Log('Interactive installation - will show configuration page');
+  end;
+end;
+
 procedure InitializeWizard;
 begin
-  ConfigPage := CreateInputQueryPage(wpSelectDir,
-    'Configuration Settings',
-    'Please enter the required configuration details',
-    'These settings are required for the Datamigrator Worker service.');
+  if not WizardSilent() then
+  begin
+    ConfigPage := CreateInputQueryPage(wpSelectDir,
+      'Configuration Settings',
+      'Please enter the required configuration details',
+      'These settings are required for the Datamigrator Worker service.');
 
-  ConfigPage.Add('Worker ID:', False);
-  ConfigPage.Add('Worker Secret:', True); 
-  ConfigPage.Add('Control Plane IP:', False);
+    ConfigPage.Add('Worker ID:', False);
+    ConfigPage.Add('Worker Secret:', True); 
+    ConfigPage.Add('Control Plane IP:', False);
+    
+    if ConfigWorkerID <> '' then
+      ConfigPage.Values[0] := ConfigWorkerID;
+    if ConfigWorkerSecret <> '' then
+      ConfigPage.Values[1] := ConfigWorkerSecret;
+    if ConfigControlPlaneIP <> '' then
+      ConfigPage.Values[2] := ConfigControlPlaneIP;
+  end;
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   Result := True;
   
-  if CurPageID = ConfigPage.ID then
+  if (ConfigPage <> nil) and (CurPageID = ConfigPage.ID) then
   begin
     if Length(ConfigPage.Values[0]) < 1 then
     begin
@@ -78,7 +113,6 @@ begin
     ConfigWorkerID := ConfigPage.Values[0];
     ConfigWorkerSecret := ConfigPage.Values[1];
     ConfigControlPlaneIP := ConfigPage.Values[2];
-    
   end;
 end;
 
@@ -103,7 +137,8 @@ begin
       if not LoadStringFromFile(TemplatePath, TemplateContent) then
       begin
         Log('Failed to read template file: ' + TemplatePath);
-        MsgBox('Error reading template file.', mbError, MB_OK);
+        if not WizardSilent() then
+          MsgBox('Error reading template file.', mbError, MB_OK);
         exit;
       end;
       Log('Successfully read template file');
@@ -115,7 +150,8 @@ begin
     else
     begin
       Log('Template worker.env.j2 not found at: ' + TemplatePath);
-      MsgBox('Template file missing.', mbError, MB_OK);
+      if not WizardSilent() then
+        MsgBox('Template file missing.', mbError, MB_OK);
       exit;
     end;
 
@@ -137,7 +173,8 @@ begin
     if not SaveStringToFile(ConfigPath, EnvContent, False) then
     begin
       Log('Failed to create configuration file.');
-      MsgBox('Failed to create the configuration file.', mbError, MB_OK);
+      if not WizardSilent() then
+        MsgBox('Failed to create the configuration file.', mbError, MB_OK);
     end
     else
     begin
@@ -146,7 +183,28 @@ begin
 
     Sleep(5000);
 
-    MsgBox('Datamigrator Worker installed successfully.', mbInformation, MB_OK);
+    if not WizardSilent() then
+      MsgBox('Datamigrator Worker installed successfully.', mbInformation, MB_OK);
+  end;
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  Result := True;
+  Log('Uninstallation initiated');
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    Log('Running uninstallation process');
+  end
+  else if CurUninstallStep = usPostUninstall then
+  begin
+    Log('Uninstallation completed successfully');
+    if not UninstallSilent() then
+      MsgBox('Datamigrator Worker has been successfully uninstalled.', mbInformation, MB_OK);
   end;
 end;
 
@@ -157,6 +215,9 @@ Filename: "{app}\DatamigratorWorker.exe"; Parameters: "start"; WorkingDir: "{app
 [UninstallRun]
 Filename: "{app}\DatamigratorWorker.exe"; Parameters: "stop"; WorkingDir: "{app}"; RunOnceId: "StopService"; Flags: runhidden
 Filename: "{app}\DatamigratorWorker.exe"; Parameters: "uninstall"; WorkingDir: "{app}"; RunOnceId: "UninstallService"; Flags: runhidden
+
+[UninstallSilent]
+UsePreviousAppDir=yes
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
