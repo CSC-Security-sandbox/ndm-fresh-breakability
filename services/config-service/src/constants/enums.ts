@@ -51,6 +51,7 @@ export enum WorkFlows{
     LIST_PATHS = 'ListPathsWorkflow',
     VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY = 'ValidateWorkingDirectoryWorkflow',
     VALIDATE_PATHS = 'ValidatePathsWorkflow',
+    SUPPORT_BUNDLE_WORKFLOW = 'SupportBundleWorkflow',
 }
 
 export enum ProtocolVersionError{
@@ -79,4 +80,16 @@ export enum ScheduleStatus {
     SCHEDULING = 'SCHEDULING',
     SCHEDULED = 'SCHEDULED',
     READY_TO_BE_SCHEDULED = 'READY_TO_BE_SCHEDULED'
+}
+
+export enum SupportBundleStatus {
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+}
+
+export enum UserRoles {
+  APP_ADMIN = 'App Admin',
+  PROJECT_ADMIN = 'Project Admin',
+  PROJECT_VIEWER = 'Project Viewer'
 }
