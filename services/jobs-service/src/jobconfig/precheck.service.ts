@@ -13,7 +13,7 @@ import { WorkflowService } from "../workflow/workflow.service";
 import { filterUnhealthyWorkers } from "../utils/worker-filter";
 import { StartWorkFlowPayload } from "../workflow/workflow.types";
 import { PreCheckCircularDependency, PreChecks, PreCheckWorkflowOPayload, workerWithStatus, } from "./jobconfig.types";
-import { CircularDependencyService } from "../job-circular-dependency/circular-dependency.service";
+import { MigrationConflictService } from "../migration-conflict/migration-conflict.service";
 import { JobRunEntity } from "src/entities/jobrun.entity";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { isUUID } from "class-validator";
@@ -37,11 +37,11 @@ export class PreCheckService {
         @InjectRepository(JobConfigEntity)
         private readonly jobConfigEntity: Repository<JobConfigEntity>,
         
-        private readonly circularDependencyService: CircularDependencyService,
+        private readonly migrationConflictService: MigrationConflictService,
     ) { }
 
 async verifyCircularTaskDependency(data: JobConfigPreCheck): Promise<PreCheckCircularDependency[]> {
-        return this.circularDependencyService.verifyCircularTaskDependency(data);
+        return this.migrationConflictService.checkMigrationConflicts(data);
     }
     async initiatePreCheck(data: JobConfigPreCheck): Promise<any> {
         const healthCheckTimeout = parseInt(this.configService.get("app.worker.healthCheckStatusTimout"));

@@ -18,6 +18,7 @@ import { IdentityTypes, JobContextFactory, JobStatus, SpeedTestJobConfig, SpeedT
 import { ScheduleStatus } from 'src/constants/status';
 import { JobRunConfig } from './jobrun.types';
 import { JobRunStatus, JobType, Protocol, WorkFlows } from 'src/constants/enums';
+import { MigrationConflictService } from '../migration-conflict/migration-conflict.service';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import axios from 'axios';
 import { Readable } from "stream";
@@ -106,6 +107,13 @@ describe('JobRunInitService', () => {
           useValue: {
             getClient: jest.fn(),
             setJobContext: jest.fn(),
+          },
+        },
+        {
+          provide: MigrationConflictService,
+          useValue: {
+            checkMigrationConflicts: jest.fn().mockResolvedValue([]),
+            hasMigrationConflicts: jest.fn().mockResolvedValue(false),
           },
         },
       ],

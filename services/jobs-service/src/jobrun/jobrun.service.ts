@@ -39,8 +39,7 @@ import { JobErrorQueryDto } from "./dto/jobRunErrors.dto";
 import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { JobRunStats } from "./dto/jobstats";
 import { JobRunInitService } from "./jobrun.init.service";
-import { PreCheckCircularDependency } from "src/jobconfig/jobconfig.types";
-import { CircularDependencyService } from "src/job-circular-dependency/circular-dependency.service";
+import { MigrationConflictService } from "src/migration-conflict/migration-conflict.service";
 @Injectable()
 export class JobRunService {
   private readonly logger = new Logger(JobRunService.name);
@@ -66,7 +65,7 @@ export class JobRunService {
     private sendMailService: SendMailService,
     private errorRemedyService: ErrorRemedyService,
     private readonly workerService: WorkersService,
-    private readonly circularDependencyService: CircularDependencyService
+    private readonly circularDependencyService: MigrationConflictService
   ) {
     this.mountBasePath = this.configService.get<string>(
       "app.paths.mountBasePath"
@@ -154,7 +153,7 @@ export class JobRunService {
       );
 
     if (jobConfig.jobType === JobType.CUT_OVER || jobConfig.jobType === JobType.MIGRATE) {
-      const circularDependencies = await this.circularDependencyService.checkCircularDependency({
+      const circularDependencies = await this.circularDependencyService.checkMigrationConflicts({
         migrateConfigs: [
           {
             sourcePathId: jobConfig.sourcePathId,

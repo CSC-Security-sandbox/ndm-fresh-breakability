@@ -43,7 +43,7 @@ import { WorkerEntity } from "src/entities/worker.entity";
 import { JobConfigService } from "src/jobconfig/jobconfig.service";
 import { RedisService } from "src/redis/redis.service";
 import { WorkflowService } from "src/workflow/workflow.service";
-import { CircularDependencyService } from "src/job-circular-dependency/circular-dependency.service";
+import { MigrationConflictService } from "src/migration-conflict/migration-conflict.service";
 import { Repository } from "typeorm";
 import { JobConfigEntity } from "../entities/jobconfig.entity";
 import { JobRunEntity } from "../entities/jobrun.entity";
@@ -408,9 +408,9 @@ describe("JobRunService", () => {
         },
         ConfigService,
         {
-          provide: CircularDependencyService,
+          provide: MigrationConflictService,
           useValue: {
-            checkCircularDependency: jest.fn().mockResolvedValue([]),
+            checkMigrationConflicts: jest.fn().mockResolvedValue([]),
             hasCircularDependencies: jest.fn().mockResolvedValue(false),
             verifyCircularTaskDependency: jest.fn().mockResolvedValue([]),
           },
@@ -645,8 +645,8 @@ describe("JobRunService", () => {
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(null);
       
       // Access the mock through the module's providers array
-      const circularDependencyMock = module.get(CircularDependencyService) as any;
-      circularDependencyMock.checkCircularDependency.mockResolvedValue(mockCircularDependency);
+      const circularDependencyMock = module.get(MigrationConflictService) as any;
+      circularDependencyMock.checkMigrationConflicts.mockResolvedValue(mockCircularDependency);
 
       try {
         await service.addHocRun(mockJobConfigId);
@@ -657,7 +657,7 @@ describe("JobRunService", () => {
         expect(error.options.cause).toEqual(mockCircularDependency);
       }
 
-      expect(circularDependencyMock.checkCircularDependency).toHaveBeenCalledWith({
+      expect(circularDependencyMock.checkMigrationConflicts).toHaveBeenCalledWith({
         migrateConfigs: [
           {
             sourcePathId: mockJobConfig.sourcePathId,
@@ -692,8 +692,8 @@ describe("JobRunService", () => {
       jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(mockJobConfig as any);
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(null);
       
-      const circularDependencyMock = module.get(CircularDependencyService) as any;
-      circularDependencyMock.checkCircularDependency.mockResolvedValue(mockCircularDependency);
+      const circularDependencyMock = module.get(MigrationConflictService) as any;
+      circularDependencyMock.checkMigrationConflicts.mockResolvedValue(mockCircularDependency);
 
       try {
         await service.addHocRun(mockJobConfigId);

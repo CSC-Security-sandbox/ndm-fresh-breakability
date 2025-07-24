@@ -32,7 +32,7 @@ import { RedisModule } from "src/redis/redis.module";
 import { JobRunService } from "src/jobrun/jobrun.service";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { SendMailService } from "src/utils/send-email";
-import { CircularDependencyModule } from "../job-circular-dependency/circular-dependency.module";
+import { MigrationConflictModule } from "../migration-conflict/migration-conflict.module";
 import { SyncEmailEntity } from "src/entities/sync-email.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { PreCheckService } from "./precheck.service";
@@ -66,7 +66,7 @@ import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
     ]),
     RedisModule,
     AuthKeycloakModule,
-    CircularDependencyModule,
+    MigrationConflictModule,
   ],
   providers: [JobConfigService, WorkflowService, SendMailService, PreCheckService],
   controllers: [JobConfigController],

@@ -7,7 +7,7 @@ import { InventoryEntity } from '../entities/inventory.entity';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { WorkflowService } from '../workflow/workflow.service';
 import { ConfigService } from '@nestjs/config';
-import { CircularDependencyService } from '../job-circular-dependency/circular-dependency.service';
+import { MigrationConflictService } from '../migration-conflict/migration-conflict.service';
 import { Repository, In } from 'typeorm';
 import { JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
 import { HealthStatus } from 'src/workers/worker.types';
@@ -45,11 +45,10 @@ describe('PreCheckService', () => {
         { provide: WorkflowService, useValue: { startWorkflow: jest.fn() } },
         { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('60') } },
         {
-          provide: CircularDependencyService,
+          provide: MigrationConflictService,
           useValue: {
-            checkCircularDependency: jest.fn().mockResolvedValue([]),
-            hasCircularDependencies: jest.fn().mockResolvedValue(false),
-            verifyCircularTaskDependency: jest.fn().mockResolvedValue([]),
+            checkMigrationConflicts: jest.fn().mockResolvedValue([]),
+            hasMigrationConflicts: jest.fn().mockResolvedValue(false),
           },
         },
       ],

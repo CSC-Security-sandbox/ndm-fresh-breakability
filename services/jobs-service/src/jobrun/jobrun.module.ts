@@ -32,7 +32,7 @@ import { ErrorRemedyEntity } from 'src/entities/error-remedies.entity';
 import { WorkersService } from 'src/workers/workers.service';
 import { SyncEmailEntity } from 'src/entities/sync-email.entity';
 import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';import { JobRunActionService } from './jobrun-action.service';
-import { CircularDependencyModule } from 'src/job-circular-dependency/circular-dependency.module';
+import { MigrationConflictModule } from 'src/migration-conflict/migration-conflict.module';
 
 
 @Module({
@@ -43,7 +43,7 @@ import { CircularDependencyModule } from 'src/job-circular-dependency/circular-d
         WorkerModule,
         RedisModule,
         AuthKeycloakModule,
-        CircularDependencyModule
+        MigrationConflictModule
     ],
     providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService, WorkerEntity,SendMailService, ErrorRemedyService,WorkersService, JobRunActionService],
     controllers: [JobRunController]
