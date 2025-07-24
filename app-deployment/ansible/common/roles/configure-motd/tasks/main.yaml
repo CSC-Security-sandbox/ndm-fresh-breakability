@@ -1,0 +1,75 @@
+- name: Disable MOTD news
+  lineinfile:
+    path: /etc/default/motd-news
+    regexp: '^ENABLED='
+    line: 'ENABLED=0'
+    create: yes
+    backup: yes
+
+- name: Copy pre-login banner (/etc/issue)
+  template:
+    src: ./templates/issue.j2
+    dest: /etc/issue
+    backup: yes
+
+- name: Copy SSH banner (/etc/issue.net)
+  template:
+    src: ./templates/issue.net.j2
+    dest: /etc/issue.net
+    backup: yes
+
+- name: Ensure /etc/update-motd.d exists
+  file:
+    path: /etc/update-motd.d
+    state: directory
+    mode: '0755'
+
+- name: Find all files in /etc/update-motd.d
+  find:
+    path: /etc/update-motd.d
+    file_type: any
+  register: motd_files
+
+- name: Remove all files previously found in /etc/update-motd.d
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ motd_files.files }}"
+
+- name: Add custom dynamic MOTD script
+  template:
+    src: ./templates/01-netapp-motd.j2
+    dest: /etc/update-motd.d/01-netapp-motd
+    mode: '0755'
+    backup: yes
+
+- name: Remove all pam_motd.so lines from PAM files
+  lineinfile:
+    path: "{{ item }}"
+    regexp: '^.*pam_motd\.so.*$'
+    state: absent
+    backup: yes
+  loop:
+    - /etc/pam.d/sshd
+    - /etc/pam.d/login
+
+- name: Add a single pam_motd.so motd=/run/motd.dynamic line to PAM files
+  lineinfile:
+    path: "{{ item }}"
+    regexp: '^session\s+optional\s+pam_motd\.so\s+motd=/run/motd\.dynamic'
+    line: 'session    optional     pam_motd.so motd=/run/motd.dynamic'
+    insertafter: EOF
+    backup: yes
+  loop:
+    - /etc/pam.d/sshd
+    - /etc/pam.d/login
+
+- name: Reload SSHD
+  service:
+    name: ssh
+    state: reloaded
+
+- name: Remove existing /run/motd.dynamic file
+  ansible.builtin.file:
+    path: /run/motd.dynamic
+    state: absent

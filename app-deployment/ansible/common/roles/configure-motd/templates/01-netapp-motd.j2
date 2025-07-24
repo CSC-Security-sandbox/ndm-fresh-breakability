@@ -1,0 +1,16 @@
+#!/bin/bash
+
+echo "==========================================================================="
+echo ""
+echo "  nnnnnnnnnnnnnnnnn      N  e  t  A  p  p              NetApp, Inc."
+echo "  nnnnnnnnnnnnnnnnn       www.netapp.com          \"Go further, faster.\""
+echo "  nnnnnnnnnnnnnnnnn"
+echo "  nnnnnn     nnnnnn   This system is NetApp DataMigrator (NDM)"
+echo "  nnnnnn     nnnnnn"
+echo "  nnnnnn     nnnnnn   HOST: $(hostname) ($(lsb_release -ds 2>/dev/null || cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"'))"
+echo "  nnnnnn     nnnnnn   IPv4: $(hostname -I | awk '{print $1}')"
+echo "  nnnnnn     nnnnnn   IPv6: $(ip -6 addr show scope global | grep inet6 | awk '{print $2}' | cut -d/ -f1 | head -n1)"
+echo "  nnnnnn     nnnnnn   FQDN: $(hostname -f)"
+echo "                      Time: $(date)"                   
+echo ""
+echo "==========================================================================="
