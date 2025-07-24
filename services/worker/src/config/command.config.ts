@@ -16,7 +16,10 @@ export enum CommandPattern{
     SET_SID_FOR_OBJECT='setSIDforObject',
     SET_SID_FOR_OBJECT_DIR='setSIDforDirObject',
     MOUNTED_FOLDER_SIZE='mountedFolderSize',
-    AVAILABLE_DISK_SPACE='availableDiskSpace'
+    AVAILABLE_DISK_SPACE='availableDiskSpace',
+    IS_SMB_HIDDEN_FILE='isSMBHiddenFile',
+    ADD_HIDDEN_ATTRIBUTE='addHiddenAttribute',
+    REMOVE_HIDDEN_ATTRIBUTE='removeHiddenAttribute',
 }
 
 // @types 
@@ -46,6 +49,9 @@ export interface BaseCommands {
     setSIDforObject?: string | undefined
     mountedFolderSize? : string | undefined
     availableDiskSpace? : string | undefined
+    isSMBHiddenFile?: string | undefined
+    addHiddenAttribute?: string | undefined
+    removeHiddenAttribute?: string | undefined
 }
 
 export default registerAs(
@@ -93,7 +99,10 @@ export default registerAs(
                 setSIDforDirObject: process.env.SMB_WIN_SET_SID_FOR_DIR_OBJECT_CMD,
                 setSIDforObject: process.env.SMB_WIN_SET_SID_FOR_OBJECT_CMD,
                 mountedFolderSize: process.env.WIN_USED_DISK_SPACE,
-                availableDiskSpace: process.env.WIN_AVAILABLE_DISK_SPACE_CMD
+                availableDiskSpace: process.env.WIN_AVAILABLE_DISK_SPACE_CMD,
+                isSMBHiddenFile: process.env.WIN_IS_HIDDEN_FILE,
+                addHiddenAttribute: process.env.WIN_ADD_ATTRIBUTE_HIDDEN,
+                removeHiddenAttribute: process.env.WIN_REMOVE_ATTRIBUTE_HIDDEN
             },
             linux: {
                 listPath: process.env.SMB_LINUX_LIST_PATH_CMD,

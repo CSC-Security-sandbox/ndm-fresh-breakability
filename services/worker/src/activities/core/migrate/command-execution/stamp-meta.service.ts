@@ -1,4 +1,4 @@
-import { OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
+import { JobContext, JobManagerContext, OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
 import { Inject, Injectable } from "@nestjs/common";
 import * as fs from "fs";
 import { ShellService } from "src/activities/common/shell.service";
@@ -58,6 +58,11 @@ export class StampMetaService {
             const preserveTimeOutput = await this.preserveAccessAndModifiedTime(input);
             output.sourceErrors.push(...preserveTimeOutput.sourceErrors);
             output.targetErrors.push(...preserveTimeOutput.targetErrors);
+
+            // Stamp hidden attribute
+            const hiddenAttributeOutput = await this.stampHiddenAttribute(input.sourcePath, input.targetPath, input.jobContext);
+            output.sourceErrors.push(...hiddenAttributeOutput.sourceErrors);
+            output.targetErrors.push(...hiddenAttributeOutput.targetErrors);
 
         }
         
@@ -208,6 +213,40 @@ export class StampMetaService {
                 await jobContext.publishToErrorStream(dmErr);
                 output.targetErrors.push(error.code);
             }
+        }
+        return output;
+    }
+
+    async isSMBHiddenFile(path: string): Promise<boolean> {
+        const getIsHiddenCommand = CommandConfig.getSMBCommand(process.platform, CommandPattern.IS_SMB_HIDDEN_FILE)?.replaceAll('${PATH}', path);
+        const output = await this.shellService.runCommand(getIsHiddenCommand);
+        return output.trim().includes('Hidden');
+    }
+
+    async addHiddenAttribute(path: string): Promise<void> {
+        const addHiddenCommand = CommandConfig.getSMBCommand(process.platform, CommandPattern.ADD_HIDDEN_ATTRIBUTE)?.replaceAll('${PATH}', path);
+        await this.shellService.runCommand(addHiddenCommand);
+    }
+
+    async removeHiddenAttribute(path: string): Promise<void> {
+        const removeHiddenCommand = CommandConfig.getSMBCommand(process.platform, CommandPattern.REMOVE_HIDDEN_ATTRIBUTE)?.replaceAll('${PATH}', path);
+        await this.shellService.runCommand(removeHiddenCommand);
+    }
+
+    async stampHiddenAttribute(sourcePath: string, targetPath: string, jobContext: JobManagerContext): Promise<StampMetaOutput> {
+        const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
+        if (process.platform !== 'win32') return output;
+        try {
+            const [isSourceHidden, isTargetHidden] = await Promise.all([this.isSMBHiddenFile(sourcePath), this.isSMBHiddenFile(targetPath)]);
+            if (isSourceHidden !== isTargetHidden) {
+                if (isSourceHidden) await this.addHiddenAttribute(targetPath);
+                else await this.removeHiddenAttribute(targetPath);
+            }
+        } catch (error) {
+            this.logger.error(`Error stamping hidden attribute for ${sourcePath}: ${error.message}`);
+            // const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
+            // await jobContext.publishToErrorStream(dmErr);
+            // output.sourceErrors.push(error.code);
         }
         return output;
     }
