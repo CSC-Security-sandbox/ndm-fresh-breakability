@@ -1,3 +1,4 @@
+import { PreCheck } from '../../../worker/dist/workflows/pre-check/pre-check.types';
 import {
   JobConfigBulkMigrateResStatus,
   JobStatus,
@@ -102,4 +103,14 @@ export interface PreCheckWorkflowOPayload {
     preserveAccessTime: boolean;
   },
   preChecks: PreChecks[]
+}
+
+export interface PreCheckCircularDependency {
+  status: string;
+  jobId: string;
+  jobRunIds: string[];
+  sourcePathId: string;
+  targetPathId: string;
+  sourceServerId: string;
+  targetServerId: string;
 }

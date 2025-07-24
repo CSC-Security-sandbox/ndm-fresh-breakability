@@ -43,7 +43,8 @@ import { WorkerEntity } from "src/entities/worker.entity";
 import { JobConfigService } from "src/jobconfig/jobconfig.service";
 import { RedisService } from "src/redis/redis.service";
 import { WorkflowService } from "src/workflow/workflow.service";
-import { In, Repository } from "typeorm";
+import { CircularDependencyService } from "src/job-circular-dependency/circular-dependency.service";
+import { Repository } from "typeorm";
 import { JobConfigEntity } from "../entities/jobconfig.entity";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import { WorkerJobRunMap } from "../entities/workerjobrun.entity";
@@ -64,6 +65,7 @@ import { WorkersService } from "src/workers/workers.service";
 describe("JobRunService", () => {
   let service: JobRunService;
   let initService: JobRunInitService;
+  let module: TestingModule;
   let jobRunRepo: Repository<JobRunEntity>;
   let jobConfigRepo: Repository<JobConfigEntity>;
   let workerJobRunMapRepo: Repository<WorkerJobRunMap>;
@@ -90,7 +92,7 @@ describe("JobRunService", () => {
   };
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         JobRunService,
         WorkflowService,
@@ -405,6 +407,14 @@ describe("JobRunService", () => {
           },
         },
         ConfigService,
+        {
+          provide: CircularDependencyService,
+          useValue: {
+            checkCircularDependency: jest.fn().mockResolvedValue([]),
+            hasCircularDependencies: jest.fn().mockResolvedValue(false),
+            verifyCircularTaskDependency: jest.fn().mockResolvedValue([]),
+          },
+        },
         EventEmitter2,
       ],
     }).compile();
@@ -607,6 +617,92 @@ describe("JobRunService", () => {
       expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
         where: { id: mockJobConfigId },
       });
+    });
+
+    it("should throw BadRequestException when circular dependency is detected for MIGRATE job", async () => {
+      const mockJobConfigId = "job-config-id";
+      const mockJobConfig = {
+        id: mockJobConfigId,
+        status: JobStatus.Active,
+        jobType: JobType.MIGRATE,
+        sourcePathId: "source-path-id",
+        targetPathId: "target-path-id",
+      };
+
+      const mockCircularDependency = [
+        {
+          status: 'ACTIVE',
+          jobId: 'conflicting-job-id',
+          jobRunIds: ['run-1'],
+          sourcePathId: 'target-path-id',
+          targetPathId: 'source-path-id',
+          sourceServerId: 'server-1',
+          targetServerId: 'server-2',
+        }
+      ];
+
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(mockJobConfig as any);
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(null);
+      
+      // Access the mock through the module's providers array
+      const circularDependencyMock = module.get(CircularDependencyService) as any;
+      circularDependencyMock.checkCircularDependency.mockResolvedValue(mockCircularDependency);
+
+      try {
+        await service.addHocRun(mockJobConfigId);
+        expect(true).toBe(false); // Should not reach here
+      } catch (error) {
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect(error.message).toBe(`Circular dependency detected for job config ${mockJobConfigId}`);
+        expect(error.options.cause).toEqual(mockCircularDependency);
+      }
+
+      expect(circularDependencyMock.checkCircularDependency).toHaveBeenCalledWith({
+        migrateConfigs: [
+          {
+            sourcePathId: mockJobConfig.sourcePathId,
+            destinationPathId: [mockJobConfig.targetPathId],
+          },
+        ],
+      });
+    });
+
+    it("should throw BadRequestException when circular dependency is detected for CUT_OVER job", async () => {
+      const mockJobConfigId = "job-config-id";
+      const mockJobConfig = {
+        id: mockJobConfigId,
+        status: JobStatus.Active,
+        jobType: JobType.CUT_OVER,
+        sourcePathId: "source-path-id",
+        targetPathId: "target-path-id",
+      };
+
+      const mockCircularDependency = [
+        {
+          status: 'ACTIVE',
+          jobId: 'conflicting-job-id',
+          jobRunIds: ['run-1'],
+          sourcePathId: 'target-path-id',
+          targetPathId: 'source-path-id',
+          sourceServerId: 'server-1',
+          targetServerId: 'server-2',
+        }
+      ];
+
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(mockJobConfig as any);
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(null);
+      
+      const circularDependencyMock = module.get(CircularDependencyService) as any;
+      circularDependencyMock.checkCircularDependency.mockResolvedValue(mockCircularDependency);
+
+      try {
+        await service.addHocRun(mockJobConfigId);
+        expect(true).toBe(false); // Should not reach here
+      } catch (error) {
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect(error.message).toBe(`Circular dependency detected for job config ${mockJobConfigId}`);
+        expect(error.options.cause).toEqual(mockCircularDependency);
+      }
     });
   });
 

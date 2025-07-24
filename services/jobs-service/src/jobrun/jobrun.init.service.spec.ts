@@ -148,8 +148,11 @@ describe('JobRunInitService', () => {
   });
   describe('scheduleAJob', () => {
     it('should return an array of jobs', async () => {
-      const currentTime = new Date();
-      jest.spyOn(global.Date, 'now').mockReturnValue(currentTime as any);
+      const currentTime = new Date('2025-07-24T14:42:45.764Z');
+      const originalDate = global.Date;
+      global.Date = jest.fn(() => currentTime) as any;
+      global.Date.now = jest.fn(() => currentTime.getTime());
+      
       const jobs: JobConfigEntity[] = [];
       jest.spyOn(jobConfigRepo, 'find').mockResolvedValue(jobs);
 
@@ -164,6 +167,9 @@ describe('JobRunInitService', () => {
           firstRunAt: LessThan(currentTime),
         },
       });
+      
+      // Restore original Date constructor
+      global.Date = originalDate;
     });
   });
 

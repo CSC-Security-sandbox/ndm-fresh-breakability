@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { In, Repository } from "typeorm";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Injectable, Logger } from "@nestjs/common";
+import { Dependencies, Injectable, Logger } from "@nestjs/common";
 
 import { Options } from "../constants/types";
 import { JobRunStatus, JobStatus, JobType, WorkFlows } from "../constants/enums";
@@ -12,10 +12,12 @@ import { JobConfigPrecheck as JobConfigPreCheck } from "./dto/jobdicoverybulk.dt
 import { WorkflowService } from "../workflow/workflow.service";
 import { filterUnhealthyWorkers } from "../utils/worker-filter";
 import { StartWorkFlowPayload } from "../workflow/workflow.types";
-import { PreChecks, PreCheckWorkflowOPayload, workerWithStatus } from "./jobconfig.types";
+import { PreCheckCircularDependency, PreChecks, PreCheckWorkflowOPayload, workerWithStatus, } from "./jobconfig.types";
+import { CircularDependencyService } from "../job-circular-dependency/circular-dependency.service";
 import { JobRunEntity } from "src/entities/jobrun.entity";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { isUUID } from "class-validator";
+import { JobConfigEntity } from 'src/entities/jobconfig.entity';
 
 @Injectable()
 export class PreCheckService {
@@ -29,16 +31,33 @@ export class PreCheckService {
         @InjectRepository(JobRunEntity)
         private readonly jobRunRepo: Repository<JobRunEntity>,
 
-
         @InjectRepository(InventoryEntity)
         private readonly inventoryRepo: Repository<InventoryEntity>,
+        
+        @InjectRepository(JobConfigEntity)
+        private readonly jobConfigEntity: Repository<JobConfigEntity>,
+        
+        private readonly circularDependencyService: CircularDependencyService,
     ) { }
 
+async verifyCircularTaskDependency(data: JobConfigPreCheck): Promise<PreCheckCircularDependency[]> {
+        return this.circularDependencyService.verifyCircularTaskDependency(data);
+    }
     async initiatePreCheck(data: JobConfigPreCheck): Promise<any> {
         const healthCheckTimeout = parseInt(this.configService.get("app.worker.healthCheckStatusTimout"));
         const traceId: string = uuidv4();
 
         try {
+            const circularDependencies = await this.verifyCircularTaskDependency(data);
+            if (circularDependencies && circularDependencies.length > 0) {
+                return {
+                    status: "error",
+                    erros: ["PRECHECK_FAILED"],
+                    message: `Failed to perform the pre check`,
+                    DependenciesError: circularDependencies,
+                };
+            }
+
             const preCheckPayload = this.createInitialPreCheckPayload(data.preserveAccessTime);
             const pathIds = this.collectAllPathIds(data);
             const pathToWorkerMapping = await this.fetchVolumesWithWorkers(pathIds);

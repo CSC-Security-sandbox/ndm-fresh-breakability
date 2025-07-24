@@ -39,6 +39,8 @@ import { JobErrorQueryDto } from "./dto/jobRunErrors.dto";
 import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { JobRunStats } from "./dto/jobstats";
 import { JobRunInitService } from "./jobrun.init.service";
+import { PreCheckCircularDependency } from "src/jobconfig/jobconfig.types";
+import { CircularDependencyService } from "src/job-circular-dependency/circular-dependency.service";
 @Injectable()
 export class JobRunService {
   private readonly logger = new Logger(JobRunService.name);
@@ -63,7 +65,8 @@ export class JobRunService {
     private workFlowService: WorkflowService,
     private sendMailService: SendMailService,
     private errorRemedyService: ErrorRemedyService,
-    private readonly workerService: WorkersService
+    private readonly workerService: WorkersService,
+    private readonly circularDependencyService: CircularDependencyService
   ) {
     this.mountBasePath = this.configService.get<string>(
       "app.paths.mountBasePath"
@@ -149,6 +152,25 @@ export class JobRunService {
       throw new BadRequestException(
         `Job run can not be created to Inactive Job Config`
       );
+
+    if (jobConfig.jobType === JobType.CUT_OVER || jobConfig.jobType === JobType.MIGRATE) {
+      const circularDependencies = await this.circularDependencyService.checkCircularDependency({
+        migrateConfigs: [
+          {
+            sourcePathId: jobConfig.sourcePathId,
+            destinationPathId: [jobConfig.targetPathId],
+          },
+        ],
+      });
+      if (circularDependencies && circularDependencies.length > 0) {
+        throw new BadRequestException(
+          `Circular dependency detected for job config ${jobConfigId}`,
+          {
+            cause: circularDependencies,
+          }
+        );
+      }
+    }
     return await this.jobRunInitService.createJobRun(jobConfig.id, new Date());
   }
 
