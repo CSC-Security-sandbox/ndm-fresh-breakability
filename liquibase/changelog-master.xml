@@ -391,6 +391,7 @@
    <changeSet id="20250724_01_remove_special_files_from_discovery_report.sql" author="harshitasaxena">
       <sqlFile path="liquibase/20250724_01_remove_special_files_from_discovery_report.sql" splitStatements="false"/>
       <rollback>
+         <sqlFile path="liquibase/20250724_01_remove_special_files_from_discovery_report_rollback.sql" splitStatements="false"/>
       </rollback>
    </changeSet>
 

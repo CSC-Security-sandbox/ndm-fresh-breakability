@@ -1,5 +1,6 @@
 import { FILE_SERVER_STATUS, JOB_CONFIG_STATUS_ENUM, JOBS_TYPE } from "@/types/app.type";
 import crypto from 'crypto';
+import { USER_ROLES_ENUM } from '@/types/app.type';
 
 export const getJobType = (type: JOBS_TYPE) => {
   switch (type) {
@@ -154,4 +155,9 @@ export const encryptData = (data: string): string => {
   } catch (error) {
     throw new Error('An internal error occurred');
   }
+};
+
+export const getProjectPermissions = (projectId: string, userPermissions) => {
+  return userPermissions.roles.find((row) => row.projects.includes(projectId) || (row.role_name === USER_ROLES_ENUM.APP_ADMIN && row.projects.length === 0))
+      ?.permissions;
 };
