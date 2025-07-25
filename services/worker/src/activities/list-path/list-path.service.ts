@@ -21,7 +21,7 @@ export class ListPathActivity {
 
   async listPath(traceId: string, protocolType: string, payload: any): Promise<any> {
     this.logger.log(
-      `[${traceId}] List Path for ${payload.hostname} of type ${protocolType} from ${this.workerId}`,
+      `[${traceId}] List Path of type ${protocolType} from ${this.workerId}`,
     );
 
     const response = {

@@ -72,7 +72,7 @@ export class NFSProtocol extends Protocol {
   // --------------------------- List Paths -------------------------- //
   async listPaths(traceId: string, payload: ProtocolPayload): Promise<string[]> {
     this.logger.log(
-      `[${traceId}] Getting list paths for ${payload.hostname} of type ${ProtocolTypes.NFS} from ${this.workerId}`,
+      `[${traceId}] Getting list paths of type ${ProtocolTypes.NFS} from ${this.workerId}`,
     );
     return this.executeCommand(
       traceId,
@@ -148,7 +148,7 @@ export class NFSProtocol extends Protocol {
 
   async unmountPath(traceId: string, payload: any): Promise<any> {
     this.logger.log(
-      `[${traceId}] Unmounting path for ${payload.hostname} of type ${ProtocolTypes.NFS} from ${this.workerId} with payload: ${JSON.stringify(payload)}`,
+      `[${traceId}] Unmounting path of type ${ProtocolTypes.NFS} from ${this.workerId}`,
     );
 
     const response = await this.executeCommand(

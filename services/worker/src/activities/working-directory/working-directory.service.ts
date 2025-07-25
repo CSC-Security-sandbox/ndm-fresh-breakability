@@ -132,7 +132,7 @@ export class ValidateWorkingDirectoryActivity {
           jobRunId: traceId,
         };
 
-        this.logger.log(`Mounting export path for host ${fileServer.host}`);
+        this.logger.log(`Mounting export path`);
         await protocol.mountPath(traceId, mountPathPayload);
         this.logger.log("Mounted export path successfully");
 

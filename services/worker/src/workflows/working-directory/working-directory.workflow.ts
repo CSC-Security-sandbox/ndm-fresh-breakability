@@ -7,7 +7,7 @@ async function log(traceId: string, message: string) {
 }
 
 export const ValidateWorkingDirectoryWorkflow = async ({traceId, payload, options}) => {
-  log(`traceId - ${traceId}`, `Starting ValidateWorkingDirectoryWorkflow with args: ${JSON.stringify(payload)}`);
+  log(`traceId - ${traceId}`, `Starting ValidateWorkingDirectoryWorkflow`);
     const responseArray = await Promise.all(
       payload.workerIds.map((workerId: string) =>
         executeChild(ValidateWorkingDirectoryWorkerWorkflow, {

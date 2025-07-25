@@ -51,6 +51,6 @@ export async function ValidateWorkingDirectoryWorkerWorkflow(
   }
   args.payload['exportPathWorkingDirectoryProvided'] = exportPathWorkingDirectoryProvided;
 
-  log(args.traceId, `Starting ValidateWorkingDirectoryWorkerWorkflow with args: ${JSON.stringify(args)}`);
+  log(args.traceId, `Starting ValidateWorkingDirectoryWorkerWorkflow`);
   return await workingDirectoryActivity(args.traceId, args.payload);
 }

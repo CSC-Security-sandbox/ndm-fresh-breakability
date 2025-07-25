@@ -155,7 +155,7 @@ export class SMBProtocol extends Protocol {
 
   async unmountPath(traceId: string, payload: any): Promise<any> {
     this.logger.log(
-      `[${traceId}] Unmounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
+      `[${traceId}] Unmounting path of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
     const response = await this.executeCommand(
       traceId,

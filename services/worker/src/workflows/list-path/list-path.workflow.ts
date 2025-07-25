@@ -13,7 +13,7 @@ async function log(traceId: string, message: string) {
  * @returns Returns the result of all child workflows
  */
 export const ListPathsWorkflow = async ({traceId, payload, options}) => {
-  log( traceId, `Starting ListPathsWorkflow with args: ${JSON.stringify(payload)}`,);
+  log( traceId, `Starting ListPathsWorkflow`,);
     const responseArray = await Promise.all(
       payload.workerIds.map((workerId) =>
         executeChild(ListPathWorkerWorkflow, {

@@ -13,7 +13,6 @@ async function log(traceId: string, message: string) {
  * @returns Returns the result of all child workflows
  */
 export const ValidateConnectionsWorkflow = async ({traceId, payload, options}) => {
-  log( traceId, `Starting ValidateConnectionWorkflow with args: ${JSON.stringify(payload)}`,);
   const responseArray = await Promise.all(
     payload.workerIds.map((workerId) =>
       executeChild(ValidateWorkerConnectionWorkflow, {
@@ -34,8 +33,5 @@ export const ValidateConnectionsWorkflow = async ({traceId, payload, options}) =
   );
   
   const result = responseArray.flat();
-  log(
-    traceId, `ValidateConnectionWorkflow response: ${JSON.stringify(result)}`,
-  );
   return result;
 }
