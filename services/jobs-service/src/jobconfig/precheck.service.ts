@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { In, Repository } from "typeorm";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Dependencies, Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Dependencies, Injectable, Logger } from "@nestjs/common";
 
 import { Options } from "../constants/types";
 import { JobRunStatus, JobStatus, JobType, WorkFlows } from "../constants/enums";
@@ -40,7 +40,7 @@ export class PreCheckService {
         private readonly migrationConflictService: MigrationConflictService,
     ) { }
 
-async verifyCircularTaskDependency(data: JobConfigPreCheck): Promise<PreCheckCircularDependency[]> {
+async checkMigrationConflicts(data: JobConfigPreCheck): Promise<PreCheckCircularDependency[]> {
         return this.migrationConflictService.checkMigrationConflicts(data);
     }
     async initiatePreCheck(data: JobConfigPreCheck): Promise<any> {
@@ -48,14 +48,14 @@ async verifyCircularTaskDependency(data: JobConfigPreCheck): Promise<PreCheckCir
         const traceId: string = uuidv4();
 
         try {
-            const circularDependencies = await this.verifyCircularTaskDependency(data);
-            if (circularDependencies && circularDependencies.length > 0) {
-                throw new Error(JSON.stringify({
+            const checkMigrationConflicts = await this.checkMigrationConflicts(data);
+            if (checkMigrationConflicts && checkMigrationConflicts.length > 0) {
+                throw new BadRequestException({
                     status: "error",
-                    erros: ["PRECHECK_FAILED"],
-                    message: "Failed to perform the pre check",
-                    DependenciesError: circularDependencies,
-                }));
+                    errors: ["MIGRATION_CONFLICTS_FOUND"],
+                    details: checkMigrationConflicts,
+                    message: "Migration conflicts detected during precheck.",
+                });
             }
 
             const preCheckPayload = this.createInitialPreCheckPayload(data.preserveAccessTime);
@@ -73,11 +73,17 @@ async verifyCircularTaskDependency(data: JobConfigPreCheck): Promise<PreCheckCir
 
         } catch (error) {
             this.logger.error(`${traceId}] Failed to perform the pre check: ${error}`);
-            throw new Error(JSON.stringify({
+            if (error instanceof BadRequestException) {
+                const response = error.getResponse();
+                if (typeof response === 'object' && response !== null && Array.isArray((response as any).errors) && (response as any).errors.includes("MIGRATION_CONFLICTS_FOUND")) {
+                    throw error;
+                }
+            }
+            throw new BadRequestException({
                 status: "error",
-                erros: ["PRECHECK_FAILED"],
-                message: `Failed to perform the pre check: ${error}`,
-            }));
+                errors: ["PRECHECK_FAILED"],
+                message: `${error}`,
+            });
         }
     }
 
