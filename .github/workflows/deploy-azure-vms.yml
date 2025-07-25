@@ -1,6 +1,11 @@
 name: Deploy Azure VMs with Terraform
 
 on:
+  pull_request:
+      branches:
+        - main
+        - feature/azure-vm-deployment-automation
+
   workflow_dispatch:
     inputs:
       control_plane_image_name:

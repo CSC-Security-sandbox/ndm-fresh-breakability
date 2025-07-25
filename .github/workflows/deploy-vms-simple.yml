@@ -1,6 +1,10 @@
 name: Deploy Azure VMs - Simple
 
 on:
+  pull_request:
+      branches:
+        - main
+        - feature/azure-vm-deployment-automation
   workflow_dispatch:
     inputs:
       control_plane_image_name:
