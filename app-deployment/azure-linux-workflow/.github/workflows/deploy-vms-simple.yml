@@ -1,0 +1,143 @@
+name: Deploy Azure VMs - Simple
+
+on:
+  workflow_dispatch:
+    inputs:
+      control_plane_image_name:
+        description: 'Control Plane Image Name'
+        required: true
+        default: 'CP_IMAGE'
+        type: string
+      worker_image_name:
+        description: 'Worker Image Name'
+        required: true
+        default: 'WORKER_IMAGE'
+        type: string
+      worker_count:
+        description: 'Number of Workers'
+        required: true
+        default: '1'
+        type: string
+
+env:
+  ARM_CLIENT_ID: ${{ secrets.NDM_AZURE_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.NDM_AZURE_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.NDM_AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.NDM_AZURE_TENANT_ID }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
+
+    - name: Validate Inputs
+      run: |
+        echo "🚀 Starting VM Deployment with the following configuration:"
+        echo "  • Control Plane Image: ${{ github.event.inputs.control_plane_image_name }}"
+        echo "  • Worker Image: ${{ github.event.inputs.worker_image_name }}"
+        echo "  • Number of Workers: ${{ github.event.inputs.worker_count }}"
+        echo ""
+
+    - name: Deploy Control Plane
+      working-directory: ./app-deployment/azure-linux-workflow/control_plane
+      run: |
+        echo "📡 Deploying Control Plane..."
+        terraform init -input=false
+        
+        terraform apply -auto-approve \
+          -var="image_definition=${{ github.event.inputs.control_plane_image_name }}"
+        
+        CP_IP=$(terraform output -raw vm_private_ip)
+        echo "✅ Control Plane deployed successfully!"
+        echo "   Private IP: $CP_IP"
+        echo "CONTROL_PLANE_IP=$CP_IP" >> $GITHUB_ENV
+
+    - name: Deploy Workers
+      working-directory: ./app-deployment/azure-linux-workflow/worker
+      run: |
+        echo "👷 Deploying ${{ github.event.inputs.worker_count }} Worker(s)..."
+        terraform init -input=false
+        
+        terraform apply -auto-approve \
+          -var="image_definition=${{ github.event.inputs.worker_image_name }}" \
+          -var="worker_count=${{ github.event.inputs.worker_count }}"
+        
+        WORKER_IPS=$(terraform output -json worker_private_ips | jq -r '.[]')
+        echo "✅ Workers deployed successfully!"
+        echo "   Worker IPs:"
+        echo "$WORKER_IPS" | sed 's/^/     /'
+
+    - name: Deployment Summary
+      run: |
+        echo "## 🎉 Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📋 Configuration Used" >> $GITHUB_STEP_SUMMARY
+        echo "| Component | Image Name | Count |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----------|------------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Control Plane | \`${{ github.event.inputs.control_plane_image_name }}\` | 1 |" >> $GITHUB_STEP_SUMMARY
+        echo "| Workers | \`${{ github.event.inputs.worker_image_name }}\` | ${{ github.event.inputs.worker_count }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### �️ Resource Naming" >> $GITHUB_STEP_SUMMARY
+        echo "- **Naming Pattern**: \`{image-name}-{timestamp-with-seconds}-{random-hex}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Uniqueness**: Timestamp + 6-character random suffix ensures no conflicts" >> $GITHUB_STEP_SUMMARY
+        echo "- **Example**: \`ndm-control-plane-$(date +%Y%m%d-%H%M%S)-a1b2c3\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### �🌐 Network Information" >> $GITHUB_STEP_SUMMARY
+        echo "- **Control Plane IP:** \`${{ env.CONTROL_PLANE_IP }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### ⚡ Quick Actions" >> $GITHUB_STEP_SUMMARY
+        echo "- To destroy these resources, run this workflow again with the 'destroy' action" >> $GITHUB_STEP_SUMMARY
+        echo "- SSH to control plane: \`ssh ubuntu@${{ env.CONTROL_PLANE_IP }}\`" >> $GITHUB_STEP_SUMMARY
+
+  destroy:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
+
+    - name: Destroy Workers
+      working-directory: ./app-deployment/azure-linux-workflow/worker
+      run: |
+        echo "🗑️ Destroying Workers..."
+        terraform init -input=false
+        terraform destroy -auto-approve
+      continue-on-error: true
+
+    - name: Destroy Control Plane
+      working-directory: ./app-deployment/azure-linux-workflow/control_plane
+      run: |
+        echo "🗑️ Destroying Control Plane..."
+        terraform init -input=false
+        terraform destroy -auto-approve
+      continue-on-error: true
+
+    - name: Cleanup Summary
+      run: |
+        echo "## 🧹 Cleanup Complete!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "All Azure VM resources have been destroyed." >> $GITHUB_STEP_SUMMARY

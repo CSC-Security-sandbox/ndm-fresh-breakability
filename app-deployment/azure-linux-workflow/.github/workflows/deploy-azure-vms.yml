@@ -1,0 +1,166 @@
+name: Deploy Azure VMs with Terraform
+
+on:
+  workflow_dispatch:
+    inputs:
+      control_plane_image_name:
+        description: 'Control plane image name/definition'
+        required: false
+        default: 'CP_IMAGE'
+        type: string
+      worker_image_name:
+        description: 'Worker image name/definition'
+        required: false
+        default: 'WORKER_IMAGE'
+        type: string
+      worker_count:
+        description: 'Number of worker VMs to deploy'
+        required: false
+        default: '1'
+        type: string
+      control_plane_image_version:
+        description: 'Control plane image version (leave empty for latest)'
+        required: false
+        default: ''
+        type: string
+      worker_image_version:
+        description: 'Worker image version (leave empty for latest)'
+        required: false
+        default: ''
+        type: string
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+        - deploy
+        - destroy
+
+env:
+  ARM_CLIENT_ID: ${{ secrets.NDM_AZURE_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.NDM_AZURE_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.NDM_AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.NDM_AZURE_TENANT_ID }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'deploy'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
+
+    - name: Deploy Control Plane
+      working-directory: ./control_plane
+      run: |
+        echo "Deploying Control Plane..."
+        echo "Image Name: ${{ github.event.inputs.control_plane_image_name }}"
+        echo "Image Version: ${{ github.event.inputs.control_plane_image_version || 'latest' }}"
+        
+        terraform init -input=false
+        
+        TF_ARGS=""
+        if [ -n "${{ github.event.inputs.control_plane_image_name }}" ]; then
+          TF_ARGS="$TF_ARGS -var=image_definition=${{ github.event.inputs.control_plane_image_name }}"
+        fi
+        if [ -n "${{ github.event.inputs.control_plane_image_version }}" ]; then
+          TF_ARGS="$TF_ARGS -var=image_version=${{ github.event.inputs.control_plane_image_version }}"
+        fi
+        
+        terraform apply -auto-approve $TF_ARGS
+        
+        CP_IP=$(terraform output -raw vm_private_ip)
+        echo "Control Plane Private IP: $CP_IP"
+        echo "CONTROL_PLANE_IP=$CP_IP" >> $GITHUB_ENV
+
+    - name: Deploy Workers
+      working-directory: ./worker
+      run: |
+        echo "Deploying ${{ github.event.inputs.worker_count }} Worker(s)..."
+        echo "Worker Image Name: ${{ github.event.inputs.worker_image_name }}"
+        echo "Worker Image Version: ${{ github.event.inputs.worker_image_version || 'latest' }}"
+        
+        terraform init -input=false
+        
+        TF_ARGS=""
+        if [ -n "${{ github.event.inputs.worker_image_name }}" ]; then
+          TF_ARGS="$TF_ARGS -var=image_definition=${{ github.event.inputs.worker_image_name }}"
+        fi
+        if [ -n "${{ github.event.inputs.worker_image_version }}" ]; then
+          TF_ARGS="$TF_ARGS -var=image_version=${{ github.event.inputs.worker_image_version }}"
+        fi
+        if [ -n "${{ github.event.inputs.worker_count }}" ]; then
+          TF_ARGS="$TF_ARGS -var=worker_count=${{ github.event.inputs.worker_count }}"
+        fi
+        
+        terraform apply -auto-approve $TF_ARGS
+        
+        WORKER_IPS=$(terraform output -json worker_private_ips | jq -r '.[]')
+        echo "Worker Private IPs:"
+        echo "$WORKER_IPS"
+
+    - name: Deployment Summary
+      run: |
+        echo "## Deployment Complete! 🎉" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Configuration" >> $GITHUB_STEP_SUMMARY
+        echo "- **Control Plane Image Name:** ${{ github.event.inputs.control_plane_image_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Control Plane Image Version:** ${{ github.event.inputs.control_plane_image_version || 'latest' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Worker Image Name:** ${{ github.event.inputs.worker_image_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Worker Image Version:** ${{ github.event.inputs.worker_image_version || 'latest' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Number of Workers:** ${{ github.event.inputs.worker_count }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Control Plane" >> $GITHUB_STEP_SUMMARY
+        echo "- **Private IP:** ${{ env.CONTROL_PLANE_IP }}" >> $GITHUB_STEP_SUMMARY
+
+  destroy:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'destroy'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
+
+    - name: Destroy Workers
+      working-directory: ./worker
+      run: |
+        echo "Destroying Workers..."
+        terraform init -input=false
+        terraform destroy -auto-approve
+      continue-on-error: true
+
+    - name: Destroy Control Plane
+      working-directory: ./control_plane
+      run: |
+        echo "Destroying Control Plane..."
+        terraform init -input=false
+        terraform destroy -auto-approve
+      continue-on-error: true
+
+    - name: Cleanup Summary
+      run: |
+        echo "## Cleanup Complete! 🧹" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "All Azure resources have been destroyed." >> $GITHUB_STEP_SUMMARY
