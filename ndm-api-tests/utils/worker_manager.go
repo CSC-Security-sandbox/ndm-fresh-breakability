@@ -6,11 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
-
-	"golang.org/x/crypto/ssh"
 )
 
 // Global raw configuration data.
@@ -272,7 +269,11 @@ func CreateWorkerScript(resp *http.Response) (string, string, error) {
 	workerSecret := workerResp.Data.Items.WorkerSecret
 	controlPlaneIp := workerResp.Data.Items.ControlPlaneIp
 
-	script := fmt.Sprintf(`
+	script := ""
+
+	switch PROTOCOL_TYPE {
+	case ProtocolNFS:
+		script = fmt.Sprintf(`
     sudo su -c '
     export WORKER_ID=%s
     export WORKER_SECRET=%s
@@ -280,11 +281,27 @@ func CreateWorkerScript(resp *http.Response) (string, string, error) {
     sh /opt/datamigrator/bin/worker_register.sh
     '
     `, workerId, workerSecret, controlPlaneIp)
+
+	case ProtocolSMB:
+		script = fmt.Sprintf(
+			`"C:\Users\datamigrator\Downloads\windows-worker-installer-3551489.exe" /SILENT /WORKERID=%s /WORKERSECRET=%s /CONTROLPLANEIP=%s`,
+			workerId,
+			workerSecret,
+			controlPlaneIp,
+		)
+	}
+
 	return script, workerId, nil
 }
 
-// GetDetachWorkerScript generates a shell script to stop/disable and remove worker environment variables.
-func GetDetachWorkerScript() string {
+func GetDetachWorkerScriptForSMB() string {
+	psScript := `Start-Process -Wait -FilePath "C:\datamigrator\unins000.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/LOG=C:\datamigrator_uninstall.log"; if (Test-Path "C:\datamigrator") { Remove-Item -Path "C:\datamigrator" -Recurse -Force }`
+
+	return fmt.Sprintf(`powershell.exe -Command "%s"`, psScript)
+}
+
+// GetDetachWorkerScriptForNFS generates a shell script to stop/disable and remove worker environment variables.
+func GetDetachWorkerScriptForNFS(workerConfig SSHConfig) string {
 	script := fmt.Sprintf(`#!/bin/bash
 	set -e 
 
@@ -314,14 +331,23 @@ func GetDetachWorkerScript() string {
 	echo "$SUDO_PASS" | sudo -S sed -i '/^REDIS_PASSWORD=/d' "$ENV_FILE"
 
 	echo "Successfully disabled worker service"
-	`, NDM_VM_PASSWORD)
+	`, workerConfig.Password)
 	return script
 }
 
 // DetachWorker runs the detach script on a given worker via SSH.
-func DetachWorker(config SSHConfig) (string, error) {
-	script := GetDetachWorkerScript()
-	return sshRunScript(config, script)
+func DetachWorker(workerConfig SSHConfig) (string, error) {
+	script := ""
+
+	switch PROTOCOL_TYPE {
+	case ProtocolNFS:
+		script = GetDetachWorkerScriptForNFS(workerConfig)
+	case ProtocolSMB:
+		script = GetDetachWorkerScriptForSMB()
+	}
+	fmt.Printf("UMV detach worker script for %s -> %s \n", workerConfig.Host, script)
+
+	return sshRunScript(workerConfig, script)
 }
 
 // StartWorker starts the worker service on a given worker via SSH.
@@ -359,7 +385,7 @@ func StopWorker(config SSHConfig) (string, error) {
 
 // attachWorkerForConfig registers a single worker via API call and SSH.
 // It returns the workerId if successful.
-func attachWorkerForConfig(worker SSHConfig, authToken, accountId, projectId string) (string, error) {
+/*func attachWorkerForConfig(worker SSHConfig, authToken, accountId, projectId string) (string, error) {
 	fullURL := CONFIG_SERVICE_URL + "/api/v1/worker-registration"
 	data := map[string]string{
 		"projectId": projectId,
@@ -383,6 +409,34 @@ func attachWorkerForConfig(worker SSHConfig, authToken, accountId, projectId str
 		return workerId, err
 	}
 	LogDebug(fmt.Sprintf("Output from worker %s: %s", worker.Host, output))
+	return workerId, nil
+}*/
+
+func attachWorkerForConfig(workerConfig SSHConfig, authToken, accountId, projectId string) (string, error) {
+	fullURL := CONFIG_SERVICE_URL + "/api/v1/worker-registration"
+	data := map[string]string{
+		"projectId": projectId,
+	}
+	reqBody, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+	headers := GetHeaders(authToken, ContentTypeJSON)
+	resp, err := SendAPIRequest("POST", fullURL, reqBody, headers)
+	if err != nil {
+		return "", err
+	}
+
+	script, workerId, err := CreateWorkerScript(resp)
+	if err != nil {
+		return workerId, err
+	}
+	LogDebug(fmt.Sprintf("For worker %s, running script: %s", workerConfig.Host, script))
+	output, err := sshRunScript(workerConfig, script)
+	if err != nil {
+		return workerId, err
+	}
+	LogDebug(fmt.Sprintf("Output from worker %s: %s", workerConfig.Host, output))
 	return workerId, nil
 }
 
@@ -456,167 +510,4 @@ func GetRestartWorkerScript() string {
 
 	`, NDM_VM_PASSWORD)
 	return script
-}
-
-// FOR SMB
-
-func uninstallSMBWorker(workers map[string]SSHConfig) error {
-	psScript := `Start-Process -Wait -FilePath "C:\datamigrator\unins000.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/LOG=C:\datamigrator_uninstall.log"; if (Test-Path "C:\datamigrator") { Remove-Item -Path "C:\datamigrator" -Recurse -Force }`
-
-	for _, cfg := range workers {
-		psScriptEscaped := fmt.Sprintf(`powershell.exe -Command "%s"`, psScript)
-
-		sshConfig := &ssh.ClientConfig{
-			User: cfg.Username,
-			Auth: []ssh.AuthMethod{
-				ssh.Password(cfg.Password),
-			},
-			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		}
-
-		addr := cfg.Host + ":" + strconv.Itoa(cfg.Port)
-		client, err := ssh.Dial("tcp", addr, sshConfig)
-		if err != nil {
-			return fmt.Errorf("failed to dial %s: %w", cfg.Host, err)
-		}
-		defer client.Close()
-
-		session, err := client.NewSession()
-		if err != nil {
-			return fmt.Errorf("failed to create session for %s: %w", cfg.Host, err)
-		}
-		defer session.Close()
-
-		// Run the PowerShell uninstall command
-		output, err := session.CombinedOutput(fmt.Sprintf(`cmd.exe /C %s`, psScriptEscaped))
-		if err != nil {
-			return fmt.Errorf("failed to run uninstall on %s: %w\nOutput: %s", cfg.Host, err, output)
-		}
-
-		fmt.Printf("Uninstall output for %s:\n%s\n", cfg.Host, output)
-	}
-	return nil
-}
-
-func installSMBWorker(projectID string, workerCount int) (map[string]SSHConfig, error) {
-	fullURL := CONFIG_SERVICE_URL + "/api/v1/worker-registration"
-	workerConfigs := make(map[string]SSHConfig)
-
-	// Read SMB worker hosts from NDM_SMB_WORKERS_HOST environment variable
-	hostsEnv := os.Getenv("SMB_NDM_WORKERS_HOST")
-	if hostsEnv == "" {
-		return nil, fmt.Errorf("NDM_SMB_WORKERS_HOST environment variable is not set")
-	}
-	hosts := strings.Split(hostsEnv, ",")
-	if len(hosts) < workerCount {
-		return nil, fmt.Errorf("not enough SMB worker hosts provided, required: %d, got: %d", workerCount, len(hosts))
-	}
-
-	fmt.Println("env windows ip : ", hosts)
-
-	for i := 0; i < workerCount; i++ {
-		// --- Call API for each worker ---
-		data := map[string]string{
-			"projectId": projectID,
-		}
-		reqBody, err := json.Marshal(data)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling request body: %w", err)
-		}
-		headers := GetHeaders(AuthToken, ContentTypeJSON)
-		resp, err := SendAPIRequest("POST", fullURL, reqBody, headers)
-		if err != nil {
-			return nil, fmt.Errorf("error sending API request: %w", err)
-		}
-		defer resp.Body.Close()
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("error reading response body: %w", err)
-		}
-
-		fmt.Println("Response body:", string(body))
-
-		type WorkerItems struct {
-			WorkerId       string `json:"workerId"`
-			WorkerSecret   string `json:"workerSecret"`
-			ControlPlaneIp string `json:"controlPlaneIp"`
-		}
-		type WorkerData struct {
-			Items WorkerItems `json:"items"`
-		}
-		type WorkerResponse struct {
-			TrackId string     `json:"trackId"`
-			Message string     `json:"message"`
-			Data    WorkerData `json:"data"`
-		}
-
-		var result WorkerResponse
-
-		// var result map[string]interface{}
-		err = json.Unmarshal(body, &result)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing JSON: %w", err)
-		}
-		fmt.Printf("Parsed JSON: %+v\n", result)
-
-		// --- Use API response for this worker ---
-		cfg := SSHConfig{
-			Username: "datamigrator",
-			Host:     strings.TrimSpace(hosts[i]),
-			Port:     22,
-			Password: "Dm@admin123",
-		}
-
-		installerCmd := fmt.Sprintf(
-			`"C:\Users\datamigrator\Downloads\windows-worker-installer-3551489.exe" /SILENT /WORKERID=%s /WORKERSECRET=%s /CONTROLPLANEIP=%s`,
-			result.Data.Items.WorkerId,
-			result.Data.Items.WorkerSecret,
-			result.Data.Items.ControlPlaneIp,
-		)
-
-		fmt.Printf("Installer command for %s: %s\n", cfg.Host, installerCmd)
-
-		sshConfig := &ssh.ClientConfig{
-			User: cfg.Username,
-			Auth: []ssh.AuthMethod{
-				ssh.Password(cfg.Password),
-			},
-			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		}
-
-		addr := cfg.Host + ":" + strconv.Itoa(cfg.Port)
-
-		client, err := ssh.Dial("tcp", addr, sshConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to dial: %w", err)
-		}
-		defer client.Close()
-
-		session, err := client.NewSession()
-		if err != nil {
-			return nil, fmt.Errorf("failed to create session: %w", err)
-		}
-		defer session.Close()
-
-		fullCmd := fmt.Sprintf(`cmd.exe /C "%s"`, installerCmd)
-		fmt.Println("UMV INSTALLING WORKER : ", fullCmd)
-		output, err := session.CombinedOutput(fullCmd)
-		if err != nil {
-			return nil, fmt.Errorf("failed to run installer: %w\nOutput: %s", err, output)
-		}
-
-		fmt.Printf("Installer output:\n%s\n", output)
-
-		workerID := result.Data.Items.WorkerId
-		workerConfigs[workerID] = cfg
-	}
-
-	// Update the global attachedWorkersConfig map with installed SMB workers
-	for workerID, cfg := range workerConfigs {
-		attachedWorkersConfig[workerID] = cfg
-	}
-
-	return workerConfigs, nil
-
 }

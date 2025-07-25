@@ -54,7 +54,7 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 
 			fmt.Println("host ip is : ", SOURCE_HOST_IP)
 			fmt.Println("UMV WAITING FOR WORKER ONLINE :", attachedWorkersConfig)
-			Wait(50)
+			Wait(60)
 			sourceParams := CreateServereParams{
 				ConfigName:       "source-file-server",
 				ConfigType:       ConfigTypeFile,
