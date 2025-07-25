@@ -86,6 +86,7 @@ func PtrExportPathSource(e ExportPathSource) *ExportPathSource {
 func CreateFileServer(params CreateServereParams, headers map[string]string) (string, *http.Response, error) {
 	createSourceURL := CONFIG_SERVICE_URL + CREATE_FILESERVER_ENDPOINT
 
+	fmt.Println("Creating file server with params:", params.Host, " , username : ", params.UserName, " , ", params.Password)
 	if params.ExportPathSource == nil {
 		defaultSource := AutoDiscover
 		params.ExportPathSource = &defaultSource
@@ -97,15 +98,15 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 		"projectId":  params.ProjectID,
 		"fileServers": []map[string]interface{}{
 			{
-				"serverType":       params.ServerType,
-				"userName":         params.UserName,
-				"password":         params.Password,
-				"protocol":         params.Protocol,
-				"protocolVersion":  params.ProtocolVersion,
-				"host":             params.Host,
-				"volumes":          []interface{}{},
-				"workers":          params.Workers,
-				"exportPathSource": params.ExportPathSource,
+				"serverType":      params.ServerType,
+				"userName":        "rtp.openenglab.netapp.com\\svc-datamigrator",
+				"password":        params.Password,
+				"protocol":        params.Protocol,
+				"protocolVersion": params.ProtocolVersion,
+				"host":            params.Host,
+				"volumes":         []interface{}{},
+				"workers":         params.Workers,
+				// "exportPathSource": params.ExportPathSource,
 			},
 		},
 		"workingDirectory": map[string]interface{}{
@@ -114,6 +115,14 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 			"pathName":         "",
 		},
 	}
+
+	jsonBytes, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		fmt.Println("Error marshaling payload to JSON:", err)
+
+	}
+	fmt.Println("Payload for creating file server (JSON):")
+	fmt.Println(string(jsonBytes))
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -285,6 +294,7 @@ func ClearVolume(export string) error {
 		Password: NDM_VM_PASSWORD,
 	}
 
+	fmt.Printf("UMV SSH BEFORE : %+v \n", sshConfig)
 	sshConfig = SSHConfig{
 		Username: NDM_WORKERS_USER_NAME,
 		Host:     NDM_WORKERS_HOST,
@@ -292,7 +302,8 @@ func ClearVolume(export string) error {
 		Password: NFS_NDM_WORKERS_PASSWORD,
 	}
 
-	fmt.Printf("UMV TRYING TO CONNECT : %+v \n", sshConfig)
+	fmt.Printf("UMV SSH AFTER : %+v \n", sshConfig)
+
 	fmt.Println("UMV RUNNING : ", script)
 
 	output, err := sshRunScript(sshConfig, script)
@@ -371,7 +382,7 @@ func AddDataToVolumeForSMB(export string) string {
 	cmd := fmt.Sprintf(`cmd /C
 	if exist %s rmdir /s /q %s &&
 	mkdir %s &&
-	(for /L %%i in (1,1,10) do fsutil file createnew %s\file%%i.txt 102400) &&
+	(for /L %%i in (1,1,20) do fsutil file createnew %s\file%%i.txt 102400) &&
 	net use %s %s /user:%s "%s" &&
 	xcopy /E /I /Y %s %s\%s &&
 	net use %s /delete /y &&
@@ -523,6 +534,7 @@ func RemoveDeltaFromVolume(export string) error {
 		Port:     config.Port,
 		Password: NDM_VM_PASSWORD,
 	}
+	fmt.Printf("UMV SSH BEFORE : %+v \n", sshConfig)
 
 	sshConfig = SSHConfig{
 		Username: NDM_WORKERS_USER_NAME,
@@ -530,8 +542,8 @@ func RemoveDeltaFromVolume(export string) error {
 		Port:     22,
 		Password: NFS_NDM_WORKERS_PASSWORD,
 	}
+	fmt.Printf("UMV SSH AFTER : %+v \n", sshConfig)
 
-	fmt.Printf("UMV TRYING TO CONNECT : %+v \n", sshConfig)
 	fmt.Println("UMV RUNNING : ", script)
 
 	output, err := sshRunScript(sshConfig, script)

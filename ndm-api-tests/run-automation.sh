@@ -15,6 +15,19 @@ set -e  # Exit on any error
 #   timeout        : Optional (default: "3h")
 # -------------------------------------------
 
+# ------------------ USAGE ------------------
+# Usage:
+# run_tests <test_type> <test_path> <src_volumes> <dest_volumes> [protocol_type] [timeout]
+#
+# Arguments:
+#   test_type      : Mandatory (e.g., regression, smoke, end-to-end)
+#   test_path      : Mandatory (path to test directory)
+#   src_volumes    : Mandatory (comma-separated list)
+#   dest_volumes   : Mandatory (comma-separated list)
+#   protocol_type  : Optional (default: "NFS")
+#   timeout        : Optional (default: "3h")
+# -------------------------------------------
+
 # Function to run tests and log output
 run_tests() {
     local test_type="$1"
@@ -97,15 +110,30 @@ run_tests() {
 # Test runs
 
 #Regression Testing
-run_tests "regression" "./tests/regression" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
-run_tests "regression" "./tests/regression" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "SMB"
+#run_tests "regression" "./tests/regression" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
+#run_tests "regression" "./tests/regression" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "SMB"
 
 
 #End-to-End Testing
-run_tests "end-to-end" "./tests/e2e" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
-run_tests "end-to-end" "./tests/e2e" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "SMB"
+#run_tests "end-to-end" "./tests/e2e" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
+#run_tests "end-to-end" "./tests/e2e" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "SMB"
 
 
 #Smoke Testing
-run_tests "smoke" "./tests/smoke" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
-run_tests "smoke" "./tests/smoke" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "SMB"
+#run_tests "smoke" "./tests/smoke" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
+#run_tests "smoke" "./tests/smoke" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "SMB"
+
+#--------------------SMB VOLUMES-----------------------
+#run_tests "end-to-end" "./tests/e2e" "vol4_33,vol3_33" "volSMBAutoDst,volSMBAuto_vol1" "SMB"
+#------------------------------------------------------
+
+run_tests "end-to-end" "./tests/e2e" "vol4_33,vol3_33" "volSMBAutoDst,volSMBAuto_vol1" "SMB"
+
+#run_tests "smoke" "./tests/smoke" "vol1,vol2" "vol3,vol4" "3h" "NFS"
+
+	# NFS_SOURCE_VOLUME                               = "/volSrcAuto"
+	# NFS_DESTINATION_VOLUME                          = "/vol_dest_automation"
+	# NFS_SOURCE_VOLUME_1                             = "/vol_src_automation2"
+	# NFS_DESTINATION_VOLUME_1                        = "/vol_dest_automation2"
+	# NFS_SOURCE_VOLUME_2                             = "/vol_src_automation"
+#read -p "Test execution complete. Press [Enter] key to exit..."

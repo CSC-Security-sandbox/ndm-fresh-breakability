@@ -47,9 +47,11 @@ func InitTestEnvForSMoke() {
 	}
 
 	AppAdminId, ProjectAdminId, ProjectViewerId, roleIdsErr = GetRoleId(AuthToken)
+	fmt.Println("AppAdminId:", AppAdminId)
 	if roleIdsErr != nil {
 		LogFatalf("Error getting Role Ids: %v", roleIdsErr)
 	}
+
 	LogDebug(fmt.Sprintf("Project root: %s", projectRoot))
 	scenarioConfigPath := filepath.Join(projectRoot, "smoke/scenarios/scenario_config.yml")
 	LogDebug(fmt.Sprintf("Reading scenario configuration from: %s", scenarioConfigPath))
@@ -108,57 +110,62 @@ func InitTestEnv() {
 }
 
 func SetupTestEnv(workerCount int) (string, map[string]SSHConfig, error) {
-	if PROTOCOL_TYPE == ProtocolSMB {
-		// TODO : To be replaced with SMB code.
-		// SMB-specific setup logic is not implemented yet.
-		return "", nil, fmt.Errorf("SMB-specific logic is not implemented")
-	}
-
 	// Create the project first.
 	projectId, err := createProject(AuthToken, AccountId)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to create project: %w", err)
 	}
+
 	LogDebug(fmt.Sprintf("Project created with ID: %s", projectId))
-
-	attachedWorkersConfig, err := AttachWorkers(workerCount, AuthToken, AccountId, projectId)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to attach workers: %w", err)
-	}
-
-	if len(attachedWorkersConfig) == 0 {
-		return "", nil, fmt.Errorf("failed to attach workers: worker may have been already attached")
-	}
-
-	workerIds := GetWorkerIds()
-	for i := 0; i < MaxPollRetries; i++ {
-		workerIdWithStatus, err := GetWorkerStatus(projectId, workerIds)
+	switch PROTOCOL_TYPE {
+	case "NFS":
+		attachedWorkersConfig, err := AttachWorkers(workerCount, AuthToken, AccountId, projectId)
 		if err != nil {
-			return "", nil, fmt.Errorf("error getting worker status: %w", err)
+			return "", nil, fmt.Errorf("failed to attach workers: %w", err)
 		}
-		onlineWorkers := 0
-		for _, workerId := range workerIds {
-			if workerIdWithStatus[workerId] == "Online" {
-				LogDebug(fmt.Sprintf("Worker %s is Online", workerId))
-				onlineWorkers++
+		if len(attachedWorkersConfig) == 0 {
+			return "", nil, fmt.Errorf("failed to attach workers: worker may have been already attached")
+		}
+		workerIds := GetWorkerIds()
+		for i := 0; i < MaxPollRetries; i++ {
+			workerIdWithStatus, err := GetWorkerStatus(projectId, workerIds)
+			if err != nil {
+				return "", nil, fmt.Errorf("error getting worker status: %w", err)
 			}
+			onlineWorkers := 0
+			for _, workerId := range workerIds {
+				if workerIdWithStatus[workerId] == "Online" {
+					LogDebug(fmt.Sprintf("Worker %s is Online", workerId))
+					onlineWorkers++
+				}
+			}
+			if onlineWorkers == len(workerIds) {
+				LogDebug("All workers are Online")
+				break
+			}
+			Wait(DefaultPollInterval)
 		}
-		if onlineWorkers == len(workerIds) {
-			LogDebug("All workers are Online")
-			break
+		LogDebug("Test environment setup complete and all worker are Online")
+		return projectId, attachedWorkersConfig, nil
+
+	case "SMB":
+		fmt.Println("Setting up SMB workers...")
+		workerConfigs, err := installSMBWorker(projectId, workerCount)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to install SMB workers: %w", err)
 		}
-		Wait(DefaultPollInterval)
+		// For SMB, we don't have a worker status check loop here, can be added if needed.
+		LogDebug("Test environment setup complete for SMB workers")
+		return projectId, workerConfigs, nil
+
+	default:
+		return "", nil, fmt.Errorf("unsupported worker type: %s", PROTOCOL_TYPE)
 	}
-	LogDebug("Test environment setup complete and all worker are Online")
-	return projectId, attachedWorkersConfig, nil
 }
 
 func CleanupTestEnv() error {
-
 	if PROTOCOL_TYPE == ProtocolSMB {
-		// To be replaced with SMB code.
-		// SMB-specific cleanup logic is not implemented yet.
-		return fmt.Errorf("SMB-specific logic is not implemented")
+		return uninstallSMBWorker(attachedWorkersConfig)
 	}
 
 	err := DetachAllWorkers()

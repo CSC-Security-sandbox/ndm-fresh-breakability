@@ -1,0 +1,359 @@
+
+Running end-to-end tests
+2025/07/25 10:00:03 [DEBUG] Current working directory: C:\Users\ls89152\OneDrive - NetApp Inc\Desktop\FNF\ndm\ndm-api-tests\tests\e2e
+2025/07/25 10:00:03 Environment variables loaded successfully from .env file
+Running Suite: E2e Suite - C:\Users\ls89152\OneDrive - NetApp Inc\Desktop\FNF\ndm\ndm-api-tests\tests\e2e
+=========================================================================================================
+Random Seed: [1m1753417797[0m
+
+Will run [1m1[0m of [1m19[0m specs
+[38;5;243m------------------------------[0m
+[0m[1m[BeforeSuite] [0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/FNF/ndm/ndm-api-tests/tests/e2e/e2e_suite_test.go:25[0m
+  [1mSTEP:[0m Setting before the suite [38;5;243m@ 07/25/25 10:00:03.021[0m
+DEBUG: Request method is GET
+DEBUG: Request method is POST
+DEBUG: Request method is GET
+DEBUG: Request method is PUT
+DEBUG: Request method is PUT
+2025/07/25 10:00:09 Successfully updated app admin for 'admin@datamigrator.local'
+DEBUG: Request method is POST
+DEBUG: Request method is GET
+2025/07/25 10:00:09 Access Token: Fetched
+2025/07/25 10:00:09 Refresh Token: Fetched
+2025/07/25 10:00:09 Fetching Role IDs...
+2025/07/25 10:00:10 Role IDs fetched successfully.
+[38;5;10m[BeforeSuite] PASSED [7.029 seconds][0m
+[38;5;243m------------------------------[0m
+[38;5;14mS[0m[38;5;14mS[0m[38;5;14mS[0m[38;5;14mS[0m
+[38;5;243m------------------------------[0m
+[0mTC-0014: Run incremental sync schedule migration for verifying partial deletion is mirrored [38;5;243mTC-0014: Run incremental sync schedule migration for verifying partial deletion is mirrored [0m[1mTC-0014: Run incremental sync schedule migration for verifying partial deletion is mirrored[0m
+[38;5;243mC:/Users/ls89152/OneDrive - NetApp Inc/Desktop/FNF/ndm/ndm-api-tests/tests/e2e/TC-001_test.go:360[0m
+DEBUG: Request method is POST
+Setting up SMB workers...
+env windows ip :  [10.192.7.74  10.192.7.119]
+DEBUG: Request method is POST
+2025/07/25 10:00:10 [DEBUG] Project created with ID: 6d8f961a-f5cf-4dcf-8391-660a5755605a
+Response body: {"trackId":"ddbf8cb1-1988-4f42-a36b-3adf5630face","message":"Request processed successfully.","data":{"items":{"workerId":"17eafd74-8771-4777-8b4f-6105263843da","workerSecret":"3b4ff589-a730-4b90-8dc4-75c397deeb3e","controlPlaneIp":"10.192.7.89"}}}
+Parsed JSON: {TrackId:ddbf8cb1-1988-4f42-a36b-3adf5630face Message:Request processed successfully. Data:{Items:{WorkerId:17eafd74-8771-4777-8b4f-6105263843da WorkerSecret:3b4ff589-a730-4b90-8dc4-75c397deeb3e ControlPlaneIp:10.192.7.89}}}
+Installer command for 10.192.7.74: "C:\Users\datamigrator\Downloads\windows-worker-installer-3551489.exe" /SILENT /WORKERID=17eafd74-8771-4777-8b4f-6105263843da /WORKERSECRET=3b4ff589-a730-4b90-8dc4-75c397deeb3e /CONTROLPLANEIP=10.192.7.89
+Installer output:
+
+2025/07/25 10:00:37 [DEBUG] Test environment setup complete for SMB workers
+  [1mSTEP:[0m ########################## TC-0014 start ################################ [38;5;243m@ 07/25/25 10:00:37.973[0m
+Creating file server with params: 10.192.7.33  , username :  rtp.openenglab.netapp.com\svc-datamigrator  ,  U@8e%#%Nuko%Bmd&
+Payload for creating file server (JSON):
+{
+  "configName": "source-file-server",
+  "configType": "FILE",
+  "fileServers": [
+    {
+      "host": "10.192.7.33",
+      "password": "U@8e%#%Nuko%Bmd\u0026",
+      "protocol": "SMB",
+      "protocolVersion": "v3.0",
+      "serverType": "OtherNAS",
+      "userName": "rtp.openenglab.netapp.com\\svc-datamigrator",
+      "volumes": [],
+      "workers": [
+        "17eafd74-8771-4777-8b4f-6105263843da"
+      ]
+    }
+  ],
+  "projectId": "6d8f961a-f5cf-4dcf-8391-660a5755605a",
+  "workingDirectory": {
+    "pathId": null,
+    "pathName": "",
+    "workingDirectory": ""
+  }
+}
+DEBUG: Request method is POST
+  [1mSTEP:[0m Source file server created with config ID: &http.Response{Status:"201 Created", StatusCode:201, Proto:"HTTP/1.1", ProtoMajor:1, ProtoMinor:1, Header:http.Header{"Access-Control-Allow-Origin":[]string{"*"}, "Connection":[]string{"keep-alive"}, "Content-Length":[]string{"1534"}, "Content-Type":[]string{"application/json; charset=utf-8"}, "Date":[]string{"Fri, 25 Jul 2025 04:31:28 GMT"}, "Etag":[]string{"W/\"5fe-LePTj8gYHz86Z/CGcfHovBCgbXs\""}, "Strict-Transport-Security":[]string{"max-age=31536000; includeSubDomains"}, "X-Powered-By":[]string{"Express"}}, Body:(*http.cancelTimerBody)(0xc00008c840), ContentLength:1534, TransferEncoding:[]string(nil), Close:false, Uncompressed:false, Trailer:http.Header(nil), Request:(*http.Request)(0xc000165cc0), TLS:(*tls.ConnectionState)(0xc000482000)} [38;5;243m@ 07/25/25 10:01:28.38[0m
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+ID of the volume with path 'vol4_33': a5fac804-b15c-45c8-9459-ae38c948b4d1
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+ID of the volume with path 'vol3_33': 0edf83ad-29b4-4ddf-ac37-c09cacf9148b
+  [1mSTEP:[0m Creating a new discovery job for the source [38;5;243m@ 07/25/25 10:01:34.846[0m
+DEBUG: Request method is POST
+  [1mSTEP:[0m Getting jobs by jobConfigId for source [38;5;243m@ 07/25/25 10:01:34.946[0m
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+2025/07/25 10:01:45 [DEBUG] Status check response: READY
+2025/07/25 10:01:45 [DEBUG] Checking job run status for ID 57ca68cf-3b7b-476a-8ea1-8da844b3f558, attempt 1
+2025/07/25 10:01:45 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/25 10:01:50 [DEBUG] Status check response: READY
+2025/07/25 10:01:50 [DEBUG] Checking job run status for ID 57ca68cf-3b7b-476a-8ea1-8da844b3f558, attempt 2
+2025/07/25 10:01:50 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/25 10:01:55 [DEBUG] Status check response: READY
+2025/07/25 10:01:55 [DEBUG] Checking job run status for ID 57ca68cf-3b7b-476a-8ea1-8da844b3f558, attempt 3
+2025/07/25 10:01:55 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/25 10:02:00 [DEBUG] Status check response: READY
+2025/07/25 10:02:00 [DEBUG] Checking job run status for ID 57ca68cf-3b7b-476a-8ea1-8da844b3f558, attempt 4
+2025/07/25 10:02:00 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/25 10:02:06 [DEBUG] Status check response: READY
+2025/07/25 10:02:06 [DEBUG] Checking job run status for ID 57ca68cf-3b7b-476a-8ea1-8da844b3f558, attempt 5
+2025/07/25 10:02:06 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/25 10:02:11 [DEBUG] Status check response: RUNNING
+2025/07/25 10:02:11 [DEBUG] Checking job run status for ID 57ca68cf-3b7b-476a-8ea1-8da844b3f558, attempt 6
+2025/07/25 10:02:11 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+2025/07/25 10:02:16 [DEBUG] Status check response: COMPLETED
+2025/07/25 10:02:16 [DEBUG] Checking job run status for ID 57ca68cf-3b7b-476a-8ea1-8da844b3f558, attempt 7
+2025/07/25 10:02:16 [DEBUG] Current job run status: COMPLETED
+2025/07/25 10:02:16 [DEBUG] Job reached desired state: COMPLETED.
+DEBUG: Request method is GET
+2025/07/25 10:02:16 [DEBUG] Status check response: COMPLETED
+2025/07/25 10:02:16 [DEBUG] Checking job run status for ID aa59e068-5c7b-4c30-9d71-11dac7f41827, attempt 1
+2025/07/25 10:02:16 [DEBUG] Current job run status: COMPLETED
+2025/07/25 10:02:16 [DEBUG] Job reached desired state: COMPLETED.
+  [1mSTEP:[0m Creating the destination file server [38;5;243m@ 07/25/25 10:02:16.549[0m
+Creating file server with params: 10.192.7.33  , username :  rtp.openenglab.netapp.com\svc-datamigrator  ,  U@8e%#%Nuko%Bmd&
+Payload for creating file server (JSON):
+{
+  "configName": "destination-file-server",
+  "configType": "FILE",
+  "fileServers": [
+    {
+      "host": "10.192.7.33",
+      "password": "U@8e%#%Nuko%Bmd\u0026",
+      "protocol": "SMB",
+      "protocolVersion": "v3.0",
+      "serverType": "OtherNAS",
+      "userName": "rtp.openenglab.netapp.com\\svc-datamigrator",
+      "volumes": [],
+      "workers": [
+        "17eafd74-8771-4777-8b4f-6105263843da"
+      ]
+    }
+  ],
+  "projectId": "6d8f961a-f5cf-4dcf-8391-660a5755605a",
+  "workingDirectory": {
+    "pathId": null,
+    "pathName": "",
+    "workingDirectory": ""
+  }
+}
+DEBUG: Request method is POST
+  [1mSTEP:[0m Getting the destination file server by configId [38;5;243m@ 07/25/25 10:02:16.815[0m
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+ID of the volume with path 'volSMBAutoDst': 8c415007-2532-4d7b-b57c-b7c500ff0ca9
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+ID of the volume with path 'volSMBAuto_vol1': ec6b66d0-df74-433d-a048-34ddd3a9657c
+  [1mSTEP:[0m Creating a migration job with Incremental Sync of 3 mins [38;5;243m@ 07/25/25 10:02:23.439[0m
+DEBUG: Request method is POST
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+  [1mSTEP:[0m Waiting for 1st iteration of migration to get completed [38;5;243m@ 07/25/25 10:02:34.091[0m
+DEBUG: Request method is GET
+2025/07/25 10:02:34 [DEBUG] Status check response: READY
+2025/07/25 10:02:34 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 1
+2025/07/25 10:02:34 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/25 10:02:39 [DEBUG] Status check response: READY
+2025/07/25 10:02:39 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 2
+2025/07/25 10:02:39 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/25 10:02:44 [DEBUG] Status check response: READY
+2025/07/25 10:02:44 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 3
+2025/07/25 10:02:44 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/25 10:02:49 [DEBUG] Status check response: RUNNING
+2025/07/25 10:02:49 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 4
+2025/07/25 10:02:49 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/25 10:02:54 [DEBUG] Status check response: RUNNING
+2025/07/25 10:02:54 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 5
+2025/07/25 10:02:54 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/25 10:03:00 [DEBUG] Status check response: RUNNING
+2025/07/25 10:03:00 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 6
+2025/07/25 10:03:00 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/25 10:03:05 [DEBUG] Status check response: RUNNING
+2025/07/25 10:03:05 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 7
+2025/07/25 10:03:05 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/25 10:03:10 [DEBUG] Status check response: RUNNING
+2025/07/25 10:03:10 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 8
+2025/07/25 10:03:10 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/25 10:03:15 [DEBUG] Status check response: RUNNING
+2025/07/25 10:03:15 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 9
+2025/07/25 10:03:15 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/25 10:03:20 [DEBUG] Status check response: RUNNING
+2025/07/25 10:03:20 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 10
+2025/07/25 10:03:20 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/25 10:03:25 [DEBUG] Status check response: RUNNING
+2025/07/25 10:03:25 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 11
+2025/07/25 10:03:25 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/25 10:03:30 [DEBUG] Status check response: RUNNING
+2025/07/25 10:03:30 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 12
+2025/07/25 10:03:30 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/25 10:03:36 [DEBUG] Status check response: RUNNING
+2025/07/25 10:03:36 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 13
+2025/07/25 10:03:36 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/25 10:03:41 [DEBUG] Status check response: RUNNING
+2025/07/25 10:03:41 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 14
+2025/07/25 10:03:41 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/25 10:03:46 [DEBUG] Status check response: RUNNING
+2025/07/25 10:03:46 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 15
+2025/07/25 10:03:46 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/25 10:03:51 [DEBUG] Status check response: RUNNING
+2025/07/25 10:03:51 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 16
+2025/07/25 10:03:51 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/25 10:03:56 [DEBUG] Status check response: RUNNING
+2025/07/25 10:03:56 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 17
+2025/07/25 10:03:56 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/25 10:04:01 [DEBUG] Status check response: RUNNING
+2025/07/25 10:04:01 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 18
+2025/07/25 10:04:01 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+2025/07/25 10:04:06 [DEBUG] Status check response: COMPLETED
+2025/07/25 10:04:06 [DEBUG] Checking job run status for ID 08475738-d4f8-47cb-8b35-c692cbf1555d, attempt 19
+2025/07/25 10:04:06 [DEBUG] Current job run status: COMPLETED
+2025/07/25 10:04:06 [DEBUG] Job reached desired state: COMPLETED.
+2025/07/25 10:04:06 [DEBUG] Status check response: RUNNING
+2025/07/25 10:04:06 [DEBUG] Checking job run status for ID 6359bdf7-14b0-4c58-83d3-9299a78478a7, attempt 1
+2025/07/25 10:04:06 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/25 10:04:12 [DEBUG] Status check response: RUNNING
+2025/07/25 10:04:12 [DEBUG] Checking job run status for ID 6359bdf7-14b0-4c58-83d3-9299a78478a7, attempt 2
+2025/07/25 10:04:12 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/25 10:04:17 [DEBUG] Status check response: COMPLETED
+2025/07/25 10:04:17 [DEBUG] Checking job run status for ID 6359bdf7-14b0-4c58-83d3-9299a78478a7, attempt 3
+2025/07/25 10:04:17 [DEBUG] Current job run status: COMPLETED
+2025/07/25 10:04:17 [DEBUG] Job reached desired state: COMPLETED.
+  [1mSTEP:[0m Creating a new discovery job for destination [38;5;243m@ 07/25/25 10:04:17.208[0m
+DEBUG: Request method is POST
+  [1mSTEP:[0m Getting jobs by jobConfigId for destination [38;5;243m@ 07/25/25 10:04:17.303[0m
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+2025/07/25 10:04:22 [DEBUG] Status check response: READY
+2025/07/25 10:04:22 [DEBUG] Checking job run status for ID d4278223-0529-475a-a639-88f7cc49c05a, attempt 1
+2025/07/25 10:04:22 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/25 10:04:27 [DEBUG] Status check response: READY
+2025/07/25 10:04:27 [DEBUG] Checking job run status for ID d4278223-0529-475a-a639-88f7cc49c05a, attempt 2
+2025/07/25 10:04:27 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/25 10:04:32 [DEBUG] Status check response: READY
+2025/07/25 10:04:32 [DEBUG] Checking job run status for ID d4278223-0529-475a-a639-88f7cc49c05a, attempt 3
+2025/07/25 10:04:32 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/25 10:04:38 [DEBUG] Status check response: READY
+2025/07/25 10:04:38 [DEBUG] Checking job run status for ID d4278223-0529-475a-a639-88f7cc49c05a, attempt 4
+2025/07/25 10:04:38 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+2025/07/25 10:04:43 [DEBUG] Status check response: COMPLETED
+2025/07/25 10:04:43 [DEBUG] Checking job run status for ID d4278223-0529-475a-a639-88f7cc49c05a, attempt 5
+2025/07/25 10:04:43 [DEBUG] Current job run status: COMPLETED
+2025/07/25 10:04:43 [DEBUG] Job reached desired state: COMPLETED.
+DEBUG: Request method is GET
+2025/07/25 10:04:43 [DEBUG] Status check response: READY
+2025/07/25 10:04:43 [DEBUG] Checking job run status for ID 0ab70b68-5316-4552-8f47-8b608f72b777, attempt 1
+2025/07/25 10:04:43 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/25 10:04:48 [DEBUG] Status check response: RUNNING
+2025/07/25 10:04:48 [DEBUG] Checking job run status for ID 0ab70b68-5316-4552-8f47-8b608f72b777, attempt 2
+2025/07/25 10:04:48 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+2025/07/25 10:04:53 [DEBUG] Status check response: COMPLETED
+2025/07/25 10:04:53 [DEBUG] Checking job run status for ID 0ab70b68-5316-4552-8f47-8b608f72b777, attempt 3
+2025/07/25 10:04:53 [DEBUG] Current job run status: COMPLETED
+2025/07/25 10:04:53 [DEBUG] Job reached desired state: COMPLETED.
+  [1mSTEP:[0m Creating bulk cutover job [38;5;243m@ 07/25/25 10:04:53.763[0m
+DEBUG: Request method is POST
+  [1mSTEP:[0m Getting jobs by job config id [38;5;243m@ 07/25/25 10:04:53.883[0m
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+2025/07/25 10:05:04 [DEBUG] Status check response: READY
+2025/07/25 10:05:04 [DEBUG] Checking job run status for ID 3a48bde8-4fe8-465d-b609-0b22a2459e16, attempt 1
+2025/07/25 10:05:04 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/25 10:05:09 [DEBUG] Status check response: READY
+2025/07/25 10:05:09 [DEBUG] Checking job run status for ID 3a48bde8-4fe8-465d-b609-0b22a2459e16, attempt 2
+2025/07/25 10:05:09 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/25 10:05:14 [DEBUG] Status check response: READY
+2025/07/25 10:05:14 [DEBUG] Checking job run status for ID 3a48bde8-4fe8-465d-b609-0b22a2459e16, attempt 3
+2025/07/25 10:05:14 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/25 10:05:19 [DEBUG] Status check response: READY
+2025/07/25 10:05:19 [DEBUG] Checking job run status for ID 3a48bde8-4fe8-465d-b609-0b22a2459e16, attempt 4
+2025/07/25 10:05:19 [DEBUG] Current job run status: READY
+DEBUG: Request method is GET
+2025/07/25 10:05:25 [DEBUG] Status check response: RUNNING
+2025/07/25 10:05:25 [DEBUG] Checking job run status for ID 3a48bde8-4fe8-465d-b609-0b22a2459e16, attempt 5
+2025/07/25 10:05:25 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+2025/07/25 10:05:30 [DEBUG] Status check response: BLOCKED
+2025/07/25 10:05:30 [DEBUG] Checking job run status for ID 3a48bde8-4fe8-465d-b609-0b22a2459e16, attempt 6
+2025/07/25 10:05:30 [DEBUG] Current job run status: BLOCKED
+2025/07/25 10:05:30 [DEBUG] Job reached desired state: BLOCKED.
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+2025/07/25 10:05:30 [DEBUG] Status check response: RUNNING
+2025/07/25 10:05:30 [DEBUG] Checking job run status for ID 0ee948c9-75f9-42d6-8147-31dd279fd70e, attempt 1
+2025/07/25 10:05:30 [DEBUG] Current job run status: RUNNING
+DEBUG: Request method is GET
+DEBUG: Request method is GET
+2025/07/25 10:05:35 [DEBUG] Status check response: BLOCKED
+2025/07/25 10:05:35 [DEBUG] Checking job run status for ID 0ee948c9-75f9-42d6-8147-31dd279fd70e, attempt 2
+2025/07/25 10:05:35 [DEBUG] Current job run status: BLOCKED
+2025/07/25 10:05:35 [DEBUG] Job reached desired state: BLOCKED.
+  [1mSTEP:[0m Approving bulk cutover job [38;5;243m@ 07/25/25 10:05:35.993[0m
+DEBUG: Request method is PUT
+DEBUG: Request method is PUT
+  [1mSTEP:[0m ########################## TC-0014 end ################################ [38;5;243m@ 07/25/25 10:05:36.364[0m
+Uninstall output for 10.192.7.74:
+
+  [1mSTEP:[0m Cleanup complete. [38;5;243m@ 07/25/25 10:05:43.963[0m
+[38;5;10m+ [333.912 seconds][0m
+[38;5;243m------------------------------[0m
+[38;5;14mS[0m[38;5;14mS[0m[38;5;14mS[0m[38;5;14mS[0m[38;5;14mS[0m[38;5;14mS[0m[38;5;14mS[0m[38;5;14mS[0m[38;5;14mS[0m[38;5;14mS[0m[38;5;14mS[0m[38;5;14mS[0m[38;5;14mS[0m[38;5;14mS[0m
+
+[38;5;10m[1mRan 1 of 19 Specs in 340.942 seconds[0m
+[38;5;10m[1mSUCCESS![0m -- [38;5;10m[1m1 Passed[0m | [38;5;9m[1m0 Failed[0m | [38;5;11m[1m0 Pending[0m | [38;5;14m[1m18 Skipped[0m
+PASS | FOCUSED
+
+Ginkgo ran 1 suite in 5m46.807482s
+Test Suite Passed
+Detected Programmatic Focus - setting exit status to 197

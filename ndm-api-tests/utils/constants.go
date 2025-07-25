@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"strings"
-	"time"
 )
 
 type ConfigType string
@@ -37,6 +36,8 @@ var (
 	NDM_WORKERS_PASSWORD    string
 	PROTOCOL_USERNAME       string
 	PROTOCOL_PASSWORD       string
+
+	ProtocolVersion3 ProtocolVersion
 
 	SOURCE_VOLUMES      []string
 	DESTINATION_VOLUMES []string
@@ -84,7 +85,7 @@ const (
 	DEFAULT_ACCOUNT_ID                              = "753975cb-2f97-4230-b632-6815515a7d0d"
 	LOGOUT_URL                                      = "keycloak/realms/datamigrator/protocol/openid-connect/logout"
 	LOGOUT_USER                                     = "logout-user"
-	NFS_SOURCE_VOLUME                               = "/volSrcAuto"
+	NFS_SOURCE_VOLUME                               = "volSMBAutoDst"
 	NFS_DESTINATION_VOLUME                          = "/vol_dest_automation"
 	NFS_SOURCE_VOLUME_1                             = "/vol_src_automation2"
 	NFS_DESTINATION_VOLUME_1                        = "/vol_dest_automation2"
@@ -122,7 +123,8 @@ const (
 	ServerTypeOtherNAS              ServerType      = "OtherNAS"
 	ProtocolNFS                     Protocol        = "NFS"
 	ProtocolSMB                     Protocol        = "SMB"
-	ProtocolVersion3                ProtocolVersion = "v3"
+	ProtocolVersionNFS_V3           ProtocolVersion = "v3"
+	ProtocolVersionSMB_V3           ProtocolVersion = "v3.0"
 	TIME_FORMAT                                     = "2006-01-02T15:04:05.000Z"
 )
 
@@ -173,8 +175,6 @@ func init() {
 }
 
 func UpdateConfVariables(protocolType, sourceVolumesArgs, destinationVolumesArgs string) {
-	//PROTOCOL_TYPE = ProtocolNFS
-	// uncomment once SMB support is available
 	PROTOCOL_TYPE = Protocol(protocolType)
 
 	SOURCE_VOLUMES = GetVolumesFromArgs(sourceVolumesArgs)
@@ -192,6 +192,8 @@ func UpdateConfVariables(protocolType, sourceVolumesArgs, destinationVolumesArgs
 
 		PROTOCOL_USERNAME = SMB_PROTOCOL_USERNAME
 		PROTOCOL_PASSWORD = SMB_PROTOCOL_PASSWORD
+
+		ProtocolVersion3 = ProtocolVersionSMB_V3
 	case ProtocolNFS:
 		NDM_WORKERS_HOST = NFS_NDM_WORKERS_HOST
 		NDM_WORKERS_USER_NAME = NFS_NDM_WORKERS_USER_NAME
@@ -203,21 +205,18 @@ func UpdateConfVariables(protocolType, sourceVolumesArgs, destinationVolumesArgs
 
 		PROTOCOL_USERNAME = NFS_PROTOCOL_USERNAME
 		PROTOCOL_PASSWORD = NFS_PROTOCOL_PASSWORD
+
+		ProtocolVersion3 = ProtocolVersionNFS_V3
 	default:
 		LogFatalf("Invalid protocol type: %s", protocolType)
 	}
 
 	initWorkers(NDM_WORKERS_HOST, NDM_WORKERS_PORT, NDM_WORKERS_PASSWORD, NDM_WORKERS_USER_NAME)
 
-	export := fmt.Sprintf("%s:%s", SOURCE_HOST_IP, "volSMBAutoDst")
-	AddDataToVolume(export)
-	fmt.Println("Waiting for 10sec")
-	time.Sleep(5 * time.Second)
-	RemoveDeltaFromVolume(export)
-	fmt.Println("Waiting for 10sec")
-	time.Sleep(5 * time.Second)
-	ClearVolume(export)
-	os.Exit(1)
+	//export := fmt.Sprintf("%s:vol4_33", SOURCE_HOST_IP)
+	//AddDataToVolume(export)
+	//ClearVolume(export)
+	//os.Exit(1)
 }
 
 func TestAddDataToVolume() {
@@ -242,8 +241,6 @@ func TestAddDataToVolume() {
 	for _, v := range strings.Split(cmd, "\n") {
 		commands = append(commands, strings.TrimSpace(v))
 	}
-
-	ConnectToWindows(strings.Join(commands, " "))
 }
 
 // RemoveSMBDeltaFromVolume removes the delta directory from the SMB export mounted on the VM.
@@ -262,8 +259,6 @@ func TestRemoveDataToVolume() {
 	for _, v := range strings.Split(removeDeltaScript, "\n") {
 		commands = append(commands, strings.TrimSpace(v))
 	}
-
-	ConnectToWindows(strings.Join(commands, " "))
 }
 
 func TestSMBClearVolume() {
@@ -282,6 +277,4 @@ func TestSMBClearVolume() {
 	for _, v := range strings.Split(clearVolumeScript, "\n") {
 		commands = append(commands, strings.TrimSpace(v))
 	}
-
-	ConnectToWindows(strings.Join(commands, " "))
 }

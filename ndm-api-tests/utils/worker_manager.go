@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
+
+	"golang.org/x/crypto/ssh"
 )
 
 // Global raw configuration data.
@@ -114,6 +117,7 @@ func initWorkers(ips, ports, passwords, usernames string) {
 
 // getAvailableWorkersCount returns the total count of available workers.
 func getAvailableWorkersCount() int {
+	fmt.Println("Available workers count:", len(availableWorkers))
 	return len(availableWorkers)
 }
 
@@ -136,6 +140,8 @@ func containsWorker(attachedWorkersConfig map[string]SSHConfig, item SSHConfig) 
 // A worker is considered attached only if the API call and SSH registration script succeed.
 // On success, it returns a map of worker IDs to their SSH configurations.
 func AttachWorkers(count int, authToken, accountId, projectId string) (map[string]SSHConfig, error) {
+
+	fmt.Println("Attaching workers...", getAvailableWorkersCount())
 	if count > getAvailableWorkersCount() {
 		return nil, errors.New("requested count exceeds total available workers")
 	}
@@ -450,4 +456,167 @@ func GetRestartWorkerScript() string {
 
 	`, NDM_VM_PASSWORD)
 	return script
+}
+
+// FOR SMB
+
+func uninstallSMBWorker(workers map[string]SSHConfig) error {
+	psScript := `Start-Process -Wait -FilePath "C:\datamigrator\unins000.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/LOG=C:\datamigrator_uninstall.log"; if (Test-Path "C:\datamigrator") { Remove-Item -Path "C:\datamigrator" -Recurse -Force }`
+
+	for _, cfg := range workers {
+		psScriptEscaped := fmt.Sprintf(`powershell.exe -Command "%s"`, psScript)
+
+		sshConfig := &ssh.ClientConfig{
+			User: cfg.Username,
+			Auth: []ssh.AuthMethod{
+				ssh.Password(cfg.Password),
+			},
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		}
+
+		addr := cfg.Host + ":" + strconv.Itoa(cfg.Port)
+		client, err := ssh.Dial("tcp", addr, sshConfig)
+		if err != nil {
+			return fmt.Errorf("failed to dial %s: %w", cfg.Host, err)
+		}
+		defer client.Close()
+
+		session, err := client.NewSession()
+		if err != nil {
+			return fmt.Errorf("failed to create session for %s: %w", cfg.Host, err)
+		}
+		defer session.Close()
+
+		// Run the PowerShell uninstall command
+		output, err := session.CombinedOutput(fmt.Sprintf(`cmd.exe /C %s`, psScriptEscaped))
+		if err != nil {
+			return fmt.Errorf("failed to run uninstall on %s: %w\nOutput: %s", cfg.Host, err, output)
+		}
+
+		fmt.Printf("Uninstall output for %s:\n%s\n", cfg.Host, output)
+	}
+	return nil
+}
+
+func installSMBWorker(projectID string, workerCount int) (map[string]SSHConfig, error) {
+	fullURL := CONFIG_SERVICE_URL + "/api/v1/worker-registration"
+	workerConfigs := make(map[string]SSHConfig)
+
+	// Read SMB worker hosts from NDM_SMB_WORKERS_HOST environment variable
+	hostsEnv := os.Getenv("SMB_NDM_WORKERS_HOST")
+	if hostsEnv == "" {
+		return nil, fmt.Errorf("NDM_SMB_WORKERS_HOST environment variable is not set")
+	}
+	hosts := strings.Split(hostsEnv, ",")
+	if len(hosts) < workerCount {
+		return nil, fmt.Errorf("not enough SMB worker hosts provided, required: %d, got: %d", workerCount, len(hosts))
+	}
+
+	fmt.Println("env windows ip : ", hosts)
+
+	for i := 0; i < workerCount; i++ {
+		// --- Call API for each worker ---
+		data := map[string]string{
+			"projectId": projectID,
+		}
+		reqBody, err := json.Marshal(data)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling request body: %w", err)
+		}
+		headers := GetHeaders(AuthToken, ContentTypeJSON)
+		resp, err := SendAPIRequest("POST", fullURL, reqBody, headers)
+		if err != nil {
+			return nil, fmt.Errorf("error sending API request: %w", err)
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("error reading response body: %w", err)
+		}
+
+		fmt.Println("Response body:", string(body))
+
+		type WorkerItems struct {
+			WorkerId       string `json:"workerId"`
+			WorkerSecret   string `json:"workerSecret"`
+			ControlPlaneIp string `json:"controlPlaneIp"`
+		}
+		type WorkerData struct {
+			Items WorkerItems `json:"items"`
+		}
+		type WorkerResponse struct {
+			TrackId string     `json:"trackId"`
+			Message string     `json:"message"`
+			Data    WorkerData `json:"data"`
+		}
+
+		var result WorkerResponse
+
+		// var result map[string]interface{}
+		err = json.Unmarshal(body, &result)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing JSON: %w", err)
+		}
+		fmt.Printf("Parsed JSON: %+v\n", result)
+
+		// --- Use API response for this worker ---
+		cfg := SSHConfig{
+			Username: "datamigrator",
+			Host:     strings.TrimSpace(hosts[i]),
+			Port:     22,
+			Password: "Dm@admin123",
+		}
+
+		installerCmd := fmt.Sprintf(
+			`"C:\Users\datamigrator\Downloads\windows-worker-installer-3551489.exe" /SILENT /WORKERID=%s /WORKERSECRET=%s /CONTROLPLANEIP=%s`,
+			result.Data.Items.WorkerId,
+			result.Data.Items.WorkerSecret,
+			result.Data.Items.ControlPlaneIp,
+		)
+
+		fmt.Printf("Installer command for %s: %s\n", cfg.Host, installerCmd)
+
+		sshConfig := &ssh.ClientConfig{
+			User: cfg.Username,
+			Auth: []ssh.AuthMethod{
+				ssh.Password(cfg.Password),
+			},
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		}
+
+		addr := cfg.Host + ":" + strconv.Itoa(cfg.Port)
+
+		client, err := ssh.Dial("tcp", addr, sshConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to dial: %w", err)
+		}
+		defer client.Close()
+
+		session, err := client.NewSession()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create session: %w", err)
+		}
+		defer session.Close()
+
+		fullCmd := fmt.Sprintf(`cmd.exe /C "%s"`, installerCmd)
+		fmt.Println("UMV INSTALLING WORKER : ", fullCmd)
+		output, err := session.CombinedOutput(fullCmd)
+		if err != nil {
+			return nil, fmt.Errorf("failed to run installer: %w\nOutput: %s", err, output)
+		}
+
+		fmt.Printf("Installer output:\n%s\n", output)
+
+		workerID := result.Data.Items.WorkerId
+		workerConfigs[workerID] = cfg
+	}
+
+	// Update the global attachedWorkersConfig map with installed SMB workers
+	for workerID, cfg := range workerConfigs {
+		attachedWorkersConfig[workerID] = cfg
+	}
+
+	return workerConfigs, nil
+
 }
