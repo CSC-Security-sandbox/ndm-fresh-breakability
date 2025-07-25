@@ -871,6 +871,7 @@ export class JobConfigService {
                   status: JobStatus.Active,
                   preserveAccessTime: config.preserveAccessTime,
                   firstRunAt: new Date(),
+                  excludeOlderThan: config.excludeOlderThan,
                 })
               );
             } else {

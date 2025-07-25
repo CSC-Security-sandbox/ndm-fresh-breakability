@@ -381,4 +381,18 @@
         </rollback>
     </changeSet>
 
+   <changeSet id="20250721_01_update_no_space_left_error_remedy.sql" author="harshitasaxena">
+      <sqlFile path="liquibase/20250721_01_update_no_space_left_error_remedy.sql" splitStatements="false"/>
+      <rollback>
+         <sqlFile path="liquibase/20250721_01_update_no_space_left_error_remedy_rollback.sql" splitStatements="false"/>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250722_01_create_idx_inventory_path_jobrun_created_filesize.sql" author="salim-jujara">
+      <sqlFile path="liquibase/20250722_01_create_idx_inventory_path_jobrun_created_filesize.sql" splitStatements="false"/>
+      <rollback>
+         <sqlFile path="liquibase/20250722_01_create_idx_inventory_path_jobrun_created_filesize_rollback.sql" splitStatements="false"/>
+      </rollback>
+   </changeSet>
+
 </databaseChangeLog>

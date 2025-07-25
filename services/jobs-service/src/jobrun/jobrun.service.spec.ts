@@ -2105,25 +2105,60 @@ describe("JobRunService", () => {
         jobRunId: "job123",
         errorType: ErrorType.FATAL_ERROR,
       };
-  
+        const mockData = [{ id: '1', errorType: 'FATAL_ERROR', occurrence: '2' }];
+        const mockTotal = { total: '1' };
+        const setupFailedErrors = [
+          {
+            workerResponse: {
+              message: 'fail',
+              createdAt: '2024-01-01',
+              operation: 'Setup',
+              code: 'SETUP_WORKER_FAILURE',
+              origin: 'origin',
+              occurrence: 1,
+            },
+          },
+        ];
+
+        jest.spyOn(operationErrorRepo, 'query').mockResolvedValueOnce([...mockData]);
+        jest.spyOn(operationErrorRepo, 'createQueryBuilder').mockReturnValueOnce({
+          leftJoin: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          select: jest.fn().mockReturnThis(),
+          getRawOne: jest.fn().mockResolvedValueOnce(mockTotal),
+        } as any);
+        jest.spyOn(service as any, 'getWorkerSetupErrors').mockResolvedValueOnce(setupFailedErrors);
+        jest.spyOn(errorRemedyService, 'findByErrorCodes').mockReturnValue([{ errorCode: 'E1', description: 'desc', resolutionSteps: 'steps', referenceCommands: 'cmd' }] as any);
+
+
       const result = await service.getJobRunErrors(dto);
 
       expect(qbWhereSpy).toHaveBeenCalledWith("oe");
       expect(result).toEqual({
         data: expect.arrayContaining([
           expect.objectContaining({
-            id: "errorId1",
+            id: "1",
             occurrence: "2",
             errorType: "FATAL_ERROR",
+            referenceCommands: "cmd",
+            resolutionSteps: "steps",
+            displayMessage: "desc"
           }),
           expect.objectContaining({
-            errorMessage: "setupFailedMsg",
             errorType: "FATAL_ERROR",
-            operationType: "SetupOp",
-            errorCode: "setupCode",
+            errorCode: "SETUP_WORKER_FAILURE",
+            createdAt: "2024-01-01",
+            displayMessage: "desc",
+            errorMessage: "fail",
+            occurrence: 1,
+            operationType: "Setup",
+            origin: "origin",
+            referenceCommands: "cmd",
+            resolutionSteps: "steps",
           }),
         ]),
-        total: 6,
+        total: 2,
       });
     });
   
@@ -2595,12 +2630,12 @@ describe("JobRunService", () => {
     describe('getJobRunErrors', () => {
       it('should return error data and total for non-FATAL_ERROR', async () => {
         const dto = {
-          jobRunId: 'jobRunId',
-          errorType: 'RECOVERABLE_ERROR',
-          page: '1',
-          limit: '10',
-          sort: 'createdAt',
-          order: 'DESC',
+          displayMessage: 'desc',
+          errorType: "RECOVERABLE_ERROR",
+          id: "1",
+          occurrence: "1",
+          referenceCommands: "cmd",
+          resolutionSteps: "steps",
         };
         const mockData = [{ id: '1', errorType: 'RECOVERABLE_ERROR', occurrence: '1' }];
         const mockTotal = { total: '1' };
@@ -2613,6 +2648,8 @@ describe("JobRunService", () => {
           select: jest.fn().mockReturnThis(),
           getRawOne: jest.fn().mockResolvedValueOnce(mockTotal),
         } as any);
+        jest.spyOn(service as any, 'getWorkerSetupErrors').mockResolvedValueOnce([]);
+        jest.spyOn(errorRemedyService, 'findByErrorCodes').mockReturnValue([{ errorCode: 'E1' }] as any);
 
         const result = await service.getJobRunErrors(dto as any);
 
@@ -2652,6 +2689,7 @@ describe("JobRunService", () => {
           getRawOne: jest.fn().mockResolvedValueOnce(mockTotal),
         } as any);
         jest.spyOn(service as any, 'getWorkerSetupErrors').mockResolvedValueOnce(setupFailedErrors);
+        jest.spyOn(errorRemedyService, 'findByErrorCodes').mockReturnValue([{ errorCode: 'E1', description: 'desc', resolutionSteps: 'steps', referenceCommands: 'cmd' }] as any);
 
         const result = await service.getJobRunErrors(dto as any);
 

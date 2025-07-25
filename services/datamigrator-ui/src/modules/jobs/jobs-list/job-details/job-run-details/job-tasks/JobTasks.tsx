@@ -171,6 +171,7 @@ const JobTasks = () => {
           setFilters={setCurrentFilters}
           preSelectedFilter={preSelectedFilter}
         />
+        {/* TODO: rowMenu Re-enable this button once the "View Logs" feature is ready. */}
         <Table
           isLoading={isLoading}
           headerContainerStyle={{ top: 0 }}
@@ -180,12 +181,10 @@ const JobTasks = () => {
           toggleSort={toggleSort}
           rowState={rowState}
           fixedHeight="calc(100vh - 330px)"
-          rowMenu={rowMenu}
-          {...
-            (jobTasksCount > 0 && {
-              noDataLabel: import.meta.env.VITE_REFRESH_TO_GET_LATEST_DATA,
-            })
-          }
+          // rowMenu={rowMenu}
+          {...(jobTasksCount > 0 && {
+            noDataLabel: import.meta.env.VITE_REFRESH_TO_GET_LATEST_DATA,
+          })}
         />
         {tableRows.length > 0 && totalCount >= tableRows.length && (
           <Box>{RenderTablePager}</Box>

@@ -1467,6 +1467,7 @@ describe("JobConfigService", () => {
       ],
     };
 
+    const excludeOlderThan = new Date("2025-04-04T13:01:08.226Z");
     const mockJobConfigs = [
       {
         id: "jobConfigId1",
@@ -1479,6 +1480,7 @@ describe("JobConfigService", () => {
         status: JobStatus.Active,
         preserveAccessTime: true,
         firstRunAt: new Date(),
+        excludeOlderThan,
       },
     ];
 
@@ -1562,6 +1564,7 @@ describe("JobConfigService", () => {
       status: JobStatus.Active,
       preserveAccessTime: true,
       firstRunAt: expect.any(Date),
+      excludeOlderThan: expect.any(Date),
     });
     expect(jobConfigRepo.save).toHaveBeenCalledWith([
       {
@@ -1574,6 +1577,7 @@ describe("JobConfigService", () => {
         status: JobStatus.Active,
         preserveAccessTime: true,
         firstRunAt: expect.any(Date),
+        excludeOlderThan: expect.any(Date),
       },
     ]);
   });

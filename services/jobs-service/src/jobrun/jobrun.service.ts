@@ -555,10 +555,10 @@ export class JobRunService {
         }
       }
       this.logger.log("job Run Stats", JSON.stringify(jobRunStats));
-      await this.jobRunRepo.update(
-        { id: jobRunId },
-        { status: status, endTime: new Date(), jobStats: jobRunStats }
-      );
+      const terminalStatuses = [JobRunStatus.Completed, JobRunStatus.Failed, JobRunStatus.Errored, JobRunStatus.Stopped, JobRunStatus.Blocked];
+      const updateData: Partial<JobRunEntity> = { status: status, jobStats: jobRunStats };
+      if (terminalStatuses.includes(status)) { updateData.endTime = new Date(); }
+      await this.jobRunRepo.update({ id: jobRunId }, updateData);
     } else {
       if (
         jobConfig &&
@@ -613,6 +613,40 @@ export class JobRunService {
       LIMIT $4 OFFSET $5
       `, [jobRunId, errorType, `oe.${sort}`, parseInt(limit, 10), (parseInt(page, 10) - 1) * parseInt(limit, 10)]
     );
+
+    // Map errors to include error remedy descriptions
+    const mappedData = await Promise.all(
+      data.map(async (error) => {
+        try {
+          const errorRemedies = await this.errorRemedyService.findByErrorCodes([
+            error.errorCode,
+          ]);
+          const remedy = errorRemedies[0];
+
+          this.logger.debug(
+            `[getJobRunErrors] Mapped errorCode: ${error.errorCode} to remedy: ${remedy ? remedy.description : "none"}`
+          );
+
+          return {
+            ...error,
+            displayMessage: remedy ? remedy.description : error.errorMessage,
+            resolutionSteps: remedy ? remedy.resolutionSteps : null,
+            referenceCommands: remedy ? remedy.referenceCommands : null,
+          };
+        } catch (remedyError) {
+          this.logger.error(
+            `[getJobRunErrors] Error fetching remedy for code ${error.errorCode}:`,
+            remedyError
+          );
+          return {
+            ...error,
+            displayMessage: error.errorMessage, // Fallback to original message
+            resolutionSteps: null,
+            referenceCommands: null,
+          };
+        }
+      })
+    );
     
     const totalResult = await this.operationErrorRepo
       .createQueryBuilder("oe")
@@ -622,28 +656,48 @@ export class JobRunService {
       .select("COUNT(DISTINCT oe.filePath)", "total")
       .getRawOne();
 
-    const total = parseInt(totalResult.total ?? '0', 10);
+    const total = parseInt(totalResult.total ?? "0", 10);
 
-    if(errorType && errorType === "FATAL_ERROR") {
+    if (errorType && errorType === "FATAL_ERROR") {
       const setupFailedErrors = await this.getWorkerSetupErrors(jobRunId);
       if (setupFailedErrors.length > 0) {
-        const setupFailedError = setupFailedErrors.map((error): any => {
-          return {
-            errorMessage: error.workerResponse.message,
-            errorType: "FATAL_ERROR",
-            createdAt: error.workerResponse.createdAt,
-            operationType: error.workerResponse.operation,
-            errorCode: error.workerResponse.code,
-            origin: error.workerResponse.origin,
-            occurrence: error.workerResponse.occurrence || 1,
-          }
-        });
-        data.push(...setupFailedError);
+        const setupFailedError = await Promise.all(
+          setupFailedErrors.map(async (error): Promise<any> => {
+            // Also map worker setup errors
+            const errorRemedies =
+              await this.errorRemedyService.findByErrorCodes([
+                error.workerResponse.code,
+            ]);
+            const remedy = errorRemedies[0];
+            return {
+              errorMessage: error.workerResponse.message,
+              displayMessage: remedy
+                ? remedy.description
+                : error.workerResponse.message,
+              resolutionSteps: remedy ? remedy.resolutionSteps : null,
+              referenceCommands: remedy ? remedy.referenceCommands : null,
+              errorType: "FATAL_ERROR",
+              createdAt: error.workerResponse.createdAt,
+              operationType: error.workerResponse.operation,
+              errorCode: error.workerResponse.code,
+              origin: error.workerResponse.origin,
+              occurrence: error.workerResponse.occurrence || 1,
+            };
+          })
+        );
+        mappedData.push(...setupFailedError);
       }
-      data.sort((a, b) => { if (a.errorType === "FATAL_ERROR" && b.errorType !== "FATAL_ERROR") return -1 });
-      return { data, total: total + setupFailedErrors.length };
+      mappedData.sort((a, b) => {
+        if (a.errorType === "FATAL_ERROR" && b.errorType !== "FATAL_ERROR") {
+          return -1;
+        } else if (a.errorType !== "FATAL_ERROR" && b.errorType === "FATAL_ERROR") {
+          return 1;
+        }
+        return 0;
+      });
+      return { data: mappedData, total: total + setupFailedErrors.length };
     }
-    return { data, total: total };
+    return { data: mappedData, total: total };
   }
 
   async getErrorOverview(jobRunId: string) {
@@ -735,7 +789,7 @@ export class JobRunService {
     const errorRemedies = await this.errorRemedyService.findByErrorCodes(
       errorCodes.map((error) => error.errorCode)
     );
-    this.logger.log("Error Remedies ", JSON.stringify(errorRemedies));
+
     const errorRemediesMailBody = `Hello, <br/>
       The following ${jobType} job (${jobRunId}) has errored for below Paths: <br/>
       <p>Source: ${sourceHost}</p>

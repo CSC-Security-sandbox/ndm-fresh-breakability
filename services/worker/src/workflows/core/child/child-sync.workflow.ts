@@ -76,7 +76,7 @@ export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunSt
             break;
         }
 
-        const taskIds: string[] = await getGroupOfTasksActivity(jobRunId, 1000, workerConcurrency);
+        const taskIds: string[] = await getGroupOfTasksActivity(jobRunId);
         iterations+= taskIds.length;
         if(taskIds.length === 0 && isScanFinished(scanWorkflowStatus)) {
             console.log(`No more tasks to process in SyncWorkflow ${jobRunId}.`);
