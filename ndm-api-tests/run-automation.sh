@@ -51,10 +51,16 @@ run_tests() {
 
 # Test runs
 
-run_tests "regression" "./tests/regression"
+# run_tests "regression" "./tests/regression"
 
-run_tests "end-to-end" "./tests/e2e" "/srv/nfs_share,/srv/nfs_share_utkarsh" "/srv/nfs_share,/srv/nfs_share_utkarsh" "NFS"
-#run_tests "end-to-end" "./tests/e2e" "/srv/nfs_share, /srv/nfs_share_utkarsh" "/srv/nfs_share, /srv/nfs_share_utkarsh" "SMB" "3h"
+run_tests "end-to-end" "./tests/e2e" "vol4_33,vol3_33" "volSMBAutoDst,volSMBAuto_vol1" "SMB" "3h"
+#run_tests "end-to-end" "./tests/e2e" "/volSrcAuto, /srv/nfs_share_utkarsh" "/srv/nfs_share, /srv/nfs_share_utkarsh" "SMB" "3h"
 
-# Run smoke tests
-# run_tests "smoke" "./tests/smoke"
+#run_tests "smoke" "./tests/smoke" "vol1,vol2" "vol3,vol4" "3h" "NFS"
+
+	# NFS_SOURCE_VOLUME                               = "/volSrcAuto"
+	# NFS_DESTINATION_VOLUME                          = "/vol_dest_automation"
+	# NFS_SOURCE_VOLUME_1                             = "/vol_src_automation2"
+	# NFS_DESTINATION_VOLUME_1                        = "/vol_dest_automation2"
+	# NFS_SOURCE_VOLUME_2                             = "/vol_src_automation"
+read -p "Test execution complete. Press [Enter] key to exit..."

@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = FDescribe("TC-0014: Run incremental sync schedule migration for verifying partial deletion is mirrored", func() {
+var _ = Describe("TC-0014: Run incremental sync schedule migration for verifying partial deletion is mirrored", func() {
 	var (
 		ProjectId              string
 		workerId1              string

@@ -86,6 +86,7 @@ func PtrExportPathSource(e ExportPathSource) *ExportPathSource {
 func CreateFileServer(params CreateServereParams, headers map[string]string) (string, *http.Response, error) {
 	createSourceURL := CONFIG_SERVICE_URL + CREATE_FILESERVER_ENDPOINT
 
+	fmt.Println("Creating file server with params:", params.Host, " , username : ", params.UserName, " , ", params.Password)
 	if params.ExportPathSource == nil {
 		defaultSource := AutoDiscover
 		params.ExportPathSource = &defaultSource
@@ -97,15 +98,15 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 		"projectId":  params.ProjectID,
 		"fileServers": []map[string]interface{}{
 			{
-				"serverType":       params.ServerType,
-				"userName":         params.UserName,
-				"password":         params.Password,
-				"protocol":         params.Protocol,
-				"protocolVersion":  params.ProtocolVersion,
-				"host":             params.Host,
-				"volumes":          []interface{}{},
-				"workers":          params.Workers,
-				"exportPathSource": params.ExportPathSource,
+				"serverType":      params.ServerType,
+				"userName":        "rtp.openenglab.netapp.com\\svc-datamigrator",
+				"password":        params.Password,
+				"protocol":        params.Protocol,
+				"protocolVersion": params.ProtocolVersion,
+				"host":            params.Host,
+				"volumes":         []interface{}{},
+				"workers":         params.Workers,
+				// "exportPathSource": params.ExportPathSource,
 			},
 		},
 		"workingDirectory": map[string]interface{}{
@@ -114,6 +115,14 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 			"pathName":         "",
 		},
 	}
+
+	jsonBytes, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		fmt.Println("Error marshaling payload to JSON:", err)
+
+	}
+	fmt.Println("Payload for creating file server (JSON):")
+	fmt.Println(string(jsonBytes))
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {

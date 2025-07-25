@@ -81,7 +81,7 @@ const (
 	DEFAULT_ACCOUNT_ID                              = "753975cb-2f97-4230-b632-6815515a7d0d"
 	LOGOUT_URL                                      = "keycloak/realms/datamigrator/protocol/openid-connect/logout"
 	LOGOUT_USER                                     = "logout-user"
-	NFS_SOURCE_VOLUME                               = "/volSrcAuto"
+	NFS_SOURCE_VOLUME                               = "volSMBAutoDst"
 	NFS_DESTINATION_VOLUME                          = "/vol_dest_automation"
 	NFS_SOURCE_VOLUME_1                             = "/vol_src_automation2"
 	NFS_DESTINATION_VOLUME_1                        = "/vol_dest_automation2"
@@ -119,7 +119,7 @@ const (
 	ServerTypeOtherNAS              ServerType      = "OtherNAS"
 	ProtocolNFS                     Protocol        = "NFS"
 	ProtocolSMB                     Protocol        = "SMB"
-	ProtocolVersion3                ProtocolVersion = "v3"
+	ProtocolVersion3                ProtocolVersion = "v3.0"
 	TIME_FORMAT                                     = "2006-01-02T15:04:05.000Z"
 )
 
@@ -170,9 +170,9 @@ func init() {
 }
 
 func UpdateConfVariables(protocolType, sourceVolumesArgs, destinationVolumesArgs string) {
-	PROTOCOL_TYPE = ProtocolNFS
+	// PROTOCOL_TYPE = ProtocolNFS
 	// uncomment once SMB support is available
-	//PROTOCOL_TYPE = Protocol(protocolType)
+	PROTOCOL_TYPE = Protocol(protocolType)
 
 	SOURCE_VOLUMES = GetVolumesFromArgs(sourceVolumesArgs)
 	DESTINATION_VOLUMES = GetVolumesFromArgs(destinationVolumesArgs)
