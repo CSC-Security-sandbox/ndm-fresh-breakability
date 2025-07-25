@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { CreateSupportBundleDTO } from './dto/create-support-bundle.dto';
 import { SupportBundleStatus, WorkFlows } from 'src/constants/enums';
 import { SupportBundleEntity } from 'src/entities/support-bundle-log.entity';
@@ -104,9 +104,25 @@ export class SupportBundleService {
       (role) => role.projects.length === 0,
     );
     if (isAppAdmin) {
-      return this.projectRepo.find({
+      // return this.projectRepo.find({
+      //   select: ['id', 'projectName'],
+      // });
+
+      const projects = await this.projectRepo.find({
         select: ['id', 'projectName'],
+        relations: ['workers'],
       });
+
+      return projects.map((project) => ({
+        label: project.projectName,
+        id: project.id,
+        ...(project.workers?.length > 0 && {
+          childrens: project.workers.map((worker) => ({
+            label: `${worker.workerName} (${project.projectName})`,
+            id: worker.workerId,
+          })),
+        }),
+      }));
     } else {
       const projectIdsSet = new Set<string>();
       userDetails.user.roles.forEach((role) => {
@@ -115,10 +131,27 @@ export class SupportBundleService {
 
       const projectIds = Array.from(projectIdsSet);
 
-      return this.projectRepo.find({
+      const projects = await this.projectRepo.find({
+        where: { id: In(projectIds) },
         select: ['id', 'projectName'],
-        where: projectIds.map((id) => ({ id })),
+        relations: ['workers'],
       });
+
+      return projects.map((project) => ({
+        label: project.projectName,
+        id: project.id,
+        ...(project.workers?.length > 0 && {
+          childrens: project.workers.map((worker) => ({
+            label: `${worker.workerName} (${project.projectName})`,
+            id: worker.workerId,
+          })),
+        }),
+      }));
+
+      // return this.projectRepo.find({
+      //   select: ['id', 'projectName'],
+      //   where: projectIds.map((id) => ({ id })),
+      // });
     }
   }
 
