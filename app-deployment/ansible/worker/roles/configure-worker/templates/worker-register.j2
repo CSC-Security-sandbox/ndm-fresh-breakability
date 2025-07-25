@@ -70,7 +70,6 @@ log_message "Creating $ENV_FILE with necessary environment variables."
     echo "REDIS_HOST=${CONTROL_PLANE_IP}"
     echo "REDIS_USERNAME=default"
     echo "REDIS_PASSWORD=welcome"
-    echo "OTEL_COLLECTOR_ENDPOINT=${CONTROL_PLANE_IP}:4318"
 } >> "$ENV_FILE"
 
 # Check if the worker.env file was created successfully
