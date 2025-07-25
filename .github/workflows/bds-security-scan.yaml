@@ -6,6 +6,7 @@ on:
   pull_request:
     branches:
       - main
+      - feature/azure-vm-deployment-automation
 
 permissions:
   contents: read

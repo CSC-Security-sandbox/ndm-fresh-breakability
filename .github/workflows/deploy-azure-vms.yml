@@ -63,7 +63,7 @@ jobs:
         creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
 
     - name: Deploy Control Plane
-      working-directory: ./control_plane
+      working-directory: ./app-deployment/azure-linux-workflow/control_plane
       run: |
         echo "Deploying Control Plane..."
         echo "Image Name: ${{ github.event.inputs.control_plane_image_name }}"
@@ -86,7 +86,7 @@ jobs:
         echo "CONTROL_PLANE_IP=$CP_IP" >> $GITHUB_ENV
 
     - name: Deploy Workers
-      working-directory: ./worker
+      working-directory: ./app-deployment/azure-linux-workflow/worker
       run: |
         echo "Deploying ${{ github.event.inputs.worker_count }} Worker(s)..."
         echo "Worker Image Name: ${{ github.event.inputs.worker_image_name }}"
@@ -144,7 +144,7 @@ jobs:
         creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
 
     - name: Destroy Workers
-      working-directory: ./worker
+      working-directory: ./app-deployment/azure-linux-workflow/worker
       run: |
         echo "Destroying Workers..."
         terraform init -input=false
