@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"golang.org/x/crypto/ssh"
 )
 
 type Volume struct {
@@ -367,6 +369,54 @@ sudo rm -rf "%s"
 		return fmt.Errorf("AddDataToFileserver failed: %w\noutput: %s", err, output)
 	}
 	return nil
+}
+
+// RemoveSMBDeltaFromVolume removes the delta directory from the SMB export mounted on the VM.
+func RemoveSMBDeltaFromVolume(volPath string) error {
+	cfg := SSHConfig{
+		Username: SMB_NDM_WORKERS_USER_NAME,
+		Password: SMB_NDM_WORKERS_PASSWORD,
+		Host:     SMB_NDM_WORKERS_HOST,
+		Port:     22,
+	}
+
+	workerHost := "\\10.192.7.33\volSMBAutoDst"
+	deltaPath := `\delta`
+
+	removeDeltaScript := fmt.Sprintf(`net use Z: /delete /yes && net use Z: %s && rd /s /q Z:%s && net use Z: /delete /yes`, workerHost, deltaPath)
+
+	sshConfig := &ssh.ClientConfig{
+		User: cfg.Username,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(cfg.Password),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
+
+	addr := cfg.Host + ":" + strconv.Itoa(cfg.Port)
+
+	client, err := ssh.Dial("tcp", addr, sshConfig)
+	if err != nil {
+		return fmt.Errorf("@@@ failed to dial: %w", err)
+	}
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("@@@@@ failed to create session: %w", err)
+	}
+	defer session.Close()
+
+	fullCmd := fmt.Sprintf(`cmd.exe /C "%s"`, removeDeltaScript)
+	output, err := session.CombinedOutput(fullCmd)
+	if err != nil {
+		return fmt.Errorf("failed to run installer: %w\nOutput: %s", err, output)
+	}
+
+	fmt.Printf("@@@@@ Installer output:\n%s\n", output)
+
+	return nil
+
 }
 
 // RemoveDeltaFromVolume removes the delta directory from the NFS export mounted on the VM.
