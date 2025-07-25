@@ -101,9 +101,7 @@ const JobRunDetails = () => {
   const [downloadReportApi] = useDownloadReportsMutation();
   const [getPdfReportApi] = useGetPdfReportMutation();
 
-  const canDownloadReport = hasPermission(
-    USER_PERMISSION_TYPE_ENUM.Reports
-  );
+  const canDownloadReport = hasPermission(USER_PERMISSION_TYPE_ENUM.Reports);
   const reportActionButtons =
     jobRunDetails && canDownloadReport
       ? getReportActions(
@@ -221,13 +219,14 @@ const JobRunDetails = () => {
               </Show.When>
             </Show.When>
           </Show>
-          <Button
+          {/* TODO: Re-enable this button once the "View Logs" feature is ready. */}
+          {/* <Button
             onClick={() => {
               window.open(viewLogUrl, "_blank");
             }}
           >
             View Logs
-          </Button>
+          </Button> */}
         </Box>
       </Box>
       <JobRunHeader jobRunDetails={jobRunDetails} />
