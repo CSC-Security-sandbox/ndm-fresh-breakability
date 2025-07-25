@@ -50,12 +50,12 @@ async verifyCircularTaskDependency(data: JobConfigPreCheck): Promise<PreCheckCir
         try {
             const circularDependencies = await this.verifyCircularTaskDependency(data);
             if (circularDependencies && circularDependencies.length > 0) {
-                return {
+                throw new Error(JSON.stringify({
                     status: "error",
                     erros: ["PRECHECK_FAILED"],
-                    message: `Failed to perform the pre check`,
+                    message: "Failed to perform the pre check",
                     DependenciesError: circularDependencies,
-                };
+                }));
             }
 
             const preCheckPayload = this.createInitialPreCheckPayload(data.preserveAccessTime);
@@ -73,11 +73,11 @@ async verifyCircularTaskDependency(data: JobConfigPreCheck): Promise<PreCheckCir
 
         } catch (error) {
             this.logger.error(`${traceId}] Failed to perform the pre check: ${error}`);
-            return {
+            throw new Error(JSON.stringify({
                 status: "error",
                 erros: ["PRECHECK_FAILED"],
                 message: `Failed to perform the pre check: ${error}`,
-            };
+            }));
         }
     }
 
