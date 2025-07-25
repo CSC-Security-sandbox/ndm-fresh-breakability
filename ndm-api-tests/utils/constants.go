@@ -1,8 +1,10 @@
 package utils
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"strings"
 )
 
 type ConfigType string
@@ -205,4 +207,24 @@ func UpdateConfVariables(protocolType, sourceVolumesArgs, destinationVolumesArgs
 	}
 
 	initWorkers(NDM_WORKERS_HOST, NDM_WORKERS_PORT, NDM_WORKERS_PASSWORD, NDM_WORKERS_USER_NAME)
+}
+
+func TestSMBClearVolume() {
+	workerHost := `\\10.192.7.33\volSMBAutoDst`
+	mappedDrive := "Z:"
+
+	// orignal script
+	// net use Z: /delete /yes && net use Z: \\10.192.7.33\volSMBAutoDst  /user:rtp.openenglab.netapp.com\svc-datamigrator "U@8e%#%Nuko%Bmd&" && rd /s /q Z: && net use Z: /delete /yes
+	clearVolumeScript := fmt.Sprintf(`cmd /C
+	net use %s /delete /yes &&
+	net use %s %s /user:%s "%s" &&
+	rd /s /q %s &&
+	net use %s /delete /yes`, mappedDrive, mappedDrive, workerHost, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, mappedDrive, mappedDrive)
+
+	commands := []string{}
+	for _, v := range strings.Split(clearVolumeScript, "\n") {
+		commands = append(commands, strings.TrimSpace(v))
+	}
+
+	// ConnectToWindows(strings.Join(commands, " "))
 }
