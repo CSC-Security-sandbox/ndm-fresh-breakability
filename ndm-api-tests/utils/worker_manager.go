@@ -383,35 +383,6 @@ func StopWorker(config SSHConfig) (string, error) {
 	return output, nil
 }
 
-// attachWorkerForConfig registers a single worker via API call and SSH.
-// It returns the workerId if successful.
-/*func attachWorkerForConfig(worker SSHConfig, authToken, accountId, projectId string) (string, error) {
-	fullURL := CONFIG_SERVICE_URL + "/api/v1/worker-registration"
-	data := map[string]string{
-		"projectId": projectId,
-	}
-	reqBody, err := json.Marshal(data)
-	if err != nil {
-		return "", err
-	}
-	headers := GetHeaders(authToken, ContentTypeJSON)
-	resp, err := SendAPIRequest("POST", fullURL, reqBody, headers)
-	if err != nil {
-		return "", err
-	}
-	script, workerId, err := CreateWorkerScript(resp)
-	if err != nil {
-		return workerId, err
-	}
-	LogDebug(fmt.Sprintf("For worker %s, running script: %s", worker.Host, script))
-	output, err := sshRunScript(worker, script)
-	if err != nil {
-		return workerId, err
-	}
-	LogDebug(fmt.Sprintf("Output from worker %s: %s", worker.Host, output))
-	return workerId, nil
-}*/
-
 func attachWorkerForConfig(workerConfig SSHConfig, authToken, accountId, projectId string) (string, error) {
 	fullURL := CONFIG_SERVICE_URL + "/api/v1/worker-registration"
 	data := map[string]string{
