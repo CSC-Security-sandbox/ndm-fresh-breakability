@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-
-	"golang.org/x/crypto/ssh"
 )
 
 type Volume struct {
@@ -213,23 +211,28 @@ func GetExportPathID(
 	return sourcePathID, nil
 }
 
-// ClearVolume removes all data from the NFS export mounted on the VM.
-func ClearVolume(export string) error {
-	if PROTOCOL_TYPE == ProtocolSMB {
-		// To be replaced with SMB code.
-		return fmt.Errorf("SMB-specific logic is not implemented")
+func ClearVolumeForSMB(export string) string {
+	split := strings.Split(export, ":")
+	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
+
+	mappedDrive := "Z:"
+
+	clearVolumeScript := fmt.Sprintf(`cmd /C
+	net use %s /delete /yes &
+	net use %s %s /user:%s "%s" &&
+	rd /s /q %s &&
+	net use %s /delete /yes`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, mappedDrive, mappedDrive)
+
+	commands := []string{}
+	for _, v := range strings.Split(clearVolumeScript, "\n") {
+		commands = append(commands, strings.TrimSpace(v))
 	}
 
+	return strings.Join(commands, " ")
+}
+
+func ClearVolumeForNFS(export string) string {
 	destMount := "/mnt/remove_data"
-
-	config := GetAttachedWorkerDetails()
-
-	sshConfig = SSHConfig{
-		Username: NDM_VM_USER_NAME,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: NDM_VM_PASSWORD,
-	}
 
 	script := fmt.Sprintf(`
 	set -e
@@ -259,10 +262,45 @@ func ClearVolume(export string) error {
 		destMount,
 		destMount, destMount)
 
+	return script
+}
+
+// ClearVolume removes all data from the NFS export mounted on the VM.
+func ClearVolume(export string) error {
+	script := ""
+
+	switch PROTOCOL_TYPE {
+	case ProtocolSMB:
+		script = ClearVolumeForSMB(export)
+	case ProtocolNFS:
+		script = ClearVolumeForNFS(export)
+	}
+
+	config := GetAttachedWorkerDetails()
+
+	sshConfig = SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: NDM_VM_PASSWORD,
+	}
+
+	sshConfig = SSHConfig{
+		Username: NDM_WORKERS_USER_NAME,
+		Host:     NDM_WORKERS_HOST,
+		Port:     22,
+		Password: NFS_NDM_WORKERS_PASSWORD,
+	}
+
+	fmt.Printf("UMV TRYING TO CONNECT : %+v \n", sshConfig)
+	fmt.Println("UMV RUNNING : ", script)
+
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
 		return fmt.Errorf("RemoveDataFromFileserver failed: %w\noutput: %s", err, output)
 	}
+
+	fmt.Println("UMV OUTPUT : ", output)
 	return nil
 }
 
@@ -320,22 +358,35 @@ func RemovePartialDeltaFromVolume(export string, fileCount int) error {
 	return nil
 }
 
-// AddDataToVolume creates a delta directory with 100 text files of 100KB each,
-func AddDataToVolume(export string) error {
+// AddDataToVolumeForSMB creates a delta directory with 100 text files of 100KB each
+func AddDataToVolumeForSMB(export string) string {
+	//fullCmd := `cmd /C "mkdir C:\delta_test_smb && for /L %i in (1,1,100) do fsutil file createnew C:\delta_test_smb\file%i.txt 102400"`
 
-	if PROTOCOL_TYPE == ProtocolSMB {
-		// To be replaced with SMB code.
-		return fmt.Errorf("SMB-specific logic is not implemented")
+	split := strings.Split(export, ":")
+	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
+
+	deltaDir := `C:\` + DeltaFolder
+	mappedDrive := "Z:"
+
+	cmd := fmt.Sprintf(`cmd /C
+	if exist %s rmdir /s /q %s &&
+	mkdir %s &&
+	(for /L %%i in (1,1,10) do fsutil file createnew %s\file%%i.txt 102400) &&
+	net use %s %s /user:%s "%s" &&
+	xcopy /E /I /Y %s %s\%s &&
+	net use %s /delete /y &&
+	rmdir /s /q %s
+	`, deltaDir, deltaDir, deltaDir, deltaDir, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, deltaDir, mappedDrive, DeltaFolder, mappedDrive, deltaDir)
+
+	commands := []string{}
+	for _, v := range strings.Split(cmd, "\n") {
+		commands = append(commands, strings.TrimSpace(v))
 	}
 
-	config := GetAttachedWorkerDetails()
+	return strings.Join(commands, " ")
+}
 
-	sshConfig = SSHConfig{
-		Username: NDM_VM_USER_NAME,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: NDM_VM_PASSWORD,
-	}
+func AddDataToVolumeForNFS(export string) string {
 	destMount := "/mnt/data_add"
 	deltaDir := "/" + DeltaFolder
 
@@ -364,76 +415,70 @@ sudo umount "%s"
 sudo rm -rf "%s"
 sudo rm -rf "%s"
 `, deltaDir, destMount, deltaDir, deltaDir, destMount, export, destMount, deltaDir, destMount, destMount, deltaDir, destMount)
-	output, err := sshRunScript(sshConfig, script)
-	if err != nil {
-		return fmt.Errorf("AddDataToFileserver failed: %w\noutput: %s", err, output)
-	}
-	return nil
+
+	return script
 }
 
-// RemoveSMBDeltaFromVolume removes the delta directory from the SMB export mounted on the VM.
-func RemoveSMBDeltaFromVolume(volPath string) error {
-	cfg := SSHConfig{
-		Username: SMB_NDM_WORKERS_USER_NAME,
-		Password: SMB_NDM_WORKERS_PASSWORD,
-		Host:     SMB_NDM_WORKERS_HOST,
-		Port:     22,
-	}
+// AddDataToVolume creates a delta directory with 100 text files of 100KB each,
+func AddDataToVolume(export string) error {
+	script := ""
 
-	workerHost := "\\10.192.7.33\volSMBAutoDst"
-	deltaPath := `\delta`
-
-	removeDeltaScript := fmt.Sprintf(`net use Z: /delete /yes && net use Z: %s && rd /s /q Z:%s && net use Z: /delete /yes`, workerHost, deltaPath)
-
-	sshConfig := &ssh.ClientConfig{
-		User: cfg.Username,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(cfg.Password),
-		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-	}
-
-	addr := cfg.Host + ":" + strconv.Itoa(cfg.Port)
-
-	client, err := ssh.Dial("tcp", addr, sshConfig)
-	if err != nil {
-		return fmt.Errorf("@@@ failed to dial: %w", err)
-	}
-	defer client.Close()
-
-	session, err := client.NewSession()
-	if err != nil {
-		return fmt.Errorf("@@@@@ failed to create session: %w", err)
-	}
-	defer session.Close()
-
-	fullCmd := fmt.Sprintf(`cmd.exe /C "%s"`, removeDeltaScript)
-	output, err := session.CombinedOutput(fullCmd)
-	if err != nil {
-		return fmt.Errorf("failed to run installer: %w\nOutput: %s", err, output)
-	}
-
-	fmt.Printf("@@@@@ Installer output:\n%s\n", output)
-
-	return nil
-
-}
-
-// RemoveDeltaFromVolume removes the delta directory from the NFS export mounted on the VM.
-func RemoveDeltaFromVolume(export string) error {
-	if PROTOCOL_TYPE == ProtocolSMB {
-		// To be replaced with SMB code.
-		return fmt.Errorf("SMB-specific logic is not implemented")
+	switch PROTOCOL_TYPE {
+	case ProtocolSMB:
+		script = AddDataToVolumeForSMB(export)
+	case ProtocolNFS:
+		script = AddDataToVolumeForNFS(export)
 	}
 
 	config := GetAttachedWorkerDetails()
 
 	sshConfig = SSHConfig{
-		Username: NDM_VM_USER_NAME,
+		Username: NDM_WORKERS_USER_NAME,
 		Host:     config.Host,
 		Port:     config.Port,
-		Password: NDM_VM_PASSWORD,
+		Password: NFS_NDM_WORKERS_PASSWORD,
 	}
+
+	sshConfig = SSHConfig{
+		Username: NDM_WORKERS_USER_NAME,
+		Host:     NDM_WORKERS_HOST,
+		Port:     22,
+		Password: NFS_NDM_WORKERS_PASSWORD,
+	}
+
+	fmt.Printf("UMV TRYING TO CONNECT : %+v \n", sshConfig)
+	fmt.Println("UMV RUNNING : ", script)
+
+	output, err := sshRunScript(sshConfig, script)
+	if err != nil {
+		return fmt.Errorf("AddDataToFileserver failed: %w\noutput: %s", err, output)
+	}
+	fmt.Println("UMV OUTPUT : ", output)
+	return nil
+}
+
+// RemoveDeltaFromVolumeForSMB removes the delta directory from the SMB export mounted on the VM.
+func RemoveDeltaFromVolumeForSMB(export string) string {
+	split := strings.Split(export, ":")
+	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
+
+	mappedDrive := "Z:"
+
+	removeDeltaScript := fmt.Sprintf(`cmd /C
+	net use %s /delete /yes &
+	net use %s %s /user:%s "%s" &&
+	rd /s /q %s\%s &&
+	net use %s /delete /yes`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, mappedDrive, DeltaFolder, mappedDrive)
+
+	commands := []string{}
+	for _, v := range strings.Split(removeDeltaScript, "\n") {
+		commands = append(commands, strings.TrimSpace(v))
+	}
+
+	return strings.Join(commands, " ")
+}
+
+func RemoveDeltaFromVolumeForNFS(export string) string {
 	destMount := "/mnt/data_remove"
 
 	script := fmt.Sprintf(`
@@ -456,10 +501,44 @@ func RemoveDeltaFromVolume(export string) error {
 	sudo rm -rf "%s"
 	`, destMount, destMount, export, destMount, destMount, DeltaFolder, destMount, DeltaFolder, destMount, destMount)
 
+	return script
+}
+
+// RemoveDeltaFromVolume removes the delta directory from the NFS export mounted on the VM.
+func RemoveDeltaFromVolume(export string) error {
+	script := ""
+
+	switch PROTOCOL_TYPE {
+	case ProtocolSMB:
+		script = RemoveDeltaFromVolumeForSMB(export)
+	case ProtocolNFS:
+		script = RemoveDeltaFromVolumeForNFS(export)
+	}
+
+	config := GetAttachedWorkerDetails()
+
+	sshConfig = SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: NDM_VM_PASSWORD,
+	}
+
+	sshConfig = SSHConfig{
+		Username: NDM_WORKERS_USER_NAME,
+		Host:     NDM_WORKERS_HOST,
+		Port:     22,
+		Password: NFS_NDM_WORKERS_PASSWORD,
+	}
+
+	fmt.Printf("UMV TRYING TO CONNECT : %+v \n", sshConfig)
+	fmt.Println("UMV RUNNING : ", script)
+
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
 		return fmt.Errorf("RemoveDeltaFromFileserver failed: %w\noutput: %s", err, output)
 	}
+	fmt.Println("UMV OUTPUT : ", output)
 	return nil
 }
 

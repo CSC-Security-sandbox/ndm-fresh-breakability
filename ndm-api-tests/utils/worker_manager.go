@@ -17,11 +17,6 @@ var (
 	attachedWorkersConfig map[string]SSHConfig
 )
 
-// init automatically initializes worker configurations on package load.
-func init() {
-	initWorkers(NDM_WORKERS_HOST, NDM_WORKERS_PORT, NDM_WORKERS_PASSWORD, NDM_WORKERS_USER_NAME)
-}
-
 // initWorkers parses the comma‑separated strings for IPs, ports, passwords, and usernames,
 // and builds the availableWorkers slice.
 func initWorkers(ips, ports, passwords, usernames string) {
