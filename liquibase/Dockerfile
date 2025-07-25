@@ -1,5 +1,13 @@
 FROM liquibase/liquibase:4.33.0-alpine
 
+USER root
+
+RUN apk update && \
+    apk upgrade --no-cache && \
+    rm -vrf /var/cache/apk/*
+
+USER liquibase
+
 ENV LIQUIBASE_COMMAND_DRIVER=org.postgresql.Driver \
     LIQUIBASE_COMMAND_CHANGELOG_FILE=./liquibase/changelog-master.xml
 
