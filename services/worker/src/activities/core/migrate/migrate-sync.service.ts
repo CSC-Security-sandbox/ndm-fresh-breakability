@@ -413,6 +413,47 @@ export class MigrateSyncService {
     }
     return true;
     }
-  
+
+  async isSMBHiddenFile(path: string): Promise<boolean> {
+        const getIsHiddenCommand = CommandConfig.getSMBCommand(process.platform, CommandPattern.IS_SMB_HIDDEN_FILE)?.replaceAll('${PATH}', path);
+        const output = await this.shellService.runCommand(getIsHiddenCommand);
+        return output.trim().includes('Hidden');
+    }
+
+    async addHiddenAttribute(path: string): Promise<void> {
+        const addHiddenCommand = CommandConfig.getSMBCommand(process.platform, CommandPattern.ADD_HIDDEN_ATTRIBUTE)?.replaceAll('${PATH}', path);
+        await this.shellService.runCommand(addHiddenCommand);
+    }
+
+    async removeHiddenAttribute(path: string): Promise<void> {
+        const removeHiddenCommand = CommandConfig.getSMBCommand(process.platform, CommandPattern.REMOVE_HIDDEN_ATTRIBUTE)?.replaceAll('${PATH}', path);
+        await this.shellService.runCommand(removeHiddenCommand);
+    }
+
+    async stampHiddenAttribute({command, jobContext, sourcePath, targetPath, errorType}): Promise<any> {
+        const output: any = { sourceErrors: [], targetErrors: [] };
+        if (process.platform !== 'win32') return output;
+        try {
+            const hiddenAttribute = { isSourceHidden: false, isTargetHidden: false };
+            if (!!command.ops[OPS_CMD.STAMP_META].params?.hiddenAttribute) {
+                hiddenAttribute.isSourceHidden = command.ops[OPS_CMD.STAMP_META].params?.hiddenAttribute['isSourceHidden'] ?? false;
+                hiddenAttribute.isTargetHidden = command.ops[OPS_CMD.STAMP_META].params?.hiddenAttribute['isTargetHidden'] ?? false;
+            } else {
+                const [isSourceHidden, isTargetHidden] = await Promise.all([this.isSMBHiddenFile(sourcePath), this.isSMBHiddenFile(targetPath)]);
+                hiddenAttribute.isSourceHidden = isSourceHidden;
+                hiddenAttribute.isTargetHidden = isTargetHidden;
+            }
+            if (hiddenAttribute.isSourceHidden !== hiddenAttribute.isTargetHidden) {
+                if (hiddenAttribute.isSourceHidden) await this.addHiddenAttribute(targetPath);
+                else await this.removeHiddenAttribute(targetPath);
+            }
+        } catch (error) {
+            this.logger.error(`Error stamping hidden attribute for ${sourcePath}: ${error.message}`);
+            // const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
+            // await jobContext.publishToErrorStream(dmErr);
+            //output.sourceErrors.push(error.code);
+        }
+        return output;
+    }
 }
 
