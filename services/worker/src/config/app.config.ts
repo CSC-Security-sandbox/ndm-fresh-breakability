@@ -17,6 +17,7 @@ export default registerAs(
 
     healthCheckInterval: process.env.HEALTH_CHECK_INTERVAL || '5',
     checkSpaceForPreCheck: process.env.CHECK_AVAILABLE_DISK_SPACE === 'true',
+    otelCollectorEndPoint: process.env.OTEL_COLLECTOR_ENDPOINT || 'localhost:4318',
 
     //core operations
     maxRetryCount: parseInt(process.env.MAX_OPERATION_RETRY || '3'),

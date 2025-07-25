@@ -10,6 +10,14 @@ import { KeycloakConfig } from 'src/config/keycloak.config';
 import { WorkerOptionsService } from './factory/worker-options.factory.service';
 import { AuthService } from 'src/auth/auth.service';
 import { Connection } from '@temporalio/client';
+import {
+  OpenTelemetryActivityInboundInterceptor,
+  OpenTelemetryActivityOutboundInterceptor,
+   makeWorkflowExporter,
+} from '@temporalio/interceptors-opentelemetry/lib/worker';
+import { resource, traceExporter } from 'src/instrument';
+
+
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
@@ -109,7 +117,9 @@ export class WorkManagerService {
         }
         for(let [id, config] of configsToStart) {
             this.logger.log(`Starting worker ${id} ${JSON.stringify(config)}`)
-            const workerOptions = this.workerOptions.createWorkerOptions(id, config, this.workerId, this.connection)
+            let workerOptions = this.workerOptions.createWorkerOptions(id, config, this.workerId, this.connection)
+            workerOptions = this.addWorkerInterceptors(workerOptions);
+            this.logger.debug(`[Telemetry]Worker Options: ${JSON.stringify(workerOptions)}`);
             await this.startWorker(id, workerOptions)
             configsToStart.delete(id);
         }
@@ -177,6 +187,27 @@ export class WorkManagerService {
                 this.logger.error(`Error shutting down worker ${worker.options.identity}: ${err}`);
             }
             this.activeWorkers.delete(worker.options.identity);
+        }
+    }
+
+
+    addWorkerInterceptors(workerOptions: any) {
+        return {
+            ...workerOptions,
+              sinks: traceExporter && {
+                exporter: makeWorkflowExporter(traceExporter, resource),
+            },
+            interceptors:traceExporter && {
+                workflowModules: [require.resolve('../utils/worker-interceptors')],
+                activityInbound: [(ctx) => new OpenTelemetryActivityInboundInterceptor(ctx)],
+            },
+             activity: [
+                (ctx) => ({
+                inbound: new OpenTelemetryActivityInboundInterceptor(ctx),
+                outbound: new OpenTelemetryActivityOutboundInterceptor(ctx),
+                }),
+            ],
+
         }
     }
 }
