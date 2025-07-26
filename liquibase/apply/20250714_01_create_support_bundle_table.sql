@@ -10,6 +10,6 @@ CREATE TABLE IF NOT EXISTS support_bundle_logs (
     status support_bundle_status NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by UUID,
-    workflow_id UUID,
+    workflow_id TYPE TEXT,
     filters JSONB NOT NULL
 );

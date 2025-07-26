@@ -26,13 +26,17 @@ export class SupportBundleEntity {
   @Column({ type: 'uuid' })
   created_by: string;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: 'text' })
   workflow_id: string;
 
   @Column({ type: 'jsonb', nullable: false })
   filters: {
     startDate: string;
     endDate: string;
-    projectIds: string[];
+    projectWorkerMap?: {
+      projectId?: string;
+      workerIds?: string[];
+    }[];
+    otherMetrics?: string[];
   };
 }

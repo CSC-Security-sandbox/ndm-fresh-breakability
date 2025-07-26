@@ -8,6 +8,7 @@ import {
   Param,
   Res,
   NotFoundException,
+  Inject,
 } from '@nestjs/common';
 import { SupportBundleService } from './support-bundle.service';
 import { CreateSupportBundleDTO } from './dto/create-support-bundle.dto';
@@ -21,10 +22,20 @@ import {
 import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserDetails } from 'src/constants/types';
 import { Response } from 'express';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Controller('support-bundle')
 export class SupportBundleController {
-  constructor(private readonly supportBundleService: SupportBundleService) {}
+  private logger: LoggerService;
+
+  constructor(private readonly supportBundleService: SupportBundleService,
+     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(SupportBundleController.name);
+  }
 
   @ApiOperation({
     summary: 'Create a support bundle entry in a table & start the workflow',
@@ -72,6 +83,8 @@ export class SupportBundleController {
       example: { canDownload: true },
     },
   })
+  @ApiBearerAuth()
+  @Auth()
   @Get('can-download')
   async canDownloadBundle(
     @Request() userDetails: UserDetails,
@@ -104,4 +117,14 @@ export class SupportBundleController {
       }
     });
   }
+
+  // @ApiOperation({
+  //   summary: 'Generate Error Logs using JobRunId or jobConfigId',
+  // })
+  // @ApiResponse({ status: 404, description: 'Error log file not found.' })
+  // @Get('generate-error-csv/:id')
+  // async generateErrorCsv(@Param('id') id: string) {
+  //   return await this.supportBundleService.createCsvFileForJob(id);
+  // }
 }
+
