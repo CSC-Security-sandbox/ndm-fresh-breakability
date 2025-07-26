@@ -13,13 +13,13 @@ import (
 // Global raw configuration data.
 var (
 	// Global slices holding available and attached workers.
-	availableWorkers      []SSHConfig
-	attachedWorkersConfig map[string]SSHConfig
+	EnvWorkersConfigList  []SSHConfig
+	AttachedWorkersConfig map[string]SSHConfig
 )
 
-// initWorkers parses the comma‑separated strings for IPs, ports, passwords, and usernames,
-// and builds the availableWorkers slice.
-func initWorkers(ips, ports, passwords, usernames string) {
+// InitWorkers parses the comma‑separated strings for IPs, ports, passwords, and usernames,
+// and builds the EnvWorkersConfigList slice.
+func InitWorkers(ips, ports, passwords, usernames string) {
 	// Parse and trim IP addresses.
 	ipList := []string{}
 	for _, ip := range strings.Split(ips, ",") {
@@ -97,8 +97,8 @@ func initWorkers(ips, ports, passwords, usernames string) {
 		LogFatalf("Insufficient number of usernames provided. Got %d usernames for %d IPs", len(usernameList), len(ipList))
 	}
 
-	// Build the availableWorkers slice.
-	availableWorkers = []SSHConfig{}
+	// Build the EnvWorkersConfigList slice.
+	EnvWorkersConfigList = []SSHConfig{}
 	for i, ip := range ipList {
 		worker := SSHConfig{
 			Username: usernameList[i],
@@ -106,26 +106,27 @@ func initWorkers(ips, ports, passwords, usernames string) {
 			Port:     portList[i],
 			Password: passList[i],
 		}
-		availableWorkers = append(availableWorkers, worker)
+		EnvWorkersConfigList = append(EnvWorkersConfigList, worker)
 	}
-	attachedWorkersConfig = make(map[string]SSHConfig)
-	// start with none attached
+
+	LogDebug(fmt.Sprintf("Workers ssh config loaded from .env : %+v", strings.Join(ipList, ",")))
+	LogDebug(fmt.Sprintf("Worker count: %d", len(EnvWorkersConfigList)))
+	AttachedWorkersConfig = make(map[string]SSHConfig)
 }
 
-// getAvailableWorkersCount returns the total count of available workers.
-func getAvailableWorkersCount() int {
-	fmt.Println("Available workers count:", len(availableWorkers))
-	return len(availableWorkers)
+// getEnvWorkersConfigListCount returns the total count of available workers.
+func getEnvWorkersConfigListCount() int {
+	return len(EnvWorkersConfigList)
 }
 
 // getAttachedWorkerCount returns the current count of attached workers.
 func getAttachedWorkerCount() int {
-	return len(attachedWorkersConfig)
+	return len(AttachedWorkersConfig)
 }
 
 // containsWorker checks if a worker (by Host) is in the given slice.
-func containsWorker(attachedWorkersConfig map[string]SSHConfig, item SSHConfig) bool {
-	for _, v := range attachedWorkersConfig {
+func containsWorker(AttachedWorkersConfig map[string]SSHConfig, item SSHConfig) bool {
+	for _, v := range AttachedWorkersConfig {
 		if v.Host == item.Host {
 			return true
 		}
@@ -137,9 +138,7 @@ func containsWorker(attachedWorkersConfig map[string]SSHConfig, item SSHConfig) 
 // A worker is considered attached only if the API call and SSH registration script succeed.
 // On success, it returns a map of worker IDs to their SSH configurations.
 func AttachWorkers(count int, authToken, accountId, projectId string) (map[string]SSHConfig, error) {
-
-	fmt.Println("Attaching workers...", getAvailableWorkersCount())
-	if count > getAvailableWorkersCount() {
+	if count > getEnvWorkersConfigListCount() {
 		return nil, errors.New("requested count exceeds total available workers")
 	}
 
@@ -150,12 +149,12 @@ func AttachWorkers(count int, authToken, accountId, projectId string) (map[strin
 
 	needed := count - current
 
-	// Iterate over availableWorkers and for each not already attached, attempt to attach.
-	for _, workerConfig := range availableWorkers {
+	// Iterate over EnvWorkersConfigList and for each not already attached, attempt to attach.
+	for _, workerConfig := range EnvWorkersConfigList {
 		if needed == 0 {
 			break
 		}
-		if containsWorker(attachedWorkersConfig, workerConfig) {
+		if containsWorker(AttachedWorkersConfig, workerConfig) {
 			continue
 		}
 		// Try to register this worker.
@@ -164,19 +163,19 @@ func AttachWorkers(count int, authToken, accountId, projectId string) (map[strin
 			return nil, fmt.Errorf("failed to attach worker %s: %w", workerConfig.Host, err)
 		}
 		LogDebug(fmt.Sprintf("Successfully registered worker %s with workerId: %s", workerConfig.Host, workerId))
-		attachedWorkersConfig[workerId] = workerConfig
+		AttachedWorkersConfig[workerId] = workerConfig
 		needed--
 	}
 	if getAttachedWorkerCount() != count {
 		return nil, errors.New("failed to attach the required number of workers")
 	}
-	LogDebug(fmt.Sprintf("Total Worker Attached : %d", len(attachedWorkersConfig)))
-	return attachedWorkersConfig, nil
+	LogDebug(fmt.Sprintf("Total Worker Attached : %d", len(AttachedWorkersConfig)))
+	return AttachedWorkersConfig, nil
 }
 
 // GetAttachedWorkersConfig returns the current map of attached workers.
 func GetAttachedWorkersConfig() map[string]SSHConfig {
-	return attachedWorkersConfig
+	return AttachedWorkersConfig
 }
 
 func GetAttachedWorkerDetails() SSHConfig {
@@ -199,7 +198,7 @@ func DetachWorkers(workerIdsToDelete []string) error {
 		return errors.New("no worker ID provided for detachment")
 	}
 
-	for workerId, workerConfig := range attachedWorkersConfig {
+	for workerId, workerConfig := range AttachedWorkersConfig {
 		for _, workerIdToDelete := range workerIdsToDelete {
 			if workerId == workerIdToDelete {
 				output, err := DetachWorker(workerConfig)
@@ -209,8 +208,8 @@ func DetachWorkers(workerIdsToDelete []string) error {
 					detachErrors = append(detachErrors, msg)
 				} else {
 					msg := fmt.Sprintf("Successfully detached worker %s with output: %s", workerConfig.Host, output)
-					// Remove the worker from the attachedWorkersConfig map.
-					delete(attachedWorkersConfig, workerId)
+					// Remove the worker from the AttachedWorkersConfig map.
+					delete(AttachedWorkersConfig, workerId)
 					LogDebug(msg)
 				}
 			}
@@ -224,13 +223,13 @@ func DetachWorkers(workerIdsToDelete []string) error {
 
 // DetachAllWorkers detaches all currently attached workers.
 func DetachAllWorkers() error {
-	if len(attachedWorkersConfig) == 0 {
+	if len(AttachedWorkersConfig) == 0 {
 		return errors.New("no workers currently attached")
 	}
 
 	// Collect all worker IDs to delete.
-	workerIdsToDelete := make([]string, 0, len(attachedWorkersConfig))
-	for workerId := range attachedWorkersConfig {
+	workerIdsToDelete := make([]string, 0, len(AttachedWorkersConfig))
+	for workerId := range AttachedWorkersConfig {
 		workerIdsToDelete = append(workerIdsToDelete, workerId)
 	}
 
@@ -345,8 +344,8 @@ func DetachWorker(workerConfig SSHConfig) (string, error) {
 	case ProtocolSMB:
 		script = GetDetachWorkerScriptForSMB()
 	}
-	fmt.Printf("UMV detach worker script for %s -> %s \n", workerConfig.Host, script)
 
+	LogDebug(fmt.Sprintf("Detaching Worker %s and running script: \n%s", workerConfig.Host, script))
 	return sshRunScript(workerConfig, script)
 }
 
@@ -368,7 +367,7 @@ func RestartWorker(config SSHConfig) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to start worker on %s: %w", config.Host, err)
 	}
-	LogDebug(fmt.Sprintf("Worker %s started successfully with output: %s", config.Host, output))
+	LogDebug(fmt.Sprintf("Worker %s restarted successfully with output: %s", config.Host, output))
 	return output, nil
 }
 
@@ -402,26 +401,26 @@ func attachWorkerForConfig(workerConfig SSHConfig, authToken, accountId, project
 	if err != nil {
 		return workerId, err
 	}
-	LogDebug(fmt.Sprintf("For worker %s, running script: %s", workerConfig.Host, script))
-	output, err := sshRunScript(workerConfig, script)
+
+	LogDebug(fmt.Sprintf("Attaching Worker %s and running script: \n%s", workerConfig.Host, script))
+	_, err = sshRunScript(workerConfig, script)
 	if err != nil {
 		return workerId, err
 	}
-	LogDebug(fmt.Sprintf("Output from worker %s: %s", workerConfig.Host, output))
 	return workerId, nil
 }
 
-// GetWorkerIds returns a slice of worker IDs from the attachedWorkersConfig map.
+// GetWorkerIds returns a slice of worker IDs from the AttachedWorkersConfig map.
 func GetWorkerIds() []string {
-	workerIds := make([]string, 0, len(attachedWorkersConfig))
+	workerIds := make([]string, 0, len(AttachedWorkersConfig))
 
-	// Iterate over the attachedWorkersConfig map and collect worker IDs.
-	if len(attachedWorkersConfig) == 0 {
+	// Iterate over the AttachedWorkersConfig map and collect worker IDs.
+	if len(AttachedWorkersConfig) == 0 {
 		return workerIds // Return empty slice if no workers are attached.
 	}
 
-	// Collect worker IDs from the attachedWorkersConfig map.
-	for workerId := range attachedWorkersConfig {
+	// Collect worker IDs from the AttachedWorkersConfig map.
+	for workerId := range AttachedWorkersConfig {
 		workerIds = append(workerIds, workerId)
 	}
 	return workerIds

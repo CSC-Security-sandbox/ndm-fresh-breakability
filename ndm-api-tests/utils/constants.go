@@ -211,11 +211,25 @@ func UpdateConfVariables(protocolType, sourceVolumesArgs, destinationVolumesArgs
 		LogFatalf("Invalid protocol type: %s", protocolType)
 	}
 
-	initWorkers(NDM_WORKERS_HOST, NDM_WORKERS_PORT, NDM_WORKERS_PASSWORD, NDM_WORKERS_USER_NAME)
+	InitWorkers(NDM_WORKERS_HOST, NDM_WORKERS_PORT, NDM_WORKERS_PASSWORD, NDM_WORKERS_USER_NAME)
 
 	//export := fmt.Sprintf("%s:vol4_33", SOURCE_HOST_IP)
-	//AddDataToVolume(export)
-	//ClearVolume(export)
+	/*err := AddDataToVolume(export)
+	if err != nil {
+		fmt.Println("UMV error add data to volume : ", err.Error())
+	}
+
+	Wait(20)*/
+	/*err := RemoveDeltaFromVolume(export)
+	if err != nil {
+		fmt.Println("UMV error  data to volume : ", err.Error())
+	}*/
+
+	/*Wait(20)
+	err = ClearVolume(export)
+	if err != nil {
+		fmt.Println("UMV error clear volume : ", err.Error())
+	}*/
 	//os.Exit(1)
 }
 

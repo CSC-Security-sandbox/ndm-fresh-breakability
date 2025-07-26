@@ -84,6 +84,7 @@ func PtrExportPathSource(e ExportPathSource) *ExportPathSource {
 
 // CreateFileServer creates a File server with different config details
 func CreateFileServer(params CreateServereParams, headers map[string]string) (string, *http.Response, error) {
+	LogDebug(fmt.Sprintf("Creating FileServer : %s", params.Host))
 	createSourceURL := CONFIG_SERVICE_URL + CREATE_FILESERVER_ENDPOINT
 
 	fmt.Println("Creating file server with params:", params.Host, " , username : ", params.UserName, " , ", params.Password)
@@ -167,12 +168,14 @@ func GetExportPathID(
 	var getSourceResp FileServerInfo
 
 	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
+		LogDebug(fmt.Sprintf("Refreshing FileServer for ID %s, attempt %d", configID, attempt))
 		resp, err := SendAPIRequest(http.MethodGet, refreshURL, nil, headers)
 		if err != nil {
 			return "", fmt.Errorf("error refreshing file server: %w", err)
 		}
 		defer resp.Body.Close()
 
+		LogDebug(fmt.Sprintf("Getting FileServer details for ID %s, attempt %d", configID, attempt))
 		resp, err = SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
 		if err != nil {
 			return "", err
@@ -229,7 +232,7 @@ func ClearVolumeForSMB(export string) string {
 	clearVolumeScript := fmt.Sprintf(`cmd /C
 	net use %s /delete /yes &
 	net use %s %s /user:%s "%s" &&
-	rd /s /q %s &&
+	rmdir /s /q %s &&
 	net use %s /delete /yes`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, mappedDrive, mappedDrive)
 
 	commands := []string{}
@@ -377,17 +380,18 @@ func AddDataToVolumeForSMB(export string) string {
 	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
 
 	deltaDir := `C:\` + DeltaFolder
-	mappedDrive := "Z:"
+	mappedDrive := `Z:`
 
 	cmd := fmt.Sprintf(`cmd /C
 	if exist %s rmdir /s /q %s &&
 	mkdir %s &&
-	(for /L %%i in (1,1,20) do fsutil file createnew %s\file%%i.txt 102400) &&
+	(for /L %%i in (1,1,10) do fsutil file createnew %s\file%%i.txt 102400) &&
 	net use %s %s /user:%s "%s" &&
+	(if exist %s\%s\ ( rmdir /s /q %s\%s ) else ( mkdir %s\%s )) &&
 	xcopy /E /I /Y %s %s\%s &&
 	net use %s /delete /y &&
 	rmdir /s /q %s
-	`, deltaDir, deltaDir, deltaDir, deltaDir, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, deltaDir, mappedDrive, DeltaFolder, mappedDrive, deltaDir)
+	`, deltaDir, deltaDir, deltaDir, deltaDir, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, smbShare, DeltaFolder, smbShare, DeltaFolder, smbShare, DeltaFolder, deltaDir, smbShare, DeltaFolder, mappedDrive, deltaDir)
 
 	commands := []string{}
 	for _, v := range strings.Split(cmd, "\n") {
@@ -478,8 +482,8 @@ func RemoveDeltaFromVolumeForSMB(export string) string {
 	removeDeltaScript := fmt.Sprintf(`cmd /C
 	net use %s /delete /yes &
 	net use %s %s /user:%s "%s" &&
-	rd /s /q %s\%s &&
-	net use %s /delete /yes`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, mappedDrive, DeltaFolder, mappedDrive)
+	(if exist %s\%s\ ( rmdir /s /q %s\%s ) else ( echo "delta not found" )) &&
+	net use %s /delete /yes`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, smbShare, DeltaFolder, smbShare, DeltaFolder, mappedDrive)
 
 	commands := []string{}
 	for _, v := range strings.Split(removeDeltaScript, "\n") {

@@ -35,7 +35,6 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 			// workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
 
-			fmt.Println("worker ids : ::  ", workerIds)
 			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, DESTINATION_VOLUMES[0])
 			// destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME_1)
 
@@ -52,9 +51,6 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 			//var destinationConfigID, destinationPathID1, destinationPathID2 string
 			var destinationConfigID, destinationPathID1 string
 
-			fmt.Println("host ip is : ", SOURCE_HOST_IP)
-			fmt.Println("UMV WAITING FOR WORKER ONLINE :", attachedWorkersConfig)
-			Wait(60)
 			sourceParams := CreateServereParams{
 				ConfigName:       "source-file-server",
 				ConfigType:       ConfigTypeFile,
@@ -68,8 +64,8 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 				Workers:          []string{workerId1},
 				WorkingDirectory: "",
 			}
+			fmt.Printf("UMV CREATE SRC FILE SERVER PARAMS : %+v \n", sourceParams)
 
-			fmt.Println("create source file server params: ", sourceParams)
 			sourceConfigID, resp, err := CreateFileServer(sourceParams, headers)
 			fmt.Println("create source file server response: ", resp)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
@@ -77,7 +73,6 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
-			// return
 
 			By("Getting the source file server by config ID")
 			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID, headers)
@@ -85,6 +80,8 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 
 			// sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID, headers)
 			// Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+
+			Wait(30)
 
 			By("Creating a new discovery job for the source")
 			jobParams := DiscoveryJobParams{
@@ -104,7 +101,6 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 			Expect(len(sourceJobConfigIDs)).To(BeNumerically(">", 0), "No valid sourceJobConfigIDs found in response")
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
-			fmt.Println("Waiting for Discovery....")
 
 			By("Getting jobs by jobConfigId for source")
 			/*discovery_validators := []string{
@@ -143,6 +139,7 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 				Workers:          []string{workerId1},
 				WorkingDirectory: "",
 			}
+
 			destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
 			Expect(destinationConfigID).NotTo(BeEmpty(), "destinationConfigID is empty")
