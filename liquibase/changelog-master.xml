@@ -395,4 +395,9 @@
       </rollback>
    </changeSet>
 
+   <changeSet id="20250724_07_add_smtp_permission.sql" author="ramyag">
+      <sqlFile path="liquibase/20250724_07_add_smtp_permission.sql" splitStatements="false"/>
+      <rollback></rollback>
+   </changeSet>
+
 </databaseChangeLog>
