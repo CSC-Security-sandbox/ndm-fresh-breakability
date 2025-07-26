@@ -395,9 +395,14 @@ export function withBulkMigrateCreateForm(
               }
               setIsSubmitting(false);
               if (precheckState.errors.length === 0) {
-                if (precheckState?.warnings.length > 0) {
+                if (
+                  precheckState?.warnings &&
+                  precheckState.warnings.length > 0
+                ) {
                   const warning = precheckState.warnings.filter((warning) =>
-                    warning?.warnings.includes("INSUFFICIENT_DESTINATION_SPACE")
+                    warning?.warnings?.includes(
+                      "INSUFFICIENT_DESTINATION_SPACE"
+                    )
                   );
                   if (warning.length > 0) {
                     dispatch(
@@ -411,6 +416,8 @@ export function withBulkMigrateCreateForm(
                   } else {
                     handleSubmit(onSuccessfulSubmit);
                   }
+                } else {
+                  handleSubmit(onSuccessfulSubmit);
                 }
               }
             } else if (data?.status === ValidateConnectionStatus.TERMINATED) {
@@ -431,8 +438,27 @@ export function withBulkMigrateCreateForm(
             }
           }, timeIntervalInSeconds);
         })
-        .catch((e) => {
-          showErrorOnFailure(e);
+        .catch((err) => {
+          if (
+            err?.data?.errors &&
+            err.data.errors.includes("MIGRATION_CONFLICTS_FOUND")
+          ) {
+            const conflictError = err.data;
+            setPreCheckStatus({
+              success: [],
+              failed: [],
+              errors: [],
+              warnings: [],
+              migrationConflicts: conflictError.details || [],
+            });
+            setIsPrecheckLoading(false);
+            setIsSubmitting(false);
+            if (interval.current) {
+              clearInterval(interval.current);
+            }
+          } else {
+            showErrorOnFailure(err);
+          }
         });
     };
 

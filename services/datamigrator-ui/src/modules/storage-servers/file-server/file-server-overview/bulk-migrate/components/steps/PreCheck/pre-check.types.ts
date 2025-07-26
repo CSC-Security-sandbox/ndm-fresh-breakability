@@ -3,7 +3,10 @@ export type PreCheckStatusPropsType = {
 };
 
 export type StatusType = {
-  status: { errors: [] };
+  status: {
+    errors: [];
+    migrationConflicts?: MigrationConflictDetail[];
+  };
 };
 
 export type ErrorItem = {
@@ -12,11 +15,29 @@ export type ErrorItem = {
   errors: string[];
 };
 
+export type MigrationConflictDetail = {
+  status: string;
+  jobId: string;
+  jobRunIds: string[];
+  sourcePathId: string;
+  targetPathId: string;
+  sourceServerId: string;
+  targetServerId: string;
+};
+
+export type MigrationConflictError = {
+  status: string;
+  errors: string[];
+  details: MigrationConflictDetail[];
+  message: string;
+};
+
 export type PreCheckStatus = {
   success: string[];
   failed: string[];
   errors: ErrorItem[];
   warnings: string[];
+  migrationConflicts?: MigrationConflictDetail[];
 };
 
 export type PreCheckErrorDetailsPropsType = {
@@ -36,4 +57,8 @@ export type PreCheckAccordionTitlePropsType = {
   destination?: string;
   destinationPath?: string;
   errorLabel: string;
+};
+
+export type MigrationConflictErrorPropsType = {
+  conflictData: MigrationConflictDetail[];
 };
