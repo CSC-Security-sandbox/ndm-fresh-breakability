@@ -3,7 +3,6 @@ import {
   Post,
   Body,
   Request,
-  Headers,
   Get,
   Param,
   Res,
@@ -47,12 +46,10 @@ export class SupportBundleController {
   @Post()
   async create(
     @Body() createSupportBundleDTO: CreateSupportBundleDTO,
-    @Headers('traceId') traceId: string,
     @Request() userDetails: UserDetails,
   ) {
     return this.supportBundleService.create(
       createSupportBundleDTO,
-      traceId,
       userDetails,
     );
   }
