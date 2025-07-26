@@ -26,13 +26,13 @@ const RefreshButton = ({
 export default RefreshButton;
 
 /*
-// Basic usage (same as your original)
+Basic usage
 <RefreshButton
   isLoading={isLoading}
   onRefresh={refetch}
 />
 
-// Custom styling
+Custom styling
 <RefreshButton
   isLoading={isLoading}
   onRefresh={refetch}
@@ -40,7 +40,7 @@ export default RefreshButton;
   containerClassName="flex justify-start ml-4"
 />
 
-// Different variant
+Different variant
 <RefreshButton
   isLoading={isLoading}
   onRefresh={refetch}
