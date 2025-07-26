@@ -18,10 +18,10 @@ const BulkManualUploadFile = ({
     fileServerDetails?.status === FILE_SERVER_STATUS_ENUM.DRAFT;
 
   return (
-    <Box className="flex gap-2 justify-end">
+    <Box className="flex justify-end">
       <Show>
         <Show.When isTrue={hasExportPaths}>
-          <Box className="flex gap-2 items-center">
+          <Box className="flex gap-5 items-center">
             <DownloadMonochromeIcon onClick={handleReportDownload} />
             <Button disabled={!isRefreshAvailable} onClick={openUploadModal}>
               Re-Upload Export Paths

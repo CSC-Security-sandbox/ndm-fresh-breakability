@@ -9,11 +9,11 @@ import ScheduleOptions from "@modules/storage-servers/file-server/file-server-ov
 import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
 import { isValidCron } from "cron-validator";
 import cronstrue from "cronstrue";
-import RadioButtonGroup from "@components/RadioButton/RadioButtonGroup";
 import {
   INCREMENTAL_SYNC_SCHEDULE_ENUM,
   INCREMENTAL_SYNC_SCHEDULE_OPTIONS,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/IncrementalSyncSchedule/incremental-sync-schedule.constants";
+import RadioButtonGroup from "@components/radio-button/RadioButtonGroup";
 
 const IncrementalSyncSchedule = () => {
   const { optionForm } = useContext(BulkMigrateContext);

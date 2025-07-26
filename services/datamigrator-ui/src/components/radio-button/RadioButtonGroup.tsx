@@ -1,6 +1,6 @@
 import { RadioButton } from "@netapp/bxp-design-system-react";
-import { RadioButtonGroupPropsType } from "@components/RadioButton/radio-button-group.types";
 import RenderEach from "@components/render-each/RenderEach";
+import { RadioButtonGroupPropsType } from "@components/radio-button/radio-button-group.types";
 
 const RadioButtonGroup = ({
   options,
