@@ -5,7 +5,6 @@ import {
   IsUUID,
   IsDateString,
   ValidateNested,
-  IsNotEmpty,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -31,10 +30,6 @@ export class ProjectWorkerMapDto {
 }
 
 export class CreateSupportBundleDTO {
-  @ApiProperty({ description: 'User ID', type: String, format: 'uuid' })
-  @IsUUID()
-  @IsNotEmpty()
-  userId: string;
 
   @ApiProperty({ description: 'Start date', type: String, format: 'date-time' })
   @IsDateString()
