@@ -12,7 +12,7 @@ import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
-
+import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
 import { UserDetails } from 'src/constants/types';
@@ -42,9 +42,9 @@ export class SupportBundleService {
 
   async create(
     dto: CreateSupportBundleDTO,
-    traceId: string,
     userDetails: UserDetails,
   ): Promise<{ traceId: string }> {
+    const traceId = uuidv4();
     this.logger.log(`userId - ${userDetails.user.id}`);
     this.logger.log(`traceId - ${traceId}`);
     this.logger.log(`dto - ${JSON.stringify(dto)}`);
