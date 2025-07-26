@@ -138,6 +138,8 @@ export interface BulkMigrateContextType {
   fileName: string;
   listOfNotReachableExportPaths: string[];
   sourceDisabledPaths: string[];
+  refetch: () => void;
+  isFetching: boolean;
 }
 
 export interface ErrorsValidateMappingStepFormType {

@@ -19,14 +19,18 @@ const RunningJobRunTable = () => {
 
   return (
     <Box className="mt-3">
-      <ActionButtons selectedRowIds={reviewStepSelectedIds} rows={jobRunList} />
-
       <TableWrapperWithoutFilter
         tableState={jobRunListPathTableState}
         label="Ongoing Job Runs"
         handleSelection={setReviewStepSelectedIds}
         refetchTableData={refetch}
         isRefreshing={isFetching}
+        content={
+          <ActionButtons
+            selectedRowIds={reviewStepSelectedIds}
+            rows={jobRunList}
+          />
+        }
       />
 
       {jobRunList?.length > 0 && (

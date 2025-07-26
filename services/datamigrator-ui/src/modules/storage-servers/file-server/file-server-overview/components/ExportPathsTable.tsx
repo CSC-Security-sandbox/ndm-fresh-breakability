@@ -127,7 +127,7 @@ const ExportPathsTable = ({
   }, [fileServerDetails?.fileServers]);
 
   const FETCHING_DETAILS = (
-    <Box className="flex gap-3 justify-end">
+    <Box className="flex gap-1 justify-end">
       <ReFreshExportPathsTime fileServerDetails={fileServerDetails} />
       <Button
         variant="text"

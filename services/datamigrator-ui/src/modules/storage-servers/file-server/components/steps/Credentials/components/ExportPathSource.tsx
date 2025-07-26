@@ -7,8 +7,8 @@ import {
   MANUAL_UPLOAD_INFO,
   RADIO_OPTIONS,
 } from "@modules/storage-servers/file-server/components/steps/Credentials/export-path-source.constants";
-import RadioButtonGroup from "@components/RadioButton/RadioButtonGroup";
 import { EXPORT_PATH_SOURCE_ENUM } from "@modules/storage-servers/file-server/components/file-server.constant";
+import RadioButtonGroup from "@/components/radio-button/RadioButtonGroup";
 
 const ExportPathSource = () => {
   const { nfsCredentialsForm, isJobRunning } = useContext(
