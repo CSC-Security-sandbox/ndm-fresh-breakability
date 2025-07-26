@@ -50,7 +50,7 @@ const ExportPathsTable = ({
   const [downloadTemplate] = useLazyDownloadExportPathSourceTemplateQuery();
   const [getWorkFlowStatus] = useLazyCheckConnectionRespQuery();
 
-  const isDraftStatus = fileServerDetails?.status === FILE_SERVER_STATUS?.DRAFT;
+  const isDraftStatus = fileServerDetails?.status === FILE_SERVER_STATUS.DRAFT;
   const isRefreshDisabled =
     !fileServerDetails?.isRefreshAvailable || disableRefresh || isDraftStatus;
 

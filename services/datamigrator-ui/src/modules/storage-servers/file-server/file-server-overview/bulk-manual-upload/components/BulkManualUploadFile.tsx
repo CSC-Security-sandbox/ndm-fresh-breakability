@@ -14,7 +14,7 @@ const BulkManualUploadFile = ({
   const { openUploadModal } = BulkManualUpload(fileServerDetails);
   const hasExportPaths = allExportPaths.length > 0;
   const isRefreshAvailable = fileServerDetails?.isRefreshAvailable;
-  const isDraftStatus = fileServerDetails?.status === FILE_SERVER_STATUS?.DRAFT;
+  const isDraftStatus = fileServerDetails?.status === FILE_SERVER_STATUS.DRAFT;
 
   return (
     <Box className="flex gap-2 justify-end">
