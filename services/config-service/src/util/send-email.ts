@@ -14,7 +14,7 @@ export class SendMailService {
       const url = `${SEND_MAIL}/api/v1/email/internal`;
       this.logger.log('URL', url);
       const response = await axios.post(url, body, { timeout: 30000 });
-      this.logger.log('RESPONSE', response);
+      this.logger.log('RESPONSE', JSON.stringify(response.data));
       if (response.status !== 200)
         throw new Error(`Failed to send the mail, ${response.data}`);
       this.logger.log(`Successfully sent the mail`, response.data);
