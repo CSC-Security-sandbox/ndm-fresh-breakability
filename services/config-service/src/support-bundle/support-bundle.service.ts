@@ -21,7 +21,6 @@ import archiver from 'archiver';
 import { promisify } from 'util';
 
 import { exec as execCb } from 'child_process';
-import { ProjectWorkerMap } from './dto/types';
 
 const exec = promisify(execCb);
 
