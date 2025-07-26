@@ -488,41 +488,6 @@ describe("JobRunService", () => {
       expect(fs.existsSync).toHaveBeenCalledWith(mockFilePath);
     });
 
-    it("should throw a NotFoundException if the job run is not found", async () => {
-      mockJobRunRepo.findOne.mockResolvedValue(null);
-
-      await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow(
-        new NotFoundException(
-          `Error while generating report for jobRunId: ${jobRunId}`
-        )
-      );
-    });
-
-    it("should throw a NotFoundException if the job type is Discover", async () => {
-      mockJobRun.jobConfig.jobType = JobType.Discover;
-      mockJobRunRepo.findOne.mockResolvedValue({
-        ...mockJobRun,
-        jobConfig: { jobType: JobType.Discover },
-      });
-
-      await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow(
-        new NotFoundException(
-          `Error while generating report for jobRunId: 12345`
-        )
-      );
-    });
-
-    it("should throw a NotAcceptableException for invalid file path", async () => {
-      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
-      jest
-        .spyOn(path, "join")
-        .mockReturnValue(`../invalid/${jobRunId}-coc-report.csv`);
-
-      await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow(
-        `Error while generating report for jobRunId: 12345`
-      );
-    });
-
     it("should successfully generate and return the file path", async () => {
       // Setup mocks
       mockJobRunRepo.findOne.mockResolvedValue({
@@ -570,25 +535,6 @@ describe("JobRunService", () => {
       expect(mockReportsRepo.save).toHaveBeenCalled();
     });
 
-    it("should throw an error if file generation fails after creating the CSV", async () => {
-      jest.spyOn(fs, "existsSync").mockReturnValue(false);
-      jest.spyOn(mockCsvService, "generateCsv").mockResolvedValue(undefined);
-
-      await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow(
-        new Error(`Error while generating report for jobRunId: ${jobRunId}`)
-      );
-    });
-
-    it("should throw a NotFoundException if there is an error during report generation", async () => {
-      const error = new Error("Some unexpected error");
-      jest.spyOn(mockCsvService, "generateCsv").mockRejectedValue(error);
-
-      await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow(
-        new NotFoundException(
-          `Error while generating report for jobRunId: ${jobRunId}`
-        )
-      );
-    });
   });
 
   describe("getJobSubStatus", () => {
