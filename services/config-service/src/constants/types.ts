@@ -18,3 +18,9 @@ export type Role = {
     projects: string[];
     permissions: string[];
 };
+
+export interface BundleStatus {
+  isProcessing: boolean;
+  isBundleReady: boolean;
+  error: string;
+}
