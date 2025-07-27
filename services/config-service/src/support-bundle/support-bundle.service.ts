@@ -172,12 +172,6 @@ export class SupportBundleService {
       select: ['status'],
     });
 
-    if (!user) {
-      throw new NotFoundException(
-        `No support bundle found for user ID: ${userId}`,
-      );
-    }
-
     switch (user.status) {
       case SupportBundleStatus.COMPLETED:
         return { isProcessing: false, isBundleReady: true, error: '' };
@@ -196,7 +190,7 @@ export class SupportBundleService {
         return {
           isProcessing: false,
           isBundleReady: false,
-          error: 'Support bundle generation failed.',
+          error: '',
         };
     }
   }
