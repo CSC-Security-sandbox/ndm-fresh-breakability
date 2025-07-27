@@ -15,7 +15,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
-import { UserDetails } from 'src/constants/types';
+import { BundleStatus, UserDetails } from 'src/constants/types';
 import { ProjectEntity } from 'src/entities/project.entity';
 import { ConfigService } from '@nestjs/config';
 import { UpdateStatusDto } from './dto/update-status.dto';
@@ -165,7 +165,7 @@ export class SupportBundleService {
     }
   }
 
-  async canUserDownloadBundle(userId: string): Promise<boolean> {
+  async canUserDownloadBundle(userId: string): Promise<BundleStatus> {
     const user = await this.supportBundleRepo.findOne({
       where: { userId },
       order: { createdAt: 'DESC' },
@@ -178,7 +178,27 @@ export class SupportBundleService {
       );
     }
 
-    return user.status === SupportBundleStatus.COMPLETED;
+    switch (user.status) {
+      case SupportBundleStatus.COMPLETED:
+        return { isProcessing: false, isBundleReady: true, error: '' };
+
+      case SupportBundleStatus.IN_PROGRESS:
+        return { isProcessing: true, isBundleReady: false, error: '' };
+
+      case SupportBundleStatus.FAILED:
+        return {
+          isProcessing: false,
+          isBundleReady: false,
+          error: 'Support bundle generation failed.',
+        };
+
+      default:
+        return {
+          isProcessing: false,
+          isBundleReady: false,
+          error: 'Support bundle generation failed.',
+        };
+    }
   }
 
   downloadSupportBundle(fileName: string): string {
