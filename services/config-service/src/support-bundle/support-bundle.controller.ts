@@ -24,6 +24,7 @@ import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { UpdateStatusDto } from './dto/update-status.dto';
 
 @Controller('support-bundle')
 export class SupportBundleController {
@@ -52,6 +53,17 @@ export class SupportBundleController {
       createSupportBundleDTO,
       userDetails,
     );
+  }
+
+  @ApiOperation({ summary: 'Update workflow status by traceId' })
+  @ApiResponse({ status: 200, description: 'Status updated successfully' })
+  @ApiResponse({
+    status: 404,
+    description: 'Support bundle not found for traceId',
+  })
+  @Post('workflow-status-update')
+  async updateStatus(@Body() updateStatusDto: UpdateStatusDto) {
+    return this.supportBundleService.updateSupportBundleStatus(updateStatusDto);
   }
 
   @ApiOperation({

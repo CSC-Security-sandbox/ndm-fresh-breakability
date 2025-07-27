@@ -6,10 +6,11 @@ CREATE TYPE support_bundle_status AS ENUM (
 
 CREATE TABLE IF NOT EXISTS support_bundle_logs (
     request_id UUID PRIMARY KEY,
-    user_id UUID,
+    user_id UUID NOT NULL,
     status support_bundle_status NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     created_by UUID,
-    workflow_id TYPE TEXT,
+    workflow_id TEXT,
     filters JSONB NOT NULL
 );
