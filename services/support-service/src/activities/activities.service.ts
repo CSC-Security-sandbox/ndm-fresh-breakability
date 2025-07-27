@@ -1,12 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { LogGeneratorService } from './log-generator/log-generator.service';
+import { LogGeneratorActivity } from './log-generator/log-generator.activity';
 
 @Injectable()
 export class ActivitiesService {
-  constructor(private readonly logGeneratorService: LogGeneratorService) {}
+  constructor(private readonly logGeneratorActivity: LogGeneratorActivity) {}
 
-  async fetchAndZipLogsUsingFind({ traceId, payload }) {
-    return this.logGeneratorService.fetchAndZipLogsUsingFind({
+  async fetchAndZipLogs({ traceId, payload }) {
+    return this.logGeneratorActivity.fetchAndZipLogs({
       traceId,
       payload,
     });
