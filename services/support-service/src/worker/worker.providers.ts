@@ -13,6 +13,8 @@ export const workerProviders = [
       const activities = {
         fetchAndZipLogs:
           activitiesService.fetchAndZipLogs.bind(activitiesService),
+        notifyWorkflowCompletion:
+          activitiesService.notifyWorkflowCompletion.bind(activitiesService),
       };
 
       const workflowOption =
