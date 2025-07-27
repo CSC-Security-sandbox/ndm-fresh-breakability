@@ -172,6 +172,14 @@ export class SupportBundleService {
       select: ['status'],
     });
 
+    if (!user) {
+      return {
+        isProcessing: false,
+        isBundleReady: false,
+        error: '',
+      };
+    }
+
     switch (user.status) {
       case SupportBundleStatus.COMPLETED:
         return { isProcessing: false, isBundleReady: true, error: '' };
