@@ -1,18 +1,19 @@
 import { SupportBundleStatus } from 'src/constants/enums';
 import {
   Entity,
-  PrimaryGeneratedColumn,
+  PrimaryColumn,
   Column,
   CreateDateColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 
 @Entity('support_bundle_logs')
 export class SupportBundleEntity {
-  @PrimaryGeneratedColumn('uuid')
-  request_id: string;
+  @PrimaryColumn({ name: 'request_id', type: 'uuid' })
+  requestId: string;
 
-  @Column({ type: 'uuid', nullable: true })
-  user_id: string;
+  @Column({ name: 'user_id', type: 'uuid' })
+  userId: string;
 
   @Column({
     type: 'enum',
@@ -20,14 +21,17 @@ export class SupportBundleEntity {
   })
   status: SupportBundleStatus;
 
-  @CreateDateColumn({ type: 'timestamp with time zone' })
-  created_at: Date;
+  @CreateDateColumn({ name: 'created_at', type: 'timestamp with time zone' })
+  createdAt: Date;
 
-  @Column({ type: 'uuid' })
-  created_by: string;
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamp with time zone' })
+  updatedAt: Date;
 
-  @Column({ type: 'text' })
-  workflow_id: string;
+  @Column({ name: 'created_by', type: 'uuid' })
+  createdBy: string;
+
+  @Column({ name: 'workflow_id', type: 'text' })
+  workflowId: string;
 
   @Column({ type: 'jsonb', nullable: false })
   filters: {

@@ -18,6 +18,7 @@ import * as path from 'path';
 import { UserDetails } from 'src/constants/types';
 import { ProjectEntity } from 'src/entities/project.entity';
 import { ConfigService } from '@nestjs/config';
+import { UpdateStatusDto } from './dto/update-status.dto';
 
 @Injectable()
 export class SupportBundleService {
@@ -47,12 +48,11 @@ export class SupportBundleService {
     const workflowId = WorkFlows.SUPPORT_BUNDLE_WORKFLOW + '-' + traceId;
 
     const log = this.supportBundleRepo.create({
-      request_id: traceId,
-      user_id: userDetails.user.id,
+      requestId: traceId,
+      userId: userDetails.user.id,
       status: SupportBundleStatus.IN_PROGRESS,
-      created_at: new Date(),
-      created_by: userDetails.user.id,
-      workflow_id: workflowId,
+      createdBy: userDetails.user.id,
+      workflowId: workflowId,
       filters: {
         startDate: dto.startDate,
         endDate: dto.endDate,
@@ -101,6 +101,21 @@ export class SupportBundleService {
     }
 
     return { traceId };
+  }
+
+  async updateSupportBundleStatus(updateStatusDto: UpdateStatusDto) {
+    const result = await this.supportBundleRepo.update(
+      { requestId: updateStatusDto.traceId },
+      {
+        status: updateStatusDto.status,
+      },
+    );
+
+    if (result.affected === 0) {
+      throw new Error(
+        `Support bundle not found for traceId: ${updateStatusDto.traceId}`,
+      );
+    }
   }
 
   async getProjects(userDetails: UserDetails) {
@@ -152,8 +167,8 @@ export class SupportBundleService {
 
   async canUserDownloadBundle(userId: string): Promise<boolean> {
     const user = await this.supportBundleRepo.findOne({
-      where: { user_id: userId },
-      order: { created_at: 'DESC' },
+      where: { userId },
+      order: { createdAt: 'DESC' },
       select: ['status'],
     });
 
