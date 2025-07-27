@@ -20,6 +20,13 @@ export default registerAs(
     },
     options: {
       jsonPayloadLimit: process.env.JSON_PAYLOAD_LIMIT || '5mb'
-    }
+    },
+    bundle: {
+      bundleOutputPath:
+        process.env.BUNDLE_OUTPUT_PATH || '/private/tmp/ndm-logs',
+      prometheusBaseUrl:
+        process.env.PROMETHEUS_BASE_URL ||
+        'http://prometheus-server.prometheus.svc.cluster.local:80/api/v1/query',
+    },
   }),
 );

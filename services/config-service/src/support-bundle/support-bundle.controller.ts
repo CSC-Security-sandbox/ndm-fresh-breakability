@@ -4,7 +4,6 @@ import {
   Body,
   Request,
   Get,
-  Param,
   Res,
   NotFoundException,
   Inject,
@@ -30,8 +29,9 @@ import {
 export class SupportBundleController {
   private logger: LoggerService;
 
-  constructor(private readonly supportBundleService: SupportBundleService,
-     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  constructor(
+    private readonly supportBundleService: SupportBundleService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
   ) {
     this.logger = loggerFactory.create(SupportBundleController.name);
   }
@@ -97,12 +97,14 @@ export class SupportBundleController {
     name: 'fileName',
     description: 'File name without zip extension (e.g., ndm_logs)',
   })
-  @Get('download/:fileName')
+  @ApiBearerAuth()
+  @Auth()
+  @Get('download')
   async downloadSupportBundle(
-    @Param('fileName') fileName: string,
+    @Request() userDetails: UserDetails,
     @Res() res: Response,
   ) {
-    const fullFileName = `${fileName}.zip`;
+    const fullFileName = `ndm_${userDetails?.user?.id}.zip`;
     const filePath =
       this.supportBundleService.downloadSupportBundle(fullFileName);
 
@@ -114,14 +116,4 @@ export class SupportBundleController {
       }
     });
   }
-
-  // @ApiOperation({
-  //   summary: 'Generate Error Logs using JobRunId or jobConfigId',
-  // })
-  // @ApiResponse({ status: 404, description: 'Error log file not found.' })
-  // @Get('generate-error-csv/:id')
-  // async generateErrorCsv(@Param('id') id: string) {
-  //   return await this.supportBundleService.createCsvFileForJob(id);
-  // }
 }
-

@@ -30,7 +30,6 @@ export class ProjectWorkerMapDto {
 }
 
 export class CreateSupportBundleDTO {
-
   @ApiProperty({ description: 'Start date', type: String, format: 'date-time' })
   @IsDateString()
   startDate: string;
@@ -39,15 +38,14 @@ export class CreateSupportBundleDTO {
   @IsDateString()
   endDate: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     description: 'Mapping of projects to their worker IDs',
     type: [ProjectWorkerMapDto],
   })
-  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ProjectWorkerMapDto)
-  projectWorkerMap?: ProjectWorkerMapDto[];
+  projectWorkerMap: ProjectWorkerMapDto[];
 
   @ApiPropertyOptional({
     description: 'List of other metrics to include',
