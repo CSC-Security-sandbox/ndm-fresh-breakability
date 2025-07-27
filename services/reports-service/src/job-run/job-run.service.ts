@@ -264,9 +264,6 @@ export class JobRunService {
       console.log(
         `Error while generating COC report for jobRunId: ${jobRunId} - ERROR: ${error}`
       );
-      throw new NotFoundException(
-        `Error while generating report for jobRunId: ${jobRunId}`
-      );
     }
   }
 

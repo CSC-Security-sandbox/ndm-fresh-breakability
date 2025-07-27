@@ -118,7 +118,11 @@ export class JobRunController {
   @Get("coc-report/:jobRunId")
   async getCocReportByJobRunId(@Param("jobRunId") jobRunId: string) {
     this.logger.debug(`Fetching COC report for JobRunId: ${jobRunId}`);
-    const response = await this.jobRunService.getCocReportByJobRunId(jobRunId);
-    return response;
+    this.jobRunService.getCocReportByJobRunId(jobRunId);
+    this.logger.log(`COC report generation started for JobRunId: ${jobRunId}`);
+    return { 
+      status: 'success',
+      message: `COC report generation started for JobRunId: ${jobRunId}`
+    };
   }
 }
