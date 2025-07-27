@@ -3,14 +3,15 @@ import { log } from '@temporalio/workflow';
 import { LogGeneratorWorkflow } from './child-workflows/log-generator-workflow';
 
 export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
-  log.info('Started Parent Workflow');
+  log.info('Started SupportBundleWorkflow');
   log.info(
-    `Args getting to parent - ${traceId}, ${JSON.stringify(payload)}, ${options}`,
+    `Received arguments - traceId: ${traceId}, payload: ${JSON.stringify(payload)}, options: ${JSON.stringify(options)}`,
   );
-  const childResults: string[] = [];
+
+  const workflowResults: string[] = [];
 
   try {
-    const child1 = await startChild(LogGeneratorWorkflow, {
+    const logGeneratorChild = await startChild(LogGeneratorWorkflow, {
       args: [{ traceId, payload }],
       workflowId: `LogGeneratorWorkflow-${traceId}`,
       retry: {
@@ -20,17 +21,21 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
       workflowExecutionTimeout: '30s',
     });
 
-    const result1 = await child1.result();
-    childResults.push(result1);
+    const logGeneratorResult = await logGeneratorChild.result();
+    workflowResults.push(logGeneratorResult);
   } catch (err) {
     return {
-      message: 'LogGeneratorWorkflow failed, skipping all others.',
+      status: 'failed',
+      message: 'Log generation failed. Skipping remaining workflows.',
+      traceId,
       error: err.message,
     };
   }
 
   return {
-    message: 'Child workflows completed successfully',
-    results: childResults,
+    status: 'success',
+    message: 'All child workflows completed successfully.',
+    traceId,
+    logGenerationOutput: workflowResults,
   };
 };

@@ -11,8 +11,8 @@ export const workerProviders = [
       configService: ConfigService,
     ) => {
       const activities = {
-        fetchAndZipLogsUsingFind:
-          activitiesService.fetchAndZipLogsUsingFind.bind(activitiesService),
+        fetchAndZipLogs:
+          activitiesService.fetchAndZipLogs.bind(activitiesService),
       };
 
       const workflowOption =
