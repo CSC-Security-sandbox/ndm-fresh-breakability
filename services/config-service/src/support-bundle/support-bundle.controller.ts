@@ -18,7 +18,7 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
-import { UserDetails } from 'src/constants/types';
+import { BundleStatus, UserDetails } from 'src/constants/types';
 import { Response } from 'express';
 import {
   LoggerFactory,
@@ -97,11 +97,10 @@ export class SupportBundleController {
   @Get('can-download')
   async canDownloadBundle(
     @Request() userDetails: UserDetails,
-  ): Promise<{ canDownload: boolean }> {
-    const canDownload = await this.supportBundleService.canUserDownloadBundle(
+  ): Promise<BundleStatus> {
+    return await this.supportBundleService.canUserDownloadBundle(
       userDetails.user.id,
     );
-    return { canDownload };
   }
 
   @ApiOperation({ summary: 'Download a support bundle ZIP file by name' })
