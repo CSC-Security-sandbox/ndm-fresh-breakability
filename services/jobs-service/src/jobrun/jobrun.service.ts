@@ -458,28 +458,6 @@ export class JobRunService {
     return allJobsRuns;
   }
 
-  covertBytes(bytes: number): string {
-    const bytesInKB = 1024;
-    const bytesInMB = bytesInKB * 1024;
-    const bytesInGB = bytesInMB * 1024;
-    const bytesInTB = bytesInGB * 1024;
-    const bytesInPB = bytesInTB * 1024;
-
-    if (bytes < bytesInKB) {
-      return `${bytes} B`;
-    } else if (bytes < bytesInMB) {
-      return `${(bytes / bytesInKB).toFixed(2)} KB`;
-    } else if (bytes < bytesInGB) {
-      return `${(bytes / bytesInMB).toFixed(2)} MB`;
-    } else if (bytes < bytesInTB) {
-      return `${(bytes / bytesInGB).toFixed(2)} GB`;
-    } else if (bytes < bytesInPB) {
-      return `${(bytes / bytesInTB).toFixed(2)} TB`;
-    } else {
-      return `${(bytes / bytesInPB).toFixed(2)} PB`;
-    }
-  }
-
   async updateJobRunStatus(jobRunId: string, status: JobRunStatus) {
     const jobRunDetails: JobRunEntity = await this.jobRunRepo.findOne({
       where: { id: jobRunId },

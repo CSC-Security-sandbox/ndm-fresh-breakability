@@ -1,8 +1,8 @@
 import {
-  covertBytes,
   capitalize,
-  formatSeconds,
+  covertBytes,
   formatNumbersWithSuffix,
+  formatSeconds,
   formatSizeAndCount,
 } from "./mapper";
 
@@ -15,29 +15,29 @@ describe("covertBytes", () => {
     expect(covertBytes(512)).toBe("512 B");
   });
 
-  it("should return the correct size in KB", () => {
-    expect(covertBytes(1024)).toBe("1.02 KB");
-    expect(covertBytes(1536)).toBe("1.54 KB");
+  it("should return the correct size in KiB", () => {
+    expect(covertBytes(1024)).toBe("1.02 KiB");
+    expect(covertBytes(1536)).toBe("1.54 KiB");
   });
 
-  it("should return the correct size in MB", () => {
-    expect(covertBytes(1048576)).toBe("1.05 MB");
-    expect(covertBytes(1572864)).toBe("1.57 MB");
+  it("should return the correct size in MiB", () => {
+    expect(covertBytes(1048576)).toBe("1.05 MiB");
+    expect(covertBytes(1572864)).toBe("1.57 MiB");
   });
 
-  it("should return the correct size in GB", () => {
-    expect(covertBytes(1073741824)).toBe("1.07 GB");
-    expect(covertBytes(1610612736)).toBe("1.61 GB");
+  it("should return the correct size in GiB", () => {
+    expect(covertBytes(1073741824)).toBe("1.07 GiB");
+    expect(covertBytes(1610612736)).toBe("1.61 GiB");
   });
 
-  it("should return the correct size in TB", () => {
-    expect(covertBytes(1099511627776)).toBe("1.10 TB");
-    expect(covertBytes(1649267441664)).toBe("1.65 TB");
+  it("should return the correct size in TiB", () => {
+    expect(covertBytes(1099511627776)).toBe("1.10 TiB");
+    expect(covertBytes(1649267441664)).toBe("1.65 TiB");
   });
 
-  it("should return the correct size in PB", () => {
-    expect(covertBytes(1125899906842624)).toBe("1.13 PB");
-    expect(covertBytes(1688849860263936)).toBe("1.69 PB");
+  it("should return the correct size in PiB", () => {
+    expect(covertBytes(1125899906842624)).toBe("1.13 PiB");
+    expect(covertBytes(1688849860263936)).toBe("1.69 PiB");
   });
 });
 
@@ -108,12 +108,16 @@ describe("formatNumbersWithSuffix", () => {
 
 describe("formatSizeAndCount", () => {
   it("should format size and count correctly", () => {
-    expect(formatSizeAndCount("size(1024)count(1000)")).toBe("size: (1.02 KB); count: (1.00 K)");
-    expect(formatSizeAndCount("size(1048576)count(100000)")).toBe("size: (1.05 MB); count: (1.00 L)");
+    expect(formatSizeAndCount("size(1024)count(1000)")).toBe(
+      "size: (1.02 KB); count: (1.00 K)",
+    );
+    expect(formatSizeAndCount("size(1048576)count(100000)")).toBe(
+      "size: (1.05 MB); count: (1.00 L)",
+    );
   });
 
   it("should handle zero values", () => {
-    expect(formatSizeAndCount("size(0)count(0)")).toBe("size: (0 B); count: (0)");
+    expect(formatSizeAndCount("size(0)count(0)")).toBe("size: (0 B); count: (");
   });
 
   it("should handle missing values", () => {
@@ -122,7 +126,11 @@ describe("formatSizeAndCount", () => {
   });
 
   it("should handle only size or only count", () => {
-    expect(formatSizeAndCount("size(1024)")).toBe("size: (1.02 KB); count: (0)");
-    expect(formatSizeAndCount("count(1000)")).toBe("size: (0 B); count: (1.00 K)");
+    expect(formatSizeAndCount("size(1024)")).toBe(
+      "size: (1.02 KB); count: (0)",
+    );
+    xpect(formatSizeAndCount("count(1000)")).toBe(
+      "size: (0 B); count: (1.00 K)",
+    );
   });
 });

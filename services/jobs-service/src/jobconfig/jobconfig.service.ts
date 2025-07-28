@@ -1009,7 +1009,7 @@ export class JobConfigService {
           scannedDirectoriesCount: BigInt(
             inventoryCounts.directories || "0"
           )?.toString(),
-          totalScannedSize: this.covertBytes(Number(inventoryCounts?.totalSize  || 0)),
+          totalScannedSize: formatBytes(Number(inventoryCounts?.totalSize  || 0)),
           totalMigratedSize: formatBytes(Number(jobRunStats?.totalSize || 0)),
           errors: inventoryCounts.errors,
         };
@@ -1067,13 +1067,13 @@ export class JobConfigService {
 
     const units = {
       B: 1,
-      KB: 1024,
-      MB: 1024 ** 2,
-      GB: 1024 ** 3,
-      TB: 1024 ** 4,
-      PB: 1024 ** 5,
+      KiB: 1024,
+      MiB: 1024 ** 2,
+      GiB: 1024 ** 3,
+      TiB: 1024 ** 4,
+      PiB: 1024 ** 5
     };
-    const match = size.match(/^([\d.]+)\s*(B|KB|MB|GB|TB|PB)$/);
+    const match = size.match(/^([\d.]+)\s*(B|KiB|MiB|GiB|TiB|PiB)$/);
 
     if (!match) return 0;
 
@@ -1327,27 +1327,6 @@ export class JobConfigService {
     fileStream.pipe(res);
   }
 
-  covertBytes(bytes: number): string {
-    const bytesInKB = 1024;
-    const bytesInMB = bytesInKB * 1024;
-    const bytesInGB = bytesInMB * 1024;
-    const bytesInTB = bytesInGB * 1024;
-    const bytesInPB = bytesInTB * 1024;
-
-    if (bytes < bytesInKB) {
-      return `${bytes} B`;
-    } else if (bytes < bytesInMB) {
-      return `${(bytes / bytesInKB).toFixed(2)} KB`;
-    } else if (bytes < bytesInGB) {
-      return `${(bytes / bytesInMB).toFixed(2)} MB`;
-    } else if (bytes < bytesInTB) {
-      return `${(bytes / bytesInGB).toFixed(2)} GB`;
-    } else if (bytes < bytesInPB) {
-      return `${(bytes / bytesInTB).toFixed(2)} TB`;
-    } else {
-      return `${(bytes / bytesInPB).toFixed(2)} PB`;
-    }
-  }
   hasCommonWorkers(data: any): boolean {
     const workerIds = new Set<string>();
     for (const volume of data) {

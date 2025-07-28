@@ -264,7 +264,7 @@ export const createSummaryMap = (
       // Extract the size value using regex
       const sizeMatch = value.toString().match(getRegExp(StringComparisonPattern.SIZE_EXTRACTION));
       const sizeValue = sizeMatch ? parseInt(sizeMatch[1], 10) : 0;
-      summary[sub_category +' (MB)'] = (summary[sub_category] || 0) + toMB(sizeValue) ;
+      summary[sub_category +' (MiB)'] = (summary[sub_category] || 0) + toMB(sizeValue) ;
     }
 
     if (
@@ -513,7 +513,7 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
   /* This function smartly convert bytes to KB, MB, GB, TB, PB, EB, ZB or YB */
 }
 export function formatBytes(bytes: number, decimals = 2): string {
-  if (bytes === 0) return "0 Bytes";
+  if (bytes === 0) return "0 B";
 
   const k = BYTES_IN_KILOBYTE;
   const i = Math.floor(Math.log(bytes) / Math.log(k));

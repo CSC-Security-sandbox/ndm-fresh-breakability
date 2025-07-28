@@ -1,10 +1,10 @@
 export const covertBytes = (bytes: number): string => {
   if (bytes === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
   let size = bytes;
   let unitIndex = 0;
-  while (size >= 1000 && unitIndex < units.length - 1) {
-    size /= 1000;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
     unitIndex++;
   }
   return size === Math.floor(size)

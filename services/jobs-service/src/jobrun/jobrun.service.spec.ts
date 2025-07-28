@@ -4,7 +4,7 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
 import { Test, TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import {
-  ErrorType
+  ErrorType, formatBytes
 } from "@netapp-cloud-datamigrate/jobs-lib";
 import {
   LoggerFactory
@@ -1244,7 +1244,7 @@ describe("JobRunService", () => {
         },
         scannedFilesCount: "10",
         scannedDirectoriesCount: "2",
-        totalScannedSize: "2 KB",
+        totalScannedSize: "2 KiB",
         totalMigratedSize: "0 B",
         errors: [{ errorType: "FileNotFound", count: 5 }],
       },
@@ -1323,7 +1323,7 @@ describe("JobRunService", () => {
         scannedFilesCount: "10",
         scannedDirectoriesCount: "5",
         totalScannedSize: "0 B",
-        totalMigratedSize: "4.88 KB",
+        totalMigratedSize: "4.88 KiB",
         errors: [],
       },
     ]);
@@ -1507,7 +1507,7 @@ describe("JobRunService", () => {
         timeElapsed: endTime.getTime() - startTime.getTime(),
         scannedFilesCount: fileCount,
         scannedDirectoriesCount: directoryCount,
-        totalScannedSize: "0 Bytes",
+        totalScannedSize: "0 B",
         totalMigratedSize: "0 B",
         errors: [],
         tasks: [],
@@ -1635,7 +1635,7 @@ describe("JobRunService", () => {
         scannedFilesCount: fileCount,
         scannedDirectoriesCount: directoryCount,
         totalScannedSize: "0 B",
-        totalMigratedSize: "0 Bytes",
+        totalMigratedSize: "0 B",
         errors: [],
         tasks: [],
       });
@@ -1697,7 +1697,7 @@ describe("JobRunService", () => {
       expect(result).toMatchObject({
         jobRunId: "jobRun123",
         status: JobRunStatus.Running,
-        totalScannedSize: "4.88 KB", // Assuming covertBytes converts bytes correctly
+        totalScannedSize: "4.88 KiB", // Assuming covertBytes converts bytes correctly
         totalMigratedSize: "0 B",
         tasks: [
           {
@@ -1724,54 +1724,54 @@ describe("JobRunService", () => {
     });
   });
 
-  describe("service.covertBytes", () => {
+  describe("formatBytes", () => {
     it("should return bytes for values less than 1024", () => {
-      expect(service.covertBytes(500)).toBe("500 B");
-      expect(service.covertBytes(0)).toBe("0 B");
+      expect(formatBytes(500)).toBe("500 B");
+      expect(formatBytes(0)).toBe("0 B");
     });
 
-    it("should return kilobytes for values between 1024 and 1 MB", () => {
-      expect(service.covertBytes(1024)).toBe("1.00 KB");
-      expect(service.covertBytes(1536)).toBe("1.50 KB");
+    it("should return kilobytes for values between 1024 and 1 MiB", () => {
+      expect(formatBytes(1024)).toBe("1 KiB");
+      expect(formatBytes(1536)).toBe("1.5 KiB");
     });
 
-    it("should return megabytes for values between 1 MB and 1 GB", () => {
-      expect(service.covertBytes(1048576)).toBe("1.00 MB"); // 1 MB
-      expect(service.covertBytes(2097152)).toBe("2.00 MB"); // 2 MB
-      expect(service.covertBytes(1572864)).toBe("1.50 MB"); // 1.5 MB
+    it("should return megabytes for values between 1 MiB and 1 GiB", () => {
+      expect(formatBytes(1048576)).toBe("1 MiB"); // 1 MiB
+      expect(formatBytes(2097152)).toBe("2 MiB"); // 2 MiB
+      expect(formatBytes(1572864)).toBe("1.5 MiB"); // 1.5 MiB
     });
 
-    it("should return gigabytes for values between 1 GB and 1 TB", () => {
-      expect(service.covertBytes(1073741824)).toBe("1.00 GB"); // 1 GB
-      expect(service.covertBytes(2147483648)).toBe("2.00 GB"); // 2 GB
-      expect(service.covertBytes(1610612736)).toBe("1.50 GB"); // 1.5 GB
+    it("should return gigabytes for values between 1 GiB and 1 TiB", () => {
+      expect(formatBytes(1073741824)).toBe("1 GiB"); // 1 GiB
+      expect(formatBytes(2147483648)).toBe("2 GiB"); // 2 GiB
+      expect(formatBytes(1610612736)).toBe("1.5 GiB"); // 1.5 GiB
     });
 
-    it("should return terabytes for values between 1 TB and 1 PB", () => {
-      expect(service.covertBytes(1099511627776)).toBe("1.00 TB"); // 1 TB
-      expect(service.covertBytes(2199023255552)).toBe("2.00 TB"); // 2 TB
-      expect(service.covertBytes(1649267441664)).toBe("1.50 TB"); // 1.5 TB
+    it("should return terabytes for values between 1 TiB and 1 PiB", () => {
+      expect(formatBytes(1099511627776)).toBe("1 TiB"); // 1 TiB
+      expect(formatBytes(2199023255552)).toBe("2 TiB"); // 2 TiB
+      expect(formatBytes(1649267441664)).toBe("1.5 TiB"); // 1.5 TiB
     });
 
-    it("should return petabytes for values greater than or equal to 1 PB", () => {
-      expect(service.covertBytes(1125899906842624)).toBe("1.00 PB"); // 1 PB
-      expect(service.covertBytes(2251799813685248)).toBe("2.00 PB"); // 2 PB
-      expect(service.covertBytes(1693247244558336)).toBe("1.50 PB"); // 1.5 PB
+    it("should return petabytes for values greater than or equal to 1 PiB", () => {
+      expect(formatBytes(1125899906842624)).toBe("1 PiB"); // 1 PiB
+      expect(formatBytes(2251799813685248)).toBe("2 PiB"); // 2 PiB
+      expect(formatBytes(1693247244558336)).toBe("1.5 PiB"); // 1.5 PiB
     });
 
     it("should handle very large numbers gracefully", () => {
-      expect(service.covertBytes(1125899906842624000)).toBe("1000.00 PB"); // 1000 PB
+      expect(formatBytes(1125899906842624000)).toBe("1000 PiB"); // 1000 PiB
     });
   });
 
   describe("covertBytes", () => {
     it("should convert bytes to appropriate units", () => {
-      expect(service.covertBytes(500)).toBe("500 B");
-      expect(service.covertBytes(1024)).toBe("1.00 KB");
-      expect(service.covertBytes(1048576)).toBe("1.00 MB");
-      expect(service.covertBytes(1073741824)).toBe("1.00 GB");
-      expect(service.covertBytes(1099511627776)).toBe("1.00 TB");
-      expect(service.covertBytes(1125899906842624)).toBe("1.00 PB");
+      expect(formatBytes(500)).toBe("500 B");
+      expect(formatBytes(1024)).toBe("1 KiB");
+      expect(formatBytes(1048576)).toBe("1 MiB");
+      expect(formatBytes(1073741824)).toBe("1 GiB");
+      expect(formatBytes(1099511627776)).toBe("1 TiB");
+      expect(formatBytes(1125899906842624)).toBe("1 PiB");
     });
   });
 
