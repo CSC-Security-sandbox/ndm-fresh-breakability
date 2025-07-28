@@ -10,6 +10,7 @@ import {
 } from "@netapp/bxp-design-system-react";
 import { DownloadMonochromeIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { useContext, useEffect } from "react";
+import RefreshButton from "@/components/refresh-button/RefreshButton";
 
 export const MountPathConfigurationTable = () => {
   const {
@@ -20,6 +21,8 @@ export const MountPathConfigurationTable = () => {
     mappingStepTableState,
     listOfNotReachableExportPaths,
     sourceDisabledPaths,
+    refetch,
+    isFetching,
   } = useContext(BulkMigrateContext);
 
   const { setFieldValue } = mappingStepForm;
@@ -56,12 +59,12 @@ export const MountPathConfigurationTable = () => {
   };
 
   return (
-    <Box>
-      <Box className="flex justify-end my-3">
-        <Box className="flex gap-3 items-center">
+    <Box className="mb-4">
+      <Box className="flex justify-end mx-2 mt-3 mb-1">
+        <Box className="flex gap-5 items-center">
           <SearchWidget setFilter={updateTextFilter} />
+          <RefreshButton isLoading={isFetching} onRefresh={refetch} />
           <Button
-            className="px-3"
             variant="icon"
             disabled={pagination?.pageRows === undefined}
             onClick={handleTableDownload}

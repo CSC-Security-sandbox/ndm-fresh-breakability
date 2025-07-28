@@ -1,4 +1,4 @@
-import { BlueXpTableRowType, FILE_SERVER_STATUS } from "@/types/app.type";
+import { BlueXpTableRowType, FILE_SERVER_STATUS_ENUM } from "@/types/app.type";
 import { getFileServerStatusFormat } from "@/utils/common.utils";
 import { Box } from "@components/container/index";
 import { Popover } from "@netapp/bxp-design-system-react";
@@ -6,14 +6,15 @@ import { Popover } from "@netapp/bxp-design-system-react";
 const FileServerStatusCellRenderer = ({
   row,
 }: BlueXpTableRowType<any, any>) => {
-  const statusStyleMap: Record<FILE_SERVER_STATUS, string> = {
-    [FILE_SERVER_STATUS.ACTIVE]: "bg-chart-5",
-    [FILE_SERVER_STATUS.IN_PROGRESS]: "bg-icon-primary",
-    [FILE_SERVER_STATUS.DRAFT]: "bg-chart-6",
-    [FILE_SERVER_STATUS.ERRORED]: "bg-error",
+  const statusStyleMap: Record<FILE_SERVER_STATUS_ENUM, string> = {
+    [FILE_SERVER_STATUS_ENUM.ACTIVE]: "bg-chart-5",
+    [FILE_SERVER_STATUS_ENUM.IN_PROGRESS]: "bg-icon-primary",
+    [FILE_SERVER_STATUS_ENUM.DRAFT]: "bg-chart-6",
+    [FILE_SERVER_STATUS_ENUM.ERRORED]: "bg-error",
   };
 
-  const statusStyle = statusStyleMap[row?.status as FILE_SERVER_STATUS] || ""; // Type assertion
+  const statusStyle =
+    statusStyleMap[row?.status as FILE_SERVER_STATUS_ENUM] || ""; // Type assertion
 
   if (row?.status === "ERRORED") {
     return (

@@ -19,7 +19,6 @@ import useFileServerDetails from "@hooks/useFileServerDetails";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
 import {
   DOW_OPTIONS,
-  INCREMENTAL_SYNC_SCHEDULE_ENUM,
   INCREMENTAL_SYNC_SCHEDULE_SET_ENUM,
   INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM,
   MIGRATE_OPTION_ENUM,
@@ -62,6 +61,7 @@ import {
   setModalProps,
 } from "@store/reducer/commonComponentSlice";
 import useFetchWorkers from "@hooks/useFetchWorkers";
+import { INCREMENTAL_SYNC_SCHEDULE_ENUM } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/IncrementalSyncSchedule/incremental-sync-schedule.constants";
 
 export function withBulkMigrateCreateForm(
   WrappedComponent: ComponentType<any>
@@ -98,8 +98,13 @@ export function withBulkMigrateCreateForm(
     const [preCheckApi, { isLoading: isPrecheckSubmitting }] =
       usePrecheckMutation();
 
-    const { fileServerDetails, allExportPaths, allWorkersList } =
-      useFileServerDetails();
+    const {
+      fileServerDetails,
+      allExportPaths,
+      allWorkersList,
+      refetch,
+      isFetching,
+    } = useFileServerDetails();
     const [getAllFileServersApi] = useLazyGetAllFileServersWithVolumeQuery();
     const [getWorkerDetails] = useLazyCheckConnectionRespQuery();
 
@@ -606,6 +611,8 @@ export function withBulkMigrateCreateForm(
       fileName,
       listOfNotReachableExportPaths,
       sourceDisabledPaths,
+      refetch,
+      isFetching,
     };
 
     return <WrappedComponent {...props} {...createBulkMigrateHelpers} />;
