@@ -7,15 +7,10 @@ AS $procedure$
 DECLARE
     summary_data JSONB;
     job_type_const TEXT := 'JOBS_REPORT';
-    cut_over_config_id UUID;
     var_source_path_id UUID;
     var_target_path_id UUID;
     volumeIds JSONB;
     configIds JSONB;
-    last_job_run JSONB;
-    last_iteration JSONB;
-    last_errors JSONB;
-    cutover_jobs_data JSONB;
     scan_iterations JSONB;
 BEGIN
     EXECUTE format('SET search_path TO %I', schema_name);
@@ -50,20 +45,10 @@ BEGIN
 
     -- Fetch jobconfig_id, source_path_id, and target_path_id for the given job_run_id
     SELECT jr.job_config_id, jc.source_path_id, jc.target_path_id
-    INTO cut_over_config_id, var_source_path_id, var_target_path_id
+    INTO var_source_path_id, var_target_path_id
     FROM jobrun jr
     LEFT JOIN jobconfig jc ON jc.id = jr.job_config_id
     WHERE jr.id = job_run_id_param;
-
-    -- Fetch last job run details
-    SELECT jsonb_build_object('id', last_jr.id)
-    INTO last_job_run
-    FROM jobrun last_jr
-    WHERE last_jr.job_config_id IN (
-        SELECT value::UUID FROM jsonb_array_elements_text(configIds)
-    )
-    ORDER BY last_jr.created_at DESC
-    LIMIT 1;
 
     -- Fetch summary data
     WITH aggregated_data AS (
@@ -112,7 +97,7 @@ SELECT jsonb_agg(jsonb_build_object(
         'path_id', jb.volume_target_path_id,
         'path', jb.target_path,
         'file_server', jb.file_server_target,
-        'capacity', '-',
+        'capacity', NULL,
         'protocol', jb.protocol,
         'protocol_version', jb.protocol_version
     ),
@@ -128,7 +113,7 @@ SELECT jsonb_agg(jsonb_build_object(
         'operations', COALESCE(
             (SELECT COUNT(*) FROM operations o WHERE o.job_run_id = jb.job_run_id), 0
         ),
-        'errors', '-',
+        'errors', 0,
         'duration', COALESCE(EXTRACT(EPOCH FROM (jb.end_time - jb.start_time)), 0),
         'job_run_id', jb.job_run_id,
         'created_at', jb.created_at,
