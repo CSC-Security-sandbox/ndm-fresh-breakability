@@ -677,7 +677,7 @@ export type TemporaryPasswordPropsType = {
   isAddUser: boolean;
 };
 
-export enum ReportENUM {
+export enum REPORT_TYPES_ENUM {
   DISCOVERY = "DISCOVER",
   COC = "COC",
   JOBS_REPORT = "JOBS_REPORT",
