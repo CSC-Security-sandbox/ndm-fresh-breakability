@@ -417,8 +417,8 @@ export class PathUploadService {
         .getRawMany();
 
       if (!uploads || uploads.length === 0) {
-        this.logger.warn(`No uploads found for file server ${fileServerId}`);
-        throw new InternalServerErrorException(`No uploads found for file server ${fileServerId}`);
+        this.logger.warn(`No export paths found to download. Please manually upload the export paths for file server ${fileServerId}`);
+        throw new NotFoundException(`No export paths found to download. Please manually upload the export paths for file server ${fileServerId}`);
       }
       this.logger.log(`Found ${uploads.length} uploads for file server ${fileServerId}`);
       return uploads

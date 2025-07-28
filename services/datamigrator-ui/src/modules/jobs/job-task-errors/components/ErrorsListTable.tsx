@@ -2,16 +2,11 @@ import { useGetJobRunErrorsQuery } from "@api/jobsApi";
 import { Box } from "@components/container/index";
 import { ERROR_COLUMN_DEF } from "@modules/jobs/job-task-errors/jobTaskErrors.constant";
 import { ErrorsListTablePropsType } from "@modules/jobs/job-task-errors/JobTaskErrorsTabs.interface";
-import {
-  Button,
-  Table,
-  TablePager,
-  useTable,
-} from "@netapp/bxp-design-system-react";
+import { Table, TablePager, useTable } from "@netapp/bxp-design-system-react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { JobErrorType } from "@/types/app.type";
-import { RefreshIcon } from "@netapp/bxp-style/react-icons/Navigation";
+import RefreshButton from "@components/refresh-button/RefreshButton";
 
 const pageSize = 10;
 const ErrorsListTable = ({ currentErrorType }: ErrorsListTablePropsType) => {
@@ -65,16 +60,7 @@ const ErrorsListTable = ({ currentErrorType }: ErrorsListTablePropsType) => {
   return (
     <Box className="flex flex-col gap-4">
       <Box className="flex justify-end p-2">
-        {isFetching && (
-          <Button
-            variant="icon"
-            isSubmitting={isFetching}
-            onClick={!isFetching ? refetch : undefined}
-            className="w-[17px] h-[17px]"
-          >
-            <RefreshIcon />
-          </Button>
-        )}
+        <RefreshButton isLoading={isFetching} onRefresh={refetch} />
       </Box>
       <Box>
         <Table

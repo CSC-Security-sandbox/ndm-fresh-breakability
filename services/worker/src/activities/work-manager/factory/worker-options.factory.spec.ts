@@ -24,7 +24,7 @@ import { ScanService } from 'src/activities/core/scan/scan-activity.service';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { mockLoggerFactory } from 'src/auth/auth.service.spec';
 
-jest.mock('../../workflows/workflows', () => ({}), { virtual: true });
+jest.mock('../../../workflows/workflows', () => ({}), { virtual: true });
 
 describe('WorkFlowOptions', () => {
   const mockConnection = {} as NativeConnection;
@@ -98,7 +98,7 @@ describe('WorkFlowOptions', () => {
     expect(options.taskQueue).toBe('taskQ');
     expect(options.activities).toEqual({ act: expect.any(Function) });
     expect(options.maxConcurrentActivityTaskExecutions).toBe(5);
-    expect(options.workflowsPath).toEqual(require.resolve('../../workflows/workflows'));
+    expect(options.workflowsPath).toEqual(require.resolve('../../../workflows/workflows'));
   });
 
   it('should initialize with dynamicTaskQueue true and append taskQueueId', () => {
@@ -139,7 +139,7 @@ describe('WorkFlowOptions', () => {
       'queueZ',
       baseConfig
     );
-    expect(options.workflowsPath).toBe(require.resolve('../../workflows/workflows'));
+    expect(options.workflowsPath).toBe(require.resolve('../../../workflows/workflows'));
   });
 
   it('should assign all constructor parameters correctly', () => {
@@ -160,7 +160,7 @@ describe('WorkFlowOptions', () => {
     expect(options.taskQueue).toBe('queueA');
     expect(options.activities).toBe(activitiesMock);
     expect(options.maxConcurrentActivityTaskExecutions).toBe(maxConcurrent);
-    expect(options.workflowsPath).toBe(require.resolve('../../workflows/workflows'));
+    expect(options.workflowsPath).toBe(require.resolve('../../../workflows/workflows'));
   });
 
   it('should handle empty string taskQueue and dynamicTaskQueue true', () => {

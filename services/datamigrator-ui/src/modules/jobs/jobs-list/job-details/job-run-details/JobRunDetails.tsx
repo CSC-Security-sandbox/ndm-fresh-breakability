@@ -24,7 +24,10 @@ import {
 import JobDescription from "@modules/jobs/jobs-list/job-details/components/JobDescription";
 import JobRunHeader from "@modules/jobs/jobs-list/job-details/components/JobRunHeader";
 import JobRunTaskCard from "@modules/jobs/jobs-list/job-details/components/JobRunTaskDetails";
-import { handleDownloadReport } from "@modules/jobs/jobs.utils";
+import {
+  handleDownloadReport,
+  handleDownloadCocReport,
+} from "@modules/jobs/jobs.utils";
 import {
   ActionMenu,
   ActionMenuButtonStyle,
@@ -111,6 +114,7 @@ const JobRunDetails = () => {
             jobRunId,
           },
           handleDownloadReport,
+          handleDownloadCocReport,
           downloadReportApi,
           getPdfReportApi,
           "button"
@@ -219,14 +223,13 @@ const JobRunDetails = () => {
               </Show.When>
             </Show.When>
           </Show>
-          {/* TODO: Re-enable this button once the "View Logs" feature is ready. */}
-          {/* <Button
+          <Button
             onClick={() => {
               window.open(viewLogUrl, "_blank");
             }}
           >
             View Logs
-          </Button> */}
+          </Button>
         </Box>
       </Box>
       <JobRunHeader jobRunDetails={jobRunDetails} />
