@@ -36,6 +36,7 @@ import { useForm } from "@netapp/bxp-design-system-react";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { MAX_RETRY_API_ATTEMPTS } from "@/utils/constants";
+import { getAPIWrappedResponse } from "@/utils/common.utils";
 
 export const useFileServerForm = () => {
   const interval = useRef<any | undefined>("");
@@ -179,13 +180,12 @@ export const useFileServerForm = () => {
     );
 
     try {
-      const resp = await validateConnectionMutationApi(payload).unwrap();
-
+      const resp = getAPIWrappedResponse(await validateConnectionMutationApi(payload).unwrap());
       return new Promise((resolve) => {
         interval.current = setInterval(async () => {
-          const data = await checkConnectionRespApi({
+          const data = getAPIWrappedResponse(await checkConnectionRespApi({
             id: resp?.workflowId,
-          }).unwrap();
+          }).unwrap());
           if (data?.status === ValidateConnectionStatus.COMPLETED) {
             const errorMessageList = await handleConnectionValidationComplete(
               data

@@ -5,6 +5,7 @@ import { createConfigPayload } from "@modules/storage-servers/file-server/compon
 import { useFileServerForm } from "@modules/storage-servers/file-server/context/useFileServerForm";
 import { ComponentType } from "react";
 import { useNavigate } from "react-router-dom";
+import { getAPISuccessResponse } from "@/utils/common.utils";
 
 export function withCreateFileServer(WrappedComponent: ComponentType<any>) {
   return function WithCreateFileServerComponent(props: any) {
@@ -27,7 +28,7 @@ export function withCreateFileServer(WrappedComponent: ComponentType<any>) {
           fileServerForm.jobConfigForm
         );
 
-        const resp = await createConfigurationApi(payload);
+        const resp = getAPISuccessResponse(await createConfigurationApi(payload));
 
         if (resp.error) {
           throw new Error("Error creating file server");
@@ -36,7 +37,6 @@ export function withCreateFileServer(WrappedComponent: ComponentType<any>) {
         navigate("/file-server");
       } catch (err) {
         notify.error("Error creating file server.");
-
         console.error({ error: err, level: "Creating Config" });
       }
     };

@@ -37,6 +37,7 @@ import { useNavigate } from "react-router-dom";
 import { BULK_DISCOVERY_DEFAULT_COLUMN_STATE } from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
 import { SCHEDULE_OPTIONS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
+import { getAPIWrappedResponse } from "@/utils/common.utils";
 
 dayjs.extend(utc);
 
@@ -104,7 +105,7 @@ const BulkDiscover = () => {
   useEffect(() => {
     const fetchFileServers = async () => {
       try {
-        const resp = await getAllFileServersApi({ projectId }).unwrap();
+        const resp = getAPIWrappedResponse(await getAllFileServersApi({ projectId }).unwrap());
         const allFileServers: AllFileServerWithVolumesApiType[] = resp?.configs;
         let notReachableExportPaths = [];
         allFileServers.forEach((config) => {

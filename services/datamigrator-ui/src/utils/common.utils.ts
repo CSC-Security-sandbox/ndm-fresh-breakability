@@ -161,3 +161,23 @@ export const getProjectPermissions = (projectId: string, userPermissions) => {
   return userPermissions.roles.find((row) => row.projects.includes(projectId) || (row.role_name === USER_ROLES_ENUM.APP_ADMIN && row.projects.length === 0))
       ?.permissions;
 };
+
+export const getAPISuccessResponse = (query: any) => {
+  return query?.data?.data?.items || query?.data;
+}
+
+export const getAPIErrorResponse = (errorObject: any) => {
+  if (errorObject?.data?.error) {
+    const errorData = errorObject?.data?.error;
+    return errorData?.error ||  errorObject?.message;
+  }
+  return errorObject?.data?.message;
+};
+
+export const getAPIWrappedResponse = (response: any) => {
+  return response?.data || response;
+};
+
+export const getAPIWrappedInterceptorResponse = (response: any) => {
+  return response?.data?.items || response?.data;
+};

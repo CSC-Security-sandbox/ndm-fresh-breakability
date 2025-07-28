@@ -33,19 +33,16 @@ import {
 } from "@modules/jobs/job-run-list/run.utils";
 import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
 import useAdhocRun from "@hooks/useAdhocRun";
+import { getAPISuccessResponse } from "@/utils/common.utils";
 
 const JobRunList = () => {
   const navigate = useNavigate();
   const adhocRun = useAdhocRun();
   const { selectedProjectId } = useSelectedProjectId();
-  const {
-    data: jobRunList,
-    isLoading,
-    isFetching,
-    refetch,
-  } = useGetJobRunsQuery({
-    projectId: selectedProjectId,
-  });
+  const apiResult = useGetJobRunsQuery({ projectId: selectedProjectId });
+  const jobRunList = getAPISuccessResponse(apiResult);
+  const { isLoading, isFetching, refetch } = apiResult;
+
   const [jobRunListSelectedIds, setJobRunListSelectedIds] = useState<string[]>(
     []
   );

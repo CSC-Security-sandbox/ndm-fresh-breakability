@@ -19,6 +19,7 @@ import { MountPathsOptionsListType } from "@modules/storage-servers/file-server/
 import { ComponentType, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { EXPORT_PATH_SOURCE_ENUM } from "@modules/storage-servers/file-server/components/file-server.constant";
+import { getAPIWrappedResponse } from "@/utils/common.utils";
 
 export function withEditFileServer(WrappedComponent: ComponentType<any>) {
   return function WithEditFileServerComponent(props: any) {
@@ -42,14 +43,15 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
       if (fileServerForm?.fileServerId) {
         (async () => {
           fileServerForm?.setIsEditMode(true);
-          const resp: FileServerDetailsType = await getFileServerDetailsByIdApi(
+          const response: FileServerDetailsType = await getFileServerDetailsByIdApi(
             { fileServerId: fileServerForm?.fileServerId }
           )
-            .unwrap()
-            .catch((error) => {
-              notify.error("Error Fetching Details.");
-              console.error(error);
-            });
+          .unwrap()
+          .catch((error) => {
+            notify.error("Error Fetching Details.");
+            console.error(error);
+          });
+          const resp: FileServerDetailsType = getAPIWrappedResponse(response);
           setEditingFileServerDetails(resp);
         })();
       }
@@ -177,10 +179,10 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
         })
           .unwrap()
           .then((resp) => {
+            resp = getAPIWrappedResponse(resp);
             if (resp.error) {
               throw new Error("Error creating file server");
             }
-
             navigate("/file-server");
           })
           .catch((err) => {

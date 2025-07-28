@@ -48,6 +48,7 @@ import {
   DOWNLOAD_BULK_ERROR_REPORT,
   GENERATE_BULK_ERROR_REPORT,
 } from "@modules/jobs/job-task-errors/jobTaskErrors.constant";
+import { getAPISuccessResponse } from "@/utils/common.utils";
 
 const JobDetails = () => {
   const LOWER_TIME_INTERVAL_FOR_IN_PROGRESS = 5000; // 5 seconds
@@ -61,23 +62,19 @@ const JobDetails = () => {
 
   const [showGeneratingReportBtn, setShowGeneratingReportBtn] =
     useState<Record<string, boolean>>();
-  const {
-    data: jobConfigDetails,
-    isLoading,
-    refetch,
-    isFetching,
-  } = useGetJobConfigDetailsQuery(
+  const apiResult = useGetJobConfigDetailsQuery(
     { jobConfigId: jobId },
     {
       pollingInterval: isFrequentInterval
         ? LOWER_TIME_INTERVAL_FOR_IN_PROGRESS
         : Number(
-            window?.env?.VITE_TIME_INTERVAL ||
-              import.meta.env.VITE_TIME_INTERVAL
+            window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
           ),
       skipPollingIfUnfocused: true,
     }
   );
+  const jobConfigDetails = getAPISuccessResponse(apiResult);
+  const { isLoading, refetch, isFetching } = apiResult;
   const [downloadErrorLogs] = useLazyDownloadErrorLogsCSVQuery();
   const [generateErrorLogs] = useLazyGenerateErrorLogsQuery();
   const { data } = useIsErrorLogsCsvReadyQuery(

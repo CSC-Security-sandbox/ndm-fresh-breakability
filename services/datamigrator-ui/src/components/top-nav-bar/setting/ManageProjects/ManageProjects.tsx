@@ -12,16 +12,15 @@ import {Collapse} from '@mui/material';
 import {useSelector} from 'react-redux';
 import {RootStateType} from '@store/store';
 import { getProjectPermissions } from '@/utils/common.utils';
+import { getAPISuccessResponse } from "@/utils/common.utils";
 
 const ManageProject = () => {
   const [editSelectedProject, setEditSelectedProject] = useState();
   const { accountDetails } = useAccountDetails();
-  const {
-    data: projectList,
-    isLoading,
-    isFetching,
-    refetch,
-  } = useGetAllProjectsQuery(accountDetails?.id);
+  const apiResult = useGetAllProjectsQuery(accountDetails?.id);
+  const projectList = getAPISuccessResponse(apiResult);
+  const { isLoading, isFetching, refetch } = apiResult;
+
   const [isCreateFormVisible, setIsCreateFormVisible] =
     useState<boolean>(false);
   const closeAction = () => {
@@ -51,7 +50,7 @@ const ManageProject = () => {
 
   const tableStateProps = {
     columns: COL_DEF_FOR_PROJECT,
-    rows: projectList?.data?.items,
+    rows: projectList || [],
     isSorting: true,
     pageSize: 10,
   };

@@ -16,6 +16,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import NotificationsTile from "@modules/home/components/NotificationsTile";
 import { Show } from "@components/show/Show";
+import { getAPIWrappedResponse } from "@/utils/common.utils";
 
 const NotificationsContent = ({
   setTotalNotifications,
@@ -28,9 +29,9 @@ const NotificationsContent = ({
   useEffect(() => {
     if (selectedProjectId) {
       (async () => {
-        const response = await getNoticeBoardDetailsApi({
+        const response = getAPIWrappedResponse(await getNoticeBoardDetailsApi({
           projectId: selectedProjectId,
-        }).unwrap();
+        }).unwrap());
         setNoticeBoardDetails(response);
       })();
     }

@@ -14,16 +14,15 @@ import {useSelector} from 'react-redux';
 import {RootStateType} from '@store/store';
 import {DEFAULT_COLUMN_STATE} from '@components/top-nav-bar/setting/ManageUsers/ManageUsers.constant';
 import {decryptData} from '@/utils/common.utils';
+import { getAPISuccessResponse, getAPIWrappedInterceptorResponse } from "@/utils/common.utils";
 
 const ManageUsers = () => {
   const [updateUserStatus] = useUpdateUserStatusMutation();
   const [resetPasswordApi] = useResetPasswordMutation();
-  const {
-    data: userData,
-    isLoading,
-    isFetching,
-    refetch,
-  } = useGetAllUsersQuery("");
+  const apiResult = useGetAllUsersQuery("");
+  const userData = getAPISuccessResponse(apiResult);
+  const { isLoading, isFetching, refetch } = apiResult;
+
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const permission = useSelector(
     (state: RootStateType) => state.permissionSlice
@@ -34,8 +33,8 @@ const ManageUsers = () => {
   const updateUserStatusWrapper = (body: { email: string; enable: boolean }) => {
     updateUserStatus(body)
       .unwrap()
-        .then((res) => {
-          notify.success(res?.message);
+      .then((res) => {
+        notify.success(res?.message);
       })
       .catch((err) => {
         console.log('error', err);
@@ -68,11 +67,13 @@ const ManageUsers = () => {
         const body = {
           email: row.email,
         };
+
         resetPasswordApi(body)
           .unwrap()
           .then((res) => {
             setIsCreateFormVisible(true);
-            setTemporaryPassword(decryptData(res?.data?.items?.newPassword));
+            res = getAPIWrappedInterceptorResponse(res);
+            setTemporaryPassword(decryptData(res?.newPassword));
           })
           .catch((err) => {
             notify.error(err.message);
@@ -88,7 +89,7 @@ const ManageUsers = () => {
   };
   const tableStateProps = {
     columns: COL_DEF_FOR_USER,
-    rows: userData?.data?.items || [],
+    rows: userData || [],
     isSorting: true,
     pageSize: 10,
     defaultColumnState: DEFAULT_COLUMN_STATE,

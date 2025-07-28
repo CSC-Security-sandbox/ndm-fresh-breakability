@@ -6,13 +6,16 @@ import TopNavBar from '@components/top-nav-bar/TopNavBar';
 import useAccountDetails from '@hooks/useAccountDetails';
 import CreateFirstProject from '@modules/create-first-project/CreateFirstProject';
 import {Outlet} from 'react-router-dom';
+import { getAPISuccessResponse } from "@/utils/common.utils";
 
 const Layout = () => {
   const { accountDetails } = useAccountDetails();
-  const { data: projectList } = useGetAllProjectsQuery(accountDetails?.id);
+  const apiResult  = useGetAllProjectsQuery(accountDetails?.id);
+  const projectList = getAPISuccessResponse(apiResult);
+
   return (
     <>
-      {!projectList?.data?.items || projectList?.data?.items?.length === 0 ? (
+      {!projectList || projectList?.length === 0 ? (
         <CreateFirstProject />
       ) : (
         <>

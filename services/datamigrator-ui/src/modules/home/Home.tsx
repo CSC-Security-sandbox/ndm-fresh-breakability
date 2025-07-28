@@ -16,12 +16,14 @@ import WorkerInstallation from "@components/top-nav-bar/setting/ManageProjects/W
 import PermissionAuth from "@/auth/PermissionAuth";
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import { InitialFileServerOverviewApiData } from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
+import { getAPISuccessResponse } from "@/utils/common.utils";
 
 const Home = () => {
   const { selectedProjectId } = useSelectedProjectId();
   const navigate = useNavigate();
-  const [getProjectOverviewApi, { data, isLoading, isError }] =
-    useLazyGetProjectOverviewQuery();
+  const [getProjectOverviewApi, apiResult] = useLazyGetProjectOverviewQuery();
+  const data = getAPISuccessResponse(apiResult);
+  const { isLoading, isError } = apiResult;
 
   const [chartData, setChartData] = useState<FileServerOverviewApi>(
     InitialFileServerOverviewApiData

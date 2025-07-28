@@ -7,7 +7,7 @@ import {
   JOBS_TYPE,
   BlueXpTableStateType,
 } from "@/types/app.type";
-import { convertFileToBase64, getOptionsFromArray } from "@/utils/common.utils";
+import { convertFileToBase64, getAPIWrappedResponse, getOptionsFromArray } from "@/utils/common.utils";
 import {
   useBulkMigrateMutation,
   useLazyGetAllFileServersWithVolumeQuery,
@@ -135,7 +135,7 @@ export function withBulkMigrateCreateForm(
       if (!fileServerDetails.id) return;
       (async () => {
         try {
-          const resp = await getAllFileServersApi({ projectId }).unwrap();
+          const resp = getAPIWrappedResponse(await getAllFileServersApi({ projectId }).unwrap());
           const allFileServers: AllFileServerWithVolumesApiType[] =
             resp?.configs;
           const _migrationTableDetails: MigrationDetailsTableConfigurationType[] =
@@ -383,9 +383,7 @@ export function withBulkMigrateCreateForm(
         .unwrap()
         .then((res) => {
           interval.current = setInterval(async () => {
-            const data = await getWorkerDetails({
-              id: res?.workflowId,
-            }).unwrap();
+            const data = getAPIWrappedResponse(await getWorkerDetails({id: res?.workflowId,}).unwrap());
             if (data?.status === ValidateConnectionStatus.COMPLETED) {
               const precheckState = getPreCheckStatus(data);
               setPreCheckStatus(precheckState);

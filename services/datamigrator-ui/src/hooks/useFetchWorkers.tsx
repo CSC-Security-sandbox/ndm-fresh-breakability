@@ -1,6 +1,7 @@
 import { useGetAllWorkersQuery } from "@api/workersApi";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
 import { useParams } from "react-router-dom";
+import { getAPISuccessResponse } from "@/utils/common.utils";
 
 const useFetchWorkers = () => {
   const { selectedProjectId } = useSelectedProjectId();
@@ -14,19 +15,15 @@ const useFetchWorkers = () => {
     return url;
   };
 
-  const {
-    data: workers,
-    error,
-    isLoading,
-    isFetching,
-    refetch: refetchAllWorkers,
-  } = useGetAllWorkersQuery(getParams(), {
+  const apiResult = useGetAllWorkersQuery(getParams(), {
     skip: !selectedProjectId,
     pollingInterval: Number(
       window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
     ),
     skipPollingIfUnfocused: true,
   });
+  const workers = getAPISuccessResponse(apiResult);
+  const { error, isLoading, isFetching, refetch: refetchAllWorkers } = apiResult;
 
   return {
     workers,

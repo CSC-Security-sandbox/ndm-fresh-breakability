@@ -17,6 +17,7 @@ import {
   preSelectedFilterType,
 } from "@modules/jobs/jobs-list/job-listing.constant";
 import { getJobListFlaternList } from "@modules/jobs/jobs-list/listing.utils";
+import { getAPISuccessResponse, getAPIWrappedResponse } from "@/utils/common.utils";
 
 const JobsList = () => {
   const navigate = useNavigate();
@@ -31,13 +32,10 @@ const JobsList = () => {
   if (jobType) preSelectedFilter.jobType = jobType;
 
   const { selectedProjectId } = useSelectedProjectId();
-  const {
-    data: jobList,
-    isLoading,
-    isError,
-    isFetching,
-    refetch: refetchJobList,
-  } = useGetJobConfigsQuery({ projectId: selectedProjectId });
+  const apiResult = useGetJobConfigsQuery({ projectId: selectedProjectId });
+  const jobList = getAPISuccessResponse(apiResult);
+  const { isLoading, isError, isFetching, refetch: refetchJobList } = apiResult;
+
   const [updateStatus] = useUpdateJobStatusMutation();
 
   const rowMenu = (row: any) => [
@@ -61,6 +59,7 @@ const JobsList = () => {
               : JOB_CONFIG_STATUS_ENUM.ACTIVE,
         })
           .then((res) => {
+            res = getAPIWrappedResponse(res);
             if (res.error) throw res.error;
             notify.success("Successfully updated the job status.");
           })

@@ -26,6 +26,7 @@ import { setDrawerClose } from "@store/reducer/commonComponentSlice";
 import ErrorMessageContainer from "@components/container/ErrorMessageContainer";
 import { smtpData } from "@components/top-nav-bar/setting/SMTP/SMTP.utils";
 import { smtpValuesType } from "@/types/app.type";
+import { getAPISuccessResponse, getAPIErrorResponse } from "@/utils/common.utils";
 
 interface SmtpDetailsPropsType {
   handleDefaultTab: () => void;
@@ -38,17 +39,18 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
   const [updateSmtpDataAPi, { isLoading: isUpdateFormSubmitting }] =
     useUpdateSmtpDataMutation();
 
-  const { data: userData } = useGetAllUsersQuery("");
-  const toEmailOptions =
-    userData?.data?.items.map((user) => ({
-      label: user.email,
-      value: user.email,
-    })) || [];
+  const usersApiResult = useGetAllUsersQuery("");
+  const userData = getAPISuccessResponse(usersApiResult);
+  const toEmailOptions = userData?.map((user) => ({
+    label: user.email,
+    value: user.email,
+  })) || [];
 
-  const { data: smtpResult, isLoading: smtpLoading } =
-    useGetSmtpDetailsQuery("");
+  const apiResult = useGetSmtpDetailsQuery("");
+  const smtpExistingData = getAPISuccessResponse(apiResult);
+  const { isLoading: smtpLoading} = apiResult;
   const [isEdit, setIsEdit] = useState<boolean>(false);
-  const smtpExistingData = smtpResult?.data?.items;
+
   const objectData: smtpValuesType = {
     SMTP_HOST: "",
     SMTP_PORT: "",
@@ -94,7 +96,7 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
       setIsEdit(true);
       smtpForm.resetForm(getFormData(smtpValues));
     }
-  }, [smtpLoading, smtpResult, isEdit]);
+  }, [smtpLoading, smtpExistingData, isEdit]);
 
   const handleCreateSMTP = async () => {
     const data = smtpData(smtpForm.formState);
@@ -105,16 +107,16 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
         notify.success(result.message);
       } else {
         const result = await createSmtpApi(data.payLoad).unwrap();
+        console.log(result);
         notify.success(result.message);
       }
       dispatch(setDrawerClose());
       handleDefaultTab();
     } catch (err) {
-      const errorDetails = err?.data?.error;
       notify.error(
         <ErrorMessageContainer
           title="Error occurred."
-          message={errorDetails?.error}
+          message={getAPIErrorResponse(err)}
         />
       );
     }

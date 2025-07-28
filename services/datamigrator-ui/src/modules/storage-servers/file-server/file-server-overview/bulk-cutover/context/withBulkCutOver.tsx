@@ -22,6 +22,7 @@ import { useForm, useTable } from "@netapp/bxp-design-system-react";
 import { ComponentType, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { skipToken } from "@reduxjs/toolkit/query";
+import { getAPISuccessResponse } from "@/utils/common.utils";
 
 const INIT_VALUE: bulkCutOverFormType = {
   isReviewConformed: false,
@@ -40,10 +41,8 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
     const [createJobCutOverApi, { isLoading: isSubmittingBulkCutover }] =
       useBulkCutOverMutation();
     const { selectedProjectId: projectId } = useSelectedProjectId();
-    const { jobRunList, refetch, isFetching, error } = useGetJobRunsQuery(
-      {
-        projectId,
-      },
+    const apiResult = useGetJobRunsQuery(
+      { projectId },
       {
         selectFromResult: ({ data, isFetching, error }) => ({
           jobRunList: data
@@ -57,16 +56,12 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
         }),
       }
     );
+    const jobRunList = getAPISuccessResponse(apiResult);
+    const { isFetching, error, refetch } = apiResult;
     const { fileServerDetails } = useFileServerDetails();
-    const {
-      data: allCutOverPaths = [],
-      isFetching: isCutOverPathsFetching,
-      refetch: refetchCutOverPaths,
-      error: cutOverPathsError,
-    } = useGetAllCutOverPathsQuery(
-      fileServerDetails?.id ? { fileServerId: fileServerDetails.id } : skipToken
-    );
-
+    const apiCutOverPathsResult = useGetAllCutOverPathsQuery(fileServerDetails?.id ? { fileServerId: fileServerDetails.id } : skipToken);
+    const allCutOverPaths = getAPISuccessResponse(apiCutOverPathsResult);
+    const { isFetching: isCutOverPathsFetching, refetch: refetchCutOverPaths, error: cutOverPathsError } = apiCutOverPathsResult;
     useEffect(() => {
       if (error) {
         notify.error(error?.message || "Something went wrong.");
