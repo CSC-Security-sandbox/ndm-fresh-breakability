@@ -223,14 +223,13 @@ const JobRunDetails = () => {
               </Show.When>
             </Show.When>
           </Show>
-          {/* TODO: Re-enable this button once the "View Logs" feature is ready. */}
-          {/* <Button
+          <Button
             onClick={() => {
               window.open(viewLogUrl, "_blank");
             }}
           >
             View Logs
-          </Button> */}
+          </Button>
         </Box>
       </Box>
       <JobRunHeader jobRunDetails={jobRunDetails} />
