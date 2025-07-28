@@ -28,7 +28,6 @@ import { ProjectEntity } from "src/entities/project.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
 import { nextDate } from "src/utils/mapper";
 import { WorkflowService } from "src/workflow/workflow.service";
-import { StartWorkFlowPayload } from "src/workflow/workflow.types";
 import { In, Raw, Repository } from "typeorm";
 import { validate as isUUID, v4 as uuidv4 } from "uuid";
 import { JobConfigEntity } from "../entities/jobconfig.entity";
@@ -66,22 +65,19 @@ import {
   SpeedTestJobRun,
   workerWithStatus,
 } from "./jobconfig.types";
-import { run } from "node:test";
 import { FileServerEntity } from "src/entities/fileserver.entity";
 import { WorkerEntity } from "src/entities/worker.entity";
 import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
 import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
 import { ParsedMapping } from "src/utils/indentity-mapping.type";
 import { RedisService } from "src/redis/redis.service";
-import { JobRunService } from "src/jobrun/jobrun.service";
 import { JobRunStats } from "src/jobrun/dto/jobstats";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { SendMailService } from "src/utils/send-email";
-import { filterUnhealthyWorkers } from "../utils/worker-filter";
-import { filter } from "rxjs";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 import { IncidentStatus, SyncEmailEntity } from "src/entities/sync-email.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
+import { SuccessEmailType } from "src/utils/send-email.type";
 
 @Injectable()
 export class JobConfigService {
@@ -758,23 +754,17 @@ export class JobConfigService {
         );
       }
 
-      const mailBody =
-        `Hello,<br/>
-      The following Migrate jobs has been created:<br/><br/>
-      ` +
-        savedJobConfigs
-          .map(
-            (jobConfig) => `
-                <p>Job ID: ${jobConfig.id}</p>
-                <p>Source Path: ${jobConfig.sourcePath?.volumePath}</p>
-                <p>Target Path: ${jobConfig.targetPath?.volumePath}</p>
-                <p>Job Type: ${jobConfig.jobType}</p>
-                <br/>
-              `
-          )
-          .join("");
-      const payload = { body: mailBody };
-      await this.sendMailService.sendMail(payload);
+      await this.sendMailService.sendMail({
+        successEmailType: SuccessEmailType.JOB_CREATION,
+        migrateJob: {
+          savedJobConfigs: savedJobConfigs.map(jobConfig => ({
+            id: jobConfig.id,
+            sourcePath: jobConfig.sourcePath?.volumePath,
+            targetPath: jobConfig.targetPath?.volumePath,
+            jobType: jobConfig.jobType,
+          })),
+        }
+      });
       savedJobConfigsmapData =  savedJobConfigs.map(
         ({ id, jobType, sourcePathId, targetPathId }) => ({
           id,

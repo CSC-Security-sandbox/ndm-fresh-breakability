@@ -51,6 +51,7 @@ import sanitizeHtml from 'sanitize-html';
 import escapeHtml from 'escape-html';
 
 import { PathUploadsEntity } from 'src/entities/pathupload.entity';
+import { SuccessEmailType } from 'src/util/send-email.type';
 @Injectable()
 export class ConfigurationService {
   private logger: LoggerService;
@@ -677,26 +678,18 @@ export class ConfigurationService {
           });
         });
         
-        const htmlContent = `
-            <p>Hello</p>
-            <p>Config ${this.escapeHtml(update.configName)} has been created successfully</p>
-            <p>with below server details:</p>
-            ${createConfig.fileServers
-              .map(
-                (fileServer) => `
-                <p>Server Name: ${this.escapeHtml(fileServer.host.trim())}</p>
-                <p>Server Type: ${this.escapeHtml(fileServer.serverType)}</p>
-                <p>Protocol: ${this.escapeHtml(fileServer.protocol)}</p>
-                <p>Workers: ${workerNames.length > 0 ? this.escapeHtml(workerNames.join(', ')) : 'Workers are not associated with the file server'}</p>
-            `,
-              )
-              .join('')}
-        `;
-        const payload = { body: htmlContent };
-        this.logger.log(
-          `Sending email for config creation ${update.id} with payload ${JSON.stringify(payload)}`,
-        );
-        await this.sendMailService.sendMail(payload);
+        await this.sendMailService.sendMail({
+          successEmailType: SuccessEmailType.CREATE_CONFIGURATION,
+          createConfig: {
+            configName: update.configName,
+            fileServers: update.fileServers.map((fs) => ({
+              host: fs.host,
+              serverType: fs.serverType,
+              protocol: fs.protocol,
+              workerNames: fs.workers.map((w) => w.workerName),
+            })),
+          },
+        });
         const workingDirectory =
           this.fileServerWorkingDirectoryMappingEntity.create({
             pathName: createConfig?.workingDirectory?.pathName,
@@ -873,33 +866,20 @@ export class ConfigurationService {
       if (allUnHealthy) {
         return update;
       }
-      const htmlContent = `
-            <p>Hello</p>
-            <p>Config ${update.configName} has been updated successfully</p>
-            ${
-              removedWorkers?.length > 0
-                ? `
-                  <p>Below is the list of deassociated workers:</p>
-                  ${removedWorkers.map((worker) => `<p>Worker Name: ${worker?.workerName}</p>`).join('')}
-              `
-                : ''
-            }
- ${
-   addedWorkers?.length > 0
-     ? `
-        <p>Below is the list of newly associated workers:</p>
-        ${addedWorkers.map((worker) => `<p>Worker Name: ${worker?.workerName}</p>`).join('')}
-      `
-     : ''
- }
-
-           `;
-
-        const payload = { body: htmlContent };
-        this.logger.log(
-          `Sending email for config updation ${update.id} with payload ${JSON.stringify(payload)}`,
-        );
-        await this.sendMailService.sendMail(payload);
+        await this.sendMailService.sendMail({
+          successEmailType: SuccessEmailType.UPDATE_CONFIGURATION,
+          createConfig: {
+            configName: update.configName,
+            fileServers: update.fileServers.map((fs) => ({
+              host: fs.host,
+              serverType: fs.serverType,
+              protocol: fs.protocol,
+              workerNames: fs.workers.map((w) => w.workerName),
+              addedWorkers: addedWorkers.map((w) => w.workerName),
+              removedWorkers: removedWorkers.map((w) => w.workerName),
+            })),
+          },
+        });
 
         await this.startValidateWorkingDirectoryWorkflow(
           updateConfig,

@@ -1,16 +1,20 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import axios from "axios";
+import { SuccessEventEmailDto } from "./send-email.type";
 
 @Injectable()
 export class SendMailService {
   private readonly logger = new Logger(SendMailService.name);
-  constructor(private readonly configService: ConfigService) {}
+  readonly sendEmailUrl: string;
+  constructor(private readonly configService: ConfigService) {
+    this.sendEmailUrl = this.configService.get("app.email.sendMail");
+  }
 
-  async sendMail(body: any) {
+  async sendMail(body: SuccessEventEmailDto) {
     try {
-      const SEND_MAIL = this.configService.get("app.email.sendMail");
-      const response = await axios.post(`${SEND_MAIL}/api/v1/email/internal`, body);
+      const sendEmailFullUrl = `${this.sendEmailUrl}/api/v1/email/internal`;
+      const response = await axios.post(sendEmailFullUrl, body);
       if (response.status !== 200)
         throw new Error(
           `Failed to post the send mail request, ${response.data}`
