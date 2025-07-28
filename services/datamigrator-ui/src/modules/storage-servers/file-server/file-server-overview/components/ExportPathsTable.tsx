@@ -15,7 +15,7 @@ import { ExportPathsTablePropsType } from "@modules/storage-servers/file-server/
 import { Button } from "@netapp/bxp-design-system-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLazyCheckConnectionRespQuery } from "@api/workerManagerApi";
-import { ValidateConnectionStatus } from "@/types/app.type";
+import { FILE_SERVER_STATUS, ValidateConnectionStatus } from "@/types/app.type";
 import { useDispatch } from "react-redux";
 import { MAX_RETRY_API_ATTEMPTS } from "@/utils/constants";
 import BulkManualUploadFile from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/components/BulkManualUploadFile";
@@ -49,6 +49,10 @@ const ExportPathsTable = ({
   const [reFetchExportPathsApi] = useLazyRefetchConfigExportPathsQuery();
   const [downloadTemplate] = useLazyDownloadExportPathSourceTemplateQuery();
   const [getWorkFlowStatus] = useLazyCheckConnectionRespQuery();
+
+  const isDraftStatus = fileServerDetails?.status === FILE_SERVER_STATUS.DRAFT;
+  const isRefreshDisabled =
+    !fileServerDetails?.isRefreshAvailable || disableRefresh || isDraftStatus;
 
   const tableStateProps = {
     columns: EXPORT_PATHS_TABLE_COLS_DEF,
@@ -103,7 +107,7 @@ const ExportPathsTable = ({
           showErrorOnRefetchFailure(error);
         } else if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
           const error = new Error(
-            `Request timed out after ${MAX_RETRY_API_ATTEMPTS} attempts`
+            `Request timed out after ${MAX_RETRY_API_ATTEMPTS} attempts.`
           );
           showErrorOnRefetchFailure(error);
         }
@@ -132,7 +136,7 @@ const ExportPathsTable = ({
       <Button
         variant="text"
         onClick={handleRefetchExportPaths}
-        disabled={!fileServerDetails?.isRefreshAvailable || disableRefresh}
+        disabled={isRefreshDisabled}
       >
         Click here to refresh
       </Button>

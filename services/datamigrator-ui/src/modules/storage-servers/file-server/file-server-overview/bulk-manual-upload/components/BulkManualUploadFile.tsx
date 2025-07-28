@@ -4,6 +4,7 @@ import { BulkManualUploadPropsType } from "@modules/storage-servers/file-server/
 import { Show } from "@components/show/Show";
 import { DownloadMonochromeIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { BulkManualUpload } from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/BulkManualUpload";
+import { FILE_SERVER_STATUS } from "@/types/app.type";
 
 const BulkManualUploadFile = ({
   fileServerDetails,
@@ -13,6 +14,7 @@ const BulkManualUploadFile = ({
   const { openUploadModal } = BulkManualUpload(fileServerDetails);
   const hasExportPaths = allExportPaths.length > 0;
   const isRefreshAvailable = fileServerDetails?.isRefreshAvailable;
+  const isDraftStatus = fileServerDetails?.status === FILE_SERVER_STATUS.DRAFT;
 
   return (
     <Box className="flex gap-2 justify-end">
@@ -31,6 +33,7 @@ const BulkManualUploadFile = ({
             <ExternalLink
               variant="text"
               className="cursor-pointer"
+              disabled={isDraftStatus}
               onClick={openUploadModal}
             >
               Click here to Upload Export Paths
