@@ -11,6 +11,7 @@ import ValidationCellRenderer from "@components/custom-cell-renderer/ValidationC
 import Mapping from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/Mapping";
 import Options from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Options/Options";
 import Review from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Review/Review";
+import { INCREMENTAL_SYNC_SCHEDULE_ENUM } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/IncrementalSyncSchedule/incremental-sync-schedule.constants";
 
 export const STEPS_MAP_BULK_MIGRATION = {
   mapping: Mapping,
@@ -41,12 +42,6 @@ export enum INCREMENTAL_SYNC_SCHEDULE_SET_ENUM {
 export enum INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM {
   DAY = "day",
   WEEKDAY = "weekday",
-}
-
-export enum INCREMENTAL_SYNC_SCHEDULE_ENUM {
-  OFF = "Off",
-  SCHEDULE = "schedule",
-  CRON_EXPRESSION = "cron_expression",
 }
 
 export enum MIGRATE_OPTION_ENUM {

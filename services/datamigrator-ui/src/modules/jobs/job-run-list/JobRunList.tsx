@@ -17,7 +17,10 @@ import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import { notify } from "@components/notification/NotificationWrapper";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
-import { handleDownloadReport } from "@modules/jobs/jobs.utils";
+import {
+  handleDownloadReport,
+  handleDownloadCocReport,
+} from "@modules/jobs/jobs.utils";
 import ActionButtons from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/Review/components/ActionButtons";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -50,7 +53,9 @@ const JobRunList = () => {
     []
   );
 
-  const [filteredJobRunList, setFilteredJobRunList] = useState<JobRunApiType[]>([]);
+  const [filteredJobRunList, setFilteredJobRunList] = useState<JobRunApiType[]>(
+    []
+  );
 
   const [updateStatus, { isLoading: isUpdating }] =
     useUpdateJobRunStatusMutation();
@@ -59,9 +64,7 @@ const JobRunList = () => {
   const [selectedJobRunId, setSelectedJobRunId] = useState("");
   const [downloadReportApi] = useDownloadReportsMutation();
   const [getPdfReportApi] = useGetPdfReportMutation();
-  const canDownloadReport = hasPermission(
-    USER_PERMISSION_TYPE_ENUM.Reports
-  );
+  const canDownloadReport = hasPermission(USER_PERMISSION_TYPE_ENUM.Reports);
 
   const canUpdateStatus = hasPermission(USER_PERMISSION_TYPE_ENUM.ManageJob);
 
@@ -83,6 +86,7 @@ const JobRunList = () => {
       ? getReportActions(
           row,
           handleDownloadReport,
+          handleDownloadCocReport,
           downloadReportApi,
           getPdfReportApi
         )
@@ -140,10 +144,13 @@ const JobRunList = () => {
     defaultSortState: { sortOrder: "desc", column: "startTime" },
   };
 
-  const handleSelections = (selectedRowIds: string[], _filteredJobRunList: JobRunApiType[]) => {
+  const handleSelections = (
+    selectedRowIds: string[],
+    _filteredJobRunList: JobRunApiType[]
+  ) => {
     setJobRunListSelectedIds(selectedRowIds);
-    setFilteredJobRunList(_filteredJobRunList)
-  }
+    setFilteredJobRunList(_filteredJobRunList);
+  };
 
   return (
     <>

@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, forwardRef } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NativeConnection } from "@temporalio/worker";
 import { CommonActivityService } from "src/activities/common/common.service";
@@ -33,7 +33,7 @@ export class WorkerOptionsService {
     private readonly validateConnectionService: ValidateConnectionActivity,
     private readonly discoveryActivities: DiscoveryActivity,
     private readonly discoveryScanActivity: DiscoveryScanActivity,
-    private readonly setupActivityService: SetupActivityService,
+    @Inject(forwardRef(()=>SetupActivityService))private readonly setupActivityService: SetupActivityService,
     private readonly migrationScanService: MigrationScanService,
     private readonly migrationTaskService: MigrationTaskService,
     private readonly migrationSyncService:MigrationSyncService,

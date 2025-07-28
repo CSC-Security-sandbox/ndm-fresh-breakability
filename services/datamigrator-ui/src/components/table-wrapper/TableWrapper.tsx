@@ -6,14 +6,13 @@ import {
   Table,
   TableCounter,
   TablePager,
-  TableWidgets,
   useTable,
 } from "@netapp/bxp-design-system-react";
 import { DownloadMonochromeIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import React, { useEffect, useState } from "react";
 import Filters from "@components/table-wrapper/Filters";
 import { TableWrapperPropsType } from "@components/table-wrapper/TableWrapper.types";
-import { RefreshIcon } from "@netapp/bxp-style/react-icons/Navigation";
+import RefreshButton from "@components/refresh-button/RefreshButton";
 
 const TableWrapper = ({
   tableStateProps,
@@ -133,29 +132,22 @@ const TableWrapper = ({
             </Box>
           </Box>
         )}
-        <Box className="flex gap-2 items-center">
-          <TableWidgets>
-            <SearchWidget
-              setFilter={updateTextFilter}
-              className="w-[360px]"
-              style={{ marginTop: "5px" }}
-            />
-            {isRefreshing !== undefined && (
-              <Button
-                variant="icon"
-                isSubmitting={isRefreshing}
-                onClick={!isRefreshing ? refetchTableData : undefined}
-                className="w-[17px] h-[17px]"
-              >
-                <RefreshIcon />
-              </Button>
-            )}
-            {showDownload && (
-              <Button variant="icon" className="w-[18px] h-[18px]">
-                <DownloadMonochromeIcon />
-              </Button>
-            )}
-          </TableWidgets>
+        <Box className="flex gap-5 items-center">
+          <SearchWidget
+            setFilter={updateTextFilter}
+            className="w-[360px] mt-1"
+          />
+
+          <RefreshButton
+            isLoading={isRefreshing}
+            onRefresh={refetchTableData}
+          />
+
+          {showDownload && (
+            <Button variant="icon" className="w-[18px] h-[18px]">
+              <DownloadMonochromeIcon />
+            </Button>
+          )}
           {content}
         </Box>
       </Box>

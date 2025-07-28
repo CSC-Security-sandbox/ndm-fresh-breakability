@@ -1,5 +1,5 @@
 
-import { WorkerConfiguration } from 'src/work-manager/work-manager.types';
+import { WorkerConfiguration } from 'src/activities/work-manager/work-manager.types';
 import { getWorkerIdentity } from './worker-manager.mappers';
 
 describe('getWorkerIdentity', () => {
