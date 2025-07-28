@@ -6,6 +6,7 @@ import { ActivitiesModule } from './activities/activities.module';
 import { HealthcheckModule } from './healthcheck/healthcheck.module';
 import { AuthModule } from './auth/auth.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { WorkerThreadModule } from './thread/worker.thread.module';
 import {
   MiddlewareConsumer,
   Module,
@@ -30,7 +31,8 @@ import { WorkManagerModule } from './work-manager/work-manager.module';
     ScheduleModule.forRoot(),
     AuthModule,
     MetricsModule,
-    WorkManagerModule
+    WorkManagerModule,
+    WorkerThreadModule,
   ],
   providers: [WorkersConfig, CommandConfig, Protocols, NFSProtocol, SMBProtocol],
 })

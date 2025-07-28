@@ -3,6 +3,7 @@ import { WorkerThreadService } from './worker.thread.service';
 import { WorkerThreadOutput, ThreadOperation, MigrateFile } from './worker.thread.type';
 import { ConfigService } from '@nestjs/config';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { MetricsService } from '../metrics/metrics.service';
 import { mockLogger } from 'src/auth/auth.service.spec';
 
 jest.mock('worker_threads', () => {
@@ -40,6 +41,16 @@ describe('WorkerThreadService', () => {
         {
           provide: LoggerFactory,
           useValue: mockLoggerFactory,
+        },
+        {
+          provide: MetricsService,
+          useValue: {
+            recordTaskCompleted: jest.fn(),
+            recordWorkerThreadError: jest.fn(),
+            updateWorkerThreadStatus: jest.fn(),
+            updateQueueDepth: jest.fn(),
+            updateBandAllocation: jest.fn(),
+          },
         },
       ],
     }).compile();
@@ -210,8 +221,16 @@ describe('WorkerThreadService', () => {
       create: jest.fn().mockReturnValue(loggerMock),
     };
 
+    const metricsServiceMock = {
+      recordTaskCompleted: jest.fn(),
+      recordWorkerThreadError: jest.fn(),
+      updateWorkerThreadStatus: jest.fn(),
+      updateQueueDepth: jest.fn(),
+      updateBandAllocation: jest.fn(),
+    };
+
     const WorkerThreadServiceModule = (await import('./worker.thread.service')).WorkerThreadService;
-    const service = new WorkerThreadServiceModule(configServiceMock as any, loggerFactoryMock as any);
+    const service = new WorkerThreadServiceModule(configServiceMock as any, loggerFactoryMock as any, metricsServiceMock as any);
 
     // Assert
     expect(service['sizes']).toBeDefined()
