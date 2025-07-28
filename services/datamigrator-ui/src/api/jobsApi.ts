@@ -241,7 +241,7 @@ export const {
   useUpdateJobStatusMutation,
   useUpdateJobRunStatusMutation,
   useJobAdhocRunMutation,
-  useLazyGetJobTasksQuery,
+  useGetJobTasksQuery,
   useBulkMigrateMutation,
   usePrecheckMutation,
   useLazyGetAllFileServersWithVolumeQuery,

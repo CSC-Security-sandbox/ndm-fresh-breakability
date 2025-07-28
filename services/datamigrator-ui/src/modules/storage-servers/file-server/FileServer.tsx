@@ -71,7 +71,7 @@ const FileServer = () => {
 
   const ADD_NEW_FILE_SERVER = (
     <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.ManageConfig}>
-      <Button className="ml-4" onClick={() => navigate("/new-file-server")}>
+      <Button onClick={() => navigate("/new-file-server")}>
         <Box className="flex items-stretch">
           <AddIcon fontSize="small" size="20" />
           Add

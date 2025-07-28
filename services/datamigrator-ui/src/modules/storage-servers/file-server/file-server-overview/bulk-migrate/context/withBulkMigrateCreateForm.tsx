@@ -98,8 +98,13 @@ export function withBulkMigrateCreateForm(
     const [preCheckApi, { isLoading: isPrecheckSubmitting }] =
       usePrecheckMutation();
 
-    const { fileServerDetails, allExportPaths, allWorkersList } =
-      useFileServerDetails();
+    const {
+      fileServerDetails,
+      allExportPaths,
+      allWorkersList,
+      refetch,
+      isFetching,
+    } = useFileServerDetails();
     const [getAllFileServersApi] = useLazyGetAllFileServersWithVolumeQuery();
     const [getWorkerDetails] = useLazyCheckConnectionRespQuery();
 
@@ -606,6 +611,8 @@ export function withBulkMigrateCreateForm(
       fileName,
       listOfNotReachableExportPaths,
       sourceDisabledPaths,
+      refetch,
+      isFetching,
     };
 
     return <WrappedComponent {...props} {...createBulkMigrateHelpers} />;
