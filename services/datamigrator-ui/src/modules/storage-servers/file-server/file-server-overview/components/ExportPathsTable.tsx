@@ -107,7 +107,7 @@ const ExportPathsTable = ({
           showErrorOnRefetchFailure(error);
         } else if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
           const error = new Error(
-            `Request timed out after ${MAX_RETRY_API_ATTEMPTS} attempts`
+            `Request timed out after ${MAX_RETRY_API_ATTEMPTS} attempts.`
           );
           showErrorOnRefetchFailure(error);
         }
