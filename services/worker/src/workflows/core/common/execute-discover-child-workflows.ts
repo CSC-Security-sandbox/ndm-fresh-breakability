@@ -2,6 +2,7 @@ import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
 import { JobRunStatus } from 'src/activities/discovery/enums';
 import { ChildScanWorkflowOutput } from '../child/chid-scan.workflow.type';
+import { LogExecutionTime } from '../../../utils/perfomance.test';
 
 
 interface DiscoveryWorkflowExecutorInput {
@@ -25,7 +26,7 @@ const {
 
 const actionSignal = wf.defineSignal<[string]>('action');
 
-export const executeDiscoveryChildWorkflows = async ( {jobRunId } : DiscoveryWorkflowExecutorInput ) => {
+export const executeDiscoveryChildWorkflows = LogExecutionTime(async function executeDiscoveryChildWorkflows( {jobRunId } : DiscoveryWorkflowExecutorInput ) {
 
     let scanWorkflow: wf.ChildWorkflowHandle<wf.Workflow>;
     let isScanIsRunning: boolean = false;
@@ -64,4 +65,4 @@ export const executeDiscoveryChildWorkflows = async ( {jobRunId } : DiscoveryWor
     await updateLastEntryActivity(jobRunId);
     return output;
 
-}
+});

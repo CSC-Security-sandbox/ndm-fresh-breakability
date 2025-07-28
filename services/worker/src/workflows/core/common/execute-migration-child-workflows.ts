@@ -2,6 +2,7 @@ import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 import { JobRunStatus } from "src/activities/discovery/enums";
+import { LogExecutionTime } from '../../../utils/perfomance.test';
 
 
 
@@ -36,7 +37,7 @@ interface MigrationWorkflowExecutorOutput {
     syncJobStatus: JobRunStatus;
 }
 
-export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkflowExecutorInput): Promise<MigrationWorkflowExecutorOutput> => {
+export const executeMigrationChildWorkflows = LogExecutionTime(async function executeMigrationChildWorkflows({jobRunId}: MigrationWorkflowExecutorInput): Promise<MigrationWorkflowExecutorOutput> {
 
     let scanWorkflow: wf.ChildWorkflowHandle<wf.Workflow>, syncWorkflow: wf.ChildWorkflowHandle<wf.Workflow>;
     let output: MigrationWorkflowExecutorOutput = {
@@ -97,7 +98,7 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
     await updateLastEntryActivity(jobRunId);
 
     return output
-}
+});
 
 const getUnifiedJobStatus = (scanStatus: JobRunStatus, syncStatus: JobRunStatus): JobRunStatus => {
     if (scanStatus === JobRunStatus.Failed || syncStatus === JobRunStatus.Failed) {

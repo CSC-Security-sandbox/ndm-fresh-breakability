@@ -10,6 +10,7 @@ import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishCommandInput } from "./migrate-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { LogExecutionTime } from '../../../../utils/perfomance';
 
 @Injectable()
 export class MigrateScanService {
@@ -32,12 +33,14 @@ export class MigrateScanService {
     }
 
 
+    @LogExecutionTime
     async publishCommands({ jobContext, commands}: PublishCommandInput)  {
         //TODO: make bulk publish to command stream. 
         for(const command of commands)
             await jobContext.publishToCommandStream(command);
     }
 
+    @LogExecutionTime
     async getDirContents({path, origin, jobContext, errorType, command}: DirContentsInput): Promise<Set<string>>{
         let content = new Set<string>();
         try{
@@ -58,6 +61,7 @@ export class MigrateScanService {
     }
 
     
+    @LogExecutionTime
     async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings , targetPrefix}: ScanDirectoryInput): Promise<ScanDirectoryOutput> { 
 
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
@@ -151,7 +155,8 @@ export class MigrateScanService {
         return output
     }
 
-    buildCommand = (sFile: fs.Stats, fPath: string, dFile?: fs.Stats): Command | undefined => {
+    @LogExecutionTime
+    buildCommand(sFile: fs.Stats, fPath: string, dFile?: fs.Stats): Command | undefined {
          if (!sFile) {
             return new Command(
                 fPath,{
@@ -185,6 +190,7 @@ export class MigrateScanService {
 
         return undefined;
     }
+    @LogExecutionTime
     async processDeletedItems({ sourceContent, targetContent, targetPath, targetPrefix, jobContext, errorType, command, commands }: {
         sourceContent: Set<string>,
         targetContent: Set<string>,

@@ -7,6 +7,7 @@ import { MigrateSyncService } from "src/activities/core/migrate/migrate-sync.ser
 import { JobRunStatus } from "src/activities/discovery/enums";
 import { updateJobStatusIfNotRunning } from '../common/workflow-utils';
 import { SyncWorkflowOutput } from './chid-scan.workflow.type';
+import { LogExecutionTime } from '../../../utils/perfomance.test';
 
 
 interface SyncWorkflowInput {
@@ -43,7 +44,7 @@ function isScanFinished(scanWorkflowStatus: JobRunStatus) : boolean {
     return scanWorkflowStatus === JobRunStatus.Completed || scanWorkflowStatus === JobRunStatus.Failed;
 }
 
-export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunStatus.Running, actionState = JobRunStatus.Running, workerConcurrency= 20 } : SyncWorkflowInput) : Promise<SyncWorkflowOutput>=> {
+export const ChildSyncWorkflow = LogExecutionTime(async function ChildSyncWorkflow({jobRunId, scanWorkflowStatus = JobRunStatus.Running, actionState = JobRunStatus.Running, workerConcurrency= 20 } : SyncWorkflowInput) : Promise<SyncWorkflowOutput> {
     console.log(`Starting SyncWorkflow ${jobRunId}`)
 
     
@@ -107,7 +108,7 @@ export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunSt
     
     syncWorkflowOutput.status = isManualStop ? JobRunStatus.Stopped : JobRunStatus.Completed;
     return syncWorkflowOutput; 
-}
+});
 
 
 

@@ -1,5 +1,6 @@
 import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
+import { LogExecutionTime } from '../../../utils/perfomance.test';
 
 
 const {
@@ -21,7 +22,7 @@ export interface SetupWorkerOutput {
     failedWorkers: string[];
 }
 
-export const executeWorkerSetup = async ( { jobRunId, workerIds , options}: SetupWorkerInput): Promise<SetupWorkerOutput> => {
+export const executeWorkerSetup = LogExecutionTime(async function executeWorkerSetup( { jobRunId, workerIds , options}: SetupWorkerInput): Promise<SetupWorkerOutput> {
     const setupCompletedWorkers : string[] = [];
     const failedWorkers: string[] = [];
 
@@ -60,7 +61,7 @@ export const executeWorkerSetup = async ( { jobRunId, workerIds , options}: Setu
     }
 
     return { setupCompletedWorkers, failedWorkers}
-}
+});
 
 const updateWorkerFailedResponse = async (workerId: string, jobRunId: string, message: string) => {
      await updateWorkerResponse(jobRunId, workerId, {

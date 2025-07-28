@@ -5,6 +5,7 @@ import { JobRunStatus } from '../../../activities/discovery/enums';
 import { ReportingWorkflow } from "../../../workflows/reporting/reporting.workflow";
 import { waitUntilRedisMemoryOk } from '../../../workflows/utils/memory-utils';
 import { CleanupWorkerWorkflow } from "../../../workflows/workflows";
+import { LogExecutionTime } from '../../../utils/perfomance.test';
 interface MigrationWorkflowInput {
   traceId: string;
   payload: {
@@ -37,11 +38,11 @@ const {
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 
 
-export const MigrationWorkflow = async ({
+export const MigrationWorkflow = LogExecutionTime(async function MigrationWorkflow({
   traceId,
   payload,
   options = {},
-}: MigrationWorkflowInput): Promise<MigrationWorkflowOutput> => {
+}: MigrationWorkflowInput): Promise<MigrationWorkflowOutput> {
   console.log(`[${traceId}] Parent workflow started for ${traceId}`);
 
   const workFlowStatus: MigrationWorkflowOutput = {
@@ -223,4 +224,4 @@ export const MigrationWorkflow = async ({
   const response = await cleanupJobContextActivity(traceId)
   console.log(`[${traceId}] CleanupJobContextActivity response: ${response}`);
   return workFlowStatus;
-};
+});

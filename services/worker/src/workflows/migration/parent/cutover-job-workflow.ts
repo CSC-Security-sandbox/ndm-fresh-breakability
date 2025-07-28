@@ -7,6 +7,7 @@ import { CutOverStatus } from "../../../activities/migrate/migrate.type";
 import { ReportingWorkflow } from "../../../workflows/reporting/reporting.workflow";
 import { waitUntilRedisMemoryOk } from '../../../workflows/utils/memory-utils';
 import { CleanupWorkerWorkflow } from "../../../workflows/workflows";
+import { LogExecutionTime } from '../../../utils/perfomance.test';
 
 interface WorkerConfig {
   ids: string[];
@@ -48,11 +49,11 @@ const {
    cleanupJobContext: cleanupJobContextActivity,
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 
-export const CutOverWorkFlow = async ({
+export const CutOverWorkFlow = LogExecutionTime(async function CutOverWorkFlow({
   traceId,
   payload,
   options = {},
-}: CutOverWorkFlowInput): Promise<any> => {
+}: CutOverWorkFlowInput): Promise<any> {
   console.log(`[${traceId}] Parent workflow started for ${traceId}`);
 
   const workFlowStatus: CutOverWorkflowOutput = {
@@ -240,12 +241,12 @@ export const CutOverWorkFlow = async ({
   const response = await cleanupJobContextActivity(traceId)
   console.log(`[${traceId}] CleanupJobContextActivity response: ${response}`);
   return workFlowStatus;
-};
+});
 
-export const WaitingForApproval = async (
+export const WaitingForApproval = LogExecutionTime(async function WaitingForApproval(
   traceId: string,
   approve_signal: wf.SignalDefinition<[string], string>
-): Promise<string> => {
+): Promise<string> {
   let isBlocked = true;
   let approval_status: CutOverStatus | undefined;
 
@@ -274,4 +275,4 @@ export const WaitingForApproval = async (
     throw err;
   }
   return approval_status ?? 'No approval received';
-};
+});

@@ -8,6 +8,7 @@ import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput } from "./discovery-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
+import { LogExecutionTime } from "../../../../utils/perfomance";
 
 
 export class DiscoveryScanService {
@@ -25,6 +26,7 @@ export class DiscoveryScanService {
     }
 
 
+    @LogExecutionTime
     async getDirContents({path, jobContext, errorType, command}: DirContentsInput): Promise<fs.Dirent[]>{
         let content:fs.Dirent[] = [];
         try{
@@ -41,6 +43,7 @@ export class DiscoveryScanService {
         return content;
     }
 
+    @LogExecutionTime
     async scanDirectory({ jobContext, sourcePath, sourcePrefix, command, settings}: ScanDirectoryInput): Promise<ScanDirectoryOutput> {
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
         const errorType: ErrorType = command.retryCount+1 > this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;

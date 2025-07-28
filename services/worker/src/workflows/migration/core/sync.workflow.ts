@@ -4,6 +4,7 @@ import { CommonActivityService } from "../../../activities/common/common.service
 import { JobRunStatus } from "../../../activities/discovery/enums";
 import { MigrationSyncService } from "../../../activities/migrate/migrate.sync.service";
 import { SyncTaskOutput } from '../../../activities/migrate/migrate.type';
+import { LogExecutionTime } from '../../../utils/perfomance.test';
 
 interface SyncWorkflowInput {
     jobRunId: string;
@@ -44,7 +45,7 @@ async function log(traceId: string, message: string) {
 export const syncWorkerListSignal = wf.defineSignal<[string[]]>('syncWorkerList');
 export const isScanCompletedSignal = wf.defineSignal('isScanCompleted');
 
-export const SyncWorkflow = async ({jobRunId, workers, failedWorkers, isScanCompleted = false } : SyncWorkflowInput) : Promise<SyncWorkflowOutput>=> {
+export const SyncWorkflow = LogExecutionTime(async function SyncWorkflow({jobRunId, workers, failedWorkers, isScanCompleted = false } : SyncWorkflowInput) : Promise<SyncWorkflowOutput> {
     console.log('Starting SyncWorkflow ', jobRunId)
     
     wf.setHandler(isScanCompletedSignal, () => {
@@ -136,4 +137,4 @@ export const SyncWorkflow = async ({jobRunId, workers, failedWorkers, isScanComp
             return { jobRunId, workers, failedWorkers, status: JobRunStatus.Errored,  error: error?.message };
         }
     }
-}
+});

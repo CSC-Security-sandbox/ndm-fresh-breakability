@@ -6,6 +6,7 @@ import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from "../../../activities/common/common.service";
 import { ScanPathOutput } from "../../../activities/migrate/migrate.type";
 import { sleep } from '@temporalio/workflow';
+import { LogExecutionTime } from '../../../utils/perfomance.test';
 
 async function log(traceId: string, message: string) {
     console.log(`[${traceId}] ${message}`);
@@ -51,7 +52,7 @@ interface ScanWorkflowOutput{
 
 export const syncWorkerListSignal = wf.defineSignal<[string[]]>('syncWorkerList');
 
-export const ScanWorkflow = async ({ jobRunId, workers, failedWorkers } : ScanWorkflowInput): Promise<ScanWorkflowOutput> => {
+export const ScanWorkflow = LogExecutionTime(async function ScanWorkflow({ jobRunId, workers, failedWorkers } : ScanWorkflowInput): Promise<ScanWorkflowOutput> {
   console.log('Starting MigrateScan ', jobRunId)
   // signal handler for syncWorkerList
   wf.setHandler(syncWorkerListSignal, (workerList: string[]) => {
@@ -156,4 +157,4 @@ export const ScanWorkflow = async ({ jobRunId, workers, failedWorkers } : ScanWo
       }
   }
 
-}
+});

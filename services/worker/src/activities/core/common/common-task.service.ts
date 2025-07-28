@@ -11,6 +11,7 @@ import { handleInitTaskInput } from "../migrate/migrate-sync.types";
 import { BuildOrGetScanTaskInput, CreateInitBatchInput } from "./common-task.type";
 import { calculateHash } from "src/activities/utils/checksum-utils";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { LogExecutionTime } from "../../../utils/perfomance";
 
 @Injectable()
 export class CommonTaskService {
@@ -35,6 +36,7 @@ export class CommonTaskService {
     }
 
     // TO-DO : make this adaptive resource based task creation
+    @LogExecutionTime
     async getGroupOfTasksActivity(jobRunId): Promise<string[]> {
       const activityContext = Context.current();      
       const heartBeatInterval = setInterval(() => { activityContext.heartbeat({});}, 2000);
@@ -74,6 +76,7 @@ export class CommonTaskService {
     }
 
   
+  @LogExecutionTime
   async buildOrGetValidScanTask({jobContext , taskHashId , jobRunId, batchId}: BuildOrGetScanTaskInput): Promise<Task> {
     let task: Task | undefined = await jobContext.getTask(taskHashId);
     if(!task && batchId) {
@@ -89,6 +92,7 @@ export class CommonTaskService {
   }
 
 
+  @LogExecutionTime
   async ensureTaskValid({task, jobContext}: handleInitTaskInput) : Promise<Task> {
       let retryCount = 0;
       for (let i = 0; i < task.commands.length; i++) {
@@ -105,6 +109,7 @@ export class CommonTaskService {
       return task;
   }
 
+  @LogExecutionTime
   async isWorkflowRunningActivity(workflowId: string): Promise<boolean> {
     const connection = await Connection.connect({address: this.temporalAddress});
     this.logger.debug(`Checking if workflow ${workflowId} is running on Temporal at ${this.temporalAddress}`);
@@ -118,6 +123,7 @@ export class CommonTaskService {
   }
 
 
+  @LogExecutionTime
   async createInitialDirBatch({dirsToScan, jobRunId}: CreateInitBatchInput): Promise<string>  {
     const jobContext = await this.redisService.getJobManagerContext(jobRunId);
     const batchId: string = calculateHash(dirsToScan);

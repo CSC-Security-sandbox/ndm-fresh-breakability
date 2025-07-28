@@ -10,6 +10,7 @@ import { DiscoveryScanService } from "./discovery/discovery-scan.service";
 import { MigrateScanService } from "./migrate/migrate-scan.service";
 import { BatchSubDirInput, BatchSubDirOutput, ScanActivityInput, ScanActivityOutput, ScanDirectoryInput, ScanDirectoryOutput, ScanDirectorySettings, TaskExecInput, TaskExecOutput, UpdateAndReportTaskInput } from './scan-activity.type';
 import { calculateHash } from "src/activities/utils/checksum-utils";
+import { LogExecutionTime } from "../../../utils/perfomance";
 
 
 
@@ -37,6 +38,7 @@ export class ScanService {
     }
 
 
+    @LogExecutionTime
     async scanDirectories ({jobRunId, isMigration, batchSize, batchId}: ScanActivityInput): Promise<ScanActivityOutput>  {
         const scanActivityContext = Context.current();
         const heartbeatInterval = setInterval(() => {
@@ -89,6 +91,7 @@ export class ScanService {
         }        
     }
 
+    @LogExecutionTime
     getScanSettings(jobContext: JobManagerContext ): ScanDirectorySettings {
         const settings: ScanDirectorySettings = {
             skipFile: jobContext.jobConfig.options?.skipsFilesModifiedInLast ?? '',
@@ -97,6 +100,7 @@ export class ScanService {
         return settings;
     }
 
+    @LogExecutionTime
     async executeTask({activityId, jobContext, jobRunId, task, isMigration, batchSize}: TaskExecInput): Promise<TaskExecOutput>{
         const baseSourcePrefixPath = basePrefix(jobRunId, task.sPathId);
         const baseTargetPrefixPath = basePrefix(jobRunId, task.tPathId);
@@ -142,6 +146,7 @@ export class ScanService {
         return {result:output, errors, retryCount}
     }
 
+    @LogExecutionTime
     async updateAndReportTaskStatus({ errors, jobContext, taskHashId, task, retryCount }: UpdateAndReportTaskInput) {
         if(errors.length == 0) {
             task.status = TaskStatus.COMPLETED
@@ -166,6 +171,7 @@ export class ScanService {
         
     }
 
+    @LogExecutionTime
     async batchSubDirs({batchSize, subDirs, jobContext}: BatchSubDirInput): Promise<BatchSubDirOutput> {
         const batchDirsId: string[] = []
         while(subDirs.length > batchSize) {
