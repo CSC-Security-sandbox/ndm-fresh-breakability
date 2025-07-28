@@ -15,7 +15,10 @@ import { ExportPathsTablePropsType } from "@modules/storage-servers/file-server/
 import { Button } from "@netapp/bxp-design-system-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLazyCheckConnectionRespQuery } from "@api/workerManagerApi";
-import { FILE_SERVER_STATUS, ValidateConnectionStatus } from "@/types/app.type";
+import {
+  FILE_SERVER_STATUS_ENUM,
+  ValidateConnectionStatus,
+} from "@/types/app.type";
 import { useDispatch } from "react-redux";
 import { MAX_RETRY_API_ATTEMPTS } from "@/utils/constants";
 import BulkManualUploadFile from "@modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/components/BulkManualUploadFile";
@@ -50,7 +53,8 @@ const ExportPathsTable = ({
   const [downloadTemplate] = useLazyDownloadExportPathSourceTemplateQuery();
   const [getWorkFlowStatus] = useLazyCheckConnectionRespQuery();
 
-  const isDraftStatus = fileServerDetails?.status === FILE_SERVER_STATUS.DRAFT;
+  const isDraftStatus =
+    fileServerDetails?.status === FILE_SERVER_STATUS_ENUM.DRAFT;
   const isRefreshDisabled =
     !fileServerDetails?.isRefreshAvailable || disableRefresh || isDraftStatus;
 

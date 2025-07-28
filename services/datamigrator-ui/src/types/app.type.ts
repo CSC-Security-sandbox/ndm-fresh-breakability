@@ -7,8 +7,8 @@
  * Form - <form_name>FormType e.g. CreateProjectFormType
  */
 
-import {ReactNode} from 'react';
-import {WorkingDirectoryDetailsType} from '@modules/storage-servers/file-server/fileServer.interface';
+import { ReactNode } from "react";
+import { WorkingDirectoryDetailsType } from "@modules/storage-servers/file-server/fileServer.interface";
 
 export type GraphLoaderType = {
   label: string;
@@ -172,7 +172,7 @@ export type ConfigListTypeApiType = {
   project: ProjectType;
   fileServers: FileServerApiType[];
   workingDirectory: WorkingDirectoryDetailsType;
-  status: FILE_SERVER_STATUS;
+  status: FILE_SERVER_STATUS_ENUM;
   isRefreshAvailable?: boolean;
   isUploadInProgress?: boolean;
 };
@@ -508,7 +508,7 @@ export interface ProjectApiType {
   };
 }
 
-export enum FILE_SERVER_STATUS {
+export enum FILE_SERVER_STATUS_ENUM {
   ACTIVE = "ACTIVE",
   DRAFT = "DRAFT",
   IN_PROGRESS = "IN_PROGRESS",
@@ -724,10 +724,10 @@ export interface BlueXpTableStateType<T> {
 export interface JobErrorType {
   id: string;
   errorCode: string;
-  errorMessage: string;        // Original system message
-  displayMessage?: string;     // User-friendly mapped message
-  resolutionSteps?: string;    // Resolution steps from error_remedies
-  referenceCommands?: string;  // Diagnostic commands
+  errorMessage: string; // Original system message
+  displayMessage?: string; // User-friendly mapped message
+  resolutionSteps?: string; // Resolution steps from error_remedies
+  referenceCommands?: string; // Diagnostic commands
   fileName: string;
   filePath: string;
   createdAt: string;
