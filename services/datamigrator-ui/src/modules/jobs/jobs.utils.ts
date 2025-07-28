@@ -1,9 +1,10 @@
 import { notify } from "@components/notification/NotificationWrapper";
+import { REPORT_TYPES_ENUM } from "@/types/app.type";
 
 export const handleDownloadReport = async (
   downloadReports: (arg: any) => any,
   jobRunId: string,
-  reportType: string = "discovery",
+  reportType: string = REPORT_TYPES_ENUM.DISCOVERY,
   fileType: string
 ) => {
   const isFileTypePdf = fileType.toLowerCase() === "pdf";
@@ -48,6 +49,32 @@ export const handleDownloadErrorsLogs = async (
     console.error("Failed to download Error Report:", error?.data?.message);
     notify.error(
       error?.data?.displayMessage || "Failed to download Error Report."
+    );
+  }
+};
+
+export const handleDownloadCocReport = async (
+  downloadReports: (arg: any) => any,
+  jobRunId: string,
+  reportType: string = REPORT_TYPES_ENUM.COC
+) => {
+  try {
+    const response = await downloadReports({
+      jobRunId: [jobRunId],
+      "report-type": reportType,
+    }).unwrap();
+    const mimeType = getMimeType("ZIP");
+    const extension = "zip";
+
+    createAndDownloadBlob(
+      response,
+      mimeType,
+      `coc-report-${jobRunId}.${extension}`
+    );
+  } catch (error) {
+    console.error("Failed to download CoC report:", error);
+    notify.error(
+      "CoC report not generated yet, please try again after some time."
     );
   }
 };
