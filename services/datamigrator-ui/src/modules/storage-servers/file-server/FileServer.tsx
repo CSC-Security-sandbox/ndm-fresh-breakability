@@ -11,7 +11,7 @@ import { RootStateType } from "@store/store";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { FILE_SERVER_LIST_COLUMN_DEFS } from "@modules/storage-servers/file-server/file-server.constant";
-import { FILE_SERVER_STATUS } from "@/types/app.type";
+import { FILE_SERVER_STATUS_ENUM } from "@/types/app.type";
 
 const FileServer = () => {
   const LOWER_TIME_INTERVAL_FOR_IN_PROGRESS = 5000; // 5 seconds
@@ -44,7 +44,7 @@ const FileServer = () => {
   useEffect(() => {
     if (
       configByProject?.serverConfig?.find(
-        (row) => row.status === FILE_SERVER_STATUS.IN_PROGRESS
+        (row) => row.status === FILE_SERVER_STATUS_ENUM.IN_PROGRESS
       )
     ) {
       setIsFrequentInterval(true);
