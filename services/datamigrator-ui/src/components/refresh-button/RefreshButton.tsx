@@ -1,21 +1,21 @@
 import { Button } from "@netapp/bxp-design-system-react";
 import { RefreshIcon } from "@netapp/bxp-style/react-icons/Navigation";
-import { RefreshButtonProps } from "@components/refresh-button/refresh-button.types";
+import { RefreshButtonPropsType } from "@components/refresh-button/refresh-button.types";
 import { sizeClasses } from "@components/refresh-button/refresh-button.constants";
 
 const RefreshButton = ({
   isLoading = false,
   onRefresh,
-  className,
+  className = "",
   size = "sm",
   variant = "icon",
-}: RefreshButtonProps) => {
+}: RefreshButtonPropsType) => {
   return (
     <Button
       variant={variant}
       isSubmitting={isLoading}
       onClick={!isLoading ? onRefresh : undefined}
-      className={`${sizeClasses[size]} ${className || ""}`}
+      className={`${sizeClasses[size]} ${className}`}
       disabled={isLoading}
     >
       <RefreshIcon />

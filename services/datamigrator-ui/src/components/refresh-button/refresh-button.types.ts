@@ -1,4 +1,4 @@
-export type RefreshButtonProps = {
+export type RefreshButtonPropsType = {
   isLoading?: boolean;
   onRefresh: () => void;
   className?: string;
