@@ -39,6 +39,7 @@ import { JobErrorQueryDto } from "./dto/jobRunErrors.dto";
 import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { JobRunStats } from "./dto/jobstats";
 import { JobRunInitService } from "./jobrun.init.service";
+import { SuccessEmailType } from "src/utils/send-email.type";
 @Injectable()
 export class JobRunService {
   private readonly logger = new Logger(JobRunService.name);
@@ -539,19 +540,22 @@ export class JobRunService {
           this.logger.log(
             `Job Run ${jobRunId} completed with stats ${JSON.stringify(jobRunStats)}`
           );
-          const mailBody = `Hello, <br/>
-          The following ${jobConfig.jobType} job has been completed for below Paths:
-          <p>Source Path:${jobConfig.sourcePath?.volumePath}</p>
-          <p>Target Path:${jobConfig.targetPath?.volumePath}</p>
-          <p>Source:${jobConfig.sourcePath?.fileServer?.host}</p>
-          <p>Target:${jobConfig.targetPath?.fileServer?.host}</p>
-          `;
-          const payload = { body: mailBody };
-          this.logger.log(
-            "Sending Mail for job completion with payload",
-            JSON.stringify(payload)
-          );
-          await this.sendMailService.sendMail(payload);
+
+          await this.sendMailService.sendMail({
+            successEmailType: SuccessEmailType.JOB_UPDATE,
+            jobStatusUpdate: {
+              jobType: jobConfig.jobType,
+              jobAction: "completed",
+              sourcePath: {
+                volumePath: jobConfig.sourcePath?.volumePath,
+                fileServer: { host: jobConfig.sourcePath?.fileServer?.host },
+              },
+              targetPath: {
+                volumePath: jobConfig.targetPath?.volumePath,
+                fileServer: { host: jobConfig.targetPath?.fileServer?.host },
+              },
+            }
+          });
         }
       }
       this.logger.log("job Run Stats", JSON.stringify(jobRunStats));
@@ -565,19 +569,21 @@ export class JobRunService {
         (jobConfig.jobType === JobType.MIGRATE ||
           jobConfig.jobType === JobType.CUT_OVER)
       ) {
-        const mailBody = `Hello,
-          The following ${jobConfig.jobType} job has been started for below Paths:
-          <p>Source Path:${jobConfig.sourcePath?.volumePath}</p>
-          <p>Target Path:${jobConfig.targetPath?.volumePath}</p>
-          <p>Source:${jobConfig.sourcePath?.fileServer?.host}</p>
-          <p>Target:${jobConfig.targetPath?.fileServer?.host}</p>
-        `;
-        const payload = { body: mailBody };
-        this.logger.log(
-          "Sending Mail for job start with payload",
-          JSON.stringify(payload)
-        );
-        await this.sendMailService.sendMail(payload);
+        await this.sendMailService.sendMail({
+          successEmailType: SuccessEmailType.JOB_UPDATE,
+          jobStatusUpdate: {
+            jobType: jobConfig.jobType,
+            jobAction: "started",
+            sourcePath: {
+              volumePath: jobConfig.sourcePath?.volumePath,
+              fileServer: { host: jobConfig.sourcePath?.fileServer?.host },
+            },
+            targetPath: {
+              volumePath: jobConfig.targetPath?.volumePath,
+              fileServer: { host: jobConfig.targetPath?.fileServer?.host },
+            },
+          }
+        });
       }
       this.logger.log(`Job Run ${jobRunId} status updated to ${status}`);
       return this.jobRunRepo.update({ id: jobRunId }, { status: status });
@@ -790,30 +796,23 @@ export class JobRunService {
       errorCodes.map((error) => error.errorCode)
     );
 
-    const errorRemediesMailBody = `Hello, <br/>
-      The following ${jobType} job (${jobRunId}) has errored for below Paths: <br/>
-      <p>Source: ${sourceHost}</p>
-      <p>Source Path: ${sourcePath}</p>
-      <p>Target: ${targetHost}</p>
-      <p>Target Path: ${targetPath}</p>
-      <br/>
-      <p> Error Details: </p>
-      ${errorRemedies
-        .map(
-          (error) => `
-      <p>Error Code: ${error.errorCode}</p>
-      <p>Description: ${error.description}</p>
-      <p>Resolution Steps: ${error.resolutionSteps}</p>
-      <p>Reference Commands: <code>${!!error.referenceCommands ? error.referenceCommands : ""}</code> </p>
-      <br/>`
-        )
-        .join("")}`;
-    const errorRemediesPayload = { body: errorRemediesMailBody };
-    this.logger.log(
-      "Sending Mail for job completion with errorRemediesPayload",
-      JSON.stringify(errorRemediesPayload)
-    );
-    await this.sendMailService.sendMail(errorRemediesPayload);
+    await this.sendMailService.sendMail({
+      successEmailType: SuccessEmailType.ERROR_REMEDY,
+      errorRemedy: {
+        jobRunId,
+        jobType,
+        sourceHost,
+        sourcePath,
+        targetHost,
+        targetPath,
+        errorRemedies: errorCodes.map((error) => ({
+          code: error.errorCode,
+          description: error.description,
+          resolutionSteps: error.resolutionSteps,
+          referenceCommands: error.referenceCommands,
+        })),
+      }
+    });
   }
 
   async checkWorkerHealth() {
