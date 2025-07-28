@@ -426,9 +426,8 @@ func GetWorkerIds() []string {
 	return workerIds
 }
 
-// GetStopWorkerScript generates a shell script to stop worker service.
-func GetStopWorkerScript() string {
-	script := fmt.Sprintf(`#!/bin/bash
+func getStopWorkerScriptForNFS() string {
+	return fmt.Sprintf(`#!/bin/bash
 	set -e 
 
 	SUDO_PASS="%s"
@@ -444,12 +443,25 @@ func GetStopWorkerScript() string {
 
 	echo "Successfully stopped worker service"
 	`, NDM_VM_PASSWORD)
-	return script
 }
 
-// GetStopWorkerScript generates a shell script to start worker service.
-func GetStartWorkerScript() string {
-	script := fmt.Sprintf(`#!/bin/bash
+func getStopWorkerScriptSMB() string {
+	return `cmd /C net stop "Datamigrator Worker`
+}
+
+// GetStopWorkerScript generates a shell script to stop worker service.
+func GetStopWorkerScript() string {
+	switch PROTOCOL_TYPE {
+	case ProtocolNFS:
+		return getStopWorkerScriptForNFS()
+	case ProtocolSMB:
+		return getStopWorkerScriptSMB()
+	}
+	return ""
+}
+
+func getStartWorkerScriptNFS() string {
+	return fmt.Sprintf(`#!/bin/bash
 	set -e 
 
 	SUDO_PASS="%s"
@@ -465,7 +477,21 @@ func GetStartWorkerScript() string {
 
 	echo "Successfully started worker service"
 	`, NDM_VM_PASSWORD)
-	return script
+}
+
+func getStartWorkerScriptSMB() string {
+	return `cmd /C net start "Datamigrator Worker`
+}
+
+// GetStopWorkerScript generates a shell script to start worker service.
+func GetStartWorkerScript() string {
+	switch PROTOCOL_TYPE {
+	case ProtocolNFS:
+		return getStartWorkerScriptNFS()
+	case ProtocolSMB:
+		return getStartWorkerScriptSMB()
+	}
+	return ""
 }
 
 // GetStopWorkerScript generates a shell script to restart worker service.
