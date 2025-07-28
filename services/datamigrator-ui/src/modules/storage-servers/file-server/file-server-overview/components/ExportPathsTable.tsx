@@ -102,7 +102,7 @@ const ExportPathsTable = ({
           clearInterval(interval.current);
         } else if (data?.status === ValidateConnectionStatus.TERMINATED) {
           const error = new Error(
-            `Seems like request to refresh paths got terminated, please try again`
+            `Seems like request to refresh paths got terminated, please try again.`
           );
           showErrorOnRefetchFailure(error);
         } else if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
