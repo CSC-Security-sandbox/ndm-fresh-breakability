@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 import archiver from 'archiver';
@@ -10,21 +10,19 @@ const exec = promisify(execCb);
 
 @Injectable()
 export class LogGeneratorActivity {
+  private readonly logger = new Logger(LogGeneratorActivity.name);
   private baseLogPath: string;
   private outputZipPath: string;
   constructor(private readonly configService: ConfigService) {
-    this.baseLogPath =
-      this.configService.get<string>('support-bundle.bundle.baseLogPath') || '/Users/aniketdarekar/Desktop/poc/ndm_logs';
-    this.outputZipPath =
-      this.configService.get<string>('support-bundle.bundle.outputZipPath') ||
-      '/Users/aniketdarekar/Desktop/poc/generated-zips';
+    this.baseLogPath = this.configService.get<string>('support-bundle.bundle.baseLogPath');
+    this.outputZipPath = this.configService.get<string>('support-bundle.bundle.outputZipPath');
   }
 
   async fetchAndZipLogs({ traceId, payload }): Promise<string> {
-    console.log('Started fetchAndZipLogsUsingFind activity');
-    console.log(`traceId - ${traceId} & payload - ${JSON.stringify(payload)}`);
-    console.log(`baseLogPath - ${this.baseLogPath}`);
-    console.log(`outputZipPath - ${this.outputZipPath}`);
+    this.logger.log('Started fetchAndZipLogsUsingFind activity');
+    this.logger.log(`traceId - ${traceId} & payload - ${JSON.stringify(payload)}`);
+    this.logger.log(`baseLogPath - ${this.baseLogPath}`);
+    this.logger.log(`outputZipPath - ${this.outputZipPath}`);
 
     try {
       const zipRoot = 'ndm_logs';
@@ -89,7 +87,7 @@ export class LogGeneratorActivity {
       const findCommand = `find "${this.baseLogPath}" -type d \\( ${pathExpressions.join(' -o ')} \\)`;
 
       const { stdout } = await exec(findCommand).catch((err) => {
-        console.error('Error executing find:', err.stderr || err.message);
+        this.logger.error('Error executing find:', err.stderr || err.message);
         throw new Error('Failed to execute find command');
       });
 
@@ -110,12 +108,12 @@ export class LogGeneratorActivity {
         const archive = archiver('zip', { zlib: { level: 9 } });
 
         output.on('close', () => {
-          console.log(`Zip created at: ${zipPath}`);
+          this.logger.log(`Zip created at: ${zipPath}`);
           resolve(zipPath);
         });
 
         archive.on('error', (err) => {
-          console.error('Archiving error:', err);
+          this.logger.error('Archiving error:', err);
           reject(err);
         });
 
@@ -129,7 +127,7 @@ export class LogGeneratorActivity {
         archive.finalize();
       });
     } catch (err) {
-      console.error('Error in fetchAndZipLogsUsingFind:', err.message);
+      this.logger.error('Error in fetchAndZipLogsUsingFind:', err.message);
       throw err;
     }
   }
