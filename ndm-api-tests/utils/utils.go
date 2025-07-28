@@ -2,12 +2,14 @@ package utils
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"ndm-api-tests/tests/smoke/parser"
 	"net/http"
 	"net/url"
@@ -16,8 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"crypto/rand"
-	"math/big"
+
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/ssh"
@@ -235,7 +236,7 @@ func GenerateNewPassword(length int) (string, error) {
 		allChars = lower + upper + digits + special
 	)
 
-	if length < 7 {
+	if length < 8 {
 		return "", errors.New("password length must be at least 8 to include all character types")
 	}
 
@@ -278,13 +279,12 @@ func ResetUserPassword(userID, accessToken, newPassword string) error {
 	}
 	url := fmt.Sprintf("https://%s/%s/%s/reset-password", KEYCLOAK_IP, KEYCLOAK_BASE_URL, userID)
 
-	// PASSWORD
 	var err error
 	PASSWORD, err = GenerateNewPassword(10)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to generate new password: %w", err)
 	}
-	LogDebug(fmt.Sprintf("New Generated password: %s", PASSWORD))
+
 	payload := map[string]interface{}{
 		"type":      "password",
 		"value":     PASSWORD,
