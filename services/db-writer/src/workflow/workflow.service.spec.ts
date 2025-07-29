@@ -67,7 +67,7 @@ describe("WorkflowService", () => {
 
     it('should throw an error if client is not found', async () => {
       jest.spyOn(service as any, 'getClient').mockResolvedValue(null); // Force getClient() to return null
-      await expect(service.signalWorkflow({})).rejects.toThrow('Client not found');
+      await expect(service.signalWorkflow({})).rejects.toThrow('Workflow signal failed: Temporal client not available');
   });
   });
 

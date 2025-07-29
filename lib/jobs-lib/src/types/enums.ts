@@ -9,10 +9,12 @@ export enum JobType {
 
 export enum OPS_CMD {
   COPY_CONTENT = 'cc',
-  STAMP_META  = 'sm',
+  STAMP_META  = 'sm', // TO-DO: make it granular
+  COPY_FILE = 'cf',
   COPY_DIR = 'cd',
   REMOVE_DIR = 'rd', // This is used to remove directories
-  REMOVE_FILE = 'rf' // This is used to remove files
+  REMOVE_FILE = 'rf', // This is used to remove files
+
 }
 
 export enum OPS_STATUS {

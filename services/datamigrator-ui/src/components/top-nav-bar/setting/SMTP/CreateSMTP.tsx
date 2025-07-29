@@ -1,6 +1,6 @@
-import React, {useEffect, useState} from 'react';
-import {Box} from '@components/container/index';
-import {notify} from '@components/notification/NotificationWrapper';
+import React, { useEffect, useState } from "react";
+import { Box } from "@components/container/index";
+import { notify } from "@components/notification/NotificationWrapper";
 import {
   Button,
   Card,
@@ -9,23 +9,23 @@ import {
   Heading,
   Layout,
   useForm,
-  WizardFooter
-} from '@netapp/bxp-design-system-react';
+  WizardFooter,
+} from "@netapp/bxp-design-system-react";
 import {
   CREATE_SMTP_FORM_VALIDATION_SCHEMA,
-  INITIAL_SMTP_FORM_STATE
-} from '@components/top-nav-bar/setting/SMTP/SMTP.constants';
+  INITIAL_SMTP_FORM_STATE,
+} from "@components/top-nav-bar/setting/SMTP/SMTP.constants";
 import {
   useCreateSmtpMutation,
   useGetAllUsersQuery,
   useGetSmtpDetailsQuery,
-  useUpdateSmtpDataMutation
-} from '@api/userApi';
-import {useDispatch} from 'react-redux';
-import {setDrawerClose} from '@store/reducer/commonComponentSlice';
-import ErrorMessageContainer from '@components/container/ErrorMessageContainer';
-import {smtpData} from '@components/top-nav-bar/setting/SMTP/SMTP.utils';
-import {smtpValuesType} from '@/types/app.type';
+  useUpdateSmtpDataMutation,
+} from "@api/userApi";
+import { useDispatch } from "react-redux";
+import { setDrawerClose } from "@store/reducer/commonComponentSlice";
+import ErrorMessageContainer from "@components/container/ErrorMessageContainer";
+import { smtpData } from "@components/top-nav-bar/setting/SMTP/SMTP.utils";
+import { smtpValuesType } from "@/types/app.type";
 
 interface SmtpDetailsPropsType {
   handleDefaultTab: () => void;
@@ -40,15 +40,15 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
 
   const { data: userData } = useGetAllUsersQuery("");
   const toEmailOptions =
-      userData?.data?.items.map((user) => ({
-        label: user.email,
-        value: user.email
-      })) || [];
+    userData?.data?.items.map((user) => ({
+      label: user.email,
+      value: user.email,
+    })) || [];
 
-  const { data: smtpExistingData, isLoading: smtpLoading } =
+  const { data: smtpResult, isLoading: smtpLoading } =
     useGetSmtpDetailsQuery("");
   const [isEdit, setIsEdit] = useState<boolean>(false);
-
+  const smtpExistingData = smtpResult?.data?.items;
   const objectData: smtpValuesType = {
     SMTP_HOST: "",
     SMTP_PORT: "",
@@ -94,7 +94,7 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
       setIsEdit(true);
       smtpForm.resetForm(getFormData(smtpValues));
     }
-  }, [smtpLoading, smtpExistingData, isEdit]);
+  }, [smtpLoading, smtpResult, isEdit]);
 
   const handleCreateSMTP = async () => {
     const data = smtpData(smtpForm.formState);
@@ -113,11 +113,9 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
       const errorDetails = err?.data?.error;
       notify.error(
         <ErrorMessageContainer
-            title="Error occurred."
-          message={
-            errorDetails?.message
-          }
-        />,
+          title="Error occurred."
+          message={errorDetails?.error}
+        />
       );
     }
   };

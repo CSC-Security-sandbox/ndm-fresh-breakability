@@ -81,7 +81,7 @@ const JobChart = ({
         />
         <LegendWrapper
           title="Migration Jobs"
-          value={totalCutoverJobs}
+          value={totalMigrateJobs}
           color="bg-teal-500"
           unit=""
         />

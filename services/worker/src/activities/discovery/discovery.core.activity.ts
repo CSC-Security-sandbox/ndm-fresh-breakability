@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CommandStatus, ErrorType, FileInfo, JobContext, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
@@ -9,16 +9,18 @@ import { basePrefix, dmError, getFileInfo, getServerInfoFromPath, createServerDo
 import { Operation, Origin } from '../utils/utils.types';
 import { DiscoverPathInput, DiscoverPathOutput, DiscoveryInput, DiscoveryOutput, ScanDirCommandInput, ScanDirCommandOutput } from './discovery.type';
 import { Context } from '@temporalio/activity';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class DiscoveryScanActivity {
-
     readonly workerId: string;
     readonly maxRetryCount: number;
     readonly maxConcurrency: number;
     readonly operationTimeout: number;
+    private readonly logger: LoggerService;
+
     constructor(
-        private readonly logger: Logger,
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
         private readonly redisService: RedisService,
         @Inject(ConfigService) private readonly configService: ConfigService,
         private readonly commonService: CommonActivityService
@@ -27,6 +29,7 @@ export class DiscoveryScanActivity {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 250; 
         this.operationTimeout = this.configService.get('worker.operationTimeout') || 5000;
+        this.logger = loggerFactory.create(DiscoveryScanActivity.name);
     }
 
     async getDirectoryContents(directoryPath: string, jobContext: JobContext): Promise<fs.Dirent[]> {

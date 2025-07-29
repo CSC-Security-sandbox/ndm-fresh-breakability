@@ -10,6 +10,10 @@ export function sanitize(
     const sanitizedFields = sensitiveFields
         .filter(field => field && field.trim())
         .map(field => field.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    
+    if (sanitizedFields.length === 0) {
+        return message;
+    }
     const regex = new RegExp(`(${sanitizedFields.join('|')})`, 'gi');
     return message.replace(regex, placeholder);
 }

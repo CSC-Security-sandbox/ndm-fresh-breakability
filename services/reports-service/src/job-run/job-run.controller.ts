@@ -1,16 +1,42 @@
-import { Controller, Get, Param, Query, SerializeOptions, Logger } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiResponse, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { JobRunService } from './job-run.service';
-import { JobReportResponseDto, JobRunDetailsResponseDto, serializeJobRunDetailsResponse } from './dto/job-rundetails.dto';
-import { Auth, AuthWorker, Permission } from '@netapp-cloud-datamigrate/auth-lib';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Param,
+  Query,
+  SerializeOptions,
+  StreamableFile,
+  Logger,
+} from "@nestjs/common";
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
+import { JobRunService } from "./job-run.service";
+import {
+  JobReportResponseDto,
+  JobRunDetailsResponseDto,
+  serializeJobRunDetailsResponse,
+} from "./dto/job-rundetails.dto";
+import { ErrorLogService } from "src/csv/error_log_csv.service";
+import {
+  Auth,
+  AuthWorker,
+  Permission,
+} from "@netapp-cloud-datamigrate/auth-lib";
 
 @ApiTags("job-run")
 @Controller("job-run")
 export class JobRunController {
-   constructor(
-    private readonly jobRunService: JobRunService,    
+  constructor(
+    private readonly jobRunService: JobRunService,
     private readonly logger: Logger,
+    private readonly errorLogService: ErrorLogService
   ) {}
+
   @ApiOperation({ summary: "Get job run Report by JobRunId" })
   @ApiOkResponse({
     description: "Returns a job run report by its JobRunId.",
@@ -22,7 +48,7 @@ export class JobRunController {
   })
   @SerializeOptions({ type: JobReportResponseDto })
   @Auth(Permission.Reports)
-  @ApiBearerAuth()  
+  @ApiBearerAuth()
   @Get("job-report")
   async getJobReportById(
     @Query("jobRunId") jobRunId: string,
@@ -33,6 +59,37 @@ export class JobRunController {
       reportType
     );
     return JSON.parse(response);
+  }
+
+  @ApiOperation({
+    summary: "Generate Error Logs using JobRunId or jobConfigId",
+  })
+  @ApiOkResponse({
+    description: "Returns Error Logs using JobRunId or jobConfigId",
+  })
+  @ApiResponse({ status: 404, description: "Error log file not found." })
+  @Get("generate-error-csv/:type/:id")
+  async generateErrorCsv(
+    @Param("id") id: string,
+    @Param("type") type: "job-run" | "job-config"
+  ) {
+    return await this.errorLogService.createCsvFileForJob(type, id);
+  }
+
+  @Get("download-error-csv/:type/:id")
+  async downloadErrorCsv(
+    @Param("id") id: string,
+    @Param("type") type: "job-run" | "job-config"
+  ): Promise<StreamableFile> {
+    return this.errorLogService.downloadErrorLogCsvFile(type, id);
+  }
+
+  @Get("is-error-csv-ready/:type/:id")
+  isErrorCsvReady(
+    @Param("id") id: string,
+    @Param("type") type: "job-run" | "job-config"
+  ) {
+    return this.errorLogService.isCsvFileReady(type, id);
   }
 
   @ApiOperation({ summary: "Get job run Details by ID" })
@@ -48,7 +105,8 @@ export class JobRunController {
   async getJobStatsId(@Param("id") id: string) {
     const response = await this.jobRunService.getJobStatsId(id);
     const jobSubStatus = await this.jobRunService.getJobSubStatus(id);
-    response.status = !!jobSubStatus && jobSubStatus.subStatus || response.status;
+    response.status =
+      (!!jobSubStatus && jobSubStatus.subStatus) || response.status;
     return serializeJobRunDetailsResponse(response);
   }
 
@@ -60,7 +118,11 @@ export class JobRunController {
   @Get("coc-report/:jobRunId")
   async getCocReportByJobRunId(@Param("jobRunId") jobRunId: string) {
     this.logger.debug(`Fetching COC report for JobRunId: ${jobRunId}`);
-    const response = await this.jobRunService.getCocReportByJobRunId(jobRunId);
-    return response;
+    this.jobRunService.getCocReportByJobRunId(jobRunId);
+    this.logger.log(`COC report generation started for JobRunId: ${jobRunId}`);
+    return { 
+      status: 'success',
+      message: `COC report generation started for JobRunId: ${jobRunId}`
+    };
   }
 }

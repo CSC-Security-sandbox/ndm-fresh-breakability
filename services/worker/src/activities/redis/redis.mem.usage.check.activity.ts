@@ -1,16 +1,20 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { RedisService } from "src/redis/redis.service";
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class RedisMemoryCheckActivity {
-    private readonly memoryUsageThreshold: number;
+  private readonly memoryUsageThreshold: number;
+  private readonly logger: LoggerService;
+
   constructor(
     private readonly redisService: RedisService,
-    private readonly logger: Logger,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     @Inject(ConfigService) private readonly configService: ConfigService,
   ) {
     this.memoryUsageThreshold = this.configService.get<number>('worker.redisMemoryUsageThreshold', 90);
+    this.logger = loggerFactory.create(RedisMemoryCheckActivity.name);
   }
 
     /**

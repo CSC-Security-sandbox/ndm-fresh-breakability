@@ -706,7 +706,7 @@ describe('PathUploadService', () => {
 
       jest.spyOn(uploadRepo, 'createQueryBuilder').mockReturnValue(mockQueryBuilder);
 
-      await expect(service.getUploadedPaths('file-server-id-123')).rejects.toThrow('No uploads found for file server file-server-id-123');
+      await expect(service.getUploadedPaths('file-server-id-123')).rejects.toThrow('No export paths found to download. Please manually upload the export paths for file server file-server-id-123');
     });
   });
 });

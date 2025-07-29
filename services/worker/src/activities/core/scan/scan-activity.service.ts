@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { JobManagerContext, TaskStatus } from "@netapp-cloud-datamigrate/jobs-lib";
+import { ErrorType, JobManagerContext, TaskStatus } from "@netapp-cloud-datamigrate/jobs-lib";
 import { Context } from '@temporalio/activity';
 import { basePrefix, isSourceFatalError } from "src/activities/utils/utils";
 import { FatalError, RetryableError, RetryExceededError } from "src/errors/errors.types";
@@ -101,7 +101,8 @@ export class ScanService {
         const baseSourcePrefixPath = basePrefix(jobRunId, task.sPathId);
         const baseTargetPrefixPath = basePrefix(jobRunId, task.tPathId);
         const output: ScanActivityOutput = { dirCount: 0, fileCount: 0, subDirs: [], jobRunId: jobRunId, batchDirs: [] };    
-        let errors: string[] = [], retryCount: number = 0;        
+        let errors: string[] = [], errorType: ErrorType = task.retryCount + 1 >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
+        task.retryCount++;
         const settings = this.getScanSettings(jobContext);
         for (let i = 0; i < task.commands.length; i += this.maxConcurrency) {
             const batch = task.commands.slice(i, i + this.maxConcurrency);
@@ -114,7 +115,8 @@ export class ScanService {
                         targetPrefix: baseTargetPrefixPath,
                         targetPath: `${baseTargetPrefixPath}${command.fPath}`,
                         jobContext,
-                        command
+                        command,
+                        errorType
                     }
                     try {
                         let result: ScanDirectoryOutput;
@@ -130,16 +132,15 @@ export class ScanService {
                     }catch(error) {
                         errors.push(error.code ?? '')
                     }
-                    command.retryCount++;
-                    retryCount = Math.max(command.retryCount, retryCount);
                     jobContext.setTask(activityId, task)
                 })
             )
         }
+        
         const { batchDirs, subDirs }: BatchSubDirOutput = await this.batchSubDirs({subDirs: output.subDirs, batchSize, jobContext});
         output.subDirs = subDirs;
         output.batchDirs = batchDirs;
-        return {result:output, errors, retryCount}
+        return {result:output, errors, retryCount: task.retryCount};
     }
 
     async updateAndReportTaskStatus({ errors, jobContext, taskHashId, task, retryCount }: UpdateAndReportTaskInput) {
@@ -162,8 +163,7 @@ export class ScanService {
             await jobContext.deleteTask(taskHashId);
             throw new RetryExceededError(`Task ${task.id} has exceeded maximum retry count of ${this.maxRetryCount}`);
         }
-        throw new RetryableError(`Sync Task Update Failed: ${errors.length} source errors with retry count ${retryCount} With Retryable Error`);
-        
+        throw new RetryableError(`Sync Task Update Failed: ${errors.length} source errors with retry count ${retryCount} With Retryable Error`);   
     }
 
     async batchSubDirs({batchSize, subDirs, jobContext}: BatchSubDirInput): Promise<BatchSubDirOutput> {

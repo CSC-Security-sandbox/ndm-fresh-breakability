@@ -1,6 +1,7 @@
 
+import { Cmd, ItemInfo, TaskInfo } from '../datatype/stream-datatypes';
 import { GroupReaderType } from './enums';
-import { FileInfo, DMError, TaskStats, Task, SpeedTestReadWriteInfo, Command } from './metadata-types';
+import { FileInfo, DMError, TaskStats, Task, SpeedTestReadWriteInfo } from './metadata-types';
 import { Serializable } from './serializable';
 
 export interface Message<T> {
@@ -37,4 +38,7 @@ export interface TaskStatsCollection extends StreamCollection<TaskStats> {}
 export interface TaskCollection extends StreamCollection<Task> {}
 export interface UpdatedTaskCollection extends StreamCollection<Task> {}
 export interface MigrationTaskCollection extends StreamCollection<Task> {}
-export interface CommandCollection extends StreamCollection<Command> {}
+
+export interface CommandCollection extends StreamCollection<Cmd> {}
+export interface ItemInfoCollection extends StreamCollection<ItemInfo> {}
+export interface TaskInfoCollection extends StreamCollection<TaskInfo> {}

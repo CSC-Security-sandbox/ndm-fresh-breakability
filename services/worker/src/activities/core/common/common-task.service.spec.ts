@@ -1,6 +1,9 @@
 import { CommandStatus, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { RetryExceededError } from 'src/errors/errors.types';
 import { CommonTaskService } from './common-task.service';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLogger } from 'src/auth/auth.service.spec';
+
 const { Connection } = require('@temporalio/client');
 const { calculateHash } = require('src/activities/utils/checksum-utils');
 
@@ -34,9 +37,14 @@ jest.mock('../../utils/utils', () => ({
 describe('CommonTaskService', () => {
     let service: CommonTaskService;
     let configService: any;
-    let logger: any;
+    let loggerFactory: LoggerFactory;
+    let logger: Partial<LoggerService>;
     let redisService: any;
 
+    const mockLoggerFactory: Partial<LoggerFactory> = {
+        create: jest.fn().mockReturnValue(mockLogger),
+    };
+  
     beforeEach(() => {
         configService = {
             get: jest.fn((key) => {
@@ -45,14 +53,11 @@ describe('CommonTaskService', () => {
                 return undefined;
             }),
         };
-        logger = {
-            debug: jest.fn(),
-            error: jest.fn(),
-        };
+        logger = mockLogger;
         redisService = {
             getJobManagerContext: jest.fn(),
         };
-        service = new CommonTaskService(configService, logger, redisService);
+        service = new CommonTaskService(configService, mockLoggerFactory as LoggerFactory, redisService);
     });
 
     describe('constructor', () => {
@@ -92,6 +97,7 @@ describe('CommonTaskService', () => {
                 commands: [
                     { retryCount: 2, status: CommandStatus.READY },
                 ],
+                retryCount: 2, // Set retryCount to equal maxRetryCount (2) to trigger the error
                 status: TaskStatus.PENDING,
             };
             await expect(
@@ -162,6 +168,15 @@ describe('CommonTaskService', () => {
             getTask: jest.fn(),
             getBatchDir: jest.fn(),
             setTaskIfNotExists: jest.fn(),
+            jobConfig: {
+                workerIds: ['worker-1'],
+                sourceFileServer: {
+                pathId: 'source-path-id'
+                },
+                destinationFileServer: {
+                pathId: 'dest-path-id'
+                }
+            }
             };
             service.ensureTaskValid = jest.fn(async ({ task }) => task);
         });
@@ -234,6 +249,15 @@ describe('CommonTaskService', () => {
                 groupReadCommandStream: groupReadCommandStreamMock,
                 setTaskIfNotExists: setTaskIfNotExistsMock,
                 groupAckCommandStream: groupAckCommandStreamMock,
+                jobConfig: {
+                    workerIds: ['worker-1'],
+                    sourceFileServer: {
+                        pathId: 'source-path-id'
+                    },
+                    destinationFileServer: {
+                        pathId: 'dest-path-id'
+                    }
+                }
             };
             redisService.getJobManagerContext.mockResolvedValue(jobContext);
         });
@@ -243,7 +267,7 @@ describe('CommonTaskService', () => {
         });
 
         it('should create tasks and return their hash keys', async () => {
-            const result = await service.getGroupOfTasksActivity('jobRunId', 2, 1);
+            const result = await service.getGroupOfTasksActivity('jobRunId');
             expect(Array.isArray(result)).toBe(true);
             expect(result.length).toBeGreaterThan(0);
             expect(setTaskIfNotExistsMock).toHaveBeenCalled();

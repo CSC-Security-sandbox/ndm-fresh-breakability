@@ -15,6 +15,7 @@ var (
 	JOB_SERVICE_URL         string
 	CONFIG_SERVICE_URL      string
 	ADMIN_SERVICE_URL       string
+	REPORT_SERVICE_URL      string
 	KEYCLOAK_IP             string
 	CLIENT_SECRET           string
 	USERNAME                string
@@ -103,6 +104,7 @@ func init() {
 	JOB_SERVICE_URL = os.Getenv("JOB_SERVICE_URL")
 	CONFIG_SERVICE_URL = os.Getenv("CONFIG_SERVICE_URL")
 	ADMIN_SERVICE_URL = os.Getenv("ADMIN_SERVICE_URL")
+	REPORT_SERVICE_URL = os.Getenv("REPORT_SERVICE_URL")
 	KEYCLOAK_IP = os.Getenv("KEYCLOAK_IP")
 	USERNAME = os.Getenv("NDM_USERNAME")
 	PASSWORD = os.Getenv("PASSWORD")

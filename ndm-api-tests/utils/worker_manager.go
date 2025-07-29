@@ -336,6 +336,17 @@ func StartWorker(config SSHConfig) (string, error) {
 	return output, nil
 }
 
+// RestartWorker starts the worker service on a given worker via SSH.
+func RestartWorker(config SSHConfig) (string, error) {
+	script := GetRestartWorkerScript()
+	output, err := sshRunScript(config, script)
+	if err != nil {
+		return "", fmt.Errorf("failed to start worker on %s: %w", config.Host, err)
+	}
+	LogDebug(fmt.Sprintf("Worker %s started successfully with output: %s", config.Host, output))
+	return output, nil
+}
+
 // StopWorker stops the worker service on a given worker via SSH.
 func StopWorker(config SSHConfig) (string, error) {
 	script := GetStopWorkerScript()
@@ -430,6 +441,20 @@ func GetStartWorkerScript() string {
 	fi
 
 	echo "Successfully started worker service"
+	`, NDM_VM_PASSWORD)
+	return script
+}
+
+// GetStopWorkerScript generates a shell script to restart worker service.
+func GetRestartWorkerScript() string {
+	script := fmt.Sprintf(`#!/bin/bash
+	set -e 
+
+	SUDO_PASS="%s"
+
+	SERVICE="datamigrator-worker.service"
+	echo "$SUDO_PASS" | sudo -S systemctl restart "$SERVICE"
+
 	`, NDM_VM_PASSWORD)
 	return script
 }

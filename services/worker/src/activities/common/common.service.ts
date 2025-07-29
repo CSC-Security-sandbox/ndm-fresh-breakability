@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { GroupReaderType, JobContext, JobStatus, Task } from "@netapp-cloud-datamigrate/jobs-lib";
 import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
@@ -7,7 +7,11 @@ import { AuthService } from "src/auth/auth.service";
 import { RedisService } from "src/redis/redis.service";
 import { JobRunStatus } from "../discovery/enums";
 import { UpdateStatusInput, UpdateStatusOutput } from "../migrate/migrate.type";
-import { generateDummyErrorEntry, generateDummyFileEntry, generateDummyTaskEntry } from '../utils/utils';
+import { generateDummyErrorEntry, generateDummyFileEntry, generateDummyItemEntry, generateDummyTaskEntry, generateDummyTaskInfoEntry } from '../utils/utils';
+import {
+  LoggerFactory,
+  LoggerService
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class CommonActivityService{
@@ -18,11 +22,12 @@ export class CommonActivityService{
   readonly reportServiceUrl: string;
   readonly migrationTaskLimit: number;
   readonly maxRetryCount: number;
+  private readonly logger : LoggerService;
   
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly authService: AuthService,
-    private readonly logger: Logger,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly redisService: RedisService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
@@ -31,6 +36,7 @@ export class CommonActivityService{
     this.reportServiceUrl = this.configService.get('worker.connection.workerReportServiceUrl');
     this.migrationTaskLimit = this.configService.get('worker.migrationTaskStreamLimit');
     this.fetchTaskBatch = 50, this.pushTaskDirSize = 500;
+    this.logger = loggerFactory.create(CommonActivityService.name);
   }
 
   async cleanupJobContext(traceId: string): Promise<any> {
@@ -47,8 +53,8 @@ export class CommonActivityService{
     try {
       this.logger.log(`[${traceId}] Publishing last entry for job id: ${traceId}`);
       const jobContext = await this.redisService.getJobManagerContext(traceId);
-      await jobContext.publishToFileStream(generateDummyFileEntry);  
-      await jobContext.publishToTaskStream(generateDummyTaskEntry);
+      await jobContext.publishToFileStream(generateDummyItemEntry);  
+      await jobContext.publishToTaskStream(generateDummyTaskInfoEntry);
       await jobContext.publishToErrorStream(generateDummyErrorEntry);
       this.logger.log(`[${traceId}] Last entry published for job id: ${traceId}`);
       return { message: 'Job completed for job id: ' + traceId };
