@@ -1,23 +1,23 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
-import { CreateSupportBundleDTO } from './dto/create-support-bundle.dto';
-import { SupportBundleStatus, WorkFlows } from 'src/constants/enums';
-import { SupportBundleEntity } from 'src/entities/support-bundle-log.entity';
-import { StartWorkFlowPayload } from 'src/workflow/workflow.types';
-import { SupportBundleWorkflowPayloadDTO } from './dto/support-bundle-workflow.dto';
-import { Options } from 'src/work-manager/dto/validate-connection.dto';
-import { WorkflowService } from 'src/workflow/workflow.service';
 import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
-import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
+import { SupportBundleStatus, WorkFlows } from 'src/constants/enums';
 import { BundleStatus, UserDetails } from 'src/constants/types';
 import { ProjectEntity } from 'src/entities/project.entity';
-import { ConfigService } from '@nestjs/config';
+import { SupportBundleEntity } from 'src/entities/support-bundle-log.entity';
+import { Options } from 'src/work-manager/dto/validate-connection.dto';
+import { WorkflowService } from 'src/workflow/workflow.service';
+import { StartWorkFlowPayload } from 'src/workflow/workflow.types';
+import { In, Repository } from 'typeorm';
+import { v4 as uuidv4 } from 'uuid';
+import { CreateSupportBundleDTO } from './dto/create-support-bundle.dto';
+import { SupportBundleWorkflowPayloadDTO } from './dto/support-bundle-workflow.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 
 @Injectable()
@@ -108,6 +108,7 @@ export class SupportBundleService {
       { requestId: updateStatusDto.traceId },
       {
         status: updateStatusDto.status,
+        errorMessage: updateStatusDto.errorMessage,
       },
     );
 
