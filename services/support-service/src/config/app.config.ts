@@ -6,10 +6,13 @@ export default registerAs(
     bundle: {
       baseLogPath:
         process.env.BASE_LOG_PATH ||
-        '/Users/aniketdarekar/Desktop/poc/ndm_logs',
+        '/private/tmp/ndm_logs',
       outputZipPath:
         process.env.OUTPUT_ZIP_PATH ||
-        '/Users/aniketdarekar/Desktop/poc/generated-zips',
+        '/private/tmp/generated_zips',
+    },
+    api: {
+      configUrl: process.env.CONFIG_BASE_URL || 'http://localhost:3009/api/v1',
     },
   }),
 );
