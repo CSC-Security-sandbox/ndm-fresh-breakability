@@ -36,20 +36,30 @@ const SettingsContent = () => {
           }
         >
           <InnerTab>
-            <InnerTab.Button
-              isActive={currentTab === 1}
-              onClick={() => setCurrentTab(1)}
-              style={{ paddingTop: 16, paddingBottom: 16 }}
+            <PermissionAuth
+              permissionName={USER_PERMISSION_TYPE_ENUM.ListUsers}
             >
-              <Span color="text-title">Users</Span>
-            </InnerTab.Button>
-            <InnerTab.Button
-              isActive={currentTab === 2}
-              onClick={() => setCurrentTab(2)}
-              style={{ paddingTop: 16, paddingBottom: 16 }}
+              <InnerTab.Button
+                isActive={currentTab === 1}
+                onClick={() => setCurrentTab(1)}
+                style={{ paddingTop: 16, paddingBottom: 16 }}
+              >
+                <Span color="text-title">Users</Span>
+              </InnerTab.Button>
+            </PermissionAuth>
+
+            <PermissionAuth
+              permissionName={USER_PERMISSION_TYPE_ENUM.ViewProject}
             >
-              <Span color="text-title">Projects</Span>
-            </InnerTab.Button>
+              <InnerTab.Button
+                isActive={currentTab === 2}
+                onClick={() => setCurrentTab(2)}
+                style={{ paddingTop: 16, paddingBottom: 16 }}
+              >
+                <Span color="text-title">Projects</Span>
+              </InnerTab.Button>
+            </PermissionAuth>
+
             <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.SaveSmtp}>
               <InnerTab.Button
                 isActive={currentTab === 3}
