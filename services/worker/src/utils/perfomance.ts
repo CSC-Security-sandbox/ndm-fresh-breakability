@@ -1,4 +1,19 @@
-// Enhanced decorator with performance.now() for better precision
+import { appendFileSync, mkdirSync, existsSync } from 'fs';
+import { join } from 'path';
+
+const logToFile = (message: string) => {
+  const logsDir = join(process.cwd(), 'logs');
+  
+  // Ensure logs directory exists
+  if (!existsSync(logsDir)) {
+    mkdirSync(logsDir, { recursive: true });
+  }
+  
+  const logPath = join(logsDir, 'performance.log');
+  const timestamp = new Date().toISOString();
+  appendFileSync(logPath, `${timestamp} - ${message}\n`);
+};
+
 export function LogExecutionTime(
   target: any,
   propertyKey: string,
@@ -9,7 +24,7 @@ export function LogExecutionTime(
   
   descriptor.value = function (...args: any[]) {
     const start = performance.now();
-    console.log(`[TIMING] ${className}.${propertyKey} - Start time: ${new Date().toISOString()}`);
+    logToFile(`[TIMING] ${className}.${propertyKey} - Start time: ${new Date().toISOString()}`);
     
     const result = originalMethod.apply(this, args);
     
@@ -17,17 +32,17 @@ export function LogExecutionTime(
       return result
         .then((res) => {
           const executionTime = (performance.now() - start).toFixed(3);
-          console.log(`[TIMING] ${className}.${propertyKey} - End time: ${new Date().toISOString()}, Total execution time: ${executionTime}ms`);
+          logToFile(`[TIMING] ${className}.${propertyKey} - End time: ${new Date().toISOString()}, Total execution time: ${executionTime}ms`);
           return res;
         })
         .catch((error) => {
           const executionTime = (performance.now() - start).toFixed(3);
-          console.log(`[TIMING] ${className}.${propertyKey} - End time (error): ${new Date().toISOString()}, Total execution time: ${executionTime}ms`);
+          logToFile(`[TIMING] ${className}.${propertyKey} - End time (error): ${new Date().toISOString()}, Total execution time: ${executionTime}ms`);
           throw error;
         });
     } else {
       const executionTime = (performance.now() - start).toFixed(3);
-      console.log(`[TIMING] ${className}.${propertyKey} - End time: ${new Date().toISOString()}, Total execution time: ${executionTime}ms`);
+      logToFile(`[TIMING] ${className}.${propertyKey} - End time: ${new Date().toISOString()}, Total execution time: ${executionTime}ms`);
       return result;
     }
   };
