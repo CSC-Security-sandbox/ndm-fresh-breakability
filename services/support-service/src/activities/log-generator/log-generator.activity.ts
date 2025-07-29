@@ -13,16 +13,19 @@ export class LogGeneratorActivity {
   private readonly logger = new Logger(LogGeneratorActivity.name);
   private baseLogPath: string;
   private outputZipPath: string;
+
   constructor(private readonly configService: ConfigService) {
-    this.baseLogPath = this.configService.get<string>('support-bundle.bundle.baseLogPath');
-    this.outputZipPath = this.configService.get<string>('support-bundle.bundle.outputZipPath');
+    const baseLogPath = this.configService.get<string>('support-bundle.bundle.baseLogPath');
+    const outputZipPath = this.configService.get<string>('support-bundle.bundle.outputZipPath');
+    if (!baseLogPath || !outputZipPath) {
+      throw new Error('Missing required configuration for baseLogPath or outputZipPath');
+    }
+    this.baseLogPath = baseLogPath;
+    this.outputZipPath = outputZipPath;
   }
 
   async fetchAndZipLogs({ traceId, payload }): Promise<string> {
-    this.logger.log('Started fetchAndZipLogsUsingFind activity');
-    this.logger.log(`traceId - ${traceId} & payload - ${JSON.stringify(payload)}`);
-    this.logger.log(`baseLogPath - ${this.baseLogPath}`);
-    this.logger.log(`outputZipPath - ${this.outputZipPath}`);
+    this.logger.log(`[${traceId}] Started fetchAndZipLogsUsingFind activity`);
 
     try {
       const zipRoot = 'ndm_logs';
@@ -108,12 +111,12 @@ export class LogGeneratorActivity {
         const archive = archiver('zip', { zlib: { level: 9 } });
 
         output.on('close', () => {
-          this.logger.log(`Zip created at: ${zipPath}`);
+          this.logger.log(`[${traceId}] Zip created at: ${zipPath}`);
           resolve(zipPath);
         });
 
         archive.on('error', (err) => {
-          this.logger.error('Archiving error:', err);
+          this.logger.error(`[${traceId}] Archiving error:`, err);
           reject(err);
         });
 
@@ -127,10 +130,8 @@ export class LogGeneratorActivity {
         archive.finalize();
       });
     } catch (err) {
-      this.logger.error('Error in fetchAndZipLogsUsingFind:', err.message);
+      this.logger.error(`[${traceId}] Error in fetchAndZipLogsUsingFind:`, err.message);
       throw err;
     }
   }
-
-
 }

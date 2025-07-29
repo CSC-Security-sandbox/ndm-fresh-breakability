@@ -1,6 +1,9 @@
 import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import { Worker, NativeConnection } from '@temporalio/worker';
 import { ActivitiesService } from 'src/activities/activities.service';
+
+const logger = new Logger('TemporalWorker');
 
 export const workerProviders = [
   {
@@ -15,6 +18,10 @@ export const workerProviders = [
           activitiesService.fetchAndZipLogs.bind(activitiesService),
         notifyWorkflowCompletion:
           activitiesService.notifyWorkflowCompletion.bind(activitiesService),
+        getJobConfigIdsByProjectIds:
+          activitiesService.getJobConfigIdsByProjectIds.bind(activitiesService),  
+        generateErrorCsv:
+          activitiesService.generateErrorCsv.bind(activitiesService),
       };
 
       const workflowOption =
@@ -40,9 +47,7 @@ export const workerProviders = [
       });
 
       worker.run();
-      console.log(
-        `Started worker using NativeConnection at ${temporalAddress}`,
-      );
+      logger.log(`Started worker using NativeConnection at ${temporalAddress}`);
 
       return worker;
     },

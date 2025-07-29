@@ -1,7 +1,7 @@
 export enum SupportBundleStatus {
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  FAILED = 'FAILED',
+    IN_PROGRESS = 'IN_PROGRESS',
+    COMPLETED = 'COMPLETED',
+    FAILED = 'FAILED',
 }
 
 export enum ConfigStatus {
@@ -28,7 +28,7 @@ export enum ExportPathSource {
     MANUAL_UPLOAD = 'MANUAL_UPLOAD',
 }
 
-export enum Protocol{
+export enum Protocol {
     NFS = 'NFS',
     SMB = 'SMB'
 }
@@ -51,58 +51,58 @@ export enum ServerType {
 
 
 export enum JobStatus {
-  Active = "ACTIVE",
-  InActive = "IN_ACTIVE",
+    Active = "ACTIVE",
+    InActive = "IN_ACTIVE",
 }
 
 export enum JobType {
-  Discover = "DISCOVER",
-  Migrate = "MIGRATE",
-  CutOver = "CUT_OVER",
-  SpeedTest = "SPEED_TEST",
+    Discover = "DISCOVER",
+    Migrate = "MIGRATE",
+    CutOver = "CUT_OVER",
+    SpeedTest = "SPEED_TEST",
 }
 
 export enum JobRunStatus {
-  Ready = "READY",
-  Pending = "PENDING",
-  Running = "RUNNING",
-  Paused = "PAUSED",
-  Stopped = "STOPPED",
-  Completed = "COMPLETED",
-  Failed = "FAILED",
-  Errored = "ERRORED",
+    Ready = "READY",
+    Pending = "PENDING",
+    Running = "RUNNING",
+    Paused = "PAUSED",
+    Stopped = "STOPPED",
+    Completed = "COMPLETED",
+    Failed = "FAILED",
+    Errored = "ERRORED",
 }
 
 export enum PausedReason {
-  USER_PAUSED = "USER_PAUSED",
-  SYSTEM_PAUSED = "SYSTEM_PAUSED",
+    USER_PAUSED = "USER_PAUSED",
+    SYSTEM_PAUSED = "SYSTEM_PAUSED",
 }
 
 export enum OperationStatus {
-  READY = "READY",
-  IN_PROCESS = "IN_PROCESS",
-  ERROR = "ERROR",
-  COMPLETED = "COMPLETED",
+    READY = "READY",
+    IN_PROCESS = "IN_PROCESS",
+    ERROR = "ERROR",
+    COMPLETED = "COMPLETED",
 }
 
 export enum OperationType {
-  SCAN = "SCAN",
+    SCAN = "SCAN",
 }
 
 export enum TaskStatus {
-  PENDING = "PENDING",
-  RUNNING = "RUNNING",
-  ERRORED = "ERRORED",
-  COMPLETED = "COMPLETED",
+    PENDING = "PENDING",
+    RUNNING = "RUNNING",
+    ERRORED = "ERRORED",
+    COMPLETED = "COMPLETED",
 }
 
 export enum TaskOperation {
-  SCAN_PATH = "SCAN_PATH",
-  COPY_FILE = "COPY_FILE",
-  META_STAMP = "META_STAMP",
+    SCAN_PATH = "SCAN_PATH",
+    COPY_FILE = "COPY_FILE",
+    META_STAMP = "META_STAMP",
 }
 
 export enum TaskType {
-  SCAN = "SCAN",
-  COPY = "COPY",
+    SCAN = "SCAN",
+    COPY = "COPY",
 }
