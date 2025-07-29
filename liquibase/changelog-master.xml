@@ -388,6 +388,13 @@
       </rollback>
    </changeSet>
 
+   <changeSet id="20250725_01_alter_inventory_add_meta_column.sql" author="akunal">
+      <sqlFile path="liquibase/20250725_01_alter_inventory_add_meta_column.sql" splitStatements="false"/>
+      <rollback>
+         <sqlFile path="liquibase/20250725_01_alter_inventory_add_meta_column_rollback.sql" splitStatements="false"/>
+      </rollback>
+   </changeSet>
+
    <changeSet id="20250722_01_create_idx_inventory_path_jobrun_created_filesize.sql" author="salim-jujara">
       <sqlFile path="liquibase/20250722_01_create_idx_inventory_path_jobrun_created_filesize.sql" splitStatements="false"/>
       <rollback>

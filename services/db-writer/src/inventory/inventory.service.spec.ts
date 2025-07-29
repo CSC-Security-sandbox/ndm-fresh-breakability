@@ -13,6 +13,8 @@ import {
   OperationError,
   TaskError,
   TaskStatus,
+  ItemInfo,
+  ItemMeta,
 } from "@netapp-cloud-datamigrate/jobs-lib";
 import { CreateInventory } from "./inventory.types";
 import { OperationStatus } from "../enum/queues.enum";
@@ -162,29 +164,47 @@ describe("InventoryService", () => {
     jest.clearAllMocks();
   });
 
+  // Helper function to create valid ItemInfo objects
+  const createMockItemInfo = (overrides: Partial<ItemInfo> = {}): ItemInfo => {
+    const defaultSourceMeta: ItemMeta = {
+      birthTime: new Date('2024-01-01T10:00:00Z'),
+      modifiedTime: new Date('2024-01-01T12:00:00Z'),
+      accessTime: new Date('2024-01-02T12:00:00Z'),
+      permission: 'rw-r--r--',
+      uid: 1001,
+      gid: 1002,
+      checksum: 'abc123',
+    };
+
+    const defaultTargetMeta: ItemMeta = {
+      birthTime: new Date('2024-01-01T10:00:00Z'),
+      modifiedTime: new Date('2024-01-01T12:00:00Z'),
+      accessTime: new Date('2024-01-02T12:00:00Z'),
+      permission: 'rw-r--r--',
+      uid: 1001,
+      gid: 1002,
+      checksum: 'xyz456',
+    };
+
+    return new ItemInfo(
+      overrides.fileName || '/test/path/file.txt',
+      overrides.isDirectory || false,
+      overrides.isSymbolicLink || false,
+      overrides.depth || 2,
+      overrides.extension || '.txt',
+      overrides.fileType || 'text',
+      overrides.sourceMeta || defaultSourceMeta,
+      overrides.targetMeta || defaultTargetMeta,
+      overrides.size || 1024
+    );
+  };
+
   describe('mapSourceToTarget', () => {
     const jobRunId = 'test-job-123';
     const pathId = 'test-path-456';
 
     it('should correctly map a valid file object', () => {
-        const file = {
-            path: '/test/path/file.txt',
-            isDirectory: false,
-            sourceChecksum: 'abc123',
-            targetChecksum: 'xyz456',
-            parentPath: '/test/path',
-            depth: 2,
-            fileName: 'file.txt',
-            uid: 1001,
-            gid: 1002,
-            fileSize: 1024,
-            extension: '.txt',
-            fileType: 'text',
-            modifiedTime: new Date('2024-01-01T12:00:00Z'),
-            accessTime: new Date('2024-01-02T12:00:00Z'),
-            permission: 'rw-r--r--',
-            birthTime: new Date('2024-01-01T10:00:00Z'),
-        };
+        const file = createMockItemInfo();
 
         const result = service.mapSourceToTarget(file, jobRunId, pathId);
 
@@ -193,9 +213,9 @@ describe("InventoryService", () => {
             isDirectory: false,
             sourceChecksum: 'abc123',
             targetChecksum: 'xyz456',
-            parentPath: '/test/path',
+            parentPath: '/test/path/file.txt',
             depth: 2,
-            fileName: 'file.txt',
+            fileName: '/test/path/file.txt',
             uid: '1001',
             gid: '1002',
             fileSize: '1024',
@@ -207,34 +227,35 @@ describe("InventoryService", () => {
             jobRunId: 'test-job-123',
             birthTime: new Date('2024-01-01T10:00:00Z'),
             pathId: 'test-path-456',
+            sourceMeta: expect.any(Object),
+            targetMeta: expect.any(Object),
         });
     });
 
-    it('should handle missing properties and assign defaults', () => {
-        const file = {}; // Empty file object
+    it('should handle file with missing metadata', () => {
+        // Create a file with completely null sourceMeta and targetMeta
+        const file = new ItemInfo(
+          '/test/path/file.txt',
+          false,
+          false,
+          2,
+          '.txt',
+          'text',
+          null, // sourceMeta is null
+          null, // targetMeta is null
+          1024
+        );
 
         const result = service.mapSourceToTarget(file, jobRunId, pathId);
 
-        expect(result).toEqual({
-            path: '',
-            isDirectory: false,
-            sourceChecksum: null,
-            targetChecksum: null,
-            parentPath: '',
-            depth: 0,
-            fileName: '',
-            uid: '',
-            gid: '',
-            fileSize: '0',
-            extension: '',
-            fileType: null,
-            modifiedTime: null,
-            accessTime: null,
-            permission: '',
-            jobRunId: 'test-job-123',
-            birthTime: null,
-            pathId: 'test-path-456',
-        });
+        expect(result.sourceChecksum).toBeNull();
+        expect(result.targetChecksum).toBeNull();
+        expect(result.uid).toBe('');
+        expect(result.gid).toBe('');
+        expect(result.modifiedTime).toBeNull();
+        expect(result.accessTime).toBeNull();
+        expect(result.permission).toBeNull();
+        expect(result.birthTime).toBeNull();
     });
 
     it('should throw an error if file is null or undefined', () => {
@@ -252,27 +273,24 @@ describe("InventoryService", () => {
       expect(inventoryRepo.upsert).not.toHaveBeenCalled();
     });
 
-    it("should save inventory records successfully", async () => {
-      const data: CreateInventory[] = [
-        { 
-          path: "/path/to/file",
-          fileName: "test.txt",
-          isDirectory: false,
-          fileSize: "1024"
-        } as any
-      ];
-      const mappedData = [
-        { 
-          path: "/path/to/file", 
-          jobRunId: "jobRunId", 
-          pathId: "pathId",
-          fileName: "test.txt",
-          isDirectory: false,
-          fileSize: "1024"
-        },
-      ];
+    it("should return early if data is null", async () => {
+      const result = await service.createInventory(null, "jobRunId", "pathId");
+      expect(result).toBeUndefined();
+      expect(inventoryRepo.upsert).not.toHaveBeenCalled();
+    });
 
-      jest.spyOn(service, "mapSourceToTarget").mockReturnValue(mappedData[0]);
+    it("should save inventory records successfully", async () => {
+      const data = [createMockItemInfo()];
+      const mappedData = { 
+        path: "/test/path/file.txt", 
+        jobRunId: "jobRunId", 
+        pathId: "pathId",
+        fileName: "/test/path/file.txt",
+        isDirectory: false,
+        fileSize: "1024"
+      };
+
+      jest.spyOn(service, "mapSourceToTarget").mockReturnValue(mappedData);
       inventoryRepo.upsert.mockResolvedValue({ identifiers: [{ id: 1 }] } as any);
 
       await service.createInventory(data, "jobRunId", "pathId");
@@ -286,10 +304,10 @@ describe("InventoryService", () => {
     });
 
     it("should log an error if saving inventory records fails", async () => {
-      const data: CreateInventory[] = [{ path: "/path/to/file" } as any];
+      const data = [createMockItemInfo()];
       const error = new Error("Database error");
       
-      jest.spyOn(service, "mapSourceToTarget").mockReturnValue(data[0]);
+      jest.spyOn(service, "mapSourceToTarget").mockReturnValue({} as any);
       inventoryRepo.upsert.mockRejectedValue(error);
       const loggerSpy = jest.spyOn(service["logger"], "error");
 
@@ -300,6 +318,46 @@ describe("InventoryService", () => {
       );
       expect(loggerSpy).toHaveBeenCalledWith(
         `Failed to save 1 inventory records`
+      );
+    });
+
+    it("should process large datasets in batches", async () => {
+      // Create 1500 items to test batching (batch size is 500)
+      const data = Array(1500).fill(null).map(() => createMockItemInfo());
+      
+      jest.spyOn(service, "mapSourceToTarget").mockReturnValue({} as any);
+      inventoryRepo.upsert.mockResolvedValue({ identifiers: [] } as any);
+
+      await service.createInventory(data, "jobRunId", "pathId");
+
+      // Should be called 3 times (1500 / 500 = 3 batches)
+      expect(inventoryRepo.upsert).toHaveBeenCalledTimes(3);
+    });
+
+    it("should handle duplicate items correctly", async () => {
+      const data = [
+        createMockItemInfo({ fileName: '/same/path.txt' }),
+        createMockItemInfo({ fileName: '/same/path.txt' }),
+        createMockItemInfo({ fileName: '/different/path.txt' }),
+      ];
+      
+      jest.spyOn(service, "mapSourceToTarget").mockImplementation((item) => ({
+        path: item.fileName,
+        jobRunId: "jobRunId",
+        isDirectory: item.isDirectory,
+      }));
+      
+      inventoryRepo.upsert.mockResolvedValue({ identifiers: [] } as any);
+
+      await service.createInventory(data, "jobRunId", "pathId");
+
+      // Should upsert only unique items based on path|jobRunId|isDirectory key
+      expect(inventoryRepo.upsert).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ path: '/same/path.txt' }),
+          expect.objectContaining({ path: '/different/path.txt' }),
+        ]),
+        ['path', 'jobRunId', 'isDirectory']
       );
     });
   });
@@ -614,6 +672,112 @@ describe("InventoryService", () => {
       expect(loggerSpy).toHaveBeenCalledWith(
         `Failed to update task (ID: ${taskId}): ${error.message}`
       );
+    });
+  });
+
+  describe("saveSpeedLogsEntries", () => {
+    it("should save speed log entries successfully", async () => {
+      const data = {
+        testType: "read-test",
+        timeStamp: new Date(),
+        speed: 150.5
+      };
+      const speedLogEntry = {
+        id: 1,
+        speedLogId: "read-test",
+        timeStamp: data.timeStamp,
+        speed: 150.5
+      };
+
+      speedLogEntryRepo.create.mockReturnValue(speedLogEntry as any);
+      speedLogEntryRepo.save.mockResolvedValue(speedLogEntry as any);
+
+      await service.saveSpeedLogsEntries(data);
+
+      expect(speedLogEntryRepo.create).toHaveBeenCalledWith({
+        speedLogId: "read-test",
+        timeStamp: data.timeStamp,
+        speed: 150.5
+      });
+      expect(speedLogEntryRepo.save).toHaveBeenCalledWith(speedLogEntry);
+    });
+
+    it("should handle string speed values by converting to number", async () => {
+      const data = {
+        testType: "write-test",
+        timeStamp: new Date(),
+        speed: "125.75"
+      };
+
+      speedLogEntryRepo.create.mockReturnValue({} as any);
+      speedLogEntryRepo.save.mockResolvedValue({} as any);
+
+      await service.saveSpeedLogsEntries(data);
+
+      expect(speedLogEntryRepo.create).toHaveBeenCalledWith({
+        speedLogId: "write-test",
+        timeStamp: data.timeStamp,
+        speed: 125.75
+      });
+    });
+
+    it("should log an error and throw if saving speed log entries fails", async () => {
+      const data = {
+        testType: "read-test",
+        timeStamp: new Date(),
+        speed: 100
+      };
+      const error = new Error("Database connection failed");
+      
+      speedLogEntryRepo.create.mockReturnValue({} as any);
+      speedLogEntryRepo.save.mockRejectedValue(error);
+      const loggerSpy = jest.spyOn(service["logger"], "error");
+
+      await expect(service.saveSpeedLogsEntries(data)).rejects.toThrow(
+        "Error while saving Speed Log records to the database"
+      );
+      expect(loggerSpy).toHaveBeenCalledWith(
+        "Error saving Speed Log records:",
+        error
+      );
+    });
+
+    it("should handle missing testType field", async () => {
+      const data = {
+        testType: undefined,
+        timeStamp: new Date(),
+        speed: 100
+      };
+
+      speedLogEntryRepo.create.mockReturnValue({} as any);
+      speedLogEntryRepo.save.mockResolvedValue({} as any);
+
+      await service.saveSpeedLogsEntries(data);
+
+      expect(speedLogEntryRepo.create).toHaveBeenCalledWith({
+        speedLogId: undefined,
+        timeStamp: data.timeStamp,
+        speed: 100
+      });
+    });
+
+    it("should handle NaN speed values", async () => {
+      const data = {
+        testType: "test",
+        timeStamp: new Date(),
+        speed: "invalid-number"
+      };
+
+      speedLogEntryRepo.create.mockReturnValue({} as any);
+      speedLogEntryRepo.save.mockResolvedValue({} as any);
+
+      await service.saveSpeedLogsEntries(data);
+
+      expect(speedLogEntryRepo.create).toHaveBeenCalledWith({
+        speedLogId: "test",
+        timeStamp: data.timeStamp,
+        speed: NaN
+      });
     });
   });
 });

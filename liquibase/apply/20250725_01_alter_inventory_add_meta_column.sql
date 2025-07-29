@@ -1,0 +1,2 @@
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS source_meta JSONB;
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS target_meta JSONB;

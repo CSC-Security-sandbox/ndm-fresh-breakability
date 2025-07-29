@@ -7,7 +7,6 @@ import {
     shouldSkipFile,
     shouldExcludeOlderThan,
     shouldExcludeOrSkip,
-    getJobConnection,
     getFileType,
     isContentUpdate,
     isMetaUpdated,
@@ -15,7 +14,6 @@ import {
     formatDate
 } from './utils';
 import { JobContext, JobContextFactory } from "@netapp-cloud-datamigrate/jobs-lib";
-import { RedisUtils } from "@netapp-cloud-datamigrate/jobs-lib";
 import { FileType } from '../types/tasks';
 
 jest.mock('fs');
@@ -53,7 +51,15 @@ jest.mock('@netapp-cloud-datamigrate/jobs-lib', () => ({
         serialize: jest.fn(),
         deserialize: jest.fn()
     })),
+    ItemInfo: jest.fn().mockImplementation(() => ({
+        serialize: jest.fn(),
+        deserialize: jest.fn()
+    })),
     Task: jest.fn(),
+    TaskInfo: jest.fn().mockImplementation(() => ({
+        serialize: jest.fn(),
+        deserialize: jest.fn()
+    })),
     DMError: jest.fn(),
     ErrorType: {
         FATAL_ERROR: 'FATAL_ERROR',
@@ -353,63 +359,6 @@ describe('utils', () => {
             expect(result).toBe(true);
         });
     });
-
-    describe('getJobConnection', () => {
-        const mockJobRunId = 'test-job-run-id';
-        const mockRedisClient = {
-            isOpen: false,
-            connect: jest.fn(),
-            disconnect: jest.fn()
-        };
-        // const mockJobContext = mock<JobContext>();
-        const mockJobContext = {
-            // Mock methods you use
-            getJobConfig: jest.fn(),
-            appendToFileList: jest.fn(),
-            // Add other methods as needed
-        } as unknown as JobContext;
-
-        beforeEach(() => {
-            (RedisUtils.getClient as jest.Mock).mockResolvedValue(mockRedisClient);
-            (JobContextFactory.getProvider as jest.Mock).mockReturnValue({
-                getJobContext: jest.fn().mockResolvedValue(mockJobContext)
-            });
-        });
-
-        it('should connect to redis if not already open', async () => {
-            await getJobConnection({ jobRunId: mockJobRunId });
-            expect(mockRedisClient.connect).toHaveBeenCalled();
-        });
-
-        it('should not connect to redis if already open', async () => {
-            mockRedisClient.isOpen = true;
-            await getJobConnection({ jobRunId: mockJobRunId });
-            expect(mockRedisClient.connect).not.toHaveBeenCalled();
-            mockRedisClient.isOpen = false; // Reset for other tests
-        });
-
-        it('should return jobContext and redis client', async () => {
-            const result = await getJobConnection({ jobRunId: mockJobRunId });
-            expect(result.jobContext).toBe(mockJobContext);
-            expect(result.connectionClient).toBe(mockRedisClient);
-            expect(JobContextFactory.getProvider).toHaveBeenCalledWith('redis', mockRedisClient);
-        });
-
-        it('should handle redis connection errors', async () => {
-            const mockError = new Error('Connection failed');
-            mockRedisClient.connect.mockRejectedValue(mockError);
-            await expect(getJobConnection({ jobRunId: mockJobRunId })).rejects.toThrow(mockError);
-        });
-
-        it('should handle job context creation errors', async () => {
-            const mockError = new Error('Connection failed');
-            (JobContextFactory.getProvider as jest.Mock).mockReturnValue({
-                getJobContext: jest.fn().mockRejectedValue(mockError)
-            });
-            await expect(getJobConnection({ jobRunId: mockJobRunId })).rejects.toThrow(mockError);
-        });
-    });
-
 
     describe('getFileType', () => {
         it('should return SYMBOLIC_LINK for symbolic links', () => {

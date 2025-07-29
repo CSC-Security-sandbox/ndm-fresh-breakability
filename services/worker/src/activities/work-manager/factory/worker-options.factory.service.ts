@@ -2,7 +2,6 @@ import { Inject, Injectable, forwardRef } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NativeConnection } from "@temporalio/worker";
 import { CommonActivityService } from "src/activities/common/common.service";
-import { MigrateSyncService } from "src/activities/core/migrate/migrate-sync.service";
 import { ScanService } from "src/activities/core/scan/scan-activity.service";
 import { DiscoveryActivity } from "src/activities/discovery/discovery.activities";
 import { DiscoveryScanActivity } from "src/activities/discovery/discovery.core.activity";
@@ -20,6 +19,7 @@ import { ValidateWorkingDirectoryActivity } from "src/activities/working-directo
 import { WorkerConfiguration } from "../work-manager.types";
 import { WorkFlowOptions } from "./worker-options.factory";
 import { WorkFlowType } from "./worker-options.types";
+import { SyncService } from "src/activities/core/migrate/sync-activity.service";
 import { ValidatePathActivity } from "src/activities/validate-path/validate-path.service";
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
@@ -42,12 +42,13 @@ export class WorkerOptionsService {
     private readonly commonActivityService:CommonActivityService,
     private readonly speedTestReadActivity: SpeedTestActivities,
     private readonly redismeorycheck: RedisMemoryCheckActivity,
-    private readonly migrateSyncService:  MigrateSyncService,
     private readonly commonTaskService: CommonTaskService,
     private readonly scanService: ScanService,
+    private readonly syncService: SyncService,
     private readonly validatePathActivity: ValidatePathActivity,
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+
   ) {
     this.jobTaskActivityConcurrency = this.configService.get<number>('worker.maxActivityConcurrency') || 1;
     this.logger = loggerFactory.create(WorkerOptionsService.name);
@@ -131,7 +132,7 @@ export class WorkerOptionsService {
           hasRunningSyncTask: this.commonActivityService.hasRunningSyncTask.bind(this.commonActivityService),
           // for new migration workflow 
 
-          syncTaskActivity: this.migrateSyncService.syncTaskActivity.bind(this.migrateSyncService),
+          syncTaskActivity: this.syncService.syncTaskActivity.bind(this.syncService),
           getGroupOfTasksActivity: this.commonTaskService.getGroupOfTasksActivity.bind(this.commonTaskService),
           scanDirectories: this.scanService.scanDirectories.bind(this.scanService),
           createInitialDirBatch: this.commonTaskService.createInitialDirBatch.bind(this.commonTaskService),

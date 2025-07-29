@@ -3,10 +3,10 @@ import * as wf from '@temporalio/workflow';
 import { proxyActivities } from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
-import { MigrateSyncService } from "src/activities/core/migrate/migrate-sync.service";
 import { JobRunStatus } from "src/activities/discovery/enums";
 import { updateJobStatusIfNotRunning } from '../common/workflow-utils';
 import { SyncWorkflowOutput } from './chid-scan.workflow.type';
+import { SyncService } from 'src/activities/core/migrate/sync-activity.service';
 
 
 interface SyncWorkflowInput {
@@ -24,7 +24,7 @@ const {
 
 const {
     syncTaskActivity: SyncTaskActivity,
-} = proxyActivities<MigrateSyncService>({ 
+} = proxyActivities<SyncService>({ 
     retry: { maximumAttempts: 3, initialInterval: '10s', backoffCoefficient: 2.0,  maximumInterval: '30s', nonRetryableErrorTypes: ['ActivityFailure','FatalError'], },
      startToCloseTimeout: '5h', heartbeatTimeout: '30s', });
 
