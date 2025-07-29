@@ -12,5 +12,6 @@ CREATE TABLE IF NOT EXISTS support_bundle_logs (
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     created_by UUID,
     workflow_id TEXT,
+    error_message TEXT,
     filters JSONB NOT NULL
 );

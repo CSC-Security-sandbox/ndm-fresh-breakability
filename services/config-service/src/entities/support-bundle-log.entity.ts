@@ -33,6 +33,9 @@ export class SupportBundleEntity {
   @Column({ name: 'workflow_id', type: 'text' })
   workflowId: string;
 
+  @Column({ name: 'error_message', type: 'text' })
+  errorMessage: string;
+
   @Column({ type: 'jsonb', nullable: false })
   filters: {
     startDate: string;
