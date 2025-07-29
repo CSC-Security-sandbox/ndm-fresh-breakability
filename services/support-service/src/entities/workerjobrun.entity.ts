@@ -1,6 +1,3 @@
-import { WorkerEntity } from './worker.entity';
-import { JobRunEntity } from './jobrun.entity';
-import { WorkerConfiguration } from 'src/constants/types';
 import {
   Column,
   Entity,
@@ -8,6 +5,9 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { WorkerEntity } from './worker.entity';
+import { JobRunEntity } from './jobrun.entity';
+import { WorkerConfiguration } from 'src/constants/types';
 
 @Entity({ name: 'worker_jobrun_mapping' })
 export class WorkerJobRunMap {

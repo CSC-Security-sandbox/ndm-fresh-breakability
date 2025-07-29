@@ -1,11 +1,4 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  JoinColumn,
-  OneToOne,
-  PrimaryColumn,
-} from 'typeorm';
+import { Column, Entity, JoinColumn, OneToOne, PrimaryColumn } from 'typeorm';
 import { WorkerEntity } from './worker.entity';
 import { ApiProperty } from '@nestjs/swagger';
 import { Base } from './base.entity';
@@ -34,8 +27,4 @@ export class WorkerStatsEntity extends Base {
   @OneToOne(() => WorkerEntity, (worker) => worker.stats)
   @JoinColumn({ name: 'worker_id' }) // Foreign key column in the worker_stats table
   worker: WorkerEntity;
-
-  @ApiProperty({ description: 'createdAt' })
-  @CreateDateColumn({ name: 'updated_at', type: 'timestamp' })
-  updatedAt: Date;
 }
