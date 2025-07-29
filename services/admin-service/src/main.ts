@@ -43,8 +43,8 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe());
   app.enableCors();
   
-  const server = await app.listen(3000);
-  console.log('[Bootstrap] Admin Service is running on port 3000');
+  const server = await app.listen(3001);
+  console.log('[Bootstrap] Admin Service is running on port 3001');
 
   // Handle graceful shutdown - NestJS will handle most of the cleanup
   const gracefulShutdown = async (signal: string) => {

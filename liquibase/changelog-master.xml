@@ -421,5 +421,11 @@
       <sqlFile path="liquibase/20250729_01_add_listusers_permission_to_project_viewer_role.sql" splitStatements="false"/>
       <rollback> </rollback>
    </changeSet>
+   <changeSet id="20250729_05_discovery_report_proc_added_Top_File_Extensions_capacity_count.sql" author="gm67249">
+      <sqlFile path="liquibase/20250729_05_discovery_report_proc_added_Top_File_Extensions_capacity_count.sql"
+               splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
 
 </databaseChangeLog>

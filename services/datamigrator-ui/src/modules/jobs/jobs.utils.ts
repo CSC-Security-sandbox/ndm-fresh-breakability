@@ -5,7 +5,7 @@ export const handleDownloadReport = async (
   downloadReports: (arg: any) => any,
   jobRunId: string,
   reportType: string = REPORT_TYPES_ENUM.DISCOVERY,
-  fileType: string
+  fileType: string,
 ) => {
   const isFileTypePdf = fileType.toLowerCase() === "pdf";
   try {
@@ -14,13 +14,13 @@ export const handleDownloadReport = async (
       "report-type": reportType,
     }).unwrap();
 
-    const mimeType = getMimeType(fileType);
-    const extension = fileType.toLowerCase();
+    const mimeType = isFileTypePdf ? getMimeType(fileType) : getMimeType("ZIP");
+    const extension = isFileTypePdf ? fileType.toLowerCase() : "zip";
 
     createAndDownloadBlob(
       response,
       mimeType,
-      `${jobRunId}-${reportType}-report.${extension}`
+      `${jobRunId}-${reportType}-report.${extension}`,
     );
   } catch (error) {
     console.error("Failed to download the report:", error);
@@ -31,7 +31,7 @@ export const handleDownloadReport = async (
 export const handleDownloadErrorsLogs = async (
   downloadReports: (arg: any) => any,
   body: Record<string, string | number>,
-  fileType: string = "CSV"
+  fileType: string = "CSV",
 ) => {
   try {
     const response = await downloadReports(body).unwrap();
@@ -43,12 +43,12 @@ export const handleDownloadErrorsLogs = async (
     createAndDownloadBlob(
       response,
       mimeType,
-      `error-log-${id}-${timestamp}.${extension}`
+      `error-log-${id}-${timestamp}.${extension}`,
     );
   } catch (error) {
     console.error("Failed to download Error Report:", error?.data?.message);
     notify.error(
-      error?.data?.displayMessage || "Failed to download Error Report."
+      error?.data?.displayMessage || "Failed to download Error Report.",
     );
   }
 };
@@ -56,7 +56,7 @@ export const handleDownloadErrorsLogs = async (
 export const handleDownloadCocReport = async (
   downloadReports: (arg: any) => any,
   jobRunId: string,
-  reportType: string = REPORT_TYPES_ENUM.COC
+  reportType: string = REPORT_TYPES_ENUM.COC,
 ) => {
   try {
     const response = await downloadReports({
@@ -69,12 +69,12 @@ export const handleDownloadCocReport = async (
     createAndDownloadBlob(
       response,
       mimeType,
-      `coc-report-${jobRunId}.${extension}`
+      `coc-report-${jobRunId}.${extension}`,
     );
   } catch (error) {
     console.error("Failed to download CoC report:", error);
     notify.error(
-      "CoC report not generated yet, please try again after some time."
+      "CoC report not generated yet, please try again after some time.",
     );
   }
 };
@@ -82,7 +82,7 @@ export const handleDownloadCocReport = async (
 const createAndDownloadBlob = (
   data: BlobPart,
   type: string,
-  fileName: string
+  fileName: string,
 ) => {
   const blob = new Blob([data], { type });
   const link = document.createElement("a");

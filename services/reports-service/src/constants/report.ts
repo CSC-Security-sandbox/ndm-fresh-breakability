@@ -1,4 +1,5 @@
 import { ReportValueType } from "./enums";
+
 export const PDFReportHeaders = {
   DISCOVER: [
     "File Server Info",
@@ -9,14 +10,14 @@ export const PDFReportHeaders = {
     "Depth",
     "Space Used",
     "File System Stats",
-    "Top File Extensions",
+    "Top File Extensions (with file Capacity and Count)",
     "Maximum Values",
     "Job Run Stats",
     "Biggest",
   ],
 };
 export enum formatStringTypeCategories {
-  Top_File_Extension = "Top File Extensions",
+  Top_File_Extension = "Top File Extensions (with file Capacity and Count)",
 }
 export const ReportSubCategoriesHeader = {
   "Number of Files": [
