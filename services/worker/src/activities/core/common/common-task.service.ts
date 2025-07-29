@@ -36,11 +36,44 @@ export class CommonTaskService {
       this.logger = loggerFactory.create(CommonTaskService.name);
     }
 
+    sleep(ms: number, signal?: AbortSignal): Promise<void> {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          cleanup();
+          resolve();
+        }, ms);
+        function onAbort() {
+          clearTimeout(timer);
+          cleanup();
+          resolve();
+        }
+        function cleanup() {
+          if (signal) signal.removeEventListener('abort', onAbort);
+        }
+        if (signal) signal.addEventListener('abort', onAbort);
+      });
+    }
+
     // TO-DO : make this adaptive resource based task creation
-       async getGroupOfTasksActivity(jobRunId): Promise<string[]> {
-      const activityContext = Context.current();      
-      const heartBeatInterval = setInterval(() => { activityContext.heartbeat({});}, 2000);
+    async getGroupOfTasksActivity(jobRunId: string): Promise<string[]> {
+      const activityContext = Context.current();
       let taskIds: string[] = [];
+
+      const abortController = new AbortController();
+      let heartbeatActive = true;
+      const heartbeat = async () => {
+        try {
+          while (heartbeatActive) {
+            activityContext.heartbeat();
+            await this.sleep(30000, abortController.signal);
+          }
+        } catch (err) {
+          this.logger.error(`Error in heartbeat for jobRunId: ${jobRunId}, ${err}`);
+          heartbeatActive = false;
+        }
+      };
+      const heartbeatPromise = heartbeat();
+
       try{
         const jobContext = await this.redisService.getJobManagerContext(jobRunId);
         let commands:Cmd[] = [], streamIds = [];
@@ -66,11 +99,13 @@ export class CommonTaskService {
         }
         if(streamIds.length > 0) 
           await jobContext.groupAckCommandStream(streamIds, GroupReaderType.WORKER);
-      }catch (error) {
+      } catch (error) {
         this.logger.error(`Error in getGroupOfTasksActivity: ${error.message}`, error.stack);
         throw new Error(`Failed to get group of tasks activity: ${error.message}`);
-      }finally{
-        clearInterval(heartBeatInterval);
+      } finally {
+        heartbeatActive = false;
+        abortController.abort();
+        await heartbeatPromise;
       }
       return taskIds;
     }

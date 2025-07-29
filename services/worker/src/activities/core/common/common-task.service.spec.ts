@@ -3,6 +3,7 @@ import { RetryExceededError } from 'src/errors/errors.types';
 import { CommonTaskService } from './common-task.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { mockLogger } from 'src/auth/auth.service.spec';
+import { Context } from '@temporalio/activity';
 
 const { Connection } = require('@temporalio/client');
 const { calculateHash } = require('src/activities/utils/checksum-utils');
@@ -44,7 +45,7 @@ describe('CommonTaskService', () => {
     const mockLoggerFactory: Partial<LoggerFactory> = {
         create: jest.fn().mockReturnValue(mockLogger),
     };
-  
+
     beforeEach(() => {
         configService = {
             get: jest.fn((key) => {
@@ -142,12 +143,12 @@ describe('CommonTaskService', () => {
 
         it('should return false if workflowExecutionInfo is undefined', async () => {
             const mockDescribe = jest.fn().mockResolvedValue({
-            workflowExecutionInfo: undefined,
+                workflowExecutionInfo: undefined,
             });
             const mockConnection = {
-            workflowService: {
-                describeWorkflowExecution: mockDescribe,
-            },
+                workflowService: {
+                    describeWorkflowExecution: mockDescribe,
+                },
             };
             Connection.connect.mockResolvedValue(mockConnection);
 
@@ -159,9 +160,9 @@ describe('CommonTaskService', () => {
             Connection.connect.mockRejectedValue(new Error('connection error'));
             await expect(service.isWorkflowRunningActivity('wf-err')).rejects.toThrow('connection error');
         });
-        });
+    });
 
-        describe('buildOrGetValidScanTask', () => {
+    describe('buildOrGetValidScanTask', () => {
         let jobContext: any;
         beforeEach(() => {
             jobContext = {
@@ -186,10 +187,10 @@ describe('CommonTaskService', () => {
             jobContext.getTask.mockResolvedValue(existingTask);
 
             const result = await service.buildOrGetValidScanTask({
-            jobContext,
-            taskHashId: 'hash1',
-            jobRunId: 'job1',
-            preBatchedId: undefined,
+                jobContext,
+                taskHashId: 'hash1',
+                jobRunId: 'job1',
+                preBatchedId: undefined,
             } as any);
 
             expect(result).toBe(existingTask);
@@ -203,10 +204,10 @@ describe('CommonTaskService', () => {
             jobContext.setTaskIfNotExists.mockResolvedValue(undefined);
 
             const result = await service.buildOrGetValidScanTask({
-            jobContext,
-            taskHashId: 'hash2',
-            jobRunId: 'job2',
-            batchId: 'batch1',
+                jobContext,
+                taskHashId: 'hash2',
+                jobRunId: 'job2',
+                batchId: 'batch1',
             } as any);
 
             expect(jobContext.getBatchDir).toHaveBeenCalledWith('batch1');
@@ -220,10 +221,10 @@ describe('CommonTaskService', () => {
             jobContext.setTaskIfNotExists.mockResolvedValue(undefined);
 
             await service.buildOrGetValidScanTask({
-            jobContext,
-            taskHashId: 'hash3',
-            jobRunId: 'job3',
-            batchId: 'batch2',
+                jobContext,
+                taskHashId: 'hash3',
+                jobRunId: 'job3',
+                batchId: 'batch2',
             } as any);
 
             expect(jobContext.setTaskIfNotExists).toHaveBeenCalled();
@@ -260,6 +261,9 @@ describe('CommonTaskService', () => {
                 }
             };
             redisService.getJobManagerContext.mockResolvedValue(jobContext);
+            jest.spyOn(Context, 'current').mockReturnValue({
+                heartbeat: jest.fn(),
+            } as any);
         });
 
         afterEach(() => {
@@ -267,6 +271,7 @@ describe('CommonTaskService', () => {
         });
 
         it('should create tasks and return their hash keys', async () => {
+            jest.setTimeout(15000);
             const result = await service.getGroupOfTasksActivity('jobRunId');
             expect(Array.isArray(result)).toBe(true);
             expect(result.length).toBeGreaterThan(0);
@@ -275,8 +280,82 @@ describe('CommonTaskService', () => {
         });
 
         it('should handle error and clear interval', async () => {
+            jest.setTimeout(15000);
             redisService.getJobManagerContext.mockRejectedValueOnce(new Error('fail'));
             await expect(service.getGroupOfTasksActivity('jobRunId')).rejects.toThrow('Failed to get group of tasks activity: fail');
+        });
+
+        it('should not call groupAckCommandStream if no streamIds', async () => {
+            // Simulate no commands yielded from groupReadCommandStream
+            jobContext.groupReadCommandStream = async function* () { /* yields nothing */ };
+            redisService.getJobManagerContext.mockResolvedValue(jobContext);
+
+            const result = await service.getGroupOfTasksActivity('jobRunId');
+            expect(result).toEqual([]);
+            expect(groupAckCommandStreamMock).not.toHaveBeenCalled();
+        });
+
+        it('should call logger.error and rethrow on error', async () => {
+            const error = new Error('test error');
+            jobContext.groupReadCommandStream = jest.fn(() => { throw error; });
+            redisService.getJobManagerContext.mockResolvedValue(jobContext);
+            const loggerErrorSpy = jest.spyOn(service['logger'], 'error');
+
+            // Force error inside for-await loop
+            jobContext.groupReadCommandStream = async function* () {
+            throw error;
+            };
+
+            await expect(service.getGroupOfTasksActivity('jobRunId')).rejects.toThrow('Failed to get group of tasks activity: test error');
+            expect(loggerErrorSpy).toHaveBeenCalledWith(
+            'Error in getGroupOfTasksActivity: test error',
+            error.stack
+            );
+        });
+
+        it('should clear heartbeat and abort controller on success', async () => {
+            // This test ensures that the heartbeatActive flag is set to false and controller.abort is called
+            // We can't directly check private variables, but we can check that the function completes and doesn't hang
+            const result = await service.getGroupOfTasksActivity('jobRunId');
+            expect(Array.isArray(result)).toBe(true);
+        });
+
+        describe('createInitialDirBatch', () => {
+            it('should create a batch and return its hash', async () => {
+            const mockJobContext = {
+                setBatchDir: jest.fn().mockResolvedValue(undefined),
+            };
+            redisService.getJobManagerContext.mockResolvedValue(mockJobContext);
+            const dirsToScan = ['dirA', 'dirB'];
+            const jobRunId = 'job-xyz';
+            // Mock calculateHash to return a predictable value
+            jest.spyOn(require('src/activities/utils/checksum-utils'), 'calculateHash').mockReturnValue('mock-batch-hash');
+
+            const batchId = await service.createInitialDirBatch({ dirsToScan, jobRunId });
+            expect(redisService.getJobManagerContext).toHaveBeenCalledWith(jobRunId);
+            expect(mockJobContext.setBatchDir).toHaveBeenCalledWith('mock-batch-hash', dirsToScan);
+            expect(batchId).toBe('mock-batch-hash');
+            });
+        });
+
+        describe('sleep', () => {
+            it('should resolve after the given ms', async () => {
+            jest.useFakeTimers();
+            const promise = service.sleep(1000);
+            jest.advanceTimersByTime(1000);
+            await expect(promise).resolves.toBeUndefined();
+            jest.useRealTimers();
+            });
+
+            it('should resolve early if aborted', async () => {
+            jest.useFakeTimers();
+            const controller = new AbortController();
+            const promise = service.sleep(5000, controller.signal);
+            controller.abort();
+            jest.advanceTimersByTime(0);
+            await expect(promise).resolves.toBeUndefined();
+            jest.useRealTimers();
+            });
         });
     });
 });

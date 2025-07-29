@@ -22,13 +22,13 @@ const {
     syncTaskActivity: SyncTaskActivity,
 } = proxyActivities<SyncService>({ 
     retry: { initialInterval: '10s', backoffCoefficient: 1.2,  maximumInterval: '30s', nonRetryableErrorTypes: ['ActivityFailure','FatalError'], },
-     startToCloseTimeout: '5h', heartbeatTimeout: '30s', });
+     startToCloseTimeout: '5h', heartbeatTimeout: '2m', });
 
 const {
     getGroupOfTasksActivity: getGroupOfTasksActivity,
 }= proxyActivities<CommonTaskService>({
     retry: { initialInterval: '10s', backoffCoefficient: 2.0, maximumInterval: '30s', nonRetryableErrorTypes: ['ActivityFailure','FatalError'] },
-    startToCloseTimeout: '5h', heartbeatTimeout: '30s', });
+    startToCloseTimeout: '5h', heartbeatTimeout: '2m', });
 
 
 const actionSignal = wf.defineSignal<[JobRunStatus]>('syncActionSignal');
