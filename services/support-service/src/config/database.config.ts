@@ -7,6 +7,9 @@ import { VolumeEntity } from 'src/entities/volume.entity';
 import { JobConfigEntity } from 'src/entities/jobconfig.entity';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
 import { OperationErrorEntity } from 'src/entities/operation-error.entity';
+import { WorkerEntity } from 'src/entities/worker.entity';
+import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
+import { WorkerStatsEntity } from 'src/entities/worker-stats.entity';
 
 export default registerAs(
   'typeorm',
@@ -28,7 +31,10 @@ export default registerAs(
       ProjectEntity,
       JobConfigEntity,
       JobRunEntity,
-      OperationErrorEntity
+      OperationErrorEntity,
+      WorkerEntity,
+      WorkerJobRunMap,
+      WorkerStatsEntity,
     ],
     migrations: [],
   }),
