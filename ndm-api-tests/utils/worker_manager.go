@@ -446,7 +446,7 @@ func getStopWorkerScriptForNFS() string {
 }
 
 func getStopWorkerScriptSMB() string {
-	return `cmd /C net stop "Datamigrator Worker`
+	return `cmd /C net stop "Datamigrator Worker"`
 }
 
 // GetStopWorkerScript generates a shell script to stop worker service.
@@ -480,7 +480,7 @@ func getStartWorkerScriptNFS() string {
 }
 
 func getStartWorkerScriptSMB() string {
-	return `cmd /C net start "Datamigrator Worker`
+	return `cmd /C net start "Datamigrator Worker"`
 }
 
 // GetStopWorkerScript generates a shell script to start worker service.
