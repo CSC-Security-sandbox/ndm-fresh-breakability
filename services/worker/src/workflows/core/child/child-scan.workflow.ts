@@ -35,7 +35,7 @@ const {
 
 
 
-const actionSignal = wf.defineSignal<[string]>('scanActionSignal');
+const actionSignal = wf.defineSignal<[JobRunStatus]>('scanActionSignal');
 
 
 const MAX_CONCURRENT_BATCHES = 100;
@@ -58,9 +58,10 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
     error: undefined,
   };
 
-  wf.setHandler(actionSignal, async (action:string)=>{
-    actionState = action as JobRunStatus;
+  wf.setHandler(actionSignal, async (action:JobRunStatus)=>{    
+    actionState = action;
     console.log(jobRunId, `action signal called with value: ${action}`);
+    
     
   });
 
@@ -68,9 +69,11 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
   let errors: string[] = [];
   let iterations = 0; 
 
-  while(dirBatchIds.length > 0) {        
-    if(actionState === JobRunStatus.Stopped as JobRunStatus) {
+  while(dirBatchIds.length > 0) {   
+
+    if(actionState === JobRunStatus.Stopped) {
       isStopRequested = true
+      console.log(`Stopping ChildScanWorkflow ${jobRunId} as requested. ${actionState}`);
       break;
     }
 

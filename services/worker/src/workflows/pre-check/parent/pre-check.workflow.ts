@@ -7,7 +7,7 @@ import {
     executeChild,
     proxyActivities,
   } from '@temporalio/workflow';
-import { WorkFlows } from "../../../work-manager/work-manager.types";
+import { WorkFlows } from "src/activities/work-manager/work-manager.types";
 
 
 

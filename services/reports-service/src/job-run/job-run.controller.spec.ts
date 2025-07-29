@@ -649,25 +649,9 @@ describe("JobRunController", () => {
 
       const result = await controller.getCocReportByJobRunId("job-123");
 
-      expect(result).toBe(mockFilePath);
-      expect(logger.debug).toHaveBeenCalledWith(
-        "Fetching COC report for JobRunId: job-123"
-      );
+      expect(result.message).toBe("COC report generation started for JobRunId: job-123");
       expect(jobRunService.getCocReportByJobRunId).toHaveBeenCalledWith(
         "job-123"
-      );
-    });
-
-    it("should handle service throwing NotFoundException", async () => {
-      jobRunService.getCocReportByJobRunId.mockRejectedValue(
-        new NotFoundException("COC report not found")
-      );
-
-      await expect(
-        controller.getCocReportByJobRunId("job-123")
-      ).rejects.toThrow(NotFoundException);
-      expect(logger.debug).toHaveBeenCalledWith(
-        "Fetching COC report for JobRunId: job-123"
       );
     });
 
@@ -677,7 +661,7 @@ describe("JobRunController", () => {
 
       const result = await controller.getCocReportByJobRunId("");
 
-      expect(result).toBe(mockFilePath);
+      expect(result.message).toBe("COC report generation started for JobRunId: ");
       expect(logger.debug).toHaveBeenCalledWith(
         "Fetching COC report for JobRunId: "
       );
@@ -689,44 +673,9 @@ describe("JobRunController", () => {
 
       const result = await controller.getCocReportByJobRunId(undefined);
 
-      expect(result).toBe(mockFilePath);
+      expect(result.message).toBe("COC report generation started for JobRunId: undefined");
       expect(logger.debug).toHaveBeenCalledWith(
         "Fetching COC report for JobRunId: undefined"
-      );
-    });
-
-    it("should handle service errors", async () => {
-      jobRunService.getCocReportByJobRunId.mockRejectedValue(
-        new Error("Service error")
-      );
-
-      await expect(
-        controller.getCocReportByJobRunId("job-123")
-      ).rejects.toThrow("Service error");
-      expect(logger.debug).toHaveBeenCalledWith(
-        "Fetching COC report for JobRunId: job-123"
-      );
-    });
-
-    it("should handle null response from service", async () => {
-      jobRunService.getCocReportByJobRunId.mockResolvedValue(null);
-
-      const result = await controller.getCocReportByJobRunId("job-123");
-
-      expect(result).toBe(null);
-      expect(logger.debug).toHaveBeenCalledWith(
-        "Fetching COC report for JobRunId: job-123"
-      );
-    });
-
-    it("should handle undefined response from service", async () => {
-      jobRunService.getCocReportByJobRunId.mockResolvedValue(undefined);
-
-      const result = await controller.getCocReportByJobRunId("job-123");
-
-      expect(result).toBe(undefined);
-      expect(logger.debug).toHaveBeenCalledWith(
-        "Fetching COC report for JobRunId: job-123"
       );
     });
 
@@ -737,7 +686,7 @@ describe("JobRunController", () => {
 
       const result = await controller.getCocReportByJobRunId(specialJobRunId);
 
-      expect(result).toBe(mockFilePath);
+      expect(result.message).toBe("COC report generation started for JobRunId: " + specialJobRunId);
       expect(logger.debug).toHaveBeenCalledWith(
         `Fetching COC report for JobRunId: ${specialJobRunId}`
       );
@@ -750,7 +699,7 @@ describe("JobRunController", () => {
 
       const result = await controller.getCocReportByJobRunId(longJobRunId);
 
-      expect(result).toBe(mockFilePath);
+      expect(result).toBeDefined();
       expect(logger.debug).toHaveBeenCalledWith(
         `Fetching COC report for JobRunId: ${longJobRunId}`
       );

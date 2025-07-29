@@ -8,3 +8,5 @@ export  interface TaskStatusCount {
     status: string;
     count: string;
 }
+
+export type ReaderStatus = 'active' | 'inactive';

@@ -2,11 +2,14 @@ package utils
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"ndm-api-tests/tests/smoke/parser"
 	"net/http"
 	"net/url"
@@ -223,15 +226,67 @@ func FetchUserID(email, accessToken string) (string, error) {
 	return users[0].ID, nil
 }
 
+func GenerateNewPassword(length int) (string, error) {
+	const (
+		lower    = "abcdefghijklmnopqrstuvwxyz"
+		upper    = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+		digits   = "0123456789"
+		special  = "!@#$%^&*()-_=+[]{}|;:,.<>/?"
+		allChars = lower + upper + digits + special
+	)
+
+	if length < 8 {
+		return "", errors.New("password length must be at least 8 to include all character types")
+	}
+
+	// Ensure at least one character from each category
+	categories := []string{lower, upper, digits, special}
+	var password []byte
+
+	for _, category := range categories {
+		idx, err := rand.Int(rand.Reader, big.NewInt(int64(len(category))))
+		if err != nil {
+			return "", err
+		}
+		password = append(password, category[idx.Int64()])
+	}
+
+	// Fill the rest of the password length with random characters from allChars
+	for i := 4; i < length; i++ {
+		idx, err := rand.Int(rand.Reader, big.NewInt(int64(len(allChars))))
+		if err != nil {
+			return "", err
+		}
+		password = append(password, allChars[idx.Int64()])
+	}
+
+	// Shuffle the password to avoid predictable placement of category characters
+	for i := range password {
+		j, err := rand.Int(rand.Reader, big.NewInt(int64(len(password))))
+		if err != nil {
+			return "", err
+		}
+		password[i], password[j.Int64()] = password[j.Int64()], password[i]
+	}
+
+	return string(password), nil
+}
+
 func ResetUserPassword(userID, accessToken, newPassword string) error {
 	if KEYCLOAK_IP == "" {
 		return fmt.Errorf("environment variable KEYCLOAK_IP not set")
 	}
 	url := fmt.Sprintf("https://%s/%s/%s/reset-password", KEYCLOAK_IP, KEYCLOAK_BASE_URL, userID)
 
+	var err error
+	PASSWORD, err = GenerateNewPassword(10)
+	if err != nil {
+		return fmt.Errorf("failed to generate new password: %w", err)
+	}
+
 	payload := map[string]interface{}{
 		"type":      "password",
-		"value":     newPassword,
+		"value":     PASSWORD,
 		"temporary": false,
 	}
 	bodyBytes, err := json.Marshal(payload)

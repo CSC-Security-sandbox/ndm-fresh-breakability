@@ -5,13 +5,12 @@ import {
   SearchWidget,
   Table,
   TableCounter,
-  TableWidgets,
   TablePager,
 } from "@netapp/bxp-design-system-react";
 import { DownloadMonochromeIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { useEffect } from "react";
 import { TableWrapperWithoutFilterPropsType } from "@components/table-wrapper/TableWrapperWithoutFilter.types";
-import { RefreshIcon } from "@netapp/bxp-style/react-icons/Navigation";
+import RefreshButton from "@components/refresh-button/RefreshButton";
 
 const TableWrapperWithoutFilter = ({
   tableState,
@@ -74,33 +73,27 @@ const TableWrapperWithoutFilter = ({
               onResetFilter={resetFilters}
             />
           </Box>
-          <Box className="flex gap-2 items-center">
-            <TableWidgets style={{}}>
-              <SearchWidget
-                setFilter={updateTextFilter}
-                className="w-[360px]"
-                style={{ marginTop: "5px" }}
-              />
-              {isRefreshing !== undefined && (
-                <Button
-                  variant="icon"
-                  isSubmitting={isRefreshing}
-                  onClick={!isRefreshing ? refetchTableData : undefined}
-                  className="w-[17px] h-[17px]"
-                >
-                  <RefreshIcon />
-                </Button>
-              )}
-              {showDownload && (
-                <Button
-                  variant="icon"
-                  className="w-[18px] h-[18px]"
-                  onClick={() => alert("DOWNLOAD CALLED")}
-                >
-                  <DownloadMonochromeIcon />
-                </Button>
-              )}
-            </TableWidgets>
+          <Box className="flex gap-5 items-center">
+            <SearchWidget
+              setFilter={updateTextFilter}
+              className="w-[360px] mt-1"
+            />
+
+            <RefreshButton
+              isLoading={isRefreshing}
+              onRefresh={refetchTableData}
+            />
+
+            {showDownload && (
+              <Button
+                variant="icon"
+                className="w-[18px] h-[18px]"
+                onClick={() => alert("DOWNLOAD CALLED")}
+              >
+                <DownloadMonochromeIcon />
+              </Button>
+            )}
+
             {content}
           </Box>
         </Box>

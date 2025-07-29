@@ -1,9 +1,8 @@
 import { RedisClientType } from "redis";
-import { JobManagerContext } from "./job-manager-context";
-import { JobConfig } from "../job-config";
-import { RedisCommandCollection, RedisErrorCollection, RedisFileCollection, RedisTaskCollection } from "../../redis/redis-collections";
+import { RedisCommandCollection, RedisErrorCollection, RedisItemInfoCollection, RedisTaskCollection, RedisTaskInfoCollection } from "../../redis/redis-collections";
 import { RedisHMapCollection } from "../../redis/redis-hmap-collection";
-
+import { JobConfig } from "../job-config";
+import { JobManagerContext } from "./job-manager-context";
 
 
 export class RedisJobManagerContext extends JobManagerContext {
@@ -12,11 +11,10 @@ export class RedisJobManagerContext extends JobManagerContext {
     constructor(redisClient: RedisClientType, jobRunId: string, jobConfig?: JobConfig, jobRunStatus?: string)  {
         super(jobRunId, jobConfig, jobRunStatus)
         this.redisClient = redisClient;
-
-        this.fileStream = new RedisFileCollection(this.jobRunId, 0, '0-0', this.redisClient);
+        this.fileStream = new RedisItemInfoCollection(this.jobRunId, 0, '0-0', this.redisClient);
         this.errorStream = new RedisErrorCollection(this.jobRunId, 0, '0-0', this.redisClient);
         this.commandStream = new RedisCommandCollection(this.jobRunId, 0, '0-0', this.redisClient);
-        this.taskStream = new RedisTaskCollection(this.jobRunId, 0, '0-0', this.redisClient);
+        this.taskStream = new RedisTaskInfoCollection(this.jobRunId, 0, '0-0', this.redisClient);
         this.taskMap = new RedisHMapCollection(this.jobRunId, 'taskMap', this.redisClient);
         this.dirBatchMap = new RedisHMapCollection(this.jobRunId, 'dirBatchMap', this.redisClient);
     }

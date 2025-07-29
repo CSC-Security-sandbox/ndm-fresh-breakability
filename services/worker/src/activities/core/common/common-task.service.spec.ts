@@ -97,6 +97,7 @@ describe('CommonTaskService', () => {
                 commands: [
                     { retryCount: 2, status: CommandStatus.READY },
                 ],
+                retryCount: 2, // Set retryCount to equal maxRetryCount (2) to trigger the error
                 status: TaskStatus.PENDING,
             };
             await expect(
@@ -167,6 +168,15 @@ describe('CommonTaskService', () => {
             getTask: jest.fn(),
             getBatchDir: jest.fn(),
             setTaskIfNotExists: jest.fn(),
+            jobConfig: {
+                workerIds: ['worker-1'],
+                sourceFileServer: {
+                pathId: 'source-path-id'
+                },
+                destinationFileServer: {
+                pathId: 'dest-path-id'
+                }
+            }
             };
             service.ensureTaskValid = jest.fn(async ({ task }) => task);
         });
@@ -239,6 +249,15 @@ describe('CommonTaskService', () => {
                 groupReadCommandStream: groupReadCommandStreamMock,
                 setTaskIfNotExists: setTaskIfNotExistsMock,
                 groupAckCommandStream: groupAckCommandStreamMock,
+                jobConfig: {
+                    workerIds: ['worker-1'],
+                    sourceFileServer: {
+                        pathId: 'source-path-id'
+                    },
+                    destinationFileServer: {
+                        pathId: 'dest-path-id'
+                    }
+                }
             };
             redisService.getJobManagerContext.mockResolvedValue(jobContext);
         });
@@ -248,7 +267,7 @@ describe('CommonTaskService', () => {
         });
 
         it('should create tasks and return their hash keys', async () => {
-            const result = await service.getGroupOfTasksActivity('jobRunId', 2, 1);
+            const result = await service.getGroupOfTasksActivity('jobRunId');
             expect(Array.isArray(result)).toBe(true);
             expect(result.length).toBeGreaterThan(0);
             expect(setTaskIfNotExistsMock).toHaveBeenCalled();
