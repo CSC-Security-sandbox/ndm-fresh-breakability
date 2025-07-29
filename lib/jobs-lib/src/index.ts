@@ -26,3 +26,4 @@ export * from './types/job-manager-context/job-manager-redis';
 
 
 export * from './types/identity-mappings';
+export * from './datatype/stream-datatypes';

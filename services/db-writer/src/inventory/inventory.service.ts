@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import {
+  ItemInfo,
   OperationError,
   Task,
   TaskError,
@@ -45,29 +46,31 @@ export class InventoryService {
   ) {
 
   }
-  mapSourceToTarget(file: any, jobRunId: string, pathId: string): any {
+  mapSourceToTarget(file: ItemInfo, jobRunId: string, pathId: string): any {
     if (!file) {
       throw new Error('Invalid file object: Cannot map undefined or null file');
     }
     return {
-      path: file.path ?? '',
+      path: file.fileName ?? '', 
       isDirectory: file.isDirectory ?? false,
-      sourceChecksum: file?.sourceChecksum ?? null,
-      targetChecksum: file?.targetChecksum ?? null,
-      parentPath: file?.parentPath ?? '',
+      sourceChecksum: file?.sourceMeta?.checksum ?? null,
+      targetChecksum: file?.targetMeta?.checksum ?? null,
+      parentPath: file?.fileName ?? '', // TODO - deprecate
       depth: file?.depth ?? 0,
-      fileName: file?.fileName ?? '',
-      uid: file?.uid ? file.uid.toString() : '',
-      gid: file?.gid ? file.gid.toString() : '',
-      fileSize: file?.fileSize ? BigInt(file.fileSize).toString() : '0',
+      fileName: file?.fileName ?? '', // TO-DO deprecate
+      uid: file?.targetMeta?.uid?.toString() ?? file?.sourceMeta?.uid?.toString() ?? '',
+      gid: file?.targetMeta?.gid?.toString() ?? file?.sourceMeta?.gid?.toString() ?? '',
+      fileSize: file?.size ? BigInt(file.size).toString() : '0',
       extension: file?.extension ?? '',
       fileType: file?.fileType ?? null,
-      modifiedTime: file?.modifiedTime ?? null,
-      accessTime: file?.accessTime ?? null,
-      permission: file?.permission ?? '',
+      modifiedTime: file?.targetMeta?.modifiedTime ?? file?.sourceMeta?.modifiedTime ?? null,
+      accessTime: file?.targetMeta?.accessTime ?? file?.sourceMeta?.accessTime ?? null,
+      permission: file?.targetMeta?.permission ?? file?.sourceMeta?.permission ?? null,
       jobRunId: jobRunId,
-      birthTime: file?.birthTime ?? null,
+      birthTime: file?.targetMeta?.birthTime ?? file?.sourceMeta?.birthTime ?? null,
       pathId: pathId,
+      sourceMeta: file?.sourceMeta ?? null,
+      targetMeta: file?.targetMeta ?? null,
     };
   }
 
@@ -86,13 +89,13 @@ export class InventoryService {
   }
 
 
-  async createInventory(data: CreateInventory[], jobRunId: string, pathId: string) {
+  async createInventory(data: ItemInfo[], jobRunId: string, pathId: string) {
     if (!data || data.length === 0) {
       return;
     }
 
-    const batchSize = 500;
-    const failedRecords: CreateInventory[] = [];
+    const batchSize = 500; // Adjust batch size as needed
+    const failedRecords: ItemInfo[] = [];
 
     for (let i = 0; i < data.length; i += batchSize) {
       const batch = data.slice(i, i + batchSize);
@@ -214,7 +217,7 @@ export class InventoryService {
       if (Array.isArray(commands) && commands.length > 0) {
         for (let i = 0; i < commands.length; i += batchSize) {
           const batch = commands.slice(i, i + batchSize).map((command: any) => ({
-            id: command.commandId,
+            id: command.id,
             taskId,
             jobRunId,
             sPathId,

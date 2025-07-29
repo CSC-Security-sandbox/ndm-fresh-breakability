@@ -7,7 +7,7 @@ import { AuthService } from "src/auth/auth.service";
 import { RedisService } from "src/redis/redis.service";
 import { JobRunStatus } from "../discovery/enums";
 import { UpdateStatusInput, UpdateStatusOutput } from "../migrate/migrate.type";
-import { generateDummyErrorEntry, generateDummyFileEntry, generateDummyTaskEntry } from '../utils/utils';
+import { generateDummyErrorEntry, generateDummyFileEntry, generateDummyItemEntry, generateDummyTaskEntry, generateDummyTaskInfoEntry } from '../utils/utils';
 import {
   LoggerFactory,
   LoggerService
@@ -53,8 +53,8 @@ export class CommonActivityService{
     try {
       this.logger.log(`[${traceId}] Publishing last entry for job id: ${traceId}`);
       const jobContext = await this.redisService.getJobManagerContext(traceId);
-      await jobContext.publishToFileStream(generateDummyFileEntry);  
-      await jobContext.publishToTaskStream(generateDummyTaskEntry);
+      await jobContext.publishToFileStream(generateDummyItemEntry);  
+      await jobContext.publishToTaskStream(generateDummyTaskInfoEntry);
       await jobContext.publishToErrorStream(generateDummyErrorEntry);
       this.logger.log(`[${traceId}] Last entry published for job id: ${traceId}`);
       return { message: 'Job completed for job id: ' + traceId };

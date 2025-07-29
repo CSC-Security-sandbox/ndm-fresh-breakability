@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { Command, ErrorType } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Cmd, Command, ErrorType, CommandStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
 import { getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip } from 'src/activities/utils/utils';
 import { Origin } from 'src/activities/utils/utils.types';
@@ -154,7 +154,7 @@ describe('MigrateScanService', () => {
             };
             (isContentUpdate as jest.Mock).mockReturnValue(true);
             const result = service.buildCommand(mockStat as any, 'file/path');
-            expect(result).toBeInstanceOf(Command);
+            expect(result).toBeInstanceOf(Cmd);
         });
 
         it('should build directory copy command if content updated and is directory', () => {
@@ -172,7 +172,7 @@ describe('MigrateScanService', () => {
             };
             (isContentUpdate as jest.Mock).mockReturnValue(true);
             const result = service.buildCommand(mockStat as any, 'dir/path');
-            expect(result).toBeInstanceOf(Command);
+            expect(result).toBeInstanceOf(Cmd);
         });
 
         it('should build file copy command if content updated and is file', () => {
@@ -190,7 +190,7 @@ describe('MigrateScanService', () => {
             };
             (isContentUpdate as jest.Mock).mockReturnValue(true);
             const result = service.buildCommand(mockStat as any, 'file/path');
-            expect(result).toBeInstanceOf(Command);
+            expect(result).toBeInstanceOf(Cmd);
         });
 
         it('should return undefined if not content updated', () => {
@@ -203,7 +203,10 @@ describe('MigrateScanService', () => {
     // --- publishCommands ---
     describe('publishCommands', () => {
         it('should call publishToCommandStream for each command in publishCommands', async () => {
-            const commands = [new Command('a', {}, 'id1', 0), new Command('b', {}, 'id2', 0)];
+            const commands = [
+                new Cmd('cmd1', '/src/file1', CommandStatus.READY, false, { COPY_FILE: { status: 'READY', params: {} } }),
+                new Cmd('cmd2', '/src/file2', CommandStatus.READY, false, { COPY_FILE: { status: 'READY', params: {} } }),
+            ];
             await service.publishCommands({ jobContext, commands });
             expect(jobContext.publishToCommandStream).toHaveBeenCalledTimes(2);
         });
