@@ -16,6 +16,10 @@ import databaseConfig from 'src/config/database.config';
 import { ErrorCsvGenerationActivity } from './error-csv-generation/error-csv-generation.activity';
 import { OperationErrorService } from 'src/utils/error-csv-generation.service';
 import { OperationErrorEntity } from 'src/entities/operation-error.entity';
+import { ConfigurationDataCsvGenerationActivity } from './config-data-csv-generation/config-data-csv-generation.activity';
+import { WorkerEntity } from 'src/entities/worker.entity';
+import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
+import { WorkerStatsEntity } from 'src/entities/worker-stats.entity';
 
 @Module({
   imports: [
@@ -26,6 +30,9 @@ import { OperationErrorEntity } from 'src/entities/operation-error.entity';
       VolumeEntity,
       JobConfigEntity,
       OperationErrorEntity,
+      WorkerEntity,
+      WorkerJobRunMap,
+      WorkerStatsEntity,
     ]),
     ConfigModule.forRoot({ load: [appConfig, databaseConfig, temporalConfig] }),
   ],
@@ -36,7 +43,8 @@ import { OperationErrorEntity } from 'src/entities/operation-error.entity';
     ProjectJobConfigMappingActivity,
     ErrorCsvGenerationActivity,
     ConfigService,
-    OperationErrorService
+    OperationErrorService,
+    ConfigurationDataCsvGenerationActivity,
   ],
   exports: [
     ActivitiesService,
