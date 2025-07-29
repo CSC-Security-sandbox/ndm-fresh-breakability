@@ -9,13 +9,14 @@ import {
   OneToOne,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
-import { Platform, WorkerStatus } from 'src/constants/enums';
 import { WorkerConfiguration } from 'src/constants/types';
 import { Base } from './base.entity';
 import { ProjectEntity } from './project.entity';
 import { FileServerEntity } from './fileserver.entity';
+import { WorkerStatus } from '@temporalio/worker';
+import { Platform } from 'src/constants/enum';
 import { WorkerJobRunMap } from './workerjobrun.entity';
-import { WorkerStatsEntity } from 'src/entities/worker-stats.entity';
+import { WorkerStatsEntity } from './worker-stats.entity';
 
 @Entity({ name: 'worker' })
 export class WorkerEntity extends Base {

@@ -19,9 +19,15 @@ export const workerProviders = [
         notifyWorkflowCompletion:
           activitiesService.notifyWorkflowCompletion.bind(activitiesService),
         getJobConfigIdsByProjectIds:
-          activitiesService.getJobConfigIdsByProjectIds.bind(activitiesService),  
+          activitiesService.getJobConfigIdsByProjectIds.bind(activitiesService),
         generateErrorCsv:
           activitiesService.generateErrorCsv.bind(activitiesService),
+        generateConfigurationDataCsv:
+          activitiesService.generateConfigurationDataCsv.bind(
+            activitiesService,
+          ),
+        generateConfigurationJobCsv:
+          activitiesService.generateConfigurationJobCsv.bind(activitiesService),
       };
 
       const workflowOption =
