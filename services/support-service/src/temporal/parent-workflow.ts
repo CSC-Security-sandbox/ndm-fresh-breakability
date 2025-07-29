@@ -3,6 +3,7 @@ import { LogGeneratorWorkflow } from './child-workflows/log-generator-workflow';
 import { ErrorCsvGeneratorWorkflow } from './child-workflows/error-csv-generator-workflow';
 import { SupportBundleStatus } from 'src/constants/enum';
 import { ActivitiesService } from 'src/activities/activities.service';
+import { ConfigurationDataCsvGeneratorWorkflow } from './child-workflows/configuration-data-csv-workflow';
 
 const { notifyWorkflowCompletion } = proxyActivities<ActivitiesService>({
   startToCloseTimeout: '1 minute',
@@ -10,7 +11,7 @@ const { notifyWorkflowCompletion } = proxyActivities<ActivitiesService>({
 
 export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
   log.info(`Started SupportBundleWorkflow for traceId: ${traceId}`);
- 
+
   const workflowResults: string[] = [];
 
   try {
@@ -40,6 +41,22 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
 
     const errorCsvResult = await errorCsvChild.result();
     workflowResults.push(errorCsvResult);
+
+    const configurationDataCsvChild = await startChild(
+      ConfigurationDataCsvGeneratorWorkflow,
+      {
+        args: [{ traceId, payload }],
+        workflowId: `ConfigurationDataCsvWorkflow-${traceId}`,
+        retry: {
+          maximumAttempts: 3,
+          initialInterval: '2s',
+        },
+        workflowExecutionTimeout: '3m',
+      },
+    );
+
+    const configurationDataCsvResult = await configurationDataCsvChild.result();
+    workflowResults.push(configurationDataCsvResult);
 
     await notifyWorkflowCompletion({
       traceId,

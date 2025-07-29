@@ -1,9 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 import { Base } from './base.entity';
 import { WorkerConfiguration } from 'src/constants/types';
 import { JobConfigEntity } from './jobconfig.entity';
-// import { WorkerJobRunMap } from './workerjobrun.entity';
+import { WorkerJobRunMap } from './workerjobrun.entity';
 
 // ---------- Job Run -----------/
 export enum JobRunStatus {
@@ -16,9 +23,8 @@ export enum JobRunStatus {
   Completed = 'COMPLETED',
   Failed = 'FAILED',
   Errored = 'ERRORED',
-  Blocked = 'BLOCKED'
+  Blocked = 'BLOCKED',
 }
-
 
 @Entity({ name: 'jobrun' })
 export class JobRunEntity extends Base {
@@ -27,7 +33,12 @@ export class JobRunEntity extends Base {
   id: string;
 
   @ApiProperty({ description: 'Job Run status' })
-  @Column({ type: 'enum', enum: JobRunStatus, default: JobRunStatus.Ready, name:'status' })
+  @Column({
+    type: 'enum',
+    enum: JobRunStatus,
+    default: JobRunStatus.Ready,
+    name: 'status',
+  })
   status: JobRunStatus;
 
   @ApiProperty({ description: 'Start time of the job' })
@@ -42,16 +53,21 @@ export class JobRunEntity extends Base {
   @Column({ name: 'job_config_id' })
   jobConfigId: string;
 
-  @ManyToOne(() => JobConfigEntity, jobConfig => jobConfig.jobRunDetails, {eager: false })
+  @ManyToOne(() => JobConfigEntity, (jobConfig) => jobConfig.jobRunDetails, {
+    eager: false,
+  })
   @JoinColumn({ name: 'job_config_id' })
-  jobConfig: JobConfigEntity; 
+  jobConfig: JobConfigEntity;
 
-  @Column({ type: 'json', nullable: true, name: 'meta_config' }) 
+  @Column({ type: 'json', nullable: true, name: 'meta_config' })
   metaConfig: WorkerConfiguration[];
 
   @Column({ type: 'text', nullable: true, name: 'workflow_id' })
   workFlowId: string;
 
-//   @OneToMany(()=>WorkerJobRunMap, workerMap=>workerMap.jobRun, { cascade: true,  eager: false})
-//   workerMap: WorkerJobRunMap[]
+  @OneToMany(() => WorkerJobRunMap, (workerMap) => workerMap.jobRun, {
+    cascade: true,
+    eager: false,
+  })
+  workerMap: WorkerJobRunMap[];
 }
