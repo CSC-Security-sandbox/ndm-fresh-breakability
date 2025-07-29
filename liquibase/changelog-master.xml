@@ -400,4 +400,14 @@
       <rollback></rollback>
    </changeSet>
 
+   <changeSet id="20250727_01_inventory_table_index.sql" author="dinesh_seervi" runInTransaction="false">
+      <sqlFile path="liquibase/20250727_01_inventory_table_index.sql" splitStatements="false"/>
+      <rollback></rollback>
+   </changeSet>
+
+   <changeSet id="20250727_02_jobs_report_proc.sql" author="dinesh_seervi">
+      <sqlFile path="liquibase/20250727_02_jobs_report_proc.sql" splitStatements="false"/>
+      <rollback></rollback>
+   </changeSet>
+
 </databaseChangeLog>

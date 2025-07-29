@@ -178,7 +178,11 @@ describe('WorkManagerService', () => {
       const result = await service.getConfiguration(workerId, ip, projectId,Platform.LINUX);
       expect(result).toEqual(savedWorker.metaConfig);
       expect(sendMailService.sendMail).toHaveBeenCalledWith({
-        body: `<p>Hello</p> The Seceret Client Id ${workerId} has been used from address ${ip} <p></p>`,
+        successEmailType: "worker_usage",
+        workerUsage: {
+          id: "test-worker",
+          ip: "127.0.0.1",
+        }
       });
       // Ensure update worker name is called after saving
       expect(workerRepo.update).toHaveBeenCalledWith(

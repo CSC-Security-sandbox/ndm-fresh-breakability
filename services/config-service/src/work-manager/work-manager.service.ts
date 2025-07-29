@@ -15,6 +15,7 @@ import { ConfigStatusPayloadDTO } from './dto/validate-export-path.dto';
 import { SendMailService } from 'src/util/send-email';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { generateWorkerName } from 'src/util/utils';
+import { SuccessEmailType } from 'src/util/send-email.type';
 
 @Injectable()
 export class WorkManagerService {
@@ -103,9 +104,10 @@ export class WorkManagerService {
       });
 
       const result = await this.workerEntity.save(newWorker);
-      const htmlContent = `<p>Hello</p> The Seceret Client Id ${id} has been used from address ${ip} <p></p>`;
-      const payload = { body: htmlContent };   
-      await this.sendMailService.sendMail(payload);
+      await this.sendMailService.sendMail({
+        successEmailType: SuccessEmailType.WORKER_USAGE,
+        workerUsage: { id, ip }
+      });
       await this.workerEntity.update(
         { workerId: result.workerId },
         { workerName: generateWorkerName(result.workerNumber, platform) },

@@ -278,7 +278,6 @@ func ResetUserPassword(userID, accessToken, newPassword string) error {
 	}
 	url := fmt.Sprintf("https://%s/%s/%s/reset-password", KEYCLOAK_IP, KEYCLOAK_BASE_URL, userID)
 
-	// PASSWORD
 	var err error
 	PASSWORD, err = GenerateNewPassword(10)
 	if err != nil {

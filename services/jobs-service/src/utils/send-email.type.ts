@@ -1,15 +1,14 @@
-export enum EmailContentStatus {
-  FIRING = 'firing',
-  RESOLVED = 'resolved',
-}
+import { ApiProperty } from "@nestjs/swagger";
+import { IsString } from "class-validator";
 
- export enum SuccessEmailType {
+
+export enum SuccessEmailType {
   CREATE_CONFIGURATION = 'create_configuration',
   ERROR_REMEDY = 'error_remedy',
   JOB_CREATION = 'job_creation',
   JOB_UPDATE = 'job_update',
   UPDATE_CONFIGURATION = 'update_configuration',
-  WORKER_USAGE = 'worker_usage',
+  WORKER_USES = 'worker_uses',
 }
 
 export type CreateConfigurationEmailContent = {
@@ -72,4 +71,46 @@ export type ConfigUpdateEmailContent = {
 export type WorkerUsesEmailContent = {
   id: string;
   ip: string;
+};
+
+export class SuccessEventEmailDto {
+  @ApiProperty({ enum: SuccessEmailType, enumName: 'SuccessEmailType', description: 'Type of success email' })
+  @IsString({ message: 'successEmailType must be a string' })
+  successEmailType: SuccessEmailType;
+
+  @ApiProperty({
+    description: 'Content for create configuration email',
+    required: false,
+  })
+  createConfig?: CreateConfigurationEmailContent;
+
+  @ApiProperty({
+    description: 'Content for error remedy email',
+    required: false,
+  })
+  errorRemedy?: ErrorRemedyEmailContent;
+
+  @ApiProperty({
+    description: 'Content for migrate job email',
+    required: false,
+  })
+  migrateJob?: MigrateJobEmailContent;
+
+  @ApiProperty({
+    description: 'Content for job status update email',
+    required: false,
+  })
+  jobStatusUpdate?: JobStatusUpdateEmailContent;
+
+  @ApiProperty({
+    description: 'Content for configuration update email',
+    required: false,
+  })
+  configUpdate?: ConfigUpdateEmailContent;
+
+  @ApiProperty({
+    description: 'Content for worker uses email',
+    required: false,
+  })
+  workerUsage?: WorkerUsesEmailContent;
 };
