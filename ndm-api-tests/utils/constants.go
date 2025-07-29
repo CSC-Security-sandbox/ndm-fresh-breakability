@@ -1,10 +1,8 @@
 package utils
 
 import (
-	"fmt"
 	"log"
 	"os"
-	"strings"
 )
 
 type ConfigType string
@@ -235,64 +233,4 @@ func UpdateConfVariables(protocolType, sourceVolumesArgs, destinationVolumesArgs
 		fmt.Println("UMV error clear volume : ", err.Error())
 	}*/
 	//os.Exit(1)
-}
-
-func TestAddDataToVolume() {
-	//fullCmd := `cmd /C "mkdir C:\delta_test_smb && for /L %i in (1,1,100) do fsutil file createnew C:\delta_test_smb\file%i.txt 102400"`
-
-	deltaDir := `C:\` + DeltaFolder
-	smbShare := fmt.Sprintf(`\\%s\%s`, SOURCE_HOST_IP, SOURCE_VOLUMES[0])
-	mappedDrive := "Z:"
-
-	cmd := fmt.Sprintf(`cmd /C
-	if exist %s rmdir /s /q %s &&
-	mkdir %s &&
-	(for /L %%i in (1,1,30) do fsutil file createnew %s\file%%i.txt 102400) &&
-	dir %s &&
-	net use %s %s /user:%s "%s" &&
-	xcopy /E /I /Y %s %s\%s &&
-	net use * /delete /y &&
-	rmdir /s /q %s
-	`, deltaDir, deltaDir, deltaDir, deltaDir, deltaDir, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, deltaDir, mappedDrive, DeltaFolder, deltaDir)
-
-	commands := []string{}
-	for _, v := range strings.Split(cmd, "\n") {
-		commands = append(commands, strings.TrimSpace(v))
-	}
-}
-
-// RemoveSMBDeltaFromVolume removes the delta directory from the SMB export mounted on the VM.
-func TestRemoveDataToVolume() {
-	workerHost := `\\10.192.7.33\volSMBAutoDst`
-	deltaPath := `\delta`
-	mappedDrive := "Z:"
-
-	//net use Z: /delete /yes &&
-	removeDeltaScript := fmt.Sprintf(`cmd /C
-	net use %s %s /user:%s "%s" &&
-	rd /s /q Z:%s &&
-	net use Z: /delete /yes`, mappedDrive, workerHost, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, deltaPath)
-
-	commands := []string{}
-	for _, v := range strings.Split(removeDeltaScript, "\n") {
-		commands = append(commands, strings.TrimSpace(v))
-	}
-}
-
-func TestSMBClearVolume() {
-	workerHost := `\\10.192.7.33\volSMBAutoDst`
-	mappedDrive := "Z:"
-
-	// orignal script
-	// net use Z: /delete /yes && net use Z: \\10.192.7.33\volSMBAutoDst  /user:rtp.openenglab.netapp.com\svc-datamigrator "U@8e%#%Nuko%Bmd&" && rd /s /q Z: && net use Z: /delete /yes
-	clearVolumeScript := fmt.Sprintf(`cmd /C
-	net use %s /delete /yes &
-	net use %s %s /user:%s "%s" &&
-	rd /s /q %s &&
-	net use %s /delete /yes`, mappedDrive, mappedDrive, workerHost, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, mappedDrive, mappedDrive)
-
-	commands := []string{}
-	for _, v := range strings.Split(clearVolumeScript, "\n") {
-		commands = append(commands, strings.TrimSpace(v))
-	}
 }

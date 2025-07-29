@@ -1114,6 +1114,10 @@ func GetVolumesFromArgs(volumes string) []string {
 	res := []string{}
 
 	for _, s := range split {
+		if PROTOCOL_TYPE == ProtocolNFS {
+			res = append(res, fmt.Sprintf("/%s", strings.TrimSpace(s)))
+			continue
+		}
 		res = append(res, strings.TrimSpace(s))
 	}
 
