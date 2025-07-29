@@ -37,6 +37,8 @@ jest.mock('src/activities/utils/utils', () => ({
     removePrefix: jest.fn(),
     shouldExcludeOrSkip: jest.fn(),
     isContentUpdate: jest.fn(),
+    isMetaUpdated: jest.fn(), 
+
 }));
 
 describe('MigrateScanService', () => {
@@ -571,4 +573,82 @@ describe('MigrateScanService', () => {
             expect(jobContext.publishToCommandStream).not.toHaveBeenCalled();
         });
     });
+});
+
+// --- MigrateScanService ---
+describe('MigrateScanService', () => {
+    let service: MigrateScanService;
+    let configService: ConfigService;
+    let logger: Partial<LoggerService>;
+    let jobContext: any;
+    let commandInput: any;
+
+    const mockLoggerFactory: Partial<LoggerFactory> = {
+        create: jest.fn().mockReturnValue(mockLogger),
+    };
+
+    beforeEach(() => {
+        configService = {
+            get: jest.fn((key: string) => {
+                const values = {
+                    'worker.workerId': 'test-worker',
+                    'worker.maxMigrationCommand': 2,
+                    'worker.maxCommandConcurrency': 5,
+                    'worker.maxRetryCount': 2,
+                };
+                return values[key];
+            }),
+        } as any;
+
+        logger = mockLogger;
+
+        service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory);
+
+        jobContext = {
+            publishToErrorStream: jest.fn(),
+            publishToCommandStream: jest.fn(),
+            jobConfig: {
+                options: {
+                    excludeOlderThan: new Date('2023-01-01'),
+                },
+                jobType: 'MIGRATION',
+            },
+        };
+
+        commandInput = {
+            jobContext,
+            command: { commandId: '123', retryCount: 0, fPath: '/src/a.txt' },
+            sourcePath: '/src',
+            targetPath: '/dst',
+            sourcePrefix: '/src',
+            settings: {
+                excludePatterns: [],
+                skipFile: 0,
+            },
+        };
+
+        jest.clearAllMocks();
+    });
+
+    it('should be defined', () => {
+        expect(service).toBeDefined();
+    });
+
+    it('should call publishToCommandStream for sync command', async () => {
+        const commands = [
+            new Cmd('cmd1', '/src/file1', CommandStatus.READY, false, { SYNC_FILE: { status: 'READY', params: {} } }),
+        ];
+        await service.publishCommands({ jobContext, commands });
+        expect(jobContext.publishToCommandStream).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle error in publishCommands gracefully', async () => {
+        jobContext.publishToCommandStream.mockImplementation(() => { throw new Error('fail'); });
+        const commands = [
+            new Cmd('cmd1', '/src/file1', CommandStatus.READY, false, { SYNC_FILE: { status: 'READY', params: {} } }),
+        ];
+        await expect(service.publishCommands({ jobContext, commands })).rejects.toThrow('fail');
+    });
+
+    // Add more tests as needed for coverage, e.g. for scanDirectory, buildCommand, etc.
 });

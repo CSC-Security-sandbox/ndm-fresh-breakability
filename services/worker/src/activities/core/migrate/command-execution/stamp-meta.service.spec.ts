@@ -50,6 +50,7 @@ describe('StampMetaService', () => {
     const mockFs = fs as jest.Mocked<typeof fs>;
     const { dmError, formatDate, getUserACLs } = require('src/activities/utils/utils');
     const { CommandConfig } = require('src/config/command.config');
+const validateSidMapping = require('./sid-mapping.util').validateSidMapping;
 
     beforeEach(async () => {
         shellService = {
@@ -508,187 +509,154 @@ describe('StampMetaService', () => {
             );
             expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
         });
-    });
 
-    describe('getRawSID', () => {
-        it('should successfully get raw SID', async () => {
-            const filePath = '/test/file.txt';
-            const expectedSID = 'S-1-5-21-123456789-987654321-111111111-1001';
-            
-            CommandConfig.getSMBCommand.mockReturnValue('getfacl ${PATH}');
-            shellService.runCommand.mockResolvedValue(expectedSID);
-
-            const result = await service.getRawSID(filePath);
-
-            expect(result).toBe(expectedSID);
-            expect(CommandConfig.getSMBCommand).toHaveBeenCalledWith(process.platform, 'GET_SID_FOR_OBJECT');
-            expect(shellService.runCommand).toHaveBeenCalledWith('getfacl /test/file.txt');
         });
-    });
 
-    describe('stampSIDtoObject', () => {
-        beforeEach(() => {
-            Object.defineProperty(process, 'platform', {
-                value: 'linux',
-                writable: true,
+        describe('stampSIDAclToObject', () => {
+            beforeEach(() => {
+                Object.defineProperty(process, 'platform', {
+                    value: 'win32',
+                    writable: true,
+                });
+            });
+
+            it('should skip stamping SID ACL if not on win32', async () => {
+                Object.defineProperty(process, 'platform', { value: 'linux' });
+                const input = createMockInput();
+                const result = await service.stampSIDAclToObject(input);
+                expect(result.sourceErrors).toEqual([]);
+                expect(result.targetErrors).toEqual([]);
+            });
+
+            it('should handle error when getting source ACL fails', async () => {
+                const input = createMockInput();
+                const error = new Error('ACL error') as any;
+                error.code = 'EACL';
+                shellService.runCommand.mockRejectedValueOnce(error);
+                dmError.mockReturnValue({});
+                const result = await service.stampSIDAclToObject(input);
+                expect(result.sourceErrors).toEqual(['EACL']);
+                expect(result.targetErrors).toEqual([]);
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    'Getting ACL for /source/test-file.txt, Error: ACL error',
+                    error.stack
+                );
+                expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+            });
+
+            it('should handle error when transferring ACL fails', async () => {
+                const input = createMockInput();
+                // Mock getAclScript and getTransferAclSript
+                jest.mock('./sid-mapping.util', () => ({
+                    getAclScript: jest.fn((path: string) => `get-acl ${path}`),
+                    getTransferAclSript: jest.fn((path: string, isDir: boolean, acl: any) => `set-acl ${path}`),
+                    validateSidMapping: jest.fn(() => ({})),
+                }));
+                // Mock shellService.runCommand for getAclScript
+                shellService.runCommand
+                    .mockResolvedValueOnce(JSON.stringify({ Access: { value: [] } })) // getSourceAcl
+                    .mockRejectedValueOnce(Object.assign(new Error('Transfer error'), { code: 'EFAIL' })); // transferAclSript
+                dmError.mockReturnValue({});
+                const result = await service.stampSIDAclToObject(input);
+                expect(result.sourceErrors).toEqual([]);
+                expect(result.targetErrors).toEqual(['EFAIL']);
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    'Transferring ACL to /target/test-file.txt, Error: Transfer error',
+                    expect.anything()
+                );
+                expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+            });
+
+            it('should stamp SID ACL and validate mapping', async () => {
+                const input = createMockInput();
+                // Mock getAclScript and getTransferAclSript
+                const aclObj = { Access: { value: [{ IdentityReference: 'S-1-5-21' }] } };
+                const targetAclObj = { Access: { value: [{ IdentityReference: 'S-1-5-21' }] } };
+                jest.mock('./sid-mapping.util', () => ({
+                    getAclScript: jest.fn((path: string) => `get-acl ${path}`),
+                    getTransferAclSript: jest.fn((path: string, isDir: boolean, acl: any) => `set-acl ${path}`),
+                    validateSidMapping: jest.fn(() => ({ mapped: true })),
+                }));
+                shellService.runCommand
+                    .mockResolvedValueOnce(JSON.stringify(aclObj)) // getSourceAcl
+                    .mockResolvedValueOnce('success') // transferAclSript
+                    .mockResolvedValueOnce(JSON.stringify(targetAclObj)); // getTargetAcl
+                const result = await service.stampSIDAclToObject(input);
+                expect(result.sourceErrors).toEqual([]);
+                expect(result.targetErrors).toEqual([]);
+                expect(shellService.runCommand).toHaveBeenCalledTimes(3);
+                expect(validateSidMapping).toBeDefined();
             });
         });
 
-        it('should skip SID stamping on non-Windows platforms', async () => {
-            const input = createMockInput();
+        describe('stampFileAttrMeta', () => {
+            beforeEach(() => {
+                Object.defineProperty(process, 'platform', {
+                    value: 'win32',
+                    writable: true,
+                });
+            });
 
-            const result = await service.stampSIDtoObject(input);
+            it('should skip stamping file attributes if not on win32', async () => {
+                Object.defineProperty(process, 'platform', { value: 'linux' });
+                const input = createMockInput();
+                const result = await service.stampFileAttrMeta(input);
+                expect(result.sourceErrors).toEqual([]);
+                expect(result.targetErrors).toEqual([]);
+            });
 
-            expect(result.sourceErrors).toEqual([]);
-            expect(result.targetErrors).toEqual([]);
-            expect(shellService.runCommand).not.toHaveBeenCalled();
-        });
+            it('should handle error when getting file attributes fails', async () => {
+                const input = createMockInput();
+                const error = new Error('Attrib error') as any;
+                error.code = 'EATTR';
+                shellService.runCommand.mockRejectedValueOnce(error);
+                dmError.mockReturnValue({});
+                const result = await service.stampFileAttrMeta(input);
+                expect(result.sourceErrors).toEqual(['EATTR']);
+                expect(result.targetErrors).toEqual([]);
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    'Getting Attribute for /source/test-file.txt, Error: Attrib error',
+                    error.stack
+                );
+                expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+            });
 
-        it('should successfully stamp SID on Windows platform', async () => {
-            Object.defineProperty(process, 'platform', { value: 'win32' });
-            const input = createMockInput();
-            
-            const rawSID = 'S-1-5-21-123456789-987654321-111111111-1001';
-            const mockACLs = [
-                { user: 'DOMAIN\\user1', permissions: 'F' },
-                { user: 'DOMAIN\\user2', permissions: 'R' },
-            ];
+            it('should set file attributes on target when present', async () => {
+                const input = createMockInput();
+                shellService.runCommand
+                    .mockResolvedValueOnce('A H S R C:\\source\\test-file.txt') // attrib source
+                    .mockResolvedValueOnce('success'); // attrib target
+                const result = await service.stampFileAttrMeta(input);
+                expect(result.sourceErrors).toEqual([]);
+                expect(result.targetErrors).toEqual([]);
+                expect(shellService.runCommand).toHaveBeenCalledWith('attrib +H +S +R +A "/target/test-file.txt"');
+            });
 
-            CommandConfig.getSMBCommand
-                .mockReturnValueOnce('getfacl ${PATH}') // for getRawSID
-                .mockReturnValue('icacls ${PATH} /grant ${USER}:${ACL}'); // for setSID
-            shellService.runCommand
-                .mockResolvedValueOnce(rawSID) // getRawSID
-                .mockResolvedValueOnce('success') // first setSID
-                .mockResolvedValueOnce('success'); // second setSID
-            getUserACLs.mockReturnValue(mockACLs);
+            it('should skip setting attributes if none present', async () => {
+                const input = createMockInput();
+                shellService.runCommand.mockResolvedValueOnce('C:\\source\\test-file.txt');
+                const result = await service.stampFileAttrMeta(input);
+                expect(result.sourceErrors).toEqual([]);
+                expect(result.targetErrors).toEqual([]);
+                // Only one call for getting attributes, not for setting
+                expect(shellService.runCommand).toHaveBeenCalledTimes(1);
+            });
 
-            const result = await service.stampSIDtoObject(input);
-
-            expect(result.sourceErrors).toEqual([]);
-            expect(result.targetErrors).toEqual([]);
-            expect(getUserACLs).toHaveBeenCalledWith(rawSID, '/source/test-file.txt');
-            expect(shellService.runCommand).toHaveBeenCalledTimes(3); // getRawSID + 2 setSID calls
-        });
-
-        it('should handle identity mapping for SID stamping', async () => {
-            Object.defineProperty(process, 'platform', { value: 'win32' });
-            const input = createMockInput({}, { isIdentityMappingAvailable: true });
-            
-            const rawSID = 'S-1-5-21-123456789-987654321-111111111-1001';
-            const mockACLs = [{ user: 'DOMAIN\\user1', permissions: 'F' }];
-
-            CommandConfig.getSMBCommand
-                .mockReturnValueOnce('getfacl ${PATH}')
-                .mockReturnValue('icacls ${PATH} /grant ${USER}:${ACL}');
-            shellService.runCommand
-                .mockResolvedValueOnce(rawSID)
-                .mockResolvedValueOnce('success');
-            getUserACLs.mockReturnValue(mockACLs);
-            redisService.getOwnerIdentity.mockResolvedValue('MAPPED\\user1');
-
-            const result = await service.stampSIDtoObject(input);
-
-            expect(result.sourceErrors).toEqual([]);
-            expect(result.targetErrors).toEqual([]);
-            expect(redisService.getOwnerIdentity).toHaveBeenCalledWith('job-run-123', 'DOMAIN\\user1', 'SID');
-        });
-
-        it('should handle directory vs file command patterns', async () => {
-            Object.defineProperty(process, 'platform', { value: 'win32' });
-            const input = createMockInput({}, {}, true); // isDir = true
-            
-            const rawSID = 'S-1-5-21-123456789-987654321-111111111-1001';
-            const mockACLs = [{ user: 'DOMAIN\\user1', permissions: 'F' }];
-
-            CommandConfig.getSMBCommand
-                .mockReturnValueOnce('getfacl ${PATH}')
-                .mockReturnValue('icacls ${PATH} /grant ${USER}:${ACL} /T');
-            shellService.runCommand
-                .mockResolvedValueOnce(rawSID)
-                .mockResolvedValueOnce('success');
-            getUserACLs.mockReturnValue(mockACLs);
-
-            const result = await service.stampSIDtoObject(input);
-
-            expect(result.sourceErrors).toEqual([]);
-            expect(result.targetErrors).toEqual([]);
-            expect(CommandConfig.getSMBCommand).toHaveBeenCalledWith(process.platform, 'SET_SID_FOR_OBJECT_DIR');
-        });
-
-        it('should handle getRawSID errors gracefully', async () => {
-            Object.defineProperty(process, 'platform', { value: 'win32' });
-            const input = createMockInput();
-            
-            const error = new Error('Access denied') as any;
-            error.code = 'EACCES';
-            CommandConfig.getSMBCommand.mockReturnValue('getfacl ${PATH}');
-            shellService.runCommand.mockRejectedValue(error);
-            dmError.mockReturnValue({});
-
-            const result = await service.stampSIDtoObject(input);
-
-            expect(result.sourceErrors).toEqual(['EACCES']);
-            expect(result.targetErrors).toEqual([]);
-            expect(mockLogger.error).toHaveBeenCalledWith(
-                'Getting ACL for /source/test-file.txt, Error: Access denied',
-                error.stack
-            );
-            expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
-        });
-
-        it('should handle setSID errors gracefully', async () => {
-            Object.defineProperty(process, 'platform', { value: 'win32' });
-            const input = createMockInput();
-            
-            const rawSID = 'S-1-5-21-123456789-987654321-111111111-1001';
-            const mockACLs = [{ user: 'DOMAIN\\user1', permissions: 'F' }];
-            const error = new Error('Permission denied') as any;
-            error.code = 'EPERM';
-
-            CommandConfig.getSMBCommand
-                .mockReturnValueOnce('getfacl ${PATH}')
-                .mockReturnValue('icacls ${PATH} /grant ${USER}:${ACL}');
-            shellService.runCommand
-                .mockResolvedValueOnce(rawSID)
-                .mockRejectedValueOnce(error);
-            getUserACLs.mockReturnValue(mockACLs);
-            dmError.mockReturnValue({});
-
-            const result = await service.stampSIDtoObject(input);
-
-            expect(result.sourceErrors).toEqual([]);
-            expect(result.targetErrors).toEqual(['EPERM']);
-            expect(mockLogger.error).toHaveBeenCalledWith('Error setting ownership: Permission denied');
-            expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
-        });
-
-        it('should skip users when identity mapping returns null', async () => {
-            Object.defineProperty(process, 'platform', { value: 'win32' });
-            const input = createMockInput({}, { isIdentityMappingAvailable: true });
-            
-            const rawSID = 'S-1-5-21-123456789-987654321-111111111-1001';
-            const mockACLs = [
-                { user: 'DOMAIN\\user1', permissions: 'F' },
-                { user: 'DOMAIN\\user2', permissions: 'R' },
-            ];
-
-            CommandConfig.getSMBCommand
-                .mockReturnValueOnce('getfacl ${PATH}')
-                .mockReturnValue('icacls ${PATH} /grant ${USER}:${ACL}');
-            shellService.runCommand
-                .mockResolvedValueOnce(rawSID)
-                .mockResolvedValueOnce('success');
-            getUserACLs.mockReturnValue(mockACLs);
-            redisService.getOwnerIdentity
-                .mockResolvedValueOnce('MAPPED\\user1') // user1 mapped
-                .mockResolvedValueOnce(null); // user2 not mapped
-
-            const result = await service.stampSIDtoObject(input);
-
-            expect(result.sourceErrors).toEqual([]);
-            expect(result.targetErrors).toEqual([]);
-            expect(shellService.runCommand).toHaveBeenCalledTimes(2); // getRawSID + 1 setSID (user2 skipped)
+            it('should handle error when setting file attributes fails', async () => {
+                const input = createMockInput();
+                shellService.runCommand
+                    .mockResolvedValueOnce('A H S R C:\\source\\test-file.txt') // attrib source
+                    .mockRejectedValueOnce(Object.assign(new Error('Set attrib error'), { code: 'EATTRSET' }));
+                dmError.mockReturnValue({});
+                const result = await service.stampFileAttrMeta(input);
+                expect(result.sourceErrors).toEqual([]);
+                expect(result.targetErrors).toEqual(['EATTRSET']);
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    'Transferring ACL to /target/test-file.txt, Error: Set attrib error',
+                    expect.anything()
+                );
+                expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+            });
         });
     });
-});
+

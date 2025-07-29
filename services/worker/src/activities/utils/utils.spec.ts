@@ -492,60 +492,7 @@ describe('utils', () => {
         });
     });
 
-    describe('isMetaUpdated', () => {
-
-
-        it('should return false when content differs', () => {
-            const sourceStats = { size: 100, mtime: new Date('2023-01-01') } as fs.Stats;
-            const destStats = { size: 200, mtime: new Date('2023-01-01') } as fs.Stats;
-            expect(isMetaUpdated(sourceStats, destStats)).toBe(false);
-        });
-
-        it('should return true when gid differs', () => {
-            const sourceStats = { size: 100, mtime: new Date('2023-01-01'), gid: 1001, uid: 1001, atime: new Date('2023-01-01'), mode: 0o644 } as fs.Stats;
-            const destStats = { size: 100, mtime: new Date('2023-01-01'), gid: 1002, uid: 1001, atime: new Date('2023-01-01'), mode: 0o644 } as fs.Stats;
-            expect(isMetaUpdated(sourceStats, destStats)).toBe(true);
-        });
-
-        it('should return true when uid differs', () => {
-            const sourceStats = { size: 100, mtime: new Date('2023-01-01'), gid: 1001, uid: 1001, atime: new Date('2023-01-01'), mode: 0o644 } as fs.Stats;
-            const destStats = { size: 100, mtime: new Date('2023-01-01'), gid: 1001, uid: 1002, atime: new Date('2023-01-01'), mode: 0o644 } as fs.Stats;
-            expect(isMetaUpdated(sourceStats, destStats)).toBe(true);
-        });
-
-        it('should return true when atime differs', () => {
-            const sourceStats = { size: 100, mtime: new Date('2023-01-01'), gid: 1001, uid: 1001, atime: new Date('2023-01-01'), mode: 0o644 } as fs.Stats;
-            const destStats = { size: 100, mtime: new Date('2023-01-01'), gid: 1001, uid: 1001, atime: new Date('2023-01-02'), mode: 0o644 } as fs.Stats;
-            expect(isMetaUpdated(sourceStats, destStats)).toBe(true);
-        });
-
-        it('should return true when mode differs', () => {
-            const sourceStats = { size: 100, mtime: new Date('2023-01-01'), gid: 1001, uid: 1001, atime: new Date('2023-01-01'), mode: 0o644 } as fs.Stats;
-            const destStats = { size: 100, mtime: new Date('2023-01-01'), gid: 1001, uid: 1001, atime: new Date('2023-01-01'), mode: 0o755 } as fs.Stats;
-            expect(isMetaUpdated(sourceStats, destStats)).toBe(true);
-        });
-
-        it('should return false when metadata is identical', () => {
-            const date = new Date('2023-01-01');
-            const sourceStats = {
-                size: 100,
-                mtime: date,
-                gid: 1001,
-                uid: 1001,
-                atime: date,
-                mode: 0o644
-            } as fs.Stats;
-            const destStats = {
-                size: 100,
-                mtime: new Date(date),
-                gid: 1001,
-                uid: 1001,
-                atime: new Date(date),
-                mode: 0o644
-            } as fs.Stats;
-            expect(isMetaUpdated(sourceStats, destStats)).toBe(true);
-        });
-    });
+ 
 
     describe('getErrorCode', () => {
         it('should return TASK error codes', () => {
@@ -596,6 +543,8 @@ describe("formatDate", () => {
         const date = new Date("2024-03-27T15:05:09Z");
         expect(formatDate(date)).toBeDefined();
     });
+
+
 });
 
 

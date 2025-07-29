@@ -1,19 +1,21 @@
-import { OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
 import { Inject, Injectable } from "@nestjs/common";
+import { OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import * as fs from "fs";
 import { ShellService } from "src/activities/common/shell.service";
-import { dmError, formatDate, getUserACLs } from "src/activities/utils/utils";
-import { ACL, Operation, Origin } from "src/activities/utils/utils.types";
-import { CommandConfig, CommandPattern } from "src/config/command.config";
+import { dmError, formatDate } from "src/activities/utils/utils";
+import { Operation, Origin } from "src/activities/utils/utils.types";
 import { RedisService } from "src/redis/redis.service";
 import { CommandExecInput, CommandOutput } from "./command-execution.type";
+import { getAclScript, getTransferAclSript, validateSidMapping } from "./sid-mapping.util";
+import { AclEntry } from "./sid-mapping.util.type";
 import { StampMetaOutput } from "./stamp-meta.type";
-import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 
 @Injectable()
 export class StampMetaService {
     private readonly logger: LoggerService;
+    private readonly attributeRegex = /^([A-Za-z]:[\\/]|[\\/])/;
     constructor(
         private readonly shellService: ShellService,
         private readonly redisService: RedisService,
@@ -29,11 +31,7 @@ export class StampMetaService {
             input.command.ops[OPS_CMD.STAMP_META] &&
             input.command.ops[OPS_CMD.STAMP_META].status !== OPS_STATUS.COMPLETED
         ) {
-            // Stamp permissions
-            const permissionsOutput = await this.stampPermission(input);
-            output.sourceErrors.push(...permissionsOutput.sourceErrors);
-            output.targetErrors.push(...permissionsOutput.targetErrors);
-
+           
             // Stamp birth time
             const birthTimeOutput = await this.stampBirthTime(input);
             output.sourceErrors.push(...birthTimeOutput.sourceErrors);
@@ -45,7 +43,7 @@ export class StampMetaService {
             output.targetErrors.push(...gidUidOutput.targetErrors);
 
             // Stamp SID to object
-            const sidOutput = await this.stampSIDtoObject(input);
+            const sidOutput = await this.stampSIDAclToObject(input);
             output.sourceErrors.push(...sidOutput.sourceErrors);
             output.targetErrors.push(...sidOutput.targetErrors);
 
@@ -53,6 +51,16 @@ export class StampMetaService {
             const timeOutput = await this.stampAccessAndModifiedTime(input);
             output.sourceErrors.push(...timeOutput.sourceErrors);
             output.targetErrors.push(...timeOutput.targetErrors);
+
+             // Stamp Hidden Metadata
+            const hiddenAttrOutput = await this.stampFileAttrMeta(input);
+            output.sourceErrors.push(...hiddenAttrOutput.sourceErrors);
+            output.targetErrors.push(...hiddenAttrOutput.targetErrors);            
+
+             // Stamp permissions
+            const permissionsOutput = await this.stampPermission(input);
+            output.sourceErrors.push(...permissionsOutput.sourceErrors);
+            output.targetErrors.push(...permissionsOutput.targetErrors);
 
             // Preserve access and modified time
             const preserveTimeOutput = await this.preserveAccessAndModifiedTime(input);
@@ -92,10 +100,14 @@ export class StampMetaService {
         if(command.metadata?.birthtime) {
             try {
                 if(process.platform === 'win32') {
-                    const birthtime = new Date(command.metadata.birthtime) 
-                    var dateString = new Date(birthtime.getTime() - birthtime.getTimezoneOffset() * 60000);
-                    var birth_time = dateString.toISOString().replace("T", " ").substr(0, 19);
-                    const birthtimeCommand = `(tem.DateTime]::ParseExact('${birth_time}', 'yyyy-MMGet-Item '${targetPath}').CreationTime = [Sys-dd HH:mm:ss', $null)`;
+                    const birthtime = new Date(command.metadata.birthtime);
+                    const dateWithOffset = new Date(birthtime.getTime() - birthtime.getTimezoneOffset() * 60000);
+
+                    // Format to `yyyy-MM-dd HH:mm:ss.fff`
+                    const iso = dateWithOffset.toISOString(); 
+                    const birth_time = iso.replace("T", " ").replace("Z", "").substr(0, 23); // includes milliseconds
+
+                    const birthtimeCommand = `(Get-Item '${targetPath}').CreationTime = [System.DateTime]::ParseExact('${birth_time}', 'yyyy-MM-dd HH:mm:ss.fff', $null)`;
                     await this.shellService.runCommand(birthtimeCommand);
                 }else {
                     const birthtimeCommand = `touch -t ${formatDate(new Date(command.metadata.birthtime))} ${targetPath}${command?.isDir ? '/' : ''}`;
@@ -133,7 +145,6 @@ export class StampMetaService {
         return output;
     }
 
-
     async stampAccessAndModifiedTime({command, jobContext, targetPath, errorType}: CommandExecInput): Promise<StampMetaOutput> {  
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         if(command.metadata.mtime && command.metadata.atime) {
@@ -164,54 +175,97 @@ export class StampMetaService {
          return output;
     }
 
+    async stampSIDAclToObject({command, jobContext, sourcePath, targetPath, errorType}: CommandExecInput): Promise<StampMetaOutput> {
+        const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
+        if(process.platform !== 'win32') return output;
+        try {
+            const getSourceAcl = getAclScript(sourcePath);
+            command.metadata.sid = await this.shellService.runCommand(getSourceAcl);
+        } catch(error) {
+            this.logger.error(`Getting ACL for ${sourcePath}, Error: ${error.message}`, error   .stack);
+            const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.STAMP_META  , errorType, command.id, error, {name: command.fPath, path: targetPath});
+            await jobContext.publishToErrorStream(dmErr);
+            output.sourceErrors.push(error.code);
+            return output;
+        }
+        try {
+            const acl = JSON.parse(command.metadata.sid);
+        
+            const aclMapping: Map<string, string> = new Map();
+            let mappingNotFound: string[] = []
+            // get SID to username mapping
+            if(jobContext.jobConfig.options.isIdentityMappingAvailable) 
+                acl.Access.value = await Promise.all(acl.Access.value.map(async (entry: AclEntry) => {
+                    const mapped = await this.redisService.getOwnerIdentity(jobContext.jobRunId, entry.IdentityReference, 'SID');
+                    if (mapped) {
+                        entry.IdentityReference = mapped;
+                        aclMapping.set(mapped, entry.IdentityReference);
+                    }
+                    else mappingNotFound.push(entry.IdentityReference);
+                    return entry;
+                }))
+            
+            const transferAclSript = getTransferAclSript(targetPath, command.isDir, acl);
+            await this.shellService.runCommand(transferAclSript);
 
-    async getRawSID(filePath: String) : Promise<string> {
-        const getSIDCommand = CommandConfig.getSMBCommand(process.platform, CommandPattern.GET_SID_FOR_OBJECT)?.replaceAll('${PATH}', filePath);
-        return await this.shellService.runCommand(getSIDCommand);
+            const getTargetAcl = getAclScript(targetPath);
+            const targetRawAcl = await this.shellService.runCommand(getTargetAcl);
+            const targetAcl = JSON.parse(targetRawAcl);
+            
+            command.ops[OPS_CMD.STAMP_META].params.sidMap = validateSidMapping({
+                sidMapping: aclMapping, expected: acl, 
+                actual: targetAcl, failedMaps: mappingNotFound
+            });
+
+        } catch(error) {
+            this.logger.error(`Transferring ACL to ${targetPath}, Error: ${error.message}`, error.stack);
+            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, {name: command.fPath, path: targetPath});
+            await jobContext.publishToErrorStream(dmErr);
+            output.targetErrors.push(error.code);
+        }
+        return output
     }
 
-    async stampSIDtoObject({command, jobContext, sourcePath, targetPath, errorType}: CommandExecInput): Promise<StampMetaOutput> {
+
+
+    async stampFileAttrMeta({command, jobContext, sourcePath, targetPath, errorType}: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
-        if(process.platform === 'win32') {
-            try{
-                command.metadata.sid = await this.getRawSID(sourcePath);
-            }catch(error) {
-                this.logger.error(`Getting ACL for ${sourcePath}, Error: ${error.message}`, error.stack);
-                const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.STAMP_META, errorType, command.id, error, {name: command.fPath, path: targetPath});
-                await jobContext.publishToErrorStream(dmErr);
-                output.sourceErrors.push(error.code);
-                return output;
+        if(process.platform !== 'win32') return output;
+        try{
+            const fileAttr = await this.shellService.runCommand(`attrib ${sourcePath}`);
+            command.ops[OPS_CMD.STAMP_META].params.fileAttr = fileAttr.trim().split(/\s+/).filter(token => !this.attributeRegex.test(token)).join('')
+            this.logger.debug(`File attributes for ${sourcePath}: ${command.ops[OPS_CMD.STAMP_META].params.fileAttr}`);
+
+        }catch(error) {
+            this.logger.error(`Getting Attribute for ${sourcePath}, Error: ${error.message}`, error.stack);
+            const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.STAMP_META  , errorType, command.id, error, {name: command.fPath, path: targetPath});
+            await jobContext.publishToErrorStream(dmErr);
+            output.sourceErrors.push(error.code);
+            return output;
+        } 
+        try{
+            let attributeFlags = '';
+            if (command.ops[OPS_CMD.STAMP_META].params.fileAttr?.includes('H')) attributeFlags += '+H ';
+            if (command.ops[OPS_CMD.STAMP_META].params.fileAttr?.includes('S')) attributeFlags += '+S ';
+            if (command.ops[OPS_CMD.STAMP_META].params.fileAttr?.includes('R')) attributeFlags += '+R ';
+            if (command.ops[OPS_CMD.STAMP_META].params.fileAttr?.includes('A')) attributeFlags += '+A ';
+            
+            this.logger.debug(`Setting file attributes for ${targetPath}: ${attributeFlags}`);
+
+            if (attributeFlags) {
+                const command = `attrib ${attributeFlags.trim()} "${targetPath}"`;
+                this.logger.debug(`Setting file attributes for ${targetPath}: ${command}`);
+                await this.shellService.runCommand(command);
             }
-            try{
-                const usersAcls:ACL[] = getUserACLs(command.metadata.sid, sourcePath)
-                await Promise.all(
-                    usersAcls.map(async (userAcl) => {
-                    const user = !jobContext.jobConfig.options.isIdentityMappingAvailable ? 
-                        userAcl.user : 
-                            await this.redisService.getOwnerIdentity(jobContext.jobRunId, userAcl.user, 'SID');
-                    if (user) {
-                        const commandExec = command?.isDir === false
-                        ? CommandPattern.SET_SID_FOR_OBJECT
-                        : CommandPattern.SET_SID_FOR_OBJECT_DIR;
-                        const rawCommand = CommandConfig.getSMBCommand(process.platform, commandExec);
-                        let setSIDCommand = rawCommand
-                        .replace('${PATH}', targetPath)
-                        .replace('${USER}', user)
-                        .replace('${ACL}', userAcl.permissions);
-                        this.logger.warn(` setSIDCommand : ${setSIDCommand}`)
-                        const output = await this.shellService.runCommand(setSIDCommand);
-                        this.logger.debug(` output : ${output}`)
-                    }
-                    })
-                );
-            } 
-            catch(error) {
-                this.logger.error(`Error setting ownership: ${error.message}`);
-                const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, {name: command.fPath, path: targetPath});
-                await jobContext.publishToErrorStream(dmErr);
-                output.targetErrors.push(error.code);
-            }
+
+        }catch(error) {
+            this.logger.error(`Transferring ACL to ${targetPath}, Error: ${error.message}`, error.stack);
+            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, {name: command.fPath, path: targetPath});
+            await jobContext.publishToErrorStream(dmErr);
+            output.targetErrors.push(error.code);
         }
+
         return output;
     }
+
 }

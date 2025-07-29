@@ -29,10 +29,3 @@ export interface ValidateCommandInput {
     item: ItemInfo;
     errorType?: ErrorType | undefined
 }
-
-export interface MissMatchMeta {
-    [key: string]: {
-        source: string;
-        target: string;
-    }
-}

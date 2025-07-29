@@ -8,7 +8,7 @@ import * as path from 'path';
 import { dmError, getFilePermissions, getFileType } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { WorkerThreadService } from "src/thread/worker.thread.service";
-import { CommandExecInput, CommandExecOutput, CommandOutput, MissMatchMeta, ValidateCommandInput } from "./command-execution.type";
+import { CommandExecInput, CommandExecOutput, CommandOutput, ValidateCommandInput } from "./command-execution.type";
 import { StampMetaService } from "./stamp-meta.service";
 
 @Injectable()
@@ -169,6 +169,7 @@ export class CommandExecService {
             checksum : command.ops?.[OPS_CMD.COPY_FILE]?.params?.checksums?.sourceChecksum ?? '',
             uid: sourceStats.uid,
             gid: sourceStats.gid,
+                        sid: command.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.sourceAcl ?? ''
         }
 
         const targetStats = await fs.promises.lstat(targetPath);
@@ -181,6 +182,7 @@ export class CommandExecService {
             checksum : command.ops?.[OPS_CMD.COPY_FILE]?.params?.checksums?.targetChecksum ?? '',
             uid: targetStats.uid,
             gid: targetStats.gid,
+            sid: command.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.targetAcl ?? ''
         }
 
 
@@ -201,22 +203,25 @@ export class CommandExecService {
     }
 
     async validateCommand({ cmd, item, jobContext, errorType}:ValidateCommandInput): Promise<void> {
-        const missMatch: MissMatchMeta = {}
+        let validateMisMatch : string = ""
 
         if (item.sourceMeta.checksum !== item.targetMeta.checksum) 
-            missMatch['checksum'] = { source: item.sourceMeta.checksum, target: item.targetMeta.checksum };
+            validateMisMatch += `CheckSum Mismatch detected, source: ${item.sourceMeta.checksum}, target: ${item.targetMeta.checksum} \n`;
         
         if (item.sourceMeta.permission !== item.targetMeta.permission) 
-            missMatch['permission'] = { source: item.sourceMeta.permission, target: item.targetMeta.permission };
+            validateMisMatch += `Permission Mismatch detected, source: ${item.sourceMeta.permission}, target: ${item.targetMeta.permission} \n`;
         
         if (item.sourceMeta.birthTime.getTime() !== item.targetMeta.birthTime.getTime())
-            missMatch['birthTime'] = { source: item.sourceMeta.birthTime.toISOString(), target: item.targetMeta.birthTime.toISOString() };
+            validateMisMatch += `BirthTime Mismatch detected, source: ${item.sourceMeta.birthTime.toISOString()}, target: ${item.targetMeta.birthTime.toISOString()} \n`;
 
         if (item.sourceMeta.accessTime.getTime() !== item.targetMeta.accessTime.getTime())
-            missMatch['accessTime'] = { source: item.sourceMeta.accessTime.toISOString(), target: item.targetMeta.accessTime.toISOString() };
+            validateMisMatch += `AccessTime Mismatch detected, source: ${item.sourceMeta.accessTime.toISOString()}, target: ${item.targetMeta.accessTime.toISOString()} \n`;
 
-        if(Object.keys(missMatch).length > 0) {
-            const error = new Error(`Metadata mismatch for metafields ${JSON.stringify(missMatch)}`);
+        if(cmd.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.failedSid?.length > 0) 
+            validateMisMatch += `SID Mapping Failed to Stamp for mapping ${cmd.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.failedSid} \n`;
+
+        if(validateMisMatch.length > 0) {
+            const error = new Error(validateMisMatch);
             const dmErr = dmError( "OPERATION",
                 Origin.DESTINATION, Operation.STAMP_META,
                 errorType, cmd.id, error, {name: cmd.fPath, path: item.fileName});
