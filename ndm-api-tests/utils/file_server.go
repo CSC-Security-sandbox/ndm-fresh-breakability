@@ -71,10 +71,10 @@ func init() {
 	}
 
 	sshConfig = SSHConfig{
-		Username: NDM_VM_USER_NAME,
-		Host:     NDM_VM_HOST,
+		Username: NDM_WORKERS_USER_NAME,
+		Host:     NDM_WORKERS_HOST,
 		Port:     port,
-		Password: NDM_VM_PASSWORD,
+		Password: NDM_WORKERS_HOST,
 	}
 }
 
@@ -291,21 +291,11 @@ func ClearVolume(export string) error {
 	config := GetAttachedWorkerDetails()
 
 	sshConfig = SSHConfig{
-		Username: NDM_VM_USER_NAME,
+		Username: config.Username,
 		Host:     config.Host,
 		Port:     config.Port,
-		Password: NDM_VM_PASSWORD,
+		Password: config.Password,
 	}
-
-	fmt.Printf("UMV SSH BEFORE : %+v \n", sshConfig)
-	sshConfig = SSHConfig{
-		Username: NDM_WORKERS_USER_NAME,
-		Host:     NDM_WORKERS_HOST,
-		Port:     22,
-		Password: NFS_NDM_WORKERS_PASSWORD,
-	}
-
-	fmt.Printf("UMV SSH AFTER : %+v \n", sshConfig)
 
 	fmt.Println("UMV RUNNING : ", script)
 
@@ -327,11 +317,12 @@ func RemovePartialDeltaFromVolume(export string, fileCount int) error {
 	config := GetAttachedWorkerDetails()
 
 	sshConfig = SSHConfig{
-		Username: NDM_VM_USER_NAME,
+		Username: config.Username,
 		Host:     config.Host,
 		Port:     config.Port,
-		Password: NDM_VM_PASSWORD,
+		Password: config.Password,
 	}
+
 	destMount := "/mnt/data_remove"
 
 	script := fmt.Sprintf(`
@@ -387,11 +378,11 @@ func AddDataToVolumeForSMB(export string) string {
 	mkdir %s &&
 	(for /L %%i in (1,1,10) do fsutil file createnew %s\file%%i.txt 102400) &&
 	net use %s %s /user:%s "%s" &&
-	(if exist %s\%s\ ( rmdir /s /q %s\%s ) else ( mkdir %s\%s )) &&
+	(if exist %s\%s\ ( rmdir /s /q %s\%s ) else ( echo "delta not found" )) &
 	xcopy /E /I /Y %s %s\%s &&
 	net use %s /delete /y &&
 	rmdir /s /q %s
-	`, deltaDir, deltaDir, deltaDir, deltaDir, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, smbShare, DeltaFolder, smbShare, DeltaFolder, smbShare, DeltaFolder, deltaDir, smbShare, DeltaFolder, mappedDrive, deltaDir)
+	`, deltaDir, deltaDir, deltaDir, deltaDir, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, smbShare, DeltaFolder, smbShare, DeltaFolder, deltaDir, smbShare, DeltaFolder, mappedDrive, deltaDir)
 
 	commands := []string{}
 	for _, v := range strings.Split(cmd, "\n") {
@@ -448,17 +439,10 @@ func AddDataToVolume(export string) error {
 	config := GetAttachedWorkerDetails()
 
 	sshConfig = SSHConfig{
-		Username: NDM_WORKERS_USER_NAME,
+		Username: config.Username,
 		Host:     config.Host,
 		Port:     config.Port,
-		Password: NFS_NDM_WORKERS_PASSWORD,
-	}
-
-	sshConfig = SSHConfig{
-		Username: NDM_WORKERS_USER_NAME,
-		Host:     NDM_WORKERS_HOST,
-		Port:     22,
-		Password: NFS_NDM_WORKERS_PASSWORD,
+		Password: config.Password,
 	}
 
 	fmt.Printf("UMV TRYING TO CONNECT : %+v \n", sshConfig)
@@ -482,7 +466,7 @@ func RemoveDeltaFromVolumeForSMB(export string) string {
 	removeDeltaScript := fmt.Sprintf(`cmd /C
 	net use %s /delete /yes &
 	net use %s %s /user:%s "%s" &&
-	(if exist %s\%s\ ( rmdir /s /q %s\%s ) else ( echo "delta not found" )) &&
+	(if exist %s\%s\ ( rmdir /s /q %s\%s ) else ( echo "delta not found" )) &
 	net use %s /delete /yes`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, smbShare, DeltaFolder, smbShare, DeltaFolder, mappedDrive)
 
 	commands := []string{}
@@ -533,20 +517,11 @@ func RemoveDeltaFromVolume(export string) error {
 	config := GetAttachedWorkerDetails()
 
 	sshConfig = SSHConfig{
-		Username: NDM_VM_USER_NAME,
+		Username: config.Username,
 		Host:     config.Host,
 		Port:     config.Port,
-		Password: NDM_VM_PASSWORD,
+		Password: config.Password,
 	}
-	fmt.Printf("UMV SSH BEFORE : %+v \n", sshConfig)
-
-	sshConfig = SSHConfig{
-		Username: NDM_WORKERS_USER_NAME,
-		Host:     NDM_WORKERS_HOST,
-		Port:     22,
-		Password: NFS_NDM_WORKERS_PASSWORD,
-	}
-	fmt.Printf("UMV SSH AFTER : %+v \n", sshConfig)
 
 	fmt.Println("UMV RUNNING : ", script)
 
@@ -562,10 +537,10 @@ func RemoveDeltaFromVolume(export string) error {
 func ModifyDataOnVolume(export string) error {
 	config := GetAttachedWorkerDetails()
 	sshConfig = SSHConfig{
-		Username: NDM_VM_USER_NAME,
+		Username: config.Username,
 		Host:     config.Host,
 		Port:     config.Port,
-		Password: NDM_VM_PASSWORD,
+		Password: config.Password,
 	}
 	destMount := "/mnt/data_modify"
 
@@ -604,10 +579,10 @@ func ModifyDataOnVolume(export string) error {
 func RestoreOriginalDataOnVolume(export string) error {
 	config := GetAttachedWorkerDetails()
 	sshConfig = SSHConfig{
-		Username: NDM_VM_USER_NAME,
+		Username: config.Username,
 		Host:     config.Host,
 		Port:     config.Port,
-		Password: NDM_VM_PASSWORD,
+		Password: config.Password,
 	}
 	destMount := "/mnt/data_restore"
 
@@ -689,12 +664,12 @@ func GetVolumeIDByName(volumeName, authToken, configId string) (string, error) {
 // GetFileUserGroupId mounts the NFS export, stats the given file‐path
 // (relative to that export) and returns its numeric UID and GID.
 func GetFileUserGroupId(export, fileName string) (uid, gid int, err error) {
-	cfg := GetAttachedWorkerDetails()
+	config := GetAttachedWorkerDetails()
 	sshCfg := SSHConfig{
-		Username: NDM_VM_USER_NAME,
-		Host:     cfg.Host,
-		Port:     cfg.Port,
-		Password: NDM_VM_PASSWORD,
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
 	}
 
 	// Build a shell script that mounts + stats with "%u %g"

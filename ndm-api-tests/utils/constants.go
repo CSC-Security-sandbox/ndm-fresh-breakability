@@ -212,14 +212,18 @@ func UpdateConfVariables(protocolType, sourceVolumesArgs, destinationVolumesArgs
 	}
 
 	InitWorkers(NDM_WORKERS_HOST, NDM_WORKERS_PORT, NDM_WORKERS_PASSWORD, NDM_WORKERS_USER_NAME)
+	//CreateSMBDataset()
+	//os.Exit(1)
 
-	//export := fmt.Sprintf("%s:vol4_33", SOURCE_HOST_IP)
-	/*err := AddDataToVolume(export)
+	//export := fmt.Sprintf("%s:vol3_33", SOURCE_HOST_IP)
+	/*export := fmt.Sprintf("%s:vol4_33", SOURCE_HOST_IP)
+
+	err := AddDataToVolume(export)
 	if err != nil {
 		fmt.Println("UMV error add data to volume : ", err.Error())
 	}
 
-	Wait(20)*/
+	os.Exit(1)
 	/*err := RemoveDeltaFromVolume(export)
 	if err != nil {
 		fmt.Println("UMV error  data to volume : ", err.Error())

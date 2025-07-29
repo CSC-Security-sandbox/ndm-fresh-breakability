@@ -445,7 +445,7 @@ func getStopWorkerScriptForNFS() string {
 	`, NDM_VM_PASSWORD)
 }
 
-func getStopWorkerScriptSMB() string {
+func getStopWorkerScriptForSMB() string {
 	return `cmd /C net stop "Datamigrator Worker"`
 }
 
@@ -455,12 +455,12 @@ func GetStopWorkerScript() string {
 	case ProtocolNFS:
 		return getStopWorkerScriptForNFS()
 	case ProtocolSMB:
-		return getStopWorkerScriptSMB()
+		return getStopWorkerScriptForSMB()
 	}
 	return ""
 }
 
-func getStartWorkerScriptNFS() string {
+func getStartWorkerScriptForNFS() string {
 	return fmt.Sprintf(`#!/bin/bash
 	set -e 
 
@@ -479,7 +479,7 @@ func getStartWorkerScriptNFS() string {
 	`, NDM_VM_PASSWORD)
 }
 
-func getStartWorkerScriptSMB() string {
+func getStartWorkerScriptForSMB() string {
 	return `cmd /C net start "Datamigrator Worker"`
 }
 
@@ -487,9 +487,9 @@ func getStartWorkerScriptSMB() string {
 func GetStartWorkerScript() string {
 	switch PROTOCOL_TYPE {
 	case ProtocolNFS:
-		return getStartWorkerScriptNFS()
+		return getStartWorkerScriptForNFS()
 	case ProtocolSMB:
-		return getStartWorkerScriptSMB()
+		return getStartWorkerScriptForSMB()
 	}
 	return ""
 }

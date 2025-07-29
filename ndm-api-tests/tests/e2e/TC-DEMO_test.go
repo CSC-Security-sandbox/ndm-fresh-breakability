@@ -11,9 +11,9 @@ import (
 
 var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
 	var (
-		ProjectId string
-		workerId1 string
-		// workerId2 string
+		ProjectId              string
+		workerId1              string
+		workerId2              string
 		workerIds              []string
 		err                    error
 		destinationVolumePath1 string
@@ -26,13 +26,13 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 
 	Context("TC-001", func() {
 		BeforeEach(func() {
-			numberOfWorker := 1
+			numberOfWorker := 2
 			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
 			Expect(err).To(BeNil(), "Error during test environment setup")
-			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 1), "Expected 2 workers to be attached")
+			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 			workerIds = GetWorkerIds()
 			workerId1 = workerIds[0]
-			// workerId2 = workerIds[1]
+			workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
 
 			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, DESTINATION_VOLUMES[0])
@@ -52,16 +52,17 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 			var destinationConfigID, destinationPathID1 string
 
 			sourceParams := CreateServereParams{
-				ConfigName:       "source-file-server",
-				ConfigType:       ConfigTypeFile,
-				ProjectID:        ProjectId,
-				ServerType:       ServerTypeOtherNAS,
-				UserName:         PROTOCOL_USERNAME,
-				Password:         PROTOCOL_PASSWORD,
-				Protocol:         PROTOCOL_TYPE,
-				ProtocolVersion:  ProtocolVersion3,
-				Host:             SOURCE_HOST_IP,
-				Workers:          []string{workerId1},
+				ConfigName:      "source-file-server",
+				ConfigType:      ConfigTypeFile,
+				ProjectID:       ProjectId,
+				ServerType:      ServerTypeOtherNAS,
+				UserName:        PROTOCOL_USERNAME,
+				Password:        PROTOCOL_PASSWORD,
+				Protocol:        PROTOCOL_TYPE,
+				ProtocolVersion: ProtocolVersion3,
+				Host:            SOURCE_HOST_IP,
+				Workers:         []string{workerId1, workerId2},
+				//Workers:          []string{workerId1},
 				WorkingDirectory: "",
 			}
 			fmt.Printf("UMV CREATE SRC FILE SERVER PARAMS : %+v \n", sourceParams)
@@ -80,8 +81,6 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 
 			// sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID, headers)
 			// Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
-
-			Wait(30)
 
 			By("Creating a new discovery job for the source")
 			jobParams := DiscoveryJobParams{
@@ -127,16 +126,17 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 
 			By("Creating the destination file server")
 			destinationParams := CreateServereParams{
-				ConfigName:       "destination-file-server",
-				ConfigType:       ConfigTypeFile,
-				ProjectID:        ProjectId,
-				ServerType:       ServerTypeOtherNAS,
-				UserName:         PROTOCOL_USERNAME,
-				Password:         PROTOCOL_PASSWORD,
-				Protocol:         PROTOCOL_TYPE,
-				ProtocolVersion:  ProtocolVersion3,
-				Host:             DESTINATION_HOST_IP,
-				Workers:          []string{workerId1},
+				ConfigName:      "destination-file-server",
+				ConfigType:      ConfigTypeFile,
+				ProjectID:       ProjectId,
+				ServerType:      ServerTypeOtherNAS,
+				UserName:        PROTOCOL_USERNAME,
+				Password:        PROTOCOL_PASSWORD,
+				Protocol:        PROTOCOL_TYPE,
+				ProtocolVersion: ProtocolVersion3,
+				Host:            DESTINATION_HOST_IP,
+				//Workers:          []string{workerId1},
+				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
 
@@ -294,7 +294,7 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 
 		AfterEach(func() {
 			fmt.Println("UMV WAITING BEFORE CLEANUP")
-			Wait(50)
+			Wait(20)
 			err := RemoveDeltaFromVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
 
