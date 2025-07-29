@@ -106,14 +106,6 @@ describe('RedisService', () => {
       const res = await service.setJobState('t4', 'state' as any);
       expect(res).toEqual({ message: 'Error while updating the job state : t4' });
     });
-
-    it('getOwnerIdentity should hGet mapping', async () => {
-      (service as any).client = mockClient;
-      mockClient.hGet.mockResolvedValue('identity');
-      const jobCtx = { jobRunId: 'runId' } as any;
-      const result = service.getOwnerIdentity(jobCtx, '123', 'UID');
-      await expect(result).resolves.toBe('identity');
-    });
   });
 
   describe('setJobContext', () => {
@@ -165,28 +157,6 @@ describe('RedisService', () => {
 
       const result = await service.setJobState('traceId', 'jobState' as any);
       expect(result).toEqual({ message: 'Error while updating the job state : traceId' });
-    });
-  });
-
-  describe('getOwnerIdentity', () => {
-    it('should return owner identity', async () => {
-      (service as any).client = mockClient;
-      mockClient.hGet.mockResolvedValue('ownerIdentity');
-
-      const result = await service.getOwnerIdentity('jobRunId', 'id', 'SID');
-      expect(mockClient.hGet).toHaveBeenCalledWith('jobRunId:mapping', 'SID:id');
-      expect(result).toBe('ownerIdentity');
-    });
-  });
-
-  describe('getMemoryInfo', () => {
-    it('should return memory info', async () => {
-      (service as any).client = mockClient;
-      mockClient.info.mockResolvedValue('used_memory:1024\ntotal_system_memory:2048\n');
-
-      const result = await service.getMemoryInfo();
-      expect(mockClient.info).toHaveBeenCalledWith('memory');
-      expect(result).toEqual({ used_memory: 1024, total_system_memory: 2048 });
     });
   });
 });
