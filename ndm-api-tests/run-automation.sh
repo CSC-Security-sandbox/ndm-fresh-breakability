@@ -127,7 +127,11 @@ run_tests() {
 #run_tests "end-to-end" "./tests/e2e" "vol4_33,vol3_33" "volSMBAutoDst,volSMBAuto_vol1" "SMB"
 #------------------------------------------------------
 
-run_tests "end-to-end" "./tests/e2e" "vol4_33,vol3_33" "volSMBAutoDst,volSMBAuto_vol1" "SMB"
+#run_tests "end-to-end" "./tests/e2e" "vol4_33,vol3_33" "volSMBAutoDst,volSMBAuto_vol1" "SMB"
+
+#run_tests "end-to-end" "./tests/e2e" "/volSrcAuto,/vol_src_automation2" "vol_dest_automation,vol_dest_automation2" "NFS"
+
+run_tests regression "./tests/regression" "volSrcAuto,vol_src_automation2" "vol_dest_automation,vol_dest_automation2" "NFS"
 
 #run_tests "smoke" "./tests/smoke" "vol1,vol2" "vol3,vol4" "3h" "NFS"
 
