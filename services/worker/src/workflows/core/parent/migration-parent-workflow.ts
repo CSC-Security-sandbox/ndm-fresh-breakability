@@ -4,6 +4,7 @@ import { executeCleanup } from '../common/execute-cleanup-workflow';
 import { executeMigrationChildWorkflows } from '../common/execute-migration-child-workflows';
 import { handleReporting } from '../common/handle-reporting';
 import { executeWorkerSetup } from '../common/execute-setup-workflow';
+import { LogExecutionTime } from '../../../utils/perfomance.test';
 
 
 
@@ -24,11 +25,11 @@ interface MigrationWorkflowOutput {
 }
 
 
-export const MigrationWorkflow = async ({
+export const MigrationWorkflow = LogExecutionTime(async function MigrationWorkflow({
   traceId,
   payload,
   options = {},
-}: MigrationWorkflowInput): Promise<MigrationWorkflowOutput> => {
+}: MigrationWorkflowInput): Promise<MigrationWorkflowOutput> {
     const output: MigrationWorkflowOutput = {
       traceId: traceId,
       setupCompletedWorkers: [],
@@ -61,4 +62,4 @@ export const MigrationWorkflow = async ({
     await executeCleanup({ jobRunId: traceId, workerIds: output.setupCompletedWorkers, options });
 
     return output
-}
+});

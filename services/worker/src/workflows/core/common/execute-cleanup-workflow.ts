@@ -1,6 +1,7 @@
 import * as wf from '@temporalio/workflow'
 import { CommonActivityService } from 'src/activities/common/common.service';
 import { CleanupWorkerWorkflow } from "src/workflows/workflows";
+import { LogExecutionTime } from '../../../utils/perfomance.test';
 
 
 const {
@@ -16,7 +17,7 @@ export interface CleanUpWorkersInput {
 }
 
 
-export const executeCleanup = async ({ jobRunId, workerIds, options}: CleanUpWorkersInput): Promise<void> => {
+export const executeCleanup = LogExecutionTime(async function executeCleanup({ jobRunId, workerIds, options}: CleanUpWorkersInput): Promise<void> {
     
     await Promise.allSettled(
         workerIds.map(async (workerId) => {
@@ -41,4 +42,4 @@ export const executeCleanup = async ({ jobRunId, workerIds, options}: CleanUpWor
     const response = await cleanupJobContextActivity(jobRunId)
     console.log(`[${jobRunId}] CleanupJobContextActivity response: ${response}`);
     
-}
+});

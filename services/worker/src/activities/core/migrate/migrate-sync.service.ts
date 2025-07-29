@@ -15,6 +15,7 @@ import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, getUs
 import { CommonTaskService } from '../common/common-task.service';
 import { handleSyncTaskUpdateInput, StampMetaDataInput, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate-sync.types';
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { LogExecutionTime } from "../../../utils/perfomance.test";
 
 @Injectable()
 export class MigrateSyncService {
@@ -41,10 +42,12 @@ export class MigrateSyncService {
 
 
 
+  @LogExecutionTime
   ensureDirectoryExists(directoryPath: string) {    
       fs.mkdirSync(directoryPath, { recursive: true });    
   }
   
+  @LogExecutionTime
   async stampMetaData({sourcePath, metadata, command, errorType, jobContext, targetPath}: StampMetaDataInput):Promise<StampMetaDataOutput> {
     //TODO: change the command class to replace ops with steps. 
     const stampMetaDataOutput : StampMetaDataOutput = {sourceErrors: [], targetErrors:[], errorType: errorType}
@@ -169,6 +172,7 @@ export class MigrateSyncService {
     return stampMetaDataOutput
   }
   
+  @LogExecutionTime
   async syncOperation({ sourcePath, targetPath, ops, jobContext, command, errorType }: SyncOperationInput): Promise<SyncOperationOutput> {
     const syncOperation: SyncOperationOutput = {errors : {source: new Set<string>(), target: new Set<string>() },  ops, status: OPS_STATUS.COMPLETED , errorType : errorType }
     if (syncOperation.ops[0] && syncOperation.ops[0].status !== OPS_STATUS.COMPLETED) {
@@ -230,6 +234,7 @@ export class MigrateSyncService {
     return syncOperation ;
   }
 
+  @LogExecutionTime
   async syncTaskActivity({ jobRunId, taskId }: SyncTaskInput): Promise<SyncTaskOutput> {
     const syncActivityCtx= Context.current();
     const heartBeatInterval = setInterval(() => { syncActivityCtx.heartbeat({});}, 2000);
@@ -261,7 +266,8 @@ export class MigrateSyncService {
     return syncOutput;
   }
 
-  executeSyncTask = async (taskHashId:string, task: Task, jobContext: JobManagerContext, ): Promise<SyncTaskOutput> => {
+  @LogExecutionTime
+  async executeSyncTask(taskHashId:string, task: Task, jobContext: JobManagerContext, ): Promise<SyncTaskOutput> {
       const syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0, retryCount: 0};
       const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
       const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
@@ -305,7 +311,8 @@ export class MigrateSyncService {
   }
 
   //TODO: revisit this and see what all are not used. 
-  getFileInfo = async ({name, fullFilePath, relativePath, checksums, getID}: getFileInfoInput): Promise<any>  => {
+  @LogExecutionTime
+  async getFileInfo({name, fullFilePath, relativePath, checksums, getID}: getFileInfoInput): Promise<any> {
       const lStat = await fs.promises.lstat(fullFilePath);
       const isDirectory:boolean = lStat.isDirectory();
       let sid = undefined
@@ -337,12 +344,14 @@ export class MigrateSyncService {
       }
   }
   // TODO: can be this depricated in future
-  getSID = async (filePath: string) => {
+  @LogExecutionTime
+  async getSID(filePath: string) {
     const getSIDCommand = CommandConfig.getSMBCommand(process.platform, CommandPattern.GET_SID_FOR_OBJECT)?.replaceAll('${PATH}', filePath);
     return await this.shellService.runCommand(getSIDCommand);
   }
 
 
+  @LogExecutionTime
   async updateAndReportTaskStatus({ errors, jobContext, taskHashId, task, retryCount }: handleSyncTaskUpdateInput): Promise<void> {
     const allCompleted = task.commands.every(cmd => cmd.status === CommandStatus.COMPLETED);
 
@@ -379,6 +388,7 @@ export class MigrateSyncService {
     );
   }
 
+  @LogExecutionTime
   async removeFileOrDirectory({ targetPath, ops, syncOperation, command, jobContext }: { targetPath: string; ops: any; syncOperation: SyncOperationOutput; command: any; jobContext: JobManagerContext }): Promise<void> {
     try {
       if (syncOperation.ops[0].cmd === OPS_CMD.REMOVE_DIR) {
@@ -396,6 +406,7 @@ export class MigrateSyncService {
       this.logger.error(`Error in SyncOperation ${syncOperation.ops[0].cmd === OPS_CMD.REMOVE_DIR ? 'Dir' : 'File'}: ${error.message}`);
     }
   }
+  @LogExecutionTime
   async safeUnlink(targetPath) {
     try {
       await fs.promises.unlink(targetPath);
@@ -406,6 +417,7 @@ export class MigrateSyncService {
       this.logger.log(`File ${targetPath} does not exist, skipping unlink.`);
     }
   }
+  @LogExecutionTime
   validateSourceExist(sourcePath: string):boolean {
     if (!fs.existsSync(sourcePath)) {
     this.logger.error(`Source path does not exist: ${sourcePath}`);

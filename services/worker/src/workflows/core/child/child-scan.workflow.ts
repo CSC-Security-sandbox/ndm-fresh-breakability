@@ -5,6 +5,7 @@ import { ScanService } from 'src/activities/core/scan/scan-activity.service';
 import { JobRunStatus } from "src/activities/discovery/enums";
 import { updateJobStatusIfNotRunning } from '../common/workflow-utils';
 import { ChildScanWorkflowInput, ChildScanWorkflowOutput, ExecuteBatchScanInput, ExecuteBatchScansOutput } from './chid-scan.workflow.type';
+import { LogExecutionTime } from '../../../utils/perfomance.test';
 
 
 
@@ -41,7 +42,7 @@ const actionSignal = wf.defineSignal<[JobRunStatus]>('scanActionSignal');
 const MAX_CONCURRENT_BATCHES = 100;
 const ITERATIONS_LIMIT = 1000;
 
-export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatchIds = [], batchSize = 100, dirCount = 0, fileCount = 0, isMigration = false, actionState = JobRunStatus.Running, isInitialScan = true, workerConcurrency = 20}: ChildScanWorkflowInput): Promise<ChildScanWorkflowOutput> => {
+export const ChildScanWorkflow = LogExecutionTime(async ({ jobRunId, dirsToScan = ['/'], dirBatchIds = [], batchSize = 100, dirCount = 0, fileCount = 0, isMigration = false, actionState = JobRunStatus.Running, isInitialScan = true, workerConcurrency = 20}: ChildScanWorkflowInput): Promise<ChildScanWorkflowOutput> => {
 
   await updateJobStatusActivity({jobRunId, status :JobRunStatus.Running});
 
@@ -100,10 +101,10 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
   scanWorkflowOutput.error = errors.length > 0 ? errors.join(', ') : undefined;
 
   return  scanWorkflowOutput;
-}
+});
 
 
-export const executeBatchScan = async ({ batchSize, batches, isMigration, jobRunId}: ExecuteBatchScanInput): Promise<ExecuteBatchScansOutput> => {
+export const executeBatchScan = LogExecutionTime(async ({ batchSize, batches, isMigration, jobRunId}: ExecuteBatchScanInput): Promise<ExecuteBatchScansOutput> => {
   const output: ExecuteBatchScansOutput = {
     fileCount: 0,
     dirCount: 0,
@@ -142,4 +143,4 @@ export const executeBatchScan = async ({ batchSize, batches, isMigration, jobRun
   }
 
   return output;
-}
+});

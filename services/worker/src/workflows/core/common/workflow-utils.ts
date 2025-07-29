@@ -1,6 +1,7 @@
 import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
 import { JobRunStatus } from 'src/activities/discovery/enums';
+import { LogExecutionTime } from '../../../utils/perfomance.test';
 
 
 const {
@@ -11,8 +12,8 @@ const {
 });
 
 
-export const updateJobStatusIfNotRunning = async (state: JobRunStatus, jobRunId: string) => {
+export const updateJobStatusIfNotRunning = LogExecutionTime(async function updateJobStatusIfNotRunning(state: JobRunStatus, jobRunId: string) {
   if(state !== JobRunStatus.Running) {
     await updateJobStatusActivity({jobRunId, status: state});
   }
-}
+});
