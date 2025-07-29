@@ -1,30 +1,20 @@
-import { proxyActivities } from '@temporalio/workflow';
+import { proxyActivities, log } from '@temporalio/workflow';
 import { ActivitiesService } from 'src/activities/activities.service';
-import { SupportBundleStatus } from 'src/constants/enum';
 
-const { fetchAndZipLogs, notifyWorkflowCompletion } =
+const { fetchAndZipLogs } =
   proxyActivities<ActivitiesService>({
     startToCloseTimeout: '1 minute',
   });
 
 export const LogGeneratorWorkflow = async ({ traceId, payload }) => {
-  console.log(`Started LogGeneratorWorkflow - ${traceId}`);
+  log.info(`[${traceId}] Started LogGeneratorWorkflow`);
 
   try {
     const zipPath = await fetchAndZipLogs({ traceId, payload });
-
-    await notifyWorkflowCompletion({
-      traceId,
-      status: SupportBundleStatus.COMPLETED,
-    });
-
+    log.info(`[${traceId}] Finished LogGeneratorWorkflow, zipPath: ${zipPath}`);
     return zipPath;
   } catch (error) {
-    await notifyWorkflowCompletion({
-      traceId,
-      status: SupportBundleStatus.FAILED,
-    });
-
+    log.error(`[${traceId}] Error in LogGeneratorWorkflow: ${error.message}`);
     throw error;
   }
 };

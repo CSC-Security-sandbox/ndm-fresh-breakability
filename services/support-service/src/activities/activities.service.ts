@@ -11,7 +11,7 @@ export class ActivitiesService {
     private readonly notifyConfigActivity: NotifyConfigActivity,
     private readonly projectJobConfigMappingActivity: ProjectJobConfigMappingActivity,
     private readonly errorCsvGenerationActivity: ErrorCsvGenerationActivity,
-  ) {}
+  ) { }
 
   async fetchAndZipLogs({ traceId, payload }) {
     return this.logGeneratorActivity.fetchAndZipLogs({ traceId, payload });
@@ -25,10 +25,11 @@ export class ActivitiesService {
     return this.errorCsvGenerationActivity.generateErrorCsv({ traceId, payload, projectIds });
   }
 
-  async notifyWorkflowCompletion({ traceId, status }) {
+  async notifyWorkflowCompletion({ traceId, status, errorMessage }) {
     return this.notifyConfigActivity.notifyWorkflowCompletion({
       traceId,
       status,
+      errorMessage
     });
   }
 }

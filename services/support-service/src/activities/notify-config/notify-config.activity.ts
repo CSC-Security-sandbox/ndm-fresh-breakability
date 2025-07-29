@@ -1,17 +1,34 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class NotifyConfigActivity {
-  async notifyWorkflowCompletion({ traceId, status }) {
+  private readonly logger = new Logger(NotifyConfigActivity.name);
+  private configBaseUrl: string ;
+
+  constructor(private readonly configService: ConfigService) {
+    const configUrl = this.configService.get<string>('support-bundle.api.configUrl');
+    if (!configUrl) {
+      throw new Error('Config URL for support-bundle.api.configUrl is not defined');
+    }
+    this.configBaseUrl = configUrl;
+  }
+
+  async notifyWorkflowCompletion({ traceId, status, errorMessage }) {
     try {
-      await axios.post('http://localhost:3009/api/v1/support-bundle/workflow-status-update', {
-        traceId,
-        status,
-      });
-      console.log(`Notification sent to Config Service for ${traceId}`);
+      await axios.post(
+        `${this.configBaseUrl}/support-bundle/workflow-status-update`,
+        {
+          traceId,
+          status,
+          errorMessage
+        },
+      );
+      this.logger.log(`[${traceId}] Notification sent to Config Service for workflow completion`);
     } catch (error) {
-      console.error(`Failed to notify Config Service: ${error.message}`);
+      this.logger.error(`[${traceId}] Failed to notify Config Service: ${error.message}`);
       throw error;
     }
   }
