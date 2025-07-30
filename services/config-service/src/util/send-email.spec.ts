@@ -2,6 +2,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { ConfigService } from "@nestjs/config";
 import axios from "axios";
 import { SendMailService } from "./send-email";
+import { SuccessEmailType } from "./send-email.type";
 
 jest.mock("axios");
 
@@ -37,33 +38,63 @@ describe("SendMailService", () => {
     const mockResponse = { status: 200, data: { message: "Email sent successfully" } };
     mockPost.mockResolvedValue(mockResponse);
 
-    const emailBody = { to: "test@example.com", subject: "Test", body: "Hello" };
+    const emailBody = {
+      successEmailType: SuccessEmailType.WORKER_USAGE,
+      workerUsage: {
+        id: "test-worker",
+        ip: "127.0.0.1",
+      }
+    };
 
     const result = await service.sendMail(emailBody);
 
-    expect(mockPost).toHaveBeenCalledWith("http://mock-email-service/api/v1/email/internal", emailBody);
+    expect(mockPost).toHaveBeenCalledWith(
+      'http://mock-email-service/api/v1/email/internal',
+      emailBody,
+      { timeout: 30000 },
+    );
     expect(result).toEqual(mockResponse.data);
   });
 
   it("should handle failure when email sending fails", async () => {
     mockPost.mockResolvedValue({ status: 500, data: { error: "Internal Server Error" } });
 
-    const emailBody = { to: "test@example.com", subject: "Test", body: "Hello" };
+    const emailBody = {
+      successEmailType: SuccessEmailType.WORKER_USAGE,
+      workerUsage: {
+        id: "test-worker",
+        ip: "127.0.0.1",
+      }
+    };
 
     const result = await service.sendMail(emailBody);
 
-    expect(mockPost).toHaveBeenCalledWith("http://mock-email-service/api/v1/email/internal", emailBody);
-    expect(result).toBeUndefined(); 
+    expect(mockPost).toHaveBeenCalledWith(
+      'http://mock-email-service/api/v1/email/internal',
+      emailBody,
+      { timeout: 30000 },
+    );
+    expect(result).toBeUndefined();
   });
 
   it("should handle axios exceptions gracefully", async () => {
     mockPost.mockRejectedValue(new Error("Network Error"));
 
-    const emailBody = { to: "test@example.com", subject: "Test", body: "Hello" };
+    const emailBody = {
+      successEmailType: SuccessEmailType.WORKER_USAGE,
+      workerUsage: {
+        id: "test-worker",
+        ip: "127.0.0.1",
+      }
+    };
 
     const result = await service.sendMail(emailBody);
 
-    expect(mockPost).toHaveBeenCalledWith("http://mock-email-service/api/v1/email/internal", emailBody);
+    expect(mockPost).toHaveBeenCalledWith(
+      'http://mock-email-service/api/v1/email/internal',
+      emailBody,
+      { timeout: 30000 },
+    );
     expect(result).toBeUndefined();
   });
 });

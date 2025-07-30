@@ -1,32 +1,36 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { JobRunService } from './jobrun.service';
 import { JobRunController } from './jobrun.controller';
-import { JobRunPageDto } from './dto/jobrunpage.dto';
+import { JobRunService } from './jobrun.service';
 import { JobRunInitService } from './jobrun.init.service';
-import { BadRequestException } from '@nestjs/common';
-import { CutOverStatus } from 'src/constants/enums';
+import { JobRunActionService } from './jobrun-action.service';
+import { JobRunPageDto } from './dto/jobrunpage.dto';
+import { JobErrorQueryDto } from './dto/jobRunErrors.dto';
+import { JobRunActionsReq, ApprovalRequestDTO } from './dto/jobrunactions.dto';
+import { AdHocRunDTO } from './dto/adhockjobrun.dto';
+import { CutOverStatus, JobRunStatus } from 'src/constants/enums';
+import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('JobRunController', () => {
   let controller: JobRunController;
-  let service: JobRunService;
-
-  const mockJobRunService = {
-    findAllJobRuns: jest.fn(),
-    getJobRun: jest.fn(),
-    scheduleAJob: jest.fn(),
-    getJobAllRuns: jest.fn(),
-    cutOverApproval: jest.fn(),
-    getErrorOverview: jest.fn()
+  let jobRunService: jest.Mocked<JobRunService>;
+  let jobRunInitService: jest.Mocked<JobRunInitService>;
+  let jobRunActionService: jest.Mocked<JobRunActionService>;
+  const mockJwtService = {
+    verifyToken: jest.fn().mockResolvedValue({
+      user: {
+        roles: [
+          {
+            permissions: ["permission1", "permission2"],
+            projects: ["project1"],
+          },
+        ],
+      },
+    }),
+    configService: {},
+    client: jest.fn(),
+    logger: jest.fn(),
+    getKey: jest.fn(),
   };
-  
-
-  const mockJobRunInitService = {
-    findAllJobRuns: jest.fn(),
-    getJobRun: jest.fn(),
-    scheduleAJob: jest.fn(),
-    getJobAllRuns: jest.fn()
-  };
-  
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -34,90 +38,165 @@ describe('JobRunController', () => {
       providers: [
         {
           provide: JobRunService,
-          useValue: mockJobRunService,
+          useValue: {
+            getJobAllRuns: jest.fn(),
+            getJobRunErrors: jest.fn(),
+            getJobRun: jest.fn(),
+            approveCutoverRequest: jest.fn(),
+            addHocRun: jest.fn(),
+            updateJobRunStatus: jest.fn(),
+            cutOverApproval: jest.fn(),
+            getErrorOverview: jest.fn(),
+            checkWorkerHealth: jest.fn(),
+            updateWorkerResponse: jest.fn(),
+          },
+        },
+        {
+          provide: JwtService,
+          useValue: mockJwtService,
         },
         {
           provide: JobRunInitService,
-          useValue: mockJobRunInitService,
+          useValue: {
+            scheduleAJob: jest.fn(),
+          },
         },
-
+        {
+          provide: JobRunActionService,
+          useValue: {
+            actions: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
     controller = module.get<JobRunController>(JobRunController);
-    service = module.get<JobRunService>(JobRunService);
-  });
-
-  describe('getJobRuns', () => {
-    it('should return a list of job runs', async () => {
-      const jobRuns = [{ id: '1', name: 'Job 1' }];
-      mockJobRunService.getJobAllRuns.mockResolvedValue(jobRuns);
-
-      const jobRunPageDto = new JobRunPageDto();
-      const result = await controller.getJobRuns(jobRunPageDto);
-
-      expect(result).toEqual(jobRuns);
-      expect(mockJobRunService.getJobAllRuns).toHaveBeenCalledWith(jobRunPageDto);
-    });
-  });
-
-  describe('getJobById', () => {
-    it('should return a job run by ID', async () => {
-      const jobRun = { id: '1', name: 'Job 1' };
-      mockJobRunService.getJobRun.mockResolvedValue([jobRun]);
-
-      const result = await controller.getJobById('1');
-
-      expect(result).toEqual([jobRun]);
-      expect(mockJobRunService.getJobRun).toHaveBeenCalledWith("1");
-    });
-  });
-
-  describe('handleCron', () => {
-    it('should call the scheduleAJob method on the service', async () => {
-      mockJobRunService.scheduleAJob.mockResolvedValue(undefined);
-
-      await controller.handleCron();
-
-      expect(mockJobRunInitService.scheduleAJob).toHaveBeenCalled();
-    });
+    jobRunService = module.get(JobRunService);
+    jobRunInitService = module.get(JobRunInitService);
+    jobRunActionService = module.get(JobRunActionService);
   });
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
   });
+
+  describe('getJobRuns', () => {
+    it('should return paginated job runs', async () => {
+      const dto: JobRunPageDto = {} as any;
+      const result = { items: [], total: 0 };
+      jobRunService.getJobAllRuns.mockResolvedValue(result as any);
+      expect(await controller.getJobRuns(dto)).toBe(result);
+      expect(jobRunService.getJobAllRuns).toHaveBeenCalledWith(dto);
+    });
+  });
+
+  describe('getJobRunErrors', () => {
+    it('should return job run errors', async () => {
+      const dto: JobErrorQueryDto = {} as any;
+      const result = [{ error: 'err' }];
+      jobRunService.getJobRunErrors.mockResolvedValue(result as any);
+      expect(await controller.getJobRunErrors(dto)).toBe(result);
+      expect(jobRunService.getJobRunErrors).toHaveBeenCalledWith(dto);
+    });
+  });
+
+  describe('getJobById', () => {
+    it('should return job run by id', async () => {
+      const id = '123';
+      const result = { id } as any;
+      jobRunService.getJobRun.mockResolvedValue(result);
+      expect(await controller.getJobById(id)).toBe(result);
+      expect(jobRunService.getJobRun).toHaveBeenCalledWith(id);
+    });
+  });
+
+  describe('actions', () => {
+    it('should call jobRunActionService.actions', async () => {
+      const req: JobRunActionsReq = {} as any;
+      const result = { status: 'ok' };
+      jobRunActionService.actions.mockResolvedValue(result as any);
+      expect(await controller.actions(req)).toBe(result);
+      expect(jobRunActionService.actions).toHaveBeenCalledWith(req);
+    });
+  });
+
+  describe('cutoverApprove', () => {
+    it('should approve cutover request', async () => {
+      const approval: ApprovalRequestDTO = {} as any;
+      const result = { approved: true };
+      jobRunService.approveCutoverRequest.mockResolvedValue(result as any);
+      expect(await controller.cutoverApprove(approval)).toBe(result);
+      expect(jobRunService.approveCutoverRequest).toHaveBeenCalledWith(approval);
+    });
+  });
+
+  describe('adhocRun', () => {
+    it('should create ad hoc run', async () => {
+      const adhoc: AdHocRunDTO = { jobConfigId: 'cfg1' } as any;
+      const result = { runId: 'run1' };
+      jobRunService.addHocRun.mockResolvedValue(result as any);
+      expect(await controller.adhocRun(adhoc)).toBe(result);
+      expect(jobRunService.addHocRun).toHaveBeenCalledWith('cfg1');
+    });
+  });
+
+  describe('updateJobRunStatus', () => {
+    it('should update job run status', async () => {
+      const jobRunId = 'run1';
+      const status = JobRunStatus.Running;
+      const result = { updated: true };
+      jobRunService.updateJobRunStatus.mockResolvedValue(result as any);
+      expect(await controller.updateJobRunStatus(jobRunId, status)).toBe(result);
+      expect(jobRunService.updateJobRunStatus).toHaveBeenCalledWith(jobRunId, status);
+    });
+  });
+
   describe('cutoverApproval', () => {
-    it('should handle errors thrown by jobRunService.cutOverApproval', async () => {
-      const mockJobRunId = 'jobRunId';
-      const mockStatus = CutOverStatus.REJECTED;
-
-      jest.spyOn(service, 'cutOverApproval').mockRejectedValue(new Error('Test error'));
-
-      await expect(controller.cutoverApproval(mockJobRunId, mockStatus)).rejects.toThrow('Test error');
-      expect(service.cutOverApproval).toHaveBeenCalledWith(mockJobRunId, mockStatus);
+    it('should approve cutover', async () => {
+      const jobRunId = 'run1';
+      const status = CutOverStatus.APPROVED;
+      const result = { cutover: true };
+      jobRunService.cutOverApproval.mockResolvedValue(result as any);
+      expect(await controller.cutoverApproval(jobRunId, status)).toBe(result);
+      expect(jobRunService.cutOverApproval).toHaveBeenCalledWith(jobRunId, status);
     });
   });
 
   describe('getErrorOverview', () => {
-    it('should call jobRunService.getErrorOverview with correct parameters', async () => {
-      const mockJobRunId = 'jobRunId';
-      const mockErrorOverview = { errorType: 'TypeError', count: 5 };
-
-      jest.spyOn(service, 'getErrorOverview').mockResolvedValue(mockErrorOverview);
-
-      const result = await controller.getErrorOverview(mockJobRunId);
-
-      expect(result).toEqual(mockErrorOverview);
-      expect(service.getErrorOverview).toHaveBeenCalledWith(mockJobRunId);
+    it('should get error overview', async () => {
+      const jobRunId = 'run1';
+      const result = { overview: true };
+      jobRunService.getErrorOverview.mockResolvedValue(result);
+      expect(await controller.getErrorOverview(jobRunId)).toBe(result);
+      expect(jobRunService.getErrorOverview).toHaveBeenCalledWith(jobRunId);
     });
+  });
 
-    it('should handle errors thrown by jobRunService.getErrorOverview', async () => {
-      const mockJobRunId = 'jobRunId';
+  describe('handleCron', () => {
+    it('should call jobRunInitService.scheduleAJob', async () => {
+      jobRunInitService.scheduleAJob.mockResolvedValue(undefined);
+      await controller.handleCron();
+      expect(jobRunInitService.scheduleAJob).toHaveBeenCalled();
+    });
+  });
 
-      jest.spyOn(service, 'getErrorOverview').mockRejectedValue(new Error('Test error'));
+  describe('checkWorkerHealthCron', () => {
+    it('should call jobRunService.checkWorkerHealth', async () => {
+      jobRunService.checkWorkerHealth.mockResolvedValue(undefined);
+      await controller.checkWorkerHealthCron();
+      expect(jobRunService.checkWorkerHealth).toHaveBeenCalled();
+    });
+  });
 
-      await expect(controller.getErrorOverview(mockJobRunId)).rejects.toThrow('Test error');
-      expect(service.getErrorOverview).toHaveBeenCalledWith(mockJobRunId);
+  describe('updateWorkerResponse', () => {
+    it('should update worker response', async () => {
+      const jobRunId = 'run1';
+      const workerId = 'worker1';
+      const workerResponse = { status: 'ok' };
+      const result = { updated: true };
+      jobRunService.updateWorkerResponse.mockResolvedValue(result as any);
+      expect(await controller.updateWorkerResponse(jobRunId, workerId, workerResponse)).toBe(result);
+      expect(jobRunService.updateWorkerResponse).toHaveBeenCalledWith(jobRunId, workerId, workerResponse);
     });
   });
 });

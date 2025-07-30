@@ -18,6 +18,7 @@ import {
   ApiOperation,
   ApiResponse,
   ApiTags,
+  ApiBearerAuth,
 } from "@nestjs/swagger";
 
 import { JobRunDetailsDTO } from "./dto/jobrun.dto";
@@ -28,6 +29,8 @@ import { AdHocRunDTO } from "./dto/adhockjobrun.dto";
 import { CutOverStatus, JobRunStatus } from "src/constants/enums";
 import { JobRunInitService } from "./jobrun.init.service";
 import { JobErrorQueryDto } from "./dto/jobRunErrors.dto";
+import { Auth, AuthWorker, Permission } from "@netapp-cloud-datamigrate/auth-lib";
+import { JobRunActionService } from "./jobrun-action.service";
 
 @ApiTags("jobs run")
 @Controller("job-run")
@@ -35,7 +38,8 @@ export class JobRunController {
   private readonly logger = new Logger(JobRunController.name);
   constructor(
     private readonly jobRunService: JobRunService,
-    private readonly jobRunInitService: JobRunInitService
+    private readonly jobRunInitService: JobRunInitService,
+    private readonly jobRunActionService: JobRunActionService
   ) {}
 
   // remove the schedule cron job
@@ -56,6 +60,8 @@ export class JobRunController {
   @ApiBadRequestResponse({
     description: "Invalid pagination parameters.",
   })
+  @ApiBearerAuth()
+  @Auth(Permission.ViewJob)
   @Get("/")
   async getJobRuns(
     @Query(new ValidationPipe({ transform: false, whitelist: true }))
@@ -69,6 +75,8 @@ export class JobRunController {
     status: 200,
     description: "The job run errors retrieved successfully .",
   })
+  @ApiBearerAuth()
+  @Auth(Permission.ViewJob)
   @Get("/errors")
   async getJobRunErrors(
     @Query(new ValidationPipe({ transform: false, whitelist: true }))
@@ -80,6 +88,8 @@ export class JobRunController {
   @ApiOperation({ summary: "Get job run by ID" })
   @ApiResponse({ status: 200, description: "Returns a job run by its ID." })
   @ApiResponse({ status: 404, description: "Job run not found." })
+  @ApiBearerAuth()
+  @Auth(Permission.ViewJob)
   @Get(":id")
   async getJobById(@Param("id") id: string): Promise<JobRunDetailsDTO> {
     return await this.jobRunService.getJobRun(id);
@@ -90,9 +100,11 @@ export class JobRunController {
     status: 200,
     description: "The job run action completed successfully .",
   })
+  @ApiBearerAuth()
+  @Auth(Permission.ManageJob)
   @Put("/action")
   async actions(@Body() jobRunActions: JobRunActionsReq) {
-    return this.jobRunService.actions(jobRunActions);
+    return this.jobRunActionService.actions(jobRunActions);
   }
 
   @ApiOperation({ summary: "Approve cutover by jon run ID" })
@@ -100,6 +112,8 @@ export class JobRunController {
     status: 200,
     description: "The cutover job approved successfully.",
   })
+  @ApiBearerAuth()
+  @Auth(Permission.ManageJob)
   @Put("/cutover/approve")
   async cutoverApprove(@Body() approval: ApprovalRequestDTO) {
     this.logger.log(approval);
@@ -111,6 +125,8 @@ export class JobRunController {
     status: 200,
     description: "The job run created completed successfully .",
   })
+  @ApiBearerAuth()
+  @Auth(Permission.ManageJob)
   @Post("/ad-hoc")
   async adhocRun(@Body() adhocRun: AdHocRunDTO) {
     return this.jobRunService.addHocRun(adhocRun.jobConfigId);
@@ -121,6 +137,7 @@ export class JobRunController {
     status: 200,
     description: "The job run status updated successfully .",
   })
+  @AuthWorker()
   @Patch("/:jobRunId/:status")
   async updateJobRunStatus(
     @Param("jobRunId") jobRunId: string,
@@ -135,6 +152,8 @@ export class JobRunController {
     status: 200,
     description: "The cutover job approved successfully.",
   })
+  @ApiBearerAuth()
+  @AuthWorker()
   @Put("/cutover/:jobRunId/:status")
   async cutoverApproval(
     @Param("jobRunId") jobRunId: string,
@@ -148,6 +167,8 @@ export class JobRunController {
     status: 200,
     description: "The job run error overview retrieved successfully .",
   })
+  @ApiBearerAuth()
+  @Auth(Permission.Reports)
   @Get("/:jobRunId/errors/overview")
   async getErrorOverview(@Param("jobRunId") jobRunId: string) {
     return this.jobRunService.getErrorOverview(jobRunId);
@@ -163,6 +184,7 @@ export class JobRunController {
     status: 200,
     description: "The worker response updated successfully.",
   })
+  @AuthWorker()
   @Put("/worker-response/:jobRunId/:workerId")
   @ApiBody({
     description: "The response data returned by the worker (can include status, message, code, etc.)",

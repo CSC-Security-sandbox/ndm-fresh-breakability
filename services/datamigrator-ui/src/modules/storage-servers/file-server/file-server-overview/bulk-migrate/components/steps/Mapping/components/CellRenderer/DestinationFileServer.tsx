@@ -1,7 +1,7 @@
 import {
   BlueXpTableRowType,
   ConfigListTypeApiType,
-  FILE_SERVER_STATUS,
+  FILE_SERVER_STATUS_ENUM,
 } from "@/types/app.type";
 import { Autocomplete, TextField } from "@mui/material";
 import { useContext, useMemo } from "react";
@@ -62,7 +62,7 @@ const DestinationFileServer = ({
     return allFileServers.filter(
       (row) =>
         row.id !== sourceFileServerDetails.id &&
-        row.status === FILE_SERVER_STATUS.ACTIVE &&
+        row.status === FILE_SERVER_STATUS_ENUM.ACTIVE &&
         row.fileServers.find(
           (r) => r.protocol === protocolForm.formState.protocol.value
         )

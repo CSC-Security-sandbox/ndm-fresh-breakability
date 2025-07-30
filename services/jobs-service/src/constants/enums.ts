@@ -62,7 +62,9 @@ export enum JobRunStatus {
     Pending = 'PENDING',
     Running = 'RUNNING',
     Paused = 'PAUSED',
+    Pausing = 'PAUSING',
     Stopped = 'STOPPED',
+    Stopping = 'STOPPING',
     Completed = 'COMPLETED',
     Failed = 'FAILED',
     Errored = 'ERRORED',
@@ -157,4 +159,11 @@ export enum CutOverStatus {
 export enum PausedReason {
     USER_PAUSED = 'USER_PAUSED',
     SYSTEM_PAUSED = 'SYSTEM_PAUSED'
+}
+
+export enum Platform {
+    LINUX = 'LINUX',
+    WINDOWS = 'WINDOWS',
+    MACOS = 'MACOS',
+    OTHER = 'OTHER'
 }

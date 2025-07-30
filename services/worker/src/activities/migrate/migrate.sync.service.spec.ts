@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MigrationSyncService } from './migrate.sync.service';
 import { ConfigService } from '@nestjs/config';
-import { Logger } from '@nestjs/common';
 import { RedisService } from 'src/redis/redis.service';
 import { CommonActivityService } from '../common/common.service';
 import { ShellService } from '../common/shell.service';
@@ -10,17 +9,18 @@ import * as utils from '../utils/utils';
 import * as crypto from 'crypto';
 import { CommandStatus, ErrorType, JobContext, OPS_CMD, OPS_STATUS, Task, TaskStatus, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { WorkerThreadService } from '../../thread/worker.thread.service';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 jest.mock('@temporalio/activity', () => ({
     Context: {
-      current: jest.fn(),
+        current: jest.fn(),
     },
 }));
 
 
 jest.mock('@temporalio/activity', () => ({
     Context: {
-        current: jest.fn().mockResolvedValue(()=>({
+        current: jest.fn().mockResolvedValue(() => ({
             heartbeat: jest.fn(),
         }))
     },
@@ -30,6 +30,20 @@ describe('MigrationSyncService', () => {
     let redisService: RedisService;
     let commonService: CommonActivityService;
     let workerThreadService: any;
+
+    const mockLoggerInstance: LoggerService = {
+        log: jest.fn(),
+        debug: jest.fn(),
+        error: jest.fn(),
+        warn: jest.fn(),
+        requestContext: {} as any,
+        parentContext: {} as any,
+        setParentContext: jest.fn(),
+    } as unknown as LoggerService;
+
+    const mockLoggerFactory = {
+        create: jest.fn().mockReturnValue(mockLoggerInstance),
+    } as unknown as LoggerFactory;
 
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
@@ -52,7 +66,10 @@ describe('MigrationSyncService', () => {
                 },
                 MigrationSyncService,
                 ConfigService,
-                Logger,
+                {
+                    provide: LoggerFactory,
+                    useValue: mockLoggerFactory,
+                },
                 RedisService,
                 CommonActivityService,
                 ShellService,
@@ -115,6 +132,33 @@ describe('MigrationSyncService', () => {
                 return stream;
             });
             await expect(service.calculateChecksum(mockFilePath)).rejects.toThrow('Read error');
+        });
+
+        it('should resolve checksum when stream finishes', async () => {
+            const mockFilePath = 'test.txt';
+            const fileContent = 'Hello World';
+            jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+            jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
+                const stream = new (require('stream')).Readable();
+                stream._read = function () {
+                    this.push(fileContent);
+                    this.push(null);
+                };
+                return stream;
+            });
+            const checksum = await service.calculateChecksum(mockFilePath);
+            expect(typeof checksum).toBe('string');
+        });
+
+        it('should reject if stream emits error', async () => {
+            const mockFilePath = 'error.txt';
+            jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+            jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
+                const stream = new (require('stream')).Readable();
+                process.nextTick(() => stream.emit('error', new Error('Stream error')));
+                return stream;
+            });
+            await expect(service.calculateChecksum(mockFilePath)).rejects.toThrow('Stream error');
         });
     });
 
@@ -448,6 +492,33 @@ describe('MigrationSyncService', () => {
                 expect(error.message).toBe('Directory creation error');
             }
         });
+
+        it('should skip stampMetaData if ops[1] status is COMPLETED', async () => {
+            const mockInput = {
+                sourcePath: 'source',
+                targetPath: 'target',
+                ops: [
+                    { cmd: OPS_CMD.COPY_CONTENT, status: OPS_STATUS.COMPLETED, metadata: {} },
+                    { cmd: OPS_CMD.STAMP_META, status: OPS_STATUS.COMPLETED, metadata: {} }
+                ],
+                jobContext: { appendToErrorList: jest.fn(), jobConfig: { options: {} } },
+                command: { commandId: 'id', fPath: 'file', ops: [{ cmd: OPS_CMD.COPY_CONTENT }] }
+            } as any;
+            const result = await service.syncOperation(mockInput);
+            expect(result.ops[1].status).toBe(OPS_STATUS.COMPLETED);
+        });
+
+        it('should skip copy if ops[0] is undefined', async () => {
+            const mockInput = {
+                sourcePath: 'source',
+                targetPath: 'target',
+                ops: [undefined, { cmd: OPS_CMD.STAMP_META, status: OPS_STATUS.READY, metadata: {} }],
+                jobContext: { appendToErrorList: jest.fn(), jobConfig: { options: {} } },
+                command: { commandId: 'id', fPath: 'file', ops: [{ cmd: OPS_CMD.COPY_CONTENT }] }
+            } as any;
+            const result = await service.syncOperation(mockInput);
+            expect(result.ops[1].status).toBe(OPS_STATUS.COMPLETED);
+        });
     })
 
     describe('syncTask', () => {
@@ -555,7 +626,7 @@ describe('MigrationSyncService', () => {
             jest.spyOn(service, 'getFileInfo').mockResolvedValue({} as any);
             jest.spyOn(utils, 'isFatalError').mockReturnValue(false);
 
-            const result = await service.syncTask({failedWorkers: [], jobRunId: '1234', jobContext: mockJobContext} as any);
+            const result = await service.syncTask({ failedWorkers: [], jobRunId: '1234', jobContext: mockJobContext } as any);
             expect(result).toBeDefined();
         });
 
@@ -569,13 +640,13 @@ describe('MigrationSyncService', () => {
                     workers_agreed: [],
                     status: 'RUNNING',
                     failedWorkers: []
-                  }),
-                  getScanTask: jest.fn(),
-                  setScanTask: jest.fn(),
-                  deleteScanTask: jest.fn(),
-                  getSyncTask: jest.fn(),
-                  setSyncTask: jest.fn(),
-                  deleteSyncTask: jest.fn(),
+                }),
+                getScanTask: jest.fn(),
+                setScanTask: jest.fn(),
+                deleteScanTask: jest.fn(),
+                getSyncTask: jest.fn(),
+                setSyncTask: jest.fn(),
+                deleteSyncTask: jest.fn(),
             }
             const mockInput = {
                 jobContext: mockedJobContext,
@@ -588,7 +659,7 @@ describe('MigrationSyncService', () => {
             jest.spyOn(redisService, 'setJobContext').mockResolvedValue(undefined);
             jest.spyOn(commonService, 'fetchOneMigrationTask').mockReturnValue(mockedTask);
 
-            const result = await service.syncTask({failedWorkers: [], jobRunId: '1234'} as any);
+            const result = await service.syncTask({ failedWorkers: [], jobRunId: '1234' } as any);
             expect(result).toEqual({
                 errors: {
                     source: new Set(),
@@ -783,7 +854,327 @@ describe('MigrationSyncService', () => {
             const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
             jest.spyOn(fs.promises, 'utimes').mockResolvedValue();
             const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
-                expect(result.targetErrors).toHaveLength(0);
+            expect(result.targetErrors).toHaveLength(0);
+        });
+
+        it('should handle error when setting access and modified times', async () => {
+            const mockTargetPath = 'targetPath';
+            const mockSourcePath = 'sourcePath';
+            const mockMetadata = { atime: new Date().toISOString(), mtime: new Date().toISOString() };
+            const mockJobContext = {
+                appendToErrorList: jest.fn(),
+                jobConfig: { options: {} },
+                getScanTask: jest.fn(),
+                setScanTask: jest.fn(),
+                deleteScanTask: jest.fn(),
+                getSyncTask: jest.fn(),
+                setSyncTask: jest.fn(),
+                deleteSyncTask: jest.fn(),
+            } as unknown as JobContext;
+            const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
+
+            jest.spyOn(fs.promises, 'utimes').mockRejectedValue({ message: 'utimes error', code: 'EUTIMES' });
+
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
+
+            expect(result.targetErrors.length).toBeGreaterThan(0);
+            expect(mockJobContext.appendToErrorList).toHaveBeenCalled();
+        });
+
+        it('should handle error when setting ownership (chown)', async () => {
+            const mockTargetPath = 'targetPath';
+            const mockSourcePath = 'sourcePath';
+            const mockMetadata = { gid: 1000, uid: 1000 } as any;
+            const mockJobContext = {
+                appendToErrorList: jest.fn(),
+                jobConfig: { options: {} },
+                getScanTask: jest.fn(),
+                setScanTask: jest.fn(),
+                deleteScanTask: jest.fn(),
+                getSyncTask: jest.fn(),
+                setSyncTask: jest.fn(),
+                deleteSyncTask: jest.fn(),
+            } as unknown as JobContext;
+            const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath', ops: [{}] } as any;
+
+            Object.defineProperty(process, 'platform', { value: 'linux' });
+            jest.spyOn(fs.promises, 'chown').mockRejectedValue({ message: 'chown error', code: 'ECHOWN' });
+
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
+
+            expect(result.targetErrors.length).toBeGreaterThan(0);
+            expect(mockJobContext.appendToErrorList).toHaveBeenCalled();
+        });
+
+        it('should handle error when setting birthtime', async () => {
+            const mockTargetPath = 'targetPath';
+            const mockSourcePath = 'sourcePath';
+            const mockMetadata = { birthtime: new Date().toISOString() } as any;
+            const mockJobContext = {
+                appendToErrorList: jest.fn(),
+                jobConfig: { options: {} },
+                getScanTask: jest.fn(),
+                setScanTask: jest.fn(),
+                deleteScanTask: jest.fn(),
+                getSyncTask: jest.fn(),
+                setSyncTask: jest.fn(),
+                deleteSyncTask: jest.fn(),
+            } as unknown as JobContext;
+            const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath', ops: [{ cmd: OPS_CMD.COPY_CONTENT }] } as any;
+
+            Object.defineProperty(process, 'platform', { value: 'linux' });
+            jest.spyOn(service['shellService'], 'runCommand').mockRejectedValue({ message: 'shell error', code: 'ESHELL' });
+
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
+
+            expect(result.targetErrors.length).toBeGreaterThan(0);
+            expect(mockJobContext.appendToErrorList).toHaveBeenCalled();
+        });
+
+        it('should handle error when preserving access time', async () => {
+            const mockTargetPath = 'targetPath';
+            const mockSourcePath = 'sourcePath';
+            const mockMetadata = { mtime: new Date().toISOString(), atime: new Date().toISOString() };
+            const mockJobContext = {
+                appendToErrorList: jest.fn(),
+                jobConfig: { options: { preserveAccessTime: true } },
+                getScanTask: jest.fn(),
+                setScanTask: jest.fn(),
+                deleteScanTask: jest.fn(),
+                getSyncTask: jest.fn(),
+                setSyncTask: jest.fn(),
+                deleteSyncTask: jest.fn(),
+            } as unknown as JobContext;
+            const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath' } as any;
+
+            jest.spyOn(fs.promises, 'utimes').mockResolvedValueOnce(undefined).mockRejectedValueOnce({ message: 'preserve error', code: 'EPRESERVE' });
+
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
+
+            expect(result.sourceErrors.length).toBeGreaterThan(0);
+            expect(mockJobContext.appendToErrorList).toHaveBeenCalled();
+        });
+
+        it('should handle win32 platform SID and ACL errors', async () => {
+            const mockTargetPath = 'targetPath';
+            const mockSourcePath = 'sourcePath';
+            const mockMetadata = { sid: 'sid', atime: new Date().toISOString(), mtime: new Date().toISOString() };
+            const mockJobContext = {
+                appendToErrorList: jest.fn(),
+                jobConfig: { options: {} },
+                getScanTask: jest.fn(),
+                setScanTask: jest.fn(),
+                deleteScanTask: jest.fn(),
+                getSyncTask: jest.fn(),
+                setSyncTask: jest.fn(),
+                deleteSyncTask: jest.fn(),
+            } as unknown as JobContext;
+            const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath', ops: [{ cmd: OPS_CMD.COPY_CONTENT }] } as any;
+
+            Object.defineProperty(process, 'platform', { value: 'win32' });
+            jest.spyOn(service, 'getSID').mockRejectedValue({ message: 'sid error', code: 'ESID' });
+            const getUserACLsMock = jest.spyOn(utils, 'getUserACLs').mockReturnValue([{ user: 'user', permissions: 'perm' }]);
+            jest.spyOn(service['shellService'], 'runCommand').mockRejectedValue({ message: 'acl error', code: 'EACL' });
+
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
+
+            expect(result.sourceErrors.length + result.targetErrors.length).toBeGreaterThan(0);
+            expect(mockJobContext.appendToErrorList).toHaveBeenCalled();
+            getUserACLsMock.mockRestore();
+        });
+
+        it('should set win32 platform SID and ACL successfully', async () => {
+            const mockTargetPath = 'targetPath';
+            const mockSourcePath = 'sourcePath';
+            const mockMetadata = { sid: 'sid', atime: new Date().toISOString(), mtime: new Date().toISOString() };
+            const mockJobContext = {
+                appendToErrorList: jest.fn(),
+                jobConfig: { options: {} },
+                getScanTask: jest.fn(),
+                setScanTask: jest.fn(),
+                deleteScanTask: jest.fn(),
+                getSyncTask: jest.fn(),
+                setSyncTask: jest.fn(),
+                deleteSyncTask: jest.fn(),
+            } as unknown as JobContext;
+            const mockCommand = { retryCount: 0, commandId: 'command-id', fPath: 'filePath', ops: [{ cmd: OPS_CMD.COPY_CONTENT }] } as any;
+
+            Object.defineProperty(process, 'platform', { value: 'win32' });
+            jest.spyOn(service, 'getSID').mockResolvedValue('sid');
+            const getUserACLsMock = jest.spyOn(utils, 'getUserACLs').mockReturnValue([{ user: 'user', permissions: 'perm' }]);
+            jest.spyOn(service['shellService'], 'runCommand').mockResolvedValue('ok');
+
+            const result = await service.stampMetaData(mockTargetPath, mockSourcePath, mockMetadata as any, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
+
+            expect(result.sourceErrors.length + result.targetErrors.length).toBe(1);
+            getUserACLsMock.mockRestore();
+        });
+
+        it('should run win32 birthtime command', async () => {
+            Object.defineProperty(process, 'platform', { value: 'win32' });
+            const mockMetadata: any = { birthtime: new Date().toISOString() };
+            const mockJobContext = { appendToErrorList: jest.fn(), jobConfig: { options: {} } } as any;
+            const mockCommand = { ops: [{ cmd: OPS_CMD.COPY_CONTENT }], commandId: 'id', fPath: 'file' } as any;
+            jest.spyOn(service['shellService'], 'runCommand').mockResolvedValue('ok');
+            await service.stampMetaData('target', 'source', mockMetadata, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
+            expect(service['shellService'].runCommand).toHaveBeenCalled();
+        });
+
+        it('should handle error in getSID on win32', async () => {
+            Object.defineProperty(process, 'platform', { value: 'win32' });
+            const mockMetadata: any = {};
+            const mockJobContext = { appendToErrorList: jest.fn(), jobConfig: { options: {} } } as any;
+            const mockCommand = { ops: [{ cmd: OPS_CMD.COPY_CONTENT }], commandId: 'id', fPath: 'file' } as any;
+            jest.spyOn(service, 'getSID').mockRejectedValue({ message: 'sid error', code: 'ESID' });
+            await service.stampMetaData('target', 'source', mockMetadata, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
+            expect(mockJobContext.appendToErrorList).toHaveBeenCalled();
+        });
+
+        it('should skip runCommand if getUserACLs returns empty', async () => {
+            Object.defineProperty(process, 'platform', { value: 'win32' });
+            const mockMetadata: any = { sid: 'sid' };
+            const mockJobContext = { appendToErrorList: jest.fn(), jobConfig: { options: {} } } as any;
+            const mockCommand = { ops: [{ cmd: OPS_CMD.COPY_CONTENT }], commandId: 'id', fPath: 'file' } as any;
+            jest.spyOn(service, 'getSID').mockResolvedValue('sid');
+            jest.spyOn(utils, 'getUserACLs').mockReturnValue([]);
+            const runCmdSpy = jest.spyOn(service['shellService'], 'runCommand');
+            await service.stampMetaData('target', 'source', mockMetadata, mockJobContext, mockCommand, ErrorType.RECOVERABLE_ERROR);
+            expect(runCmdSpy).not.toHaveBeenCalled();
+        });
+
+    });
+
+    describe('copyFileWithChecksum', () => {
+        const mockSourceFile = '/mock/source.txt';
+        const mockDestFile = '/mock/dest.txt';
+        const fileContent = Buffer.from('Hello World');
+        const expectedChecksum = crypto.createHash('sha256').update(fileContent).digest('hex');
+
+        beforeEach(() => {
+            jest.clearAllMocks();
+        });
+
+        it('should throw error if source file does not exist', async () => {
+            jest.spyOn(fs, 'existsSync').mockImplementation((filePath: string) => false);
+            await expect(service.copyFileWithChecksum(mockSourceFile, mockDestFile))
+                .rejects
+                .toThrow(`Source file does not exist: ${mockSourceFile}`);
+        });
+
+        it('should throw if fs.mkdirSync fails in copyFileWithChecksum', async () => {
+            jest.spyOn(fs, 'existsSync').mockImplementation((p: string) => p.includes('source') ? true : false);
+            jest.spyOn(fs, 'mkdirSync').mockImplementation(() => { throw new Error('mkdir error'); });
+            await expect(service.copyFileWithChecksum('sourceFile', 'destDir/destFile')).rejects.toThrow('mkdir error');
+        });
+
+        it('should throw if checksum mismatch', async () => {
+            jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+            jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
+                const stream = new (require('stream')).Readable();
+                stream.push('abc');
+                stream.push(null);
+                return stream;
+            });
+            jest.spyOn(fs, 'createWriteStream').mockImplementation(() => {
+                const stream = new (require('stream')).Writable();
+                stream._write = (chunk, encoding, callback) => callback();
+                return stream;
+            });
+            jest.spyOn(service, 'calculateChecksum').mockResolvedValue('different');
+            await expect(service.copyFileWithChecksum('sourceFile', 'destFile')).rejects.toThrow('Checksum mismatch');
+        });
+
+        it('should copy file and return checksums when source and target match', async () => {
+            const mockSourceFile = '/mock/source.txt';
+            const mockDestFile = '/mock/dest.txt';
+            const fileContent = Buffer.from('Hello World');
+            const expectedChecksum = crypto.createHash('sha256').update(fileContent).digest('hex');
+
+            jest.spyOn(fs, 'existsSync').mockImplementation((filePath: string) => true);
+            jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
+            const stream = new (require('stream')).Readable();
+            stream.push(fileContent);
+            stream.push(null);
+            return stream;
+            });
+            jest.spyOn(fs, 'createWriteStream').mockImplementation(() => {
+            const stream = new (require('stream')).Writable();
+            stream._write = (chunk, encoding, callback) => callback();
+            return stream;
+            });
+            jest.spyOn(service, 'calculateChecksum').mockResolvedValue(expectedChecksum);
+
+            const result = await service.copyFileWithChecksum(mockSourceFile, mockDestFile);
+            expect(result.sourceChecksum).toBe(expectedChecksum);
+            expect(result.targetChecksum).toBe(expectedChecksum);
+        });
+
+        it('should pause and resume readStream if writeStream buffer is full', async () => {
+            const mockSourceFile = '/mock/source.txt';
+            const mockDestFile = '/mock/dest.txt';
+            const fileContent = Buffer.from('Hello World');
+            const expectedChecksum = crypto.createHash('sha256').update(fileContent).digest('hex');
+
+            jest.spyOn(fs, 'existsSync').mockImplementation((filePath: string) => true);
+
+            // Mock readStream and writeStream with pause/resume
+            const events: Record<string, Function[]> = {};
+            const readStream = {
+            on: jest.fn(function (event, cb) {
+                events[event] = events[event] || [];
+                events[event].push(cb);
+                return this;
+            }),
+            pause: jest.fn(),
+            resume: jest.fn(),
+            };
+            const writeStream = {
+            write: jest.fn(() => false), // Simulate buffer full
+            on: jest.fn(function (event, cb) {
+                events[event] = events[event] || [];
+                events[event].push(cb);
+                return this;
+            }),
+            end: jest.fn(),
+            };
+
+            jest.spyOn(fs, 'createReadStream').mockReturnValue(readStream as any);
+            jest.spyOn(fs, 'createWriteStream').mockReturnValue(writeStream as any);
+            jest.spyOn(service, 'calculateChecksum').mockResolvedValue(expectedChecksum);
+
+            // Simulate the data event
+            setTimeout(() => {
+            events['data'].forEach(cb => cb(fileContent));
+            events['end'].forEach(cb => cb());
+            events['drain'].forEach(cb => cb());
+            events['finish'].forEach(cb => cb());
+            }, 10);
+
+            const result = await service.copyFileWithChecksum(mockSourceFile, mockDestFile);
+            expect(readStream.pause).toHaveBeenCalled();
+            expect(readStream.resume).toHaveBeenCalled();
+            expect(result.sourceChecksum).toBe(expectedChecksum);
+            expect(result.targetChecksum).toBe(expectedChecksum);
+        });
+
+
+        it('should create destination directory if it does not exist', async () => {
+            jest.spyOn(fs, 'existsSync').mockImplementation((filePath: string) => filePath.includes('source'));
+            const mkdirSyncSpy = jest.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined);
+            jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
+            const stream = new (require('stream')).Readable();
+            stream.push('abc');
+            stream.push(null);
+            return stream;
+            });
+            jest.spyOn(fs, 'createWriteStream').mockImplementation(() => {
+            const stream = new (require('stream')).Writable();
+            stream._write = (chunk, encoding, callback) => callback();
+            return stream;
+            });
+            jest.spyOn(service, 'calculateChecksum').mockResolvedValue('abc');
+            await expect(service.copyFileWithChecksum('sourceFile', 'destDir/destFile')).rejects.toThrow('Checksum mismatch');
+            expect(mkdirSyncSpy).toHaveBeenCalled();
         });
     });
 });

@@ -18,6 +18,8 @@ const Review = () => {
     preCheckStatus,
     isPrecheckSuccessful,
     reviewIdsValidated,
+    refetch,
+    isFetching,
   } = useContext(BulkMigrateContext);
 
   const rows = useMemo(() => {
@@ -76,6 +78,8 @@ const Review = () => {
         tableStateProps={tableStateProps}
         showLabel={false}
         handleSelection={handleSelection}
+        refetchTableData={refetch}
+        isRefreshing={isFetching}
       />
     </Box>
   );

@@ -1,14 +1,17 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { RedisService } from "src/redis/redis.service";
-import { generateDummyErrorEntry, generateDummyFileEntry, generateDummyTaskEntry } from '../utils/utils';
-import { UpdateStatusInput, UpdateStatusOutput } from "../migrate/migrate.type";
-import axios from 'axios';
-import { JobRunStatus } from "../discovery/enums";
-import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
 import { GroupReaderType, JobContext, JobStatus, Task } from "@netapp-cloud-datamigrate/jobs-lib";
-import { HttpService } from "@nestjs/axios";
+import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
+import axios from 'axios';
 import { AuthService } from "src/auth/auth.service";
+import { RedisService } from "src/redis/redis.service";
+import { JobRunStatus } from "../discovery/enums";
+import { UpdateStatusInput, UpdateStatusOutput } from "../migrate/migrate.type";
+import { generateDummyErrorEntry, generateDummyFileEntry, generateDummyItemEntry, generateDummyTaskEntry, generateDummyTaskInfoEntry } from '../utils/utils';
+import {
+  LoggerFactory,
+  LoggerService
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class CommonActivityService{
@@ -18,25 +21,28 @@ export class CommonActivityService{
   readonly workerJobServiceUrl: string;
   readonly reportServiceUrl: string;
   readonly migrationTaskLimit: number;
+  readonly maxRetryCount: number;
+  private readonly logger : LoggerService;
   
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
-    private readonly httpService: HttpService,
     private readonly authService: AuthService,
-    private readonly logger: Logger,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly redisService: RedisService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
+    this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
     this.workerJobServiceUrl = this.configService.get('worker.connection.workerJobServiceUrl');
     this.reportServiceUrl = this.configService.get('worker.connection.workerReportServiceUrl');
     this.migrationTaskLimit = this.configService.get('worker.migrationTaskStreamLimit');
     this.fetchTaskBatch = 50, this.pushTaskDirSize = 500;
+    this.logger = loggerFactory.create(CommonActivityService.name);
   }
 
   async cleanupJobContext(traceId: string): Promise<any> {
     try{
-      const jobContext = await this.redisService.getJobContext(traceId);
-      jobContext.cleanup()
+      const jobContext = await this.redisService.getJobManagerContext(traceId);
+      await jobContext.cleanup();
     }catch(error){
       this.logger.error(`[${traceId}] Error while cleaning up the job context: ${error}`);
       return { message: 'Error while cleaning up the job context: ' + traceId };
@@ -46,26 +52,10 @@ export class CommonActivityService{
   async updateLastEntry(traceId: string): Promise<any> {
     try {
       this.logger.log(`[${traceId}] Publishing last entry for job id: ${traceId}`);
-      const jobContext = await this.redisService.getJobContext(traceId);
-      const id = await jobContext.appendToFileList(generateDummyFileEntry);
-      jobContext.filesInfo.lastId = id;
-      
-      const directoryId  = await jobContext.appendToDirList(generateDummyFileEntry);
-      jobContext.dirsInfo.lastId = directoryId;
-
-      const lastTask = await jobContext.appendToTaskList(generateDummyTaskEntry);
-      jobContext.tasksInfo.lastId = lastTask;
-
-      const migratedTask = await jobContext.appendToMigrationTask(generateDummyTaskEntry);
-      jobContext.migrateTask.lastId = migratedTask;
-
-      const updateTask = await jobContext.appendToUpdatedTaskList(generateDummyTaskEntry);
-      jobContext.updatedTaskInfo.lastId = updateTask;
-
-      const errorTask = await jobContext.appendToErrorList(generateDummyErrorEntry);
-      jobContext.errorsInfo.lastId = errorTask;
-      
-      this.redisService.setJobContext(traceId, jobContext);
+      const jobContext = await this.redisService.getJobManagerContext(traceId);
+      await jobContext.publishToFileStream(generateDummyItemEntry);  
+      await jobContext.publishToTaskStream(generateDummyTaskInfoEntry);
+      await jobContext.publishToErrorStream(generateDummyErrorEntry);
       this.logger.log(`[${traceId}] Last entry published for job id: ${traceId}`);
       return { message: 'Job completed for job id: ' + traceId };
     } catch (error) {
@@ -113,17 +103,19 @@ export class CommonActivityService{
       return { message: 'Error while Triggering generateJobsReport for the job id : ' + jobRunId };
     }
   }
-
+  //deprecated,
   async updateJobErrorStatus(jobRunId: string) {
     await this.updateStatus({jobRunId, status: JobRunStatus.Errored});
     await this.updateLastEntry(jobRunId);
   }
 
+  //deprecated,
   async getJobState(traceId: string): Promise<any> {
     const jobContext = await this.redisService.getJobContext(traceId);
     return await jobContext.getJobState();
   }
 
+  //deprecated,
   async setJobState(traceId: string, jobState: JobState): Promise<any> {
     const jobContext = await this.redisService.getJobContext(traceId);
     jobContext.jobState = new JobState(
@@ -146,6 +138,7 @@ export class CommonActivityService{
     return { jobState, isStreamOverloaded };
   }
 
+  //deprecated,
   async fetchOneTask(jobContext: JobContext): Promise<Task | undefined> {
     try {
       const tasks = await jobContext.groupReadTasks(this.workerId, 1, GroupReaderType.WORKER);
@@ -162,6 +155,7 @@ export class CommonActivityService{
     }
   }
 
+  //deprecated,
   async fetchOneMigrationTask(jobContext: JobContext): Promise<Task | undefined> {
     try {
       const tasks = await jobContext.groupReadMigrationTask(this.workerId, 1, GroupReaderType.WORKER);
@@ -178,12 +172,14 @@ export class CommonActivityService{
     }
   }
 
+  //deprecated,
   async getJobStateAndUpdateTaskList(traceId: string, jobType: 'SCAN' | 'SYNC'): Promise<any> {
     const jobContext = await this.redisService.getJobContext(traceId);
     await this.publishPendingTasksToStream(jobContext, jobType);
     return await jobContext.getJobState();
-  }
-
+  } 
+  
+  //deprecated,
   async publishPendingTasksToStream(jobContext: JobContext, jobType: 'SCAN' | 'SYNC'): Promise<any> {
     if(jobType === 'SCAN') {
       const runningScanTasks = await jobContext.getAllRunningScanTasks() as any;
@@ -218,7 +214,7 @@ export class CommonActivityService{
       }
     }
   }
-
+  //deprecated,
   async updateWorkerResponse(jobRunId: string, workerId: string, workerResponse: Record<string, any>) {
     try {
       this.logger.log(`[${jobRunId}] Updating worker response to URL ${this.workerJobServiceUrl}/api/v1/job-run/worker-response/${jobRunId}/${workerId}`);
@@ -232,13 +228,16 @@ export class CommonActivityService{
       return { message: 'Error while updating the worker response for the job id : ' + jobRunId };
     }
   }
-
+  //deprecated,
   async hasRunningScanTask(jobRunId: string): Promise<boolean> {
     const jobContext = await this.redisService.getJobContext(jobRunId);
     return !(await jobContext.isRunningScanTaskEmpty());
   }
+  
+  //deprecated,
   async hasRunningSyncTask(jobRunId: string): Promise<boolean> {
     const jobContext = await this.redisService.getJobContext(jobRunId);
     return !(await jobContext.isRunningSyncTaskEmpty());
   }
+
 }

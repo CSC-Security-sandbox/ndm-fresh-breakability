@@ -1,6 +1,6 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { EmailDto } from './dto/emailDto';
+import { EmailDto, SuccessEventEmailDto } from './dto/emailDto';
 import { EmailService } from './email.service';
 import { NOTIFICATION_TYPE } from './dto/notification.type';
 
@@ -29,7 +29,7 @@ export class EmailController {
       'Sends an email notification for successful events, confirming completion or status updates',
   })
   @ApiTags('Email')
-  createInternal(@Body() content: any) {
+  createInternal(@Body() content: SuccessEventEmailDto) {
     return this.emailService.setupAndSendMailForSuccessEvents(
       content,
       NOTIFICATION_TYPE.SUCCESS,

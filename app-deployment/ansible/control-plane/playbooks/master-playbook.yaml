@@ -64,6 +64,12 @@
   import_playbook: configure-cloud-init.yaml
   when: local_cluster is not defined 
 
+- name: Configure OVF customization for vSphere
+  import_playbook: configure-ovf.yaml
+  when: 
+    - vsphere_build | default(false)
+    - local_cluster is not defined
+
 - name: Reset Cluster
   import_playbook: reset-cluster.yaml
   when: local_cluster is not defined 

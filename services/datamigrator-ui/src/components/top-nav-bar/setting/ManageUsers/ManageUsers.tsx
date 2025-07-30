@@ -17,6 +17,7 @@ import { hasPermission } from "@/auth/auth.utils";
 import { useSelector } from "react-redux";
 import { RootStateType } from "@store/store";
 import { DEFAULT_COLUMN_STATE } from "@components/top-nav-bar/setting/ManageUsers/ManageUsers.constant";
+import { decryptData } from "@/utils/common.utils";
 
 const ManageUsers = () => {
   const [updateUserStatus] = useUpdateUserStatusMutation();
@@ -34,23 +35,23 @@ const ManageUsers = () => {
   const [isCreateFormVisible, setIsCreateFormVisible] =
     useState<boolean>(false);
 
-  const updateUserStatusWraper = (body: { email: string; enable: boolean }) => {
+  const updateUserStatusWrapper = (body: {
+    email: string;
+    enable: boolean;
+  }) => {
     updateUserStatus(body)
       .unwrap()
-      .then(() => {
-        notify.success(
-          `${body.enable ? "Enabled" : "Disabled"} access for user ${
-            body.email
-          }`
-        );
+      .then((res) => {
+        notify.success(res?.message);
       })
       .catch((err) => {
-        notify.error(`Failed to update status of user ${body.email}.`);
-        console.error(err);
+        console.log("error", err);
+        const errorDetails = err.data?.error;
+        notify.error(errorDetails?.message);
       });
   };
 
-  const canManageProject: boolean = hasPermission(
+  const canManageUser: boolean = hasPermission(
     USER_PERMISSION_TYPE_ENUM.CreateUser
   );
   const rowMenu = (row: any) => [
@@ -61,14 +62,14 @@ const ManageUsers = () => {
           email: row.email,
           enable: row.user_status !== "active",
         };
-        updateUserStatusWraper(body);
+        updateUserStatusWrapper(body);
       },
 
-      disabled: permission?.userPermissions?.id === row.id || !canManageProject,
+      disabled: permission?.userPermissions?.id === row.id || !canManageUser,
     },
     {
       label: "Reset Password",
-      disabled: row.user_status !== "active" || !canManageProject,
+      disabled: row.user_status !== "active" || !canManageUser,
       onClick: () => {
         const body = {
           email: row.email,
@@ -77,10 +78,10 @@ const ManageUsers = () => {
           .unwrap()
           .then((res) => {
             setIsCreateFormVisible(true);
-            setTemporaryPassword(res?.newPassword);
+            setTemporaryPassword(decryptData(res?.data?.items?.newPassword));
           })
           .catch((err) => {
-            notify.error("Failed to reset password.");
+            notify.error(err.message);
             console.error({ err, level: "Generate Temporary Password." });
           });
       },
@@ -91,10 +92,9 @@ const ManageUsers = () => {
     setIsCreateFormVisible(false);
     setTemporaryPassword("");
   };
-
   const tableStateProps = {
     columns: COL_DEF_FOR_USER,
-    rows: userData,
+    rows: userData?.data?.items || [],
     isSorting: true,
     pageSize: 10,
     defaultColumnState: DEFAULT_COLUMN_STATE,
@@ -121,10 +121,7 @@ const ManageUsers = () => {
             <PermissionAuth
               permissionName={USER_PERMISSION_TYPE_ENUM.CreateUser}
             >
-              <Button
-                onClick={() => setIsCreateFormVisible(true)}
-                className="ml-4"
-              >
+              <Button onClick={() => setIsCreateFormVisible(true)}>
                 Add User
               </Button>
             </PermissionAuth>

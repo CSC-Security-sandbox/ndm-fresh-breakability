@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from "axios";
 import * as fs from 'fs';
@@ -8,25 +8,30 @@ import { join } from 'path';
 import { AuthService } from 'src/auth/auth.service';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { ConfigError, ConfigStatus, ConfigStatusPayload } from './working-directory.type';
+import { ExportPathSource } from '../list-path/list-path.type';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class ValidateWorkingDirectoryActivity {
   readonly workerId: string;
   readonly baseWorkingPath: string;
   readonly workerConfigUrl: string;
+  private readonly logger: LoggerService;
+
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
-    private readonly logger: Logger,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly authService: AuthService,
+    private readonly protocols: Protocols
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
     this.workerConfigUrl = this.configService.get('worker.connection.workerConfigUrl');
+    this.logger = loggerFactory.create(ValidateWorkingDirectoryActivity.name);
   }
 
   async validateWorkingDirectory(traceId: string, payload: any): Promise<any> {
     const apiUrl = `${this.workerConfigUrl}/api/v1/work-manager/validate/working-directory`;
-
 
     const configStatusPayload: ConfigStatusPayload = {
       configId: payload.configId,
@@ -34,9 +39,24 @@ export class ValidateWorkingDirectoryActivity {
       errorMessage: null
     };
 
+    const isPathExists = !!payload?.paths?.length;
+    if(!isPathExists && !payload.hasManualUpload) {
+      configStatusPayload.status = ConfigStatus.ERRORED;
+      configStatusPayload.errorMessage = ConfigError.UNABLE_TO_DETECT_EXPORT_PATH;
+      await this.updateConfigStatus(apiUrl, configStatusPayload);
+      return {
+        traceId,
+        status: 'error',
+        workerId: this.workerId,
+        message: ConfigError.UNABLE_TO_DETECT_EXPORT_PATH,
+      };
+    }
+
     if(!payload?.exportPathWorkingDirectoryProvided) {
       try {
+        this.logger.log("Export Path not provided, fetching from file server");
         await this.handleMountAndUnmountPaths(traceId, payload);
+        this.logger.log("Export Path fetched successfully");
         configStatusPayload.status = ConfigStatus.ACTIVE;
         configStatusPayload.errorMessage = null;
       } catch (error) {
@@ -94,7 +114,12 @@ export class ValidateWorkingDirectoryActivity {
   async handleMountAndUnmountPaths(traceId: string, payload: any): Promise<void> {
     try {
       for (const fileServer of payload.listPathPayload) {
-        const protocol = Protocols.getProtocol(ProtocolTypes[fileServer.type]);
+        if(fileServer.exportPathSource === ExportPathSource.MANUAL_UPLOAD) {
+          this.logger.log(`Skipping mounting and unmounting for MANUAL_UPLOAD type for host ${fileServer.host}`);
+          continue;
+        }
+        
+        const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
 
         const mountPathPayload = {
           hostname: fileServer.host,
@@ -142,7 +167,7 @@ export class ValidateWorkingDirectoryActivity {
 
     try {
       for (const fileServer of payload.listPathPayload) {
-        const protocol = Protocols.getProtocol(ProtocolTypes[fileServer.type]);
+        const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
 
         const mountPathPayload = {
           hostname: fileServer.host,

@@ -12,6 +12,8 @@ const ToggleWorkerCellRenderer = ({
     setSelectedWorkerIds,
     validateConnectionLoader,
     isJobRunning,
+    nfsCredentialsForm,
+    smbCredentialsForm,
   } = useContext(CommonFileServerContext);
 
   const handleToggle = useCallback(() => {
@@ -22,21 +24,27 @@ const ToggleWorkerCellRenderer = ({
         return [...prevIds, value];
       }
     });
-  }, [value]);
+  }, [value, setSelectedWorkerIds]);
 
   const isOnline = row?.status === "Online";
+  const isSelected = selectedWorkerIds.includes(value);
+  const workerName = row?.workerName?.toLowerCase() || "";
 
-  const isDisabled =
-    validateConnectionLoader ||
-    (isJobRunning && isOnline) ||
-    (!selectedWorkerIds.includes(value) && !isOnline && !isJobRunning);
+  const isWorkerTypeValid =
+    (nfsCredentialsForm.isValid && workerName.startsWith("nfs-")) ||
+    (smbCredentialsForm.isValid && workerName.startsWith("smb-"));
+
+  const isDisabled = (() => {
+    if (!isWorkerTypeValid) return true;
+    if (validateConnectionLoader) return true;
+    if (isJobRunning && isOnline) return true;
+    if (!isSelected && !isOnline && !isJobRunning) return true;
+
+    return false;
+  })();
 
   return (
-    <Toggle
-      value={selectedWorkerIds.includes(value)}
-      disabled={isDisabled}
-      toggle={handleToggle}
-    />
+    <Toggle value={isSelected} disabled={isDisabled} toggle={handleToggle} />
   );
 };
 

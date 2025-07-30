@@ -1,15 +1,12 @@
-import {
-  useGetJobRunErrorsMutation,
-  useLazyGetJobRunErrorsOverviewQuery,
-} from "@api/jobsApi";
+import { useGetJobRunErrorsQuery } from "@api/jobsApi";
 import { Box } from "@components/container/index";
 import { ERROR_COLUMN_DEF } from "@modules/jobs/job-task-errors/jobTaskErrors.constant";
 import { ErrorsListTablePropsType } from "@modules/jobs/job-task-errors/JobTaskErrorsTabs.interface";
 import { Table, TablePager, useTable } from "@netapp/bxp-design-system-react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { notify } from "@components/notification/NotificationWrapper";
-import { JobErrorType, JobRunErrorsApiType } from "@/types/app.type";
+import { JobErrorType } from "@/types/app.type";
+import RefreshButton from "@components/refresh-button/RefreshButton";
 
 const pageSize = 10;
 const ErrorsListTable = ({ currentErrorType }: ErrorsListTablePropsType) => {
@@ -18,34 +15,33 @@ const ErrorsListTable = ({ currentErrorType }: ErrorsListTablePropsType) => {
   const [totalCount, setTotalCount] = useState(0);
   const pageCount = Math.ceil(totalCount / pageSize);
   const rowsCountArray = Array(totalCount);
-  const [getJobRunErrorsApi, { isLoading }] = useGetJobRunErrorsMutation();
-  useLazyGetJobRunErrorsOverviewQuery();
 
   const { rowState, pagination, toggleSort, sortState, gotoPage } = useTable({
     columns: ERROR_COLUMN_DEF,
     pageSize: 1,
-    totalCount: 1,
     externalSort: true,
     rows: tableRows,
     isSorting: true,
     defaultSortState: { sortOrder: "desc", column: "createdAt" },
   });
 
+  const queryParams = `page=${
+    pagination?.pageIndex + 1
+  }&limit=${pageSize}&sort=createdAt&order=DESC&jobRunId=${jobRunId}&errorType=${currentErrorType}`;
+
+  const {
+    data: errorDetails,
+    isLoading,
+    refetch,
+    isFetching,
+  } = useGetJobRunErrorsQuery(queryParams);
+
   useEffect(() => {
-    (async () => {
-      const queryParams: string = `page${1}&limit=10&sort=createdAt&order=DESC&jobRunId=${jobRunId}&errorType=${currentErrorType}`;
-      try {
-        const _errorDetails: JobRunErrorsApiType = await getJobRunErrorsApi(
-          queryParams
-        ).unwrap();
-        setTableRows(_errorDetails.data);
-        setTotalCount(_errorDetails.total || 0);
-      } catch (error) {
-        notify.error("Something went wrong.");
-        console.error({ error, level: "error listing" });
-      }
-    })();
-  }, [pagination.pageIndex, sortState, currentErrorType]);
+    if (errorDetails) {
+      setTableRows(errorDetails?.data);
+      setTotalCount(errorDetails?.total || 0);
+    }
+  }, [errorDetails, pagination?.pageIndex, sortState, currentErrorType]);
 
   const RenderTablePager = useMemo(
     () => (
@@ -62,10 +58,13 @@ const ErrorsListTable = ({ currentErrorType }: ErrorsListTablePropsType) => {
   );
 
   return (
-    <Box className="flex flex-col gap-6">
+    <Box className="flex flex-col gap-4">
+      <Box className="flex justify-end p-2">
+        <RefreshButton isLoading={isFetching} onRefresh={refetch} />
+      </Box>
       <Box>
         <Table
-          isLoading={isLoading}
+          isLoading={isFetching || isLoading}
           columns={ERROR_COLUMN_DEF}
           rows={tableRows}
           sortState={sortState || {}}

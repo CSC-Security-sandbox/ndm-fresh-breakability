@@ -44,3 +44,13 @@ export const ERROR_COLUMN_DEF = [
       React.createElement(TooltipCellRenderer, { ...props }),
   },
 ];
+
+export const GENERATING_ERRORS_LOGS_LABEL = "Generating error report";
+
+export const GENERATE_ERROR_REPORT = "Generate Error Report";
+
+export const DOWNLOAD_ERROR_REPORT = "Download Error Report";
+
+export const GENERATE_BULK_ERROR_REPORT = "Generate Bulk Error Report";
+
+export const DOWNLOAD_BULK_ERROR_REPORT = "Download Bulk Error Report ";

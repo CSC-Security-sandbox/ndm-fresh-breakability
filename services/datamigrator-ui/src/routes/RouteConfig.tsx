@@ -92,7 +92,7 @@ export const routeConfig: RouteConfigType[] = [
     element: <JobDetailsPage />,
   },
   {
-    path: "job-details/:jobId/errors",
+    path: "job-details/:jobId/:jobRunId/errors",
     element: <JobTaskErrorsPage />,
   },
   {

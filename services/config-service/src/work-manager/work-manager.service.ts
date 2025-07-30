@@ -2,9 +2,9 @@ import { BadRequestException, Injectable, InternalServerErrorException, NotFound
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
-import { Repository, IsNull, Not } from 'typeorm';
+import { Repository, IsNull, Not, In } from 'typeorm';
 import { WorkerConfiguration } from 'src/constants/types';
-import { WorkerStatus, WorkFlows, WorkFlowType } from 'src/constants/enums';
+import { Platform, WorkerStatus, WorkFlows, WorkFlowType } from 'src/constants/enums';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 import { ConfigEntity } from 'src/entities/config.entity';
@@ -14,6 +14,8 @@ import { CreateRequestDto } from './dto/validate-connection.dto';
 import { ConfigStatusPayloadDTO } from './dto/validate-export-path.dto';
 import { SendMailService } from 'src/util/send-email';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
+import { generateWorkerName } from 'src/util/utils';
+import { SuccessEmailType } from 'src/util/send-email.type';
 
 @Injectable()
 export class WorkManagerService {
@@ -39,6 +41,7 @@ export class WorkManagerService {
     id: string,
     ip: string,
     projectId: string,
+    platform: Platform
   ): Promise<WorkerConfiguration[]> {
     try {
       const workerMetaConfig = await this.workerEntity.findOne({
@@ -47,7 +50,7 @@ export class WorkManagerService {
       if (workerMetaConfig) {
         const jobRunConfig = await this.jobRunRepo.find({
           where: {
-            status: Not(JobRunStatus.Completed),
+            status: In([JobRunStatus.Running, JobRunStatus.Ready, JobRunStatus.Pausing, JobRunStatus.Stopping, JobRunStatus.Paused]),
             workerMap: {
               workerId: id,
               metaConfig: Not(IsNull()),
@@ -76,6 +79,16 @@ export class WorkManagerService {
             });
           }
         });
+        await this.workerEntity.update(
+          { workerId: workerMetaConfig.workerId },
+          {
+            workerName: generateWorkerName(
+              workerMetaConfig.workerNumber,
+              platform,
+            ),
+            platform: platform,
+          },
+        );
         return workerMetaConfig.metaConfig;
       }
       this.logger.warn(`project ID : ${projectId}`);
@@ -87,15 +100,17 @@ export class WorkManagerService {
         workerName: id,
         createdBy: id,
         projectId,
+        platform: platform,
       });
 
       const result = await this.workerEntity.save(newWorker);
-      const htmlContent = `<p>Hello</p> The Seceret Client Id ${id} has been used from address ${ip} <p></p>`;
-      const payload = { body: htmlContent };   
-      await this.sendMailService.sendMail(payload);
+      await this.sendMailService.sendMail({
+        successEmailType: SuccessEmailType.WORKER_USAGE,
+        workerUsage: { id, ip }
+      });
       await this.workerEntity.update(
         { workerId: result.workerId },
-        { workerName: `Worker-${result.workerNumber}` },
+        { workerName: generateWorkerName(result.workerNumber, platform) },
       );
 
       return result.metaConfig;

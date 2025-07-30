@@ -1,12 +1,14 @@
 import { exec } from "child_process";
 import { WorkersConfig } from "src/config/app.config";
-
-import { Logger } from "src/logger/logger.service";
 import { ProtocolPayload } from "./protocol.type";
-
+import { sanitize } from "src/utils/utilities";
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 export abstract class Protocol {
-    protected logger = new  Logger();
+    protected readonly logger: LoggerService;
     protected workerId = WorkersConfig.get('workerId');
     protected baseMountDir = WorkersConfig.get('baseMountDir');
     protected platform: NodeJS.Platform = WorkersConfig.get('platform');
@@ -19,6 +21,10 @@ export abstract class Protocol {
     abstract disconnectSession(traceId: string, payload: ProtocolPayload): Promise<any>;
     abstract getTotalUsedMemory(traceId: string, payload: ProtocolPayload): Promise<any>;
     abstract getAvailableDiskSpace(traceId: string, payload: ProtocolPayload): Promise<any>;
+
+    constructor(loggerFactory: LoggerFactory) {
+      this.logger = loggerFactory.create(this.constructor.name);
+    }
 
     public async executeCommand(
         traceId: string,
@@ -43,28 +49,36 @@ export abstract class Protocol {
           ?.replaceAll('${MOUNT_PATH}', payload?.path)
           ?.replaceAll('${DIR_PATH}', directoryPath)
           ?.replaceAll('${PROTOCOL_VERSION}', payload?.protocolVersion)
-        this.logger.log(`command: ${command}`)
+        
+        const fieldsToSanitize: string[] = [];
+        const trimmedPassword = payload.password?.trim();
+        if (trimmedPassword) fieldsToSanitize.push(trimmedPassword);
+        const sanitizedCommand = sanitize(command, fieldsToSanitize);
+        this.logger.debug(`command: ${sanitizedCommand}`)
         return new Promise((resolve, rejects) => {
           exec(command, (error, stdout, stderr) => {
-            this.logger.info(
-              `[${traceId}] command: ${command}, stdout: ${stdout}, stderr: ${stderr}, error: ${error}`,
+            const sanitizedStderr = sanitize(stderr, fieldsToSanitize);
+            const sanitizedError = sanitize(error?.message, fieldsToSanitize);
+
+            this.logger.log(
+              `[${traceId}] command: ${sanitizedCommand}, stdout: ${stdout}, stderr: ${sanitizedStderr}, error: ${sanitizedError}`,
             );
       
             if (error) {
-              response.message = `[${protocolType}] [${commandDescription}] Failed. Hostname: ${payload.hostname} Worker: ${this.workerId}. Error: ${error}`;
+              response.message = `[${protocolType}] [${commandDescription}] Failed. Hostname: ${payload.hostname} Worker: ${this.workerId}. Error: ${sanitizedError}`;
               response.status = 'error';
-              return rejects(error);
+              return rejects(sanitizedError);
             }
       
             if (stderr) {
-              response.message = `[${protocolType}] [${commandDescription}] Failed. Hostname: ${payload.hostname} Worker: ${this.workerId}. Error: ${stderr}`;
+              response.message = `[${protocolType}] [${commandDescription}] Failed. Hostname: ${payload.hostname} Worker: ${this.workerId}. Error: ${sanitizedStderr}`;
               response.status = 'error';
-              return rejects(stderr);
+              return rejects(sanitizedStderr);
             }
       
             response.message = `${stdout}`;
             resolve(response);
           });
         });
-      }    
+      }
 }

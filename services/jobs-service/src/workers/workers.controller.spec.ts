@@ -2,10 +2,28 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { WorkersController } from './workers.controller';
 import { WorkersService } from './workers.service';
 import { WorkersStatusPageDto,  } from './dto/workers.page.dto';
+import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 
 describe('WorkersController', () => {
   let controller: WorkersController;
   let service: WorkersService;
+
+  const mockJwtService = {
+    verifyToken: jest.fn().mockResolvedValue({
+      user: {
+        roles: [
+          {
+            permissions: ["permission1", "permission2"],
+            projects: ["project1"],
+          },
+        ],
+      },
+    }),
+    configService: {},
+    client: jest.fn(),
+    logger: jest.fn(),
+    getKey: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -16,6 +34,10 @@ describe('WorkersController', () => {
           useValue: {
             findAllWorkers: jest.fn(),
           },
+        },
+        {
+          provide: JwtService,
+          useValue: mockJwtService,
         },
       ],
     }).compile();
@@ -42,6 +64,25 @@ describe('WorkersController', () => {
       jest.spyOn(service, 'findAllWorkers').mockRejectedValue(new Error('Invalid parameters'));
 
       await expect(controller.getWorkers(query)).rejects.toThrow('Invalid parameters');
+    });
+
+    describe('updateWorkerJobRunStatus', () => {
+      it('should update the worker job run status successfully', async () => {
+      const params = { workerId: 'worker1', jobrunId: 'jobrun1', active: true };
+      const updateResult = { success: true };
+      service.updateWorkerJobRunStatus = jest.fn().mockResolvedValue(updateResult);
+
+      const result = await controller.updateWorkerJobRunStatus(params as any);
+      expect(service.updateWorkerJobRunStatus).toHaveBeenCalledWith('worker1', 'jobrun1', true);
+      expect(result).toEqual(updateResult);
+      });
+
+      it('should throw an error if service throws', async () => {
+      const params = { workerId: 'worker1', jobrunId: 'jobrun1', active: false };
+      service.updateWorkerJobRunStatus = jest.fn().mockRejectedValue(new Error('Not found'));
+
+      await expect(controller.updateWorkerJobRunStatus(params as any)).rejects.toThrow('Not found');
+      });
     });
   });
 });

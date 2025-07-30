@@ -4,6 +4,7 @@ import DiscoveryJobsCountRenderer from "@modules/storage-servers/file-server/fil
 import MigrationJobsCountRenderer from "@modules/storage-servers/file-server/file-server-overview/components/CellRenderer/MigrationJobsCountRenderer";
 import React from "react";
 import StatusCellRenderer from "@components/custom-cell-renderer/StatusCellRenderer";
+import PathsInfoCellRenderer from "@modules/storage-servers/file-server/file-server-overview/components/CellRenderer/PathsInfoCellRenderer";
 
 export const EXPORT_PATHS_TABLE_COLS_DEF = [
   {
@@ -13,26 +14,31 @@ export const EXPORT_PATHS_TABLE_COLS_DEF = [
   },
   {
     id: 2,
+    header: "Status",
+    Renderer: PathsInfoCellRenderer,
+  },
+  {
+    id: 3,
     header: "Protocol",
     accessor: "protocol",
   },
   {
     // Running/Completed/Total
-    id: 3,
+    id: 4,
     header: "Discovery",
     accessor: "isDiscoveryDone",
     popoverText: "Running / Completed / Total Job Runs",
     Renderer: DiscoveryJobsCountRenderer,
   },
   {
-    id: 4,
+    id: 5,
     header: "Migration",
     accessor: "isBaselineMigrationDone",
     popoverText: "Running / Completed / Total Job Runs",
     Renderer: MigrationJobsCountRenderer,
   },
   {
-    id: 5,
+    id: 6,
     header: "Cutover",
     accessor: "cutover",
     popoverText: "Running / Completed / Total Job Runs",
@@ -66,10 +72,7 @@ export const WORKERS_PATHS_TABLE_COLS_DEF = [
 export const InitialFileServerOverviewApiData: FileServerOverviewApi = {
   jobDetails: {
     totalDiscoverJobs: 0,
-    totalMigrateJobs: {
-      baseLineJob: 0,
-      incrementalJob: 0,
-    },
+    totalMigrateJobs: 0,
     totalCutoverJobs: 0,
   },
   storageDetails: {
@@ -83,3 +86,5 @@ export const InitialFileServerOverviewApiData: FileServerOverviewApi = {
 export const BULK_DISCOVERY_DEFAULT_COLUMN_STATE = {
   2: { isHidden: true },
 };
+
+export const BULK_DISCOVERY = "bulk_discover";

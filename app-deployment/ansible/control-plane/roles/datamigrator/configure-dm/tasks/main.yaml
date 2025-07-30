@@ -3,15 +3,16 @@
   file:
     path: "{{ item.path }}"
     state: directory
-    owner: "{{ vm_username }}"
-    group: "{{ vm_username }}"
+    owner: root
+    group: root
     mode: "0755"
+    recurse: yes
   loop:
     - { path: "/opt/datamigrator" }
     - { path: "/opt/datamigrator/bin" }
     - { path: "/opt/datamigrator/conf" }
     - { path: "/opt/datamigrator/logs" }
-    - { path: "/var/log/datamigrator" }
+    - { path: "/opt/datamigrator/lock" }
 
 - name: Configure NDM Versions
   become: yes
@@ -21,6 +22,8 @@
       current_version={{ build_version }}
       previous_version=N/A
     dest: "/opt/datamigrator/conf/versions.conf"
+    owner: root
+    group: root
 
 - name: Cleanup service account
   become: yes

@@ -97,6 +97,7 @@ export class PreCheckService {
                     protocol: volume.fileServer.protocol,
                     protocolVersion: volume.fileServer.protocolVersion?.replace(/^v/, ""),
                     serverType: volume.fileServer.serverType,
+                    exportPathSource: volume.fileServer.exportPathSource,
                 });
             }
         });
@@ -179,7 +180,7 @@ export class PreCheckService {
         
         const inventorySize = await this.inventoryRepo.createQueryBuilder("inventory")
             .where("inventory.job_run_id = :jobRunId", { jobRunId: latestDiscoveryJobRun.id })
-            .andWhere("inventory.is_directory = :isDirectory", { isDirectory: true })
+            .andWhere("inventory.is_directory = :isDirectory", { isDirectory: false })
             .select("SUM(inventory.file_size)", "totalSize")
             .getRawOne();
         if (!inventorySize || !inventorySize.totalSize) return 0;

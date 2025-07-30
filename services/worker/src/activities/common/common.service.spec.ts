@@ -3,12 +3,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { AuthService } from 'src/auth/auth.service';
-import { Logger } from '@nestjs/common';
 import { RedisService } from 'src/redis/redis.service';
 import axios from 'axios';
 import { JobRunStatus } from '../discovery/enums';
 import { JobContext } from '@netapp-cloud-datamigrate/jobs-lib';
 import { CommonActivityService } from './common.service';
+import {
+  LoggerFactory,
+  LoggerService
+} from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLogger } from 'src/auth/auth.service.spec';
 
 jest.mock('axios');
 
@@ -17,7 +21,7 @@ describe('CommonActivityService', () => {
   let configService: Partial<ConfigService>;
   let httpService: Partial<HttpService>;
   let authService: Partial<AuthService>;
-  let logger: Partial<Logger>;
+  let logger: Partial<LoggerService>;
   let redisService: Partial<RedisService>;
   let mockContext: any;
 
@@ -64,7 +68,12 @@ describe('CommonActivityService', () => {
     };
     httpService = {};
     authService = { getAccessToken: jest.fn().mockResolvedValue('token') };
-    logger = { log: jest.fn(), error: jest.fn(), debug: jest.fn(), warn: jest.fn() } as unknown as Logger;
+
+    const mockLoggerFactory = {
+      create: jest.fn().mockReturnValue(mockLogger),
+    };
+
+    logger = mockLogger;
     redisService = {
       getJobContext: jest.fn().mockResolvedValue(mockContext),
       setJobContext: jest.fn(),
@@ -76,43 +85,15 @@ describe('CommonActivityService', () => {
         { provide: ConfigService, useValue: configService },
         { provide: HttpService, useValue: httpService },
         { provide: AuthService, useValue: authService },
-        { provide: Logger, useValue: logger },
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
+        },
         { provide: RedisService, useValue: redisService },
       ],
     }).compile();
 
     service = module.get<CommonActivityService>(CommonActivityService);
-  });
-
-  describe('cleanupJobContext', () => {
-    it('should cleanup successfully', async () => {
-      await service.cleanupJobContext(traceId);
-      expect(redisService.getJobContext).toHaveBeenCalledWith(traceId);
-      expect(mockContext.cleanup).toHaveBeenCalled();
-    });
-
-    it('should handle error', async () => {
-      (redisService.getJobContext as jest.Mock).mockRejectedValueOnce(new Error('fail'));
-      const res = await service.cleanupJobContext(traceId);
-      expect(logger.error).toHaveBeenCalled();
-      expect(res).toEqual({ message: 'Error while cleaning up the job context: ' + traceId });
-    });
-  });
-
-  describe('updateLastEntry', () => {
-    it('should publish last entries', async () => {
-      const res = await service.updateLastEntry(traceId);
-      expect(mockContext.appendToFileList).toHaveBeenCalled();
-      expect(redisService.setJobContext).toHaveBeenCalledWith(traceId, mockContext);
-      expect(res).toEqual({ message: 'Job completed for job id: ' + traceId });
-    });
-
-    it('should handle error', async () => {
-      (mockContext.appendToFileList as jest.Mock).mockRejectedValueOnce(new Error('err'));
-      const res = await service.updateLastEntry(traceId);
-      expect(logger.error).toHaveBeenCalled();
-      expect(res).toEqual({ message: 'Error while marking the job as completed : ' + traceId });
-    });
   });
 
   describe('updateStatus', () => {
@@ -309,6 +290,71 @@ describe('CommonActivityService', () => {
       await service.publishPendingTasksToStream(mockContext, 'SYNC');
       expect(mockContext.appendToTaskList).not.toHaveBeenCalled();
       expect(mockContext.appendToMigrationTask).not.toHaveBeenCalled();
+      });
+
+      it('should handle errors when appending scan tasks to stream', async () => {
+        const scanTasks = { t1: JSON.stringify({ id: 't1' }) };
+        mockContext.getAllRunningScanTasks = jest.fn().mockResolvedValue(scanTasks);
+        mockContext.appendToTaskList = jest.fn().mockRejectedValueOnce(new Error('append error'));
+        mockContext.deleteAllScanTasks = jest.fn().mockResolvedValue(undefined);
+        await service.publishPendingTasksToStream(mockContext, 'SCAN');
+        expect(logger.error).toHaveBeenCalledWith(
+          `[${mockContext.jobRunId}] Failed to append Scan task to stream: Error: append error`
+        );
+        expect(mockContext.deleteAllScanTasks).toHaveBeenCalled();
+      });
+
+      it('should handle errors when appending sync tasks to stream', async () => {
+        const syncTasks = { s1: JSON.stringify({ id: 's1' }) };
+        mockContext.getAllRunningSyncTasks = jest.fn().mockResolvedValue(syncTasks);
+        mockContext.appendToMigrationTask = jest.fn().mockRejectedValueOnce(new Error('sync error'));
+        mockContext.deleteAllSyncTasks = jest.fn().mockResolvedValue(undefined);
+        await service.publishPendingTasksToStream(mockContext, 'SYNC');
+        expect(logger.error).toHaveBeenCalledWith(
+          `[${mockContext.jobRunId}] Failed to append Sync task to stream: Error: sync error`
+        );
+        expect(mockContext.deleteAllSyncTasks).toHaveBeenCalled();
+      });
+
+      describe('updateLastEntry', () => {
+        it('should publish last entries successfully', async () => {
+          const jobManagerContext = {
+        publishToFileStream: jest.fn().mockResolvedValue(undefined),
+        publishToTaskStream: jest.fn().mockResolvedValue(undefined),
+        publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+          };
+          redisService.getJobManagerContext = jest.fn().mockResolvedValue(jobManagerContext);
+          const res = await service.updateLastEntry(traceId);
+          expect(redisService.getJobManagerContext).toHaveBeenCalledWith(traceId);
+          expect(jobManagerContext.publishToFileStream).toHaveBeenCalled();
+          expect(jobManagerContext.publishToTaskStream).toHaveBeenCalled();
+          expect(jobManagerContext.publishToErrorStream).toHaveBeenCalled();
+          expect(res).toEqual({ message: 'Job completed for job id: ' + traceId });
+        });
+
+        it('should handle error when publishing last entry', async () => {
+          redisService.getJobManagerContext = jest.fn().mockRejectedValueOnce(new Error('fail'));
+          const res = await service.updateLastEntry(traceId);
+          expect(logger.error).toHaveBeenCalled();
+          expect(res).toEqual({ message: 'Error while marking the job as completed : ' + traceId });
+        });
+
+        it('should handle error when cleaning up job context', async () => {
+          redisService.getJobManagerContext = jest.fn().mockRejectedValueOnce(new Error('fail'));
+          const res = await service.cleanupJobContext(traceId);
+          expect(logger.error).toHaveBeenCalledWith(
+            `[${traceId}] Error while cleaning up the job context: Error: fail`
+          );
+          expect(res).toEqual({ message: 'Error while cleaning up the job context: ' + traceId });
+        });
+
+        it('should cleanup job context successfully', async () => {
+          const jobManagerContext = { cleanup: jest.fn().mockResolvedValue(undefined) };
+          redisService.getJobManagerContext = jest.fn().mockResolvedValue(jobManagerContext);
+          const res = await service.cleanupJobContext(traceId);
+          expect(jobManagerContext.cleanup).toHaveBeenCalled();
+          expect(res).toBeUndefined();
+        });
       });
     });
 

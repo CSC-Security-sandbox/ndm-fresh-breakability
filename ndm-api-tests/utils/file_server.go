@@ -6,19 +6,45 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 type Volume struct {
-	ID         string `json:"id"`
-	VolumePath string `json:"volumePath"`
+	ID             string `json:"id"`
+	VolumePath     string `json:"volumePath"`
+	IsValid        bool   `json:"isValid"`
+	IsDisabled     bool   `json:"isDisabled"`
+	ReachableCount int    `json:"reachableCount"`
 }
 
 type FileServer struct {
-	Volumes []Volume `json:"volumes"`
+	Id               string           `json:"id"`
+	Volumes          []Volume         `json:"volumes"`
+	ExportPathSource ExportPathSource `json:"exportPathSource"`
+	Protocol         Protocol         `json:"protocol"`
+	ProtocolVersion  ProtocolVersion  `json:"protocolVersion"`
+	ServerType       ServerType       `json:"serverType"`
+	Host             string           `json:"host"`
 }
 
 type FileServerInfo struct {
 	FileServers []FileServer `json:"fileServers"`
+}
+
+type ExportPathSource string
+
+const (
+	AutoDiscover ExportPathSource = "AUTO_DISCOVER"
+	ManualUpload ExportPathSource = "MANUAL_UPLOAD"
+)
+
+type FileServerDetails struct {
+	ConfigName  string       `json:"configName"`
+	ID          string       `json:"id"`
+	ConfigType  ConfigType   `json:"configType"`
+	ProjectID   string       `json:"projectId"`
+	FileServers []FileServer `json:"fileServers"`
+	Status      string       `json:"status"`
 }
 
 type CreateServereParams struct {
@@ -33,6 +59,7 @@ type CreateServereParams struct {
 	Host             string
 	Workers          []string
 	WorkingDirectory string
+	ExportPathSource *ExportPathSource
 }
 
 var sshConfig SSHConfig
@@ -51,9 +78,18 @@ func init() {
 	}
 }
 
+func PtrExportPathSource(e ExportPathSource) *ExportPathSource {
+	return &e
+}
+
 // CreateFileServer creates a File server with different config details
 func CreateFileServer(params CreateServereParams, headers map[string]string) (string, *http.Response, error) {
 	createSourceURL := CONFIG_SERVICE_URL + CREATE_FILESERVER_ENDPOINT
+
+	if params.ExportPathSource == nil {
+		defaultSource := AutoDiscover
+		params.ExportPathSource = &defaultSource
+	}
 
 	payload := map[string]interface{}{
 		"configName": params.ConfigName,
@@ -61,14 +97,15 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 		"projectId":  params.ProjectID,
 		"fileServers": []map[string]interface{}{
 			{
-				"serverType":      params.ServerType,
-				"userName":        params.UserName,
-				"password":        params.Password,
-				"protocol":        params.Protocol,
-				"protocolVersion": params.ProtocolVersion,
-				"host":            params.Host,
-				"volumes":         []interface{}{},
-				"workers":         params.Workers,
+				"serverType":       params.ServerType,
+				"userName":         params.UserName,
+				"password":         params.Password,
+				"protocol":         params.Protocol,
+				"protocolVersion":  params.ProtocolVersion,
+				"host":             params.Host,
+				"volumes":          []interface{}{},
+				"workers":          params.Workers,
+				"exportPathSource": params.ExportPathSource,
 			},
 		},
 		"workingDirectory": map[string]interface{}{
@@ -189,6 +226,11 @@ func ClearVolume(export string) error {
 
 	script := fmt.Sprintf(`
 	set -e
+
+	# Clean up any previous mount
+	sudo umount -f "%s" 2>/dev/null || true
+	sudo rm -rf "%s"
+
 	sudo mkdir -p "%s"
 	sudo mount -t nfs "%s" "%s"
 
@@ -203,7 +245,8 @@ func ClearVolume(export string) error {
 
 	sudo umount "%s"
 	sudo rm -rf "%s"
-	`, destMount, export, destMount,
+`, destMount, destMount,
+		destMount, export, destMount,
 		destMount, destMount, destMount,
 		destMount,
 		destMount,
@@ -231,31 +274,30 @@ func AddDataToVolume(export string) error {
 	deltaDir := "/" + DeltaFolder
 
 	script := fmt.Sprintf(`
-	set -e
+set -e
 
-	# Clean up any previous run
-	sudo rm -rf "%s"
-	sudo rm -rf "%s"
+# Clean up any previous run
+sudo rm -rf "%s"
+sudo rm -rf "%s"
 
-	# Create delta directory and generate 100 txt files of 100KB each
-	sudo mkdir -p "%s"
-	for i in $(seq -w 1 100); do
-		sudo dd if=/dev/urandom of="%s/file${i}.txt" bs=100K count=1 status=none
-	done
+# Create delta directory and generate 100 txt files of 100KB each
+sudo mkdir -p "%s"
+for i in $(seq -w 1 100); do
+	sudo dd if=/dev/zero of="%s/file${i}.txt" bs=100K count=1 status=none
+done
 
-	# Mount export NFS export
-	sudo mkdir -p "%s"
-	sudo mount -t nfs "%s" "%s"
+# Mount export NFS export
+sudo mkdir -p "%s"
+sudo mount -t nfs "%s" "%s"
 
-	# Copy delta to the mounted export
-	sudo cp -a "%s" "%s/"
+# Copy delta to the mounted export
+sudo cp -a "%s" "%s/"
 
-	# Unmount and cleanup
-	sudo umount "%s"
-	sudo rm -rf "%s"
-	sudo rm -rf "%s"
-	`, deltaDir, destMount, deltaDir, deltaDir, destMount, export, destMount, deltaDir, destMount, destMount, deltaDir, destMount)
-
+# Unmount and cleanup
+sudo umount "%s"
+sudo rm -rf "%s"
+sudo rm -rf "%s"
+`, deltaDir, destMount, deltaDir, deltaDir, destMount, export, destMount, deltaDir, destMount, destMount, deltaDir, destMount)
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
 		return fmt.Errorf("AddDataToFileserver failed: %w\noutput: %s", err, output)
@@ -362,10 +404,10 @@ func RestoreOriginalDataOnVolume(export string) error {
     sudo mkdir -p "%s"
     sudo mount -t nfs "%s" "%s"
 
-    # Remove appended lines from each file
-    sudo sed -i '/^# MODIFIED LINE/d' "%s/modify1.text"
-    sudo sed -i '/^# MODIFIED LINE/d' "%s/modify2.text"
-    sudo sed -i '/^# MODIFIED LINE/d' "%s/modify3.text"
+    # Empty each file
+    sudo truncate -s 0 "%s/modify1.text"
+    sudo truncate -s 0 "%s/modify2.text"
+    sudo truncate -s 0 "%s/modify3.text"
 
     # Unmount and cleanup
     sudo umount "%s"
@@ -375,7 +417,6 @@ func RestoreOriginalDataOnVolume(export string) error {
 		destMount,
 		destMount,
 		destMount, destMount)
-
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
 		return fmt.Errorf("RestoreOriginalDataOnVolume failed: %w\noutput: %s", err, output)
@@ -430,4 +471,80 @@ func GetVolumeIDByName(volumeName, authToken, configId string) (string, error) {
 	}
 
 	return foundID, nil // Return the found ID and no error
+}
+
+// GetFileUserGroupId mounts the NFS export, stats the given file‐path
+// (relative to that export) and returns its numeric UID and GID.
+func GetFileUserGroupId(export, fileName string) (uid, gid int, err error) {
+	cfg := GetAttachedWorkerDetails()
+	sshCfg := SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     cfg.Host,
+		Port:     cfg.Port,
+		Password: NDM_VM_PASSWORD,
+	}
+
+	// Build a shell script that mounts + stats with "%u %g"
+	script := fmt.Sprintf(`
+	set -e
+	MP=$(mktemp -d -t mount.XXXXXX)
+	trap 'sudo umount "$MP" || true; rm -rf "$MP"' EXIT
+
+	sudo mount -t nfs "%[1]s" "$MP"
+	stat -c "%%u %%g" "$MP/%[2]s"
+	`, export, fileName)
+
+	out, err := sshRunScript(sshCfg, script)
+	if err != nil {
+		return 0, 0, fmt.Errorf("OwnerIDShellStat failed: %w\n%s", err, out)
+	}
+
+	parts := strings.Fields(strings.TrimSpace(out))
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("unexpected stat output: %q", out)
+	}
+
+	// parse the two numeric strings into ints
+	u, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid uid %q: %w", parts[0], err)
+	}
+	g, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid gid %q: %w", parts[1], err)
+	}
+	return u, g, nil
+}
+
+func GetFileServerDetails(configId string, headers map[string]string) (FileServerDetails, error) {
+	fullURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configId)
+
+	fmt.Printf("GetConfigById Full URL: %s\n", fullURL)
+	resp, err := SendAPIRequest(http.MethodGet, fullURL, nil, headers)
+	if err != nil {
+		return FileServerDetails{}, fmt.Errorf("error sending API request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return FileServerDetails{}, fmt.Errorf("error reading response body: %w", err)
+	}
+
+	var response FileServerDetails
+	err = json.Unmarshal(bodyBytes, &response)
+	if err != nil {
+		return FileServerDetails{}, fmt.Errorf("error unmarshalling response: %w", err)
+	}
+
+	return response, nil
+}
+
+func GetVolumeDetailsFromFileServer(Volumes []Volume, volumePath string) (Volume, error) {
+	for _, volume := range Volumes {
+		if volume.VolumePath == volumePath {
+			return volume, nil
+		}
+	}
+	return Volume{}, fmt.Errorf("no volume found with path '%s'", volumePath)
 }

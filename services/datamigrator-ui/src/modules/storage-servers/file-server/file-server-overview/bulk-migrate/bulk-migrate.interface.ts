@@ -10,11 +10,11 @@ import { FormikProps } from "formik";
 import { ReactNode } from "react";
 import { Dayjs } from "dayjs";
 import {
-  INCREMENTAL_SYNC_SCHEDULE_ENUM,
   INCREMENTAL_SYNC_SCHEDULE_SET_ENUM,
   INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM,
   MIGRATE_OPTION_ENUM,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
+import { INCREMENTAL_SYNC_SCHEDULE_ENUM } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/IncrementalSyncSchedule/incremental-sync-schedule.constants";
 
 export interface OptionType {
   label: string;
@@ -59,6 +59,9 @@ export interface DestinationPathsOptionsType {
   protocol: string;
   pathId: string;
   pathName: string;
+  isDisabled?: boolean;
+  isValid?: boolean;
+  reachableCount?: number;
 }
 
 export interface ProtocolFormType {
@@ -134,10 +137,14 @@ export interface BulkMigrateContextType {
   setFileName: (arg: string) => void;
   fileName: string;
   listOfNotReachableExportPaths: string[];
+  sourceDisabledPaths: string[];
+  refetch: () => void;
+  isFetching: boolean;
 }
 
 export interface ErrorsValidateMappingStepFormType {
   selectedMountPathsId?: string;
+  scheduledDateTime?: string;
   migrationDetailsTableConfigurationValue?: Array<{
     destinationFileServerDetails?: {
       destinationFileServerName?: string;

@@ -10,16 +10,16 @@ Ensure the following tools are installed on your macOS system:
 - **Azure CLI**: [Install Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli-macos)
 - **Multipass**: [Multipass](https://formulae.brew.sh/cask/multipass)
 
-  Once you have setup multipass in local,
+  Once you have setup multipass locally,
   Run this command and give `admin` as passphrase
 
-  ```
+  ```sh
   multipass set local.passphrase
   ```
 
   Then, run the below command and when prompted for passphrase, give `admin`
 
-  ```
+  ```sh
   multipass auth
   ```
 
@@ -36,17 +36,22 @@ Ensure the following tools are installed on your macOS system:
 ### SSH Key Setup
 
 - Ensure the SSH key `~/.ssh/id_rsa` is present on your system:
+
   ```sh
   ls -la ~/.ssh/
   ```
+
 - If not, create the SSH keys:
+
   ```sh
   ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
   ```
+
 - Press **Enter** to accept the default file location (`~/.ssh/id_rsa`).
 - When prompted, enter a secure passphrase - leave it empty.
 
 - To add the key to the SSH agent, run:
+
   ```sh
   eval "$(ssh-agent -s)"
   ssh-add ~/.ssh/id_rsa
@@ -57,6 +62,7 @@ Ensure the following tools are installed on your macOS system:
 ### Exporting Environment Variables
 
 - Replace the placeholder values with actual values:
+
   ```sh
   export DOCKER_BUILDKIT=1
   export AZ_USERNAME=""
@@ -69,6 +75,7 @@ Ensure the following tools are installed on your macOS system:
 
 1. Pull the code from the main branch before running the script or any branch you would like.
 2. Here are the services which are used in control plane:
+
    ```sh
     keycloak-customizations
     admin-service
@@ -79,12 +86,16 @@ Ensure the following tools are installed on your macOS system:
     reports-service
     db-migrations
    ```
+
 3. Run the build script:
+
    ```sh
    cd app-deployment/local-deployment/bin
    ./build.sh --initial-build
    ```
+
 4. Verify the Docker images:
+
    ```sh
    cd app-deployment/local-deployment/bin
    docker load --input ../../../app-deployment/datamigrator/datamigrator.tar
@@ -115,6 +126,7 @@ Ensure the following tools are installed on your macOS system:
 ### Installing NFS Server on Multipass
 
 - Run the setup script:
+
   ```sh
   cd app-deployment/local-deployment/bin
   ./nfs.sh
@@ -131,6 +143,7 @@ Ensure the following tools are installed on your macOS system:
 
 - Go to **Docker Desktop** > **Settings** > **Docker Engine**,  
   Replace the `IP_ADDRESS` with your Multipass IP:
+
   ```json
   "insecure-registries": [
     "IP_ADDRESS:32000"
@@ -142,9 +155,11 @@ Ensure the following tools are installed on your macOS system:
 NOTE: All credentials are managed from openbao. Replace the `IP_ADDRESS` with your Multipass IP.
 
 1. Fetch the control plane multipass IP
+
    ```sh
    multipass list | grep datamigrator-cp | awk '{print $3}'
    ```
+
 2. Fetch the openbao root token
 
    ```sh
@@ -178,13 +193,17 @@ NOTE: All credentials are managed from openbao. Replace the `IP_ADDRESS` with yo
 
 6. Paste the instructions copied in step 3.
 7. Verify the status of the worker:
+
    ```sh
    systemctl status datamigrator-worker.service
    ```
+
 8. Check the logs using the following command:
+
    ```sh
    tail -20f /opt/datamigrator/logs/datamigrator-worker.log
    ```
+
 9. Navigate to DM UI to see if the worker is registered or not.
 
 ## Application Upgrades
@@ -199,6 +218,7 @@ NOTE: All credentials are managed from openbao. Replace the `IP_ADDRESS` with yo
   ```
 
 - For example, this will build the image for admin service and admin service liquibase. It will also push to the Multipass MicroK8s registry.
+
   ```sh
   cd app-deployment/local-deployment/bin
   ./build.sh admin-service new_tag
@@ -208,11 +228,13 @@ NOTE: All credentials are managed from openbao. Replace the `IP_ADDRESS` with yo
 
 1. Build and push the Docker image using the steps mentioned above.
 2. If no tag is specified, the default tag `latest` will be used. Replace tags with your tags. Override tags by passing variables as follows:
+
    ```sh
    ansible-playbook -i ansible/control-plane/config/inventory.yaml ansible/control-plane/playbooks/helm-upgrade.yaml -e local_cluster=true -e "datamigrator_ui_tag=latest config_service_tag=latest db_writer_service_tag=latest jobs_service_tag=latest file_service_tag=latest reports_service_tag=latest admin_service_tag=latest keycloak_customizations_tag=latest db_migrations_tag=latest"
    ```
 
 - For example, if you want to deploy the admin service build in the last step:
+
   ```sh
   ansible-playbook -i ansible/control-plane/config/inventory.yaml ansible/control-plane/playbooks/helm-upgrade.yaml -e local_cluster=true -e "datamigrator_ui_tag=latest config_service_tag=latest db_writer_service_tag=latest jobs_service_tag=latest file_service_tag=latest reports_service_tag=latest admin_service_tag=new_tag keycloak_customizations_tag=latest db_migrations_tag=latest"
   ```
@@ -229,16 +251,21 @@ Notice the tag for `admin_service_tag` is changed.
 1. Download the binary from the worker repository, extract the zip file and take the path of `worker-linux-arm64` binary (MacOS).
 2. Note the path of the binary and copy it.
 3. Run the following playbook from the root folder, replacing `local_binary_path` with your path:
+
    ```sh
    ansible-playbook -i ansible/worker/config/inventory.yaml ansible/worker/playbooks/master-playbook.yaml -e local_cluster=true -e local_worker_update=true -e local_binary_path="/path/to/local/binary/"
    ```
+
 4. SSH into the worker server and verify that the worker is running:
+
    ```sh
    multipass shell datamigrator-worker
    sudo su - datamigrator
    sudo systemctl status datamigrator-worker.service
    ```
+
 5. Check the logs using the following command:
+
    ```sh
    tail -20f /opt/datamigrator/logs/datamigrator-worker.log
    ```
@@ -248,46 +275,67 @@ Notice the tag for `admin_service_tag` is changed.
 ### kubectl commands reference
 
 - To get the pods in `datamigrator` namespace:
+
   ```sh
   kubectl get pods -n datamigrator
   ```
+
 - To get the logs for a pod in `datamigrator` namespace:
+
   ```sh
   kubectl logs <podname> -n datamigrator
   ```
+
 - To describe a pod in `datamigrator` namespace:
+
   ```sh
   kubectl describe pod <podname> -n datamigrator
   ```
+
 - To get all namespaces:
+
   ```sh
   kubectl get ns
   ```
+
 - To get the pods in any namespace:
+
   ```sh
   kubectl get pods -n <NAMESPACE>
   ```
+
 - To delete a pod in `datamigrator` namespace:
+
   ```sh
   kubectl delete pod <podname> -n datamigrator
   ```
+
 - To get the events in `datamigrator` namespace:
+
   ```sh
   kubectl get events -n datamigrator
   ```
+
 - To execute a command inside a running pod:
+
   ```sh
   kubectl exec -it <podname> -n datamigrator -- <command>
   ```
+
 - To check the cluster nodes:
+
   ```sh
   kubectl get nodes
   ```
+
 - To get the resource usage of pods in `datamigrator` namespace:
+
   ```sh
   kubectl top pods -n datamigrator
   ```
+
 - To get the resource usage of nodes:
+
   ```sh
   kubectl top nodes
   ```
@@ -307,6 +355,7 @@ Notice the tag for `admin_service_tag` is changed.
   ```
 
 - To delete an instance:
+
   ```sh
   multipass delete <instance-name>
   multipass purge
@@ -322,6 +371,7 @@ Notice the tag for `admin_service_tag` is changed.
   ```
 
 - Replace OPENBAO_UNSEAL_KEY with your key
+
   ```sh
   sudo su - datamigrator
   jq -r ".unseal_keys_b64[]" /opt/datamigrator/openbao/cluster-keys.json
@@ -339,10 +389,39 @@ Notice the tag for `admin_service_tag` is changed.
   ```
 
 - Verify the status of the worker:
+
   ```sh
   systemctl status datamigrator-worker.service
   ```
+
 - Check the logs using the following command:
+
   ```sh
   tail -20f /opt/datamigrator/logs/datamigrator-worker.log
   ```
+
+## Troubleshooting Common Issues
+
+### Helm Chart Installation Errors
+
+If you encounter the error "Upgrade failed: another operation (install/upgrade/rollback) is in progress" when installing Helm charts:
+
+1. SSH into the control plane VM:
+
+   ```sh
+   multipass shell datamigrator-cp
+   ```
+
+2. Check for secrets in the datamigrator namespace:
+
+   ```sh
+   kubectl get secrets -n datamigrator
+   ```
+
+3. Delete the secret(s):
+
+   ```sh
+   kubectl delete secrets <secret-names> -n datamigrator
+   ```
+
+4. Run the installation/upgrade command again.

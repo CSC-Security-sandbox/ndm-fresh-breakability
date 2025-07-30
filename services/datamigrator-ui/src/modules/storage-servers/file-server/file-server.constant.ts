@@ -12,12 +12,13 @@ import ValidateConnection from "@modules/storage-servers/file-server/components/
 import DateCellRenderer from "@components/custom-cell-renderer/DateCellRenderer";
 import React from "react";
 import { BlueXpTableRowType, FileServerApiType } from "@/types/app.type";
+import ExportPathSourceCellRenderer from "@modules/storage-servers/file-server/components/cellRenderer/ExportPathSourceCellRenderer";
 
 export const STEPS_MAP = {
   "server-type": ServerType,
   "credentials-details": Credentials,
   "validate-connection": ValidateConnection,
-  "job-config": JobConfig,
+  // "job-config": JobConfig, //Uncomment this when decided to enable speed test
 };
 
 export const STEPS_PATHS = {
@@ -25,7 +26,7 @@ export const STEPS_PATHS = {
     { label: "Server Type", key: "server-type" },
     { label: "Credentials", key: "credentials-details" },
     { label: "Workers", key: "validate-connection" },
-    { label: "Job Config", key: "job-config" },
+    // { label: "Job Config", key: "job-config" }, //Uncomment this when decided to enable speed test
   ],
 };
 
@@ -75,12 +76,24 @@ export const FILE_SERVER_LIST_COLUMN_DEFS: any[] = [
     id: 7,
   },
   {
+    header: "Path Retrieval",
+    Renderer: ExportPathSourceCellRenderer,
+    sortable: true,
+    filter: true,
+    id: 8,
+  },
+  {
     header: "Created On (UTC)",
     accessor: "createdAt",
-    id: 8,
+    id: 9,
     Renderer: (
-      props: BlueXpTableRowType<FileServerApiType, FileServerApiType>,
+      props: BlueXpTableRowType<FileServerApiType, FileServerApiType>
     ) =>
       React.createElement(DateCellRenderer, { value: props?.row?.createdAt }),
   },
 ];
+
+export enum FILE_SERVER_LIST_ENUM {
+  AUTO_DISCOVER = "Auto Discover",
+  MANUAL_UPLOAD = "Manual Upload",
+}

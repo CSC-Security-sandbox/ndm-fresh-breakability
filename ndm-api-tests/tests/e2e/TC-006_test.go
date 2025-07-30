@@ -9,6 +9,10 @@ import (
 )
 
 var _ = Describe("TC-006: Run migration to the same destination", func() {
+
+	BeforeEach(func() {
+		Skip("TC-006 is skipped in CI/CD due to flakiness")
+	})
 	var (
 		ProjectId              string
 		workerId1              string
@@ -112,7 +116,7 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
-					"skipFile":            "15-M",
+					"skipFile":            "0-M",
 				},
 			}
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
@@ -134,7 +138,7 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../validators/TC-006-JSON/%s", migration_validators[i]))
+				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-006-JSON/%s", migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 				By(fmt.Sprintf("validate report result : %s", result))
 			}

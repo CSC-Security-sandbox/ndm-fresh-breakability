@@ -1,0 +1,140 @@
+import { DirMap, TaskMap } from "src/redis/hmap-collection";
+import { Cmd, ItemInfo, TaskInfo } from "../../datatype/stream-datatypes";
+import { GroupReaderType } from "../enums";
+import { JobConfig } from "../job-config";
+import { DMError, Task } from "../metadata-types";
+import { CommandCollection, ErrorCollection, ItemInfoCollection, TaskInfoCollection } from "../stream-collection";
+
+
+
+
+export  class JobManagerContext {
+    jobRunId: string;
+    jobConfig: JobConfig;
+    jobRunStatus: string;
+    fileStream: ItemInfoCollection;
+    errorStream: ErrorCollection;
+    commandStream: CommandCollection;
+    taskStream: TaskInfoCollection;
+    taskMap: TaskMap;
+    dirBatchMap: DirMap;
+
+    constructor(jobRunId: string, jobConfig?: JobConfig, jobRunStatus?: string) {
+        this.jobRunId = jobRunId;
+        if (jobConfig)
+        this.jobConfig = jobConfig;
+        if (jobRunStatus)
+        this.jobRunStatus = jobRunStatus;
+    }
+
+    getJobRunId(): string {
+        return this.jobRunId;
+    }
+
+    getJobRunStatus(): string {
+        return this.jobRunStatus;
+    }
+
+    getJobConfig(): JobConfig {
+        return this.jobConfig;
+    }
+
+    // streams Methods
+
+    // file stream methods
+    async publishToFileStream(file: ItemInfo): Promise<string> {
+        return await this.fileStream.append(file);
+    }
+
+    async *groupReadFileStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: ItemInfo; id: string; }> {
+        yield* this.fileStream.groupReadWithoutAck(readerName, batchSize, groupType);
+    }
+
+    async groupAckFileStream(ids:string[], groupType: GroupReaderType): Promise<void> {
+        await this.fileStream.ackAndPurge(ids, groupType);
+    }
+
+    // Error Stream Methods
+    async publishToErrorStream(error: DMError): Promise<string> {
+        return await this.errorStream.append(error);
+    }
+
+    async *groupReadErrorStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: DMError; id: string; }> {
+        yield* this.errorStream.groupReadWithoutAck(readerName, batchSize, groupType);
+    }
+    
+    async groupAckErrorStream(ids:string[], groupType: GroupReaderType): Promise<void> {
+        await this.errorStream.ackAndPurge(ids, groupType);
+    }
+
+    // Command Stream Methods
+    async publishToCommandStream(command: Cmd): Promise<string> {
+        return await this.commandStream.append(command);
+    }
+
+    async *groupReadCommandStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: Cmd; id: string; }> {
+        yield* this.commandStream.groupReadWithoutAck(readerName, batchSize, groupType);
+    }
+
+    async groupAckCommandStream(ids:string[], groupType: GroupReaderType): Promise<void> {
+        await this.commandStream.ackAndPurge(ids, groupType);
+    }
+
+    // Task Stream Methods
+    async publishToTaskStream(task: TaskInfo): Promise<string> {
+        return await this.taskStream.append(task);
+    }
+    async *groupReadTaskStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: TaskInfo; id: string; }> {
+        yield* this.taskStream.groupReadWithoutAck(readerName, batchSize, groupType);
+    }
+    async groupAckTaskStream(ids:string[], groupType: GroupReaderType): Promise<void> {
+        await this.taskStream.ackAndPurge(ids, groupType);
+    }
+
+
+    // Task Map Methods
+    async setTask(key: string, value: TaskInfo): Promise<void> {
+        await this.taskMap.setValue(key, value);
+    }
+
+    async setTaskIfNotExists(key: string, value: TaskInfo): Promise<boolean> {
+        return await this.taskMap.setValueIfNotExists(key, value);
+    }
+
+    async getTask(key: string): Promise<TaskInfo | null> {
+        return await this.taskMap.getValue(key);
+    }
+
+    async deleteTask(key: string): Promise<void> {
+        await this.taskMap.deleteValue(key);
+    }
+
+    async setBatchDir(key: string , value: any): Promise<void> {
+        await this.dirBatchMap.setValue(key, value);
+    }
+
+    async getBatchDir(key: string): Promise<any | null> {
+        return await this.dirBatchMap.getValue(key);
+    }
+
+    async deleteBatchDir(key: string): Promise<void> {
+        await this.dirBatchMap.deleteValue(key);
+    }
+    
+    serialize(): string {
+        const data = {
+            jobRunId: this.jobRunId,
+            jobConfig: this.jobConfig,
+            jobRunStatus: this.jobRunStatus,
+        }
+        return JSON.stringify(data);
+    }
+
+    deserialize(json: string) {
+        return JSON.parse(json);
+    }
+
+    async initializeInstance(): Promise<void>{ }
+
+    async cleanup(): Promise<void> {}
+}

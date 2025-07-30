@@ -14,9 +14,10 @@ export type TableWrapperPropsType = {
   isRowDisabled?: (arg: any) => void;
   showLabel?: boolean;
   preSelectedFilter?: any;
-  handleSelection?: (arg: any[]) => void;
+  handleSelection?: (arg: any[], tableRows?: any[]) => void;
   secondaryLabel?: string;
   isRefreshing?: boolean;
   refetchTableData?: () => void;
   notReachableExportPaths?: string[];
+  noDataLabel?: string;
 };

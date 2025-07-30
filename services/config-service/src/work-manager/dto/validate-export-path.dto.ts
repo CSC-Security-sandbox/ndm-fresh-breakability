@@ -1,6 +1,6 @@
 import { IsString, IsOptional, IsNotEmpty, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { ConfigStatus } from 'src/constants/enums';
+import { ConfigStatus, ExportPathSource } from 'src/constants/enums';
 
 export class ListPathDTO {
     @ApiProperty({ enum: ['NFS', 'SMB'], description: 'The type of protocol (NFS or SMB)' })
@@ -24,6 +24,10 @@ export class ListPathDTO {
     @ApiProperty({ description: 'Protocol version', example: '3' })
     @IsString()
     protocolVersion: string;
+
+    @ApiProperty({ description: 'The export path for the protocol', example: '/export/path', enum: ExportPathSource })
+    @IsString()
+    exportPathSource: ExportPathSource;
 }
 
 export class ConfigStatusPayloadDTO {

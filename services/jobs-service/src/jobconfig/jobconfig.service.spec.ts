@@ -1467,6 +1467,7 @@ describe("JobConfigService", () => {
       ],
     };
 
+    const excludeOlderThan = new Date("2025-04-04T13:01:08.226Z");
     const mockJobConfigs = [
       {
         id: "jobConfigId1",
@@ -1479,6 +1480,7 @@ describe("JobConfigService", () => {
         status: JobStatus.Active,
         preserveAccessTime: true,
         firstRunAt: new Date(),
+        excludeOlderThan,
       },
     ];
 
@@ -1562,6 +1564,7 @@ describe("JobConfigService", () => {
       status: JobStatus.Active,
       preserveAccessTime: true,
       firstRunAt: expect.any(Date),
+      excludeOlderThan: expect.any(Date),
     });
     expect(jobConfigRepo.save).toHaveBeenCalledWith([
       {
@@ -1574,6 +1577,7 @@ describe("JobConfigService", () => {
         status: JobStatus.Active,
         preserveAccessTime: true,
         firstRunAt: expect.any(Date),
+        excludeOlderThan: expect.any(Date),
       },
     ]);
   });
@@ -2665,6 +2669,7 @@ describe("JobConfigService", () => {
       const date = new Date();
       const mockAllJobsDetails = [
         {
+          jobRunIds: ["jobrunid-1", "jobrunid-2"],
           jobconfigid: "jobConfigId1",
           jobtype: "MIGRATE",
           jobconfigstatus: "Active",
@@ -2696,6 +2701,7 @@ describe("JobConfigService", () => {
       jest
         .spyOn(require("src/utils/mapper"), "nextDate")
         .mockReturnValue(new Date());
+      jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
 
       const result = await service.getAllJobConfig(mockProjectId);
 
@@ -2826,6 +2832,7 @@ describe("JobConfigService", () => {
     const date = new Date();
     const mockAllJobsDetails = [
       {
+        jobRunIds: ["jobrunid-1", "jobrunid-2"],
         jobconfigid: "jobConfigId1",
         jobtype: "MIGRATE",
         jobconfigstatus: "Active",
@@ -2857,6 +2864,8 @@ describe("JobConfigService", () => {
     jest
       .spyOn(require("src/utils/mapper"), "nextDate")
       .mockReturnValue(new Date());
+
+    jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
 
     const result = await service.getAllJobConfig(mockProjectId);
 
@@ -3589,88 +3598,7 @@ describe("JobConfigService", () => {
     });
   });
 
-  describe("getCutoverDetailsByFileServerId", () => {
-    it("should return correct cutover details for a given fileServerId", async () => {
-      const fileServerId = "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39";
-      const expectedResponse = [
-        {
-          protocol: Protocol.NFS,
-          sourcePath: {
-            id: fileServerId,
-            sourcePathName: "/source/test",
-          },
-          destinationFileServer: {
-            id: fileServerId,
-            destinationFileServerName: "fileServer1",
-          },
-          destinationPath: {
-            id: fileServerId,
-            destinationPathName: "/destination/test",
-          },
-          jobConfig: [
-            {
-              id: fileServerId,
-              jobType: JobType.MIGRATE,
-              jobRunDetails: {
-                id: fileServerId,
-                status: JobRunStatus.Completed,
-              },
-            },
-          ],
-        },
-      ];
-
-      const result =
-        await service.getCutoverDetailsByFileServerId(fileServerId);
-
-      expect(result).toEqual(expectedResponse);
-    });
-
-    it("should return an empty array if fileServerId does not match", async () => {
-      const fileServerId = "non-existing-id";
-      const result =
-        await service.getCutoverDetailsByFileServerId(fileServerId);
-
-      expect(result).toEqual([
-        {
-          protocol: Protocol.NFS,
-          sourcePath: {
-            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-            sourcePathName: "/source/test",
-          },
-          destinationFileServer: {
-            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-            destinationFileServerName: "fileServer1",
-          },
-          destinationPath: {
-            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-            destinationPathName: "/destination/test",
-          },
-          jobConfig: [
-            {
-              id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-              jobType: JobType.MIGRATE,
-              jobRunDetails: {
-                id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-                status: JobRunStatus.Completed,
-              },
-            },
-          ],
-        },
-      ]);
-    });
-
-    it("should ensure jobConfig contains correct job type and status", async () => {
-      const fileServerId = "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39";
-      const result =
-        await service.getCutoverDetailsByFileServerId(fileServerId);
-
-      expect(result[0].jobConfig[0].jobType).toBe(JobType.MIGRATE);
-      expect(result[0].jobConfig[0].jobRunDetails.status).toBe(
-        JobRunStatus.Completed
-      );
-    });
-  });
+ 
 
   describe("calculateJobRunStats", () => {
     it("should throw NotFoundException if jobRunId does not exist", async () => {

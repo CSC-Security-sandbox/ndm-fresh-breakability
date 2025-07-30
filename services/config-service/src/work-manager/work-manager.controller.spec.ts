@@ -4,6 +4,7 @@ import { WorkManagerService } from './work-manager.service';
 import { WorkerConfiguration } from 'src/constants/types';
 import { CreateRequestDto } from './dto/validate-connection.dto';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
+import { Platform } from 'src/constants/enums';
 
 describe('WorkManagerController', () => {
   let controller: WorkManagerController;
@@ -43,13 +44,16 @@ describe('WorkManagerController', () => {
 
       const reqMock = {
         'project_id': projectId,
-        'worker_id': '123123'
+        'worker_id': '123123',
+        headers:{
+          'x-client-platform': Platform.WINDOWS
+        } 
       };
 
       const result = await controller.getConfiguration(ip, reqMock);
 
       expect(result).toEqual(mockConfig);
-      expect(serviceMock.getConfiguration).toHaveBeenCalledWith(workerId, ip, projectId);
+      expect(serviceMock.getConfiguration).toHaveBeenCalledWith(workerId, ip, projectId, Platform.WINDOWS);
     });
   });
 

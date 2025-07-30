@@ -5,6 +5,8 @@ import axios from 'axios';
 import { InternalServerErrorException } from '@nestjs/common';
 import { KeycloakAdminConfig } from 'src/config/keycloak.config';
 import { RegisterWorkerDto } from './dto/register-worker.dto';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../test-utils/logger-mocks';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -29,6 +31,10 @@ describe('WorkerRegistrationService', () => {
           useValue: {
             get: jest.fn().mockReturnValue(mockKeycloakConfig),
           },
+        },
+        { 
+          provide: LoggerFactory, 
+          useValue: mockLoggerFactory
         },
       ],
     }).compile();

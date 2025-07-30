@@ -28,7 +28,6 @@ import { ProjectEntity } from "src/entities/project.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
 import { nextDate } from "src/utils/mapper";
 import { WorkflowService } from "src/workflow/workflow.service";
-import { StartWorkFlowPayload } from "src/workflow/workflow.types";
 import { In, Raw, Repository } from "typeorm";
 import { validate as isUUID, v4 as uuidv4 } from "uuid";
 import { JobConfigEntity } from "../entities/jobconfig.entity";
@@ -66,22 +65,19 @@ import {
   SpeedTestJobRun,
   workerWithStatus,
 } from "./jobconfig.types";
-import { run } from "node:test";
 import { FileServerEntity } from "src/entities/fileserver.entity";
 import { WorkerEntity } from "src/entities/worker.entity";
 import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
 import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
 import { ParsedMapping } from "src/utils/indentity-mapping.type";
 import { RedisService } from "src/redis/redis.service";
-import { JobRunService } from "src/jobrun/jobrun.service";
 import { JobRunStats } from "src/jobrun/dto/jobstats";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { SendMailService } from "src/utils/send-email";
-import { filterUnhealthyWorkers } from "../utils/worker-filter";
-import { filter } from "rxjs";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 import { IncidentStatus, SyncEmailEntity } from "src/entities/sync-email.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
+import { SuccessEmailType } from "src/utils/send-email.type";
 
 @Injectable()
 export class JobConfigService {
@@ -758,23 +754,17 @@ export class JobConfigService {
         );
       }
 
-      const mailBody =
-        `Hello,<br/>
-      The following Migrate jobs has been created:<br/><br/>
-      ` +
-        savedJobConfigs
-          .map(
-            (jobConfig) => `
-                <p>Job ID: ${jobConfig.id}</p>
-                <p>Source Path: ${jobConfig.sourcePath?.volumePath}</p>
-                <p>Target Path: ${jobConfig.targetPath?.volumePath}</p>
-                <p>Job Type: ${jobConfig.jobType}</p>
-                <br/>
-              `
-          )
-          .join("");
-      const payload = { body: mailBody };
-      await this.sendMailService.sendMail(payload);
+      await this.sendMailService.sendMail({
+        successEmailType: SuccessEmailType.JOB_CREATION,
+        migrateJob: {
+          savedJobConfigs: savedJobConfigs.map(jobConfig => ({
+            id: jobConfig.id,
+            sourcePath: jobConfig.sourcePath?.volumePath,
+            targetPath: jobConfig.targetPath?.volumePath,
+            jobType: jobConfig.jobType,
+          })),
+        }
+      });
       savedJobConfigsmapData =  savedJobConfigs.map(
         ({ id, jobType, sourcePathId, targetPathId }) => ({
           id,
@@ -871,6 +861,7 @@ export class JobConfigService {
                   status: JobStatus.Active,
                   preserveAccessTime: config.preserveAccessTime,
                   firstRunAt: new Date(),
+                  excludeOlderThan: config.excludeOlderThan,
                 })
               );
             } else {
@@ -1110,6 +1101,8 @@ export class JobConfigService {
               id: true,
               volumePath: true,
               reachableCount: true,
+              isDisabled: true,
+              isValid: true,
             },
           },
         },
@@ -1242,6 +1235,7 @@ export class JobConfigService {
         'jobconfig.updated_at AS "updated_at"',
       ])
       .addSelect("COUNT(jobRun.id)", "totalRuns")
+      .addSelect("ARRAY_AGG(jobRun.id)", "jobRunIds")
       .where("sourceConfig.projectId = :projectId", { projectId })
       .orWhere("targetConfig.projectId = :projectId", { projectId })
       .groupBy("jobconfig.id")
@@ -1260,7 +1254,7 @@ export class JobConfigService {
       .getRawMany();
 
     const payload: JobListingDTO[] = [];
-    allJobsDetails.forEach((job) => {
+    for(const job of allJobsDetails) {
         let nextScheduleDate: Date | null = null;
 
       if (job.jobconfigstatus === JobStatus.Active) {
@@ -1274,6 +1268,9 @@ export class JobConfigService {
           nextScheduleDate = null;
         }
       }
+
+      const allErrorCounts = await Promise.all(job.jobRunIds.map(id => this.getErrorCounts(id)));
+      const errorCount = allErrorCounts.flat().map(e => e.count).reduce((a, b) => Number(a) + Number(b), 0) || 0;
 
       payload.push({
         jobConfigId: job.jobconfigid,
@@ -1292,15 +1289,15 @@ export class JobConfigService {
               protocol: job.targetprotocol,
             }
           : {},
-        errors: 0,
+        errors: errorCount,
         totalRuns: job.totalRuns,
         configName: job.configname,
         createdAt: job.createdAt,
         updatedAt: job.updated_at,
       });
-    });
+    };
     return payload;
-  }
+  };
 
   private templates = {
     sid: "sid_template.csv",
@@ -1722,35 +1719,7 @@ export class JobConfigService {
     }
   }
 
-  async getCutoverDetailsByFileServerId(fileServerId: string) {
-    return [
-      {
-        protocol: Protocol.NFS,
-        sourcePath: {
-          id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-          sourcePathName: "/source/test",
-        },
-        destinationFileServer: {
-          id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-          destinationFileServerName: "fileServer1",
-        },
-        destinationPath: {
-          id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-          destinationPathName: "/destination/test",
-        },
-        jobConfig: [
-          {
-            id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-            jobType: JobType.MIGRATE,
-            jobRunDetails: {
-              id: "b84f2e0a-c013-4c19-9fe7-4ff8c7d65d39",
-              status: JobRunStatus.Completed,
-            },
-          },
-        ],
-      },
-    ];
-  }
+
   async calculateJobRunStats(jobRunId: string): Promise<JobRunStats> {
     const jobRun = await this.jobRunRepo.findOne({
       where: { id: jobRunId },

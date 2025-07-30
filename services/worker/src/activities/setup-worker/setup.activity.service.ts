@@ -7,27 +7,36 @@ import { KeycloakConfig } from 'src/config/keycloak.config';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { RedisService } from 'src/redis/redis.service';
-
 import { AuthService } from 'src/auth/auth.service';
 import { WorkersConfig } from 'src/config/app.config';
 import { SetupWorkerParams } from '../types/tasks';
+import { RetryableError } from 'src/errors/errors.types';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { WorkManagerService } from '../work-manager/work-manager.service';
+import { WorkerConfiguration } from '../work-manager/work-manager.types';
+import { getWorkerIdentity } from 'src/utils/worker-manager.mappers';
+
 @Injectable()
 export class SetupActivityService {
-
+  private readonly logger: LoggerService;
   readonly keycloakConfig: KeycloakConfig;
   readonly tokenRequest: string;
   readonly workerId: string;
   readonly workerConfigUrl: string;
   readonly baseWorkingPath: string;
+
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(AuthService) private readonly authService: AuthService,
     private readonly redisService: RedisService,
-    private readonly logger: Logger,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    private readonly protocols: Protocols,
+    private workManagerService: WorkManagerService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
     this.workerConfigUrl = this.configService.get('worker.connection.workerConfigUrl');
+    this.logger = loggerFactory.create(SetupActivityService.name);
   }
 
   
@@ -78,7 +87,7 @@ export class SetupActivityService {
 
     try {
       // Retrieve the protocol based on the protocol type
-      const protocol = Protocols.getProtocol(ProtocolTypes[args.protocolType]);
+      const protocol = this.protocols.getProtocol(ProtocolTypes[args.protocolType]);
       this.logger.debug(`[${args.jobRunId}] - [${this.workerId}] Protocol resolved: ${args.protocolType}`);
 
       // Get the base working directory from the configuration
@@ -138,14 +147,14 @@ export class SetupActivityService {
     this.logger.log(`[${jobRunId}] - [${this.workerId}] Setting up worker`);
     
     try {
-      const context = await this.redisService.getJobContext(jobRunId);
+      const context = await this.redisService.getJobManagerContext(jobRunId);
       if (!context) {
         throw new Error(`Context not found for traceId ${jobRunId}`);
       }
      
 
       const protocolType = context.jobConfig.sourceFileServer.protocols[0].type;
-      const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
+      const protocol = this.protocols.getProtocol(ProtocolTypes[protocolType]);
       // mount source path
       this.logger.log(
         `[${jobRunId}] - [${this.workerId}] Setting up worker`,
@@ -175,14 +184,21 @@ export class SetupActivityService {
       );
       
       await this.waitFor(1000);
-
+      const config:WorkerConfiguration ={
+        workerId: this.workerId,
+        configName: 'job-specific-tasks' ,
+        taskQueueId: jobRunId,
+        dynamicTaskQueue: true,
+      }
+      const id = getWorkerIdentity(config)
+      const workerOptions = await this.workManagerService.createWorkerOptions(id,config);
+      await this.workManagerService.startWorker(id, workerOptions);
       return {
         jobRunId,
         status: 'success',
         protocolType,
         workerId: this.workerId,
-        message: `Worker ${this.workerId} successfully set up.`,
-        state: context.jobState
+        message: `Worker ${this.workerId} successfully set up`,
       };
     } catch (error) {
       this.logger.error(`[${jobRunId}] - Setup failed: ${error?.message ?? error}`);
@@ -198,7 +214,7 @@ export class SetupActivityService {
   async speedTestCleanup(jobRunId: string, fsDetails:FileServerDetails, protocolType:string): Promise<any> {
     try {
 
-      const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
+      const protocol = this.protocols.getProtocol(ProtocolTypes[protocolType]);
       // unmount source path
       await this.unmountPath(
         fsDetails,
@@ -228,14 +244,14 @@ export class SetupActivityService {
 
   async cleanup(jobRunId: string): Promise<SetupOutput> {
     try {
-      const context = await this.redisService.getJobContext(jobRunId);
+      const context = await this.redisService.getJobManagerContext(jobRunId);
 
       if (!context) {
         throw new Error(`Context not found for traceId ${jobRunId}`);
       }
 
       const protocolType = context.jobConfig.sourceFileServer.protocols[0].type;
-      const protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
+      const protocol = this.protocols.getProtocol(ProtocolTypes[protocolType]);
       // unmount source path
       await this.unmountPath(
         context.jobConfig.sourceFileServer,
@@ -269,6 +285,17 @@ export class SetupActivityService {
         // await context.cleanup();
         this.logger.log(`[${jobRunId}] - Job context cleaned up`);
       }
+      const config:WorkerConfiguration ={
+        workerId: this.workerId,
+        configName: 'job-specific-tasks' ,
+        taskQueueId: jobRunId,
+        dynamicTaskQueue: true,
+      }
+      const id = getWorkerIdentity(config);
+      this.logger.log(`[${jobRunId}] - Shutting down worker with ID: ${id}`);
+      const worker = await this.workManagerService.getWorker(id);
+      this.logger.log(`[${jobRunId}] - Worker found: ${worker ? 'Yes' : 'No'}`);
+      await this.workManagerService.shutdownWorker(worker, false);  
       return {
         jobRunId,
         status: 'success',
@@ -278,12 +305,7 @@ export class SetupActivityService {
       };
     } catch (error) {
       this.logger.error(`[${jobRunId}] - Cleanup failed: ${error.message}`);
-      return {
-        jobRunId,
-        status: 'error',
-        workerId: this.workerId,
-        message: `Cleanup failed: ${error.message}`,
-      };
+      throw new RetryableError(`Cleanup failed: ${error.message}`);
     }
   }
 }

@@ -1,0 +1,21 @@
+<p>Hello,</p>
+<p>The following {{jobType}} job {{jobRunId}} has errored for below Paths:</p>
+
+<p>Source: {{sourceHost}}</p>
+<p>Source Path: {{sourcePath}}</p>
+<p>Target: {{targetHost}}</p>
+<p>Target Path: {{targetPath}}</p>
+<br/>
+
+<p>Error Details:</p>
+
+{{#each errorRemedies}}
+  <p>Error Code: {{errorCode}}</p>
+  <p>Description: {{description}}</p>
+  <p>Resolution Steps: {{resolutionSteps}}</p>
+  <p>Reference Commands: <code>
+    {{#if referenceCommands}}
+        {{referenceCommands}}
+    {{/if}}</code></p>
+  <br/>
+{{/each}}

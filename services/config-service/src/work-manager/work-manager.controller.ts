@@ -1,11 +1,12 @@
 import { Body, Controller, Get, Logger, Param, Post, Req } from '@nestjs/common';
-import { ApiBody, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { AuthWorker } from '@netapp-cloud-datamigrate/auth-lib';
+import { ApiBody, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiResponse, ApiBearerAuth   } from '@nestjs/swagger';
+import { Auth, AuthWorker, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { WorkerConfiguration } from 'src/constants/types';
 import { ClientIp } from 'src/middleware/clientip';
 import { WorkManagerService } from './work-manager.service';
 import { CreateRequestDto } from './dto/validate-connection.dto';
 import { ConfigStatusPayloadDTO } from './dto/validate-export-path.dto';
+
 
 @Controller('work-manager')
 export class WorkManagerController {
@@ -20,13 +21,15 @@ export class WorkManagerController {
     @AuthWorker()
     @Get('config')
     async getConfiguration(@ClientIp() ip: string, @Req() req: any): Promise<WorkerConfiguration[]> {
-        this.logger.debug(`Fetching configuration for worker ID: ${req['worker_id']} from IP: ${ip} for project ID: ${req['project_id']}`);
-        return await this.workManagerService.getConfiguration(req['worker_id'], ip, req['project_id'])
+        this.logger.debug(`Fetching configuration for worker ID: ${req['worker_id']} from IP: ${ip} for project ID: ${req['project_id']} on platform: ${ req?.headers['x-client-platform']}`);
+        return await this.workManagerService.getConfiguration(req['worker_id'], ip, req['project_id'], req?.headers['x-client-platform'])
     }
 
   @ApiOperation({ summary: 'Create a new request' })
   @ApiResponse({ status: 201, description: 'Request created successfully' })
   @ApiResponse({ status: 400, description: 'Bad Request' })
+  @ApiBearerAuth()
+  @Auth(Permission.ManageConfig)
   @Post('/validate-connection')
   async create(@Body() request: CreateRequestDto, @Req() req: any) {
     return await this.workManagerService.validateConnection(
@@ -38,6 +41,8 @@ export class WorkManagerController {
   @ApiOperation({ summary: 'Validating export path and working directory' })
   @ApiResponse({ status: 201, description: 'Request created successfully' })
   @ApiResponse({ status: 400, description: 'Bad Request' })
+  @ApiBearerAuth()
+  @AuthWorker()
   @Post('/validate/working-directory')
   async validateWorkingDirectory(@Body() data: ConfigStatusPayloadDTO) {
     return await this.workManagerService.validateWorkingDirectory(data);
@@ -46,11 +51,15 @@ export class WorkManagerController {
   @ApiOperation({ summary: 'Get Workflow Result' })
   @ApiResponse({ status: 201, description: 'Request created successfully' })
   @ApiResponse({ status: 400, description: 'Bad Request' })
+  @ApiBearerAuth()
+  @Auth(Permission.ManageJob)
   @Get('/workflow/details/:id')
   async getChildWorkFlowRes(@Param('id') id: string) {
     return await this.workManagerService.getChildWorkFlowRes(id);
   }
 
+  @ApiBearerAuth()
+  @AuthWorker()
   @Post('/update/configs')
   @ApiOperation({
     summary: 'Update worker configurations',

@@ -1,18 +1,17 @@
 
-import { CommandStatus, DMError, FileServerDetails, JobContext, JobStatus, OPS_STATUS, SpeedTestReadWriteInfo, TaskStats, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
-import { Injectable, Logger } from '@nestjs/common';
-import * as path from 'path';
+import { Injectable, Inject } from '@nestjs/common';
+import { FileServerDetails, SpeedTestReadWriteInfo, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
+import * as path from 'path';
 // import * as net from 'net';
 import * as ping from 'ping';
 // import * as raw from 'raw-socket';
-import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
-import { RedisService } from 'src/redis/redis.service';
-import { getErrorCode, getFilePermissions, getFileType, shouldExclude } from '../utils/utils';
-import { WorkersConfig } from 'src/config/app.config';
 import axios from 'axios';
+import { WorkersConfig } from 'src/config/app.config';
+import { RedisService } from 'src/redis/redis.service';
+import { getErrorCode } from '../utils/utils';
 import { SpeedTestOutput } from './speed-test.type';
-
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 interface RoundTripDelay {
   min: number;
@@ -27,10 +26,14 @@ export interface NetworkMetrics {
 
 @Injectable()
 export class SpeedTestActivities {
+  private readonly logger: LoggerService;
+
   constructor(
-    private readonly logger: Logger,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly redisService: RedisService,
-  ) {}
+  ) {
+    this.logger = loggerFactory.create(SpeedTestActivities.name);
+  }
 
   async readActivity(payload: any, traceId: string, volumeId:string, resultId:string): Promise<SpeedTestOutput> {
     const output: SpeedTestOutput = { errors: [], success: false, result: null };    

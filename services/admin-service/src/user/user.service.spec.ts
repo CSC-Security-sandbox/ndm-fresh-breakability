@@ -6,12 +6,15 @@ import { randomUUID } from 'crypto';
 import { Project } from '../entities/project.entity';
 import { UserService } from './user.service';
 import { User } from '../entities/user.entity';
+import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { Account } from '../entities/account.entity';
 import { Role } from '../entities/role.entity';
 import { UserRole } from '../entities/user-role.entity';
 import { RolePermission } from '../entities/role-permission.entity';
 import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory, resetLoggerMocks } from '../test-utils/logger-mocks';
 
 describe('UserService', () => {
   let service: UserService;
@@ -26,28 +29,56 @@ describe('UserService', () => {
         UserService,
         {
           provide: getRepositoryToken(User),
-          useClass: Repository,
+          useValue: {
+            create: jest.fn(),
+            save: jest.fn(),
+            find: jest.fn(),
+            findOne: jest.fn(),
+            findOneBy: jest.fn(),
+            update: jest.fn(),
+            delete: jest.fn(),
+            remove: jest.fn(),
+            findAndCount: jest.fn(),
+          },
         },
         {
           provide: getRepositoryToken(UserRole),
-          useClass: Repository,
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+            save: jest.fn(),
+            create: jest.fn(),
+          },
         },
         {
           provide: getRepositoryToken(Project),
-          useClass: Repository,
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+          },
         },
         {
           provide: getRepositoryToken(Role),
-          useClass: Repository,
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+          },
         },
         {
           provide: getRepositoryToken(RolePermission),
-          useClass: Repository,
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+          },
         },
         {
           provide: getRepositoryToken(Account),
-          useClass: Repository,
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+          },
         },
+        { provide: LoggerFactory, useValue: mockLoggerFactory },
       ],
     }).compile();
 
@@ -107,6 +138,37 @@ describe('UserService', () => {
     expect(userRepository.save).toHaveBeenCalledWith(mockUser);
   });
 
+  it('should throw NotFoundException when finding user by id that does not exist', async () => {
+    const userId = 'non-existent-id';
+    jest.spyOn(userRepository, 'findOneBy').mockResolvedValue(null);
+
+    await expect(service.findOne(userId)).rejects.toThrow(
+      new NotFoundException(`User with ID ${userId} not found`),
+    );
+  });
+
+  it('should throw NotFoundException when updating user that does not exist', async () => {
+    const userId = 'non-existent-id';
+    const updateUserDto: UpdateUserDto = {
+      email: 'updated@example.com',
+    };
+
+    jest.spyOn(userRepository, 'findOneBy').mockResolvedValue(null);
+
+    await expect(service.update(userId, updateUserDto, userPermissionResponseMock)).rejects.toThrow(
+      new NotFoundException(`User with ID ${userId} not found`),
+    );
+  });
+
+  it('should throw NotFoundException when deleting user that does not exist', async () => {
+    const userId = 'non-existent-id';
+    jest.spyOn(userRepository, 'findOne').mockResolvedValue(null);
+
+    await expect(service.delete(userId)).rejects.toThrow(
+      new NotFoundException(`User with ID ${userId} not found`),
+    );
+  });
+
   it('should find all users', async () => {
     const users = [
       {
@@ -143,17 +205,16 @@ describe('UserService', () => {
       },
     ];
 
-    jest.spyOn(userRepository, 'find').mockResolvedValue(users);
+    jest.spyOn(userRepository, 'find')
+      .mockResolvedValueOnce(users) // First call - main query
+      .mockResolvedValueOnce([]) // Second call - createdByUsers (empty because no matching IDs)
+      .mockResolvedValueOnce([]); // Third call - updatedByUsers (empty because no matching IDs)
 
-    jest.spyOn(userRepository, 'findOne').mockResolvedValue(users[0]);
-
-    jest
-      .spyOn(userRoleRepository, 'findOne')
-      .mockResolvedValue({ roleId: '1' } as UserRole);
-
-    jest
-      .spyOn(roleRepository, 'findOne')
-      .mockResolvedValue({ role_name: 'App Admin' } as Role);
+    // Mock the UserRole repository find method for the findAll method
+    jest.spyOn(userRoleRepository, 'find').mockResolvedValue([
+      { userId: '1', roleId: '1', projectId: null } as UserRole,
+      { userId: '2', roleId: '2', projectId: null } as UserRole,
+    ]);
 
     const result = await service.findAll();
     expect(userRepository.find).toHaveBeenCalled();
@@ -248,13 +309,22 @@ describe('UserService', () => {
     const permissions2 = ['read'];
 
     jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
-    jest
-      .spyOn(service, 'getPermissionsByRoles')
-      .mockImplementation((roleId: string) => {
-        if (roleId === 'role-id-1') return Promise.resolve(permissions1);
-        if (roleId === 'role-id-2') return Promise.resolve(permissions2);
-        return Promise.resolve([]);
-      });
+    
+    // Mock the rolePermissionRepository.find method for allRolePermissions
+    jest.spyOn(rolePermissionRepository, 'find').mockResolvedValue([
+      {
+        role: { id: 'role-id-1' },
+        permission: { permission_name: 'read' },
+      } as any,
+      {
+        role: { id: 'role-id-1' },
+        permission: { permission_name: 'write' },
+      } as any,
+      {
+        role: { id: 'role-id-2' },
+        permission: { permission_name: 'read' },
+      } as any,
+    ]);
 
     const result = await service.getUserProjectsAndPermissions(email);
 
@@ -318,6 +388,8 @@ describe('UserService', () => {
       email: 'test',
     };
 
+    const mockUser = { id: '1', email: 'existing@example.com' };
+    jest.spyOn(userRepository, 'findOneBy').mockResolvedValue(mockUser as any);
     jest.spyOn(userRepository, 'update').mockResolvedValue({
       generatedMaps: [],
       raw: [],
@@ -325,6 +397,7 @@ describe('UserService', () => {
     });
 
     await service.update('1', updateUserDto, userPermissionResponseMock);
+    expect(userRepository.findOneBy).toHaveBeenCalledWith({ id: '1' });
     expect(userRepository.update).toHaveBeenCalledWith('1', {
       ...updateUserDto,
       updated_by: expect.any(String),
@@ -371,6 +444,8 @@ describe('UserService', () => {
   });
 
   it('should inactivate a user', async () => {
+    const mockUser = { id: '1', user_status: 'active' };
+    jest.spyOn(userRepository, 'findOneBy').mockResolvedValue(mockUser as any);
     jest.spyOn(userRepository, 'update').mockResolvedValue({
       generatedMaps: [],
       raw: [],
@@ -378,8 +453,118 @@ describe('UserService', () => {
     });
 
     await service.inactivate('1');
+    expect(userRepository.findOneBy).toHaveBeenCalledWith({ id: '1' });
     expect(userRepository.update).toHaveBeenCalledWith('1', {
       user_status: 'inactive',
+    });
+  });
+
+  // Database error handling tests
+  describe('Database Error Handling', () => {
+    const createUserDto = {
+      email: 'test@example.com',
+      first_name: 'John',
+      last_name: 'Doe',
+      user_status: 'active',
+      password: 'password123',
+    };
+
+    const updateUserDto: UpdateUserDto = {
+      first_name: 'Jane',
+      last_name: 'Doe',
+    };
+
+    const mockUser = {
+      id: '1',
+      first_name: 'John',
+      last_name: 'Doe',
+      email: 'john.doe@example.com',
+      user_status: 'active',
+      created_at: new Date(),
+      created_by: 'user-id',
+      updated_at: new Date(),
+      updated_by: 'user-id',
+      user_roles: [],
+      name: 'John Doe',
+      populateWhoColumns: jest.fn(),
+    };
+
+    beforeEach(() => {
+      resetLoggerMocks();
+    });
+
+    it('should handle database errors in create and log them', async () => {
+      const dbError = new Error('Database connection failed');
+      jest.spyOn(userRepository, 'create').mockReturnValue(mockUser as any);
+      jest.spyOn(userRepository, 'save').mockRejectedValue(dbError);
+
+      await expect(service.create(createUserDto, userPermissionResponseMock))
+        .rejects.toThrow('Database connection failed');
+
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Failed to create user',
+        dbError
+      );
+    });
+
+    it('should handle database errors in findAll and log them', async () => {
+      const dbError = new Error('Database query failed');
+      jest.spyOn(userRepository, 'find').mockRejectedValue(dbError);
+
+      await expect(service.findAll()).rejects.toThrow('Database query failed');
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Failed to retrieve users list',
+        dbError
+      );
+    });
+
+    it('should handle database errors in findOne and log them', async () => {
+      const dbError = new Error('Database connection failed');
+      jest.spyOn(userRepository, 'findOneBy').mockRejectedValue(dbError);
+
+      await expect(service.findOne('1')).rejects.toThrow('Database connection failed');
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Failed to retrieve user',
+        dbError
+      );
+    });
+
+    it('should handle database errors in update and log them', async () => {
+      const dbError = new Error('Database update failed');
+      jest.spyOn(userRepository, 'findOneBy').mockResolvedValue(mockUser as any);
+      jest.spyOn(userRepository, 'update').mockRejectedValue(dbError);
+
+      await expect(service.update('1', updateUserDto, userPermissionResponseMock))
+        .rejects.toThrow('Database update failed');
+
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Failed to update user',
+        dbError
+      );
+    });
+
+    it('should handle database errors in delete and log them', async () => {
+      const dbError = new Error('Database delete failed');
+      jest.spyOn(userRepository, 'findOne').mockResolvedValue(mockUser as any);
+      jest.spyOn(userRepository, 'remove').mockRejectedValue(dbError);
+
+      await expect(service.delete('1')).rejects.toThrow('Database delete failed');
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Failed to delete user',
+        dbError
+      );
+    });
+
+    it('should handle database errors in inactivate and log them', async () => {
+      const dbError = new Error('Database update failed');
+      jest.spyOn(userRepository, 'findOneBy').mockResolvedValue(mockUser as any);
+      jest.spyOn(userRepository, 'update').mockRejectedValue(dbError);
+
+      await expect(service.inactivate('1')).rejects.toThrow('Database update failed');
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Failed to inactivate user',
+        dbError
+      );
     });
   });
 });

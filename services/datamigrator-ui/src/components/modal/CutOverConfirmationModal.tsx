@@ -11,7 +11,7 @@ import {
   BlueXpFormType,
   CutOverConfirmModalPropType,
   CUTOVER_STATUS_TYPE_ENUM,
-  ReportENUM,
+  REPORT_TYPES_ENUM,
 } from "@/types/app.type";
 import { useConfirmCutOverMutation } from "@api/jobsApi";
 import { useDownloadReportsMutation } from "@api/reportApi";
@@ -58,8 +58,8 @@ export default function CutoverConfirmationModal({
                   handleDownloadReport(
                     downloadReportApi,
                     jobRunId,
-                    ReportENUM.COC,
-                    "csv"
+                    REPORT_TYPES_ENUM.COC,
+                    "CSV"
                   )
                 }
                 variant="text"

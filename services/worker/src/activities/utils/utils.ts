@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from 'path';
-import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, Protocol, RedisUtils, Task, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, JobManagerContext, RedisUtils, Task, TaskStatus, TaskType, Protocol, Cmd, ItemInfo, TaskInfo } from "@netapp-cloud-datamigrate/jobs-lib";
 import { ACL, ExcludeOrSkipParams, getFileInfoInput, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
@@ -21,13 +21,13 @@ export const getChecksum = (filePath: string): Promise<string> => {
 export const removePrefix = (str: string, prefix: string): string => 
     str.startsWith(prefix) ? str.slice(prefix.length, 1000) : str;
 
-export const getFilePermissions = (stats: fs.Stats) : string =>{
+export const getFilePermissions = (stats: fs.Stats, isDirectory: boolean) : string =>{
     const mode = stats.mode;
     const owner = (mode & 0o700) >> 6;
     const group = (mode & 0o070) >> 3;
     const others = mode & 0o007;
     const toRWX = (perm: number) => `${perm & 4 ? 'r' : '-'}${perm & 2 ? 'w' : '-'}${perm & 1 ? 'x' : '-'}`;
-    const typePrefix = stats.isDirectory() ? 'd' : '-';
+    const typePrefix = isDirectory ? 'd' : '-';
     return `${typePrefix}${toRWX(owner)}${toRWX(group)}${toRWX(others)}`;
 }
 
@@ -77,7 +77,7 @@ export const shouldExcludeOlderThan = (stats: fs.Stats, olderThan: Date): boolea
 export const shouldExcludeOrSkip = ({ fullPath, stats, excludePatterns, skipTime, olderThan, jobType }: ExcludeOrSkipParams): boolean => (shouldExclude(fullPath, excludePatterns) || shouldSkipFile(stats, skipTime, jobType) || shouldExcludeOlderThan(stats, olderThan));
 
 export const getJobConnection = async ({jobRunId}: GetJobConnectionInput): Promise<GetJobConnectionOutput> => {
-    const redisClient = await RedisUtils.getClient();
+    const redisClient = await new RedisUtils().getClient();
     if (!redisClient.isOpen) {
         await redisClient.connect();
         console.log(`job run ${jobRunId}, Connected to Redis client.`);
@@ -88,14 +88,14 @@ export const getJobConnection = async ({jobRunId}: GetJobConnectionInput): Promi
 }
 
 
-export function getFileType(stats: fs.Stats): FileType {
+export function getFileType(stats: fs.Stats, isDirectory:boolean): FileType {
     switch (true) {
+      case isDirectory:
+        return FileType.DIRECTORY;
       case stats.isSymbolicLink():
         return FileType.SYMBOLIC_LINK;
       case stats.isFile():
-        return FileType.FILE;
-      case stats.isDirectory():
-        return FileType.DIRECTORY;
+        return FileType.FILE;      
       case stats.isSocket():
         return FileType.SOCKET;
       case stats.isFIFO():
@@ -112,6 +112,7 @@ export function getFileType(stats: fs.Stats): FileType {
 
   export const getFileInfo = async ({name, fullFilePath, relativePath, checksums, getID}: getFileInfoInput): Promise<any>  => {
     const lStat = await fs.promises.lstat(fullFilePath);
+    const isDirectory:boolean = lStat.isDirectory();
     let sid = undefined
     if(getID && process.platform == 'win32' && lStat.isFile())
       sid = getSID(fullFilePath);
@@ -119,15 +120,15 @@ export function getFileType(stats: fs.Stats): FileType {
         name,
         relativePath,
         relativePath,
-        lStat.isDirectory(),
+        isDirectory,
         lStat.size,
-        !lStat.isDirectory(),
+        !isDirectory,
         lStat.birthtime,
         lStat.mtime,
         lStat.atime,
         path.extname(fullFilePath),
-        getFilePermissions(lStat),
-        getFileType(lStat),
+        getFilePermissions(lStat, isDirectory),
+        getFileType(lStat, isDirectory),
         relativePath.split('/').length - 2,
         lStat.uid,
         lStat.gid,
@@ -139,7 +140,7 @@ export function getFileType(stats: fs.Stats): FileType {
     }
 }
 
-export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobContext, commands: Command[]): Task => new Task(
+export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobContext | JobManagerContext, commands: Command[]): Task => new Task(
   uuid4(), jobRunId, taskType, TaskStatus.PENDING, jobContext.jobConfig.workerIds[0],
   basePrefix(jobRunId, jobContext.jobConfig.sourceFileServer.pathId),
   jobContext.jobConfig.sourceFileServer.pathId,
@@ -150,13 +151,44 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobC
 )
 
 export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats) => !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString())
-export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats) => (dFile && sFile &&  (sFile.size === dFile.size) && (sFile.mtime.toISOString() === dFile.mtime.toISOString())) && (
-  (sFile.gid != dFile.gid) ||   (sFile.uid != dFile.uid) ||  (sFile.atime != dFile.atime) || (sFile.mode != dFile.mode)
-)
+export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats) => !dFile || (sFile.ctime.toISOString() > dFile.ctime.toISOString())
 
 export const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false,  2048, true, new Date(), new Date(), new Date(), "", "", "", 0, 1001, 1001);
+export const generateDummyItemEntry: ItemInfo = new ItemInfo(
+  "LAST_FILE", // fileName
+  false, // isDirectory
+  false, // isSymbolicLink
+  0, // depth
+  "", // extension
+  "file", // fileType
+  {
+    birthTime: new Date(),
+    modifiedTime: new Date(),
+    accessTime: new Date(),
+    permission: "rwxr-xr-x",  // permission
+    checksum: "dummy-checksum-source" // checksum
+  }, // sourceMeta
+  {
+    birthTime: new Date(),
+    modifiedTime: new Date(),
+    accessTime: new Date(),
+    permission: "rwxr-xr-x", // permission  
+    checksum: "dummy-checksum-target" // checksum
+  }, // targeMeta
+  2048 // size
+);
 
 export const generateDummyTaskEntry: Task = new Task('8840625a-b818-42a8-98c8-5c05aaa19106', '', TaskType.MIGRATE, TaskStatus.ERRORED, '', '', '', [], '', '', '');
+export const generateDummyTaskInfoEntry: TaskInfo = new TaskInfo(
+  '8840625a-b818-42a8-98c8-5c05aaa19106', 
+  '',
+  TaskType.MIGRATE,
+  TaskStatus.ERRORED, 
+  'worker-12345',
+  'sourcePathId-12345',
+  [],
+  'destinationPathId-12345',
+);
 
 export const generateDummyErrorEntry: DMError = new DMError({ taskId: '8840625a-b818-42a8-98c8-5c05aaa19106', errorCode: '', errorMessage: '', errorType: ErrorType.FATAL_ERROR, taskType: '' });
 
@@ -291,7 +323,9 @@ export const getSID = (filePath: string) => {
 
 
 export const getUserACLs = (line: string, path:string): ACL[] => {
+  if (!line || !path) return [];
   const lines: string[] = line.split('\n').map(l => l.trim()).filter(Boolean);
+  if (lines.length === 0) return [];
   const aclLines: string[] = [];
 
   const firstLine = lines[0];
@@ -317,3 +351,11 @@ export const getUserACLs = (line: string, path:string): ACL[] => {
     .filter((item): item is ACL => item !== null);
 };
 
+
+export const  calculateCommandHash = (commands: Cmd[]): string => {
+  const commandIds = commands.map(cmd => cmd.id);
+  commandIds.sort(); // Sort to ensure consistent order
+  const concatenatedIds = commandIds.join(',');
+  return crypto.createHash('sha256').update(concatenatedIds).digest('hex');
+
+}

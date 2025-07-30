@@ -1,0 +1,50 @@
+<ProductSection xmlns:ovf="http://schemas.dmtf.org/ovf/envelope/1" ovf:class="vplatform" ovf:required="false">
+  <Info ovf:msgid="productSection.info">Virtual Appliance</Info>
+  <Product ovf:msgid="productSection.product">PRODUCT_NAME</Product>
+  <Vendor ovf:msgid="productSection.vendor">NetApp Inc.</Vendor>
+  <Version ovf:msgid="productSection.version">BUILD_VERSION</Version>
+  <FullVersion ovf:msgid="productSection.fullversion">BUILD_VERSION</FullVersion>
+  <ProductUrl ovf:msgid="productSection.producturl">http://www.netapp.com/</ProductUrl>
+  <VendorUrl ovf:msgid="productSection.vendorurl">http://www.netapp.com/</VendorUrl>
+  <Category ovf:msgid="productSection.category">System &amp; Network</Category>
+  
+  <Property ovf:key="ssh_user" ovf:qualifiers="MinLen(1)" ovf:type="string" ovf:userConfigurable="true" ovf:value="">
+    <Label ovf:msgid="productSection.ssh_user.label">SSH Username</Label>
+    <Description ovf:msgid="productSection.ssh_user.desc">SSH username for the appliance. Please use only a letter as the beginning. And only &apos;@&apos;, &apos;_&apos;, &apos;-&apos;,  &apos;.&apos;, &apos;!&apos; special characters are supported. Prefer to use datamigrator user.</Description>
+  </Property>
+
+  <Property ovf:key="ssh_pass" ovf:password="true" ovf:qualifiers="MinLen(8)" ovf:type="string" ovf:userConfigurable="true">
+    <Label ovf:msgid="productSection.ssh_pass.label">SSH Password</Label>
+    <Description ovf:msgid="productSection.ssh_pass.desc">Specify the password for the SSH user.</Description>
+  </Property>
+
+  <Property ovf:key="ip0" ovf:type="string" ovf:userConfigurable="true">
+    <Label ovf:msgid="productSection.ip0.label">IPv4 Address</Label>
+    <Description ovf:msgid="productSection.ip0.desc">Specify the IPv4 address for the appliance. Leave blank if DHCP is desired.</Description>
+  </Property>
+
+  <Property ovf:key="netmask0" ovf:type="string" ovf:userConfigurable="true">
+    <Label ovf:msgid="productSection.netmask0.label">IPv4 Subnet Netmask</Label>
+    <Description ovf:msgid="productSection.netmask0.desc">Specify the subnet mask for the appliance (e.g. 255.255.255.0). Leave blank if DHCP is desired.</Description>
+  </Property>
+
+  <Property ovf:key="gateway0" ovf:type="string" ovf:userConfigurable="true">
+    <Label ovf:msgid="productSection.gateway0.label">IPv4 Gateway</Label>
+    <Description ovf:msgid="productSection.gateway0.desc">Specify the default gateway for the appliance. Leave blank if DHCP is desired.</Description>
+  </Property>
+
+  <Property ovf:key="dns0" ovf:type="string" ovf:userConfigurable="true">
+    <Label ovf:msgid="productSection.dns0.label">Primary DNS</Label>
+    <Description ovf:msgid="productSection.dns0.desc">Primary DNS to be used. Leave blank if DHCP is desired.</Description>
+  </Property>
+
+  <Property ovf:key="dns1" ovf:type="string" ovf:userConfigurable="true">
+    <Label ovf:msgid="productSection.dns1.label">Secondary DNS</Label>
+    <Description ovf:msgid="productSection.dns1.desc">Secondary DNS to be used. Optional - Leave blank if DHCP is desired.</Description>
+  </Property>
+
+  <Property ovf:key="searchDomains" ovf:type="string" ovf:userConfigurable="true">
+    <Label ovf:msgid="productSection.searchDomains.label">Search domains</Label>
+    <Description ovf:msgid="productSection.searchDomains.desc">Specify the search domain name to use when resolving the hostname. Comma-separated list allowed. Leave blank if DHCP is desired.</Description>
+  </Property>
+</ProductSection>

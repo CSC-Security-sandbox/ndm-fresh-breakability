@@ -4,16 +4,17 @@
   file:
     path: "{{ item.path }}"
     state: directory
-    owner: "{{ vm_username }}"
-    group: "{{ vm_username }}"
+    owner: root
+    group: root
     mode: '0755'
+    recurse: yes
   loop:
     - { path: "/opt/datamigrator" }
     - { path: "/opt/datamigrator/bin" }
     - { path: "/opt/datamigrator/binary" }
     - { path: "/opt/datamigrator/conf" }
+    - { path: "/opt/datamigrator/lock" }
     - { path: "/opt/datamigrator/logs" }
-    - { path: "/var/log/datamigrator" }
     - { path: "/mnt/datamigrator" }
 
 - name: 4.1.1 Configure NDM Versions
@@ -24,6 +25,8 @@
       current_version={{ build_version }}
       previous_version=N/A
     dest: "/opt/datamigrator/conf/versions.conf"
+    owner: root
+    group: root
 
 - name: 4.2. Copy binary file to remote server
   become: yes
@@ -53,8 +56,8 @@
     src: ./templates/worker-register.j2
     dest: /opt/datamigrator/bin/worker_register.sh
     mode: '0755'
-    owner: "{{ vm_username }}"
-    group: "{{ vm_username }}"
+    owner: root
+    group: root
   when: local_worker_update is not defined
 
 
@@ -64,8 +67,8 @@
     src: ./templates/worker.env.j2
     dest: /opt/datamigrator/conf/worker.env
     mode: '0644'
-    owner: "{{ vm_username }}"
-    group: "{{ vm_username }}"
+    owner: root
+    group: root
   when: local_worker_update is not defined
 
 - name: 4.7. Reload systemd daemon

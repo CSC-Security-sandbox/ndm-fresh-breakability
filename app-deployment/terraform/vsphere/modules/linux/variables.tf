@@ -112,3 +112,15 @@ variable "disk" {
     unit_number = number
   })
 }
+
+# vApp properties
+variable "ssh_user" {
+  description = "SSH username for the VM"
+  type        = string
+} 
+
+variable "ssh_pass" {
+  description = "SSH password for the VM"
+  type        = string
+  sensitive   = true
+}

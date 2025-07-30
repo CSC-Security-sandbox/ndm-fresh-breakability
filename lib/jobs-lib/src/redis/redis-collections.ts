@@ -8,11 +8,15 @@ import {
   TaskStatsCollection,
   UpdatedTaskCollection,
   SpeedTestReadWriteCollection,
-  MigrationTaskCollection
+  MigrationTaskCollection,
+  CommandCollection,
+  ItemInfoCollection,
+  TaskInfoCollection
 } from '../types/stream-collection';
 import { JobUtils } from '../utils/job-utils';
 import { RedisStreamCollection } from './redis-stream-collection';
 import { encode } from 'msgpack-lite';
+import { Cmd, ItemInfo, TaskInfo } from '../datatype/stream-datatypes';
 
 export class RedisFileCollection
   extends RedisStreamCollection<FileInfo>
@@ -187,6 +191,63 @@ export class RedisMigrationTasksCollection
     super(
       jobRunId,
       JobUtils.getRedisKey(jobRunId, 'migration-tasks'),
+      numMessages,
+      lastId,
+      redisClient,
+    );
+  }
+}
+
+
+export class RedisCommandCollection extends RedisStreamCollection<Cmd> 
+implements CommandCollection {
+  constructor(
+    jobRunId: string,
+    numMessages: number,
+    lastId: string,
+    redisClient: any,
+  ) {
+    super(
+      jobRunId,
+      JobUtils.getRedisKey(jobRunId, 'commands'),
+      numMessages,
+      lastId,
+      redisClient,
+    );
+  }
+}
+
+export class RedisItemInfoCollection extends RedisStreamCollection<ItemInfo> 
+implements ItemInfoCollection {
+  constructor(
+    jobRunId: string,
+    numMessages: number,
+    lastId: string,
+    redisClient: any,
+  ) {
+    super(
+      jobRunId,
+      JobUtils.getRedisKey(jobRunId, 'files'),
+      numMessages,
+      lastId,
+      redisClient,
+    );
+  }
+}  
+
+export class RedisTaskInfoCollection
+  extends RedisStreamCollection<TaskInfo>
+  implements TaskInfoCollection
+{
+  constructor(
+    jobRunId: string,
+    numMessages: number,
+    lastId: string,
+    redisClient: any,
+  ) {
+    super(
+      jobRunId,
+      JobUtils.getRedisKey(jobRunId, 'tasks'),
       numMessages,
       lastId,
       redisClient,

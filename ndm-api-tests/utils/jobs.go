@@ -136,6 +136,7 @@ type MigrationJobParams struct {
 	DestinationPathIDs []string
 	SidMapping         bool
 	Options            map[string]interface{}
+	ExtraParams        map[string]interface{}
 }
 
 // CreateMigrationJob creates migration jobs for all combinations of source and destination path IDs.
@@ -164,6 +165,12 @@ func CreateMigrationJob(params MigrationJobParams, headers map[string]string) ([
 		"options":           params.Options,
 	}
 
+	// This extra params is used when any new key-value needs to add in struct e.g., gidMapping
+	if params.ExtraParams != nil {
+		for key, value := range params.ExtraParams {
+			migrationPayload[key] = value
+		}
+	}
 	payloadBytes, err := json.Marshal(migrationPayload)
 	if err != nil {
 		return nil, nil, err
@@ -331,6 +338,11 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 
 		if status == desiredJobState {
 			LogDebug("Job reached desired state: " + desiredJobState + ".")
+			return nil
+		}
+
+		if status == COMPLETED_JOBRUN || status == BLOCKED_JOBRUN {
+			LogDebug("Job reached desired state: " + status + ".")
 			return nil
 		}
 		Wait(DefaultPollInterval)

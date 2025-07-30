@@ -13,6 +13,8 @@ interface Credential {
     pathId: string,
     username: string,
     path:string,
+    isValidPath: boolean,
+    isDisabled: boolean,
     host: string,
     workingDirectory:string,
     protocolVersion: string
@@ -29,6 +31,7 @@ export interface JobRunConfig{
     preserveAccessTime: boolean
     workers: string[],
     skipFile?: string,
+    skipDelete?: boolean,
 }
 
 

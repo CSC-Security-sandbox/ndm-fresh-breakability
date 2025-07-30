@@ -1,11 +1,12 @@
 import {
-  Controller,
-  Get,
-  Post,
   Body,
-  Patch,
-  Param,
+  Controller,
   Delete,
+  Get,
+  Inject,
+  Param,
+  Patch,
+  Post,
   Query,
   Request,
 } from '@nestjs/common';
@@ -22,11 +23,23 @@ import {
 import { AccountDescription } from '../swagger/swagger-summary';
 import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
+import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @ApiTags('accounts')
 @Controller('/api/v1/accounts')
 export class AccountController {
-  constructor(private readonly accountService: AccountService) {}
+  private readonly logger: LoggerService;
+
+  constructor(
+    private readonly accountService: AccountService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(AccountController.name);
+  }
 
   @Auth()
   @ApiBearerAuth()
@@ -40,6 +53,9 @@ export class AccountController {
     @Body() createAccountDto: CreateAccountDto,
     @Request() userPermissions: UserPermissionResponse,
   ) {
+    this.logger.log('Create account request received', {
+      userId: userPermissions.user.id,
+    });
     return this.accountService.create(createAccountDto, userPermissions);
   }
 
@@ -87,6 +103,12 @@ export class AccountController {
     @Query('sortOrder') sortOrder: 'ASC' | 'DESC' = 'ASC',
     @Query('filter') filter: string,
   ) {
+    this.logger.log('GET All Accounts request', {
+      page,
+      limit,
+      sortField,
+      sortOrder,
+    });
     return this.accountService.findAll(
       page,
       limit,
@@ -103,7 +125,8 @@ export class AccountController {
     summary: 'Get Account by account id',
     description: AccountDescription.getAccountByIdDescription,
   })
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', NonEmptyStringPipe) id: string) {
+    this.logger.log('GET Account by ID request', { accountId: id });
     return this.accountService.findOne(id);
   }
 
@@ -115,10 +138,14 @@ export class AccountController {
     description: AccountDescription.UpdateAccountDescription,
   })
   update(
-    @Param('id') id: string,
+    @Param('id', NonEmptyStringPipe) id: string,
     @Body() updateAccountDto: UpdateAccountDto,
     @Request() userPermissionResponse: UserPermissionResponse,
   ) {
+    this.logger.log('UPDATE Account request', {
+      accountId: id,
+      userId: userPermissionResponse.user.id,
+    });
     return this.accountService.update(
       id,
       updateAccountDto,
@@ -133,7 +160,8 @@ export class AccountController {
     summary: 'Delete Account',
     description: AccountDescription.DeleteAccountDescription,
   })
-  delete(@Param('id') id: string) {
+  delete(@Param('id', NonEmptyStringPipe) id: string) {
+    this.logger.log('DELETE Account request', { accountId: id });
     return this.accountService.delete(id);
   }
 }

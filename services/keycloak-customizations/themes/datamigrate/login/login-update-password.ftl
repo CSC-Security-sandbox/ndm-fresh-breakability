@@ -83,7 +83,7 @@
                                     <div id="rule-uppercase" class="rule-failed">At least one uppercase letter</div>
                                     <div id="rule-lowercase" class="rule-failed">At least one lowercase letter</div>
                                     <div id="rule-number" class="rule-failed">At least one number</div>
-                                    <div id="rule-special" class="rule-failed">At least one special character</div>
+                                    <div id="rule-special" class="rule-failed">At least one special character: ! @ # $ % ^ & * ( ) , . ? " : { } | < > + ]</div>
                                 </div>
                             </div>
                         </div>
@@ -108,7 +108,7 @@
 
                         <!-- Submit Button -->
                         <div class="my-2 w-full">
-                            <button id="kc-update-password" type="submit" class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonBlockClass!} ${properties.kcButtonLargeClass!}">
+                            <button id="kc-update-password" type="submit" class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonBlockClass!} ${properties.kcButtonLargeClass!}" disabled style="opacity: 0.5;">
                                 Reset Password
                             </button>
                         </div>
@@ -139,12 +139,13 @@
             // Password validation rules
             const passwordRules = () => {
                 const password = document.getElementById('password-new').value;
+                const confirmPassword = document.getElementById('password-confirm').value;
                 const rules = {
                     length: password.length >= 8,
                     uppercase: /[A-Z]/.test(password),
                     lowercase: /[a-z]/.test(password),
                     number: /[0-9]/.test(password),
-                    special: /[!@#$%^&*(),.?":{}|<>]/.test(password),
+                    special: /[!@#$%^&*(),.?":{}|<>+\]]/.test(password),
                 };
 
                 // Update rule status
@@ -153,17 +154,28 @@
                 document.getElementById('rule-lowercase').className = rules.lowercase ? 'rule-passed' : 'rule-failed';
                 document.getElementById('rule-number').className = rules.number ? 'rule-passed' : 'rule-failed';
                 document.getElementById('rule-special').className = rules.special ? 'rule-passed' : 'rule-failed';
+
+                const allRulesPassed = Object.values(rules).every(rule => rule);
+                
+                const passwordsMatch = password === confirmPassword;
+                const bothFieldsHaveValues = password && confirmPassword;
+                
+                const canSubmit = allRulesPassed && bothFieldsHaveValues && passwordsMatch;
+                const submitButton = document.getElementById('kc-update-password');
+                submitButton.disabled = !canSubmit;
+                submitButton.style.opacity = canSubmit ? '1' : '0.5';
             };
 
-            // Call password validation on input
+            // Call password validation on input for both fields
             document.getElementById('password-new').addEventListener('input', passwordRules);
+            document.getElementById('password-confirm').addEventListener('input', passwordRules);
 
             // Additional validation for matching passwords before submitting the form
             function validatePasswords() {
                 const password = document.getElementById('password-new').value;
                 const confirmPassword = document.getElementById('password-confirm').value;
+                
                 if (password !== confirmPassword) {
-                    error.classList.remove('hidden');
                     return false;
                 }
                 return true;

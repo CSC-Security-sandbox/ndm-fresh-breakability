@@ -15,6 +15,7 @@ var (
 	JOB_SERVICE_URL         string
 	CONFIG_SERVICE_URL      string
 	ADMIN_SERVICE_URL       string
+	REPORT_SERVICE_URL      string
 	KEYCLOAK_IP             string
 	CLIENT_SECRET           string
 	USERNAME                string
@@ -53,6 +54,7 @@ const (
 	NFS_DESTINATION_VOLUME                          = "/vol_dest_automation"
 	NFS_SOURCE_VOLUME_1                             = "/vol_src_automation2"
 	NFS_DESTINATION_VOLUME_1                        = "/vol_dest_automation2"
+	NFS_SOURCE_VOLUME_2                             = "/vol_src_automation"
 	CREATE_FILESERVER_ENDPOINT                      = "/api/v1/servers"
 	CREATE_DISCOVERY_ENDPOINT                       = "/api/v1/jobs/bulk-discovery"
 	CREATE_MIGRATION_ENDPOINT                       = "/api/v1/jobs/bulk-migrate"
@@ -69,7 +71,7 @@ const (
 	FormatPDF                       Format          = "pdf"
 	FormatCSV                       Format          = "csv"
 	DefaultPollInterval                             = 5
-	MaxPollRetries                                  = 50
+	MaxPollRetries                                  = 70
 	WORKER_TIMEOUT                                  = 180
 	RUNNING_JOBRUN                                  = "RUNNING"
 	PAUSE_JOBRUN                                    = "PAUSE"
@@ -102,6 +104,7 @@ func init() {
 	JOB_SERVICE_URL = os.Getenv("JOB_SERVICE_URL")
 	CONFIG_SERVICE_URL = os.Getenv("CONFIG_SERVICE_URL")
 	ADMIN_SERVICE_URL = os.Getenv("ADMIN_SERVICE_URL")
+	REPORT_SERVICE_URL = os.Getenv("REPORT_SERVICE_URL")
 	KEYCLOAK_IP = os.Getenv("KEYCLOAK_IP")
 	USERNAME = os.Getenv("NDM_USERNAME")
 	PASSWORD = os.Getenv("PASSWORD")

@@ -1,29 +1,25 @@
-import Box from "@/components/container/Box";
-import { notify } from "@components/notification/NotificationWrapper";
-import {
-  useAssociateUserMutation,
-  useCreateUserMutation,
-  useGetAllRolesQuery,
-} from "@api/userApi";
-import { Collapse } from "@mui/material";
+import Box from '@/components/container/Box';
+import {notify} from '@components/notification/NotificationWrapper';
+import {useAssociateUserMutation, useCreateUserMutation, useGetAllRolesQuery} from '@api/userApi';
+import {Collapse} from '@mui/material';
 import {
   Button,
   Card,
+  Checkbox,
   FormFieldInputNew,
   Heading,
   Layout,
   useForm,
-  WizardFooter,
-  Checkbox,
-} from "@netapp/bxp-design-system-react";
-import { useEffect, useState } from "react";
+  WizardFooter
+} from '@netapp/bxp-design-system-react';
+import React, {useEffect, useState} from 'react';
 import {
   CREATE_USER_FORM_VALIDATION_SCHEMA,
-  RoleApiType,
-} from "@components/top-nav-bar/setting/ManageUsers/ManageUsers.constant";
-import React from "react";
-import TemporaryPassword from "@components/top-nav-bar/setting/ManageUsers/TemporaryPassword";
-import { USER_ROLES_ENUM } from "@/types/app.type";
+  RoleApiType
+} from '@components/top-nav-bar/setting/ManageUsers/ManageUsers.constant';
+import TemporaryPassword from '@components/top-nav-bar/setting/ManageUsers/TemporaryPassword';
+import {USER_ROLES_ENUM} from '@/types/app.type';
+import {decryptData} from '@/utils/common.utils';
 
 type CreateUserFormProps = {
   temporaryPassword: string;
@@ -68,30 +64,23 @@ const CreateUserForm = ({
 
     try {
       const createUserResponse = await createUserApi(body).unwrap();
-      setTemporaryPassword(createUserResponse.tempPassword);
+      const decryptedPassword = decryptData(createUserResponse?.data?.items?.tempPassword);
+      setTemporaryPassword(decryptedPassword);
       if (form.formState.is_app_admin) {
         await associateUserApi({
           account_id: localStorage.getItem("account_id"),
-          user_id: createUserResponse.user.id,
-          role_id: roles?.find(
-            (row) => row.role_name === USER_ROLES_ENUM.APP_ADMIN
+          user_id: createUserResponse?.data?.items?.user.id,
+          role_id: roles['data']?.items.find(
+              (row) => row.role_name === USER_ROLES_ENUM.APP_ADMIN
           )?.id,
           project_id: "",
         }).unwrap();
       }
-      notify.success(`Users added successfully.`);
+      notify.success(createUserResponse.message);
       setShowTemporaryPassword(true);
     } catch (err) {
-      let errorMsg = "Failed to add User.";
       const errorData = (err as any)?.data;
-      const errorMessage = errorData?.message as string | undefined;
-      if (
-        errorMessage &&
-        errorMessage.toLowerCase().includes("email id") &&
-        errorMessage.toLowerCase().includes("already exists")
-      ) {
-        errorMsg = errorMessage;
-      }
+      const errorMsg = errorData.error.displayMessage || errorData.message;
       notify.error(errorMsg);
       console.error({ err, level: "Add user" });
     }

@@ -61,7 +61,8 @@ REALM_PAYLOAD=$(cat <<EOF
   "loginWithEmailAllowed": true,
   "verifyEmail": false,
   "duplicateEmailsAllowed": false,
-  "resetPasswordAllowed": true
+  "resetPasswordAllowed": true,
+  "passwordPolicy": 'passwordHistory(3)'
 }
 EOF
 )

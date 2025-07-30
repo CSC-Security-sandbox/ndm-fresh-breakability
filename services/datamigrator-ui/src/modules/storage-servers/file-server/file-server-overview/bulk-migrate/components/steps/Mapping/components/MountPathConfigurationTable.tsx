@@ -1,14 +1,16 @@
 import { MigrationDetailsTableConfigurationType } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.interface";
 import { downloadBulkMigrationCsv } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
 import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
-import { Box, Button } from "@mui/material";
+import { Box } from "@mui/material";
 import {
+  Button,
   SearchWidget,
   Table,
   TablePager,
 } from "@netapp/bxp-design-system-react";
 import { DownloadMonochromeIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { useContext, useEffect } from "react";
+import RefreshButton from "@/components/refresh-button/RefreshButton";
 
 export const MountPathConfigurationTable = () => {
   const {
@@ -18,6 +20,9 @@ export const MountPathConfigurationTable = () => {
     setSelectedReviewIds,
     mappingStepTableState,
     listOfNotReachableExportPaths,
+    sourceDisabledPaths,
+    refetch,
+    isFetching,
   } = useContext(BulkMigrateContext);
 
   const { setFieldValue } = mappingStepForm;
@@ -47,16 +52,24 @@ export const MountPathConfigurationTable = () => {
     downloadBulkMigrationCsv(mappingStepForm);
   };
   const checkDisabled = (row: MigrationDetailsTableConfigurationType) => {
-    return listOfNotReachableExportPaths.includes(row?.sourcePath?.sourcePathId);
+    return (
+      listOfNotReachableExportPaths.includes(row?.sourcePath?.sourcePathId) ||
+      sourceDisabledPaths.includes(row?.sourcePath?.sourcePathId)
+    );
   };
 
   return (
-    <Box>
-      <Box className="flex justify-end my-3">
-        <Box className="flex gap-3 items-center">
+    <Box className="mb-4">
+      <Box className="flex justify-end mx-2 mt-3 mb-1">
+        <Box className="flex gap-5 items-center">
           <SearchWidget setFilter={updateTextFilter} />
-          <Button variant="icon" onClick={handleTableDownload}>
-            <DownloadMonochromeIcon />
+          <RefreshButton isLoading={isFetching} onRefresh={refetch} />
+          <Button
+            variant="icon"
+            disabled={pagination?.pageRows === undefined}
+            onClick={handleTableDownload}
+          >
+            <DownloadMonochromeIcon onClick={handleTableDownload} />
           </Button>
         </Box>
       </Box>

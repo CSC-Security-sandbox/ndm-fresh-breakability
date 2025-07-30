@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Command, CommandStatus, ErrorType, FileInfo, JobContext, MetaData, OPS_STATUS, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as crypto from "crypto";
@@ -13,6 +13,7 @@ import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, getUs
 import { ACL, getFileInfoInput, Operation, Origin } from '../utils/utils.types';
 import { OPS_CMD, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
 import { Context } from '@temporalio/activity';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 
 @Injectable()
@@ -21,10 +22,11 @@ export class MigrationSyncService {
   readonly CHUNK_SIZE: number;
   readonly maxRetryCount: number;
   readonly maxConcurrency: number;
-  
+  private readonly logger: LoggerService;
+
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
-    private readonly logger: Logger,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly redisService: RedisService,
     private readonly commonService: CommonActivityService,
     private readonly shellService: ShellService,
@@ -34,6 +36,7 @@ export class MigrationSyncService {
     this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
     this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100;
     this.CHUNK_SIZE = this.configService.get('worker.migrationChunkSize') || 1024 * 1024;
+    this.logger = loggerFactory.create(MigrationSyncService.name);
   }
 
   async calculateChecksum(filePath: string): Promise<string> {
@@ -139,8 +142,8 @@ export class MigrationSyncService {
         let gid = metadata.gid?.toString();
         let uid = metadata.uid?.toString();
         if(jobContext.jobConfig.options.isIdentityMappingAvailable) {
-          gid = await this.redisService.getOwnerIdentity(jobContext, metadata.gid?.toString(), 'GID')
-          uid = await this.redisService.getOwnerIdentity(jobContext, metadata.uid?.toString(), 'UID')
+          gid = await this.redisService.getOwnerIdentity(jobContext.jobRunId, metadata.gid?.toString(), 'GID')
+          uid = await this.redisService.getOwnerIdentity(jobContext.jobRunId, metadata.uid?.toString(), 'UID')
         }
         if(gid && uid)
           await fs.promises.chown(targetPath, parseInt(uid), parseInt(gid));
@@ -166,7 +169,7 @@ export class MigrationSyncService {
         const usersAcls:ACL[] = getUserACLs(metadata.sid, sourcePath)
         await Promise.all(
           usersAcls.map(async (userAcl) => {
-            const user = !jobContext.jobConfig.options.isIdentityMappingAvailable ?  userAcl.user : await this.redisService.getOwnerIdentity(jobContext, userAcl.user, 'SID');
+            const user = !jobContext.jobConfig.options.isIdentityMappingAvailable ?  userAcl.user : await this.redisService.getOwnerIdentity(jobContext.jobRunId, userAcl.user, 'SID');
             if (user) {
               const commandExec = command.ops[0].cmd !== OPS_CMD.COPY_DIR
                 ? CommandPattern.SET_SID_FOR_OBJECT
@@ -393,6 +396,7 @@ export class MigrationSyncService {
 
   getFileInfo = async ({name, fullFilePath, relativePath, checksums, getID}: getFileInfoInput): Promise<any>  => {
       const lStat = await fs.promises.lstat(fullFilePath);
+      const isDirectory = lStat.isDirectory();
       let sid = undefined
       if(getID && process.platform == 'win32' && lStat.isFile())
         sid = this.getSID(fullFilePath);
@@ -400,15 +404,15 @@ export class MigrationSyncService {
           name,
           relativePath,
           relativePath,
-          lStat.isDirectory(),
+          isDirectory,
           lStat.size,
-          !lStat.isDirectory(),
+          !isDirectory,
           lStat.birthtime,
           lStat.mtime,
           lStat.atime,
           path.extname(fullFilePath),
-          getFilePermissions(lStat),
-          getFileType(lStat),
+          getFilePermissions(lStat, isDirectory),
+          getFileType(lStat, isDirectory),
           relativePath.split('/').length - 2,
           lStat.uid,
           lStat.gid,

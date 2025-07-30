@@ -1,8 +1,10 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Protocols, ProtocolTypes } from "src/protocols/protocols";
 import { PreCheckErrorCodes, PreCheckStatus, ServerCredential, Settings, WorkerTaskPaths } from "src/workflows/pre-check/pre-check.types";
 import { PreCheckPathOutput } from "./precheck-activity.type";
+import { ExportPathSource } from "../list-path/list-path.type";
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 const fs = require('fs').promises;
 
@@ -11,14 +13,17 @@ export class PrecheckActivity {
   readonly workerId: string;
   readonly baseWorkingPath: string;
   readonly shouldCheckDiskSpace: boolean = false;
+  private readonly logger: LoggerService;
+
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
-    private readonly logger: Logger,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    private readonly protocols: Protocols
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
     this.shouldCheckDiskSpace = this.configService.get<boolean>('worker.checkSpaceForPreCheck');
-
+    this.logger = loggerFactory.create(PrecheckActivity.name);
   }
 
   async preCheckPath(settings: Settings, serverCredentials: ServerCredential, serverPaths: WorkerTaskPaths, traceId): Promise<PreCheckPathOutput> {
@@ -29,7 +34,7 @@ export class PrecheckActivity {
       workerId: this.workerId
     };
     this.logger.log(`Started Prechecking path ${serverPaths.pathName} on server ${serverCredentials.host}`);
-    const protocol = Protocols.getProtocol(ProtocolTypes[serverCredentials.protocol]);
+    const protocol = this.protocols.getProtocol(ProtocolTypes[serverCredentials.protocol]);
     const protocolPayload = {
       hostname: serverCredentials.host,
       username: serverCredentials.userName,
@@ -58,27 +63,29 @@ export class PrecheckActivity {
     if (mountSuccess) {
       const checkPromises = [];
 
-      checkPromises.push(
-        protocol.listPaths(traceId, protocolPayload)
-          .then(pathList => {
-            if (!pathList.includes(serverPaths.pathName)) {
-              this.logger.error(`Path ${serverPaths.pathName} not found on server ${serverCredentials.host}`);
+      if(serverCredentials.exportPathSource === ExportPathSource.AUTO_DISCOVER) {
+        checkPromises.push(
+          protocol.listPaths(traceId, protocolPayload)
+            .then(pathList => {
+              if (!pathList.includes(serverPaths.pathName)) {
+                this.logger.error(`Path ${serverPaths.pathName} not found on server ${serverCredentials.host}`);
+                preCheckPathOutput.errorCodes.push(
+                  serverPaths.isSource ?
+                    PreCheckErrorCodes.SOURCE_PATH_NOT_FOUND :
+                    PreCheckErrorCodes.DESTINATION_PATH_NOT_FOUND
+                );
+              }
+            })
+            .catch(error => {
+              this.logger.error(`Error listing paths on server ${serverCredentials.host}`);
               preCheckPathOutput.errorCodes.push(
                 serverPaths.isSource ?
                   PreCheckErrorCodes.SOURCE_PATH_NOT_FOUND :
                   PreCheckErrorCodes.DESTINATION_PATH_NOT_FOUND
               );
-            }
-          })
-          .catch(error => {
-            this.logger.error(`Error listing paths on server ${serverCredentials.host}`);
-            preCheckPathOutput.errorCodes.push(
-              serverPaths.isSource ?
-                PreCheckErrorCodes.SOURCE_PATH_NOT_FOUND :
-                PreCheckErrorCodes.DESTINATION_PATH_NOT_FOUND
-            );
-          })
-      );
+            })
+          );
+      }
 
       this.logger.log(`Preserve Access Time - ${settings?.preserveAccessTime}`);
       this.logger.log(`IsDestination - ${!serverPaths?.isSource}`);

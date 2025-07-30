@@ -60,6 +60,7 @@ export interface VolumeType {
   volumePath: string;
   jobConfig: JobConfig[];
   protocol: string;
+  isValid?: boolean;
 }
 
 interface DataType {
@@ -154,6 +155,7 @@ export interface FileServerApiType {
   protocolVersion: string;
   workers: WorkerApiType[];
   volumes: VolumeType[]; // Adjust this type if you have specific volume data structure
+  exportPathSource?: string;
 }
 
 export type ConfigListTypeApiType = {
@@ -170,7 +172,9 @@ export type ConfigListTypeApiType = {
   project: ProjectType;
   fileServers: FileServerApiType[];
   workingDirectory: WorkingDirectoryDetailsType;
-  status: FILE_SERVER_STATUS;
+  status: FILE_SERVER_STATUS_ENUM;
+  isRefreshAvailable?: boolean;
+  isUploadInProgress?: boolean;
 };
 
 export type FileServerDetailsType = ConfigListTypeApiType;
@@ -255,9 +259,17 @@ export interface CreateProjectFormType {
   start_date: any;
 }
 
+export interface CreateProjectResponseType {
+  data: {
+    id: string;
+    items: any;
+    // Add other properties as needed based on the actual API response
+  };
+}
+
 interface CreateProjectHOCType {
   createProjectForm: BlueXpFormType<CreateProjectFormType>;
-  handleCreateProject: Function;
+  handleCreateProject: () => Promise<CreateProjectResponseType>;
   resetForm: Function;
   handleUpdateProject: Function;
 }
@@ -416,10 +428,7 @@ export interface JobRowType {
 export interface FileServerOverviewApi {
   jobDetails: {
     totalDiscoverJobs: number;
-    totalMigrateJobs: {
-      baseLineJob: number;
-      incrementalJob: number;
-    };
+    totalMigrateJobs: number;
     totalCutoverJobs: number;
   };
   storageDetails: {
@@ -499,7 +508,7 @@ export interface ProjectApiType {
   };
 }
 
-export enum FILE_SERVER_STATUS {
+export enum FILE_SERVER_STATUS_ENUM {
   ACTIVE = "ACTIVE",
   DRAFT = "DRAFT",
   IN_PROGRESS = "IN_PROGRESS",
@@ -553,6 +562,8 @@ export interface AllFileServerWithVolumesApiType {
     volumes: {
       id: string;
       volumePath: string;
+      isValid?: boolean;
+      isDisabled?: boolean;
       reachableCount: number;
     }[];
   }[];
@@ -666,7 +677,7 @@ export type TemporaryPasswordPropsType = {
   isAddUser: boolean;
 };
 
-export enum ReportENUM {
+export enum REPORT_TYPES_ENUM {
   DISCOVERY = "DISCOVER",
   COC = "COC",
   JOBS_REPORT = "JOBS_REPORT",
@@ -713,7 +724,10 @@ export interface BlueXpTableStateType<T> {
 export interface JobErrorType {
   id: string;
   errorCode: string;
-  errorMessage: string;
+  errorMessage: string; // Original system message
+  displayMessage?: string; // User-friendly mapped message
+  resolutionSteps?: string; // Resolution steps from error_remedies
+  referenceCommands?: string; // Diagnostic commands
   fileName: string;
   filePath: string;
   createdAt: string;

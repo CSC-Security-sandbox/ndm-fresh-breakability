@@ -40,20 +40,23 @@
     "class-validator": "^0.14.1",
     "fast-csv": "^5.0.2",
     "hbs": "^4.2.0",
-    "multer": "^2.0.1",
+    "multer": "^2.0.2",
     "pg": "^8.13.0",
     "puppeteer": "^23.11.1",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
+    "sanitize-html": "^2.17.0",
     "typeorm": "^0.3.20"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
     "@nestjs/schematics": "^10.0.0",
     "@nestjs/testing": "^10.0.0",
+    "@types/escape-html": "^1.0.4",
     "@types/express": "^4.17.17",
     "@types/jest": "^29.5.2",
     "@types/node": "^20.3.1",
+    "@types/sanitize-html": "^2.16.0",
     "@types/supertest": "^6.0.0",
     "@typescript-eslint/eslint-plugin": "8.25.0",
     "@typescript-eslint/parser": "^8.0.0",
@@ -88,7 +91,8 @@
       "!**/dist/**",
       "!**/coverage/**",
       "!**.eslintrc.js",
-      "!**/main.ts"
+      "!**/main.ts",
+      "!**/*.types.ts"
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
@@ -112,10 +116,12 @@
       "/test/",
       "/config/",
       "/entities/",
-      "/dto/"
+      "/dto/",
+      ".*types\\.ts$"
     ]
   },
   "overrides": {
-    "multer": "^2.0.1"
+    "multer": "^2.0.2",
+    "brace-expansion": "1.1.12"
   }
 }

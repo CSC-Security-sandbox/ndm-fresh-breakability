@@ -12,6 +12,8 @@ const SelectPath = () => {
     fileServerDetails,
     selectPathTableState,
     setCutOverSelectedIds,
+    isCutOverPathsFetching,
+    refetchCutOverPaths,
   } = useContext(BulkCutOverContext);
 
   return (
@@ -29,6 +31,8 @@ const SelectPath = () => {
         tableState={selectPathTableState}
         isLoading={false}
         handleSelection={setCutOverSelectedIds}
+        refetchTableData={refetchCutOverPaths}
+        isRefreshing={isCutOverPathsFetching}
       />
 
       <UserWarning

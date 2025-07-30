@@ -12,12 +12,17 @@ export interface ExportPathsTablePropsType {
   setSelectedExportPathsIds: (ids: string[]) => void;
   defaultColumnState?: any;
   notReachableExportPaths: string[];
+  refetch?: () => void;
+  isFetching?: boolean;
+  jobType?: string;
 }
 
 export interface TableRendererPropsType {
   allExportPaths: VolumeType[];
   allWorkersList: WorkerApiType[];
   fileServerDetails: ConfigListTypeApiType;
+  refetch: () => void;
+  isFetching: boolean;
 }
 
 export interface OverviewTabsPropsType {

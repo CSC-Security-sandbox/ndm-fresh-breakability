@@ -13,7 +13,7 @@ import { HealthcheckService } from "./healthcheck.service";
 import { HealthcheckStats } from "./dto/healthcheck.dto";
 import { HealthCheckResponse } from "./dto/healthcheck-response.dto";
 import { AuthWorker } from "@netapp-cloud-datamigrate/auth-lib";
-import { ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 
 @ApiTags('jobs')
 @Controller("statscheck")
@@ -25,6 +25,7 @@ export class HealthcheckController {
 
   @Post("/")
   @AuthWorker()
+  @ApiBearerAuth()
   async healthCheck(
     @Body() healthStats: HealthcheckStats,
     @Req() req: any

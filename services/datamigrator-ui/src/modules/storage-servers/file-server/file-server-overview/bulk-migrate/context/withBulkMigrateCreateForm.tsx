@@ -19,7 +19,6 @@ import useFileServerDetails from "@hooks/useFileServerDetails";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
 import {
   DOW_OPTIONS,
-  INCREMENTAL_SYNC_SCHEDULE_ENUM,
   INCREMENTAL_SYNC_SCHEDULE_SET_ENUM,
   INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM,
   MIGRATE_OPTION_ENUM,
@@ -62,6 +61,7 @@ import {
   setModalProps,
 } from "@store/reducer/commonComponentSlice";
 import useFetchWorkers from "@hooks/useFetchWorkers";
+import { INCREMENTAL_SYNC_SCHEDULE_ENUM } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/IncrementalSyncSchedule/incremental-sync-schedule.constants";
 
 export function withBulkMigrateCreateForm(
   WrappedComponent: ComponentType<any>
@@ -98,8 +98,13 @@ export function withBulkMigrateCreateForm(
     const [preCheckApi, { isLoading: isPrecheckSubmitting }] =
       usePrecheckMutation();
 
-    const { fileServerDetails, allExportPaths, allWorkersList } =
-      useFileServerDetails();
+    const {
+      fileServerDetails,
+      allExportPaths,
+      allWorkersList,
+      refetch,
+      isFetching,
+    } = useFileServerDetails();
     const [getAllFileServersApi] = useLazyGetAllFileServersWithVolumeQuery();
     const [getWorkerDetails] = useLazyCheckConnectionRespQuery();
 
@@ -120,7 +125,11 @@ export function withBulkMigrateCreateForm(
       onSubmit: () => {},
     });
 
-    const [listOfNotReachableExportPaths, setListOfNotReachableExportPaths] = useState<string[]>([]);
+    const [listOfNotReachableExportPaths, setListOfNotReachableExportPaths] =
+      useState<string[]>([]);
+    const [sourceDisabledPaths, setSourceDisabledPaths] = useState<string[]>(
+      []
+    );
 
     useEffect(() => {
       mappingStepForm.validateForm();
@@ -167,23 +176,29 @@ export function withBulkMigrateCreateForm(
               });
             });
           });
-
           const notReachableVolumes = [];
+          const sourceDisabledPathsHashSet = [];
           allFileServers.forEach((config) => {
             const _destinationPaths: DestinationPathsOptionsType[] = [];
-
-            config?.fileServers?.flatMap((fileServer) => 
+            config?.fileServers?.flatMap((fileServer) =>
               fileServer?.volumes?.map((volume) => {
                 _destinationPaths.push({
                   protocol: fileServer.protocol,
                   pathId: volume?.id,
                   pathName: volume?.volumePath,
-                })
+                  isDisabled: volume?.isDisabled,
+                  isValid: volume?.isValid,
+                  reachableCount: volume?.reachableCount,
+                });
                 if (volume?.reachableCount === 0) {
                   notReachableVolumes.push(volume.id);
                 }
+                if (volume?.isDisabled) {
+                  sourceDisabledPathsHashSet.push(volume.id);
+                }
               })
             );
+            setSourceDisabledPaths(sourceDisabledPathsHashSet);
             setListOfNotReachableExportPaths(notReachableVolumes);
             _fileServerDetailsMap.set(config?.id, _destinationPaths);
           });
@@ -329,7 +344,10 @@ export function withBulkMigrateCreateForm(
       const offlineWorkers = availableWorkers.filter(
         (w: WorkerType) => w.status && w.status.toLowerCase() === OFFLINE_STATUS
       );
-      if (availableWorkers.length > 0 && offlineWorkers.length === availableWorkers.length) {
+      if (
+        availableWorkers.length > 0 &&
+        offlineWorkers.length === availableWorkers.length
+      ) {
         throw new Error(
           `All workers are offline. Please ensure at least one worker is online before proceeding.`
         );
@@ -592,6 +610,9 @@ export function withBulkMigrateCreateForm(
       setFileName,
       fileName,
       listOfNotReachableExportPaths,
+      sourceDisabledPaths,
+      refetch,
+      isFetching,
     };
 
     return <WrappedComponent {...props} {...createBulkMigrateHelpers} />;
