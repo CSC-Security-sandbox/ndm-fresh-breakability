@@ -126,11 +126,15 @@ export class ConfigurationDataCsvGenerationActivity {
           LEFT JOIN datamigrator.config c ON fs.config_id = c.id
           LEFT JOIN datamigrator.project p ON c.project_id = p.id
         WHERE p.id IN (${placeholders})
+          AND v.volume_path IS NOT NULL 
+          AND TRIM(v.volume_path) != ''
         ORDER BY jc.id
       `;
 
       const result = await this.dataSource.query(query, projectIds);
-      this.logger.log(`Found ${result.length} job config records`);
+      this.logger.log(
+        `Found ${result.length} job config records with valid volume paths`,
+      );
 
       if (result.length > 0) {
         const csvContent = this.createJobConfigCsvContent(result);
@@ -159,7 +163,6 @@ export class ConfigurationDataCsvGenerationActivity {
     if (jobConfigs.length === 0) return '';
 
     const headers = Object.keys(jobConfigs[0]);
-
     return this.createCsvString(headers, jobConfigs);
   }
 
@@ -167,24 +170,46 @@ export class ConfigurationDataCsvGenerationActivity {
     headers: string[],
     data: Record<string, any>[],
   ): string {
-    let csvContent = headers.join(',') + '\n';
+    // Simple header transformation for better readability
+    const friendlyHeaders = headers.map((header) =>
+      this.makeHeaderFriendly(header),
+    );
+
+    let csvContent = this.escapeRow(friendlyHeaders) + '\n';
 
     data.forEach((row) => {
       const values = headers.map((header) => {
         const value = String(row[header] || '');
-        if (
-          value.includes(',') ||
-          value.includes('\n') ||
-          value.includes('"')
-        ) {
-          return `"${value.replace(/"/g, '""')}"`;
-        }
-        return value;
+        return this.escapeCsvValue(value);
       });
       csvContent += values.join(',') + '\n';
     });
 
     return csvContent;
+  }
+
+  // Header transformation
+  private makeHeaderFriendly(header: string): string {
+    return header
+      .replace(/([a-z])([A-Z])/g, '$1 $2') // camelCase to spaces
+      .replace(/[_-]/g, ' ') // underscores/dashes to spaces
+      .split(' ')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ')
+      .trim();
+  }
+
+  // CSV value escaping
+  private escapeCsvValue(value: string): string {
+    if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+      return `"${value.replace(/"/g, '""')}"`;
+    }
+    return value;
+  }
+
+  // Helper to escape entire row
+  private escapeRow(values: string[]): string {
+    return values.map((value) => this.escapeCsvValue(value)).join(',');
   }
 
   private async addCsvToZip(
@@ -337,12 +362,16 @@ export class ConfigurationDataCsvGenerationActivity {
           LEFT JOIN datamigrator.config c ON fs.config_id = c.id
           LEFT JOIN datamigrator.project p ON c.project_id = p.id
         WHERE p.id IN (${placeholders})
+          AND v.volume_path IS NOT NULL 
+          AND TRIM(v.volume_path) != ''
         ORDER BY jc.id
       `;
 
       const result = await this.dataSource.query(query, projectIds);
 
-      this.logger.log(`Found ${result.length} job config records`);
+      this.logger.log(
+        `Found ${result.length} job config records with valid volume paths`,
+      );
       console.log('Job Config Details:----', JSON.stringify(result, null, 2));
 
       if (result.length > 0) {
@@ -366,7 +395,7 @@ export class ConfigurationDataCsvGenerationActivity {
     this.logger.log(`Creating Job Config CSV file: ${fileName}`);
 
     try {
-      const csvContent = this.generateJobConfigCsvContent(jobConfigs);
+      const csvContent = this.createJobConfigCsvContent(jobConfigs);
 
       await this.addCsvToZip(
         csvContent,
@@ -381,32 +410,5 @@ export class ConfigurationDataCsvGenerationActivity {
       this.logger.error(`Job Config CSV creation failed: ${error.message}`);
       throw error;
     }
-  }
-
-  private generateJobConfigCsvContent(jobConfigs: any[]): string {
-    if (jobConfigs.length === 0) {
-      return '';
-    }
-
-    const headers = Object.keys(jobConfigs[0]);
-
-    let csvContent = headers.join(',') + '\n';
-
-    jobConfigs.forEach((row) => {
-      const values = headers.map((header) => {
-        const value = String(row[header] || '');
-        if (
-          value.includes(',') ||
-          value.includes('\n') ||
-          value.includes('"')
-        ) {
-          return `"${value.replace(/"/g, '""')}"`;
-        }
-        return value;
-      });
-      csvContent += values.join(',') + '\n';
-    });
-
-    return csvContent;
   }
 }

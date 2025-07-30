@@ -74,6 +74,7 @@ export class SupportBundleService {
         projectWorkerMap: dto.projectWorkerMap ?? [],
         userId: userDetails.user.id,
         options: new Options(),
+        otherMetrics: dto.otherMetrics ?? [],
       };
       const startWorkFlowPayload: StartWorkFlowPayload = {
         workflowId,
@@ -192,7 +193,7 @@ export class SupportBundleService {
         return {
           isProcessing: false,
           isBundleReady: false,
-          error: user.errorMessage ,
+          error: user.errorMessage,
         };
 
       default:
