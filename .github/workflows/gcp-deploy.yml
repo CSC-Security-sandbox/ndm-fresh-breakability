@@ -1,0 +1,286 @@
+name: GCP Script
+
+on:
+  workflow_call:
+    inputs:
+      name_prefix:
+        description: "Name prefix for instances"
+        required: false
+        type: string
+        default: "admin"
+      # cp_count:
+      #   description: "Number of control plane nodes"
+      #   required: false
+      #   type: string
+      #   default: "1"
+      worker_count:
+        description: "Number of worker nodes"
+        required: false
+        type: string
+        default: "2"
+      cp_image:
+        description: "Control plane image"
+        required: false
+        type: string
+        default: ""
+      worker_image:
+        description: "Worker image"
+        required: false
+        type: string
+        default: ""
+      # gcp_region:
+      #   description: "GCP Region"
+      #   required: false
+      #   type: string
+      #   default: "us-east1"
+      # gcp_machine_type:
+      #   description: "GCP Machine Type"
+      #   required: false
+      #   type: string
+      #   default: "e2-custom-8-32768"
+
+  # Only for testing GCP directly - remove these in production
+  workflow_dispatch:
+    inputs:
+      name_prefix:
+        description: "Name prefix for instances (e.g., 'john', 'test', 'prod')"
+        required: false
+        default: "admin"
+        type: string
+      worker_count:
+        description: "Number of worker nodes"
+        required: false
+        default: "2"
+        type: string
+      cp_image:
+        description: "Control plane image (leave empty for default)"
+        required: false
+        default: ""
+        type: string
+      worker_image:
+        description: "Worker image (leave empty for default)"
+        required: false
+        default: ""
+        type: string
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+        - deploy
+        # - destroy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ (github.event.inputs.action == 'deploy' || github.event.inputs.action == '') || github.event_name == 'workflow_call' || github.event_name == 'push' }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set Variables
+      run: |
+        # Handle both workflow_call and workflow_dispatch inputs
+        if [ "${{ github.event_name }}" == "workflow_call" ]; then
+          # Called from multi-cloud workflow
+          echo "NAME_PREFIX=${{ inputs.name_prefix || 'admin' }}" >> $GITHUB_ENV
+          echo "CP_COUNT=1" >> $GITHUB_ENV
+          echo "WORKER_COUNT=${{ inputs.worker_count || '2' }}" >> $GITHUB_ENV
+          echo "CP_IMAGE=${{ inputs.cp_image }}" >> $GITHUB_ENV
+          echo "WORKER_IMAGE=${{ inputs.worker_image }}" >> $GITHUB_ENV
+          echo "REGION=${{ inputs.gcp_region || 'us-east1' }}" >> $GITHUB_ENV
+          echo "MACHINE_TYPE=${{ inputs.gcp_machine_type || 'e2-custom-8-32768' }}" >> $GITHUB_ENV
+          echo "CP_ZONE=us-east1-b" >> $GITHUB_ENV
+          echo "WORKER_ZONE=us-east1-b" >> $GITHUB_ENV
+        else
+          # Direct execution
+          echo "NAME_PREFIX=${{ github.event.inputs.name_prefix || 'admin' }}" >> $GITHUB_ENV
+          echo "CP_COUNT=1" >> $GITHUB_ENV
+          echo "WORKER_COUNT=${{ github.event.inputs.worker_count || '2' }}" >> $GITHUB_ENV
+          echo "CP_IMAGE=${{ github.event.inputs.cp_image }}" >> $GITHUB_ENV
+          echo "WORKER_IMAGE=${{ github.event.inputs.worker_image }}" >> $GITHUB_ENV
+          echo "REGION=us-east1" >> $GITHUB_ENV
+          echo "MACHINE_TYPE=e2-custom-8-32768" >> $GITHUB_ENV
+          echo "CP_ZONE=us-east1-b" >> $GITHUB_ENV
+          echo "WORKER_ZONE=us-east1-b" >> $GITHUB_ENV
+        fi
+
+    - name: Display GCP Configuration
+      run: |
+        echo "🔵 ===== GCP DEPLOYMENT CONFIGURATION ===== 🔵"
+        echo "Execution Type: ${{ github.event_name }}"
+        echo "Name Prefix: ${{ env.NAME_PREFIX }}"
+        echo "CP Count: ${{ env.CP_COUNT }}"
+        echo "Worker Count: ${{ env.WORKER_COUNT }}"
+        echo "Machine Type: ${{ env.MACHINE_TYPE }}"
+        echo "Region: ${{ env.REGION }}"
+        echo "CP Zone: ${{ env.CP_ZONE }}"
+        echo "Worker Zone: ${{ env.WORKER_ZONE }}"
+        echo "CP Image: ${{ env.CP_IMAGE || 'default' }}"
+        echo "Worker Image: ${{ env.WORKER_IMAGE || 'default' }}"
+        echo "================================================="
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: latest
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        version: 'latest'
+
+    - name: Set up environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq expect
+
+    - name: Run GCP Script
+      run: |
+        cd app-deployment/terraform/gcp # Ensure we're in the correct directory
+        chmod +x ./run.sh
+        
+        echo "🔵 ===== EXECUTING GCP DEPLOYMENT ===== 🔵"
+        
+        # Pass inputs to your existing GCP run.sh script in the correct order
+        (
+        echo "${{ env.NAME_PREFIX }}"
+        echo "${{ env.CP_COUNT }}"
+        echo "${{ env.WORKER_COUNT }}"
+        echo "${{ env.MACHINE_TYPE }}"
+        echo "${{ env.CP_ZONE }}"
+        echo "${{ env.CP_IMAGE }}"
+        echo "${{ env.MACHINE_TYPE }}"
+        echo "${{ env.WORKER_ZONE }}"
+        echo "${{ env.WORKER_IMAGE }}"
+        echo "${{ env.REGION }}"
+        ) | ./run.sh
+         
+    - name: Display Instance IPs
+      working-directory: ./app-deployment/terraform/gcp
+      run: |
+        echo ""
+        echo "🖥️  ===== DEPLOYMENT SUMMARY ===== 🖥️"
+        echo ""
+
+        # Define NAME_PREFIX variable
+        NAME_PREFIX="${{ env.NAME_PREFIX }}"
+        
+        # Get Terraform outputs with nice formatting
+        echo "📋 Control Plane Nodes:"
+        if terraform output control_plane_internal_ips > /dev/null 2>&1; then
+          terraform output -json control_plane_internal_ips | jq -r '.[] | "  🔵 Control Plane IP: " + .'
+        else
+          echo "  ⚠️ Control plane IPs not available yet"
+        fi
+        
+        echo ""
+        echo "📋 Worker Nodes:"
+        if terraform output worker_internal_ips > /dev/null 2>&1; then
+          terraform output -json worker_internal_ips | jq -r '.[] | "  🟢 Worker IP: " + .'
+        else
+          echo "  ⚠️ Worker IPs not available yet"
+        fi
+        
+        echo ""
+        echo "📊 Instance Details:"
+        
+        # Get all instance details
+        gcloud compute instances list \
+          --project=app-microservices-cm \
+          --filter="name~'${NAME_PREFIX}-.*'" \
+          --format="table(
+            name:label='Instance Name',
+            zone.basename():label='Zone',
+            machineType.basename():label='Machine Type',
+            networkInterfaces[0].networkIP:label='Internal IP',
+            status:label='Status'
+          )"
+        
+        # echo ""
+        # echo "🔐 SSH Login Information:"
+        # echo "Username: root"
+        # echo "Password: ${{ 'Admin@123' }}"
+        # echo ""
+        # echo "🔑 SSH Connection Commands:"
+        
+        # # Generate SSH commands for each instance
+        # INSTANCES=$(gcloud compute instances list \
+        #   --project=app-microservices-cm \
+        #   --filter="name~'${NAME_PREFIX}-.*'" \
+        #   --format="value(name,zone.basename(),networkInterfaces[0].networkIP)")
+        
+        # while IFS=$'\t' read -r name zone ip; do
+        #   if [ -n "$name" ] && [ -n "$zone" ] && [ -n "$ip" ]; then
+        #     if [[ $name == *"control-plane"* ]]; then
+        #       echo "🔵 Control Plane: ssh root@${ip}  # ${name}"
+        #     else
+        #       echo "🟢 Worker: ssh root@${ip}  # ${name}"
+        #     fi
+        #   fi
+        # done <<< "$INSTANCES"
+        
+        echo ""
+        echo "✅ Deployment completed successfully!"
+
+        # Save IPs to file for artifacts with error handling
+        echo "Control Plane IPs:" > instance_ips.txt
+        if terraform output control_plane_internal_ips > /dev/null 2>&1; then
+          terraform output -json control_plane_internal_ips | jq -r '.[]' >> instance_ips.txt
+        else
+          echo "Not available" >> instance_ips.txt
+        fi
+        
+        echo "" >> instance_ips.txt
+        echo "Worker IPs:" >> instance_ips.txt
+        if terraform output worker_internal_ips > /dev/null 2>&1; then
+          terraform output -json worker_internal_ips | jq -r '.[]' >> instance_ips.txt
+        else
+          echo "Not available" >> instance_ips.txt
+        fi
+        
+        # Also create a summary file
+        echo "=== DEPLOYMENT SUMMARY ===" > deployment_summary.txt
+        echo "Name Prefix: ${NAME_PREFIX}" >> deployment_summary.txt
+        echo "Control Plane Count: ${{ env.CP_COUNT }}" >> deployment_summary.txt
+        echo "Worker Count: ${{ env.WORKER_COUNT }}" >> deployment_summary.txt
+        echo "Region: ${{ env.REGION }}" >> deployment_summary.txt
+        echo "" >> deployment_summary.txt
+        echo "Control Plane IPs:" >> deployment_summary.txt
+        if terraform output control_plane_internal_ips > /dev/null 2>&1; then
+          terraform output -json control_plane_internal_ips | jq -r '.[]' >> deployment_summary.txt
+        else
+          echo "Not available" >> deployment_summary.txt
+        fi
+        echo "" >> deployment_summary.txt
+        echo "Worker IPs:" >> deployment_summary.txt
+        if terraform output worker_internal_ips > /dev/null 2>&1; then
+          terraform output -json worker_internal_ips | jq -r '.[]' >> deployment_summary.txt
+        else
+          echo "Not available" >> deployment_summary.txt
+        fi
+
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: gcp-deployment-logs
+        path: |
+          Gcp-test/deploy_*.log
+          Gcp-test/terraform.tfstate*
+          Gcp-test/terraform.tfvars
+          Gcp-test/instance_ips.txt
+          Gcp-test/deployment_summary.txt
+          Gcp-test/ssh_credentials.txt
+          Gcp-test/.terraform.lock.hcl
+        retention-days: 30
+
+ 

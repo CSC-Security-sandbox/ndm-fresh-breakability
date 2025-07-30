@@ -1,0 +1,243 @@
+name: Automated Azure VMs deployment with Terraform
+
+on:
+  workflow_call:
+    inputs:
+      name_prefix:
+        description: "Name prefix for VMs (maps to username)"
+        required: false
+        type: string
+        default: "admin"
+      # cp_count:
+      #   description: "Number of control plane nodes"
+      #   required: false
+      #   type: string
+      #   default: "1"
+      worker_count:
+        description: "Number of worker nodes"
+        required: false
+        type: string
+        default: "2"
+      cp_image:
+        description: "Control plane image version"
+        required: false
+        type: string
+        default: ""
+      worker_image:
+        description: "Worker image version"
+        required: false
+        type: string
+        default: ""
+      azure_admin_password:
+        description: "Azure admin password"
+        required: true
+        type: string
+        default: "Welcome@123"
+      username:
+        description: "Username for VM naming"
+        required: true
+        type: string
+        default: "admin"
+
+  # Only for testing Azure directly - remove these in production
+  workflow_dispatch:
+    inputs:
+      username:
+        description: 'Username for VM naming'
+        required: true
+        default: "admin"
+        type: string
+      admin_password:
+        description: 'Admin password for VMs (minimum 8 characters, must contain uppercase, lowercase, number, and special character)'
+        required: true
+        default: "Welcome@123"
+        type: string
+      worker_count:
+        description: 'Number of worker VMs to deploy'
+        required: false
+        default: '2'
+        type: string
+      control_plane_image_version:
+        description: 'Control plane image version (leave empty for latest)'
+        required: false
+        default: ''
+        type: string
+      worker_image_version:
+        description: 'Worker image version (leave empty for latest)'
+        required: false
+        default: ''
+        type: string
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+        - deploy
+        # - destroy
+
+env:
+  ARM_CLIENT_ID: ${{ secrets.NDM_AZURE_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.NDM_AZURE_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.NDM_AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.NDM_AZURE_TENANT_ID }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ (github.event.inputs.action == 'deploy' || github.event.inputs.action == '') || github.event_name == 'workflow_call' || github.event_name == 'pull_request' }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+
+    - name: Set Variables
+      run: |
+        # Handle both workflow_call and workflow_dispatch inputs
+        if [ "${{ github.event_name }}" == "workflow_call" ]; then
+          # Called from multi-cloud workflow
+          echo "USERNAME=${{ inputs.username || inputs.name_prefix }}" >> $GITHUB_ENV
+          echo "ADMIN_PASSWORD=${{ inputs.azure_admin_password }}" >> $GITHUB_ENV
+          echo "WORKER_COUNT=${{ inputs.worker_count }}" >> $GITHUB_ENV
+          echo "CP_IMAGE=${{ inputs.cp_image }}" >> $GITHUB_ENV
+          echo "WORKER_IMAGE=${{ inputs.worker_image }}" >> $GITHUB_ENV
+          echo "CP_COUNT=${{ '1' }}" >> $GITHUB_ENV
+        else
+          # Direct execution or PR
+          echo "USERNAME=${{ github.event.inputs.username || 'admin' }}" >> $GITHUB_ENV
+          echo "ADMIN_PASSWORD=${{ github.event.inputs.admin_password || 'Welcome@123' }}" >> $GITHUB_ENV
+          echo "WORKER_COUNT=${{ github.event.inputs.worker_count || '2' }}" >> $GITHUB_ENV
+          echo "CP_IMAGE=${{ github.event.inputs.control_plane_image_version }}" >> $GITHUB_ENV
+          echo "WORKER_IMAGE=${{ github.event.inputs.worker_image_version }}" >> $GITHUB_ENV
+          echo "CP_COUNT=1" >> $GITHUB_ENV
+        fi
+
+    - name: Display Azure Configuration
+      run: |
+        echo "🔷 ===== AZURE DEPLOYMENT CONFIGURATION ===== 🔷"
+        echo "Execution Type: ${{ github.event_name }}"
+        echo "Username: ${{ env.USERNAME }}"
+        echo "CP Count: ${{ env.CP_COUNT }}"
+        echo "Worker Count: ${{ env.WORKER_COUNT }}"
+        echo "CP Image: ${{ env.CP_IMAGE || 'latest' }}"
+        echo "Worker Image: ${{ env.WORKER_IMAGE || 'latest' }}"
+        echo "Admin Password: ******* (hidden)"
+        echo "================================================="
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
+
+    - name: Deploy Control Plane
+      working-directory: ./app-deployment/terraform/azure/control_plane
+      run: |
+        echo "Deploying Control Plane..."
+        echo "Username: ${{ env.USERNAME }}"
+        echo "Image Version: ${{ env.CP_IMAGE || 'latest' }}"
+        
+        terraform init -input=false
+
+        TF_ARGS="-var=image_definition=ndm-control-plane -var=username=${{ env.USERNAME }} -var=admin_password=${{ env.ADMIN_PASSWORD }}"
+        if [ -n "${{ env.CP_IMAGE }}" ]; then
+          TF_ARGS="$TF_ARGS -var=image_version=${{ env.CP_IMAGE }}"
+        fi
+        
+        terraform apply -auto-approve $TF_ARGS
+        
+        CP_IP=$(terraform output -raw vm_private_ip)
+        CP_NAME=$(terraform output -raw vm_name)
+        CP_PASSWORD=$(terraform output -raw admin_password)
+        echo "Control Plane Private IP: $CP_IP"
+        echo "CONTROL_PLANE_IP=$CP_IP" >> $GITHUB_ENV
+        echo "CONTROL_PLANE_NAME=$CP_NAME" >> $GITHUB_ENV
+        echo "CONTROL_PLANE_PASSWORD=$CP_PASSWORD" >> $GITHUB_ENV
+
+    - name: Deploy Workers
+      working-directory: ./app-deployment/terraform/azure/worker
+      run: |
+        echo "Deploying ${{ env.WORKER_COUNT }} Worker(s)..."
+        echo "Username: ${{ env.USERNAME }}"
+        echo "Worker Image Version: ${{ env.WORKER_IMAGE || 'latest' }}"
+
+        terraform init -input=false
+
+        TF_ARGS="-var=image_definition=ndm-worker -var=username=${{ env.USERNAME }} -var=admin_password=${{ env.ADMIN_PASSWORD }}"
+        if [ -n "${{ env.WORKER_IMAGE }}" ]; then
+          TF_ARGS="$TF_ARGS -var=image_version=${{ env.WORKER_IMAGE }}"
+        fi
+        if [ -n "${{ env.WORKER_COUNT }}" ]; then
+          TF_ARGS="$TF_ARGS -var=worker_count=${{ env.WORKER_COUNT }}"
+        fi
+        
+        terraform apply -auto-approve $TF_ARGS
+        
+        WORKER_IPS=$(terraform output -json worker_private_ips | jq -r '.[]')
+        WORKER_NAMES=$(terraform output -json worker_names | jq -r '.[]')
+        WORKER_PASSWORD=$(terraform output -raw admin_password)
+        echo "Worker Private IPs:"
+        echo "$WORKER_IPS"
+        echo "Worker Names:"
+        echo "$WORKER_NAMES"
+        
+        # Store worker information in environment variables for summary
+        echo "WORKER_IPS<<EOF" >> $GITHUB_ENV
+        echo "$WORKER_IPS" >> $GITHUB_ENV
+        echo "EOF" >> $GITHUB_ENV
+        echo "WORKER_NAMES<<EOF" >> $GITHUB_ENV
+        echo "$WORKER_NAMES" >> $GITHUB_ENV
+        echo "EOF" >> $GITHUB_ENV
+        echo "WORKER_PASSWORD=$WORKER_PASSWORD" >> $GITHUB_ENV
+
+    - name: Deployment Summary
+      run: |
+        echo "## Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### VM Information" >> $GITHUB_STEP_SUMMARY
+        echo "- **Control Plane VM:** \`${{ env.CONTROL_PLANE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "  - **IP:** \`${{ env.CONTROL_PLANE_IP }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "  - **Version:** ${{ env.CP_IMAGE || 'latest' }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Worker VMs" >> $GITHUB_STEP_SUMMARY
+        
+        # Create temp files for processing
+        echo "${{ env.WORKER_NAMES }}" > /tmp/worker_names.txt
+        echo "${{ env.WORKER_IPS }}" > /tmp/worker_ips.txt
+        
+        # Process workers
+        vm_counter=1
+        while IFS= read -r name && IFS= read -r ip <&3; do
+          if [ -n "$name" ] && [ -n "$ip" ]; then
+            echo "- **Worker VM ${vm_counter}:** \`${name}\`" >> $GITHUB_STEP_SUMMARY
+            echo "  - **IP:** \`${ip}\`" >> $GITHUB_STEP_SUMMARY
+            echo "  - **Version:** ${{ env.WORKER_IMAGE || 'latest' }}" >> $GITHUB_STEP_SUMMARY
+            vm_counter=$((vm_counter + 1))
+          fi
+        done < /tmp/worker_names.txt 3< /tmp/worker_ips.txt
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Access Information" >> $GITHUB_STEP_SUMMARY
+        echo "ssh using username: ubuntu and the password which was provided by you during workflow dispatch." >> $GITHUB_STEP_SUMMARY
+
+        echo ""
+        echo "✅ Azure Deployment completed successfully!"
+
+    - name: Upload Azure Artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: azure-deployment-logs
+        path: |
+          azure-test/control_plane/terraform.tfstate*
+          azure-test/control_plane/.terraform.lock.hcl
+          azure-test/worker/terraform.tfstate*
+          azure-test/worker/.terraform.lock.hcl
+        retention-days: 30
+
+  
