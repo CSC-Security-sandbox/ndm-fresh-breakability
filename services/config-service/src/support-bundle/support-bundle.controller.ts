@@ -63,7 +63,7 @@ export class SupportBundleController {
   })
   @Post('workflow-status-update')
   async updateStatus(@Body() updateStatusDto: UpdateStatusDto) {
-    return this.supportBundleService.updateSupportBundleStatus(updateStatusDto);
+    return await this.supportBundleService.updateSupportBundleStatus(updateStatusDto);
   }
 
   @ApiOperation({
