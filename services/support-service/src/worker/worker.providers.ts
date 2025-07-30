@@ -20,6 +20,12 @@ export const workerProviders = [
           activitiesService.notifyWorkflowCompletion.bind(activitiesService),
         generateErrorCsv:
           activitiesService.generateErrorCsv.bind(activitiesService),
+        generateConfigurationDataCsv:
+          activitiesService.generateConfigurationDataCsv.bind(
+            activitiesService,
+          ),
+        generateConfigurationJobCsv:
+          activitiesService.generateConfigurationJobCsv.bind(activitiesService),
       };
 
       const workflowOption =
