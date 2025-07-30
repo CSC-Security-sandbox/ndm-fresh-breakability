@@ -61,8 +61,7 @@ describe('OperationErrorService', () => {
         it('should successfully fetch operation errors for given projects and date range', async () => {
             mockQuery.mockResolvedValue(mockOperationErrors);
 
-            const result = await service.getOperationErrorsByProjectAndDateRange(
-                projectIds,
+            const result = await service.getOperationErrorsByDateRange(
                 startDate,
                 endDate,
             );
@@ -80,8 +79,7 @@ describe('OperationErrorService', () => {
         it('should return empty array when no errors found', async () => {
             mockQuery.mockResolvedValue([]);
 
-            const result = await service.getOperationErrorsByProjectAndDateRange(
-                projectIds,
+            const result = await service.getOperationErrorsByDateRange(
                 startDate,
                 endDate,
             );
@@ -95,8 +93,7 @@ describe('OperationErrorService', () => {
             mockQuery.mockRejectedValue(dbError);
 
             await expect(
-                service.getOperationErrorsByProjectAndDateRange(
-                    projectIds,
+                service.getOperationErrorsByDateRange(
                     startDate,
                     endDate,
                 ),

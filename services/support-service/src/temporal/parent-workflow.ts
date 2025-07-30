@@ -3,7 +3,6 @@ import { LogGeneratorWorkflow } from './child-workflows/log-generator-workflow';
 import { ErrorCsvGeneratorWorkflow } from './child-workflows/error-csv-generator-workflow';
 import { SupportBundleStatus } from 'src/constants/enum';
 import { ActivitiesService } from 'src/activities/activities.service';
-import { ConfigurationDataCsvGeneratorWorkflow } from './child-workflows/configuration-data-csv-workflow';
 
 const { notifyWorkflowCompletion } = proxyActivities<ActivitiesService>({
   startToCloseTimeout: '1 minute',
@@ -15,6 +14,8 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
   const workflowResults: string[] = [];
 
   try {
+    // Step 1: Execute Log Generator Workflow
+    log.info(`[${traceId}] Starting LogGeneratorWorkflow`);
     const logGeneratorChild = await startChild(LogGeneratorWorkflow, {
       args: [{ traceId, payload }],
       workflowId: `LogGeneratorWorkflow-${traceId}`,
@@ -26,17 +27,22 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
     });
 
     const logGeneratorResult = await logGeneratorChild.result();
+    log.info(`[${traceId}] LogGeneratorWorkflow completed: ${JSON.stringify(logGeneratorResult)}`);
 
-    log.info(`logGeneratorResult - ${JSON.stringify(logGeneratorResult)}`);
-    if (logGeneratorResult.status === 'failed') {
-      log.info(`error occured in LogGeneratorWorkflow: ${logGeneratorResult.message}`);
-      // Throw a plain object to preserve the message in Temporal's error serialization
-      throw { message: logGeneratorResult.message };
+    // Extract zip path from result
+    const zipPath = typeof logGeneratorResult === 'string'
+      ? logGeneratorResult
+      : logGeneratorResult?.message;
+
+    if (!zipPath) {
+      throw new Error('LogGeneratorWorkflow did not return a valid zip path');
     }
 
-    payload.zipLocation = logGeneratorResult.message;
-    workflowResults.push(logGeneratorResult.message);
+    payload.zipLocation = zipPath;
+    workflowResults.push(zipPath);
 
+    // Step 2: Execute Error CSV Generator Workflow
+    log.info(`[${traceId}] Starting ErrorCsvGeneratorWorkflow`);
     const errorCsvChild = await startChild(ErrorCsvGeneratorWorkflow, {
       args: [{ traceId, payload }],
       workflowId: `ErrorCsvWorkflow-${traceId}`,
@@ -48,43 +54,23 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
     });
 
     const errorCsvResult = await errorCsvChild.result();
+    log.info(`[${traceId}] ErrorCsvGeneratorWorkflow completed: ${JSON.stringify(errorCsvResult)}`);
 
-    if (errorCsvResult.status === 'failed') {
-      log.info(`error occured in ErrorCsvGeneratorWorkflow: ${errorCsvResult.message}`);
-      // Throw a plain object to preserve the message in Temporal's error serialization
-      throw { message: errorCsvResult.message };
+    workflowResults.push(typeof errorCsvResult === 'string'
+      ? errorCsvResult
+      : (errorCsvResult?.message || 'CSV generation completed'));
+
+    // Step 3: Notify successful completion
+    try {
+      await notifyWorkflowCompletion({
+        traceId,
+        status: SupportBundleStatus.COMPLETED,
+        errorMessage: null,
+      });
+    } catch (notificationError) {
+      log.error(`[${traceId}] Failed to send success notification: ${notificationError.message}`);
+      // Don't fail the workflow for notification issues
     }
-
-    workflowResults.push(errorCsvResult.message);
-
-    const configurationDataCsvChild = await startChild(
-      ConfigurationDataCsvGeneratorWorkflow,
-      {
-        args: [{ traceId, payload }],
-        workflowId: `ConfigurationDataCsvWorkflow-${traceId}`,
-        retry: {
-          maximumAttempts: 3,
-          initialInterval: '2s',
-        },
-        workflowExecutionTimeout: '3m',
-      },
-    );
-
-    const configurationDataCsvResult = await configurationDataCsvChild.result();
-
-    if (configurationDataCsvResult.status === 'failed') {
-      log.info(`error occured in ConfigurationDataCsvGeneratorWorkflow: ${configurationDataCsvResult.message}`);
-      // Throw a plain object to preserve the message in Temporal's error serialization
-      throw { message: configurationDataCsvResult.message };
-    }
-
-    workflowResults.push(configurationDataCsvResult.message);
-
-    await notifyWorkflowCompletion({
-      traceId,
-      status: SupportBundleStatus.COMPLETED,
-      errorMessage: null,
-    });
 
     return {
       status: 'success',
@@ -92,19 +78,40 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
       traceId,
       workflowResults,
     };
+
   } catch (err) {
-    log.error(`Error in SupportBundleWorkflow for traceId: ${traceId} ${JSON.stringify(err)}`);
-    await notifyWorkflowCompletion({
+    log.error(`[${traceId}] Error in SupportBundleWorkflow: ${JSON.stringify(err)}`);
+
+    // Extract detailed error information
+    const errorMessage = err?.message || err?.toString() || 'Unknown workflow error';
+    const errorDetails = {
+      message: errorMessage,
+      originalError: err,
+      timestamp: new Date().toISOString(),
       traceId,
-      status: SupportBundleStatus.FAILED,
-      errorMessage: err.message,
-    });
+      workflowResults: workflowResults.length > 0 ? workflowResults : null
+    };
+
+    log.error(`[${traceId}] Detailed error context:`, errorDetails);
+
+    // Notify failure with detailed error information
+    try {
+      await notifyWorkflowCompletion({
+        traceId,
+        status: SupportBundleStatus.FAILED,
+        errorMessage: JSON.stringify(errorDetails), // Send complete error context
+      });
+    } catch (notificationError) {
+      log.error(`[${traceId}] Failed to send failure notification: ${notificationError.message}`);
+      // Log notification failure but don't change main error response
+    }
 
     return {
       status: 'failed',
       message: 'Workflow failed during execution.',
       traceId,
-      error: err.message,
+      error: errorMessage,
+      errorDetails,
     };
   }
 };
