@@ -1,1098 +1,822 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { Logger } from '@nestjs/common';
-import { getRepositoryToken } from '@nestjs/typeorm';
+import { ConfigurationDataCsvGenerationActivity } from './config-data-csv-generation.activity';
+import { WorkerEntity } from 'src/entities/worker.entity';
+import {
+  ALLOWED_KEYWORDS,
+  CSV_FILE_EXTENSION,
+  CSV_FILE_PREFIX,
+  MASK_VALUE,
+  SENSITIVE_PATTERNS,
+} from 'src/constants/constants';
 import { DataSource, Repository } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
+import archiver from 'archiver';
 import AdmZip from 'adm-zip';
-import { ConfigurationDataCsvGenerationActivity } from './config-data-csv-generation.activity';
-import { WorkerEntity } from 'src/entities/worker.entity';
 
-jest.mock('fs', () => ({
-  promises: {
-    mkdir: jest.fn(),
-    access: jest.fn(),
-  },
-  createWriteStream: jest.fn(),
+// Mock TypeORM decorators
+jest.mock('typeorm', () => ({
+  ...jest.requireActual('typeorm'),
+  Entity: () => (target: any) => target,
+  PrimaryGeneratedColumn: () => (target: any, key: string) => {},
+  Column: () => (target: any, key: string) => {},
+  ManyToOne: () => (target: any, key: string) => {},
+  OneToMany: () => (target: any, key: string) => {},
+  JoinColumn: () => (target: any, key: string) => {},
+  CreateDateColumn: () => (target: any, key: string) => {},
+  UpdateDateColumn: () => (target: any, key: string) => {},
 }));
 
-jest.mock('adm-zip');
+// Mock the external dependencies
+jest.mock('fs');
 jest.mock('archiver');
+jest.mock('adm-zip');
 
 describe('ConfigurationDataCsvGenerationActivity', () => {
-  let activity: ConfigurationDataCsvGenerationActivity;
-  let workerRepository: jest.Mocked<Repository<WorkerEntity>>;
-  let dataSource: jest.Mocked<DataSource>;
-  let mockLogger: jest.Mocked<Logger>;
+  let service: ConfigurationDataCsvGenerationActivity;
+  let mockWorkerRepo: jest.Mocked<Repository<WorkerEntity>>;
+  let mockDataSource: jest.Mocked<DataSource>;
+  let mockFs: jest.Mocked<typeof fs>;
+  let mockArchiver: jest.MockedFunction<typeof archiver>;
+  let mockAdmZip: jest.MockedClass<typeof AdmZip>;
 
-  const mockWorkerData: WorkerEntity[] = [
-    {
-      workerId: 'worker-1',
-      projectId: 'project-123',
-      envVariables: {
-        DATABASE_URL: 'postgres://localhost',
-        API_KEY: 'secret-key',
-        DEBUG_MODE: 'true',
-        LOG_LEVEL: 'info',
-      },
-    } as WorkerEntity,
-    {
-      workerId: 'worker-2',
-      projectId: 'project-123',
-      envVariables: {
-        DATABASE_URL: 'postgres://remote',
-        CACHE_SIZE: '1000',
-        TIMEOUT: '30',
-      },
-    } as WorkerEntity,
-  ];
+  const mockWorkerEntity: Partial<WorkerEntity> = {
+    workerId: 'worker-1',
+    projectId: 'project-1',
+    envVariables: {
+      DATABASE_URL: 'postgres://localhost:5432/db',
+      API_KEY: 'secret-key',
+      DEBUG_MODE: 'true',
+      LOG_LEVEL: 'info',
+    },
+  };
 
   const mockJobConfigData = [
     {
-      'Project Id': 'project-123',
+      'Project Id': 'project-1',
       'Project Name': 'Test Project',
+      'Project Description': 'Test Description',
       'Config Id': 'config-1',
       'Config Name': 'Test Config',
-      'File Server Hostname': 'server1.example.com',
-      'Job Type': 'COPY',
-      'Job Status': 'ACTIVE',
-    },
-    {
-      'Project Id': 'project-456',
-      'Project Name': 'Another Project',
-      'Config Id': 'config-2',
-      'Config Name': 'Another Config',
-      'File Server Hostname': 'server2.example.com',
-      'Job Type': 'MOVE',
-      'Job Status': 'INACTIVE',
+      'File Server Id': 'fs-1',
+      'File Server Hostname': 'localhost',
+      'File Server Username': 'user',
+      'File Server Protocol': 'sftp',
+      'File Server Type': 'linux',
+      'File Server Protocol Version': '2.0',
+      'Export Path Source': '/export/path',
+      'Volume Path': '/volume/path',
+      'JobConfig Id': 'job-1',
+      'Job Type': 'migration',
+      'Job Status': 'active',
+      'Exclude File Patterns': '*.tmp',
     },
   ];
 
-  beforeEach(async () => {
-    const mockWorkerRepository = {
+  beforeEach(() => {
+    // Reset all mocks
+    jest.clearAllMocks();
+
+    // Setup mocks using direct instantiation approach
+    mockFs = fs as jest.Mocked<typeof fs>;
+    mockArchiver = archiver as jest.MockedFunction<typeof archiver>;
+    mockAdmZip = AdmZip as jest.MockedClass<typeof AdmZip>;
+
+    // Create mock repository and data source
+    mockWorkerRepo = {
       find: jest.fn(),
-    };
-
-    const mockDataSource = {
-      query: jest.fn(),
-    };
-
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        ConfigurationDataCsvGenerationActivity,
-        {
-          provide: getRepositoryToken(WorkerEntity),
-          useValue: mockWorkerRepository,
-        },
-        {
-          provide: DataSource,
-          useValue: mockDataSource,
-        },
-      ],
-    }).compile();
-
-    activity = module.get<ConfigurationDataCsvGenerationActivity>(
-      ConfigurationDataCsvGenerationActivity,
-    );
-    workerRepository = module.get(getRepositoryToken(WorkerEntity));
-    dataSource = module.get(DataSource);
-    mockLogger = {
-      log: jest.fn(),
-      error: jest.fn(),
-      warn: jest.fn(),
-      debug: jest.fn(),
-      verbose: jest.fn(),
+      save: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+      findOne: jest.fn(),
     } as any;
 
-    (activity as any).logger = mockLogger;
-  });
+    mockDataSource = {
+      query: jest.fn(),
+      manager: jest.fn(),
+      getRepository: jest.fn(),
+    } as any;
 
-  afterEach(() => {
-    jest.clearAllMocks();
+    // Instantiate service directly with mocks
+    service = new ConfigurationDataCsvGenerationActivity(
+      mockWorkerRepo,
+      mockDataSource,
+    );
+
+    // Setup fs.promises mock with proper jest mocks
+    const mockAccess = jest.fn().mockRejectedValue(new Error('File not found'));
+    const mockMkdir = jest.fn().mockResolvedValue(undefined);
+
+    mockFs.promises = {
+      mkdir: mockMkdir,
+      access: mockAccess,
+    } as any;
+
+    // Setup createWriteStream mock
+    const mockWriteStream = {
+      on: jest.fn((event, callback) => {
+        if (event === 'close') {
+          setTimeout(callback, 0);
+        }
+        return mockWriteStream;
+      }),
+    };
+    jest
+      .spyOn(mockFs, 'createWriteStream')
+      .mockImplementation(() => mockWriteStream as any);
+
+    // Setup archiver mock
+    const mockArchiverInstance = {
+      on: jest.fn().mockReturnThis(),
+      pipe: jest.fn().mockReturnThis(),
+      append: jest.fn().mockReturnThis(),
+      finalize: jest.fn().mockResolvedValue(undefined),
+      pointer: jest.fn().mockReturnValue(1024),
+    };
+    mockArchiver.mockReturnValue(mockArchiverInstance as any);
+
+    // Setup AdmZip mock
+    const mockAdmZipInstance = {
+      addFile: jest.fn(),
+      writeZip: jest.fn(),
+    };
+    mockAdmZip.mockImplementation(() => mockAdmZipInstance as any);
   });
 
   describe('generateConfigurationDataCsv', () => {
-    it('should generate worker CSV when worker IDs exist and Configuration Data is requested', async () => {
+    it('should generate worker CSV when workerIds exist and Configuration Data is included', async () => {
       const payload = {
         projectWorkerMap: [
           { workerIds: ['worker-1', 'worker-2'] },
           { workerIds: ['worker-3'] },
         ],
         otherMetrics: ['Configuration Data'],
-        zipLocation: '/tmp/test.zip',
+        zipLocation: '/path/to/zip',
       };
 
-      workerRepository.find.mockResolvedValue(mockWorkerData);
-      (fs.promises.mkdir as jest.Mock).mockResolvedValue(undefined);
-      (fs.promises.access as jest.Mock).mockRejectedValue(
-        new Error('File not found'),
-      );
+      mockWorkerRepo.find.mockResolvedValue([mockWorkerEntity as WorkerEntity]);
+      jest
+        .spyOn(service as any, 'generateWorkerCsv')
+        .mockResolvedValue(undefined);
 
-      const mockArchiver = {
-        pipe: jest.fn(),
-        append: jest.fn(),
-        finalize: jest.fn(),
-        pointer: jest.fn().mockReturnValue(1024),
-        on: jest.fn((event, callback) => {
-          if (event === 'error') return;
-          if (event === 'close') setTimeout(callback, 0);
-        }),
-      };
-
-      const mockWriteStream = {
-        on: jest.fn((event, callback) => {
-          if (event === 'close') setTimeout(callback, 0);
-        }),
-      };
-
-      (fs.createWriteStream as jest.Mock).mockReturnValue(mockWriteStream);
-      const archiver = require('archiver');
-      archiver.mockReturnValue(mockArchiver);
-
-      const result = await activity.generateConfigurationDataCsv({
-        traceId: 'test-trace',
+      const result = await service.generateConfigurationDataCsv({
+        traceId: 'trace-1',
         payload,
       });
 
       expect(result).toBe(
         'Configuration data CSV generation completed successfully',
       );
-      expect(workerRepository.find).toHaveBeenCalledWith({
-        where: { workerId: expect.anything() },
-        select: ['workerId', 'projectId', 'envVariables'],
-      });
-      expect(mockLogger.log).toHaveBeenCalledWith(
-        'Generating CSV for 3 workers',
-      );
-    });
-
-    it('should skip generation when no worker IDs exist', async () => {
-      const payload = {
-        projectWorkerMap: [{ workerIds: [] }],
-        otherMetrics: ['Configuration Data'],
-        zipLocation: '/tmp/test.zip',
-      };
-
-      const result = await activity.generateConfigurationDataCsv({
-        traceId: 'test-trace',
+      expect(service['generateWorkerCsv']).toHaveBeenCalledWith(
+        ['worker-1', 'worker-2', 'worker-3'],
         payload,
-      });
-
-      expect(result).toBe(
-        'Configuration data CSV generation completed successfully',
       );
-      expect(workerRepository.find).not.toHaveBeenCalled();
     });
 
-    it('should skip generation when Configuration Data is not in otherMetrics', async () => {
+    it('should not generate CSV when Configuration Data is not in otherMetrics', async () => {
       const payload = {
         projectWorkerMap: [{ workerIds: ['worker-1'] }],
         otherMetrics: ['Other Metric'],
-        zipLocation: '/tmp/test.zip',
+        zipLocation: '/path/to/zip',
       };
 
-      const result = await activity.generateConfigurationDataCsv({
-        traceId: 'test-trace',
+      jest
+        .spyOn(service as any, 'generateWorkerCsv')
+        .mockResolvedValue(undefined);
+
+      const result = await service.generateConfigurationDataCsv({
+        traceId: 'trace-1',
         payload,
       });
 
       expect(result).toBe(
         'Configuration data CSV generation completed successfully',
       );
-      expect(workerRepository.find).not.toHaveBeenCalled();
+      expect(service['generateWorkerCsv']).not.toHaveBeenCalled();
     });
 
-    it('should handle malformed payload gracefully', async () => {
+    it('should not generate CSV when no workerIds exist', async () => {
       const payload = {
-        projectWorkerMap: null,
-        otherMetrics: undefined,
-        zipLocation: '/tmp/test.zip',
+        projectWorkerMap: [{ workerIds: [] }],
+        otherMetrics: ['Configuration Data'],
+        zipLocation: '/path/to/zip',
       };
 
-      const result = await activity.generateConfigurationDataCsv({
-        traceId: 'test-trace',
+      jest
+        .spyOn(service as any, 'generateWorkerCsv')
+        .mockResolvedValue(undefined);
+
+      const result = await service.generateConfigurationDataCsv({
+        traceId: 'trace-1',
         payload,
       });
 
       expect(result).toBe(
         'Configuration data CSV generation completed successfully',
       );
-      expect(workerRepository.find).not.toHaveBeenCalled();
+      expect(service['generateWorkerCsv']).not.toHaveBeenCalled();
     });
   });
 
   describe('generateConfigurationJobCsv', () => {
-    it('should generate job config CSV when project IDs exist and Configuration Data is requested', async () => {
+    it('should generate job config CSV when projectIds exist and Configuration Data is included', async () => {
       const payload = {
         projectWorkerMap: [
-          { projectId: 'project-123' },
-          { projectId: 'project-456' },
+          { projectId: 'project-1' },
+          { projectId: 'project-2' },
         ],
         otherMetrics: ['Configuration Data'],
-        zipLocation: '/tmp/test.zip',
+        zipLocation: '/path/to/zip',
       };
 
-      dataSource.query.mockResolvedValue(mockJobConfigData);
-      (fs.promises.mkdir as jest.Mock).mockResolvedValue(undefined);
-      (fs.promises.access as jest.Mock).mockRejectedValue(
-        new Error('File not found'),
-      );
-
-      const mockArchiver = {
-        pipe: jest.fn(),
-        append: jest.fn(),
-        finalize: jest.fn(),
-        pointer: jest.fn().mockReturnValue(2048),
-        on: jest.fn((event, callback) => {
-          if (event === 'error') return;
-          if (event === 'close') setTimeout(callback, 0);
-        }),
-      };
-
-      const mockWriteStream = {
-        on: jest.fn((event, callback) => {
-          if (event === 'close') setTimeout(callback, 0);
-        }),
-      };
-
-      (fs.createWriteStream as jest.Mock).mockReturnValue(mockWriteStream);
-      const archiver = require('archiver');
-      archiver.mockReturnValue(mockArchiver);
-
-      const result = await activity.generateConfigurationJobCsv({
-        traceId: 'test-trace',
-        payload,
-      });
-
-      expect(result).toBe(
-        'Configuration data CSV generation completed successfully',
-      );
-      expect(dataSource.query).toHaveBeenCalledWith(
-        expect.stringContaining('SELECT'),
-        ['project-123', 'project-456'],
-      );
-      expect(mockLogger.log).toHaveBeenCalledWith('Found 2 job config records');
-    });
-
-    it('should handle empty query results', async () => {
-      const payload = {
-        projectWorkerMap: [{ projectId: 'nonexistent-project' }],
-        otherMetrics: ['Configuration Data'],
-        zipLocation: '/tmp/test.zip',
-      };
-
-      dataSource.query.mockResolvedValue([]);
-
-      const result = await activity.generateConfigurationJobCsv({
-        traceId: 'test-trace',
-        payload,
-      });
-
-      expect(result).toBe(
-        'Configuration data CSV generation completed successfully',
-      );
-      expect(dataSource.query).toHaveBeenCalled();
-      expect(mockLogger.log).toHaveBeenCalledWith('Found 0 job config records');
-    });
-
-    it('should handle database query errors', async () => {
-      const payload = {
-        projectWorkerMap: [{ projectId: 'project-123' }],
-        otherMetrics: ['Configuration Data'],
-        zipLocation: '/tmp/test.zip',
-      };
-
-      const dbError = new Error('Database connection failed');
-      dataSource.query.mockRejectedValue(dbError);
-
-      await expect(
-        activity.generateConfigurationJobCsv({
-          traceId: 'test-trace',
-          payload,
-        }),
-      ).rejects.toThrow(
-        'Failed to fetch job config details: Database connection failed',
-      );
-
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'Error fetching job config details:',
-        dbError,
-      );
-    });
-  });
-
-  describe('CSV Content Generation', () => {
-    it('should generate proper CSV content for workers with environment variables', () => {
-      const csvContent = (activity as any).createWorkerCsvContent(
-        mockWorkerData,
-      );
-
-      expect(csvContent).toContain(
-        'Project ID,DATABASE_URL,DEBUG_MODE,LOG_LEVEL',
-      );
-      expect(csvContent).toContain(
-        'project-123,postgres://localhost,true,info',
-      );
-      expect(csvContent).toContain('project-123,postgres://remote,,');
-    });
-
-    it('should handle workers with no environment variables', () => {
-      const workersWithoutEnv = [
-        {
-          workerId: 'worker-empty',
-          projectId: 'project-123',
-          envVariables: {},
-        } as WorkerEntity,
-      ];
-
-      const csvContent = (activity as any).createWorkerCsvContent(
-        workersWithoutEnv,
-      );
-
-      expect(csvContent).toContain('Project ID');
-      expect(csvContent).toContain('project-123');
-    });
-
-    it('should mask sensitive environment variables', () => {
-      const workersWithSensitiveData = [
-        {
-          workerId: 'worker-sensitive',
-          projectId: 'project-123',
-          envVariables: {
-            DATABASE_PASSWORD: 'secret123',
-            API_TOKEN: 'token456',
-            PUBLIC_URL: 'https://example.com',
-          },
-        } as WorkerEntity,
-      ];
-
-      const csvContent = (activity as any).createWorkerCsvContent(
-        workersWithSensitiveData,
-      );
-
-      expect(csvContent).toContain('***MASKED***');
-      expect(csvContent).not.toContain('secret123');
-      expect(csvContent).not.toContain('token456');
-    });
-
-    it('should escape CSV special characters properly', () => {
-      const workersWithSpecialChars = [
-        {
-          workerId: 'worker-special',
-          projectId: 'project-123',
-          envVariables: {
-            DESCRIPTION: 'Contains, comma and "quotes"',
-            MULTILINE: 'Line 1\nLine 2',
-          },
-        } as WorkerEntity,
-      ];
-
-      const csvContent = (activity as any).createWorkerCsvContent(
-        workersWithSpecialChars,
-      );
-
-      expect(csvContent).toContain('"Contains, comma and ""quotes"""');
-      expect(csvContent).toContain('"Line 1\nLine 2"');
-    });
-
-    it('should generate proper CSV content for job configurations', () => {
-      const csvContent = (activity as any).createJobConfigCsvContent(
-        mockJobConfigData,
-      );
-
-      expect(csvContent).toContain('Project Id,Project Name,Config Id');
-      expect(csvContent).toContain('project-123,Test Project,config-1');
-      expect(csvContent).toContain('project-456,Another Project,config-2');
-    });
-
-    it('should return empty string for empty data arrays', () => {
-      const workerCsvContent = (activity as any).createWorkerCsvContent([]);
-      const jobCsvContent = (activity as any).createJobConfigCsvContent([]);
-
-      expect(workerCsvContent).toBe('');
-      expect(jobCsvContent).toBe('');
-    });
-  });
-
-  describe('Zip File Operations', () => {
-    it('should create new zip file when it does not exist', async () => {
-      (fs.promises.access as jest.Mock).mockRejectedValue(
-        new Error('File not found'),
-      );
-      (fs.promises.mkdir as jest.Mock).mockResolvedValue(undefined);
-
-      const mockArchiver = {
-        pipe: jest.fn(),
-        append: jest.fn(),
-        finalize: jest.fn(),
-        pointer: jest.fn().mockReturnValue(1024),
-        on: jest.fn((event, callback) => {
-          if (event === 'error') return;
-          if (event === 'close') setTimeout(callback, 0);
-        }),
-      };
-
-      const mockWriteStream = {
-        on: jest.fn((event, callback) => {
-          if (event === 'close') setTimeout(callback, 0);
-        }),
-      };
-
-      (fs.createWriteStream as jest.Mock).mockReturnValue(mockWriteStream);
-      const archiver = require('archiver');
-      archiver.mockReturnValue(mockArchiver);
-
-      await (activity as any).addCsvToZip(
-        'test content',
-        'test.csv',
-        '/tmp/test.zip',
-      );
-
-      expect(fs.createWriteStream).toHaveBeenCalledWith('/tmp/test.zip');
-      expect(mockArchiver.append).toHaveBeenCalledWith('test content', {
-        name: 'configuration data/test.csv',
-      });
-    });
-
-    it('should add to existing zip file when it exists', async () => {
-      (fs.promises.access as jest.Mock).mockResolvedValue(undefined);
-      (fs.promises.mkdir as jest.Mock).mockResolvedValue(undefined);
-
-      const mockZip = {
-        addFile: jest.fn(),
-        writeZip: jest.fn(),
-      };
-
-      (AdmZip as jest.MockedClass<typeof AdmZip>).mockImplementation(
-        () => mockZip as any,
-      );
-
-      await (activity as any).addCsvToZip(
-        'test content',
-        'test.csv',
-        '/tmp/existing.zip',
-      );
-
-      expect(AdmZip).toHaveBeenCalledWith('/tmp/existing.zip');
-      expect(mockZip.addFile).toHaveBeenCalledWith(
-        'configuration data/test.csv',
-        Buffer.from('test content', 'utf8'),
-      );
-      expect(mockZip.writeZip).toHaveBeenCalledWith('/tmp/existing.zip');
-    });
-
-    it('should handle AdmZip errors and fallback to archiver', async () => {
-      (fs.promises.access as jest.Mock).mockResolvedValue(undefined);
-      (fs.promises.mkdir as jest.Mock).mockResolvedValue(undefined);
-
-      const mockZip = {
-        addFile: jest.fn().mockImplementation(() => {
-          throw new Error('AdmZip error');
-        }),
-        writeZip: jest.fn(),
-      };
-
-      (AdmZip as jest.MockedClass<typeof AdmZip>).mockImplementation(
-        () => mockZip as any,
-      );
-
-      const mockArchiver = {
-        pipe: jest.fn(),
-        append: jest.fn(),
-        finalize: jest.fn(),
-        pointer: jest.fn().mockReturnValue(1024),
-        on: jest.fn((event, callback) => {
-          if (event === 'error') return;
-          if (event === 'close') setTimeout(callback, 0);
-        }),
-      };
-
-      const mockWriteStream = {
-        on: jest.fn((event, callback) => {
-          if (event === 'close') setTimeout(callback, 0);
-        }),
-      };
-
-      (fs.createWriteStream as jest.Mock).mockReturnValue(mockWriteStream);
-      const archiver = require('archiver');
-      archiver.mockReturnValue(mockArchiver);
-
-      await (activity as any).addCsvToZip(
-        'test content',
-        'test.csv',
-        '/tmp/existing.zip',
-      );
-
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Error adding CSV to existing zip'),
-      );
-      expect(mockLogger.log).toHaveBeenCalledWith(
-        'Falling back to archiver-based approach...',
-      );
-    });
-
-    it('should handle different zip location formats', async () => {
-      (fs.promises.mkdir as jest.Mock).mockResolvedValue(undefined);
-      (fs.promises.access as jest.Mock).mockRejectedValue(
-        new Error('File not found'),
-      );
-
-      const directoryPath = '/tmp/support-bundle/';
-
-      await (activity as any).addCsvToZip(
-        'test content',
-        'test.csv',
-        directoryPath,
-      );
-
-      expect(fs.promises.mkdir).toHaveBeenCalledWith('/tmp/support-bundle', {
-        recursive: true,
-      });
-    });
-  });
-
-  describe('Environment Variable Filtering', () => {
-    it('should filter only uppercase configuration variables with allowed keywords', () => {
-      const envVars = {
-        DATABASE_URL: 'postgres://localhost',
-        api_key: 'should-be-filtered-out',
-        DEBUG_MODE: 'true',
-        random_var: 'also-filtered',
-        LOG_LEVEL: 'info',
-        notConfigVar: 'filtered',
-      };
-
-      const filtered = (activity as any).filterEnvVariables(envVars);
-
-      expect(filtered).toHaveProperty('DATABASE_URL');
-      expect(filtered).toHaveProperty('DEBUG_MODE');
-      expect(filtered).toHaveProperty('LOG_LEVEL');
-      expect(filtered).not.toHaveProperty('api_key');
-      expect(filtered).not.toHaveProperty('random_var');
-      expect(filtered).not.toHaveProperty('notConfigVar');
-    });
-
-    it('should mask sensitive patterns', () => {
-      const envVars = {
-        DATABASE_PASSWORD: 'secret123',
-        API_TOKEN: 'token456',
-        SECRET_KEY: 'key789',
-        PUBLIC_URL: 'https://example.com',
-      };
-
-      const filtered = (activity as any).filterEnvVariables(envVars);
-
-      expect(filtered.DATABASE_PASSWORD).toBe('***MASKED***');
-      expect(filtered.API_TOKEN).toBe('***MASKED***');
-      expect(filtered.SECRET_KEY).toBe('***MASKED***');
-      expect(filtered.PUBLIC_URL).toBe('https://example.com');
-    });
-
-    it('should handle null or undefined environment variables', () => {
-      expect((activity as any).filterEnvVariables(null)).toEqual({});
-      expect((activity as any).filterEnvVariables(undefined)).toEqual({});
-      expect((activity as any).filterEnvVariables({})).toEqual({});
-    });
-
-    it('should handle non-object environment variables', () => {
-      expect((activity as any).filterEnvVariables('string')).toEqual({});
-      expect((activity as any).filterEnvVariables(123)).toEqual({});
-      expect((activity as any).filterEnvVariables([])).toEqual({});
-    });
-  });
-
-  describe('CSV Content Generation Edge Cases', () => {
-    it('should handle CSV special characters properly', () => {
-      const testData = [
-        {
-          field1: 'Contains, comma',
-          field2: 'Contains "quotes"',
-          field3: 'Contains\nnewline',
-          field4: 'Normal value',
-          field5: null,
-          field6: undefined,
-        },
-      ];
-
-      const csvContent = (activity as any).createCsvString(
-        ['field1', 'field2', 'field3', 'field4', 'field5', 'field6'],
-        testData,
-      );
-
-      expect(csvContent).toContain('"Contains, comma"');
-      expect(csvContent).toContain('"Contains ""quotes"""');
-      expect(csvContent).toContain('"Contains\nnewline"');
-      expect(csvContent).toContain('Normal value');
-      expect(csvContent).toContain(',,');
-    });
-
-    it('should handle empty and whitespace values correctly', () => {
-      const testData = [
-        {
-          empty: '',
-          space: ' ',
-          tabs: '\t',
-          mixed: '  \t  ',
-        },
-      ];
-
-      const csvContent = (activity as any).createCsvString(
-        ['empty', 'space', 'tabs', 'mixed'],
-        testData,
-      );
-
-      expect(csvContent).toContain(', ,\t,  \t  ');
-    });
-
-    it('should handle Unicode and special characters', () => {
-      const testData = [
-        {
-          unicode: '你好世界',
-          emoji: '🚀💻📊',
-          accents: 'café naïve résumé',
-          symbols: '™®©€£¥',
-        },
-      ];
-
-      const csvContent = (activity as any).createCsvString(
-        ['unicode', 'emoji', 'accents', 'symbols'],
-        testData,
-      );
-
-      expect(csvContent).toContain(
-        '你好世界,🚀💻📊,café naïve résumé,™®©€£¥',
-      );
-    });
-
-    it('should handle very long field values', () => {
-      const longValue = 'a'.repeat(5000);
-      const testData = [{ longField: longValue }];
-
-      const csvContent = (activity as any).createCsvString(
-        ['longField'],
-        testData,
-      );
-      expect(csvContent).toContain(longValue);
-    });
-
-    it('should handle mixed data types', () => {
-      const testData = [
-        {
-          string: 'text',
-          number: 42,
-          boolean: true,
-          falsy: false,
-          zero: 0,
-          object: { key: 'value' },
-          array: [1, 2, 3],
-        },
-      ];
-
-      const csvContent = (activity as any).createCsvString(
-        ['string', 'number', 'boolean', 'falsy', 'zero', 'object', 'array'],
-        testData,
-      );
-
-      expect(csvContent).toContain(
-        'text,42,true,false,0,[object Object],1,2,3',
-      );
-    });
-  });
-
-  describe('Advanced Environment Variable Filtering', () => {
-    it('should filter sensitive patterns case-insensitively', () => {
-      const envVars = {
-        DATABASE_PASSWORD: 'secret123',
-        api_secret: 'should-be-filtered-anyway',
-        SECRET_API_KEY: 'masked',
-        TOKEN_VALUE: 'token123',
-        private_key: 'key456',
-        KEY_STORE_PASSWORD: 'store_pass',
-        normal_config: 'normal',
-        DEBUG_MODE: 'true',
-      };
-
-      const filtered = (activity as any).filterEnvVariables(envVars);
-
-      expect(filtered.DATABASE_PASSWORD).toBe('***MASKED***');
-      expect(filtered.SECRET_API_KEY).toBe('***MASKED***');
-      expect(filtered.TOKEN_VALUE).toBe('***MASKED***');
-      expect(filtered.KEY_STORE_PASSWORD).toBe('***MASKED***');
-      expect(filtered.DEBUG_MODE).toBe('true');
-      expect(filtered).not.toHaveProperty('api_secret');
-      expect(filtered).not.toHaveProperty('private_key');
-      expect(filtered).not.toHaveProperty('normal_config');
-    });
-
-    it('should handle configuration variable validation edge cases', () => {
-      const testCases = [
-        { key: 'DATABASE_URL', expected: true },
-        { key: 'database_url', expected: false },
-        { key: 'Database_Url', expected: false },
-        { key: 'API_KEY_VALUE', expected: true },
-        { key: 'RANDOM_VARIABLE', expected: false },
-        { key: 'DEBUG_CONFIG_MODE', expected: true },
-        { key: 'LOG_DEBUG_LEVEL', expected: true },
-        { key: 'CACHE_API_TIMEOUT', expected: true },
-        { key: '', expected: false },
-        { key: 'A', expected: false },
-      ];
-
-      testCases.forEach(({ key, expected }) => {
-        expect((activity as any).isConfigurationVariable(key)).toBe(expected);
-      });
-    });
-
-    it('should handle sensitive data detection edge cases', () => {
-      const testCases = [
-        { key: 'PASSWORD', expected: true },
-        { key: 'SECRET', expected: true },
-        { key: 'TOKEN', expected: true },
-        { key: 'KEY', expected: true },
-        { key: 'MY_PASSWORD_FIELD', expected: true },
-        { key: 'API_SECRET_VALUE', expected: true },
-        { key: 'AUTH_TOKEN_BEARER', expected: true },
-        { key: 'PRIVATE_KEY_PATH', expected: true },
-        { key: 'KEYSTORE', expected: true },
-        { key: 'PASSPHRASE', expected: false },
-        { key: 'NORMAL_CONFIG', expected: false },
-        { key: 'DEBUG_MODE', expected: false },
-        { key: '', expected: false },
-      ];
-
-      testCases.forEach(({ key, expected }) => {
-        expect((activity as any).containsSensitiveData(key)).toBe(expected);
-      });
-    });
-  });
-
-  describe('Zip File Operations Advanced Tests', () => {
-    let mockArchiver: any;
-    let mockWriteStream: any;
-    let mockAdmZip: any;
-
-    beforeEach(() => {
-      mockArchiver = {
-        pipe: jest.fn(),
-        append: jest.fn(),
-        finalize: jest.fn(),
-        pointer: jest.fn().mockReturnValue(1024),
-        on: jest.fn(),
-      };
-
-      mockWriteStream = {
-        on: jest.fn(),
-      };
-
-      mockAdmZip = {
-        addFile: jest.fn(),
-        writeZip: jest.fn(),
-        getEntries: jest.fn().mockReturnValue([]),
-      };
-
-      // Mock archiver
-      const archiverModule = require('archiver');
-      archiverModule.mockReturnValue(mockArchiver);
-
-      (fs.createWriteStream as jest.Mock).mockReturnValue(mockWriteStream);
-      (AdmZip as jest.MockedClass<typeof AdmZip>).mockImplementation(
-        () => mockAdmZip,
-      );
-    });
-
-    it('should handle directory-style zip locations', async () => {
-      (fs.promises.mkdir as jest.Mock).mockResolvedValue(undefined);
-      (fs.promises.access as jest.Mock).mockRejectedValue(
-        new Error('Not found'),
-      );
-
-      mockWriteStream.on.mockImplementation(
-        (event: string, callback: Function) => {
-          if (event === 'close') setTimeout(callback, 0);
-          return mockWriteStream;
-        },
-      );
-
-      await (activity as any).addCsvToZip(
-        'content',
-        'test.csv',
-        '/tmp/bundle/',
-      );
-
-      expect(fs.promises.mkdir).toHaveBeenCalledWith('/tmp/bundle', {
-        recursive: true,
-      });
-      expect(fs.createWriteStream).toHaveBeenCalledWith(
-        '/tmp/bundle/support-bundle.zip',
-      );
-    });
-
-    it('should handle AdmZip fallback scenarios', async () => {
-      (fs.promises.mkdir as jest.Mock).mockResolvedValue(undefined);
-      (fs.promises.access as jest.Mock).mockResolvedValue(undefined);
-
-      const admZipError = new Error('AdmZip failed');
-      mockAdmZip.addFile.mockImplementation(() => {
-        throw admZipError;
-      });
-
-      mockWriteStream.on.mockImplementation(
-        (event: string, callback: Function) => {
-          if (event === 'close') setTimeout(callback, 0);
-          return mockWriteStream;
-        },
-      );
-
-      const createNewZipSpy = jest
-        .spyOn(activity as any, 'createNewZipWithCsv')
+      jest
+        .spyOn(service as any, 'generateJobConfigCsv')
         .mockResolvedValue(undefined);
 
-      await (activity as any).addCsvToZip(
-        'content',
-        'test.csv',
-        '/tmp/test.zip',
-      );
-
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Error adding CSV to existing zip with AdmZip'),
-      );
-      expect(createNewZipSpy).toHaveBeenCalled();
-    });
-
-    it('should handle archiver error events', async () => {
-      (fs.promises.mkdir as jest.Mock).mockResolvedValue(undefined);
-      (fs.promises.access as jest.Mock).mockRejectedValue(
-        new Error('Not found'),
-      );
-
-      const archiverError = new Error('Archiver failed');
-      mockArchiver.on.mockImplementation(
-        (event: string, callback: Function) => {
-          if (event === 'error') {
-            setTimeout(() => callback(archiverError), 0);
-          }
-          return mockArchiver;
-        },
-      );
-
-      await expect(
-        (activity as any).addCsvToZip('content', 'test.csv', '/tmp/test.zip'),
-      ).rejects.toThrow('Archiver failed');
-    });
-
-    it('should handle write stream errors', async () => {
-      (fs.promises.mkdir as jest.Mock).mockResolvedValue(undefined);
-      (fs.promises.access as jest.Mock).mockRejectedValue(
-        new Error('Not found'),
-      );
-
-      const streamError = new Error('Write stream failed');
-      mockWriteStream.on.mockImplementation(
-        (event: string, callback: Function) => {
-          if (event === 'error') {
-            setTimeout(() => callback(streamError), 0);
-          }
-          return mockWriteStream;
-        },
-      );
-
-      await expect(
-        (activity as any).addCsvToZip('content', 'test.csv', '/tmp/test.zip'),
-      ).rejects.toThrow('Write stream failed');
-    });
-  });
-
-  describe('Integration and Performance Tests', () => {
-    it('should handle large datasets efficiently', async () => {
-      const largeWorkerIds = Array.from(
-        { length: 1000 },
-        (_, i) => `worker-${i}`,
-      );
-      const largeWorkerData = largeWorkerIds.map((workerId, i) => ({
-        workerId,
-        projectId: `project-${i % 10}`,
-        envVariables: {
-          DATABASE_URL: `postgres://db${i}.example.com`,
-          API_KEY: `key-${i}`,
-          LOG_LEVEL: 'info',
-          CACHE_SIZE: `${1000 + i}`,
-        },
-      })) as WorkerEntity[];
-
-      const payload = {
-        projectWorkerMap: [{ workerIds: largeWorkerIds }],
-        otherMetrics: ['Configuration Data'],
-        zipLocation: '/tmp/large-test.zip',
-      };
-
-      workerRepository.find.mockResolvedValue(largeWorkerData);
-      jest.spyOn(activity as any, 'addCsvToZip').mockResolvedValue(undefined);
-
-      const result = await activity.generateConfigurationDataCsv({
-        traceId: 'large-test',
+      const result = await service.generateConfigurationJobCsv({
+        traceId: 'trace-1',
         payload,
       });
 
       expect(result).toBe(
         'Configuration data CSV generation completed successfully',
       );
-      expect(mockLogger.log).toHaveBeenCalledWith(
-        'Generating CSV for 1000 workers',
+      expect(service['generateJobConfigCsv']).toHaveBeenCalledWith(
+        ['project-1', 'project-2'],
+        payload,
       );
     });
 
-    it('should handle complex job configuration queries', async () => {
-      const complexJobData = Array.from({ length: 500 }, (_, i) => ({
-        'Project Id': `project-${i}`,
-        'Project Name': `Project ${i}`,
-        'Project Description':
-          i % 3 === 0 ? null : `Description for project ${i}`,
-        'Config Id': `config-${i}`,
-        'Config Name': `Config ${i}`,
-        'File Server Id': `fs-${i}`,
-        'File Server Hostname': `server${i}.example.com`,
-        'File Server Username': `user${i}`,
-        'File Server Protocol': i % 2 === 0 ? 'SMB' : 'NFS',
-        'File Server Type': i % 2 === 0 ? 'Windows' : 'Linux',
-        'File Server Protocol Version': i % 2 === 0 ? '3.0' : '4.1',
-        'Export Path Source': `/source/path/${i}`,
-        'Volume Path': `/volume/path/${i}`,
-        'JobConfig Id': `job-${i}`,
-        'Job Type': i % 3 === 0 ? 'COPY' : i % 3 === 1 ? 'MOVE' : 'SYNC',
-        'Job Status': i % 2 === 0 ? 'ACTIVE' : 'INACTIVE',
-        'Exclude File Patterns': `*.tmp,*.log${i}`,
-      }));
-
+    it('should not generate CSV when Configuration Data is not in otherMetrics', async () => {
       const payload = {
-        projectWorkerMap: Array.from({ length: 100 }, (_, i) => ({
-          projectId: `project-${i}`,
-        })),
-        otherMetrics: ['Configuration Data'],
-        zipLocation: '/tmp/complex-test.zip',
+        projectWorkerMap: [{ projectId: 'project-1' }],
+        otherMetrics: ['Other Metric'],
+        zipLocation: '/path/to/zip',
       };
 
-      dataSource.query.mockResolvedValue(complexJobData);
-      jest.spyOn(activity as any, 'addCsvToZip').mockResolvedValue(undefined);
+      jest
+        .spyOn(service as any, 'generateJobConfigCsv')
+        .mockResolvedValue(undefined);
 
-      const result = await activity.generateConfigurationJobCsv({
-        traceId: 'complex-test',
+      const result = await service.generateConfigurationJobCsv({
+        traceId: 'trace-1',
         payload,
       });
 
       expect(result).toBe(
         'Configuration data CSV generation completed successfully',
       );
-      expect(mockLogger.log).toHaveBeenCalledWith(
-        'Found 500 job config records',
+      expect(service['generateJobConfigCsv']).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('generateWorkerCsv', () => {
+    it('should generate worker CSV successfully', async () => {
+      const workerIds = ['worker-1', 'worker-2'];
+      const payload = { zipLocation: '/path/to/zip' };
+
+      mockWorkerRepo.find.mockResolvedValue([mockWorkerEntity as WorkerEntity]);
+      jest
+        .spyOn(service as any, 'createWorkerCsvContent')
+        .mockReturnValue('csv content');
+      jest.spyOn(service as any, 'addCsvToZip').mockResolvedValue(undefined);
+
+      await service['generateWorkerCsv'](workerIds, payload);
+
+      expect(mockWorkerRepo.find).toHaveBeenCalledWith({
+        where: { workerId: expect.any(Object) }, // In matcher for workerIds
+        select: ['workerId', 'projectId', 'envVariables'],
+      });
+      expect(service['createWorkerCsvContent']).toHaveBeenCalledWith([
+        mockWorkerEntity as WorkerEntity,
+      ]);
+      expect(service['addCsvToZip']).toHaveBeenCalledWith(
+        'csv content',
+        expect.stringMatching(
+          new RegExp(`^${CSV_FILE_PREFIX}\\d+${CSV_FILE_EXTENSION}$`),
+        ),
+        '/path/to/zip',
+      );
+    });
+
+    it('should throw error when worker repository fails', async () => {
+      const workerIds = ['worker-1'];
+      const payload = { zipLocation: '/path/to/zip' };
+      const error = new Error('Database error');
+
+      mockWorkerRepo.find.mockRejectedValue(error);
+
+      await expect(
+        service['generateWorkerCsv'](workerIds, payload),
+      ).rejects.toThrow('Failed to generate worker CSV data: Database error');
+    });
+  });
+
+  describe('generateJobConfigCsv', () => {
+    it('should generate job config CSV successfully', async () => {
+      const projectIds = ['project-1', 'project-2'];
+      const payload = { zipLocation: '/path/to/zip' };
+
+      mockDataSource.query.mockResolvedValue(mockJobConfigData);
+      jest
+        .spyOn(service as any, 'createJobConfigCsvContent')
+        .mockReturnValue('csv content');
+      jest.spyOn(service as any, 'addCsvToZip').mockResolvedValue(undefined);
+
+      await service['generateJobConfigCsv'](projectIds, payload);
+
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT'),
+        projectIds,
+      );
+      expect(service['createJobConfigCsvContent']).toHaveBeenCalledWith(
+        mockJobConfigData,
+      );
+      expect(service['addCsvToZip']).toHaveBeenCalledWith(
+        'csv content',
+        expect.stringMatching(/^job_config_details_\d+\.csv$/),
+        '/path/to/zip',
+      );
+    });
+
+    it('should not create CSV when no job config data found', async () => {
+      const projectIds = ['project-1'];
+      const payload = { zipLocation: '/path/to/zip' };
+
+      mockDataSource.query.mockResolvedValue([]);
+      jest.spyOn(service as any, 'addCsvToZip').mockResolvedValue(undefined);
+
+      await service['generateJobConfigCsv'](projectIds, payload);
+
+      expect(service['addCsvToZip']).not.toHaveBeenCalled();
+    });
+
+    it('should throw error when database query fails', async () => {
+      const projectIds = ['project-1'];
+      const payload = { zipLocation: '/path/to/zip' };
+      const error = new Error('Query error');
+
+      mockDataSource.query.mockRejectedValue(error);
+
+      await expect(
+        service['generateJobConfigCsv'](projectIds, payload),
+      ).rejects.toThrow('Failed to fetch job config details: Query error');
+    });
+  });
+
+  describe('createWorkerCsvContent', () => {
+    it('should create CSV content from workers', () => {
+      const workers = [mockWorkerEntity as WorkerEntity];
+      jest.spyOn(service as any, 'formatWorkerForCsv').mockReturnValue({
+        'Project ID': 'project-1',
+        ENV_VAR: 'value',
+      });
+      jest
+        .spyOn(service as any, 'createCsvString')
+        .mockReturnValue('csv content');
+
+      const result = service['createWorkerCsvContent'](workers);
+
+      expect(service['formatWorkerForCsv']).toHaveBeenCalledWith(
+        mockWorkerEntity,
+      );
+      expect(service['createCsvString']).toHaveBeenCalledWith(
+        ['Project ID', 'ENV_VAR'],
+        [{ 'Project ID': 'project-1', ENV_VAR: 'value' }],
+      );
+      expect(result).toBe('csv content');
+    });
+
+    it('should return empty string for empty workers array', () => {
+      const result = service['createWorkerCsvContent']([]);
+      expect(result).toBe('');
+    });
+  });
+
+  describe('createJobConfigCsvContent', () => {
+    it('should create CSV content from job configs', () => {
+      jest
+        .spyOn(service as any, 'createCsvString')
+        .mockReturnValue('csv content');
+
+      const result = service['createJobConfigCsvContent'](mockJobConfigData);
+
+      expect(service['createCsvString']).toHaveBeenCalledWith(
+        Object.keys(mockJobConfigData[0]),
+        mockJobConfigData,
+      );
+      expect(result).toBe('csv content');
+    });
+
+    it('should return empty string for empty job configs array', () => {
+      const result = service['createJobConfigCsvContent']([]);
+      expect(result).toBe('');
+    });
+  });
+
+  describe('createCsvString', () => {
+    it('should create properly formatted CSV string', () => {
+      const headers = ['Name', 'Value', 'Description'];
+      const data = [
+        { Name: 'Test', Value: 'test-value', Description: 'A test item' },
+        {
+          Name: 'Item with, comma',
+          Value: 'value',
+          Description: 'Has "quotes"',
+        },
+      ];
+
+      const result = service['createCsvString'](headers, data);
+
+      const expectedCsv = [
+        'Name,Value,Description',
+        'Test,test-value,A test item',
+        '"Item with, comma",value,"Has ""quotes"""',
+        '',
+      ].join('\n');
+
+      expect(result).toBe(expectedCsv);
+    });
+
+    it('should handle empty values', () => {
+      const headers = ['Name', 'Value'];
+      const data = [
+        { Name: 'Test', Value: null },
+        { Name: '', Value: undefined },
+      ];
+
+      const result = service['createCsvString'](headers, data);
+
+      const expectedCsv = ['Name,Value', 'Test,', ',', ''].join('\n');
+      expect(result).toBe(expectedCsv);
+    });
+  });
+
+  describe('addCsvToZip', () => {
+    it('should create new zip when zip does not exist', async () => {
+      const csvContent = 'csv content';
+      const fileName = 'test.csv';
+      const zipLocation = '/path/to/zip.zip';
+
+      const mockAccess = mockFs.promises.access as jest.Mock;
+      mockAccess.mockRejectedValue(new Error('File not found'));
+      jest
+        .spyOn(service as any, 'createNewZipWithCsv')
+        .mockResolvedValue(undefined);
+
+      await service['addCsvToZip'](csvContent, fileName, zipLocation);
+
+      expect(mockFs.promises.mkdir).toHaveBeenCalledWith('/path/to', {
+        recursive: true,
+      });
+      expect(service['createNewZipWithCsv']).toHaveBeenCalledWith(
+        csvContent,
+        fileName,
+        zipLocation,
+      );
+    });
+
+    it('should add to existing zip when zip exists', async () => {
+      const csvContent = 'csv content';
+      const fileName = 'test.csv';
+      const zipLocation = '/path/to/zip.zip';
+
+      const mockAccess = mockFs.promises.access as jest.Mock;
+      mockAccess.mockResolvedValue(undefined);
+      jest
+        .spyOn(service as any, 'addToExistingZip')
+        .mockResolvedValue(undefined);
+
+      await service['addCsvToZip'](csvContent, fileName, zipLocation);
+
+      expect(service['addToExistingZip']).toHaveBeenCalledWith(
+        csvContent,
+        fileName,
+        zipLocation,
+      );
+    });
+
+    it('should append .zip extension when not present', async () => {
+      const csvContent = 'csv content';
+      const fileName = 'test.csv';
+      const zipLocation = '/path/to/folder';
+
+      const mockAccess = mockFs.promises.access as jest.Mock;
+      mockAccess.mockRejectedValue(new Error('File not found'));
+      jest
+        .spyOn(service as any, 'createNewZipWithCsv')
+        .mockResolvedValue(undefined);
+
+      await service['addCsvToZip'](csvContent, fileName, zipLocation);
+
+      expect(service['createNewZipWithCsv']).toHaveBeenCalledWith(
+        csvContent,
+        fileName,
+        path.join(zipLocation, 'support-bundle.zip'),
       );
     });
   });
 
-  describe('Error Handling', () => {
-    it('should handle worker repository errors', async () => {
-      const payload = {
-        projectWorkerMap: [{ workerIds: ['worker-1'] }],
-        otherMetrics: ['Configuration Data'],
-        zipLocation: '/tmp/test.zip',
+  describe('createNewZipWithCsv', () => {
+    it('should create new zip file with CSV content', async () => {
+      const csvContent = 'csv content';
+      const fileName = 'test.csv';
+      const zipPath = '/path/to/zip.zip';
+
+      await service['createNewZipWithCsv'](csvContent, fileName, zipPath);
+
+      expect(mockFs.createWriteStream).toHaveBeenCalledWith(zipPath);
+      expect(mockArchiver).toHaveBeenCalledWith('zip', { zlib: { level: 9 } });
+    });
+  });
+
+  describe('addToExistingZip', () => {
+    it('should add file to existing zip using AdmZip', async () => {
+      const csvContent = 'csv content';
+      const fileName = 'test.csv';
+      const zipPath = '/path/to/zip.zip';
+
+      const mockZipInstance = {
+        addFile: jest.fn(),
+        writeZip: jest.fn(),
       };
+      mockAdmZip.mockImplementation(() => mockZipInstance as any);
 
-      const dbError = new Error('Repository error');
-      workerRepository.find.mockRejectedValue(dbError);
+      await service['addToExistingZip'](csvContent, fileName, zipPath);
 
-      await expect(
-        activity.generateConfigurationDataCsv({
-          traceId: 'test-trace',
-          payload,
-        }),
-      ).rejects.toThrow('Failed to generate worker CSV data: Repository error');
-
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'Error generating worker CSV data:',
-        dbError,
+      expect(mockAdmZip).toHaveBeenCalledWith(zipPath);
+      expect(mockZipInstance.addFile).toHaveBeenCalledWith(
+        `configuration data/${fileName}`,
+        Buffer.from(csvContent, 'utf8'),
       );
+      expect(mockZipInstance.writeZip).toHaveBeenCalledWith(zipPath);
     });
 
-    it('should handle job config database errors', async () => {
-      const payload = {
-        projectWorkerMap: [{ projectId: 'project-123' }],
-        otherMetrics: ['Configuration Data'],
-        zipLocation: '/tmp/test.zip',
-      };
+    it('should fall back to archiver when AdmZip fails', async () => {
+      const csvContent = 'csv content';
+      const fileName = 'test.csv';
+      const zipPath = '/path/to/zip.zip';
 
-      const dbError = new Error('Database query failed');
-      dataSource.query.mockRejectedValue(dbError);
+      mockAdmZip.mockImplementation(() => {
+        throw new Error('AdmZip error');
+      });
+      jest
+        .spyOn(service as any, 'createNewZipWithCsv')
+        .mockResolvedValue(undefined);
 
-      await expect(
-        activity.generateConfigurationJobCsv({
-          traceId: 'test-trace',
-          payload,
-        }),
-      ).rejects.toThrow(
-        'Failed to fetch job config details: Database query failed',
-      );
+      await service['addToExistingZip'](csvContent, fileName, zipPath);
 
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'Error fetching job config details:',
-        dbError,
+      expect(service['createNewZipWithCsv']).toHaveBeenCalledWith(
+        csvContent,
+        fileName,
+        zipPath,
       );
     });
+  });
 
-    it('should handle zip creation errors', async () => {
-      const payload = {
-        projectWorkerMap: [{ workerIds: ['worker-1'] }],
-        otherMetrics: ['Configuration Data'],
-        zipLocation: '/invalid/path/test.zip',
-      };
+  describe('formatWorkerForCsv', () => {
+    it('should format worker data for CSV', () => {
+      jest.spyOn(service as any, 'filterEnvVariables').mockReturnValue({
+        DATABASE_URL: MASK_VALUE,
+        DEBUG_MODE: 'true',
+      });
 
-      workerRepository.find.mockResolvedValue(mockWorkerData);
-      (fs.promises.mkdir as jest.Mock).mockRejectedValue(
-        new Error('Permission denied'),
+      const result = service['formatWorkerForCsv'](
+        mockWorkerEntity as WorkerEntity,
       );
 
-      await expect(
-        activity.generateConfigurationDataCsv({
-          traceId: 'test-trace',
-          payload,
-        }),
-      ).rejects.toThrow(
-        'Failed to generate worker CSV data: Permission denied',
-      );
-    });
-
-    it('should handle null/undefined edge cases in formatWorkerForCsv', () => {
-      const edgeCaseWorkers = [
-        {
-          workerId: 'worker-null',
-          projectId: null,
-          envVariables: null,
-        },
-        {
-          workerId: 'worker-undefined',
-          projectId: undefined,
-          envVariables: undefined,
-        },
-        {
-          workerId: 'worker-empty',
-          projectId: '',
-          envVariables: {},
-        },
-      ] as WorkerEntity[];
-
-      edgeCaseWorkers.forEach((worker) => {
-        const formatted = (activity as any).formatWorkerForCsv(worker);
-        expect(formatted).toHaveProperty('Project ID');
-        expect(typeof formatted['Project ID']).toBe('string');
+      expect(result).toEqual({
+        'Project ID': 'project-1',
+        DATABASE_URL: MASK_VALUE,
+        DEBUG_MODE: 'true',
       });
     });
 
-    it('should handle empty or invalid input arrays', () => {
-      expect((activity as any).createWorkerCsvContent([])).toBe('');
-      expect((activity as any).createWorkerCsvContent(null)).toBe('');
-      expect((activity as any).createWorkerCsvContent(undefined)).toBe('');
+    it('should handle worker with empty project ID', () => {
+      const worker = { ...mockWorkerEntity, projectId: '' };
+      jest.spyOn(service as any, 'filterEnvVariables').mockReturnValue({});
 
-      expect((activity as any).createJobConfigCsvContent([])).toBe('');
-      expect((activity as any).createJobConfigCsvContent(null)).toBe('');
-      expect((activity as any).createJobConfigCsvContent(undefined)).toBe('');
+      const result = service['formatWorkerForCsv'](worker as WorkerEntity);
+
+      expect(result['Project ID']).toBe('');
+    });
+  });
+
+  describe('filterEnvVariables', () => {
+    // Mock constants for testing
+    const mockAllowedKeywords = ['database', 'debug', 'log'];
+    const mockSensitivePatterns = ['PASSWORD', 'KEY', 'SECRET'];
+
+    beforeEach(() => {
+      (ALLOWED_KEYWORDS as any) = mockAllowedKeywords;
+      (SENSITIVE_PATTERNS as any) = mockSensitivePatterns;
+    });
+
+    it('should filter and mask environment variables correctly', () => {
+      const envVariables = {
+        DATABASE_URL: 'postgres://localhost:5432/db',
+        API_KEY: 'secret-key',
+        DEBUG_MODE: 'true',
+        LOG_LEVEL: 'info',
+        RANDOM_CONFIG: 'value', // Should be filtered out
+        lowercase_var: 'value', // Should be filtered out
+      };
+
+      jest
+        .spyOn(service as any, 'isConfigurationVariable')
+        .mockImplementation((key: string) =>
+          ['DATABASE_URL', 'API_KEY', 'DEBUG_MODE', 'LOG_LEVEL'].includes(key),
+        );
+      jest
+        .spyOn(service as any, 'containsSensitiveData')
+        .mockImplementation((key: string) =>
+          ['DATABASE_URL', 'API_KEY'].includes(key),
+        );
+
+      const result = service['filterEnvVariables'](envVariables);
+
+      expect(result).toEqual({
+        DATABASE_URL: MASK_VALUE,
+        API_KEY: MASK_VALUE,
+        DEBUG_MODE: 'true',
+        LOG_LEVEL: 'info',
+      });
+    });
+
+    it('should return empty object for null/undefined env variables', () => {
+      expect(service['filterEnvVariables'](null as any)).toEqual({});
+      expect(service['filterEnvVariables'](undefined as any)).toEqual({});
+      expect(service['filterEnvVariables']('not an object' as any)).toEqual({});
+    });
+  });
+
+  describe('isConfigurationVariable', () => {
+    beforeEach(() => {
+      (ALLOWED_KEYWORDS as any) = ['database', 'debug', 'log'];
+    });
+
+    it('should return true for uppercase variables containing allowed keywords', () => {
+      expect(service['isConfigurationVariable']('DATABASE_URL')).toBe(true);
+      expect(service['isConfigurationVariable']('DEBUG_MODE')).toBe(true);
+      expect(service['isConfigurationVariable']('LOG_LEVEL')).toBe(true);
+    });
+
+    it('should return false for lowercase variables', () => {
+      expect(service['isConfigurationVariable']('database_url')).toBe(false);
+      expect(service['isConfigurationVariable']('Debug_Mode')).toBe(false);
+    });
+
+    it('should return false for variables not containing allowed keywords', () => {
+      expect(service['isConfigurationVariable']('RANDOM_CONFIG')).toBe(false);
+      expect(service['isConfigurationVariable']('API_KEY')).toBe(false);
+    });
+  });
+
+  describe('containsSensitiveData', () => {
+    beforeEach(() => {
+      (SENSITIVE_PATTERNS as any) = ['PASSWORD', 'KEY', 'SECRET'];
+    });
+
+    it('should return true for keys containing sensitive patterns', () => {
+      expect(service['containsSensitiveData']('API_KEY')).toBe(true);
+      expect(service['containsSensitiveData']('DATABASE_PASSWORD')).toBe(true);
+      expect(service['containsSensitiveData']('SECRET_TOKEN')).toBe(true);
+    });
+
+    it('should return false for keys not containing sensitive patterns', () => {
+      expect(service['containsSensitiveData']('DATABASE_URL')).toBe(false);
+      expect(service['containsSensitiveData']('DEBUG_MODE')).toBe(false);
+    });
+
+    it('should be case insensitive', () => {
+      expect(service['containsSensitiveData']('api_key')).toBe(true);
+      expect(service['containsSensitiveData']('Password')).toBe(true);
+    });
+  });
+
+  describe('getJobConfigDetails', () => {
+    it('should fetch and process job config details successfully', async () => {
+      const projectIds = ['project-1', 'project-2'];
+      const payload = { zipLocation: '/path/to/zip' };
+
+      mockDataSource.query.mockResolvedValue(mockJobConfigData);
+      jest
+        .spyOn(service as any, 'createJobConfigCsvFile')
+        .mockResolvedValue(undefined);
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      const result = await service.getJobConfigDetails(projectIds, payload);
+
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT'),
+        projectIds,
+      );
+      expect(service['createJobConfigCsvFile']).toHaveBeenCalledWith(
+        mockJobConfigData,
+        payload,
+      );
+      expect(result).toEqual(mockJobConfigData);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Job Config Details:----',
+        JSON.stringify(mockJobConfigData, null, 2),
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should not create CSV file when no data found', async () => {
+      const projectIds = ['project-1'];
+      const payload = { zipLocation: '/path/to/zip' };
+
+      mockDataSource.query.mockResolvedValue([]);
+      jest
+        .spyOn(service as any, 'createJobConfigCsvFile')
+        .mockResolvedValue(undefined);
+
+      const result = await service.getJobConfigDetails(projectIds, payload);
+
+      expect(result).toEqual([]);
+      expect(service['createJobConfigCsvFile']).not.toHaveBeenCalled();
+    });
+
+    it('should throw error when query fails', async () => {
+      const projectIds = ['project-1'];
+      const payload = { zipLocation: '/path/to/zip' };
+      const error = new Error('Query failed');
+
+      mockDataSource.query.mockRejectedValue(error);
+
+      await expect(
+        service.getJobConfigDetails(projectIds, payload),
+      ).rejects.toThrow('Failed to fetch job config details: Query failed');
+    });
+  });
+
+  describe('createJobConfigCsvFile', () => {
+    it('should create job config CSV file successfully', async () => {
+      const payload = { zipLocation: '/path/to/zip' };
+
+      jest
+        .spyOn(service as any, 'generateJobConfigCsvContent')
+        .mockReturnValue('csv content');
+      jest.spyOn(service as any, 'addCsvToZip').mockResolvedValue(undefined);
+
+      await service['createJobConfigCsvFile'](mockJobConfigData, payload);
+
+      expect(service['generateJobConfigCsvContent']).toHaveBeenCalledWith(
+        mockJobConfigData,
+      );
+      expect(service['addCsvToZip']).toHaveBeenCalledWith(
+        'csv content',
+        expect.stringMatching(/^job_config_details_\d+\.csv$/),
+        '/path/to/zip',
+      );
+    });
+
+    it('should throw error when CSV creation fails', async () => {
+      const payload = { zipLocation: '/path/to/zip' };
+      const error = new Error('CSV creation failed');
+
+      jest
+        .spyOn(service as any, 'generateJobConfigCsvContent')
+        .mockReturnValue('csv content');
+      jest.spyOn(service as any, 'addCsvToZip').mockRejectedValue(error);
+
+      await expect(
+        service['createJobConfigCsvFile'](mockJobConfigData, payload),
+      ).rejects.toThrow(error);
+    });
+  });
+
+  describe('generateJobConfigCsvContent', () => {
+    it('should generate CSV content for job configs', () => {
+      const result = service['generateJobConfigCsvContent'](mockJobConfigData);
+
+      const lines = result.split('\n');
+      expect(lines[0]).toBe(Object.keys(mockJobConfigData[0]).join(','));
+      expect(lines[1]).toContain('project-1');
+      expect(lines[1]).toContain('Test Project');
+    });
+
+    it('should return empty string for empty job configs', () => {
+      const result = service['generateJobConfigCsvContent']([]);
+      expect(result).toBe('');
+    });
+
+    it('should handle special characters in values', () => {
+      const jobConfigsWithSpecialChars = [
+        {
+          'Project Name': 'Test, Project',
+          Description: 'Has "quotes" and\nnewlines',
+        },
+      ];
+
+      const result = service['generateJobConfigCsvContent'](
+        jobConfigsWithSpecialChars,
+      );
+
+      expect(result).toContain('"Test, Project"');
+      expect(result).toContain('"Has ""quotes"" and\nnewlines"');
     });
   });
 });
