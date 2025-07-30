@@ -1,159 +1,139 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
-import { getRepositoryToken } from '@nestjs/typeorm';
+import { SupportBundleService } from './support-bundle.service';
 import { NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Repository } from 'typeorm';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { SupportBundleEntity } from 'src/entities/support-bundle-log.entity';
+import { ProjectEntity } from 'src/entities/project.entity';
+import { WorkflowService } from 'src/workflow/workflow.service';
+import { SupportBundleStatus, WorkFlows } from 'src/constants/enums';
+import { BundleStatus, UserDetails } from 'src/constants/types';
+import { CreateSupportBundleDTO } from './dto/create-support-bundle.dto';
+import { UpdateStatusDto } from './dto/update-status.dto';
 import * as fs from 'fs';
 import * as path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import { In } from 'typeorm';
 
+// Mock dependencies
 jest.mock('fs');
 jest.mock('path');
 jest.mock('uuid', () => ({
-  v4: () => 'mock-uuid-123',
+  v4: jest.fn(),
+}));
+jest.mock('app-root-path', () => ({
+  resolve: jest.fn(() => '/mock/root/path'),
+  toString: jest.fn(() => '/mock/root/path'),
+  path: '/mock/root/path',
 }));
 
-jest.mock('./support-bundle.service', () => {
-  return {
-    SupportBundleService: jest.fn().mockImplementation(() => ({
-      create: jest.fn(),
-      updateSupportBundleStatus: jest.fn(),
-      getProjects: jest.fn(),
-      canUserDownloadBundle: jest.fn(),
-      downloadSupportBundle: jest.fn(),
-    })),
-  };
-});
+// Mock the logger lib to avoid any issues with it
+jest.mock('@netapp-cloud-datamigrate/logger-lib', () => ({
+  LoggerFactory: jest.fn().mockImplementation(() => ({
+    create: jest.fn(),
+  })),
+  LoggerService: jest.fn(),
+}));
 
-const { SupportBundleService } = require('./support-bundle.service');
-
-const SupportBundleStatus = {
-  IN_PROGRESS: 'IN_PROGRESS',
-  COMPLETED: 'COMPLETED',
-  FAILED: 'FAILED',
-};
-
-const WorkFlows = {
-  SUPPORT_BUNDLE_WORKFLOW: 'SUPPORT_BUNDLE_WORKFLOW',
-};
-
-// Type definitions
-interface UserDetails {
-  traceId: string;
-  user: {
-    id: string;
-    roles: Array<{
-      role_name: string;
-      projects: string[];
-      permissions: string[];
-    }>;
-  };
-}
-
-interface CreateSupportBundleDTO {
-  startDate: string;
-  endDate: string;
-  projectWorkerMap: Array<{
-    projectId?: string;
-    workerIds?: string[];
-  }>;
-  otherMetrics?: string[];
-}
-
-interface UpdateStatusDto {
-  traceId: string;
-  status: string;
-  errorMessage?: string;
-}
-
-interface BundleStatus {
-  isProcessing: boolean;
-  isBundleReady: boolean;
-  error: string;
-}
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 describe('SupportBundleService', () => {
-  let service: any;
-  let mockSupportBundleRepo: any;
-  let mockProjectRepo: any;
-  let mockWorkflowService: any;
-  let mockConfigService: any;
+  let service: SupportBundleService;
+  let supportBundleRepo: jest.Mocked<Repository<SupportBundleEntity>>;
+  let projectRepo: jest.Mocked<Repository<ProjectEntity>>;
+  let workflowService: jest.Mocked<WorkflowService>;
+  let configService: jest.Mocked<ConfigService>;
   let mockLoggerFactory: any;
+  let mockLogger: any;
+
+  const mockUuid = 'test-uuid-123';
+  const mockBundlePath = '/test/bundle/path';
 
   beforeEach(async () => {
-    // Reset all mocks
     jest.clearAllMocks();
+    (uuidv4 as jest.Mock).mockReturnValue(mockUuid);
 
-    // Create mock instances
-    mockSupportBundleRepo = {
+    // Mock logger
+    mockLogger = {
+      log: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+      verbose: jest.fn(),
+    };
+
+    mockLoggerFactory = {
+      create: jest.fn().mockReturnValue(mockLogger),
+    };
+
+    // Mock repositories
+    const supportBundleRepoMock = {
       create: jest.fn(),
       save: jest.fn(),
       update: jest.fn(),
       findOne: jest.fn(),
     };
 
-    mockProjectRepo = {
+    const projectRepoMock = {
       find: jest.fn(),
     };
 
-    mockWorkflowService = {
+    // Mock workflow service
+    const workflowServiceMock = {
       startWorkflow: jest.fn(),
     };
 
-    mockConfigService = {
-      get: jest.fn().mockReturnValue('/tmp/support-bundles'),
-    };
-
-    mockLoggerFactory = {
-      create: jest.fn().mockReturnValue({
-        log: jest.fn(),
-        error: jest.fn(),
-        warn: jest.fn(),
-        debug: jest.fn(),
-        verbose: jest.fn(),
-      }),
+    // Mock config service
+    const configServiceMock = {
+      get: jest.fn().mockReturnValue(mockBundlePath),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SupportBundleService,
         {
-          provide: 'Repository<SupportBundleEntity>',
-          useValue: mockSupportBundleRepo,
+          provide: getRepositoryToken(SupportBundleEntity),
+          useValue: supportBundleRepoMock,
         },
         {
-          provide: 'Repository<ProjectEntity>',
-          useValue: mockProjectRepo,
+          provide: getRepositoryToken(ProjectEntity),
+          useValue: projectRepoMock,
         },
         {
-          provide: 'LoggerFactory',
+          provide: LoggerFactory,
           useValue: mockLoggerFactory,
         },
         {
-          provide: 'WorkflowService',
-          useValue: mockWorkflowService,
+          provide: WorkflowService,
+          useValue: workflowServiceMock,
         },
         {
           provide: ConfigService,
-          useValue: mockConfigService,
+          useValue: configServiceMock,
         },
       ],
     }).compile();
 
-    service = module.get(SupportBundleService);
-
-    // Manually inject dependencies since we're mocking
-    service.supportBundleRepo = mockSupportBundleRepo;
-    service.projectRepo = mockProjectRepo;
-    service.workFlowService = mockWorkflowService;
-    service.configService = mockConfigService;
-    service.logger = mockLoggerFactory.create();
-    service.bundleOutputPath = '/tmp/support-bundles';
+    service = module.get<SupportBundleService>(SupportBundleService);
+    supportBundleRepo = module.get(getRepositoryToken(SupportBundleEntity)) as jest.Mocked<Repository<SupportBundleEntity>>;
+    projectRepo = module.get(getRepositoryToken(ProjectEntity)) as jest.Mocked<Repository<ProjectEntity>>;
+    workflowService = module.get<WorkflowService>(WorkflowService) as jest.Mocked<WorkflowService>;
+    configService = module.get<ConfigService>(ConfigService) as jest.Mocked<ConfigService>;
   });
 
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
 
-  describe('create method testing', () => {
+  describe('constructor', () => {
+    it('should initialize logger and bundle output path', () => {
+      expect(mockLoggerFactory.create).toHaveBeenCalledWith(SupportBundleService.name);
+      expect(configService.get).toHaveBeenCalledWith('app.bundle.bundleOutputPath');
+    });
+  });
+
+  describe('create', () => {
     const mockUserDetails: UserDetails = {
       traceId: 'trace-123',
       user: {
@@ -168,7 +148,7 @@ describe('SupportBundleService', () => {
       },
     };
 
-    const mockCreateSupportBundleDTO: CreateSupportBundleDTO = {
+    const mockCreateDto: CreateSupportBundleDTO = {
       startDate: '2023-01-01T00:00:00Z',
       endDate: '2023-01-31T23:59:59Z',
       projectWorkerMap: [
@@ -180,187 +160,455 @@ describe('SupportBundleService', () => {
       otherMetrics: ['state data', 'inventory data'],
     };
 
-    it('should create method exist and be callable', () => {
-      expect(typeof service.create).toBe('function');
+    it('should create support bundle successfully', async () => {
+      const mockEntity = { id: 1, requestId: mockUuid };
+      supportBundleRepo.create.mockReturnValue(mockEntity as any);
+      supportBundleRepo.save.mockResolvedValue(mockEntity as any);
+      workflowService.startWorkflow.mockResolvedValue(undefined);
+
+      const result = await service.create(mockCreateDto, mockUserDetails);
+
+      expect(result).toEqual({ traceId: mockUuid });
+      expect(supportBundleRepo.create).toHaveBeenCalledWith({
+        requestId: mockUuid,
+        userId: mockUserDetails.user.id,
+        status: SupportBundleStatus.IN_PROGRESS,
+        createdBy: mockUserDetails.user.id,
+        workflowId: `${WorkFlows.SUPPORT_BUNDLE_WORKFLOW}-${mockUuid}`,
+        filters: {
+          startDate: mockCreateDto.startDate,
+          endDate: mockCreateDto.endDate,
+          projectWorkerMap: mockCreateDto.projectWorkerMap,
+          otherMetrics: mockCreateDto.otherMetrics,
+        },
+      });
+      expect(supportBundleRepo.save).toHaveBeenCalledWith(mockEntity);
+      expect(workflowService.startWorkflow).toHaveBeenCalled();
+      expect(mockLogger.log).toHaveBeenCalledWith(
+        `Starting SupportBundleWorkflow with requestId: ${mockUuid} and userId: ${mockUserDetails.user.id}`,
+      );
+      expect(mockLogger.log).toHaveBeenCalledWith('Started SupportBundleWorkflow successfully');
     });
 
-    it('should test create method with mocked implementation', async () => {
-      // Mock the create method directly
-      service.create = jest.fn().mockResolvedValue({ traceId: 'mock-uuid-123' });
+    it('should create support bundle with empty projectWorkerMap and otherMetrics when not provided', async () => {
+      const dtoWithoutOptionalFields = {
+        startDate: '2023-01-01T00:00:00Z',
+        endDate: '2023-01-31T23:59:59Z',
+      };
+      const mockEntity = { id: 1, requestId: mockUuid };
+      supportBundleRepo.create.mockReturnValue(mockEntity as any);
+      supportBundleRepo.save.mockResolvedValue(mockEntity as any);
+      workflowService.startWorkflow.mockResolvedValue(undefined);
 
-      const result = await service.create(mockCreateSupportBundleDTO, mockUserDetails);
+      const result = await service.create(dtoWithoutOptionalFields as CreateSupportBundleDTO, mockUserDetails);
 
-      expect(service.create).toHaveBeenCalledWith(mockCreateSupportBundleDTO, mockUserDetails);
-      expect(result).toEqual({ traceId: 'mock-uuid-123' });
+      expect(result).toEqual({ traceId: mockUuid });
+      expect(supportBundleRepo.create).toHaveBeenCalledWith({
+        requestId: mockUuid,
+        userId: mockUserDetails.user.id,
+        status: SupportBundleStatus.IN_PROGRESS,
+        createdBy: mockUserDetails.user.id,
+        workflowId: `${WorkFlows.SUPPORT_BUNDLE_WORKFLOW}-${mockUuid}`,
+        filters: {
+          startDate: dtoWithoutOptionalFields.startDate,
+          endDate: dtoWithoutOptionalFields.endDate,
+          projectWorkerMap: [],
+          otherMetrics: [],
+        },
+      });
+    });
+
+    it('should handle workflow start error and continue execution', async () => {
+      const mockEntity = { id: 1, requestId: mockUuid };
+      supportBundleRepo.create.mockReturnValue(mockEntity as any);
+      supportBundleRepo.save.mockResolvedValue(mockEntity as any);
+      const workflowError = new Error('Workflow failed');
+      workflowService.startWorkflow.mockRejectedValue(workflowError);
+
+      const result = await service.create(mockCreateDto, mockUserDetails);
+
+      expect(result).toEqual({ traceId: mockUuid });
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        `Error while starting SupportBundleWorkflow - ${workflowError.message}`,
+      );
+    });
+
+    it('should call workflow service with correct payload', async () => {
+      const mockEntity = { id: 1, requestId: mockUuid };
+      supportBundleRepo.create.mockReturnValue(mockEntity as any);
+      supportBundleRepo.save.mockResolvedValue(mockEntity as any);
+      workflowService.startWorkflow.mockResolvedValue(undefined);
+
+      await service.create(mockCreateDto, mockUserDetails);
+
+      expect(workflowService.startWorkflow).toHaveBeenCalledWith(
+        WorkFlows.SUPPORT_BUNDLE_WORKFLOW,
+        expect.objectContaining({
+          workflowId: `${WorkFlows.SUPPORT_BUNDLE_WORKFLOW}-${mockUuid}`,
+          taskQueue: 'Support-TaskQueue',
+          args: [
+            {
+              traceId: mockUuid,
+              payload: expect.objectContaining({
+                traceId: mockUuid,
+                startDate: mockCreateDto.startDate,
+                endDate: mockCreateDto.endDate,
+                projectWorkerMap: mockCreateDto.projectWorkerMap,
+                userId: mockUserDetails.user.id,
+                otherMetrics: mockCreateDto.otherMetrics,
+              }),
+              options: expect.any(Object),
+            },
+          ],
+        }),
+      );
     });
   });
 
-  describe('updateSupportBundleStatus method testing', () => {
-    const mockUpdateStatusDto: UpdateStatusDto = {
+  describe('updateSupportBundleStatus', () => {
+    const mockUpdateDto: UpdateStatusDto = {
       traceId: 'trace-123',
       status: SupportBundleStatus.COMPLETED,
-      errorMessage: '',
+      errorMessage: 'test error',
     };
 
-    it('should updateSupportBundleStatus method exist', () => {
-      expect(typeof service.updateSupportBundleStatus).toBe('function');
+    it('should update support bundle status successfully', async () => {
+      supportBundleRepo.update.mockResolvedValue({ affected: 1 } as any);
+
+      await service.updateSupportBundleStatus(mockUpdateDto);
+
+      expect(supportBundleRepo.update).toHaveBeenCalledWith(
+        { requestId: mockUpdateDto.traceId },
+        {
+          status: mockUpdateDto.status,
+          errorMessage: mockUpdateDto.errorMessage,
+        },
+      );
     });
 
-    it('should test updateSupportBundleStatus method with mock', async () => {
-      service.updateSupportBundleStatus = jest.fn().mockResolvedValue(undefined);
+    it('should throw error when support bundle not found', async () => {
+      supportBundleRepo.update.mockResolvedValue({ affected: 0 } as any);
 
-      await service.updateSupportBundleStatus(mockUpdateStatusDto);
+      await expect(service.updateSupportBundleStatus(mockUpdateDto)).rejects.toThrow(
+        `Support bundle not found for traceId: ${mockUpdateDto.traceId}`,
+      );
+    });
 
-      expect(service.updateSupportBundleStatus).toHaveBeenCalledWith(mockUpdateStatusDto);
+    it('should update without error message when not provided', async () => {
+      const updateDtoWithoutError: UpdateStatusDto = {
+        traceId: 'trace-123',
+        status: SupportBundleStatus.COMPLETED,
+      };
+      supportBundleRepo.update.mockResolvedValue({ affected: 1 } as any);
+
+      await service.updateSupportBundleStatus(updateDtoWithoutError);
+
+      expect(supportBundleRepo.update).toHaveBeenCalledWith(
+        { requestId: updateDtoWithoutError.traceId },
+        {
+          status: updateDtoWithoutError.status,
+          errorMessage: undefined,
+        },
+      );
     });
   });
 
-  describe('getProjects method testing', () => {
-    const mockUserDetails: UserDetails = {
+  describe('getProjects', () => {
+    const mockAdminUserDetails: UserDetails = {
       traceId: 'trace-123',
       user: {
         id: 'admin-user',
         roles: [
           {
             role_name: 'App Admin',
-            projects: [],
+            projects: [], // Empty projects array indicates app admin
             permissions: ['read', 'write', 'admin'],
           },
         ],
       },
     };
 
-    it('should getProjects method exist', () => {
-      expect(typeof service.getProjects).toBe('function');
-    });
+    const mockRegularUserDetails: UserDetails = {
+      traceId: 'trace-123',
+      user: {
+        id: 'regular-user',
+        roles: [
+          {
+            role_name: 'Project Admin',
+            projects: ['project-1', 'project-2'],
+            permissions: ['read', 'write'],
+          },
+          {
+            role_name: 'Project User',
+            projects: ['project-3'],
+            permissions: ['read'],
+          },
+        ],
+      },
+    };
 
-    it('should test getProjects method with mock', async () => {
-      const expectedProjects = [
+    const mockProjects = [
+      {
+        id: 'project-1',
+        projectName: 'Project One',
+        workers: [
+          { workerId: 'worker-1', workerName: 'Worker 1' },
+          { workerId: 'worker-2', workerName: 'Worker 2' },
+        ],
+      },
+      {
+        id: 'project-2',
+        projectName: 'Project Two',
+        workers: [],
+      },
+    ];
+
+    it('should get all projects for app admin user', async () => {
+      projectRepo.find.mockResolvedValue(mockProjects as any);
+
+      const result = await service.getProjects(mockAdminUserDetails);
+
+      expect(projectRepo.find).toHaveBeenCalledWith({
+        select: ['id', 'projectName'],
+        relations: ['workers'],
+      });
+      expect(result).toEqual([
         {
           label: 'Project One',
           id: 'project-1',
           childrens: [
             { label: 'Worker 1 (Project One)', id: 'worker-1' },
+            { label: 'Worker 2 (Project One)', id: 'worker-2' },
           ],
         },
+        {
+          label: 'Project Two',
+          id: 'project-2',
+        },
+      ]);
+    });
+
+    it('should get specific projects for regular user', async () => {
+      projectRepo.find.mockResolvedValue(mockProjects as any);
+
+      const result = await service.getProjects(mockRegularUserDetails);
+
+      expect(projectRepo.find).toHaveBeenCalledWith({
+        where: { id: In(['project-1', 'project-2', 'project-3']) },
+        select: ['id', 'projectName'],
+        relations: ['workers'],
+      });
+      expect(result).toEqual([
+        {
+          label: 'Project One',
+          id: 'project-1',
+          childrens: [
+            { label: 'Worker 1 (Project One)', id: 'worker-1' },
+            { label: 'Worker 2 (Project One)', id: 'worker-2' },
+          ],
+        },
+        {
+          label: 'Project Two',
+          id: 'project-2',
+        },
+      ]);
+    });
+
+    it('should handle projects without workers', async () => {
+      const projectsWithoutWorkers = [
+        {
+          id: 'project-1',
+          projectName: 'Project One',
+          workers: [],
+        },
       ];
+      projectRepo.find.mockResolvedValue(projectsWithoutWorkers as any);
 
-      service.getProjects = jest.fn().mockResolvedValue(expectedProjects);
+      const result = await service.getProjects(mockAdminUserDetails);
 
-      const result = await service.getProjects(mockUserDetails);
+      expect(result).toEqual([
+        {
+          label: 'Project One',
+          id: 'project-1',
+        },
+      ]);
+    });
 
-      expect(service.getProjects).toHaveBeenCalledWith(mockUserDetails);
-      expect(result).toEqual(expectedProjects);
+    it('should handle projects with undefined workers', async () => {
+      const projectsWithUndefinedWorkers = [
+        {
+          id: 'project-1',
+          projectName: 'Project One',
+          workers: undefined,
+        },
+      ];
+      projectRepo.find.mockResolvedValue(projectsWithUndefinedWorkers as any);
+
+      const result = await service.getProjects(mockAdminUserDetails);
+
+      expect(result).toEqual([
+        {
+          label: 'Project One',
+          id: 'project-1',
+        },
+      ]);
+    });
+
+    it('should handle user with multiple roles having duplicate project IDs', async () => {
+      const userWithDuplicateProjects: UserDetails = {
+        traceId: 'trace-123',
+        user: {
+          id: 'user-123',
+          roles: [
+            {
+              role_name: 'Role 1',
+              projects: ['project-1', 'project-2'],
+              permissions: ['read'],
+            },
+            {
+              role_name: 'Role 2',
+              projects: ['project-1', 'project-3'],
+              permissions: ['write'],
+            },
+          ],
+        },
+      };
+      projectRepo.find.mockResolvedValue(mockProjects as any);
+
+      await service.getProjects(userWithDuplicateProjects);
+
+      expect(projectRepo.find).toHaveBeenCalledWith({
+        where: { id: In(['project-1', 'project-2', 'project-3']) },
+        select: ['id', 'projectName'],
+        relations: ['workers'],
+      });
     });
   });
 
-  describe('canUserDownloadBundle method testing', () => {
-    it('should canUserDownloadBundle method exist', () => {
-      expect(typeof service.canUserDownloadBundle).toBe('function');
-    });
+  describe('canUserDownloadBundle', () => {
+    const userId = 'user-123';
 
-    it('should test canUserDownloadBundle method with mock - completed status', async () => {
-      const expectedBundleStatus: BundleStatus = {
+    it('should return bundle ready status for completed bundle', async () => {
+      const mockBundle = {
+        status: SupportBundleStatus.COMPLETED,
+        errorMessage: null,
+      };
+      supportBundleRepo.findOne.mockResolvedValue(mockBundle as any);
+
+      const result = await service.canUserDownloadBundle(userId);
+
+      expect(supportBundleRepo.findOne).toHaveBeenCalledWith({
+        where: { userId },
+        order: { createdAt: 'DESC' },
+        select: ['status', 'errorMessage'],
+      });
+      expect(result).toEqual({
         isProcessing: false,
         isBundleReady: true,
-        error: '',
-      };
-
-      service.canUserDownloadBundle = jest.fn().mockResolvedValue(expectedBundleStatus);
-
-      const result = await service.canUserDownloadBundle('user-123');
-
-      expect(service.canUserDownloadBundle).toHaveBeenCalledWith('user-123');
-      expect(result).toEqual(expectedBundleStatus);
+        error: null,
+      });
     });
 
-    it('should test canUserDownloadBundle method with mock - in progress status', async () => {
-      const expectedBundleStatus: BundleStatus = {
+    it('should return processing status for in-progress bundle', async () => {
+      const mockBundle = {
+        status: SupportBundleStatus.IN_PROGRESS,
+        errorMessage: null,
+      };
+      supportBundleRepo.findOne.mockResolvedValue(mockBundle as any);
+
+      const result = await service.canUserDownloadBundle(userId);
+
+      expect(result).toEqual({
         isProcessing: true,
         isBundleReady: false,
-        error: '',
-      };
-
-      service.canUserDownloadBundle = jest.fn().mockResolvedValue(expectedBundleStatus);
-
-      const result = await service.canUserDownloadBundle('user-123');
-
-      expect(result).toEqual(expectedBundleStatus);
+        error: null,
+      });
     });
 
-    it('should test canUserDownloadBundle method with mock - failed status', async () => {
-      const expectedBundleStatus: BundleStatus = {
+    it('should return failed status with error message', async () => {
+      const errorMessage = 'Bundle generation failed';
+      const mockBundle = {
+        status: SupportBundleStatus.FAILED,
+        errorMessage,
+      };
+      supportBundleRepo.findOne.mockResolvedValue(mockBundle as any);
+
+      const result = await service.canUserDownloadBundle(userId);
+
+      expect(result).toEqual({
         isProcessing: false,
         isBundleReady: false,
-        error: 'Support bundle generation failed.',
+        error: errorMessage,
+      });
+    });
+
+    it('should return default status for unknown status', async () => {
+      const mockBundle = {
+        status: 'UNKNOWN_STATUS',
+        errorMessage: null,
       };
+      supportBundleRepo.findOne.mockResolvedValue(mockBundle as any);
 
-      service.canUserDownloadBundle = jest.fn().mockResolvedValue(expectedBundleStatus);
+      const result = await service.canUserDownloadBundle(userId);
 
-      const result = await service.canUserDownloadBundle('user-123');
+      expect(result).toEqual({
+        isProcessing: false,
+        isBundleReady: false,
+        error: null,
+      });
+    });
 
-      expect(result).toEqual(expectedBundleStatus);
+    it('should return default status when no bundle found for user', async () => {
+      supportBundleRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.canUserDownloadBundle(userId);
+
+      expect(result).toEqual({
+        isProcessing: false,
+        isBundleReady: false,
+        error: '',
+      });
     });
   });
 
-  describe('downloadSupportBundle method testing', () => {
-    const mockFileName = 'ndm_user-123.zip';
+  describe('downloadSupportBundle', () => {
+    const fileName = 'ndm_user-123.zip';
+    const fullPath = '/test/bundle/path/ndm_user-123.zip';
 
     beforeEach(() => {
-      (path.join as jest.Mock).mockImplementation((...args) => args.join('/'));
+      (path.join as jest.Mock).mockReturnValue(fullPath);
     });
 
-    it('should downloadSupportBundle method exist', () => {
-      expect(typeof service.downloadSupportBundle).toBe('function');
-    });
-
-    it('should test downloadSupportBundle method when file exists', () => {
-      const expectedPath = '/tmp/support-bundles/ndm_user-123.zip';
+    it('should return file path when file exists', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(true);
 
-      service.downloadSupportBundle = jest.fn().mockReturnValue(expectedPath);
+      const result = service.downloadSupportBundle(fileName);
 
-      const result = service.downloadSupportBundle(mockFileName);
-
-      expect(service.downloadSupportBundle).toHaveBeenCalledWith(mockFileName);
-      expect(result).toBe(expectedPath);
+      expect(path.join).toHaveBeenCalledWith(mockBundlePath, fileName);
+      expect(fs.existsSync).toHaveBeenCalledWith(fullPath);
+      expect(result).toBe(fullPath);
     });
 
-    it('should test downloadSupportBundle method when file does not exist', () => {
+    it('should throw NotFoundException when file does not exist', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
 
-      service.downloadSupportBundle = jest.fn().mockImplementation(() => {
-        throw new NotFoundException('Support bundle file not found.');
-      });
-
-      expect(() => service.downloadSupportBundle(mockFileName)).toThrow(NotFoundException);
-      expect(() => service.downloadSupportBundle(mockFileName)).toThrow('Support bundle file not found.');
-    });
-  });
-
-  describe('Integration-style testing with repository mocks', () => {
-    it('should test repository interactions are properly mocked', () => {
-      expect(mockSupportBundleRepo.create).toBeDefined();
-      expect(mockSupportBundleRepo.save).toBeDefined();
-      expect(mockSupportBundleRepo.update).toBeDefined();
-      expect(mockSupportBundleRepo.findOne).toBeDefined();
-      expect(mockProjectRepo.find).toBeDefined();
+      expect(() => service.downloadSupportBundle(fileName)).toThrow(NotFoundException);
+      expect(() => service.downloadSupportBundle(fileName)).toThrow('Support bundle file not found.');
+      expect(path.join).toHaveBeenCalledWith(mockBundlePath, fileName);
+      expect(fs.existsSync).toHaveBeenCalledWith(fullPath);
     });
 
-    it('should test workflow service mock', () => {
-      expect(mockWorkflowService.startWorkflow).toBeDefined();
-    });
+    it('should handle different file names correctly', () => {
+      const differentFileName = 'custom-bundle.zip';
+      const differentFullPath = '/test/bundle/path/custom-bundle.zip';
+      (path.join as jest.Mock).mockReturnValue(differentFullPath);
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
 
-    it('should test config service mock', () => {
-      expect(mockConfigService.get).toBeDefined();
-      expect(mockConfigService.get()).toBe('/tmp/support-bundles');
-    });
+      const result = service.downloadSupportBundle(differentFileName);
 
-    it('should test logger factory mock', () => {
-      expect(mockLoggerFactory.create).toBeDefined();
-      const logger = mockLoggerFactory.create();
-      expect(logger.log).toBeDefined();
-      expect(logger.error).toBeDefined();
+      expect(path.join).toHaveBeenCalledWith(mockBundlePath, differentFileName);
+      expect(fs.existsSync).toHaveBeenCalledWith(differentFullPath);
+      expect(result).toBe(differentFullPath);
     });
   });
 });
