@@ -6,7 +6,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { NotifyConfigActivity } from './notify-config/notify-config.activity';
 import appConfig from 'src/config/app.config';
 import temporalConfig from 'src/config/temporal.config';
-import { ProjectJobConfigMappingActivity } from './error-csv-generation/project-jobconfig-mapping.activity';
 import { ProjectEntity } from 'src/entities/project.entity';
 import { ConfigEntity } from 'src/entities/config.entity';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
@@ -16,7 +15,6 @@ import databaseConfig from 'src/config/database.config';
 import { ErrorCsvGenerationActivity } from './error-csv-generation/error-csv-generation.activity';
 import { OperationErrorService } from 'src/utils/error-csv-generation.service';
 import { OperationErrorEntity } from 'src/entities/operation-error.entity';
-import { ConfigurationDataCsvGenerationActivity } from './config-data-csv-generation/config-data-csv-generation.activity';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { WorkerStatsEntity } from 'src/entities/worker-stats.entity';
@@ -40,17 +38,14 @@ import { WorkerStatsEntity } from 'src/entities/worker-stats.entity';
     ActivitiesService,
     LogGeneratorActivity,
     NotifyConfigActivity,
-    ProjectJobConfigMappingActivity,
     ErrorCsvGenerationActivity,
     ConfigService,
     OperationErrorService,
-    ConfigurationDataCsvGenerationActivity,
   ],
   exports: [
     ActivitiesService,
     LogGeneratorActivity,
     NotifyConfigActivity,
-    ProjectJobConfigMappingActivity,
     ErrorCsvGenerationActivity,
     OperationErrorService,
   ],
