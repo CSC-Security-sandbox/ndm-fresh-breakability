@@ -66,18 +66,6 @@ export class SupportBundleController {
     return await this.supportBundleService.updateSupportBundleStatus(updateStatusDto);
   }
 
-  @ApiOperation({
-    summary: 'Get projects associated to a User',
-    description:
-      'Get list of projects associated to a User & workers list associated to a project',
-  })
-  @ApiBearerAuth()
-  @Auth()
-  @Get()
-  async getProjects(@Request() userDetails: UserDetails) {
-    return this.supportBundleService.getProjects(userDetails);
-  }
-
   @ApiOperation({ summary: 'Check if user can download bundle' })
   @ApiQuery({
     name: 'userId',
