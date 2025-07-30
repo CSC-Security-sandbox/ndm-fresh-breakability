@@ -145,35 +145,35 @@ describe('LogGeneratorActivity', () => {
       userId: 'test-user-123',
       startDate: '2024-01-01',
       endDate: '2024-01-03',
-      projectWorkerMap: [
-        {
-          projectId: 'project-1',
-          workerIds: ['worker-1', 'worker-2'],
-        },
-        {
-          projectId: 'project-2',
-          workerIds: ['worker-3'],
-        },
-      ],
     };
 
     const traceId = 'trace-123';
 
     beforeEach(() => {
       // Mock fs methods
-      mockFs.existsSync.mockReturnValue(false);
+      mockFs.existsSync.mockReturnValue(true); // Mock base log path exists
       mockFs.mkdirSync.mockReturnValue(undefined);
       mockFs.unlinkSync.mockReturnValue(undefined);
       mockFs.createWriteStream.mockReturnValue({
-        on: jest.fn(),
+        on: jest.fn((event, callback) => {
+          if (event === 'close') {
+            setTimeout(callback, 0);
+          }
+        }),
       } as any);
 
       // Mock archiver
       const mockArchive = {
-        on: jest.fn(),
+        on: jest.fn((event, callback) => {
+          if (event === 'entry') {
+            // Simulate entry events
+            setTimeout(() => callback({ name: 'test-file' }), 0);
+          }
+        }),
         pipe: jest.fn(),
         directory: jest.fn(),
-        finalize: jest.fn(),
+        finalize: jest.fn().mockResolvedValue(undefined),
+        pointer: jest.fn().mockReturnValue(12345),
       };
       mockArchiver.mockReturnValue(mockArchive as any);
 
@@ -182,7 +182,7 @@ describe('LogGeneratorActivity', () => {
         setTimeout(() => {
           callback(
             null,
-            '/test/logs/2024-01-01/project-1\n/test/logs/2024-01-01/project-2\n',
+            '/test/logs/2024-01-01\n/test/logs/2024-01-02\n/test/logs/2024-01-03\n',
             '',
           );
         }, 0);
@@ -202,7 +202,8 @@ describe('LogGeneratorActivity', () => {
         on: jest.fn(),
         pipe: jest.fn(),
         directory: jest.fn(),
-        finalize: jest.fn(),
+        finalize: jest.fn().mockResolvedValue(undefined),
+        pointer: jest.fn().mockReturnValue(12345),
       };
 
       mockFs.createWriteStream.mockReturnValue(mockOutput as any);
@@ -213,12 +214,12 @@ describe('LogGeneratorActivity', () => {
         payload: mockPayload,
       });
 
-      expect(result).toBe(path.join(outputZipPath, 'ndm_test-user-123.zip'));
+      expect(result).toBe('/test/output/ndm_test-user-123.zip');
       expect(mockLogger.log).toHaveBeenCalledWith(
-        '[trace-123] Started fetchAndZipLogsUsingFind activity',
+        '[trace-123] Started fetchAndZipLogs activity',
       );
       expect(mockLogger.log).toHaveBeenCalledWith(
-        '[trace-123] Zip created at: /test/output/ndm_test-user-123.zip',
+        '[trace-123] Zip created successfully at: /test/output/ndm_test-user-123.zip',
       );
     });
 
@@ -271,7 +272,7 @@ describe('LogGeneratorActivity', () => {
 
       await expect(
         activity.fetchAndZipLogs({ traceId, payload: invalidPayload }),
-      ).rejects.toThrow('Invalid date range: invalid-date to 2024-01-03');
+      ).rejects.toThrow('Invalid date format. Expected YYYY-MM-DD format. Received startDate: invalid-date, endDate: 2024-01-03');
     });
 
     it('should throw error for invalid end date', async () => {
@@ -282,7 +283,7 @@ describe('LogGeneratorActivity', () => {
 
       await expect(
         activity.fetchAndZipLogs({ traceId, payload: invalidPayload }),
-      ).rejects.toThrow('Invalid date range: 2024-01-01 to invalid-date');
+      ).rejects.toThrow('Invalid date format. Expected YYYY-MM-DD format. Received startDate: 2024-01-01, endDate: invalid-date');
     });
 
     it('should throw error when start date is after end date', async () => {
@@ -294,7 +295,7 @@ describe('LogGeneratorActivity', () => {
 
       await expect(
         activity.fetchAndZipLogs({ traceId, payload: invalidPayload }),
-      ).rejects.toThrow('Invalid date range: 2024-01-05 to 2024-01-01');
+      ).rejects.toThrow('Start date (2024-01-05) cannot be after end date (2024-01-01)');
     });
 
     it('should handle single date range', async () => {
