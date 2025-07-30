@@ -97,7 +97,8 @@
       "/coverage",
       "/dist",
       "/entities/",
-      "/temporal/"
+      "/temporal/",
+      "constants"
     ]
   }
 }
