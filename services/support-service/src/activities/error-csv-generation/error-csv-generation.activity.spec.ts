@@ -23,10 +23,15 @@ jest.mock('csv-writer', () => ({
 
 jest.mock('adm-zip');
 
+const mockFs = fs as jest.Mocked<typeof fs>;
+const mockCreateObjectCsvWriter = createObjectCsvWriter as jest.MockedFunction<typeof createObjectCsvWriter>;
+const MockAdmZip = AdmZip as jest.MockedClass<typeof AdmZip>;
+
 describe('ErrorCsvGenerationActivity', () => {
     let activity: ErrorCsvGenerationActivity;
     let operationErrorService: jest.Mocked<OperationErrorService>;
-    let mockLogger: jest.Mocked<Logger>;
+    let mockZipInstance: jest.Mocked<AdmZip>;
+    let mockCsvWriter: any;
 
     const mockOperationErrorData: OperationErrorExportData[] = [
         {
