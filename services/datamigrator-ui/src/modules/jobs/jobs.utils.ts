@@ -79,7 +79,7 @@ export const handleDownloadCocReport = async (
   }
 };
 
-const createAndDownloadBlob = (
+export const createAndDownloadBlob = (
   data: BlobPart,
   type: string,
   fileName: string

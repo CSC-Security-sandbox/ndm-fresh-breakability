@@ -3,6 +3,7 @@ import {
   Module,
   NestModule,
 } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AccountModule } from './account/account.module';
@@ -29,7 +30,13 @@ import { EmailModule } from './email/email.module';
 import {
   LoggerModule,
   RequestContextMiddleware,
+  LoggerFactory,
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { ResponseInterceptor } from '@netapp-cloud-datamigrate/api-handler-lib';
+import {
+  customErrorDTOList,
+  customSuccessDTOList,
+} from './constants/custom-response-message';
 
 @Module({
   imports: [
@@ -58,7 +65,18 @@ import {
     EmailModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_INTERCEPTOR,
+      useFactory: (loggerFactory) => new ResponseInterceptor(
+        customSuccessDTOList,
+        customErrorDTOList,
+        loggerFactory,
+      ),
+      inject: [LoggerFactory],
+    },
+  ],
 })
 export class AppModule implements NestModule{
   configure(consumer: MiddlewareConsumer) {

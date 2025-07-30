@@ -4,7 +4,7 @@ import { HttpModule } from '@nestjs/axios';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
-import { LoggerModule, RequestLoggerMiddleware } from '@netapp-cloud-datamigrate/logger-lib';
+import { LoggerModule, RequestContextMiddleware } from '@netapp-cloud-datamigrate/logger-lib';
 import { ConfigurationModule } from './configurations/configuration.module';
 import { WorkManagerModule } from './work-manager/work-manager.module';
 import { WorkflowModule } from './workflow/workflow.module';
@@ -34,7 +34,7 @@ import { SupportBundleModule } from './support-bundle/support-bundle.module';
 export class AppModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
-      .apply(RequestLoggerMiddleware)
+      .apply(RequestContextMiddleware)
       .forRoutes('*');
   }
 }

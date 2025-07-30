@@ -3,7 +3,10 @@ FROM datamigratedev.azurecr.io/datamigrator-ui:0.0.4 AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+COPY .npmrc ./
+RUN --mount=type=secret,id=git_token \
+    GITOPS_USER_GITHUB_TOKEN=$(cat /run/secrets/git_token) npm install \
+    && rm -f ./.npmrc
 
 COPY . ./
 RUN npm run build

@@ -143,6 +143,8 @@ export class ConfigurationService {
 
   async getAllConfig(findAllConfigPageDto: FindAllConfigPageDto) {
     try {
+      this.logger.log(`--------------- getting all config: ---------------`);
+
       const {
         page,
         limit,
