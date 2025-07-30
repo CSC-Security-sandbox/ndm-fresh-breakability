@@ -4,7 +4,7 @@ import { Cmd, CmdMeta, Command, CommandStatus, ErrorType, FileInfo, ItemMeta, Jo
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
 import * as path from "path";
-import { dmError, getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
+import { dmError, getFileInfo, isContentUpdate, isMetaUpdated, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishCommandInput } from "./migrate-scan.type";
@@ -222,6 +222,20 @@ export class MigrateScanService {
                 isDirectory,
                 {
                     [isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE]: { status: OPS_STATUS.READY, params: {} },
+                    [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: { } }
+                },
+                metadata,
+            )
+        }
+        if(isMetaUpdated(sFile, dFile) ) {
+            const isDirectory = sFile.isDirectory();
+            return new Cmd (
+                uuid4(),
+                fPath,
+                CommandStatus.READY,
+                isDirectory,
+                {
+                    [isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE]: { status: OPS_STATUS.COMPLETED, params: {} },
                     [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: { } }
                 },
                 metadata,

@@ -11,6 +11,9 @@
 - name: Configure Worker
   import_playbook: configure-worker.yaml
 
+- name: Configure Fluentd Logging
+  import_playbook: install-fluentd.yaml
+
 - name: Configure OVF customization for vSphere
   import_playbook: configure-ovf.yaml
   when: 

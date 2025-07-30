@@ -1,0 +1,49 @@
+---
+- name: Install and configure Fluentd
+  hosts: default
+  become: true
+  become_method: ansible.builtin.sudo
+  gather_facts: true
+  vars:
+    ansible_python_interpreter: auto
+    ansible_python_interpreter_fallback: ['python3.13', 'python3.12', 'python3.11', 'python3.10', 'python3.9', 'python3.8', '/usr/bin/python3', 'python3']
+    
+  roles:
+    - { role: ../roles/fluentd, tags: 'fluentd' }
+    
+  post_tasks:
+    - name: Verify Fluentd installation
+      command: /opt/fluent/bin/fluentd --version
+      register: fluentd_version
+      changed_when: false
+      tags:
+        - fluentd
+        - verify
+    
+    - name: Display Fluentd version
+      debug:
+        msg: "Installed Fluentd version: {{ fluentd_version.stdout }}"
+      tags:
+        - fluentd
+        - verify
+    
+    - name: Check if Fluentd files are properly installed
+      stat:
+        path: "{{ item }}"
+      register: fluentd_files
+      loop:
+        - /etc/fluent/fluentd.conf
+        - /opt/fluent/bin/fluentd
+        - /var/log/fluentd
+        - /etc/systemd/system/fluentd.service.d/override.conf
+      tags:
+        - fluentd
+        - verify
+
+    - name: Display installation verification results
+      debug:
+        msg: "{{ item.item }} - {{ 'EXISTS' if item.stat.exists else 'MISSING' }}"
+      loop: "{{ fluentd_files.results }}"
+      tags:
+        - fluentd
+        - verify

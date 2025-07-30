@@ -6,5 +6,5 @@ build_version: "0.1.0"
 vm_username: datamigrator
 vm_uid: 1030
 vm_gid: 1030
-local_binary_path: /Users/anuragdoshi/Downloads/pkg-5/worker-linux-x64
+local_binary_path: /Users/hn73621/Downloads/pkg/worker-linux-arm64
 remote_binary_path: /opt/datamigrator/binary/dm-worker-linux-x64-v1.0.0

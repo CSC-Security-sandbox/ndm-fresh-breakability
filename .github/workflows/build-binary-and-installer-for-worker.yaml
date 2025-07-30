@@ -72,7 +72,7 @@ jobs:
         with:
           name: worker-binary-${{ steps.set_release_tag.outputs.RELEASE_TAG }}
           path: services/worker/pkg.zip
-
+          
   build:
     runs-on: windows-latest
     needs: worker-package
@@ -88,31 +88,61 @@ jobs:
           uses: actions/download-artifact@v4
           with:
             name: worker-binary-${{ env.RELEASE_TAG }}
-            path: pkg
+            path: .
 
         - name: Extract Binary
           shell: pwsh
           run: |
-            Expand-Archive -Path "pkg\pkg.zip" -DestinationPath "pkg" -Force
+            Expand-Archive -Path "pkg.zip" -DestinationPath "pkg" -Force
 
         - name: Prepare Installer Directory
           shell: pwsh
           run: |
             New-Item -ItemType Directory -Force -Path wininstaller
+            New-Item -ItemType Directory -Force -Path wininstaller\redist
+            New-Item -ItemType Directory -Force -Path wininstaller\fluentd
             Move-Item -Path "./pkg/pkg/worker-win-x64.exe" -Destination "wininstaller\worker.exe" -Force
 
-        - name: Copy environment file
+        - name: Download Redistributables
+          shell: pwsh
+          run: |
+            # Download VC++ Redistributable
+            Write-Host "Downloading VC++ Redistributable..."
+            Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "wininstaller\redist\vc_redist.x64.exe"
+            
+            # Download fluent-package MSI
+            Write-Host "Downloading fluent-package..."
+            Invoke-WebRequest -Uri "https://s3.amazonaws.com/packages.treasuredata.com/5/windows/fluent-package-5.2.0-x64.msi" -OutFile "wininstaller\fluentd\fluent-package-5.2.0-x64.msi"
+
+            # Verify downloads
+            Write-Host "Verifying downloads..."
+            if (Test-Path "wininstaller\redist\vc_redist.x64.exe") {
+                $vcSize = (Get-Item "wininstaller\redist\vc_redist.x64.exe").Length
+                Write-Host "VC++ Redistributable downloaded: $vcSize bytes"
+            } else {
+                throw "VC++ Redistributable download failed"
+            }
+
+            if (Test-Path "wininstaller\fluentd\fluent-package-5.2.0-x64.msi") {
+                $fluentSize = (Get-Item "wininstaller\fluentd\fluent-package-5.2.0-x64.msi").Length
+                Write-Host "fluent-package downloaded: $fluentSize bytes"
+            } else {
+                throw "fluent-package download failed"
+            }
+
+        - name: Copy environment file and installer files
           shell: pwsh
           run: |
             Write-Host "Current working directory: $(Get-Location)"
             Copy-Item -Path "app-deployment/ansible/worker/roles/configure-worker/templates/worker.env.j2" -Destination "wininstaller\worker.env.j2" -Force
             Copy-Item -Path "services/worker/wininstaller/installer.iss" -Destination "wininstaller\installer.iss" -Force
             Copy-Item -Path "services/worker/wininstaller/service.xml" -Destination "wininstaller\service.xml" -Force
+            Copy-Item -Path "services/worker/wininstaller/fluentd.conf" -Destination "wininstaller\fluentd.conf" -Force
   
         - name: Download WinSW and rename
           shell: pwsh
           run: |
-            # Download a specific version of WinSW (adjust version if needed)
+            # Download a specific version of WinSW
             Invoke-WebRequest -Uri "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe" -OutFile "wininstaller\winsw.exe"
   
         - name: List files in wininstaller directory

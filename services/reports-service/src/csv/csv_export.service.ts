@@ -106,7 +106,11 @@ export class CsvService {
 
                 -- GID
                 i.source_meta->>'gid'           AS "Source GID",
-                i.target_meta->>'gid'           AS "Target GID"
+                i.target_meta->>'gid'           AS "Target GID",
+
+                -- SID
+                i.source_meta->>'sid'           AS "Source SID",
+                i.target_meta->>'sid'           AS "Target SID"
 
             FROM ${dbSchema}.inventory i
             LEFT JOIN ${dbSchema}.jobrun ON jobrun.id = i.job_run_id

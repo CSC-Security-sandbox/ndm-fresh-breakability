@@ -1,88 +1,55 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { JobContextFactory, RedisUtils } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
-import { createClient, RedisClientType } from 'redis';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 
+import { RedisClientType } from 'redis';
 
 @Injectable()
-export class RedisService implements OnModuleInit, OnModuleDestroy {
+export class RedisService  implements OnModuleInit, OnModuleDestroy {
+
   private client: RedisClientType;
+  private redisUtils: RedisUtils;
   private readonly logger = new Logger(RedisService.name);
 
-async onModuleInit(): Promise<void> {
-    await this.createClient();
+  constructor() {
+    this.redisUtils = new RedisUtils();
+  }
+
+  async onModuleInit(): Promise<void> {
+    this.client = await this.redisUtils.getClient() as RedisClientType;
   }
 
   async onModuleDestroy(): Promise<void> {
-    if (this.client && this.client.isOpen) {
-      await this.client.quit();
-      this.logger.log('Redis client disconnected');
-    }
-  }
-  async createClient(): Promise<void> {
-    if (this.client && this.client.isOpen) {
-      return;
-    }
-    
-    const redisClientOptions: any = {
-      url: `redis://${process.env.REDIS_HOST || '127.0.0.1'}:${process.env.REDIS_PORT || 6379}`,
-    };
-
-    if (process.env.REDIS_USERNAME && process.env.REDIS_PASSWORD) {
-      redisClientOptions.username = process.env.REDIS_USERNAME;
-      redisClientOptions.password = process.env.REDIS_PASSWORD;
-    }
-
-    this.logger.log(`Connecting to Redis at ${redisClientOptions.url}`);
-    this.client = createClient(redisClientOptions);
-
-    this.client.on('error', (error) => {
-      this.logger.error(`Redis connection error: ${error}`);
-    });
-
-    this.client.on('connect', () => {
-      this.logger.log('Connected to Redis');
-    });
-
-    await this.client.connect();
-  }
-  
-  async ensureClient(): Promise<void> {
-    if (!this.client || !this.client.isOpen) {
-      this.logger.warn('Redis client not initialized. Attempting to reconnect...');
-      await this.createClient();
-    }
-  }
-
-  async getClient(): Promise<RedisClientType> {
-    if (!this.client || !this.client.isOpen) {
-      this.logger.debug('Redis client is not initialized yet. calling ensureClient again');
-      await this.ensureClient();
-      this.logger.debug('Redis client initialized from ensureClient');
-    }
-    return this.client;
+    await this.redisUtils.closePool();
   }
 
   async getJobContext(traceId: string) {
-    if (!this.client) {
-      this.logger.error('[Job-Service] Redis client is not initialized, trying to reconnect');
-      this.client = await this.getClient();
-      this.logger.log('[Job-Service] Redis client reconnected');
-    }
     const contextProvider = JobContextFactory.getProvider('redis', this.client);
     return await contextProvider.getJobContext(traceId);
   }
 
-  async setJobContext(traceId: string, jobContext: any) {
-    if (!this.client) {
-      this.logger.error('[Job-Service] Redis client is not initialized, trying to reconnect');
-      this.client = await this.getClient()
-      this.logger.log('[Job-Service] Redis client reconnected');
-    }
-    const serializedContext = jobContext.serialize(); 
-    await this.client.set(traceId, serializedContext);
-    this.logger.log(`[Job-Service] [${traceId}] Job context saved to Redis.`);
+  async getJobManagerContext(traceId: string) {
+    const contextProvider = JobContextFactory.getJobManagerProvider('redis', this.client);
+    return await contextProvider.getContext(traceId);
   }
+
+  async getSpeedTestJobContext(traceId: string) {
+    const contextProvider = JobContextFactory.getSpeedTestProvider('redis', this.client);
+    return await contextProvider.getJobContext(traceId);
+  }
+
+  async setJobContext(traceId: string, jobContext: any) {
+    const serializedContext = jobContext.serialize();
+    await this.client.set(traceId, serializedContext);
+  }
+
+  async getClient(): Promise<RedisClientType> {
+    if (!this.client) {
+      this.client = await this.redisUtils.getClient() as RedisClientType;
+    }
+    return this.client;
+  }
+
 
   async getJobState(traceId: string): Promise<any> {
     try {
