@@ -20,15 +20,23 @@ jest.mock('./error-csv-generation/error-csv-generation.activity', () => ({
   })),
 }));
 
+jest.mock('./config-data-csv-generation/config-data-csv-generation.activity', () => ({
+  ConfigurationDataCsvGenerationActivity: jest.fn().mockImplementation(() => ({
+    generateConfigurationDataCsv: jest.fn(),
+  })),
+}));
+
 import { LogGeneratorActivity } from './log-generator/log-generator.activity';
 import { NotifyConfigActivity } from './notify-config/notify-config.activity';
 import { ErrorCsvGenerationActivity } from './error-csv-generation/error-csv-generation.activity';
+import { ConfigurationDataCsvGenerationActivity } from './config-data-csv-generation/config-data-csv-generation.activity';
 
 describe('ActivitiesService', () => {
   let service: ActivitiesService;
   let logGeneratorActivity: any;
   let notifyConfigActivity: any;
   let errorCsvGenerationActivity: any;
+  let configurationDataCsvGenerationActivity: any;
 
   beforeEach(async () => {
     // Create mock instances with proper Jest mock functions
@@ -42,6 +50,10 @@ describe('ActivitiesService', () => {
 
     errorCsvGenerationActivity = {
       generateErrorCsv: jest.fn(),
+    };
+
+    configurationDataCsvGenerationActivity = {
+      generateConfigurationDataCsv: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -58,6 +70,10 @@ describe('ActivitiesService', () => {
         {
           provide: ErrorCsvGenerationActivity,
           useValue: errorCsvGenerationActivity,
+        },
+        {
+          provide: ConfigurationDataCsvGenerationActivity,
+          useValue: configurationDataCsvGenerationActivity,
         },
       ],
     }).compile();
