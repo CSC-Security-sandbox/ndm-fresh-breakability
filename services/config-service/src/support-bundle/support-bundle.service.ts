@@ -183,23 +183,23 @@ export class SupportBundleService {
 
     switch (user.status) {
       case SupportBundleStatus.COMPLETED:
-        return { isProcessing: false, isBundleReady: true, error: '' };
+        return { isProcessing: false, isBundleReady: true, error: null };
 
       case SupportBundleStatus.IN_PROGRESS:
-        return { isProcessing: true, isBundleReady: false, error: '' };
+        return { isProcessing: true, isBundleReady: false, error: null };
 
       case SupportBundleStatus.FAILED:
         return {
           isProcessing: false,
           isBundleReady: false,
-          error: 'Support bundle generation failed.',
+          error: user.errorMessage ,
         };
 
       default:
         return {
           isProcessing: false,
           isBundleReady: false,
-          error: '',
+          error: null,
         };
     }
   }
