@@ -85,7 +85,19 @@
     "moduleNameMapper": {
       "^src/(.*)$": "<rootDir>/$1"
     },
-    "modulePaths": ["<rootDir>"],
-    "setupFilesAfterEnv": ["<rootDir>/test-setup.ts"]
+    "modulePaths": [
+      "<rootDir>"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/test-setup.ts"
+    ],
+    "coveragePathIgnorePatterns": [
+      "/node_modules/",
+      ".*\\.module\\.ts$",
+      "/coverage",
+      "/dist",
+      "/entities/",
+      "/temporal/"
+    ]
   }
 }
