@@ -1,19 +1,23 @@
-import Box from '@/components/container/Box';
-import TableWrapper from '@components/table-wrapper/TableWrapper';
-import {notify} from '@components/notification/NotificationWrapper';
-import {useGetAllUsersQuery, useResetPasswordMutation, useUpdateUserStatusMutation} from '@api/userApi';
-import {COL_DEF_FOR_USER} from '@/constant/app.constants';
-import {Collapse} from '@mui/material';
-import {Button} from '@netapp/bxp-design-system-react';
-import {useState} from 'react';
-import CreateUserForm from '@components/top-nav-bar/setting/ManageUsers/CreateUserForm';
-import PermissionAuth from '@/auth/PermissionAuth';
-import {USER_PERMISSION_TYPE_ENUM} from '@auth/permissionAuth.constant';
-import {hasPermission} from '@/auth/auth.utils';
-import {useSelector} from 'react-redux';
-import {RootStateType} from '@store/store';
-import {DEFAULT_COLUMN_STATE} from '@components/top-nav-bar/setting/ManageUsers/ManageUsers.constant';
-import {decryptData} from '@/utils/common.utils';
+import Box from "@/components/container/Box";
+import TableWrapper from "@components/table-wrapper/TableWrapper";
+import { notify } from "@components/notification/NotificationWrapper";
+import {
+  useGetAllUsersQuery,
+  useResetPasswordMutation,
+  useUpdateUserStatusMutation,
+} from "@api/userApi";
+import { COL_DEF_FOR_USER } from "@/constant/app.constants";
+import { Collapse } from "@mui/material";
+import { Button } from "@netapp/bxp-design-system-react";
+import { useState } from "react";
+import CreateUserForm from "@components/top-nav-bar/setting/ManageUsers/CreateUserForm";
+import PermissionAuth from "@/auth/PermissionAuth";
+import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
+import { hasPermission } from "@/auth/auth.utils";
+import { useSelector } from "react-redux";
+import { RootStateType } from "@store/store";
+import { DEFAULT_COLUMN_STATE } from "@components/top-nav-bar/setting/ManageUsers/ManageUsers.constant";
+import { decryptData } from "@/utils/common.utils";
 
 const ManageUsers = () => {
   const [updateUserStatus] = useUpdateUserStatusMutation();
@@ -31,20 +35,23 @@ const ManageUsers = () => {
   const [isCreateFormVisible, setIsCreateFormVisible] =
     useState<boolean>(false);
 
-  const updateUserStatusWrapper = (body: { email: string; enable: boolean }) => {
+  const updateUserStatusWrapper = (body: {
+    email: string;
+    enable: boolean;
+  }) => {
     updateUserStatus(body)
       .unwrap()
-        .then((res) => {
-          notify.success(res?.message);
+      .then((res) => {
+        notify.success(res?.message);
       })
       .catch((err) => {
-        console.log('error', err);
+        console.log("error", err);
         const errorDetails = err.data?.error;
         notify.error(errorDetails?.message);
       });
   };
 
-  const canManageProject: boolean = hasPermission(
+  const canManageUser: boolean = hasPermission(
     USER_PERMISSION_TYPE_ENUM.CreateUser
   );
   const rowMenu = (row: any) => [
@@ -58,11 +65,11 @@ const ManageUsers = () => {
         updateUserStatusWrapper(body);
       },
 
-      disabled: permission?.userPermissions?.id === row.id || !canManageProject,
+      disabled: permission?.userPermissions?.id === row.id || !canManageUser,
     },
     {
       label: "Reset Password",
-      disabled: row.user_status !== "active" || !canManageProject,
+      disabled: row.user_status !== "active" || !canManageUser,
       onClick: () => {
         const body = {
           email: row.email,
@@ -114,10 +121,7 @@ const ManageUsers = () => {
             <PermissionAuth
               permissionName={USER_PERMISSION_TYPE_ENUM.CreateUser}
             >
-              <Button
-                onClick={() => setIsCreateFormVisible(true)}
-                className="ml-4"
-              >
+              <Button onClick={() => setIsCreateFormVisible(true)}>
                 Add User
               </Button>
             </PermissionAuth>

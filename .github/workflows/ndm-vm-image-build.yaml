@@ -789,6 +789,27 @@ jobs:
             ;;
           esac
 
+      - name: Save Image Info for Notification
+        run: |
+          # Save image name to file for notification job
+          case "${{ matrix.provider }}" in
+            azure)
+              echo "${{ steps.image-info.outputs.image_name }}" > ${{ matrix.component }}-${{ matrix.provider }}-image.txt
+              ;;
+            vsphere)
+              echo "${{ steps.image-info.outputs.image_name }}" > ${{ matrix.component }}-${{ matrix.provider }}-image.txt
+              ;;
+            gcp)
+              echo "${{ steps.image-info.outputs.gcp_image_id }}" > ${{ matrix.component }}-${{ matrix.provider }}-image.txt
+              ;;
+          esac
+
+      - name: Upload Image Info
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: image-info-${{ matrix.component }}-${{ matrix.provider }}
+          path: ${{ matrix.component }}-${{ matrix.provider }}-image.txt
+
       - name: Generate and upload images and manifests for control-plane
         if: ${{ matrix.component == 'control-plane' }}
         run: |
@@ -1003,6 +1024,140 @@ jobs:
           elif [ "${{ matrix.component }}" == "worker" ]; then
             echo "worker_template=${{ steps.image-info.outputs.image_name }}" >> $GITHUB_OUTPUT
           fi
+
+  notify-build-completion:
+    if: ${{ github.event_name == 'schedule' }}
+    needs: [package-artifacts, packer]
+    runs-on: openlab
+    steps:
+      - name: Download Image Info Artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: image-info-*
+          merge-multiple: true
+          path: ./image-info/
+
+      - name: Send Build Notification
+        run: |
+          BUILD_VERSION="${{ needs.package-artifacts.outputs.build_version }}"
+          BUILD_TYPE="${{ needs.package-artifacts.outputs.build_type }}"
+          TRIGGER="${{ github.event_name == 'schedule' && 'Nightly Build' || 'Manual Trigger' }}"
+          
+          # Build the Adaptive Card body
+          CARD_BODY='[
+            {
+              "type": "TextBlock",
+              "text": "Image Details for '"${TRIGGER}"'",
+              "size": "Medium",
+              "weight": "Bolder"
+            },
+            {
+              "type": "FactSet",
+              "facts": [
+                {
+                  "title": "Build Version:",
+                  "value": "'"${BUILD_VERSION}"'"
+                },
+                {
+                  "title": "Build Type:",
+                  "value": "'"${BUILD_TYPE}"'"
+                }
+              ]
+            },
+            {
+              "type": "TextBlock",
+              "text": "**Provider Images:**",
+              "weight": "Bolder",
+              "spacing": "Medium"
+            }'
+
+          INSTALLER_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/builds/${BUILD_TYPE}/${BUILD_VERSION}/worker/windows-worker-installer-${BUILD_VERSION}.exe"
+          
+          for provider in "azure" "vsphere" "gcp"; do
+            CONTROL_PLANE_FILE="./image-info/control-plane-${provider}-image.txt"
+            WORKER_FILE="./image-info/worker-${provider}-image.txt"
+            
+            if [[ -f "$CONTROL_PLANE_FILE" || -f "$WORKER_FILE" ]]; then
+              case "$provider" in
+                "azure")
+                  PROVIDER_NAME="Azure"
+                  ;;
+                "vsphere") 
+                  PROVIDER_NAME="vSphere"
+                  ;;
+                "gcp")
+                  PROVIDER_NAME="GCP"
+                  ;;
+              esac
+              
+              CARD_BODY+=',
+              {
+                "type": "TextBlock",
+                "text": "**'"${PROVIDER_NAME}"':**",
+                "weight": "Bolder",
+                "spacing": "Medium"
+              },
+              {
+                "type": "FactSet",
+                "facts": ['
+              
+              FACTS_ADDED=false
+              
+              if [[ -f "$CONTROL_PLANE_FILE" ]]; then
+                CP_NAME=$(cat "$CONTROL_PLANE_FILE")
+                CARD_BODY+='
+                  {
+                    "title": "Control Plane:",
+                    "value": "'"${CP_NAME}"'"
+                  }'
+                FACTS_ADDED=true
+              fi
+              
+              if [[ -f "$WORKER_FILE" ]]; then
+                WORKER_NAME=$(cat "$WORKER_FILE")
+                if [[ "$FACTS_ADDED" == "true" ]]; then
+                  CARD_BODY+=','
+                fi
+                CARD_BODY+='
+                  {
+                    "title": "Worker:",
+                    "value": "'"${WORKER_NAME}"'"
+                  }'
+              fi
+              
+              CARD_BODY+='
+                ]
+              }'
+            fi
+          done
+
+          CARD_BODY+=',
+          {
+            "type": "ActionSet",
+            "actions": [
+              {
+                "type": "Action.OpenUrl",
+                "title": "Download Windows Installer",
+                "url": "'"${INSTALLER_URL}"'"
+              }
+            ]
+          }'
+
+          CARD_BODY+=']'
+
+          ADAPTIVE_CARD='{
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": '"${CARD_BODY}"'
+          }'
+
+          # Send the card
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -d "$ADAPTIVE_CARD" \
+            '${{ secrets.POWER_AUTOMATE_URL }}'
+
+          echo "Build notification sent successfully"
 
   run-ndm-api-tests:
     if: ${{ needs.packer.outputs.control_plane_template != '' && needs.packer.outputs.worker_template != '' }}

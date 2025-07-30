@@ -1,5 +1,5 @@
 import { GroupReaderType } from 'src/types/enums';
-import { Command, DMError, FileInfo, SpeedTestReadWriteInfo, Task, TaskStats } from '../types/metadata-types';
+import { DMError, FileInfo, SpeedTestReadWriteInfo, Task, TaskStats } from '../types/metadata-types';
 import {
   DirectoryCollection,
   ErrorCollection,
@@ -9,11 +9,14 @@ import {
   UpdatedTaskCollection,
   SpeedTestReadWriteCollection,
   MigrationTaskCollection,
-  CommandCollection
+  CommandCollection,
+  ItemInfoCollection,
+  TaskInfoCollection
 } from '../types/stream-collection';
 import { JobUtils } from '../utils/job-utils';
 import { RedisStreamCollection } from './redis-stream-collection';
 import { encode } from 'msgpack-lite';
+import { Cmd, ItemInfo, TaskInfo } from '../datatype/stream-datatypes';
 
 export class RedisFileCollection
   extends RedisStreamCollection<FileInfo>
@@ -196,7 +199,7 @@ export class RedisMigrationTasksCollection
 }
 
 
-export class RedisCommandCollection extends RedisStreamCollection<Command> 
+export class RedisCommandCollection extends RedisStreamCollection<Cmd> 
 implements CommandCollection {
   constructor(
     jobRunId: string,
@@ -207,6 +210,44 @@ implements CommandCollection {
     super(
       jobRunId,
       JobUtils.getRedisKey(jobRunId, 'commands'),
+      numMessages,
+      lastId,
+      redisClient,
+    );
+  }
+}
+
+export class RedisItemInfoCollection extends RedisStreamCollection<ItemInfo> 
+implements ItemInfoCollection {
+  constructor(
+    jobRunId: string,
+    numMessages: number,
+    lastId: string,
+    redisClient: any,
+  ) {
+    super(
+      jobRunId,
+      JobUtils.getRedisKey(jobRunId, 'files'),
+      numMessages,
+      lastId,
+      redisClient,
+    );
+  }
+}  
+
+export class RedisTaskInfoCollection
+  extends RedisStreamCollection<TaskInfo>
+  implements TaskInfoCollection
+{
+  constructor(
+    jobRunId: string,
+    numMessages: number,
+    lastId: string,
+    redisClient: any,
+  ) {
+    super(
+      jobRunId,
+      JobUtils.getRedisKey(jobRunId, 'tasks'),
       numMessages,
       lastId,
       redisClient,

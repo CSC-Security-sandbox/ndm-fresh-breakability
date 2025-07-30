@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { Command, ErrorType } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Cmd, Command, ErrorType, CommandStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
 import { getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip } from 'src/activities/utils/utils';
 import { Origin } from 'src/activities/utils/utils.types';
@@ -37,6 +37,8 @@ jest.mock('src/activities/utils/utils', () => ({
     removePrefix: jest.fn(),
     shouldExcludeOrSkip: jest.fn(),
     isContentUpdate: jest.fn(),
+    isMetaUpdated: jest.fn(), 
+
 }));
 
 describe('MigrateScanService', () => {
@@ -154,7 +156,7 @@ describe('MigrateScanService', () => {
             };
             (isContentUpdate as jest.Mock).mockReturnValue(true);
             const result = service.buildCommand(mockStat as any, 'file/path');
-            expect(result).toBeInstanceOf(Command);
+            expect(result).toBeInstanceOf(Cmd);
         });
 
         it('should build directory copy command if content updated and is directory', () => {
@@ -172,7 +174,7 @@ describe('MigrateScanService', () => {
             };
             (isContentUpdate as jest.Mock).mockReturnValue(true);
             const result = service.buildCommand(mockStat as any, 'dir/path');
-            expect(result).toBeInstanceOf(Command);
+            expect(result).toBeInstanceOf(Cmd);
         });
 
         it('should build file copy command if content updated and is file', () => {
@@ -190,7 +192,7 @@ describe('MigrateScanService', () => {
             };
             (isContentUpdate as jest.Mock).mockReturnValue(true);
             const result = service.buildCommand(mockStat as any, 'file/path');
-            expect(result).toBeInstanceOf(Command);
+            expect(result).toBeInstanceOf(Cmd);
         });
 
         it('should return undefined if not content updated', () => {
@@ -203,7 +205,10 @@ describe('MigrateScanService', () => {
     // --- publishCommands ---
     describe('publishCommands', () => {
         it('should call publishToCommandStream for each command in publishCommands', async () => {
-            const commands = [new Command('a', {}, 'id1', 0), new Command('b', {}, 'id2', 0)];
+            const commands = [
+                new Cmd('cmd1', '/src/file1', CommandStatus.READY, false, { COPY_FILE: { status: 'READY', params: {} } }),
+                new Cmd('cmd2', '/src/file2', CommandStatus.READY, false, { COPY_FILE: { status: 'READY', params: {} } }),
+            ];
             await service.publishCommands({ jobContext, commands });
             expect(jobContext.publishToCommandStream).toHaveBeenCalledTimes(2);
         });
@@ -568,4 +573,82 @@ describe('MigrateScanService', () => {
             expect(jobContext.publishToCommandStream).not.toHaveBeenCalled();
         });
     });
+});
+
+// --- MigrateScanService ---
+describe('MigrateScanService', () => {
+    let service: MigrateScanService;
+    let configService: ConfigService;
+    let logger: Partial<LoggerService>;
+    let jobContext: any;
+    let commandInput: any;
+
+    const mockLoggerFactory: Partial<LoggerFactory> = {
+        create: jest.fn().mockReturnValue(mockLogger),
+    };
+
+    beforeEach(() => {
+        configService = {
+            get: jest.fn((key: string) => {
+                const values = {
+                    'worker.workerId': 'test-worker',
+                    'worker.maxMigrationCommand': 2,
+                    'worker.maxCommandConcurrency': 5,
+                    'worker.maxRetryCount': 2,
+                };
+                return values[key];
+            }),
+        } as any;
+
+        logger = mockLogger;
+
+        service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory);
+
+        jobContext = {
+            publishToErrorStream: jest.fn(),
+            publishToCommandStream: jest.fn(),
+            jobConfig: {
+                options: {
+                    excludeOlderThan: new Date('2023-01-01'),
+                },
+                jobType: 'MIGRATION',
+            },
+        };
+
+        commandInput = {
+            jobContext,
+            command: { commandId: '123', retryCount: 0, fPath: '/src/a.txt' },
+            sourcePath: '/src',
+            targetPath: '/dst',
+            sourcePrefix: '/src',
+            settings: {
+                excludePatterns: [],
+                skipFile: 0,
+            },
+        };
+
+        jest.clearAllMocks();
+    });
+
+    it('should be defined', () => {
+        expect(service).toBeDefined();
+    });
+
+    it('should call publishToCommandStream for sync command', async () => {
+        const commands = [
+            new Cmd('cmd1', '/src/file1', CommandStatus.READY, false, { SYNC_FILE: { status: 'READY', params: {} } }),
+        ];
+        await service.publishCommands({ jobContext, commands });
+        expect(jobContext.publishToCommandStream).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle error in publishCommands gracefully', async () => {
+        jobContext.publishToCommandStream.mockImplementation(() => { throw new Error('fail'); });
+        const commands = [
+            new Cmd('cmd1', '/src/file1', CommandStatus.READY, false, { SYNC_FILE: { status: 'READY', params: {} } }),
+        ];
+        await expect(service.publishCommands({ jobContext, commands })).rejects.toThrow('fail');
+    });
+
+    // Add more tests as needed for coverage, e.g. for scanDirectory, buildCommand, etc.
 });

@@ -10,7 +10,7 @@ interface PoolOptions {
 }
 
 export class RedisUtils {
-  private pool: Pool<RedisClientType> | null = null;
+private pool: Pool<RedisClientType['v4']> | null = null;
   private poolOptions: Required<PoolOptions>;
 
   constructor(options?: PoolOptions) {
@@ -72,14 +72,14 @@ export class RedisUtils {
     console.log(`Redis pool initialized with min ${this.poolOptions.minConnections} connections`);
   }
 
-  async getClient(): Promise<RedisClientType> {
-    if (!this.pool) { 
-       await this.initializePool();
-    }
-    return this.pool.acquire();
+ async getClient(): Promise<RedisClientType['v4']> {
+  if (!this.pool) {
+    await this.initializePool();
   }
+  return this.pool.acquire();
+}
 
-  async releaseClient(client: RedisClientType): Promise<void> {
+  async releaseClient(client: RedisClientType['v4']): Promise<void> {
     if (!this.pool) {
       console.warn('Pool not initialized');
       return;

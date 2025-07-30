@@ -1,0 +1,10 @@
+<p>Hello,</p>
+<p>The following Migrate jobs have been created:</p>
+
+{{#each migrateJob.savedJobConfigs}}
+  <p>Job ID: {{id}}</p>
+  <p>Source Path: {{sourcePath}}</p>
+  <p>Target Path: {{targetPath}}</p>
+  <p>Job Type: {{jobType}}</p>
+  <br/>
+{{/each}}

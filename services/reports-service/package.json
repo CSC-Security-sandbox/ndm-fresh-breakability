@@ -91,7 +91,8 @@
       "!**/dist/**",
       "!**/coverage/**",
       "!**.eslintrc.js",
-      "!**/main.ts"
+      "!**/main.ts",
+      "!**/*.types.ts"
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
@@ -115,7 +116,8 @@
       "/test/",
       "/config/",
       "/entities/",
-      "/dto/"
+      "/dto/",
+      ".*types\\.ts$"
     ]
   },
   "overrides": {

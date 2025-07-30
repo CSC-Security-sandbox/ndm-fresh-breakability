@@ -187,6 +187,12 @@ fileConfigs:
         url http://loki-gateway.grafana.svc.cluster.local:80
         tenant ndm-1
         extra_labels {"job":"worker"}
+        <label>
+          worker_id $.worker_id
+          worker_type $.worker_type
+          worker_platform $.worker_platform
+          hostname $.hostname
+        </label>
         flush_interval 10s
         flush_at_shutdown true
       </match>
@@ -233,13 +239,13 @@ fileConfigs:
         renew_record true
         <record>
           message "[${time.strftime('%Y-%m-%d %H:%M:%S')}] ${record.to_json}"
-          worker_name "worker"
+          worker_name "${record['worker_id'] || 'unknown-worker'}"
         </record>
       </filter>
 
       <match worker.tag>
         @type file
-        path /fluentd-logs/%Y-%m-%d/worker/${worker_name}
+        path /fluentd-logs/%Y-%m-%d/worker/${worker_name}/worker
         append true
         <buffer time,worker_name>
           @type file

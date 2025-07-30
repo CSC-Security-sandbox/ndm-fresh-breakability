@@ -50,14 +50,15 @@ export abstract class Protocol {
           ?.replaceAll('${DIR_PATH}', directoryPath)
           ?.replaceAll('${PROTOCOL_VERSION}', payload?.protocolVersion)
         
-        const filedToSanitize: string[] = [];
-        if(!!payload.password) filedToSanitize.push(payload.password);
-        const sanitizedCommand = sanitize(command, filedToSanitize);
+        const fieldsToSanitize: string[] = [];
+        const trimmedPassword = payload.password?.trim();
+        if (trimmedPassword) fieldsToSanitize.push(trimmedPassword);
+        const sanitizedCommand = sanitize(command, fieldsToSanitize);
         this.logger.debug(`command: ${sanitizedCommand}`)
         return new Promise((resolve, rejects) => {
           exec(command, (error, stdout, stderr) => {
-            const sanitizedStderr = sanitize(stderr, filedToSanitize);
-            const sanitizedError = sanitize(error?.message, filedToSanitize);
+            const sanitizedStderr = sanitize(stderr, fieldsToSanitize);
+            const sanitizedError = sanitize(error?.message, fieldsToSanitize);
 
             this.logger.log(
               `[${traceId}] command: ${sanitizedCommand}, stdout: ${stdout}, stderr: ${sanitizedStderr}, error: ${sanitizedError}`,

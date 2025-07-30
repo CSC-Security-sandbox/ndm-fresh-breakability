@@ -1,15 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Client, Connection } from '@temporalio/client';
 
 
 @Injectable()
-export class WorkflowService {
+export class WorkflowService implements OnModuleDestroy {
 
     private client: Client | null = null;
     private connection: Connection | null = null;
     private readonly logger = new Logger(WorkflowService.name);
-    
+
     constructor(
         private readonly configService: ConfigService,
     ) { }
@@ -18,13 +18,16 @@ export class WorkflowService {
         if (this.client)
             return this.client;
         try {
-            this.connection = await Connection.connect(this.configService.get<any>('temporal'));
+            this.connection = await Connection.connect({
+                address: process.env.TEMPORAL_ADDRESS || 'localhost:7233',
+            });
             this.client = new Client({ connection: this.connection });
             return this.client;
 
         } catch (error) {
-            this.logger.log(`Error on getClient : ${error} ${this.configService.get<any>('temporal.address')}`)
-            throw error// return this.getClient()
+            this.logger.error(`Error connecting to Temporal server: ${error.message}`, error.stack);
+            this.logger.error(`Temporal config: ${JSON.stringify(process.env.TEMPORAL_ADDRESS || 'localhost:7233')}`);
+            throw new Error(`Failed to initialize Temporal client: ${error.message}`);
         }
     }
 
@@ -32,11 +35,29 @@ export class WorkflowService {
         try {
             const client = await this.getClient();
             if (!client) {
-                throw new Error('Client not found');
+                throw new Error('Temporal client not available');
             }
+            this.logger.log(`Signaling workflow: ${request.workflowExecution?.workflowId}`);
             return await client.workflowService.signalWorkflowExecution(request);
         } catch (error) {
-            throw error;
+            this.logger.error(`Failed to signal workflow: ${error.message}`, error.stack);
+            throw new Error(`Workflow signal failed: ${error.message}`);
+        }
+    }
+
+    /**
+     * Cleanup method to properly close connections when module is destroyed
+     */
+    async onModuleDestroy(): Promise<void> {
+        try {
+            if (this.connection) {
+                await this.connection.close();
+                this.connection = null;
+                this.logger.log('Temporal connection closed');
+            }
+            this.client = null;
+        } catch (error) {
+            this.logger.error(`Error closing Temporal connection: ${error.message}`);
         }
     }
 

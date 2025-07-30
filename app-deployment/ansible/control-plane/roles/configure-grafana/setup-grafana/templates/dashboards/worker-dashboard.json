@@ -113,7 +113,7 @@
             },
             "direction": "backward",
             "editorMode": "code",
-            "expr": "count_over_time({job=\"worker\"}[$__interval])",
+            "expr": "count_over_time({job=\"worker\", worker_id=\"$workerid\"}[$__interval])",
             "queryType": "range",
             "refId": "A"
           }
@@ -213,7 +213,7 @@
             },
             "direction": "backward",
             "editorMode": "code",
-            "expr": "sum by(level) (\n  count_over_time(\n    {job=\"worker\"}\n    | decolorize\n    | logfmt\n  [$__interval])\n)",
+            "expr": "sum by(level) (count_over_time({job=\"worker\", worker_id=\"$workerid\"}| label_format level=detected_level [$__interval]))",
             "queryType": "range",
             "refId": "A"
           }
@@ -259,7 +259,7 @@
             },
             "direction": "backward",
             "editorMode": "code",
-            "expr": "{job=\"worker\"}\n|decolorize\n|logfmt\n|level=\"error\"",
+            "expr": "{job=\"worker\", worker_id=\"$workerid\"} | logfmt | label_format level=detected_level | level = `error`",
             "queryType": "range",
             "refId": "A"
           }
@@ -278,7 +278,7 @@
           "overrides": []
         },
         "gridPos": {
-          "h": 7,
+          "h": 11,
           "w": 24,
           "x": 0,
           "y": 12
@@ -300,7 +300,7 @@
           {
             "direction": "backward",
             "editorMode": "code",
-            "expr": "{job=\"worker\"} |= ``",
+            "expr": "{job=\"worker\", worker_id=\"$workerid\"} |= ``",
             "queryType": "range",
             "refId": "A"
           }
@@ -330,6 +330,26 @@
           "refresh": 1,
           "regex": "",
           "type": "datasource"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${DataSource}"
+          },
+          "definition": "",
+          "description": "",
+          "label": "Worker ID",
+          "name": "workerid",
+          "options": [],
+          "query": {
+            "label": "worker_id",
+            "refId": "LokiVariableQueryEditor-VariableQuery",
+            "stream": "",
+            "type": 1
+          },
+          "refresh": 1,
+          "regex": "",
+          "type": "query"
         }
       ]
     },

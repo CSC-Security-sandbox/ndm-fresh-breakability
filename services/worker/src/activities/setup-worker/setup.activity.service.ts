@@ -12,6 +12,9 @@ import { WorkersConfig } from 'src/config/app.config';
 import { SetupWorkerParams } from '../types/tasks';
 import { RetryableError } from 'src/errors/errors.types';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { WorkManagerService } from '../work-manager/work-manager.service';
+import { WorkerConfiguration } from '../work-manager/work-manager.types';
+import { getWorkerIdentity } from 'src/utils/worker-manager.mappers';
 
 @Injectable()
 export class SetupActivityService {
@@ -27,7 +30,8 @@ export class SetupActivityService {
     @Inject(AuthService) private readonly authService: AuthService,
     private readonly redisService: RedisService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
-    private readonly protocols: Protocols
+    private readonly protocols: Protocols,
+    private workManagerService: WorkManagerService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
@@ -180,13 +184,21 @@ export class SetupActivityService {
       );
       
       await this.waitFor(1000);
-
+      const config:WorkerConfiguration ={
+        workerId: this.workerId,
+        configName: 'job-specific-tasks' ,
+        taskQueueId: jobRunId,
+        dynamicTaskQueue: true,
+      }
+      const id = getWorkerIdentity(config)
+      const workerOptions = await this.workManagerService.createWorkerOptions(id,config);
+      await this.workManagerService.startWorker(id, workerOptions);
       return {
         jobRunId,
         status: 'success',
         protocolType,
         workerId: this.workerId,
-        message: `Worker ${this.workerId} successfully set up.`,
+        message: `Worker ${this.workerId} successfully set up`,
       };
     } catch (error) {
       this.logger.error(`[${jobRunId}] - Setup failed: ${error?.message ?? error}`);
@@ -273,6 +285,17 @@ export class SetupActivityService {
         // await context.cleanup();
         this.logger.log(`[${jobRunId}] - Job context cleaned up`);
       }
+      const config:WorkerConfiguration ={
+        workerId: this.workerId,
+        configName: 'job-specific-tasks' ,
+        taskQueueId: jobRunId,
+        dynamicTaskQueue: true,
+      }
+      const id = getWorkerIdentity(config);
+      this.logger.log(`[${jobRunId}] - Shutting down worker with ID: ${id}`);
+      const worker = await this.workManagerService.getWorker(id);
+      this.logger.log(`[${jobRunId}] - Worker found: ${worker ? 'Yes' : 'No'}`);
+      await this.workManagerService.shutdownWorker(worker, false);  
       return {
         jobRunId,
         status: 'success',
