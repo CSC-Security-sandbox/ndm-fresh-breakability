@@ -15,7 +15,7 @@ import { basePrefix, dmError, formatDate, getFilePermissions, getFileType, getUs
 import { CommonTaskService } from '../common/common-task.service';
 import { handleSyncTaskUpdateInput, StampMetaDataInput, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate-sync.types';
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
-import { LogExecutionTime } from "../../../utils/perfomance.test";
+import { LogExecutionTime } from '../../../utils/perfomance';
 
 @Injectable()
 export class MigrateSyncService {
