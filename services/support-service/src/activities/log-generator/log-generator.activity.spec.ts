@@ -53,7 +53,11 @@ describe('LogGeneratorActivity', () => {
 
   beforeEach(async () => {
     const mockConfigService = {
-      get: jest.fn(),
+      get: jest.fn((key: string) => {
+        if (key === 'support-bundle.bundle.baseLogPath') return baseLogPath;
+        if (key === 'support-bundle.bundle.outputZipPath') return outputZipPath;
+        return undefined;
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
