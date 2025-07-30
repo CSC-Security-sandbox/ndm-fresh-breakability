@@ -28,11 +28,21 @@ export const ConfigurationDataCsvGeneratorWorkflow = async ({
     log.info(
       `[${traceId}] Finished ConfigurationDataCsvGeneratorWorkflow, configJobCsv: ${configJobCsv}`,
     );
-    return 'Successfully generated configuration data CSV files for workers and jobs';
+
+    return {
+      status: 'success',
+      message: 'Successfully generated configuration data CSV files for workers and jobs',
+    }
+
+    // return 'Successfully generated configuration data CSV files for workers and jobs';
   } catch (error) {
     log.error(
       `[${traceId}] Error in ConfigurationDataCsvGeneratorWorkflow: ${error.message}`,
     );
-    throw error;
+    return {
+      status: 'failed',
+      message: error.message,
+    };
+    // throw error;
   }
 };

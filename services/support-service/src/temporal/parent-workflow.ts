@@ -26,8 +26,16 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
     });
 
     const logGeneratorResult = await logGeneratorChild.result();
-    payload.zipLocation = logGeneratorResult;
-    workflowResults.push(logGeneratorResult);
+
+    log.info(`logGeneratorResult - ${JSON.stringify(logGeneratorResult)}`);
+    if (logGeneratorResult.status === 'failed') {
+      log.info(`error occured in LogGeneratorWorkflow: ${logGeneratorResult.message}`);
+      // Throw a plain object to preserve the message in Temporal's error serialization
+      throw { message: logGeneratorResult.message };
+    }
+
+    payload.zipLocation = logGeneratorResult.message;
+    workflowResults.push(logGeneratorResult.message);
 
     const errorCsvChild = await startChild(ErrorCsvGeneratorWorkflow, {
       args: [{ traceId, payload }],
@@ -40,7 +48,14 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
     });
 
     const errorCsvResult = await errorCsvChild.result();
-    workflowResults.push(errorCsvResult);
+
+    if (errorCsvResult.status === 'failed') {
+      log.info(`error occured in ErrorCsvGeneratorWorkflow: ${errorCsvResult.message}`);
+      // Throw a plain object to preserve the message in Temporal's error serialization
+      throw { message: errorCsvResult.message };
+    }
+
+    workflowResults.push(errorCsvResult.message);
 
     const configurationDataCsvChild = await startChild(
       ConfigurationDataCsvGeneratorWorkflow,
@@ -56,7 +71,14 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
     );
 
     const configurationDataCsvResult = await configurationDataCsvChild.result();
-    workflowResults.push(configurationDataCsvResult);
+
+    if (configurationDataCsvResult.status === 'failed') {
+      log.info(`error occured in ConfigurationDataCsvGeneratorWorkflow: ${configurationDataCsvResult.message}`);
+      // Throw a plain object to preserve the message in Temporal's error serialization
+      throw { message: configurationDataCsvResult.message };
+    }
+
+    workflowResults.push(configurationDataCsvResult.message);
 
     await notifyWorkflowCompletion({
       traceId,
@@ -71,6 +93,7 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
       workflowResults,
     };
   } catch (err) {
+    log.error(`Error in SupportBundleWorkflow for traceId: ${traceId} ${JSON.stringify(err)}`);
     await notifyWorkflowCompletion({
       traceId,
       status: SupportBundleStatus.FAILED,
