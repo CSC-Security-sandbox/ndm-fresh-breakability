@@ -18,13 +18,16 @@ export class RequestContextMiddleware implements NestMiddleware {
         (req.get('trackId') as string) ||
         uuidv4();
 
-    const context: RequestContextData = { trackId: trackId };
+    const projectId = (req.get('projectId') as string);    
+
+    const context: RequestContextData = { trackId: trackId, projectId: projectId };
     req['trackId'] = trackId;
 
     this.requestContext.run(context, () => {
       this.logger.info({
         context: RequestContextMiddleware.name,
         trackId,
+        projectId,
         message: `Incoming request: [${req.method}] ${req.url}`,
         ip: req.ip,
         headers: (() => {
@@ -41,6 +44,7 @@ export class RequestContextMiddleware implements NestMiddleware {
         this.logger.log(logLevel, {
           context: RequestContextMiddleware.name,
           trackId,
+          projectId,
           message: `Response sent: [${req.method}] ${req.url} - ${statusCode}`,
         });
       });
