@@ -28,11 +28,6 @@ variable "images" {
   type        = list(string)
 }
 
-variable "zones" {
-  description = "List of zones for each VM"
-  type        = list(string)
-}
-
 variable "control_plane_count" {
   type = number
 }

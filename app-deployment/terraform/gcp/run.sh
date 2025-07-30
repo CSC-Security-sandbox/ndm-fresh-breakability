@@ -29,11 +29,9 @@ PROJECT_ID="app-microservices-cm"
 DEFAULT_REGION="us-east1"
 DEFAULT_CP_MACHINE_TYPE="e2-custom-8-32768"
 DEFAULT_CP_COUNT=1
-DEFAULT_CP_ZONE="us-east1-b"
 DEFAULT_CP_IMAGE_FAMILY=""
 DEFAULT_WORKER_MACHINE_TYPE="e2-custom-8-32768"
 DEFAULT_WORKER_COUNT=2
-DEFAULT_WORKER_ZONE="us-east1-b"
 DEFAULT_WORKER_IMAGE_FAMILY=""
 NAME_PREFIX="daksh"
 NAME_TIMESTAMP=$(date +%Y%m%d%H%M%S)
@@ -70,17 +68,11 @@ VM_COUNT=$((CONTROL_PLANE_COUNT + WORKER_COUNT))
 read -p "Enter machine type for all control plane nodes [${DEFAULT_CP_MACHINE_TYPE}]: " CP_MACHINE_TYPE
 CP_MACHINE_TYPE=${CP_MACHINE_TYPE:-$DEFAULT_CP_MACHINE_TYPE}
 
-read -p "Enter zone for all control plane nodes [${DEFAULT_CP_ZONE}]: " CP_ZONE
-CP_ZONE=${CP_ZONE:-$DEFAULT_CP_ZONE}
-
 read -p "Enter image for control plane [${DEFAULT_CP_IMAGE}]: " CP_IMAGE
 CP_IMAGE=${CP_IMAGE:-$DEFAULT_CP_IMAGE}
 
 read -p "Enter machine type for all worker nodes [${DEFAULT_WORKER_MACHINE_TYPE}]: " WORKER_MACHINE_TYPE
 WORKER_MACHINE_TYPE=${WORKER_MACHINE_TYPE:-$DEFAULT_WORKER_MACHINE_TYPE}
-
-read -p "Enter zone for all worker nodes [${DEFAULT_WORKER_ZONE}]: " WORKER_ZONE
-WORKER_ZONE=${WORKER_ZONE:-$DEFAULT_WORKER_ZONE}
 
 read -p "Enter image for worker [${DEFAULT_WORKER_IMAGE}]: " WORKER_IMAGE
 WORKER_IMAGE=${WORKER_IMAGE:-$DEFAULT_WORKER_IMAGE}
@@ -96,30 +88,23 @@ REGION=${REGION:-$DEFAULT_REGION}
 
 
 MACHINE_TYPES=()
-ZONES=()
 IMAGES=()
 NAMES=()
 
-
-
 for i in $(seq 1 $CONTROL_PLANE_COUNT); do
   MACHINE_TYPES+=("$CP_MACHINE_TYPE")
-  ZONES+=("$CP_ZONE")
   IMAGES+=("$CP_IMAGE")
   NAMES+=("${NAME_PREFIX}-control-plane-$i-${NAME_TIMESTAMP}")
 done
 
 for i in $(seq 1 $WORKER_COUNT); do
   MACHINE_TYPES+=("$WORKER_MACHINE_TYPE")
-  ZONES+=("$WORKER_ZONE")
   IMAGES+=("$WORKER_IMAGE")
   NAMES+=("${NAME_PREFIX}-worker-$i-${NAME_TIMESTAMP}")
 done
 
-
 MACHINE_TYPES_JSON=$(printf '%s\n' "${MACHINE_TYPES[@]}" | jq -R . | jq -s .)
 IMAGES_JSON=$(printf '%s\n' "${IMAGES[@]}" | jq -R . | jq -s .)
-ZONES_JSON=$(printf '%s\n' "${ZONES[@]}" | jq -R . | jq -s .)
 NAMES_JSON=$(printf '%s\n' "${NAMES[@]}" | jq -R . | jq -s .)
 
 
@@ -130,7 +115,7 @@ export TF_VAR_vm_count=$VM_COUNT
 export TF_VAR_name_prefix=$NAME_PREFIX
 export TF_VAR_machine_types="$MACHINE_TYPES_JSON"
 export TF_VAR_images="$IMAGES_JSON"
-export TF_VAR_zones="$ZONES_JSON"
+# export TF_VAR_zones="$ZONES_JSON"
 export TF_VAR_control_plane_count=$CONTROL_PLANE_COUNT
 export TF_VAR_worker_count=$WORKER_COUNT
 export TF_VAR_instance_names="$NAMES_JSON"

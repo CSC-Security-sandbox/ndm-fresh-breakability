@@ -90,10 +90,9 @@ jobs:
           echo "WORKER_COUNT=${{ inputs.worker_count || '2' }}" >> $GITHUB_ENV
           echo "CP_IMAGE=${{ inputs.cp_image }}" >> $GITHUB_ENV
           echo "WORKER_IMAGE=${{ inputs.worker_image }}" >> $GITHUB_ENV
-          echo "REGION=${{ inputs.gcp_region || 'us-east1' }}" >> $GITHUB_ENV
-          echo "MACHINE_TYPE=${{ inputs.gcp_machine_type || 'e2-custom-8-32768' }}" >> $GITHUB_ENV
-          echo "CP_ZONE=us-east1-b" >> $GITHUB_ENV
-          echo "WORKER_ZONE=us-east1-b" >> $GITHUB_ENV
+          echo "REGION=us-east1" >> $GITHUB_ENV
+          echo "MACHINE_TYPE=e2-custom-8-32768" >> $GITHUB_ENV
+          echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID || 'app-microservices-cm' }}" >> $GITHUB_ENV
         else
           # Direct execution
           echo "NAME_PREFIX=${{ github.event.inputs.name_prefix || 'admin' }}" >> $GITHUB_ENV
@@ -103,8 +102,7 @@ jobs:
           echo "WORKER_IMAGE=${{ github.event.inputs.worker_image }}" >> $GITHUB_ENV
           echo "REGION=us-east1" >> $GITHUB_ENV
           echo "MACHINE_TYPE=e2-custom-8-32768" >> $GITHUB_ENV
-          echo "CP_ZONE=us-east1-b" >> $GITHUB_ENV
-          echo "WORKER_ZONE=us-east1-b" >> $GITHUB_ENV
+          echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID || 'app-microservices-cm' }}" >> $GITHUB_ENV
         fi
 
     - name: Display GCP Configuration
@@ -116,8 +114,7 @@ jobs:
         echo "Worker Count: ${{ env.WORKER_COUNT }}"
         echo "Machine Type: ${{ env.MACHINE_TYPE }}"
         echo "Region: ${{ env.REGION }}"
-        echo "CP Zone: ${{ env.CP_ZONE }}"
-        echo "Worker Zone: ${{ env.WORKER_ZONE }}"
+        echo "Zones: Auto-selected from available zones"
         echo "CP Image: ${{ env.CP_IMAGE || 'default' }}"
         echo "Worker Image: ${{ env.WORKER_IMAGE || 'default' }}"
         echo "================================================="
@@ -155,10 +152,7 @@ jobs:
         echo "${{ env.CP_COUNT }}"
         echo "${{ env.WORKER_COUNT }}"
         echo "${{ env.MACHINE_TYPE }}"
-        echo "${{ env.CP_ZONE }}"
         echo "${{ env.CP_IMAGE }}"
-        echo "${{ env.MACHINE_TYPE }}"
-        echo "${{ env.WORKER_ZONE }}"
         echo "${{ env.WORKER_IMAGE }}"
         echo "${{ env.REGION }}"
         ) | ./run.sh
@@ -194,7 +188,7 @@ jobs:
         
         # Get all instance details
         gcloud compute instances list \
-          --project=app-microservices-cm \
+          --project=${{ env.GCP_PROJECT_ID }} \
           --filter="name~'${NAME_PREFIX}-.*'" \
           --format="table(
             name:label='Instance Name',

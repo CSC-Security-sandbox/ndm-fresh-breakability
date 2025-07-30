@@ -3,12 +3,18 @@ provider "google" {
   region  = var.region
 }
 
+# Data source to get available zones in the region
+data "google_compute_zones" "available" {
+  region = var.region
+  status = "UP"
+}
+
 resource "google_compute_instance" "vm_instance" {
   count        = var.vm_count
   
   name         = var.instance_names[count.index]
   machine_type = var.machine_types[count.index]
-  zone         = var.zones[count.index]
+  zone         = data.google_compute_zones.available.names[count.index % length(data.google_compute_zones.available.names)]
 
   boot_disk {
     initialize_params {
