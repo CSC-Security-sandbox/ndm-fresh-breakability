@@ -36,8 +36,7 @@ describe('OperationErrorService', () => {
         });
     });
 
-    describe('getOperationErrorsByProjectAndDateRange', () => {
-        const projectIds = ['project-1', 'project-2'];
+    describe('getOperationErrorsByDateRange', () => {
         const startDate = '2023-01-01';
         const endDate = '2023-12-31';
 
@@ -58,7 +57,7 @@ describe('OperationErrorService', () => {
             },
         ];
 
-        it('should successfully fetch operation errors for given projects and date range', async () => {
+        it('should successfully fetch operation errors for given date range', async () => {
             mockQuery.mockResolvedValue(mockOperationErrors);
 
             const result = await service.getOperationErrorsByDateRange(
@@ -69,7 +68,7 @@ describe('OperationErrorService', () => {
             expect(mockQuery).toHaveBeenCalledTimes(1);
             expect(mockQuery).toHaveBeenCalledWith(
                 expect.stringContaining('SELECT'),
-                [projectIds, startDate, endDate],
+                [startDate, endDate],
             );
 
             expect(result).toEqual(mockOperationErrors);
@@ -98,6 +97,27 @@ describe('OperationErrorService', () => {
                     endDate,
                 ),
             ).rejects.toThrow('Database connection failed');
+        });
+
+        it('should call the correct SQL query with startDate and endDate', async () => {
+            mockQuery.mockResolvedValue([]);
+
+            const startDate = '2023-01-01';
+            const endDate = '2023-12-31';
+
+            await service.getOperationErrorsByDateRange(startDate, endDate);
+
+            expect(mockQuery).toHaveBeenCalledWith(
+                expect.stringContaining('SELECT'),
+                [startDate, endDate]
+            );
+        });
+
+        it('should propagate errors thrown by the repository', async () => {
+            const error = new Error('Unexpected DB error');
+            mockQuery.mockRejectedValue(error);
+
+            await expect(service.getOperationErrorsByDateRange('2023-01-01', '2023-12-31')).rejects.toThrow('Unexpected DB error');
         });
     });
 });
