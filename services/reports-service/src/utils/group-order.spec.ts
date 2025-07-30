@@ -43,7 +43,7 @@ describe("formatValue", () => {
       value: 1024,
       valueType: ReportValueType.SIZE
     };
-    expect(formatValue(entry)).toBe("1.02 KB");
+    expect(formatValue(entry)).toBe("1 KiB");
   });
 
   it("should format time values correctly", () => {

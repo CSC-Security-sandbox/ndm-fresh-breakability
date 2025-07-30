@@ -16,28 +16,28 @@ describe("convertBytes", () => {
   });
 
   it("should return the correct size in KiB", () => {
-    expect(convertBytes(1024)).toBe("1.02 KiB");
-    expect(convertBytes(1536)).toBe("1.54 KiB");
+    expect(convertBytes(1024)).toBe("1 KiB");
+    expect(convertBytes(1536)).toBe("1.50 KiB");
   });
 
   it("should return the correct size in MiB", () => {
-    expect(convertBytes(1048576)).toBe("1.05 MiB");
-    expect(convertBytes(1572864)).toBe("1.57 MiB");
+    expect(convertBytes(1048576)).toBe("1 MiB");
+    expect(convertBytes(1572864)).toBe("1.50 MiB");
   });
 
   it("should return the correct size in GiB", () => {
-    expect(convertBytes(1073741824)).toBe("1.07 GiB");
-    expect(convertBytes(1610612736)).toBe("1.61 GiB");
+    expect(convertBytes(1073741824)).toBe("1 GiB");
+    expect(convertBytes(1610612736)).toBe("1.50 GiB");
   });
 
   it("should return the correct size in TiB", () => {
-    expect(convertBytes(1099511627776)).toBe("1.10 TiB");
-    expect(convertBytes(1649267441664)).toBe("1.65 TiB");
+    expect(convertBytes(1099511627776)).toBe("1 TiB");
+    expect(convertBytes(1649267441664)).toBe("1.50 TiB");
   });
 
   it("should return the correct size in PiB", () => {
-    expect(convertBytes(1125899906842624)).toBe("1.13 PiB");
-    expect(convertBytes(1688849860263936)).toBe("1.69 PiB");
+    expect(convertBytes(1125899906842624)).toBe("1 PiB");
+    expect(convertBytes(1688849860263936)).toBe("1.50 PiB");
   });
 });
 
@@ -109,10 +109,10 @@ describe("formatNumbersWithSuffix", () => {
 describe("formatSizeAndCount", () => {
   it("should format size and count correctly", () => {
     expect(formatSizeAndCount("size(1024)count(1000)")).toBe(
-      "size: (1.02 KiB); count: (1.00 K)",
+      "size: (1 KiB); count: (1.00 K)",
     );
     expect(formatSizeAndCount("size(1048576)count(100000)")).toBe(
-      "size: (1.05 MiB); count: (1.00 L)",
+      "size: (1 MiB); count: (1.00 L)",
     );
   });
 
@@ -127,7 +127,7 @@ describe("formatSizeAndCount", () => {
 
   it("should handle only size or only count", () => {
     expect(formatSizeAndCount("size(1024)")).toBe(
-      "size: (1.02 KB); count: (0)",
+      "size: (1 KB); count: (0)",
     );
     expect(formatSizeAndCount("count(1000)")).toBe(
       "size: (0 B); count: (1.00 K)",
