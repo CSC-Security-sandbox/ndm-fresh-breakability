@@ -272,13 +272,22 @@ export class ErrorCsvGenerationActivity {
         }
       } catch (error) {
         // Fallback: try to extract date string manually
-        const dateStr = item.createdAt.toString();
-        if (dateStr.includes('-')) {
-          date = dateStr.split('T')[0];
+        if (!item.createdAt) {
+          date = 'unknown-date';
         } else {
-          // For dates like "Fri Jul 11 2025", parse and format
-          const parsed = new Date(dateStr);
-          date = parsed.toISOString().split('T')[0];
+          const dateStr = item.createdAt.toString();
+          if (dateStr.includes('-')) {
+            date = dateStr.split('T')[0];
+          } else {
+            // For dates like "Fri Jul 11 2025", parse and format
+            const parsed = new Date(dateStr);
+            if (!isNaN(parsed.getTime())) {
+              date = parsed.toISOString().split('T')[0];
+            } else {
+              // If still can't parse, use fallback
+              date = 'unknown-date';
+            }
+          }
         }
       }
 
