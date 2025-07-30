@@ -52,7 +52,7 @@ export const formatNumbersWithSuffix = (num: number): string => {
 
   const i = Math.floor(Math.log10(num) / 3);
 
-  const formattedNumber = (num / Math.pow(NUMBER_IN_KILOBYTE, i)).toFixed(2);
+  const formattedNumber = (num / Math.pow(DECIMAL_BASE, i)).toFixed(2);
 
   return `${parseFloat(formattedNumber)}${LARGE_NUMBER_SUFFIXES[i]}`;
 };
