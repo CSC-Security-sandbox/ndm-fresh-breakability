@@ -171,7 +171,7 @@ export class SupportBundleService {
     const user = await this.supportBundleRepo.findOne({
       where: { userId },
       order: { createdAt: 'DESC' },
-      select: ['status'],
+      select: ['status', 'errorMessage'],
     });
 
     if (!user) {

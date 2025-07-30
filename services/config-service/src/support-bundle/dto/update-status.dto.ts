@@ -1,4 +1,4 @@
-import { IsUUID, IsEnum, IsString } from 'class-validator';
+import { IsUUID, IsEnum, IsString, IsOptional } from 'class-validator';
 import { SupportBundleStatus } from 'src/constants/enums';
 
 export class UpdateStatusDto {
@@ -8,6 +8,7 @@ export class UpdateStatusDto {
   @IsEnum(SupportBundleStatus)
   status: SupportBundleStatus;
 
+  @IsOptional()
   @IsString()
-  errorMessage?: string;
+  errorMessage?: string | null;
 }
