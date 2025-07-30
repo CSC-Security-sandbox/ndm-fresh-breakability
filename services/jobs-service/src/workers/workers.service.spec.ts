@@ -1,4 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
+import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
 import { WorkersService } from "./workers.service";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
@@ -41,6 +42,17 @@ describe("WorkersService", () => {
         {
           provide: ConfigService,
           useValue: configService,
+        },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
+            }),
+          },
         },
       ],
     }).compile();

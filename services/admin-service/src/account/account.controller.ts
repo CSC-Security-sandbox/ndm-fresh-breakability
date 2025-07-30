@@ -53,9 +53,7 @@ export class AccountController {
     @Body() createAccountDto: CreateAccountDto,
     @Request() userPermissions: UserPermissionResponse,
   ) {
-    this.logger.log('Create account request received', {
-      userId: userPermissions.user.id,
-    });
+    this.logger.log(`Create account request received from user: ${userPermissions.user.id}`);
     return this.accountService.create(createAccountDto, userPermissions);
   }
 
@@ -103,12 +101,7 @@ export class AccountController {
     @Query('sortOrder') sortOrder: 'ASC' | 'DESC' = 'ASC',
     @Query('filter') filter: string,
   ) {
-    this.logger.log('GET All Accounts request', {
-      page,
-      limit,
-      sortField,
-      sortOrder,
-    });
+    this.logger.log(`GET All Accounts request - page: ${page}, limit: ${limit}, sortField: ${sortField}, sortOrder: ${sortOrder}`);
     return this.accountService.findAll(
       page,
       limit,
@@ -126,7 +119,7 @@ export class AccountController {
     description: AccountDescription.getAccountByIdDescription,
   })
   findOne(@Param('id', NonEmptyStringPipe) id: string) {
-    this.logger.log('GET Account by ID request', { accountId: id });
+    this.logger.log(`GET Account by ID request: ${id}`);
     return this.accountService.findOne(id);
   }
 
@@ -142,10 +135,7 @@ export class AccountController {
     @Body() updateAccountDto: UpdateAccountDto,
     @Request() userPermissionResponse: UserPermissionResponse,
   ) {
-    this.logger.log('UPDATE Account request', {
-      accountId: id,
-      userId: userPermissionResponse.user.id,
-    });
+    this.logger.log(`UPDATE Account request: ${id} by user: ${userPermissionResponse.user.id}`);
     return this.accountService.update(
       id,
       updateAccountDto,
@@ -161,7 +151,7 @@ export class AccountController {
     description: AccountDescription.DeleteAccountDescription,
   })
   delete(@Param('id', NonEmptyStringPipe) id: string) {
-    this.logger.log('DELETE Account request', { accountId: id });
+    this.logger.log(`DELETE Account request: ${id}`);
     return this.accountService.delete(id);
   }
 }

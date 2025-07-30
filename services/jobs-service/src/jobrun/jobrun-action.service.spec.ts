@@ -1,22 +1,52 @@
 import { BadRequestException } from "@nestjs/common";
+import { Test, TestingModule } from "@nestjs/testing";
+import { getRepositoryToken } from "@nestjs/typeorm";
+import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
 import { JobRunActionService } from "./jobrun-action.service";
 import { JobRunStatus } from "src/constants/enums";
 import { JobRunActions } from "./dto/jobrunactions.dto";
+import { JobRunEntity } from "src/entities/jobrun.entity";
+import { WorkflowService } from "src/workflow/workflow.service";
 
 describe("JobRunActionService", () => {
     let service: JobRunActionService;
     let jobRunRepo: any;
     let workFlowService: any;
 
-    beforeEach(() => {
-        jobRunRepo = {
-            find: jest.fn(),
-            update: jest.fn(),
-        };
-        workFlowService = {
-            sendSignal: jest.fn(),
-        };
-        service = new JobRunActionService(jobRunRepo, workFlowService);
+    beforeEach(async () => {
+        const module: TestingModule = await Test.createTestingModule({
+            providers: [
+                JobRunActionService,
+                {
+                    provide: getRepositoryToken(JobRunEntity),
+                    useValue: {
+                        find: jest.fn(),
+                        update: jest.fn(),
+                    },
+                },
+                {
+                    provide: WorkflowService,
+                    useValue: {
+                        sendSignal: jest.fn(),
+                    },
+                },
+                {
+                    provide: LoggerFactory,
+                    useValue: {
+                        create: jest.fn().mockReturnValue({
+                            log: jest.fn(),
+                            error: jest.fn(),
+                            warn: jest.fn(),
+                            debug: jest.fn(),
+                        }),
+                    },
+                },
+            ],
+        }).compile();
+
+        service = module.get<JobRunActionService>(JobRunActionService);
+        jobRunRepo = module.get(getRepositoryToken(JobRunEntity));
+        workFlowService = module.get<WorkflowService>(WorkflowService);
     });
 
     describe("actions", () => {

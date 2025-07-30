@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { ConfigService } from "@nestjs/config";
 import axios from "axios";
+import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
 import { SendMailService } from "./send-email";
 import { SuccessEmailType } from "./send-email.type";
 
@@ -17,6 +18,17 @@ describe("SendMailService", () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SendMailService,
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
+            }),
+          },
+        },
         {
           provide: ConfigService,
           useValue: {

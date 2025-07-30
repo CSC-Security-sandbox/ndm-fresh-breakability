@@ -1,6 +1,7 @@
 import { JobContextFactory, RedisUtils } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Inject, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 
 import { RedisClientType } from 'redis';
 
@@ -9,10 +10,11 @@ export class RedisService  implements OnModuleInit, OnModuleDestroy {
 
   private client: RedisClientType;
   private redisUtils: RedisUtils;
-  private readonly logger = new Logger(RedisService.name);
+  private readonly logger: LoggerService;
 
-  constructor() {
+  constructor(@Inject(LoggerFactory) private readonly loggerFactory: LoggerFactory) {
     this.redisUtils = new RedisUtils();
+    this.logger = loggerFactory.create(RedisService.name);
   }
 
   async onModuleInit(): Promise<void> {

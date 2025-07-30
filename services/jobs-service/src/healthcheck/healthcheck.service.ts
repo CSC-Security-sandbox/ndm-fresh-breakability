@@ -1,5 +1,6 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Inject } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
+import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 import { WorkerStatsEntity } from "src/entities/worker-stats.entity";
 import { WorkerEntity } from "src/entities/worker.entity";
 import { Repository } from "typeorm";
@@ -8,13 +9,16 @@ import { HealthcheckStats, SystemStats } from "./dto/healthcheck.dto";
 @Injectable()
 export class HealthcheckService {
   // This service will handle the logic for health checks
-  private readonly logger = new Logger(HealthcheckService.name);
+  private readonly logger: LoggerService;
   constructor(
+    @Inject(LoggerFactory) private readonly loggerFactory: LoggerFactory,
     @InjectRepository(WorkerStatsEntity)
     private workerStatsEntity: Repository<WorkerStatsEntity>,
     @InjectRepository(WorkerEntity)
     private workerEntity: Repository<WorkerEntity>,
-  ) {}
+  ) {
+    this.logger = loggerFactory.create(HealthcheckService.name);
+  }
 
   async createOrUpdateHealthCheckStats(
     healthStats: HealthcheckStats,

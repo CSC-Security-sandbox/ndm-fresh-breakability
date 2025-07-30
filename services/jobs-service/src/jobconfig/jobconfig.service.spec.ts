@@ -100,6 +100,9 @@ describe("JobConfigService", () => {
     loggerService = {
       log: jest.fn(),
       error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+      verbose: jest.fn(),
     } as unknown as jest.Mocked<LoggerService>;
     redisService = {
       getClient: jest.fn().mockReturnValue(createClient()),

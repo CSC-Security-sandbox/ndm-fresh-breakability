@@ -1,6 +1,7 @@
-import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
+import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 import {
   Command,
   FileServerDetails,
@@ -54,10 +55,11 @@ import { getWorkflowId } from "./jobrun.utli";
 
 @Injectable()
 export class JobRunInitService {
-  private readonly logger = new Logger(JobRunInitService.name);
+  private readonly logger: LoggerService;
   private readonly mountBasePath: string;
 
   constructor(
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     @InjectRepository(JobRunEntity)
     private jobRunRepo: Repository<JobRunEntity>,
     @InjectRepository(SpeedTestConfigEntity)
@@ -79,6 +81,7 @@ export class JobRunInitService {
     @InjectRepository(IdentityConfigCrossMappingEntity)
     private identityConfigCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>,
   ) {
+    this.logger = loggerFactory.create(JobRunInitService.name);
     this.mountBasePath = this.configService.get<string>(
       "app.paths.mountBasePath",
     );

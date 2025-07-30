@@ -1,7 +1,8 @@
-import { Module } from "@nestjs/common";
+import { MiddlewareConsumer, Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { LoggerModule, RequestContextMiddleware } from "@netapp-cloud-datamigrate/logger-lib";
 import { AppConfigModule } from "./config/config.module";
 import { JobConfigModule } from "./jobconfig/jobconfig.module";
 import { JobRunModule } from "./jobrun/jobrun.module";
@@ -13,7 +14,7 @@ import { HealthcheckModule } from "./healthcheck/healthcheck.module";
 
 @Module({
   imports: [
-    // LoggerModule.forRoot(),
+    LoggerModule.forRoot(),
     EventEmitterModule.forRoot(),
     AppConfigModule,
     TypeOrmModule.forRootAsync({
@@ -35,9 +36,9 @@ import { HealthcheckModule } from "./healthcheck/healthcheck.module";
   exports: [],
 })
 export class AppModule {
-  // configure(consumer: MiddlewareConsumer) {
-  //   consumer
-  //     .apply(RequestLoggerMiddleware)
-  //     .forRoutes('*');
-  // }
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(RequestContextMiddleware)
+      .forRoutes('*');
+  }
 }

@@ -4,14 +4,13 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { WorkerStatsEntity } from "src/entities/worker-stats.entity";
 import { WorkerEntity } from "src/entities/worker.entity";
-import { LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
+import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
 import { HealthcheckStats } from "./dto/healthcheck.dto";
 
 describe("HealthcheckService", () => {
   let service: HealthcheckService;
   let workerRepository: Repository<WorkerEntity>;
   let workerStatsRepository: Repository<WorkerStatsEntity>;
-  let logger: LoggerService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -26,10 +25,14 @@ describe("HealthcheckService", () => {
           useClass: Repository,
         },
         {
-          provide: LoggerService,
+          provide: LoggerFactory,
           useValue: {
-            error: jest.fn(),
-            log: jest.fn(),
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
+            }),
           },
         },
       ],
@@ -42,7 +45,6 @@ describe("HealthcheckService", () => {
     workerStatsRepository = module.get<Repository<WorkerStatsEntity>>(
       getRepositoryToken(WorkerStatsEntity),
     );
-    logger = module.get<LoggerService>(LoggerService);
   });
 
   it("should be defined", () => {
@@ -178,7 +180,7 @@ describe("HealthcheckService", () => {
     jest
       .spyOn(workerRepository, "findOne")
       .mockRejectedValue(new Error("Database error"));
-    jest.spyOn(logger, "error");
+    jest.spyOn(service['logger'], "error");
 
     await expect(
       service.createOrUpdateHealthCheckStats(healthStats),

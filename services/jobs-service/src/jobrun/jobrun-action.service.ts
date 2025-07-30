@@ -1,5 +1,6 @@
-import { BadRequestException, Logger } from "@nestjs/common";
+import { BadRequestException, Inject } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
+import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 import { JobRunStatus } from "src/constants/enums";
 import { JobRunEntity } from "src/entities/jobrun.entity";
 import { WorkflowService } from "src/workflow/workflow.service";
@@ -11,13 +12,16 @@ import { SignalJobRunsInput } from "./jobrun-action.type";
 
 
 export class JobRunActionService {
-    private readonly logger = new Logger(JobRunActionService.name);
+    private readonly logger: LoggerService;
 
     constructor(
+        @Inject(LoggerFactory) private readonly loggerFactory: LoggerFactory,
         @InjectRepository(JobRunEntity)
         private jobRunRepo: Repository<JobRunEntity>,
            private workFlowService: WorkflowService,
-    ){}
+    ){
+        this.logger = loggerFactory.create(JobRunActionService.name);
+    }
 
     //  ------------------- JobRun actions ------------------ //
     async actions(jobRunActions: JobRunActionsReq) {

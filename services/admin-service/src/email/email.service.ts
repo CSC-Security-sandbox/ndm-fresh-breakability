@@ -119,7 +119,7 @@ export class EmailService implements OnModuleDestroy {
 
       // Add error handling for transporter
       this.transporter.on('error', (error) => {
-        this.logger.error('Transporter error:', error);
+        this.logger.error(`Transporter error: ${error.message}`);
       });
 
       // Add idle event handler for cleanup
@@ -181,11 +181,7 @@ export class EmailService implements OnModuleDestroy {
         alerts[0]?.annotations?.description || 'No description available.';
       const summary = alerts[0]?.annotations?.summary || 'No summary available.';
 
-      this.logger.log('Sending failure notification email', {
-        alertName,
-        severity,
-        podName: podName || instanceName
-      });
+      this.logger.log(`Sending failure notification email for alert: ${alertName}, severity: ${severity}, pod: ${podName || instanceName}`);
 
       const mailOptions = {
         from: from,
@@ -212,7 +208,7 @@ export class EmailService implements OnModuleDestroy {
 
       try {
         await this.transporter.sendMail(mailOptions);
-        this.logger.log('Failure notification email sent successfully', { alertName });
+        this.logger.log(`Failure notification email sent successfully for alert: ${alertName}`);
       } catch (emailError) {
         this.logger.error('Error sending email', emailError);
         throw new Error(`Error sending email: ${emailError.message}`);
@@ -221,7 +217,7 @@ export class EmailService implements OnModuleDestroy {
       try {
         if (emailContent.status === EmailContentStatus.FIRING) {
           await this.syncEmailRepo.save(syncEmail);
-          this.logger.log('Sync email record saved', { alertName });
+          this.logger.log(`Sync email record saved for alert: ${alertName}`);
         } else {
           await this.syncEmailRepo.update(
             {
@@ -231,7 +227,7 @@ export class EmailService implements OnModuleDestroy {
             },
             { incidentStatus: IncidentStatus.CLOSED },
           );
-          this.logger.log('Sync email record updated to closed', { alertName });
+          this.logger.log(`Sync email record updated to closed for alert: ${alertName}`);
         }
       } catch (dbError) {
         this.logger.error('Error updating sync email database record', dbError);
@@ -270,7 +266,7 @@ export class EmailService implements OnModuleDestroy {
 
   async setupTemplateBasdOnNotificationType(templateName: string) {
     try {
-      this.logger.log('Setting up email template', { templateName });
+      this.logger.log(`Setting up email template: ${templateName}`);
 
       this.transporter.use(
         'compile',
@@ -287,7 +283,7 @@ export class EmailService implements OnModuleDestroy {
         })
       );
 
-      this.logger.log('Email template setup completed', { templateName });
+      this.logger.log(`Email template setup completed: ${templateName}`);
     } catch (error) {
       this.logger.error('Error setting up email template', error);
       throw new Error(`Error setting up email template: ${error.message}`);

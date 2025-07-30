@@ -1,5 +1,6 @@
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Inject } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
+import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 import { FindManyOptions, Repository } from "typeorm";
 
 import { WorkerEntity } from "src/entities/worker.entity";
@@ -11,14 +12,17 @@ import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 
 @Injectable()
 export class WorkersService {
-  private logger: Logger = new Logger(WorkersService.name);
+  private logger: LoggerService;
   constructor(
+    @Inject(LoggerFactory) private readonly loggerFactory: LoggerFactory,
     @InjectRepository(WorkerEntity)
     private readonly WorkerEntity: Repository<WorkerEntity>,
      @InjectRepository(WorkerJobRunMap)
     private readonly workerJobRunMap: Repository<WorkerJobRunMap>,
     private readonly configService: ConfigService,
-  ) {}
+  ) {
+    this.logger = loggerFactory.create(WorkersService.name);
+  }
 
   updateWorkerStatus(workers: WorkerEntity[]) {
     const timeout = this.configService.get(
