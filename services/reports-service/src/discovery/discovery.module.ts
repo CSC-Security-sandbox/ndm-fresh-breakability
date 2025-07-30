@@ -1,17 +1,19 @@
-import { Module } from '@nestjs/common';
-import { DiscoveryController } from './discovery.controller';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { InventoryEntity } from 'src/entities/inventory.entity';
-import { DiscoveryService } from './discovery.service';
-import { ReportsEntity } from 'src/entities/reports.entity';
-import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
+import { Module } from "@nestjs/common";
+import { DiscoveryController } from "./discovery.controller";
+import { TypeOrmModule } from "@nestjs/typeorm";
+import { InventoryEntity } from "src/entities/inventory.entity";
+import { DiscoveryService } from "./discovery.service";
+import { ReportsEntity } from "src/entities/reports.entity";
+import { AuthKeycloakModule } from "@netapp-cloud-datamigrate/auth-lib";
+import { LoggerModule } from "@netapp-cloud-datamigrate/logger-lib";
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([InventoryEntity, ReportsEntity]),
-        AuthKeycloakModule
-    ],
-    providers: [DiscoveryService],
-    controllers: [DiscoveryController],
+  imports: [
+    LoggerModule.forRoot(),
+    TypeOrmModule.forFeature([InventoryEntity, ReportsEntity]),
+    AuthKeycloakModule,
+  ],
+  providers: [DiscoveryService],
+  controllers: [DiscoveryController],
 })
 export class DiscoveryModule {}

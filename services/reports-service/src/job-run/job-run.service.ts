@@ -1,9 +1,9 @@
 import { CsvService } from "./../csv/csv_export.service";
 import {
   Injectable,
-  Logger,
   NotFoundException,
   NotAcceptableException,
+  Inject,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { JobRunStatus, JobType, ReportType } from "src/constants/enums";
@@ -22,11 +22,16 @@ import * as fs from "fs";
 import * as crypto from "crypto";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as path from "path";
+import {
+  LoggerFactory,
+  LoggerService,
+} from "@netapp-cloud-datamigrate/logger-lib";
 
 @Injectable()
 export class JobRunService {
-  private readonly logger = new Logger(JobRunService.name);
+  private readonly logger: LoggerService;
   constructor(
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     @InjectRepository(JobRunEntity)
     private jobRunRepo: Repository<JobRunEntity>,
     @InjectRepository(InventoryEntity)
@@ -36,7 +41,9 @@ export class JobRunService {
     @InjectRepository(ReportsEntity)
     private reportsRepo: Repository<ReportsEntity>,
     private csvService: CsvService
-  ) {}
+  ) {
+    this.logger = loggerFactory.create(JobRunService.name);
+  }
 
   async jobRunReportByJobRunId(jobRunId: string, reportType: string) {
     const report = await this.reportsRepo.findOne({

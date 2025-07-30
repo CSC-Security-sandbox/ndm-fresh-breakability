@@ -1,53 +1,66 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { DataSource } from 'typeorm';
-import * as fs from 'fs';
-import * as fastCsv from 'fast-csv';
-import { validateFilePath } from 'src/utils/utils';
+import { Injectable, Inject } from "@nestjs/common";
+import { DataSource } from "typeorm";
+import * as fs from "fs";
+import * as fastCsv from "fast-csv";
+import { validateFilePath } from "src/utils/utils";
+import {
+  LoggerFactory,
+  LoggerService,
+} from "@netapp-cloud-datamigrate/logger-lib";
 
 @Injectable()
 export class CsvService {
-    private readonly logger = new Logger(CsvService.name);
-    constructor(private readonly dataSource: DataSource) { }
+  private readonly logger: LoggerService;
+  constructor(
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    private readonly dataSource: DataSource
+  ) {
+    this.logger = loggerFactory.create(CsvService.name);
+  }
 
-    async generateCsv(filePath: string, jobRunId: string, batchSize: number = 10000) {
-        if (!validateFilePath(filePath)) {
-            this.logger.error(`File path contains invalid characters: ${filePath}`);
-            throw new Error('File path contains invalid characters.');
-        } else {
-            this.logger.log(`File path validation passed: ${filePath}`);
-        }
-        const queryRunner = this.dataSource.createQueryRunner();
-        await queryRunner.connect();
-        try {
-            const fileStream = fs.createWriteStream(filePath); 
-            const csvStream = fastCsv.format({ headers: true });
-            csvStream.pipe(fileStream);
-            let offset = 1;
-
-            while (true) {
-                const result = await this.getInventoryData(jobRunId, batchSize, offset);
-                if (result.length === 0) break;
-                for (const row of result) {
-                    csvStream.write(row);
-                }
-                offset++;
-            }
-            csvStream.end();
-        } catch (err) {
-            console.error('Error:', err);
-        } finally {
-            await queryRunner.release();
-        }
+  async generateCsv(
+    filePath: string,
+    jobRunId: string,
+    batchSize: number = 10000
+  ) {
+    if (!validateFilePath(filePath)) {
+      this.logger.error(`File path contains invalid characters: ${filePath}`);
+      throw new Error("File path contains invalid characters.");
+    } else {
+      this.logger.log(`File path validation passed: ${filePath}`);
     }
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    try {
+      const fileStream = fs.createWriteStream(filePath);
+      const csvStream = fastCsv.format({ headers: true });
+      csvStream.pipe(fileStream);
+      let offset = 1;
 
-    async getInventoryData(jobRunId: string, limit: number, offset: number) {
-        const query = await this.getInventoryDataQuery(jobRunId, limit, offset);
-        return this.dataSource.query(query.query, query.values);
+      while (true) {
+        const result = await this.getInventoryData(jobRunId, batchSize, offset);
+        if (result.length === 0) break;
+        for (const row of result) {
+          csvStream.write(row);
+        }
+        offset++;
+      }
+      csvStream.end();
+    } catch (err) {
+      console.error("Error:", err);
+    } finally {
+      await queryRunner.release();
     }
+  }
 
-    async getInventoryDataQuery(jobRunId: string, limit: number, offset: number) {
-        const dbSchema = process.env.SCHEMA;
-        const query = `
+  async getInventoryData(jobRunId: string, limit: number, offset: number) {
+    const query = await this.getInventoryDataQuery(jobRunId, limit, offset);
+    return this.dataSource.query(query.query, query.values);
+  }
+
+  async getInventoryDataQuery(jobRunId: string, limit: number, offset: number) {
+    const dbSchema = process.env.SCHEMA;
+    const query = `
             SELECT
                 v_source.volume_path || i.path AS "Source Path",
                 v_target.volume_path || i.path AS "Target Path",
@@ -121,6 +134,6 @@ export class CsvService {
             ORDER BY i.created_at DESC
             LIMIT $2 OFFSET ($3 - 1) * $2;
         `;
-        return { query, values: [jobRunId, limit, offset] };
-    }
+    return { query, values: [jobRunId, limit, offset] };
+  }
 }

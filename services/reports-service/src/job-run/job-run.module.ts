@@ -1,4 +1,3 @@
-import { Logger } from "@nestjs/common";
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { JobRunController } from "./job-run.controller";
@@ -12,9 +11,11 @@ import { TaskEntity } from "src/entities/task.entity";
 import { JobRunEntity } from "src/entities/jobrun.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { AuthKeycloakModule } from "@netapp-cloud-datamigrate/auth-lib";
+import { LoggerModule } from "@netapp-cloud-datamigrate/logger-lib";
 
 @Module({
   imports: [
+    LoggerModule.forRoot(),
     TypeOrmModule.forFeature([
       JobRunEntity,
       InventoryEntity,
@@ -26,6 +27,6 @@ import { AuthKeycloakModule } from "@netapp-cloud-datamigrate/auth-lib";
     AuthKeycloakModule,
   ],
   controllers: [JobRunController],
-  providers: [JobRunService, CsvService, Logger, ErrorLogService],
+  providers: [JobRunService, CsvService, ErrorLogService],
 })
 export class JobRunModule {}

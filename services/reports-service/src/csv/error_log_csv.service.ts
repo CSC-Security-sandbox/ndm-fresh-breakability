@@ -2,6 +2,7 @@ import {
   Injectable,
   StreamableFile,
   BadRequestException,
+  Inject,
 } from "@nestjs/common";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { Raw, Repository, In } from "typeorm";
@@ -14,15 +15,23 @@ import {
   sanitizeAndValidateFilePath,
   sanitizeIdentifier,
 } from "../utils/file-utils";
+import {
+  LoggerFactory,
+  LoggerService,
+} from "@netapp-cloud-datamigrate/logger-lib";
 
 @Injectable()
 export class ErrorLogService {
+  private readonly logger: LoggerService;
   constructor(
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     @InjectRepository(OperationErrorEntity)
     private operationErrorRepo: Repository<OperationErrorEntity>,
     @InjectRepository(WorkerJobRunMap)
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>
-  ) {}
+  ) {
+    this.logger = loggerFactory.create(ErrorLogService.name);
+  }
 
   async getPaginatedErrors({
     jobConfigId,
@@ -35,6 +44,9 @@ export class ErrorLogService {
     pageSize: number;
     offset: number;
   }) {
+    this.logger.debug(
+      `Getting paginated errors for jobConfigId: ${jobConfigId}, jobRunId: ${jobRunId}, pageSize: ${pageSize}, offset: ${offset}`
+    );
     await this.handleError(jobRunId, jobConfigId);
     try {
       const params: (string | number)[] = [];
@@ -77,6 +89,10 @@ export class ErrorLogService {
 
       return this.operationErrorRepo.query(query, params);
     } catch (error) {
+      this.logger.error(
+        `Error in getPaginatedErrors: ${error.message}`,
+        error.stack
+      );
       throw new BadRequestException({
         displayMessage: "Something went wrong while fetching errors.",
         message: error.message,
@@ -85,6 +101,9 @@ export class ErrorLogService {
   }
 
   async getWorkerSetupErrors(jobRunIds: string | string[]): Promise<any[]> {
+    this.logger.debug(
+      `Getting worker setup errors for jobRunIds: ${Array.isArray(jobRunIds) ? jobRunIds.join(", ") : jobRunIds}`
+    );
     try {
       let whereClause: string;
       let params: (string | number)[];
@@ -113,6 +132,10 @@ export class ErrorLogService {
       `;
       return this.workerJobRunMapRepo.query(query, params);
     } catch (error) {
+      this.logger.error(
+        `Error in getWorkerSetupErrors: ${error.message}`,
+        error.stack
+      );
       throw new BadRequestException({
         displayMessage: "Something went wrong while fetching errors.",
         message: error.message,
@@ -131,6 +154,9 @@ export class ErrorLogService {
     jobConfigId?: string,
     pageSize: number = 10000
   ): Promise<void> {
+    this.logger.log(
+      `Starting CSV write to disk for filePath: ${filePath}, jobRunId: ${jobRunId}, jobConfigId: ${jobConfigId}`
+    );
     return new Promise<void>(async (resolve, reject) => {
       try {
         const safeFilePath = sanitizeAndValidateFilePath(
@@ -179,11 +205,28 @@ export class ErrorLogService {
         csvStream.end();
         writeStream.on("finish", () => {
           fs.unlinkSync(processingFilePath);
+          this.logger.log(`CSV file successfully written to ${filePath}`);
           resolve();
         });
-        writeStream.on("error", reject);
-        csvStream.on("error", reject);
+        writeStream.on("error", (error) => {
+          this.logger.error(
+            `Error writing CSV file: ${error.message}`,
+            error.stack
+          );
+          reject(error);
+        });
+        csvStream.on("error", (error) => {
+          this.logger.error(
+            `Error in CSV stream: ${error.message}`,
+            error.stack
+          );
+          reject(error);
+        });
       } catch (error) {
+        this.logger.error(
+          `Error in writeLargeCsvToDisk: ${error.message}`,
+          error.stack
+        );
         throw new BadRequestException({
           displayMessage:
             "Something went wrong while writing errors on the file.",
@@ -260,6 +303,9 @@ export class ErrorLogService {
 
   async createCsvFileForJob(type?: string, id?: string): Promise<any> {
     const { jobRunId, jobConfigId } = this.extractJobIdentifiers(type, id);
+    this.logger.log(
+      `Creating CSV file for job - type: ${type}, id: ${id}, jobRunId: ${jobRunId}, jobConfigId: ${jobConfigId}`
+    );
     await this.handleError(jobRunId, jobConfigId);
     try {
       const identifier = jobRunId || jobConfigId;
@@ -282,6 +328,7 @@ export class ErrorLogService {
 
       // If the latest file already exists, return it
       if (fs.existsSync(filePath)) {
+        this.logger.log(`CSV file already exists: ${filePath}`);
         return filePath;
       }
 
@@ -303,8 +350,13 @@ export class ErrorLogService {
       }
 
       await this.writeLargeCsvToDisk(filePath, jobRunId, jobConfigId);
+      this.logger.log(`CSV file creation completed for ${fileName}`);
       return { message: "CSV generation started" };
     } catch (error) {
+      this.logger.error(
+        `Error in createCsvFileForJob: ${error.message}`,
+        error.stack
+      );
       throw new BadRequestException({
         displayMessage: "Error Report generation failed",
         message: error.message,

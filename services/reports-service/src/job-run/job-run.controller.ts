@@ -6,7 +6,7 @@ import {
   Query,
   SerializeOptions,
   StreamableFile,
-  Logger,
+  Inject,
 } from "@nestjs/common";
 import {
   ApiBearerAuth,
@@ -27,15 +27,22 @@ import {
   AuthWorker,
   Permission,
 } from "@netapp-cloud-datamigrate/auth-lib";
+import {
+  LoggerService,
+  LoggerFactory,
+} from "@netapp-cloud-datamigrate/logger-lib";
 
 @ApiTags("job-run")
 @Controller("job-run")
 export class JobRunController {
+  private logger: LoggerService;
   constructor(
     private readonly jobRunService: JobRunService,
-    private readonly logger: Logger,
-    private readonly errorLogService: ErrorLogService
-  ) {}
+    private readonly errorLogService: ErrorLogService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory
+  ) {
+    this.logger = loggerFactory.create(JobRunController.name);
+  }
 
   @ApiOperation({ summary: "Get job run Report by JobRunId" })
   @ApiOkResponse({
@@ -120,9 +127,9 @@ export class JobRunController {
     this.logger.debug(`Fetching COC report for JobRunId: ${jobRunId}`);
     this.jobRunService.getCocReportByJobRunId(jobRunId);
     this.logger.log(`COC report generation started for JobRunId: ${jobRunId}`);
-    return { 
-      status: 'success',
-      message: `COC report generation started for JobRunId: ${jobRunId}`
+    return {
+      status: "success",
+      message: `COC report generation started for JobRunId: ${jobRunId}`,
     };
   }
 }

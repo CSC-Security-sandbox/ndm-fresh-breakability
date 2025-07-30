@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Inject } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { OverviewDTO } from "src/overview/overview.dto";
 import { InventoryEntity } from "src/entities/inventory.entity";
@@ -6,16 +6,23 @@ import { ProjectEntity } from "src/entities/project.entity";
 import { Repository } from "typeorm";
 import { JobRunStatus, JobType } from "src/constants/enums";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
+import {
+  LoggerFactory,
+  LoggerService,
+} from "@netapp-cloud-datamigrate/logger-lib";
 
 @Injectable()
 export class OverviewService {
-  private logger: Logger = new Logger(OverviewService.name);
+  private readonly logger: LoggerService;
   constructor(
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     @InjectRepository(InventoryEntity)
     private readonly inventoryRepository: Repository<InventoryEntity>,
     @InjectRepository(ProjectEntity)
     private readonly projectRepository: Repository<ProjectEntity>
-  ) {}
+  ) {
+    this.logger = loggerFactory.create(OverviewService.name);
+  }
 
   async getStorageAndJobsOverview(
     projectId: string,
@@ -82,11 +89,8 @@ export class OverviewService {
 
     const scanRunDetailsStart = Date.now();
 
-    const {
-      totalDiscoverJobs,
-      totalMigrationJobs,
-      totalCutOverJobs
-    } = this.countAllJobTypes(projectDetails);
+    const { totalDiscoverJobs, totalMigrationJobs, totalCutOverJobs } =
+      this.countAllJobTypes(projectDetails);
 
     const scanRunDetails = projectDetails
       ?.flatMap((project) =>
@@ -251,8 +255,8 @@ export class OverviewService {
         projects?.flatMap((project) =>
           project?.configs?.flatMap((config) =>
             config?.fileServers?.flatMap((fileServer) =>
-              fileServer?.volumes?.flatMap((volume) =>
-                volume?.sourceConfig || []
+              fileServer?.volumes?.flatMap(
+                (volume) => volume?.sourceConfig || []
               )
             )
           )
@@ -282,7 +286,7 @@ export class OverviewService {
         totalCutOverJobs,
       };
     } catch (error) {
-      this.logger.error('Error counting job configs:', error?.message);
+      this.logger.error("Error counting job configs:", error?.message);
       return {
         totalDiscoverJobs: 0,
         totalMigrationJobs: 0,
@@ -290,5 +294,4 @@ export class OverviewService {
       };
     }
   }
-  
 }
