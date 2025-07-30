@@ -1,9 +1,4 @@
-export const METRICS_OPTIONS = [
-  { label: "State Data", value: 1 },
-  { label: "System Inventory Data", value: 2 },
-  { label: "Configuration Data", value: 3 },
-  { label: "Performance Metrics", value: 4 },
-];
+export const METRICS_OPTIONS = [{ label: "Configuration Data", value: 1 }];
 
 export const INITIAL_FORM_STATE = {
   start_date: "",
