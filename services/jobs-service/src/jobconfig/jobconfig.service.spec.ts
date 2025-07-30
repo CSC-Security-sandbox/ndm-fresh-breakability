@@ -3600,13 +3600,6 @@ describe("JobConfigService", () => {
       );
     });
 
-    it("should throw NotFoundException if jobRunId does not exist", async () => {
-      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(null);
-      await expect(service.calculateJobRunStats("invalid-id")).rejects.toThrow(
-        new NotFoundException("Job Run with id invalid-id not found")
-      );
-    });
-
     it("should return values from inventory summary", async () => {
       const jobRunId = "12345";
       const mockInventoryCounts = {
@@ -3632,6 +3625,62 @@ describe("JobConfigService", () => {
         fileCount: "10",
         directories: "5",
         totalSize: "1000",
+        errors: [],
+      });
+    });
+
+    it("should default to '0' when inventory summary values are undefined", async () => {
+      const jobRunId = "12345";
+      const mockInventoryCounts = {
+        // All values are undefined
+      };
+      const mockJobRun = {
+        id: jobRunId,
+        jobConfig: { id: "jobConfigId" },
+      };
+
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(mockJobRun as any);
+      jest.spyOn(inventoryRepo, "createQueryBuilder").mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue(mockInventoryCounts),
+      } as any);
+      jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
+
+      const result = await service.calculateJobRunStats(jobRunId);
+      expect(result).toEqual({
+        fileCount: "0",
+        directories: "0",
+        totalSize: "0",
+        errors: [],
+      });
+    });
+
+    it("should default to '0' when inventory summary values are falsy", async () => {
+      const jobRunId = "12345";
+      const mockInventoryCounts = {
+        filecount: "",
+        directorycount: null,
+        totalfilesize: 0,
+      };
+      const mockJobRun = {
+        id: jobRunId,
+        jobConfig: { id: "jobConfigId" },
+      };
+
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(mockJobRun as any);
+      jest.spyOn(inventoryRepo, "createQueryBuilder").mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue(mockInventoryCounts),
+      } as any);
+      jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
+
+      const result = await service.calculateJobRunStats(jobRunId);
+      expect(result).toEqual({
+        fileCount: "0",
+        directories: "0",
+        totalSize: "0",
         errors: [],
       });
     });

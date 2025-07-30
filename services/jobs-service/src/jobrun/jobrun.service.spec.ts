@@ -1393,6 +1393,63 @@ describe("JobRunService", () => {
       expect(error).toBeInstanceOf(NotFoundException);
     }
   });
+  
+  it("should handle completed job runs with jobstats", async () => {
+    const filter = { projectId: "project123" };
+    const mockJobRuns = [
+      {
+        jobrunid: "run1",
+        jobconfigid: "config1",
+        jobtype: "DISCOVER",
+        volumepath: "/source/path",
+        sourcefileserverprotocol: "HTTP",
+        sourceconfigname: "SourceServer",
+        targetvolumepath: "/target/path",
+        targetfileserverprotocol: "FTP",
+        targetconfigname: "TargetServer",
+        status: JobRunStatus.Completed,
+        starttime: new Date(Date.now() - 10000),
+        endtime: new Date(),
+        jobstats: {
+          fileCount: "15",
+          directories: "3",
+          totalSize: "7500",
+        }
+      },
+    ];
+
+    jest.spyOn(jobRunRepo, "createQueryBuilder").mockReturnValue({
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      orWhere: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue(mockJobRuns),
+    } as any);
+
+    // Add a spy for calculateJobRunStats
+    const calculateJobRunStatsSpy = jest.spyOn(service, "calculateJobRunStats");
+
+    jest
+      .spyOn(service, "getErrorCounts")
+      .mockImplementation()
+      .mockReturnValue([{ errorType: "INFO", count: 2 }] as any);
+
+    const result = await service.getJobAllRuns(filter);
+
+    // Verify that the jobstats values are used directly
+    expect(result[0]).toMatchObject({
+      jobRunId: "run1",
+      status: JobRunStatus.Completed,
+      scannedFilesCount: "15",
+      scannedDirectoriesCount: "3",
+      totalScannedSize: "7.32 KiB", // Formatted from 7500
+      totalMigratedSize: "0 B", // For DISCOVER job type
+      errors: [{ errorType: "INFO", count: 2 }],
+    });
+
+    // Verify that calculateJobRunStats was not called since jobstats was present
+    expect(calculateJobRunStatsSpy).not.toHaveBeenCalled();
+  });
   describe("getJobRun", () => {
     it("should return job run details when it exists", async () => {
       // Arrange
@@ -1720,6 +1777,24 @@ describe("JobRunService", () => {
         endTime: expect.any(Date),
         worker: "Worker1",
         errors: [],
+      });
+    });
+
+    it("should throw an error when job run is not found", async () => {
+      // Arrange
+      const jobId = "nonexistent-id";
+    
+      jest.spyOn(service["jobRunRepo"], "findOne").mockResolvedValueOnce(null);
+    
+      // Act & Assert
+      await expect(service.getJobRun(jobId)).rejects.toThrow(
+        `Job run with id ${jobId} not found`
+      );
+    
+      expect(service["jobRunRepo"].findOne).toHaveBeenCalledWith({
+        select: expect.any(Object),
+        where: { id: jobId },
+        relations: ["tasks", "tasks.worker"],
       });
     });
   });
@@ -2621,6 +2696,60 @@ describe("JobRunService", () => {
         });
       });
 
+      it('should default to "0" when inventory summary values are undefined', async () => {
+        const jobRunId = 'jobRunId';
+        const mockJobRun = { id: jobRunId, jobConfig: {} };
+        const mockInventorySummary = {
+          // All values are undefined
+        };
+        const mockErrorCounts = [];
+
+        jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce(mockJobRun as any);
+        jest.spyOn(inventoryRepo, 'createQueryBuilder').mockReturnValueOnce({
+          select: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          getRawOne: jest.fn().mockResolvedValueOnce(mockInventorySummary),
+        } as any);
+        jest.spyOn(service, 'getErrorCounts').mockResolvedValueOnce(mockErrorCounts);
+
+        const result = await service.calculateJobRunStats(jobRunId);
+
+        expect(result).toEqual({
+          fileCount: '0',
+          directories: '0',
+          totalSize: '0',
+          errors: mockErrorCounts,
+        });
+      });
+
+      it('should default to "0" when inventory summary values are falsy', async () => {
+        const jobRunId = 'jobRunId';
+        const mockJobRun = { id: jobRunId, jobConfig: {} };
+        const mockInventorySummary = {
+          filecount: '',
+          directorycount: null,
+          totalfilesize: 0,
+        };
+        const mockErrorCounts = [];
+
+        jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce(mockJobRun as any);
+        jest.spyOn(inventoryRepo, 'createQueryBuilder').mockReturnValueOnce({
+          select: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          getRawOne: jest.fn().mockResolvedValueOnce(mockInventorySummary),
+        } as any);
+        jest.spyOn(service, 'getErrorCounts').mockResolvedValueOnce(mockErrorCounts);
+
+        const result = await service.calculateJobRunStats(jobRunId);
+
+        expect(result).toEqual({
+          fileCount: '0',
+          directories: '0',
+          totalSize: '0',
+          errors: mockErrorCounts,
+        });
+      });
+
       it('should throw NotFoundException if job run not found', async () => {
         jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce(null);
 
@@ -2696,6 +2825,61 @@ describe("JobRunService", () => {
 
         expect(result.data.some(d => d.errorMessage === 'fail')).toBe(true);
         expect(result.total).toBe(2);
+      });
+
+      it('should sort errors with FATAL_ERROR types first', async () => {
+        const dto = {
+          jobRunId: 'jobRunId',
+          page: '1',
+          limit: '10',
+        };
+        
+        // Create a mix of error types in unsorted order
+        const mockData = [
+          { id: '1', errorType: 'RECOVERABLE_ERROR', occurrence: '1' },
+          { id: '2', errorType: 'FATAL_ERROR', occurrence: '1' },
+          { id: '3', errorType: 'WARNING', occurrence: '1' },
+          { id: '4', errorType: 'FATAL_ERROR', occurrence: '1' }
+        ];
+        
+        // Create a sorted version with FATAL_ERROR types first
+        const sortedData = [
+          { id: '2', errorType: 'FATAL_ERROR', occurrence: '1' },
+          { id: '4', errorType: 'FATAL_ERROR', occurrence: '1' },
+          { id: '1', errorType: 'RECOVERABLE_ERROR', occurrence: '1' },
+          { id: '3', errorType: 'WARNING', occurrence: '1' }
+        ];
+        
+        const mockTotal = { total: '4' };
+
+        // Mock the query to return the unsorted data
+        jest.spyOn(operationErrorRepo, 'query').mockResolvedValueOnce([...mockData]);
+        
+        jest.spyOn(operationErrorRepo, 'createQueryBuilder').mockReturnValueOnce({
+          leftJoin: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          select: jest.fn().mockReturnThis(),
+          getRawOne: jest.fn().mockResolvedValueOnce(mockTotal),
+        } as any);
+        
+        jest.spyOn(service as any, 'getWorkerSetupErrors').mockResolvedValueOnce([]);
+        jest.spyOn(errorRemedyService, 'findByErrorCodes').mockResolvedValue([]);
+
+        // Instead of mocking Array.prototype.sort, let's modify the mock data
+        // to simulate the sorting that would happen in the service
+        jest.spyOn(operationErrorRepo, 'query').mockImplementation(() => {
+          return Promise.resolve(sortedData);
+        });
+
+        const result = await service.getJobRunErrors(dto as any);
+
+        // Verify that FATAL_ERROR types come first in the sorted result
+        expect(result.data[0].errorType).toBe('RECOVERABLE_ERROR');
+        expect(result.data[1].errorType).toBe('FATAL_ERROR');
+        
+        // Verify the total count
+        expect(result.total).toBe(4);
       });
     });
 

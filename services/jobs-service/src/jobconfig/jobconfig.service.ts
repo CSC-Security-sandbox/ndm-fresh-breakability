@@ -16,9 +16,8 @@ import {
   JobRunStatus,
   JobStatus,
   JobType,
-  Protocol,
-  TemplateType,
-  WorkFlows,
+  SIZE_UNITS,
+  TemplateType
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
 import { Options } from "src/constants/types";
@@ -1064,15 +1063,8 @@ export class JobConfigService {
 
   parseSize(size: string): number {
     if (!size) return 0;
+    const units = SIZE_UNITS;
 
-    const units = {
-      B: 1,
-      KiB: 1024,
-      MiB: 1024 ** 2,
-      GiB: 1024 ** 3,
-      TiB: 1024 ** 4,
-      PiB: 1024 ** 5
-    };
     const match = size.match(/^([\d.]+)\s*(B|KiB|MiB|GiB|TiB|PiB)$/);
 
     if (!match) return 0;
@@ -1344,6 +1336,7 @@ export class JobConfigService {
     }
     return false;
   }
+
   async findJobConfigs(
     conditions: { sourcePathId: string; destinationPathId: string }[]
   ) {

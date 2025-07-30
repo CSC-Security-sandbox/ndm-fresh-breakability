@@ -1,4 +1,4 @@
-export const covertBytes = (bytes: number): string => {
+export const convertBytes = (bytes: number): string => {
   if (bytes === 0) return "0 B";
   const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
   let size = bytes;
@@ -54,7 +54,7 @@ export const formatSizeAndCount = (input: string): string => {
   const countValue = countMatch ? parseInt(countMatch[1], 10) : 0;
 
   // Format size using the formatBytes function (already in your codebase)
-  const formattedSize = covertBytes(sizeValue);
+  const formattedSize = convertBytes(sizeValue);
 
   // Format count using the formatLargeNumber function (already in your codebase)
   const formattedCount = formatNumbersWithSuffix(countValue);
