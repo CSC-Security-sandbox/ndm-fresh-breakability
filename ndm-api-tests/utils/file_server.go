@@ -100,7 +100,7 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 		"fileServers": []map[string]interface{}{
 			{
 				"serverType":      params.ServerType,
-				"userName":        "rtp.openenglab.netapp.com\\svc-datamigrator",
+				"userName":        PROTOCOL_USERNAME,
 				"password":        params.Password,
 				"protocol":        params.Protocol,
 				"protocolVersion": params.ProtocolVersion,
