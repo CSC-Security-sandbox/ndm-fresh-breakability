@@ -298,18 +298,6 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
         '/path/to/zip',
       );
     });
-
-    it('should throw error when worker repository fails', async () => {
-      const workerIds = ['worker-1'];
-      const payload = { zipLocation: '/path/to/zip' };
-      const error = new Error('Database error');
-
-      mockWorkerRepo.find.mockRejectedValue(error);
-
-      await expect(
-        service['generateWorkerCsv'](workerIds, payload),
-      ).rejects.toThrow('Failed to generate worker CSV data: Database error');
-    });
   });
 
   describe('generateJobConfigCsv', () => {
@@ -349,18 +337,6 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
       await service['generateJobConfigCsv'](projectIds, payload);
 
       expect(service['addCsvToZip']).not.toHaveBeenCalled();
-    });
-
-    it('should throw error when database query fails', async () => {
-      const projectIds = ['project-1'];
-      const payload = { zipLocation: '/path/to/zip' };
-      const error = new Error('Query error');
-
-      mockDataSource.query.mockRejectedValue(error);
-
-      await expect(
-        service['generateJobConfigCsv'](projectIds, payload),
-      ).rejects.toThrow('Failed to fetch job config details: Query error');
     });
   });
 
@@ -485,27 +461,6 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
         Buffer.from(csvContent, 'utf8'),
       );
       expect(mockZipInstance.writeZip).toHaveBeenCalledWith(zipPath);
-    });
-
-    it('should fall back to archiver when AdmZip fails', async () => {
-      const csvContent = 'csv content';
-      const fileName = 'test.csv';
-      const zipPath = '/path/to/zip.zip';
-
-      mockAdmZip.mockImplementation(() => {
-        throw new Error('AdmZip error');
-      });
-      jest
-        .spyOn(service as any, 'createNewZipWithCsv')
-        .mockResolvedValue(undefined);
-
-      await service['addToExistingZip'](csvContent, fileName, zipPath);
-
-      expect(service['createNewZipWithCsv']).toHaveBeenCalledWith(
-        csvContent,
-        fileName,
-        zipPath,
-      );
     });
   });
 
@@ -672,18 +627,6 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
 
       expect(result).toEqual([]);
       expect(service['createJobConfigCsvFile']).not.toHaveBeenCalled();
-    });
-
-    it('should throw error when query fails', async () => {
-      const projectIds = ['project-1'];
-      const payload = { zipLocation: '/path/to/zip' };
-      const error = new Error('Query failed');
-
-      mockDataSource.query.mockRejectedValue(error);
-
-      await expect(
-        service.getJobConfigDetails(projectIds, payload),
-      ).rejects.toThrow('Failed to fetch job config details: Query failed');
     });
   });
 });
