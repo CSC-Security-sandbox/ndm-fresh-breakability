@@ -3,11 +3,12 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
-  Logger,
+  Inject,
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
+import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 import { Response } from "express";
 import { createReadStream, existsSync } from "fs";
 import { join } from "path";
@@ -81,8 +82,9 @@ import { SuccessEmailType } from "src/utils/send-email.type";
 
 @Injectable()
 export class JobConfigService {
-  private readonly logger = new Logger(JobConfigService.name);
+  private readonly logger: LoggerService;
   constructor(
+    @Inject(LoggerFactory) private readonly loggerFactory: LoggerFactory,
     @InjectRepository(FileServerEntity)
     private fileServerRepo: Repository<FileServerEntity>,
     @InjectRepository(SyncEmailEntity)
@@ -126,7 +128,9 @@ export class JobConfigService {
 
     @InjectRepository(WorkerJobRunMap)
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
-  ) {}
+  ) {
+    this.logger = loggerFactory.create(JobConfigService.name);
+  }
 
   // ------------ Bulk Discovery ---------------- //
   async createBulkDiscovery(
@@ -635,7 +639,7 @@ export class JobConfigService {
               })
             }
           }
-          this.logger.warn(inactiveJobWarnings);
+          this.logger.warn(JSON.stringify(inactiveJobWarnings));
           continue; 
         }
         
@@ -1635,8 +1639,8 @@ export class JobConfigService {
     templateType: TemplateType
   ) {
     this.logger.log("reached for updating mappings");
-    this.logger.log("jobCIDs", jobConfigIds);
-    this.logger.log("parsedData", parsedData);
+    this.logger.log(`jobCIDs: ${JSON.stringify(jobConfigIds)}`);
+    this.logger.log(`parsedData: ${JSON.stringify(parsedData)}`);
 
     for (const mapping of parsedData) {
       if (templateType === TemplateType.SID) {

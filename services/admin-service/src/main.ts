@@ -11,14 +11,14 @@ import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const loggerFactory = app.resolve(LoggerFactory);
-  app.useGlobalInterceptors(
-    new ResponseInterceptor(
-      customSuccessDTOList,
-      customErrorDTOList,
-      await loggerFactory,
-    ),
-  );
+  // const loggerFactory = await app.resolve(LoggerFactory);
+  // app.useGlobalInterceptors(
+  //   new ResponseInterceptor(
+  //     customSuccessDTOList,
+  //     customErrorDTOList,
+  //     loggerFactory,
+  //   ),
+  // );
   // Enable graceful shutdown
   app.enableShutdownHooks();
 

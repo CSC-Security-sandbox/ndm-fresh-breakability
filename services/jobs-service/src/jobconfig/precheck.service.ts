@@ -3,7 +3,8 @@ import { v4 as uuidv4 } from "uuid";
 import { In, Repository } from "typeorm";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Inject } from "@nestjs/common";
+import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 
 import { Options } from "../constants/types";
 import { JobRunStatus, JobStatus, JobType, WorkFlows } from "../constants/enums";
@@ -19,8 +20,9 @@ import { isUUID } from "class-validator";
 
 @Injectable()
 export class PreCheckService {
-    private readonly logger = new Logger(PreCheckService.name);
+    private readonly logger: LoggerService;
     constructor(
+        @Inject(LoggerFactory) private readonly loggerFactory: LoggerFactory,
         @InjectRepository(VolumeEntity)
         private readonly volumeRepo: Repository<VolumeEntity>,
         private readonly workFlowService: WorkflowService,
@@ -32,7 +34,9 @@ export class PreCheckService {
 
         @InjectRepository(InventoryEntity)
         private readonly inventoryRepo: Repository<InventoryEntity>,
-    ) { }
+    ) { 
+        this.logger = loggerFactory.create(PreCheckService.name);
+    }
 
     async initiatePreCheck(data: JobConfigPreCheck): Promise<any> {
         const healthCheckTimeout = parseInt(this.configService.get("app.worker.healthCheckStatusTimout"));

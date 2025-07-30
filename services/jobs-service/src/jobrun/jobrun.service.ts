@@ -1,12 +1,13 @@
 import {
   BadRequestException,
   Injectable,
-  Logger,
+  Inject,
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
+import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 import * as parser from "cron-parser";
 import {
   CutOverStatus,
@@ -44,10 +45,11 @@ import { getErrorDisplayMessage } from './jobrun.utli';
 
 @Injectable()
 export class JobRunService {
-  private readonly logger = new Logger(JobRunService.name);
+  private readonly logger: LoggerService;
   private readonly mountBasePath: string;
 
   constructor(
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     @InjectRepository(JobRunEntity)
     private jobRunRepo: Repository<JobRunEntity>,
     @InjectRepository(JobConfigEntity)
@@ -68,6 +70,7 @@ export class JobRunService {
     private errorRemedyService: ErrorRemedyService,
     private readonly workerService: WorkersService
   ) {
+    this.logger = loggerFactory.create(JobRunService.name);
     this.mountBasePath = this.configService.get<string>(
       "app.paths.mountBasePath"
     );

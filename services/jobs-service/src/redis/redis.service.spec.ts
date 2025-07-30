@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
 import { RedisService } from './redis.service';
 import { RedisUtils, JobContextFactory } from '@netapp-cloud-datamigrate/jobs-lib';
 
@@ -26,6 +27,17 @@ describe('RedisService', () => {
       providers: [
         RedisService,
         { provide: RedisUtils, useValue: redisUtilsMock },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
+            }),
+          },
+        },
       ],
     }).compile();
 

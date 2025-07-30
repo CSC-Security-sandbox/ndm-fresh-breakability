@@ -1,12 +1,18 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { SuccessEventEmailDto } from './send-email.type';
 
 @Injectable()
 export class SendMailService {
-  private readonly logger = new Logger(SendMailService.name);
-  constructor(private readonly configService: ConfigService) {}
+  private readonly logger: LoggerService;
+  constructor(
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    private readonly configService: ConfigService
+  ) {
+    this.logger = loggerFactory.create(SendMailService.name);
+  }
 
   async sendMail(body: SuccessEventEmailDto) {
     try {

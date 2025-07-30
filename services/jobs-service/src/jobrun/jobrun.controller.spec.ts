@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
 import { JobRunController } from './jobrun.controller';
 import { JobRunService } from './jobrun.service';
 import { JobRunInitService } from './jobrun.init.service';
@@ -65,6 +66,17 @@ describe('JobRunController', () => {
           provide: JobRunActionService,
           useValue: {
             actions: jest.fn(),
+          },
+        },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
+            }),
           },
         },
       ],

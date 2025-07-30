@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
 import { PreCheckService } from './precheck.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { VolumeEntity } from '../entities/volume.entity';
@@ -41,6 +42,17 @@ describe('PreCheckService', () => {
         { provide: getRepositoryToken(InventoryEntity), useValue: { createQueryBuilder: jest.fn() } },
         { provide: WorkflowService, useValue: { startWorkflow: jest.fn() } },
         { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('60') } },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
+            }),
+          },
+        },
       ],
     }).compile();
 

@@ -30,19 +30,13 @@ export class AccountService {
     userPermissions: UserPermissionResponse,
   ): Promise<Account> {
     try {
-      this.logger.log('Creating new account', {
-        userId: userPermissions.user.id,
-        accountData: createAccountDto
-      });
+      this.logger.log(`Creating new account for user: ${userPermissions.user.id}`);
 
       const account = this.accountRepository.create(createAccountDto);
       account.populateWhoColumns(userPermissions.user.id);
       const savedAccount = await this.accountRepository.save(account);
 
-      this.logger.log('Account created successfully', {
-        accountId: savedAccount.id,
-        userId: userPermissions.user.id
-      });
+      this.logger.log(`Account created successfully: ${savedAccount.id} for user: ${userPermissions.user.id}`);
 
       return savedAccount;
     } catch (error) {
@@ -59,12 +53,7 @@ export class AccountService {
     filter: Partial<CreateAccountDto> = {},
   ): Promise<Account[]> {
     try {
-      this.logger.log('Retrieving accounts list', {
-        page,
-        limit,
-        sortField,
-        sortOrder
-      });
+      this.logger.log(`Retrieving accounts list - page: ${page}, limit: ${limit}, sortField: ${sortField}, sortOrder: ${sortOrder}`);
 
       const options: FindManyOptions<Account> = {
         skip: (page - 1) * limit,
@@ -77,11 +66,7 @@ export class AccountService {
 
       const accounts = await this.accountRepository.find(options);
 
-      this.logger.log('Successfully retrieved accounts', {
-        count: accounts.length,
-        page,
-        limit
-      });
+      this.logger.log(`Successfully retrieved accounts - count: ${accounts.length}, page: ${page}, limit: ${limit}`);
       return accounts;
     } catch (error) {
       this.logger.error('Failed to retrieve accounts list', error);
@@ -96,11 +81,11 @@ export class AccountService {
       const account = await this.accountRepository.findOneBy({ id: id });
 
       if (!account) {
-        this.logger.warn('Account not found', { accountId: id });
+        this.logger.warn(`Account not found: ${id}`);
         throw new NotFoundException(`Account with ID ${id} not found`);
       }
 
-      this.logger.log('Successfully retrieved account', { accountId: id });
+      this.logger.log(`Successfully retrieved account: ${id}`);
       return account;
     } catch (error) {
       if (error instanceof NotFoundException) {
@@ -117,15 +102,12 @@ export class AccountService {
     userPermissionResponse: UserPermissionResponse,
   ): Promise<void> {
     try {
-      this.logger.log('Updating account', {
-        accountId: id,
-        userId: userPermissionResponse.user.id
-      });
+      this.logger.log(`Updating account: ${id} by user: ${userPermissionResponse.user.id}`);
 
       // Check if account exists first
       const existingAccount = await this.accountRepository.findOneBy({ id });
       if (!existingAccount) {
-        this.logger.warn('Account not found for update', { accountId: id });
+        this.logger.warn(`Account not found for update: ${id}`);
         throw new NotFoundException(`Account with ID ${id} not found`);
       }
 
@@ -134,7 +116,7 @@ export class AccountService {
         updated_by: userPermissionResponse.user.id,
       });
 
-      this.logger.log('Successfully updated account', { accountId: id });
+      this.logger.log(`Successfully updated account: ${id}`);
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -146,18 +128,18 @@ export class AccountService {
 
   async delete(id: string): Promise<void> {
     try {
-      this.logger.log('Deleting account', { accountId: id });
+      this.logger.log(`Deleting account: ${id}`);
 
       // Check if account exists first
       const existingAccount = await this.accountRepository.findOneBy({ id });
       if (!existingAccount) {
-        this.logger.warn('Account not found for deletion', { accountId: id });
+        this.logger.warn(`Account not found for deletion: ${id}`);
         throw new NotFoundException(`Account with ID ${id} not found`);
       }
 
       await this.accountRepository.delete(id);
 
-      this.logger.log('Successfully deleted account', { accountId: id });
+      this.logger.log(`Successfully deleted account: ${id}`);
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
