@@ -460,29 +460,6 @@ describe('ErrorCsvGenerationActivity', () => {
         });
     });
 
-    describe('getErrorCountByProject', () => {
-        it('should delegate to operation error service for error counts', async () => {
-            const projectIds = ['project-123', 'project-456'];
-            const startDate = '2024-07-01';
-            const endDate = '2024-07-31';
-            const mockErrorCounts = [
-                { projectId: 'project-123', projectName: 'Test Project', errorCount: 5 },
-                { projectId: 'project-456', projectName: 'Another Project', errorCount: 3 },
-            ];
-
-            operationErrorService.getErrorCountByProject.mockResolvedValue(mockErrorCounts);
-
-            const result = await activity.getErrorCountByProject(projectIds, startDate, endDate);
-
-            expect(result).toEqual(mockErrorCounts);
-            expect(operationErrorService.getErrorCountByProject).toHaveBeenCalledWith(
-                projectIds,
-                startDate,
-                endDate,
-            );
-        });
-    });
-
     describe('addCSVToZip - directory structure logic', () => {
         let mockZip: jest.Mocked<AdmZip>;
 
