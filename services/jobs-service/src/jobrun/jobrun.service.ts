@@ -40,6 +40,8 @@ import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { JobRunStats } from "./dto/jobstats";
 import { JobRunInitService } from "./jobrun.init.service";
 import { SuccessEmailType } from "src/utils/send-email.type";
+import { getErrorDisplayMessage } from './jobrun.utli';
+
 @Injectable()
 export class JobRunService {
   private readonly logger = new Logger(JobRunService.name);
@@ -627,17 +629,17 @@ export class JobRunService {
           const errorRemedies = await this.errorRemedyService.findByErrorCodes([
             error.errorCode,
           ]);
-          const remedy = errorRemedies[0];
+          const errorRemedy = errorRemedies?.[0];
 
           this.logger.debug(
-            `[getJobRunErrors] Mapped errorCode: ${error.errorCode} to remedy: ${remedy ? remedy.description : "none"}`
+            `[getJobRunErrors] Mapped errorCode: ${error.errorCode} to remedy: ${errorRemedy ? errorRemedy.description : "none"}`
           );
 
           return {
             ...error,
-            displayMessage: remedy ? remedy.description : error.errorMessage,
-            resolutionSteps: remedy ? remedy.resolutionSteps : null,
-            referenceCommands: remedy ? remedy.referenceCommands : null,
+            displayMessage: getErrorDisplayMessage(error.errorCode, error.errorMessage, errorRemedy?.description),
+            resolutionSteps: errorRemedy ? errorRemedy.resolutionSteps : null,
+            referenceCommands: errorRemedy ? errorRemedy.referenceCommands : null,
           };
         } catch (remedyError) {
           this.logger.error(
@@ -674,14 +676,16 @@ export class JobRunService {
               await this.errorRemedyService.findByErrorCodes([
                 error.workerResponse.code,
             ]);
-            const remedy = errorRemedies[0];
+            const errorRemedy = errorRemedies?.[0];
             return {
               errorMessage: error.workerResponse.message,
-              displayMessage: remedy
-                ? remedy.description
-                : error.workerResponse.message,
-              resolutionSteps: remedy ? remedy.resolutionSteps : null,
-              referenceCommands: remedy ? remedy.referenceCommands : null,
+              displayMessage: getErrorDisplayMessage(
+                error?.workerResponse?.code,
+                error?.workerResponse?.message,
+                errorRemedy?.description
+              ),
+              resolutionSteps: errorRemedy ? errorRemedy.resolutionSteps : null,
+              referenceCommands: errorRemedy ? errorRemedy.referenceCommands : null,
               errorType: "FATAL_ERROR",
               createdAt: error.workerResponse.createdAt,
               operationType: error.workerResponse.operation,
