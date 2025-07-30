@@ -53,3 +53,17 @@ volumePermissions:
 
 replica:
   replicaCount: 0
+
+metrics:
+  enabled: true
+  containerSecurityContext:
+    enabled: true
+    runAsUser: {{ vm_uid }}
+    runAsGroup: {{ vm_gid }}
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop:
+        - ALL 
