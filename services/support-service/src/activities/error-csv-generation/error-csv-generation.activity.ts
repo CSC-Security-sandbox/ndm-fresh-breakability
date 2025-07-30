@@ -17,13 +17,11 @@ export class ErrorCsvGenerationActivity {
     {
       traceId,
       payload,
-      projectIds
     }
   ): Promise<ExportResult> {
     const outputLocation = payload.zipLocation;
     try {
-      const data = await this.getOperationErrorsByProjectAndDateRange(
-        projectIds,
+      const data = await this.getOperationErrorsByDateRange(
         payload.startDate,
         payload.endDate,
       );
@@ -37,18 +35,14 @@ export class ErrorCsvGenerationActivity {
       }
 
       await this.exportOperationErrorsToZip({
-        projectIds,
         startDate: payload.startDate,
         endDate: payload.endDate,
         outputLocation,
       });
 
-      // Count unique combinations
-      const groupedData = this.groupDataByProjectAndDate(data);
-      let filesCreated = 0;
-      for (const [, dateGroups] of groupedData.entries()) {
-        filesCreated += dateGroups.size;
-      }
+      // Count unique dates instead of project-date combinations
+      const groupedData = this.groupDataByDate(data);
+      const filesCreated = groupedData.size;
 
       return {
         success: true,
@@ -66,15 +60,13 @@ export class ErrorCsvGenerationActivity {
   }
 
   /**
-   * Fetch operation errors for given project IDs and date range
+   * Fetch operation errors for given date range
    */
-  async getOperationErrorsByProjectAndDateRange(
-    projectIds: string[],
+  async getOperationErrorsByDateRange(
     startDate: string,
     endDate: string,
   ): Promise<OperationErrorExportData[]> {
-    return await this.operationErrorService.getOperationErrorsByProjectAndDateRange(
-      projectIds,
+    return await this.operationErrorService.getOperationErrorsByDateRange(
       startDate,
       endDate,
     );
@@ -84,14 +76,13 @@ export class ErrorCsvGenerationActivity {
    * Generate CSV files and add them to existing zip structure
    */
   async exportOperationErrorsToZip(request: ExportRequest): Promise<void> {
-    const data = await this.getOperationErrorsByProjectAndDateRange(
-      request.projectIds,
+    const data = await this.getOperationErrorsByDateRange(
       request.startDate,
       request.endDate,
     );
 
-    // Group data by project ID and date
-    const groupedData = this.groupDataByProjectAndDate(data);
+    // Group data by date only
+    const groupedData = this.groupDataByDate(data);
 
     // Process zip file
     await this.addCSVFilesToZip(groupedData, request.outputLocation);
@@ -101,7 +92,7 @@ export class ErrorCsvGenerationActivity {
    * Add CSV files to existing zip structure
    */
   private async addCSVFilesToZip(
-    groupedData: Map<string, Map<string, OperationErrorExportData[]>>,
+    groupedData: Map<string, OperationErrorExportData[]>,
     zipFilePath: string,
   ): Promise<void> {
     // Check if zip file exists
@@ -130,17 +121,14 @@ export class ErrorCsvGenerationActivity {
       this.logger.log(`${zipEntries.filter(entry => entry.isDirectory).length - 10} more directories`);
     }
 
-    // Process each project and date combination
+    // Process each date combination
     let totalFilesAdded = 0;
-    for (const [projectId, dateGroups] of groupedData.entries()) {
-      this.logger.log(`Processing project: ${projectId}`);
-      for (const [date, errors] of dateGroups.entries()) {
-        // Ensure date is in YYYY-MM-DD format
-        const formattedDate = date.includes('/') ? date.replace(/\//g, '-') : date;
-        this.logger.log(`Processing: Project '${projectId}', Date '${formattedDate}' (${errors.length} errors)`);
-        await this.addCSVToZip(zip, projectId, formattedDate, errors, zipEntries);
-        totalFilesAdded++;
-      }
+    for (const [date, errors] of groupedData.entries()) {
+      // Ensure date is in YYYY-MM-DD format
+      const formattedDate = date.includes('/') ? date.replace(/\//g, '-') : date;
+      this.logger.log(`Processing Date '${formattedDate}' (${errors.length} errors)`);
+      await this.addCSVToZip(zip, formattedDate, errors, zipEntries);
+      totalFilesAdded++;
     }
 
     // Save the zip file
@@ -151,64 +139,43 @@ export class ErrorCsvGenerationActivity {
 
   /**
    * Add a single CSV file to the zip structure
-   * Structure: ndm_logs/date_folder/project_id_folder/control_plane/errorlog.csv
+   * Structure: ndm_logs/date_folder/errorlog.csv
    */
   private async addCSVToZip(
     zip: AdmZip,
-    projectId: string,
     date: string,
     errors: OperationErrorExportData[],
     zipEntries: AdmZip.IZipEntry[],
   ): Promise<void> {
-    // Use YYYY-MM-DD format as a single folder name
-    this.logger.log(`Looking for project '${projectId}' in date format: ${date}`);
+    // Use YYYY-MM-DD format as the date folder name
+    this.logger.log(`Looking for date folder: ${date}`);
 
     let targetPath = '';
     let foundStructure = false;
 
     this.logger.log(`   Checking date format: ${date}`);
 
-    // Step 1: Look for exact control_plane folder
-    const controlPlanePath = `ndm_logs/${date}/${projectId}/control_plane/`;
-    if (this.findExactDirectory(zipEntries, controlPlanePath)) {
-      targetPath = `${controlPlanePath}errorlog.csv`;
+    // Step 1: Look for existing date folder
+    const datePath = `ndm_logs/${date}/`;
+    if (this.findExactDirectory(zipEntries, datePath)) {
+      targetPath = `${datePath}errorlog.csv`;
       foundStructure = true;
-      this.logger.log(`   ✓ Found existing control_plane: ${controlPlanePath}`);
+      this.logger.log(`   ✓ Found existing date folder: ${datePath}`);
     }
 
-    // Step 2: Look for project folder
-    if (!foundStructure) {
-      const projectPath = `ndm_logs/${date}/${projectId}/`;
-      if (this.findExactDirectory(zipEntries, projectPath)) {
-        targetPath = `${projectPath}control_plane/errorlog.csv`;
-        foundStructure = true;
-        this.logger.log(`Found existing project folder: ${projectPath}`);
-      }
-    }
-
-    // Step 3: Look for date folder
-    if (!foundStructure) {
-      const datePath = `ndm_logs/${date}/`;
-      if (this.findExactDirectory(zipEntries, datePath)) {
-        targetPath = `${datePath}${projectId}/control_plane/errorlog.csv`;
-        foundStructure = true;
-        this.logger.log(`Found existing date folder: ${datePath}`);
-      }
-    }
-
-    // Step 4: Check for ndm_logs folder
+    // Step 2: Check for ndm_logs folder
     if (!foundStructure) {
       if (this.findExactDirectory(zipEntries, 'ndm_logs/')) {
         // Use the date format (YYYY-MM-DD) as single folder
-        targetPath = `ndm_logs/${date}/${projectId}/control_plane/errorlog.csv`;
+        targetPath = `ndm_logs/${date}/errorlog.csv`;
         foundStructure = true;
-        this.logger.log(`Found ndm_logs, creating structure: ndm_logs/${date}/${projectId}/control_plane/`);
+        this.logger.log(`Found ndm_logs, creating structure: ndm_logs/${date}/`);
       }
     }
 
-    // Step 5: Fallback - create complete structure
+    // Step 3: Fallback - create complete structure
     if (!foundStructure) {
-      targetPath = `ndm_logs/${date}/${projectId}/control_plane/errorlog.csv`;
+      targetPath = `ndm_logs/${date}/errorlog.csv`;
       this.logger.log(`No existing structure found, creating complete structure: ${targetPath}`);
     }
 
@@ -283,12 +250,12 @@ export class ErrorCsvGenerationActivity {
   }
 
   /**
-   * Group operation errors by project ID and date
+   * Group operation errors by date only
    */
-  private groupDataByProjectAndDate(
+  private groupDataByDate(
     data: OperationErrorExportData[],
-  ): Map<string, Map<string, OperationErrorExportData[]>> {
-    const grouped = new Map<string, Map<string, OperationErrorExportData[]>>();
+  ): Map<string, OperationErrorExportData[]> {
+    const grouped = new Map<string, OperationErrorExportData[]>();
 
     for (const item of data) {
       // Properly format date to YYYY-MM-DD
@@ -315,18 +282,11 @@ export class ErrorCsvGenerationActivity {
         }
       }
 
-      const projectId = item.projectId;
-
-      if (!grouped.has(projectId)) {
-        grouped.set(projectId, new Map());
+      if (!grouped.has(date)) {
+        grouped.set(date, []);
       }
 
-      const projectGroup = grouped.get(projectId)!;
-      if (!projectGroup.has(date)) {
-        projectGroup.set(date, []);
-      }
-
-      projectGroup.get(date)!.push(item);
+      grouped.get(date)!.push(item);
     }
 
     return grouped;

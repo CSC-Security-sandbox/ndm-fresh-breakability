@@ -1,5 +1,4 @@
 import { proxyActivities, log } from '@temporalio/workflow';
-import { stat } from 'fs';
 import { ActivitiesService } from 'src/activities/activities.service';
 
 const { fetchAndZipLogs } =
@@ -11,10 +10,8 @@ export const LogGeneratorWorkflow = async ({ traceId, payload }) => {
   log.info(`[${traceId}] Started LogGeneratorWorkflow`);
 
   try {
-    // throw new Error('This workflow is not implemented yet');
     const zipPath = await fetchAndZipLogs({ traceId, payload });
     log.info(`[${traceId}] Finished LogGeneratorWorkflow, zipPath: ${zipPath}`);
-    // return zipPath;
 
     return {
       status: 'success',
@@ -23,10 +20,7 @@ export const LogGeneratorWorkflow = async ({ traceId, payload }) => {
 
   } catch (error) {
     log.error(`[${traceId}] Error in LogGeneratorWorkflow: ${error.message}`);
-    return {
-      status: 'failed',
-      message: error.message,
-    };
-    // throw error;
+    // Don't return status object - throw the error so parent can catch it
+    throw error;
   }
 };

@@ -25,29 +25,45 @@ export class LogGeneratorActivity {
   }
 
   async fetchAndZipLogs({ traceId, payload }): Promise<string> {
-    this.logger.log(`[${traceId}] Started fetchAndZipLogsUsingFind activity`);
+    this.logger.log(`[${traceId}] Started fetchAndZipLogs activity`);
 
     try {
+      // Validate required payload fields
+      if (!payload?.startDate || !payload?.endDate || !payload?.userId) {
+        throw new Error('Missing required payload fields: startDate, endDate, or userId');
+      }
+
       const zipRoot = 'ndm_logs';
       const zipFileName = `ndm_${payload.userId}.zip`;
       const zipPath = path.join(this.outputZipPath, zipFileName);
 
+      // Remove existing zip file if it exists
       if (fs.existsSync(zipPath)) {
         fs.unlinkSync(zipPath);
+        this.logger.log(`[${traceId}] Removed existing zip file: ${zipPath}`);
       }
 
+      // Ensure output directory exists
       if (!fs.existsSync(this.outputZipPath)) {
         fs.mkdirSync(this.outputZipPath, { recursive: true });
+        this.logger.log(`[${traceId}] Created output directory: ${this.outputZipPath}`);
       }
 
+      // Validate and parse date range
       const start = new Date(payload.startDate);
       const end = new Date(payload.endDate);
-      if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
         throw new Error(
-          `Invalid date range: ${payload.startDate} to ${payload.endDate}`,
+          `Invalid date format. Expected YYYY-MM-DD format. Received startDate: ${payload.startDate}, endDate: ${payload.endDate}`,
+        );
+      }
+      if (start > end) {
+        throw new Error(
+          `Start date (${payload.startDate}) cannot be after end date (${payload.endDate})`,
         );
       }
 
+      // Generate date folders for the given range
       const dateFolders: string[] = [];
       const current = new Date(payload.startDate);
       const endDt = new Date(payload.endDate);
@@ -58,79 +74,119 @@ export class LogGeneratorActivity {
         current.setUTCDate(current.getUTCDate() + 1);
       }
 
-      const pathExpressions: string[] = [];
+      this.logger.log(`[${traceId}] Processing date folders: ${dateFolders.join(', ')}`);
 
+      // Verify base log path exists
+      if (!fs.existsSync(this.baseLogPath)) {
+        throw new Error(`Base log path does not exist: ${this.baseLogPath}`);
+      }
+
+      // Use find command to locate existing date folders within the specified range
+      const pathExpressions: string[] = [];
       for (const date of dateFolders) {
         const datePath = path.join(this.baseLogPath, date);
-
-        for (const entry of payload?.projectWorkerMap) {
-          if (entry.projectId) {
-            const controlPlanePath = path.join(datePath, entry.projectId);
-            pathExpressions.push(`-path "${controlPlanePath}"`);
-
-            if (entry.projectId) {
-              const projectPath = path.join(datePath, entry.projectId);
-              pathExpressions.push(`-path "${projectPath}"`);
-            }
-          }
-
-          if (entry.workerIds) {
-            for (const wid of entry.workerIds) {
-              const workerPath = path.join(datePath, 'worker', wid);
-              pathExpressions.push(`-path "${workerPath}"`);
-            }
-          }
-        }
+        pathExpressions.push(`-path "${datePath}"`);
       }
 
       if (pathExpressions.length === 0) {
-        throw new Error('No paths generated from inputs');
+        throw new Error('No date paths generated from date range');
       }
 
-      const findCommand = `find "${this.baseLogPath}" -type d \\( ${pathExpressions.join(' -o ')} \\)`;
+      const findCommand = `find "${this.baseLogPath}" -maxdepth 1 -type d \\( ${pathExpressions.join(' -o ')} \\)`;
+
+      this.logger.log(`[${traceId}] Executing find command: ${findCommand}`);
 
       const { stdout } = await exec(findCommand).catch((err) => {
-        this.logger.error('Error executing find:', err.stderr || err.message);
-        throw new Error('Failed to execute find command');
+        this.logger.error(`[${traceId}] Error executing find command:`, err.stderr || err.message);
+        throw new Error(`Failed to execute find command: ${err.message}`);
       });
 
-      const matchingDirs = stdout
+      const existingDateFolders = stdout
         .trim()
         .split('\n')
         .map((s) => s.trim())
         .filter(Boolean);
 
-      if (matchingDirs.length === 0) {
+      if (existingDateFolders.length === 0) {
         throw new Error(
-          'No matching directories found in the given date range.',
+          `No date folders found in the specified range (${payload.startDate} to ${payload.endDate}) at path: ${this.baseLogPath}`,
         );
       }
 
+      this.logger.log(`[${traceId}] Found ${existingDateFolders.length} date folders to process: ${existingDateFolders.map(p => path.basename(p)).join(', ')}`);
+
+      // Create zip file with all content from existing date folders
       return await new Promise((resolve, reject) => {
         const output = fs.createWriteStream(zipPath);
         const archive = archiver('zip', { zlib: { level: 9 } });
 
+        let totalFilesAdded = 0;
+
         output.on('close', () => {
-          this.logger.log(`[${traceId}] Zip created at: ${zipPath}`);
+          this.logger.log(`[${traceId}] Zip created successfully at: ${zipPath}`);
+          this.logger.log(`[${traceId}] Total bytes written: ${archive.pointer()}`);
+          this.logger.log(`[${traceId}] Total files/folders added: ${totalFilesAdded}`);
           resolve(zipPath);
         });
 
         archive.on('error', (err) => {
           this.logger.error(`[${traceId}] Archiving error:`, err);
-          reject(err);
+          reject(new Error(`Failed to create zip archive: ${err.message}`));
+        });
+
+        archive.on('warning', (err) => {
+          if (err.code === 'ENOENT') {
+            this.logger.warn(`[${traceId}] Archive warning:`, err);
+          } else {
+            this.logger.error(`[${traceId}] Archive warning:`, err);
+            reject(err);
+          }
+        });
+
+        archive.on('entry', (entry) => {
+          totalFilesAdded++;
+          if (totalFilesAdded % 100 === 0) {
+            this.logger.log(`[${traceId}] Processed ${totalFilesAdded} entries...`);
+          }
         });
 
         archive.pipe(output);
 
-        for (const dir of matchingDirs) {
-          const relative = path.relative(this.baseLogPath, dir);
-          archive.directory(dir, path.join(zipRoot, relative));
+        // Add each date folder to the zip
+        for (const dateFolderPath of existingDateFolders) {
+          const dateFolder = path.basename(dateFolderPath);
+          this.logger.log(`[${traceId}] Adding date folder to zip: ${dateFolder}`);
+
+          try {
+            // Add the entire date folder and its contents to the zip
+            archive.directory(dateFolderPath, path.join(zipRoot, dateFolder));
+          } catch (err) {
+            this.logger.error(`[${traceId}] Error adding folder ${dateFolder}:`, err);
+            reject(new Error(`Failed to add folder ${dateFolder} to zip: ${err.message}`));
+            return;
+          }
         }
 
-        archive.finalize();
+        archive.finalize().catch((err) => {
+          this.logger.error(`[${traceId}] Error finalizing archive:`, err);
+          reject(new Error(`Failed to finalize zip archive: ${err.message}`));
+        });
       });
     } catch (err) {
-      this.logger.error(`[${traceId}] Error in fetchAndZipLogsUsingFind:`, err.message);
+      this.logger.error(`[${traceId}] Error in fetchAndZipLogs:`, err.message);
+
+      // Clean up partial zip file if it exists
+      const zipFileName = `ndm_${payload?.userId || 'unknown'}.zip`;
+      const zipPath = path.join(this.outputZipPath, zipFileName);
+      if (fs.existsSync(zipPath)) {
+        try {
+          fs.unlinkSync(zipPath);
+          this.logger.log(`[${traceId}] Cleaned up partial zip file: ${zipPath}`);
+        } catch (cleanupErr) {
+          this.logger.error(`[${traceId}] Failed to cleanup partial zip file:`, cleanupErr);
+        }
+      }
+
       throw err;
     }
   }
