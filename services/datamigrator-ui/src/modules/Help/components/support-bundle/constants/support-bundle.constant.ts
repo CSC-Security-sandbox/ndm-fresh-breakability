@@ -14,5 +14,3 @@ export const DOWNLOAD_REPORT_LABEL = "Download Report";
 export const GENERATE_SUPPORT_BUNDLE_LABEL = "Generate Support Bundle";
 
 export const GENERATING_SUPPORT_BUNDLE_LABEL = "Generating Support Bundle";
-
-export const SELECT_PROJECT_AND_WORKER_LABEL = "Select Project and Worker";

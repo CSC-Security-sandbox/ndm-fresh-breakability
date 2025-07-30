@@ -128,10 +128,6 @@ export const configApi = createApi({
       }),
     }),
 
-    fetchProjectWithWorker: builder.query<Array<Record<string, string>>, void>({
-      query: () => "support-bundle",
-    }),
-
     downloadSupportBundle: builder.query<void, void>({
       query: () => ({
         url: "support-bundle/download",
@@ -162,7 +158,6 @@ export const {
   useUploadExportPathSourceFileMutation,
   useSubmitExportPathSourceFileMutation,
   useGenerateSupportBundleMutation,
-  useFetchProjectWithWorkerQuery,
   useCheckBundleReadyStatusQuery,
   useLazyDownloadSupportBundleQuery,
 } = configApi;
