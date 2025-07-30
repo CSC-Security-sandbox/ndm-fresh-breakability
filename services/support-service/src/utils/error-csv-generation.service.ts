@@ -6,20 +6,19 @@ import { OperationErrorExportData } from 'src/constants/types';
 
 @Injectable()
 export class OperationErrorService {
-    constructor(
-        @InjectRepository(OperationErrorEntity)
-        private operationErrorRepo: Repository<OperationErrorEntity>,
-    ) { }
+  constructor(
+    @InjectRepository(OperationErrorEntity)
+    private operationErrorRepo: Repository<OperationErrorEntity>,
+  ) { }
 
-    /**
-     * Fetch operation errors for given project IDs and date range using raw SQL
-     */
-    async getOperationErrorsByProjectAndDateRange(
-        projectIds: string[],
-        startDate: string,
-        endDate: string,
-    ): Promise<OperationErrorExportData[]> {
-        const query = `
+  /**
+   * Fetch operation errors for given date range using raw SQL
+   */
+  async getOperationErrorsByDateRange(
+    startDate: string,
+    endDate: string,
+  ): Promise<OperationErrorExportData[]> {
+    const query = `
       SELECT 
         oe.id,
         oe.operation_id as "operationId",
@@ -45,16 +44,14 @@ export class OperationErrorService {
         )
       )
       INNER JOIN datamigrator.project p ON c.project_id = p.id
-      WHERE p.id = ANY($1)
-        AND DATE(oe.created_at) >= $2
-        AND DATE(oe.created_at) <= $3
-      ORDER BY p.id, DATE(oe.created_at), oe.created_at
+      WHERE DATE(oe.created_at) >= $1
+        AND DATE(oe.created_at) <= $2
+      ORDER BY DATE(oe.created_at), oe.created_at, p.id
     `;
 
-        return await this.operationErrorRepo.query(query, [
-            projectIds,
-            startDate,
-            endDate,
-        ]);
-    }
+    return await this.operationErrorRepo.query(query, [
+      startDate,
+      endDate,
+    ]);
+  }
 }
