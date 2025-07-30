@@ -15,9 +15,18 @@ export const ErrorCsvGeneratorWorkflow = async ({ traceId, payload }) => {
     await generateErrorCsv({ traceId, projectIds, payload });
 
     log.info(`[${traceId}] Finished Error CSV Generation`);
-    return `Successfully Completed Error CSV Generation`;
+
+     return {
+      status: 'success',
+      message: 'Successfully Completed Error CSV Generation',
+    };
+    // return `Successfully Completed Error CSV Generation`;
   } catch (error) {
     log.error(`[${traceId}] Error during CSV generation: ${error.message}`);
-    throw error;
+    return {
+      status: 'failed',
+      message: error.message,
+    };
+    // throw error;
   }
 };
