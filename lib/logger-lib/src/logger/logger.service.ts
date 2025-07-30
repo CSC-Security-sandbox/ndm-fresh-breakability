@@ -32,13 +32,16 @@ export class LoggerService {
 
   private formatMessage(message: string, data?: string | object): object {
     const trackId =
-        data && typeof data === 'object' && 'trackId' in data
-            ? (data as any).trackId
-            : this.requestContext.getTrackId();
+      data && typeof data === 'object' && 'trackId' in data
+        ? (data as any).trackId
+        : this.requestContext.getTrackId();
+
+    const projectId = this.requestContext.getProjectId();
     const baseLog = {
       message: message,
       context: this.parentContext ?? LoggerService.name,
       trackId: trackId,
+      projectId: projectId
     };
 
     // Handle both string and object for data

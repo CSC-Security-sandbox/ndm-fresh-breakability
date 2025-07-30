@@ -3,6 +3,7 @@ import {Inject, Injectable} from "@nestjs/common";
 
 export interface RequestContextData {
     trackId: string;
+    projectId: string;
 }
 
 @Injectable()
@@ -21,5 +22,9 @@ export class RequestContext {
 
     getTrackId(): string | undefined {
         return this.getContext()?.trackId;
+    }
+
+    getProjectId(): string | undefined {
+        return this.getContext()?.projectId;
     }
 }
