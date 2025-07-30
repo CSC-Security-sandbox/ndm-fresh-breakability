@@ -57,12 +57,12 @@ on:
         required: false
         default: '2'
         type: string
-      control_plane_image_version:
+      cp_image:
         description: 'Control plane image version (leave empty for latest)'
         required: false
         default: ''
         type: string
-      worker_image_version:
+      worker_image:
         description: 'Worker image version (leave empty for latest)'
         required: false
         default: ''
@@ -97,7 +97,14 @@ jobs:
         # Handle both workflow_call and workflow_dispatch inputs
         if [ "${{ github.event_name }}" == "workflow_call" ]; then
           # Called from multi-cloud workflow
-          echo "USERNAME=${{ inputs.username || inputs.name_prefix }}" >> $GITHUB_ENV
+          USERNAME="${{ inputs.username }}"
+          if [ -z "$USERNAME" ]; then
+            USERNAME="${{ inputs.name_prefix }}"
+          fi
+          if [ -z "$USERNAME" ]; then
+            USERNAME="admin"
+          fi    
+          echo "USERNAME=$USERNAME" >> $GITHUB_ENV
           echo "ADMIN_PASSWORD=${{ inputs.azure_admin_password }}" >> $GITHUB_ENV
           echo "WORKER_COUNT=${{ inputs.worker_count }}" >> $GITHUB_ENV
           echo "CP_IMAGE=${{ inputs.cp_image }}" >> $GITHUB_ENV
@@ -108,8 +115,8 @@ jobs:
           echo "USERNAME=${{ github.event.inputs.username || 'admin' }}" >> $GITHUB_ENV
           echo "ADMIN_PASSWORD=${{ github.event.inputs.admin_password || 'Welcome@123' }}" >> $GITHUB_ENV
           echo "WORKER_COUNT=${{ github.event.inputs.worker_count || '2' }}" >> $GITHUB_ENV
-          echo "CP_IMAGE=${{ github.event.inputs.control_plane_image_version }}" >> $GITHUB_ENV
-          echo "WORKER_IMAGE=${{ github.event.inputs.worker_image_version }}" >> $GITHUB_ENV
+          echo "CP_IMAGE=${{ github.event.inputs.cp_image }}" >> $GITHUB_ENV
+          echo "WORKER_IMAGE=${{ github.event.inputs.worker_image }}" >> $GITHUB_ENV
           echo "CP_COUNT=1" >> $GITHUB_ENV
         fi
 
@@ -234,10 +241,8 @@ jobs:
       with:
         name: azure-deployment-logs
         path: |
-          azure-test/control_plane/terraform.tfstate*
-          azure-test/control_plane/.terraform.lock.hcl
-          azure-test/worker/terraform.tfstate*
-          azure-test/worker/.terraform.lock.hcl
+          app-deployment/terraform/azure/control_plane/terraform.tfstate*
+          app-deployment/terraform/azure/control_plane/.terraform.lock.hcl
+          app-deployment/terraform/azure/worker/terraform.tfstate*
+          app-deployment/terraform/azure/worker/.terraform.lock.hcl
         retention-days: 30
-
-  

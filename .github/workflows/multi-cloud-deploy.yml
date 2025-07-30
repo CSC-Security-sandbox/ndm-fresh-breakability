@@ -72,12 +72,12 @@ jobs:
     needs: route-deployment
     uses: ./.github/workflows/azure-deploy.yml
     with:
+      username: ${{ github.event.inputs.username || github.event.inputs.name_prefix }}  # Ensure username is passed
       name_prefix: ${{ github.event.inputs.name_prefix }}
       worker_count: ${{ github.event.inputs.worker_count }}
       cp_image: ${{ github.event.inputs.cp_image }}
       worker_image: ${{ github.event.inputs.worker_image }}
-      azure_admin_password: ${{ github.event.inputs.azure_admin_password }}
-      username: ${{ github.event.inputs.username }}
+      azure_admin_password: ${{ github.event.inputs.admin_password || 'Welcome@123' }}
     secrets: inherit
 
   deploy-to-gcp:

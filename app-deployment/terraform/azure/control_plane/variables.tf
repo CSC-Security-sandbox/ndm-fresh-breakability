@@ -60,3 +60,4 @@ variable "image_definition" {
   type        = string
   default     = "ndm-control-plane"
 }
+

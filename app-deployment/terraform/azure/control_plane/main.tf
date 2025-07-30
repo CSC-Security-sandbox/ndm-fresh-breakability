@@ -1,6 +1,6 @@
 provider "azurerm" {
   features {}
-  subscription_id = "1630c6a9-d99b-498a-aca8-a271f7506bc0"
+  # Remove the hardcoded subscription_id - it will use ARM_SUBSCRIPTION_ID env var automatically
 }
 
 # Get the desired image version if specified

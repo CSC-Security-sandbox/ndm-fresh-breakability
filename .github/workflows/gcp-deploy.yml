@@ -274,13 +274,14 @@ jobs:
       with:
         name: gcp-deployment-logs
         path: |
-          Gcp-test/deploy_*.log
-          Gcp-test/terraform.tfstate*
-          Gcp-test/terraform.tfvars
-          Gcp-test/instance_ips.txt
-          Gcp-test/deployment_summary.txt
-          Gcp-test/ssh_credentials.txt
-          Gcp-test/.terraform.lock.hcl
+          app-deployment/terraform/gcp/deploy_*.log
+          app-deployment/terraform/gcp/terraform.tfstate*
+          app-deployment/terraform/gcp/terraform.tfvars
+          app-deployment/terraform/gcp/instance_ips.txt
+          app-deployment/terraform/gcp/deployment_summary.txt
+          app-deployment/terraform/gcp/ssh_credentials.txt
+          app-deployment/terraform/gcp/.terraform.lock.hcl
+   
         retention-days: 30
 
  
