@@ -18,6 +18,7 @@ import { OperationErrorEntity } from 'src/entities/operation-error.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { WorkerStatsEntity } from 'src/entities/worker-stats.entity';
+import { ConfigurationDataCsvGenerationActivity } from './config-data-csv-generation/config-data-csv-generation.activity';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { WorkerStatsEntity } from 'src/entities/worker-stats.entity';
     LogGeneratorActivity,
     NotifyConfigActivity,
     ErrorCsvGenerationActivity,
+    ConfigurationDataCsvGenerationActivity,
     ConfigService,
     OperationErrorService,
   ],
