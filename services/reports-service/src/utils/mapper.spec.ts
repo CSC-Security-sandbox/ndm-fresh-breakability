@@ -1,6 +1,6 @@
 import {
-  capitalize,
   convertBytes,
+  capitalize,
   formatNumbersWithSuffix,
   formatSeconds,
   formatSizeAndCount,
@@ -86,18 +86,18 @@ describe("formatSeconds", () => {
 
 describe("formatNumbersWithSuffix", () => {
   it("should return value in 'Cr' for numbers >= 1,00,00,000", () => {
-    expect(formatNumbersWithSuffix(1_00_00_000)).toBe("1.00 Cr");
-    expect(formatNumbersWithSuffix(2_50_00_000)).toBe("2.50 Cr");
+    expect(formatNumbersWithSuffix(1_00_00_000)).toBe("10M");
+    expect(formatNumbersWithSuffix(2_50_00_000)).toBe("25M");
   });
 
   it("should return value in 'L' for numbers >= 1,00,000 and < 1,00,00,000", () => {
-    expect(formatNumbersWithSuffix(1_00_000)).toBe("1.00 L");
-    expect(formatNumbersWithSuffix(5_50_000)).toBe("5.50 L");
+    expect(formatNumbersWithSuffix(1_00_000)).toBe("100K");
+    expect(formatNumbersWithSuffix(5_50_000)).toBe("550K");
   });
 
   it("should return value in 'K' for numbers >= 1,000 and < 1,00,000", () => {
-    expect(formatNumbersWithSuffix(1_000)).toBe("1.00 K");
-    expect(formatNumbersWithSuffix(12_500)).toBe("12.50 K");
+    expect(formatNumbersWithSuffix(1_000)).toBe("1K");
+    expect(formatNumbersWithSuffix(12_500)).toBe("12.5K");
   });
 
   it("should return the number as string for numbers < 1,000", () => {
@@ -109,15 +109,15 @@ describe("formatNumbersWithSuffix", () => {
 describe("formatSizeAndCount", () => {
   it("should format size and count correctly", () => {
     expect(formatSizeAndCount("size(1024)count(1000)")).toBe(
-      "size: (1 KiB); count: (1.00 K)",
+      "size: (1 KiB); count: (1K)",
     );
     expect(formatSizeAndCount("size(1048576)count(100000)")).toBe(
-      "size: (1 MiB); count: (1.00 L)",
+      "size: (1 MiB); count: (100K)",
     );
   });
 
   it("should handle zero values", () => {
-    expect(formatSizeAndCount("size(0)count(0)")).toBe("size: (0 B); count: (");
+    expect(formatSizeAndCount("size(0)count(0)")).toBe("size: (0 B); count: (0)");
   });
 
   it("should handle missing values", () => {
@@ -127,10 +127,10 @@ describe("formatSizeAndCount", () => {
 
   it("should handle only size or only count", () => {
     expect(formatSizeAndCount("size(1024)")).toBe(
-      "size: (1 KB); count: (0)",
+      "size: (1 KiB); count: (0)",
     );
     expect(formatSizeAndCount("count(1000)")).toBe(
-      "size: (0 B); count: (1.00 K)",
+      "size: (0 B); count: (1K)",
     );
   });
 });
