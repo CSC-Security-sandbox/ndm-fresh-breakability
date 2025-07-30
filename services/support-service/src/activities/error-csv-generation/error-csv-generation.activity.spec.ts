@@ -32,6 +32,7 @@ describe('ErrorCsvGenerationActivity', () => {
     let operationErrorService: jest.Mocked<OperationErrorService>;
     let mockZipInstance: jest.Mocked<AdmZip>;
     let mockCsvWriter: any;
+    let mockLogger: jest.Mocked<Logger>;
 
     const mockOperationErrorData: OperationErrorExportData[] = [
         {
