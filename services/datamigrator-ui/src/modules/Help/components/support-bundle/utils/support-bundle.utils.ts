@@ -5,6 +5,10 @@ export const buildProjectWorkerMap = (
   const selectedProjectIds = new Set();
   const selectedWorkerIds = new Set();
 
+  if (!Array.isArray(formData?.project_worker)) {
+    return [];
+  }
+
   formData?.project_worker.forEach(({ id, childrens }) => {
     if (childrens) {
       selectedProjectIds.add(id);
