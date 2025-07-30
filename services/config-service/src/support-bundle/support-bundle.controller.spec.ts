@@ -70,12 +70,6 @@ describe('SupportBundleController', () => {
     const mockCreateSupportBundleDTO: CreateSupportBundleDTO = {
       startDate: '2023-01-01T00:00:00Z',
       endDate: '2023-01-31T23:59:59Z',
-      projectWorkerMap: [
-        {
-          projectId: 'project-1',
-          workerIds: ['worker-1', 'worker-2'],
-        },
-      ],
       otherMetrics: ['state data', 'inventory data'],
     };
 
@@ -153,69 +147,6 @@ describe('SupportBundleController', () => {
       expect(service.updateSupportBundleStatus).toHaveBeenCalledWith(
         mockUpdateStatusDto,
       );
-    });
-  });
-
-  describe('getProjects', () => {
-    const mockUserDetails: UserDetails = {
-      traceId: 'trace-123',
-      user: {
-        id: 'user-123',
-        roles: [
-          {
-            role_name: 'admin',
-            projects: ['project-1', 'project-2'],
-            permissions: ['read', 'write'],
-          },
-        ],
-      },
-    };
-
-    it('should get projects for user successfully', async () => {
-      const expectedProjects = [
-        {
-          projectId: 'project-1',
-          projectName: 'Project One',
-          workers: [
-            { workerId: 'worker-1', workerName: 'Worker 1' },
-            { workerId: 'worker-2', workerName: 'Worker 2' },
-          ],
-        },
-        {
-          projectId: 'project-2',
-          projectName: 'Project Two',
-          workers: [{ workerId: 'worker-3', workerName: 'Worker 3' }],
-        },
-      ];
-
-      mockSupportBundleService.getProjects.mockResolvedValue(expectedProjects);
-
-      const result = await controller.getProjects(mockUserDetails);
-
-      expect(service.getProjects).toHaveBeenCalledWith(mockUserDetails);
-      expect(result).toEqual(expectedProjects);
-    });
-
-    it('should handle service errors when getting projects', async () => {
-      const errorMessage = 'Failed to get projects';
-      mockSupportBundleService.getProjects.mockRejectedValue(
-        new Error(errorMessage),
-      );
-
-      await expect(controller.getProjects(mockUserDetails)).rejects.toThrow(
-        errorMessage,
-      );
-
-      expect(service.getProjects).toHaveBeenCalledWith(mockUserDetails);
-    });
-
-    it('should return empty array when user has no projects', async () => {
-      mockSupportBundleService.getProjects.mockResolvedValue([]);
-
-      const result = await controller.getProjects(mockUserDetails);
-
-      expect(service.getProjects).toHaveBeenCalledWith(mockUserDetails);
-      expect(result).toEqual([]);
     });
   });
 
