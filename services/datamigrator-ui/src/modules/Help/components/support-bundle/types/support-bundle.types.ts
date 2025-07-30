@@ -8,6 +8,12 @@ export type SupportBundleContextType = {
   handleDateChange: (value: any) => void;
   handleDownloadReport: () => void;
   handleGenerateBundle: () => void;
+  isFormDataDifferentFromLastBundle: () => boolean;
+  hasFormData: boolean;
+  isBundleReady: boolean;
+  isDownloadDisabled: boolean;
+  isGenerateDisabled: boolean;
+  showLoader: boolean;
 };
 
 export type SupportBundlePayloadType = {

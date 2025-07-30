@@ -13,20 +13,18 @@ import SupportBundleForm from "@modules/Help/components/support-bundle/component
 
 const SupportBundleContent = () => {
   const {
-    form,
-    bundleReadyStatus,
     handleDownloadReport,
     handleGenerateBundle,
+    isDownloadDisabled,
+    isGenerateDisabled,
+    showLoader,
   } = useContext(SupportBundleContext);
-
-  const isFormValid = form?.formState?.isValid;
-  const isProcessing = form?.formState?.isProcessing;
 
   return (
     <Card className="p-6 flex flex-col m-8">
       <Button
         className="ml-auto"
-        disabled={!bundleReadyStatus?.isBundleReady || !isFormValid}
+        disabled={isDownloadDisabled}
         onClick={handleDownloadReport}
       >
         {DOWNLOAD_REPORT_LABEL}
@@ -36,18 +34,13 @@ const SupportBundleContent = () => {
 
       <Box className="flex justify-center">
         <Show>
-          <Show.When
-            isTrue={
-              bundleReadyStatus?.isProcessing ||
-              (isProcessing && !bundleReadyStatus?.isBundleReady)
-            }
-          >
+          <Show.When isTrue={showLoader}>
             <ReportsGeneratingLoader label={GENERATING_SUPPORT_BUNDLE_LABEL} />
           </Show.When>
           <Show.Else>
             <Button
               onClick={handleGenerateBundle}
-              disabled={!isFormValid || bundleReadyStatus?.isBundleReady}
+              disabled={isGenerateDisabled}
             >
               {GENERATE_SUPPORT_BUNDLE_LABEL}
             </Button>

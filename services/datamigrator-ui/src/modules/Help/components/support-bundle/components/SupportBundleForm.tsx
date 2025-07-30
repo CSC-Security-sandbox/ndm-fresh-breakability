@@ -61,9 +61,6 @@ const SupportBundleForm = () => {
           name="other_metrics"
           form={form}
           options={METRICS_OPTIONS}
-          isSearchable
-          isMulti
-          hasSelectAll
         />
       </Box>
     </Box>
