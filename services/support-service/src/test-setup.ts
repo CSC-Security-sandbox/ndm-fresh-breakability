@@ -2,9 +2,16 @@
 jest.mock('typeorm', () => ({
     Entity: () => (target: any) => target,
     PrimaryGeneratedColumn: () => (target: any, propertyKey: string) => { },
+    PrimaryColumn: () => (target: any, propertyKey: string) => { },
     Column: () => (target: any, propertyKey: string) => { },
     CreateDateColumn: () => (target: any, propertyKey: string) => { },
     UpdateDateColumn: () => (target: any, propertyKey: string) => { },
+    ManyToOne: () => (target: any, propertyKey: string) => { },
+    OneToMany: () => (target: any, propertyKey: string) => { },
+    OneToOne: () => (target: any, propertyKey: string) => { },
+    ManyToMany: () => (target: any, propertyKey: string) => { },
+    JoinColumn: () => (target: any, propertyKey: string) => { },
+    JoinTable: () => (target: any, propertyKey: string) => { },
     Repository: class Repository { },
     getRepository: jest.fn(),
     createConnection: jest.fn(),
@@ -27,7 +34,7 @@ jest.mock('@nestjs/typeorm', () => ({
         forRoot: jest.fn(),
         forFeature: jest.fn(),
     },
-    getRepositoryToken: jest.fn(),
+    getRepositoryToken: jest.fn(() => 'mock-repository-token'),
 }));
 
 // Disable console logs during tests
