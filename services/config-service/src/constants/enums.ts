@@ -51,6 +51,7 @@ export enum WorkFlows{
     LIST_PATHS = 'ListPathsWorkflow',
     VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY = 'ValidateWorkingDirectoryWorkflow',
     VALIDATE_PATHS = 'ValidatePathsWorkflow',
+    SUPPORT_BUNDLE_WORKFLOW = 'SupportBundleWorkflow',
 }
 
 export enum ProtocolVersionError{
@@ -79,4 +80,73 @@ export enum ScheduleStatus {
     SCHEDULING = 'SCHEDULING',
     SCHEDULED = 'SCHEDULED',
     READY_TO_BE_SCHEDULED = 'READY_TO_BE_SCHEDULED'
+}
+
+export enum SupportBundleStatus {
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+}
+
+export enum UserRoles {
+  APP_ADMIN = 'App Admin',
+  PROJECT_ADMIN = 'Project Admin',
+  PROJECT_VIEWER = 'Project Viewer'
+}
+
+export enum JobStatus {
+  Active = "ACTIVE",
+  InActive = "IN_ACTIVE",
+}
+
+export enum JobType {
+  Discover = "DISCOVER",
+  Migrate = "MIGRATE",
+  CutOver = "CUT_OVER",
+  SpeedTest = "SPEED_TEST",
+}
+
+export enum JobRunStatus {
+  Ready = "READY",
+  Pending = "PENDING",
+  Running = "RUNNING",
+  Paused = "PAUSED",
+  Stopped = "STOPPED",
+  Completed = "COMPLETED",
+  Failed = "FAILED",
+  Errored = "ERRORED",
+}
+
+export enum PausedReason {
+  USER_PAUSED = "USER_PAUSED",
+  SYSTEM_PAUSED = "SYSTEM_PAUSED",
+}
+
+export enum OperationStatus {
+  READY = "READY",
+  IN_PROCESS = "IN_PROCESS",
+  ERROR = "ERROR",
+  COMPLETED = "COMPLETED",
+}
+
+export enum OperationType {
+  SCAN = "SCAN",
+}
+
+export enum TaskStatus {
+  PENDING = "PENDING",
+  RUNNING = "RUNNING",
+  ERRORED = "ERRORED",
+  COMPLETED = "COMPLETED",
+}
+
+export enum TaskOperation {
+  SCAN_PATH = "SCAN_PATH",
+  COPY_FILE = "COPY_FILE",
+  META_STAMP = "META_STAMP",
+}
+
+export enum TaskType {
+  SCAN = "SCAN",
+  COPY = "COPY",
 }

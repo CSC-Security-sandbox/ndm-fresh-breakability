@@ -1,7 +1,13 @@
-import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { WorkerEntity } from './worker.entity';
 import { JobRunEntity } from './jobrun.entity';
 import { WorkerConfiguration } from 'src/constants/types';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 
 @Entity({ name: 'worker_jobrun_mapping' })
 export class WorkerJobRunMap {
@@ -20,7 +26,7 @@ export class WorkerJobRunMap {
   @Column({ name: 'is_path_mounted', type: 'boolean', default: 'false' })
   isPathMounted: boolean = false;
 
-  @Column({ type: 'json', nullable: true, name: 'meta_config' }) 
+  @Column({ type: 'json', nullable: true, name: 'meta_config' })
   metaConfig: WorkerConfiguration;
 
   @ManyToOne(() => WorkerEntity, (worker) => worker.jobRunMap, {

@@ -84,18 +84,22 @@ export class WorkManagerService implements OnModuleInit {
       const accessToken = await this.authService.getAccessToken();
       if (!accessToken) throw new Error('Access token is null');
       const response = await firstValueFrom(
-        this.httpService.get(
+        this.httpService.post(
           `${this.workerConfigUrl}/api/v1/work-manager/config`,
+          {
+            envVariables: process.env,
+          },
           {
             headers: {
               Authorization: `Bearer ${accessToken}`,
               'x-client-platform': this.platform,
+              'Content-Type': 'application/json',
             },
             timeout: 5000,
           },
         ),
       );
-      if (response.status !== 200) {
+      if (response.status !== 200 && response.status !== 201) {
         throw new Error(
           `Failed to fetch configurations. Status: ${response.status}`,
         );
@@ -204,8 +208,12 @@ export class WorkManagerService implements OnModuleInit {
         `Error shutting down worker ${worker.options.identity}: ${err}`,
       );
     } finally {
-        this.logger.log('Removing worker from active workers');
-      if (worker.options && worker.options.identity && this.activeWorkers.has(worker.options.identity)) {
+      this.logger.log('Removing worker from active workers');
+      if (
+        worker.options &&
+        worker.options.identity &&
+        this.activeWorkers.has(worker.options.identity)
+      ) {
         this.activeWorkers.delete(worker.options.identity);
       }
     }
