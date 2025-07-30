@@ -331,20 +331,5 @@ export class ErrorCsvGenerationActivity {
 
     return grouped;
   }
-
-  /**
-   * Get error count statistics
-   */
-  async getErrorCountByProject(
-    projectIds: string[],
-    startDate: string,
-    endDate: string,
-  ): Promise<{ projectId: string; projectName: string; errorCount: number }[]> {
-    return await this.operationErrorService.getErrorCountByProject(
-      projectIds,
-      startDate,
-      endDate,
-    );
-  }
 }
 
