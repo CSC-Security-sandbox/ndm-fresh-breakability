@@ -33,9 +33,14 @@ export class ConfigurationDataCsvGenerationActivity {
     traceId: string;
     payload: any;
   }) {
-    const workerIds = payload?.projectWorkerMap
-      ?.flatMap((entry: any) => entry.workerIds ?? [])
-      ?.filter(Boolean) as string[];
+    const workerQuery = `
+      SELECT w.id as worker_id
+      FROM datamigrator.project p
+      INNER JOIN datamigrator.worker w ON p.id = w.project_id
+      ORDER BY w.id`;
+
+    const workerResult = await this.dataSource.query(workerQuery);
+    const workerIds = workerResult.map((row: any) => row.worker_id);
 
     if (
       workerIds?.length > 0 &&
@@ -53,9 +58,12 @@ export class ConfigurationDataCsvGenerationActivity {
     traceId: string;
     payload: any;
   }) {
-    const projectIds = payload?.projectWorkerMap
-      ?.map((entry) => entry.projectId)
-      ?.filter(Boolean) as string[];
+    const projectQuery = `
+      SELECT id as project_id
+      FROM datamigrator.project`;
+
+    const projectResult = await this.dataSource.query(projectQuery);
+    const projectIds = projectResult.map((row: any) => row.project_id);
 
     if (
       projectIds?.length > 0 &&
@@ -355,19 +363,27 @@ export class ConfigurationDataCsvGenerationActivity {
           jc.id as "JobConfig Id",
           jc.job_type as "Job Type",
           jc.status as "Job Status",
-          jc.exclude_file_patterns as "Exclude File Patterns"
-        FROM datamigrator.jobconfig jc
-          LEFT JOIN datamigrator.volume v ON jc.source_path_id = v.id
-          LEFT JOIN datamigrator.file_server fs ON v.file_server_id = fs.id
-          LEFT JOIN datamigrator.config c ON fs.config_id = c.id
-          LEFT JOIN datamigrator.project p ON c.project_id = p.id
-        WHERE p.id IN (${placeholders})
-          AND v.volume_path IS NOT NULL 
+          jc.exclude_file_patterns as "Exclude File Patterns",
+          jc.created_at as "JobConfig Created At",
+          jc.updated_at as "JobConfig Updated At"
+        FROM datamigrator.project p
+          LEFT JOIN datamigrator.config c ON p.id = c.project_id
+          LEFT JOIN datamigrator.file_server fs ON c.id = fs.config_id
+          LEFT JOIN datamigrator.volume v ON fs.id = v.file_server_id
+          LEFT JOIN datamigrator.jobconfig jc ON v.id = jc.source_path_id
+        WHERE v.volume_path IS NOT NULL 
           AND TRIM(v.volume_path) != ''
+          AND (
+            (jc.created_at >= $1 AND jc.created_at <= $2) OR
+            (jc.updated_at >= $1 AND jc.updated_at <= $2)
+          )
         ORDER BY jc.id
       `;
 
-      const result = await this.dataSource.query(query, projectIds);
+      const result = await this.dataSource.query(query, [
+        payload.startDate,
+        payload.endDate,
+      ]);
 
       this.logger.log(
         `Found ${result.length} job config records with valid volume paths`,
