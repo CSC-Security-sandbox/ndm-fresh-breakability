@@ -109,7 +109,7 @@ func InitTestEnv() {
 
 func SetupTestEnv(workerCount int) (string, map[string]SSHConfig, error) {
 	// Create the project first.
-	projectId, err := createProject(AuthToken, AccountId)
+	projectId, err := CreateProject(AuthToken, AccountId)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to create project: %w", err)
 	}

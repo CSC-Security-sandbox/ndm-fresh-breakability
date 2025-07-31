@@ -835,6 +835,22 @@ func DeleteAllUsers(token string) error {
 	return nil
 }
 
+func DeleteUserByID(userID string, headers map[string]string) {
+	url := fmt.Sprintf("%s/api/v1/users/%s", ADMIN_SERVICE_URL, userID)
+	resp, err := SendAPIRequest("DELETE", url, nil, headers)
+	if err != nil {
+		fmt.Printf("Failed to delete user %s: %v\n", userID, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
+		fmt.Printf("Successfully deleted user: %s\n", userID)
+	} else {
+		fmt.Printf("Failed to delete user %s, status: %d\n", userID, resp.StatusCode)
+	}
+}
+
 func DeleteAllUserRoles(token string) error {
 	listURL := fmt.Sprintf("%s/api/v1/user-roles?limit=1000", ADMIN_SERVICE_URL)
 	headers := GetHeaders(token, ContentTypeJSON)
