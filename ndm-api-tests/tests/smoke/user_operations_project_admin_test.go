@@ -84,7 +84,7 @@ var _ = Describe("User Operations for Project Admin", func() {
 			userId = user["id"].(string)
 			sharedVars["user"] = user
 			sharedVars["userid"] = userId
-			By("✅ User created successfully")
+			By("User created successfully")
 
 			By("Creating user role assignment")
 			// create user data for project admin
@@ -108,7 +108,7 @@ var _ = Describe("User Operations for Project Admin", func() {
 			Expect(err).NotTo(HaveOccurred(), "Error decoding create role response")
 			userRoleId = createRoleResponse["id"].(string)
 			sharedVars["user_role_id"] = userRoleId
-			By("✅ User role created successfully")
+			By("User role created successfully")
 
 			By("Resetting user password via Keycloak")
 			// retrieve user email from the created user data
@@ -122,7 +122,7 @@ var _ = Describe("User Operations for Project Admin", func() {
 			Expect(err).NotTo(HaveOccurred(), "Error fetching user ID from Keycloak")
 			err = ResetUserPassword(userID, keycloakToken, "Root@123")
 			Expect(err).NotTo(HaveOccurred(), "Error resetting user password via Keycloak")
-			By("✅ User password reset successfully via Keycloak")
+			By("User password reset successfully via Keycloak")
 
 			By("Logging in with project admin user credentials")
 			// Now login with the new user credentials
@@ -131,7 +131,7 @@ var _ = Describe("User Operations for Project Admin", func() {
 			Expect(newToken).NotTo(BeEmpty(), "New auth token should not be empty")
 			localAuthToken = newToken
 			localRefreshToken = newRefreshToken
-			By("✅ Successfully logged in with updated credentials")
+			By("Successfully logged in with updated credentials")
 
 			By("Attempting to create user with project admin restricted to project scope")
 			// Switch to project-scoped headers with new user token
@@ -150,7 +150,7 @@ var _ = Describe("User Operations for Project Admin", func() {
 			Expect(err).NotTo(HaveOccurred(), "Error sending restricted user creation API request")
 			defer restrictedResp.Body.Close()
 			Expect(restrictedResp.StatusCode).To(Equal(http.StatusForbidden), "Expected HTTP 403 FORBIDDEN for restricted user creation")
-			By("✅ Restricted user creation correctly returned as expected")
+			By("Restricted user creation correctly returned as expected")
 
 			By("Getting all users")
 			// Make API request to get all users
@@ -163,7 +163,7 @@ var _ = Describe("User Operations for Project Admin", func() {
 			var getAllUsersResponse interface{}
 			err = json.NewDecoder(usersResp.Body).Decode(&getAllUsersResponse)
 			Expect(err).NotTo(HaveOccurred(), "Error decoding get all users response")
-			By("✅ Successfully retrieved all users")
+			By("Successfully retrieved all users")
 
 			By("Getting user by ID")
 			// Ensure user ID exists from previous test
@@ -173,7 +173,7 @@ var _ = Describe("User Operations for Project Admin", func() {
 			Expect(err).NotTo(HaveOccurred(), "Error sending get user by ID API request")
 			defer userIdResp.Body.Close()
 			Expect(userIdResp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK for getting user by ID")
-			By("✅ Successfully retrieved user by ID")
+			By("Successfully retrieved user by ID")
 
 			By("Changing user status")
 			// Ensure user email exists from previous test
@@ -188,7 +188,7 @@ var _ = Describe("User Operations for Project Admin", func() {
 			Expect(err).NotTo(HaveOccurred(), "Error sending change user status API request")
 			defer userStatusResp.Body.Close()
 			Expect(userStatusResp.StatusCode).To(Equal(http.StatusForbidden), "Expected HTTP 403 FORBIDDEN for changing user status")
-			By("✅ Restricted user status change correctly returned as expected")
+			By("Restricted user status change correctly returned as expected")
 		})
 	})
 
@@ -206,6 +206,6 @@ var _ = Describe("User Operations for Project Admin", func() {
 			DeleteUserRoleByID(userRoleId, headers)
 			DeleteUserByID(userId, headers)
 		}
-		By("✅ Completed cleanup operations for user tests")
+		By("  Completed cleanup operations for user tests")
 	})
 })

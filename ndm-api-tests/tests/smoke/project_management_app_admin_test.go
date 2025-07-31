@@ -68,7 +68,7 @@ var _ = Describe("Project Management - App Admin Tests", func() {
 			projectId = createProjectResponse["id"].(string)
 			sharedVars["project_id"] = projectId
 			Expect(projectId).NotTo(BeEmpty(), "Project ID should be extracted successfully")
-			By("✅ Project created successfully with ID")
+			By("Project created successfully with ID")
 
 			By("Creating a new user")
 			// Prepare user creation payload
@@ -97,7 +97,7 @@ var _ = Describe("Project Management - App Admin Tests", func() {
 			userId = user["id"].(string)
 			sharedVars["user"] = user
 			sharedVars["userid"] = userId
-			By("✅ User created successfully with ID")
+			By("User created successfully with ID")
 
 			By("Creating user role assignment for app admin")
 			// Prepare user role assignment payload
@@ -121,7 +121,7 @@ var _ = Describe("Project Management - App Admin Tests", func() {
 			createRoleResponse = createRoleResponse["data"].(map[string]interface{})
 			userRoleId = createRoleResponse["id"].(string)
 			sharedVars["user_role_id"] = userRoleId
-			By("✅ User role created successfully with ID")
+			By("User role created successfully with ID")
 
 			By("Getting project list")
 			// Ensure project ID exists from previous test
@@ -133,7 +133,7 @@ var _ = Describe("Project Management - App Admin Tests", func() {
 			var getProjectListResponse interface{}
 			err = json.NewDecoder(projectListResp.Body).Decode(&getProjectListResponse)
 			Expect(err).NotTo(HaveOccurred(), "Error decoding get project list response")
-			By("✅ Get project list completed successfully")
+			By("Get project list completed successfully")
 
 			By("Getting user permissions list")
 			// Make API request to get user permissions
@@ -145,7 +145,7 @@ var _ = Describe("Project Management - App Admin Tests", func() {
 			var getPermissionsResponse interface{}
 			err = json.NewDecoder(userPermsResp.Body).Decode(&getPermissionsResponse)
 			Expect(err).NotTo(HaveOccurred(), "Error decoding get permissions response")
-			By("✅ Get permission list completed successfully")
+			By("Get permission list completed successfully")
 
 			By("Getting project by project ID")
 			// Make API request to get project by ID
@@ -162,7 +162,7 @@ var _ = Describe("Project Management - App Admin Tests", func() {
 			responseProjectId := getProjectResponse["id"].(string)
 			Expect(responseProjectId).To(Equal(projectId), "Response project ID should match requested ID")
 			sharedVars["project_id"] = responseProjectId
-			By("✅ Get project by ID completed successfully for project")
+			By("Get project by ID completed successfully for project")
 		})
 	})
 
@@ -172,6 +172,6 @@ var _ = Describe("Project Management - App Admin Tests", func() {
 			DeleteUserRoleByID(userRoleId, headers)
 			DeleteUserByID(userId, headers)
 		}
-		By("✅ Cleanup complete.")
+		By("  Cleanup complete.")
 	})
 })

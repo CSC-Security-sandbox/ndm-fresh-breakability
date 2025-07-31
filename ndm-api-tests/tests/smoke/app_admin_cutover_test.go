@@ -60,6 +60,6 @@ var _ = Describe("App Admin Cutover Operations", func() {
 		By("Waiting for job processing (120 seconds delay as specified)")
 		time.Sleep(120 * time.Second)
 
-		By("✅ Bulk cutover job creation and processing completed")
+		By("Bulk cutover job creation and processing completed")
 	})
 })

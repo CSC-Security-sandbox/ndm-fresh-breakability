@@ -54,7 +54,7 @@ var _ = Describe("Authentication API Tests", func() {
 			user = items["user"].(map[string]interface{})
 			Expect(user["first_name"]).To(Equal("Tester"), "User first name should match")
 			userId = user["id"].(string)
-			By("✅ User created successfully with ID")
+			By("User created successfully with ID")
 
 			By("Resetting user password")
 			userEmail, exists := user["email"]
@@ -77,7 +77,7 @@ var _ = Describe("Authentication API Tests", func() {
 			resetPwdData := resetPwdResponseData["data"].(map[string]interface{})
 			resetPwdItems := resetPwdData["items"].(map[string]interface{})
 			Expect(resetPwdItems["email"]).To(Equal(user["email"]), "Email should match expected value")
-			By("✅ Password reset completed successfully")
+			By("Password reset completed successfully")
 
 			By("Changing user status")
 			// Prepare user status change payload
@@ -92,7 +92,7 @@ var _ = Describe("Authentication API Tests", func() {
 			Expect(err).NotTo(HaveOccurred(), "Error sending change user status API request")
 			defer userStatusresp.Body.Close()
 			Expect(userStatusresp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-			By("✅ User status changed successfully")
+			By("User status changed successfully")
 
 			By("Performing worker registration")
 			// Prepare worker registration payload
@@ -106,7 +106,7 @@ var _ = Describe("Authentication API Tests", func() {
 			Expect(err).NotTo(HaveOccurred(), "Error sending worker registration API request")
 			defer workerRegResp.Body.Close()
 			Expect(workerRegResp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-			By("✅ Worker registration completed successfully")
+			By("Worker registration completed successfully")
 		})
 	})
 
@@ -115,6 +115,6 @@ var _ = Describe("Authentication API Tests", func() {
 		if userId != "" {
 			DeleteUserByID(userId, headers)
 		}
-		By("✅ Cleanup complete.")
+		By("  Cleanup complete.")
 	})
 })

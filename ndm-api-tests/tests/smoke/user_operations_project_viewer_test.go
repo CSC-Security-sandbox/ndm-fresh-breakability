@@ -62,7 +62,7 @@ var _ = Describe("User Operations for Project Viewer", func() {
 			// Parse user data for subsequent tests
 			userId = user["id"].(string)
 			userEmail = user["email"].(string)
-			By("✅ Project viewer user created successfully")
+			By("Project viewer user created successfully")
 
 			By("Creating user role assignment for project viewer")
 			// Create user role assignment for project viewer
@@ -79,7 +79,7 @@ var _ = Describe("User Operations for Project Viewer", func() {
 			Expect(err).NotTo(HaveOccurred(), "Error sending create user role API request")
 			defer userRoleResp.Body.Close()
 			Expect(userRoleResp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK for user role creation")
-			By("✅ User role assignment created successfully")
+			By("User role assignment created successfully")
 
 			By("Resetting password for project viewer user via Keycloak")
 			// Get Keycloak admin token first
@@ -90,7 +90,7 @@ var _ = Describe("User Operations for Project Viewer", func() {
 			Expect(err).NotTo(HaveOccurred(), "Error fetching user ID from Keycloak")
 			err = ResetUserPassword(keycloakUserId, keycloakToken, "Root@123")
 			Expect(err).NotTo(HaveOccurred(), "Error resetting user password via Keycloak")
-			By("✅ Password reset successful for project viewer")
+			By("Password reset successful for project viewer")
 
 			By("Logging in with project viewer credentials")
 			// Login with the new project viewer user credentials
@@ -101,7 +101,7 @@ var _ = Describe("User Operations for Project Viewer", func() {
 			localRefreshToken = newRefreshToken
 			restrictedHeaders := GetHeaders(localAuthToken, ContentTypeJSON)
 			restrictedHeaders["project_id"] = projectId
-			By("✅ Project viewer login successful")
+			By("Project viewer login successful")
 
 			By("Testing restricted operation: Creating new user (should fail)")
 			// Create user data for project viewer
@@ -116,7 +116,7 @@ var _ = Describe("User Operations for Project Viewer", func() {
 			Expect(err).NotTo(HaveOccurred(), "Error sending create user API request")
 			defer forbiddenUserResp.Body.Close()
 			Expect(forbiddenUserResp.StatusCode).To(Equal(http.StatusForbidden), "Expected HTTP 403 FORBIDDEN for user creation")
-			By("✅ Project viewer correctly restricted from creating new user")
+			By("Project viewer correctly restricted from creating new user")
 
 			By("Testing restricted operation: Getting all users (should fail)")
 			// Attempt to get all users
@@ -125,7 +125,7 @@ var _ = Describe("User Operations for Project Viewer", func() {
 			Expect(err).NotTo(HaveOccurred(), "Error sending get all users API request")
 			defer allUsersResp.Body.Close()
 			Expect(allUsersResp.StatusCode).To(Equal(http.StatusForbidden), "Expected HTTP 403 FORBIDDEN for getting all users")
-			By("✅ Project viewer correctly restricted from getting all users")
+			By("Project viewer correctly restricted from getting all users")
 
 			By("Testing restricted operation: Getting user by ID (should fail)")
 			// Attempt to get user by ID
@@ -134,7 +134,7 @@ var _ = Describe("User Operations for Project Viewer", func() {
 			Expect(err).NotTo(HaveOccurred(), "Error sending get user by ID API request")
 			defer userByIDResp.Body.Close()
 			Expect(userByIDResp.StatusCode).To(Equal(http.StatusForbidden), "Expected HTTP 403 FORBIDDEN for getting user by ID")
-			By("✅ Project viewer correctly restricted from getting user by ID")
+			By("Project viewer correctly restricted from getting user by ID")
 
 			By("Testing restricted operation: Changing user status (should fail)")
 			// Attempt to change user status
@@ -149,7 +149,7 @@ var _ = Describe("User Operations for Project Viewer", func() {
 			Expect(err).NotTo(HaveOccurred(), "Error sending change user status API request")
 			defer changeUserStatusResp.Body.Close()
 			Expect(changeUserStatusResp.StatusCode).To(Equal(http.StatusForbidden), "Expected HTTP 403 FORBIDDEN for changing user status")
-			By("✅ Project viewer correctly restricted from changing user status")
+			By("Project viewer correctly restricted from changing user status")
 
 		})
 	})
@@ -162,13 +162,13 @@ var _ = Describe("User Operations for Project Viewer", func() {
 			if err != nil {
 				By(fmt.Sprintf("Warning: Could not logout project viewer user: %v", err))
 			} else {
-				By("✅ Project viewer user logged out successfully")
+				By("Project viewer user logged out successfully")
 			}
 		}
 		headers = GetHeaders(AuthToken, ContentTypeJSON)
 		if userId != "" {
 			DeleteUserByID(userId, headers)
 		}
-		By("✅ Cleanup operations completed for project viewer test")
+		By("Cleanup operations completed for project viewer test")
 	})
 })
