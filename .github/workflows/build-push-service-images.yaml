@@ -12,6 +12,7 @@ on:
       - 'services/jobs-service/**'
       - 'services/keycloak-customizations/**'
       - 'services/reports-service/**'
+      - 'services/support-service/**'
       - 'liquibase/**'
   push:
     branches:
@@ -24,6 +25,7 @@ on:
       - 'services/jobs-service/**'
       - 'services/keycloak-customizations/**'
       - 'services/reports-service/**'
+      - 'services/support-service/**'
       - 'liquibase/**'
   workflow_dispatch:
     inputs:
@@ -67,6 +69,11 @@ on:
         required: false
         type: boolean
         default: false
+      support-service:
+        description: 'support-service'
+        required: false
+        type: boolean
+        default: false
       all-services:
         description: 'all services'
         required: false
@@ -105,7 +112,7 @@ jobs:
         id: set-matrix
         shell: bash
         run: |
-          services=( "db-writer" "keycloak-customizations" "reports-service" "admin-service" "config-service" "datamigrator-ui" "jobs-service" )
+          services=( "db-writer" "keycloak-customizations" "reports-service" "admin-service" "config-service" "datamigrator-ui" "jobs-service" "support-service" )
           targets=()
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base_branch="${{ github.event.pull_request.base.ref }}"
@@ -150,6 +157,9 @@ jobs:
               fi
               if [ "${{ github.event.inputs.db-migrations }}" = "true" ]; then
                 targets+=("db-migrations")
+              fi
+              if [ "${{ github.event.inputs.support-service }}" = "true" ]; then
+                targets+=("support-service")
               fi
             fi
           elif [ "${{ github.event_name }}" = "push" ]; then
