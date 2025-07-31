@@ -3,7 +3,7 @@ import { OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import * as fs from "fs";
 import { ShellService } from "src/activities/common/shell.service";
-import { dmError, formatDate } from "src/activities/utils/utils";
+import { dmError } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { RedisService } from "src/redis/redis.service";
 import { CommandExecInput, CommandOutput } from "./command-execution.type";
@@ -31,11 +31,6 @@ export class StampMetaService {
             input.command.ops[OPS_CMD.STAMP_META] &&
             input.command.ops[OPS_CMD.STAMP_META].status !== OPS_STATUS.COMPLETED
         ) {
-           
-            // Stamp birth time
-            const birthTimeOutput = await this.stampBirthTime(input);
-            output.sourceErrors.push(...birthTimeOutput.sourceErrors);
-            output.targetErrors.push(...birthTimeOutput.targetErrors);
 
             // Stamp GID and UID
             const gidUidOutput = await this.stampGIDandUID(input);
@@ -46,6 +41,11 @@ export class StampMetaService {
             const sidOutput = await this.stampSIDAclToObject(input);
             output.sourceErrors.push(...sidOutput.sourceErrors);
             output.targetErrors.push(...sidOutput.targetErrors);
+
+            // Preserve access and modified time
+            const preserveTimeOutput = await this.preserveAccessAndModifiedTime(input);
+            output.sourceErrors.push(...preserveTimeOutput.sourceErrors);
+            output.targetErrors.push(...preserveTimeOutput.targetErrors);
 
             // Stamp access and modified time
             const timeOutput = await this.stampAccessAndModifiedTime(input);
@@ -62,10 +62,6 @@ export class StampMetaService {
             output.sourceErrors.push(...permissionsOutput.sourceErrors);
             output.targetErrors.push(...permissionsOutput.targetErrors);
 
-            // Preserve access and modified time
-            const preserveTimeOutput = await this.preserveAccessAndModifiedTime(input);
-            output.sourceErrors.push(...preserveTimeOutput.sourceErrors);
-            output.targetErrors.push(...preserveTimeOutput.targetErrors);
 
         }
         
@@ -95,33 +91,6 @@ export class StampMetaService {
         return output;
     }
 
-    async stampBirthTime({command, jobContext, sourcePath, targetPath, errorType}: CommandExecInput): Promise<StampMetaOutput> {
-        const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
-        if(command.metadata?.birthtime) {
-            try {
-                if(process.platform === 'win32') {
-                    const birthtime = new Date(command.metadata.birthtime);
-                    const dateWithOffset = new Date(birthtime.getTime() - birthtime.getTimezoneOffset() * 60000);
-
-                    // Format to `yyyy-MM-dd HH:mm:ss.fff`
-                    const iso = dateWithOffset.toISOString(); 
-                    const birth_time = iso.replace("T", " ").replace("Z", "").substr(0, 23); // includes milliseconds
-
-                    const birthtimeCommand = `(Get-Item '${targetPath}').CreationTime = [System.DateTime]::ParseExact('${birth_time}', 'yyyy-MM-dd HH:mm:ss.fff', $null)`;
-                    await this.shellService.runCommand(birthtimeCommand);
-                }else {
-                    const birthtimeCommand = `touch -t ${formatDate(new Date(command.metadata.birthtime))} ${targetPath}${command?.isDir ? '/' : ''}`;
-                    await this.shellService.runCommand(birthtimeCommand);
-                }
-            } catch(error) {
-                this.logger.error(`Stamping BirthTime from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
-                const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, {name: command.fPath, path: targetPath});
-                await jobContext.publishToErrorStream(dmErr);
-                output.targetErrors.push(error.code);
-            }
-        }
-         return output;
-    }
 
     async stampGIDandUID({command, jobContext, sourcePath, targetPath, errorType}: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
@@ -233,7 +202,7 @@ export class StampMetaService {
         if(process.platform !== 'win32') return output;
         try{
             const fileAttr = await this.shellService.runCommand(`attrib ${sourcePath}`);
-            command.ops[OPS_CMD.STAMP_META].params.fileAttr = fileAttr.trim().split(/\s+/).filter(token => !this.attributeRegex.test(token)).join('')
+            command.ops[OPS_CMD.STAMP_META].params.fileAttr = fileAttr.trim()?.split(/\s+/)?.filter(token => !this.attributeRegex.test(token)).join('')
             this.logger.debug(`File attributes for ${sourcePath}: ${command.ops[OPS_CMD.STAMP_META].params.fileAttr}`);
 
         }catch(error) {

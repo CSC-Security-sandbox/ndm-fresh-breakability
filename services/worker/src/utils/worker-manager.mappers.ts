@@ -1,4 +1,5 @@
-import { Platform, WorkerConfiguration } from "src/activities/work-manager/work-manager.types";
+import { Platform, WorkerConfiguration } from "src/work-manager/work-manager.types";
+
 
 
 export const getWorkerIdentity = (
