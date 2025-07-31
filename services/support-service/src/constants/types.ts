@@ -29,5 +29,4 @@ export interface ExportRequest {
 export interface ExportResult {
     success: boolean;
     message: string;
-    filesCreated: number;
 }

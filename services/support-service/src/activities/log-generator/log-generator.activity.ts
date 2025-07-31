@@ -24,7 +24,7 @@ export class LogGeneratorActivity {
     this.outputZipPath = outputZipPath;
   }
 
-  async fetchAndZipLogs({ traceId, payload }): Promise<string> {
+  async fetchAndZipLogs({ traceId, payload }): Promise<any> {
     this.logger.log(`[${traceId}] Started fetchAndZipLogs activity`);
 
     try {
@@ -59,7 +59,7 @@ export class LogGeneratorActivity {
       }
       if (start > end) {
         throw new Error(
-          `Start date (${payload.startDate}) cannot be after end date (${payload.endDate})`,
+           `Invalid date range: start date "${payload.startDate}" is after end date "${payload.endDate}". Please ensure the start date is earlier than or equal to the end date.`
         );
       }
 
@@ -126,7 +126,10 @@ export class LogGeneratorActivity {
           this.logger.log(`[${traceId}] Zip created successfully at: ${zipPath}`);
           this.logger.log(`[${traceId}] Total bytes written: ${archive.pointer()}`);
           this.logger.log(`[${traceId}] Total files/folders added: ${totalFilesAdded}`);
-          resolve(zipPath);
+           resolve({
+            success: true,
+            message: zipPath
+           });
         });
 
         archive.on('error', (err) => {
@@ -176,7 +179,7 @@ export class LogGeneratorActivity {
       this.logger.error(`[${traceId}] Error in fetchAndZipLogs:`, err.message);
 
       // Clean up partial zip file if it exists
-      const zipFileName = `ndm_${payload?.userId || 'unknown'}.zip`;
+      const zipFileName = `ndm_${payload?.userId}.zip`;
       const zipPath = path.join(this.outputZipPath, zipFileName);
       if (fs.existsSync(zipPath)) {
         try {
@@ -187,7 +190,10 @@ export class LogGeneratorActivity {
         }
       }
 
-      throw err;
+      return {
+        success: false,
+        message: err.message
+      }
     }
   }
 }
