@@ -211,6 +211,74 @@ func GetExportPathID(
 	return sourcePathID, nil
 }
 
+// GetExportPathIDWithTimeout is like GetExportPathID but with configurable retry limit
+func GetExportPathIDWithTimeout(
+	volumeType string,
+	volumeName string,
+	configID string,
+	headers map[string]string,
+	maxRetries int,
+) (string, error) {
+	getSourceURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configID)
+	refreshURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILE_SERVER_REFRESH_URL, configID)
+
+	var getSourceResp FileServerInfo
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		resp, err := SendAPIRequest(http.MethodGet, refreshURL, nil, headers)
+		if err != nil {
+			return "", fmt.Errorf("error refreshing file server: %w", err)
+		}
+		defer resp.Body.Close()
+
+		resp, err = SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
+		if err != nil {
+			return "", err
+		}
+		defer resp.Body.Close()
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", err
+		}
+
+		err = json.Unmarshal(bodyBytes, &getSourceResp)
+		if err != nil {
+			return "", err
+		}
+
+		// Check if volumes exist
+		if len(getSourceResp.FileServers) > 0 && len(getSourceResp.FileServers[0].Volumes) > 0 {
+			break // Volumes found, proceed
+		}
+
+		if attempt < maxRetries {
+			Wait(DefaultPollInterval) 
+		}
+	}
+
+	// After retries, check again
+	if len(getSourceResp.FileServers) == 0 {
+		return "", fmt.Errorf("no fileServers found in source response after %d attempts", maxRetries)
+	}
+	if len(getSourceResp.FileServers[0].Volumes) == 0 {
+		return "", fmt.Errorf("no volumes found for source file server after %d attempts", maxRetries)
+	}
+	
+	//fetch the volume ID
+	volumeID, err := GetVolumeIDByName(volumeName, AuthToken, configID)
+	if err != nil {
+		return "", fmt.Errorf("error handling volume for '%s': %w", "Getting the source file server by config ID", err)
+	}
+	if volumeID == "" {
+		return "", fmt.Errorf("expected a valid sourcePathID, got empty string")
+	}
+
+	sourcePathID := volumeID
+
+	return sourcePathID, nil
+}
+
 // ClearVolume removes all data from the NFS export mounted on the VM.
 func ClearVolume(export string) error {
 	destMount := "/mnt/remove_data"

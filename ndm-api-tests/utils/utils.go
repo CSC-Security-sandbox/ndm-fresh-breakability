@@ -983,7 +983,7 @@ func HandleKeycloakResetPassword(scData parser.Scenario, sharedVars map[string]i
 	return ResetUserPassword(userID, keycloakAuthToken, newPassword)
 }
 
-func UpdateAppAdmin(keycloakUser, keycloakPassword string) error {
+func UpdateAppAdmin(keycloakUser, keycloakPassword string) error {	
 	keycloakAuthToken, err := GetKeyCloakAccessToken(keycloakUser, keycloakPassword)
 	if err != nil {
 		return fmt.Errorf("error getting Keycloak access token: %v", err)
@@ -1050,4 +1050,369 @@ func GetFutureUTCTimestamp(timeInterval int) string {
 	return time.Now().UTC().
 		Add(time.Duration(timeInterval) * time.Second).
 		Format(TIME_FORMAT)
+}
+
+type UserResponse struct {
+	Data struct {
+		Items struct {
+			User struct {
+				ID        string `json:"id"`
+				Email     string `json:"email"`
+				FirstName string `json:"first_name"`
+				LastName  string `json:"last_name"`
+				Username  string `json:"username"`
+			} `json:"user"`
+		} `json:"items"`
+	} `json:"data"`
+}
+
+type UserRoleResponse struct {
+	ID string `json:"id"`
+}
+
+//creates a new user in the system
+func CreateUser(userData map[string]interface{}, headers map[string]string) (UserResponse, *http.Response, error) {
+	var userResp UserResponse
+
+	url := fmt.Sprintf("%s/api/v1/create-user", ADMIN_SERVICE_URL)
+	bodyBytes, err := json.Marshal(userData)
+	if err != nil {
+		return userResp, nil, fmt.Errorf("failed to marshal user data: %w", err)
+	}
+
+	resp, err := SendAPIRequest("POST", url, bodyBytes, headers)
+	if err != nil {
+		return userResp, resp, err
+	}
+
+	if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK {
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return userResp, resp, fmt.Errorf("failed to read response body: %w", err)
+		}
+
+		err = json.Unmarshal(body, &userResp)
+		if err != nil {
+			return userResp, resp, fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+	}
+
+	return userResp, resp, nil
+}
+
+//creates a role assignment for a user
+func CreateUserRole(userRoleData map[string]interface{}, headers map[string]string) (UserRoleResponse, *http.Response, error) {
+	var userRoleResp UserRoleResponse
+
+	url := fmt.Sprintf("%s/api/v1/user-roles", ADMIN_SERVICE_URL)
+	bodyBytes, err := json.Marshal(userRoleData)
+	if err != nil {
+		return userRoleResp, nil, fmt.Errorf("failed to marshal user role data: %w", err)
+	}
+
+	resp, err := SendAPIRequest("POST", url, bodyBytes, headers)
+	if err != nil {
+		return userRoleResp, resp, err
+	}
+
+	if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK {
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return userRoleResp, resp, fmt.Errorf("failed to read response body: %w", err)
+		}
+
+		err = json.Unmarshal(body, &userRoleResp)
+		if err != nil {
+			return userRoleResp, resp, fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+	}
+
+	return userRoleResp, resp, nil
+}
+
+//resets a user's password in Keycloak
+func ResetKeycloakPassword(email, newPassword, keycloakUser, keycloakPassword string) error {
+	// Get Keycloak admin token
+	accessToken, err := GetKeyCloakAccessToken(keycloakUser, keycloakPassword)
+	if err != nil {
+		return fmt.Errorf("failed to get Keycloak access token: %w", err)
+	}
+
+	// Get user ID from email
+	userID, err := FetchUserID(email, accessToken)
+	if err != nil {
+		return fmt.Errorf("failed to fetch user ID: %w", err)
+	}
+
+	err = ResetUserPassword(userID, accessToken, newPassword)
+	if err != nil {
+		return fmt.Errorf("failed to reset user password: %w", err)
+	}
+
+	return nil
+}
+
+// Logs out a user using refresh token
+func LogoutUserViaToken(refreshToken string) (*http.Response, error) {
+	logoutURL := fmt.Sprintf("https://%s/%s", KEYCLOAK_IP, LOGOUT_URL)
+
+	data := url.Values{}
+	data.Set("client_id", CLIENT_ID)
+	data.Set("client_secret", CLIENT_SECRET)
+	data.Set("refresh_token", refreshToken)
+	requestBody := data.Encode()
+
+	headers := GetHeaders("", ContentTypeForm)
+	resp, err := SendAPIRequest("POST", logoutURL, []byte(requestBody), headers)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+//deletes a user role assignment
+func DeleteUserRole(userRoleId string, headers map[string]string) (*http.Response, error) {
+	url := fmt.Sprintf("%s/api/v1/user-roles/%s", ADMIN_SERVICE_URL, userRoleId)
+
+	resp, err := SendAPIRequest("DELETE", url, nil, headers)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+//deletes a user from the system
+func DeleteUser(userId string, headers map[string]string) (*http.Response, error) {
+	url := fmt.Sprintf("%s/api/v1/users/%s", ADMIN_SERVICE_URL, userId)
+
+	resp, err := SendAPIRequest("DELETE", url, nil, headers)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+//generates a new UUID
+func GenerateUUID() string {
+	return uuid.New().String()
+}
+
+// Project response structure
+type ProjectResponse struct {
+	TrackID string `json:"trackId"`
+	Message string `json:"message"`
+	Data    struct {
+		ID    string `json:"id"`
+		Items struct {
+			ProjectName   string `json:"project_name"`
+			StartDate     string `json:"start_date"`
+			Description   string `json:"project_description"`
+			Account       interface{} `json:"account"`
+			CreatedBy     string      `json:"created_by"`
+			UpdatedBy     interface{} `json:"updated_by"`
+			CreatedAt     string      `json:"created_at"`
+			UpdatedAt     string      `json:"updated_at"`
+		} `json:"items"`
+	} `json:"data"`
+}
+
+// Helper method gets project ID
+func (p ProjectResponse) GetID() string {
+	return p.Data.ID
+}
+
+//creates a new project
+func CreateProject(projectData map[string]interface{}, headers map[string]string) (ProjectResponse, *http.Response, error) {
+	var projectResp ProjectResponse
+
+	url := fmt.Sprintf("%s/api/v1/projects", ADMIN_SERVICE_URL)
+	bodyBytes, err := json.Marshal(projectData)
+	if err != nil {
+		return projectResp, nil, fmt.Errorf("failed to marshal project data: %w", err)
+	}
+
+	resp, err := SendAPIRequest("POST", url, bodyBytes, headers)
+	if err != nil {
+		return projectResp, resp, err
+	}
+
+	if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK {
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return projectResp, resp, fmt.Errorf("failed to read response body: %w", err)
+		}
+		
+		err = json.Unmarshal(body, &projectResp)
+		if err != nil {
+			return projectResp, resp, fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+	}
+
+	return projectResp, resp, nil
+}
+
+// Response structures
+type PermissionsResponse struct {
+	Permissions []interface{} `json:"permissions"`
+}
+
+type ProjectsListResponse struct {
+	Projects []interface{} `json:"projects"`
+}
+
+type UserRolesResponse struct {
+	UserRoles []interface{} `json:"userRoles"`
+}
+
+//gets user permissions
+func GetUserPermissions(headers map[string]string) (PermissionsResponse, *http.Response, error) {
+	var permissionsResp PermissionsResponse
+	url := fmt.Sprintf("%s/api/v1/user-permissions", ADMIN_SERVICE_URL)
+	
+	resp, err := SendAPIRequest("GET", url, nil, headers)
+	if err != nil {
+		return permissionsResp, resp, err
+	}
+
+	if resp.StatusCode == http.StatusOK {
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return permissionsResp, resp, fmt.Errorf("failed to read response body: %w", err)
+		}
+		
+		err = json.Unmarshal(body, &permissionsResp)
+		if err != nil {
+			return permissionsResp, resp, fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+	}
+
+	return permissionsResp, resp, nil
+}
+
+//gets list of projects
+func GetProjectList(accountId string, headers map[string]string) (ProjectsListResponse, *http.Response, error) {
+	var projectsResp ProjectsListResponse
+	url := fmt.Sprintf("%s/api/v1/projects/accounts/%s/projects?limit=1000", ADMIN_SERVICE_URL, accountId)
+	
+	resp, err := SendAPIRequest("GET", url, nil, headers)
+	if err != nil {
+		return projectsResp, resp, err
+	}
+
+	if resp.StatusCode == http.StatusOK {
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return projectsResp, resp, fmt.Errorf("failed to read response body: %w", err)
+		}
+		
+		err = json.Unmarshal(body, &projectsResp)
+		if err != nil {
+			return projectsResp, resp, fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+	}
+
+	return projectsResp, resp, nil
+}
+
+//gets user roles
+func GetUserRoles(headers map[string]string) (UserRolesResponse, *http.Response, error) {
+	var userRolesResp UserRolesResponse
+	url := fmt.Sprintf("%s/api/v1/user-roles", ADMIN_SERVICE_URL)
+	
+	resp, err := SendAPIRequest("GET", url, nil, headers)
+	if err != nil {
+		return userRolesResp, resp, err
+	}
+
+	if resp.StatusCode == http.StatusOK {
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return userRolesResp, resp, fmt.Errorf("failed to read response body: %w", err)
+		}
+		
+		err = json.Unmarshal(body, &userRolesResp)
+		if err != nil {
+			return userRolesResp, resp, fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+	}
+
+	return userRolesResp, resp, nil
+}
+
+//gets a project by ID
+func GetProjectById(projectId string, headers map[string]string) (interface{}, *http.Response, error) {
+	url := fmt.Sprintf("%s/api/v1/projects/%s", ADMIN_SERVICE_URL, projectId)
+	
+	resp, err := SendAPIRequest("GET", url, nil, headers)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	var result interface{}
+	if resp.StatusCode == http.StatusOK {
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, resp, fmt.Errorf("failed to read response body: %w", err)
+		}
+		
+		err = json.Unmarshal(body, &result)
+		if err != nil {
+			return nil, resp, fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+	}
+
+	return result, resp, nil
+}
+
+//deletes a project
+func DeleteProject(projectId string, headers map[string]string) (*http.Response, error) {
+	url := fmt.Sprintf("%s/api/v1/projects/%s", ADMIN_SERVICE_URL, projectId)
+	
+	resp, err := SendAPIRequest("DELETE", url, nil, headers)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+//creates multiple user roles in batch
+func CreateUserRoleBatch(userRoleData interface{}, headers map[string]string) (interface{}, *http.Response, error) {
+	var result interface{}
+	
+	url := fmt.Sprintf("%s/api/v1/user-roles/batch", ADMIN_SERVICE_URL)
+	bodyBytes, err := json.Marshal(userRoleData)
+	if err != nil {
+		return result, nil, fmt.Errorf("failed to marshal user role data: %w", err)
+	}
+
+	resp, err := SendAPIRequest("POST", url, bodyBytes, headers)
+	if err != nil {
+		return result, resp, err
+	}
+
+	if resp.StatusCode == http.StatusCreated {
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return result, resp, fmt.Errorf("failed to read response body: %w", err)
+		}
+		
+		err = json.Unmarshal(body, &result)
+		if err != nil {
+			return result, resp, fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+	}
+
+	return result, resp, nil
 }
