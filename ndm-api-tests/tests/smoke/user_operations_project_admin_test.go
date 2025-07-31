@@ -105,10 +105,8 @@ var _ = Describe("User Operations for Project Admin", func() {
 			var createRoleResponse map[string]interface{}
 			err = json.NewDecoder(roleResp.Body).Decode(&createRoleResponse)
 			createRoleResponse = createRoleResponse["data"].(map[string]interface{})
-			roleItemsResponse := createRoleResponse["items"].(map[string]interface{})
-			roleResponse := roleItemsResponse["role"].(map[string]interface{})
 			Expect(err).NotTo(HaveOccurred(), "Error decoding create role response")
-			userRoleId = roleResponse["id"].(string)
+			userRoleId = createRoleResponse["id"].(string)
 			sharedVars["user_role_id"] = userRoleId
 			By("✅ User role created successfully")
 
@@ -205,9 +203,9 @@ var _ = Describe("User Operations for Project Admin", func() {
 			}
 		}
 		if userId != "" {
+			DeleteUserRoleByID(userRoleId, headers)
 			DeleteUserByID(userId, headers)
 		}
 		By("✅ Completed cleanup operations for user tests")
-
 	})
 })

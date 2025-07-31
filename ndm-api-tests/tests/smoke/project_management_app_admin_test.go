@@ -73,7 +73,7 @@ var _ = Describe("Project Management - App Admin Tests", func() {
 			By("Creating a new user")
 			// Prepare user creation payload
 			createUserPayload := map[string]interface{}{
-				"username":  fmt.Sprintf("testprojectadmin3010%d@email.com", GinkgoRandomSeed()),
+				"username":  fmt.Sprintf("testprojectadmin%d@email.com", GinkgoRandomSeed()),
 				"firstName": "test",
 				"lastName":  "user",
 			}
@@ -119,9 +119,7 @@ var _ = Describe("Project Management - App Admin Tests", func() {
 			err = json.NewDecoder(userRoleResp.Body).Decode(&createRoleResponse)
 			Expect(err).NotTo(HaveOccurred(), "Error decoding create role response")
 			createRoleResponse = createRoleResponse["data"].(map[string]interface{})
-			roleItemsResponse := createRoleResponse["items"].(map[string]interface{})
-			roleResponse := roleItemsResponse["role"].(map[string]interface{})
-			userRoleId = roleResponse["id"].(string)
+			userRoleId = createRoleResponse["id"].(string)
 			sharedVars["user_role_id"] = userRoleId
 			By("✅ User role created successfully with ID")
 
@@ -171,6 +169,7 @@ var _ = Describe("Project Management - App Admin Tests", func() {
 	AfterEach(func() {
 		By("Cleanup started")
 		if userId != "" {
+			DeleteUserRoleByID(userRoleId, headers)
 			DeleteUserByID(userId, headers)
 		}
 		By("✅ Cleanup complete.")
