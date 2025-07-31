@@ -20,5 +20,5 @@ func TestRegression(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	By("Setting before the suite")
-	InitTestEnvForSMoke()
+	InitTestEnv()
 })
