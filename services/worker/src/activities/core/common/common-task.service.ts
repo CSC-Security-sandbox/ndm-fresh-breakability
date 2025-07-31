@@ -37,9 +37,7 @@ export class CommonTaskService {
     }
 
     // TO-DO : make this adaptive resource based task creation
-       async getGroupOfTasksActivity(jobRunId): Promise<string[]> {
-      const activityContext = Context.current();      
-      const heartBeatInterval = setInterval(() => { activityContext.heartbeat({});}, 2000);
+    async getGroupOfTasksActivity(jobRunId): Promise<string[]> {
       let taskIds: string[] = [];
       try{
         const jobContext = await this.redisService.getJobManagerContext(jobRunId);
@@ -69,8 +67,6 @@ export class CommonTaskService {
       }catch (error) {
         this.logger.error(`Error in getGroupOfTasksActivity: ${error.message}`, error.stack);
         throw new Error(`Failed to get group of tasks activity: ${error.message}`);
-      }finally{
-        clearInterval(heartBeatInterval);
       }
       return taskIds;
     }

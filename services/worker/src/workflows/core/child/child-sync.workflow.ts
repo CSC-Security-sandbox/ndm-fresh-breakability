@@ -27,8 +27,8 @@ const {
 const {
     getGroupOfTasksActivity: getGroupOfTasksActivity,
 }= proxyActivities<CommonTaskService>({
-    retry: { initialInterval: '10s', backoffCoefficient: 2.0, maximumInterval: '30s', nonRetryableErrorTypes: ['ActivityFailure','FatalError'] },
-    startToCloseTimeout: '5h', heartbeatTimeout: '30s', });
+    retry: { maximumAttempts: 3, initialInterval: '10s', backoffCoefficient: 2.0, maximumInterval: '30s', nonRetryableErrorTypes: ['ActivityFailure','FatalError'] },
+    startToCloseTimeout: '10m' });
 
 
 const actionSignal = wf.defineSignal<[JobRunStatus]>('syncActionSignal');
