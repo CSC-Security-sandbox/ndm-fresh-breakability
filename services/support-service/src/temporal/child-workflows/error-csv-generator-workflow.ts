@@ -25,7 +25,9 @@ export const ErrorCsvGeneratorWorkflow = async ({ traceId, payload }) => {
     };
   } catch (error) {
     log.error(`[${traceId}] Error during CSV generation: ${error.message}`);
-    // Don't return status object - throw the error so parent can catch it
-    throw error;
+    return {
+      status: 'failed',
+      message: error.message,
+    };
   }
 };
