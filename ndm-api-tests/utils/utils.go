@@ -851,6 +851,38 @@ func DeleteUserByID(userID string, headers map[string]string) {
 	}
 }
 
+func DeleteUserRoleByID(roleID string, headers map[string]string) {
+	url := fmt.Sprintf("%s/api/v1/user-roles/%s", ADMIN_SERVICE_URL, roleID)
+	resp, err := SendAPIRequest("DELETE", url, nil, headers)
+	if err != nil {
+		fmt.Printf("Failed to delete user role %s: %v\n", roleID, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
+		fmt.Printf("Successfully deleted user role: %s\n", roleID)
+	} else {
+		fmt.Printf("Failed to delete user role %s, status: %d\n", roleID, resp.StatusCode)
+	}
+}
+
+func DeleteProjectByID(projectID string, headers map[string]string) {
+	url := fmt.Sprintf("%s/api/v1/projects/%s", ADMIN_SERVICE_URL, projectID)
+	resp, err := SendAPIRequest("DELETE", url, nil, headers)
+	if err != nil {
+		fmt.Printf("Failed to delete project %s: %v\n", projectID, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
+		fmt.Printf("Successfully deleted project: %s\n", projectID)
+	} else {
+		fmt.Printf("Failed to delete project %s, status: %d\n", projectID, resp.StatusCode)
+	}
+}
+
 func DeleteAllUserRoles(token string) error {
 	listURL := fmt.Sprintf("%s/api/v1/user-roles?limit=1000", ADMIN_SERVICE_URL)
 	headers := GetHeaders(token, ContentTypeJSON)
