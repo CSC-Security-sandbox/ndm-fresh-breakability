@@ -835,20 +835,18 @@ func DeleteAllUsers(token string) error {
 	return nil
 }
 
-func DeleteUserByID(userID string, headers map[string]string) {
+func DeleteUserByID(userID string, headers map[string]string) error {
 	url := fmt.Sprintf("%s/api/v1/users/%s", ADMIN_SERVICE_URL, userID)
 	resp, err := SendAPIRequest("DELETE", url, nil, headers)
 	if err != nil {
-		fmt.Printf("Failed to delete user %s: %v\n", userID, err)
-		return
+		return fmt.Errorf("failed to delete user %s: %w", userID, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
-		fmt.Printf("Successfully deleted user: %s\n", userID)
-	} else {
-		fmt.Printf("Failed to delete user %s, status: %d\n", userID, resp.StatusCode)
+		return nil
 	}
+	return fmt.Errorf("failed to delete user %s, status: %d", userID, resp.StatusCode)
 }
 
 func DeleteUserRoleByID(roleID string, headers map[string]string) error {
