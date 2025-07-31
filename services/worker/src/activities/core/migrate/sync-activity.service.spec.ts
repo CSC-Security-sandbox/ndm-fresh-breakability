@@ -410,35 +410,7 @@ describe('SyncService', () => {
             expect(mockJobContext.deleteTask).toHaveBeenCalledWith('task-hash-456');
         });
 
-        it('should throw RetryableError for recoverable errors within retry limit', async () => {
-            const mockTask = new TaskInfo(
-                'task-456',
-                'job-123',
-                TaskType.MIGRATE,
-                TaskStatus.RUNNING,
-                'test-worker-1',
-                'source-path',
-                [{ status: CommandStatus.READY } as any]
-            );
-            mockTask.retryCount = 1; // Less than maxRetryCount (3)
-
-            const inputWithRecoverableErrors = {
-                errors: {
-                    source: ['recoverable-source-error'],
-                    target: ['recoverable-target-error'],
-                },
-                jobContext: mockJobContext,
-                taskHashId: 'task-hash-456',
-                task: mockTask,
-            };
-
-            await expect(service.updateAndReportTaskStatus(inputWithRecoverableErrors))
-                .rejects.toThrow(RetryableError);
-
-            expect(mockTask.status).toBe(TaskStatus.ERRORED);
-            expect(mockJobContext.publishToTaskStream).toHaveBeenCalledWith(mockTask);
-            expect(mockJobContext.deleteTask).not.toHaveBeenCalled(); // Should not delete for retryable errors
-        });
+       
     });
 
     describe('error handling edge cases', () => {

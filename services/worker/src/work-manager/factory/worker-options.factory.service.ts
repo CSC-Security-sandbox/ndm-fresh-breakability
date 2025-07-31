@@ -1,4 +1,4 @@
-import { Inject, Injectable, forwardRef } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NativeConnection } from "@temporalio/worker";
 import { CommonActivityService } from "src/activities/common/common.service";
@@ -19,9 +19,9 @@ import { ValidateWorkingDirectoryActivity } from "src/activities/working-directo
 import { WorkerConfiguration } from "../work-manager.types";
 import { WorkFlowOptions } from "./worker-options.factory";
 import { WorkFlowType } from "./worker-options.types";
-import { SyncService } from "src/activities/core/migrate/sync-activity.service";
 import { ValidatePathActivity } from "src/activities/validate-path/validate-path.service";
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { SyncService } from "src/activities/core/migrate/sync-activity.service";
 
 @Injectable()
 export class WorkerOptionsService {
@@ -33,7 +33,7 @@ export class WorkerOptionsService {
     private readonly validateConnectionService: ValidateConnectionActivity,
     private readonly discoveryActivities: DiscoveryActivity,
     private readonly discoveryScanActivity: DiscoveryScanActivity,
-    @Inject(forwardRef(()=>SetupActivityService))private readonly setupActivityService: SetupActivityService,
+    private readonly setupActivityService: SetupActivityService,
     private readonly migrationScanService: MigrationScanService,
     private readonly migrationTaskService: MigrationTaskService,
     private readonly migrationSyncService:MigrationSyncService,
@@ -46,9 +46,9 @@ export class WorkerOptionsService {
     private readonly scanService: ScanService,
     private readonly syncService: SyncService,
     private readonly validatePathActivity: ValidatePathActivity,
+
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
-
   ) {
     this.jobTaskActivityConcurrency = this.configService.get<number>('worker.maxActivityConcurrency') || 1;
     this.logger = loggerFactory.create(WorkerOptionsService.name);
