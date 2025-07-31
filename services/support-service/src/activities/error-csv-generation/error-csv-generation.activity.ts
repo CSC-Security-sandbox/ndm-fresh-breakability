@@ -19,7 +19,6 @@ export class ErrorCsvGenerationActivity {
       payload,
     }
   ): Promise<ExportResult> {
-    const outputLocation = payload.zipLocation;
     try {
       const data = await this.getOperationErrorsByDateRange(
         payload.startDate,
@@ -30,14 +29,13 @@ export class ErrorCsvGenerationActivity {
         return {
           success: true,
           message: 'No operation errors found for the given criteria',
-          filesCreated: 0,
         };
       }
 
       await this.exportOperationErrorsToZip({
         startDate: payload.startDate,
         endDate: payload.endDate,
-        outputLocation,
+        outputLocation: payload.zipLocation,
       });
 
       // Count unique dates instead of project-date combinations
@@ -47,14 +45,12 @@ export class ErrorCsvGenerationActivity {
       return {
         success: true,
         message: `Successfully exported operation errors to ${filesCreated} CSV files`,
-        filesCreated,
       };
     } catch (error) {
       console.error('Error exporting operation errors:', error);
       return {
         success: false,
         message: `Export failed: ${error instanceof Error ? error.message : String(error)}`,
-        filesCreated: 0,
       };
     }
   }

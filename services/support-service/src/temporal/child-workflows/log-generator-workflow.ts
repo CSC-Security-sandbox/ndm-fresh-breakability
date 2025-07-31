@@ -8,21 +8,5 @@ const { fetchAndZipLogs } =
 
 export const LogGeneratorWorkflow = async ({ traceId, payload }) => {
   log.info(`[${traceId}] Started LogGeneratorWorkflow`);
-
-  try {
-    const zipPath = await fetchAndZipLogs({ traceId, payload });
-    log.info(`[${traceId}] Finished LogGeneratorWorkflow, zipPath: ${zipPath}`);
-
-    return {
-      status: 'success',
-      message: zipPath,
-    };
-
-  } catch (error) {
-    log.error(`[${traceId}] Error in LogGeneratorWorkflow: ${error.message}`);
-    return {
-      status: 'failed',
-      message: error.message,
-    };
-  }
+    return await fetchAndZipLogs({ traceId, payload });
 };
