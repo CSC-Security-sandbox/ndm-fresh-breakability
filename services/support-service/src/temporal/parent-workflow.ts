@@ -28,9 +28,8 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
     const logGeneratorResult = await logGeneratorChild.result();
 
     log.info(`logGeneratorResult - ${JSON.stringify(logGeneratorResult)}`);
-    if (logGeneratorResult.status === 'failed') {
-      log.info(`error occured in LogGeneratorWorkflow: ${logGeneratorResult.message}`);
-      // Throw a plain object to preserve the message in Temporal's error serialization
+    if (!logGeneratorResult.success) {
+      log.info(`Error occured in LogGeneratorWorkflow: ${logGeneratorResult.message}`);
       throw { message: logGeneratorResult.message };
     }
 
@@ -49,9 +48,8 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
 
     const errorCsvResult = await errorCsvChild.result();
 
-    if (errorCsvResult.status === 'failed') {
-      log.info(`error occured in ErrorCsvGeneratorWorkflow: ${errorCsvResult.message}`);
-      // Throw a plain object to preserve the message in Temporal's error serialization
+    if (!errorCsvResult.success) {
+      log.info(`Error occured in ErrorCsvGeneratorWorkflow: ${errorCsvResult.message}`);
       throw { message: errorCsvResult.message };
     }
 
@@ -72,9 +70,8 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
 
     const configurationDataCsvResult = await configurationDataCsvChild.result();
 
-    if (configurationDataCsvResult.status === 'failed') {
-      log.info(`error occured in ConfigurationDataCsvGeneratorWorkflow: ${configurationDataCsvResult.message}`);
-      // Throw a plain object to preserve the message in Temporal's error serialization
+    if (!configurationDataCsvResult.success) {
+      log.info(`Error occured in ConfigurationDataCsvGeneratorWorkflow: ${configurationDataCsvResult.message}`);
       throw { message: configurationDataCsvResult.message };
     }
 
