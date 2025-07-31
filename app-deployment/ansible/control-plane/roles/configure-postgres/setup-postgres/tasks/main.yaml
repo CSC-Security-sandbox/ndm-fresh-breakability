@@ -68,12 +68,13 @@
 - name: remove previous installation
   become: yes
   shell: |
-    helm delete postgres --namespace "postgres"
+    helm delete postgresql --namespace "postgres"
     kubectl delete pvc --all --namespace "postgres"
     kubectl delete -f $HOME/postgres/postgres-configmap.yaml
     kubectl delete -f $HOME/postgres/postgres-primary-pv.yaml
     kubectl delete -f $HOME/postgres/postgres-storageclass.yaml
     kubectl delete -f $HOME/postgres/postgres-secret.yaml
+    kubectl delete -f $HOME/postgres/postgres-exporter.yaml
     kubectl delete -f $HOME/postgres/postgres-namespace.yaml
   when: postgres_uninstall is defined
   args:
@@ -131,6 +132,19 @@
 
 - debug:
     var: pod_status.stdout
+
+- name: postgres-exporter template
+  become: yes
+  template:
+    src: ./templates/postgres-exporter.j2
+    dest: $HOME/postgres/postgres-exporter.yaml
+
+- name: Deploy postgres-exporter manifests
+  become: yes
+  shell: |
+    kubectl apply -f $HOME/postgres/postgres-exporter.yaml
+  args:
+    chdir: $HOME
 
 - name: Delete postgres directory
   become: yes

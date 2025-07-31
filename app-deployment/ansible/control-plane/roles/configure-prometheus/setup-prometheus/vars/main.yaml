@@ -1,4 +1,9 @@
 customScrapeConfigs:
+  - job_name: postgres-dmadmin
+    static_configs:
+      - targets: 
+          - postgres-exporter.postgres.svc.cluster.local:9187
+          
   - job_name: worker-service
     static_configs:
       - targets:
