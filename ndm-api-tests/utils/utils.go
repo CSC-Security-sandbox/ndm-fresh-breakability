@@ -867,19 +867,19 @@ func DeleteUserRoleByID(roleID string, headers map[string]string) {
 	}
 }
 
-func DeleteProjectByID(projectID string, headers map[string]string) {
+func DeleteProjectByID(projectID string, headers map[string]string) error {
 	url := fmt.Sprintf("%s/api/v1/projects/%s", ADMIN_SERVICE_URL, projectID)
 	resp, err := SendAPIRequest("DELETE", url, nil, headers)
 	if err != nil {
-		fmt.Printf("Failed to delete project %s: %v\n", projectID, err)
-		return
+		return fmt.Errorf("failed to delete project %s: %v", projectID, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
 		fmt.Printf("Successfully deleted project: %s\n", projectID)
+		return nil
 	} else {
-		fmt.Printf("Failed to delete project %s, status: %d\n", projectID, resp.StatusCode)
+		return fmt.Errorf("failed to delete project %s, status: %d", projectID, resp.StatusCode)
 	}
 }
 
