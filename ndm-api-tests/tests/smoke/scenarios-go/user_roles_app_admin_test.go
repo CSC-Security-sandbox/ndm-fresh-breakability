@@ -15,36 +15,6 @@ import (
 )
 
 // UserRoleRequest represents the request payload for user role operations
-type UserRoleRequest struct {
-    ProjectID string `json:"project_id"` // ID of the project where the role is assigned
-    AccountID string `json:"account_id"` // Account ID that owns the project
-    UserID    string `json:"user_id"`    // ID of the user being assigned the role
-    RoleID    string `json:"role_id"`    // Role ID being assigned to the user
-}
-
-// CreateUserRequest represents the request payload for creating a user
-type CreateUserRequest struct {
-    Username  string `json:"username"`   // Username for the new user
-    FirstName string `json:"firstName"`  // First name of the user
-    LastName  string `json:"lastName"`   // Last name of the user
-}
-
-// UserResponse represents the response when creating or getting a user
-type UserResponse struct {
-    ID        string `json:"id"`         // Unique identifier for the user
-    FirstName string `json:"first_name"` // User's first name
-    LastName  string `json:"last_name"`  // User's last name
-    Username  string `json:"username"`   // User's username
-}
-
-// UserRoleResponse represents the response when creating or getting user roles
-type UserRoleResponse struct {
-    ID        string `json:"id"`         // Unique identifier for the user role assignment
-    ProjectID string `json:"project_id"` // ID of the project where the role is assigned
-    AccountID string `json:"account_id"` // Account ID that owns the project
-    UserID    string `json:"user_id"`    // ID of the user assigned the role
-    RoleID    string `json:"role_id"`    // Role ID assigned to the user
-}
 
 // User Roles App Admin Test
 // This test suite validates the complete workflow of user role management functionality including:

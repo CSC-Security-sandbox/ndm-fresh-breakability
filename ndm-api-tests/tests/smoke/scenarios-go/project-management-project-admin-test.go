@@ -13,51 +13,6 @@ import (
     . "github.com/onsi/gomega"
 )
 
-// userResponse represents the structure of user data returned from API responses
-type userResponse struct {
-    ID        string `json:"id"`        // Unique identifier for the user
-    FirstName string `json:"first_name"` // User's first name
-    LastName  string `json:"last_name"`  // User's last name
-    // Username  string `json:"username"` // Commented out as not currently used
-    Email     string `json:"email"`      // User's email address
-}
-
-// createUserRequest represents the payload structure for creating a new user
-type createUserRequest struct {
-    Username  string `json:"username"`   // Username for the new user
-    FirstName string `json:"firstName"`  // First name of the user
-    LastName  string `json:"lastName"`   // Last name of the user
-}
-
-// createProjectRequest represents the payload structure for creating a new project
-type createProjectRequest struct {
-    AccountID string `json:"account_id"`           // Account ID that owns the project
-    ProjectName string `json:"project_name"`       // Name of the project
-    ProjectDescription string `json:"project_description"` // Description of the project
-    StartDate string `json:"start_date"`           // Project start date in RFC3339 format
-}
-
-// type createProjectResponse struct {
-//     ID string `json:"id"`
-// }
-
-// userRoleRequest represents the payload structure for assigning roles to users
-type userRoleRequest struct {
-    ProjectID string `json:"project_id"` // ID of the project where the role is assigned
-    AccountID string `json:"account_id"` // Account ID that owns the project
-    UserID    string `json:"user_id"`    // ID of the user being assigned the role
-    RoleID    string `json:"role_id"`    // Role ID being assigned to the user
-}
-
-// type userRoleResponse struct {
-//     ID        string `json:"id"`
-// }
-
-// keyClockCred represents the credentials structure for Keycloak authentication
-type keyClockCred struct {
-    Username string `json:"username"` // Username for Keycloak authentication
-    Password string `json:"password"` // Password for Keycloak authentication
-}
 
 // Project Management Project Admin Test
 // This test suite validates the complete workflow of project admin functionality including:
@@ -76,7 +31,7 @@ var _ = Describe("Project Management Project Admin Test", Ordered, func() {
         // projectViewerRoleID string        // Role ID for project viewer permissions (not used)
         userID              string           // ID of the created test user
         userRoleID          string           // ID of the user role assignment  
-        users               userResponse     // User details from API response
+        users               UserResponse     // User details from API response
         projectID_1         string           // ID of the first test project
         projectID_2         string           // ID of the second test project
         refreshToken        string           // JWT refresh token for logout
@@ -137,7 +92,7 @@ var _ = Describe("Project Management Project Admin Test", Ordered, func() {
         // Step 1: Create a new test user that will be assigned project admin role
         createURL := fmt.Sprintf("%s/api/v1/create-user", ADMIN_SERVICE_URL)
 
-        createUserRequest := createUserRequest{
+        createUserRequest := CreateUserRequest{
             Username:  fmt.Sprintf("testprojectadmin-%d@email.com", time.Now().UnixNano()), // Unique username using timestamp
             FirstName: "test",
             LastName:  "user",
@@ -190,7 +145,7 @@ var _ = Describe("Project Management Project Admin Test", Ordered, func() {
         By("creating project 1")
         // Step 2: Create the first project that the project admin will have access to
         createProjectURL := fmt.Sprintf("%s/api/v1/projects", ADMIN_SERVICE_URL)
-        createProject := createProjectRequest{
+        createProject := CreateProjectRequest{
             AccountID: AccountId,
             ProjectName: AutoGenerateProjectName(""), // Generate unique project name
             ProjectDescription: "desc1",
@@ -225,7 +180,7 @@ var _ = Describe("Project Management Project Admin Test", Ordered, func() {
         By("creating project 2")
         // Step 3: Create a second project that the project admin should NOT have access to
         // This is used to test permission boundaries
-        createProjectRequest2 := createProjectRequest{
+        createProjectRequest2 := CreateProjectRequest{
             AccountID: AccountId,
             ProjectName: AutoGenerateProjectName(""),
             ProjectDescription: "desc1",
@@ -261,7 +216,7 @@ var _ = Describe("Project Management Project Admin Test", Ordered, func() {
         // Step 4: Assign project admin role to the test user for project 1 only
         // This establishes the permission boundary for the test
         createUserRoleURL := fmt.Sprintf("%s/api/v1/user-roles", ADMIN_SERVICE_URL)
-        createUserRoleReq := userRoleRequest{
+        createUserRoleReq := UserRoleRequest{
             ProjectID: projectID_1,     // Only assign access to project 1
             AccountID: accountID,
             UserID:    userID,
@@ -296,12 +251,8 @@ var _ = Describe("Project Management Project Admin Test", Ordered, func() {
         By("resetting Keycloak password")
         // Step 5: Reset the user's password in Keycloak to enable login
         // This is necessary for newly created users to authenticate
-        var keycloakCred = keyClockCred{
-            Username: users.Email,
-            Password: "Root@123",
-        }
-
-        fmt.Println("Keycloak credentials:", keycloakCred)
+        
+        fmt.Printf("Preparing to reset password for user: %s\n", users.Email)
 
         // Get Keycloak admin access token
         localAuthToken, err := GetKeyCloakAccessToken(KeycloakUser, KeycloakPassword)
@@ -365,7 +316,7 @@ var _ = Describe("Project Management Project Admin Test", Ordered, func() {
         // Step 8: Test permission boundary - project admins should NOT be able to create new projects
         // This validates that role-based access control is working correctly
         createProjectURL = fmt.Sprintf("%s/api/v1/projects", ADMIN_SERVICE_URL)
-        createProjectRequest3 := createProjectRequest{
+        createProjectRequest3 := CreateProjectRequest{
             AccountID: AccountId,
             ProjectName: AutoGenerateProjectName(""),
             ProjectDescription: "desc1",

@@ -15,58 +15,6 @@ import (
     . "github.com/onsi/gomega"
 )
 
-// CreateSourceFileServerRequest represents the request payload for creating a source file server
-type CreateSourceFileServerRequest struct {
-    ConfigName       string                `json:"configName"`       // Name identifier for the file server configuration
-    ConfigType       string                `json:"configType"`       // Type of configuration (FILE, DATABASE, etc.)
-    ProjectID        string                `json:"projectId"`        // ID of the project this server belongs to
-    FileServers      []FileServerConfig    `json:"fileServers"`      // Array of file server configurations
-    WorkingDirectory WorkingDirectoryConfig `json:"workingDirectory"` // Working directory configuration
-}
-
-// FileServerConfig represents the configuration for a file server
-type FileServerConfig struct {
-    ServerType      string   `json:"serverType"`      // Type of server (OtherNAS, NetApp, etc.)
-    UserName        string   `json:"userName"`        // Username for server authentication
-    Password        string   `json:"password"`        // Password for server authentication
-    Protocol        string   `json:"protocol"`        // Protocol used (NFS, SMB, etc.)
-    ProtocolVersion string   `json:"protocolVersion"` // Version of the protocol (v3, v4, etc.)
-    Host            string   `json:"host"`            // IP address or hostname of the server
-    Volumes         []string `json:"volumes"`         // List of volumes available on the server
-    Workers         []string `json:"workers"`         // List of worker IDs assigned to this server
-}
-
-// WorkingDirectoryConfig represents the working directory configuration
-type WorkingDirectoryConfig struct {
-    WorkingDirectory string      `json:"workingDirectory"` // Path to the working directory
-    PathID           interface{} `json:"pathId"`           // ID of the path (can be null)
-    PathName         string      `json:"pathName"`         // Name of the path
-}
-
-// CreateDiscoveryJobRequest represents the request payload for creating a discovery job
-type CreateDiscoveryJobRequest struct {
-    ExcludeOlderThan     string              `json:"excludeOlderThan"`     // ISO timestamp to exclude older files
-    ExcludeFilePatterns  string              `json:"excludeFilePatterns"`  // Pattern to exclude certain files
-    PreserveAccessTime   bool                `json:"preserveAccessTime"`   // Whether to preserve file access times
-    FirstRunAt           string              `json:"firstRunAt"`           // ISO timestamp for first job execution
-    SourcePathIDs        []string            `json:"sourcePathIds"`        // Array of source path IDs to discover
-    CreatedBy            interface{}         `json:"createdBy"`            // User who created the job (can be null)
-    Options              DiscoveryJobOptions `json:"options"`              // Additional job execution options
-}
-
-// DiscoveryJobOptions represents options for discovery job execution
-type DiscoveryJobOptions struct {
-    WorkflowExecutionTimeout string `json:"workflowExecutionTimeout"` // Timeout for entire workflow execution
-    WorkflowTaskTimeout      string `json:"workflowTaskTimeout"`      // Timeout for individual workflow tasks
-    WorkflowRunTimeout       string `json:"workflowRunTimeout"`       // Timeout for workflow run
-    StartDelay               string `json:"startDelay"`               // Delay before starting the job
-}
-
-// GetFileServerData represents the data for getting file server information
-type GetFileServerData struct {
-    Type       string `json:"type"`        // Type of server (source, destination)
-    VolumeName string `json:"volume_name"` // Name of the volume to query
-}
 
 func sendPostAPIRequest(url string, data map[string]string, authToken string) (map[string]interface{}, error) {
 	// Marshal the data into JSON
