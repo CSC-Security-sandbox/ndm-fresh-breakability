@@ -1,0 +1,15 @@
+scenarios:
+  - name: create-bulk-cutover-job
+    url: /api/v1/jobs/bulk-cutover
+    method: post
+    service_name: job_service
+    delay : "120"
+    data:
+      cutoverConfig:
+      - sourcePathId: "$sourcePathId"
+        destinationPathId:
+          - "$destinationPathId"
+
+    response:
+      - status_code: 201
+    parse: {}
