@@ -20,7 +20,9 @@ export const LogGeneratorWorkflow = async ({ traceId, payload }) => {
 
   } catch (error) {
     log.error(`[${traceId}] Error in LogGeneratorWorkflow: ${error.message}`);
-    // Don't return status object - throw the error so parent can catch it
-    throw error;
+    return {
+      status: 'failed',
+      message: error.message,
+    };
   }
 };
