@@ -376,7 +376,7 @@ func AddDataToVolumeForSMB(export string) string {
 	cmd := fmt.Sprintf(`cmd /C
 	if exist %s rmdir /s /q %s &&
 	mkdir %s &&
-	(for /L %%i in (1,1,10) do fsutil file createnew %s\file%%i.txt 102400) &&
+	(for /L %%i in (1,1,100) do fsutil file createnew %s\file%%i.txt 102400) &&
 	net use %s %s /user:%s "%s" &&
 	(if exist %s\%s\ ( rmdir /s /q %s\%s ) else ( echo "delta not found" )) &
 	xcopy /E /I /Y %s %s\%s &&

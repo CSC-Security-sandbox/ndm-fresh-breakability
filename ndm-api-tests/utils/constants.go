@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"log"
 	"os"
 )
@@ -104,7 +105,7 @@ const (
 	FormatPDF                       Format          = "pdf"
 	FormatCSV                       Format          = "csv"
 	DefaultPollInterval                             = 5
-	MaxPollRetries                                  = 120
+	MaxPollRetries                                  = 180
 	WORKER_TIMEOUT                                  = 180
 	RUNNING_JOBRUN                                  = "RUNNING"
 	PAUSE_JOBRUN                                    = "PAUSE"
@@ -214,9 +215,9 @@ func UpdateConfVariables(protocolType, sourceVolumesArgs, destinationVolumesArgs
 	//os.Exit(1)
 
 	//export := fmt.Sprintf("%s:vol3_33", SOURCE_HOST_IP)
-	/*export := fmt.Sprintf("%s:vol4_33", SOURCE_HOST_IP)
+	/*export := fmt.Sprintf("%s:volSMBAuto_vol1", SOURCE_HOST_IP)
 
-	err := AddDataToVolume(export)
+	err := TestAddData(export)
 	if err != nil {
 		fmt.Println("UMV error add data to volume : ", err.Error())
 	}
@@ -233,4 +234,32 @@ func UpdateConfVariables(protocolType, sourceVolumesArgs, destinationVolumesArgs
 		fmt.Println("UMV error clear volume : ", err.Error())
 	}*/
 	//os.Exit(1)
+}
+
+func TestAddData(export string) error {
+	script := ""
+
+	switch PROTOCOL_TYPE {
+	case ProtocolSMB:
+		script = AddDataToVolumeForSMB(export)
+	case ProtocolNFS:
+		script = AddDataToVolumeForNFS(export)
+	}
+
+	sshConfig = SSHConfig{
+		Username: "datamigrator",
+		Host:     "10.192.7.71",
+		Port:     22,
+		Password: "Dm@admin123",
+	}
+
+	fmt.Printf("UMV TRYING TO CONNECT : %+v \n", sshConfig)
+	fmt.Println("UMV RUNNING : ", script)
+
+	output, err := sshRunScript(sshConfig, script)
+	if err != nil {
+		return fmt.Errorf("AddDataToFileserver failed: %w\noutput: %s", err, output)
+	}
+	fmt.Println("UMV OUTPUT : ", output)
+	return nil
 }
