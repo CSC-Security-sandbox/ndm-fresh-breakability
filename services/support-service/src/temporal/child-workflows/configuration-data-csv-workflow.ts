@@ -43,6 +43,5 @@ export const ConfigurationDataCsvGeneratorWorkflow = async ({
       status: 'failed',
       message: error.message,
     };
-    // throw error;
   }
 };
