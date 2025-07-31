@@ -33,7 +33,7 @@ export enum FileSystemCategory {
   CREATED = "Created",
   ACCESS_TIME = "Access Time",
   BIGGEST = "Biggest",
-  TOP_FILE_EXTENSIONS = "Top File Extensions",
+  TOP_FILE_EXTENSIONS = "Top File Extensions (with file Capacity and Count)",
   MAXIMUM_VALUES = "Maximum Values",
   JOB_RUN_STATS = "Job Run Stats",
   FILE_SERVER_INFO = "File Server Info",
@@ -121,7 +121,6 @@ export const SIMPLIFIED_BYTE_UNITS = [
   "ZiB",
   "YiB"
 ];
-
 export const availableChartColors = [
   "chart-1",
   "chart-2",
@@ -286,17 +285,7 @@ export const OPTIONS_FOR_CHART_TOGGLE = [
 /**
  * Array of large number suffixes in order
  */
-export const LARGE_NUMBER_SUFFIXES = [
-  "",
-  "K",
-  "M",
-  "B",
-  "T",
-  "Q",
-  "Quint",
-  "Sext",
-  "Sept"
-];
+export const LARGE_NUMBER_SUFFIXES = ["", "K", "M", "B", "T", "Q", "Quint", "Sext", "Sept"];
 
 /**
  * String constants for file size and count prefixes
@@ -304,8 +293,7 @@ export const LARGE_NUMBER_SUFFIXES = [
 export const FILE_SIZE_PREFIX = "Capacity with File Size: ";
 export const FILE_COUNT_PREFIX = "File Count with File Size: ";
 export const MODIFICATION_TIME_SIZE_PREFIX = "Capacity with Modification Time";
-export const MODIFICATION_TIME_COUNT_PREFIX =
-    "File Count with Modification Time";
+export const MODIFICATION_TIME_COUNT_PREFIX = "File Count with Modification Time";
 export const CREATION_TIME_SIZE_PREFIX = "Capacity with Creation Time";
 export const CREATION_TIME_COUNT_PREFIX = "File Count with Creation Time";
 export const ACCESS_TIME_SIZE_PREFIX = "Capacity with Access Time";
@@ -315,3 +303,4 @@ export const ACCESS_TIME_COUNT_PREFIX = "File Count with Access Time";
  * Constant for byte conversion (1000 bytes = 1 KB)
  */
 export const BYTES_IN_KILOBYTE = 1024;
+export const DECIMAL_BASE = 1000;

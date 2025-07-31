@@ -49,9 +49,9 @@ const ReportDoughnutChart = () => {
   const summary = createSummaryMap(reportData);
 
   const fileExtensionCounts = Object.entries(summary).filter(
-    ([key]) => key !== "total size (MB)"
+    ([key]) => key !== "total size (MiB)"
   );
-  const totalSizeMB = summary["total size (MB)"];
+  const totalSizeMB = summary["total size (MiB)"];
 
   /* This part ensures colors in the legend matches the exact 
   same colors in doughnut chart (random colors will be assigned 
@@ -81,7 +81,7 @@ const ReportDoughnutChart = () => {
       color: colorClassMap[`chart-${index + 2}`],
     })),
     {
-      title: "Total Size (MB)",
+      title: "Total Size (MiB)",
       value: totalSizeMB,
       color: colorClassMap["chart-1"],
     },
