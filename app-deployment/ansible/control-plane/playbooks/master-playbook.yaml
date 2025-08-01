@@ -11,7 +11,6 @@
           admin_service_tag: "{{ admin_service_tag }}"
           keycloak_customizations_tag: "{{ keycloak_customizations_tag }}"
           db_migrations_tag: "{{ db_migrations_tag }}"
-          support_service_tag: "{{ support_service_tag }}"
 
 - name: Configure user access on VM
   import_playbook: configure-user.yaml
