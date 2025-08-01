@@ -49,7 +49,6 @@ jobs:
             "Keycloak Customizations:services/keycloak-customizations"
             "Reports Service:services/reports-service"
             "Worker:services/worker"
-            "Support Service:services/support-service"
           )
 
           declare -a matrix_items=()

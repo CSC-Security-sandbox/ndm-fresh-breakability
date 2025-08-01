@@ -29,7 +29,6 @@ services=(
     "db-migrations:db_migrations_tag:db_migrations_branch:ndm-db-migrations"
     "jobs-service:jobs_service_tag:jobs_service_branch:ndm-jobs-service"
     "reports-service:reports_service_tag:reports_service_branch:ndm-reports-service"
-    "support-service:support_service_tag:support_service_branch:ndm-support-service"
     "keycloak-customizations:keycloak_customizations_tag:keycloak_customizations_branch:ndm-keycloak-customizations"
 )
 
