@@ -58,7 +58,7 @@ export class WorkManagerService {
             this.logger.debug('Already loading configurations, skipping this cycle.');
             return;
         }
-        this.logger.log(`Fetching configurations for platform: ${this.platform}`);
+        // this.logger.log(`Fetching configurations for platform: ${this.platform}`);
 
         try {
             this.loadingConfigs = true;

@@ -5,7 +5,6 @@ import * as fs from 'fs/promises';
 
 const execAsync = promisify(exec);
 
-// Type definitions
 interface Permission {
     code: string;
     description: string;
@@ -13,8 +12,9 @@ interface Permission {
 
 interface ACLEntry {
     principal: string;
-    originalPrincipal?: string; // Store original SID if resolved
+    originalPrincipal?: string;
     permissions: Permission[];
+    accessType: 'allow' | 'deny';
 }
 
 interface ACLData {
@@ -26,13 +26,47 @@ interface ACLData {
 }
 
 interface Operation {
-    type: 'reset' | 'grant' | 'skip';
+    type: 'reset' | 'grant' | 'deny' | 'skip';
     principal?: string;
     permissions?: string;
-    status: 'completed' | 'failed' | 'simulated' | 'skipped';
+    status: 'completed' | 'failed' | 'skipped';
     reason?: string;
     error?: string;
 }
+
+const PERMISSION_MAP: Record<string, string> = {
+    'F': 'Full Control',
+    'M': 'Modify',
+    'RX': 'Read & Execute',
+    'R': 'Read',
+    'W': 'Write',
+    'D': 'Delete',
+    'DE': 'Delete',
+    'RC': 'Read Control',
+    'WDAC': 'Write DAC',
+    'WO': 'Write Owner',
+    'S': 'Synchronize',
+    'AS': 'Access System Security',
+    'MA': 'Maximum Allowed',
+    'GR': 'Generic Read',
+    'GW': 'Generic Write',
+    'GE': 'Generic Execute',
+    'GA': 'Generic All',
+    'RD': 'Read Data/List Directory',
+    'WD': 'Write Data/Add File',
+    'AD': 'Append Data/Add Subdirectory',
+    'REA': 'Read Extended Attributes',
+    'WEA': 'Write Extended Attributes',
+    'X': 'Execute/Traverse',
+    'DC': 'Delete Child',
+    'RA': 'Read Attributes',
+    'WA': 'Write Attributes',
+    'OI': 'Object Inherit',
+    'CI': 'Container Inherit',
+    'IO': 'Inherit Only',
+    'NP': 'No Propagate',
+    'I': 'Inherited'
+};
 
 interface StampResult {
     source: string;
@@ -48,25 +82,15 @@ interface StampOptions {
     preserveExisting?: boolean;
     excludePrincipals?: string[];
     includePrincipals?: string[];
-    simulate?: boolean;
     resolveSIDs?: boolean;
+    isIdentityMappingAvailable?: boolean;
+    jobID?: string;
 }
 
 interface GetACLOptions {
     resolveSIDs?: boolean;
-}
-
-interface ExportedACL {
-    version: string;
-    exported: {
-        timestamp: string;
-        user: string;
-        source: string;
-    };
-    acl: {
-        permissions: ACLEntry[];
-        inheritance: string | null;
-    };
+    isIdentityMappingAvailable?: boolean;
+    jobID?: string;  // Add jobID for identity mapping
 }
 
 interface ParsedACL {
@@ -113,126 +137,104 @@ export class CommandExecutionError extends ACLError {
     }
 }
 
-// Redis service interface
+// Redis service interface - update to support target SID lookup
 interface RedisService {
-    getOwnerIdentity(sid: string): Promise<string | null>;
+    getOwnerIdentity(jobID: string, sid: string, type: 'SID'): Promise<string | null>;
 }
 
-// Permission mapping
-const PERMISSION_MAP: Record<string, string> = {
-    'F': 'Full Control',
-    'M': 'Modify',
-    'RX': 'Read & Execute',
-    'R': 'Read',
-    'W': 'Write',
-    'D': 'Delete',
-    'DE': 'Delete',
-    'RC': 'Read Control',
-    'WDAC': 'Write DAC',
-    'WO': 'Write Owner',
-    'S': 'Synchronize',
-    'AS': 'Access System Security',
-    'MA': 'Maximum Allowed',
-    'GR': 'Generic Read',
-    'GW': 'Generic Write',
-    'GE': 'Generic Execute',
-    'GA': 'Generic All',
-    'RD': 'Read Data/List Directory',
-    'WD': 'Write Data/Add File',
-    'AD': 'Append Data/Add Subdirectory',
-    'REA': 'Read Extended Attributes',
-    'WEA': 'Write Extended Attributes',
-    'X': 'Execute/Traverse',
-    'DC': 'Delete Child',
-    'RA': 'Read Attributes',
-    'WA': 'Write Attributes'
-};
-
-// ACL Operations class with Redis integration
-export class ACLOperations {
-    constructor(private redisService?: RedisService) { }
-
-    /**
-     * Check if a string is a SID
-     */
-    private isSID(principal: string): boolean {
-        return /^S-\d-\d+-(\d+-){1,14}\d+$/.test(principal);
+// Execute command with proper cleanup
+async function executeCommand(command: string): Promise<{ stdout: string; stderr: string }> {
+    const controller = new AbortController();
+    const { signal } = controller;
+    
+    try {
+        const result = await execAsync(command, { 
+            encoding: 'utf8',
+            shell: 'cmd.exe',
+            signal,
+            windowsHide: true
+        });
+        return result;
+    } finally {
+        // Ensure the shell process is terminated
+        controller.abort();
     }
+}
 
-    /**
-     * Resolve SIDs to readable names
-     */
-    private async resolvePrincipal(principal: string): Promise<string> {
-        if (!this.redisService || !this.isSID(principal)) {
+// ACL Operations class
+export class ACLOperations {
+    constructor(private redisService?: RedisService) {}
+
+    private async resolvePrincipal(principal: string, jobID?: string): Promise<string> {
+        if (!this.redisService || !jobID || !/^S-\d-\d+-(\d+-){1,14}\d+$/.test(principal)) {
             return principal;
         }
 
         try {
-            const resolvedName = await this.redisService.getOwnerIdentity(principal);
+            const resolvedName = await this.redisService.getOwnerIdentity(jobID, principal, 'SID');
             return resolvedName || principal;
         } catch (error) {
-            console.warn(`Failed to resolve SID ${principal}: ${(error as Error).message}`);
             return principal;
         }
     }
 
-    /**
-     * Get ACL of a file in object format
-     */
-    async getFileACL(filePath: string, options: GetACLOptions = {}): Promise<ACLData> {
-        const { resolveSIDs = false } = options;
+    private async getFileACL(filePath: string, options: GetACLOptions = {}): Promise<ACLData> {
+        const { resolveSIDs = false, isIdentityMappingAvailable = false, jobID } = options;
 
         try {
             const normalizedPath = path.resolve(filePath);
-
-            // Verify file exists
+            
             try {
                 await fs.access(normalizedPath);
             } catch (error) {
                 throw new FileAccessError(normalizedPath, error as Error);
             }
-
-            // Use icacls to get ACL
+            
             const command = `icacls "${normalizedPath}" /L`;
             let stdout: string, stderr: string;
-
+            
             try {
-                ({ stdout, stderr } = await execAsync(command, {
-                    encoding: 'utf8',
-                    shell: 'cmd.exe'
-                }));
+                ({ stdout, stderr } = await executeCommand(command));
             } catch (error) {
+                // Check if it's a file not found error
+                const errorMessage = (error as Error).message || '';
+                if (errorMessage.includes('The system cannot find the file specified') || 
+                    errorMessage.includes('cannot find the path specified')) {
+                    throw new FileAccessError(normalizedPath, error as Error);
+                }
                 throw new CommandExecutionError(command, error as Error);
             }
-
-            if (stderr) {
+            
+            if (stderr && !stderr.includes('Successfully processed')) {
+                // Check for file not found in stderr
+                if (stderr.includes('The system cannot find the file specified') ||
+                    stderr.includes('cannot find the path specified')) {
+                    throw new FileAccessError(normalizedPath, new Error(stderr));
+                }
                 throw new ACLError(`Error executing icacls: ${stderr}`, 'ICACLS_ERROR', { stderr });
             }
-
-            // Parse the output
+            
             const aclData = this.parseIcaclsOutput(stdout);
-
-            // Resolve SIDs if requested
-            if (resolveSIDs && this.redisService) {
+            
+            // Only resolve SIDs if both flags are true and jobID is provided
+            if (resolveSIDs && isIdentityMappingAvailable && jobID && this.redisService) {
                 for (const entry of aclData.permissions) {
-                    if (this.isSID(entry.principal)) {
-                        const resolved = await this.resolvePrincipal(entry.principal);
-                        if (resolved !== entry.principal) {
-                            entry.originalPrincipal = entry.principal;
-                            entry.principal = resolved;
-                        }
+                    const resolved = await this.resolvePrincipal(entry.principal, jobID);
+                    if (resolved !== entry.principal) {
+                        entry.originalPrincipal = entry.principal;
+                        entry.principal = resolved;
                     }
                 }
             }
-
+            
             return {
                 filePath: normalizedPath,
                 timestamp: new Date().toISOString(),
-                user: 'VishalBikkad',
+                user: process.env.USERNAME || 'unknown',
                 permissions: aclData.permissions,
                 inheritance: aclData.inheritance
             };
-
+            
         } catch (error) {
             if (error instanceof ACLError) {
                 throw error;
@@ -241,27 +243,24 @@ export class ACLOperations {
         }
     }
 
-    /**
-     * Apply ACL from one file to another
-     */
     async stampFileACL(
-        sourceFile: string,
-        targetFile: string,
+        sourceFile: string, 
+        targetFile: string, 
         options: StampOptions = {}
     ): Promise<StampResult> {
         const {
             preserveExisting = false,
             excludePrincipals = [],
             includePrincipals = [],
-            simulate = false,
-            resolveSIDs = false
+            resolveSIDs = false,
+            isIdentityMappingAvailable = false,
+            jobID
         } = options;
-
+        
         try {
             const sourcePath = path.resolve(sourceFile);
             const targetPath = path.resolve(targetFile);
-
-            // Verify both files exist
+            
             try {
                 await Promise.all([
                     fs.access(sourcePath),
@@ -271,108 +270,155 @@ export class ACLOperations {
                 const failedPath = await fs.access(sourcePath).then(() => targetPath, () => sourcePath);
                 throw new FileAccessError(failedPath, error as Error);
             }
-
-            // Get source ACL
-            const sourceACL = await this.getFileACL(sourcePath, { resolveSIDs });
-
+            
+            // Only resolve SIDs if both flags are true and jobID is provided
+            const shouldResolveSIDs = resolveSIDs && isIdentityMappingAvailable && !!jobID;
+            const sourceACL = await this.getFileACL(sourcePath, { 
+                resolveSIDs: shouldResolveSIDs, 
+                isIdentityMappingAvailable,
+                jobID 
+            });
+            
             const result: StampResult = {
                 source: sourcePath,
                 target: targetPath,
                 timestamp: new Date().toISOString(),
-                user: 'VishalBikkad',
+                user: process.env.USERNAME || 'unknown',
                 operations: [],
                 commands: [],
                 success: true
             };
-
+            
             // Reset permissions if not preserving
             if (!preserveExisting) {
                 const resetCmd = `icacls "${targetPath}" /reset`;
-                if (!simulate) {
-                    try {
-                        await execAsync(resetCmd, { shell: 'cmd.exe' });
-                    } catch (error) {
-                        result.operations.push({
-                            type: 'reset',
-                            status: 'failed',
-                            error: (error as Error).message
-                        });
-                        result.success = false;
-                        throw new CommandExecutionError(resetCmd, error as Error);
-                    }
+                try {
+                    await executeCommand(resetCmd);
+                    // Add a note about what /reset does
+                    console.log(`Reset completed. Note: /reset sets default permissions, not blank permissions.`);
+                } catch (error) {
+                    result.operations.push({
+                        type: 'reset',
+                        status: 'failed',
+                        error: (error as Error).message
+                    });
+                    result.success = false;
+                    throw new CommandExecutionError(resetCmd, error as Error);
                 }
                 result.commands.push(resetCmd);
                 result.operations.push({
                     type: 'reset',
-                    status: simulate ? 'simulated' : 'completed'
+                    status: 'completed'
                 });
+                
+                // Option 1: Remove all explicit permissions after reset
+                // This would require using /remove commands for each default principal
+                // const removeCmd = `icacls "${targetPath}" /inheritance:r`;
+                // await executeCommand(removeCmd);
             }
-
+            
             // Apply each permission
             for (const permission of sourceACL.permissions) {
-                const { principal, originalPrincipal, permissions } = permission;
-
-                // Use original SID for actual command if it was resolved
-                const principalForCommand = originalPrincipal || principal;
-
-                // Check filters (use resolved name for filtering)
-                if (excludePrincipals.includes(principal)) {
+                const { principal, originalPrincipal, permissions, accessType } = permission;
+                
+                // Skip unresolved SIDs when identity mapping is enabled
+                if (isIdentityMappingAvailable && resolveSIDs) {
+                    // Check if the principal is still a SID (meaning it wasn't resolved)
+                    if (/^S-\d-\d+-(\d+-){1,14}\d+$/.test(principal)) {
+                        result.operations.push({
+                            type: 'skip',
+                            principal: principal,
+                            reason: 'unresolved SID with identity mapping enabled',
+                            status: 'skipped'
+                        });
+                        continue;
+                    }
+                }
+                
+                // When identity mapping is available, use the resolved name for the command
+                // Otherwise, use the original principal (SID or name)
+                let principalForCommand: string;
+                if (isIdentityMappingAvailable && resolveSIDs && originalPrincipal) {
+                    // Use the resolved name (e.g., DESKTOP-EBFPEK8\sham)
+                    principalForCommand = principal;
+                } else {
+                    // Use the original principal (SID or name as it came from source)
+                    principalForCommand = originalPrincipal || principal;
+                }
+                
+                const principalForFiltering = principal; // This will be the resolved name if mapping was applied
+                
+                // Check filters using the resolved principal name
+                if (excludePrincipals.includes(principalForFiltering)) {
                     result.operations.push({
                         type: 'skip',
-                        principal,
+                        principal: principalForFiltering,
                         reason: 'excluded',
                         status: 'skipped'
                     });
                     continue;
                 }
-
-                if (includePrincipals.length > 0 && !includePrincipals.includes(principal)) {
+                
+                if (includePrincipals.length > 0 && !includePrincipals.includes(principalForFiltering)) {
                     result.operations.push({
                         type: 'skip',
-                        principal,
+                        principal: principalForFiltering,
                         reason: 'not included',
                         status: 'skipped'
                     });
                     continue;
                 }
-
-                // Build and execute grant command
-                const permString = permissions.map(p => p.code).join(',');
-                const grantCmd = `icacls "${targetPath}" /grant "${principalForCommand}:(${permString})"`;
-
-                if (!simulate) {
-                    try {
-                        await execAsync(grantCmd, { shell: 'cmd.exe' });
-                        result.operations.push({
-                            type: 'grant',
-                            principal: resolveSIDs ? principal : principalForCommand,
-                            permissions: permString,
-                            status: 'completed'
-                        });
-                    } catch (error) {
-                        result.operations.push({
-                            type: 'grant',
-                            principal: resolveSIDs ? principal : principalForCommand,
-                            permissions: permString,
-                            status: 'failed',
-                            error: (error as Error).message
-                        });
-                        result.success = false;
-                    }
-                } else {
+                
+                // Separate inheritance flags from actual permissions
+                // Exclude 'I' (Inherited) flag as it cannot be set manually
+                const inheritanceFlags = permissions.filter(p => ['OI', 'CI', 'IO', 'NP'].includes(p.code));
+                const actualPermissions = permissions.filter(p => !['OI', 'CI', 'IO', 'NP', 'I'].includes(p.code));
+                
+                // Skip if no actual permissions to set (e.g., only had 'I' flag)
+                if (actualPermissions.length === 0 && inheritanceFlags.length === 0) {
                     result.operations.push({
-                        type: 'grant',
-                        principal: resolveSIDs ? principal : principalForCommand,
-                        permissions: permString,
-                        status: 'simulated'
+                        type: 'skip',
+                        principal: principalForFiltering,
+                        reason: 'no settable permissions',
+                        status: 'skipped'
                     });
+                    continue;
                 }
-
-                result.commands.push(grantCmd);
+                
+                // Build permission string with inheritance flags first, then permissions
+                const inheritanceString = inheritanceFlags.map(p => p.code).join(',');
+                const permissionString = actualPermissions.map(p => p.code).join(',');
+                const fullPermString = inheritanceString ? 
+                    (permissionString ? `${inheritanceString},${permissionString}` : inheritanceString) : 
+                    permissionString;
+                
+                const commandType = accessType === 'deny' ? 'deny' : 'grant';
+                const aclCmd = `icacls "${targetPath}" /${commandType} "${principalForCommand}:(${fullPermString})"`;
+                
+                try {
+                    const cmdResult = await executeCommand(aclCmd);
+                    result.operations.push({
+                        type: commandType as 'grant' | 'deny',
+                        principal: principalForFiltering,
+                        permissions: fullPermString,
+                        status: 'completed'
+                    });
+                } catch (error) {
+                    result.operations.push({
+                        type: commandType as 'grant' | 'deny',
+                        principal: principalForFiltering,
+                        permissions: fullPermString,
+                        status: 'failed',
+                        error: (error as Error).message
+                    });
+                    result.success = false;
+                }
+                
+                result.commands.push(aclCmd);
             }
-
+            
             return result;
-
+            
         } catch (error) {
             if (error instanceof ACLError) {
                 throw error;
@@ -381,22 +427,128 @@ export class ACLOperations {
         }
     }
 
-    /**
-     * Compare ACLs between two files
-     */
+    private parseIcaclsOutput(output: string): ParsedACL {
+        const lines = output.split('\n').filter(line => line.trim());
+        const permissions: ACLEntry[] = [];
+        let inheritance: string | null = null;
+        
+        if (lines.length < 2) {
+            throw new ACLError('Invalid icacls output', 'PARSE_ERROR', { output });
+        }
+        
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            
+            if (!line || line.startsWith('Successfully processed')) {
+                continue;
+            }
+            
+            // Check for deny permissions - they appear with (N) or (DENY) prefix
+            const isDeny = line.includes('(DENY)') || /:\(N\)/.test(line);
+            
+            // Updated regex to handle deny format like "principal:(N)(permissions)"
+            const match = line.match(/^(.+?):\s*(?:\(DENY\)|(?:\(N\)))?\s*\(([^)]+)\)(?:\(([^)]+)\))?$/);
+            if (match) {
+                const [, principal, permission1, permission2] = match;
+                const entry: ACLEntry = {
+                    principal: principal.trim(),
+                    permissions: [],
+                    accessType: isDeny ? 'deny' : 'allow'
+                };
+                
+                // For deny permissions, skip the (N) part and parse actual permissions
+                if (permission1 && permission1 !== 'N') {
+                    entry.permissions.push(...this.parsePermissionString(permission1, true));
+                }
+                if (permission2) {
+                    entry.permissions.push(...this.parsePermissionString(permission2, true));
+                }
+                
+                // Only add entry if it has permissions
+                if (entry.permissions.length > 0) {
+                    permissions.push(entry);
+                }
+            }
+        }
+        
+        return { permissions, inheritance };
+    }
+
+    private parsePermissionString(permStr: string, includeInheritance: boolean = true): Permission[] {
+        const permissions: Permission[] = [];
+        const parts = permStr.split(',');
+        
+        parts.forEach(part => {
+            const trimmedPart = part.trim();
+            if (trimmedPart && !trimmedPart.includes('(') && !trimmedPart.includes(')')) {
+                // Include inheritance flags like OI, CI, IO, NP, I
+                const isInheritanceFlag = ['OI', 'CI', 'IO', 'NP', 'I'].includes(trimmedPart);
+                if (includeInheritance || !isInheritanceFlag) {
+                    permissions.push({
+                        code: trimmedPart,
+                        description: PERMISSION_MAP[trimmedPart] || trimmedPart
+                    });
+                }
+            }
+        });
+        
+        return permissions;
+    }
+
+    private arePermissionsEqual(perms1: Permission[], perms2: Permission[]): boolean {
+        // Filter out the 'I' (Inherited) flag from both sides for comparison
+        // since it's automatically set by Windows and can't be manually controlled
+        const filterInherited = (perms: Permission[]) => 
+            perms.filter(p => p.code !== 'I');
+        
+        const filtered1 = filterInherited(perms1);
+        const filtered2 = filterInherited(perms2);
+        
+        if (filtered1.length !== filtered2.length) return false;
+        
+        const codes1 = filtered1.map(p => p.code).sort();
+        const codes2 = filtered2.map(p => p.code).sort();
+        
+        return codes1.every((code, index) => code === codes2[index]);
+    }
+
     async compareFileACLs(
         sourceFile: string,
         targetFile: string,
         options: GetACLOptions = {}
     ): Promise<ComparisonResult> {
         try {
-            const [sourceACL, targetACL] = await Promise.all([
-                this.getFileACL(sourceFile, options),
-                this.getFileACL(targetFile, options)
-            ]);
+            const { resolveSIDs = false, isIdentityMappingAvailable = false, jobID } = options;
+            
+            // For comparison, we should NOT resolve SIDs on the target
+            // because the target will have the actual usernames, not the source SIDs
+            const sourceACL = await this.getFileACL(sourceFile, { 
+                resolveSIDs: resolveSIDs && isIdentityMappingAvailable && !!jobID, 
+                isIdentityMappingAvailable,
+                jobID 
+            });
+            
+            // Get target ACL without SID resolution
+            const targetACL = await this.getFileACL(targetFile, { 
+                resolveSIDs: false, 
+                isIdentityMappingAvailable: false,
+                jobID: undefined
+            });
 
-            const sourcePrincipals = new Map(sourceACL.permissions.map(p => [p.principal, p]));
-            const targetPrincipals = new Map(targetACL.permissions.map(p => [p.principal, p]));
+            const sourcePrincipals = new Map<string, ACLEntry>();
+            const targetPrincipals = new Map<string, ACLEntry>();
+
+            // For source entries, use the resolved principal for comparison if available
+            sourceACL.permissions.forEach(p => {
+                const keyPrincipal = p.principal; // This will be the resolved name if mapping was applied
+                const key = `${keyPrincipal}:${p.accessType}`;
+                sourcePrincipals.set(key, p);
+            });
+
+            targetACL.permissions.forEach(p => {
+                const key = `${p.principal}:${p.accessType}`;
+                targetPrincipals.set(key, p);
+            });
 
             const onlyInSource: ACLEntry[] = [];
             const onlyInTarget: ACLEntry[] = [];
@@ -410,37 +562,35 @@ export class ACLOperations {
                 permissions: Permission[];
             }> = [];
 
-            // Check source principals
-            for (const [principal, entry] of sourcePrincipals) {
-                if (!targetPrincipals.has(principal)) {
+            for (const [key, entry] of sourcePrincipals) {
+                if (!targetPrincipals.has(key)) {
                     onlyInSource.push(entry);
                 } else {
-                    const targetEntry = targetPrincipals.get(principal)!;
+                    const targetEntry = targetPrincipals.get(key)!;
                     if (!this.arePermissionsEqual(entry.permissions, targetEntry.permissions)) {
                         different.push({
-                            principal,
+                            principal: `${entry.principal} (${entry.accessType})`,
                             sourcePermissions: entry.permissions,
                             targetPermissions: targetEntry.permissions
                         });
                     } else {
                         identical.push({
-                            principal,
+                            principal: `${entry.principal} (${entry.accessType})`,
                             permissions: entry.permissions
                         });
                     }
                 }
             }
 
-            // Check for principals only in target
-            for (const [principal, entry] of targetPrincipals) {
-                if (!sourcePrincipals.has(principal)) {
+            for (const [key, entry] of targetPrincipals) {
+                if (!sourcePrincipals.has(key)) {
                     onlyInTarget.push(entry);
                 }
             }
 
-            const isEqual = onlyInSource.length === 0 &&
-                onlyInTarget.length === 0 &&
-                different.length === 0;
+            const isEqual = onlyInSource.length === 0 && 
+                           onlyInTarget.length === 0 && 
+                           different.length === 0;
 
             return {
                 source: sourceACL,
@@ -460,201 +610,9 @@ export class ACLOperations {
             throw new ACLError(`Failed to compare ACLs`, 'COMPARE_ERROR', { originalError: (error as Error).message });
         }
     }
-
-    /**
-     * Get ACL as exportable/importable data structure
-     */
-    async exportFileACL(filePath: string, options: GetACLOptions = {}): Promise<ExportedACL> {
-        const acl = await this.getFileACL(filePath, options);
-
-        return {
-            version: '1.0',
-            exported: {
-                timestamp: new Date().toISOString(),
-                user: 'VishalBikkad',
-                source: acl.filePath
-            },
-            acl: {
-                permissions: acl.permissions,
-                inheritance: acl.inheritance
-            }
-        };
-    }
-
-    /**
-     * Apply ACL from exported data to a file
-     */
-    async importFileACL(
-        targetFile: string,
-        aclData: ExportedACL,
-        options: { simulate?: boolean } = {}
-    ): Promise<StampResult> {
-        const { simulate = false } = options;
-
-        try {
-            const targetPath = path.resolve(targetFile);
-
-            try {
-                await fs.access(targetPath);
-            } catch (error) {
-                throw new FileAccessError(targetPath, error as Error);
-            }
-
-            const result: StampResult = {
-                source: aclData.exported.source,
-                target: targetPath,
-                timestamp: new Date().toISOString(),
-                user: 'VishalBikkad',
-                operations: [],
-                commands: [],
-                success: true
-            };
-
-            // Reset permissions
-            const resetCmd = `icacls "${targetPath}" /reset`;
-            if (!simulate) {
-                try {
-                    await execAsync(resetCmd, { shell: 'cmd.exe' });
-                } catch (error) {
-                    result.operations.push({
-                        type: 'reset',
-                        status: 'failed',
-                        error: (error as Error).message
-                    });
-                    result.success = false;
-                    throw new CommandExecutionError(resetCmd, error as Error);
-                }
-            }
-            result.commands.push(resetCmd);
-            result.operations.push({
-                type: 'reset',
-                status: simulate ? 'simulated' : 'completed'
-            });
-
-            // Apply permissions from data
-            for (const permission of aclData.acl.permissions) {
-                const principalForCommand = permission.originalPrincipal || permission.principal;
-                const permString = permission.permissions.map(p => p.code).join(',');
-                const grantCmd = `icacls "${targetPath}" /grant "${principalForCommand}:(${permString})"`;
-
-                if (!simulate) {
-                    try {
-                        await execAsync(grantCmd, { shell: 'cmd.exe' });
-                        result.operations.push({
-                            type: 'grant',
-                            principal: permission.principal,
-                            status: 'completed'
-                        });
-                    } catch (error) {
-                        result.operations.push({
-                            type: 'grant',
-                            principal: permission.principal,
-                            status: 'failed',
-                            error: (error as Error).message
-                        });
-                        result.success = false;
-                    }
-                } else {
-                    result.operations.push({
-                        type: 'grant',
-                        principal: permission.principal,
-                        status: 'simulated'
-                    });
-                }
-
-                result.commands.push(grantCmd);
-            }
-
-            return result;
-
-        } catch (error) {
-            if (error instanceof ACLError) {
-                throw error;
-            }
-            throw new ACLError(`Failed to import ACL`, 'IMPORT_ERROR', { originalError: (error as Error).message });
-        }
-    }
-
-    /**
-     * Parse icacls output into structured format
-     */
-    private parseIcaclsOutput(output: string): ParsedACL {
-        const lines = output.split('\n').filter(line => line.trim());
-        const permissions: ACLEntry[] = [];
-        let inheritance: string | null = null;
-
-        if (lines.length < 2) {
-            throw new ACLError('Invalid icacls output', 'PARSE_ERROR', { output });
-        }
-
-        for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-
-            if (!line || line.startsWith('Successfully processed')) {
-                continue;
-            }
-
-            const match = line.match(/^(.+?):\(([^)]+)\)(?:\(([^)]+)\))?$/);
-            if (match) {
-                const [, principal, permission1, permission2] = match;
-                const entry: ACLEntry = {
-                    principal: principal.trim(),
-                    permissions: []
-                };
-
-                if (permission1) {
-                    entry.permissions.push(...this.parsePermissionString(permission1));
-                }
-                if (permission2) {
-                    entry.permissions.push(...this.parsePermissionString(permission2));
-                }
-
-                permissions.push(entry);
-            }
-        }
-
-        return { permissions, inheritance };
-    }
-
-    /**
-     * Parse permission string into structured format
-     */
-    private parsePermissionString(permStr: string): Permission[] {
-        const permissions: Permission[] = [];
-        const parts = permStr.split(',');
-
-        parts.forEach(part => {
-            const trimmedPart = part.trim();
-            if (trimmedPart) {
-                permissions.push({
-                    code: trimmedPart,
-                    description: PERMISSION_MAP[trimmedPart] || trimmedPart
-                });
-            }
-        });
-
-        return permissions;
-    }
-
-    /**
-     * Check if two permission arrays are equal
-     */
-    private arePermissionsEqual(perms1: Permission[], perms2: Permission[]): boolean {
-        if (perms1.length !== perms2.length) return false;
-
-        const codes1 = perms1.map(p => p.code).sort();
-        const codes2 = perms2.map(p => p.code).sort();
-
-        return codes1.every((code, index) => code === codes2[index]);
-    }
 }
 
-// Export standalone functions for backward compatibility
-export async function getFileACL(filePath: string, options?: GetACLOptions): Promise<ACLData> {
-    const aclOps = new ACLOperations();
-    return aclOps.getFileACL(filePath, options);
-}
-
+// Export standalone functions
 export async function stampFileACL(
     sourceFile: string,
     targetFile: string,
@@ -673,24 +631,7 @@ export async function compareFileACLs(
     return aclOps.compareFileACLs(sourceFile, targetFile, options);
 }
 
-export async function exportFileACL(
-    filePath: string,
-    options?: GetACLOptions
-): Promise<ExportedACL> {
-    const aclOps = new ACLOperations();
-    return aclOps.exportFileACL(filePath, options);
-}
-
-export async function importFileACL(
-    targetFile: string,
-    aclData: ExportedACL,
-    options?: { simulate?: boolean }
-): Promise<StampResult> {
-    const aclOps = new ACLOperations();
-    return aclOps.importFileACL(targetFile, aclData, options);
-}
-
-// Re-export all types
+// Re-export types
 export type {
     Permission,
     ACLEntry,
@@ -698,7 +639,6 @@ export type {
     Operation,
     StampResult,
     StampOptions,
-    ExportedACL,
     RedisService,
     GetACLOptions,
     ComparisonResult
