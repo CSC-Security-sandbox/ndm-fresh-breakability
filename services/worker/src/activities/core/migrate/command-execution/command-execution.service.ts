@@ -211,10 +211,7 @@ export class CommandExecService {
         if (item.sourceMeta.permission !== item.targetMeta.permission) 
             validateMisMatch += `Permission Mismatch detected, source: ${item.sourceMeta.permission}, target: ${item.targetMeta.permission} \n`;
         
-        if (item.sourceMeta.birthTime.getTime() !== item.targetMeta.birthTime.getTime())
-            validateMisMatch += `BirthTime Mismatch detected, source: ${item.sourceMeta.birthTime.toISOString()}, target: ${item.targetMeta.birthTime.toISOString()} \n`;
-
-        if (item.sourceMeta.accessTime.getTime() !== item.targetMeta.accessTime.getTime())
+        if (jobContext.jobConfig.options.preserveAccessTime &&  item.sourceMeta.accessTime.getTime() !== item.targetMeta.accessTime.getTime())
             validateMisMatch += `AccessTime Mismatch detected, source: ${item.sourceMeta.accessTime.toISOString()}, target: ${item.targetMeta.accessTime.toISOString()} \n`;
 
         if(cmd.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.failedSid?.length > 0) 

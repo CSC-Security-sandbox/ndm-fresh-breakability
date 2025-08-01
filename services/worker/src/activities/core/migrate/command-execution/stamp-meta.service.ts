@@ -32,37 +32,53 @@ export class StampMetaService {
             input.command.ops[OPS_CMD.STAMP_META].status !== OPS_STATUS.COMPLETED
         ) {
 
-            // Stamp GID and UID
-            const gidUidOutput = await this.stampGIDandUID(input);
-            output.sourceErrors.push(...gidUidOutput.sourceErrors);
-            output.targetErrors.push(...gidUidOutput.targetErrors);
+            if(process.platform === 'win32') {
+                // Stamp SID to object
+                const sidOutput = await this.stampSIDAclToObject(input);
+                output.sourceErrors.push(...sidOutput.sourceErrors);
+                output.targetErrors.push(...sidOutput.targetErrors);
 
-            // Stamp SID to object
-            const sidOutput = await this.stampSIDAclToObject(input);
-            output.sourceErrors.push(...sidOutput.sourceErrors);
-            output.targetErrors.push(...sidOutput.targetErrors);
+                // Stamp Hidden Metadata
+                const hiddenAttrOutput = await this.stampFileAttrMeta(input);
+                output.sourceErrors.push(...hiddenAttrOutput.sourceErrors);
+                output.targetErrors.push(...hiddenAttrOutput.targetErrors);      
+                
+                // Preserve access and modified time
+                const preserveTimeOutput = await this.preserveAccessAndModifiedTime(input);
+                output.sourceErrors.push(...preserveTimeOutput.sourceErrors);
+                output.targetErrors.push(...preserveTimeOutput.targetErrors);
 
-            // Preserve access and modified time
-            const preserveTimeOutput = await this.preserveAccessAndModifiedTime(input);
-            output.sourceErrors.push(...preserveTimeOutput.sourceErrors);
-            output.targetErrors.push(...preserveTimeOutput.targetErrors);
+                // Stamp access and modified time
+                const timeOutput = await this.stampAccessAndModifiedTime(input);
+                output.sourceErrors.push(...timeOutput.sourceErrors);
+                output.targetErrors.push(...timeOutput.targetErrors);
 
-            // Stamp access and modified time
-            const timeOutput = await this.stampAccessAndModifiedTime(input);
-            output.sourceErrors.push(...timeOutput.sourceErrors);
-            output.targetErrors.push(...timeOutput.targetErrors);
+                // Stamp permissions
+                const permissionsOutput = await this.stampPermission(input);
+                output.sourceErrors.push(...permissionsOutput.sourceErrors);
+                output.targetErrors.push(...permissionsOutput.targetErrors);
+            }
+            else {
+                // Stamp GID and UID
+                const gidUidOutput = await this.stampGIDandUID(input);
+                output.sourceErrors.push(...gidUidOutput.sourceErrors);
+                output.targetErrors.push(...gidUidOutput.targetErrors);
 
-             // Stamp Hidden Metadata
-            const hiddenAttrOutput = await this.stampFileAttrMeta(input);
-            output.sourceErrors.push(...hiddenAttrOutput.sourceErrors);
-            output.targetErrors.push(...hiddenAttrOutput.targetErrors);            
+                // Preserve access and modified time
+                const preserveTimeOutput = await this.preserveAccessAndModifiedTime(input);
+                output.sourceErrors.push(...preserveTimeOutput.sourceErrors);
+                output.targetErrors.push(...preserveTimeOutput.targetErrors);
 
-             // Stamp permissions
-            const permissionsOutput = await this.stampPermission(input);
-            output.sourceErrors.push(...permissionsOutput.sourceErrors);
-            output.targetErrors.push(...permissionsOutput.targetErrors);
+                  // Stamp access and modified time
+                const timeOutput = await this.stampAccessAndModifiedTime(input);
+                output.sourceErrors.push(...timeOutput.sourceErrors);
+                output.targetErrors.push(...timeOutput.targetErrors);
 
-
+                 // Stamp permissions
+                const permissionsOutput = await this.stampPermission(input);
+                output.sourceErrors.push(...permissionsOutput.sourceErrors);
+                output.targetErrors.push(...permissionsOutput.targetErrors);
+            }               
         }
         
         // Only update status if the operation exists
@@ -126,7 +142,7 @@ export class StampMetaService {
                 output.targetErrors.push(error.code);
             }
         }
-         return output;
+        return output;
     }
 
     async preserveAccessAndModifiedTime({command, jobContext, sourcePath, targetPath, errorType}: CommandExecInput): Promise<StampMetaOutput> {  
@@ -141,7 +157,7 @@ export class StampMetaService {
                 output.sourceErrors.push(error.code);
             }
         }
-         return output;
+        return output;
     }
 
     async stampSIDAclToObject({command, jobContext, sourcePath, targetPath, errorType}: CommandExecInput): Promise<StampMetaOutput> {

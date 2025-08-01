@@ -131,6 +131,7 @@ export class MigrateScanService {
                 throw error; 
             }
         }
+        
         if (jobContext?.jobConfig?.skipDelete === false) {
             //TODO: remove command as it is not required. 
             await this.processDeletedItems({

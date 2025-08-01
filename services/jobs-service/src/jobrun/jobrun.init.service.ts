@@ -216,9 +216,8 @@ export class JobRunInitService {
     }
     const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
     const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
-    const skipDelete : boolean = !(jobConfig?.futureScheduleAt !== null || jobConfig?.jobType === JobType.CUT_OVER);
-
-
+    // skip if job Is migration and futureScheduleAt is not set or empty
+    const skipDelete : boolean = jobConfig?.jobType === JobType.MIGRATE && (!jobConfig?.futureScheduleAt || jobConfig?.futureScheduleAt === "")
     const details: JobRunConfig = {
       preserveAccessTime: jobConfig.preserveAccessTime,
       excludeFilePatterns: jobConfig.excludeFilePatterns,
