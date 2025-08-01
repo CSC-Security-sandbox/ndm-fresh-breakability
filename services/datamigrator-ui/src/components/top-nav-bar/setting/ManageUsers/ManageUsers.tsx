@@ -45,9 +45,8 @@ const ManageUsers = () => {
         notify.success(res?.message);
       })
       .catch((err) => {
-        console.log("error", err);
-        const errorDetails = err.data?.error;
-        notify.error(errorDetails?.message);
+        console.error('error', err);
+        notify.error(err?.error || err?.message || "Failed to update user status");
       });
   };
 
@@ -78,7 +77,7 @@ const ManageUsers = () => {
           .unwrap()
           .then((res) => {
             setIsCreateFormVisible(true);
-            setTemporaryPassword(decryptData(res?.data?.items?.newPassword));
+            setTemporaryPassword(decryptData(res?.newPassword));
           })
           .catch((err) => {
             notify.error(err.message);
@@ -94,7 +93,7 @@ const ManageUsers = () => {
   };
   const tableStateProps = {
     columns: COL_DEF_FOR_USER,
-    rows: userData?.data?.items || [],
+    rows: userData || [],
     isSorting: true,
     pageSize: 10,
     defaultColumnState: DEFAULT_COLUMN_STATE,

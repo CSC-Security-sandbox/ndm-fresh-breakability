@@ -751,123 +751,219 @@ describe('CommandExecService', () => {
             expect(result.sourceErrors).toEqual([]);
             expect(result.targetErrors).toEqual([]);
         });
-    });
 
-    describe('validateCommand', () => {
-        const mockItemInfo = {
+        describe('publishFileInfo', () => {
+            const createMockCommand = () => ({
+            id: 'cmd-1',
+            fPath: '/test.txt',
+            status: CommandStatus.READY,
+            isDir: false,
+            ops: {
+                [OPS_CMD.COPY_FILE]: {
+                status: OPS_STATUS.COMPLETED,
+                params: {
+                    checksums: {
+                    sourceChecksum: 'src-checksum',
+                    targetChecksum: 'tgt-checksum'
+                    }
+                }
+                },
+                [OPS_CMD.STAMP_META]: {
+                params: {
+                    sidMap: {
+                    sourceAcl: 'source-sid',
+                    targetAcl: 'target-sid'
+                    }
+                }
+                }
+            },
+            metadata: {
+                size: 1024,
+                mtime: new Date(),
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+                mode: 644,
+                uid: 1000,
+                gid: 1000,
+                sid: 'test-sid'
+            },
+            serialize: jest.fn(),
+            });
+
+            const mockSourceStats = {
+            atime: new Date('2023-01-01T00:00:00Z'),
+            birthtime: new Date('2023-01-01T00:00:00Z'),
+            mtime: new Date('2023-01-01T00:00:00Z'),
+            isDirectory: jest.fn().mockReturnValue(false),
+            uid: 1000,
+            gid: 1000,
+            };
+            const mockTargetStats = {
+            atime: new Date('2023-01-01T00:00:00Z'),
+            birthtime: new Date('2023-01-01T00:00:00Z'),
+            mtime: new Date('2023-01-01T00:00:00Z'),
+            isDirectory: jest.fn().mockReturnValue(false),
+            isSymbolicLink: jest.fn().mockReturnValue(false),
+            uid: 1000,
+            gid: 1000,
+            size: 1024,
+            };
+
+            beforeEach(() => {
+            (fs.promises.lstat as jest.Mock)
+                .mockResolvedValueOnce(mockSourceStats)
+                .mockResolvedValueOnce(mockTargetStats);
+            (getFilePermissions as jest.Mock).mockReturnValue('755');
+            (getFileType as jest.Mock).mockReturnValue('file');
+            (path.extname as jest.Mock).mockReturnValue('.txt');
+            });
+
+            it('should publish file info and validate command', async () => {
+            const command = createMockCommand();
+            const input = {
+                command,
+                jobContext: mockJobContext,
+                sourcePath: '/source/test.txt',
+                targetPath: '/target/test.txt',
+                errorType: ErrorType.RECOVERABLE_ERROR,
+            };
+            jest.spyOn(service, 'validateCommand').mockResolvedValue();
+
+            await service.publishFileInfo(input as any);
+
+            expect(fs.promises.lstat).toHaveBeenCalledWith('/source/test.txt');
+            expect(fs.promises.lstat).toHaveBeenCalledWith('/target/test.txt');
+            expect(getFilePermissions).toHaveBeenCalledTimes(2);
+            expect(getFileType).toHaveBeenCalledWith(mockTargetStats, false);
+            expect(path.extname).toHaveBeenCalledWith('/target/test.txt');
+            expect(service.validateCommand).toHaveBeenCalled();
+            expect(mockJobContext.publishToFileStream).toHaveBeenCalledWith(expect.any(Object));
+            });
+        });
+
+        describe('validateCommand', () => {
+            const baseCmd = {
+            id: 'cmd-1',
+            fPath: '/test.txt',
+            ops: {
+                [OPS_CMD.STAMP_META]: {
+                params: {
+                    sidMap: {}
+                }
+                }
+            }
+            };
+            const baseItem = {
             fileName: '/test.txt',
             sourceMeta: {
-                checksum: 'checksum-1',
-                permission: '644',
-                birthTime: new Date('2023-01-01'),
-                accessTime: new Date('2023-01-01'),
+                checksum: 'abc',
+                permission: '755',
+                accessTime: new Date('2023-01-01T00:00:00Z')
             },
             targetMeta: {
-                checksum: 'checksum-1',
-                permission: '644',
-                birthTime: new Date('2023-01-01'),
-                accessTime: new Date('2023-01-01'),
-            },
-        };
-
-        const baseValidateInput = {
-            cmd: {
-                id: 'cmd-1',
-                fPath: '/test.txt',
-            } as any,
-            item: mockItemInfo as any,
-            jobContext: mockJobContext,
-            errorType: ErrorType.RECOVERABLE_ERROR,
-        };
-
-        it('should not report errors when metadata matches', async () => {
-            await service.validateCommand(baseValidateInput);
-
-            expect(mockJobContext.publishToErrorStream).not.toHaveBeenCalled();
-        });
-
-        it('should report checksum mismatch', async () => {
-            const input = {
-                cmd: {
-                    id: 'cmd-1',
-                    fPath: '/test.txt',
-                } as any,
-                item: {
-                    fileName: '/test.txt',
-                    sourceMeta: {
-                        checksum: 'checksum-1',
-                        permission: '644',
-                        birthTime: new Date('2023-01-01'),
-                        accessTime: new Date('2023-01-01'),
-                    },
-                    targetMeta: {
-                        checksum: 'different-checksum',
-                        permission: '644',
-                        birthTime: new Date('2023-01-01'),
-                        accessTime: new Date('2023-01-01'),
-                    },
-                } as any,
-                jobContext: mockJobContext,
-                errorType: ErrorType.RECOVERABLE_ERROR,
+                checksum: 'abc',
+                permission: '755',
+                accessTime: new Date('2023-01-01T00:00:00Z')
+            }
+            };
+            const jobContext = {
+            publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+            jobConfig: {
+                options: {
+                preserveAccessTime: false
+                }
+            }
             };
 
-            dmError.mockReturnValue({});
+            beforeEach(() => {
+            (dmError as jest.Mock).mockReturnValue({});
+            });
 
-            await service.validateCommand(input);
+            it('should not publish error if no mismatches', async () => {
+            await service.validateCommand({
+                cmd: baseCmd as any,
+                item: baseItem as any,
+                jobContext,
+                errorType: ErrorType.RECOVERABLE_ERROR
+            }as any);
+            expect(jobContext.publishToErrorStream).not.toHaveBeenCalled();
+            });
 
-            expect(dmError).toHaveBeenCalledWith(
-                "OPERATION",
-                "Destination",
-                "Update Metadata",
-                ErrorType.RECOVERABLE_ERROR,
-                'cmd-1',
-                expect.any(Error),
-                { name: '/test.txt', path: '/test.txt' }
-            );
-            expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
-        });
-
-        it('should report multiple mismatches', async () => {
-            const input = {
-                cmd: {
-                    id: 'cmd-1',
-                    fPath: '/test.txt',
-                } as any,
-                item: {
-                    fileName: '/test.txt',
-                    sourceMeta: {
-                        checksum: 'checksum-1',
-                        permission: '644',
-                        birthTime: new Date('2023-01-01'),
-                        accessTime: new Date('2023-01-01'),
-                    },
-                    targetMeta: {
-                        checksum: 'different-checksum',
-                        permission: '755',
-                        birthTime: new Date('2023-01-02'),
-                        accessTime: new Date('2023-01-01'),
-                    },
-                } as any,
-                jobContext: mockJobContext,
-                errorType: ErrorType.RECOVERABLE_ERROR,
+            it('should publish error if checksum mismatch', async () => {
+            const item = {
+                ...baseItem,
+                sourceMeta: { ...baseItem.sourceMeta, checksum: 'abc' },
+                targetMeta: { ...baseItem.targetMeta, checksum: 'def' }
             };
+            await service.validateCommand({
+                cmd: baseCmd as any,
+                item: item as any,
+                jobContext,
+                errorType: ErrorType.RECOVERABLE_ERROR
+            } as any);
+            expect(jobContext.publishToErrorStream).toHaveBeenCalled();
+            });
 
-            dmError.mockReturnValue({});
+            it('should publish error if permission mismatch', async () => {
+            const item = {
+                ...baseItem,
+                sourceMeta: { ...baseItem.sourceMeta, permission: '755' },
+                targetMeta: { ...baseItem.targetMeta, permission: '644' }
+            };
+            await service.validateCommand({
+                cmd: baseCmd as any,
+                item: item as any,
+                jobContext,
+                errorType: ErrorType.RECOVERABLE_ERROR
+            }as any);
+            expect(jobContext.publishToErrorStream).toHaveBeenCalled();
+            });
 
-            await service.validateCommand(input);
+            it('should publish error if accessTime mismatch and preserveAccessTime is true', async () => {
+            const item = {
+                ...baseItem,
+                sourceMeta: { ...baseItem.sourceMeta, accessTime: new Date('2023-01-01T00:00:00Z') },
+                targetMeta: { ...baseItem.targetMeta, accessTime: new Date('2023-01-02T00:00:00Z') }
+            };
+            const ctx = {
+                ...jobContext,
+                jobConfig: {
+                options: {
+                    preserveAccessTime: true
+                }
+                }
+            };
+            await service.validateCommand({
+                cmd: baseCmd as any,
+                item: item as any,
+                jobContext: ctx,
+                errorType: ErrorType.RECOVERABLE_ERROR
+            }as any);
+            expect(ctx.publishToErrorStream).toHaveBeenCalled();
+            });
 
-            expect(dmError).toHaveBeenCalledWith(
-                "OPERATION",
-                "Destination", 
-                "Update Metadata",
-                ErrorType.RECOVERABLE_ERROR,
-                'cmd-1',
-                expect.objectContaining({
-                    message: expect.stringContaining('checksum'),
-                }),
-                { name: '/test.txt', path: '/test.txt' }
-            );
-            expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
+            it('should publish error if SID mapping failed', async () => {
+            const cmd = {
+                ...baseCmd,
+                ops: {
+                [OPS_CMD.STAMP_META]: {
+                    params: {
+                    sidMap: {
+                        failedSid: ['sid1', 'sid2']
+                    }
+                    }
+                }
+                }
+            };
+            await service.validateCommand({
+                cmd: cmd as any,
+                item: baseItem as any,
+                jobContext,
+                errorType: ErrorType.RECOVERABLE_ERROR
+            } as any);
+            expect(jobContext.publishToErrorStream).toHaveBeenCalled();
+            });
         });
     });
 });
