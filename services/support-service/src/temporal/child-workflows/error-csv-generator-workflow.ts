@@ -3,11 +3,15 @@ import { ActivitiesService } from 'src/activities/activities.service';
 
 const { generateErrorCsv } =
   proxyActivities<ActivitiesService>({
-    startToCloseTimeout: '1 minute',
+    startToCloseTimeout: '4h',
+    retry: {
+      maximumAttempts: 3,
+      maximumInterval: '3s',
+    },
   });
 
-export const ErrorCsvGeneratorWorkflow = async ({ traceId, payload }) => {
-  log.info(`[${traceId}] Starting Error CSV Generation`);
+export const ErrorLogsCsvGeneratorWorkflow = async ({ traceId, payload }) => {
+  log.info(`[${traceId}] Starting Error Logs CSV Generation`);
 
   try {
     const result = await generateErrorCsv({ traceId, payload });

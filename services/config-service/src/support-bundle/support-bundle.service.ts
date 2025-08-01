@@ -109,7 +109,7 @@ export class SupportBundleService {
     );
 
     if (result.affected === 0) {
-      throw new Error(
+      throw new NotFoundException(
         `Support bundle not found for traceId: ${updateStatusDto.traceId}`,
       );
     }
@@ -122,34 +122,28 @@ export class SupportBundleService {
       select: ['status', 'errorMessage'],
     });
 
+    const defaultResponse: BundleStatus = {
+      isProcessing: false,
+      isBundleReady: false,
+      error: null,
+    };
+
     if (!user) {
-      return {
-        isProcessing: false,
-        isBundleReady: false,
-        error: '',
-      };
+      return defaultResponse;
     }
 
     switch (user.status) {
       case SupportBundleStatus.COMPLETED:
-        return { isProcessing: false, isBundleReady: true, error: null };
+        return { ...defaultResponse, isBundleReady: true };
 
       case SupportBundleStatus.IN_PROGRESS:
-        return { isProcessing: true, isBundleReady: false, error: null };
+        return { ...defaultResponse, isProcessing: true };
 
       case SupportBundleStatus.FAILED:
-        return {
-          isProcessing: false,
-          isBundleReady: false,
-          error: user.errorMessage,
-        };
+        return { ...defaultResponse, error: user.errorMessage };
 
       default:
-        return {
-          isProcessing: false,
-          isBundleReady: false,
-          error: null,
-        };
+        return defaultResponse;
     }
   }
 

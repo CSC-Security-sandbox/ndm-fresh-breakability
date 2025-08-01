@@ -1,6 +1,6 @@
 import { startChild, log, proxyActivities } from '@temporalio/workflow';
 import { LogGeneratorWorkflow } from './child-workflows/log-generator-workflow';
-import { ErrorCsvGeneratorWorkflow } from './child-workflows/error-csv-generator-workflow';
+import { ErrorLogsCsvGeneratorWorkflow } from './child-workflows/error-csv-generator-workflow';
 import { SupportBundleStatus } from 'src/constants/enum';
 import { ActivitiesService } from 'src/activities/activities.service';
 import { ConfigurationDataCsvGeneratorWorkflow } from './child-workflows/configuration-data-csv-workflow';
@@ -15,67 +15,52 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
   const workflowResults: string[] = [];
 
   try {
-    const logGeneratorChild = await startChild(LogGeneratorWorkflow, {
+    const logGeneratorWorkflow = await startChild(LogGeneratorWorkflow, {
       args: [{ traceId, payload }],
       workflowId: `LogGeneratorWorkflow-${traceId}`,
-      retry: {
-        maximumAttempts: 3,
-        initialInterval: '2s',
-      },
-      workflowExecutionTimeout: '30s',
     });
 
-    const logGeneratorResult = await logGeneratorChild.result();
+    const logGeneratorWorkflowResult = await logGeneratorWorkflow.result();
 
-    log.info(`logGeneratorResult - ${JSON.stringify(logGeneratorResult)}`);
-    if (!logGeneratorResult.success) {
-      log.info(`Error occured in LogGeneratorWorkflow: ${logGeneratorResult.message}`);
-      throw { message: logGeneratorResult.message };
+    log.info(`logGeneratorWorkflowResult - ${JSON.stringify(logGeneratorWorkflowResult)}`);
+    if (!logGeneratorWorkflowResult.success) {
+      log.info(`Error occured in LogGeneratorWorkflow: ${logGeneratorWorkflowResult.message}`);
+      throw { message: logGeneratorWorkflowResult.message };
     }
 
-    payload.zipLocation = logGeneratorResult.message;
-    workflowResults.push(logGeneratorResult.message);
+    payload.zipLocation = logGeneratorWorkflowResult.message;
+    workflowResults.push(logGeneratorWorkflowResult.message);
 
-    const errorCsvChild = await startChild(ErrorCsvGeneratorWorkflow, {
+    const errorLogsCsvGeneratorWorkflow = await startChild(ErrorLogsCsvGeneratorWorkflow, {
       args: [{ traceId, payload }],
       workflowId: `ErrorCsvWorkflow-${traceId}`,
-      retry: {
-        maximumAttempts: 3,
-        initialInterval: '2s',
-      },
-      workflowExecutionTimeout: '3m',
     });
 
-    const errorCsvResult = await errorCsvChild.result();
+    const errorLogsCsvGeneratorWorkflowResult = await errorLogsCsvGeneratorWorkflow.result();
 
-    if (!errorCsvResult.success) {
-      log.info(`Error occured in ErrorCsvGeneratorWorkflow: ${errorCsvResult.message}`);
-      throw { message: errorCsvResult.message };
+    if (!errorLogsCsvGeneratorWorkflowResult.success) {
+      log.info(`Error occured in ErrorCsvGeneratorWorkflow: ${errorLogsCsvGeneratorWorkflowResult.message}`);
+      throw { message: errorLogsCsvGeneratorWorkflowResult.message };
     }
 
-    workflowResults.push(errorCsvResult.message);
+    workflowResults.push(errorLogsCsvGeneratorWorkflowResult.message);
 
-    const configurationDataCsvChild = await startChild(
+    const configurationDataCsvGeneratorWorkflow = await startChild(
       ConfigurationDataCsvGeneratorWorkflow,
       {
         args: [{ traceId, payload }],
-        workflowId: `ConfigurationDataCsvWorkflow-${traceId}`,
-        retry: {
-          maximumAttempts: 3,
-          initialInterval: '2s',
-        },
-        workflowExecutionTimeout: '3m',
+        workflowId: `ConfigurationDataCsvGeneratorWorkflow-${traceId}`,
       },
     );
 
-    const configurationDataCsvResult = await configurationDataCsvChild.result();
+    const configurationDataCsvGeneratorWorkflowResult = await configurationDataCsvGeneratorWorkflow.result();
 
-    if (!configurationDataCsvResult.success) {
-      log.info(`Error occured in ConfigurationDataCsvGeneratorWorkflow: ${configurationDataCsvResult.message}`);
-      throw { message: configurationDataCsvResult.message };
+    if (!configurationDataCsvGeneratorWorkflowResult.success) {
+      log.info(`Error occured in ConfigurationDataCsvGeneratorWorkflow: ${configurationDataCsvGeneratorWorkflowResult.message}`);
+      throw { message: configurationDataCsvGeneratorWorkflowResult.message };
     }
 
-    workflowResults.push(configurationDataCsvResult.message);
+    workflowResults.push(configurationDataCsvGeneratorWorkflowResult.message);
 
     await notifyWorkflowCompletion({
       traceId,

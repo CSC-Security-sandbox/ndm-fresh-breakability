@@ -373,7 +373,7 @@ describe('SupportBundleService', () => {
       expect(result).toEqual({
         isProcessing: false,
         isBundleReady: false,
-        error: '',
+        error: null,
       });
     });
   });

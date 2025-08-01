@@ -3,7 +3,11 @@ import { ActivitiesService } from 'src/activities/activities.service';
 
 const { generateConfigurationDataCsv, generateConfigurationJobCsv } =
   proxyActivities<ActivitiesService>({
-    startToCloseTimeout: '1 minute',
+    startToCloseTimeout: '4h',
+    retry: {
+      maximumAttempts: 3,
+      maximumInterval: '3s',
+    },
   });
 
 export const ConfigurationDataCsvGeneratorWorkflow = async ({

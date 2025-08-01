@@ -431,6 +431,7 @@
    <changeSet id="20250714_01_create_support_bundle_table.sql" author="aniketd">
       <sqlFile path="liquibase/20250714_01_create_support_bundle_table.sql" splitStatements="false"/>
       <rollback>
+         <sqlFile path="liquibase/20250714_01_create_support_bundle_table_rollback.sql"/>
       </rollback>
    </changeSet>
 
