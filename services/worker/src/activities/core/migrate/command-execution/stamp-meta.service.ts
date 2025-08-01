@@ -232,12 +232,18 @@ export class StampMetaService {
 
             // Track critical failures only
             const criticalErrors: string[] = [];
+            const denyOperations: any[] = [];
 
             stampData.operations.forEach(op => {
                 if (op.type === 'grant' && op.status === 'completed') {
                     grantCount++;
                 } else if (op.type === 'deny' && op.status === 'completed') {
                     denyCount++;
+                    denyOperations.push(op);
+                } else if (op.type === 'deny' && op.status === 'failed') {
+                    failCount++;
+                    denyOperations.push(op);
+                    criticalErrors.push(`DENY ${op.principal}: ${op.error}`);
                 } else if (op.type === 'skip') {
                     skipCount++;
                 } else if (op.status === 'failed') {
@@ -248,6 +254,13 @@ export class StampMetaService {
                     }
                 }
             });
+
+            // Always log if there were deny operations attempted
+            if (denyOperations.length > 0) {
+                const successfulDeny = denyOperations.filter(op => op.status === 'completed').length;
+                const failedDeny = denyOperations.filter(op => op.status === 'failed').length;
+                this.logger.log(`Deny permissions for ${targetPath}: ${successfulDeny} successful, ${failedDeny} failed out of ${denyOperations.length} total`);
+            }
 
             // Skip comparison for performance in production unless there were failures
             if (failCount > 0 && criticalErrors.length > 0) {

@@ -235,6 +235,12 @@ export class ACLOperations {
                 return 0;
             });
             
+            // Log deny permissions for debugging
+            const denyPermissions = sortedPermissions.filter(p => p.accessType === 'deny');
+            if (denyPermissions.length > 0) {
+                console.log(`Found ${denyPermissions.length} deny permissions to apply for ${targetPath}`);
+            }
+            
             for (const permission of sortedPermissions) {
                 const { principal, originalPrincipal, permissions, accessType } = permission;
 
