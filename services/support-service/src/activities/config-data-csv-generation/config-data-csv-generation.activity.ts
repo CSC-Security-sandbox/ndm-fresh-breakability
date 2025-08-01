@@ -11,6 +11,7 @@ import {
   MASK_VALUE,
   SENSITIVE_PATTERNS,
 } from 'src/constants/constants';
+import { SQL_QUERIES } from 'src/constants/sql-queries';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { DataSource, In, Repository } from 'typeorm';
 
@@ -33,14 +34,10 @@ export class ConfigurationDataCsvGenerationActivity {
     traceId: string;
     payload: any;
   }) {
-    const workerQuery = `
-      SELECT w.id as worker_id
-      FROM datamigrator.project p
-      INNER JOIN datamigrator.worker w ON p.id = w.project_id
-      ORDER BY w.id`;
-
-    const workerResult = await this.dataSource.query(workerQuery);
-    const workerIds = workerResult.map((row: any) => row.worker_id);
+    const workerDetails = await this.dataSource.query(
+      SQL_QUERIES.GET_WORKER_IDS,
+    );
+    const workerIds = workerDetails.map((row: any) => row.worker_id);
 
     if (
       workerIds?.length > 0 &&
@@ -58,12 +55,10 @@ export class ConfigurationDataCsvGenerationActivity {
     traceId: string;
     payload: any;
   }) {
-    const projectQuery = `
-      SELECT id as project_id
-      FROM datamigrator.project`;
-
-    const projectResult = await this.dataSource.query(projectQuery);
-    const projectIds = projectResult.map((row: any) => row.project_id);
+    const projectDetails = await this.dataSource.query(
+      SQL_QUERIES.GET_PROJECT_IDS,
+    );
+    const projectIds = projectDetails.map((row: any) => row.project_id);
 
     if (
       projectIds?.length > 0 &&
@@ -106,40 +101,14 @@ export class ConfigurationDataCsvGenerationActivity {
     this.logger.log(`Fetching job config details for projects: ${projectIds}`);
 
     try {
-      const placeholders = projectIds
-        .map((_, index) => `$${index + 1}`)
-        .join(',');
-      const query = `
-        SELECT 
-          p.id as "Project Id",
-          p.project_name as "Project Name",
-          p.project_description as "Project Description",
-          c.id as "Config Id",
-          c.config_name as "Config Name",
-          fs.id as "File Server Id",
-          fs.hostname as "File Server Hostname",
-          fs.username as "File Server Username",
-          fs.protocol as "File Server Protocol",
-          fs.server_type as "File Server Type",
-          fs.protocol_version as "File Server Protocol Version",
-          fs.export_path_source as "Export Path Source",
-          v.volume_path as "Volume Path",
-          jc.id as "JobConfig Id",
-          jc.job_type as "Job Type",
-          jc.status as "Job Status",
-          jc.exclude_file_patterns as "Exclude File Patterns"
-        FROM datamigrator.jobconfig jc
-          LEFT JOIN datamigrator.volume v ON jc.source_path_id = v.id
-          LEFT JOIN datamigrator.file_server fs ON v.file_server_id = fs.id
-          LEFT JOIN datamigrator.config c ON fs.config_id = c.id
-          LEFT JOIN datamigrator.project p ON c.project_id = p.id
-        WHERE p.id IN (${placeholders})
-          AND v.volume_path IS NOT NULL 
-          AND TRIM(v.volume_path) != ''
-        ORDER BY jc.id
-      `;
+      const jobConfigDetails =
+        SQL_QUERIES.GET_JOB_CONFIG_DETAILS_WITH_DATE_FILTER;
 
-      const result = await this.dataSource.query(query, projectIds);
+      const result = await this.dataSource.query(jobConfigDetails, [
+        payload.startDate,
+        payload.endDate,
+      ]);
+
       this.logger.log(
         `Found ${result.length} job config records with valid volume paths`,
       );
@@ -330,75 +299,6 @@ export class ConfigurationDataCsvGenerationActivity {
   private containsSensitiveData(key: string): boolean {
     const upperKey = key.toUpperCase();
     return SENSITIVE_PATTERNS.some((pattern) => upperKey.includes(pattern));
-  }
-
-  async getJobConfigDetails(
-    projectIds: string[],
-    payload: any,
-  ): Promise<any[]> {
-    this.logger.log(
-      `Fetching job config details for projects: ${projectIds.join(', ')}`,
-    );
-
-    try {
-      const placeholders = projectIds
-        .map((_, index) => `$${index + 1}`)
-        .join(',');
-
-      const query = `
-        SELECT 
-          p.id as "Project Id",
-          p.project_name as "Project Name",
-          p.project_description as "Project Description",
-          c.id as "Config Id",
-          c.config_name as "Config Name",
-          fs.id as "File Server Id",
-          fs.hostname as "File Server Hostname",
-          fs.username as "File Server Username",
-          fs.protocol as "File Server Protocol",
-          fs.server_type as "File Server Type",
-          fs.protocol_version as "File Server Protocol Version",
-          fs.export_path_source as "Export Path Source",
-          v.volume_path as "Volume Path",
-          jc.id as "JobConfig Id",
-          jc.job_type as "Job Type",
-          jc.status as "Job Status",
-          jc.exclude_file_patterns as "Exclude File Patterns",
-          jc.created_at as "JobConfig Created At",
-          jc.updated_at as "JobConfig Updated At"
-        FROM datamigrator.project p
-          LEFT JOIN datamigrator.config c ON p.id = c.project_id
-          LEFT JOIN datamigrator.file_server fs ON c.id = fs.config_id
-          LEFT JOIN datamigrator.volume v ON fs.id = v.file_server_id
-          LEFT JOIN datamigrator.jobconfig jc ON v.id = jc.source_path_id
-        WHERE v.volume_path IS NOT NULL 
-          AND TRIM(v.volume_path) != ''
-          AND (
-            (jc.created_at >= $1 AND jc.created_at <= $2) OR
-            (jc.updated_at >= $1 AND jc.updated_at <= $2)
-          )
-        ORDER BY jc.id
-      `;
-
-      const result = await this.dataSource.query(query, [
-        payload.startDate,
-        payload.endDate,
-      ]);
-
-      this.logger.log(
-        `Found ${result.length} job config records with valid volume paths`,
-      );
-      console.log('Job Config Details:----', JSON.stringify(result, null, 2));
-
-      if (result.length > 0) {
-        await this.createJobConfigCsvFile(result, payload);
-      }
-
-      return result;
-    } catch (error) {
-      this.logger.error('Error fetching job config details:', error);
-      throw new Error(`Failed to fetch job config details: ${error.message}`);
-    }
   }
 
   private async createJobConfigCsvFile(
