@@ -178,7 +178,11 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
   describe('generateJobConfigCsv', () => {
     it('should generate job config CSV successfully', async () => {
       const projectIds = ['project-1', 'project-2'];
-      const payload = { zipLocation: '/path/to/zip' };
+      const payload = {
+        zipLocation: '/path/to/zip',
+        startDate: '2024-01-01',
+        endDate: '2024-12-31',
+      };
 
       mockDataSource.query.mockResolvedValue(mockJobConfigData);
       jest
@@ -190,7 +194,7 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
 
       expect(mockDataSource.query).toHaveBeenCalledWith(
         expect.stringContaining('SELECT'),
-        projectIds,
+        [payload.startDate, payload.endDate],
       );
       expect(service['createJobConfigCsvContent']).toHaveBeenCalledWith(
         mockJobConfigData,
@@ -459,19 +463,29 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
     });
   });
 
-  describe('getJobConfigDetails', () => {
+  describe('generateConfigurationJobCsv', () => {
     it('should not create CSV file when no data found', async () => {
-      const projectIds = ['project-1'];
-      const payload = { zipLocation: '/path/to/zip' };
+      const traceId = 'test-trace-id';
+      const payload = {
+        zipLocation: '/path/to/zip',
+        startDate: '2023-01-01',
+        endDate: '2023-12-31',
+        otherMetrics: ['Configuration Data'],
+      };
 
       mockDataSource.query.mockResolvedValue([]);
       jest
         .spyOn(service as any, 'createJobConfigCsvFile')
         .mockResolvedValue(undefined);
 
-      const result = await service.getJobConfigDetails(projectIds, payload);
+      const result = await service.generateConfigurationJobCsv({
+        traceId,
+        payload,
+      });
 
-      expect(result).toEqual([]);
+      expect(result).toBe(
+        'Configuration data CSV generation completed successfully',
+      );
       expect(service['createJobConfigCsvFile']).not.toHaveBeenCalled();
     });
   });
@@ -544,7 +558,11 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
   describe('generateJobConfigCsv - Error Handling (Lines 156-157)', () => {
     it('should handle database query errors and throw descriptive error', async () => {
       const projectIds = ['project-1', 'project-2'];
-      const payload = { zipLocation: '/path/to/zip' };
+      const payload = {
+        zipLocation: '/path/to/zip',
+        startDate: '2024-01-01',
+        endDate: '2024-12-31',
+      };
       const queryError = new Error('SQL syntax error');
 
       mockDataSource.query.mockRejectedValue(queryError);
@@ -555,7 +573,7 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
 
       expect(mockDataSource.query).toHaveBeenCalledWith(
         expect.stringContaining('SELECT'),
-        projectIds,
+        [payload.startDate, payload.endDate],
       );
     });
 
@@ -910,16 +928,15 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
       ];
 
       mockDataSource.query.mockResolvedValue(mockResults);
-      jest
-        .spyOn(service as any, 'createJobConfigCsvFile')
-        .mockResolvedValue(undefined);
+      jest.spyOn(service as any, 'addCsvToZip').mockResolvedValue(undefined);
 
-      const result = await service.getJobConfigDetails(projectIds, payload);
+      const result = await service['generateJobConfigCsv'](projectIds, payload);
 
-      expect(result).toEqual(mockResults);
-      expect(service['createJobConfigCsvFile']).toHaveBeenCalledWith(
-        mockResults,
-        payload,
+      expect(result).toBeUndefined();
+      expect(service['addCsvToZip']).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.stringMatching(/^job_config_details_\d+\.csv$/),
+        payload.zipLocation,
       );
       expect(mockDataSource.query).toHaveBeenCalledWith(
         expect.stringContaining('FROM datamigrator.project p'),
@@ -936,14 +953,12 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
       };
 
       mockDataSource.query.mockResolvedValue([]);
-      jest
-        .spyOn(service as any, 'createJobConfigCsvFile')
-        .mockResolvedValue(undefined);
+      jest.spyOn(service as any, 'addCsvToZip').mockResolvedValue(undefined);
 
-      const result = await service.getJobConfigDetails(projectIds, payload);
+      const result = await service['generateJobConfigCsv'](projectIds, payload);
 
-      expect(result).toEqual([]);
-      expect(service['createJobConfigCsvFile']).not.toHaveBeenCalled();
+      expect(result).toBeUndefined();
+      expect(service['addCsvToZip']).not.toHaveBeenCalled();
     });
   });
 
@@ -960,7 +975,7 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
       mockDataSource.query.mockRejectedValue(queryError);
 
       await expect(
-        service.getJobConfigDetails(projectIds, payload),
+        service['generateJobConfigCsv'](projectIds, payload),
       ).rejects.toThrow(
         'Failed to fetch job config details: Connection timeout',
       );
@@ -982,12 +997,10 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
       const csvError = new Error('CSV file creation failed');
 
       mockDataSource.query.mockResolvedValue(mockResults);
-      jest
-        .spyOn(service as any, 'createJobConfigCsvFile')
-        .mockRejectedValue(csvError);
+      jest.spyOn(service as any, 'addCsvToZip').mockRejectedValue(csvError);
 
       await expect(
-        service.getJobConfigDetails(projectIds, payload),
+        service['generateJobConfigCsv'](projectIds, payload),
       ).rejects.toThrow(
         'Failed to fetch job config details: CSV file creation failed',
       );

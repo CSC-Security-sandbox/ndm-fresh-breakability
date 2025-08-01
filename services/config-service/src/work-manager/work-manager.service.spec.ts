@@ -167,11 +167,54 @@ describe('WorkManagerService', () => {
         ip,
         projectId,
         Platform.WINDOWS,
-        {},
       );
       expect(result).toEqual([{ key: 'value1' }, { key: 'value2' }]);
       // Verify that debug logging is called for each workerMap entry
       expect(logger.debug).toHaveBeenCalledTimes(2);
+    });
+
+    it('should create a new worker when not found, send email and update worker name', async () => {
+      (workerRepo.findOne as jest.Mock).mockResolvedValue(null);
+
+      // Setup mocks for worker creation and saving:
+      const newWorker = {
+        workerId,
+        ipAddress: ip,
+        metaConfig: defaultWorkerConfig,
+        status: WorkerStatus.Online,
+        workerName: workerId,
+        createdBy: workerId,
+        projectId,
+      };
+
+      const savedWorker = {
+        ...newWorker,
+        workerNumber: 42,
+      };
+
+      (workerRepo.create as jest.Mock).mockReturnValue(newWorker);
+      (workerRepo.save as jest.Mock).mockResolvedValue(savedWorker);
+      (workerRepo.update as jest.Mock).mockResolvedValue({});
+
+      const result = await service.getConfiguration(
+        workerId,
+        ip,
+        projectId,
+        Platform.LINUX,
+      );
+      expect(result).toEqual(savedWorker.metaConfig);
+      expect(sendMailService.sendMail).toHaveBeenCalledWith({
+        successEmailType: 'worker_usage',
+        workerUsage: {
+          id: 'test-worker',
+          ip: '127.0.0.1',
+        },
+      });
+      // Ensure update worker name is called after saving
+      expect(workerRepo.update).toHaveBeenCalledWith(
+        { workerId: savedWorker.workerId },
+        { workerName: `nfs-worker-${savedWorker.workerNumber}` },
+      );
     });
 
     it('should throw an error if something fails', async () => {
@@ -179,7 +222,7 @@ describe('WorkManagerService', () => {
         new Error('DB error'),
       );
       await expect(
-        service.getConfiguration(workerId, ip, projectId, Platform.LINUX, {}),
+        service.getConfiguration(workerId, ip, projectId, Platform.LINUX),
       ).rejects.toThrow('Error while fetching worker configuration');
       expect(logger.error).toHaveBeenCalled();
     });
