@@ -367,8 +367,6 @@ export class ACLOperations {
                             error: errorMessage
                         });
                         result.success = false;
-                        
-                        // Log the specific error for debugging
                     }
                 }
 

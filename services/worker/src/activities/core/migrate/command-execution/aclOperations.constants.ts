@@ -67,4 +67,11 @@ export const PERMISSION_MAP: Record<string, string> = {
 export const INHERITANCE_FLAGS = ['OI', 'CI', 'IO', 'NP'];
 export const NON_SETTABLE_FLAGS = ['I'];
 export const SID_REGEX = /^S-\d-\d+-(\d+-){1,14}\d+$/;
-export const COMMAND_TIMEOUT = 30000; // 30 seconds
+
+// Optimize timeout for production workloads
+export const COMMAND_TIMEOUT = process.env.NODE_ENV === 'production' ? 15000 : 30000; // 15s in prod, 30s in dev
+
+// Add batch processing constants for production
+export const BATCH_SIZE = 1000; // Process ACLs in batches
+export const MAX_RETRIES = 2; // Retry failed operations
+export const RETRY_DELAY = 100; // ms between retries

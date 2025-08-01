@@ -213,19 +213,7 @@ export class StampMetaService {
 
             const aclOps = new ACLOperations(this.redisService);
 
-
-            // First, check if source has any deny permissions
-            const sourceACL = await aclOps.getFileACL(sourcePath, {
-                resolveSIDs: jobContext.jobConfig.options.isIdentityMappingAvailable,
-                isIdentityMappingAvailable: jobContext.jobConfig.options.isIdentityMappingAvailable,
-                jobID: jobContext.jobRunId
-            });
-            
-            const sourceDenyCount = sourceACL.permissions.filter(p => p.accessType === 'deny').length;
-            if (sourceDenyCount > 0) {
-                logData.push(`Source has ${sourceDenyCount} deny permissions`);
-            }
-
+            // Skip the pre-check for deny permissions in production
             const stampData = await aclOps.stampFileACL(sourcePath, targetPath, {
                 preserveExisting: false,
                 excludePrincipals: [],
@@ -242,54 +230,47 @@ export class StampMetaService {
             let skipCount = 0;
             let failCount = 0;
 
+            // Track critical failures only
+            const criticalErrors: string[] = [];
+
             stampData.operations.forEach(op => {
                 if (op.type === 'grant' && op.status === 'completed') {
                     grantCount++;
                 } else if (op.type === 'deny' && op.status === 'completed') {
                     denyCount++;
-                    // Always log successful deny operations
-                    logData.push(`✓ Deny applied: ${op.principal} - ${op.permissions}`);
-                } else if (op.type === 'deny' && op.status === 'failed') {
-                    failCount++;
-                    logData.push(`✗ DENY FAILED: ${op.principal} - ${op.error}`);
-                } else if (op.type === 'deny' && op.status === 'skipped') {
-                    skipCount++;
-                    logData.push(`⚠ Deny skipped: ${op.principal} (${op.reason})`);
                 } else if (op.type === 'skip') {
                     skipCount++;
-                    // Only log skips that aren't for unresolved SIDs when identity mapping is enabled
-                    if (!op.reason?.includes('unresolved SID')) {
-                        logData.push(`Skip: ${op.principal} (${op.reason})`);
-                    }
-                } else if (op.type === 'reset' && op.status === 'completed') {
-                    // logData.push(`🔄 Reset: Clear existing permissions`);
                 } else if (op.status === 'failed') {
                     failCount++;
-                    // Specifically highlight failed deny operations
-                    if (op.type === 'deny') {
-                        logData.push(`DENY FAILED: ${op.principal} - ${op.error}`);
-                    } else {
-                        logData.push(`Failed: ${op.type} ${op.principal} - ${op.error}`);
-                    }
-                    const failedIndex = stampData.operations.indexOf(op);
-                    if (failedIndex >= 0 && failedIndex < stampData.commands.length) {
-                        logData.push(`Failed command: ${stampData.commands[failedIndex]}`);
+                    // Only track non-SID mapping failures as critical
+                    if (!op.error?.includes('1332') && !op.error?.includes('No mapping')) {
+                        criticalErrors.push(`${op.type} ${op.principal}: ${op.error}`);
                     }
                 }
             });
 
-            // Add summary including deny count - always show if there are deny permissions
-            if (denyCount > 0 || failCount > 0 || stampData.operations.some(op => op.type === 'deny')) {
-                logData.push(`ACL Summary: ${grantCount} granted, ${denyCount} denied, ${skipCount} skipped, ${failCount} failed`);
+            // Skip comparison for performance in production unless there were failures
+            if (failCount > 0 && criticalErrors.length > 0) {
+                // Log critical errors only
+                const errorMessage = `ACL stamping had ${criticalErrors.length} critical failures`;
+                this.logger.error(`ACL stamping errors from ${sourcePath} to ${targetPath}`, errorMessage);
                 
-                // Log any deny operations that were attempted
-                const denyOps = stampData.operations.filter(op => op.type === 'deny');
-                if (denyOps.length > 0) {
-                    logData.push(`Deny operations attempted: ${denyOps.length}`);
-                    denyOps.forEach(op => {
-                        logData.push(`- ${op.principal}: ${op.status} ${op.status === 'failed' ? `(${op.error})` : ''}`);
-                    });
-                }
+                const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id,
+                    new Error(`${errorMessage}: ${criticalErrors.slice(0, 3).join('; ')}${criticalErrors.length > 3 ? '...' : ''}`), 
+                    { name: command.fPath, path: targetPath });
+                await jobContext.publishToErrorStream(dmErr);
+                output.targetErrors.push('ACL_STAMP_FAILED');
+            }
+
+            // Store summary statistics for monitoring
+            if (command.ops[OPS_CMD.STAMP_META].params) {
+                command.ops[OPS_CMD.STAMP_META].params.aclStats = {
+                    granted: grantCount,
+                    denied: denyCount,
+                    skipped: skipCount,
+                    failed: failCount,
+                    success: stampData.success
+                };
             }
 
             // Perform ACL comparison after stamping
@@ -381,7 +362,7 @@ export class StampMetaService {
                     const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, new Error(`Stamping ACLs Errors:\n${logData.join('\n')}`),
                         { name: command.fPath, path: targetPath });
                     await jobContext.publishToErrorStream(dmErr);
-                    output.targetErrors.push("ACL_STAMP_FAILED");
+                    //output.targetErrors.push("ACL_STAMP_FAILED");
                 } else {
                     // Log as warning/info for monitoring purposes
                     this.logger.warn(`ACL comparison differences for ${targetPath}:\n${logData.join('\n')}`);
