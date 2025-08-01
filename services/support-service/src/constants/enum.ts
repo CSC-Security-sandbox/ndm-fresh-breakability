@@ -16,13 +16,6 @@ export enum WorkerStatus {
   Offline = 'Offline',
 }
 
-export enum Platform {
-  LINUX = 'LINUX',
-  WINDOWS = 'WINDOWS',
-  MACOS = 'MACOS',
-  OTHER = 'OTHER',
-}
-
 export enum ExportPathSource {
   AUTO_DISCOVER = 'AUTO_DISCOVER',
   MANUAL_UPLOAD = 'MANUAL_UPLOAD',
@@ -47,18 +40,6 @@ export enum ServerType {
   other = 'OtherNAS',
   dell = 'dell',
   emc = 'emc',
-}
-
-export enum JobStatus {
-  Active = 'ACTIVE',
-  InActive = 'IN_ACTIVE',
-}
-
-export enum JobType {
-  Discover = 'DISCOVER',
-  Migrate = 'MIGRATE',
-  CutOver = 'CUT_OVER',
-  SpeedTest = 'SPEED_TEST',
 }
 
 export enum JobRunStatus {
