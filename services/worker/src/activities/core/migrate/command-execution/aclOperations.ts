@@ -449,6 +449,12 @@ export class ACLOperations {
 
             // For source entries, use the resolved principal for comparison if available
             sourceACL.permissions.forEach(p => {
+                // Skip unresolved SIDs when identity mapping is enabled
+                if (isIdentityMappingAvailable && resolveSIDs && SID_REGEX.test(p.principal)) {
+                    // This is an unresolved SID, skip it from comparison
+                    return;
+                }
+                
                 const keyPrincipal = p.principal; // This will be the resolved name if mapping was applied
                 const key = `${keyPrincipal}:${p.accessType}`;
                 sourcePrincipals.set(key, p);
