@@ -116,7 +116,7 @@ run_tests() {
 
 #End-to-End Testing
 #run_tests "end-to-end" "./tests/e2e" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
-#run_tests "end-to-end" "./tests/e2e" "volSMBAutoSrc, volSMBAutoSrcc, volsmbEDA"  "volSMBAutoDst , volSMBAuto_vol1, vol4_33, vol3_33" "SMB"
+#run_tests "end-to-end" "./tests/e2e" "volSMBAutoSrc, volSMBAutoSrcc, volsmbEDA"  "volSMBAutoDst , volSMBAuto_vol1, vol4_33, vol3_33, vol2_33" "SMB"
 
 
 #Smoke Testing
@@ -125,7 +125,7 @@ run_tests() {
 
 #--------------------SMB VOLUMES-----------------------
 #run_tests "end-to-end" "./tests/e2e" "volSMBAutoDst, volSMBAuto_vol1" "vol4_33, vol3_33" "SMB"
-run_tests "end-to-end" "./tests/e2e" "volSMBAuto_vol1" "vol3_33" "SMB"
+run_tests "end-to-end" "./tests/e2e" "volSMBAuto_vol1, vol4_33, vol2_33"  "volSMBAutoDst, vol3_33" "SMB"
 #------------------------------------------------------
 
 #run_tests "end-to-end" "./tests/e2e" "vol4_33,vol3_33" "volSMBAutoDst,volSMBAuto_vol1" "SMB"

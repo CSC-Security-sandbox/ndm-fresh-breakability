@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
+var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
 	var (
 		ProjectId              string
 		workerId1              string
@@ -17,11 +17,11 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 		workerIds              []string
 		err                    error
 		destinationVolumePath1 string
-		//destinationVolumePath2 string
-		headers               map[string]string
-		attachedWorkersConfig map[string]SSHConfig
-		sourceVolumePath1     string
-		//sourceVolumePath2      string
+		destinationVolumePath2 string
+		headers                map[string]string
+		attachedWorkersConfig  map[string]SSHConfig
+		sourceVolumePath1      string
+		sourceVolumePath2      string
 	)
 
 	Context("TC-001", func() {
@@ -35,20 +35,18 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 			workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
 			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, DESTINATION_VOLUMES[0])
-			//destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, DESTINATION_VOLUMES[1])
+			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, DESTINATION_VOLUMES[1])
 
 			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[0])
-			//sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[1])
+			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[1])
 		})
 
 		It("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
 			By("########################## TC-001 start ################################")
 
-			//var sourceConfigID, sourcePathID1, sourcePathID2 string
-			var sourceConfigID, sourcePathID1 string
+			var sourceConfigID, sourcePathID1, sourcePathID2 string
 			var sourceJobConfigIDs, destinationJobConfigIDs, jobConfigIDs, migrationJobConfigIDs, cutoverRunIDs []string
-			//var destinationConfigID, destinationPathID1, destinationPathID2 string
-			var destinationConfigID, destinationPathID1 string
+			var destinationConfigID, destinationPathID1, destinationPathID2 string
 
 			Wait(20)
 			sourceParams := CreateServereParams{
@@ -75,13 +73,12 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			/*sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))*/
+			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a new discovery job for the source")
 			jobParams := DiscoveryJobParams{
-				//SourcePathIDs:            []string{sourcePathID1, sourcePathID2},
-				SourcePathIDs:            []string{sourcePathID1},
+				SourcePathIDs:            []string{sourcePathID1, sourcePathID2},
 				ExcludeOlderThan:         nil,
 				ExcludeFilePatterns:      "",
 				PreserveAccessTime:       false,
@@ -104,7 +101,8 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 				"nfs_src_vol2_discovery.json",
 			}*/
 			discovery_validators := []string{
-				"output_discover.json",
+				"test_discovery_src1.json",
+				"test_discovery_src2.json",
 			}
 			for i, sourceJobConfigID := range sourceJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(sourceJobConfigID, headers)
@@ -148,13 +146,12 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 			destinationPathID1, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			/*destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))*/
+			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a new discovery job for destination")
 			destinationJobParams := DiscoveryJobParams{
-				//SourcePathIDs:            []string{destinationPathID1, destinationPathID2},
-				SourcePathIDs:            []string{destinationPathID1},
+				SourcePathIDs:            []string{destinationPathID1, destinationPathID2},
 				ExcludeOlderThan:         nil,
 				ExcludeFilePatterns:      "",
 				PreserveAccessTime:       false,
@@ -188,12 +185,10 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 
 			By("Creating a migration job")
 			migrationParams := MigrationJobParams{
-				FirstRunAt:        GetCurrentUTCTimestamp(),
-				FutureRunSchedule: "",
-				//SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
-				SourcePathIDs: []string{sourcePathID1},
-				//DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
-				DestinationPathIDs: []string{destinationPathID1},
+				FirstRunAt:         GetCurrentUTCTimestamp(),
+				FutureRunSchedule:  "",
+				SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
+				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
 				SidMapping:         false,
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
@@ -212,7 +207,8 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 				"nfs_src2_to_dest2_vol_migration.json",
 			}*/
 			migration_validators := []string{
-				"output.json",
+				"test_migration_src1_to_dest1.json",
+				"test_migration_src2_to_dest2.json",
 			}
 			// Get migration job run IDs and wait for completion
 			for i, migrationJobConfigID := range migrationJobConfigIDs {
@@ -233,15 +229,13 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 			By("Adding Delta Data")
 			err = AddDataToVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
-			/*err = AddDataToVolume(sourceVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)*/
+			err = AddDataToVolume(sourceVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
 
 			By("Creating bulk cutover job")
 			cutoverParams := BulkCutoverJobParams{
-				//SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
-				SourcePathIDs: []string{sourcePathID1},
-				//DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
-				DestinationPathIDs: []string{destinationPathID1},
+				SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
+				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
 			}
 			jobConfigIDs, resp, err = CreateBulkCutoverJob(cutoverParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error creating bulk cutover job")
@@ -295,14 +289,14 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 			err := RemoveDeltaFromVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
 
-			/*err = RemoveDeltaFromVolume(sourceVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath2)*/
+			err = RemoveDeltaFromVolume(sourceVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath2)
 
 			err = ClearVolume(destinationVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
 
-			/*err = ClearVolume(destinationVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)*/
+			err = ClearVolume(destinationVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
