@@ -260,6 +260,16 @@ export class StampMetaService {
                 const successfulDeny = denyOperations.filter(op => op.status === 'completed').length;
                 const failedDeny = denyOperations.filter(op => op.status === 'failed').length;
                 this.logger.log(`Deny permissions for ${targetPath}: ${successfulDeny} successful, ${failedDeny} failed out of ${denyOperations.length} total`);
+                
+                // Log the order of operations to verify precedence is preserved
+                const operationOrder = stampData.operations
+                    .filter(op => op.type === 'grant' || op.type === 'deny')
+                    .map((op, index) => `${index + 1}. ${op.type} ${op.principal}`)
+                    .slice(0, 5); // Just show first 5 for debugging
+                
+                if (operationOrder.length > 0) {
+                    this.logger.debug(`ACL operation order for ${targetPath}: ${operationOrder.join(', ')}`);
+                }
             }
 
             // Skip comparison for performance in production unless there were failures

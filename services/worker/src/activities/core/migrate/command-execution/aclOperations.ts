@@ -227,21 +227,10 @@ export class ACLOperations {
                 }
             }
 
-            // Apply each permission
-            // Sort to apply deny permissions first, then allow permissions
-            const sortedPermissions = sourceACL.permissions.sort((a, b) => {
-                if (a.accessType === 'deny' && b.accessType === 'allow') return -1;
-                if (a.accessType === 'allow' && b.accessType === 'deny') return 1;
-                return 0;
-            });
-            
-            // Log deny permissions for debugging
-            const denyPermissions = sortedPermissions.filter(p => p.accessType === 'deny');
-            if (denyPermissions.length > 0) {
-                console.log(`Found ${denyPermissions.length} deny permissions to apply for ${targetPath}`);
-            }
-            
-            for (const permission of sortedPermissions) {
+            // Apply each permission in the order they appear in the source
+            // Windows respects ACL order - deny permissions are typically listed first
+            // but we should preserve whatever order exists in the source
+            for (const permission of sourceACL.permissions) {
                 const { principal, originalPrincipal, permissions, accessType } = permission;
 
                 // Skip unresolved SIDs when identity mapping is enabled
@@ -329,15 +318,9 @@ export class ACLOperations {
                 const inheritanceString = inheritanceFlags.map(p => p.code).join(',');
                 const permissionString = actualPermissions.map(p => p.code).join(',');
                 
-                // For deny permissions, we might need special handling
                 let fullPermString = inheritanceString ?
                     (permissionString ? `${inheritanceString},${permissionString}` : inheritanceString) :
                     permissionString;
-
-                // Ensure we have the correct format for deny permissions
-                if (accessType === 'deny' && fullPermString) {
-                    // Deny permissions sometimes need special formatting
-                }
 
                 const commandType = accessType === 'deny' ? 'deny' : 'grant';
                 const aclCmd = `icacls "${targetPath}" /${commandType} "${principalForCommand}:(${fullPermString})"`;
@@ -345,12 +328,25 @@ export class ACLOperations {
                 try {
                     const cmdResult = await executeCommand(aclCmd);
                     
-                    result.operations.push({
-                        type: commandType as 'grant' | 'deny',
-                        principal: principalForFiltering,
-                        permissions: fullPermString,
-                        status: 'completed'
-                    });
+                    // Verify the command succeeded by checking the output
+                    if (cmdResult.stdout && cmdResult.stdout.includes('Successfully processed')) {
+                        result.operations.push({
+                            type: commandType as 'grant' | 'deny',
+                            principal: principalForFiltering,
+                            permissions: fullPermString,
+                            status: 'completed'
+                        });
+                    } else {
+                        // Command didn't report success
+                        result.operations.push({
+                            type: commandType as 'grant' | 'deny',
+                            principal: principalForFiltering,
+                            permissions: fullPermString,
+                            status: 'failed',
+                            error: 'Command did not report success'
+                        });
+                        result.success = false;
+                    }
                 } catch (error) {
                     const errorMessage = (error as Error).message;
                     
@@ -405,16 +401,36 @@ export class ACLOperations {
                 continue;
             }
 
-            // Check for deny permissions - they appear as (N) in the output
-            const isDeny = line.includes('(N)');
+            // Check for deny permissions - they can appear in multiple formats:
+            // Format 1: principal:(N)(permissions)
+            // Format 2: principal:(D)(permissions) 
+            // Format 3: principal:(DENY)(permissions)
+            const isDeny = line.includes('(N)') || line.includes('(D)') || line.includes('(DENY)');
 
-            // Updated regex to properly handle deny permissions
-            // Deny format: "principal:(N)(permissions)"
-            // Allow format: "principal:(permissions)"
+            // More flexible regex to handle various ACL formats
             let match;
+            
+            // Try multiple patterns to match different deny formats
             if (isDeny) {
-                // Handle deny format: principal:(N)(permissions)
+                // Try pattern 1: principal:(N)(permissions)
                 match = line.match(/^(.+?):\(N\)\(([^)]+)\)$/);
+                if (!match) {
+                    // Try pattern 2: principal:(D)(permissions)
+                    match = line.match(/^(.+?):\(D\)\(([^)]+)\)$/);
+                }
+                if (!match) {
+                    // Try pattern 3: principal:(DENY)(permissions)
+                    match = line.match(/^(.+?):\(DENY\)\(([^)]+)\)$/);
+                }
+                if (!match) {
+                    // Try pattern 4: principal:(permissions)(N)
+                    match = line.match(/^(.+?):\(([^)]+)\)\(N\)$/);
+                    if (match) {
+                        // Swap the captured groups for this format
+                        const [fullMatch, principal, perms] = match;
+                        match = [fullMatch, principal, perms];
+                    }
+                }
             } else {
                 // Handle allow format: principal:(permissions)
                 match = line.match(/^(.+?):\(([^)]+)\)$/);
@@ -429,7 +445,7 @@ export class ACLOperations {
                 };
 
                 // Parse the permission string
-                if (permissionStr) {
+                if (permissionStr && permissionStr !== 'N' && permissionStr !== 'D' && permissionStr !== 'DENY') {
                     entry.permissions.push(...this.parsePermissionString(permissionStr, true));
                 }
 
