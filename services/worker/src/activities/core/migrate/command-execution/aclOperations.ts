@@ -324,6 +324,7 @@ export class ACLOperations {
 
                 try {
                     const cmdResult = await executeCommand(aclCmd);
+                    
                     result.operations.push({
                         type: commandType as 'grant' | 'deny',
                         principal: principalForFiltering,

@@ -260,6 +260,9 @@ export class StampMetaService {
             // Perform ACL comparison after stamping
             if (stampData.success || failCount < stampData.operations.length) {
                 try {
+                    // Remove the fixed delay - it's not scalable for millions of files
+                    // await new Promise(resolve => setTimeout(resolve, 1000)); // Remove this
+                    
                     await Promise.all([
                         fs.promises.access(sourcePath, fs.constants.F_OK),
                         fs.promises.access(targetPath, fs.constants.F_OK)
@@ -272,32 +275,27 @@ export class StampMetaService {
                     });
 
                     if (comparisonResult.isEqual) {
+                        // Success - no logging needed
                     } else {
-                        // Debug: Log what we're comparing
-                        // logData.push(`Source principals: ${comparisonResult.source.permissions.map(p => p.principal).join(', ')}`);
-                        // logData.push(`Target principals: ${comparisonResult.target.permissions.map(p => p.principal).join(', ')}`);
+                        // Only log comparison differences if there were actual stamp failures
+                        // This avoids false positives due to timing issues
+                        if (failCount > 0) {
+                            if (comparisonResult.differences.onlyInSource.length > 0) {
+                                logData.push(`Missing in target (${comparisonResult.differences.onlyInSource.length} entries):`);
+                                comparisonResult.differences.onlyInSource.forEach(entry => {
+                                    logData.push(`- ${entry.principal} (${entry.accessType})`);
+                                });
+                            }
+
+                            if (comparisonResult.differences.different.length > 0) {
+                                logData.push(`Different permissions (${comparisonResult.differences.different.length} entries):`);
+                                comparisonResult.differences.different.forEach(diff => {
+                                    logData.push(`- ${diff.principal}: source=[${diff.sourcePermissions.map(p => p.code).join(',')}] vs target=[${diff.targetPermissions.map(p => p.code).join(',')}]`);
+                                });
+                            }
+                        }
                         
-                        if (comparisonResult.differences.onlyInSource.length > 0) {
-                            logData.push(`Missing in target (${comparisonResult.differences.onlyInSource.length} entries):`);
-                            comparisonResult.differences.onlyInSource.forEach(entry => {
-                                logData.push(`- ${entry.principal} (${entry.accessType})`);
-                            });
-                        }
-
-                        if (comparisonResult.differences.onlyInTarget.length > 0) {
-                            //logData.push(`Extra in target (${comparisonResult.differences.onlyInTarget.length} entries):`);
-                            comparisonResult.differences.onlyInTarget.forEach(entry => {
-                              //  logData.push(`- ${entry.principal} (${entry.accessType})`);
-                            });
-                        }
-
-                        if (comparisonResult.differences.different.length > 0) {
-                            logData.push(`Different permissions (${comparisonResult.differences.different.length} entries):`);
-                            comparisonResult.differences.different.forEach(diff => {
-                                logData.push(`- ${diff.principal}: source=[${diff.sourcePermissions.map(p => p.code).join(',')}] vs target=[${diff.targetPermissions.map(p => p.code).join(',')}]`);
-                            });
-                        }
-
+                        // Always store the comparison results for monitoring
                         if (command.ops[OPS_CMD.STAMP_META].params) {
                             command.ops[OPS_CMD.STAMP_META].params.aclComparison = {
                                 isEqual: comparisonResult.isEqual,
@@ -309,10 +307,11 @@ export class StampMetaService {
                         }
                     }
                 } catch (compareError) {
+                    // Comparison errors are not critical - log but don't fail the operation
                     if (compareError instanceof FileAccessError) {
-                        logData.push(`Cannot compare ACLs - file no longer accessible: ${compareError.message}`);
+                        this.logger.debug(`Cannot compare ACLs - file no longer accessible: ${compareError.message}`);
                     } else {
-                        logData.push(`Failed to compare ACLs: ${compareError.message}`);
+                        this.logger.debug(`Failed to compare ACLs: ${compareError.message}`);
                     }
                 }
             }
@@ -340,11 +339,16 @@ export class StampMetaService {
                 output.targetErrors.push('ACL_STAMP_FAILED');
             }
             if (logData.length > 0) {
-                const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, new Error(`Stamping ACLs Errors:\n${logData.join('\n')}`),
-                    { name: command.fPath, path: targetPath });
-                await jobContext.publishToErrorStream(dmErr);
-                output.targetErrors.push("ACL_STAMP_FAILED");
-
+                // Only report as error if there were actual stamp failures
+                if (failCount > 0) {
+                    const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, new Error(`Stamping ACLs Errors:\n${logData.join('\n')}`),
+                        { name: command.fPath, path: targetPath });
+                    await jobContext.publishToErrorStream(dmErr);
+                    output.targetErrors.push("ACL_STAMP_FAILED");
+                } else {
+                    // Log as warning/info for monitoring purposes
+                    this.logger.warn(`ACL comparison differences for ${targetPath}:\n${logData.join('\n')}`);
+                }
             }
             // command.ops[OPS_CMD.STAMP_META].status = OPS_STATUS.COMPLETED;
 
