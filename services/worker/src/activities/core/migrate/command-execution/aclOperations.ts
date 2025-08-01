@@ -121,8 +121,6 @@ export class ACLOperations {
                         entry.principal = resolved;
                     }
                 }
-            } else {
-                console.log(`Not resolving SIDs: resolveSIDs=${resolveSIDs}, isIdentityMappingAvailable=${isIdentityMappingAvailable}, jobID=${jobID}, redisService=${!!this.redisService}`);
             }
 
             return {

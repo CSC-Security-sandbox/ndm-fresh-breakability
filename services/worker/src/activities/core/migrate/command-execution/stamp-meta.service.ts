@@ -320,7 +320,14 @@ export class StampMetaService {
                     .map(op => `${op.type} ${op.principal}: ${op.error}`)
                     .join('; ');
                 
-                const errorMessage = errorDetails ? `ACL stamping failed: ${errorDetails}` : 'ACL stamping failed';
+                // Also count skipped unresolved SIDs
+                const unresolvedSIDs = stampData.operations
+                    .filter(op => op.type === 'skip' && op.reason?.includes('unresolved SID'))
+                    .length;
+                
+                const errorMessage = errorDetails 
+                    ? `ACL stamping failed: ${errorDetails}${unresolvedSIDs > 0 ? ` (${unresolvedSIDs} unresolved SIDs skipped)` : ''}`
+                    : `ACL stamping failed${unresolvedSIDs > 0 ? ` (${unresolvedSIDs} unresolved SIDs skipped)` : ''}`;
                 
                 this.logger.error(`ACL stamping failed from ${sourcePath} to ${targetPath}`, errorMessage);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id,
