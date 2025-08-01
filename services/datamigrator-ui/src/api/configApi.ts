@@ -5,6 +5,7 @@ import {
   UploadedFilePropsType,
   UploadExportPathSourceFileProps,
 } from "@/modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/bulk-manual-upload-file.types";
+import { SupportBundlePayloadType } from "@modules/Help/components/support-bundle/types/support-bundle.types";
 
 export const configApi = createApi({
   reducerPath: "configApi",
@@ -127,6 +128,28 @@ export const configApi = createApi({
       }),
       invalidatesTags: ["GET_FILE_SERVER_BY_ID"],
     }),
+
+    generateSupportBundle: builder.mutation<
+      string,
+      { payload: SupportBundlePayloadType }
+    >({
+      query: ({ payload }) => ({
+        url: `support-bundle`,
+        method: "POST",
+        body: payload,
+      }),
+    }),
+
+    downloadSupportBundle: builder.query<void, void>({
+      query: () => ({
+        url: "support-bundle/download",
+        responseHandler: async (response) => response.blob(),
+      }),
+    }),
+
+    checkBundleReadyStatus: builder.query<Record<string, boolean>, void>({
+      query: () => "support-bundle/can-download",
+    }),
   }),
 });
 
@@ -146,4 +169,7 @@ export const {
   useLazyDownloadExportPathSourceTemplateQuery,
   useUploadExportPathSourceFileMutation,
   useSubmitExportPathSourceFileMutation,
+  useGenerateSupportBundleMutation,
+  useCheckBundleReadyStatusQuery,
+  useLazyDownloadSupportBundleQuery,
 } = configApi;
