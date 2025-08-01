@@ -1,8 +1,8 @@
 import {
-  covertBytes,
-  formatNumbersWithSuffix,
-  formatSeconds,
-  formatSizeAndCount,
+    convertBytes,
+    formatNumbersWithSuffix,
+    formatSeconds,
+    formatSizeAndCount
 } from "./mapper";
 import { ReportValueType } from "../constants/enums";
 import {
@@ -21,7 +21,7 @@ export const formatValue = (entry: ReportEntry): string | number => {
 
   switch (entry.valueType) {
     case ReportValueType.SIZE:
-      return value > 0 ? covertBytes(value) : "0 B";
+      return value > 0 ? convertBytes(value) : "0 B";
     case ReportValueType.TIME:
       return value > 0 ? formatSeconds(value) : "0 s";
     case ReportValueType.COUNT:

@@ -24,7 +24,7 @@ export class WorkFlowOptions {
         this.connection = connection;
         this.taskQueue = !config.dynamicTaskQueue ? taskQueue : `${config.taskQueueId}-${taskQueue}`
         this.activities = activities;
-        this.workflowsPath = require.resolve('../../../workflows/workflows'),
+        this.workflowsPath = require.resolve('../../workflows/workflows'),
         this.maxConcurrentActivityTaskExecutions = maxConcurrentActivityTaskExecutions;
     }
 }

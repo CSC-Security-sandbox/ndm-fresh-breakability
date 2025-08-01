@@ -43,7 +43,7 @@ describe("formatValue", () => {
       value: 1024,
       valueType: ReportValueType.SIZE
     };
-    expect(formatValue(entry)).toBe("1.02 KB");
+    expect(formatValue(entry)).toBe("1 KiB");
   });
 
   it("should format time values correctly", () => {
@@ -63,7 +63,7 @@ describe("formatValue", () => {
       value: 1024,
       valueType: ReportValueType.COUNT
     };
-    expect(formatValue(entry)).toBe("1.02 K");
+    expect(formatValue(entry)).toBe("1.02K");
   });
 
   it("should return original value for unknown value types", () => {
@@ -146,7 +146,7 @@ describe("groupAndOrder", () => {
     expect(result["Number of Files"]).toHaveLength(2);
     expect(result["Job Run Stats"]).toHaveLength(1);
 
-    expect(result["Number of Files"][0].value).toBe("1.02 K");
+    expect(result["Number of Files"][0].value).toBe("1.02K");
     expect(result["Number of Files"][1].value).toBe("60");
     expect(result["Job Run Stats"][0].value).toBe("7m 33s");
   });
@@ -295,7 +295,7 @@ describe("groupAndOrder", () => {
     expect(result).not.toBeNull();
     expect(result).toHaveProperty("Number of Files");
     expect(result["Number of Files"].length).toBe(1);
-    expect(result["Number of Files"][0].value).toBe("1.02 K");
+    expect(result["Number of Files"][0].value).toBe("1.02K");
 
     // The implementation returns empty arrays for categories in PDFReportHeaders that have no data
     expect(result).toHaveProperty("Modified");

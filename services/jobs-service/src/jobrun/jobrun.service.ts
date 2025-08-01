@@ -40,6 +40,9 @@ import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { JobRunStats } from "./dto/jobstats";
 import { JobRunInitService } from "./jobrun.init.service";
 import { SuccessEmailType } from "src/utils/send-email.type";
+import { getErrorDisplayMessage } from './jobrun.utli';
+import { WorkFlowFailureReason } from "./jobrun.types";
+
 @Injectable()
 export class JobRunService {
   private readonly logger = new Logger(JobRunService.name);
@@ -456,28 +459,6 @@ export class JobRunService {
     return allJobsRuns;
   }
 
-  covertBytes(bytes: number): string {
-    const bytesInKB = 1024;
-    const bytesInMB = bytesInKB * 1024;
-    const bytesInGB = bytesInMB * 1024;
-    const bytesInTB = bytesInGB * 1024;
-    const bytesInPB = bytesInTB * 1024;
-
-    if (bytes < bytesInKB) {
-      return `${bytes} B`;
-    } else if (bytes < bytesInMB) {
-      return `${(bytes / bytesInKB).toFixed(2)} KB`;
-    } else if (bytes < bytesInGB) {
-      return `${(bytes / bytesInMB).toFixed(2)} MB`;
-    } else if (bytes < bytesInTB) {
-      return `${(bytes / bytesInGB).toFixed(2)} GB`;
-    } else if (bytes < bytesInPB) {
-      return `${(bytes / bytesInTB).toFixed(2)} TB`;
-    } else {
-      return `${(bytes / bytesInPB).toFixed(2)} PB`;
-    }
-  }
-
   async updateJobRunStatus(jobRunId: string, status: JobRunStatus) {
     const jobRunDetails: JobRunEntity = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
@@ -627,17 +608,17 @@ export class JobRunService {
           const errorRemedies = await this.errorRemedyService.findByErrorCodes([
             error.errorCode,
           ]);
-          const remedy = errorRemedies[0];
+          const errorRemedy = errorRemedies?.[0];
 
           this.logger.debug(
-            `[getJobRunErrors] Mapped errorCode: ${error.errorCode} to remedy: ${remedy ? remedy.description : "none"}`
+            `[getJobRunErrors] Mapped errorCode: ${error.errorCode} to remedy: ${errorRemedy ? errorRemedy.description : "none"}`
           );
 
           return {
             ...error,
-            displayMessage: remedy ? remedy.description : error.errorMessage,
-            resolutionSteps: remedy ? remedy.resolutionSteps : null,
-            referenceCommands: remedy ? remedy.referenceCommands : null,
+            displayMessage: getErrorDisplayMessage(error.errorCode, error.errorMessage, errorRemedy?.description),
+            resolutionSteps: errorRemedy ? errorRemedy.resolutionSteps : null,
+            referenceCommands: errorRemedy ? errorRemedy.referenceCommands : null,
           };
         } catch (remedyError) {
           this.logger.error(
@@ -674,14 +655,16 @@ export class JobRunService {
               await this.errorRemedyService.findByErrorCodes([
                 error.workerResponse.code,
             ]);
-            const remedy = errorRemedies[0];
+            const errorRemedy = errorRemedies?.[0];
             return {
               errorMessage: error.workerResponse.message,
-              displayMessage: remedy
-                ? remedy.description
-                : error.workerResponse.message,
-              resolutionSteps: remedy ? remedy.resolutionSteps : null,
-              referenceCommands: remedy ? remedy.referenceCommands : null,
+              displayMessage: getErrorDisplayMessage(
+                error?.workerResponse?.code,
+                error?.workerResponse?.message,
+                errorRemedy?.description
+              ),
+              resolutionSteps: errorRemedy ? errorRemedy.resolutionSteps : null,
+              referenceCommands: errorRemedy ? errorRemedy.referenceCommands : null,
               errorType: "FATAL_ERROR",
               createdAt: error.workerResponse.createdAt,
               operationType: error.workerResponse.operation,
@@ -881,19 +864,30 @@ export class JobRunService {
 
   async updateWorkerResponse(jobRunId: string, workerId: string, workerResponse: Record<string, any>): Promise<UpdateResult> {
     try {
-      return await this.workerJobRunMapRepo.update({ jobRunId, workerId }, { workerResponse });
+      const updateCondition = workerId === 'all' ? { jobRunId } : { jobRunId, workerId };
+      return await this.workerJobRunMapRepo.update(updateCondition, { workerResponse });
     } catch (error) {
       this.logger.error(`Error occurred while updating worker response for jobRunId ${jobRunId} and workerId ${workerId}: ${error}`);
       throw new Error(`Failed to update worker response: ${error}`);
     }
   }
 
-  async getWorkerSetupErrors(jobRunId: string): Promise<any[]> {
-    return await this.workerJobRunMapRepo.find({
-      where: {
-        jobRunId,
-        workerResponse: Raw(alias => `${alias} IS NOT NULL AND ${alias} ->> 'code' = 'SETUP_WORKER_FAILURE' AND ${alias} ->> 'status' = 'FAILED'`),
-      },
-    });
+  async getWorkerSetupErrors(jobRunId: string): Promise<WorkerJobRunMap[]> {
+    try {
+      const result = await this.workerJobRunMapRepo
+        .createQueryBuilder("job")
+        .where("job.jobRunId = :jobRunId", { jobRunId })
+        .andWhere("job.workerResponse IS NOT NULL")
+        .andWhere(
+          "job.workerResponse ->> 'code' = ANY(:errorCodes)",
+          { errorCodes:  Object.values(WorkFlowFailureReason) }
+        )
+        .andWhere("job.workerResponse ->> 'status' = 'FAILED'")
+        .getMany();
+      return result;
+    } catch (error) {
+      this.logger.error(`Error fetching worker setup errors for jobRunId ${jobRunId}:`, error);
+      throw error;
+    }
   }
 }
