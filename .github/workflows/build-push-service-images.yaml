@@ -17,6 +17,7 @@ on:
   push:
     branches:
       - main
+      - hmn/support-dockerfile
     paths:
       - 'services/admin-service/**'
       - 'services/config-service/**'
@@ -112,7 +113,7 @@ jobs:
         id: set-matrix
         shell: bash
         run: |
-          services=( "db-writer" "keycloak-customizations" "reports-service" "admin-service" "config-service" "datamigrator-ui" "jobs-service" "support-service" )
+          services=( "support-service" )
           targets=()
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base_branch="${{ github.event.pull_request.base.ref }}"
@@ -176,12 +177,12 @@ jobs:
           fi
 
           # Convert to JSON for the matrix
-          service_json=$(printf '%s\n' "${targets[@]}" | jq -R . | jq -s . | tr -d '\n')
+          service_json=$(printf '%s\n' "${services[@]}" | jq -R . | jq -s . | tr -d '\n')
           echo "Matrix for changed services: $service_json"
           echo "matrix={\"service\":$service_json}" >> $GITHUB_OUTPUT
 
   trivy-pr-scan:
-    if: github.event_name == 'pull_request'
+    # if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     needs: determine-matrix
     strategy:
