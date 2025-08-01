@@ -450,7 +450,9 @@ export class ACLOperations {
             // For source entries, use the resolved principal for comparison if available
             sourceACL.permissions.forEach(p => {
                 // Skip unresolved SIDs when identity mapping is enabled
-                if (isIdentityMappingAvailable && resolveSIDs && SID_REGEX.test(p.principal)) {
+                // Check both the principal and originalPrincipal to catch unresolved SIDs
+                const principalToCheck = p.originalPrincipal || p.principal;
+                if (isIdentityMappingAvailable && resolveSIDs && SID_REGEX.test(principalToCheck)) {
                     // This is an unresolved SID, skip it from comparison
                     return;
                 }
