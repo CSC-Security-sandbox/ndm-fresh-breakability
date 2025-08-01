@@ -290,8 +290,14 @@ export class ACLOperations {
                     !INHERITANCE_FLAGS.includes(p.code) && !NON_SETTABLE_FLAGS.includes(p.code)
                 );
 
+                // Remove duplicates from both arrays
+                const uniqueInheritanceFlags = Array.from(new Set(inheritanceFlags.map(p => p.code)))
+                    .map(code => ({ code, description: PERMISSION_MAP[code] || code }));
+                const uniqueActualPermissions = Array.from(new Set(actualPermissions.map(p => p.code)))
+                    .map(code => ({ code, description: PERMISSION_MAP[code] || code }));
+
                 // Skip if no actual permissions to set (e.g., only had 'I' flag)
-                if (actualPermissions.length === 0 && inheritanceFlags.length === 0) {
+                if (uniqueActualPermissions.length === 0 && uniqueInheritanceFlags.length === 0) {
                     result.operations.push({
                         type: 'skip',
                         principal: principalForFiltering,
@@ -303,23 +309,23 @@ export class ACLOperations {
 
                 // For RX (Read & Execute), ensure we're including both R and X permissions
                 // Check if we have common permission combinations
-                const hasRead = actualPermissions.some(p => p.code === 'R');
-                const hasExecute = actualPermissions.some(p => p.code === 'X');
-                const hasRX = actualPermissions.some(p => p.code === 'RX');
+                const hasRead = uniqueActualPermissions.some(p => p.code === 'R');
+                const hasExecute = uniqueActualPermissions.some(p => p.code === 'X');
+                const hasRX = uniqueActualPermissions.some(p => p.code === 'RX');
                 
                 // If source has both R and X separately but not RX, we might need to use RX
                 if (hasRead && hasExecute && !hasRX) {
                     // Remove separate R and X
-                    const filteredPerms = actualPermissions.filter(p => p.code !== 'R' && p.code !== 'X');
+                    const filteredPerms = uniqueActualPermissions.filter(p => p.code !== 'R' && p.code !== 'X');
                     // Add RX instead
                     filteredPerms.push({ code: 'RX', description: 'Read & Execute' });
-                    actualPermissions.length = 0;
-                    actualPermissions.push(...filteredPerms);
+                    uniqueActualPermissions.length = 0;
+                    uniqueActualPermissions.push(...filteredPerms);
                 }
 
                 // Build permission string with inheritance flags first, then permissions
-                const inheritanceString = inheritanceFlags.map(p => p.code).join(',');
-                const permissionString = actualPermissions.map(p => p.code).join(',');
+                const inheritanceString = uniqueInheritanceFlags.map(p => p.code).join(',');
+                const permissionString = uniqueActualPermissions.map(p => p.code).join(',');
                 
                 let fullPermString = inheritanceString ?
                     (permissionString ? `${inheritanceString},${permissionString}` : inheritanceString) :
@@ -444,6 +450,9 @@ export class ACLOperations {
                 accessType: 'allow' // default to allow
             };
 
+            // Use a Set to avoid duplicate permissions
+            const uniquePermissions = new Set<string>();
+
             // Parse the permissions section
             // Extract all permission groups in parentheses
             const permissionGroups = permissionsSection.match(/\([^)]+\)/g) || [];
@@ -456,9 +465,19 @@ export class ACLOperations {
                     entry.accessType = 'deny';
                 } else if (content !== 'DENY' && content.length > 0) {
                     // This is a permission string
-                    entry.permissions.push(...this.parsePermissionString(content, true));
+                    const perms = this.parsePermissionString(content, true);
+                    // Add to set to avoid duplicates
+                    perms.forEach(p => uniquePermissions.add(p.code));
                 }
             }
+
+            // Convert set back to Permission array
+            uniquePermissions.forEach(code => {
+                entry.permissions.push({
+                    code: code,
+                    description: PERMISSION_MAP[code] || code
+                });
+            });
 
             // Only add entry if it has permissions
             if (entry.permissions.length > 0) {
