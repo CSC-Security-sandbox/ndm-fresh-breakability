@@ -203,6 +203,8 @@ var _ = Describe("Project Admin Discovery Migration Cutover Test", Ordered, func
         err = json.Unmarshal(bodyBytes, &createUserResponse)
         Expect(err).NotTo(HaveOccurred(), "Failed to unmarshal create user response")
 
+        fmt.Println("DEBUG: User creation response:", createUserResponse)
+
         // Extract user information from nested response structure
         if data, ok := createUserResponse["data"].(map[string]interface{}); ok {
             if items, ok := data["items"].(map[string]interface{}); ok {

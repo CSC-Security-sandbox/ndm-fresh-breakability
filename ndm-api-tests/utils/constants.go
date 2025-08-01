@@ -50,7 +50,7 @@ const (
 	DEFAULT_ACCOUNT_ID                              = "753975cb-2f97-4230-b632-6815515a7d0d"
 	LOGOUT_URL                                      = "keycloak/realms/datamigrator/protocol/openid-connect/logout"
 	LOGOUT_USER                                     = "logout-user"
-	NFS_SOURCE_VOLUME                               = "/volSrcAuto"
+	NFS_SOURCE_VOLUME                               = "/vol_src_automation"
 	NFS_DESTINATION_VOLUME                          = "/vol_dest_automation"
 	NFS_SOURCE_VOLUME_1                             = "/vol_src_automation2"
 	NFS_DESTINATION_VOLUME_1                        = "/vol_dest_automation2"

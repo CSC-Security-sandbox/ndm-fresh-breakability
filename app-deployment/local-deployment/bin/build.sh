@@ -3,14 +3,15 @@ set -e  # Exit on any error
 
 # Detect system architecture
 ARCH=$(uname -m)
-if [ "$ARCH" = "x86_64" ]; then
-    PLATFORM="linux/amd64"
-elif [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
-    PLATFORM="linux/arm64"
-else
-    echo "Unsupported architecture: $ARCH"
-    exit 1
-fi
+# if [ "$ARCH" = "x86_64" ]; then
+#     PLATFORM="linux/amd64"
+# elif [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
+#     PLATFORM="linux/arm64"
+# else
+#     echo "Unsupported architecture: $ARCH"
+#     exit 1
+# fi
+PLATFORM="linux/amd64"
 echo "Detected architecture: $ARCH, using platform: $PLATFORM"
 
 # check if AZ_USERNAME, AZ_PASSWORD and AZ_TENANT environment variables are set or not
