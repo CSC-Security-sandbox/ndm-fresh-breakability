@@ -691,6 +691,12 @@ describe("JobRunService", () => {
 
       jest.spyOn(workerJobRunMapRepo, "find").mockResolvedValue([]);
 
+      jest.spyOn(workerJobRunMapRepo, "createQueryBuilder").mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([] as any),
+      } as any);
+
       await service.updateJobRunStatus(jobRunId, JobRunStatus.Completed);
 
       expect(jobRunRepo.findOne).toHaveBeenCalledWith({
@@ -1997,6 +2003,12 @@ describe("JobRunService", () => {
         .mockReturnValue(mockQueryBuilder as any);
       jest.spyOn(workerJobRunMapRepo, "find").mockResolvedValue([]);
 
+      jest.spyOn(workerJobRunMapRepo, "createQueryBuilder").mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([] as any),
+      } as any);
+
       const result = await service.getErrorCounts(mockJobRunId);
 
       expect(result).toEqual(mockErrorCounts);
@@ -2035,6 +2047,14 @@ describe("JobRunService", () => {
       const loggerSpy = jest.spyOn(service["logger"], "error");
 
       jest.spyOn(workerJobRunMapRepo, "find").mockResolvedValue([]);
+
+
+      jest.spyOn(workerJobRunMapRepo, "createQueryBuilder").mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([] as any),
+      } as any);
+
       const result = await service.getErrorCounts(mockJobRunId);
 
       expect(result).toEqual([]);
@@ -2077,6 +2097,13 @@ describe("JobRunService", () => {
       const loggerSpy = jest.spyOn(service["logger"], "error");
 
       jest.spyOn(workerJobRunMapRepo, "find").mockResolvedValue([{ workerId: "worker1", workerResponse: "setupFailed" }] as any);
+
+      jest.spyOn(workerJobRunMapRepo, "createQueryBuilder").mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([{ workerId: "worker1", workerResponse: "setupFailed" }] as any),
+      } as any);
+
       const result = await service.getErrorCounts(mockJobRunId);
       expect(operationErrorRepo.createQueryBuilder).toHaveBeenCalledWith("oe");
       expect(mockQueryBuilder.innerJoin).toHaveBeenCalledWith(
@@ -2118,6 +2145,13 @@ describe("JobRunService", () => {
 
       jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue(mockQueryBuilder as any);
       jest.spyOn(workerJobRunMapRepo, "find").mockResolvedValue([{ workerId: "worker1", workerResponse: "setupFailed" }] as any);
+
+      jest.spyOn(workerJobRunMapRepo, "createQueryBuilder").mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([{ workerId: "worker1", workerResponse: "setupFailed" }] as any),
+      } as any);
+
       const result = await service.getErrorCounts(mockJobRunId);
       expect(result).toEqual([{ errortype: "FATAL_ERROR", count: 2 }])
     })
@@ -2658,6 +2692,11 @@ describe("JobRunService", () => {
   describe('getWorkerSetupErrors', () => {
     it('should return worker setup errors', async () => {
       jest.spyOn(workerJobRunMapRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(workerJobRunMapRepo, "createQueryBuilder").mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      } as any);
       const result = await service.getWorkerSetupErrors('jobRunId');
       expect(result).toEqual([]);
     })
@@ -2952,6 +2991,12 @@ describe("JobRunService", () => {
         const jobRunId = 'jobRunId';
         const mockErrors = [{ workerResponse: { code: 'SETUP_WORKER_FAILURE', status: 'FAILED' } }];
         jest.spyOn(workerJobRunMapRepo, 'find').mockResolvedValue(mockErrors as any);
+
+        jest.spyOn(workerJobRunMapRepo, "createQueryBuilder").mockReturnValue({
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue(mockErrors),
+        } as any);
         const result = await service.getWorkerSetupErrors(jobRunId);
         expect(result).toEqual(mockErrors);
       });
@@ -2961,6 +3006,13 @@ describe("JobRunService", () => {
         const expectedRaw = expect.any(Function);
         const mockResult = [{ workerResponse: { code: 'SETUP_WORKER_FAILURE', status: 'FAILED' } }];
         jest.spyOn(workerJobRunMapRepo, 'find').mockResolvedValue(mockResult as any);
+
+         jest.spyOn(workerJobRunMapRepo, "createQueryBuilder").mockReturnValue({
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue(mockResult),
+        } as any);
+
 
         const result = await service.getWorkerSetupErrors(jobRunId);
         expect(result).toEqual(mockResult);
@@ -3254,6 +3306,11 @@ describe("JobRunService", () => {
         const mockJobRunId = "jobRunId";
 
         jest.spyOn(workerJobRunMapRepo, "find").mockResolvedValue([]);
+        jest.spyOn(workerJobRunMapRepo, "createQueryBuilder").mockReturnValue({
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([]),
+        } as any);
 
         const result = await service.getWorkerSetupErrors(mockJobRunId);
 

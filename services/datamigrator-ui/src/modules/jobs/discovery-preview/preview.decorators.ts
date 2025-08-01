@@ -1,20 +1,20 @@
 import {DataItemType, FileInfo, ProcessedData} from '@/types/app.type';
 import {
-  ACCESS_TIME_COUNT_PREFIX,
-  ACCESS_TIME_SIZE_PREFIX,
-  BYTE_UNITS,
-  BYTES_IN_KILOBYTE,
-  CREATION_TIME_COUNT_PREFIX,
-  CREATION_TIME_SIZE_PREFIX,
-  FILE_COUNT_PREFIX,
-  FILE_SIZE_PREFIX,
-  FileSystemCategory,
-  FileSystemSubCategory,
-  LARGE_NUMBER_SUFFIXES,
-  MODIFICATION_TIME_COUNT_PREFIX,
-  MODIFICATION_TIME_SIZE_PREFIX,
-  SIMPLIFIED_BYTE_UNITS,
-  ValueType
+    ACCESS_TIME_COUNT_PREFIX,
+    ACCESS_TIME_SIZE_PREFIX,
+    BYTE_UNITS,
+    BYTES_IN_KILOBYTE,
+    CREATION_TIME_COUNT_PREFIX,
+    CREATION_TIME_SIZE_PREFIX, DECIMAL_BASE,
+    FILE_COUNT_PREFIX,
+    FILE_SIZE_PREFIX,
+    FileSystemCategory,
+    FileSystemSubCategory,
+    LARGE_NUMBER_SUFFIXES,
+    MODIFICATION_TIME_COUNT_PREFIX,
+    MODIFICATION_TIME_SIZE_PREFIX,
+    SIMPLIFIED_BYTE_UNITS,
+    ValueType
 } from '@modules/jobs/discovery-preview/preview.constants';
 import {getRegExp, StringComparisonPattern} from '@modules/jobs/discovery-preview/string-comparison.enum';
 
@@ -531,7 +531,7 @@ export function formatLargeNumber(num: number, decimals = 2): string {
 
   const i = Math.floor(Math.log10(num) / 3);
 
-  const formattedNumber = (num / Math.pow(BYTES_IN_KILOBYTE, i)).toFixed(decimals);
+  const formattedNumber = (num / Math.pow(DECIMAL_BASE, i)).toFixed(decimals);
 
   return `${parseFloat(formattedNumber)}${LARGE_NUMBER_SUFFIXES[i]}`;
 }

@@ -41,6 +41,7 @@ import { JobRunStats } from "./dto/jobstats";
 import { JobRunInitService } from "./jobrun.init.service";
 import { SuccessEmailType } from "src/utils/send-email.type";
 import { getErrorDisplayMessage } from './jobrun.utli';
+import { WorkFlowFailureReason } from "./jobrun.types";
 
 @Injectable()
 export class JobRunService {
@@ -863,19 +864,30 @@ export class JobRunService {
 
   async updateWorkerResponse(jobRunId: string, workerId: string, workerResponse: Record<string, any>): Promise<UpdateResult> {
     try {
-      return await this.workerJobRunMapRepo.update({ jobRunId, workerId }, { workerResponse });
+      const updateCondition = workerId === 'all' ? { jobRunId } : { jobRunId, workerId };
+      return await this.workerJobRunMapRepo.update(updateCondition, { workerResponse });
     } catch (error) {
       this.logger.error(`Error occurred while updating worker response for jobRunId ${jobRunId} and workerId ${workerId}: ${error}`);
       throw new Error(`Failed to update worker response: ${error}`);
     }
   }
 
-  async getWorkerSetupErrors(jobRunId: string): Promise<any[]> {
-    return await this.workerJobRunMapRepo.find({
-      where: {
-        jobRunId,
-        workerResponse: Raw(alias => `${alias} IS NOT NULL AND ${alias} ->> 'code' = 'SETUP_WORKER_FAILURE' AND ${alias} ->> 'status' = 'FAILED'`),
-      },
-    });
+  async getWorkerSetupErrors(jobRunId: string): Promise<WorkerJobRunMap[]> {
+    try {
+      const result = await this.workerJobRunMapRepo
+        .createQueryBuilder("job")
+        .where("job.jobRunId = :jobRunId", { jobRunId })
+        .andWhere("job.workerResponse IS NOT NULL")
+        .andWhere(
+          "job.workerResponse ->> 'code' = ANY(:errorCodes)",
+          { errorCodes:  Object.values(WorkFlowFailureReason) }
+        )
+        .andWhere("job.workerResponse ->> 'status' = 'FAILED'")
+        .getMany();
+      return result;
+    } catch (error) {
+      this.logger.error(`Error fetching worker setup errors for jobRunId ${jobRunId}:`, error);
+      throw error;
+    }
   }
 }

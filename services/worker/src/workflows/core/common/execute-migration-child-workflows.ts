@@ -21,6 +21,8 @@ const {
   heartbeatTimeout: '2m',
 }); 
 
+const { updateWorkerResponse: updateWorkerResponse } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '10m' });
+
 
 export const actionSignal = wf.defineSignal<[string]>('action');
 
@@ -89,6 +91,15 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
         output.syncJobStatus = syncWorkflowOutput.status;    
     }catch(error){  
         output.syncJobStatus = JobRunStatus.Failed;
+        await updateWorkerResponse(jobRunId, 'all', {
+            status: 'FAILED',
+            code: 'TASK_FETCH_FAILURE',
+            operation: 'Sync Workflow Failed',
+            occurrence: 1,
+            origin: 'ChildSyncWorkflow',
+            message: `Sync workflow failed with error: ${error.message}`,
+            createdAt: new Date()
+        });
     }
 
 

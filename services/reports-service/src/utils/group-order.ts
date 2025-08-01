@@ -1,8 +1,8 @@
 import {
-  convertBytes,
-  formatNumbersWithSuffix,
-  formatSeconds,
-  formatSizeAndCount,
+    convertBytes,
+    formatNumbersWithSuffix,
+    formatSeconds,
+    formatSizeAndCount
 } from "./mapper";
 import { ReportValueType } from "../constants/enums";
 import {
