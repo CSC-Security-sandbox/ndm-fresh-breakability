@@ -254,9 +254,9 @@ export class StampMetaService {
                 // Log critical errors only
                 const errorMessage = `ACL stamping had ${criticalErrors.length} critical failures`;
                 this.logger.error(`ACL stamping errors from ${sourcePath} to ${targetPath}`, errorMessage);
-                
+
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id,
-                    new Error(`${errorMessage}: ${criticalErrors.slice(0, 3).join('; ')}${criticalErrors.length > 3 ? '...' : ''}`), 
+                    new Error(`${errorMessage}: ${criticalErrors.slice(0, 3).join('; ')}${criticalErrors.length > 3 ? '...' : ''}`),
                     { name: command.fPath, path: targetPath });
                 await jobContext.publishToErrorStream(dmErr);
                 output.targetErrors.push('ACL_STAMP_FAILED');
@@ -278,7 +278,7 @@ export class StampMetaService {
                 try {
                     // Remove the fixed delay - it's not scalable for millions of files
                     // await new Promise(resolve => setTimeout(resolve, 1000)); // Remove this
-                    
+
                     await Promise.all([
                         fs.promises.access(sourcePath, fs.constants.F_OK),
                         fs.promises.access(targetPath, fs.constants.F_OK)
@@ -312,7 +312,7 @@ export class StampMetaService {
                                 });
                             }
                         }
-                        
+
                         // Always store the comparison results for monitoring
                         if (command.ops[OPS_CMD.STAMP_META].params) {
                             command.ops[OPS_CMD.STAMP_META].params.aclComparison = {
@@ -340,16 +340,16 @@ export class StampMetaService {
                     .filter(op => op.status === 'failed')
                     .map(op => `${op.type} ${op.principal}: ${op.error}`)
                     .join('; ');
-                
+
                 // Also count skipped unresolved SIDs
                 const unresolvedSIDs = stampData.operations
                     .filter(op => op.type === 'skip' && op.reason?.includes('unresolved SID'))
                     .length;
-                
-                const errorMessage = errorDetails 
+
+                const errorMessage = errorDetails
                     ? `ACL stamping failed: ${errorDetails}${unresolvedSIDs > 0 ? ` (${unresolvedSIDs} unresolved SIDs skipped)` : ''}`
                     : `ACL stamping failed${unresolvedSIDs > 0 ? ` (${unresolvedSIDs} unresolved SIDs skipped)` : ''}`;
-                
+
                 this.logger.error(`ACL stamping failed from ${sourcePath} to ${targetPath}`, errorMessage);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id,
                     new Error(errorMessage), { name: command.fPath, path: targetPath });
@@ -362,6 +362,9 @@ export class StampMetaService {
                     const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, new Error(`Stamping ACLs Errors:\n${logData.join('\n')}`),
                         { name: command.fPath, path: targetPath });
                     await jobContext.publishToErrorStream(dmErr);
+                    output.targetErrors.push('ACL_STAMP_FAILED');
+
+                    return output;
                     //output.targetErrors.push("ACL_STAMP_FAILED");
                 } else {
                     // Log as warning/info for monitoring purposes
@@ -393,10 +396,19 @@ export class StampMetaService {
     async stampFileAttrMeta({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         if (process.platform !== 'win32') return output;
+        
         try {
-            const fileAttr = await this.shellService.runCommand(`attrib ${sourcePath}`);
-            command.ops[OPS_CMD.STAMP_META].params.fileAttr = fileAttr.trim()?.split(/\s+/)?.filter(token => !this.attributeRegex.test(token)).join('')
-            this.logger.debug(`File attributes for ${sourcePath}: ${command.ops[OPS_CMD.STAMP_META].params.fileAttr}`);
+            // Get source attributes
+            const sourceAttrOutput = await this.shellService.runCommand(`attrib "${sourcePath}"`);
+            const sourceAttrs = sourceAttrOutput.trim()?.split(/\s+/)?.filter(token => !this.attributeRegex.test(token)).join('') || '';
+            
+            // Get target attributes to compare
+            const targetAttrOutput = await this.shellService.runCommand(`attrib "${targetPath}"`);
+            const targetAttrs = targetAttrOutput.trim()?.split(/\s+/)?.filter(token => !this.attributeRegex.test(token)).join('') || '';
+            
+            command.ops[OPS_CMD.STAMP_META].params.fileAttr = sourceAttrs;
+            this.logger.debug(`Source attributes for ${sourcePath}: ${sourceAttrs}`);
+            this.logger.debug(`Target attributes for ${targetPath}: ${targetAttrs}`);
 
         } catch (error) {
             this.logger.error(`Getting Attribute for ${sourcePath}, Error: ${error.message}`, error.stack);
@@ -405,23 +417,44 @@ export class StampMetaService {
             output.sourceErrors.push(error.code);
             return output;
         }
+        
         try {
+            const sourceAttrs = command.ops[OPS_CMD.STAMP_META].params.fileAttr || '';
+            
+            // First, clear all attributes on target
+            // This ensures we start fresh and match source exactly
+            const clearCmd = `attrib -R -A -S -H "${targetPath}"`;
+            await this.shellService.runCommand(clearCmd);
+            
+            // Then apply only the attributes from source
             let attributeFlags = '';
-            if (command.ops[OPS_CMD.STAMP_META].params.fileAttr?.includes('H')) attributeFlags += '+H ';
-            if (command.ops[OPS_CMD.STAMP_META].params.fileAttr?.includes('S')) attributeFlags += '+S ';
-            if (command.ops[OPS_CMD.STAMP_META].params.fileAttr?.includes('R')) attributeFlags += '+R ';
-            if (command.ops[OPS_CMD.STAMP_META].params.fileAttr?.includes('A')) attributeFlags += '+A ';
-
-            this.logger.debug(`Setting file attributes for ${targetPath}: ${attributeFlags}`);
+            
+            // Check each possible attribute
+            // R = Read-only
+            if (sourceAttrs.includes('R')) attributeFlags += '+R ';
+            
+            // A = Archive
+            if (sourceAttrs.includes('A')) attributeFlags += '+A ';
+            
+            // S = System
+            if (sourceAttrs.includes('S')) attributeFlags += '+S ';
+            
+            // H = Hidden
+            if (sourceAttrs.includes('H')) attributeFlags += '+H ';
+            
+            // I = Not content indexed (if present)
+            if (sourceAttrs.includes('I')) attributeFlags += '+I ';
+            
+            this.logger.debug(`Setting file attributes for ${targetPath}: ${attributeFlags || 'none'}`);
 
             if (attributeFlags) {
-                const command = `attrib ${attributeFlags.trim()} "${targetPath}"`;
-                this.logger.debug(`Setting file attributes for ${targetPath}: ${command}`);
-                await this.shellService.runCommand(command);
+                const setCmd = `attrib ${attributeFlags.trim()} "${targetPath}"`;
+                this.logger.debug(`Setting file attributes command: ${setCmd}`);
+                await this.shellService.runCommand(setCmd);
             }
 
         } catch (error) {
-            this.logger.error(`Transferring ACL to ${targetPath}, Error: ${error.message}`, error.stack);
+            this.logger.error(`Setting file attributes for ${targetPath}, Error: ${error.message}`, error.stack);
             const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
             await jobContext.publishToErrorStream(dmErr);
             output.targetErrors.push(error.code);
