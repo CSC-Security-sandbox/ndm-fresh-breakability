@@ -222,7 +222,7 @@ func UpdateConfVariables(protocolType, sourceVolumesArgs, destinationVolumesArgs
 		fmt.Println("UMV error add data to volume : ", err.Error())
 	}
 
-	os.Exit(1)
+	os.Exit(1)*/
 	/*err := RemoveDeltaFromVolume(export)
 	if err != nil {
 		fmt.Println("UMV error  data to volume : ", err.Error())

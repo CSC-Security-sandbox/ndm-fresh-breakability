@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Global raw configuration data.
@@ -16,6 +17,19 @@ var (
 	EnvWorkersConfigList  []SSHConfig
 	AttachedWorkersConfig map[string]SSHConfig
 )
+
+type AttachWorkerResult struct {
+	workerConfig SSHConfig
+	workerId     string
+	err          error
+}
+
+type DetachWorkerResult struct {
+	workerConfig SSHConfig
+	workerID     string
+	output       string
+	err          error
+}
 
 // InitWorkers parses the comma‑separated strings for IPs, ports, passwords, and usernames,
 // and builds the EnvWorkersConfigList slice.
@@ -147,25 +161,33 @@ func AttachWorkers(count int, authToken, accountId, projectId string) (map[strin
 		return nil, errors.New("already attached more workers than requested; please detach first")
 	}
 
-	needed := count - current
+	var wg sync.WaitGroup
+	attachWorkerRes := make(chan AttachWorkerResult, len(EnvWorkersConfigList))
 
 	// Iterate over EnvWorkersConfigList and for each not already attached, attempt to attach.
 	for _, workerConfig := range EnvWorkersConfigList {
-		if needed == 0 {
-			break
-		}
 		if containsWorker(AttachedWorkersConfig, workerConfig) {
 			continue
 		}
+
+		wg.Add(1)
 		// Try to register this worker.
-		workerId, err := attachWorkerForConfig(workerConfig, authToken, accountId, projectId)
-		if err != nil {
-			return nil, fmt.Errorf("failed to attach worker %s: %w", workerConfig.Host, err)
-		}
-		LogDebug(fmt.Sprintf("Successfully registered worker %s with workerId: %s", workerConfig.Host, workerId))
-		AttachedWorkersConfig[workerId] = workerConfig
-		needed--
+		go attachWorkerForConfig(workerConfig, authToken, accountId, projectId, attachWorkerRes, &wg)
 	}
+
+	go func() {
+		wg.Wait()
+		close(attachWorkerRes)
+	}()
+
+	for res := range attachWorkerRes {
+		if res.err != nil {
+			return nil, fmt.Errorf("failed to attach worker %s: %w", res.workerConfig.Host, res.err)
+		}
+		LogDebug(fmt.Sprintf("Successfully registered worker %s with workerId: %s", res.workerConfig.Host, res.workerId))
+		AttachedWorkersConfig[res.workerId] = res.workerConfig
+	}
+
 	if getAttachedWorkerCount() != count {
 		return nil, errors.New("failed to attach the required number of workers")
 	}
@@ -198,23 +220,36 @@ func DetachWorkers(workerIdsToDelete []string) error {
 		return errors.New("no worker ID provided for detachment")
 	}
 
+	var wg sync.WaitGroup
+	detachWorkerRes := make(chan DetachWorkerResult, len(workerIdsToDelete))
+
 	for workerId, workerConfig := range AttachedWorkersConfig {
 		for _, workerIdToDelete := range workerIdsToDelete {
 			if workerId == workerIdToDelete {
-				output, err := DetachWorker(workerConfig)
-				if err != nil {
-					msg := fmt.Sprintf("Failed to detach worker %s: %v", workerConfig.Host, err)
-					LogError(msg, err)
-					detachErrors = append(detachErrors, msg)
-				} else {
-					msg := fmt.Sprintf("Successfully detached worker %s with output: %s", workerConfig.Host, output)
-					// Remove the worker from the AttachedWorkersConfig map.
-					delete(AttachedWorkersConfig, workerId)
-					LogDebug(msg)
-				}
+				wg.Add(1)
+				go DetachWorker(workerConfig, workerId, detachWorkerRes, &wg)
 			}
 		}
 	}
+
+	go func() {
+		wg.Wait()
+		close(detachWorkerRes)
+	}()
+
+	for res := range detachWorkerRes {
+		if res.err != nil {
+			msg := fmt.Sprintf("Failed to detach worker %s: %v", res.workerConfig.Host, res.err)
+			LogError(msg, res.err)
+			detachErrors = append(detachErrors, msg)
+		} else {
+			msg := fmt.Sprintf("Successfully detached worker %s with output: %s", res.workerConfig.Host, res.output)
+			// Remove the worker from the AttachedWorkersConfig map.
+			delete(AttachedWorkersConfig, res.workerID)
+			LogDebug(msg)
+		}
+	}
+
 	if len(detachErrors) > 0 {
 		return errors.New(strings.Join(detachErrors, "; "))
 	}
@@ -335,7 +370,8 @@ func GetDetachWorkerScriptForNFS(workerConfig SSHConfig) string {
 }
 
 // DetachWorker runs the detach script on a given worker via SSH.
-func DetachWorker(workerConfig SSHConfig) (string, error) {
+func DetachWorker(workerConfig SSHConfig, workerID string, detachWorkerRes chan DetachWorkerResult, wg *sync.WaitGroup) {
+	defer wg.Done()
 	script := ""
 
 	switch PROTOCOL_TYPE {
@@ -346,7 +382,8 @@ func DetachWorker(workerConfig SSHConfig) (string, error) {
 	}
 
 	LogDebug(fmt.Sprintf("Detaching Worker %s and running script: \n%s", workerConfig.Host, script))
-	return sshRunScript(workerConfig, script)
+	output, err := sshRunScript(workerConfig, script)
+	detachWorkerRes <- DetachWorkerResult{workerConfig, workerID, output, err}
 }
 
 // StartWorker starts the worker service on a given worker via SSH.
@@ -382,32 +419,38 @@ func StopWorker(config SSHConfig) (string, error) {
 	return output, nil
 }
 
-func attachWorkerForConfig(workerConfig SSHConfig, authToken, accountId, projectId string) (string, error) {
+func attachWorkerForConfig(workerConfig SSHConfig, authToken, accountId, projectId string, attachWorkerRes chan AttachWorkerResult, wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	fullURL := CONFIG_SERVICE_URL + "/api/v1/worker-registration"
 	data := map[string]string{
 		"projectId": projectId,
 	}
 	reqBody, err := json.Marshal(data)
 	if err != nil {
-		return "", err
+		attachWorkerRes <- AttachWorkerResult{workerConfig, "", err}
+		return
 	}
 	headers := GetHeaders(authToken, ContentTypeJSON)
 	resp, err := SendAPIRequest("POST", fullURL, reqBody, headers)
 	if err != nil {
-		return "", err
+		attachWorkerRes <- AttachWorkerResult{workerConfig, "", err}
+		return
 	}
 
 	script, workerId, err := CreateWorkerScript(resp)
 	if err != nil {
-		return workerId, err
+		attachWorkerRes <- AttachWorkerResult{workerConfig, workerId, err}
+		return
 	}
 
 	LogDebug(fmt.Sprintf("Attaching Worker %s and running script: \n%s", workerConfig.Host, script))
 	_, err = sshRunScript(workerConfig, script)
 	if err != nil {
-		return workerId, err
+		attachWorkerRes <- AttachWorkerResult{workerConfig, workerId, err}
+		return
 	}
-	return workerId, nil
+	attachWorkerRes <- AttachWorkerResult{workerConfig, workerId, nil}
 }
 
 // GetWorkerIds returns a slice of worker IDs from the AttachedWorkersConfig map.
