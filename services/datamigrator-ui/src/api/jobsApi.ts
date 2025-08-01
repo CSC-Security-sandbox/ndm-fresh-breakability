@@ -26,6 +26,9 @@ export const jobsApi = createApi({
   endpoints: (builder) => ({
     getJobConfigs: builder.query({
       query: ({ projectId }) => `jobs?projectId=${projectId}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      },
       providesTags: ["ALL_JOB_CONFIGS"],
     }),
 
@@ -43,6 +46,12 @@ export const jobsApi = createApi({
           status,
         },
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      },
+      transformErrorResponse: (error: any) => {
+        return error?.data?.error || error?.data || error || {};
+      },
       invalidatesTags: ["ALL_JOB_CONFIGS", "JOB_CONFIG_DETAILS"],
     }),
 
@@ -80,11 +89,17 @@ export const jobsApi = createApi({
 
     getJobConfigDetails: builder.query({
       query: ({ jobConfigId }) => `jobs/${jobConfigId}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || {};
+      },
       providesTags: ["JOB_CONFIG_DETAILS"],
     }),
 
     getJobRuns: builder.query({
       query: ({ projectId }) => `job-run?projectId=${projectId}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      },
       providesTags: ["ALL_JOB_RUNS"],
     }),
 
@@ -151,6 +166,9 @@ export const jobsApi = createApi({
         url: `jobs/project/${projectId}`,
         method: "GET",
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      },
     }),
 
     bulkCutOver: builder.mutation({
@@ -220,7 +238,10 @@ export const jobsApi = createApi({
         url: `jobs/notice-board/${projectId}`,
         method: "GET",
       }),
-    }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response;
+      },
+      }),
 
     getFileServerWorkers: builder.query({
       query: ({ jobRunId }) => ({

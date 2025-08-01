@@ -49,8 +49,8 @@ const CreateProjectForm = ({
       useGetAllUsersQuery('');
   const {data: getAllRoleSResult, isLoading: rolesLoading} =
       useGetAllRolesQuery('');
-  const users = getAllUserResult?.data?.items || [];
-  const roles = getAllRoleSResult?.data?.items || [];
+  const users = getAllUserResult || [];
+  const roles = getAllRoleSResult || [];
   const editMode = !!editSelectedProject?.id;
   const [getAllAssociatedUser] = useLazyGetAllUserRolesQuery();
   const [associatedUsers, setAssociatedUsers] = useState<
@@ -72,7 +72,7 @@ const CreateProjectForm = ({
             project_id: editSelectedProject?.id,
           }).unwrap();
           const tempAssociatedUsers: AssociatedUsersOptionsType[] =
-              res?.data.items.map((userRoles: any) => ({
+            res?.map((userRoles: any) => ({
               user: {
                 label: userRoles?.user?.email,
                 value: userRoles?.user?.id,
@@ -81,7 +81,7 @@ const CreateProjectForm = ({
                 label: userRoles?.role?.role_name,
                 value: userRoles?.role?.id,
               },
-              }));
+            }));
           setAssociatedUsers(tempAssociatedUsers);
         } catch (error) {
           const errorData = error?.data || {};

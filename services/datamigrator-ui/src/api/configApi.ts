@@ -23,6 +23,9 @@ export const configApi = createApi({
         method: "POST",
         body,
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || {};
+      },
       invalidatesTags: ["GET_ALL_FILE_SERVERS"],
     }),
 
@@ -30,6 +33,9 @@ export const configApi = createApi({
     getAllFileServersOfProject: builder.query({
       query: ({ projectId }) => {
         return `/servers?projectId=${projectId}`;
+      },
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || {};
       },
       providesTags: ["GET_ALL_FILE_SERVERS"],
     }),
@@ -58,6 +64,9 @@ export const configApi = createApi({
         url: `/servers/${fileServerId}`,
         method: "GET",
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || {};
+      },
       providesTags: ["GET_FILE_SERVER_BY_ID"],
     }),
 
@@ -70,6 +79,9 @@ export const configApi = createApi({
 
     getAllCutOverPaths: builder.query({
       query: ({ fileServerId }) => `/servers/cutover/${fileServerId}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      },
     }),
 
     getSpeedTestFileServers: builder.query<SpeedTestConfigType[], void>({

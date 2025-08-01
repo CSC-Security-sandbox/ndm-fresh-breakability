@@ -28,6 +28,7 @@ const ManageProject = () => {
     setEditSelectedProject(undefined);
     setIsCreateFormVisible(false);
   };
+
   const userPermissions = useSelector(
     (state: RootStateType) => state.permissionSlice?.userPermissions
   );
@@ -55,7 +56,7 @@ const ManageProject = () => {
 
   const tableStateProps = {
     columns: COL_DEF_FOR_PROJECT,
-    rows: projectList?.data?.items,
+    rows: projectList,
     isSorting: true,
     pageSize: 10,
   };

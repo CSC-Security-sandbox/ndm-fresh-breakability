@@ -15,6 +15,9 @@ export const projectApi = createApi({
       query: (accountId) => {
         return `/projects/accounts/${accountId}/projects?page=1&limit=1000`;
       },
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || [];
+      },
       providesTags: ["ALL_PROJECTS"],
     }),
 

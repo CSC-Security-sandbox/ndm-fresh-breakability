@@ -14,6 +14,9 @@ export const workerManagerApi = createApi({
         method: "POST",
         body,
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      }
     }),
 
     checkConnectionResp: builder.query({
@@ -21,6 +24,9 @@ export const workerManagerApi = createApi({
         url: `/work-manager/workflow/details/${id}`,
         method: "GET",
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      },
     }),
   }),
 });

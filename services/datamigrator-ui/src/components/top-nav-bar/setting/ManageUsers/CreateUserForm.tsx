@@ -64,13 +64,13 @@ const CreateUserForm = ({
 
     try {
       const createUserResponse = await createUserApi(body).unwrap();
-      const decryptedPassword = decryptData(createUserResponse?.data?.items?.tempPassword);
+      const decryptedPassword = decryptData(createUserResponse?.data?.tempPassword);
       setTemporaryPassword(decryptedPassword);
       if (form.formState.is_app_admin) {
         await associateUserApi({
           account_id: localStorage.getItem("account_id"),
-          user_id: createUserResponse?.data?.items?.user.id,
-          role_id: roles['data']?.items.find(
+          user_id: createUserResponse?.data?.user.id,
+          role_id: roles?.find(
               (row) => row.role_name === USER_ROLES_ENUM.APP_ADMIN
           )?.id,
           project_id: "",
@@ -79,9 +79,7 @@ const CreateUserForm = ({
       notify.success(createUserResponse.message);
       setShowTemporaryPassword(true);
     } catch (err) {
-      const errorData = (err as any)?.data;
-      const errorMsg = errorData.error.displayMessage || errorData.message;
-      notify.error(errorMsg);
+      notify.error(err?.message || "Failed to create user");
       console.error({ err, level: "Add user" });
     }
   };
