@@ -12,6 +12,22 @@ import { AclEntry } from "./sid-mapping.util.type";
 import { StampMetaOutput } from "./stamp-meta.type";
 
 
+import {
+    ACLOperations,
+    getFileACL,
+    stampFileACL,
+    compareFileACLs,
+    exportFileACL,
+    importFileACL,
+    ACLError,
+    FileAccessError,
+    CommandExecutionError,
+    type ComparisonResult,
+    type ACLData,
+    type StampResult,
+    type ExportedACL
+} from './aclOperations';
+
 @Injectable()
 export class StampMetaService {
     private readonly logger: LoggerService;
@@ -163,51 +179,81 @@ export class StampMetaService {
     async stampSIDAclToObject({command, jobContext, sourcePath, targetPath, errorType}: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         if(process.platform !== 'win32') return output;
-        try {
-            const getSourceAcl = getAclScript(sourcePath);
-            command.metadata.sid = await this.shellService.runCommand(getSourceAcl);
-        } catch(error) {
-            this.logger.error(`Getting ACL for ${sourcePath}, Error: ${error.message}`, error   .stack);
-            const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.STAMP_META  , errorType, command.id, error, {name: command.fPath, path: targetPath});
-            await jobContext.publishToErrorStream(dmErr);
-            output.sourceErrors.push(error.code);
-            return output;
-        }
-        try {
-            const acl = JSON.parse(command.metadata.sid);
-        
-            const aclMapping: Map<string, string> = new Map();
-            let mappingNotFound: string[] = []
-            // get SID to username mapping
-            if(jobContext.jobConfig.options.isIdentityMappingAvailable) 
-                acl.Access.value = await Promise.all(acl.Access.value.map(async (entry: AclEntry) => {
-                    const mapped = await this.redisService.getOwnerIdentity(jobContext.jobRunId, entry.IdentityReference, 'SID');
-                    if (mapped) {
-                        entry.IdentityReference = mapped;
-                        aclMapping.set(mapped, entry.IdentityReference);
-                    }
-                    else mappingNotFound.push(entry.IdentityReference);
-                    return entry;
-                }))
-            
-            const transferAclSript = getTransferAclSript(targetPath, command.isDir, acl);
-            await this.shellService.runCommand(transferAclSript);
-
-            const getTargetAcl = getAclScript(targetPath);
-            const targetRawAcl = await this.shellService.runCommand(getTargetAcl);
-            const targetAcl = JSON.parse(targetRawAcl);
-            
-            command.ops[OPS_CMD.STAMP_META].params.sidMap = validateSidMapping({
-                sidMapping: aclMapping, expected: acl, 
-                actual: targetAcl, failedMaps: mappingNotFound
+        try{
+           const stapmData =  await stampFileACL(sourcePath, targetPath, {
+                preserveExisting: true,
+                excludePrincipals: [],
+                includePrincipals: [],
+                simulate: false,
+                resolveSIDs: false
             });
-
+            let grantCount = 0;
+            let skipCount = 0;
+           stapmData.operations.forEach(op => {
+            if (op.type === 'grant') {
+                grantCount++;
+                console.log(`  ✅ Grant: ${op.principal} - ${op.permissions}`);
+            } else if (op.type === 'skip') {
+                skipCount++;
+                console.log(`  ⏭️  Skip: ${op.principal} (${op.reason})`);
+            } else if (op.type === 'reset') {
+                console.log(`  🔄 Reset: Clear existing permissions`);
+            }
+        });
         } catch(error) {
-            this.logger.error(`Transferring ACL to ${targetPath}, Error: ${error.message}`, error.stack);
-            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, {name: command.fPath, path: targetPath});
-            await jobContext.publishToErrorStream(dmErr);
-            output.targetErrors.push(error.code);
+            this.logger.error(`Stamping SID ACL from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
+            // const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.STAMP_META  , errorType, command.id, error, {name: command.fPath, path: targetPath});
+            // await jobContext.publishToErrorStream(dmErr);
+            // output.sourceErrors.push(error.code);
+            return output;
+
         }
+
+        // try {
+        //     const getSourceAcl = getAclScript(sourcePath);
+        //     command.metadata.sid = await this.shellService.runCommand(getSourceAcl);
+        // } catch(error) {
+        //     this.logger.error(`Getting ACL for ${sourcePath}, Error: ${error.message}`, error   .stack);
+        //     const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.STAMP_META  , errorType, command.id, error, {name: command.fPath, path: targetPath});
+        //     await jobContext.publishToErrorStream(dmErr);
+        //     output.sourceErrors.push(error.code);
+        //     return output;
+        // }
+        // try {
+        //     const acl = JSON.parse(command.metadata.sid);
+        
+        //     const aclMapping: Map<string, string> = new Map();
+        //     let mappingNotFound: string[] = []
+        //     // get SID to username mapping
+        //     if(jobContext.jobConfig.options.isIdentityMappingAvailable) 
+        //         acl.Access.value = await Promise.all(acl.Access.value.map(async (entry: AclEntry) => {
+        //             const mapped = await this.redisService.getOwnerIdentity(jobContext.jobRunId, entry.IdentityReference, 'SID');
+        //             if (mapped) {
+        //                 entry.IdentityReference = mapped;
+        //                 aclMapping.set(mapped, entry.IdentityReference);
+        //             }
+        //             else mappingNotFound.push(entry.IdentityReference);
+        //             return entry;
+        //         }))
+            
+        //     const transferAclSript = getTransferAclSript(targetPath, command.isDir, acl);
+        //     await this.shellService.runCommand(transferAclSript);
+
+        //     const getTargetAcl = getAclScript(targetPath);
+        //     const targetRawAcl = await this.shellService.runCommand(getTargetAcl);
+        //     const targetAcl = JSON.parse(targetRawAcl);
+            
+        //     command.ops[OPS_CMD.STAMP_META].params.sidMap = validateSidMapping({
+        //         sidMapping: aclMapping, expected: acl, 
+        //         actual: targetAcl, failedMaps: mappingNotFound
+        //     });
+
+        // } catch(error) {
+        //     this.logger.error(`Transferring ACL to ${targetPath}, Error: ${error.message}`, error.stack);
+        //     const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, {name: command.fPath, path: targetPath});
+        //     await jobContext.publishToErrorStream(dmErr);
+        //     output.targetErrors.push(error.code);
+        // }
         return output
     }
 
