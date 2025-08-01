@@ -20,6 +20,7 @@ export interface StreamCollection<T extends Serializable> {
   cleanup(): Promise<void>;
   close(): Promise<void>;
   append(record: T): Promise<string>;
+  appendBulk(record: T[]): Promise<string[]>;
   read(readerName: string): AsyncGenerator<T>;
   groupRead(readerName: string,batchSize:number, groupType: GroupReaderType): AsyncGenerator<T>;
   readAndPurge(readerName: string,batchSize:number, groupType: GroupReaderType): AsyncGenerator<T>;

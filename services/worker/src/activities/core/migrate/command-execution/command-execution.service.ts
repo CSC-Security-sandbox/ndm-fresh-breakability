@@ -10,6 +10,7 @@ import { Operation, Origin } from "src/activities/utils/utils.types";
 import { WorkerThreadService } from "src/thread/worker.thread.service";
 import { CommandExecInput, CommandExecOutput, CommandOutput, ValidateCommandInput } from "./command-execution.type";
 import { StampMetaService } from "./stamp-meta.service";
+import { isPathExists } from "../../utils/utils";
 
 @Injectable()
 export class CommandExecService {
@@ -74,7 +75,9 @@ export class CommandExecService {
             return output;  // skip if already completed
         }
         if( command.ops[OPS_CMD.COPY_FILE].status !== OPS_STATUS.COMPLETED) {
-            if(!fs.existsSync(sourcePath)) {
+            //TODO: convert this to async and non-blocking 
+            const pathExists = await isPathExists(sourcePath);
+            if(!pathExists) {
                 const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.COPY_CONTENT, errorType, command.id, 
                     new Error(`Source path does not exist: ${sourcePath}`), {name: command.fPath, path: sourcePath});
                 await jobContext.publishToErrorStream(dmErr);
@@ -103,8 +106,8 @@ export class CommandExecService {
             return output;  // skip if already completed
         }
         if( command.ops[OPS_CMD.COPY_DIR].status !== OPS_STATUS.COMPLETED) {
-            try {
-                fs.mkdirSync(targetPath, { recursive: true });  
+            try {                
+                await fs.promises.mkdir(targetPath, {recursive: true});                
                 command.ops[OPS_CMD.COPY_DIR].status = OPS_STATUS.COMPLETED;
                 output.shouldStampMeta = true;
 

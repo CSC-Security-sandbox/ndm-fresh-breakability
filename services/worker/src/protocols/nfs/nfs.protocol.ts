@@ -7,6 +7,7 @@ import { ProtocolPayload } from 'src/protocols/protocol/protocol.type';
 import * as fs from 'fs';
 import { Injectable } from '@nestjs/common';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { isPathExists } from 'src/activities/core/utils/utils';
 
 @Injectable()
 export class NFSProtocol extends Protocol {
@@ -161,8 +162,9 @@ export class NFSProtocol extends Protocol {
 
     if (response['status'] === 'success') {
       const mountDir = `${payload.mountBasePath}/${payload.jobRunId}/${payload.pathId}`;
-      if (fs.existsSync(mountDir) && mountDir.startsWith(payload.mountBasePath)) {
-        fs.rmdirSync(mountDir, { recursive: true });
+      const mountDirExists = await isPathExists(mountDir);
+      if (mountDirExists && mountDir.startsWith(payload.mountBasePath)) {
+        await fs.promises.rmdir(mountDir, { recursive: true });
         this.logger.log(`[${traceId}] Directory removed: ${mountDir}`);
       } else {
         this.logger.log(`[${traceId}] Directory does not exist: ${mountDir}`);
@@ -177,8 +179,9 @@ export class NFSProtocol extends Protocol {
       `[${traceId}] Mounting path for ${payload.hostname} of type ${payload} from ${this.workerId}`,
     );
 
-    const mountDir = `${payload.mountBasePath}/${payload.jobRunId}/${payload.pathId}`;
-    if (fs.existsSync(mountDir)) {
+    const mountDir = `${payload.mountBasePath}/${payload.jobRunId}/${payload.pathId}`;    
+    try{
+      await fs.promises.access(mountDir, fs.constants.F_OK);
       this.logger.log(`[${traceId}] Directory already exists: ${mountDir}`);
       return {
         traceId,
@@ -188,23 +191,24 @@ export class NFSProtocol extends Protocol {
         workerId: this.workerId,
         message: `[${traceId}] Directory already exists: ${mountDir}`,
       }
-    } else {
-      try{
-      fs.mkdirSync(mountDir,{ recursive: true });
-      this.logger.log(`[${traceId}] Directory created: ${mountDir}`);
-      } catch (error) {
-        this.logger.error(`[${traceId}] Error creating directory------?: ${error.message}`);
-        return {
-          traceId,
-          status: 'error',
-          protocolType: ProtocolTypes.NFS,
-          hostname: payload.hostname,
-          workerId: this.workerId,
-          message: `[${traceId}] Error creating directory: ${error.message}`,
+    }catch(error){
+      if (error.code === 'ENOENT') {
+        try{
+           await fs.promises.mkdir(mountDir, { recursive: true });
+           this.logger.log(`[${traceId}] Directory created: ${mountDir}`);
+        }catch(mkdirError) {
+          this.logger.error(`[${traceId}] Error creating directory------?: ${mkdirError.message}`);
+          return {
+            traceId,
+            status: 'error',
+            protocolType: ProtocolTypes.NFS,
+            hostname: payload.hostname,
+            workerId: this.workerId,
+            message: `[${traceId}] Error creating directory: ${mkdirError.message}`,
+          }       
         }
       }
     }
-
     const mountResult = await this.executeCommand(
       traceId,
       ProtocolTypes.NFS,
