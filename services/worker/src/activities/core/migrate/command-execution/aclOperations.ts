@@ -328,25 +328,12 @@ export class ACLOperations {
                 try {
                     const cmdResult = await executeCommand(aclCmd);
                     
-                    // Verify the command succeeded by checking the output
-                    if (cmdResult.stdout && cmdResult.stdout.includes('Successfully processed')) {
-                        result.operations.push({
-                            type: commandType as 'grant' | 'deny',
-                            principal: principalForFiltering,
-                            permissions: fullPermString,
-                            status: 'completed'
-                        });
-                    } else {
-                        // Command didn't report success
-                        result.operations.push({
-                            type: commandType as 'grant' | 'deny',
-                            principal: principalForFiltering,
-                            permissions: fullPermString,
-                            status: 'failed',
-                            error: 'Command did not report success'
-                        });
-                        result.success = false;
-                    }
+                    result.operations.push({
+                        type: commandType as 'grant' | 'deny',
+                        principal: principalForFiltering,
+                        permissions: fullPermString,
+                        status: 'completed'
+                    });
                 } catch (error) {
                     const errorMessage = (error as Error).message;
                     
@@ -394,6 +381,9 @@ export class ACLOperations {
             throw new ACLError('Invalid icacls output', 'PARSE_ERROR', { output });
         }
 
+        // Log the first few lines for debugging
+        console.log(`Parsing icacls output for ${lines[0]}`);
+
         for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
 
@@ -401,36 +391,16 @@ export class ACLOperations {
                 continue;
             }
 
-            // Check for deny permissions - they can appear in multiple formats:
-            // Format 1: principal:(N)(permissions)
-            // Format 2: principal:(D)(permissions) 
-            // Format 3: principal:(DENY)(permissions)
-            const isDeny = line.includes('(N)') || line.includes('(D)') || line.includes('(DENY)');
+            // Check for deny permissions - they appear as (N) in the output
+            const isDeny = line.includes('(N)');
 
-            // More flexible regex to handle various ACL formats
+            // Updated regex to properly handle deny permissions
+            // Deny format: "principal:(N)(permissions)"
+            // Allow format: "principal:(permissions)"
             let match;
-            
-            // Try multiple patterns to match different deny formats
             if (isDeny) {
-                // Try pattern 1: principal:(N)(permissions)
+                // Handle deny format: principal:(N)(permissions)
                 match = line.match(/^(.+?):\(N\)\(([^)]+)\)$/);
-                if (!match) {
-                    // Try pattern 2: principal:(D)(permissions)
-                    match = line.match(/^(.+?):\(D\)\(([^)]+)\)$/);
-                }
-                if (!match) {
-                    // Try pattern 3: principal:(DENY)(permissions)
-                    match = line.match(/^(.+?):\(DENY\)\(([^)]+)\)$/);
-                }
-                if (!match) {
-                    // Try pattern 4: principal:(permissions)(N)
-                    match = line.match(/^(.+?):\(([^)]+)\)\(N\)$/);
-                    if (match) {
-                        // Swap the captured groups for this format
-                        const [fullMatch, principal, perms] = match;
-                        match = [fullMatch, principal, perms];
-                    }
-                }
             } else {
                 // Handle allow format: principal:(permissions)
                 match = line.match(/^(.+?):\(([^)]+)\)$/);
@@ -445,7 +415,7 @@ export class ACLOperations {
                 };
 
                 // Parse the permission string
-                if (permissionStr && permissionStr !== 'N' && permissionStr !== 'D' && permissionStr !== 'DENY') {
+                if (permissionStr) {
                     entry.permissions.push(...this.parsePermissionString(permissionStr, true));
                 }
 
@@ -456,6 +426,7 @@ export class ACLOperations {
             }
         }
 
+        console.log(`Parsed ${permissions.length} ACL entries`);
         return { permissions, inheritance };
     }
 

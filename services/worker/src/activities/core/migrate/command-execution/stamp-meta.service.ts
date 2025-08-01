@@ -213,7 +213,9 @@ export class StampMetaService {
 
             const aclOps = new ACLOperations(this.redisService);
 
-            // Skip the pre-check for deny permissions in production
+            // Add logging to track the stamping process
+            this.logger.debug(`Starting ACL stamp from ${sourcePath} to ${targetPath}`);
+
             const stampData = await aclOps.stampFileACL(sourcePath, targetPath, {
                 preserveExisting: false,
                 excludePrincipals: [],
@@ -223,6 +225,9 @@ export class StampMetaService {
                 jobID: jobContext.jobRunId,
                 disableInheritance: false
             });
+
+            // Log the stamp result
+            this.logger.debug(`ACL stamp completed. Success: ${stampData.success}, Operations: ${stampData.operations.length}`);
 
             // Process results
             let grantCount = 0;
@@ -270,6 +275,14 @@ export class StampMetaService {
                 if (operationOrder.length > 0) {
                     this.logger.debug(`ACL operation order for ${targetPath}: ${operationOrder.join(', ')}`);
                 }
+            }
+
+            // Always log summary even if no failures
+            const summary = `ACL stamping summary for ${targetPath}: ${grantCount} granted, ${denyCount} denied, ${skipCount} skipped, ${failCount} failed`;
+            if (stampData.operations.length > 0) {
+                this.logger.log(summary);
+            } else {
+                this.logger.warn(`No ACL operations performed for ${targetPath}`);
             }
 
             // Skip comparison for performance in production unless there were failures
