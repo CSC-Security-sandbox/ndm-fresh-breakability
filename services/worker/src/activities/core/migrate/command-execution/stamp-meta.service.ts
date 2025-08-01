@@ -236,7 +236,8 @@ export class StampMetaService {
                     // logData.push(` Grant: ${op.principal} - ${op.permissions}`);
                 } else if (op.type === 'deny' && op.status === 'completed') {
                     denyCount++;
-                    // logData.push(`Deny: ${op.principal} - ${op.permissions}`);
+                    // Log deny operations for debugging
+                    logData.push(`Deny applied: ${op.principal} - ${op.permissions}`);
                 } else if (op.type === 'skip') {
                     skipCount++;
                     // Only log skips that aren't for unresolved SIDs when identity mapping is enabled
@@ -247,7 +248,12 @@ export class StampMetaService {
                     // logData.push(`🔄 Reset: Clear existing permissions`);
                 } else if (op.status === 'failed') {
                     failCount++;
-                    logData.push(`Failed: ${op.type} ${op.principal} - ${op.error}`);
+                    // Specifically highlight failed deny operations
+                    if (op.type === 'deny') {
+                        logData.push(`DENY FAILED: ${op.principal} - ${op.error}`);
+                    } else {
+                        logData.push(`Failed: ${op.type} ${op.principal} - ${op.error}`);
+                    }
                     const failedIndex = stampData.operations.indexOf(op);
                     if (failedIndex >= 0 && failedIndex < stampData.commands.length) {
                         logData.push(`Failed command: ${stampData.commands[failedIndex]}`);
@@ -255,7 +261,19 @@ export class StampMetaService {
                 }
             });
 
-            // logData.push(`ACL Stamp Summary: ${grantCount} granted, ${denyCount} denied, ${skipCount} skipped, ${failCount} failed`);
+            // Add summary including deny count - always show if there are deny permissions
+            if (denyCount > 0 || failCount > 0 || stampData.operations.some(op => op.type === 'deny')) {
+                logData.push(`ACL Summary: ${grantCount} granted, ${denyCount} denied, ${skipCount} skipped, ${failCount} failed`);
+                
+                // Log any deny operations that were attempted
+                const denyOps = stampData.operations.filter(op => op.type === 'deny');
+                if (denyOps.length > 0) {
+                    logData.push(`Deny operations attempted: ${denyOps.length}`);
+                    denyOps.forEach(op => {
+                        logData.push(`- ${op.principal}: ${op.status} ${op.status === 'failed' ? `(${op.error})` : ''}`);
+                    });
+                }
+            }
 
             // Perform ACL comparison after stamping
             if (stampData.success || failCount < stampData.operations.length) {
@@ -279,11 +297,13 @@ export class StampMetaService {
                     } else {
                         // Only log comparison differences if there were actual stamp failures
                         // This avoids false positives due to timing issues
-                        if (failCount > 0) {
+                        if (failCount > 0 || denyCount === 0 && stampData.operations.some(op => op.type === 'deny')) {
                             if (comparisonResult.differences.onlyInSource.length > 0) {
                                 logData.push(`Missing in target (${comparisonResult.differences.onlyInSource.length} entries):`);
                                 comparisonResult.differences.onlyInSource.forEach(entry => {
-                                    logData.push(`- ${entry.principal} (${entry.accessType})`);
+                                    // Highlight if it's a deny permission
+                                    const prefix = entry.accessType === 'deny' ? 'DENY -' : '-';
+                                    logData.push(`${prefix} ${entry.principal} (${entry.accessType})`);
                                 });
                             }
 
