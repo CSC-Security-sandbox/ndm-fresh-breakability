@@ -9,8 +9,8 @@ import (
 
 var ProjectID string
 
-// createProject creates a project using the API and stores the project ID globally.
-func createProject(authToken string, accountId string) (string, error) {
+// CreateProject creates a project using the API and stores the project ID globally.
+func CreateProject(authToken string, accountId string) (string, error) {
 	fullURL := ADMIN_SERVICE_URL + "/api/v1/projects"
 	data := map[string]string{
 		"account_id":          accountId,
