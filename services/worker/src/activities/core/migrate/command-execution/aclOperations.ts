@@ -301,14 +301,28 @@ export class ACLOperations {
                         status: 'completed'
                     });
                 } catch (error) {
-                    result.operations.push({
-                        type: commandType as 'grant' | 'deny',
-                        principal: principalForFiltering,
-                        permissions: fullPermString,
-                        status: 'failed',
-                        error: (error as Error).message
-                    });
-                    result.success = false;
+                    const errorMessage = (error as Error).message;
+                    
+                    // Check if the error is due to unresolved SID
+                    if (errorMessage.includes('No mapping between account names and security IDs was done') ||
+                        errorMessage.includes('1332')) { // Error code 1332 is for no mapping
+                        result.operations.push({
+                            type: 'skip',
+                            principal: principalForFiltering,
+                            reason: 'unresolved SID - no mapping found',
+                            status: 'skipped'
+                        });
+                        // Don't mark as failed for unresolved SIDs
+                    } else {
+                        result.operations.push({
+                            type: commandType as 'grant' | 'deny',
+                            principal: principalForFiltering,
+                            permissions: fullPermString,
+                            status: 'failed',
+                            error: errorMessage
+                        });
+                        result.success = false;
+                    }
                 }
 
                 result.commands.push(aclCmd);
