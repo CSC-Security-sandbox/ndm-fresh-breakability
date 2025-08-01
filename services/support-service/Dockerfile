@@ -1,11 +1,10 @@
-FROM public.ecr.aws/docker/library/node:20-bullseye-slim
+FROM registry.access.redhat.com/ubi9/nodejs-22-minimal:9.6-1753796458
 
-RUN apt-get update && \
-    apt-get upgrade -y && \
-    apt-get install -y ca-certificates && \
-    npm i -g @nestjs/cli && \
-    npm i -g pm2@latest && \
-    rm -rf /var/lib/apt/lists/*
+USER root
+
+RUN microdnf update -y && \
+    microdnf clean all && \
+    npm install -g @nestjs/cli pm2@latest
 
 WORKDIR /app
 
@@ -20,11 +19,11 @@ COPY ./src ./src
 COPY tsconfig.json .
 COPY tsconfig.build.json .
 COPY nest-cli.json .
+COPY entrypoint.sh .
 
 RUN npm run build
 
+RUN chmod +x /app/entrypoint.sh
 EXPOSE 3000
 
-COPY entrypoint.sh .
-RUN chmod +x /app/entrypoint.sh
 ENTRYPOINT ["/app/entrypoint.sh"]
