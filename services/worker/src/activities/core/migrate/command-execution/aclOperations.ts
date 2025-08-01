@@ -391,37 +391,46 @@ export class ACLOperations {
                 continue;
             }
 
-            // Check for deny permissions - they appear as (N) in the output
-            const isDeny = line.includes('(N)');
-
-            // Updated regex to properly handle deny permissions
-            // Deny format: "principal:(N)(permissions)"
-            // Allow format: "principal:(permissions)"
-            let match;
-            if (isDeny) {
-                // Handle deny format: principal:(N)(permissions)
-                match = line.match(/^(.+?):\(N\)\(([^)]+)\)$/);
-            } else {
-                // Handle allow format: principal:(permissions)
-                match = line.match(/^(.+?):\(([^)]+)\)$/);
-            }
-
+            // More flexible parsing to handle various formats
+            // Format 1: principal:(permissions) - for allow
+            // Format 2: principal:(N)(permissions) - for deny
+            // Format 3: principal:(I)(permissions) - inherited
+            // Format 4: principal:(permissions)(permissions) - multiple permission sets
+            
+            // Check if this is a deny entry
+            const isDeny = line.includes(':(N)') || line.includes('(N)(');
+            
+            // Try to match the line with a more flexible regex
+            const match = line.match(/^(.+?):(.*?)$/);
+            
             if (match) {
-                const [, principal, permissionStr] = match;
+                const [, principal, permissionsSection] = match;
                 const entry: ACLEntry = {
                     principal: principal.trim(),
                     permissions: [],
-                    accessType: isDeny ? 'deny' : 'allow'
+                    accessType: 'allow' // default to allow
                 };
 
-                // Parse the permission string
-                if (permissionStr) {
-                    entry.permissions.push(...this.parsePermissionString(permissionStr, true));
+                // Parse the permissions section
+                // Extract all permission groups in parentheses
+                const permissionGroups = permissionsSection.match(/\([^)]+\)/g) || [];
+                
+                for (const group of permissionGroups) {
+                    const content = group.slice(1, -1); // Remove parentheses
+                    
+                    if (content === 'N') {
+                        // This indicates a deny entry
+                        entry.accessType = 'deny';
+                    } else if (content !== 'DENY' && content.length > 0) {
+                        // This is a permission string
+                        entry.permissions.push(...this.parsePermissionString(content, true));
+                    }
                 }
 
                 // Only add entry if it has permissions
                 if (entry.permissions.length > 0) {
                     permissions.push(entry);
+                    console.log(`Added ${entry.accessType} entry for ${entry.principal} with ${entry.permissions.length} permissions`);
                 }
             }
         }
