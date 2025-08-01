@@ -55,6 +55,7 @@ describe('WorkManagerService', () => {
     };
     httpService = {
       get: jest.fn(),
+      post: jest.fn(),
     };
     workerOptions = {
       createWorkerOptions: jest.fn().mockReturnValue({ taskQueue: 'tq', identity: 'id' }),
@@ -68,7 +69,8 @@ describe('WorkManagerService', () => {
         WorkManagerService,
         { provide: ConfigService, useValue: configService },
         { provide: HttpService, useValue: httpService },
-        { provide: LoggerFactory,
+        {
+          provide: LoggerFactory,
           useValue: mockLoggerFactory,
         },
         { provide: WorkerOptionsService, useValue: workerOptions },
@@ -123,14 +125,14 @@ describe('WorkManagerService', () => {
     it('should fetch configs, handle them, and monitor task queues', async () => {
       service['loadingConfigs'] = false;
       const mockData = [{ id: 1 }];
-      httpService.get.mockReturnValue(of({ status: 200, data: mockData }));
+      httpService.post.mockReturnValue(of({ status: 200, data: mockData }));
       jest.spyOn(service, 'handleConfigurations').mockResolvedValue(undefined);
       jest.spyOn(service, 'monitorTaskQueues').mockResolvedValue(undefined);
 
       await service.handleCron();
 
       expect(authService.getAccessToken).toHaveBeenCalled();
-      expect(httpService.get).toHaveBeenCalled();
+      expect(httpService.post).toHaveBeenCalled();
       expect(service.handleConfigurations).toHaveBeenCalledWith(mockData);
       expect(service.monitorTaskQueues).toHaveBeenCalled();
       expect(service['loadingConfigs']).toBe(false);
@@ -138,7 +140,7 @@ describe('WorkManagerService', () => {
 
     it('should log error if fetching configs fails', async () => {
       authService.getAccessToken.mockResolvedValue('token');
-      httpService.get.mockImplementation(() => { throw new Error('fail'); });
+      httpService.post.mockImplementation(() => { throw new Error('fail'); });
       await service.handleCron();
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error fetching configurations:'));
       expect(service['loadingConfigs']).toBe(false);
