@@ -45,11 +45,8 @@ describe('WorkerThreadService', () => {
         {
           provide: MetricsService,
           useValue: {
-            recordTaskCompleted: jest.fn(),
             recordWorkerThreadError: jest.fn(),
-            updateWorkerThreadStatus: jest.fn(),
-            updateQueueDepth: jest.fn(),
-            updateBandAllocation: jest.fn(),
+            setWorkerThreadService: jest.fn(),
           },
         },
       ],
@@ -222,11 +219,8 @@ describe('WorkerThreadService', () => {
     };
 
     const metricsServiceMock = {
-      recordTaskCompleted: jest.fn(),
       recordWorkerThreadError: jest.fn(),
-      updateWorkerThreadStatus: jest.fn(),
-      updateQueueDepth: jest.fn(),
-      updateBandAllocation: jest.fn(),
+      setWorkerThreadService: jest.fn(),
     };
 
     const WorkerThreadServiceModule = (await import('./worker.thread.service')).WorkerThreadService;
@@ -317,6 +311,16 @@ describe('WorkerThreadService', () => {
     expect(service.getTaskBand(10485761)).toBe('100mb');
     expect(service.getTaskBand(104857600)).toBe('100mb');
     expect(service.getTaskBand(104857601)).toBe('1gb');
+  });
+
+  it('should return worker metrics correctly', () => {
+    const metrics = service.getWorkerThreadMetrics();
+    
+    expect(metrics).toHaveProperty('totalThreads');
+    expect(metrics).toHaveProperty('availableThreads');
+    expect(metrics).toHaveProperty('activeTasks');
+    expect(metrics).toHaveProperty('queueDepths');
+    expect(typeof metrics.queueDepths).toBe('object');
   });
 
 });

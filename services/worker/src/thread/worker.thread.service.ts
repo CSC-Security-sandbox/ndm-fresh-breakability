@@ -21,7 +21,6 @@ import { MetricsService } from '../metrics/metrics.service';
 export class WorkerThreadService {
   private totalThreads: number;
   private activeTasks: Map<string, ThreadTask> = new Map();
-  private taskTimestamps: Map<string, number> = new Map(); // Track task start times
 
   private operationBands: Map<string, OperationBand> = new Map<
     string,
@@ -69,9 +68,9 @@ export class WorkerThreadService {
     }
     this.assignThreads();
     this.initWorkers(this.totalThreads);
-
-    // Record initial band allocation metrics
-    this.recordBandAllocationMetrics();
+    
+    // Set reference in MetricsService for interval-based collection
+    this.metricsService.setWorkerThreadService(this);
   }
 
   assignThreads = () => {
@@ -122,48 +121,21 @@ export class WorkerThreadService {
           if (result.isResolved) {
             const task = this.activeTasks.get(result.id);
             if (task) {
-              // Record task completion metrics
-              const startTime = this.taskTimestamps.get(result.id);
-              if (startTime) {
-                const duration = Date.now() - startTime;
-                const bandName = this.getTaskBandFromTask(task);
-                this.metricsService.recordTaskCompleted(
-                  bandName,
-                  duration,
-                  true,
-                );
-              }
-
               task.resolve(result.data);
               this.activeTasks.delete(result.id);
-              this.taskTimestamps.delete(result.id);
             }
           }
           // reject the task
           if (result.isRejected) {
             const task = this.activeTasks.get(result.id);
             if (task) {
-              // Record task failure metrics
-              const startTime = this.taskTimestamps.get(result.id);
-              if (startTime) {
-                const duration = Date.now() - startTime;
-                const bandName = this.getTaskBandFromTask(task);
-                this.metricsService.recordTaskCompleted(
-                  bandName,
-                  duration,
-                  false,
-                );
-              }
-
               task.reject(result.data);
               this.activeTasks.delete(result.id);
-              this.taskTimestamps.delete(result.id);
             }
           }
         });
 
         this.availableWorkers.push(worker);
-        this.updateWorkerMetrics();
         this.processQueue();
       });
 
@@ -244,9 +216,6 @@ export class WorkerThreadService {
           (task) => task.id,
         );
         worker.postMessage(input);
-
-        // Update metrics after processing tasks
-        this.updateWorkerMetrics();
       }
       if (worker && tasks.length === 0) {
         this.availableWorkers.push(worker);
@@ -263,9 +232,6 @@ export class WorkerThreadService {
     return new Promise((resolve, reject) => {
       const operationBand = this.getTaskBand(size);
 
-      // Record task start time for duration tracking
-      this.taskTimestamps.set(operationId, Date.now());
-
       this.operationBands.get(operationBand).task.push({
         id: operationId,
         data: { sourcePath, destinationPath, operationId, size },
@@ -274,8 +240,6 @@ export class WorkerThreadService {
         reject,
       });
 
-      // Update metrics after adding task to queue
-      this.updateWorkerMetrics();
       this.processQueue();
     });
   }
@@ -292,54 +256,18 @@ export class WorkerThreadService {
     return this.sizes[4].name;
   }
 
-  private getTaskBandFromTask(task: ThreadTask): string {
-    // Extract band information from task data or use default logic
-    if (task.data && task.data.size) {
-      return this.getTaskBand(task.data.size);
-    }
-    // Fallback: try to determine from worker details
-    const workerDetail = Array.from(this.workerDetails.values()).find(
-      (detail) => detail.operatingTasks.includes(task.id),
-    );
-    return workerDetail?.operationBand || '1mb'; // Default fallback
-  }
-
-  // Metrics collection methods
-  private recordBandAllocationMetrics() {
-    this.operationBands.forEach((band, bandName) => {
-      this.metricsService.updateBandAllocation(bandName, band.numberOfThreads);
-    });
-  }
-
-  private updateWorkerMetrics() {
-    this.metricsService.updateWorkerThreadStatus(
-      this.totalThreads,
-      this.availableWorkers.length,
-      this.activeTasks.size,
-    );
-
-    // Update queue depths for each band
-    this.operationBands.forEach((band, bandName) => {
-      this.metricsService.updateQueueDepth(bandName, band.task.length);
-    });
-  }
-
+  // Method for MetricsService to get current worker metrics
   public getWorkerThreadMetrics() {
-    const bandMetrics = new Map();
+    const queueDepths: Record<string, number> = {};
     this.operationBands.forEach((band, bandName) => {
-      bandMetrics.set(bandName, {
-        threadCount: band.numberOfThreads,
-        queueDepth: band.task.length,
-        maxFetch: this.sizes.find((s) => s.name === bandName)?.maxFetch || 0,
-      });
+      queueDepths[bandName] = band.task.length;
     });
 
     return {
       totalThreads: this.totalThreads,
       availableThreads: this.availableWorkers.length,
-      busyThreads: this.totalThreads - this.availableWorkers.length,
-      activeTasksCount: this.activeTasks.size,
-      bandMetrics: Object.fromEntries(bandMetrics),
+      activeTasks: this.activeTasks.size,
+      queueDepths,
     };
   }
 }

@@ -9,7 +9,6 @@ import {
   collectDefaultMetrics,
   Counter,
   Gauge,
-  Histogram,
   Pushgateway,
   Registry,
 } from 'prom-client';
@@ -18,6 +17,7 @@ import {
   LoggerService,
   LoggerFactory,
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { WorkerThreadService } from 'src/thread/worker.thread.service';
 
 @Injectable()
 export class MetricsService implements OnModuleInit, OnModuleDestroy {
@@ -25,12 +25,14 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
   private readonly pushgateway: Pushgateway<any>;
   private pushInterval: NodeJS.Timeout;
   private collectSystemMetricsInterval: NodeJS.Timeout;
+  private collectWorkerThreadMetricsInterval: NodeJS.Timeout;
 
   private readonly workerId: string = process.env.WORKER_ID || 'worker-id';
   private readonly pushgatewayUrl: string = `http://${process.env.CONTROL_PLANE_IP || '127.0.0.1'}:9091`;
   private readonly metricsEnabled: boolean = process.env.METRICS_ENABLED !== 'false';
   private readonly collectionInterval: number = parseInt(process.env.METRICS_COLLECTION_INTERVAL || '5000');
   private readonly pushIntervalMs: number = parseInt(process.env.METRICS_PUSH_INTERVAL || '15000');
+  private readonly workerThreadMetricsInterval: number = parseInt(process.env.WORKER_METRICS_COLLECTION_INTERVAL || '2000');
 
   public readonly httpRequestCounter = new Counter({
     name: 'worker_http_requests_total',
@@ -89,23 +91,6 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     registers: [this.registry],
   });
 
-  private readonly workerTaskCompletedCounter = new Counter({
-    name: 'worker_tasks_completed_total',
-    help: 'Total completed worker tasks',
-    labelNames: ['worker_id', 'band_name', 'status'], // status: success, error
-    registers: [this.registry],
-  });
-
-  private readonly workerTaskDurationHistogram = new Histogram({
-    name: 'worker_task_duration_milliseconds',
-    help: 'Task completion time by band in milliseconds',
-    labelNames: ['worker_id', 'band_name', 'operation'],
-    buckets: [
-      1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000,
-    ],
-    registers: [this.registry],
-  });
-
   private readonly workerThreadErrorCounter = new Counter({
     name: 'worker_thread_errors_total',
     help: 'Total worker thread errors',
@@ -113,14 +98,8 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     registers: [this.registry],
   });
 
-  private readonly workerBandAllocationGauge = new Gauge({
-    name: 'worker_band_thread_allocation',
-    help: 'Number of threads allocated to each band',
-    labelNames: ['worker_id', 'band_name'],
-    registers: [this.registry],
-  });
-
   private readonly logger: LoggerService;
+  private workerThreadService: WorkerThreadService;
 
   constructor(
     private readonly httpService: HttpService,
@@ -181,9 +160,17 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     this.logger.log('Starting metrics collection');
+    
+    // Initialize worker thread metrics with baseline values immediately
+    this.initializeWorkerThreadMetrics();
+    
     this.collectSystemMetricsInterval = setInterval(
       () => this.collectSystemMetrics(),
       this.collectionInterval,
+    );
+    this.collectWorkerThreadMetricsInterval = setInterval(
+      () => this.collectWorkerThreadMetrics(),
+      this.workerThreadMetricsInterval,
     );
     this.pushInterval = setInterval(
       () => this.pushMetrics(),
@@ -194,6 +181,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
   async onModuleDestroy() {
     clearInterval(this.pushInterval);
     clearInterval(this.collectSystemMetricsInterval);
+    clearInterval(this.collectWorkerThreadMetricsInterval);
 
     try {
       await this.pushgateway.delete({ jobName: `worker-${this.workerId}` });
@@ -216,7 +204,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
       await Promise.all([
         this.collectCPUMetrics(),
         this.collectMemoryMetrics(),
-        this.collectDiskUsageMetrics(), 
+        this.collectDiskUsageMetrics(),
         this.collectNetworkIOMetrics(),
       ]);
     } catch (err) {
@@ -284,18 +272,18 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         const total = disk.size;
         const used = disk.used;
         const available = disk.available;
-        
+
         this.diskUsageGauge.set(
           { worker_id: this.workerId, mount: mountPoint, type: 'total' },
-          total
+          total,
         );
         this.diskUsageGauge.set(
           { worker_id: this.workerId, mount: mountPoint, type: 'used' },
-          used
+          used,
         );
         this.diskUsageGauge.set(
           { worker_id: this.workerId, mount: mountPoint, type: 'available' },
-          available
+          available,
         );
 
         const usagePercent = total > 0 ? (used / total) * 100 : 0;
@@ -374,69 +362,103 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  // Public methods for WorkerThreadService to call
-  public recordTaskCompleted(
-    bandName: string,
-    durationMs: number,
-    success: boolean,
-  ) {
-    this.workerTaskCompletedCounter.inc({
-      worker_id: this.workerId,
-      band_name: bandName,
-      status: success ? 'success' : 'error',
-    });
+  private initializeWorkerThreadMetrics() {
+    // ensure metrics are available even before any migration is triggered
+    
+    if (this.workerThreadService) {
+      // If WorkerThreadService is already available, collect actual metrics
+      this.collectWorkerThreadMetrics();
+    } else {
+      // If not available yet, set reasonable defaults
+      // These will be updated once the WorkerThreadService becomes available
+      this.logger.debug('Setting baseline worker thread metrics to zeros');
+      
+      // Set all metrics to zero initially (will be updated by interval collection)
+      this.workerThreadsGauge.set(
+        { worker_id: this.workerId, status: 'total' },
+        0,
+      );
+      this.workerThreadsGauge.set(
+        { worker_id: this.workerId, status: 'available' },
+        0,
+      );
+      this.workerThreadsGauge.set(
+        { worker_id: this.workerId, status: 'busy' },
+        0,
+      );
+      this.workerTasksActiveGauge.set(
+        { worker_id: this.workerId },
+        0,
+      );
 
-    this.workerTaskDurationHistogram.observe(
-      {
-        worker_id: this.workerId,
-        band_name: bandName,
-        operation: 'copy_file',
-      },
-      durationMs, // Keep in milliseconds
-    );
+      // Set default queue depths for all known bands
+      const defaultBands = ['1kb', '1mb', '10mb', '100mb', '1gb'];
+      defaultBands.forEach(bandName => {
+        this.workerTasksQueueGauge.set(
+          { worker_id: this.workerId, band_name: bandName },
+          0,
+        );
+      });
+    }
   }
 
+  private async collectWorkerThreadMetrics() {
+    try {
+      if (this.workerThreadService) {
+        // Get current queue depths and thread status from WorkerThreadService
+        const workerThreadMetrics =
+          this.workerThreadService.getWorkerThreadMetrics();
+
+        this.logger.debug(`Worker thread metrics collected:`, workerThreadMetrics);
+
+        // Update worker thread status metrics
+        this.workerThreadsGauge.set(
+          { worker_id: this.workerId, status: 'total' },
+          workerThreadMetrics.totalThreads,
+        );
+        this.workerThreadsGauge.set(
+          { worker_id: this.workerId, status: 'available' },
+          workerThreadMetrics.availableThreads,
+        );
+        this.workerThreadsGauge.set(
+          { worker_id: this.workerId, status: 'busy' },
+          workerThreadMetrics.totalThreads -
+            workerThreadMetrics.availableThreads,
+        );
+        this.workerTasksActiveGauge.set(
+          { worker_id: this.workerId },
+          workerThreadMetrics.activeTasks,
+        );
+
+        // Update queue depths for each band
+        Object.entries(workerThreadMetrics.queueDepths).forEach(
+          ([bandName, queueDepth]) => {
+            this.workerTasksQueueGauge.set(
+              { worker_id: this.workerId, band_name: bandName },
+              queueDepth as number,
+            );
+          },
+        );
+      } else {
+        this.logger.warn('WorkerThreadService not available for metrics collection');
+      }
+    } catch (err) {
+      this.logger.error(
+        'Error collecting worker thread metrics:',
+        err.message || err,
+      );
+    }
+  }
+
+  // Public methods for WorkerThreadService to call
+  public setWorkerThreadService(workerThreadService: any) {
+    this.workerThreadService = workerThreadService;
+  }
+  
   public recordWorkerThreadError(errorType: string) {
     this.workerThreadErrorCounter.inc({
       worker_id: this.workerId,
       error_type: errorType,
     });
-  }
-
-  public updateWorkerThreadStatus(
-    totalThreads: number,
-    availableThreads: number,
-    activeTasksCount: number,
-  ) {
-    this.workerThreadsGauge.set(
-      { worker_id: this.workerId, status: 'total' },
-      totalThreads,
-    );
-    this.workerThreadsGauge.set(
-      { worker_id: this.workerId, status: 'available' },
-      availableThreads,
-    );
-    this.workerThreadsGauge.set(
-      { worker_id: this.workerId, status: 'busy' },
-      totalThreads - availableThreads,
-    );
-    this.workerTasksActiveGauge.set(
-      { worker_id: this.workerId },
-      activeTasksCount,
-    );
-  }
-
-  public updateQueueDepth(bandName: string, queueDepth: number) {
-    this.workerTasksQueueGauge.set(
-      { worker_id: this.workerId, band_name: bandName },
-      queueDepth,
-    );
-  }
-
-  public updateBandAllocation(bandName: string, threadCount: number) {
-    this.workerBandAllocationGauge.set(
-      { worker_id: this.workerId, band_name: bandName },
-      threadCount,
-    );
   }
 }

@@ -283,6 +283,7 @@ describe('MetricsService', () => {
     it('should clear intervals and handle delete error', async () => {
       (service as any).pushInterval = setInterval(() => {}, 1000);
       (service as any).collectSystemMetricsInterval = setInterval(() => {}, 1000);
+      (service as any).collectWorkerThreadMetricsInterval = setInterval(() => {}, 1000);
       const deleteMock = jest.fn().mockRejectedValue(new Error('fail-delete'));
       (service as any).pushgateway.delete = deleteMock;
       jest.spyOn((service as any).logger, 'error').mockImplementation(jest.fn());
@@ -294,6 +295,7 @@ describe('MetricsService', () => {
     it('should handle no intervals set', async () => {
       (service as any).pushInterval = undefined;
       (service as any).collectSystemMetricsInterval = undefined;
+      (service as any).collectWorkerThreadMetricsInterval = undefined;
       const deleteMock = jest.fn().mockResolvedValue(undefined);
       (service as any).pushgateway.delete = deleteMock;
       jest.spyOn((service as any).logger, 'error').mockImplementation(jest.fn());
@@ -365,40 +367,11 @@ describe('MetricsService', () => {
       jest.spyOn((service as any).workerThreadsGauge, 'set').mockImplementation(jest.fn());
       jest.spyOn((service as any).workerTasksQueueGauge, 'set').mockImplementation(jest.fn());
       jest.spyOn((service as any).workerTasksActiveGauge, 'set').mockImplementation(jest.fn());
-      jest.spyOn((service as any).workerTaskCompletedCounter, 'inc').mockImplementation(jest.fn());
-      jest.spyOn((service as any).workerTaskDurationHistogram, 'observe').mockImplementation(jest.fn());
       jest.spyOn((service as any).workerThreadErrorCounter, 'inc').mockImplementation(jest.fn());
-      jest.spyOn((service as any).workerBandAllocationGauge, 'set').mockImplementation(jest.fn());
     });
 
     afterEach(() => {
       jest.restoreAllMocks();
-    });
-
-    it('should record task completed successfully', () => {
-      service.recordTaskCompleted('1mb', 5000, true);
-      expect((service as any).workerTaskCompletedCounter.inc).toHaveBeenCalledWith({
-        worker_id: (service as any).workerId,
-        band_name: '1mb',
-        status: 'success'
-      });
-      expect((service as any).workerTaskDurationHistogram.observe).toHaveBeenCalledWith(
-        {
-          worker_id: (service as any).workerId,
-          band_name: '1mb',
-          operation: 'copy_file'
-        },
-        5000
-      );
-    });
-
-    it('should record task completed with error', () => {
-      service.recordTaskCompleted('10mb', 3000, false);
-      expect((service as any).workerTaskCompletedCounter.inc).toHaveBeenCalledWith({
-        worker_id: (service as any).workerId,
-        band_name: '10mb',
-        status: 'error'
-      });
     });
 
     it('should record worker thread error', () => {
@@ -409,40 +382,49 @@ describe('MetricsService', () => {
       });
     });
 
-    it('should update worker thread status', () => {
-      service.updateWorkerThreadStatus(5, 2, 3);
+    it('should set worker thread service reference', () => {
+      const mockWorkerService = { getWorkerThreadMetrics: jest.fn() };
+      service.setWorkerThreadService(mockWorkerService);
+      expect((service as any).workerThreadService).toBe(mockWorkerService);
+    });
+
+    it('should collect worker thread metrics when worker service is set', async () => {
+      const mockWorkerService = {
+        getWorkerThreadMetrics: jest.fn().mockReturnValue({
+          totalThreads: 5,
+          availableThreads: 2,
+          activeTasks: 3,
+          queueDepths: {
+            '1mb': 10,
+            '10mb': 5
+          }
+        })
+      };
+
+      service.setWorkerThreadService(mockWorkerService);
+      await (service as any).collectWorkerThreadMetrics();
+
+      expect(mockWorkerService.getWorkerThreadMetrics).toHaveBeenCalled();
       expect((service as any).workerThreadsGauge.set).toHaveBeenCalledWith(
         { worker_id: (service as any).workerId, status: 'total' },
         5
       );
-      expect((service as any).workerThreadsGauge.set).toHaveBeenCalledWith(
-        { worker_id: (service as any).workerId, status: 'available' },
-        2
-      );
-      expect((service as any).workerThreadsGauge.set).toHaveBeenCalledWith(
-        { worker_id: (service as any).workerId, status: 'busy' },
-        3
-      );
-      expect((service as any).workerTasksActiveGauge.set).toHaveBeenCalledWith(
-        { worker_id: (service as any).workerId },
-        3
-      );
-    });
-
-    it('should update queue depth', () => {
-      service.updateQueueDepth('100mb', 10);
       expect((service as any).workerTasksQueueGauge.set).toHaveBeenCalledWith(
-        { worker_id: (service as any).workerId, band_name: '100mb' },
+        { worker_id: (service as any).workerId, band_name: '1mb' },
         10
       );
+      expect((service as any).workerTasksQueueGauge.set).toHaveBeenCalledWith(
+        { worker_id: (service as any).workerId, band_name: '10mb' },
+        5
+      );
     });
 
-    it('should update band allocation', () => {
-      service.updateBandAllocation('1gb', 1);
-      expect((service as any).workerBandAllocationGauge.set).toHaveBeenCalledWith(
-        { worker_id: (service as any).workerId, band_name: '1gb' },
-        1
-      );
+    it('should handle missing worker service in collectWorkerThreadMetrics', async () => {
+      const loggerSpy = jest.spyOn((service as any).logger, 'error').mockClear();
+      await (service as any).collectWorkerThreadMetrics();
+      
+      // Should not throw error and should not call any metrics methods
+      expect(loggerSpy).not.toHaveBeenCalled();
     });
   });
 
