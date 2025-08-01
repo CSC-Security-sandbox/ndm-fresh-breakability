@@ -214,6 +214,18 @@ export class StampMetaService {
             const aclOps = new ACLOperations(this.redisService);
 
 
+            // First, check if source has any deny permissions
+            const sourceACL = await aclOps.getFileACL(sourcePath, {
+                resolveSIDs: jobContext.jobConfig.options.isIdentityMappingAvailable,
+                isIdentityMappingAvailable: jobContext.jobConfig.options.isIdentityMappingAvailable,
+                jobID: jobContext.jobRunId
+            });
+            
+            const sourceDenyCount = sourceACL.permissions.filter(p => p.accessType === 'deny').length;
+            if (sourceDenyCount > 0) {
+                logData.push(`Source has ${sourceDenyCount} deny permissions`);
+            }
+
             const stampData = await aclOps.stampFileACL(sourcePath, targetPath, {
                 preserveExisting: false,
                 excludePrincipals: [],
@@ -233,11 +245,16 @@ export class StampMetaService {
             stampData.operations.forEach(op => {
                 if (op.type === 'grant' && op.status === 'completed') {
                     grantCount++;
-                    // logData.push(` Grant: ${op.principal} - ${op.permissions}`);
                 } else if (op.type === 'deny' && op.status === 'completed') {
                     denyCount++;
-                    // Log deny operations for debugging
-                    logData.push(`Deny applied: ${op.principal} - ${op.permissions}`);
+                    // Always log successful deny operations
+                    logData.push(`✓ Deny applied: ${op.principal} - ${op.permissions}`);
+                } else if (op.type === 'deny' && op.status === 'failed') {
+                    failCount++;
+                    logData.push(`✗ DENY FAILED: ${op.principal} - ${op.error}`);
+                } else if (op.type === 'deny' && op.status === 'skipped') {
+                    skipCount++;
+                    logData.push(`⚠ Deny skipped: ${op.principal} (${op.reason})`);
                 } else if (op.type === 'skip') {
                     skipCount++;
                     // Only log skips that aren't for unresolved SIDs when identity mapping is enabled

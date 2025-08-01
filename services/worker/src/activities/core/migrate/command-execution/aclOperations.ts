@@ -74,7 +74,7 @@ export class ACLOperations {
         }
     }
 
-    private async getFileACL(filePath: string, options: GetACLOptions = {}): Promise<ACLData> {
+    public async getFileACL(filePath: string, options: GetACLOptions = {}): Promise<ACLData> {
         const { resolveSIDs = false, isIdentityMappingAvailable = false, jobID } = options;
 
         try {
@@ -331,16 +331,10 @@ export class ACLOperations {
                 // Ensure we have the correct format for deny permissions
                 if (accessType === 'deny' && fullPermString) {
                     // Deny permissions sometimes need special formatting
-                    console.log(`Formatting deny permission: ${fullPermString} for ${principalForCommand}`);
                 }
 
                 const commandType = accessType === 'deny' ? 'deny' : 'grant';
                 const aclCmd = `icacls "${targetPath}" /${commandType} "${principalForCommand}:(${fullPermString})"`;
-
-                // Debug logging for deny permissions
-                if (accessType === 'deny') {
-                    console.log(`Processing DENY permission for ${principalForCommand}: ${fullPermString}`);
-                }
 
                 try {
                     const cmdResult = await executeCommand(aclCmd);
@@ -351,11 +345,6 @@ export class ACLOperations {
                         permissions: fullPermString,
                         status: 'completed'
                     });
-                    
-                    // Log successful deny operations
-                    if (accessType === 'deny') {
-                        console.log(`Successfully applied DENY permission for ${principalForCommand}`);
-                    }
                 } catch (error) {
                     const errorMessage = (error as Error).message;
                     
@@ -380,8 +369,6 @@ export class ACLOperations {
                         result.success = false;
                         
                         // Log the specific error for debugging
-                        console.error(`ACL command failed for ${principalForFiltering}: ${aclCmd}`);
-                        console.error(`Error: ${errorMessage}`);
                     }
                 }
 
@@ -414,49 +401,38 @@ export class ACLOperations {
                 continue;
             }
 
-            // Debug log for parsing
-            console.log(`Parsing ACL line: ${line}`);
+            // Check for deny permissions - they appear as (N) in the output
+            const isDeny = line.includes('(N)');
 
-            // Check for deny permissions - they can appear in multiple formats:
-            // Format 1: principal:(DENY)(permissions)
-            // Format 2: principal:(N)(permissions)
-            // Format 3: principal:(permissions)(N)
-            const isDeny = line.includes('(DENY)') || line.includes('(N)');
-
-            // More flexible regex to handle various deny formats
-            let match = line.match(/^(.+?):\s*(?:\(DENY\))?\s*(?:\(N\))?\s*\(([^)]+)\)(?:\s*\(([^)]+)\))?$/);
-            
-            // Try alternative format if first doesn't match
-            if (!match) {
-                match = line.match(/^(.+?):\s*\(([^)]+)\)(?:\s*\(N\))?$/);
+            // Updated regex to properly handle deny permissions
+            // Deny format: "principal:(N)(permissions)"
+            // Allow format: "principal:(permissions)"
+            let match;
+            if (isDeny) {
+                // Handle deny format: principal:(N)(permissions)
+                match = line.match(/^(.+?):\(N\)\(([^)]+)\)$/);
+            } else {
+                // Handle allow format: principal:(permissions)
+                match = line.match(/^(.+?):\(([^)]+)\)$/);
             }
 
             if (match) {
-                const [, principal, permission1, permission2] = match;
+                const [, principal, permissionStr] = match;
                 const entry: ACLEntry = {
                     principal: principal.trim(),
                     permissions: [],
                     accessType: isDeny ? 'deny' : 'allow'
                 };
 
-                // Debug log
-                console.log(`Parsed: principal=${principal}, isDeny=${isDeny}, perm1=${permission1}, perm2=${permission2}`);
-
-                // Parse permissions - handle various cases
-                if (permission1 && permission1 !== 'N' && permission1 !== 'DENY') {
-                    entry.permissions.push(...this.parsePermissionString(permission1, true));
-                }
-                if (permission2 && permission2 !== 'N' && permission2 !== 'DENY') {
-                    entry.permissions.push(...this.parsePermissionString(permission2, true));
+                // Parse the permission string
+                if (permissionStr) {
+                    entry.permissions.push(...this.parsePermissionString(permissionStr, true));
                 }
 
                 // Only add entry if it has permissions
                 if (entry.permissions.length > 0) {
                     permissions.push(entry);
-                    console.log(`Added entry: ${entry.principal} (${entry.accessType}) with ${entry.permissions.length} permissions`);
                 }
-            } else {
-                console.log(`Failed to parse line: ${line}`);
             }
         }
 
