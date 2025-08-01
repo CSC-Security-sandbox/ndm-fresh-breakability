@@ -55,7 +55,6 @@ export class WorkManagerService {
     ip: string,
     projectId: string,
     platform: Platform,
-    envVariables: Record<string, any>,
   ): Promise<WorkerConfiguration[]> {
     try {
       const workerMetaConfig = await this.workerEntity.findOne({
@@ -107,7 +106,6 @@ export class WorkManagerService {
               platform,
             ),
             platform: platform,
-            envVariables: envVariables,
           },
         );
         return workerMetaConfig.metaConfig;
@@ -122,7 +120,6 @@ export class WorkManagerService {
         createdBy: id,
         projectId,
         platform: platform,
-        envVariables: envVariables,
       });
 
       const result = await this.workerEntity.save(newWorker);
@@ -132,10 +129,7 @@ export class WorkManagerService {
       });
       await this.workerEntity.update(
         { workerId: result.workerId },
-        {
-          workerName: generateWorkerName(result.workerNumber, platform),
-          envVariables: envVariables,
-        },
+        { workerName: generateWorkerName(result.workerNumber, platform) },
       );
 
       return result.metaConfig;

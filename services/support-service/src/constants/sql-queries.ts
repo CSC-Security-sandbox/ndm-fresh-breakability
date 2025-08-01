@@ -3,9 +3,12 @@ export const SQL_QUERIES = {
    * Query to fetch worker IDs for all projects
    */
   GET_WORKER_IDS: `
-    SELECT w.id as worker_id
+    SELECT w.id as worker_id, w.env_variables
     FROM datamigrator.project p
     INNER JOIN datamigrator.worker w ON p.id = w.project_id
+    WHERE w.env_variables IS NOT NULL 
+      AND json_typeof(w.env_variables) = 'object'
+      AND w.env_variables::text != '{}'
     ORDER BY w.id`,
 
   /**
