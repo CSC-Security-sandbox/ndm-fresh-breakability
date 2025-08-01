@@ -220,7 +220,8 @@ export class StampMetaService {
                 includePrincipals: [],
                 resolveSIDs: true,
                 isIdentityMappingAvailable: jobContext.jobConfig.options.isIdentityMappingAvailable,
-                jobID: jobContext.jobRunId
+                jobID: jobContext.jobRunId,
+                disableInheritance: false
             });
 
             // Process results
@@ -238,7 +239,10 @@ export class StampMetaService {
                     // logData.push(`Deny: ${op.principal} - ${op.permissions}`);
                 } else if (op.type === 'skip') {
                     skipCount++;
-                    // logData.push(`⏭️  Skip: ${op.principal} (${op.reason})`);
+                    // Only log skips that aren't for unresolved SIDs when identity mapping is enabled
+                    if (!op.reason?.includes('unresolved SID')) {
+                        logData.push(`Skip: ${op.principal} (${op.reason})`);
+                    }
                 } else if (op.type === 'reset' && op.status === 'completed') {
                     // logData.push(`🔄 Reset: Clear existing permissions`);
                 } else if (op.status === 'failed') {

@@ -352,6 +352,10 @@ export class ACLOperations {
                             error: errorMessage
                         });
                         result.success = false;
+                        
+                        // Log the specific error for debugging
+                        console.error(`ACL command failed for ${principalForFiltering}: ${aclCmd}`);
+                        console.error(`Error: ${errorMessage}`);
                     }
                 }
 
