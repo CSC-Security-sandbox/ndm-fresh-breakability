@@ -11,6 +11,7 @@ reports_service_tag: "latest"
 admin_service_tag: "latest"
 keycloak_customizations_tag: "latest"
 db_migrations_tag: "latest"
+support_service_tag: "latest"
 
 chart_names:
   - admin-service
@@ -20,6 +21,7 @@ chart_names:
   - reports-service
   - datamigrator-ui
   - db-migrations
+  - support-service
 
 acr_registry: "{{ 'localhost:32000' if local_cluster is defined and local_cluster | bool else '' }}"
 

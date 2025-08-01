@@ -12,6 +12,7 @@ on:
       - 'services/jobs-service/**'
       - 'services/reports-service/**'
       - 'services/worker/**'
+      - 'services/support-service/**'
 
 permissions:
   contents: read
@@ -31,7 +32,7 @@ jobs:
         id: set-matrix
         shell: bash
         run: |
-          all_services=( "db-writer" "reports-service" "admin-service" "config-service" "jobs-service" "worker" )
+          all_services=( "db-writer" "reports-service" "admin-service" "config-service" "jobs-service" "worker" "support-service" )
 
           base_branch="${{ github.event.pull_request.base.ref }}"
           git fetch origin "$base_branch"
