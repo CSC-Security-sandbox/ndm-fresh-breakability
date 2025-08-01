@@ -19,7 +19,7 @@ export interface ACLData {
 }
 
 export interface Operation {
-    type: 'reset' | 'grant' | 'deny' | 'skip';
+    type: 'reset' | 'grant' | 'deny' | 'skip' | 'disable-inheritance';
     principal?: string;
     permissions?: string;
     status: 'completed' | 'failed' | 'skipped';
@@ -44,6 +44,7 @@ export interface StampOptions {
     resolveSIDs?: boolean;
     isIdentityMappingAvailable?: boolean;
     jobID?: string;
+    disableInheritance?: boolean;
 }
 
 export interface GetACLOptions {

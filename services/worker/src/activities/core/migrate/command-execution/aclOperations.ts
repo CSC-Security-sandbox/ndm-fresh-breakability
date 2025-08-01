@@ -205,10 +205,26 @@ export class ACLOperations {
                     status: 'completed'
                 });
 
-                // Option 1: Remove all explicit permissions after reset
-                // This would require using /remove commands for each default principal
-                // const removeCmd = `icacls "${targetPath}" /inheritance:r`;
-                // await executeCommand(removeCmd);
+                // Optionally disable inheritance to remove inherited permissions
+                // This ensures only explicit permissions from source are applied
+                if (options.disableInheritance) {
+                    const disableInheritCmd = `icacls "${targetPath}" /inheritance:r`;
+                    try {
+                        await executeCommand(disableInheritCmd);
+                        result.commands.push(disableInheritCmd);
+                        result.operations.push({
+                            type: 'disable-inheritance',
+                            status: 'completed'
+                        });
+                    } catch (error) {
+                        result.operations.push({
+                            type: 'disable-inheritance',
+                            status: 'failed',
+                            error: (error as Error).message
+                        });
+                        // Continue even if disabling inheritance fails
+                    }
+                }
             }
 
             // Apply each permission
@@ -449,10 +465,9 @@ export class ACLOperations {
 
             // For source entries, use the resolved principal for comparison if available
             sourceACL.permissions.forEach(p => {
-                // Skip unresolved SIDs when identity mapping is enabled
-                // Check both the principal and originalPrincipal to catch unresolved SIDs
-                const principalToCheck = p.originalPrincipal || p.principal;
-                if (isIdentityMappingAvailable && resolveSIDs && SID_REGEX.test(principalToCheck)) {
+                // When identity mapping is enabled, skip any remaining SIDs (unresolved)
+                // Check if the current principal is still a SID (meaning it wasn't resolved)
+                if (isIdentityMappingAvailable && resolveSIDs && SID_REGEX.test(p.principal)) {
                     // This is an unresolved SID, skip it from comparison
                     return;
                 }
