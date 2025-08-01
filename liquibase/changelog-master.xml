@@ -48,6 +48,7 @@
    <changeSet id="20250729_01_alter_worker_table_add_env_variables.sql" author="rutuja">
       <sqlFile path="liquibase/20250729_01_alter_worker_table_add_env_variables.sql"/>
       <rollback>
+         <sqlFile path="liquibase/rollback/20250729_01_alter_worker_table_add_env_variables_rollback.sql"/>
       </rollback>
    </changeSet>
    

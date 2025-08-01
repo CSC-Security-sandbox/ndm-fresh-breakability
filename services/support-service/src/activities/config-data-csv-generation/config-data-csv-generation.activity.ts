@@ -12,6 +12,7 @@ import {
   SENSITIVE_PATTERNS,
 } from 'src/constants/constants';
 import { SQL_QUERIES } from 'src/constants/sql-queries';
+import { createCsvString } from 'src/utils/config-data-csv-generation.utils';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { DataSource, In, Repository } from 'typeorm';
 
@@ -147,46 +148,7 @@ export class ConfigurationDataCsvGenerationActivity {
     headers: string[],
     data: Record<string, any>[],
   ): string {
-    // Simple header transformation for better readability
-    const friendlyHeaders = headers.map((header) =>
-      this.makeHeaderFriendly(header),
-    );
-
-    let csvContent = this.escapeRow(friendlyHeaders) + '\n';
-
-    data.forEach((row) => {
-      const values = headers.map((header) => {
-        const value = String(row[header] || '');
-        return this.escapeCsvValue(value);
-      });
-      csvContent += values.join(',') + '\n';
-    });
-
-    return csvContent;
-  }
-
-  // Header transformation
-  private makeHeaderFriendly(header: string): string {
-    return header
-      .replace(/([a-z])([A-Z])/g, '$1 $2') // camelCase to spaces
-      .replace(/[_-]/g, ' ') // underscores/dashes to spaces
-      .split(' ')
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ')
-      .trim();
-  }
-
-  // CSV value escaping
-  private escapeCsvValue(value: string): string {
-    if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-      return `"${value.replace(/"/g, '""')}"`;
-    }
-    return value;
-  }
-
-  // Helper to escape entire row
-  private escapeRow(values: string[]): string {
-    return values.map((value) => this.escapeCsvValue(value)).join(',');
+    return createCsvString(headers, data);
   }
 
   private async addCsvToZip(

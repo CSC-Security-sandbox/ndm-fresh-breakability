@@ -25,6 +25,7 @@ import { ClientIp } from 'src/middleware/clientip';
 import { WorkManagerService } from './work-manager.service';
 import { CreateRequestDto } from './dto/validate-connection.dto';
 import { ConfigStatusPayloadDTO } from './dto/validate-export-path.dto';
+import { GetConfigurationRequestDto } from './dto/get-configuration.dto';
 
 @Controller('work-manager')
 export class WorkManagerController {
@@ -41,12 +42,13 @@ export class WorkManagerController {
   @Post('config')
   @ApiBody({
     description: 'Worker configuration request with environment variables',
+    type: GetConfigurationRequestDto,
     required: true,
   })
   async getConfiguration(
     @ClientIp() ip: string,
     @Req() req: any,
-    @Body() body: any,
+    @Body() body: GetConfigurationRequestDto,
   ): Promise<WorkerConfiguration[]> {
     this.logger.debug(
       `Fetching configuration for worker ID: ${req['worker_id']} from IP: ${ip} for project ID: ${req['project_id']} on platform: ${req?.headers['x-client-platform']}`,
