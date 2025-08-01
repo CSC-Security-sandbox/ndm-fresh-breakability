@@ -150,7 +150,7 @@ const PERMISSION_MAP: Record<string, string> = {
 
 // ACL Operations class with Redis integration
 export class ACLOperations {
-    constructor(private redisService?: RedisService) {}
+    constructor(private redisService?: RedisService) { }
 
     /**
      * Check if a string is a SID
@@ -184,34 +184,34 @@ export class ACLOperations {
 
         try {
             const normalizedPath = path.resolve(filePath);
-            
+
             // Verify file exists
             try {
                 await fs.access(normalizedPath);
             } catch (error) {
                 throw new FileAccessError(normalizedPath, error as Error);
             }
-            
+
             // Use icacls to get ACL
             const command = `icacls "${normalizedPath}" /L`;
             let stdout: string, stderr: string;
-            
+
             try {
-                ({ stdout, stderr } = await execAsync(command, { 
+                ({ stdout, stderr } = await execAsync(command, {
                     encoding: 'utf8',
-                    shell: 'cmd.exe' 
+                    shell: 'cmd.exe'
                 }));
             } catch (error) {
                 throw new CommandExecutionError(command, error as Error);
             }
-            
+
             if (stderr) {
                 throw new ACLError(`Error executing icacls: ${stderr}`, 'ICACLS_ERROR', { stderr });
             }
-            
+
             // Parse the output
             const aclData = this.parseIcaclsOutput(stdout);
-            
+
             // Resolve SIDs if requested
             if (resolveSIDs && this.redisService) {
                 for (const entry of aclData.permissions) {
@@ -224,7 +224,7 @@ export class ACLOperations {
                     }
                 }
             }
-            
+
             return {
                 filePath: normalizedPath,
                 timestamp: new Date().toISOString(),
@@ -232,7 +232,7 @@ export class ACLOperations {
                 permissions: aclData.permissions,
                 inheritance: aclData.inheritance
             };
-            
+
         } catch (error) {
             if (error instanceof ACLError) {
                 throw error;
@@ -245,8 +245,8 @@ export class ACLOperations {
      * Apply ACL from one file to another
      */
     async stampFileACL(
-        sourceFile: string, 
-        targetFile: string, 
+        sourceFile: string,
+        targetFile: string,
         options: StampOptions = {}
     ): Promise<StampResult> {
         const {
@@ -256,11 +256,11 @@ export class ACLOperations {
             simulate = false,
             resolveSIDs = false
         } = options;
-        
+
         try {
             const sourcePath = path.resolve(sourceFile);
             const targetPath = path.resolve(targetFile);
-            
+
             // Verify both files exist
             try {
                 await Promise.all([
@@ -271,10 +271,10 @@ export class ACLOperations {
                 const failedPath = await fs.access(sourcePath).then(() => targetPath, () => sourcePath);
                 throw new FileAccessError(failedPath, error as Error);
             }
-            
+
             // Get source ACL
             const sourceACL = await this.getFileACL(sourcePath, { resolveSIDs });
-            
+
             const result: StampResult = {
                 source: sourcePath,
                 target: targetPath,
@@ -284,7 +284,7 @@ export class ACLOperations {
                 commands: [],
                 success: true
             };
-            
+
             // Reset permissions if not preserving
             if (!preserveExisting) {
                 const resetCmd = `icacls "${targetPath}" /reset`;
@@ -307,14 +307,14 @@ export class ACLOperations {
                     status: simulate ? 'simulated' : 'completed'
                 });
             }
-            
+
             // Apply each permission
             for (const permission of sourceACL.permissions) {
                 const { principal, originalPrincipal, permissions } = permission;
-                
+
                 // Use original SID for actual command if it was resolved
                 const principalForCommand = originalPrincipal || principal;
-                
+
                 // Check filters (use resolved name for filtering)
                 if (excludePrincipals.includes(principal)) {
                     result.operations.push({
@@ -325,7 +325,7 @@ export class ACLOperations {
                     });
                     continue;
                 }
-                
+
                 if (includePrincipals.length > 0 && !includePrincipals.includes(principal)) {
                     result.operations.push({
                         type: 'skip',
@@ -335,11 +335,11 @@ export class ACLOperations {
                     });
                     continue;
                 }
-                
+
                 // Build and execute grant command
                 const permString = permissions.map(p => p.code).join(',');
                 const grantCmd = `icacls "${targetPath}" /grant "${principalForCommand}:(${permString})"`;
-                
+
                 if (!simulate) {
                     try {
                         await execAsync(grantCmd, { shell: 'cmd.exe' });
@@ -367,12 +367,12 @@ export class ACLOperations {
                         status: 'simulated'
                     });
                 }
-                
+
                 result.commands.push(grantCmd);
             }
-            
+
             return result;
-            
+
         } catch (error) {
             if (error instanceof ACLError) {
                 throw error;
@@ -438,9 +438,9 @@ export class ACLOperations {
                 }
             }
 
-            const isEqual = onlyInSource.length === 0 && 
-                           onlyInTarget.length === 0 && 
-                           different.length === 0;
+            const isEqual = onlyInSource.length === 0 &&
+                onlyInTarget.length === 0 &&
+                different.length === 0;
 
             return {
                 source: sourceACL,
@@ -466,7 +466,7 @@ export class ACLOperations {
      */
     async exportFileACL(filePath: string, options: GetACLOptions = {}): Promise<ExportedACL> {
         const acl = await this.getFileACL(filePath, options);
-        
+
         return {
             version: '1.0',
             exported: {
@@ -485,21 +485,21 @@ export class ACLOperations {
      * Apply ACL from exported data to a file
      */
     async importFileACL(
-        targetFile: string, 
-        aclData: ExportedACL, 
+        targetFile: string,
+        aclData: ExportedACL,
         options: { simulate?: boolean } = {}
     ): Promise<StampResult> {
         const { simulate = false } = options;
-        
+
         try {
             const targetPath = path.resolve(targetFile);
-            
+
             try {
                 await fs.access(targetPath);
             } catch (error) {
                 throw new FileAccessError(targetPath, error as Error);
             }
-            
+
             const result: StampResult = {
                 source: aclData.exported.source,
                 target: targetPath,
@@ -509,7 +509,7 @@ export class ACLOperations {
                 commands: [],
                 success: true
             };
-            
+
             // Reset permissions
             const resetCmd = `icacls "${targetPath}" /reset`;
             if (!simulate) {
@@ -530,13 +530,13 @@ export class ACLOperations {
                 type: 'reset',
                 status: simulate ? 'simulated' : 'completed'
             });
-            
+
             // Apply permissions from data
             for (const permission of aclData.acl.permissions) {
                 const principalForCommand = permission.originalPrincipal || permission.principal;
                 const permString = permission.permissions.map(p => p.code).join(',');
                 const grantCmd = `icacls "${targetPath}" /grant "${principalForCommand}:(${permString})"`;
-                
+
                 if (!simulate) {
                     try {
                         await execAsync(grantCmd, { shell: 'cmd.exe' });
@@ -561,12 +561,12 @@ export class ACLOperations {
                         status: 'simulated'
                     });
                 }
-                
+
                 result.commands.push(grantCmd);
             }
-            
+
             return result;
-            
+
         } catch (error) {
             if (error instanceof ACLError) {
                 throw error;
@@ -582,18 +582,18 @@ export class ACLOperations {
         const lines = output.split('\n').filter(line => line.trim());
         const permissions: ACLEntry[] = [];
         let inheritance: string | null = null;
-        
+
         if (lines.length < 2) {
             throw new ACLError('Invalid icacls output', 'PARSE_ERROR', { output });
         }
-        
+
         for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
-            
+
             if (!line || line.startsWith('Successfully processed')) {
                 continue;
             }
-            
+
             const match = line.match(/^(.+?):\(([^)]+)\)(?:\(([^)]+)\))?$/);
             if (match) {
                 const [, principal, permission1, permission2] = match;
@@ -601,18 +601,18 @@ export class ACLOperations {
                     principal: principal.trim(),
                     permissions: []
                 };
-                
+
                 if (permission1) {
                     entry.permissions.push(...this.parsePermissionString(permission1));
                 }
                 if (permission2) {
                     entry.permissions.push(...this.parsePermissionString(permission2));
                 }
-                
+
                 permissions.push(entry);
             }
         }
-        
+
         return { permissions, inheritance };
     }
 
@@ -622,7 +622,7 @@ export class ACLOperations {
     private parsePermissionString(permStr: string): Permission[] {
         const permissions: Permission[] = [];
         const parts = permStr.split(',');
-        
+
         parts.forEach(part => {
             const trimmedPart = part.trim();
             if (trimmedPart) {
@@ -632,7 +632,7 @@ export class ACLOperations {
                 });
             }
         });
-        
+
         return permissions;
     }
 
@@ -641,10 +641,10 @@ export class ACLOperations {
      */
     private arePermissionsEqual(perms1: Permission[], perms2: Permission[]): boolean {
         if (perms1.length !== perms2.length) return false;
-        
+
         const codes1 = perms1.map(p => p.code).sort();
         const codes2 = perms2.map(p => p.code).sort();
-        
+
         return codes1.every((code, index) => code === codes2[index]);
     }
 }

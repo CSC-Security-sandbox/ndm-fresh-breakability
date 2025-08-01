@@ -181,7 +181,7 @@ export class StampMetaService {
         if(process.platform !== 'win32') return output;
         try{
            const stapmData =  await stampFileACL(sourcePath, targetPath, {
-                preserveExisting: true,
+                preserveExisting: false,
                 excludePrincipals: [],
                 includePrincipals: [],
                 simulate: false,
