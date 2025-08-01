@@ -241,7 +241,7 @@ fileConfigs:
         @type grep
         <regexp>
           key $.kubernetes.container_name
-          pattern ^(db-writer|config-service|db-migrations|datamigrator-ui|reports-service|admin-service|jobs-service|keycloak-customizations|support-service)$
+          pattern ^(db-writer|config-service|db-migrations|datamigrator-ui|reports-service|admin-service|jobs-service|keycloak-customizations)$
         </regexp>
       </filter>
 
@@ -250,7 +250,7 @@ fileConfigs:
         enable_ruby true
         <record>
           # Determine service type
-          service_name ${begin; container = record['container_name'].to_s.downcase; case container; when /db-writer/; "db-writer"; when /config-service/; "config-service"; when /db-migrations/; "db-migrations"; when /datamigrator-ui/; "datamigrator-ui"; when /reports-service/; "reports-service"; when /admin-service/; "admin-service"; when /jobs-service/; "jobs-service"; when /keycloak-customizations/; "keycloak-customizations"; when /support-service/; "support-service"; else; container; end; rescue; record['container_name'].to_s; end}
+          service_name ${begin; container = record['container_name'].to_s.downcase; case container; when /db-writer/; "db-writer"; when /config-service/; "config-service"; when /db-migrations/; "db-migrations"; when /datamigrator-ui/; "datamigrator-ui"; when /reports-service/; "reports-service"; when /admin-service/; "admin-service"; when /jobs-service/; "jobs-service"; when /keycloak-customizations/; "keycloak-customizations"; else; container; end; rescue; record['container_name'].to_s; end}
 
           component_type "control-plane"
         </record>
@@ -333,4 +333,3 @@ fileConfigs:
         </format>
       </match>
     </label>
-    
