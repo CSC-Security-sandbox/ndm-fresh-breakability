@@ -184,7 +184,6 @@ export class StampMetaService {
         const logData: string[] = [];
 
         try {
-            // Verify both files exist before attempting ACL operations
             try {
                 await Promise.all([
                     fs.promises.access(sourcePath, fs.constants.F_OK),
@@ -315,8 +314,17 @@ export class StampMetaService {
             }
 
             if (!stampData.success) {
+                // Collect error details from failed operations
+                const errorDetails = stampData.operations
+                    .filter(op => op.status === 'failed')
+                    .map(op => `${op.type} ${op.principal}: ${op.error}`)
+                    .join('; ');
+                
+                const errorMessage = errorDetails ? `ACL stamping failed: ${errorDetails}` : 'ACL stamping failed';
+                
+                this.logger.error(`ACL stamping failed from ${sourcePath} to ${targetPath}`, errorMessage);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id,
-                    new Error('ACL stamping failed'), { name: command.fPath, path: targetPath });
+                    new Error(errorMessage), { name: command.fPath, path: targetPath });
                 await jobContext.publishToErrorStream(dmErr);
                 output.targetErrors.push('ACL_STAMP_FAILED');
             }
@@ -324,8 +332,10 @@ export class StampMetaService {
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, new Error(`Stamping ACLs Errors:\n${logData.join('\n')}`),
                     { name: command.fPath, path: targetPath });
                 await jobContext.publishToErrorStream(dmErr);
+                output.targetErrors.push("ACL_STAMP_FAILED");
+
             }
-            command.ops[OPS_CMD.STAMP_META].status = OPS_STATUS.COMPLETED;
+            // command.ops[OPS_CMD.STAMP_META].status = OPS_STATUS.COMPLETED;
 
         } catch (error) {
             this.logger.error(`Stamping ACLs from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
