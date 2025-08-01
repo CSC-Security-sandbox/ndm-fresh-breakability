@@ -47,7 +47,7 @@ initial_build=false
 images=()
 
 # List of all services (defined once)
-services=( "keycloak-customizations" "admin-service" "config-service" "datamigrator-ui" "db-writer" "jobs-service" "reports-service" "db-migrations" )
+services=( "keycloak-customizations" "admin-service" "config-service" "datamigrator-ui" "db-writer" "jobs-service" "reports-service" "db-migrations" "support-service" )
 
 # Check if "--initial-build" flag is passed
 if [[ "$1" == "--initial-build" ]]; then
