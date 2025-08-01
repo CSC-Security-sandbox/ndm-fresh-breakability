@@ -279,7 +279,7 @@ export class ACLOperations {
                 }
 
                 // Separate inheritance flags from actual permissions
-                // Exclude 'I' (Inherited) flag as it cannot be set manually
+                // Note: We should include all permissions except 'I' flag
                 const inheritanceFlags = permissions.filter(p => INHERITANCE_FLAGS.includes(p.code));
                 const actualPermissions = permissions.filter(p =>
                     !INHERITANCE_FLAGS.includes(p.code) && !NON_SETTABLE_FLAGS.includes(p.code)
@@ -294,6 +294,22 @@ export class ACLOperations {
                         status: 'skipped'
                     });
                     continue;
+                }
+
+                // For RX (Read & Execute), ensure we're including both R and X permissions
+                // Check if we have common permission combinations
+                const hasRead = actualPermissions.some(p => p.code === 'R');
+                const hasExecute = actualPermissions.some(p => p.code === 'X');
+                const hasRX = actualPermissions.some(p => p.code === 'RX');
+                
+                // If source has both R and X separately but not RX, we might need to use RX
+                if (hasRead && hasExecute && !hasRX) {
+                    // Remove separate R and X
+                    const filteredPerms = actualPermissions.filter(p => p.code !== 'R' && p.code !== 'X');
+                    // Add RX instead
+                    filteredPerms.push({ code: 'RX', description: 'Read & Execute' });
+                    actualPermissions.length = 0;
+                    actualPermissions.push(...filteredPerms);
                 }
 
                 // Build permission string with inheritance flags first, then permissions

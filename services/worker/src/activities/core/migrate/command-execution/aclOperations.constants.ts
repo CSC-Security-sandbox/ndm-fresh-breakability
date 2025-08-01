@@ -1,34 +1,66 @@
 export const PERMISSION_MAP: Record<string, string> = {
-    'F': 'Full Control',
+    // Full control
+    'F': 'Full control',
+    
+    // Modify
     'M': 'Modify',
+    
+    // Read & Execute
     'RX': 'Read & Execute',
+    
+    // Read
     'R': 'Read',
+    
+    // Write
     'W': 'Write',
-    'D': 'Delete',
-    'DE': 'Delete',
-    'RC': 'Read Control',
-    'WDAC': 'Write DAC',
-    'WO': 'Write Owner',
-    'S': 'Synchronize',
-    'AS': 'Access System Security',
-    'MA': 'Maximum Allowed',
-    'GR': 'Generic Read',
-    'GW': 'Generic Write',
-    'GE': 'Generic Execute',
-    'GA': 'Generic All',
-    'RD': 'Read Data/List Directory',
-    'WD': 'Write Data/Add File',
-    'AD': 'Append Data/Add Subdirectory',
-    'REA': 'Read Extended Attributes',
-    'WEA': 'Write Extended Attributes',
+    
+    // Execute/Traverse
     'X': 'Execute/Traverse',
-    'DC': 'Delete Child',
-    'RA': 'Read Attributes',
-    'WA': 'Write Attributes',
-    'OI': 'Object Inherit',
-    'CI': 'Container Inherit',
-    'IO': 'Inherit Only',
-    'NP': 'No Propagate',
+    
+    // Delete
+    'D': 'Delete',
+    
+    // Read permissions
+    'RC': 'Read permissions',
+    
+    // Change permissions
+    'WDAC': 'Change permissions',
+    
+    // Take ownership
+    'WO': 'Take ownership',
+    
+    // Synchronize
+    'S': 'Synchronize',
+    
+    // Read data
+    'RD': 'Read data',
+    
+    // Write data
+    'WD': 'Write data',
+    
+    // Append data
+    'AD': 'Append data',
+    
+    // Read extended attributes
+    'REA': 'Read extended attributes',
+    
+    // Write extended attributes
+    'WEA': 'Write extended attributes',
+    
+    // Delete child
+    'DC': 'Delete child',
+    
+    // Read attributes
+    'RA': 'Read attributes',
+    
+    // Write attributes
+    'WA': 'Write attributes',
+    
+    // Inheritance flags
+    'OI': 'Object inherit',
+    'CI': 'Container inherit',
+    'IO': 'Inherit only',
+    'NP': 'No propagate inherit',
     'I': 'Inherited'
 };
 
