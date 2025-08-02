@@ -230,13 +230,13 @@ NOTE: All credentials are managed from openbao. Replace the `IP_ADDRESS` with yo
 2. If no tag is specified, the default tag `latest` will be used. Replace tags with your tags. Override tags by passing variables as follows:
 
    ```sh
-   ansible-playbook -i ansible/control-plane/config/inventory.yaml ansible/control-plane/playbooks/helm-upgrade.yaml -e local_cluster=true -e "datamigrator_ui_tag=latest config_service_tag=latest db_writer_service_tag=latest jobs_service_tag=latest file_service_tag=latest reports_service_tag=latest admin_service_tag=latest keycloak_customizations_tag=latest db_migrations_tag=latest"
+   ansible-playbook -i ansible/control-plane/config/inventory.yaml ansible/control-plane/playbooks/helm-upgrade.yaml -e local_cluster=true -e "datamigrator_ui_tag=latest config_service_tag=latest db_writer_service_tag=latest jobs_service_tag=latest file_service_tag=latest reports_service_tag=latest admin_service_tag=latest keycloak_customizations_tag=latest db_migrations_tag=latest support_service_tag=latest"
    ```
 
 - For example, if you want to deploy the admin service build in the last step:
 
   ```sh
-  ansible-playbook -i ansible/control-plane/config/inventory.yaml ansible/control-plane/playbooks/helm-upgrade.yaml -e local_cluster=true -e "datamigrator_ui_tag=latest config_service_tag=latest db_writer_service_tag=latest jobs_service_tag=latest file_service_tag=latest reports_service_tag=latest admin_service_tag=new_tag keycloak_customizations_tag=latest db_migrations_tag=latest"
+  ansible-playbook -i ansible/control-plane/config/inventory.yaml ansible/control-plane/playbooks/helm-upgrade.yaml -e local_cluster=true -e "datamigrator_ui_tag=latest config_service_tag=latest db_writer_service_tag=latest jobs_service_tag=latest file_service_tag=latest reports_service_tag=latest admin_service_tag=new_tag keycloak_customizations_tag=latest db_migrations_tag=latest support_service_tag=latest"
   ```
 
 Notice the tag for `admin_service_tag` is changed.
