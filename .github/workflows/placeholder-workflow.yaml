@@ -65,13 +65,6 @@ jobs:
       - run: |
           echo "Satisfying required check: trivy-pr-scan (reports-service)"
 
-  dummy-support-service:
-    name: trivy-pr-scan (support-service)
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          echo "Satisfying required check: trivy-pr-scan (support-service)"
-
   dummy-unit-admin-service:
     name: unit-test-cases-and-code-coverage (admin-service)
     runs-on: ubuntu-latest
@@ -106,13 +99,6 @@ jobs:
     steps:
       - run: |
           echo "Satisfying required check: unit-test-cases-and-code-coverage (reports-service)"
-  
-  dummy-unit-support-service:
-    name: unit-test-cases-and-code-coverage (support-service)
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          echo "Satisfying required check: unit-test-cases-and-code-coverage (support-service)"
 
   dummy-unit-worker:
     name: unit-test-cases-and-code-coverage (worker)
