@@ -40,7 +40,7 @@ export class LoggerModule {
                                         format.colorize(),
                                         format.splat(),
                                         format.printf((info) => {
-                                            const { timestamp, level, message, trackId, context, ...meta } = info;
+                                            const { timestamp, level, message, trackId, projectId, context, ...meta } = info;
                                             let metaString = '';
                                             
                                             // Build the main log line with spaces between elements
@@ -48,6 +48,10 @@ export class LoggerModule {
                                             
                                             if (trackId) {
                                                 logLine += ` ${trackId}`;
+                                            }
+
+                                            if (projectId) {
+                                                logLine += ` projectId: ${projectId}`;
                                             }
                                             
                                             if (context) {
@@ -95,7 +99,7 @@ export class LoggerModule {
                                 format.uncolorize(),
                                 format.printf((info) => {
                                     // Compact format for file logging with spaces
-                                    const { timestamp, level, message, trackId, context, ...meta } = info;
+                                    const { timestamp, level, message, trackId, projectId, context, ...meta } = info;
                                     let metaString = '';
                                     
                                     // Build the main log line with spaces between elements
@@ -103,6 +107,10 @@ export class LoggerModule {
                                     
                                     if (trackId) {
                                         logLine += ` ${trackId}`;
+                                    }
+
+                                    if (projectId) {
+                                        logLine += ` projectId: ${projectId}`;
                                     }
                                     
                                     if (context) {
