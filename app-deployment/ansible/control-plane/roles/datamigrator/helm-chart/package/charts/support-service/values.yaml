@@ -1,9 +1,9 @@
-appName: "config-service"
+appName: "support-service"
 kubeApiVersion: "apps/v1"
 replicaCount: 1
 
 image:
-  repository: ndm-config-service
+  repository: ndm-support-service
 
 annotations:
   vault.hashicorp.com/agent-inject: "true"
@@ -29,60 +29,38 @@ env:
     valueFrom:
       fieldRef:
         fieldPath: status.hostIP
-  - name: APP_PORT
-    value: "3000"
-  - name: APP_HOST
-    value: "$(MY_HOST_IP)"
+
   - name: DB_PORT
     value: "5432"
-  - name: DB_NAME
-    value: "datamigrator"
   - name: DB_HOST
     value: "postgresql.postgres.svc.cluster.local"
-
-  # - name: DB_USER # from secret
-  #   value: ""
-  # - name: DB_PASSWORD # from secret
-  #   value: ""
-
+  - name: DB_NAME
+    value: "datamigrator"
   - name: SCHEMA
     value: "datamigrator"
-  - name: LOG_LEVEL
-    value: "INFO"
-  - name: LOG_DIR
-    value: "/logs"
-  - name: ENABLE_VERSIONS_FETCH
-    value: "false"
-  - name: ENABLE_PRE_LIST_PATH
-    value: "false"
-  - name: KEYCLOAK_BASE_URL
-    value: "http://keycloak.keycloak.svc.cluster.local:80/keycloak"
-  - name: KEYCLOAK_REALM
-    value: "datamigrator"
+
   - name: TEMPORAL_ADDRESS
     value: "temporaltest-frontend.temporal.svc.cluster.local:7233"
-  - name: SEND_EMAIL
-    value: "http://admin-service-service:3000"
-  - name: BUNDLE_OUTPUT_PATH
+  
+  - name: BASE_LOG_PATH
+    value: "/ndm-logs"
+
+  - name: OUTPUT_ZIP_PATH
     value: "/generated-zips"
+  
+  - name: CONFIG_BASE_URL
+    value: "http://config-service-service:3000/api/v1"
 
 service:
   type: ClusterIP
   port: 3000
   targetPort: 3000
 
-ingress:
-  pathPrefix: api/v1/
-  trailingPath: "(servers|work-manager|config-docs|paths-upload|support-bundle)"
-  userDefinedAnnotations:
-    nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-  ingressClassName: public
-  tls:
-    enabled: false
-  host: ""
-  
 persistentVolumes:
+  - name: ndm-logs
+    mountPath: /ndm-logs
+    hostPath: /ndm-logs
   - name: generated-zips
     mountPath: /generated-zips
     hostPath: /generated-zips
+  
