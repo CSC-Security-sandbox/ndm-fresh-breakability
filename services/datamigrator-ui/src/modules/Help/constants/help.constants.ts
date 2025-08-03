@@ -1,6 +1,6 @@
 import AboutNDM from "@modules/Help/components/about-ndm/components/AboutNDM";
 import React from "react";
-import SupportBundle from "@modules/Help/components/support-bundle/components/SupportBundle";
+import SupportBundle from "@modules/Help/components/support-bundle/SupportBundle";
 
 export enum HELP_ITEMS_ENUM {
   ABOUT_NDM = "About NDM",
@@ -9,6 +9,7 @@ export enum HELP_ITEMS_ENUM {
   FEEDBACK = "Feedback",
   SUPPORT_BUNDLE = "Support Bundle",
 }
+
 export const HELP_ITEMS = [
   {
     id: 1,
