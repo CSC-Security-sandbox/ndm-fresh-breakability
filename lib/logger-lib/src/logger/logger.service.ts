@@ -2,13 +2,21 @@ import { Inject, Injectable, Scope } from '@nestjs/common';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 import { Logger } from 'winston';
 import { RequestContext } from '../middleware/request-context';
+import { ConfigService } from '@nestjs/config';
+import { maskIPs } from './util/mask-sensitive';
 
 @Injectable({ scope: Scope.TRANSIENT }) 
 export class LoggerService {
   private parentContext: string;
+  private readonly disableMasking: boolean;
 
-  constructor(@Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger,
-              @Inject(RequestContext) private readonly requestContext: RequestContext) {}
+  constructor(
+    @Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger,
+    @Inject(RequestContext) private readonly requestContext: RequestContext,
+    private readonly configService: ConfigService,
+  ) {
+    this.disableMasking = this.configService.get<boolean>('loggerOptions.disableMasking') ?? false;
+  }
 
   setParentContext(context: string) {
     this.parentContext = context;
@@ -46,12 +54,9 @@ export class LoggerService {
     };
 
     // Handle both string and object for data
-    if(data){
-      if (typeof data === 'string') {
-        return { ...baseLog, data: data };
-      } else {
-        return { ...baseLog, data };
-      }
+    if (data !== undefined) {
+      const maskedData = this.disableMasking ? data : maskIPs(data);
+      return { ...baseLog, data: maskedData };
     }
 
     return baseLog;
