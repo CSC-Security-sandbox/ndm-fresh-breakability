@@ -5,11 +5,14 @@ import { InventoryEntity } from "../entities/inventory.entity";
 import { ReportsEntity } from "../entities/reports.entity";
 import * as fs from "fs";
 import {
+  BadRequestException,
   InternalServerErrorException,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import * as validation from "../utils/utils";
 import * as puppeteer from "puppeteer";
+import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
 
 jest.mock("puppeteer", () => {
   const mockPuppeteer = {
@@ -31,6 +34,7 @@ describe("DiscoveryService", () => {
   let service: DiscoveryService;
   let mockInventoryRepo;
   let mockReportsRepo;
+  let loggerMock: any;
 
   const mockInventoryData = [
     {
@@ -58,6 +62,13 @@ describe("DiscoveryService", () => {
   ];
 
   beforeEach(async () => {
+    loggerMock = {
+      info: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+      log: jest.fn(),
+    };
     mockInventoryRepo = {
       findOne: jest.fn(),
       find: jest.fn(),
@@ -91,6 +102,12 @@ describe("DiscoveryService", () => {
           provide: "ESCAPE_HTML",
           useValue: mockEscapeHtml,
         },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue(loggerMock),
+          },
+        },
       ],
     }).compile();
 
@@ -108,6 +125,28 @@ describe("DiscoveryService", () => {
 
   it("should be defined", () => {
     expect(service).toBeDefined();
+  });
+
+  describe("constructor", () => {
+    it("should use fallback logger when LoggerFactory is not provided", async () => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          DiscoveryService,
+          {
+            provide: getRepositoryToken(InventoryEntity),
+            useValue: mockInventoryRepo,
+          },
+          {
+            provide: getRepositoryToken(ReportsEntity),
+            useValue: mockReportsRepo,
+          },
+          // Note: No LoggerFactory provided to test fallback
+        ],
+      }).compile();
+
+      const serviceWithFallback = module.get<DiscoveryService>(DiscoveryService);
+      expect(serviceWithFallback).toBeDefined();
+    });
   });
 
   describe("createReportFile", () => {
@@ -209,7 +248,7 @@ describe("DiscoveryService", () => {
 
       await expect(
         service.createReportFile(jobRunId, reportType)
-      ).rejects.toThrow(InternalServerErrorException);
+      ).rejects.toThrow(NotFoundException);
     });
 
     it("should throw error when file path contains invalid characters", async () => {
@@ -221,12 +260,34 @@ describe("DiscoveryService", () => {
       await expect(
         service.createReportFile(jobRunId, reportType)
       ).rejects.toThrow(
-        "Failed to generate report for jobRunId: job123 and reportType: DISCOVERY"
+        "File path contains invalid characters."
       );
 
       expect(loggerSpy).toHaveBeenCalledWith(
-        expect.stringContaining("File path contains invalid characters:")
+        expect.stringContaining("File path contains invalid characters: reports/job123-discovery-report.pdf")
       );
+    });
+
+    it("should handle generic errors and throw InternalServerErrorException", async () => {
+      process.env.SCHEMA = "test_schema";
+      const genericError = new Error("Unexpected database error");
+      mockInventoryRepo.query.mockRejectedValue(genericError);
+
+      await expect(
+        service.createReportFile(jobRunId, reportType)
+      ).rejects.toThrow(
+        new InternalServerErrorException(`Failed to generate report for jobRunId: ${jobRunId} and reportType: ${reportType}`)
+      );
+    });
+
+    it("should re-throw known exceptions", async () => {
+      process.env.SCHEMA = "test_schema";
+      const badRequestError = new BadRequestException("Invalid request");
+      mockInventoryRepo.query.mockRejectedValue(badRequestError);
+
+      await expect(
+        service.createReportFile(jobRunId, reportType)
+      ).rejects.toThrow(badRequestError);
     });
   });
 
@@ -322,6 +383,38 @@ describe("DiscoveryService", () => {
       expect(result[0].root).toBe("path");
       expect(result[0].childs).toHaveLength(2);
     });
+
+    it("should handle ServiceUnavailableException and re-throw it", async () => {
+      const fileServerId = "test-id";
+      const mockInventory = {
+        path: "/test/path",
+        fileServerPathId: fileServerId,
+      };
+
+      mockInventoryRepo.findOne.mockResolvedValue(mockInventory);
+      
+      const serviceUnavailableError = new ServiceUnavailableException("Service unavailable");
+      jest.spyOn(service, 'getDataFromParentPath').mockRejectedValue(serviceUnavailableError);
+
+      await expect(service.getDiscoveryByFileServerId(fileServerId)).rejects.toThrow(serviceUnavailableError);
+    });
+
+    it("should handle generic errors and throw InternalServerErrorException", async () => {
+      const fileServerId = "test-id";
+      const mockInventory = {
+        path: "/test/path",
+        fileServerPathId: fileServerId,
+      };
+
+      mockInventoryRepo.findOne.mockResolvedValue(mockInventory);
+      
+      const genericError = new Error("Database error");
+      jest.spyOn(service, 'getDataFromParentPath').mockRejectedValue(genericError);
+
+      await expect(service.getDiscoveryByFileServerId(fileServerId)).rejects.toThrow(
+        new InternalServerErrorException('Failed to retrieve discovery data for the specified file server.')
+      );
+    });
   });
 
   describe("generateHtmlTable", () => {
@@ -384,6 +477,27 @@ describe("DiscoveryService", () => {
       expect(result).toBeInstanceOf(Buffer);
       expect(service.generateHtmlTable).toHaveBeenCalledWith(mockData);
     });
+
+    it("should handle PDF generation error and throw InternalServerErrorException", async () => {
+      const mockData = [{ category: "Files", sub_category: "Total", value: "100" }];
+      
+      // Mock puppeteer.launch to throw an error
+      const pdfError = new Error("Failed to launch browser");
+      (puppeteer.launch as jest.Mock).mockRejectedValueOnce(pdfError);
+
+      await expect(service.generatePdfFromData(mockData)).rejects.toThrow(
+        new InternalServerErrorException("Failed to generate PDF from data")
+      );
+    });
+
+    it("should re-throw known exceptions", async () => {
+      const mockData = [{ category: "Files", sub_category: "Total", value: "100" }];
+      
+      const badRequestError = new BadRequestException("Invalid data");
+      (puppeteer.launch as jest.Mock).mockRejectedValueOnce(badRequestError);
+
+      await expect(service.generatePdfFromData(mockData)).rejects.toThrow(badRequestError);
+    });
   });
 
   describe("createJobsPDFReportData", () => {
@@ -438,6 +552,22 @@ describe("DiscoveryService", () => {
 
       expect(result).toEqual(
         mockInventoryData.map((item) => ({ ...item, childs: [] }))
+      );
+    });
+
+    it("should handle ServiceUnavailableException and re-throw it", async () => {
+      const serviceUnavailableError = new ServiceUnavailableException("Service unavailable");
+      jest.spyOn(service, 'getDataFromParentPath').mockRejectedValue(serviceUnavailableError);
+
+      await expect(service.getDiscoveryByFileServerIdAndParentPath("server1", "/root")).rejects.toThrow(serviceUnavailableError);
+    });
+
+    it("should handle generic errors and throw InternalServerErrorException", async () => {
+      const genericError = new Error("Database error");
+      jest.spyOn(service, 'getDataFromParentPath').mockRejectedValue(genericError);
+
+      await expect(service.getDiscoveryByFileServerIdAndParentPath("server1", "/root")).rejects.toThrow(
+        new InternalServerErrorException('Failed to retrieve discovery data for the specified file server and path.')
       );
     });
   });
@@ -614,6 +744,57 @@ describe("DiscoveryService", () => {
 
       writeFileSpy.mockRestore();
     });
+
+    it("should handle file write errors and throw InternalServerErrorException", () => {
+      const mockData = [
+        {
+          category: "Category1",
+          sub_category: "SubCat1",
+          value: "100",
+          valueType: "count",
+        },
+      ];
+      const mockFilePath = "test.txt";
+
+      // Mock validateFilePath to pass validation
+      jest.spyOn(validation, "validateFilePath").mockReturnValue(true);
+      
+      // Mock fs.writeFileSync to throw an error
+      const writeError = new Error("ENOSPC: no space left on device");
+      jest.spyOn(fs, "writeFileSync").mockImplementation(() => {
+        throw writeError;
+      });
+
+      expect(() => {
+        service.formatAndWriteToFile(mockData, mockFilePath);
+      }).toThrow(
+        new InternalServerErrorException(`Failed to write report data to file: ${mockFilePath}`)
+      );
+    });
+
+    it("should re-throw known exceptions from formatAndWriteToFile", () => {
+      const mockData = [
+        {
+          category: "Category1",
+          sub_category: "SubCat1",
+          value: "100",
+          valueType: "count",
+        },
+      ];
+      const mockFilePath = "test.txt";
+
+      // Mock validateFilePath to pass validation
+      jest.spyOn(validation, "validateFilePath").mockReturnValue(true);
+      
+      const badRequestError = new BadRequestException("Invalid file format");
+      jest.spyOn(fs, "writeFileSync").mockImplementation(() => {
+        throw badRequestError;
+      });
+
+      expect(() => {
+        service.formatAndWriteToFile(mockData, mockFilePath);
+      }).toThrow(badRequestError);
+    });
   });
 
   describe("getDataFromParentPath", () => {
@@ -626,6 +807,24 @@ describe("DiscoveryService", () => {
       expect(mockInventoryRepo.find).toHaveBeenCalledWith({
         where: { fileServerPathId: "server1", parentPath: "/root" },
       });
+    });
+
+    it("should handle ServiceUnavailableException and re-throw it", async () => {
+      const serviceUnavailableError = new ServiceUnavailableException("Database service unavailable");
+      mockInventoryRepo.find.mockRejectedValue(serviceUnavailableError);
+
+      await expect(service.getDataFromParentPath("server1", "/root")).rejects.toThrow(
+        new ServiceUnavailableException('Unable to fetch data at this time. Please try again later.')
+      );
+    });
+
+    it("should handle generic errors and throw ServiceUnavailableException", async () => {
+      const genericError = new Error("Database connection failed");
+      mockInventoryRepo.find.mockRejectedValue(genericError);
+
+      await expect(service.getDataFromParentPath("server1", "/root")).rejects.toThrow(
+        new ServiceUnavailableException('Unable to fetch data at this time. Please try again later.')
+      );
     });
   });
 

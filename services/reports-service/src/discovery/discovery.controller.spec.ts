@@ -4,14 +4,14 @@ import { DiscoveryService } from './discovery.service';
 import { BadRequestException } from '@nestjs/common';
 import { StreamableFile } from '@nestjs/common';
 import { RmqContext } from '@nestjs/microservices';
-import { Logger } from '@nestjs/common';
 import { ReportType } from './pattern.enum';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 describe('DiscoveryController', () => {
   let controller: DiscoveryController;
   let service: DiscoveryService;
-  let logger: Logger;
+  let mockLogger: any;
 
   const mockDiscoveryService = {
     getDiscoveryByFileServerId: jest.fn(),
@@ -38,6 +38,14 @@ describe('DiscoveryController', () => {
   };
 
   beforeEach(async () => {
+    mockLogger = {
+      info: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+      log: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [DiscoveryController],
       providers: [
@@ -49,12 +57,18 @@ describe('DiscoveryController', () => {
           provide: JwtService,
           useValue: mockJwtService,
         },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue(mockLogger),
+          },
+        },
       ],
     }).compile();
 
     controller = module.get<DiscoveryController>(DiscoveryController);
     service = module.get<DiscoveryService>(DiscoveryService);
-    logger = controller['logger'];
+    
   });
 
   afterEach(() => {
@@ -171,7 +185,7 @@ describe('DiscoveryController', () => {
     });
 
     it('should log when generating report', async () => {
-      const logSpy = jest.spyOn(logger, 'log');
+      const logSpy = jest.spyOn(mockLogger, 'log');
       const jobRunId = 'job1';
       const reportType = ReportType.DISCOVERY;
       mockDiscoveryService.createReportFile.mockResolvedValue({ message: 'success' });
@@ -211,7 +225,7 @@ describe('DiscoveryController', () => {
 
     it('should log received message', async () => {
       const payload = { jobRunId: 'job1' };
-      const logSpy = jest.spyOn(logger, 'log');
+      const logSpy = jest.spyOn(mockLogger, 'log');
       mockDiscoveryService.createReportFile.mockResolvedValue({ message: 'success' });
 
       await controller.generateDiscoveryReport(payload, mockContext);

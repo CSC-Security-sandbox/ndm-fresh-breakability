@@ -1,6 +1,27 @@
 import { formatValue, groupAndOrder } from "./group-order";
 import { ReportValueType } from "../constants/enums";
 import { PDFReportHeaders } from "../constants/report";
+import { Logger } from "@nestjs/common";
+
+jest.mock("@nestjs/common", () => {
+  const mockLogger = {
+    warn: jest.fn(),
+    error: jest.fn(),
+    log: jest.fn(),
+    debug: jest.fn(),
+  };
+
+  return {
+    ...jest.requireActual("@nestjs/common"),
+    Logger: jest.fn().mockImplementation(() => mockLogger),
+    // Export the mock logger so we can access it in tests
+    __mockLogger: mockLogger,
+  };
+});
+
+// ✅ Get reference to the mocked logger
+const { __mockLogger: mockLoggerInstance } = jest.requireMock("@nestjs/common");
+
 // Mock the report constants to avoid dependencies
 jest.mock("../constants/report", () => ({
   PDFReportHeaders: {
@@ -99,6 +120,14 @@ describe("formatValue", () => {
 
 describe("groupAndOrder", () => {
   const mockReportType = "DISCOVER";
+
+  beforeEach(() => {
+    // ✅ Clear mock calls before each test
+    mockLoggerInstance.warn.mockClear();
+    mockLoggerInstance.error.mockClear();
+    mockLoggerInstance.log.mockClear();
+    mockLoggerInstance.debug.mockClear();
+  });
 
   it("should return null for empty data array", () => {
     const result = groupAndOrder([], mockReportType);
@@ -309,7 +338,11 @@ describe("groupAndOrder", () => {
   });
 
   it("should log errors for entries missing required properties", () => {
-    const consoleSpy = jest.spyOn(console, "error").mockImplementation();
+
+  //   const { logger } = require("./group-order");
+  // const originalWarn = logger.warn;
+  // const warnSpy = jest.fn();
+  // logger.warn = warnSpy;
 
     const mockData = [
       {
@@ -328,15 +361,16 @@ describe("groupAndOrder", () => {
 
     const result = groupAndOrder(mockData, mockReportType);
 
-    expect(consoleSpy).toHaveBeenCalledWith(
-      "Missing 'category' in entry:",
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
+      "Missing 'category' in entry :",
       expect.anything()
     );
-    expect(consoleSpy).toHaveBeenCalledWith(
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
       "Missing 'sub_category' in entry:",
       expect.anything()
     );
 
-    consoleSpy.mockRestore();
+    expect(result).not.toBeNull();
+    expect(mockLoggerInstance.warn).toHaveBeenCalledTimes(2);
   });
 });

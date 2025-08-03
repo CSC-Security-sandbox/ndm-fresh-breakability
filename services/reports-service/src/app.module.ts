@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import appConfig from './config/app.config';
@@ -9,9 +9,14 @@ import { ReportsEntity } from './entities/reports.entity';
 import { PdfModule } from './pdf/pdf.module';
 import { JobRunModule } from './job-run/job-run.module';
 import { OverviewModule } from './overview/overview.module';
+import {
+  LoggerModule,
+  RequestContextMiddleware,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Module({
   imports: [
+    LoggerModule.forRoot(),
     ConfigModule.forRoot({ load: [databaseConfig, appConfig] }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -28,4 +33,8 @@ import { OverviewModule } from './overview/overview.module';
   controllers: [],
   providers: [],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestContextMiddleware).forRoutes('*');
+  }
+}

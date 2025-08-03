@@ -10,6 +10,7 @@ import * as puppeteer from "puppeteer";
 import { Browser, Page } from "puppeteer";
 import * as hbs from "hbs";
 import { DiscoveryService } from "src/discovery/discovery.service";
+import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
 
 jest.mock("puppeteer");
 
@@ -20,8 +21,16 @@ describe("PdfService", () => {
   let mockBrowser: Partial<Browser>;
   let mockPage: Partial<Page>;
   let mockDiscoveryService: Partial<DiscoveryService>;
+  let loggerMock: any;
 
   beforeEach(async () => {
+    loggerMock = {
+      info: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+      log: jest.fn(),
+    };
     mockInventoryRepo = {
       query: jest.fn(),
     };
@@ -63,6 +72,12 @@ describe("PdfService", () => {
           provide: DiscoveryService,
           useValue: mockDiscoveryService,
         },
+        {
+                  provide: LoggerFactory,
+                  useValue: {
+                    create: jest.fn().mockReturnValue(loggerMock),
+                  },
+                },
       ],
     }).compile();
 
@@ -139,7 +154,7 @@ describe("PdfService", () => {
 
       // Expect the function to throw an HttpException
       await expect(pdfService.generateJobsReportPdf(jobRunId)).rejects.toThrow(
-        "Failed to generate jobs report"
+        "Report data not found"
       );
 
       // Verify that discoveryService.createJobsPDFReportData was called

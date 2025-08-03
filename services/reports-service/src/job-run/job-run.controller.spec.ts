@@ -16,6 +16,7 @@ import {
 } from "@netapp-cloud-datamigrate/auth-lib";
 import { ConfigService } from "@nestjs/config";
 import { serializeJobRunDetailsResponse } from "./dto/job-rundetails.dto";
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 // Mock the serialization function
 jest.mock("./dto/job-rundetails.dto", () => ({
@@ -28,8 +29,17 @@ describe("JobRunController", () => {
   let jobRunService: jest.Mocked<JobRunService>;
   let errorLogService: jest.Mocked<ErrorLogService>;
   let logger: jest.Mocked<Logger>;
+  let mockLogger: any;
 
   beforeEach(async () => {
+    mockLogger = {
+      info: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+      log: jest.fn(),
+      verbose: jest.fn(),
+    };
     const mockJobRunService = {
       jobRunReportByJobRunId: jest.fn(),
       getJobStatsId: jest.fn(),
@@ -41,14 +51,6 @@ describe("JobRunController", () => {
       createCsvFileForJob: jest.fn(),
       downloadErrorLogCsvFile: jest.fn(),
       isCsvFileReady: jest.fn(),
-    };
-
-    const mockLogger = {
-      debug: jest.fn(),
-      log: jest.fn(),
-      error: jest.fn(),
-      warn: jest.fn(),
-      verbose: jest.fn(),
     };
 
     const mockJwtAuthGuard = {
@@ -80,6 +82,12 @@ describe("JobRunController", () => {
         { provide: Reflector, useValue: {} },
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue(mockLogger),
+          },
+        },
       ],
     })
       .overrideGuard(JwtAuthGuard)
