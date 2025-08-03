@@ -307,7 +307,7 @@ describe('SupportBundleService', () => {
       expect(supportBundleRepo.findOne).toHaveBeenCalledWith({
         where: { userId },
         order: { createdAt: 'DESC' },
-        select: ['status', 'errorMessage'],
+        select: ['status', 'errorMessage', 'filters', 'createdAt'],
       });
       expect(result).toEqual({
         isProcessing: false,
@@ -347,7 +347,7 @@ describe('SupportBundleService', () => {
       expect(supportBundleRepo.findOne).toHaveBeenCalledWith({
         where: { userId },
         order: { createdAt: 'DESC' },
-        select: ['status', 'errorMessage'],
+        select: ['status', 'errorMessage', 'filters', 'createdAt'],
       });
     });
 

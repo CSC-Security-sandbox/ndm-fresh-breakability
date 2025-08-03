@@ -119,7 +119,7 @@ export class SupportBundleService {
     const user = await this.supportBundleRepo.findOne({
       where: { userId },
       order: { createdAt: 'DESC' },
-      select: ['status', 'errorMessage'],
+      select: ['status', 'errorMessage', 'filters', 'createdAt'],
     });
 
     const defaultResponse: BundleStatus = {
