@@ -125,9 +125,8 @@ export class SupportBundleService {
     const defaultResponse: BundleStatus = {
       isProcessing: false,
       isBundleReady: false,
-      error: null,
-      filters: user.filters,
-      createdAt: user.createdAt,
+      filters: user?.filters || null,
+      createdAt: user?.createdAt || null,
     };
 
     if (!user) {
