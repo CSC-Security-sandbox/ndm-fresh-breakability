@@ -9,6 +9,7 @@ import * as path from "path";
 import { DiscoveryService } from "src/discovery/discovery.service";
 import { PDFGeneratorService } from "src/generator/pdf-generator.service";
 import { PDFTemplate } from "src/generator/pdf-generator.type";
+import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
 
 describe("PdfService", () => {
   let pdfService: PdfService;
@@ -16,11 +17,19 @@ describe("PdfService", () => {
   let mockReportsRepo;
   let mockDiscoveryService: Partial<DiscoveryService>;
   let mockPdfGeneratorService: Partial<PDFGeneratorService>;
+  let loggerMock: any;
 
   beforeEach(async () => {
     // Reset all mocks
     jest.clearAllMocks();
-    
+
+    loggerMock = {
+      info: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+      log: jest.fn(),
+    };
     mockInventoryRepo = {
       query: jest.fn(),
     };
@@ -59,6 +68,12 @@ describe("PdfService", () => {
           provide: PDFGeneratorService,
           useValue: mockPdfGeneratorService,
         },
+        {
+                  provide: LoggerFactory,
+                  useValue: {
+                    create: jest.fn().mockReturnValue(loggerMock),
+                  },
+                },
       ],
     }).compile();
 
@@ -139,7 +154,7 @@ describe("PdfService", () => {
 
       // Expect the function to throw an HttpException
       await expect(pdfService.generateJobsReportPdf(jobRunId)).rejects.toThrow(
-        "Failed to generate jobs report"
+        "Report data not found"
       );
 
       // Verify that discoveryService.createJobsPDFReportData was called

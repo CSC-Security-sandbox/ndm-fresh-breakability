@@ -13,7 +13,7 @@ import {
 } from "../constants/report";
 import { BadRequestException, Logger } from "@nestjs/common";
 
-const logger = new Logger("groupAndOrder");
+export const logger = new Logger("groupAndOrder");
 
 // Helper to format value if needed
 export const formatValue = (entry: ReportEntry): string | number => {
@@ -54,14 +54,17 @@ export const groupAndOrder = (
         "Invalid input: 'reportType' must be a string.",
       );
     }
-    if (data.length === 0) return null;
+    if (data.length === 0) {
+      logger.warn('Empty data array provided, returning null');
+      return null;
+    }
     // Group entries by category
     const grouped = data.reduce(
       (acc, entry) => {
         const category = entry.category;
 
         if (!category) {
-          console.error("Missing 'category' in entry:", entry);
+          logger.warn(`Missing 'category' in entry :`, entry);
           return acc;
         }
         if (!acc[category]) acc[category] = [];
@@ -80,7 +83,7 @@ export const groupAndOrder = (
             (acc, entry) => {
               const subCategory = entry.sub_category;
               if (!subCategory) {
-                console.error("Missing 'sub_category' in entry:", entry);
+                logger.warn("Missing 'sub_category' in entry:", entry);
                 return acc;
               }
               acc[subCategory] = acc[subCategory] || [];
@@ -108,7 +111,7 @@ export const groupAndOrder = (
       }),
     );
   } catch (error) {
-    console.error("Error in groupAndOrder function:", error);
+    logger.warn("Error in groupAndOrder function:", error);
     return null;
   }
 };

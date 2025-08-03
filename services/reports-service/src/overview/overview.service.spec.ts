@@ -4,11 +4,13 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import { InventoryEntity } from "../entities/inventory.entity";
 import { ProjectEntity } from "../entities/project.entity";
 import { JobRunStatus, JobType } from "../constants/enums";
+import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
 
 describe("OverviewService", () => {
   let service: OverviewService;
   let mockInventoryRepository;
   let mockProjectRepository;
+  let loggerMock: any;
 
   const mockProjectData = {
     id: "project1",
@@ -66,6 +68,13 @@ describe("OverviewService", () => {
   };
 
   beforeEach(async () => {
+    loggerMock = {
+      info: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+      log: jest.fn(),
+    };
     mockInventoryRepository = {
       createQueryBuilder: jest.fn(() => ({
         select: jest.fn().mockReturnThis(),
@@ -97,6 +106,12 @@ describe("OverviewService", () => {
         {
           provide: getRepositoryToken(ProjectEntity),
           useValue: mockProjectRepository,
+        },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue(loggerMock),
+          },
         },
       ],
     }).compile();

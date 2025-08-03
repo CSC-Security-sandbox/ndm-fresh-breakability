@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger, Optional, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as fs from 'fs';
 import * as path from "path";
@@ -9,10 +9,14 @@ import { PDFGeneratorService } from 'src/generator/pdf-generator.service';
 import { PDFTemplate } from 'src/generator/pdf-generator.type';
 import { Repository } from 'typeorm';
 import { DiscoveryService } from '../discovery/discovery.service';
+import {
+  LoggerService,
+  LoggerFactory,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class PdfService {
-    private logger: Logger = new Logger(PdfService.name);
+    private readonly logger : LoggerService;
     private readonly reportsDirectory =
     process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
     constructor( 
@@ -21,8 +25,16 @@ export class PdfService {
       @InjectRepository(ReportsEntity)
       private readonly reportsRepo: Repository<ReportsEntity>,
       private readonly discoveryService: DiscoveryService,
-      private readonly pdfGeneratorService: PDFGeneratorService
-    ) {}
+      private readonly pdfGeneratorService: PDFGeneratorService,
+      @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory
+    ) {
+      if (loggerFactory) {
+        this.logger = loggerFactory.create(PdfService.name);
+      } else {
+        // Fallback to basic NestJS Logger for worker threads
+        this.logger = new Logger(PdfService.name) as any;
+      }
+    }
 
     async generatePdf(jobRunId: string, reportType: ReportType): Promise<Buffer> {
       this.logger.log(`Checking for existing report for jobRunId: ${jobRunId} and reportType: ${reportType}`);
@@ -94,10 +106,13 @@ export class PdfService {
           reportDate: new Date().toLocaleDateString(),
         }
         return await this.pdfGeneratorService.generatePDF({data: reportData, template: PDFTemplate.JOBS_REPORT, pdfOptions: {
-          format: 'A0', printBackground: true, scale: 0.5, landscape: true, 
+          format: 'A0', printBackground: true, scale: 0.5, landscape: true,
         }});
       } catch (error) {
         this.logger.error(`Failed to generate jobs report for jobRunId: ${jobRunId}, error: ${error}`);
+        if (error instanceof HttpException) {
+          throw error; // Re-throw HttpExceptions to maintain the original status code
+        }
         throw new HttpException("Failed to generate jobs report", HttpStatus.INTERNAL_SERVER_ERROR);
       }
     }
