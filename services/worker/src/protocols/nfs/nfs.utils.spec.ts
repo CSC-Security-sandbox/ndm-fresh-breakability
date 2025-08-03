@@ -65,6 +65,54 @@ describe('handleConnectionError', () => {
         const result = handleConnectionError(error, host, port);
         expect(result).toBe('Error: Unexpected error while connecting to localhost:8080 - Some unexpected error');
     });
+
+    it('should return the correct error message for ENETUNREACH', () => {
+        const error = { code: 'ENETUNREACH' };
+        const host = 'localhost';
+        const port = 8080;
+        const result = handleConnectionError(error, host, port);
+        expect(result).toBe('Error: Network unreachable for localhost:8080.');
+    });
+
+    it('should return the correct error message for EPROTO', () => {
+        const error = { code: 'EPROTO' };
+        const host = 'localhost';
+        const port = 8080;
+        const result = handleConnectionError(error, host, port);
+        expect(result).toBe('Error: Protocol error connecting to localhost:8080.');
+    });
+
+    it('should return the correct error message for ENOPROTOOPT', () => {
+        const error = { code: 'ENOPROTOOPT' };
+        const host = 'localhost';
+        const port = 8080;
+        const result = handleConnectionError(error, host, port);
+        expect(result).toBe('Error: Protocol not available for localhost:8080.');
+    });
+
+    it('should return the correct error message for ENOTSUP', () => {
+        const error = { code: 'ENOTSUP' };
+        const host = 'localhost';
+        const port = 8080;
+        const result = handleConnectionError(error, host, port);
+        expect(result).toBe('Error: Host OS not supported for this operation on localhost:8080.');
+    });
+
+    it('should detect protocol port blocked from error message', () => {
+        const error = { message: 'port 2049 blocked by firewall' };
+        const host = 'localhost';
+        const port = 2049;
+        const result = handleConnectionError(error, host, port);
+        expect(result).toBe('Error: Protocol port 2049 is blocked or not accessible on localhost.');
+    });
+
+    it('should detect filtered port from error message', () => {
+        const error = { message: 'connection filtered on port 2049' };
+        const host = 'localhost';
+        const port = 2049;
+        const result = handleConnectionError(error, host, port);
+        expect(result).toBe('Error: Protocol port 2049 is blocked or not accessible on localhost.');
+    });
 });
 
 
