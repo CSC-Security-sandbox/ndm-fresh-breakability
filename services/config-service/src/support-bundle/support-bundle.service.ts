@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -140,7 +140,9 @@ export class SupportBundleService {
         return { ...defaultResponse, isProcessing: true };
 
       case SupportBundleStatus.FAILED:
-        return { ...defaultResponse, error: user.errorMessage };
+        throw new InternalServerErrorException(
+          user.errorMessage || 'Support bundle generation failed'
+        );
 
       default:
         return defaultResponse;

@@ -77,8 +77,16 @@ export class SupportBundleController {
     status: 200,
     description: 'Returns whether the bundle is ready for download',
     schema: {
-      example: { canDownload: true },
+      example: {
+        isProcessing: false,
+        isBundleReady: true,
+        error: null
+      },
     },
+  })
+  @ApiResponse({
+    status: 500,
+    description: 'Support bundle generation failed',
   })
   @ApiBearerAuth()
   @Auth()
