@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Logger, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Inject } from '@nestjs/common';
 import { ApiBody, ApiExcludeController, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { ConsumerDto } from './redis-consumer.dto';
 import { RedisConsumerService } from './redis-consumer.service';
 import { ConsumerType } from '../enum/redis-consumer.enum';
@@ -7,9 +8,14 @@ import { ConsumerType } from '../enum/redis-consumer.enum';
 @Controller('redis-consumer')
 @ApiExcludeController() // Exclude this controller from Swagger documentation
 export class RedisConsumerController {
-    private logger = new Logger(RedisConsumerController.name);
+    private readonly logger: LoggerService;
 
-    constructor(private redisConsumerService: RedisConsumerService) {}
+    constructor(
+        private redisConsumerService: RedisConsumerService,
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    ) {
+        this.logger = loggerFactory.create(RedisConsumerController.name);
+    }
 
     /**
      * Start a consumer for a specific job.
