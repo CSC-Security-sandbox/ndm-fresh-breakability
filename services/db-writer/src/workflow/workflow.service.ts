@@ -5,6 +5,7 @@ import {
   LoggerService,
   LoggerFactory,
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { WorkflowError, ConfigurationError } from '../errors/custom-errors';
 
 
 @Injectable()
@@ -39,7 +40,7 @@ export class WorkflowService implements OnModuleDestroy {
         } catch (error) {
             this.logger.error(`Error connecting to Temporal server: ${error.message}`, error.stack);
             this.logger.error(`Temporal config: ${JSON.stringify(process.env.TEMPORAL_ADDRESS || 'localhost:7233')}`);
-            throw new Error(`Failed to initialize Temporal client: ${error.message}`);
+            throw new WorkflowError(`Failed to initialize Temporal client: ${error.message}`, error);
         }
     }
 
@@ -47,13 +48,13 @@ export class WorkflowService implements OnModuleDestroy {
         try {
             const client = await this.getClient();
             if (!client) {
-                throw new Error('Temporal client not available');
+                throw new ConfigurationError('Temporal client not available');
             }
             this.logger.log(`Signaling workflow: ${request.workflowExecution?.workflowId}`);
             return await client.workflowService.signalWorkflowExecution(request);
         } catch (error) {
             this.logger.error(`Failed to signal workflow: ${error.message}`, error.stack);
-            throw new Error(`Workflow signal failed: ${error.message}`);
+            throw new WorkflowError(`Workflow signal failed: ${error.message}`, error);
         }
     }
 
@@ -64,12 +65,13 @@ export class WorkflowService implements OnModuleDestroy {
         try {
             if (this.connection) {
                 await this.connection.close();
-                this.connection = null;
                 this.logger.log('Temporal connection closed');
             }
-            this.client = null;
         } catch (error) {
             this.logger.error(`Error closing Temporal connection: ${error.message}`, error?.stack || error);
+        } finally {
+            this.connection = null;
+            this.client = null;
         }
     }
 

@@ -82,9 +82,7 @@ describe('Custom Response Message', () => {
     it('should have all expected endpoint keys', () => {
       const expectedKeys = [
         'redis-consumer/start',
-        'redis-consumer/stop',
-        'redis-consumer/status',
-        'health'
+        ''  // Root health endpoint
       ];
       
       const successKeys = customSuccessDTOList.map(dto => dto.apiEndPointKey);

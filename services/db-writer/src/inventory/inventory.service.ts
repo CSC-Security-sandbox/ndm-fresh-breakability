@@ -21,6 +21,7 @@ import {
   LoggerService,
   LoggerFactory,
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { DatabaseError, ValidationError } from '../errors/custom-errors';
 
 @Injectable()
 export class InventoryService {
@@ -59,7 +60,7 @@ export class InventoryService {
   }
   mapSourceToTarget(file: ItemInfo, jobRunId: string, pathId: string): any {
     if (!file) {
-      throw new Error('Invalid file object: Cannot map undefined or null file');
+      throw new ValidationError('Invalid file object: Cannot map undefined or null file', 'file');
     }
     return {
       path: file.fileName ?? '', 
@@ -95,7 +96,7 @@ export class InventoryService {
       await this.SpeedLogEntryRepo.save(writeLogEntry);
     } catch (err) {
       this.logger.error('Error saving Speed Log records:', err?.stack || err);
-      throw new Error('Error while saving Speed Log records to the database');
+      throw new DatabaseError('Error while saving Speed Log records to the database', err);
     }
   }
 
@@ -136,7 +137,7 @@ export class InventoryService {
   async saveOperationError(data: OperationError) {
     try {
       if (!data || !data.operationId) {
-        throw new Error('Invalid operation error data');
+        throw new ValidationError('Invalid operation error data', 'data');
       }
 
       const operationError = this.operationErrorRepo.create({
@@ -154,13 +155,13 @@ export class InventoryService {
       await this.operationErrorRepo.save(operationError);
     } catch (err) {
       this.logger.error(`Failed to save operation error: ${err.message}`, err?.stack || err);
-      throw new Error("Error while saving operation error records to the database");
+      throw new DatabaseError("Error while saving operation error records to the database", err);
     }
   }
   async saveTaskError(data: TaskError) {
     try {
       if (!data || !data.taskId) {
-        throw new Error("Invalid task error data");
+        throw new ValidationError("Invalid task error data", 'data');
       }
 
       const taskError = this.taskErrorRepo.create({
@@ -174,14 +175,14 @@ export class InventoryService {
       await this.taskErrorRepo.save(taskError);
     } catch (err) {
       this.logger.error(`Failed to save task error: ${err.message}`, err?.stack || err);
-      throw new Error("Error while saving task error records to the database");
+      throw new DatabaseError("Error while saving task error records to the database", err);
     }
   }
 
 
   async saveTasks(data: any) {
     if (!data || !data.jobRunId || !data.taskType || !data.status) {
-      throw new Error("Invalid task data");
+      throw new ValidationError("Invalid task data", 'data');
     }
     
     try {
@@ -258,7 +259,7 @@ export class InventoryService {
   ): Promise<UpdateResult> {
     try {
       if (!taskId || !Object.keys(data).length) {
-        throw new Error("Invalid input: taskId and update data are required");
+        throw new ValidationError("Invalid input: taskId and update data are required", 'taskId');
       }
 
       const result = await this.taskRepo.update(taskId, data);
@@ -270,7 +271,7 @@ export class InventoryService {
       return result;
     } catch (error) {
       this.logger.error(`Failed to update task (ID: ${taskId}): ${error.message}`, error?.stack || error);
-      throw new Error("Error while updating task data");
+      throw new DatabaseError("Error while updating task data", error);
     }
   }
 }
