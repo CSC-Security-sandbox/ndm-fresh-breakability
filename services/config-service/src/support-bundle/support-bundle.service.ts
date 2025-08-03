@@ -126,6 +126,8 @@ export class SupportBundleService {
       isProcessing: false,
       isBundleReady: false,
       error: null,
+      filters: user.filters,
+      createdAt: user.createdAt,
     };
 
     if (!user) {
