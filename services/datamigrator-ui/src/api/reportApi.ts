@@ -16,9 +16,15 @@ export const reportApi = createApi({
     }),
     getProjectOverview: builder.query({
       query: ({ projectId }) => `overview?projectId=${projectId}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      }
     }),
     getFileOverview: builder.query({
       query: ({ fileServerId }) => `overview?fileServerId=${fileServerId}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      }
     }),
     downloadReports: builder.mutation({
       query: (body) => ({
@@ -45,6 +51,9 @@ export const reportApi = createApi({
     getJobRunDetails: builder.query({
       query: ({ jobRunId }) => `job-run/${jobRunId}`,
       providesTags: ["JOB_RUN_DETAILS"],
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      }
     }),
     getReportData: builder.query({
       query: (payload) =>

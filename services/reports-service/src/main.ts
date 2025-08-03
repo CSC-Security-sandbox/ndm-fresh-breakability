@@ -6,9 +6,23 @@ import { NestExpressApplication } from "@nestjs/platform-express";
 import { ConfigService } from "@nestjs/config";
 import * as hbs from "hbs";
 import { join } from "path";
+import { ResponseInterceptor } from '@netapp-cloud-datamigrate/api-handler-lib';
+import {
+  customErrorDTOList,
+  customSuccessDTOList,
+} from './constants/custom-response-message';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  
+  app.useGlobalInterceptors(
+    new ResponseInterceptor(
+      customSuccessDTOList,
+      customErrorDTOList,
+      await app.resolve(LoggerFactory),
+    ),
+  );
 
   const configService = app.get(ConfigService);
   const host: string = configService.get<string>("app.http.host");

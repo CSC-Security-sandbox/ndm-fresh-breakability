@@ -1,8 +1,12 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
+  Optional,
+  Inject
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import * as path from "path";
@@ -21,16 +25,28 @@ import {
   validateFilePath,
 } from "src/utils/utils";
 import { ReportType } from "../constants/enums";
+import {
+  LoggerService,
+  LoggerFactory,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class DiscoveryService {
-  private logger: Logger = new Logger(DiscoveryService.name);
+  private readonly logger : LoggerService;
   constructor(
     @InjectRepository(InventoryEntity)
     private readonly inventoryRepo: Repository<InventoryEntity>,
     @InjectRepository(ReportsEntity)
     private readonly reportsRepo: Repository<ReportsEntity>,
-  ) {}
+    @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory
+  ) {
+    if (loggerFactory) {
+      this.logger = loggerFactory.create(DiscoveryService.name);
+    } else {
+      // Fallback to basic NestJS Logger for worker threads
+      this.logger = new Logger(DiscoveryService.name) as any;
+    }
+  }
 
   get getReportsDirectory(): string {
     return process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
@@ -53,7 +69,7 @@ export class DiscoveryService {
         this.logger.error(
           `File path contains invalid characters: ${pdfFilePath}`,
         );
-        throw new Error("File path contains invalid characters.");
+        throw new BadRequestException("File path contains invalid characters.");
       } else {
         this.logger.log(`File path validation passed: ${pdfFilePath}`);
       }
@@ -77,7 +93,7 @@ export class DiscoveryService {
         this.logger.error(
           `No report data found for jobRunId: ${jobRunId} and reportType: ${reportType}`,
         );
-        throw new Error("No report data found");
+        throw new NotFoundException("No report data found");
       } else {
         const reportData = JSON.parse(latestReport[0]?.reportData);
         const csvFileName = `${jobRunId}-${reportType.toLowerCase()}-report.csv`;
@@ -93,6 +109,11 @@ export class DiscoveryService {
       }
     } catch (error) {
       this.logger.log(error);
+      if (error instanceof BadRequestException ||
+          error instanceof NotFoundException ||
+          error instanceof InternalServerErrorException) {
+        throw error;
+      }
       throw new InternalServerErrorException(
         `Failed to generate report for jobRunId: ${jobRunId} and reportType: ${reportType}`,
       );
@@ -100,31 +121,41 @@ export class DiscoveryService {
   }
 
   async generatePdfFromData(reportData: any[]): Promise<Buffer> {
-    const templatePath = path.join(__dirname, '../../templates/views/discovery_pdf_report.hbs');
-    const templateSource = fs.readFileSync(templatePath, 'utf8');
-    const template = hbs.compile(templateSource);
+    try{
+      const templatePath = path.join(__dirname, '../../templates/views/discovery_pdf_report.hbs');
+      const templateSource = fs.readFileSync(templatePath, 'utf8');
+      const template = hbs.compile(templateSource);
 
-    const categories: { [key: string]: any[] } = groupAndOrder(reportData, ReportType.DISCOVERY);
+      const categories: { [key: string]: any[] } = groupAndOrder(reportData, ReportType.DISCOVERY);
 
-    // Step 2: Generate HTML from template and data
-    const htmlOutput = template(categories);
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-gpu",
-        "--disable-dev-shm-usage",
-        "--disable-accelerated-2d-canvas",
-      ],
-      protocolTimeout: 60000,
-    });
-    const page = await browser.newPage();
-    await page.setContent(htmlOutput, { waitUntil: "networkidle0" });
-    const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
+      // Step 2: Generate HTML from template and data
+      const htmlOutput = template(categories);
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-gpu",
+          "--disable-dev-shm-usage",
+          "--disable-accelerated-2d-canvas",
+        ],
+        protocolTimeout: 60000,
+      });
+      const page = await browser.newPage();
+      await page.setContent(htmlOutput, { waitUntil: "networkidle0" });
+      const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
 
-    await browser.close();
-    return Buffer.from(pdfBuffer);
+      await browser.close();
+      return Buffer.from(pdfBuffer);
+    } catch(error) {
+      this.logger.error(`Failed to generate PDF from data, error: ${error}`);
+      if (error instanceof BadRequestException ||
+          error instanceof NotFoundException ||
+          error instanceof InternalServerErrorException) {
+        throw error;
+      }
+      throw new InternalServerErrorException("Failed to generate PDF from data");
+    }
   }
 
   async createJobsPDFReportData(jobRunId: string): Promise<any> {
@@ -150,9 +181,10 @@ export class DiscoveryService {
   }
 
   formatAndWriteToFile(reportData: any[], filePath: string) {
-    if (!validateFilePath(filePath)) {
+    try {
+      if (!validateFilePath(filePath)) {
       this.logger.error(`File path contains invalid characters: ${filePath}`);
-      throw new Error("File path contains invalid characters.");
+      throw new BadRequestException("File path contains invalid characters.");
     } else {
       this.logger.log(`File path validation passed: ${filePath}`);
     }
@@ -193,43 +225,66 @@ export class DiscoveryService {
     ].join("\n");
 
     fs.writeFileSync(filePath, csvContent);
+    } catch (error) {
+      this.logger.error(`Error writing to file: ${filePath}`, error);
+      if (error instanceof BadRequestException ||
+        error instanceof NotFoundException ||
+        error instanceof InternalServerErrorException) {
+          throw error;
+      }
+      throw new InternalServerErrorException(
+        `Failed to write report data to file: ${filePath}`,
+      );
+    }
   }
 
   async getReportsAsZip(
     jobRunIds: string[],
     reportType: string,
   ): Promise<Buffer> {
-    const filesToZip: string[] = [];
 
-    if (!fs.existsSync(this.reportsDirectory)) {
-      throw new NotFoundException(
-        `Reports directory does not exist: ${this.reportsDirectory}`,
-      );
-    }
-    for (const jobRunId of jobRunIds) {
-      const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.csv`;
-      const filePath = path.join(this.reportsDirectory, fileName);
+    try {
+      const filesToZip: string[] = [];
 
-      if (fs.existsSync(filePath)) {
-        filesToZip.push(filePath);
-      } else {
-        console.warn(`File not found: ${filePath}`);
+      if (!fs.existsSync(this.reportsDirectory)) {
+        throw new NotFoundException(
+          `Reports directory does not exist: ${this.reportsDirectory}`,
+        );
       }
-    }
+      for (const jobRunId of jobRunIds) {
+        const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.csv`;
+        const filePath = path.join(this.reportsDirectory, fileName);
 
-    if (filesToZip.length === 0) {
-      throw new NotFoundException(
-        "No valid report files found for the given inputs.",
+        if (fs.existsSync(filePath)) {
+          filesToZip.push(filePath);
+        } else {
+          console.warn(`File not found: ${filePath}`);
+        }
+      }
+
+      if (filesToZip.length === 0) {
+        throw new NotFoundException(
+          "No valid report files found for the given inputs.",
+        );
+      }
+
+      const zipBuffer = await this.createZipArchive(filesToZip);
+
+      return zipBuffer;
+    } catch (error) {
+      this.logger.error(`Error in getReportsAsZip:`, error);
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        "Failed to create zip archive for the reports.",
       );
     }
-
-    const zipBuffer = await this.createZipArchive(filesToZip);
-
-    return zipBuffer;
   }
 
   async createZipArchive(filePaths: string[]): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
+    try {
+      return new Promise((resolve, reject) => {
       const archive = archiver("zip", { zlib: { level: 9 } });
       const buffers: Buffer[] = [];
 
@@ -246,6 +301,12 @@ export class DiscoveryService {
 
       archive.finalize();
     });
+    } catch (error) {
+      this.logger.error(`Error creating zip archive:`, error);
+      throw new InternalServerErrorException(
+        "Failed to create zip archive for the reports.",
+      );
+    }
   }
 
   async getDiscoveryByFileServerId(fileServerId: string) {
@@ -253,7 +314,8 @@ export class DiscoveryService {
       where: { fileServerPathId: fileServerId },
     });
 
-    const data = await this.getDataFromParentPath(
+    try {
+      const data = await this.getDataFromParentPath(
       fileServerId,
       singleRecord.path,
     );
@@ -268,22 +330,42 @@ export class DiscoveryService {
         childs: transformedData,
       },
     ];
+    } catch (error) {
+      this.logger.error(`Error in getDiscoveryByFileServerId:`, error);
+      if (error instanceof ServiceUnavailableException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to retrieve discovery data for the specified file server.');
+    }
   }
 
   async getDiscoveryByFileServerIdAndParentPath(
     fileServerId: string,
     parentPath: string,
   ) {
-    const data = await this.getDataFromParentPath(fileServerId, parentPath);
-    return data.map((item) => ({
-      ...item,
-      childs: [],
-    }));
+    try {
+      const data = await this.getDataFromParentPath(fileServerId, parentPath);
+      return data.map((item) => ({
+        ...item,
+        childs: [],
+      }));
+    } catch (error) {
+      this.logger.error(`Error in getDiscoveryByFileServerIdAndParentPath:`, error);
+      if (error instanceof ServiceUnavailableException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to retrieve discovery data for the specified file server and path.');
+    }
   }
 
   getDataFromParentPath = async (fileServerId: string, parentPath: string) => {
-    return await this.inventoryRepo.find({
-      where: { fileServerPathId: fileServerId, parentPath: parentPath },
-    });
+    try {
+      return await this.inventoryRepo.find({
+        where: { fileServerPathId: fileServerId, parentPath: parentPath },
+      });
+    } catch (error) {
+      this.logger.error(`Error in getDataFromParentPath:`, error);
+      throw new ServiceUnavailableException('Unable to fetch data at this time. Please try again later.');
+    }
   };
 }
