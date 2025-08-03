@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SupportBundleService } from './support-bundle.service';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -332,7 +332,7 @@ describe('SupportBundleService', () => {
       });
     });
 
-    it('should return failed status with error message', async () => {
+    it('should throw InternalServerErrorException for failed bundle', async () => {
       const errorMessage = 'Bundle generation failed';
       const mockBundle = {
         status: SupportBundleStatus.FAILED,
@@ -340,13 +340,27 @@ describe('SupportBundleService', () => {
       };
       supportBundleRepo.findOne.mockResolvedValue(mockBundle as any);
 
-      const result = await service.isBundleReady(userId);
+      await expect(service.isBundleReady(userId)).rejects.toThrow(
+        new InternalServerErrorException(errorMessage)
+      );
 
-      expect(result).toEqual({
-        isProcessing: false,
-        isBundleReady: false,
-        error: errorMessage,
+      expect(supportBundleRepo.findOne).toHaveBeenCalledWith({
+        where: { userId },
+        order: { createdAt: 'DESC' },
+        select: ['status', 'errorMessage'],
       });
+    });
+
+    it('should throw InternalServerErrorException with default message when no error message provided', async () => {
+      const mockBundle = {
+        status: SupportBundleStatus.FAILED,
+        errorMessage: null,
+      };
+      supportBundleRepo.findOne.mockResolvedValue(mockBundle as any);
+
+      await expect(service.isBundleReady(userId)).rejects.toThrow(
+        new InternalServerErrorException('Support bundle generation failed')
+      );
     });
 
     it('should return default status for unknown status', async () => {
