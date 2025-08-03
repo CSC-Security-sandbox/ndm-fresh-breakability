@@ -800,13 +800,43 @@ describe('startStreamConsumer', () => {
     const mockResponse = { status: 201, data: { message: 'Consumer started' } };
     jest.spyOn(axios, 'post').mockResolvedValueOnce(mockResponse);
 
-    await service.startStreamConsumer(jobRunId);
+    const result = await service.startStreamConsumer(jobRunId);
 
     expect(axios.post).toHaveBeenCalledWith(
       `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
       { jobRunId }
     );
     expect(axios.post).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ message: 'Consumer started' });
+  });
+
+  it('should handle api-handler-lib response format', async () => {
+    const mockApiHandlerResponse = {
+      status: 201,
+      data: {
+        statusCode: 201,
+        message: 'Consumer started successfully.',
+        data: {
+          success: true,
+          message: 'Consumer started successfully.'
+        },
+        timestamp: '2025-08-04T10:00:00.000Z',
+        path: '/api/v1/redis-consumer/start',
+        method: 'POST'
+      }
+    };
+    jest.spyOn(axios, 'post').mockResolvedValueOnce(mockApiHandlerResponse);
+
+    const result = await service.startStreamConsumer(jobRunId);
+
+    expect(axios.post).toHaveBeenCalledWith(
+      `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
+      { jobRunId }
+    );
+    expect(result).toEqual({
+      success: true,
+      message: 'Consumer started successfully.'
+    });
   });
 
   it('should handle unexpected errors gracefully', async () => {
@@ -821,7 +851,8 @@ describe('startStreamConsumer', () => {
       `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
       { jobRunId }
     );
-    expect(axios.post).toHaveBeenCalledTimes(2);
+    // The method retries up to 3 times when encountering errors
+    expect(axios.post).toHaveBeenCalledTimes(3);
   });
 })
 

@@ -17,7 +17,10 @@ import {
 
 @Module({
   imports: [
-    LoggerModule.forRoot(),
+    {
+      ...LoggerModule.forRoot(),
+      global: true,
+    },
     ConfigModule.forRoot({
       load: [appConfig,databaseConfig,temporalConfig],
       isGlobal: true

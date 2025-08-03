@@ -9,6 +9,7 @@ import { WorkflowService } from '../workflow/workflow.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { FileConsumerContext, getWorkflowId, ReaderStatus } from './utils';
 import { defaultDataConverter } from '@temporalio/common';
+import { RedisError, ValidationError, WorkerError, ConfigurationError } from '../errors/custom-errors';
 import { RedisUtils } from '@netapp-cloud-datamigrate/jobs-lib/dist/redis/redis-utils';
 
 
@@ -198,7 +199,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             this.logger.warn('Redis client not available for updateConsumerStatus, attempting to reinitialize');
             await this.initializeRedisConnection();
             if (!this.isValidRedisClient()) {
-                throw new Error('Redis client not available');
+                throw new RedisError('Redis client not available');
             }
         }
 
@@ -427,7 +428,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                     resolve();
                 } else {
                     this.logger.error(`Worker thread failed for job ${jobRunId}: ${result.error}`, result.error);
-                    reject(new Error(result.error));
+                    reject(new WorkerError(result.error));
                 }
             });
 
@@ -440,7 +441,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                 worker.removeAllListeners();
 
                 if (code !== 0) {
-                    this.logger.error(`Worker stopped unexpectedly with exit code ${code} for job ${jobRunId}`, new Error(`Worker exit code: ${code}`));
+                    this.logger.error(`Worker stopped unexpectedly with exit code ${code} for job ${jobRunId}`, new WorkerError(`Worker exit code: ${code}`, code));
                 } else {
                     this.logger.log(`Worker thread exited normally for job ${jobRunId}`);
                 }
@@ -515,8 +516,8 @@ export class RedisConsumerService implements OnModuleDestroy {
             jobContext = await contextProvider.getContext(jobRunId);
 
             if (!jobContext) {
-                this.logger.error(`Job context not found for jobRunId=${jobRunId}`, new Error('Job context is null'));
-                throw new Error('jobContext is null');
+                this.logger.error(`Job context not found for jobRunId=${jobRunId}`, new ConfigurationError('Job context is null'));
+                throw new ConfigurationError('jobContext is null');
             }
 
             this.logger.log(`Job context acquired for ${consumerType} in job ${jobRunId}`);
@@ -682,7 +683,7 @@ export class RedisConsumerService implements OnModuleDestroy {
 
     private getStreamReader(jobContext: JobManagerContext, consumerType: string) {
         if (!jobContext) {
-            throw new Error("getReader: jobContext is null or undefined.");
+            throw new ValidationError("getReader: jobContext is null or undefined.", 'jobContext');
         }
 
         const readerMap: Record<string, any> = {
@@ -692,13 +693,13 @@ export class RedisConsumerService implements OnModuleDestroy {
         };
 
         if (!(consumerType in readerMap)) {
-            throw new Error(`getReader: Invalid consumer type '${consumerType}'`);
+            throw new ValidationError(`getReader: Invalid consumer type '${consumerType}'`, 'consumerType');
         }
 
         const reader = readerMap[consumerType];
 
         if (!reader) {
-            throw new Error(`getReader: Reader function not found for consumer type '${consumerType}'`);
+            throw new ConfigurationError(`getReader: Reader function not found for consumer type '${consumerType}'`);
         }
 
         return reader;
