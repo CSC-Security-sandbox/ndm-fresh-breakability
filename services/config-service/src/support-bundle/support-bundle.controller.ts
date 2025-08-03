@@ -66,27 +66,27 @@ export class SupportBundleController {
     return await this.supportBundleService.updateSupportBundleStatus(updateStatusDto);
   }
 
-  @ApiOperation({ summary: 'Check if user can download bundle' })
+  @ApiOperation({ summary: 'Check if bundle is ready for download' })
   @ApiQuery({
     name: 'userId',
     type: String,
     required: true,
-    description: 'User ID to check access',
+    description: 'User ID to check bundle status',
   })
   @ApiResponse({
     status: 200,
-    description: 'Returns whether the user can download the bundle',
+    description: 'Returns whether the bundle is ready for download',
     schema: {
       example: { canDownload: true },
     },
   })
   @ApiBearerAuth()
   @Auth()
-  @Get('can-download')
-  async canDownloadBundle(
+  @Get('is-bundle-ready')
+  async isBundleReady(
     @Request() userDetails: UserDetails,
   ): Promise<BundleStatus> {
-    return await this.supportBundleService.canUserDownloadBundle(
+    return await this.supportBundleService.isBundleReady(
       userDetails.user.id,
     );
   }

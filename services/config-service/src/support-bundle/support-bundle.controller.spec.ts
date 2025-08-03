@@ -28,7 +28,7 @@ describe('SupportBundleController', () => {
     create: jest.fn(),
     updateSupportBundleStatus: jest.fn(),
     getProjects: jest.fn(),
-    canUserDownloadBundle: jest.fn(),
+    isBundleReady: jest.fn(),
     downloadSupportBundle: jest.fn(),
   };
 
@@ -150,7 +150,7 @@ describe('SupportBundleController', () => {
     });
   });
 
-  describe('canDownloadBundle', () => {
+  describe('isBundleReady', () => {
     const mockUserDetails: UserDetails = {
       traceId: 'trace-123',
       user: {
@@ -172,13 +172,13 @@ describe('SupportBundleController', () => {
         error: '',
       };
 
-      mockSupportBundleService.canUserDownloadBundle.mockResolvedValue(
+      mockSupportBundleService.isBundleReady.mockResolvedValue(
         expectedBundleStatus,
       );
 
-      const result = await controller.canDownloadBundle(mockUserDetails);
+      const result = await controller.isBundleReady(mockUserDetails);
 
-      expect(service.canUserDownloadBundle).toHaveBeenCalledWith('user-123');
+      expect(service.isBundleReady).toHaveBeenCalledWith('user-123');
       expect(result).toEqual(expectedBundleStatus);
     });
 
@@ -189,13 +189,13 @@ describe('SupportBundleController', () => {
         error: '',
       };
 
-      mockSupportBundleService.canUserDownloadBundle.mockResolvedValue(
+      mockSupportBundleService.isBundleReady.mockResolvedValue(
         expectedBundleStatus,
       );
 
-      const result = await controller.canDownloadBundle(mockUserDetails);
+      const result = await controller.isBundleReady(mockUserDetails);
 
-      expect(service.canUserDownloadBundle).toHaveBeenCalledWith('user-123');
+      expect(service.isBundleReady).toHaveBeenCalledWith('user-123');
       expect(result).toEqual(expectedBundleStatus);
     });
 
@@ -206,27 +206,27 @@ describe('SupportBundleController', () => {
         error: 'Failed to create bundle',
       };
 
-      mockSupportBundleService.canUserDownloadBundle.mockResolvedValue(
+      mockSupportBundleService.isBundleReady.mockResolvedValue(
         expectedBundleStatus,
       );
 
-      const result = await controller.canDownloadBundle(mockUserDetails);
+      const result = await controller.isBundleReady(mockUserDetails);
 
-      expect(service.canUserDownloadBundle).toHaveBeenCalledWith('user-123');
+      expect(service.isBundleReady).toHaveBeenCalledWith('user-123');
       expect(result).toEqual(expectedBundleStatus);
     });
 
     it('should handle service errors when checking download availability', async () => {
       const errorMessage = 'Failed to check download status';
-      mockSupportBundleService.canUserDownloadBundle.mockRejectedValue(
+      mockSupportBundleService.isBundleReady.mockRejectedValue(
         new Error(errorMessage),
       );
 
       await expect(
-        controller.canDownloadBundle(mockUserDetails),
+        controller.isBundleReady(mockUserDetails),
       ).rejects.toThrow(errorMessage);
 
-      expect(service.canUserDownloadBundle).toHaveBeenCalledWith('user-123');
+      expect(service.isBundleReady).toHaveBeenCalledWith('user-123');
     });
   });
 

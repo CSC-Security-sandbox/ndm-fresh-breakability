@@ -115,7 +115,7 @@ export class SupportBundleService {
     }
   }
 
-  async canUserDownloadBundle(userId: string): Promise<BundleStatus> {
+  async isBundleReady(userId: string): Promise<BundleStatus> {
     const user = await this.supportBundleRepo.findOne({
       where: { userId },
       order: { createdAt: 'DESC' },

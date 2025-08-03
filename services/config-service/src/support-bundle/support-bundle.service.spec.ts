@@ -292,7 +292,7 @@ describe('SupportBundleService', () => {
     });
   });
 
-  describe('canUserDownloadBundle', () => {
+  describe('isBundleReady', () => {
     const userId = 'user-123';
 
     it('should return bundle ready status for completed bundle', async () => {
@@ -302,7 +302,7 @@ describe('SupportBundleService', () => {
       };
       supportBundleRepo.findOne.mockResolvedValue(mockBundle as any);
 
-      const result = await service.canUserDownloadBundle(userId);
+      const result = await service.isBundleReady(userId);
 
       expect(supportBundleRepo.findOne).toHaveBeenCalledWith({
         where: { userId },
@@ -323,7 +323,7 @@ describe('SupportBundleService', () => {
       };
       supportBundleRepo.findOne.mockResolvedValue(mockBundle as any);
 
-      const result = await service.canUserDownloadBundle(userId);
+      const result = await service.isBundleReady(userId);
 
       expect(result).toEqual({
         isProcessing: true,
@@ -340,7 +340,7 @@ describe('SupportBundleService', () => {
       };
       supportBundleRepo.findOne.mockResolvedValue(mockBundle as any);
 
-      const result = await service.canUserDownloadBundle(userId);
+      const result = await service.isBundleReady(userId);
 
       expect(result).toEqual({
         isProcessing: false,
@@ -356,7 +356,7 @@ describe('SupportBundleService', () => {
       };
       supportBundleRepo.findOne.mockResolvedValue(mockBundle as any);
 
-      const result = await service.canUserDownloadBundle(userId);
+      const result = await service.isBundleReady(userId);
 
       expect(result).toEqual({
         isProcessing: false,
@@ -368,7 +368,7 @@ describe('SupportBundleService', () => {
     it('should return default status when no bundle found for user', async () => {
       supportBundleRepo.findOne.mockResolvedValue(null);
 
-      const result = await service.canUserDownloadBundle(userId);
+      const result = await service.isBundleReady(userId);
 
       expect(result).toEqual({
         isProcessing: false,
