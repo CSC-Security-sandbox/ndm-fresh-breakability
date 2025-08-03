@@ -145,7 +145,8 @@ process.on('unhandledRejection', async (reason, promise) => {
             operationErrorRepo,
             taskErrorRepo,
             speedLogRepo,
-            speedLogEntryRepo
+            speedLogEntryRepo,
+            undefined, // LoggerFactory not needed in worker context
         );
 
         const configService = new ConfigService();

@@ -2,6 +2,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { ConfigService } from "@nestjs/config";
 import { WorkflowService } from "./workflow.service";
 import { Client, Connection } from "@temporalio/client";
+import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
 
 describe("WorkflowService", () => {
   let service: WorkflowService;
@@ -17,6 +18,18 @@ describe("WorkflowService", () => {
           provide: ConfigService,
           useValue: {
             get: jest.fn().mockReturnValue({ address: "localhost:7233" }),
+          },
+        },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              info: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
+              log: jest.fn(),
+            }),
           },
         },
       ],

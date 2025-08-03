@@ -1,6 +1,10 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Inject, OnModuleDestroy, Optional, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Client, Connection } from '@temporalio/client';
+import {
+  LoggerService,
+  LoggerFactory,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 
 @Injectable()
@@ -8,11 +12,19 @@ export class WorkflowService implements OnModuleDestroy {
 
     private client: Client | null = null;
     private connection: Connection | null = null;
-    private readonly logger = new Logger(WorkflowService.name);
+    private readonly logger: LoggerService;
 
     constructor(
         private readonly configService: ConfigService,
-    ) { }
+        @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory,
+    ) { 
+        if (loggerFactory) {
+            this.logger = loggerFactory.create(WorkflowService.name);
+        } else {
+            // Fallback to basic NestJS Logger for worker threads
+            this.logger = new Logger(WorkflowService.name) as any;
+        }
+    }
 
     private async getClient(): Promise<Client> {
         if (this.client)
@@ -57,7 +69,7 @@ export class WorkflowService implements OnModuleDestroy {
             }
             this.client = null;
         } catch (error) {
-            this.logger.error(`Error closing Temporal connection: ${error.message}`);
+            this.logger.error(`Error closing Temporal connection: ${error.message}`, error?.stack || error);
         }
     }
 
