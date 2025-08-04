@@ -15,7 +15,23 @@ export const  handleConnectionError = (error: any, host: string, port: number) =
             return `Error: Too many open files. Adjust the file descriptor limit.`;
         case 'ECONNRESET':
             return `Error: Connection reset by server at ${host}:${port}.`;
+        case 'ENETUNREACH':
+            return `Error: Network unreachable for ${host}:${port}.`;
+        case 'EPROTO':
+            return `Error: Protocol error connecting to ${host}:${port}.`;
+        case 'ENOPROTOOPT':
+            return `Error: Protocol not available for ${host}:${port}.`;
+        case 'ENOTSUP':
+            return `Error: Host OS not supported for this operation on ${host}:${port}.`;
         default:
+            // Check for protocol port blocked patterns
+            if (error.message && (
+                error.message.includes('port') && error.message.includes('blocked') ||
+                error.message.includes('firewall') ||
+                error.message.includes('filtered')
+            )) {
+                return `Error: Protocol port ${port} is blocked or not accessible on ${host}.`;
+            }
             return `Error: Unexpected error while connecting to ${host}:${port} - ${error.message}`;
     }
 }

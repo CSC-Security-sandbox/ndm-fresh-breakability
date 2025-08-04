@@ -1,19 +1,24 @@
+import { BlueXpFormType, isBundleReadyApiType } from "@/types/app.type";
+
 export type SupportBundleContextType = {
-  form: Record<string, any>;
-  bundleReadyStatus: Record<string, boolean>;
+  supportBundleForm: BlueXpFormType<SupportBundleFormType>;
   handleDateChange: (value: any) => void;
   handleDownloadReport: () => void;
   handleGenerateBundle: () => void;
-  isFormDataDifferentFromLastBundle: () => boolean;
-  hasFormData: boolean;
-  isBundleReady: boolean;
-  isDownloadDisabled: boolean;
-  isGenerateDisabled: boolean;
-  showLoader: boolean;
+  bundleStatus: isBundleReadyApiType;
 };
 
 export type SupportBundlePayloadType = {
   startDate: string;
   endDate: string;
   otherMetrics: any;
+};
+
+export type SupportBundleFormType = {
+  startDate: any;
+  endDate: any;
+  project_worker: string;
+  other_metrics: any;
+  isValid: boolean;
+  isProcessing: boolean;
 };

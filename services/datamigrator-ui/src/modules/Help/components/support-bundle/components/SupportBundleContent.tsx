@@ -10,21 +10,29 @@ import {
   GENERATING_SUPPORT_BUNDLE_LABEL,
 } from "@modules/Help/components/support-bundle/constants/support-bundle.constant";
 import SupportBundleForm from "@modules/Help/components/support-bundle/components/SupportBundleForm";
+import { formatDateToYMD } from "@/utils/dateFormatter";
 
 const SupportBundleContent = () => {
   const {
     handleDownloadReport,
     handleGenerateBundle,
-    isDownloadDisabled,
-    isGenerateDisabled,
-    showLoader,
+    bundleStatus,
+    supportBundleForm,
   } = useContext(SupportBundleContext);
+
+  const { startDate, endDate } = supportBundleForm?.formState;
+
+  // Disable if dates are different from last generated bundle
+  const isDateSame =
+    bundleStatus?.filters &&
+    formatDateToYMD(startDate) === bundleStatus.filters.startDate &&
+    formatDateToYMD(endDate) === bundleStatus.filters.endDate;
 
   return (
     <Card className="p-6 flex flex-col m-8">
       <Button
         className="ml-auto"
-        disabled={isDownloadDisabled}
+        disabled={!isDateSame || !bundleStatus.isBundleReady}
         onClick={handleDownloadReport}
       >
         {DOWNLOAD_REPORT_LABEL}
@@ -34,13 +42,13 @@ const SupportBundleContent = () => {
 
       <Box className="flex justify-center">
         <Show>
-          <Show.When isTrue={showLoader}>
+          <Show.When isTrue={bundleStatus.isProcessing}>
             <ReportsGeneratingLoader label={GENERATING_SUPPORT_BUNDLE_LABEL} />
           </Show.When>
           <Show.Else>
             <Button
               onClick={handleGenerateBundle}
-              disabled={isGenerateDisabled}
+              disabled={bundleStatus.isProcessing || !supportBundleForm.isValid}
             >
               {GENERATE_SUPPORT_BUNDLE_LABEL}
             </Button>

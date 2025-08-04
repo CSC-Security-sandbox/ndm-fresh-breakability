@@ -216,10 +216,52 @@ describe('ValidateWorkingDirectoryActivity', () => {
       expect(result).toBe(ConfigError.PROTOCOL_NOT_SUPPORTED);
     });
 
-    it('should return original error message for other errors', () => {
-      const error = { message: 'Some other error' };
+    it('should return PROTOCOL_NOT_SUPPORTED for version mismatch error', () => {
+      const error = { message: 'version mismatch detected' };
       const result = service['getNfsMountErrorMessage'](error);
-      expect(result).toBe('Some other error');
+      expect(result).toBe(ConfigError.PROTOCOL_NOT_SUPPORTED);
+    });
+
+    it('should return PROTOCOL_PORT_BLOCKED for port blocked error', () => {
+      const error = { message: 'port 2049 is blocked by firewall' };
+      const result = service['getNfsMountErrorMessage'](error);
+      expect(result).toBe(ConfigError.PROTOCOL_PORT_BLOCKED);
+    });
+
+    it('should return PROTOCOL_PORT_BLOCKED for port filtered error', () => {
+      const error = { message: 'port access is filtered' };
+      const result = service['getNfsMountErrorMessage'](error);
+      expect(result).toBe(ConfigError.PROTOCOL_PORT_BLOCKED);
+    });
+
+    it('should return HOST_OS_NOT_SUPPORTED for OS not supported error', () => {
+      const error = { message: 'os not supported for this operation' };
+      const result = service['getNfsMountErrorMessage'](error);
+      expect(result).toBe(ConfigError.HOST_OS_NOT_SUPPORTED);
+    });
+
+    it('should return HOST_OS_NOT_SUPPORTED for unsupported OS error', () => {
+      const error = { message: 'current os is unsupported' };
+      const result = service['getNfsMountErrorMessage'](error);
+      expect(result).toBe(ConfigError.HOST_OS_NOT_SUPPORTED);
+    });
+
+    it('should return the actual error message for other errors', () => {
+      const error = { message: 'Some other random error' };
+      const result = service['getNfsMountErrorMessage'](error);
+      expect(result).toBe('Some other random error');
+    });
+
+    it('should return empty string when error message is undefined', () => {
+      const error = {};
+      const result = service['getNfsMountErrorMessage'](error);
+      expect(result).toBe('');
+    });
+
+    it('should return empty string when error is null', () => {
+      const error = null;
+      const result = service['getNfsMountErrorMessage'](error);
+      expect(result).toBe('');
     });
   });
 

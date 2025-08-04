@@ -11,9 +11,10 @@ import { mockLogger } from 'src/auth/auth.service.spec';
 
 // Mock fs module
 jest.mock('fs', () => ({
-    existsSync: jest.fn(),
     mkdirSync: jest.fn(),
     promises: {
+        access: jest.fn(),
+        mkdir: jest.fn(),
         unlink: jest.fn(),
         rm: jest.fn(),
         lstat: jest.fn(),
@@ -167,7 +168,7 @@ describe('CommandExecService', () => {
                 errorType: ErrorType.RECOVERABLE_ERROR,
             };
             
-            mockFs.existsSync.mockReturnValue(false);
+            (mockFs.promises.access as jest.Mock).mockRejectedValue({ code: 'ENOENT' });
             // When source doesn't exist, migrateWorkerThread should also fail
             const error = new Error('Source file not found') as any;
             error.code = 'ENOENT';
@@ -192,13 +193,22 @@ describe('CommandExecService', () => {
         });
 
         it('should successfully copy file', async () => {
-            mockFs.existsSync.mockReturnValue(true);
+            // Create fresh input to avoid state pollution
+            const input = {
+                sourcePath: '/source/test.txt',
+                targetPath: '/target/test.txt',
+                jobContext: mockJobContext,
+                command: createMockCommand(),
+                errorType: ErrorType.RECOVERABLE_ERROR,
+            };
+            
+            (mockFs.promises.access as jest.Mock).mockResolvedValue(undefined);
             workerThreadService.migrateWorkerThread.mockResolvedValue({
                 sourceChecksum: 'src-checksum',
                 targetChecksum: 'tgt-checksum',
             });
 
-            const result = await service.copyFile(baseInput);
+            const result = await service.copyFile(input);
 
             expect(result.shouldStampMeta).toBe(true);
             expect(result.sourceErrors).toEqual([]);
@@ -209,7 +219,7 @@ describe('CommandExecService', () => {
                 operationId: 'cmd-1',
                 size: 1024,
             });
-            expect(baseInput.command.ops[OPS_CMD.COPY_FILE].status).toBe(OPS_STATUS.COMPLETED);
+            expect(input.command.ops[OPS_CMD.COPY_FILE].status).toBe(OPS_STATUS.COMPLETED);
         });
 
         it('should handle copy file error', async () => {
@@ -222,7 +232,7 @@ describe('CommandExecService', () => {
                 errorType: ErrorType.RECOVERABLE_ERROR,
             };
             
-            mockFs.existsSync.mockReturnValue(true);
+            (mockFs.promises.access as jest.Mock).mockResolvedValue(undefined);
             
             const error = new Error('Copy failed') as any;
             error.code = 'EACCES';
@@ -285,7 +295,7 @@ describe('CommandExecService', () => {
             const result = await service.copyDirectory(input);
 
             expect(result.shouldStampMeta).toBe(true);
-            expect(mockFs.mkdirSync).not.toHaveBeenCalled();
+            expect(mockFs.promises.mkdir).not.toHaveBeenCalled();
         });
 
         it('should successfully create directory', async () => {
@@ -294,7 +304,7 @@ describe('CommandExecService', () => {
             expect(result.shouldStampMeta).toBe(true);
             expect(result.sourceErrors).toEqual([]);
             expect(result.targetErrors).toEqual([]);
-            expect(mockFs.mkdirSync).toHaveBeenCalledWith('/target/testdir', { recursive: true });
+            expect(mockFs.promises.mkdir).toHaveBeenCalledWith('/target/testdir', { recursive: true });
             expect(baseInput.command.ops[OPS_CMD.COPY_DIR].status).toBe(OPS_STATUS.COMPLETED);
         });
 
@@ -310,9 +320,7 @@ describe('CommandExecService', () => {
             
             const error = new Error('Permission denied') as any;
             error.code = 'EACCES';
-            mockFs.mkdirSync.mockImplementation(() => {
-                throw error;
-            });
+            (mockFs.promises.mkdir as jest.Mock).mockRejectedValue(error);
             dmError.mockReturnValue({});
 
             const result = await service.copyDirectory(input);
@@ -539,7 +547,7 @@ describe('CommandExecService', () => {
                 errorType: ErrorType.RECOVERABLE_ERROR,
             };
 
-            mockFs.existsSync.mockReturnValue(true);
+            (mockFs.promises.access as jest.Mock).mockResolvedValue(undefined);
             workerThreadService.migrateWorkerThread.mockResolvedValue({
                 sourceChecksum: 'src-checksum',
                 targetChecksum: 'tgt-checksum',
@@ -597,7 +605,7 @@ describe('CommandExecService', () => {
             };
 
             // Mock file copy to fail
-            mockFs.existsSync.mockReturnValue(true);
+            (mockFs.promises.access as jest.Mock).mockResolvedValue(undefined);
             const error = new Error('Copy failed') as any;
             error.code = 'EACCES';
             workerThreadService.migrateWorkerThread.mockRejectedValue(error);
@@ -651,7 +659,7 @@ describe('CommandExecService', () => {
                 errorType: ErrorType.RECOVERABLE_ERROR,
             };
 
-            mockFs.mkdirSync.mockReturnValue('/target/testdir');
+            (mockFs.promises.mkdir as jest.Mock).mockResolvedValue('/target/testdir');
             stampMetaService.stampMetaData.mockResolvedValue({
                 shouldStampMeta: false,
                 sourceErrors: [],

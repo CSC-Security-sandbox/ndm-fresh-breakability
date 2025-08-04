@@ -11,7 +11,33 @@ export const handleConnectionError = (errorCode: string) => {
             return `Error: Wrong credentials - ${SmbErrors.LOGON_FAILURE}`;
         case SmbErrors.TIMEOUT:
             return `Unable to connect to the server - ${SmbErrors.TIMEOUT}`;
+        case SmbErrors.PROTOCOL_MISMATCH:
+            return `Error: Protocol not supported by server - ${SmbErrors.PROTOCOL_MISMATCH}`;
+        case SmbErrors.NETWORK_UNREACHABLE:
+            return `Error: Network unreachable - ${SmbErrors.NETWORK_UNREACHABLE}`;
+        case SmbErrors.HOST_UNREACHABLE:
+            return `Error: Host unreachable - ${SmbErrors.HOST_UNREACHABLE}`;
+        case SmbErrors.PORT_BLOCKED:
+            return `Error: Protocol port blocked or not accessible - ${SmbErrors.PORT_BLOCKED}`;
         default:
+            // Check for common error patterns in error messages
+            if (typeof errorCode === 'string') {
+                if (errorCode.includes('version') && errorCode.includes('mismatch')) {
+                    return `Error: SMB version mismatch between client and server - ${errorCode}`;
+                }
+                if (errorCode.includes('protocol') && (errorCode.includes('not supported') || errorCode.includes('unsupported'))) {
+                    return `Error: Protocol not supported by server - ${errorCode}`;
+                }
+                if (errorCode.includes('port') && (errorCode.includes('blocked') || errorCode.includes('filtered'))) {
+                    return `Error: Protocol port blocked or not accessible - ${errorCode}`;
+                }
+                if (errorCode.includes('host') && (errorCode.includes('unreachable') || errorCode.includes('not found'))) {
+                    return `Error: Host unreachable - ${errorCode}`;
+                }
+                if (errorCode.includes('os') && (errorCode.includes('not supported') || errorCode.includes('unsupported'))) {
+                    return `Error: Host OS not supported for this operation - ${errorCode}`;
+                }
+            }
             return `Unable to connect to the server - ${errorCode}`;
     }
 }

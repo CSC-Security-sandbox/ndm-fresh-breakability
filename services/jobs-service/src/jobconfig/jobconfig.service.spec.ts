@@ -1387,7 +1387,6 @@ describe("JobConfigService", () => {
     const redisClient = await redisService.getClient();
     for (const jobRun of jobRunIdsToDeleteKey) {
       const redisKey = `${jobRun.id}:mapping`;
-      if (!redisClient.isOpen) await redisClient.connect();
 
       const redisKeyExists = await redisClient.exists(redisKey);
       if (redisKeyExists) {
@@ -1423,7 +1422,6 @@ describe("JobConfigService", () => {
     const redisClient = await redisService.getClient();
     for (const jobRun of jobRunIdsToDeleteKey) {
       const redisKey = `${jobRun.id}:mapping`;
-      if (!redisClient.isOpen) await redisClient.connect();
 
       const redisKeyExists = await redisClient.exists(redisKey);
       if (redisKeyExists) {

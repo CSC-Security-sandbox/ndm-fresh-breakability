@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -115,17 +115,18 @@ export class SupportBundleService {
     }
   }
 
-  async canUserDownloadBundle(userId: string): Promise<BundleStatus> {
+  async isBundleReady(userId: string): Promise<BundleStatus> {
     const user = await this.supportBundleRepo.findOne({
       where: { userId },
       order: { createdAt: 'DESC' },
-      select: ['status', 'errorMessage'],
+      select: ['status', 'errorMessage', 'filters', 'createdAt'],
     });
 
     const defaultResponse: BundleStatus = {
       isProcessing: false,
       isBundleReady: false,
-      error: null,
+      filters: user?.filters || null,
+      createdAt: user?.createdAt || null,
     };
 
     if (!user) {
@@ -140,7 +141,9 @@ export class SupportBundleService {
         return { ...defaultResponse, isProcessing: true };
 
       case SupportBundleStatus.FAILED:
-        return { ...defaultResponse, error: user.errorMessage };
+        throw new InternalServerErrorException(
+          user.errorMessage || 'Support bundle generation failed'
+        );
 
       default:
         return defaultResponse;

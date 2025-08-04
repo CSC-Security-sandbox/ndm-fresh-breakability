@@ -6,10 +6,16 @@ import {
   UploadExportPathSourceFileProps,
 } from "@/modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/bulk-manual-upload-file.types";
 import { SupportBundlePayloadType } from "@modules/Help/components/support-bundle/types/support-bundle.types";
+import { isBundleReadyApiType } from "@/types/app.type";
 
 export const configApi = createApi({
   reducerPath: "configApi",
-  tagTypes: ["GET_ALL_FILE_SERVERS", "GET_ALL_AGENTS", "GET_FILE_SERVER_BY_ID"],
+  tagTypes: [
+    "GET_ALL_FILE_SERVERS",
+    "GET_ALL_AGENTS",
+    "GET_FILE_SERVER_BY_ID",
+    "IS_BUNDLE_READY",
+  ],
   baseQuery: fetchBaseQuery({
     baseUrl:
       window?.env?.VITE_CONFIG_SERVICE_URL ||
@@ -138,6 +144,7 @@ export const configApi = createApi({
         method: "POST",
         body: payload,
       }),
+      invalidatesTags: ["IS_BUNDLE_READY"],
     }),
 
     downloadSupportBundle: builder.query<void, void>({
@@ -147,8 +154,9 @@ export const configApi = createApi({
       }),
     }),
 
-    checkBundleReadyStatus: builder.query<Record<string, boolean>, void>({
-      query: () => "support-bundle/can-download",
+    isBundleReady: builder.query<isBundleReadyApiType, void>({
+      query: () => "support-bundle/is-bundle-ready",
+      providesTags: ["IS_BUNDLE_READY"],
     }),
   }),
 });
@@ -170,6 +178,6 @@ export const {
   useUploadExportPathSourceFileMutation,
   useSubmitExportPathSourceFileMutation,
   useGenerateSupportBundleMutation,
-  useCheckBundleReadyStatusQuery,
+  useLazyIsBundleReadyQuery,
   useLazyDownloadSupportBundleQuery,
 } = configApi;

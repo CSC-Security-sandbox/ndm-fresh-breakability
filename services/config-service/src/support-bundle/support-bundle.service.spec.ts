@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SupportBundleService } from './support-bundle.service';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -292,88 +292,126 @@ describe('SupportBundleService', () => {
     });
   });
 
-  describe('canUserDownloadBundle', () => {
+  describe('isBundleReady', () => {
     const userId = 'user-123';
 
     it('should return bundle ready status for completed bundle', async () => {
+      const mockFilters = { startDate: '2023-01-01', endDate: '2023-01-31', otherMetrics: [] };
+      const mockCreatedAt = new Date('2023-01-01T10:00:00Z');
       const mockBundle = {
         status: SupportBundleStatus.COMPLETED,
         errorMessage: null,
+        filters: mockFilters,
+        createdAt: mockCreatedAt,
       };
       supportBundleRepo.findOne.mockResolvedValue(mockBundle as any);
 
-      const result = await service.canUserDownloadBundle(userId);
+      const result = await service.isBundleReady(userId);
 
       expect(supportBundleRepo.findOne).toHaveBeenCalledWith({
         where: { userId },
         order: { createdAt: 'DESC' },
-        select: ['status', 'errorMessage'],
+        select: ['status', 'errorMessage', 'filters', 'createdAt'],
       });
       expect(result).toEqual({
         isProcessing: false,
         isBundleReady: true,
-        error: null,
+        filters: mockFilters,
+        createdAt: mockCreatedAt,
       });
     });
 
     it('should return processing status for in-progress bundle', async () => {
+      const mockFilters = { startDate: '2023-01-01', endDate: '2023-01-31', otherMetrics: ['metric1'] };
+      const mockCreatedAt = new Date('2023-01-01T10:00:00Z');
       const mockBundle = {
         status: SupportBundleStatus.IN_PROGRESS,
         errorMessage: null,
+        filters: mockFilters,
+        createdAt: mockCreatedAt,
       };
       supportBundleRepo.findOne.mockResolvedValue(mockBundle as any);
 
-      const result = await service.canUserDownloadBundle(userId);
+      const result = await service.isBundleReady(userId);
 
       expect(result).toEqual({
         isProcessing: true,
         isBundleReady: false,
-        error: null,
+        filters: mockFilters,
+        createdAt: mockCreatedAt,
       });
     });
 
-    it('should return failed status with error message', async () => {
+    it('should throw InternalServerErrorException for failed bundle', async () => {
       const errorMessage = 'Bundle generation failed';
+      const mockFilters = { startDate: '2023-01-01', endDate: '2023-01-31', otherMetrics: [] };
+      const mockCreatedAt = new Date('2023-01-01T10:00:00Z');
       const mockBundle = {
         status: SupportBundleStatus.FAILED,
         errorMessage,
+        filters: mockFilters,
+        createdAt: mockCreatedAt,
       };
       supportBundleRepo.findOne.mockResolvedValue(mockBundle as any);
 
-      const result = await service.canUserDownloadBundle(userId);
+      await expect(service.isBundleReady(userId)).rejects.toThrow(
+        new InternalServerErrorException(errorMessage)
+      );
 
-      expect(result).toEqual({
-        isProcessing: false,
-        isBundleReady: false,
-        error: errorMessage,
+      expect(supportBundleRepo.findOne).toHaveBeenCalledWith({
+        where: { userId },
+        order: { createdAt: 'DESC' },
+        select: ['status', 'errorMessage', 'filters', 'createdAt'],
       });
     });
 
-    it('should return default status for unknown status', async () => {
+    it('should throw InternalServerErrorException with default message when no error message provided', async () => {
+      const mockFilters = { startDate: '2023-01-01', endDate: '2023-01-31', otherMetrics: [] };
+      const mockCreatedAt = new Date('2023-01-01T10:00:00Z');
       const mockBundle = {
-        status: 'UNKNOWN_STATUS',
+        status: SupportBundleStatus.FAILED,
         errorMessage: null,
+        filters: mockFilters,
+        createdAt: mockCreatedAt,
       };
       supportBundleRepo.findOne.mockResolvedValue(mockBundle as any);
 
-      const result = await service.canUserDownloadBundle(userId);
+      await expect(service.isBundleReady(userId)).rejects.toThrow(
+        new InternalServerErrorException('Support bundle generation failed')
+      );
+    });
+
+    it('should return default status for unknown status', async () => {
+      const mockFilters = { startDate: '2023-01-01', endDate: '2023-01-31', otherMetrics: [] };
+      const mockCreatedAt = new Date('2023-01-01T10:00:00Z');
+      const mockBundle = {
+        status: 'UNKNOWN_STATUS',
+        errorMessage: null,
+        filters: mockFilters,
+        createdAt: mockCreatedAt,
+      };
+      supportBundleRepo.findOne.mockResolvedValue(mockBundle as any);
+
+      const result = await service.isBundleReady(userId);
 
       expect(result).toEqual({
         isProcessing: false,
         isBundleReady: false,
-        error: null,
+        filters: mockFilters,
+        createdAt: mockCreatedAt,
       });
     });
 
     it('should return default status when no bundle found for user', async () => {
       supportBundleRepo.findOne.mockResolvedValue(null);
 
-      const result = await service.canUserDownloadBundle(userId);
+      const result = await service.isBundleReady(userId);
 
       expect(result).toEqual({
         isProcessing: false,
         isBundleReady: false,
-        error: null,
+        filters: null,
+        createdAt: null,
       });
     });
   });

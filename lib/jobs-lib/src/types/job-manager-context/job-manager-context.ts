@@ -71,6 +71,10 @@ export  class JobManagerContext {
     async publishToCommandStream(command: Cmd): Promise<string> {
         return await this.commandStream.append(command);
     }
+       
+    async publishBulkToCommandStream(commands: Cmd[]): Promise<string[]> {
+        return await this.commandStream.appendBulk(commands);
+    }
 
     async *groupReadCommandStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: Cmd; id: string; }> {
         yield* this.commandStream.groupReadWithoutAck(readerName, batchSize, groupType);

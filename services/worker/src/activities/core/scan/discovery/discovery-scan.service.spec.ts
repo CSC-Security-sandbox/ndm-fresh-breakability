@@ -9,8 +9,8 @@ jest.mock('fs', () => {
   const actualFs = jest.requireActual('fs');
   return {
     ...actualFs,
-    existsSync: jest.fn(),
     promises: {
+      access: jest.fn(),
       readdir: jest.fn(),
       lstat: jest.fn(),
     },
@@ -72,7 +72,7 @@ describe('DiscoveryScanService', () => {
   describe('getDirContents', () => {
     it('should return directory contents successfully', async () => {
       const dirents = [{ name: 'file1.txt' }] as unknown as fs.Dirent[];
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (fs.promises.access as jest.Mock).mockResolvedValue(undefined);
       (fs.promises.readdir as jest.Mock).mockResolvedValue(dirents);
 
       const result = await service.getDirContents({
@@ -86,7 +86,7 @@ describe('DiscoveryScanService', () => {
     });
 
     it('should throw FatalError and publish to error stream', async () => {
-      (fs.existsSync as jest.Mock).mockReturnValue(false);
+      (fs.promises.access as jest.Mock).mockRejectedValue({ code: 'ENOENT' });
 
       await expect(
         service.getDirContents({
@@ -101,7 +101,7 @@ describe('DiscoveryScanService', () => {
     });
 
     it('should catch unexpected error from readdir and publish error', async () => {
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (fs.promises.access as jest.Mock).mockResolvedValue(undefined);
       const err = new Error('readdir failed');
       (fs.promises.readdir as jest.Mock).mockRejectedValue(err);
 
@@ -131,7 +131,7 @@ describe('DiscoveryScanService', () => {
         { name: 'subdir' },
       ]);
 
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (fs.promises.access as jest.Mock).mockResolvedValue(undefined);
 
       (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
       (getFileInfo as jest.Mock).mockResolvedValue({ fileName: 'file1.txt' });
