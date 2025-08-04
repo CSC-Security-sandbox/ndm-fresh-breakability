@@ -88,7 +88,7 @@ export const SupportBundleProvider = ({
         }
         setBundleStatus(_isBundleReadyResponse);
       } catch (error) {
-        console.error("error->", error);
+        console.error("Support Bundle Ready Status", error);
         setBundleStatus({
           isBundleReady: false,
           isProcessing: false,
@@ -146,8 +146,8 @@ export const SupportBundleProvider = ({
     if (!supportBundleForm?.isValid) return;
 
     const { formState } = supportBundleForm;
-    const otherMetrics = formState?.other_metrics?.label
-      ? [formState?.other_metrics?.label]
+    const otherMetrics = formState?.otherMetrics?.label
+      ? [formState?.otherMetrics?.label]
       : [];
 
     const payload: SupportBundlePayloadType = {

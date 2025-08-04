@@ -17,8 +17,12 @@ export type SupportBundlePayloadType = {
 export type SupportBundleFormType = {
   startDate: any;
   endDate: any;
-  project_worker: string;
-  other_metrics: any;
+  otherMetrics: any;
   isValid: boolean;
   isProcessing: boolean;
+};
+
+export type SupportBundleFormErrorsType = {
+  startDate?: string;
+  endDate?: string;
 };
