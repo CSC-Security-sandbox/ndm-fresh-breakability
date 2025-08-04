@@ -34,9 +34,7 @@ export class MigrateScanService {
 
 
     async publishCommands({ jobContext, commands}: PublishCommandInput)  {
-        //TODO: make bulk publish to command stream. 
-        for(const command of commands)
-            await jobContext.publishToCommandStream(command);
+        await jobContext.publishBulkToCommandStream(commands);
     }
 
     async getDirContents({path, origin, jobContext, errorType, command}: DirContentsInput): Promise<Set<string>>{
