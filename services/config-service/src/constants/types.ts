@@ -22,5 +22,6 @@ export type Role = {
 export interface BundleStatus {
   isProcessing: boolean;
   isBundleReady: boolean;
-  error: string;
+  filters: any | null;
+  createdAt: Date | null;
 }

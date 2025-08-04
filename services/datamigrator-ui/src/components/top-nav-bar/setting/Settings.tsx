@@ -5,7 +5,7 @@ import { IAMIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { HelpIcon } from "@netapp/bxp-style/react-icons/General";
 import { RootStateType } from "@store/store";
 import { useDispatch, useSelector } from "react-redux";
-import Help from "@modules/Help/components/Help";
+import Help from "@modules/Help/Help";
 
 const Settings = () => {
   const drawerId = "Settings";

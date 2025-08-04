@@ -1,14 +1,14 @@
-import Box from "@/components/container/Box";
-import { Layout, WizardHeader } from "@netapp/bxp-design-system-react";
-import { HelpIcon } from "@netapp/bxp-style/react-icons/General";
-import { HELP_ITEMS } from "@modules/Help/constants/help.constants";
 import { useContext } from "react";
 import { Collapse } from "@mui/material";
+import { Layout, WizardHeader } from "@netapp/bxp-design-system-react";
+import { HelpIcon } from "@netapp/bxp-style/react-icons/General";
+import Box from "@/components/container/Box";
 import RenderEach from "@components/render-each/RenderEach.tsx";
-import { HelpContext } from "@modules/Help/context/HelpContext";
+import { HelpProvider, HelpContext } from "@modules/Help/context/HelpContext";
+import { HELP_ITEMS } from "@modules/Help/constants/help.constants";
 import { useHelpContent } from "@modules/Help/hook/useHelpContent";
 
-const HelpList = () => {
+const HelpContent = () => {
   const { isHelpListVisible, setGetItemIndex } = useContext(HelpContext);
 
   useHelpContent();
@@ -16,7 +16,15 @@ const HelpList = () => {
   return (
     <Collapse in={isHelpListVisible} mountOnEnter unmountOnExit>
       <Layout.Page>
-        <WizardHeader Icon={HelpIcon} label="Help" />
+        <WizardHeader
+          logo={null}
+          Icon={HelpIcon}
+          label="Help"
+          children={null}
+          onClose={() => {}}
+          closeLink=""
+          Widgets={null}
+        />
         <Layout.Content
           style={{ padding: 20, backgroundColor: "var(--light-bg)" }}
         >
@@ -39,4 +47,12 @@ const HelpList = () => {
   );
 };
 
-export default HelpList;
+const Help = () => {
+  return (
+    <HelpProvider>
+      <HelpContent />
+    </HelpProvider>
+  );
+};
+
+export default Help;

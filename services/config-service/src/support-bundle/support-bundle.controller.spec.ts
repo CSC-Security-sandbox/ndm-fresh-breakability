@@ -3,7 +3,7 @@ import { SupportBundleController } from './support-bundle.controller';
 import { SupportBundleService } from './support-bundle.service';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { CreateSupportBundleDTO } from './dto/create-support-bundle.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { BundleStatus, UserDetails } from 'src/constants/types';
@@ -28,7 +28,7 @@ describe('SupportBundleController', () => {
     create: jest.fn(),
     updateSupportBundleStatus: jest.fn(),
     getProjects: jest.fn(),
-    canUserDownloadBundle: jest.fn(),
+    isBundleReady: jest.fn(),
     downloadSupportBundle: jest.fn(),
   };
 
@@ -150,7 +150,7 @@ describe('SupportBundleController', () => {
     });
   });
 
-  describe('canDownloadBundle', () => {
+  describe('isBundleReady', () => {
     const mockUserDetails: UserDetails = {
       traceId: 'trace-123',
       user: {
@@ -169,16 +169,17 @@ describe('SupportBundleController', () => {
       const expectedBundleStatus: BundleStatus = {
         isProcessing: false,
         isBundleReady: true,
-        error: '',
+        filters: { startDate: '2023-01-01', endDate: '2023-01-31', otherMetrics: [] },
+        createdAt: new Date('2023-01-01T10:00:00Z'),
       };
 
-      mockSupportBundleService.canUserDownloadBundle.mockResolvedValue(
+      mockSupportBundleService.isBundleReady.mockResolvedValue(
         expectedBundleStatus,
       );
 
-      const result = await controller.canDownloadBundle(mockUserDetails);
+      const result = await controller.isBundleReady(mockUserDetails);
 
-      expect(service.canUserDownloadBundle).toHaveBeenCalledWith('user-123');
+      expect(service.isBundleReady).toHaveBeenCalledWith('user-123');
       expect(result).toEqual(expectedBundleStatus);
     });
 
@@ -186,47 +187,45 @@ describe('SupportBundleController', () => {
       const expectedBundleStatus: BundleStatus = {
         isProcessing: true,
         isBundleReady: false,
-        error: '',
+        filters: { startDate: '2023-01-01', endDate: '2023-01-31', otherMetrics: ['metric1'] },
+        createdAt: new Date('2023-01-01T10:00:00Z'),
       };
 
-      mockSupportBundleService.canUserDownloadBundle.mockResolvedValue(
+      mockSupportBundleService.isBundleReady.mockResolvedValue(
         expectedBundleStatus,
       );
 
-      const result = await controller.canDownloadBundle(mockUserDetails);
+      const result = await controller.isBundleReady(mockUserDetails);
 
-      expect(service.canUserDownloadBundle).toHaveBeenCalledWith('user-123');
+      expect(service.isBundleReady).toHaveBeenCalledWith('user-123');
       expect(result).toEqual(expectedBundleStatus);
     });
 
-    it('should return error status when bundle creation failed', async () => {
-      const expectedBundleStatus: BundleStatus = {
-        isProcessing: false,
-        isBundleReady: false,
-        error: 'Failed to create bundle',
-      };
+    it('should throw InternalServerErrorException when bundle creation failed', async () => {
+      const errorMessage = 'Failed to create bundle';
 
-      mockSupportBundleService.canUserDownloadBundle.mockResolvedValue(
-        expectedBundleStatus,
+      mockSupportBundleService.isBundleReady.mockRejectedValue(
+        new InternalServerErrorException(errorMessage)
       );
 
-      const result = await controller.canDownloadBundle(mockUserDetails);
+      await expect(
+        controller.isBundleReady(mockUserDetails)
+      ).rejects.toThrow(new InternalServerErrorException(errorMessage));
 
-      expect(service.canUserDownloadBundle).toHaveBeenCalledWith('user-123');
-      expect(result).toEqual(expectedBundleStatus);
+      expect(service.isBundleReady).toHaveBeenCalledWith('user-123');
     });
 
     it('should handle service errors when checking download availability', async () => {
       const errorMessage = 'Failed to check download status';
-      mockSupportBundleService.canUserDownloadBundle.mockRejectedValue(
+      mockSupportBundleService.isBundleReady.mockRejectedValue(
         new Error(errorMessage),
       );
 
       await expect(
-        controller.canDownloadBundle(mockUserDetails),
+        controller.isBundleReady(mockUserDetails),
       ).rejects.toThrow(errorMessage);
 
-      expect(service.canUserDownloadBundle).toHaveBeenCalledWith('user-123');
+      expect(service.isBundleReady).toHaveBeenCalledWith('user-123');
     });
   });
 
