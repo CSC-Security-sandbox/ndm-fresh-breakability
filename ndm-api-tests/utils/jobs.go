@@ -288,7 +288,6 @@ func GetJobRunDetails(jobConfigID string, headers map[string]string, needRetryAt
 			return GetJobResponse{}, resp, fmt.Errorf("error while sending api request , err : %v", err)
 		}
 
-		LogDebug(fmt.Sprintf("Getting job run details for ID %s, attempt %d", jobConfigID, attempt))
 		bodyBytes, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
@@ -301,6 +300,7 @@ func GetJobRunDetails(jobConfigID string, headers map[string]string, needRetryAt
 			return GetJobResponse{}, resp, fmt.Errorf("error unmrashling response: %w", err)
 		}
 
+		LogDebug(fmt.Sprintf("Getting job run details for ID %s, jobType %s, attempt %d", jobConfigID, getJobsResp.JobType, attempt))
 		if len(needRetryAttempt) > 0 {
 			return getJobsResp, resp, nil
 		}

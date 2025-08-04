@@ -4,6 +4,7 @@ import (
 	"fmt"
 	. "ndm-api-tests/utils"
 	"net/http"
+	"sync"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -286,18 +287,30 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 		})
 
 		AfterEach(func() {
-			err := RemoveDeltaFromVolume(sourceVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
 
-			err = RemoveDeltaFromVolume(sourceVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath2)
+			var wg sync.WaitGroup
+			sourceVolumePaths := []string{sourceVolumePath1, sourceVolumePath2}
+			destVolumePaths := []string{destinationVolumePath1, destinationVolumePath2}
 
-			err = ClearVolume(destinationVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
+			for _, srcPath := range sourceVolumePaths {
+				wg.Add(1)
+				go func(path string) {
+					defer wg.Done()
+					err := RemoveDeltaFromVolume(path)
+					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error restoring original data to %s", path))
+				}(srcPath)
+			}
 
-			err = ClearVolume(destinationVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
+			for _, destPath := range destVolumePaths {
+				wg.Add(1)
+				go func(path string) {
+					defer wg.Done()
+					err := ClearVolume(path)
+					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error clearing volume of %s", path))
+				}(destPath)
+			}
 
+			wg.Wait()
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
 			By("Cleanup complete.")
