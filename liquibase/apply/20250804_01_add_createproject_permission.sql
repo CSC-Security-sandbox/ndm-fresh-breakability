@@ -2,7 +2,13 @@ INSERT INTO "permission" (
     id, permission_name, permission_status, created_at, created_by, updated_at, updated_by
 )
 SELECT
-    uuid_generate_v4(), 'CreateProject', 'active', now(), uuid_generate_v4(), now(), uuid_generate_v4()
+    uuid_generate_v4(), 
+    'CreateProject', 
+    'active', 
+    now(), 
+    (SELECT id FROM "user" WHERE email = 'admin@datamigrator.local'), 
+    now(), 
+    (SELECT id FROM "user" WHERE email = 'admin@datamigrator.local')
 WHERE NOT EXISTS (
     SELECT 1 FROM "permission" WHERE permission_name = 'CreateProject'
 );
@@ -15,9 +21,9 @@ SELECT
     r.id,
     p.id,
     now(),
-    uuid_generate_v4(),
+    (SELECT id FROM "user" WHERE email = 'admin@datamigrator.local'),
     now(),
-    uuid_generate_v4()
+    (SELECT id FROM "user" WHERE email = 'admin@datamigrator.local')
 FROM "role" r, "permission" p
 WHERE r.role_name = 'App Admin'
   AND p.permission_name = 'CreateProject'
