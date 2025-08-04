@@ -14,6 +14,7 @@ import { ACL, getFileInfoInput, Operation, Origin } from '../utils/utils.types';
 import { OPS_CMD, StampMetaDataOutput, SyncOperationInput, SyncOperationOutput, SyncTaskInput, SyncTaskOutput } from './migrate.type';
 import { Context } from '@temporalio/activity';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { isPathExists } from '../core/utils/utils';
 
 
 @Injectable()
@@ -40,11 +41,11 @@ export class MigrationSyncService {
   }
 
   async calculateChecksum(filePath: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      if (!fs.existsSync(filePath)) {
-        return reject(new Error(`File not found: ${filePath}`));
+     const isFilePathExists = await isPathExists(filePath);
+     if (!isFilePathExists) {
+        throw new Error(`File not found: ${filePath}`);
       }
-      
+    return new Promise((resolve, reject) => {           
       const hash = crypto.createHash('sha256');
       const stream = fs.createReadStream(filePath);
 
@@ -55,13 +56,16 @@ export class MigrationSyncService {
   }
 
   async copyFileWithChecksum(sourceFile: string, destinationFile: string): Promise<{sourceChecksum: string, targetChecksum:string}> {
-    if (!fs.existsSync(sourceFile)) {
+    const sourceExists = await isPathExists(sourceFile);
+    if (!sourceExists) {
       throw new Error(`Source file does not exist: ${sourceFile}`);
     }
 
     const destDir = path.dirname(destinationFile);
-    if (!fs.existsSync(destDir)) {
-      fs.mkdirSync(destDir, { recursive: true });
+    const destDirExists = await isPathExists(destDir);
+
+    if (!destDirExists) {
+      await fs.promises.mkdir(destDir, { recursive: true });
     }
   
     const hash = crypto.createHash("sha256");
@@ -96,9 +100,10 @@ export class MigrationSyncService {
   }
 
 
-  ensureDirectoryExists(directoryPath: string) {
-    if (!fs.existsSync(directoryPath)) {
-      fs.mkdirSync(directoryPath, { recursive: true });
+  async ensureDirectoryExists(directoryPath: string) {
+    const dirExists = await isPathExists(directoryPath);
+    if (!dirExists) {
+      await fs.promises.mkdir(directoryPath, { recursive: true });
     }
   }
   

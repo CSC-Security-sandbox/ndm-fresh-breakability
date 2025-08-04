@@ -107,7 +107,7 @@ describe('MigrationSyncService', () => {
             const mockFilePath = 'test.txt';
             const fileContent = 'Hello World';
             const expectedChecksum = crypto.createHash('sha256').update(fileContent).digest('hex');
-            jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
                 const stream = new (require('stream')).Readable();
                 stream.push(fileContent);
@@ -119,13 +119,13 @@ describe('MigrationSyncService', () => {
 
         it('should reject if the file does not exist', async () => {
             const mockFilePath = 'nonexistent.txt';
-            jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+            jest.spyOn(fs.promises, 'access').mockRejectedValue({ code: 'ENOENT' });
             await expect(service.calculateChecksum(mockFilePath)).rejects.toThrow(`File not found: ${mockFilePath}`);
         });
 
         it('should reject if an error occurs during reading', async () => {
             const mockFilePath = 'error.txt';
-            jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
                 const stream = new (require('stream')).Readable();
                 process.nextTick(() => stream.emit('error', new Error('Read error')));
@@ -137,7 +137,7 @@ describe('MigrationSyncService', () => {
         it('should resolve checksum when stream finishes', async () => {
             const mockFilePath = 'test.txt';
             const fileContent = 'Hello World';
-            jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
                 const stream = new (require('stream')).Readable();
                 stream._read = function () {
@@ -152,7 +152,7 @@ describe('MigrationSyncService', () => {
 
         it('should reject if stream emits error', async () => {
             const mockFilePath = 'error.txt';
-            jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
                 const stream = new (require('stream')).Readable();
                 process.nextTick(() => stream.emit('error', new Error('Stream error')));
@@ -165,23 +165,23 @@ describe('MigrationSyncService', () => {
     describe('ensureDirectoryExists', () => {
         it('should create the directory if it does not exist', async () => {
             const mockDirPath = 'testDir';
-            jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-            jest.spyOn(fs, 'mkdirSync').mockImplementation(() => '');
+            jest.spyOn(fs.promises, 'access').mockRejectedValue({ code: 'ENOENT' });
+            jest.spyOn(fs.promises, 'mkdir').mockResolvedValue(undefined);
             await service.ensureDirectoryExists(mockDirPath);
-            expect(fs.mkdirSync).toHaveBeenCalledWith(mockDirPath, { recursive: true });
+            expect(fs.promises.mkdir).toHaveBeenCalledWith(mockDirPath, { recursive: true });
         });
 
         it('should do nothing if the directory already exists', async () => {
             const mockDirPath = 'existingDir';
-            jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-            jest.spyOn(fs, 'mkdirSync').mockImplementation(() => '');
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+            jest.spyOn(fs.promises, 'mkdir').mockResolvedValue(undefined);
             await service.ensureDirectoryExists(mockDirPath);
-            expect(fs.mkdirSync).not.toHaveBeenCalled();
+            expect(fs.promises.mkdir).not.toHaveBeenCalled();
         });
         it('should throw an error if an error occurs during directory creation', async () => {
             const mockDirPath = 'errorDir';
-            jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-            jest.spyOn(fs, 'mkdirSync').mockImplementation(() => { throw new Error('Directory creation error') });
+            jest.spyOn(fs.promises, 'access').mockRejectedValue({ code: 'ENOENT' });
+            jest.spyOn(fs.promises, 'mkdir').mockRejectedValue(new Error('Directory creation error'));
             try {
                 await service.ensureDirectoryExists(mockDirPath);
             } catch (error) {
@@ -485,7 +485,8 @@ describe('MigrationSyncService', () => {
                     retryCount: 0
                 },
             }
-            jest.spyOn(fs, 'mkdirSync').mockImplementation(() => { throw new Error('Directory creation error') });
+            jest.spyOn(fs.promises, 'access').mockRejectedValue({ code: 'ENOENT' });
+            jest.spyOn(fs.promises, 'mkdir').mockRejectedValue(new Error('Directory creation error'));
             try {
                 await service.syncOperation(mockInput as any);
             } catch (error) {
@@ -1055,20 +1056,21 @@ describe('MigrationSyncService', () => {
         });
 
         it('should throw error if source file does not exist', async () => {
-            jest.spyOn(fs, 'existsSync').mockImplementation((filePath: string) => false);
+            jest.spyOn(fs.promises, 'access').mockRejectedValue({ code: 'ENOENT' });
             await expect(service.copyFileWithChecksum(mockSourceFile, mockDestFile))
                 .rejects
                 .toThrow(`Source file does not exist: ${mockSourceFile}`);
         });
 
-        it('should throw if fs.mkdirSync fails in copyFileWithChecksum', async () => {
-            jest.spyOn(fs, 'existsSync').mockImplementation((p: string) => p.includes('source') ? true : false);
-            jest.spyOn(fs, 'mkdirSync').mockImplementation(() => { throw new Error('mkdir error'); });
+        it('should throw if fs.promises.mkdir fails in copyFileWithChecksum', async () => {
+            jest.spyOn(fs.promises, 'access').mockImplementation((p: string) => 
+                p.includes('source') ? Promise.resolve(undefined) : Promise.reject({ code: 'ENOENT' }));
+            jest.spyOn(fs.promises, 'mkdir').mockRejectedValue(new Error('mkdir error'));
             await expect(service.copyFileWithChecksum('sourceFile', 'destDir/destFile')).rejects.toThrow('mkdir error');
         });
 
         it('should throw if checksum mismatch', async () => {
-            jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
                 const stream = new (require('stream')).Readable();
                 stream.push('abc');
@@ -1090,7 +1092,7 @@ describe('MigrationSyncService', () => {
             const fileContent = Buffer.from('Hello World');
             const expectedChecksum = crypto.createHash('sha256').update(fileContent).digest('hex');
 
-            jest.spyOn(fs, 'existsSync').mockImplementation((filePath: string) => true);
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
             const stream = new (require('stream')).Readable();
             stream.push(fileContent);
@@ -1115,7 +1117,7 @@ describe('MigrationSyncService', () => {
             const fileContent = Buffer.from('Hello World');
             const expectedChecksum = crypto.createHash('sha256').update(fileContent).digest('hex');
 
-            jest.spyOn(fs, 'existsSync').mockImplementation((filePath: string) => true);
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
 
             // Mock readStream and writeStream with pause/resume
             const events: Record<string, Function[]> = {};
@@ -1159,8 +1161,9 @@ describe('MigrationSyncService', () => {
 
 
         it('should create destination directory if it does not exist', async () => {
-            jest.spyOn(fs, 'existsSync').mockImplementation((filePath: string) => filePath.includes('source'));
-            const mkdirSyncSpy = jest.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined);
+            jest.spyOn(fs.promises, 'access').mockImplementation((filePath: string) => 
+                filePath.includes('source') ? Promise.resolve(undefined) : Promise.reject({ code: 'ENOENT' }));
+            const mkdirSpy = jest.spyOn(fs.promises, 'mkdir').mockResolvedValue(undefined);
             jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
             const stream = new (require('stream')).Readable();
             stream.push('abc');
@@ -1174,7 +1177,7 @@ describe('MigrationSyncService', () => {
             });
             jest.spyOn(service, 'calculateChecksum').mockResolvedValue('abc');
             await expect(service.copyFileWithChecksum('sourceFile', 'destDir/destFile')).rejects.toThrow('Checksum mismatch');
-            expect(mkdirSyncSpy).toHaveBeenCalled();
+            expect(mkdirSpy).toHaveBeenCalled();
         });
     });
 });

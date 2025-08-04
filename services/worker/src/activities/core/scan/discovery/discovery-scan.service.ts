@@ -8,6 +8,7 @@ import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishItemInfoInput } from "./discovery-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
+import { isPathExists } from "../../utils/utils";
 
 
 export class DiscoveryScanService {
@@ -28,7 +29,8 @@ export class DiscoveryScanService {
     async getDirContents({path, jobContext, errorType, command}: DirContentsInput): Promise<fs.Dirent[]>{
         let content:fs.Dirent[] = [];
         try{
-            if (!fs.existsSync(path)) 
+            const pathExists = await isPathExists(path);
+            if (!pathExists) 
                     throw new FatalError(`Source directory does not exist: ${path}`);
             content = await fs.promises.readdir(path,{ withFileTypes: true }); 
         }catch(error){

@@ -10,6 +10,7 @@ import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishCommandInput } from "./migrate-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { isPathExists } from "../../utils/utils";
 
 @Injectable()
 export class MigrateScanService {
@@ -41,7 +42,8 @@ export class MigrateScanService {
     async getDirContents({path, origin, jobContext, errorType, command}: DirContentsInput): Promise<Set<string>>{
         let content = new Set<string>();
         try{
-            if (!fs.existsSync(path)) {
+            const pathExists = await isPathExists(path);
+            if (!pathExists) {
                 if (origin === Origin.SOURCE)  
                     throw new FatalError(`Source directory does not exist: ${path}`);
                 return content; 
@@ -69,8 +71,8 @@ export class MigrateScanService {
         for (const item of sourceContent) {
             try {
                 const sourceContentPath = path.join(sourcePath, item);
-                if (!fs.existsSync(sourceContentPath)) continue;
-
+                const sourceContentExists = await isPathExists(sourceContentPath);
+                if (!sourceContentExists) continue;                
                 const sourceStat = await fs.promises.lstat(sourceContentPath);
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
                 
@@ -106,7 +108,8 @@ export class MigrateScanService {
                     if (command) commands.push(command);
                 } else {
                     const targetFilePath = path.join(targetPath, item);
-                    if (fs.existsSync(targetFilePath)) {
+                    const targetFileExists = await isPathExists(targetFilePath);
+                    if (targetFileExists) {
                        const targetStatLstat = await fs.promises.lstat(targetFilePath);
                         let targetStat: fs.Stats;
                         if (targetStatLstat.isSymbolicLink()) {
@@ -167,7 +170,8 @@ export class MigrateScanService {
             if (!sourceContent.has(targetItem)) {
                 const targetContentPath = path.join(targetPath, targetItem);
                 try {
-                    if (fs.existsSync(targetContentPath)) {
+                    const targetContentExists = await isPathExists(targetContentPath);
+                    if (targetContentExists) {
                         const targetStat = await fs.promises.lstat(targetContentPath);
                         const relativeSourcePath = removePrefix(targetContentPath, targetPrefix);
                         const deleteCommand = this.buildCommand(null, relativeSourcePath, targetStat);
