@@ -244,7 +244,8 @@ func ClearVolumeForSMB(export string) string {
 }
 
 func ClearVolumeForNFS(export string) string {
-	destMount := "/mnt/remove_data"
+	split := strings.Split(export, ":")
+	destMount := fmt.Sprintf("/mnt/remove_data_%s", split[1])
 
 	script := fmt.Sprintf(`
 	set -e
@@ -297,14 +298,11 @@ func ClearVolume(export string) error {
 		Password: config.Password,
 	}
 
-	fmt.Println("UMV RUNNING : ", script)
-
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
 		return fmt.Errorf("RemoveDataFromFileserver failed: %w\noutput: %s", err, output)
 	}
 
-	fmt.Println("UMV OUTPUT : ", output)
 	return nil
 }
 
@@ -446,14 +444,11 @@ func AddDataToVolume(export string) error {
 		Password: config.Password,
 	}
 
-	fmt.Printf("UMV TRYING TO CONNECT : %+v \n", sshConfig)
-	fmt.Println("UMV RUNNING : ", script)
-
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
 		return fmt.Errorf("AddDataToFileserver failed: %w\noutput: %s", err, output)
 	}
-	fmt.Println("UMV OUTPUT : ", output)
+
 	return nil
 }
 
@@ -479,7 +474,8 @@ func RemoveDeltaFromVolumeForSMB(export string) string {
 }
 
 func RemoveDeltaFromVolumeForNFS(export string) string {
-	destMount := "/mnt/data_remove"
+	split := strings.Split(export, ":")
+	destMount := fmt.Sprintf("/mnt/data_remove_%s", split[1])
 
 	script := fmt.Sprintf(`
 	set -e
@@ -524,13 +520,11 @@ func RemoveDeltaFromVolume(export string) error {
 		Password: config.Password,
 	}
 
-	fmt.Println("UMV RUNNING : ", script)
-
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
 		return fmt.Errorf("RemoveDeltaFromFileserver failed: %w\noutput: %s", err, output)
 	}
-	fmt.Println("UMV OUTPUT : ", output)
+
 	return nil
 }
 

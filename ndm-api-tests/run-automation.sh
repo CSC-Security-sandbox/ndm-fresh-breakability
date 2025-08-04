@@ -110,35 +110,24 @@ run_tests() {
 # Test runs
 
 #Regression Testing
+
 #run_tests "regression" "./tests/regression" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
-#run_tests "regression" "./tests/regression" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "SMB"
+#run_tests "regression" "./tests/regression" "volSMBAuto_vol1, vol4_33, vol2_33"  "volSMBAutoDst, vol3_33" "SMB"
+
+
 
 
 #End-to-End Testing
+
 #run_tests "end-to-end" "./tests/e2e" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
-#run_tests "end-to-end" "./tests/e2e" "volSMBAutoSrc, volSMBAutoSrcc, volsmbEDA"  "volSMBAutoDst , volSMBAuto_vol1, vol4_33, vol3_33, vol2_33" "SMB"
+run_tests "end-to-end" "./tests/e2e" "volSMBAuto_vol1, vol4_33, vol2_33"  "volSMBAutoDst, vol3_33" "SMB"
+
+
 
 
 #Smoke Testing
+
 #run_tests "smoke" "./tests/smoke" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
 #run_tests "smoke" "./tests/smoke" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "SMB"
 
-#--------------------SMB VOLUMES-----------------------
-#run_tests "end-to-end" "./tests/e2e" "volSMBAutoDst, volSMBAuto_vol1" "vol4_33, vol3_33" "SMB"
-run_tests "end-to-end" "./tests/e2e" "volSMBAuto_vol1, vol4_33, vol2_33"  "volSMBAutoDst, vol3_33" "SMB"
-#------------------------------------------------------
-
-#run_tests "end-to-end" "./tests/e2e" "vol4_33,vol3_33" "volSMBAutoDst,volSMBAuto_vol1" "SMB"
-
-#run_tests "end-to-end" "./tests/e2e" "/volSrcAuto,/vol_src_automation2" "vol_dest_automation,vol_dest_automation2" "NFS"
-
-#run_tests regression "./tests/regression" "volSrcAuto,vol_src_automation2, vol_src_automation" "vol_dest_automation,vol_dest_automation2" "NFS"
-
-#run_tests "smoke" "./tests/smoke" "vol1,vol2" "vol3,vol4" "3h" "NFS"
-
-	# NFS_SOURCE_VOLUME                               = "/volSrcAuto"
-	# NFS_DESTINATION_VOLUME                          = "/vol_dest_automation"
-	# NFS_SOURCE_VOLUME_1                             = "/vol_src_automation2"
-	# NFS_DESTINATION_VOLUME_1                        = "/vol_dest_automation2"
-	# NFS_SOURCE_VOLUME_2                             = "/vol_src_automation"
 #read -p "Test execution complete. Press [Enter] key to exit..."

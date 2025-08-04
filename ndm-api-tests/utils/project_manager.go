@@ -14,7 +14,7 @@ func createProject(authToken string, accountId string) (string, error) {
 	fullURL := ADMIN_SERVICE_URL + "/api/v1/projects"
 	data := map[string]string{
 		"account_id":          accountId,
-		"project_name":        AutoGenerateProjectName("test_umv"),
+		"project_name":        AutoGenerateProjectName("test"),
 		"project_description": "Project For Automation testing",
 		"start_date":          time.Now().UTC().Format(time.RFC3339),
 	}

@@ -105,7 +105,6 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 				Expect(getJobsResp.JobType).To(Equal("DISCOVER"), "Expected jobType to be DISCOVER for config %s", sourceJobConfigID)
 			}
 
-			fmt.Println("UMV WAITING FOR 100s for Source Discovery to Start")
 			Wait(100)
 
 			By("Getting jobs by jobConfigId for source")
@@ -195,7 +194,7 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 				Expect(getJobsResp.Status).To(Equal("ACTIVE"), "Expected status to be ACTIVE for config %s", destinationJobConfigID)
 				Expect(getJobsResp.JobType).To(Equal("DISCOVER"), "Expected jobType to be DISCOVER for config %s", destinationJobConfigID)
 			}
-			fmt.Println("UMV WAITING FOR 100s for Destination Discovery to Start")
+
 			Wait(100)
 
 			By("Getting jobs by jobConfigId for destination")
@@ -242,7 +241,7 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 				defer resp.Body.Close()
 				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			}
-			fmt.Println("UMV WAITING FOR 80s for Migration to Start")
+
 			Wait(80)
 
 			/*migration_validators := []string{
@@ -330,7 +329,7 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 		})
 
 		AfterEach(func() {
-			err := RemoveDeltaFromVolume(sourceVolumePath1)
+			/*err := RemoveDeltaFromVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
 
 			err = RemoveDeltaFromVolume(sourceVolumePath2)
@@ -340,7 +339,10 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
 
 			err = ClearVolume(destinationVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)*/
+
+			cleanupErrors := CleanupVolumes([]string{sourceVolumePath1, sourceVolumePath2}, []string{destinationVolumePath1, destinationVolumePath2})
+			Expect(len(cleanupErrors)).Should(BeNumerically("==", 0), "Expected no errors while cleaning up volumes : ", cleanupErrors)
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")

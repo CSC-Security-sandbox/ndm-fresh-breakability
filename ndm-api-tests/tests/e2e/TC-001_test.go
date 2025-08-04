@@ -4,7 +4,6 @@ import (
 	"fmt"
 	. "ndm-api-tests/utils"
 	"net/http"
-	"sync"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -38,8 +37,8 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, DESTINATION_VOLUMES[0])
 			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, DESTINATION_VOLUMES[1])
 
-			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[0])
-			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[1])
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[1])
+			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[2])
 		})
 
 		It("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
@@ -71,10 +70,10 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID, headers)
+			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID, headers)
+			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[2], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a new discovery job for the source")
@@ -101,9 +100,13 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				"nfs_src_vol_discovery.json",
 				"nfs_src_vol2_discovery.json",
 			}*/
-			discovery_validators := []string{
+			/*discovery_validators := []string{
 				"test_discovery_src1.json",
 				"test_discovery_src2.json",
+			}*/
+			discovery_validators := []string{
+				"test_discovery_src2.json",
+				"test_discovery_src3.json",
 			}
 			for i, sourceJobConfigID := range sourceJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(sourceJobConfigID, headers)
@@ -207,9 +210,13 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				"nfs_src_to_dest_vol_migration.json",
 				"nfs_src2_to_dest2_vol_migration.json",
 			}*/
-			migration_validators := []string{
+			/*migration_validators := []string{
 				"test_migration_src1_to_dest1.json",
 				"test_migration_src2_to_dest2.json",
+			}*/
+			migration_validators := []string{
+				"test_migration_src2_to_dest1.json",
+				"test_migration_src3_to_dest2.json",
 			}
 			// Get migration job run IDs and wait for completion
 			for i, migrationJobConfigID := range migrationJobConfigIDs {
@@ -287,30 +294,21 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 		})
 
 		AfterEach(func() {
+			cleanupErrors := CleanupVolumes([]string{sourceVolumePath1, sourceVolumePath2}, []string{destinationVolumePath1, destinationVolumePath2})
+			Expect(len(cleanupErrors)).Should(BeNumerically("==", 0), "Expected no errors while cleaning up volumes : ", cleanupErrors)
 
-			var wg sync.WaitGroup
-			sourceVolumePaths := []string{sourceVolumePath1, sourceVolumePath2}
-			destVolumePaths := []string{destinationVolumePath1, destinationVolumePath2}
+			/*err := RemoveDeltaFromVolume(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
 
-			for _, srcPath := range sourceVolumePaths {
-				wg.Add(1)
-				go func(path string) {
-					defer wg.Done()
-					err := RemoveDeltaFromVolume(path)
-					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error restoring original data to %s", path))
-				}(srcPath)
-			}
+			err = RemoveDeltaFromVolume(sourceVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath2)
 
-			for _, destPath := range destVolumePaths {
-				wg.Add(1)
-				go func(path string) {
-					defer wg.Done()
-					err := ClearVolume(path)
-					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error clearing volume of %s", path))
-				}(destPath)
-			}
+			err = ClearVolume(destinationVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
 
-			wg.Wait()
+			err = ClearVolume(destinationVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)*/
+
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
 			By("Cleanup complete.")

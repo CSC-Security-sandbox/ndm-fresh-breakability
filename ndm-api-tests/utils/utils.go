@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -1122,4 +1123,49 @@ func GetVolumesFromArgs(volumes string) []string {
 	}
 
 	return res
+}
+
+func CleanupVolumes(srcVolumes, destVolumes []string) []string {
+	var wg sync.WaitGroup
+	resChan := make(chan error, len(srcVolumes)+len(destVolumes))
+
+	for _, vol := range srcVolumes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := RemoveDeltaFromVolume(vol)
+			if err != nil {
+				resChan <- fmt.Errorf("error restoring original data to %s", vol)
+				return
+			}
+			resChan <- nil
+		}()
+	}
+
+	for _, vol := range destVolumes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := ClearVolume(vol)
+			if err != nil {
+				resChan <- fmt.Errorf("error clearing volume of %s", vol)
+				return
+			}
+			resChan <- nil
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(resChan)
+	}()
+
+	var errorList []string
+	for err := range resChan {
+		if err != nil {
+			errorList = append(errorList, err.Error())
+		}
+	}
+
+	return errorList
 }
