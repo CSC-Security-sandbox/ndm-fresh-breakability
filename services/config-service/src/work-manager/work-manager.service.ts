@@ -1,10 +1,23 @@
-import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 import { Repository, IsNull, Not, In } from 'typeorm';
 import { WorkerConfiguration } from 'src/constants/types';
-import { Platform, WorkerStatus, WorkFlows, WorkFlowType } from 'src/constants/enums';
+import {
+  Platform,
+  WorkerStatus,
+  WorkFlows,
+  WorkFlowType,
+} from 'src/constants/enums';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 import { ConfigEntity } from 'src/entities/config.entity';
@@ -32,7 +45,7 @@ export class WorkManagerService {
     @InjectRepository(WorkerJobRunMap)
     private readonly workerJobRunMap: Repository<WorkerJobRunMap>,
     private readonly configService: ConfigService,
-    private readonly sendMailService: SendMailService
+    private readonly sendMailService: SendMailService,
   ) {
     this.logger = this.loggerFactory.create(WorkManagerService.name);
   }
@@ -41,7 +54,7 @@ export class WorkManagerService {
     id: string,
     ip: string,
     projectId: string,
-    platform: Platform
+    platform: Platform,
   ): Promise<WorkerConfiguration[]> {
     try {
       const workerMetaConfig = await this.workerEntity.findOne({
@@ -50,29 +63,35 @@ export class WorkManagerService {
       if (workerMetaConfig) {
         const jobRunConfig = await this.jobRunRepo.find({
           where: {
-            status: In([JobRunStatus.Running, JobRunStatus.Ready, JobRunStatus.Pausing, JobRunStatus.Stopping, JobRunStatus.Paused]),
+            status: In([
+              JobRunStatus.Running,
+              JobRunStatus.Ready,
+              JobRunStatus.Pausing,
+              JobRunStatus.Stopping,
+              JobRunStatus.Paused,
+            ]),
             workerMap: {
               workerId: id,
               metaConfig: Not(IsNull()),
               isActive: true,
-            }
+            },
           },
           relations: {
-            workerMap: true
+            workerMap: true,
           },
           select: {
             workerMap: {
               metaConfig: {},
-              workerId: true
-            }
-          }
-        })
+              workerId: true,
+            },
+          },
+        });
         jobRunConfig.forEach((data) => {
           if (Array.isArray(data.workerMap)) {
             data.workerMap.forEach((wm) => {
               if (wm.metaConfig) {
                 this.logger.debug(
-                  `JobRunId: ${data.id}, WorkerId: ${wm.workerId}, MetaConfig: ${JSON.stringify(wm.metaConfig)}`
+                  `JobRunId: ${data.id}, WorkerId: ${wm.workerId}, MetaConfig: ${JSON.stringify(wm.metaConfig)}`,
                 );
                 workerMetaConfig.metaConfig.push(wm.metaConfig);
               }
@@ -106,7 +125,7 @@ export class WorkManagerService {
       const result = await this.workerEntity.save(newWorker);
       await this.sendMailService.sendMail({
         successEmailType: SuccessEmailType.WORKER_USAGE,
-        workerUsage: { id, ip }
+        workerUsage: { id, ip },
       });
       await this.workerEntity.update(
         { workerId: result.workerId },
@@ -138,40 +157,49 @@ export class WorkManagerService {
   ];
 
   async validateConnection(payload: CreateRequestDto, traceId: string) {
-   try {
-    const startWorkFlowPayload: StartWorkFlowPayload = {
-      workflowId: WorkFlows.VALIDATE_CONNECTION + '-' + traceId,
-      taskQueue: 'ParentWorkflow-TaskQueue',
-      args: [
-        {
-          traceId: traceId,
-          payload: {
-            traceId,
-            feature: this.configService.get('app.feature'),
-            ...payload,
+    try {
+      const startWorkFlowPayload: StartWorkFlowPayload = {
+        workflowId: WorkFlows.VALIDATE_CONNECTION + '-' + traceId,
+        taskQueue: 'ParentWorkflow-TaskQueue',
+        args: [
+          {
+            traceId: traceId,
+            payload: {
+              traceId,
+              feature: this.configService.get('app.feature'),
+              ...payload,
+            },
+            options: payload.options,
           },
-          options: payload.options,
-        },
-      ],
-      ...payload.options,
-    };
-    const workflow = await this.workFlowService.startWorkflow(
-      WorkFlows.VALIDATE_CONNECTION,
-      startWorkFlowPayload,
-    );
-    return { workflowId: workflow.workflowId };
-   } catch (error) {
-    this.logger.error(`Error in validateConnection: ${error.message}`);
-    throw new InternalServerErrorException(`Failed to start validate connection workflow for traceId: ${traceId}, ${error.message}`);
-   }
+        ],
+        ...payload.options,
+      };
+      const workflow = await this.workFlowService.startWorkflow(
+        WorkFlows.VALIDATE_CONNECTION,
+        startWorkFlowPayload,
+      );
+      return { workflowId: workflow.workflowId };
+    } catch (error) {
+      this.logger.error(`Error in validateConnection: ${error.message}`);
+      throw new InternalServerErrorException(
+        `Failed to start validate connection workflow for traceId: ${traceId}, ${error.message}`,
+      );
+    }
   }
 
   async validateWorkingDirectory(data: ConfigStatusPayloadDTO) {
     try {
-      this.logger.debug('Updating config status after validating export path and working directory');
-      await this.configRepo.update({ id: data.configId }, { status: data.status, errorMessage: data.errorMessage });
+      this.logger.debug(
+        'Updating config status after validating export path and working directory',
+      );
+      await this.configRepo.update(
+        { id: data.configId },
+        { status: data.status, errorMessage: data.errorMessage },
+      );
     } catch (error) {
-      this.logger.error(`Error while updating the status of a file server after validating export path and working directory- ${error.message}`);
+      this.logger.error(
+        `Error while updating the status of a file server after validating export path and working directory- ${error.message}`,
+      );
     }
   }
 
@@ -190,10 +218,15 @@ export class WorkManagerService {
       return response;
     } catch (error) {
       this.logger.error(`Error in getChildWorkFlowRes: ${error.message}`);
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
         throw error;
       }
-      throw new InternalServerErrorException(`Failed to retrieve child workflow response for ID: ${id}`);
+      throw new InternalServerErrorException(
+        `Failed to retrieve child workflow response for ID: ${id}`,
+      );
     }
   }
 
@@ -205,14 +238,12 @@ export class WorkManagerService {
           dynamicTaskQueue: true,
           taskQueueId: `${jobRunId}`,
           workerId: workerId,
-        }
+        };
 
         await this.workerJobRunMap.update(
           { jobRunId: jobRunId, workerId: workerId },
           { metaConfig: workerConfiguration },
         );
-
-
       } catch (error) {
         this.logger.error(
           `Error while updating worker configurations for jobRunId: ${jobRunId}`,

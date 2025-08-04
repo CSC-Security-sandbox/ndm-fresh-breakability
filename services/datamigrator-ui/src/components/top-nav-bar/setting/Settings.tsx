@@ -1,11 +1,11 @@
 import { drawerFunctions } from "@components/side-drawer/SideDrawer.utils";
-import Help from "@components/top-nav-bar/help/Help";
 import SettingsContent from "@components/top-nav-bar/setting/SettingsContent";
 import { Button } from "@netapp/bxp-design-system-react";
 import { IAMIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { HelpIcon } from "@netapp/bxp-style/react-icons/General";
 import { RootStateType } from "@store/store";
 import { useDispatch, useSelector } from "react-redux";
+import Help from "@modules/Help/Help";
 
 const Settings = () => {
   const drawerId = "Settings";

@@ -84,6 +84,52 @@ export class RedisStreamCollection<T extends Serializable>
     }
   }
 
+  async appendBulk(records: T[]): Promise<string[]> {
+    if (records.length === 0) {
+      return [];
+    }
+
+    try {
+      const multi = this.redisClient.multi();
+      
+      // Add all records to the multi transaction
+      for (const record of records) {
+        const buffer = encode(record);
+        multi.xAdd(this.streamKey, '*', {
+          obj: buffer.toString('base64'),
+        });
+      }
+
+      // Execute the transaction
+      const results = await multi.exec();
+      
+      if (!results || !Array.isArray(results)) {
+        throw new Error('Redis multi.exec returned unexpected result');
+      }
+
+      // Extract the IDs from the results
+      const ids: string[] = [];
+      for (const result of results) {
+        if (result === null || typeof result !== 'string') {
+          throw new Error('Failed to append one or more records to stream');
+        }
+        ids.push(result);
+        this.numMessages++;
+      }
+
+      // Update lastId to the last added message
+      if (ids.length > 0) {
+        this.lastId = ids[ids.length - 1];
+      }
+
+      console.log(`✓ Bulk appended ${records.length} records to ${this.streamKey}`);
+      return ids;
+    } catch (err) {
+      console.error(`Error bulk writing records: ${err}`, err);
+      throw err;
+    }
+  }
+
   async *read(readerName: string): AsyncGenerator<T> {
     const readerLastReadId = await this.redisClient.get(`${this.jobRunId}-${readerName}`);
     let lastReadId = readerLastReadId || '0';

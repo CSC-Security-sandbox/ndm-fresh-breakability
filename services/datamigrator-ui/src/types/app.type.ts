@@ -790,3 +790,15 @@ type ErrorType = {
 export interface ErrorNumberCellRendererProps {
   value: ErrorType[];
 }
+
+export type isBundleReadyApiType = {
+  isBundleReady: boolean;
+  isProcessing: boolean;
+  error: null | string;
+  filters?: {
+    startDate: string;
+    endDate: string;
+    otherMetrics: string[];
+  };
+  createdAt?: string;
+};

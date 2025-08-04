@@ -517,7 +517,6 @@ describe('SMBProtocol', () => {
       describe('SMBProtocol - mountPath & unmountPath', () => {
         let smbProtocol: SMBProtocol;
         let loggerMock: any;
-        let fsMock: any;
 
         const mockTraceId = 'mount-trace-id';
         const mockPayload = {
@@ -545,14 +544,6 @@ describe('SMBProtocol', () => {
 
           jest.spyOn(smbProtocol as any, 'executeCommand').mockResolvedValue({ message: 'mounted successfully.' });
           jest.spyOn(smbProtocol as any, 'getCommandPattern').mockImplementation((key: string) => key);
-
-          // Mock fs
-          fsMock = {
-            existsSync: jest.fn(),
-            mkdirSync: jest.fn()
-          };
-          jest.spyOn(fs, 'existsSync').mockImplementation(fsMock.existsSync);
-          jest.spyOn(fs, 'mkdirSync').mockImplementation(fsMock.mkdirSync);
         });
 
         afterEach(() => {
@@ -561,8 +552,11 @@ describe('SMBProtocol', () => {
 
         describe('mountPath', () => {
           it('should create directory and mount path successfully', async () => {
-            fsMock.existsSync.mockReturnValue(false);
-            fsMock.mkdirSync.mockImplementation(() => undefined);
+            // Mock fs.promises.access to reject with ENOENT (directory doesn't exist)
+            const mockAccess = jest.spyOn(fs.promises, 'access').mockRejectedValue({ code: 'ENOENT' });
+            
+            // Mock fs.promises.mkdir
+            const mockMkdir = jest.spyOn(fs.promises, 'mkdir').mockResolvedValue(undefined);
 
             // Simulate executeCommand for mount and create path link
             (smbProtocol as any).executeCommand
@@ -572,8 +566,8 @@ describe('SMBProtocol', () => {
             const payload = { ...mockPayload };
             const result = await smbProtocol.mountPath(mockTraceId, payload);
 
-            expect(fs.existsSync).toHaveBeenCalledWith('/mnt/job123');
-            expect(fs.mkdirSync).toHaveBeenCalledWith('/mnt/job123', { recursive: true });
+            expect(mockAccess).toHaveBeenCalledWith('/mnt/job123', fs.constants.F_OK);
+            expect(mockMkdir).toHaveBeenCalledWith('/mnt/job123', { recursive: true });
             expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] Directory created: /mnt/job123`);
             expect((smbProtocol as any).executeCommand).toHaveBeenCalledWith(
               mockTraceId,
@@ -591,16 +585,25 @@ describe('SMBProtocol', () => {
             );
             expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] link created successfully.`);
             expect(result).toEqual({ message: 'link created successfully.' });
+            
+            // Restore mocks
+            mockAccess.mockRestore();
+            mockMkdir.mockRestore();
           });
 
           it('should handle error during directory creation', async () => {
-            fsMock.existsSync.mockReturnValue(false);
+            // Mock fs.promises.access to reject with ENOENT (directory doesn't exist)
+            const mockAccess = jest.spyOn(fs.promises, 'access').mockRejectedValue({ code: 'ENOENT' });
+            
+            // Mock fs.promises.mkdir to throw error
             const error = new Error('mkdir failed');
-            fsMock.mkdirSync.mockImplementation(() => { throw error; });
+            const mockMkdir = jest.spyOn(fs.promises, 'mkdir').mockRejectedValue(error);
 
             const payload = { ...mockPayload };
             const result = await smbProtocol.mountPath(mockTraceId, payload);
 
+            expect(mockAccess).toHaveBeenCalledWith('/mnt/job123', fs.constants.F_OK);
+            expect(mockMkdir).toHaveBeenCalledWith('/mnt/job123', { recursive: true });
             expect(loggerMock.error).toHaveBeenCalledWith(`[${mockTraceId}] Error creating directory------?: ${error.message}`);
             expect(result).toEqual({
               traceId: mockTraceId,
@@ -610,6 +613,35 @@ describe('SMBProtocol', () => {
               workerId: (smbProtocol as any).workerId,
               message: `[${mockTraceId}] Error creating directory: ${error.message}`,
             });
+            
+            // Restore mocks
+            mockAccess.mockRestore();
+            mockMkdir.mockRestore();
+          });
+
+          it('should skip directory creation when directory already exists', async () => {
+            // Mock fs.promises.access to resolve (directory exists)
+            const mockAccess = jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+            
+            // Mock fs.promises.mkdir (should not be called)
+            const mockMkdir = jest.spyOn(fs.promises, 'mkdir').mockResolvedValue(undefined);
+
+            // Simulate executeCommand for mount and create path link
+            (smbProtocol as any).executeCommand
+              .mockResolvedValueOnce({ message: 'mounted successfully.' }) // mount
+              .mockResolvedValueOnce({ message: 'link created successfully.' }); // create path link
+
+            const payload = { ...mockPayload };
+            const result = await smbProtocol.mountPath(mockTraceId, payload);
+
+            expect(mockAccess).toHaveBeenCalledWith('/mnt/job123', fs.constants.F_OK);
+            expect(mockMkdir).not.toHaveBeenCalled(); // Should not create directory if it exists
+            expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] link created successfully.`);
+            expect(result).toEqual({ message: 'link created successfully.' });
+            
+            // Restore mocks
+            mockAccess.mockRestore();
+            mockMkdir.mockRestore();
           });
         });
       });

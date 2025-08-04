@@ -76,16 +76,6 @@ export const shouldExcludeOlderThan = (stats: fs.Stats, olderThan: Date): boolea
 
 export const shouldExcludeOrSkip = ({ fullPath, stats, excludePatterns, skipTime, olderThan, jobType }: ExcludeOrSkipParams): boolean => (shouldExclude(fullPath, excludePatterns) || shouldSkipFile(stats, skipTime, jobType) || shouldExcludeOlderThan(stats, olderThan));
 
-export const getJobConnection = async ({jobRunId}: GetJobConnectionInput): Promise<GetJobConnectionOutput> => {
-    const redisClient = await new RedisUtils().getClient();
-    if (!redisClient.isOpen) {
-        await redisClient.connect();
-        console.log(`job run ${jobRunId}, Connected to Redis client.`);
-    }
-    const contextProvider = JobContextFactory.getProvider('redis', redisClient);
-    const jobContext = await contextProvider.getJobContext(jobRunId);
-    return {jobContext, connectionClient: redisClient}
-}
 
 
 export function getFileType(stats: fs.Stats, isDirectory:boolean): FileType {

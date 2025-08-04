@@ -37,3 +37,7 @@ datamigrator-ui:
 db-migrations:
   image:
     tag: {{ db_migrations_tag | default(common_tag) | default("latest") }}
+
+support-service:
+  image:
+    tag: {{ support_service_tag | default(common_tag) | default("latest") }}

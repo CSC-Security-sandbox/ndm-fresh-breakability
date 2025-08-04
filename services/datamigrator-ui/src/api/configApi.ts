@@ -5,10 +5,17 @@ import {
   UploadedFilePropsType,
   UploadExportPathSourceFileProps,
 } from "@/modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/bulk-manual-upload-file.types";
+import { SupportBundlePayloadType } from "@modules/Help/components/support-bundle/types/support-bundle.types";
+import { isBundleReadyApiType } from "@/types/app.type";
 
 export const configApi = createApi({
   reducerPath: "configApi",
-  tagTypes: ["GET_ALL_FILE_SERVERS", "GET_ALL_AGENTS", "GET_FILE_SERVER_BY_ID"],
+  tagTypes: [
+    "GET_ALL_FILE_SERVERS",
+    "GET_ALL_AGENTS",
+    "GET_FILE_SERVER_BY_ID",
+    "IS_BUNDLE_READY",
+  ],
   baseQuery: fetchBaseQuery({
     baseUrl:
       window?.env?.VITE_CONFIG_SERVICE_URL ||
@@ -23,6 +30,9 @@ export const configApi = createApi({
         method: "POST",
         body,
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || {};
+      },
       invalidatesTags: ["GET_ALL_FILE_SERVERS"],
     }),
 
@@ -30,6 +40,9 @@ export const configApi = createApi({
     getAllFileServersOfProject: builder.query({
       query: ({ projectId }) => {
         return `/servers?projectId=${projectId}`;
+      },
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || {};
       },
       providesTags: ["GET_ALL_FILE_SERVERS"],
     }),
@@ -58,6 +71,9 @@ export const configApi = createApi({
         url: `/servers/${fileServerId}`,
         method: "GET",
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || {};
+      },
       providesTags: ["GET_FILE_SERVER_BY_ID"],
     }),
 
@@ -70,6 +86,9 @@ export const configApi = createApi({
 
     getAllCutOverPaths: builder.query({
       query: ({ fileServerId }) => `/servers/cutover/${fileServerId}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      },
     }),
 
     getSpeedTestFileServers: builder.query<SpeedTestConfigType[], void>({
@@ -115,6 +134,30 @@ export const configApi = createApi({
       }),
       invalidatesTags: ["GET_FILE_SERVER_BY_ID"],
     }),
+
+    generateSupportBundle: builder.mutation<
+      string,
+      { payload: SupportBundlePayloadType }
+    >({
+      query: ({ payload }) => ({
+        url: `support-bundle`,
+        method: "POST",
+        body: payload,
+      }),
+      invalidatesTags: ["IS_BUNDLE_READY"],
+    }),
+
+    downloadSupportBundle: builder.query<void, void>({
+      query: () => ({
+        url: "support-bundle/download",
+        responseHandler: async (response) => response.blob(),
+      }),
+    }),
+
+    isBundleReady: builder.query<isBundleReadyApiType, void>({
+      query: () => "support-bundle/is-bundle-ready",
+      providesTags: ["IS_BUNDLE_READY"],
+    }),
   }),
 });
 
@@ -134,4 +177,7 @@ export const {
   useLazyDownloadExportPathSourceTemplateQuery,
   useUploadExportPathSourceFileMutation,
   useSubmitExportPathSourceFileMutation,
+  useGenerateSupportBundleMutation,
+  useLazyIsBundleReadyQuery,
+  useLazyDownloadSupportBundleQuery,
 } = configApi;

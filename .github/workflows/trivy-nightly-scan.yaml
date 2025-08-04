@@ -27,7 +27,7 @@ jobs:
       - name: Set matrix for all services
         id: set-matrix
         run: |
-          services=( "db-writer" "keycloak-customizations" "reports-service" "admin-service" "config-service" "datamigrator-ui" "jobs-service" )
+          services=( "db-writer" "keycloak-customizations" "reports-service" "admin-service" "config-service" "datamigrator-ui" "jobs-service" "support-service" )
           targets=("${services[@]}")
           targets+=("db-migrations")
           targets+=("worker")

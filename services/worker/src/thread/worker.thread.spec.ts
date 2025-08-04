@@ -61,11 +61,13 @@ describe("smartCopy", () => {
   };
 
 
-  it("should create target directory if it doesn’t exist", async () => {
-    (fs.existsSync as jest.Mock).mockImplementation((p) => p === sourcePath);
-
-    const mkdirSyncMock = jest.fn();
-    (fs.mkdirSync as any) = mkdirSyncMock;
+  it("should create target directory if it doesn't exist", async () => {
+    // Mock fs.promises object
+    const mockMakeDir = jest.fn().mockResolvedValue(undefined);
+    
+    (fs as any).promises = {
+      mkdir: mockMakeDir
+    };
 
     (fs.createReadStream as jest.Mock).mockImplementation(() => mockFsStream(mockData));
     (fs.createWriteStream as jest.Mock).mockImplementation(() => mockWritableStream());
@@ -79,12 +81,18 @@ describe("smartCopy", () => {
 
     const result = await smartCopy(sourcePath, destPath);
 
-    expect(mkdirSyncMock).toHaveBeenCalledWith("dest", { recursive: true });
+    // Verify directory creation was called
+    expect(mockMakeDir).toHaveBeenCalledWith("dest", { recursive: true });
     expect(result.sourceChecksum).toBe("checksum123");
   });
 
   it("should throw error if checksums do not match", async () => {
-    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    // Mock fs.promises object
+    const mockMakeDir = jest.fn().mockResolvedValue(undefined);
+    
+    (fs as any).promises = {
+      mkdir: mockMakeDir
+    };
 
     const streamHash = {
       update: jest.fn().mockReturnThis(),
@@ -103,6 +111,32 @@ describe("smartCopy", () => {
 
     await expect(smartCopy(sourcePath, destPath)).rejects.toThrow("Checksum mismatch");
   });
+
+  it("should make sure directory is always present", async () => {
+    // Mock fs.promises object - mkdir succeeds regardless of directory existence
+    const mockMakeDir = jest.fn().mockResolvedValue(undefined);
+    
+    (fs as any).promises = {
+      mkdir: mockMakeDir
+    };
+
+    (fs.createReadStream as jest.Mock).mockImplementation(() => mockFsStream(mockData));
+    (fs.createWriteStream as jest.Mock).mockImplementation(() => mockWritableStream());
+
+    const fakeHash = {
+      update: jest.fn().mockReturnThis(),
+      digest: jest.fn().mockReturnValue("checksum123"),
+    };
+
+    (crypto.createHash as jest.Mock).mockReturnValueOnce(fakeHash).mockReturnValueOnce(fakeHash);
+
+    const result = await smartCopy(sourcePath, destPath);
+
+    // Verify directory creation was called (mkdir is always called in implementation)
+    expect(mockMakeDir).toHaveBeenCalledWith("dest", { recursive: true });
+    expect(result.sourceChecksum).toBe("checksum123");
+  });
+
 });
 
 describe("calculateChecksum", () => {

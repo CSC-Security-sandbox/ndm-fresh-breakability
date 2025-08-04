@@ -97,7 +97,7 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     ) {
       try {
         const allAccounts = await getAllAccounts("").unwrap();
-        localStorage.setItem('account_id', allAccounts?.data?.items?.[0]?.id);
+        localStorage.setItem('account_id', allAccounts?.[0]?.id);
       } catch (error) {
         notify.error("Unable to fetch accounts. Please try again later.");
         console.error("Failed to fetch accounts:", error);
@@ -109,16 +109,16 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     getAllProjects(localStorage.getItem("account_id"))
       .unwrap()
       .then((resp) => {
-        dispatch(setAllProjectList(resp?.data?.items));
+        dispatch(setAllProjectList(resp));
         let selected_project_id =
           localStorage.getItem("selected_project_id") || undefined;
         if (selected_project_id) {
-          const projectIdFound = resp?.data?.items.find(
-              (row: ProjectApiType) => row.id === selected_project_id
+          const projectIdFound = resp?.find(
+            (row: ProjectApiType) => row.id === selected_project_id
           );
           if (!projectIdFound) selected_project_id = undefined;
         }
-        dispatch(setProject(selected_project_id || resp?.data?.items?.[0]?.id));
+        dispatch(setProject(selected_project_id || resp?.[0]?.id));
         setIsPageReady(true);
       });
   };
@@ -127,9 +127,9 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     if (auth.isAuthenticated) {
       (async () => {
         const result = await getUserPermissionsApi('').unwrap();
-        const resp = result?.data?.items || {};
+        const resp = result?.data || {};
         dispatch(
-            setUserPermissions({id: result?.data?.id, roles: resp.roles || []})
+            setUserPermissions({id: result?.id, roles: resp.roles || []})
         );
         if (resp?.roles?.length > 0) {
           await getAccounts();

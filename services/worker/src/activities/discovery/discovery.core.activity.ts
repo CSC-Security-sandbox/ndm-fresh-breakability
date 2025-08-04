@@ -10,6 +10,7 @@ import { Operation, Origin } from '../utils/utils.types';
 import { DiscoverPathInput, DiscoverPathOutput, DiscoveryInput, DiscoveryOutput, ScanDirCommandInput, ScanDirCommandOutput } from './discovery.type';
 import { Context } from '@temporalio/activity';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { isPathExists } from '../core/utils/utils';
 
 @Injectable()
 export class DiscoveryScanActivity {
@@ -241,17 +242,14 @@ export class DiscoveryScanActivity {
                     try {
                         const linkTarget = await fs.promises.readlink(sourceContentPath);
                         resolvedTarget = path.resolve(path.dirname(sourceContentPath), linkTarget);
-                        if (!fs.existsSync(resolvedTarget)) {
+                        const targetExists = await isPathExists(resolvedTarget);
+                        if (!targetExists) {
                             this.logger.debug(`[${jobContext.jobRunId}] Broken symbolic link: "${sourceContentPath}" → "${resolvedTarget}" (target does not exist)`);
                         }
                     } catch (err) {
                         this.logger.debug(`[${jobContext.jobRunId}] Error reading symbolic link: "${sourceContentPath}" (${err.message})`);
                     }
-                } else if (!fs.existsSync(sourceContentPath)) {
-                    this.logger.debug(`[${jobContext.jobRunId}] Skipping non-existent path: "${sourceContentPath}"`);
-                    continue;
-                }
-               
+                }               
 
                 if (shouldExcludeOrSkip({
                     fullPath: sourceContentPath,
