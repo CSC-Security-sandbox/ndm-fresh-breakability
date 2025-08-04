@@ -98,7 +98,7 @@ export class ValidateWorkingDirectoryActivity {
   }
 
   private getNfsMountErrorMessage(error: any): string {
-    const errorMsg = error?.message;
+    const errorMsg = error?.message || '';
 
     if (errorMsg.includes('illegal NFS version value')) {
       return ConfigError.PROTOCOL_NOT_SUPPORTED;
@@ -106,6 +106,12 @@ export class ValidateWorkingDirectoryActivity {
       return ConfigError.PROTOCOL_NOT_SUPPORTED;
     } else if(errorMsg.includes('Protocol not supported for')) {
       return ConfigError.PROTOCOL_NOT_SUPPORTED;
+    } else if(errorMsg.includes('version') && errorMsg.includes('mismatch')) {
+      return ConfigError.PROTOCOL_NOT_SUPPORTED;
+    } else if(errorMsg.includes('port') && (errorMsg.includes('blocked') || errorMsg.includes('filtered'))) {
+      return ConfigError.PROTOCOL_PORT_BLOCKED;
+    } else if(errorMsg.includes('os') && (errorMsg.includes('not supported') || errorMsg.includes('unsupported'))) {
+      return ConfigError.HOST_OS_NOT_SUPPORTED;
     } else {
       return errorMsg;
     }
