@@ -1,0 +1,27 @@
+INSERT INTO "permission" (
+    id, permission_name, permission_status, created_at, created_by, updated_at, updated_by
+)
+SELECT
+    uuid_generate_v4(), 'CreateProject', 'active', now(), uuid_generate_v4(), now(), uuid_generate_v4()
+WHERE NOT EXISTS (
+    SELECT 1 FROM "permission" WHERE permission_name = 'CreateProject'
+);
+
+INSERT INTO "role_permission" (
+    id, role_id, permission_id, created_at, created_by, updated_at, updated_by
+)
+SELECT
+    uuid_generate_v4(),
+    r.id,
+    p.id,
+    now(),
+    uuid_generate_v4(),
+    now(),
+    uuid_generate_v4()
+FROM "role" r, "permission" p
+WHERE r.role_name = 'App Admin'
+  AND p.permission_name = 'CreateProject'
+  AND NOT EXISTS (
+      SELECT 1 FROM "role_permission" rp
+      WHERE rp.role_id = r.id AND rp.permission_id = p.id
+);
