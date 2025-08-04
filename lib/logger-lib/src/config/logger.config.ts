@@ -27,5 +27,6 @@ export default registerAs('loggerOptions', (): LoggerOptions => ({
     maxFiles: process.env.LOG_MAX_FILES || '30d',
     maxSize: process.env.LOG_MAX_SIZE || '20m',
     datePattern: process.env.LOG_DATE_PATTERN || 'YYYY-MM-DD',
-    zippedArchive: process.env.LOG_ZIPPED_ARCHIVE !== 'false'
+    zippedArchive: process.env.LOG_ZIPPED_ARCHIVE !== 'false',
+    disableMasking: process.env.DISABLE_SENSITIVE_DATA_MASKING?.toLowerCase() === 'true',
 }));
