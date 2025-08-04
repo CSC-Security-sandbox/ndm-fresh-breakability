@@ -2,7 +2,7 @@ import { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { temporal } from '@temporalio/proto';
 import { SpeedTestJobWorkflow } from './speed-test-job-workflow';
-import { JobRunStatus } from 'src/activities/discovery/enums';
+import { JobRunStatus } from 'src/activities/common/enums';
 
 
 const mockedActivities = {

@@ -1,5 +1,5 @@
 import { CutOverWorkFlow } from './cutover-parent-workflow';
-import { JobRunStatus } from 'src/activities/discovery/enums';
+import { JobRunStatus } from 'src/activities/common/enums';
 import { executeWorkerSetup } from '../common/execute-setup-workflow';
 import { waitUntilRedisMemoryOk } from 'src/workflows/utils/memory-utils';
 import { executeMigrationChildWorkflows } from '../common/execute-migration-child-workflows';

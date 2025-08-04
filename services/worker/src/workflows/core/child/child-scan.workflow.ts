@@ -2,7 +2,7 @@ import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from "src/activities/common/common.service";
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 import { ScanService } from 'src/activities/core/scan/scan-activity.service';
-import { JobRunStatus } from "src/activities/discovery/enums";
+import { JobRunStatus } from "src/activities/common/enums";
 import { updateJobStatusIfNotRunning } from '../common/workflow-utils';
 import { ChildScanWorkflowInput, ChildScanWorkflowOutput, ExecuteBatchScanInput, ExecuteBatchScansOutput } from './chid-scan.workflow.type';
 

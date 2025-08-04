@@ -1,6 +1,6 @@
 import * as wf from '@temporalio/workflow';
 import { updateJobStatusIfNotRunning } from './workflow-utils';
-import { JobRunStatus } from 'src/activities/discovery/enums';
+import { JobRunStatus } from 'src/activities/common/enums';
 
 jest.mock('@temporalio/workflow', () => {
     const actual = jest.requireActual('@temporalio/workflow');

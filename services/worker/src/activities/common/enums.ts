@@ -10,29 +10,36 @@ export enum JobRunStatus {
     BLOCKED = 'BLOCKED',
     Errored = 'ERRORED'
 }
-
+// TODO: Deprecate
 export enum TaskStatus {
     Pending = 'PENDING',
     Running = 'RUNNING',
     Errored = 'ERRORED',
     Completed = 'COMPLETED',
 }
-export enum OperationStatus{
-    READY='READY',
-    IN_PROCESS='IN_PROCESS',
-    ERROR ='ERROR',
-    COMPLETED = 'COMPLETED'
-}
 
-//TODO: Need to check
-export enum  JobReportType {
-    MIGRATE = 'MIGRATE',
-    CUT_OVER = 'CUT_OVER',
-    DISCOVER= 'DISCOVER'
-}
 export enum  JobServiceJobType {
     MIGRATE = 'MIGRATE',
     CUT_OVER = 'CUT_OVER',
     DISCOVER= 'DISCOVER',
     SPEED_TEST= 'SPEED_TEST'
+}
+
+export interface UpdateCutOverStatusInput {
+    jobRunId: string;
+    status: CutOverStatus
+}
+
+export enum CutOverStatus {
+    APPROVED = 'APPROVED',
+    REJECTED = 'REJECTED'
+}
+
+export interface UpdateStatusOutput{
+    message: string;
+}
+
+export interface UpdateStatusInput{
+    jobRunId: string;
+    status: JobRunStatus
 }

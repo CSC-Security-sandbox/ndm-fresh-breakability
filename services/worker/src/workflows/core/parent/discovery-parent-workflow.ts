@@ -1,5 +1,5 @@
 
-import { JobRunStatus } from 'src/activities/discovery/enums';
+import { JobRunStatus } from 'src/activities/common/enums';
 import { waitUntilRedisMemoryOk } from 'src/workflows/utils/memory-utils';
 import { executeDiscoveryChildWorkflows } from '../common/execute-discover-child-workflows';
 import { handleReporting } from '../common/handle-reporting';

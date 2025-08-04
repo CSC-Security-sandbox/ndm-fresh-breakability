@@ -1,8 +1,6 @@
 import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
-import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
-import { JobRunStatus } from 'src/activities/discovery/enums';
-import { MigrationTaskService } from 'src/activities/migrate/migrate.taskmanager.service';
+import { JobRunStatus } from 'src/activities/common/enums';
 
 
 
@@ -10,13 +8,9 @@ const isReportedQuery = wf.defineQuery<boolean>('isReported');
 const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
 
 const {
+    generateCOCReport: generateCOCReportActivity,
     generateDiscoveryReport: generateDiscoveryReportActivity
-  } = wf.proxyActivities<DiscoveryActivity>({ startToCloseTimeout: '5h' });
-
-const {
-  generateCOCReport: generateCOCReportActivity,
-} = wf.proxyActivities<MigrationTaskService>({ startToCloseTimeout: '5h' });
-
+  } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '10m' });
 
 
 const {

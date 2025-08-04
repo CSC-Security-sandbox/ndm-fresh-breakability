@@ -5,7 +5,7 @@ import { HttpService } from '@nestjs/axios';
 import { AuthService } from 'src/auth/auth.service';
 import { RedisService } from 'src/redis/redis.service';
 import axios from 'axios';
-import { JobRunStatus } from '../discovery/enums';
+import { JobRunStatus } from './enums';
 import { JobContext } from '@netapp-cloud-datamigrate/jobs-lib';
 import { CommonActivityService } from './common.service';
 import {
