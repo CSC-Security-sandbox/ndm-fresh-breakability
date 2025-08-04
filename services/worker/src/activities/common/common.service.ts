@@ -107,7 +107,6 @@ export class CommonActivityService{
   }
 
 
-  //deprecated,
   async updateWorkerResponse(jobRunId: string, workerId: string, workerResponse: Record<string, any>) {
     try {
       this.logger.log(`[${jobRunId}] Updating worker response to URL ${this.workerJobServiceUrl}/api/v1/job-run/worker-response/${jobRunId}/${workerId}`);

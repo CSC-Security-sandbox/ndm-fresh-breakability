@@ -59,6 +59,8 @@ export class WorkerOptionsService {
           isWorkflowRunningActivity: this.commonTaskService.isWorkflowRunningActivity.bind(this.commonTaskService),
           postValidationResult: this.validatePathActivity.postValidationResult.bind(this.validatePathActivity),
           generateDiscoveryReport: this.commonActivityService.generateDiscoveryReport.bind(this.commonActivityService),
+          updateCutOverStatus: this.commonActivityService.updateCutOverStatus.bind(this.commonActivityService),
+          generateCOCReport: this.commonActivityService.generateCOCReport.bind(this.commonActivityService),
         });
       case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {

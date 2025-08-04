@@ -59,10 +59,9 @@ const commonActivityServiceMock = {
   updateJobErrorStatus: bindMock,
   updateWorkerResponse: bindMock,
   cleanupJobContext: bindMock,
-  getJobStateWithStreamLoad: bindMock,
-  getJobStateAndUpdateTaskList: bindMock,
-  hasRunningScanTask: bindMock,
-  hasRunningSyncTask: bindMock,
+  generateCOCReport: bindMock,
+  updateCutOverStatus: bindMock,
+  generateDiscoveryReport: bindMock,
 }
 
 const speedTestReadActivityMock = {
@@ -87,6 +86,8 @@ const CommonTaskServiceMock = {
   isWorkflowRunningActivity: jest.fn(),
   createInitialDirBatch: jest.fn(),
   generateDiscoveryReport: jest.fn(),
+  updateCutOverStatus: jest.fn(),
+  generateCOCReport: jest.fn(),
 };
 
 const ScanServiceMock = {
@@ -117,9 +118,7 @@ describe('WorkerOptionsService', () => {
         WorkerOptionsService,
         { provide: ListPathActivity, useValue: listPathActivityServiceMock},
         { provide: ValidateConnectionActivity, useValue: validateConnectionServiceMock },
-
         { provide: SetupActivityService, useValue: setupActivityServiceMock },
-
         { provide: ValidateWorkingDirectoryActivity, useValue: validateWorkingDirectoryActivityMock },
         { provide: PrecheckActivity, useValue: precheckActivityMock },
         { provide: CommonActivityService, useValue: commonActivityServiceMock },
