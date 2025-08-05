@@ -19,4 +19,5 @@ export enum USER_PERMISSION_TYPE_ENUM {
   ViewProject = "ViewProject",
   SpeedTest = "SpeedTest",
   SaveSmtp = "SaveSMTP",
+  CreateProject = "CreateProject",
 }
