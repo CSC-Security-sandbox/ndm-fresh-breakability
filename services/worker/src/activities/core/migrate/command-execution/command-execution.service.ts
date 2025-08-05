@@ -21,7 +21,7 @@ export class CommandExecService {
         @Inject(ConfigService) private readonly configService: ConfigService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
         private readonly workerThreadService: WorkerThreadService,
-        private readonly stampMetaService: StampMetaService
+        private readonly stampMetaService: StampMetaService,
     ) {
         this.workerId = this.configService?.get<string>('worker.workerId') ?? '';
         this.logger = loggerFactory.create(CommandExecService.name);
@@ -52,9 +52,11 @@ export class CommandExecService {
         output.sourceErrors.push(...baseCmdRes.sourceErrors);
         output.targetErrors.push(...baseCmdRes.targetErrors);
 
-        // Stamp Meta if needed
+       // Stamp Meta if needed
         if (baseCmdRes.shouldStampMeta) {
+            this.logger.log('Should stamp metadata ' + baseCmdRes.shouldStampMeta)
             const metaResult = await this.stampMetaService.stampMetaData(input);
+            this.logger.log(`Metadata result ${JSON.stringify(metaResult)}`)
             output.targetErrors.push(...metaResult.targetErrors);
             output.sourceErrors.push(...metaResult.sourceErrors);
             await this.publishFileInfo(input);
@@ -82,6 +84,8 @@ export class CommandExecService {
                     new Error(`Source path does not exist: ${sourcePath}`), {name: command.fPath, path: sourcePath});
                 await jobContext.publishToErrorStream(dmErr);
             }
+            if(fs.existsSync(targetPath)) 
+            await this.stampMetaService.removeFileAttributeTemporarily(targetPath);
             try {
                 const checksums = await this.workerThreadService.migrateWorkerThread({
                     sourcePath, destinationPath: targetPath, operationId: command.id, size: command.metadata?.size ?? 0
@@ -94,6 +98,9 @@ export class CommandExecService {
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
                 await jobContext.publishToErrorStream(dmErr);   
                 output.targetErrors.push(error.code);
+            }finally{
+                if(fs.existsSync(targetPath)) 
+                await this.stampMetaService.restoreFileAttribute(targetPath);
             }
         }
         return output;
@@ -217,8 +224,11 @@ export class CommandExecService {
         if (jobContext.jobConfig.options.preserveAccessTime &&  item.sourceMeta.accessTime.getTime() !== item.targetMeta.accessTime.getTime())
             validateMisMatch += `AccessTime Mismatch detected, source: ${item.sourceMeta.accessTime.toISOString()}, target: ${item.targetMeta.accessTime.toISOString()} \n`;
 
-        if(cmd.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.failedSid?.length > 0) 
-            validateMisMatch += `SID Mapping Failed to Stamp for mapping ${cmd.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.failedSid} \n`;
+        if(cmd.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.fail?.length > 0) 
+            validateMisMatch += `SID Mapping Failed to Stamp for mapping ${cmd.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.fail} \n`;
+
+        if(cmd.ops?.[OPS_CMD.STAMP_META]?.params?.error?.length) 
+            validateMisMatch += `Stamping Errors Detected: ${cmd.ops?.[OPS_CMD.STAMP_META]?.params?.error} \n`;
 
         if(validateMisMatch.length > 0) {
             const error = new Error(validateMisMatch);

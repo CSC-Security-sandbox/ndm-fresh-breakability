@@ -172,7 +172,7 @@ describe('RedisService', () => {
       expect(ctx).toBe('ctx2');
     });
 
-	@@ -206,49 +109,84 @@ describe('RedisService', () => {
+	describe('RedisService', () => {
 
     it('getOwnerIdentity should hGet mapping', async () => {
       (service as any).client = mockClient;
@@ -222,3 +222,4 @@ describe('RedisService', () => {
     });
   });
 });
+})
