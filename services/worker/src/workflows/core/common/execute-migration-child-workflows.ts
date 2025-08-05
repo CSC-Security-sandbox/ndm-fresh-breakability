@@ -2,6 +2,8 @@ import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 import { JobRunStatus } from "src/activities/common/enums";
+import { cancelWorkflowIfRunning } from './workflow-utils';
+
 
 
 
@@ -38,6 +40,7 @@ interface MigrationWorkflowExecutorOutput {
     syncJobStatus: JobRunStatus;
 }
 
+
 export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkflowExecutorInput): Promise<MigrationWorkflowExecutorOutput> => {
 
     let scanWorkflow: wf.ChildWorkflowHandle<wf.Workflow>, syncWorkflow: wf.ChildWorkflowHandle<wf.Workflow>;
@@ -48,8 +51,14 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
         scanJobStatus: JobRunStatus.Running,
         syncJobStatus: JobRunStatus.Running,
     };
+    
 
     wf.setHandler(actionSignal, async (action:string) => {  
+        if(action == JobRunStatus.Stopped){
+            await cancelWorkflowIfRunning(scanWorkflow.workflowId);
+            await cancelWorkflowIfRunning(syncWorkflow.workflowId);
+            return;
+        }
         if(await isWorkflowRunningActivity(scanWorkflow.workflowId))
             await scanWorkflow.signal('scanActionSignal', action);    
         if(await isWorkflowRunningActivity(syncWorkflow.workflowId))
@@ -80,7 +89,12 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
         output.dirCount = scanWorkflowOutput.dirCount;
         output.scanJobStatus = scanWorkflowOutput.status;    
     }catch(error){  
-        output.scanJobStatus = JobRunStatus.Failed; 
+        if (wf.isCancellation(error.cause)) {
+            // The workflow was cancelled
+            output.scanJobStatus = JobRunStatus.Stopped;
+        }else {
+            output.scanJobStatus = JobRunStatus.Failed; 
+        }
     }
 
     if(await isWorkflowRunningActivity(syncWorkflow.workflowId))
@@ -90,9 +104,14 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
         const syncWorkflowOutput = await syncWorkflow.result(); 
         output.syncJobStatus = syncWorkflowOutput.status;    
     }catch(error){  
-        output.syncJobStatus = JobRunStatus.Failed;
+        if (wf.isCancellation(error.cause)) {
+            // The workflow was cancelled
+            output.syncJobStatus = JobRunStatus.Stopped;
+        }else {
+            output.syncJobStatus = JobRunStatus.Failed;
+        }
         await updateWorkerResponse(jobRunId, 'all', {
-            status: 'FAILED',
+            status: output.syncJobStatus,
             code: 'TASK_FETCH_FAILURE',
             operation: 'Sync Workflow Failed',
             occurrence: 1,
