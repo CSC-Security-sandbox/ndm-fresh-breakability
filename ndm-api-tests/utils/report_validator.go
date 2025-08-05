@@ -331,7 +331,7 @@ func extractTextFromPDF(pdfPath string) (string, error) {
 	if err != nil {
 		abs = pdfPath
 	}
-	cmd := exec.Command("pdftotext", "-layout", "-nopgbrk", abs, "-")
+	cmd := exec.Command("pdftotext", "-raw", "-nopgbrk", abs, "-")
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	if err := cmd.Run(); err != nil {
