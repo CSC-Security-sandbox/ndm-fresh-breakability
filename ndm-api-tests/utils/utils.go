@@ -925,6 +925,100 @@ func DeleteAllKeycloakUsers(token string) error {
 	return nil
 }
 
+func DeleteUserByID(userID string) error {
+	headers := GetHeaders(AuthToken, ContentTypeJSON)
+	url := fmt.Sprintf("%s/api/v1/users/%s", ADMIN_SERVICE_URL, userID)
+	resp, err := SendAPIRequest("DELETE", url, nil, headers)
+	if err != nil {
+		return fmt.Errorf("failed to delete user %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
+		log.Printf("Successfully deleted user")
+		return nil
+	}
+	return fmt.Errorf("failed to delete user, status: %d", resp.StatusCode)
+}
+
+func DeleteUserRolesByIDs(roleIDs []string) error {
+	headers := GetHeaders(AuthToken, ContentTypeJSON)
+	if len(roleIDs) == 0 {
+		return nil // Nothing to delete
+	}
+
+	var errors []string
+	successCount := 0
+
+	for _, roleID := range roleIDs {
+		if roleID == "" {
+			continue // Skip empty role IDs
+		}
+
+		url := fmt.Sprintf("%s/api/v1/user-roles/%s", ADMIN_SERVICE_URL, roleID)
+		resp, err := SendAPIRequest("DELETE", url, nil, headers)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("failed to delete user role %s: %v", err))
+			continue
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
+			log.Print("Successfully deleted user role")
+			successCount++
+		} else {
+			errors = append(errors, fmt.Sprintf("failed to delete user role, status: %d", resp.StatusCode))
+		}
+	}
+
+	log.Printf("Successfully deleted %d out of %d user roles", successCount, len(roleIDs))
+
+	if len(errors) > 0 {
+		return fmt.Errorf("some deletions failed: %s", strings.Join(errors, "; "))
+	}
+
+	return nil
+}
+
+func DeleteProjectsByIDs(projectIDs []string) error {
+	headers := GetHeaders(AuthToken, ContentTypeJSON)
+	if len(projectIDs) == 0 {
+		return nil // Nothing to delete
+	}
+
+	var errors []string
+	successCount := 0
+
+	for _, projectID := range projectIDs {
+		if projectID == "" {
+			continue // Skip empty project IDs
+		}
+
+		url := fmt.Sprintf("%s/api/v1/projects/%s", ADMIN_SERVICE_URL, projectID)
+		resp, err := SendAPIRequest("DELETE", url, nil, headers)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("failed to delete project %v", err))
+			continue
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
+			log.Printf("Successfully deleted project")
+			successCount++
+		} else {
+			errors = append(errors, fmt.Sprintf("failed to delete project, status: %d", resp.StatusCode))
+		}
+	}
+
+	log.Printf("Successfully deleted %d out of %d projects", successCount, len(projectIDs))
+
+	if len(errors) > 0 {
+		return fmt.Errorf("some deletions failed: %s", strings.Join(errors, "; "))
+	}
+
+	return nil
+}
+
 func CleanupUsers(authToken, keycloakToken string) error {
 	if err := DeleteAllKeycloakUsers(keycloakToken); err != nil {
 		return fmt.Errorf("failed to delete all Keycloak users: %w", err)
@@ -1105,4 +1199,75 @@ func GetFutureUTCTimestamp(timeInterval int) string {
 	return time.Now().UTC().
 		Add(time.Duration(timeInterval) * time.Second).
 		Format(TIME_FORMAT)
+}
+
+func CreateNewUser(username string, firstname string, lastname string, headers map[string]string) (map[string]interface{}, error) {
+	// Prepare user creation payload
+	createUserPayload := map[string]interface{}{
+		"username":  username,
+		"firstName": firstname,
+		"lastName":  lastname,
+	}
+	payloadBytes, err := json.Marshal(createUserPayload)
+	if err != nil {
+		return nil, fmt.Errorf("error marshalling user creation payload: %w", err)
+	}
+	createUserURL := fmt.Sprintf("%s/api/v1/create-user", ADMIN_SERVICE_URL)
+	resp, err := SendAPIRequest("POST", createUserURL, payloadBytes, headers)
+	if err != nil {
+		return nil, fmt.Errorf("error sending create user API request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("expected HTTP 200 OK, got %d", resp.StatusCode)
+	}
+
+	// Parse response to extract user data
+	var responseData map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&responseData)
+	if err != nil {
+		return nil, fmt.Errorf("error while decoding user response: %w", err)
+	}
+
+	data := responseData["data"].(map[string]interface{})
+	items := data["items"].(map[string]interface{})
+	user := items["user"].(map[string]interface{})
+	return user, nil
+}
+
+func CreateUserRole(projectId, accountId, userId, roleId string, headers map[string]string) (map[string]interface{}, error) {
+	// Prepare user role assignment payload
+	createRolePayload := map[string]interface{}{
+		"project_id": projectId,
+		"account_id": accountId,
+		"user_id":    userId,
+		"role_id":    roleId,
+	}
+
+	payloadBytes, err := json.Marshal(createRolePayload)
+	if err != nil {
+		return nil, fmt.Errorf("error marshalling user role payload: %w", err)
+	}
+
+	createRoleURL := fmt.Sprintf("%s/api/v1/user-roles", ADMIN_SERVICE_URL)
+	resp, err := SendAPIRequest("POST", createRoleURL, payloadBytes, headers)
+	if err != nil {
+		return nil, fmt.Errorf("error sending create user role API request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("expected HTTP 200 OK, got %d", resp.StatusCode)
+	}
+
+	// Parse response to extract role data
+	var responseData map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&responseData)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding response: %w", err)
+	}
+
+	data := responseData["data"].(map[string]interface{})
+	return data, nil
 }
