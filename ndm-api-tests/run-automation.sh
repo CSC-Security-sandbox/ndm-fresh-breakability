@@ -110,24 +110,19 @@ run_tests() {
 # Test runs
 
 #Regression Testing
-
-#run_tests "regression" "./tests/regression" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
+#run_tests "regression" "./tests/regression" "vol_src_automation, volSrcAuto, vol_src_automation2"  "vol_dest_automation, vol_dest_automation2"  "NFS"
 #run_tests "regression" "./tests/regression" "volSMBAuto_vol1, vol4_33, vol2_33"  "volSMBAutoDst, vol3_33" "SMB"
 
 
-
-
 #End-to-End Testing
-
-#run_tests "end-to-end" "./tests/e2e" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
-run_tests "end-to-end" "./tests/e2e" "volSMBAuto_vol1, vol4_33, vol2_33"  "volSMBAutoDst, vol3_33" "SMB"
-
-
+run_tests "end-to-end" "./tests/e2e" "vol_src_automation, volSrcAuto, vol_src_automation2"  "vol_dest_automation, vol_dest_automation2" "NFS"
+#run_tests "end-to-end" "./tests/e2e" "volSMBAuto_vol1, vol4_33, vol2_33"  "volSMBAutoDst, vol3_33" "SMB"
 
 
 #Smoke Testing
+#run_tests "smoke" "./tests/smoke" "vol_src_automation, volSrcAuto, vol_src_automation2"  "vol_dest_automation, vol_dest_automation2" "NFS"
+#run_tests "smoke" "./tests/smoke" "volSMBAuto_vol1, vol4_33, vol2_33"  "volSMBAutoDst, vol3_33" "SMB"
 
-#run_tests "smoke" "./tests/smoke" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "NFS"
-#run_tests "smoke" "./tests/smoke" "/srv/nfs_dir1,/srv/nfs_dir2"  "/srv/nfs_dir1,/srv/nfs_dir2" "SMB"
+
 
 #read -p "Test execution complete. Press [Enter] key to exit..."

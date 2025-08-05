@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"log"
 	"os"
 )
@@ -211,55 +210,4 @@ func UpdateConfVariables(protocolType, sourceVolumesArgs, destinationVolumesArgs
 	}
 
 	InitWorkers(NDM_WORKERS_HOST, NDM_WORKERS_PORT, NDM_WORKERS_PASSWORD, NDM_WORKERS_USER_NAME)
-	//CreateSMBDataset()
-	//os.Exit(1)
-
-	//export := fmt.Sprintf("%s:vol3_33", SOURCE_HOST_IP)
-	/*export := fmt.Sprintf("%s:volSMBAuto_vol1", SOURCE_HOST_IP)
-
-	err := TestAddData(export)
-	if err != nil {
-		fmt.Println("UMV error add data to volume : ", err.Error())
-	}
-
-	os.Exit(1)*/
-	/*err := RemoveDeltaFromVolume(export)
-	if err != nil {
-		fmt.Println("UMV error  data to volume : ", err.Error())
-	}*/
-
-	/*Wait(20)
-	err = ClearVolume(export)
-	if err != nil {
-		fmt.Println("UMV error clear volume : ", err.Error())
-	}*/
-	//os.Exit(1)
-}
-
-func TestAddData(export string) error {
-	script := ""
-
-	switch PROTOCOL_TYPE {
-	case ProtocolSMB:
-		script = AddDataToVolumeForSMB(export)
-	case ProtocolNFS:
-		script = AddDataToVolumeForNFS(export)
-	}
-
-	sshConfig = SSHConfig{
-		Username: "datamigrator",
-		Host:     "10.192.7.71",
-		Port:     22,
-		Password: "Dm@admin123",
-	}
-
-	fmt.Printf("UMV TRYING TO CONNECT : %+v \n", sshConfig)
-	fmt.Println("UMV RUNNING : ", script)
-
-	output, err := sshRunScript(sshConfig, script)
-	if err != nil {
-		return fmt.Errorf("AddDataToFileserver failed: %w\noutput: %s", err, output)
-	}
-	fmt.Println("UMV OUTPUT : ", output)
-	return nil
 }

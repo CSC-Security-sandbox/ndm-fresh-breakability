@@ -84,10 +84,8 @@ func PtrExportPathSource(e ExportPathSource) *ExportPathSource {
 
 // CreateFileServer creates a File server with different config details
 func CreateFileServer(params CreateServereParams, headers map[string]string) (string, *http.Response, error) {
-	LogDebug(fmt.Sprintf("Creating FileServer : %s", params.Host))
 	createSourceURL := CONFIG_SERVICE_URL + CREATE_FILESERVER_ENDPOINT
 
-	fmt.Println("Creating file server with params:", params.Host, " , username : ", params.UserName, " , ", params.Password)
 	if params.ExportPathSource == nil {
 		defaultSource := AutoDiscover
 		params.ExportPathSource = &defaultSource
@@ -117,13 +115,11 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 		},
 	}
 
-	jsonBytes, err := json.MarshalIndent(payload, "", "  ")
+	/*jsonBytes, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		fmt.Println("Error marshaling payload to JSON:", err)
 
-	}
-	fmt.Println("Payload for creating file server (JSON):")
-	fmt.Println(string(jsonBytes))
+	}*/
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -244,8 +240,7 @@ func ClearVolumeForSMB(export string) string {
 }
 
 func ClearVolumeForNFS(export string) string {
-	split := strings.Split(export, ":")
-	destMount := fmt.Sprintf("/mnt/remove_data_%s", split[1])
+	destMount := "/mnt/remove_data"
 
 	script := fmt.Sprintf(`
 	set -e
@@ -474,8 +469,7 @@ func RemoveDeltaFromVolumeForSMB(export string) string {
 }
 
 func RemoveDeltaFromVolumeForNFS(export string) string {
-	split := strings.Split(export, ":")
-	destMount := fmt.Sprintf("/mnt/data_remove_%s", split[1])
+	destMount := "/mnt/data_remove"
 
 	script := fmt.Sprintf(`
 	set -e

@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = FDescribe("TC-002: Create a fileserver with 2 workers (1 offline) and check discovery and migration", func() {
+var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and check discovery and migration", func() {
 	var headers map[string]string
 	var (
 		ProjectId              string
@@ -337,7 +337,7 @@ var _ = FDescribe("TC-002: Create a fileserver with 2 workers (1 offline) and ch
 		})
 
 		AfterEach(func() {
-			/*err := RemoveDeltaFromVolume(sourceVolumePath1)
+			err := RemoveDeltaFromVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
 
 			err = RemoveDeltaFromVolume(sourceVolumePath2)
@@ -347,10 +347,7 @@ var _ = FDescribe("TC-002: Create a fileserver with 2 workers (1 offline) and ch
 			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
 
 			err = ClearVolume(destinationVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)*/
-
-			cleanupErrors := CleanupVolumes([]string{sourceVolumePath1, sourceVolumePath2}, []string{destinationVolumePath1, destinationVolumePath2})
-			Expect(len(cleanupErrors)).Should(BeNumerically("==", 0), "Expected no errors while cleaning up volumes : ", cleanupErrors)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")

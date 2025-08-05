@@ -360,7 +360,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 		})
 
 		AfterEach(func() {
-			/*err := RemoveDeltaFromVolume(sourceVolumePath1)
+			err := RemoveDeltaFromVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
 
 			err = RemoveDeltaFromVolume(sourceVolumePath2)
@@ -370,10 +370,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
 
 			err = ClearVolume(destinationVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)*/
-
-			cleanupErrors := CleanupVolumes([]string{sourceVolumePath1, sourceVolumePath2}, []string{destinationVolumePath1, destinationVolumePath2})
-			Expect(len(cleanupErrors)).Should(BeNumerically("==", 0), "Expected no errors while cleaning up volumes : ", cleanupErrors)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")

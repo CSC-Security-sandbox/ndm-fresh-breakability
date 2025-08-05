@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
+var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
 	var (
 		ProjectId              string
 		workerId1              string
@@ -62,21 +62,25 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
+
+			By(fmt.Sprintf("Creating Source File Server : %s", SOURCE_HOST_IP))
 			sourceConfigID, resp, err := CreateFileServer(sourceParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
 			Expect(sourceConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
-			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
+			LogDebug(fmt.Sprintf("Source file server created with config ID: %s", sourceConfigID))
 
-			By("Getting the source file server by config ID")
+			By("Getting the Source File Server Export Path ID")
 			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[2], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			By("Creating a new discovery job for the source")
+			LogDebug(fmt.Sprintf("Source File Server Export Path ID : [%s, %s]", sourcePathID1, sourcePathID2))
+
+			By("Creating a Bulk Discovery Job for the Source File Server")
 			jobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{sourcePathID1, sourcePathID2},
 				ExcludeOlderThan:         nil,
@@ -95,7 +99,6 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 
-			By("Getting jobs by jobConfigId for source")
 			/*discovery_validators := []string{
 				"nfs_src_vol_discovery.json",
 				"nfs_src_vol2_discovery.json",
@@ -121,12 +124,12 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				err = WaitForJobState(sourceDiscoveryJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", sourceDiscoveryJobRunID)
 
-				result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s", discovery_validators[i]))
+				result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", sourceDiscoveryJobRunID)
-				By(fmt.Sprintf("validate report result for %s: %s", sourceDiscoveryJobRunID, result))
+				LogDebug(fmt.Sprintf("Validate Report Result for Discovery Job : %s = %s", sourceDiscoveryJobRunID, result))
 			}
 
-			By("Creating the destination file server")
+			By(fmt.Sprintf("Creating Destination File Server : %s", DESTINATION_HOST_IP))
 			destinationParams := CreateServereParams{
 				ConfigName:       "destination-file-server",
 				ConfigType:       ConfigTypeFile,
@@ -145,15 +148,18 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			Expect(destinationConfigID).NotTo(BeEmpty(), "destinationConfigID is empty")
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			LogDebug(fmt.Sprintf("Destination file server created with config ID: %s", destinationConfigID))
 
-			By("Getting the destination file server by configId")
+			By("Getting the Destination File Server Export Path ID")
 			destinationPathID1, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			By("Creating a new discovery job for destination")
+			LogDebug(fmt.Sprintf("Destination File Server Export Path ID : [%s, %s]", destinationPathID1, destinationPathID2))
+
+			By("Creating a Bulk Discovery Job for the Destination File Server")
 			destinationJobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{destinationPathID1, destinationPathID2},
 				ExcludeOlderThan:         nil,
@@ -173,7 +179,6 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 
-			By("Getting jobs by jobConfigId for destination")
 			for _, destinationJobConfigID := range destinationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(destinationJobConfigID, headers)
 				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
@@ -187,7 +192,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", destinationDiscoveryJobRunID)
 			}
 
-			By("Creating a migration job")
+			By("Creating a Bulk Migration Job")
 			migrationParams := MigrationJobParams{
 				FirstRunAt:         GetCurrentUTCTimestamp(),
 				FutureRunSchedule:  "",
@@ -229,18 +234,18 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s", migration_validators[i]))
+				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 				By(fmt.Sprintf("validate report result : %s", result))
 			}
 
-			By("Adding Delta Data")
+			By("Adding Delta Data to the Source Paths")
 			err = AddDataToVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
 			err = AddDataToVolume(sourceVolumePath2)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
 
-			By("Creating bulk cutover job")
+			By("Creating a Bulk Cutover Job")
 			cutoverParams := BulkCutoverJobParams{
 				SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
 				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
@@ -253,7 +258,6 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			Expect(len(jobConfigIDs)).To(BeNumerically(">", 0), "No valid jobConfigIDs found in response")
 			Expect(jobConfigIDs).NotTo(BeEmpty(), "Expected a valid jobConfigID")
 
-			By("Getting jobs by job config id")
 			for _, jobConfigID := range jobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(jobConfigID, headers)
 				Expect(err).NotTo(HaveOccurred(), "Error getting blocked job run ID for config %s", jobConfigID)
@@ -276,7 +280,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				cutoverRunIDs = append(cutoverRunIDs, cutoverRunID)
 			}
 
-			By("Approving bulk cutover job")
+			By("Approving Bulk Cutover Job")
 			for _, cutoverRunID := range cutoverRunIDs {
 				resp, err := ApproveRejectBulkCutoverJob(cutoverRunID, "APPROVED", headers)
 				Expect(err).NotTo(HaveOccurred(), "Error approving bulk cutover job for run %s", cutoverRunID)
@@ -294,10 +298,8 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 		})
 
 		AfterEach(func() {
-			cleanupErrors := CleanupVolumes([]string{sourceVolumePath1, sourceVolumePath2}, []string{destinationVolumePath1, destinationVolumePath2})
-			Expect(len(cleanupErrors)).Should(BeNumerically("==", 0), "Expected no errors while cleaning up volumes : ", cleanupErrors)
-
-			/*err := RemoveDeltaFromVolume(sourceVolumePath1)
+			By("Cleanup started")
+			err := RemoveDeltaFromVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
 
 			err = RemoveDeltaFromVolume(sourceVolumePath2)
@@ -307,11 +309,11 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
 
 			err = ClearVolume(destinationVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)*/
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			By("Cleanup complete.")
+			LogDebug("Cleanup completed")
 		})
 	})
 })
