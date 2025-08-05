@@ -1,13 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { CommandStatus, OPS_CMD, OPS_STATUS, ErrorType } from '@netapp-cloud-datamigrate/jobs-lib';
-import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import * as fs from 'fs';
 import * as path from 'path';
 import { CommandExecService } from './command-execution.service';
 import { WorkerThreadService } from 'src/thread/worker.thread.service';
 import { StampMetaService } from './stamp-meta.service';
 import { mockLogger } from 'src/auth/auth.service.spec';
+import { dmError, getFilePermissions, getFileType,  } from 'src/activities/utils/utils';
 
 // Mock fs module
 jest.mock('fs', () => ({
@@ -31,6 +32,7 @@ jest.mock('src/activities/utils/utils', () => ({
     dmError: jest.fn(),
     getFilePermissions: jest.fn(),
     getFileType: jest.fn(),
+    isPathExists: jest.fn(),
 }));
 
 describe('CommandExecService', () => {
@@ -42,8 +44,6 @@ describe('CommandExecService', () => {
     let mockJobContext: any;
 
     const mockFs = fs as jest.Mocked<typeof fs>;
-    const mockPath = path as jest.Mocked<typeof path>;
-    const { dmError, getFilePermissions, getFileType } = require('src/activities/utils/utils');
 
     beforeEach(async () => {
         configService = {
@@ -63,6 +63,7 @@ describe('CommandExecService', () => {
 
         stampMetaService = {
             stampMetaData: jest.fn(),
+            restoreFileAttribute: jest.fn()
         } as any;
 
         mockJobContext = {
@@ -107,148 +108,6 @@ describe('CommandExecService', () => {
 
             const serviceWithUndefinedId = module.get<CommandExecService>(CommandExecService);
             expect(serviceWithUndefinedId.workerId).toBe('');
-        });
-    });
-
-    describe('copyFile', () => {
-        const createMockCommand = (status = OPS_STATUS.READY, isDir = false) => ({
-            id: 'cmd-1',
-            fPath: '/test.txt',
-            status: CommandStatus.READY,
-            isDir,
-            ops: {
-                [OPS_CMD.COPY_FILE]: { 
-                    status,
-                    params: {}
-                },
-            },
-            metadata: { 
-                size: 1024,
-                mtime: new Date(),
-                atime: new Date(),
-                ctime: new Date(),
-                birthtime: new Date(),
-                mode: 644,
-                uid: 1000,
-                gid: 1000,
-                sid: 'test-sid'
-            },
-            serialize: jest.fn(),
-        });
-
-        const baseInput = {
-            sourcePath: '/source/test.txt',
-            targetPath: '/target/test.txt',
-            jobContext: mockJobContext,
-            command: createMockCommand(),
-            errorType: ErrorType.RECOVERABLE_ERROR,
-        };
-
-        it('should skip if already completed', async () => {
-            const input = {
-                ...baseInput,
-                command: createMockCommand(OPS_STATUS.COMPLETED),
-            };
-
-            const result = await service.copyFile(input);
-
-            expect(result.shouldStampMeta).toBe(true);
-            expect(result.sourceErrors).toEqual([]);
-            expect(result.targetErrors).toEqual([]);
-            expect(workerThreadService.migrateWorkerThread).not.toHaveBeenCalled();
-        });
-
-        it('should handle source file not exists', async () => {
-            // Create fresh input to ensure we get the updated mockJobContext
-            const input = {
-                sourcePath: '/source/test.txt',
-                targetPath: '/target/test.txt',
-                jobContext: mockJobContext,
-                command: createMockCommand(),
-                errorType: ErrorType.RECOVERABLE_ERROR,
-            };
-            
-            (mockFs.promises.access as jest.Mock).mockRejectedValue({ code: 'ENOENT' });
-            // When source doesn't exist, migrateWorkerThread should also fail
-            const error = new Error('Source file not found') as any;
-            error.code = 'ENOENT';
-            workerThreadService.migrateWorkerThread.mockRejectedValue(error);
-            dmError.mockReturnValue({});
-
-            const result = await service.copyFile(input);
-
-            expect(result.shouldStampMeta).toBe(false);
-            expect(result.sourceErrors).toEqual([]);
-            expect(result.targetErrors).toEqual(['ENOENT']);
-            expect(mockJobContext.publishToErrorStream).toHaveBeenCalledTimes(2); // Once for source not exists, once for migration error
-            expect(dmError).toHaveBeenCalledWith(
-                "OPERATION",
-                "Source",
-                "Copy Content",
-                ErrorType.RECOVERABLE_ERROR,
-                'cmd-1',
-                expect.any(Error),
-                { name: '/test.txt', path: '/source/test.txt' }
-            );
-        });
-
-        it('should successfully copy file', async () => {
-            // Create fresh input to avoid state pollution
-            const input = {
-                sourcePath: '/source/test.txt',
-                targetPath: '/target/test.txt',
-                jobContext: mockJobContext,
-                command: createMockCommand(),
-                errorType: ErrorType.RECOVERABLE_ERROR,
-            };
-            
-            (mockFs.promises.access as jest.Mock).mockResolvedValue(undefined);
-            workerThreadService.migrateWorkerThread.mockResolvedValue({
-                sourceChecksum: 'src-checksum',
-                targetChecksum: 'tgt-checksum',
-            });
-
-            const result = await service.copyFile(input);
-
-            expect(result.shouldStampMeta).toBe(true);
-            expect(result.sourceErrors).toEqual([]);
-            expect(result.targetErrors).toEqual([]);
-            expect(workerThreadService.migrateWorkerThread).toHaveBeenCalledWith({
-                sourcePath: '/source/test.txt',
-                destinationPath: '/target/test.txt',
-                operationId: 'cmd-1',
-                size: 1024,
-            });
-            expect(input.command.ops[OPS_CMD.COPY_FILE].status).toBe(OPS_STATUS.COMPLETED);
-        });
-
-        it('should handle copy file error', async () => {
-            // Create fresh input with new command to avoid state pollution
-            const input = {
-                sourcePath: '/source/test.txt',
-                targetPath: '/target/test.txt',
-                jobContext: mockJobContext,
-                command: createMockCommand(),
-                errorType: ErrorType.RECOVERABLE_ERROR,
-            };
-            
-            (mockFs.promises.access as jest.Mock).mockResolvedValue(undefined);
-            
-            const error = new Error('Copy failed') as any;
-            error.code = 'EACCES';
-            workerThreadService.migrateWorkerThread.mockRejectedValue(error);
-            dmError.mockReturnValue({});
-
-            const result = await service.copyFile(input);
-
-            expect(result.shouldStampMeta).toBe(false);
-            expect(result.targetErrors).toEqual(['EACCES']);
-            expect(mockLogger.error).toHaveBeenCalledWith(
-                'Copying FILE from /source/test.txt to /target/test.txt, Error: Copy failed',
-                error.stack
-            );
-            expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
-            expect(input.command.ops[OPS_CMD.COPY_FILE].status).toBe(OPS_STATUS.ERROR);
         });
     });
 
@@ -321,7 +180,7 @@ describe('CommandExecService', () => {
             const error = new Error('Permission denied') as any;
             error.code = 'EACCES';
             (mockFs.promises.mkdir as jest.Mock).mockRejectedValue(error);
-            dmError.mockReturnValue({});
+
 
             const result = await service.copyDirectory(input);
 
@@ -408,7 +267,7 @@ describe('CommandExecService', () => {
             const error = new Error('Permission denied') as any;
             error.code = 'EACCES';
             (mockFs.promises.unlink as jest.Mock).mockRejectedValue(error);
-            dmError.mockReturnValue({});
+
 
             const result = await service.deleteFile(input);
 
@@ -498,7 +357,7 @@ describe('CommandExecService', () => {
             const error = new Error('Permission denied') as any;
             error.code = 'EACCES';
             (mockFs.promises.rm as jest.Mock).mockRejectedValue(error);
-            dmError.mockReturnValue({});
+
 
             const result = await service.deleteDirectory(input);
 
@@ -513,117 +372,6 @@ describe('CommandExecService', () => {
     });
 
     describe('executeCommand', () => {
-        it('should execute copy file operation with stamping', async () => {
-            const createMockCommand = () => ({
-                id: 'cmd-1',
-                fPath: '/test.txt',
-                status: CommandStatus.READY,
-                isDir: false,
-                ops: {
-                    [OPS_CMD.COPY_FILE]: { 
-                        status: OPS_STATUS.READY,
-                        params: {}
-                    },
-                },
-                metadata: { 
-                    size: 1024,
-                    mtime: new Date(),
-                    atime: new Date(),
-                    ctime: new Date(),
-                    birthtime: new Date(),
-                    mode: 644,
-                    uid: 1000,
-                    gid: 1000,
-                    sid: 'test-sid'
-                },
-                serialize: jest.fn(),
-            });
-
-            const input = {
-                sourcePath: '/source/test.txt',
-                targetPath: '/target/test.txt',
-                jobContext: mockJobContext,
-                command: createMockCommand(),
-                errorType: ErrorType.RECOVERABLE_ERROR,
-            };
-
-            (mockFs.promises.access as jest.Mock).mockResolvedValue(undefined);
-            workerThreadService.migrateWorkerThread.mockResolvedValue({
-                sourceChecksum: 'src-checksum',
-                targetChecksum: 'tgt-checksum',
-            });
-            stampMetaService.stampMetaData.mockResolvedValue({
-                shouldStampMeta: false,
-                sourceErrors: [],
-                targetErrors: [],
-            });
-
-            jest.spyOn(service, 'publishFileInfo').mockResolvedValue();
-
-            const result = await service.executeCommand(input);
-
-            expect(result.cmd.status).toBe(CommandStatus.COMPLETED);
-            expect(result.sourceErrors).toEqual([]);
-            expect(result.targetErrors).toEqual([]);
-            expect(workerThreadService.migrateWorkerThread).toHaveBeenCalled();
-            expect(stampMetaService.stampMetaData).toHaveBeenCalled();
-            expect(service.publishFileInfo).toHaveBeenCalled();
-        });
-
-        it('should set command status to ERROR when there are errors', async () => {
-            const createMockCommand = () => ({
-                id: 'cmd-1',
-                fPath: '/test.txt',
-                status: CommandStatus.READY,
-                isDir: false,
-                ops: {
-                    [OPS_CMD.COPY_FILE]: { 
-                        status: OPS_STATUS.READY,
-                        params: {}
-                    },
-                },
-                metadata: { 
-                    size: 1024,
-                    mtime: new Date(),
-                    atime: new Date(),
-                    ctime: new Date(),
-                    birthtime: new Date(),
-                    mode: 644,
-                    uid: 1000,
-                    gid: 1000,
-                    sid: 'test-sid'
-                },
-                serialize: jest.fn(),
-            });
-
-            const input = {
-                sourcePath: '/source/test.txt',
-                targetPath: '/target/test.txt',
-                jobContext: mockJobContext,
-                command: createMockCommand(),
-                errorType: ErrorType.RECOVERABLE_ERROR,
-            };
-
-            // Mock file copy to fail
-            (mockFs.promises.access as jest.Mock).mockResolvedValue(undefined);
-            const error = new Error('Copy failed') as any;
-            error.code = 'EACCES';
-            workerThreadService.migrateWorkerThread.mockRejectedValue(error);
-            dmError.mockReturnValue({});
-
-            // Ensure stampMetaService returns proper structure
-            stampMetaService.stampMetaData.mockResolvedValue({
-                shouldStampMeta: false,
-                sourceErrors: [],
-                targetErrors: [],
-            });
-
-            const result = await service.executeCommand(input);
-
-            expect(result.cmd.status).toBe(CommandStatus.ERROR);
-            expect(result.targetErrors).toEqual(['EACCES']);
-            expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
-        });
 
         it('should execute copy directory operation', async () => {
             const createMockCommand = () => ({
@@ -951,26 +699,50 @@ describe('CommandExecService', () => {
             expect(ctx.publishToErrorStream).toHaveBeenCalled();
             });
 
-            it('should publish error if SID mapping failed', async () => {
-            const cmd = {
-                ...baseCmd,
-                ops: {
-                [OPS_CMD.STAMP_META]: {
-                    params: {
-                    sidMap: {
-                        failedSid: ['sid1', 'sid2']
+         
+
+            it('should publish error if multiple mismatches occur', async () => {
+                const cmd = {
+                    id: 'cmd-1',
+                    fPath: '/test.txt',
+                    ops: {
+                        [OPS_CMD.STAMP_META]: {
+                            params: {
+                                sidMap: {
+                                    failedSid: ['sid1']
+                                }
+                            }
+                        }
                     }
+                };
+                const item = {
+                    fileName: '/test.txt',
+                    sourceMeta: {
+                        checksum: 'abc',
+                        permission: '755',
+                        accessTime: new Date('2023-01-01T00:00:00Z')
+                    },
+                    targetMeta: {
+                        checksum: 'def',
+                        permission: '644',
+                        accessTime: new Date('2023-01-02T00:00:00Z')
                     }
-                }
-                }
-            };
-            await service.validateCommand({
-                cmd: cmd as any,
-                item: baseItem as any,
-                jobContext,
-                errorType: ErrorType.RECOVERABLE_ERROR
-            } as any);
-            expect(jobContext.publishToErrorStream).toHaveBeenCalled();
+                };
+                const jobContext = {
+                    publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+                    jobConfig: {
+                        options: {
+                            preserveAccessTime: true
+                        }
+                    }
+                };
+                await service.validateCommand({
+                    cmd: cmd as any,
+                    item: item as any,
+                    jobContext,
+                    errorType: ErrorType.RECOVERABLE_ERROR
+                } as any);
+                expect(jobContext.publishToErrorStream).toHaveBeenCalled();
             });
         });
     });

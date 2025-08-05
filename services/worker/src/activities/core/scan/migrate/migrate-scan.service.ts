@@ -191,8 +191,9 @@ export class MigrateScanService {
         }
     }
 
-    buildCommand = (sFile: fs.Stats, fPath: string, dFile?: fs.Stats): Cmd | undefined => {
-         if (!sFile) {
+    buildCommand = (sFile: fs.Stats | undefined, fPath: string, dFile?: fs.Stats): Cmd | undefined => {
+        
+        if (!sFile) {
             const isDirectory = dFile ? dFile.isDirectory() : false;
             return new Cmd(
                 uuid4(),
@@ -200,12 +201,12 @@ export class MigrateScanService {
                 CommandStatus.READY,
                 isDirectory,
                 {
-                    [isDirectory ? OPS_CMD.REMOVE_DIR:  OPS_CMD.REMOVE_FILE] : 
-                    { status: OPS_STATUS.READY, params: {} }
+                    [isDirectory ? OPS_CMD.REMOVE_DIR : OPS_CMD.REMOVE_FILE]:
+                        { status: OPS_STATUS.READY, params: {} }
                 }
             )
         }
-        const metadata: CmdMeta =  { 
+        const metadata: CmdMeta = {
             size: sFile.size,
             mtime: sFile.mtime,
             mode: sFile.mode,
@@ -215,31 +216,38 @@ export class MigrateScanService {
             ctime: sFile.ctime,
             birthtime: sFile.birthtime,
             sid: undefined
-        } 
-        if (isContentUpdate(sFile, dFile) ) {
+        }
+        if ((process.platform == 'linux' || process.platform == 'darwin') && isContentUpdate(sFile, dFile)) {
             const isDirectory = sFile.isDirectory();
-            return new Cmd (
+            return new Cmd(
                 uuid4(),
                 fPath,
                 CommandStatus.READY,
                 isDirectory,
                 {
                     [isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE]: { status: OPS_STATUS.READY, params: {} },
-                    [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: { } }
+                    [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: {} }
                 },
                 metadata,
             )
         }
-        if(isMetaUpdated(sFile, dFile) ) {
+         this.logger.log(`isMetaUpdated ${isMetaUpdated(sFile, dFile)}`);
+         this.logger.log(`source ctime ${sFile.ctime}`);
+         this.logger.log(`destination ctime ${dFile?.ctime}`);
+        if (process.platform == 'win32' && (isMetaUpdated(sFile, dFile) || isContentUpdate(sFile, dFile))) {
+            const isContentUpdatedFlag = isContentUpdate(sFile, dFile);
+            this.logger.log(`content update ` + isContentUpdate);
+            this.logger.log(`isMetaUpdated ${isMetaUpdated(sFile, dFile)}`);
             const isDirectory = sFile.isDirectory();
-            return new Cmd (
+            this.logger.log(`Meta update detected for isMetaUpdated ${fPath}`);
+            return new Cmd(
                 uuid4(),
                 fPath,
                 CommandStatus.READY,
                 isDirectory,
                 {
-                    [isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE]: { status: OPS_STATUS.COMPLETED, params: {} },
-                    [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: { } }
+                    [isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE]: { status: isContentUpdatedFlag ? OPS_STATUS.READY : OPS_STATUS.COMPLETED, params: {} },
+                    [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: {} }
                 },
                 metadata,
             )

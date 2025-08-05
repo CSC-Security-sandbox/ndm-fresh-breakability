@@ -103,7 +103,7 @@ export class HealthcheckService implements OnModuleInit {
     ).catch((error) => {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      this.logger.error(`Error in making statscheck API call: ${errorMessage}`);
+        this.logger.error(`Error in making statscheck API call: ${errorMessage}`);
     });
   }
 

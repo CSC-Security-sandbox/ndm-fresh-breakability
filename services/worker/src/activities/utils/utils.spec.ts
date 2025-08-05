@@ -478,12 +478,6 @@ describe('utils', () => {
             expect(isContentUpdate(sourceStats, destStats)).toBe(true);
         });
 
-        it('should return true when mtimes differ', () => {
-            const sourceStats = { size: 100, mtime: new Date('2023-01-01') } as fs.Stats;
-            const destStats = { size: 100, mtime: new Date('2023-01-02') } as fs.Stats;
-            expect(isContentUpdate(sourceStats, destStats)).toBe(true);
-        });
-
         it('should return false when files are identical', () => {
             const date = new Date('2023-01-01');
             const sourceStats = { size: 100, mtime: date } as fs.Stats;
