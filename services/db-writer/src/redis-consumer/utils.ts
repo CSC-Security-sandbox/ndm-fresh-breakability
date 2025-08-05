@@ -9,10 +9,6 @@ export const getWorkflowId = (jobRunId: string, jobType: string) => {
     return `${WorkFlows.DISCOVERY}-${jobRunId}`;
 }
 
-export const redisUtils = new RedisUtils({
-    minConnections: 1,
-    maxConnections: 10,
-});
 export type ReaderStatus = 'active' | 'inactive';
 
 

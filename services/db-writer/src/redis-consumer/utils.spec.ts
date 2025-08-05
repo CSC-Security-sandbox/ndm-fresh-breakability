@@ -1,4 +1,4 @@
-import { getWorkflowId, redisUtils } from './utils';
+import { getWorkflowId } from './utils';
 import { WorkFlows } from '../enum/redis-consumer.enum';
 import { RedisUtils } from '@netapp-cloud-datamigrate/jobs-lib/dist/redis/redis-utils';
 
@@ -95,20 +95,6 @@ describe('Utils', () => {
     });
   });
 
-  describe('redisUtils', () => {
-    beforeEach(() => {
-      jest.clearAllMocks();
-    });
-
-  
-
-    it('should export redisUtils instance', () => {
-      expect(redisUtils).toBeDefined();
-      expect(redisUtils).toBeInstanceOf(RedisUtils);
-    });
-
-   
-  });
 
   describe('Types and Interfaces', () => {
     describe('ReaderStatus type', () => {
