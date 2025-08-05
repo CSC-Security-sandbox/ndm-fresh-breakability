@@ -229,7 +229,8 @@ func ClearVolumeForSMB(export string) string {
 	net use %s /delete /yes &
 	net use %s %s /user:%s "%s" &&
 	rmdir /s /q %s &&
-	net use %s /delete /yes`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, mappedDrive, mappedDrive)
+	net use %s /delete /yes
+	`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, mappedDrive, mappedDrive)
 
 	commands := []string{}
 	for _, v := range strings.Split(clearVolumeScript, "\n") {
@@ -458,7 +459,8 @@ func RemoveDeltaFromVolumeForSMB(export string) string {
 	net use %s /delete /yes &
 	net use %s %s /user:%s "%s" &&
 	(if exist %s\%s\ ( rmdir /s /q %s\%s ) else ( echo "delta not found" )) &
-	net use %s /delete /yes`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, smbShare, DeltaFolder, smbShare, DeltaFolder, mappedDrive)
+	net use %s /delete /yes
+	`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, smbShare, DeltaFolder, smbShare, DeltaFolder, mappedDrive)
 
 	commands := []string{}
 	for _, v := range strings.Split(removeDeltaScript, "\n") {
@@ -522,21 +524,38 @@ func RemoveDeltaFromVolume(export string) error {
 	return nil
 }
 
-// ModifyDataOnVolume appends lines to the text files in the NFS export mounted on the VM.
-func ModifyDataOnVolume(export string) error {
-	config := GetAttachedWorkerDetails()
-	sshConfig = SSHConfig{
-		Username: config.Username,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: config.Password,
+func ModifyDataOnVolumeForSMB(export string) string {
+	appendLines := "# MODIFIED 1 # MODIFIED 2"
+
+	split := strings.Split(export, ":")
+	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
+
+	mappedDrive := "Z:"
+
+	modifyDataScript := fmt.Sprintf(`cmd /C
+	net use %s /delete /yes &
+	net use %s %s /user:%s "%s" &&
+	echo %s >> %s\modify1.text &&
+    echo %s >> %s\modify2.text &&
+	echo %s >> %s\modify3.text &&
+	net use %s /delete /yes
+	`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, appendLines, smbShare, appendLines, smbShare, appendLines, smbShare, mappedDrive)
+
+	commands := []string{}
+	for _, v := range strings.Split(modifyDataScript, "\n") {
+		commands = append(commands, strings.TrimSpace(v))
 	}
+
+	return strings.Join(commands, " ")
+}
+
+func ModifyDataOnVolumeForNFS(export string) string {
 	destMount := "/mnt/data_modify"
 
 	// Lines to append
 	appendLines := "\n# MODIFIED LINE 1\n# MODIFIED LINE 2\n"
 
-	script := fmt.Sprintf(`
+	return fmt.Sprintf(`
     set -e
 
     # Mount export NFS export
@@ -556,6 +575,26 @@ func ModifyDataOnVolume(export string) error {
 		appendLines, destMount,
 		appendLines, destMount,
 		destMount, destMount)
+}
+
+// ModifyDataOnVolume appends lines to the text files in the NFS export mounted on the VM.
+func ModifyDataOnVolume(export string) error {
+	script := ""
+
+	switch PROTOCOL_TYPE {
+	case ProtocolSMB:
+		script = ModifyDataOnVolumeForSMB(export)
+	case ProtocolNFS:
+		script = ModifyDataOnVolumeForNFS(export)
+	}
+
+	config := GetAttachedWorkerDetails()
+	sshConfig = SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
 
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
@@ -564,18 +603,33 @@ func ModifyDataOnVolume(export string) error {
 	return nil
 }
 
-// RestoreOriginalDataOnVolume removes the appended lines from the text files in the NFS export mounted on the VM.
-func RestoreOriginalDataOnVolume(export string) error {
-	config := GetAttachedWorkerDetails()
-	sshConfig = SSHConfig{
-		Username: config.Username,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: config.Password,
+func RestoreOriginalDataOnVolumeForSMB(export string) string {
+	split := strings.Split(export, ":")
+	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
+
+	mappedDrive := "Z:"
+
+	restoreScript := fmt.Sprintf(`cmd /C
+	net use %s /delete /yes &
+	net use %s %s /user:%s "%s" &&
+	type nul > %s\modify1.text &&
+    type nul > %s\modify2.text &&
+	type nul > %s\modify3.text &&
+	net use %s /delete /yes
+	`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, smbShare, smbShare, smbShare, mappedDrive)
+
+	commands := []string{}
+	for _, v := range strings.Split(restoreScript, "\n") {
+		commands = append(commands, strings.TrimSpace(v))
 	}
+
+	return strings.Join(commands, " ")
+}
+
+func RestoreOriginalDataOnVolumeForNFS(export string) string {
 	destMount := "/mnt/data_restore"
 
-	script := fmt.Sprintf(`
+	return fmt.Sprintf(`
     set -e
 
     # Mount export NFS export
@@ -595,6 +649,27 @@ func RestoreOriginalDataOnVolume(export string) error {
 		destMount,
 		destMount,
 		destMount, destMount)
+}
+
+// RestoreOriginalDataOnVolume removes the appended lines from the text files in the NFS export mounted on the VM.
+func RestoreOriginalDataOnVolume(export string) error {
+	script := ""
+
+	switch PROTOCOL_TYPE {
+	case ProtocolSMB:
+		script = RestoreOriginalDataOnVolumeForSMB(export)
+	case ProtocolNFS:
+		script = RestoreOriginalDataOnVolumeForNFS(export)
+	}
+
+	config := GetAttachedWorkerDetails()
+	sshConfig = SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
 		return fmt.Errorf("RestoreOriginalDataOnVolume failed: %w\noutput: %s", err, output)
