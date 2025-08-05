@@ -1,17 +1,14 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { GroupReaderType, JobContext, JobStatus, Task } from "@netapp-cloud-datamigrate/jobs-lib";
-import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
 import axios from 'axios';
 import { AuthService } from "src/auth/auth.service";
 import { RedisService } from "src/redis/redis.service";
-import { JobRunStatus } from "../discovery/enums";
-import { UpdateStatusInput, UpdateStatusOutput } from "../migrate/migrate.type";
-import { generateDummyErrorEntry, generateDummyFileEntry, generateDummyItemEntry, generateDummyTaskEntry, generateDummyTaskInfoEntry } from '../utils/utils';
+import { JobRunStatus, UpdateCutOverStatusInput, UpdateStatusInput, UpdateStatusOutput } from "./enums";
 import {
   LoggerFactory,
   LoggerService
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { generateDummyErrorEntry, generateDummyItemEntry, generateDummyTaskInfoEntry } from '../utils/utils';
 
 @Injectable()
 export class CommonActivityService{
@@ -103,118 +100,13 @@ export class CommonActivityService{
       return { message: 'Error while Triggering generateJobsReport for the job id : ' + jobRunId };
     }
   }
-  //deprecated,
+  
   async updateJobErrorStatus(jobRunId: string) {
     await this.updateStatus({jobRunId, status: JobRunStatus.Errored});
     await this.updateLastEntry(jobRunId);
   }
 
-  //deprecated,
-  async getJobState(traceId: string): Promise<any> {
-    const jobContext = await this.redisService.getJobContext(traceId);
-    return await jobContext.getJobState();
-  }
 
-  //deprecated,
-  async setJobState(traceId: string, jobState: JobState): Promise<any> {
-    const jobContext = await this.redisService.getJobContext(traceId);
-    jobContext.jobState = new JobState(
-      jobState.workers ?? [], 
-      jobState.tasks_completed, 
-      jobState.tasks_total, 
-      jobState.workers_agreed ?? [], 
-      jobState.status as JobStatus,
-      jobState.failedWorkers ?? [],
-      jobState.isScanCompleted ?? false,
-    );
-    await this.redisService.setJobContext(traceId, jobContext);
-  }
-
-  async getJobStateWithStreamLoad(traceId: string, jobType: 'SCAN' | 'SYNC'): Promise<{jobState: JobState, isStreamOverloaded: boolean}> {
-    const jobContext = await this.redisService.getJobContext(traceId);
-    const jobState = await jobContext.getJobState();
-    const isStreamOverloaded = await jobContext.getMigrationTaskLength() > this.migrationTaskLimit;
-    await this.publishPendingTasksToStream(jobContext, jobType);
-    return { jobState, isStreamOverloaded };
-  }
-
-  //deprecated,
-  async fetchOneTask(jobContext: JobContext): Promise<Task | undefined> {
-    try {
-      const tasks = await jobContext.groupReadTasks(this.workerId, 1, GroupReaderType.WORKER);
-      let returnTask = undefined;
-      for await (const task of tasks) {
-        if(task) {
-          returnTask = task;
-        }
-      }
-      return returnTask;
-    } catch (error) {
-      this.logger.error(`[${jobContext.jobRunId}] Failed to fetch the task: ${error}`);
-      return undefined;
-    }
-  }
-
-  //deprecated,
-  async fetchOneMigrationTask(jobContext: JobContext): Promise<Task | undefined> {
-    try {
-      const tasks = await jobContext.groupReadMigrationTask(this.workerId, 1, GroupReaderType.WORKER);
-      let returnTask = undefined;
-      for await (const task of tasks) {
-        if(task) {
-          returnTask = task;
-        }
-      }
-      return returnTask;
-    } catch (error) {
-      this.logger.error(`[${jobContext.jobRunId}] Failed to fetch the task: ${error}`);
-      return undefined;
-    }
-  }
-
-  //deprecated,
-  async getJobStateAndUpdateTaskList(traceId: string, jobType: 'SCAN' | 'SYNC'): Promise<any> {
-    const jobContext = await this.redisService.getJobContext(traceId);
-    await this.publishPendingTasksToStream(jobContext, jobType);
-    return await jobContext.getJobState();
-  } 
-  
-  //deprecated,
-  async publishPendingTasksToStream(jobContext: JobContext, jobType: 'SCAN' | 'SYNC'): Promise<any> {
-    if(jobType === 'SCAN') {
-      const runningScanTasks = await jobContext.getAllRunningScanTasks() as any;
-      if(runningScanTasks && Object.keys(runningScanTasks).length > 0) {
-        for (const task of Object.values(runningScanTasks)) {
-          if(task) {
-            try {
-              this.logger.debug(`[${jobContext.jobRunId}] Appending Scan task to stream: ${JSON.stringify(task)}`);
-              await jobContext.appendToTaskList(JSON.parse(task as string) as Task);
-            }catch (error) {
-              this.logger.error(`[${jobContext.jobRunId}] Failed to append Scan task to stream: ${error}`);
-            }
-          }
-        }
-        await jobContext.deleteAllScanTasks();
-      }
-    }
-    if(jobType === 'SYNC') {
-      const runningSyncTasks = await jobContext.getAllRunningSyncTasks() as any;
-      if(runningSyncTasks && Object.keys(runningSyncTasks).length > 0) {
-        for (const task of  Object.values(runningSyncTasks)) {
-          if(task) {
-             try {
-              this.logger.debug(`[${jobContext.jobRunId}] Appending Sync task to stream: ${JSON.stringify(task)}`);
-              await jobContext.appendToMigrationTask(JSON.parse(task as string) as Task);
-            }catch (error) {
-              this.logger.error(`[${jobContext.jobRunId}] Failed to append Sync task to stream: ${error}`);
-            }
-          }
-        }
-        await jobContext.deleteAllSyncTasks();
-      }
-    }
-  }
-  //deprecated,
   async updateWorkerResponse(jobRunId: string, workerId: string, workerResponse: Record<string, any>) {
     try {
       this.logger.log(`[${jobRunId}] Updating worker response to URL ${this.workerJobServiceUrl}/api/v1/job-run/worker-response/${jobRunId}/${workerId}`);
@@ -228,16 +120,59 @@ export class CommonActivityService{
       return { message: 'Error while updating the worker response for the job id : ' + jobRunId };
     }
   }
-  //deprecated,
-  async hasRunningScanTask(jobRunId: string): Promise<boolean> {
-    const jobContext = await this.redisService.getJobContext(jobRunId);
-    return !(await jobContext.isRunningScanTaskEmpty());
-  }
-  
-  //deprecated,
-  async hasRunningSyncTask(jobRunId: string): Promise<boolean> {
-    const jobContext = await this.redisService.getJobContext(jobRunId);
-    return !(await jobContext.isRunningSyncTaskEmpty());
+
+   async generateDiscoveryReport(jobRunId: string) {
+    try {
+      this.logger.log(`[${jobRunId}] reportServiceUrl to URL ${this.reportServiceUrl}/api/v1/report`);
+      this.logger.log(`[${jobRunId}] Trigger generateDiscoveryReport `);
+      const payload = { jobRunId: jobRunId, "report-type": "DISCOVER" };
+      const accessToken = await this.authService.getAccessToken();
+      if (!accessToken) {
+        throw new Error('Failed to get access token');
+      }
+      await axios.post(
+        `${this.reportServiceUrl}/api/v1/report/inventory/generate-report`,
+        payload,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      this.logger.log(`[${jobRunId}] Trigger generateDiscoveryReport Successful`);
+      return { message: 'Trigger generateDiscoveryReport Successful for job id: ' + jobRunId };
+    } catch (error) {
+      this.logger.error(`[${jobRunId}] Failed to Trigger generateDiscoveryReport: ${error}`);
+      return { message: 'Error while Trigger generateDiscoveryReport the status of the job id : ' + jobRunId };
+    }
   }
 
+  async generateCOCReport(jobRunId: string) {
+    try {
+      this.logger.log(`[${jobRunId}] Triggering generateCOCReport for url : ${this.reportServiceUrl}/api/v1/report/job-run/coc-report/${jobRunId}`);
+      const accessToken = await this.authService.getAccessToken();
+      if (!accessToken) {
+        throw new Error('Failed to get access token');
+      }
+      await axios.get(`${this.reportServiceUrl}/api/v1/report/job-run/coc-report/${jobRunId}`, {headers:{Authorization:`Bearer ${accessToken}`}});
+      this.logger.log(`[${jobRunId}] Triggering generateCOCReport successful`);
+      return { message: 'Triggering generateCOCReport successful for job id: ' + jobRunId };
+    } catch (error) {
+      this.logger.error(`[${jobRunId}] Failed to Trigger generateCOCReport: ${error} | for url : ${this.reportServiceUrl}/api/v1/report/job-run/coc-report/${jobRunId}`);
+      return { message: 'Error while Triggering generateCOCReport for the job id : ' + jobRunId };
+    }
+  }
+
+  async updateCutOverStatus({jobRunId, status}: UpdateCutOverStatusInput): Promise<UpdateStatusOutput> {
+    try {
+      this.logger.log(`[${jobRunId}] Updating cutover status to URL ${this.workerJobServiceUrl}/api/v1/job-run`);
+      this.logger.log(`[${jobRunId}] Updating  cutover status to ${status}`);
+      const accessToken = await this.authService.getAccessToken();
+      if (!accessToken) {
+        throw new Error('Failed to get access token');
+      }
+      await axios.put(`${this.workerJobServiceUrl}/api/v1/job-run/cutover/${jobRunId}/${status}`, {}, {headers:{Authorization:`Bearer ${accessToken}`}});
+      this.logger.log(`[${jobRunId}] status updated to ${status}`);
+      return { message: 'Job status updated for job id: ' + jobRunId };
+    } catch (error) {
+      this.logger.error(`[${jobRunId}] Failed to update status: ${error}`);
+      return { message: 'Error while updating the status of the job id : ' + jobRunId };
+    }
+  } 
 }

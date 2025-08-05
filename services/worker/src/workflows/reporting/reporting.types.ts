@@ -1,6 +1,0 @@
-export enum JobReportType {
-    DISCOVER = 'DISCOVER_REPORTED',
-    MIGRATE = 'MIGRATE_REPORTED',
-    CUT_OVER = 'CUT_OVER_REPORTED'
-} 
-

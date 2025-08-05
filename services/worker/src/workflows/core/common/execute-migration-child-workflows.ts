@@ -1,7 +1,7 @@
 import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
-import { JobRunStatus } from "src/activities/discovery/enums";
+import { JobRunStatus } from "src/activities/common/enums";
 
 
 

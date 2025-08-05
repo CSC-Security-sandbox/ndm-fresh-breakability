@@ -15,7 +15,6 @@ export { PreCheckWorkerValidationWorkflow } from './pre-check/core/pre-check.wor
 export { ValidateWorkingDirectoryWorkerWorkflow } from './working-directory/working-directory-worker.workflow';
 export { ValidateWorkingDirectoryWorkflow } from './working-directory/working-directory.workflow';
 
-export { ReportingWorkflow } from '../workflows/reporting/reporting.workflow';
 
 export { SpeedTestJobWorkflow } from '../workflows/speed-test/speed-test-job-workflow';
 export { SpeedTestWorkflow } from '../workflows/speed-test/speed-test-workflow';

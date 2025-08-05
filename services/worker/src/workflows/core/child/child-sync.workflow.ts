@@ -2,7 +2,7 @@
 import * as wf from '@temporalio/workflow';
 import { proxyActivities } from '@temporalio/workflow';
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
-import { JobRunStatus } from "src/activities/discovery/enums";
+import { JobRunStatus } from "src/activities/common/enums";
 import { updateJobStatusIfNotRunning } from '../common/workflow-utils';
 import { SyncWorkflowOutput } from './chid-scan.workflow.type';
 import { SyncService } from 'src/activities/core/migrate/sync-activity.service';
