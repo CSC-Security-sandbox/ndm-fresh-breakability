@@ -72,7 +72,7 @@
     "ts-loader": "^9.4.3",
     "ts-node": "^10.9.1",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "5.8.3",
+    "typescript": "^5.8.3",
     "typescript-eslint": "^8.29.1"
   },
   "jest": {
@@ -82,7 +82,9 @@
       "ts"
     ],
     "rootDir": "./",
-    "setupFilesAfterEnv": ["<rootDir>/src/test-setup.ts"],
+    "setupFilesAfterEnv": [
+      "<rootDir>/src/test-setup.ts"
+    ],
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
