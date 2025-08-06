@@ -324,68 +324,6 @@ describe("DiscoveryService", () => {
     });
   });
 
-  describe("generateHtmlTable", () => {
-    it("should generate HTML table from data", () => {
-      const mockData = [
-        {
-          category: "Files",
-          sub_category: "Total",
-          valueType: "count",
-          value: "100",
-        },
-        {
-          category: "Files",
-          sub_category: "Processed",
-          valueType: "count",
-          value: "50",
-        },
-      ];
-
-      const groupAndOrderSpy = jest
-        .spyOn(require("../utils/group-order"), "groupAndOrder")
-        .mockReturnValue({
-          Files: [
-            { sub_category: "Total", value: "100" },
-            { sub_category: "Processed", value: "50" },
-          ],
-        });
-
-      const result = service.generateHtmlTable(mockData);
-
-      expect(result).toContain("<table>");
-      expect(result).toContain("<h2>Files</h2>");
-      expect(result).toContain(
-        "<tr>\n            <th>Sub Category</th>\n            <th></th>\n          </tr>"
-      );
-      expect(result).toContain("Total");
-      expect(result).toContain("Processed");
-      expect(result).toContain("100");
-      expect(result).toContain("50");
-    });
-  });
-
-  describe("generatePdfFromData", () => {
-    it("should generate PDF from data", async () => {
-      const mockData = [
-        {
-          category: "Files",
-          sub_category: "Total",
-          valueType: "count",
-          value: "100",
-        },
-      ];
-
-      // Mock the HTML generation
-      const mockHtml = "<html><body>Test HTML</body></html>";
-      jest.spyOn(service, "generateHtmlTable").mockReturnValue(mockHtml);
-
-      const result = await service.generatePdfFromData(mockData);
-
-      expect(result).toBeInstanceOf(Buffer);
-      expect(service.generateHtmlTable).toHaveBeenCalledWith(mockData);
-    });
-  });
-
   describe("createJobsPDFReportData", () => {
     it("should call the stored procedure and return success message", async () => {
       const jobRunId = "job123";

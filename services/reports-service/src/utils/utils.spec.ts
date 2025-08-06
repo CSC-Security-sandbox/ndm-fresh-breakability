@@ -1,4 +1,4 @@
-import { validateFilePath, escapeCsvValue,escapeReportData, sanitizeReportData } from "./utils";
+import { validateFilePath, escapeCsvValue, sanitizeReportData } from "./utils";
 describe("validateFilePath", () => {
   it("should return true for a valid file path", () => {
     expect(validateFilePath("valid-file_path123.txt")).toBe(true);
@@ -75,20 +75,6 @@ describe('validateFilePath', () => {
 
   it('should return false for a file path with spaces', () => {
     expect(validateFilePath('file path with spaces.txt')).toBe(false);
-  });
-});
-
-describe('escapeReportData', () => {
-  it('should escape HTML in a string', () => {
-    expect(escapeReportData('<div>Test & "escape"</div>')).toBe('&lt;div&gt;Test &amp; &quot;escape&quot;&lt;/div&gt;');
-  });
-
-  it('should escape HTML in all string values of an object', () => {
-    expect(escapeReportData({ a: '<b>bold</b>', b: 'plain' })).toEqual({ a: '&lt;b&gt;bold&lt;/b&gt;', b: 'plain' });
-  });
-
-  it('should escape HTML in all string values of an array', () => {
-    expect(escapeReportData(['<i>italic</i>', 'safe'])).toEqual(['&lt;i&gt;italic&lt;/i&gt;', 'safe']);
   });
 });
 

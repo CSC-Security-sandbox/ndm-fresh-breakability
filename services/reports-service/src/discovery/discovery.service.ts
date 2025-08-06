@@ -6,16 +6,17 @@ import {
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import * as path from "path";
-import { InventoryEntity } from "../entities/inventory.entity";
 import { Repository } from "typeorm";
 import * as fs from "fs";
 import * as archiver from "archiver";
-import { ReportsEntity } from "src/entities/reports.entity";
 import puppeteer from "puppeteer";
+import * as hbs from 'hbs';
+
+import { ReportsEntity } from "src/entities/reports.entity";
+import { InventoryEntity } from "../entities/inventory.entity";
 import { groupAndOrder } from "../utils/group-order";
 import {
   escapeCsvValue,
-  escapeReportData,
   sanitizeReportData,
   validateFilePath,
 } from "src/utils/utils";
@@ -97,77 +98,17 @@ export class DiscoveryService {
       );
     }
   }
-  generateHtmlTable(data: any[]): string {
-    const categories: { [key: string]: any[] } = groupAndOrder(
-      data,
-      ReportType.DISCOVERY,
-    );
-    let htmlString = `
-      <html>
-      <head>
-        <style>
-          table {
-            border-collapse: collapse;
-            width: 100%;
-          }
-          th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-          }
-          th {
-            background-color: #f2f2f2;
-          }
-          tr:nth-child(even) {
-            background-color: #f9f9f9;
-          }
-          tr:hover {
-            background-color: #ddd;
-          }
-        </style>
-      </head>
-      <body>
-        <h1>Data Summary</h1>
-    `;
-    for (const category in categories) {
-      htmlString += `
-        <h2>${category}</h2>
-        <table>
-          <tr>
-            <th>Sub Category</th>
-            <th></th>
-          </tr>
-      `;
-
-      categories[category].forEach((entry) => {
-        const subCategory = entry.sub_category;
-        const value = entry.value;
-        if (!!value) {
-          htmlString += `
-          <tr>
-            <td>${subCategory}</td>
-            <td>${value}</td>
-          </tr>
-        `;
-        }
-      });
-      htmlString += `</table>`;
-    }
-
-    htmlString += `
-      </body>
-      </html>
-    `;
-
-    return htmlString;
-  }
 
   async generatePdfFromData(reportData: any[]): Promise<Buffer> {
-    // Sanitize and escape the report data to prevent XSS attacks
     const sanitizedData = sanitizeReportData(reportData);
-    const escapedData = escapeReportData(sanitizedData);
+    const templatePath = path.join(__dirname, '../../templates/views/discovery_pdf_report.hbs');
+    const templateSource = fs.readFileSync(templatePath, 'utf8');
+    const template = hbs.compile(templateSource);
 
-    const htmlOutput = this.generateHtmlTable(escapedData);
+    const categories: { [key: string]: any[] } = groupAndOrder(sanitizedData, ReportType.DISCOVERY);
+
+    // Step 2: Generate HTML from template and data
+    const htmlOutput = template(categories);
     const browser = await puppeteer.launch({
       headless: true,
       args: [
@@ -177,7 +118,6 @@ export class DiscoveryService {
         "--disable-dev-shm-usage",
         "--disable-accelerated-2d-canvas",
       ],
-      executablePath: "/usr/bin/chromium-browser",
       protocolTimeout: 60000,
     });
     const page = await browser.newPage();
