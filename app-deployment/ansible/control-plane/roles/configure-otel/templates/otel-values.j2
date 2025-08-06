@@ -1,0 +1,32 @@
+mode: deployment
+replicaCount: 1
+
+image:
+  repository: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib
+  tag: 0.126.0
+  pullPolicy: IfNotPresent
+
+config:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 0.0.0.0:4318
+  exporters:
+    prometheus:
+      endpoint: 0.0.0.0:8889
+    debug:
+      verbosity: detailed
+
+  service:
+    pipelines:
+      metrics:
+        receivers: [otlp]
+        exporters: [prometheus]
+
+ports:
+  prometheus:
+    enabled: true
+    containerPort: 8889
+    servicePort: 8889
+    protocol: TCP
