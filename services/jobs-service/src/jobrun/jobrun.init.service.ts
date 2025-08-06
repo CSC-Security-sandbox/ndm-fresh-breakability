@@ -141,44 +141,47 @@ export class JobRunInitService {
       );
       return;
     }
-    const workerMap = details.workers.map((worker) =>
-      this.workerJobRunMapRepo.create({
-        workerId: worker,
-        isActive: true,
-        isPathMounted: false,
-      }),
-    );
-
-    const options = this.optionRepo.create({
-      excludeFilePatterns: details.excludeFilePatterns,
-      sourceWorkingDir: this.mountBasePath,
-      targetWorkingDir: this.mountBasePath,
-      preserveAccessTime: details.preserveAccessTime,
-      excludeOlderThan: details.excludeOlderThan,
-    });
-    const jobRunRecord = this.jobRunRepo.create({
-      status: JobRunStatus.Ready,
-      startTime: currentTime,
-      endTime: null,
-      iterationNumber: 1,
-      jobConfigId: jobConfigId,
-      workerMap: workerMap,
-      options: options,
-    });
-    const jobRun = await this.jobRunRepo.save(jobRunRecord);
+    
     await this.jobConfigRepo.update(
       { id: jobConfigId },
       { scheduler: ScheduleStatus.SCHEDULED },
     );
-    if (details.jobType == JobType.SPEED_TEST) {
-      await this.buildSpeedTestJobContext(jobRun.id, details);
-    } else {
+    try {
+      const workerMap = details.workers.map((worker) =>
+        this.workerJobRunMapRepo.create({
+          workerId: worker,
+          isActive: true,
+          isPathMounted: false,
+        }),
+      );
+      const options = this.optionRepo.create({
+        excludeFilePatterns: details.excludeFilePatterns,
+        sourceWorkingDir: this.mountBasePath,
+        targetWorkingDir: this.mountBasePath,
+        preserveAccessTime: details.preserveAccessTime,
+        excludeOlderThan: details.excludeOlderThan,
+      });
+      const jobRun = this.jobRunRepo.create({
+        id: uuid4(),
+        status: JobRunStatus.Ready,
+        startTime: currentTime,
+        endTime: null,
+        iterationNumber: 1,
+        jobConfigId: jobConfigId,
+        workerMap: workerMap,
+        options: options,
+      });
       await this.buildJobContext(jobRun.id, details);
+      await this.initiateWorkflow(jobRun.id, details);
+      jobRun.workFlowId = getWorkflowId(jobRun.id, details.jobType);
+      return await this.jobRunRepo.save(jobRun);
+    } catch (error) {
+      this.logger.error(`Failed to create job run for ${jobConfigId}: ${error.message}`);
+      await this.jobConfigRepo.update(
+        { id: jobConfigId },
+        { scheduler: ScheduleStatus.SCHEDULING },
+      );
     }
-    await this.initiateWorkflow(jobRun.id, details);
-    const workflowId = getWorkflowId(jobRun.id, details.jobType);
-    await this.jobRunRepo.update({ id: jobRun.id },{ workFlowId: workflowId });
-    return jobRun;
   }
 
   async getJobConfigSpeedTest(jobConfigId): Promise<JobRunConfig> {
@@ -445,7 +448,7 @@ export class JobRunInitService {
       );
     }
   }
-
+  // TODO deprecated, remove later
   // ------------------ BuildJobContext for SpeedTest -------------------- //
   async buildSpeedTestJobContext(jobRunId: string, jobRunConfig: JobRunConfig) {
     const jobRun = await this.jobRunRepo.findOne({
@@ -590,50 +593,16 @@ export class JobRunInitService {
       },
       jobRunConfig.skipDelete,
     );
-
-    const task = await this.createInitialTask(jobRunId, jobRunConfig);
     const redisProvider = JobContextFactory.getJobManagerProvider("redis", redisClient);
     const jobContext = await redisProvider.buildContext(
       jobRunId,
       jobConfig,
       JobRunStatus.Ready,
     );
-
     await this.redisService.setJobContext(jobRunId, jobContext);
     this.logger.debug("JobContext Saved to Redis");
   }
 
-  // ------------------ CreateInitialTask -------------------- //
-  async createInitialTask(
-    jobRunId: string,
-    jobRunConfig: JobRunConfig,
-  ): Promise<Task> {
-    const commands = new Command(
-      "",
-      { 0: { cmd: OPS_CMD.COPY_DIR, status: OPS_STATUS.READY } },
-      uuid4(),
-      0,
-    );
-    const task = new Task(
-      uuid4(),
-      jobRunId,
-      TaskType.SCAN,
-      TaskStatus.PENDING,
-      jobRunConfig.workers[0],
-      `${jobRunConfig.connection.sourceCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.sourceCredential.pathId}`,
-      jobRunConfig.connection.sourceCredential.pathId,
-      [commands],
-      jobRunConfig.jobType !== JobType.DISCOVER
-        ? `${jobRunConfig.connection.targetCredential.workingDirectory}/${jobRunId}/${jobRunConfig.connection.targetCredential.pathId}`
-        : "",
-      jobRunConfig.jobType !== JobType.DISCOVER
-        ? jobRunConfig.connection.targetCredential.pathId
-        : "",
-      jobRunConfig.excludeFilePatterns,
-    );
-    this.logger.log("Initial Task created ---> ", JSON.stringify(task));
-    return task;
-  }
 
   // ------------------ StartStreamConsumer -------------------- //
   async startStreamConsumer(jobRunId: string) {
