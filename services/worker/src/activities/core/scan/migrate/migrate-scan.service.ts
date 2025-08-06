@@ -10,6 +10,7 @@ import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishCommandInput } from "./migrate-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { isPathExists } from "../../utils/utils";
 
 @Injectable()
 export class MigrateScanService {
@@ -33,15 +34,14 @@ export class MigrateScanService {
 
 
     async publishCommands({ jobContext, commands}: PublishCommandInput)  {
-        //TODO: make bulk publish to command stream. 
-        for(const command of commands)
-            await jobContext.publishToCommandStream(command);
+        await jobContext.publishBulkToCommandStream(commands);
     }
 
     async getDirContents({path, origin, jobContext, errorType, command}: DirContentsInput): Promise<Set<string>>{
         let content = new Set<string>();
         try{
-            if (!fs.existsSync(path)) {
+            const pathExists = await isPathExists(path);
+            if (!pathExists) {
                 if (origin === Origin.SOURCE)  
                     throw new FatalError(`Source directory does not exist: ${path}`);
                 return content; 
@@ -69,8 +69,8 @@ export class MigrateScanService {
         for (const item of sourceContent) {
             try {
                 const sourceContentPath = path.join(sourcePath, item);
-                if (!fs.existsSync(sourceContentPath)) continue;
-
+                const sourceContentExists = await isPathExists(sourceContentPath);
+                if (!sourceContentExists) continue;                
                 const sourceStat = await fs.promises.lstat(sourceContentPath);
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
                 
@@ -106,7 +106,8 @@ export class MigrateScanService {
                     if (command) commands.push(command);
                 } else {
                     const targetFilePath = path.join(targetPath, item);
-                    if (fs.existsSync(targetFilePath)) {
+                    const targetFileExists = await isPathExists(targetFilePath);
+                    if (targetFileExists) {
                        const targetStatLstat = await fs.promises.lstat(targetFilePath);
                         let targetStat: fs.Stats;
                         if (targetStatLstat.isSymbolicLink()) {
@@ -131,6 +132,7 @@ export class MigrateScanService {
                 throw error; 
             }
         }
+        
         if (jobContext?.jobConfig?.skipDelete === false) {
             //TODO: remove command as it is not required. 
             await this.processDeletedItems({
@@ -166,7 +168,8 @@ export class MigrateScanService {
             if (!sourceContent.has(targetItem)) {
                 const targetContentPath = path.join(targetPath, targetItem);
                 try {
-                    if (fs.existsSync(targetContentPath)) {
+                    const targetContentExists = await isPathExists(targetContentPath);
+                    if (targetContentExists) {
                         const targetStat = await fs.promises.lstat(targetContentPath);
                         const relativeSourcePath = removePrefix(targetContentPath, targetPrefix);
                         const deleteCommand = this.buildCommand(null, relativeSourcePath, targetStat);
@@ -188,8 +191,9 @@ export class MigrateScanService {
         }
     }
 
-    buildCommand = (sFile: fs.Stats, fPath: string, dFile?: fs.Stats): Cmd | undefined => {
-         if (!sFile) {
+    buildCommand = (sFile: fs.Stats | undefined, fPath: string, dFile?: fs.Stats): Cmd | undefined => {
+        
+        if (!sFile) {
             const isDirectory = dFile ? dFile.isDirectory() : false;
             return new Cmd(
                 uuid4(),
@@ -197,12 +201,12 @@ export class MigrateScanService {
                 CommandStatus.READY,
                 isDirectory,
                 {
-                    [isDirectory ? OPS_CMD.REMOVE_DIR:  OPS_CMD.REMOVE_FILE] : 
-                    { status: OPS_STATUS.READY, params: {} }
+                    [isDirectory ? OPS_CMD.REMOVE_DIR : OPS_CMD.REMOVE_FILE]:
+                        { status: OPS_STATUS.READY, params: {} }
                 }
             )
         }
-        const metadata: CmdMeta =  { 
+        const metadata: CmdMeta = {
             size: sFile.size,
             mtime: sFile.mtime,
             mode: sFile.mode,
@@ -212,31 +216,38 @@ export class MigrateScanService {
             ctime: sFile.ctime,
             birthtime: sFile.birthtime,
             sid: undefined
-        } 
-        if (isContentUpdate(sFile, dFile) ) {
+        }
+        if ((process.platform == 'linux' || process.platform == 'darwin') && isContentUpdate(sFile, dFile)) {
             const isDirectory = sFile.isDirectory();
-            return new Cmd (
+            return new Cmd(
                 uuid4(),
                 fPath,
                 CommandStatus.READY,
                 isDirectory,
                 {
                     [isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE]: { status: OPS_STATUS.READY, params: {} },
-                    [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: { } }
+                    [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: {} }
                 },
                 metadata,
             )
         }
-        if(isMetaUpdated(sFile, dFile) ) {
+         this.logger.log(`isMetaUpdated ${isMetaUpdated(sFile, dFile)}`);
+         this.logger.log(`source ctime ${sFile.ctime}`);
+         this.logger.log(`destination ctime ${dFile?.ctime}`);
+        if (process.platform == 'win32' && (isMetaUpdated(sFile, dFile) || isContentUpdate(sFile, dFile))) {
+            const isContentUpdatedFlag = isContentUpdate(sFile, dFile);
+            this.logger.log(`content update ` + isContentUpdate);
+            this.logger.log(`isMetaUpdated ${isMetaUpdated(sFile, dFile)}`);
             const isDirectory = sFile.isDirectory();
-            return new Cmd (
+            this.logger.log(`Meta update detected for isMetaUpdated ${fPath}`);
+            return new Cmd(
                 uuid4(),
                 fPath,
                 CommandStatus.READY,
                 isDirectory,
                 {
-                    [isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE]: { status: OPS_STATUS.COMPLETED, params: {} },
-                    [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: { } }
+                    [isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE]: { status: isContentUpdatedFlag ? OPS_STATUS.READY : OPS_STATUS.COMPLETED, params: {} },
+                    [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: {} }
                 },
                 metadata,
             )

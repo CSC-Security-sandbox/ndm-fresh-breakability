@@ -76,16 +76,6 @@ export const shouldExcludeOlderThan = (stats: fs.Stats, olderThan: Date): boolea
 
 export const shouldExcludeOrSkip = ({ fullPath, stats, excludePatterns, skipTime, olderThan, jobType }: ExcludeOrSkipParams): boolean => (shouldExclude(fullPath, excludePatterns) || shouldSkipFile(stats, skipTime, jobType) || shouldExcludeOlderThan(stats, olderThan));
 
-export const getJobConnection = async ({jobRunId}: GetJobConnectionInput): Promise<GetJobConnectionOutput> => {
-    const redisClient = await new RedisUtils().getClient();
-    if (!redisClient.isOpen) {
-        await redisClient.connect();
-        console.log(`job run ${jobRunId}, Connected to Redis client.`);
-    }
-    const contextProvider = JobContextFactory.getProvider('redis', redisClient);
-    const jobContext = await contextProvider.getJobContext(jobRunId);
-    return {jobContext, connectionClient: redisClient}
-}
 
 
 export function getFileType(stats: fs.Stats, isDirectory:boolean): FileType {
@@ -150,8 +140,8 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobC
   ''
 )
 
-export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats) => !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString())
-export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats) => !dFile || (sFile.ctime.toISOString() > dFile.ctime.toISOString())
+export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats) => !dFile || (sFile.size !== dFile.size) || (sFile.mtimeMs !== dFile.mtimeMs)
+export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats) => !dFile || (sFile.ctimeMs > dFile.ctimeMs)
 
 export const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false,  2048, true, new Date(), new Date(), new Date(), "", "", "", 0, 1001, 1001);
 export const generateDummyItemEntry: ItemInfo = new ItemInfo(

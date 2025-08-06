@@ -103,3 +103,13 @@ export interface PreCheckWorkflowOPayload {
   },
   preChecks: PreChecks[]
 }
+
+export interface PreCheckCircularDependency {
+  status: string;
+  jobId: string;
+  jobRunIds: string[];
+  sourcePathId: string;
+  targetPathId: string;
+  sourceServerId: string;
+  targetServerId: string;
+}

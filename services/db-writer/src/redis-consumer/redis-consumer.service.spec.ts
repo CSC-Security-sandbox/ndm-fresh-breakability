@@ -1,12 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { Logger } from '@nestjs/common';
 import { RedisConsumerService } from './redis-consumer.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { WorkflowService } from '../workflow/workflow.service';
 import { ConsumerType } from '../enum/redis-consumer.enum';
-import { GroupReaderType, JobContextFactory, JobManagerContext } from '@netapp-cloud-datamigrate/jobs-lib';
-import { Worker } from 'worker_threads';
-import { redisUtils, ReaderStatus, getWorkflowId } from './utils';
+import { JobContextFactory, JobManagerContext } from '@netapp-cloud-datamigrate/jobs-lib';
+import { RedisUtils } from '@netapp-cloud-datamigrate/jobs-lib/dist/redis/redis-utils';
 
 // Mock problematic modules first
 jest.mock('app-root-path', () => ({
@@ -24,18 +22,18 @@ jest.mock('typeorm', () => ({
   getConnection: jest.fn(),
   getRepository: jest.fn(),
   Entity: jest.fn(() => (target: any) => target),
-  Column: jest.fn(() => (target: any, propertyKey: string) => {}),
-  PrimaryGeneratedColumn: jest.fn(() => (target: any, propertyKey: string) => {}),
-  CreateDateColumn: jest.fn(() => (target: any, propertyKey: string) => {}),
-  UpdateDateColumn: jest.fn(() => (target: any, propertyKey: string) => {}),
-  OneToMany: jest.fn(() => (target: any, propertyKey: string) => {}),
-  ManyToOne: jest.fn(() => (target: any, propertyKey: string) => {}),
-  JoinColumn: jest.fn(() => (target: any, propertyKey: string) => {}),
+  Column: jest.fn(() => (_target: any, _propertyKey: string) => {}),
+  PrimaryGeneratedColumn: jest.fn(() => (_target: any, _propertyKey: string) => {}),
+  CreateDateColumn: jest.fn(() => (_target: any, _propertyKey: string) => {}),
+  UpdateDateColumn: jest.fn(() => (_target: any, _propertyKey: string) => {}),
+  OneToMany: jest.fn(() => (_target: any, _propertyKey: string) => {}),
+  ManyToOne: jest.fn(() => (_target: any, _propertyKey: string) => {}),
+  JoinColumn: jest.fn(() => (_target: any, _propertyKey: string) => {}),
 }));
 
 // Mock NestJS TypeORM module
 jest.mock('@nestjs/typeorm', () => ({
-  InjectRepository: jest.fn(() => (target: any, propertyKey: string | symbol | undefined, parameterIndex: number) => {}),
+  InjectRepository: jest.fn(() => (_target: any, _propertyKey: string | symbol | undefined, _parameterIndex: number) => {}),
   TypeOrmModule: {
     forRoot: jest.fn(),
     forFeature: jest.fn(),
@@ -61,6 +59,11 @@ jest.mock('../workflow/workflow.service', () => ({
 
 // Mock external dependencies
 jest.mock('@netapp-cloud-datamigrate/jobs-lib');
+jest.mock('@netapp-cloud-datamigrate/jobs-lib/dist/redis/redis-utils', () => ({
+  RedisUtils: {
+    getClient: jest.fn(),
+  },
+}));
 jest.mock('@temporalio/common', () => ({
   defaultDataConverter: {
     payloadConverter: {
@@ -76,7 +79,6 @@ jest.mock('@temporalio/common', () => ({
 jest.mock('./utils', () => ({
   redisUtils: {
     getClient: jest.fn(),
-    releaseClient: jest.fn(),
   },
   getWorkflowId: jest.fn((jobRunId: string, jobType: string) => `${jobType}Workflow-${jobRunId}`),
   ReaderStatus: {
@@ -90,7 +92,7 @@ jest.mock('path');
 describe('RedisConsumerService', () => {
   let service: RedisConsumerService;
   let inventoryService: jest.Mocked<InventoryService>;
-  let workflowService: jest.Mocked<WorkflowService>;
+  let _workflowService: jest.Mocked<WorkflowService>;
   let mockRedisClient: jest.Mocked<any>;
   let mockJobContext: jest.Mocked<JobManagerContext>;
   let mockContextProvider: jest.Mocked<any>;
@@ -128,8 +130,7 @@ describe('RedisConsumerService', () => {
     };
 
     (JobContextFactory.getJobManagerProvider as jest.Mock).mockReturnValue(mockContextProvider);
-    (redisUtils.getClient as jest.Mock).mockResolvedValue(mockRedisClient);
-    (redisUtils.releaseClient as jest.Mock).mockResolvedValue(undefined);
+    (RedisUtils.getClient as jest.Mock).mockResolvedValue(mockRedisClient);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -154,7 +155,7 @@ describe('RedisConsumerService', () => {
 
     service = module.get<RedisConsumerService>(RedisConsumerService);
     inventoryService = module.get(InventoryService);
-    workflowService = module.get(WorkflowService);
+    _workflowService = module.get(WorkflowService);
 
     // Clear all mocks
     jest.clearAllMocks();
@@ -169,27 +170,21 @@ describe('RedisConsumerService', () => {
     it('should initialize Redis connection successfully', async () => {
       // Reset the client to null to test initialization
       service['redisClient'] = null;
-      (redisUtils.getClient as jest.Mock).mockResolvedValue(mockRedisClient);
+      (RedisUtils.getClient as jest.Mock).mockResolvedValue(mockRedisClient);
 
       await service.initializeRedisConnection();
 
-      expect(redisUtils.getClient).toHaveBeenCalled();
+      expect(RedisUtils.getClient).toHaveBeenCalled();
       expect(service['redisClient']).toBe(mockRedisClient);
-    });
-
-    it.skip('should handle Redis connection failure with retry logic', async () => {
-      // This test is skipped because it involves complex retry logic with timeouts
-      // that are difficult to mock in unit tests. The retry behavior is tested
-      // in integration tests instead.
     });
 
     it('should reinitialize Redis client if not available', async () => {
       service['redisClient'] = null;
-      (redisUtils.getClient as jest.Mock).mockResolvedValue(mockRedisClient);
+      (RedisUtils.getClient as jest.Mock).mockResolvedValue(mockRedisClient);
 
       await service.updateConsumerStatus(mockJobRunId, ConsumerType.files, 'active');
 
-      expect(redisUtils.getClient).toHaveBeenCalled();
+      expect(RedisUtils.getClient).toHaveBeenCalled();
       expect(mockRedisClient.hSet).toHaveBeenCalled();
     });
 
@@ -197,11 +192,11 @@ describe('RedisConsumerService', () => {
       // Set client to existing mock with isOpen = true
       mockRedisClient.isOpen = true;
       service['redisClient'] = mockRedisClient;
-      (redisUtils.getClient as jest.Mock).mockClear(); // Clear previous calls
+      (RedisUtils.getClient as jest.Mock).mockClear(); // Clear previous calls
 
       await service.initializeRedisConnection();
 
-      expect(redisUtils.getClient).toHaveBeenCalledTimes(0);
+      expect(RedisUtils.getClient).toHaveBeenCalledTimes(0);
       expect(service['redisClient']).toBe(mockRedisClient);
     });
   });
@@ -432,7 +427,6 @@ describe('RedisConsumerService', () => {
         mockJobRunId,
         mockPathId
       );
-      expect(redisUtils.releaseClient).toHaveBeenCalledWith(mockRedisClient);
       expect(service['jobConsumerMap'].size).toBe(0);
       expect(service['activeWorkers'].size).toBe(0);
     });

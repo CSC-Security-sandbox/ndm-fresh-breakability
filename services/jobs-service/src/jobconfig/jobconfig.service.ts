@@ -701,7 +701,6 @@ export class JobConfigService {
                 const redisClient = await this.redisService.getClient();
                 for (const jobRun of jobRunIdsToDeleteKey) {
                   const redisKey = `${jobRun.id}:mapping`;
-                  if (!redisClient.isOpen) await redisClient.connect();
 
                   const redisKeyExists = await redisClient.exists(redisKey);
                   if (redisKeyExists) {

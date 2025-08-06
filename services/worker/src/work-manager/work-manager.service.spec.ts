@@ -6,7 +6,10 @@ import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { WorkerOptionsService } from './factory/worker-options.factory.service';
 import { AuthService } from 'src/auth/auth.service';
-import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 import { mockLoggerFactory } from '../auth/auth.service.spec';
 
 jest.mock('@nestjs/axios');
@@ -48,7 +51,7 @@ describe('WorkManagerService', () => {
           'worker.workerId': 'worker-1',
           'worker.workerStartupTimeout': 10,
           'worker.platform': 'LINUX',
-          'temporal': {},
+          temporal: {},
         };
         return map[key];
       }),
@@ -57,7 +60,9 @@ describe('WorkManagerService', () => {
       get: jest.fn(),
     };
     workerOptions = {
-      createWorkerOptions: jest.fn().mockReturnValue({ taskQueue: 'tq', identity: 'id' }),
+      createWorkerOptions: jest
+        .fn()
+        .mockReturnValue({ taskQueue: 'tq', identity: 'id' }),
     };
     authService = {
       getAccessToken: jest.fn().mockResolvedValue('token'),
@@ -68,9 +73,7 @@ describe('WorkManagerService', () => {
         WorkManagerService,
         { provide: ConfigService, useValue: configService },
         { provide: HttpService, useValue: httpService },
-        { provide: LoggerFactory,
-          useValue: mockLoggerFactory,
-        },
+        { provide: LoggerFactory, useValue: mockLoggerFactory },
         { provide: WorkerOptionsService, useValue: workerOptions },
         { provide: AuthService, useValue: authService },
       ],
@@ -94,7 +97,8 @@ describe('WorkManagerService', () => {
 
   describe('onApplicationBootstrap', () => {
     it('should connect to temporal', async () => {
-      const nativeConnect = require('@temporalio/worker').NativeConnection.connect;
+      const nativeConnect =
+        require('@temporalio/worker').NativeConnection.connect;
       const clientConnect = require('@temporalio/client').Connection.connect;
       nativeConnect.mockResolvedValue('native-conn');
       clientConnect.mockResolvedValue('client-conn');
@@ -106,10 +110,13 @@ describe('WorkManagerService', () => {
     });
 
     it('should log and throw on connection error', async () => {
-      const nativeConnect = require('@temporalio/worker').NativeConnection.connect;
+      const nativeConnect =
+        require('@temporalio/worker').NativeConnection.connect;
       nativeConnect.mockRejectedValue(new Error('fail'));
       await expect(service.onApplicationBootstrap()).rejects.toThrow('fail');
-      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error on setting temporal connection:'));
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error on setting temporal connection:'),
+      );
     });
   });
 
@@ -117,7 +124,9 @@ describe('WorkManagerService', () => {
     it('should skip if already loading configs', async () => {
       service['loadingConfigs'] = true;
       await service.handleCron();
-      expect(logger.debug).toHaveBeenCalledWith('Already loading configurations, skipping this cycle.');
+      expect(logger.debug).toHaveBeenCalledWith(
+        'Already loading configurations, skipping this cycle.',
+      );
     });
 
     it('should fetch configs, handle them, and monitor task queues', async () => {
@@ -138,9 +147,13 @@ describe('WorkManagerService', () => {
 
     it('should log error if fetching configs fails', async () => {
       authService.getAccessToken.mockResolvedValue('token');
-      httpService.get.mockImplementation(() => { throw new Error('fail'); });
+      httpService.get.mockImplementation(() => {
+        throw new Error('fail');
+      });
       await service.handleCron();
-      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error fetching configurations:'));
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error fetching configurations:'),
+      );
       expect(service['loadingConfigs']).toBe(false);
     });
   });
@@ -157,7 +170,9 @@ describe('WorkManagerService', () => {
       jest.spyOn(service, 'startWorker').mockResolvedValue(undefined);
 
       const configs = [{ id: 1, platform: 'LINUX' }];
-      jest.spyOn(require('src/utils/worker-manager.mappers'), 'getWorkerIdentity').mockReturnValueOnce('new');
+      jest
+        .spyOn(require('src/utils/worker-manager.mappers'), 'getWorkerIdentity')
+        .mockReturnValueOnce('new');
 
       await service.handleConfigurations(configs as any);
 
@@ -170,7 +185,8 @@ describe('WorkManagerService', () => {
     it('should create, run, and track worker', async () => {
       const Worker = require('@temporalio/worker').Worker;
       const mockWorker = {
-        getState: jest.fn()
+        getState: jest
+          .fn()
           .mockReturnValueOnce('INITIALIZED')
           .mockReturnValueOnce('RUNNING'),
         run: jest.fn(),
@@ -189,14 +205,17 @@ describe('WorkManagerService', () => {
       const Worker = require('@temporalio/worker').Worker;
       Worker.create.mockRejectedValue(new Error('fail'));
       await service.startWorker('id', { taskQueue: 'tq', identity: 'id' });
-      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error starting worker id:'));
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error starting worker id:'),
+      );
     });
   });
 
   describe('shutdownWorker', () => {
     it('should shutdown gracefully and remove from taskQueues', async () => {
       const mockWorker = {
-        getState: jest.fn()
+        getState: jest
+          .fn()
           .mockReturnValueOnce('RUNNING')
           .mockReturnValueOnce('STOPPED'),
         shutdown: jest.fn(),

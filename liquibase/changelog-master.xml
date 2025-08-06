@@ -44,6 +44,13 @@
       <rollback>
       </rollback>
    </changeSet>
+
+   <changeSet id="20250729_01_alter_worker_table_add_env_variables.sql" author="rutuja">
+      <sqlFile path="liquibase/20250729_01_alter_worker_table_add_env_variables.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/rollback/20250729_01_alter_worker_table_add_env_variables_rollback.sql"/>
+      </rollback>
+   </changeSet>
    
    <changeSet id="20250228_01_error_message_column.sql" author="aniketd">
       <sqlFile path="liquibase/20250228_01_error_message_column.sql"/>
@@ -420,6 +427,20 @@
    <changeSet id="20250729_01_add_listusers_permission_to_project_viewer_role" author="mshubha1">
       <sqlFile path="liquibase/20250729_01_add_listusers_permission_to_project_viewer_role.sql" splitStatements="false"/>
       <rollback> </rollback>
+   </changeSet>
+
+   <changeSet id="20250714_01_create_support_bundle_table.sql" author="aniketd">
+      <sqlFile path="liquibase/20250714_01_create_support_bundle_table.sql" splitStatements="false"/>
+      <rollback>
+         <sqlFile path="liquibase/20250714_01_create_support_bundle_table_rollback.sql"/>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250804_01_add_createproject_permission" author="aniketd">
+      <sqlFile path="liquibase/20250804_01_add_createproject_permission.sql" splitStatements="false"/>
+      <rollback>
+         <sqlFile path="liquibase/20250804_01_add_createproject_permission_rollback.sql"/>
+      </rollback>
    </changeSet>
 
 </databaseChangeLog>

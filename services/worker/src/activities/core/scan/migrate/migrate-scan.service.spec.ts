@@ -19,6 +19,7 @@ jest.mock('fs', () => {
             readdir: jest.fn(),
             lstat: jest.fn(),
             stat: jest.fn(),
+            access: jest.fn(),
         },
     };
 });
@@ -73,6 +74,7 @@ describe('MigrateScanService', () => {
         jobContext = {
             publishToErrorStream: jest.fn(),
             publishToCommandStream: jest.fn(),
+            publishBulkToCommandStream: jest.fn(),
             jobConfig: {
                 options: {
                     excludeOlderThan: new Date('2023-01-01'),
@@ -99,7 +101,7 @@ describe('MigrateScanService', () => {
     // --- getDirContents ---
     describe('getDirContents', () => {
         it('should return directory contents', async () => {
-            (fs.existsSync as jest.Mock).mockReturnValue(true);
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             (fs.promises.readdir as jest.Mock).mockResolvedValue(['file1', 'dir1']);
 
             const result = await service.getDirContents({
@@ -114,7 +116,7 @@ describe('MigrateScanService', () => {
         });
 
         it('should return empty set for missing target dir', async () => {
-            (fs.existsSync as jest.Mock).mockReturnValue(false);
+            jest.spyOn(fs.promises, 'access').mockRejectedValue({ code: 'ENOENT' });
             const result = await service.getDirContents({
                 path: '/missing',
                 origin: Origin.DESTINATION,
@@ -126,7 +128,7 @@ describe('MigrateScanService', () => {
         });
 
         it('should throw for missing source dir', async () => {
-            (fs.existsSync as jest.Mock).mockReturnValue(false);
+            jest.spyOn(fs.promises, 'access').mockRejectedValue({ code: 'ENOENT' });
             await expect(
                 service.getDirContents({
                     path: '/bad',
@@ -204,20 +206,21 @@ describe('MigrateScanService', () => {
 
     // --- publishCommands ---
     describe('publishCommands', () => {
-        it('should call publishToCommandStream for each command in publishCommands', async () => {
+        it('should call publishBulkToCommandStream for bulk commands in publishCommands', async () => {
             const commands = [
                 new Cmd('cmd1', '/src/file1', CommandStatus.READY, false, { COPY_FILE: { status: 'READY', params: {} } }),
                 new Cmd('cmd2', '/src/file2', CommandStatus.READY, false, { COPY_FILE: { status: 'READY', params: {} } }),
             ];
             await service.publishCommands({ jobContext, commands });
-            expect(jobContext.publishToCommandStream).toHaveBeenCalledTimes(2);
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledTimes(1);
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledWith(commands);
         });
     });
 
     // --- scanDirectory ---
     describe('scanDirectory', () => {
         it('should skip excluded items', async () => {
-            (fs.existsSync as jest.Mock).mockReturnValue(true);
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             (fs.promises.readdir as jest.Mock).mockResolvedValue(['file1']);
             (fs.promises.lstat as jest.Mock).mockResolvedValue({
                 isDirectory: () => false,
@@ -234,11 +237,11 @@ describe('MigrateScanService', () => {
             (shouldExcludeOrSkip as jest.Mock).mockReturnValue(true);
             const result = await service.scanDirectory(commandInput);
             expect(result.fileCount).toBe(0);
-            expect(jobContext.publishToCommandStream).not.toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
         });
 
         it('should chunk commands and call publishCommands in scanDirectory', async () => {
-            (fs.existsSync as jest.Mock).mockReturnValue(true);
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             (fs.promises.readdir as jest.Mock).mockResolvedValue(['file1', 'file2', 'file3']);
             (fs.promises.lstat as jest.Mock).mockResolvedValue({
                 isDirectory: () => false,
@@ -265,11 +268,11 @@ describe('MigrateScanService', () => {
 
             await service.scanDirectory(commandInput);
 
-            expect(jobContext.publishToCommandStream).toHaveBeenCalledTimes(3);
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledTimes(2);
         });
 
         it('should increment dirCount and subDirs for directories and publish command if not in target', async () => {
-            (fs.existsSync as jest.Mock).mockReturnValue(true);
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             (fs.promises.readdir as jest.Mock).mockResolvedValue(['dir1']);
             (fs.promises.lstat as jest.Mock).mockResolvedValue({
                 isDirectory: () => true,
@@ -295,11 +298,11 @@ describe('MigrateScanService', () => {
 
             const result = await service.scanDirectory(commandInput);
             expect(result.dirCount).toBe(1);
-            expect(jobContext.publishToCommandStream).toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalled();
         });
 
         it('should not increment dirCount for symlink directories', async () => {
-            (fs.existsSync as jest.Mock).mockReturnValue(true);
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             (fs.promises.readdir as jest.Mock).mockResolvedValue(['dir1']);
             (fs.promises.lstat as jest.Mock).mockResolvedValue({
                 isDirectory: () => true,
@@ -326,7 +329,7 @@ describe('MigrateScanService', () => {
         });
 
         it('should build and publish command for file not present in target', async () => {
-            (fs.existsSync as jest.Mock).mockReturnValue(true);
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             (fs.promises.readdir as jest.Mock).mockResolvedValue(['file1']);
             (fs.promises.lstat as jest.Mock).mockResolvedValue({
                 isDirectory: () => false,
@@ -352,14 +355,11 @@ describe('MigrateScanService', () => {
 
             const result = await service.scanDirectory(commandInput);
             expect(result.fileCount).toBe(1);
-            expect(jobContext.publishToCommandStream).toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalled();
         });
 
         it('should build and publish command for file present in target if content updated', async () => {
-            (fs.existsSync as jest.Mock).mockImplementation((p: string) => {
-                // simulate both source and target file exist
-                return true;
-            });
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             (fs.promises.readdir as jest.Mock).mockResolvedValue(['file1']);
             (fs.promises.lstat as jest.Mock).mockResolvedValue({
                 isDirectory: () => false,
@@ -373,7 +373,7 @@ describe('MigrateScanService', () => {
                 ctime: new Date(),
                 birthtime: new Date(),
             });
-            (fs.statSync as jest.Mock).mockReturnValue({
+            (fs.promises.stat as jest.Mock).mockResolvedValue({
                 isDirectory: () => false,
                 isSymbolicLink: () => false,
                 size: 50,
@@ -397,28 +397,38 @@ describe('MigrateScanService', () => {
             });
 
             const result = await service.scanDirectory(commandInput);
-            expect(jobContext.publishToCommandStream).toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalled();
         });
 
-        it('should skip item if fs.existsSync returns false for sourceContentPath', async () => {
-            // Only the directory exists, not the file inside
-            (fs.existsSync as jest.Mock).mockImplementation((p: string) => p === '/src');
-            (fs.promises.readdir as jest.Mock).mockResolvedValue(['file1']);
-            (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
-
-            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ path, origin }) => {
+        it('should skip item if fs.promises.access returns false for sourceContentPath', async () => {
+            // Mock getDirContents to return source directory contents, but access fails for individual files
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
                 if (origin === Origin.SOURCE) return new Set(['file1']);
                 return new Set();
             });
+            
+            // Mock fs.promises.access to fail for the specific file path
+            jest.spyOn(fs.promises, 'access').mockImplementation(async (path: string) => {
+                if (path.includes('file1')) {
+                    throw { code: 'ENOENT' };
+                }
+                return undefined;
+            });
+            
+            (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
 
             const result = await service.scanDirectory(commandInput);
             expect(result.fileCount).toBe(0);
-            expect(jobContext.publishToCommandStream).not.toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
         });
 
         it('should handle error and publish to error stream', async () => {
-            (fs.existsSync as jest.Mock).mockReturnValue(true);
-            (fs.promises.readdir as jest.Mock).mockResolvedValue(['badfile']);
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set(['badfile']);
+                return new Set();
+            });
+            
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             (fs.promises.lstat as jest.Mock).mockRejectedValue(new Error('fail'));
 
             await expect(service.scanDirectory(commandInput)).rejects.toThrow('fail');
@@ -426,8 +436,12 @@ describe('MigrateScanService', () => {
         });
 
         it('should handle error thrown by buildCommand and publish to error stream', async () => {
-            (fs.existsSync as jest.Mock).mockReturnValue(true);
-            (fs.promises.readdir as jest.Mock).mockResolvedValue(['file1']);
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set(['file1']);
+                return new Set();
+            });
+            
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             (fs.promises.lstat as jest.Mock).mockResolvedValue({
                 isDirectory: () => false,
                 isSymbolicLink: () => false,
@@ -445,18 +459,12 @@ describe('MigrateScanService', () => {
             (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/file1' });
             (isContentUpdate as jest.Mock).mockImplementation(() => { throw new Error('buildCommand error'); });
 
-            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ path, origin }) => {
-                if (origin === Origin.SOURCE) return new Set(['file1']);
-                return new Set();
-            });
-
             await expect(service.scanDirectory(commandInput)).rejects.toThrow('buildCommand error');
             expect(jobContext.publishToErrorStream).toHaveBeenCalled();
         });
 
         it('should use TRANSIENT_ERROR if retryCount exceeds maxRetryCount', async () => {
-            (fs.existsSync as jest.Mock).mockReturnValue(true);
-            (fs.promises.readdir as jest.Mock).mockResolvedValue(['file1']);
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             (fs.promises.lstat as jest.Mock).mockResolvedValue({
                 isDirectory: () => false,
                 isSymbolicLink: () => false,
@@ -485,14 +493,11 @@ describe('MigrateScanService', () => {
             };
 
             await service.scanDirectory(highRetryInput);
-            expect(jobContext.publishToCommandStream).toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalled();
         });
 
         it('should handle empty source directory gracefully', async () => {
-            (fs.existsSync as jest.Mock).mockReturnValue(true);
-            (fs.promises.readdir as jest.Mock).mockResolvedValue([]);
-            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ path, origin }) => {
-                if (origin === Origin.SOURCE) return new Set();
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
                 return new Set();
             });
 
@@ -500,19 +505,19 @@ describe('MigrateScanService', () => {
             expect(result.fileCount).toBe(0);
             expect(result.dirCount).toBe(0);
             expect(result.subDirs).toHaveLength(0);
-            expect(jobContext.publishToCommandStream).not.toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
         });
         it('should skip delete when skipDelete is true', async () => {
             jobContext.jobConfig.skipDelete = true;
 
-            (fs.existsSync as jest.Mock).mockImplementation((p: string) => true);
-            (fs.promises.readdir as jest.Mock).mockImplementation(async (p: string) => {
-                if (p === '/src') return [];
-                if (p === '/dst') return ['file1', 'file2'];
-                return [];
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set();
+                if (origin === Origin.DESTINATION) return new Set(['file1', 'file2']);
+                return new Set();
             });
+            
             await service.scanDirectory(commandInput);
-            expect(jobContext.publishToCommandStream).not.toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
         });
 
         it('should handle command publishing in chunks during delete processing', async () => {
@@ -520,12 +525,13 @@ describe('MigrateScanService', () => {
             service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory);
             (service as any).maxMigrationCommand = 2;
 
-            (fs.existsSync as jest.Mock).mockReturnValue(true);
-            (fs.promises.readdir as jest.Mock).mockImplementation(async (p: string) => {
-                if (p === '/src') return [];
-                if (p === '/dst') return ['file1', 'file2', 'file3'];
-                return [];
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set();
+                if (origin === Origin.DESTINATION) return new Set(['file1', 'file2', 'file3']);
+                return new Set();
             });
+            
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             (fs.promises.lstat as jest.Mock).mockResolvedValue({
                 isDirectory: () => false,
                 isSymbolicLink: () => false,
@@ -542,35 +548,35 @@ describe('MigrateScanService', () => {
 
             commandInput.targetPrefix = '/dst';
             await service.scanDirectory(commandInput);
-            expect(jobContext.publishToCommandStream).toHaveBeenCalledTimes(3);
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledTimes(2);
         });
 
-
         it('should handle empty source directory', async () => {
-            (fs.existsSync as jest.Mock).mockReturnValue(true);
-            (fs.promises.readdir as jest.Mock).mockResolvedValue([]);
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                return new Set();
+            });
 
             const result = await service.scanDirectory(commandInput);
 
             expect(result.fileCount).toBe(0);
             expect(result.dirCount).toBe(0);
             expect(result.subDirs).toEqual([]);
-            expect(jobContext.publishToCommandStream).not.toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
         });
 
         it('should handle target directory that does not exist during delete processing', async () => {
             jobContext.jobConfig.skipDelete = false;
 
-            (fs.existsSync as jest.Mock).mockImplementation((p: string) => {
-                if (p === '/dst') return false;
-                return true;
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin, path }) => {
+                if (origin === Origin.SOURCE) return new Set();
+                if (origin === Origin.DESTINATION && path === '/dst') return new Set(); // Empty set for non-existent directory
+                return new Set();
             });
-            (fs.promises.readdir as jest.Mock).mockResolvedValue([]);
 
             const result = await service.scanDirectory(commandInput);
 
             expect(result).toBeDefined();
-            expect(jobContext.publishToCommandStream).not.toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
         });
     });
 });
@@ -607,6 +613,7 @@ describe('MigrateScanService', () => {
         jobContext = {
             publishToErrorStream: jest.fn(),
             publishToCommandStream: jest.fn(),
+            publishBulkToCommandStream: jest.fn(),
             jobConfig: {
                 options: {
                     excludeOlderThan: new Date('2023-01-01'),
@@ -634,16 +641,17 @@ describe('MigrateScanService', () => {
         expect(service).toBeDefined();
     });
 
-    it('should call publishToCommandStream for sync command', async () => {
+    it('should call publishBulkToCommandStream for sync command', async () => {
         const commands = [
             new Cmd('cmd1', '/src/file1', CommandStatus.READY, false, { SYNC_FILE: { status: 'READY', params: {} } }),
         ];
         await service.publishCommands({ jobContext, commands });
-        expect(jobContext.publishToCommandStream).toHaveBeenCalledTimes(1);
+        expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledTimes(1);
+        expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledWith(commands);
     });
 
     it('should handle error in publishCommands gracefully', async () => {
-        jobContext.publishToCommandStream.mockImplementation(() => { throw new Error('fail'); });
+        jobContext.publishBulkToCommandStream.mockImplementation(() => { throw new Error('fail'); });
         const commands = [
             new Cmd('cmd1', '/src/file1', CommandStatus.READY, false, { SYNC_FILE: { status: 'READY', params: {} } }),
         ];

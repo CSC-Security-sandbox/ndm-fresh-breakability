@@ -6,8 +6,9 @@ import { ConsumerType } from '../enum/redis-consumer.enum';
 import { InventoryService } from '../inventory/inventory.service';
 import { WorkflowService } from '../workflow/workflow.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { FileConsumerContext, getWorkflowId, ReaderStatus, redisUtils } from './utils';
+import { FileConsumerContext, getWorkflowId, ReaderStatus } from './utils';
 import { defaultDataConverter } from '@temporalio/common';
+import { RedisUtils } from '@netapp-cloud-datamigrate/jobs-lib/dist/redis/redis-utils';
 
 
 
@@ -45,14 +46,10 @@ export class RedisConsumerService implements OnModuleDestroy {
         this.logger.log('Initializing Redis Consumer Service');
         try {
             if (!this.isValidRedisClient()) {
-                this.redisClient = await redisUtils.getClient();
+                this.redisClient = await RedisUtils.getClient();
 
-                if (this.isValidRedisClient()) {
-                    this.logger.log('Redis client ready');
-                } else {
-                    this.redisClient = null;
-                    throw new Error('Redis client is not initialized');
-                }
+                 // Ensure Redis client is connected before proceeding
+                if (!this.redisClient.isOpen) await this.redisClient.connect();
                 this.logger.log('Redis client ready');
             }
         } catch (error) {
@@ -63,7 +60,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             while (!this.isValidRedisClient() && attempt <= this.maxRetries) {
                 this.logger.warn(`Retrying Redis connection (attempt ${attempt}/${this.maxRetries})...`);
                 await new Promise(resolve => setTimeout(resolve, 5000));
-                this.redisClient = await redisUtils.getClient();
+                this.redisClient = await RedisUtils.getClient();
                 if (this.isValidRedisClient()) {
                     this.logger.log('Redis client ready after retry');
                     break;
@@ -138,9 +135,9 @@ export class RedisConsumerService implements OnModuleDestroy {
                 this.activeWorkers.clear();
             }
 
-            if (this.redisClient) {
-                await redisUtils.releaseClient(this.redisClient);
-                this.redisClient = null;
+            if (this.redisClient && this.redisClient.isOpen) {
+                await this.redisClient.quit();
+                this.logger.log('Redis client disconnected');
             }
 
             this.accumulatedRecords.length = 0;

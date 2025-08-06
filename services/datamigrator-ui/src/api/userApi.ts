@@ -9,10 +9,12 @@ export const usersApi = createApi({
     "USER_ROLES",
     "CREATE_USER",
     "MY_DETAILS",
-    "GET_SMTP"
+    "GET_SMTP",
   ],
   baseQuery: fetchBaseQuery({
-    baseUrl: window?.env?.VITE_ADMIN_SERVICE_URL || import.meta.env.VITE_ADMIN_SERVICE_URL,
+    baseUrl:
+      window?.env?.VITE_ADMIN_SERVICE_URL ||
+      import.meta.env.VITE_ADMIN_SERVICE_URL,
     prepareHeaders: (headers, { endpoint }) => {
       const token = Cookies.get("access_token");
       const projectId = localStorage.getItem("selected_project_id");
@@ -33,15 +35,22 @@ export const usersApi = createApi({
   }),
   endpoints: (builder) => ({
     getAllUsers: builder.query({
-      query: () => {
-        return `/users?limit=${window?.env?.VITE_API_LIMIT || import.meta.env.VITE_API_LIMIT}`;
+      query: ({ projectId }) => {
+        return `/users?limit=${
+          window?.env?.VITE_API_LIMIT || import.meta.env.VITE_API_LIMIT
+        }&projectId=${projectId}`;
+      },
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || [];
       },
       providesTags: ["ALL_USERS"],
     }),
 
     getAllUsersWithRoles: builder.query({
       query: () => {
-        return `/user-roles/grouping?limit=${window?.env?.VITE_API_LIMIT || import.meta.env.VITE_API_LIMIT}`;
+        return `/user-roles/grouping?limit=${
+          window?.env?.VITE_API_LIMIT || import.meta.env.VITE_API_LIMIT
+        }`;
       },
       providesTags: ["ALL_USERS"],
     }),
@@ -49,6 +58,9 @@ export const usersApi = createApi({
     getAllRoles: builder.query({
       query: () => {
         return `/roles`;
+      },
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || [];
       },
       providesTags: ["ALL_ROLES"],
     }),
@@ -64,6 +76,9 @@ export const usersApi = createApi({
       query: ({ project_id }) => {
         return `/user-roles?project_id=${project_id}`;
       },
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || [];
+      },
       providesTags: ["USER_ROLES"],
     }),
 
@@ -73,6 +88,15 @@ export const usersApi = createApi({
         method: "POST",
         body,
       }),
+      transformResponse: (response) => {
+        return {
+          data: response?.data?.items || response?.data || {},
+          message: response?.message || "",
+        };
+      },
+      transformErrorResponse: (error: any) => {
+        return error?.data?.error || error;
+      },
       invalidatesTags: ["ALL_USERS"],
     }),
 
@@ -82,6 +106,12 @@ export const usersApi = createApi({
         method: "POST",
         body,
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || {};
+      },
+      transformErrorResponse: (error: any) => {
+        return error?.data?.error || error;
+      },
     }),
 
     updateUserStatus: builder.mutation({
@@ -90,6 +120,15 @@ export const usersApi = createApi({
         method: "POST",
         body,
       }),
+      transformResponse: (response) => {
+        return {
+          data: response?.data?.items || response?.data || {},
+          message: response?.message || "",
+        };
+      },
+      transformErrorResponse: (error: any) => {
+        return error?.data?.error || error;
+      },
       invalidatesTags: ["ALL_USERS"],
     }),
 
@@ -121,8 +160,11 @@ export const usersApi = createApi({
 
     logoutUser: builder.mutation({
       query: (body) => ({
-        url: `${window?.env?.VITE_KEYCLOAK_HOST || import.meta.env.VITE_KEYCLOAK_HOST}/realms/${
-          window?.env?.VITE_KEYCLOAK_REALM || import.meta.env.VITE_KEYCLOAK_REALM
+        url: `${
+          window?.env?.VITE_KEYCLOAK_HOST || import.meta.env.VITE_KEYCLOAK_HOST
+        }/realms/${
+          window?.env?.VITE_KEYCLOAK_REALM ||
+          import.meta.env.VITE_KEYCLOAK_REALM
         }/protocol/openid-connect/logout`,
         method: "POST",
         headers: {
@@ -134,8 +176,11 @@ export const usersApi = createApi({
 
     refreshUserToken: builder.mutation({
       query: (body) => ({
-        url: `${window?.env?.VITE_KEYCLOAK_HOST || import.meta.env.VITE_KEYCLOAK_HOST}/realms/${
-          window?.env?.VITE_KEYCLOAK_REALM || import.meta.env.VITE_KEYCLOAK_REALM
+        url: `${
+          window?.env?.VITE_KEYCLOAK_HOST || import.meta.env.VITE_KEYCLOAK_HOST
+        }/realms/${
+          window?.env?.VITE_KEYCLOAK_REALM ||
+          import.meta.env.VITE_KEYCLOAK_REALM
         }/protocol/openid-connect/token`,
         method: "POST",
         headers: {
@@ -151,12 +196,18 @@ export const usersApi = createApi({
         method: "POST",
         body,
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || {};
+      },
     }),
 
     //smtp related api's
     getSmtpDetails: builder.query({
       query: () => {
         return `/setting`;
+      },
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || [];
       },
       providesTags: ["GET_SMTP"],
     }),
@@ -167,6 +218,15 @@ export const usersApi = createApi({
         method: "POST",
         body,
       }),
+      transformResponse: (response) => {
+        return {
+          data: response?.data?.items || response?.data || {},
+          message: response?.message || "",
+        };
+      },
+      transformErrorResponse: (error: any) => {
+        return error?.data?.error || error;
+      },
       invalidatesTags: ["GET_SMTP"],
     }),
 
@@ -176,6 +236,15 @@ export const usersApi = createApi({
         method: "PATCH",
         body,
       }),
+      transformResponse: (response) => {
+        return {
+          data: response?.data?.items || response?.data || {},
+          message: response?.message || "",
+        };
+      },
+      transformErrorResponse: (error: any) => {
+        return error?.data?.error || error;
+      },
       invalidatesTags: ["GET_SMTP"],
     }),
   }),

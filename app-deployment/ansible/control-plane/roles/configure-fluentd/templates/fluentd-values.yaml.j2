@@ -228,11 +228,6 @@ fileConfigs:
         @type relabel
         @label @DATAMIGRATOR_FILE
       </match>
-
-      <match other.**>
-        @type relabel
-        @label @OTHER_FILE
-      </match>
     </label>
 
     <label @DATAMIGRATOR_FILE>
@@ -251,7 +246,6 @@ fileConfigs:
         <record>
           # Determine service type
           service_name ${begin; container = record['container_name'].to_s.downcase; case container; when /db-writer/; "db-writer"; when /config-service/; "config-service"; when /db-migrations/; "db-migrations"; when /datamigrator-ui/; "datamigrator-ui"; when /reports-service/; "reports-service"; when /admin-service/; "admin-service"; when /jobs-service/; "jobs-service"; when /keycloak-customizations/; "keycloak-customizations"; when /support-service/; "support-service"; else; container; end; rescue; record['container_name'].to_s; end}
-
           component_type "control-plane"
         </record>
       </filter>
@@ -263,29 +257,6 @@ fileConfigs:
         <buffer time,component_type,service_name>
           @type file
           path /var/log/fluentd-buffers/datamigrator
-          timekey 24h
-          timekey_wait 120
-          timekey_use_utc true
-          flush_mode interval
-          flush_interval 5s
-          flush_at_shutdown true
-        </buffer>
-
-        <format>
-          @type single_value
-          message_key log
-        </format>
-      </match>
-    </label>
-
-    <label @OTHER_FILE>
-      <match **>
-        @type file
-        path /ndm-logs/%Y-%m-%d/${namespace}/${pod_name}/${container_name}
-        append true
-        <buffer time,namespace,pod_name,container_name>
-          @type file
-          path /var/log/fluentd-buffers/k8s
           timekey 24h
           timekey_wait 120
           timekey_use_utc true

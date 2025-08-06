@@ -41,6 +41,7 @@ import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping
 import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
 import { JobOptionsEntity } from "src/entities/joboptions.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
+import { MigrationConflictService } from "src/migration-conflict/migration-conflict.service";
 import { RedisService } from "src/redis/redis.service";
 import { filterUnhealthyWorkers } from "src/utils/worker-filter";
 import { WorkflowService } from "src/workflow/workflow.service";
@@ -78,6 +79,7 @@ export class JobRunInitService {
     private identityMappingRepo: Repository<IdentityMappingEntity>,
     @InjectRepository(IdentityConfigCrossMappingEntity)
     private identityConfigCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>,
+    private readonly migrationConflictService: MigrationConflictService,
   ) {
     this.mountBasePath = this.configService.get<string>(
       "app.paths.mountBasePath",
@@ -95,8 +97,26 @@ export class JobRunInitService {
         firstRunAt: LessThan(currentTime),
       },
     });
-    for (const job of jobs) await this.createJobRun(job.id, currentTime);
-    return jobs;
+    const scheduledJobs = [];
+    for (const job of jobs) {
+      const alreadyExists = await this.migrationConflictService.checkMigrationConflicts({
+        migrateConfigs: [
+          {
+            sourcePathId: job.sourcePathId,
+            destinationPathId: job.targetPathId ? [job.targetPathId] : [],
+          },
+        ],
+      });
+      if (alreadyExists.length === 0) {
+        await this.createJobRun(job.id, currentTime);
+        scheduledJobs.push(job);
+      } else {
+        this.logger.warn(
+          `Job Config ${job.id} has migration conflicts. Skipping job run creation.`,
+        );
+      }
+    }
+    return scheduledJobs;
   }
 
   // ------------------ Create job run  -------------------- //
@@ -216,9 +236,8 @@ export class JobRunInitService {
     }
     const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
     const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
-    const skipDelete : boolean = !(jobConfig?.futureScheduleAt !== null || jobConfig?.jobType === JobType.CUT_OVER);
-
-
+    // skip if job Is migration and futureScheduleAt is not set or empty
+    const skipDelete : boolean = jobConfig?.jobType === JobType.MIGRATE && (!jobConfig?.futureScheduleAt || jobConfig?.futureScheduleAt === "")
     const details: JobRunConfig = {
       preserveAccessTime: jobConfig.preserveAccessTime,
       excludeFilePatterns: jobConfig.excludeFilePatterns,

@@ -24,7 +24,7 @@ export async function calculateChecksum(filePath) {
 
 export async function smartCopy(source, target) {
   const destDir = path.dirname(target);  
-  fs.mkdirSync(destDir, { recursive: true });
+  await fs.promises.mkdir(destDir, { recursive: true });
   let readStream: fs.ReadStream = null; 
   let writeStream: fs.WriteStream = null; 
   try{

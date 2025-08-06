@@ -1,4 +1,4 @@
-import { JobRunStatus } from 'src/activities/discovery/enums';
+import { JobRunStatus } from 'src/activities/common/enums';
 import { waitUntilRedisMemoryOk } from 'src/workflows/utils/memory-utils';
 import { executeCleanup } from '../common/execute-cleanup-workflow';
 import { executeMigrationChildWorkflows } from '../common/execute-migration-child-workflows';

@@ -18,16 +18,18 @@ import { useSelector } from "react-redux";
 import { RootStateType } from "@store/store";
 import { DEFAULT_COLUMN_STATE } from "@components/top-nav-bar/setting/ManageUsers/ManageUsers.constant";
 import { decryptData } from "@/utils/common.utils";
+import useSelectedProjectId from "@hooks/useSelectedProjectId";
 
 const ManageUsers = () => {
   const [updateUserStatus] = useUpdateUserStatusMutation();
   const [resetPasswordApi] = useResetPasswordMutation();
+  const projectId = useSelectedProjectId();
   const {
     data: userData,
     isLoading,
     isFetching,
     refetch,
-  } = useGetAllUsersQuery("");
+  } = useGetAllUsersQuery({ projectId: projectId.selectedProjectId });
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const permission = useSelector(
     (state: RootStateType) => state.permissionSlice
@@ -45,9 +47,10 @@ const ManageUsers = () => {
         notify.success(res?.message);
       })
       .catch((err) => {
-        console.log("error", err);
-        const errorDetails = err.data?.error;
-        notify.error(errorDetails?.message);
+        console.error("error", err);
+        notify.error(
+          err?.error || err?.message || "Failed to update user status"
+        );
       });
   };
 
@@ -78,7 +81,7 @@ const ManageUsers = () => {
           .unwrap()
           .then((res) => {
             setIsCreateFormVisible(true);
-            setTemporaryPassword(decryptData(res?.data?.items?.newPassword));
+            setTemporaryPassword(decryptData(res?.newPassword));
           })
           .catch((err) => {
             notify.error(err.message);
@@ -94,7 +97,7 @@ const ManageUsers = () => {
   };
   const tableStateProps = {
     columns: COL_DEF_FOR_USER,
-    rows: userData?.data?.items || [],
+    rows: userData || [],
     isSorting: true,
     pageSize: 10,
     defaultColumnState: DEFAULT_COLUMN_STATE,

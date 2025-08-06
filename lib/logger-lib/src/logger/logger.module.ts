@@ -1,15 +1,15 @@
 import { DynamicModule, Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
-import { WinstonModule } from "nest-winston";
-import 'winston-daily-rotate-file';
-import loggerConfig from "../config/logger.config";
-import { format, transports } from "winston";
-import { LoggerService } from "./logger.service";
-import { LoggerFactory } from "./logger.factory";
-import { RequestContextModule } from "../middleware/request-context.module";
-import { AsyncLocalStorageModule } from "../async-local-storage/async-local-storage.module";
 import * as fs from 'fs';
-import * as path from 'path';
+import { WinstonModule } from "nest-winston";
+import { format, transports } from "winston";
+import 'winston-daily-rotate-file';
+import { AsyncLocalStorageModule } from "../async-local-storage/async-local-storage.module";
+import loggerConfig from "../config/logger.config";
+import { RequestContextModule } from "../middleware/request-context.module";
+import { LoggerFactory } from "./logger.factory";
+import { LoggerService } from "./logger.service";
+import { getMaskingStage } from "./util/mask-sensitive";
 
 @Module({})
 export class LoggerModule {
@@ -28,6 +28,7 @@ export class LoggerModule {
                         const loggerOptions = cfg.get('loggerOptions');
                         const transportsList: any[] = [];
 
+                        const maskingStage = getMaskingStage(loggerOptions.disableMasking);
                         // Add console transport if enabled
                         if (loggerOptions.enableConsoleLogging) {
                             const isTestEnv = process.env.NODE_ENV === 'test';
@@ -36,11 +37,12 @@ export class LoggerModule {
                                 new transports.Console({
                                     level: loggerOptions.logLevel,
                                     format: format.combine(
+                                        maskingStage(),
                                         format.timestamp(),
                                         format.colorize(),
                                         format.splat(),
                                         format.printf((info) => {
-                                            const { timestamp, level, message, trackId, context, ...meta } = info;
+                                            const { timestamp, level, message, trackId, projectId, context, ...meta } = info;
                                             let metaString = '';
                                             
                                             // Build the main log line with spaces between elements
@@ -48,6 +50,10 @@ export class LoggerModule {
                                             
                                             if (trackId) {
                                                 logLine += ` ${trackId}`;
+                                            }
+
+                                            if (projectId) {
+                                                logLine += ` projectId: ${projectId}`;
                                             }
                                             
                                             if (context) {
@@ -91,11 +97,12 @@ export class LoggerModule {
                             
                             // Create file format - compact for all environments
                             const fileFormat = format.combine(
+                                maskingStage(),
                                 format.timestamp(),
                                 format.uncolorize(),
                                 format.printf((info) => {
                                     // Compact format for file logging with spaces
-                                    const { timestamp, level, message, trackId, context, ...meta } = info;
+                                    const { timestamp, level, message, trackId, projectId, context, ...meta } = info;
                                     let metaString = '';
                                     
                                     // Build the main log line with spaces between elements
@@ -103,6 +110,10 @@ export class LoggerModule {
                                     
                                     if (trackId) {
                                         logLine += ` ${trackId}`;
+                                    }
+
+                                    if (projectId) {
+                                        logLine += ` projectId: ${projectId}`;
                                     }
                                     
                                     if (context) {

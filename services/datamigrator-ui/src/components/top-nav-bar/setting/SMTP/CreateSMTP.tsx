@@ -40,15 +40,14 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
 
   const { data: userData } = useGetAllUsersQuery("");
   const toEmailOptions =
-    userData?.data?.items.map((user) => ({
-      label: user.email,
-      value: user.email,
-    })) || [];
+  userData?.map((user) => ({
+    label: user.email,
+    value: user.email,
+  })) || [];
 
-  const { data: smtpResult, isLoading: smtpLoading } =
+  const { data: smtpExistingData, isLoading: smtpLoading } =
     useGetSmtpDetailsQuery("");
   const [isEdit, setIsEdit] = useState<boolean>(false);
-  const smtpExistingData = smtpResult?.data?.items;
   const objectData: smtpValuesType = {
     SMTP_HOST: "",
     SMTP_PORT: "",
@@ -94,7 +93,7 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
       setIsEdit(true);
       smtpForm.resetForm(getFormData(smtpValues));
     }
-  }, [smtpLoading, smtpResult, isEdit]);
+  }, [smtpLoading, smtpExistingData, isEdit]);
 
   const handleCreateSMTP = async () => {
     const data = smtpData(smtpForm.formState);
@@ -110,11 +109,10 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
       dispatch(setDrawerClose());
       handleDefaultTab();
     } catch (err) {
-      const errorDetails = err?.data?.error;
       notify.error(
         <ErrorMessageContainer
           title="Error occurred."
-          message={errorDetails?.error}
+          message={err?.error || err?.message || "Failed to create or update SMTP settings."}
         />
       );
     }

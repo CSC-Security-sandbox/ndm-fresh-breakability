@@ -13,6 +13,7 @@ import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { mockLoggerFactory } from 'src/auth/auth.service.spec';
 import { Test, TestingModule } from '@nestjs/testing';
 import { mockLogger } from 'src/auth/auth.service.spec';
+import * as fs from 'fs';
 
 let loggerFactory: LoggerFactory;
 
@@ -165,14 +166,59 @@ describe('NFSProtocol', () => {
         hostname: 'localhost',
         protocolVersion: '',
         path: '/path1',
-        mountBasePath: '/mnt'
+        mountBasePath: '/mnt',
+        jobRunId: 'job123',
+        pathId: 'path456'
       };
       const mockResponse = { message: 'Successfully unmounted', status: 'success' };
       (nfsProtocol as any).executeCommand = jest.fn().mockResolvedValue(mockResponse);
 
+      // Mock fs.promises.access to resolve (directory exists)
+      const mockAccess = jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+      
+      // Mock fs.promises.rmdir
+      const mockRmdir = jest.spyOn(fs.promises, 'rmdir').mockResolvedValue(undefined);
+
       const result = await nfsProtocol.unmountPath('traceId', payload);
+      
       expect(mockLogger.log).toHaveBeenCalled();
+      expect(mockAccess).toHaveBeenCalledWith('/mnt/job123/path456', fs.constants.F_OK);
+      expect(mockRmdir).toHaveBeenCalledWith('/mnt/job123/path456', { recursive: true });
       expect(result).toBe(mockResponse);
+      
+      // Restore the mocks
+      mockAccess.mockRestore();
+      mockRmdir.mockRestore();
+    });
+
+    it('should handle case when directory does not exist', async () => {
+      const payload: ProtocolPayload = {
+        hostname: 'localhost',
+        protocolVersion: '',
+        path: '/path1',
+        mountBasePath: '/mnt',
+        jobRunId: 'job123',
+        pathId: 'path456'
+      };
+      const mockResponse = { message: 'Successfully unmounted', status: 'success' };
+      (nfsProtocol as any).executeCommand = jest.fn().mockResolvedValue(mockResponse);
+
+      // Mock fs.promises.access to reject with ENOENT (directory doesn't exist)
+      const mockAccess = jest.spyOn(fs.promises, 'access').mockRejectedValue({ code: 'ENOENT' });
+      
+      // Mock fs.promises.rmdir
+      const mockRmdir = jest.spyOn(fs.promises, 'rmdir').mockResolvedValue(undefined);
+
+      const result = await nfsProtocol.unmountPath('traceId', payload);
+      
+      expect(mockLogger.log).toHaveBeenCalled();
+      expect(mockAccess).toHaveBeenCalledWith('/mnt/job123/path456', fs.constants.F_OK);
+      expect(mockRmdir).not.toHaveBeenCalled(); // Should not be called when directory doesn't exist
+      expect(result).toBe(mockResponse);
+      
+      // Restore the mocks
+      mockAccess.mockRestore();
+      mockRmdir.mockRestore();
     });
   })
 

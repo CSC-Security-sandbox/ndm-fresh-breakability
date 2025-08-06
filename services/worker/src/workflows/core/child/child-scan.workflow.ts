@@ -2,7 +2,7 @@ import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from "src/activities/common/common.service";
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 import { ScanService } from 'src/activities/core/scan/scan-activity.service';
-import { JobRunStatus } from "src/activities/discovery/enums";
+import { JobRunStatus } from "src/activities/common/enums";
 import { updateJobStatusIfNotRunning } from '../common/workflow-utils';
 import { ChildScanWorkflowInput, ChildScanWorkflowOutput, ExecuteBatchScanInput, ExecuteBatchScansOutput } from './chid-scan.workflow.type';
 
@@ -38,7 +38,7 @@ const {
 const actionSignal = wf.defineSignal<[JobRunStatus]>('scanActionSignal');
 
 
-const MAX_CONCURRENT_BATCHES = 100;
+const MAX_CONCURRENT_BATCHES = 20;
 const ITERATIONS_LIMIT = 1000;
 
 export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatchIds = [], batchSize = 100, dirCount = 0, fileCount = 0, isMigration = false, actionState = JobRunStatus.Running, isInitialScan = true, workerConcurrency = 20}: ChildScanWorkflowInput): Promise<ChildScanWorkflowOutput> => {

@@ -14,10 +14,11 @@ export const workersApi = createApi({
   endpoints: (builder) => ({
     getAllWorkers: builder.query({
       query: (url) => url,
-
+      
       // THIS IS RESP MODIFICATION DUE TO BLUEXP SELECT WORKS ON ID. ON VALIDATE CONNECTION
       transformResponse: (response: any) => {
-        return response?.data?.map((worker: GetAllWorkersApiType) => {
+        const workers = response?.data?.items || response?.data || [];
+        return workers?.map((worker: GetAllWorkersApiType) => {
           return {
             ...worker,
             id: worker?.workerId,

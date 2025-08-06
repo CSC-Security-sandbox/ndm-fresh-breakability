@@ -164,6 +164,20 @@ export interface PreCheckStatusType {
     sourcePathId: string;
     errors: string[];
   }[];
+  warnings?: {
+    sourcePathId: string;
+    destinationPathId: string;
+    warnings: string[];
+  }[];
+  migrationConflicts?: {
+    status: string;
+    jobId: string;
+    jobRunIds: string[];
+    sourcePathId: string;
+    targetPathId: string;
+    sourceServerId: string;
+    targetServerId: string;
+  }[];
 }
 
 export interface createPathMappingApiPayload {

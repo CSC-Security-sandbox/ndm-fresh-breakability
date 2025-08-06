@@ -6,6 +6,7 @@ import { handleConnectionError, parseLinMacShares, parseProtocolVersions, parseW
 import * as fs from 'fs';
 import { Injectable } from '@nestjs/common';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { isPathExists } from 'src/activities/core/utils/utils';
 
 @Injectable()
 export class SMBProtocol extends Protocol {
@@ -85,9 +86,13 @@ export class SMBProtocol extends Protocol {
       }
     }
     catch(e) {
-        this.logger.log(`error: ${e}`)
-        const lines = e.message.split('\n'); 
-        throw new Error(lines.length > 1 ? lines.slice(1).join('\n') : '')
+      this.logger.log(`error: ${e}`)
+      const message = e instanceof Error ? e.message : String(e);
+      this.logger.error(`error: ${message}`);
+      const lines = message.split('\n');
+      const cleanedMessage = lines.length > 1 ? lines.slice(1).join('\n') : message;
+      throw new Error(cleanedMessage);
+ 
     }
   }
 
@@ -194,9 +199,10 @@ export class SMBProtocol extends Protocol {
     );
 
     const mountDir = `${payload.mountBasePath}/${payload.jobRunId}`;
-    if (!fs.existsSync(mountDir)) {
-      try{
-        fs.mkdirSync(mountDir,{ recursive: true });
+    const mountDirExists = await isPathExists(mountDir);
+    if (!mountDirExists) {
+      try {
+        await fs.promises.mkdir(mountDir, { recursive: true });
         this.logger.log(`[${traceId}] Directory created: ${mountDir}`);
         } catch (error) {
           this.logger.error(`[${traceId}] Error creating directory------?: ${error.message}`);

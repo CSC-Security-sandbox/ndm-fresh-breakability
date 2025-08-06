@@ -7,4 +7,5 @@ export interface LoggerOptions {
     maxSize?: string;
     datePattern?: string;
     zippedArchive?: boolean;
+    disableMasking?: boolean;
 }
