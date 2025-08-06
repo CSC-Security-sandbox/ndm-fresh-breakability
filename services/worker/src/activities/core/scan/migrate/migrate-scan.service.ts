@@ -217,7 +217,9 @@ export class MigrateScanService {
             birthtime: sFile.birthtime,
             sid: undefined
         }
-        if ((process.platform == 'linux' || process.platform == 'darwin') && isContentUpdate(sFile, dFile)) {
+        const isContentUpdated = isContentUpdate(sFile, dFile);
+
+        if ((process.platform == 'linux' || process.platform == 'darwin') && isContentUpdated) {
             const isDirectory = sFile.isDirectory();
             return new Cmd(
                 uuid4(),
@@ -231,13 +233,14 @@ export class MigrateScanService {
                 metadata,
             )
         }
-         this.logger.log(`isMetaUpdated ${isMetaUpdated(sFile, dFile)}`);
-         this.logger.log(`source ctime ${sFile.ctime}`);
-         this.logger.log(`destination ctime ${dFile?.ctime}`);
-        if (process.platform == 'win32' && (isMetaUpdated(sFile, dFile) || isContentUpdate(sFile, dFile))) {
-            const isContentUpdatedFlag = isContentUpdate(sFile, dFile);
-            this.logger.log(`content update ` + isContentUpdate);
-            this.logger.log(`isMetaUpdated ${isMetaUpdated(sFile, dFile)}`);
+        
+         const metaUpdated = isMetaUpdated(sFile, dFile);
+        this.logger.log(`isMetaUpdated ${metaUpdated}`);
+         this.logger.log(`source ctime ${sFile.ctimeMs}`);
+         this.logger.log(`destination ctime ${dFile?.ctimeMs}`);
+        if (process.platform == 'win32' && (metaUpdated || isContentUpdated)) {
+            this.logger.log(`content update ` + isContentUpdated);
+            this.logger.log(`isMetaUpdated ${metaUpdated}`);
             const isDirectory = sFile.isDirectory();
             this.logger.log(`Meta update detected for isMetaUpdated ${fPath}`);
             return new Cmd(
@@ -246,7 +249,7 @@ export class MigrateScanService {
                 CommandStatus.READY,
                 isDirectory,
                 {
-                    [isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE]: { status: isContentUpdatedFlag ? OPS_STATUS.READY : OPS_STATUS.COMPLETED, params: {} },
+                    [isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE]: { status: isContentUpdated ? OPS_STATUS.READY : OPS_STATUS.COMPLETED, params: {} },
                     [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: {} }
                 },
                 metadata,
