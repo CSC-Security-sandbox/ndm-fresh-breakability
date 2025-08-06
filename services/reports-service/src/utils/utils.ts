@@ -1,4 +1,3 @@
-const escapeHtml = require('escape-html');
 const sanitizeHtml = require('sanitize-html');
 
 export const validateFilePath = (filePath: string): boolean => {
@@ -13,18 +12,6 @@ export const escapeCsvValue = (value: string): string => {
   }
   return value;
 };
-
-export const escapeReportData = (obj: any): any => {
-    if (typeof obj === 'string') {
-      return escapeHtml(obj);
-    } else if (Array.isArray(obj)) {
-      return obj.map(item => escapeReportData(item));
-    } else if (typeof obj === 'object' && obj !== null) {
-      const entries = Object.entries(obj).map(([key, value]) => [key, escapeReportData(value)]);
-      return Object.fromEntries(entries);
-    }
-    return obj;
-}
 
 export const sanitizeReportData = (obj: any): any => {
     if (typeof obj === 'string') {
