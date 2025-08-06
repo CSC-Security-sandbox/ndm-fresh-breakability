@@ -37,7 +37,7 @@ run_tests() {
     local protocol_type="${5:-}"
     local timeout="${6:-3h}"
 
-    if [[ -z "$test_type" || -z "$test_path" || -z "$src_volumes" || -z "$dest_volumes" ]]; then
+    if [[ "$test_type" != "smoke" && ( -z "$test_type" || -z "$test_path" || -z "$src_volumes" || -z "$dest_volumes" ) ]]; then
         echo "Error: Missing mandatory arguments."
         echo "Refer to usage above."
         return 1
@@ -61,7 +61,12 @@ run_tests() {
     # Create folders
     # log file location - reports/date/protocol_type/test-type-protocol-type-epoch-time.log 
     # eg reports/2025-07-22/NFS/end-to-end-NFS-1753166831.log
-    local output_dir="reports/${date_folder}/${protocol_dir}"
+    if [ -z "$protocol_type" ]; then
+        output_dir="reports/${date_folder}"
+    else
+        output_dir="reports/${date_folder}/${protocol_dir}"
+    fi
+
     mkdir -p "$output_dir"
 
     # Final log file path
@@ -69,19 +74,24 @@ run_tests() {
 
     # Function to print log in format
     print_log_banner() {
-        local label="$1"
-        local duration="$2"
-        echo -e "\n================================================================================"
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ${label} ${test_type} tests"
+    local label="$1"
+    local duration="$2"
+    echo -e "\n================================================================================"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ${label} ${test_type} tests"
+
+    if [[ "$test_type" != "smoke" ]]; then
         echo "Protocol type         : ${protocol_type}"
-        echo "Test Path             : ${test_path}"
         echo "Source Volumes        : ${src_volumes}"
         echo "Dest Volumes          : ${dest_volumes}"
-        echo "Timeout               : ${timeout}"
-        echo "Log File Location     : ${report_file}"
-        [[ -n "$duration" ]] && echo "Total Duration        : ${duration}"
-        echo "================================================================================"
-    }
+    fi
+
+    echo "Test Path             : ${test_path}"
+    echo "Timeout               : ${timeout}"
+    echo "Log File Location     : ${report_file}"
+    [[ -n "$duration" ]] && echo "Total Duration        : ${duration}"
+    echo "================================================================================"
+}
+
 
     local start_time
     start_time=$(date +%s)
