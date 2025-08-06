@@ -78,7 +78,7 @@ const ManageProject = () => {
           label="Projects"
           content={
             <PermissionAuth
-              permissionName={USER_PERMISSION_TYPE_ENUM.ManageProject}
+              permissionName={USER_PERMISSION_TYPE_ENUM.CreateProject}
             >
               <Button onClick={() => setIsCreateFormVisible(true)}>
                 Add Project
