@@ -18,6 +18,7 @@ import { IdentityTypes, JobContextFactory, JobStatus, SpeedTestJobConfig, SpeedT
 import { ScheduleStatus } from 'src/constants/status';
 import { JobRunConfig } from './jobrun.types';
 import { JobRunStatus, JobType, Protocol, WorkFlows } from 'src/constants/enums';
+import { MigrationConflictService } from '../migration-conflict/migration-conflict.service';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import axios from 'axios';
 import { Readable } from "stream";
@@ -118,6 +119,13 @@ describe('JobRunInitService', () => {
             setJobContext: jest.fn(),
           },
         },
+        {
+          provide: MigrationConflictService,
+          useValue: {
+            checkMigrationConflicts: jest.fn().mockResolvedValue([]),
+            hasMigrationConflicts: jest.fn().mockResolvedValue(false),
+          },
+        },
       ],
     }).compile();
 
@@ -158,8 +166,11 @@ describe('JobRunInitService', () => {
   });
   describe('scheduleAJob', () => {
     it('should return an array of jobs', async () => {
-      const currentTime = new Date();
-      jest.spyOn(global.Date, 'now').mockReturnValue(currentTime as any);
+      const currentTime = new Date('2025-07-24T14:42:45.764Z');
+      const originalDate = global.Date;
+      global.Date = jest.fn(() => currentTime) as any;
+      global.Date.now = jest.fn(() => currentTime.getTime());
+      
       const jobs: JobConfigEntity[] = [];
       jest.spyOn(jobConfigRepo, 'find').mockResolvedValue(jobs);
 
@@ -174,6 +185,9 @@ describe('JobRunInitService', () => {
           firstRunAt: expect.any(Object), // Use a more flexible assertion for the LessThan object
         },
       });
+      
+      // Restore original Date constructor
+      global.Date = originalDate;
     });
   });
 
