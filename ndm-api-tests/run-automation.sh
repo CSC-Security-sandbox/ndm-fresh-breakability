@@ -32,9 +32,9 @@ set -e  # Exit on any error
 run_tests() {
     local test_type="$1"
     local test_path="$2"
-    local src_volumes="$3"
-    local dest_volumes="$4"
-    local protocol_type="${5:-NFS}"
+    local src_volumes="${3:-}"
+    local dest_volumes="${4:-}"
+    local protocol_type="${5:-}"
     local timeout="${6:-3h}"
 
     if [[ -z "$test_type" || -z "$test_path" || -z "$src_volumes" || -z "$dest_volumes" ]]; then
@@ -110,8 +110,8 @@ run_tests() {
 # Test runs
 
 #Regression Testing
-#run_tests "regression" "./tests/regression" "vol_src_automation, volSrcAuto, vol_src_automation2"  "vol_dest_automation, vol_dest_automation2"  "NFS"
-#run_tests "regression" "./tests/regression" "volSMBAuto_vol1, vol4_33, vol2_33"  "volSMBAutoDst, vol3_33" "SMB"
+run_tests "regression" "./tests/regression" "vol_src_automation, volSrcAuto, vol_src_automation2"  "vol_dest_automation, vol_dest_automation2"  "NFS"
+run_tests "regression" "./tests/regression" "volSMBAuto_vol1, vol4_33, vol2_33"  "volSMBAutoDst, vol3_33" "SMB"
 
 
 #End-to-End Testing
@@ -120,8 +120,7 @@ run_tests "end-to-end" "./tests/e2e" "vol_src_automation, volSrcAuto, vol_src_au
 
 
 #Smoke Testing
-#run_tests "smoke" "./tests/smoke" "vol_src_automation, volSrcAuto, vol_src_automation2"  "vol_dest_automation, vol_dest_automation2" "NFS"
-#run_tests "smoke" "./tests/smoke" "volSMBAuto_vol1, vol4_33, vol2_33"  "volSMBAutoDst, vol3_33" "SMB"
+run_tests "smoke"
 
 
 

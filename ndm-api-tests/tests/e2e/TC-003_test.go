@@ -108,13 +108,9 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 			Wait(100)
 
 			By("Getting jobs by jobConfigId for source")
-			/*discovery_validators := []string{
+			discovery_validators := []string{
 				"nfs_src_vol_discovery.json",
 				"nfs_src_vol2_discovery.json",
-			}*/
-			discovery_validators := []string{
-				"test_discovery_src1.json",
-				"test_discovery_src2.json",
 			}
 			for i, sourceJobConfigID := range sourceJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(sourceJobConfigID, headers)
@@ -244,13 +240,9 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 
 			Wait(80)
 
-			/*migration_validators := []string{
+			migration_validators := []string{
 				"nfs_src_to_dest_vol_migration.json",
 				"nfs_src2_to_dest2_vol_migration.json",
-			}*/
-			migration_validators := []string{
-				"test_migration_src1_to_dest1.json",
-				"test_migration_src2_to_dest2.json",
 			}
 			// Wait for migration completion
 			for i, migrationJobConfigID := range migrationJobConfigIDs {

@@ -35,8 +35,8 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
 			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, DESTINATION_VOLUMES[0])
 			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, DESTINATION_VOLUMES[1])
-			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[1])
-			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[2])
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[0])
+			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[1])
 		})
 
 		It("TC-002: Create a fileserver with 2 workers (1 offline) and check discovery and migration", func() {
@@ -82,10 +82,10 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			defer resp.Body.Close()
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID1, headers)
+			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID1, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[2], sourceConfigID1, headers)
+			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID1, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating the destination file server")
@@ -150,17 +150,9 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			sourceConfigID2 = sourceJobConfigIDs[1]
 
 			By("Getting jobs by jobConfigId for source")
-			/*discovery_validators := []string{
+			discovery_validators := []string{
 				"nfs_src_vol_discovery.json",
 				"nfs_src_vol2_discovery.json",
-			}*/
-			/*discovery_validators := []string{
-				"test_discovery_src1.json",
-				"test_discovery_src2.json",
-			}*/
-			discovery_validators := []string{
-				"test_discovery_src2.json",
-				"test_discovery_src3.json",
 			}
 			sourceConfigIDs = []string{sourceConfigID1, sourceConfigID2}
 			sourceDiscoveryJobRunIDs = make([]string, len(sourceConfigIDs))
@@ -248,17 +240,9 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
 			Expect(len(migrationJobConfigIDs)).To(BeNumerically(">", 0), "Expected at least one jobConfigID")
 
-			/*migration_validators := []string{
+			migration_validators := []string{
 				"nfs_src_to_dest_vol_migration.json",
 				"nfs_src2_to_dest2_vol_migration.json",
-			}*/
-			/*migration_validators := []string{
-				"test_migration_src1_to_dest1.json",
-				"test_migration_src2_to_dest2.json",
-			}*/
-			migration_validators := []string{
-				"test_migration_src2_to_dest1.json",
-				"test_migration_src3_to_dest2.json",
 			}
 
 			// Get migration job run IDs and wait for completion

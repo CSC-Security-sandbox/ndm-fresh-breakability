@@ -37,8 +37,8 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, DESTINATION_VOLUMES[0])
 			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, DESTINATION_VOLUMES[1])
 
-			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[1])
-			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[2])
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[0])
+			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[1])
 		})
 
 		It("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
@@ -72,10 +72,10 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 			LogDebug(fmt.Sprintf("Source file server created with config ID: %s", sourceConfigID))
 
 			By("Getting the Source File Server Export Path ID")
-			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID, headers)
+			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[2], sourceConfigID, headers)
+			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			LogDebug(fmt.Sprintf("Source File Server Export Path ID : [%s, %s]", sourcePathID1, sourcePathID2))
@@ -99,17 +99,9 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 
-			/*discovery_validators := []string{
+			discovery_validators := []string{
 				"nfs_src_vol_discovery.json",
 				"nfs_src_vol2_discovery.json",
-			}*/
-			/*discovery_validators := []string{
-				"test_discovery_src1.json",
-				"test_discovery_src2.json",
-			}*/
-			discovery_validators := []string{
-				"test_discovery_src2.json",
-				"test_discovery_src3.json",
 			}
 			for i, sourceJobConfigID := range sourceJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(sourceJobConfigID, headers)
@@ -124,7 +116,7 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 				err = WaitForJobState(sourceDiscoveryJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", sourceDiscoveryJobRunID)
 
-				result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
+				result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s", discovery_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", sourceDiscoveryJobRunID)
 				LogDebug(fmt.Sprintf("Validate Report Result for Discovery Job : %s = %s", sourceDiscoveryJobRunID, result))
 			}
@@ -211,17 +203,9 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
 			Expect(len(migrationJobConfigIDs)).To(BeNumerically(">", 0), "Expected at least one jobConfigID")
 
-			/*migration_validators := []string{
+			migration_validators := []string{
 				"nfs_src_to_dest_vol_migration.json",
 				"nfs_src2_to_dest2_vol_migration.json",
-			}*/
-			/*migration_validators := []string{
-				"test_migration_src1_to_dest1.json",
-				"test_migration_src2_to_dest2.json",
-			}*/
-			migration_validators := []string{
-				"test_migration_src2_to_dest1.json",
-				"test_migration_src3_to_dest2.json",
 			}
 			// Get migration job run IDs and wait for completion
 			for i, migrationJobConfigID := range migrationJobConfigIDs {
@@ -234,9 +218,9 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
+				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s", migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-				By(fmt.Sprintf("validate report result : %s", result))
+				LogDebug(fmt.Sprintf("validate report result : %s", result))
 			}
 
 			By("Adding Delta Data to the Source Paths")

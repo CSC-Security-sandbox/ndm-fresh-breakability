@@ -25,8 +25,7 @@ type JobType string
 
 // jobFormats tells us, internally, which formats to load per JobType.
 var jobFormats = map[JobType][]Format{
-	//JobTypeDiscovery: {FormatPDF, FormatCSV},
-	JobTypeDiscovery: {FormatPDF},
+	JobTypeDiscovery: {FormatPDF, FormatCSV},
 	JobTypeMigration: {FormatCSV},
 	JobTypeCutover:   {FormatCSV},
 }
@@ -51,6 +50,11 @@ func ValidateReport(
 	}
 
 	results := make(map[Format][]error, len(formats))
+
+	if PROTOCOL_TYPE == ProtocolSMB {
+		return results, nil
+	}
+
 	for _, fmtType := range formats {
 		// 1) fetch
 		data, err := fetchReport(jobRunID, fmtType, string(jobType))

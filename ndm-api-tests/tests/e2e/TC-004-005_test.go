@@ -126,13 +126,9 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 			By("Getting jobs by jobConfigId for source")
 			sourceConfigIDs := []string{sourceConfigID1, sourceConfigID2}
 			sourceDiscoveryJobRunIDs := make([]string, len(sourceConfigIDs))
-			/*discovery_validators := []string{
+			discovery_validators := []string{
 				"nfs_src_vol_discovery.json",
 				"nfs_src_vol2_discovery.json",
-			}*/
-			discovery_validators := []string{
-				"test_discovery_src1.json",
-				"test_discovery_src2.json",
 			}
 			for i, configID := range sourceConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(configID, headers)
@@ -232,13 +228,9 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
 			Expect(len(migrationJobConfigIDs)).To(BeNumerically(">", 0), "Expected at least one jobConfigID")
-			/*migration_validators := []string{
+			migration_validators := []string{
 				"nfs_src_to_dest_vol_migration.json",
 				"nfs_src2_to_dest2_vol_migration.json",
-			}*/
-			migration_validators := []string{
-				"test_migration_src1_to_dest1.json",
-				"test_migration_src2_to_dest2.json",
 			}
 			// Get migration job run IDs and wait for completion
 			flag := false
