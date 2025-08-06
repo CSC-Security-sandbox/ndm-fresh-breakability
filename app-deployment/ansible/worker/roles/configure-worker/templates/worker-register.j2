@@ -83,7 +83,7 @@ log_message "Required environment variables are set."
 # Check for existing environment variables in the worker.env file
 log_message "Checking for existing variables in $ENV_FILE."
 if [ -f "$ENV_FILE" ]; then
-    if grep -E "^(WORKER_CONFIG_URL|WORKER_JOB_SERVICE_URL|TEMPORAL_ADDRESS|WORKER_REPORT_SERVICE_URL|KEYCLOAK_BASE_URL|WORKER_ID|WORKER_SECRET|REDIS_HOST|REDIS_USERNAME|REDIS_PASSWORD|CONTROL_PLANE_IP|PROJECT_ID)=" "$ENV_FILE" >/dev/null; then
+    if grep -E "^(WORKER_CONFIG_URL|WORKER_JOB_SERVICE_URL|TEMPORAL_ADDRESS|WORKER_REPORT_SERVICE_URL|KEYCLOAK_BASE_URL|WORKER_ID|WORKER_SECRET|REDIS_HOST|REDIS_USERNAME|REDIS_PASSWORD|CONTROL_PLANE_IP|PROJECT_ID|OTEL_COLLECTOR_ENDPOINT)=" "$ENV_FILE" >/dev/null; then
         log_message "WARNING: Some environment variables already exist in $ENV_FILE."
         handle_failure "Existing variables detected in $ENV_FILE. Manual intervention required."
     fi
@@ -105,6 +105,7 @@ log_message "Creating $ENV_FILE with necessary environment variables."
     echo "REDIS_USERNAME=default"
     echo "REDIS_PASSWORD=welcome"
     echo "PROJECT_ID=${PROJECT_ID}"
+    echo "OTEL_COLLECTOR_ENDPOINT=${CONTROL_PLANE_IP}:4318"
 } >> "$ENV_FILE"
 
 # Check if the worker.env file was created successfully
