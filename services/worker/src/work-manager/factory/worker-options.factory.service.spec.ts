@@ -7,13 +7,7 @@ import { WorkerOptionsService } from './worker-options.factory.service';
 import { WorkerConfiguration } from '../work-manager.types';
 import { ListPathActivity } from 'src/activities/list-path/list-path.service';
 import { ValidateConnectionActivity } from 'src/activities/validate-connection/validate-connection.service';
-import { DiscoveryActivity } from 'src/activities/discovery/discovery.activities';
-import { DiscoveryScanActivity } from 'src/activities/discovery/discovery.core.activity';
 import { SetupActivityService } from 'src/activities/setup-worker/setup.activity.service';
-import { MigrationScanService } from 'src/activities/migrate/migrate.scan.service';
-import { MigrationTaskService } from 'src/activities/migrate/migrate.taskmanager.service';
-import { MigrationSyncService } from 'src/activities/migrate/migrate.sync.service';
-
 import { ValidateWorkingDirectoryActivity } from 'src/activities/working-directory/working-directory.service';
 import { PrecheckActivity } from 'src/activities/precheck/precheck-activity';
 import { CommonActivityService } from 'src/activities/common/common.service';
@@ -21,7 +15,7 @@ import { SpeedTestActivities } from 'src/activities/speed-test/speed-test-activi
 import { RedisMemoryCheckActivity } from 'src/activities/redis/redis.mem.usage.check.activity';
 import { ScanService } from 'src/activities/core/scan/scan-activity.service';
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
-import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { mockLogger } from 'src/auth/auth.service.spec';
 import { ValidatePathActivity } from 'src/activities/validate-path/validate-path.service';
 import { SyncService } from 'src/activities/core/migrate/sync-activity.service';
@@ -38,40 +32,13 @@ const validateConnectionServiceMock = {
   validate: bindMock
 }
 
-const discoveryActivityMock = {
-  getWorkerId: bindMock,
-  generateDiscoveryReport: bindMock,
-  publishTask: bindMock,
-  discoveryStatusUpdate: bindMock,
-  discoveryProcess: bindMock,
-  scanActivity: bindMock,
-  publishLastEntry: bindMock,
-  fetchTasks: bindMock,
-}
-const discoveryScanActivityMock = {
-  scanActivity: bindMock,
-}
 const setupActivityServiceMock = {
   setup: bindMock,
   cleanup: bindMock,
   speedTestSetup: bindMock,
   speedTestCleanup: bindMock,
 }
-const migrationScanServiceMock = {
-  scanPath: bindMock,
-}
-const migrationTaskServiceMock = {
-  updateCutOverStatus: bindMock,
-  generateCOCReport: bindMock,
-  publishScanTask: bindMock,
-  fetchScanTask: bindMock,
-  fetchMigrationTask: bindMock,
-  updateStatus: bindMock,
-}
 
-const migrationSyncServiceMock = {
-  syncTask:  bindMock
-}
 
 const validateWorkingDirectoryActivityMock = {
   validateWorkingDirectory:  bindMock,
@@ -92,10 +59,9 @@ const commonActivityServiceMock = {
   updateJobErrorStatus: bindMock,
   updateWorkerResponse: bindMock,
   cleanupJobContext: bindMock,
-  getJobStateWithStreamLoad: bindMock,
-  getJobStateAndUpdateTaskList: bindMock,
-  hasRunningScanTask: bindMock,
-  hasRunningSyncTask: bindMock,
+  generateCOCReport: bindMock,
+  updateCutOverStatus: bindMock,
+  generateDiscoveryReport: bindMock,
 }
 
 const speedTestReadActivityMock = {
@@ -114,14 +80,14 @@ const redismeorycheckactivityMock = {
   checkMemoryUsage: bindMock,
 }
 
-const MigrateSyncServiceMock = {
-  syncTaskActivity: bindMock,
-}
 
 const CommonTaskServiceMock = {
   getGroupOfTasksActivity: jest.fn(),
   isWorkflowRunningActivity: jest.fn(),
   createInitialDirBatch: jest.fn(),
+  generateDiscoveryReport: jest.fn(),
+  updateCutOverStatus: jest.fn(),
+  generateCOCReport: jest.fn(),
 };
 
 const ScanServiceMock = {
@@ -152,12 +118,7 @@ describe('WorkerOptionsService', () => {
         WorkerOptionsService,
         { provide: ListPathActivity, useValue: listPathActivityServiceMock},
         { provide: ValidateConnectionActivity, useValue: validateConnectionServiceMock },
-        { provide: DiscoveryActivity, useValue: discoveryActivityMock },
-        { provide: DiscoveryScanActivity, useValue: discoveryScanActivityMock },
         { provide: SetupActivityService, useValue: setupActivityServiceMock },
-        { provide: MigrationScanService, useValue: migrationScanServiceMock },
-        { provide: MigrationTaskService, useValue: migrationTaskServiceMock },
-        { provide: MigrationSyncService, useValue: migrationSyncServiceMock },
         { provide: ValidateWorkingDirectoryActivity, useValue: validateWorkingDirectoryActivityMock },
         { provide: PrecheckActivity, useValue: precheckActivityMock },
         { provide: CommonActivityService, useValue: commonActivityServiceMock },

@@ -72,6 +72,7 @@ export const getTransferAclSript = (targetPath: string, isDir: boolean, acl: Acl
 }
 
 export const validateSidMapping = ({actual ,expected, sidMapping, failedMaps,}: ValidateMappingInput): ValidateMappingResult => {
+
   const output: ValidateMappingResult = {
     failedSid: '',
     sourceAcl: '',

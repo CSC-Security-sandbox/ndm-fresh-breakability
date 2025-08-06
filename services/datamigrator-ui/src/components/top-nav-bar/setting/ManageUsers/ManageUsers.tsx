@@ -18,16 +18,18 @@ import { useSelector } from "react-redux";
 import { RootStateType } from "@store/store";
 import { DEFAULT_COLUMN_STATE } from "@components/top-nav-bar/setting/ManageUsers/ManageUsers.constant";
 import { decryptData } from "@/utils/common.utils";
+import useSelectedProjectId from "@hooks/useSelectedProjectId";
 
 const ManageUsers = () => {
   const [updateUserStatus] = useUpdateUserStatusMutation();
   const [resetPasswordApi] = useResetPasswordMutation();
+  const projectId = useSelectedProjectId();
   const {
     data: userData,
     isLoading,
     isFetching,
     refetch,
-  } = useGetAllUsersQuery("");
+  } = useGetAllUsersQuery({ projectId: projectId.selectedProjectId });
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const permission = useSelector(
     (state: RootStateType) => state.permissionSlice
@@ -45,8 +47,10 @@ const ManageUsers = () => {
         notify.success(res?.message);
       })
       .catch((err) => {
-        console.error('error', err);
-        notify.error(err?.error || err?.message || "Failed to update user status");
+        console.error("error", err);
+        notify.error(
+          err?.error || err?.message || "Failed to update user status"
+        );
       });
   };
 

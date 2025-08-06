@@ -86,9 +86,13 @@ export class SMBProtocol extends Protocol {
       }
     }
     catch(e) {
-        this.logger.log(`error: ${e}`)
-        const lines = e.message.split('\n'); 
-        throw new Error(lines.length > 1 ? lines.slice(1).join('\n') : '')
+      this.logger.log(`error: ${e}`)
+      const message = e instanceof Error ? e.message : String(e);
+      this.logger.error(`error: ${message}`);
+      const lines = message.split('\n');
+      const cleanedMessage = lines.length > 1 ? lines.slice(1).join('\n') : message;
+      throw new Error(cleanedMessage);
+ 
     }
   }
 

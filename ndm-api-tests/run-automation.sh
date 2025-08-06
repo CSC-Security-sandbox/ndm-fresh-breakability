@@ -120,7 +120,7 @@ run_tests "end-to-end" "./tests/e2e" "vol_src_automation, volSrcAuto, vol_src_au
 
 
 #Smoke Testing
-run_tests "smoke"
+run_tests "smoke" "./tests/smoke"
 
 
 

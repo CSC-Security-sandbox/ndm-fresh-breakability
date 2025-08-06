@@ -9,8 +9,8 @@ import { CleanupWorkerWorkflow } from '../setup/cleanup-worker-workflow';
 import { SpeedTestJobWorkflow } from './speed-test-job-workflow';
 import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from '../../activities/common/common.service';
-import { TaskStatus } from '../../activities/discovery/enums';
-import { JobServiceJobType } from '../../activities/discovery/enums';
+import { TaskStatus } from '../../activities/common/enums';
+import { JobServiceJobType } from '../../activities/common/enums';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
@@ -18,10 +18,10 @@ async function log(traceId: string, message: string) {
 
 export const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
 
-const { 
-  getJobState: getJobStateActivity,
-  setJobState: setJobStateActivity,
-} = proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
+// const { 
+//   getJobState: getJobStateActivity,
+//   setJobState: setJobStateActivity,
+// } = proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 /**
  * This is parent workflow that will call SetupWorkerWorkflow for each workerId
  * @param traceId Unique identifier to trace the request
@@ -94,10 +94,10 @@ export async function SpeedTestWorkflow({
     const fileServerId = workerActivities.fileServerId;
     const tests = workerActivities.tests;
 
-    const jobState = await getJobStateActivity(traceId);
-    const uniqueWorkers = jobState.workers.includes(workerId) ? jobState.workers : [...jobState.workers, workerId];
-    const newJobState = { ...jobState, workers: uniqueWorkers, status: TaskStatus.Running} as any;
-    await setJobStateActivity(traceId, newJobState);
+    // const jobState = await getJobStateActivity(traceId);
+    // const uniqueWorkers = jobState.workers.includes(workerId) ? jobState.workers : [...jobState.workers, workerId];
+    // const newJobState = { ...jobState, workers: uniqueWorkers, status: TaskStatus.Running} as any;
+    // await setJobStateActivity(traceId, newJobState);
     log(traceId, `Starting SpeedTestJobWorkflow for workerId: ${workerId} and fsDetails: ${fsDetails}`);
     while (true) {
       try {

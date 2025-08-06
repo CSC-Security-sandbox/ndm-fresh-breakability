@@ -81,23 +81,60 @@ export class UserService {
     sortField: string = 'id',
     sortOrder: 'ASC' | 'DESC' = 'ASC',
     filter: Partial<CreateUserDto> = {},
+    projectId?: string,
   ): Promise<User[]> {
     try {
       this.logger.log('Retrieving users list', {
         page,
         limit,
         sortField,
-        sortOrder
+        sortOrder,
+        projectId
       });
 
-      const options: FindManyOptions<User> = {
-        skip: (page - 1) * limit,
-        take: limit,
-        order: { [sortField]: sortOrder },
-        where: filter,
-      };
+      let users: User[];
 
-      const users = await this.userRepository.find(options);
+      if (projectId) {
+        // When projectId is provided, get users associated with that project OR app admins
+        // App admins have roles with projectId: null and should have access to all projects
+        const userRoles = await this.userRoleRepository.find({
+          where: [
+            { projectId }, // Users with roles for the specific project
+            { projectId: IsNull() } // App admins with global access (projectId is null)
+          ],
+          relations: ['user'],
+          select: ['userId']
+        });
+
+        if (userRoles.length === 0) {
+          this.logger.log('No users found for project', { projectId });
+          return [];
+        }
+
+        const userIds = userRoles.map(ur => ur.userId);
+        
+        const options: FindManyOptions<User> = {
+          skip: (page - 1) * limit,
+          take: limit,
+          order: { [sortField]: sortOrder },
+          where: { 
+            id: In(userIds),
+            ...filter 
+          },
+        };
+
+        users = await this.userRepository.find(options);
+      } else {
+        // Original logic when no projectId is provided
+        const options: FindManyOptions<User> = {
+          skip: (page - 1) * limit,
+          take: limit,
+          order: { [sortField]: sortOrder },
+          where: filter,
+        };
+
+        users = await this.userRepository.find(options);
+      }
 
     if (users.length === 0) {
       return [];
@@ -117,8 +154,12 @@ export class UserService {
         where: { id: In(updatedByIds) },
         select: ['id', 'email', 'user_status'],
       }) : [],
+      // If projectId is provided, get roles for that project; otherwise get app admin roles (projectId is null)
       this.userRoleRepository.find({
-        where: { userId: In(userIds), projectId: IsNull() },
+        where: { 
+          userId: In(userIds), 
+          ...(projectId ? { projectId } : { projectId: IsNull() })
+        },
         select: ['userId', 'roleId', 'projectId'],
       })
     ]);
@@ -136,6 +177,8 @@ export class UserService {
     // Transform users with the fetched data
     const transformedUsers = users.map(user => ({
       ...user,
+      // When filtering by projectId, show if user has role in that project
+      // When no projectId, show if user is app admin (has role with null projectId)
       isAppAdmin: userRoleMap.has(user.id),
       created_by: createdByMap.get(user.created_by) || null,
       updated_by: updatedByMap.get(user.updated_by) || null,
@@ -144,7 +187,8 @@ export class UserService {
     this.logger.log('Successfully retrieved users', {
       count: transformedUsers.length,
       page,
-      limit
+      limit,
+      projectId: projectId || 'all'
     });
     return transformedUsers;
     } catch (error) {

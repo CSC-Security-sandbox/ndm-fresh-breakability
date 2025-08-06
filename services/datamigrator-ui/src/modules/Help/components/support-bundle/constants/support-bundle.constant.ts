@@ -1,15 +1,46 @@
 import * as yup from "yup";
 
 export const SUPPORT_BUNDLE_FORM_VALIDATION_SCHEMA = yup.object().shape({
-  startDate: yup.string().required("Start date is required"),
-  endDate: yup.string().required("End date is required"),
+  startDate: yup
+    .string()
+    .test(
+      "is-not-future",
+      "Start date cannot be in the future",
+      function (value) {
+        if (!value) return true;
+        const selectedDate = new Date(value);
+        const today = new Date();
+
+        // Compare only dates, not time
+        selectedDate.setHours(0, 0, 0, 0);
+        today.setHours(0, 0, 0, 0);
+
+        return selectedDate <= today;
+      }
+    ),
+  endDate: yup
+    .string()
+    .test(
+      "is-not-future",
+      "End date cannot be in the future",
+      function (value) {
+        if (!value) return true;
+        const selectedDate = new Date(value);
+        const today = new Date();
+
+        // Compare only dates, not time
+        selectedDate.setHours(0, 0, 0, 0);
+        today.setHours(0, 0, 0, 0);
+
+        return selectedDate <= today;
+      }
+    ),
 });
 
 export const INITIAL_FORM_STATE = {
   startDate: "",
   endDate: "",
-  project_worker: "",
-  other_metrics: "",
+  otherMetrics: "",
   isValid: false,
   isProcessing: false,
 };

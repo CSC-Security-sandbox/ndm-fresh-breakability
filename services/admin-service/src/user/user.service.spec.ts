@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { Project } from '../entities/project.entity';
 import { UserService } from './user.service';
@@ -169,7 +169,7 @@ describe('UserService', () => {
     );
   });
 
-  it('should find all users', async () => {
+  it('should find all users without projectId', async () => {
     const users = [
       {
         id: '1',
@@ -233,6 +233,226 @@ describe('UserService', () => {
         }),
       ]),
     );
+  });
+
+  it('should find users by projectId including app admins', async () => {
+    const projectId = 'project-123';
+    const userRoles = [
+      { userId: '1', projectId } as UserRole, // Project-specific user
+      { userId: '2', projectId } as UserRole, // Project-specific user
+      { userId: '3', projectId: null } as UserRole, // App admin
+    ];
+
+    const users = [
+      {
+        id: '1',
+        email: 'user1@test.com',
+        user_status: 'active',
+        first_name: 'User',
+        last_name: 'One',
+        name: 'User One',
+        created_at: new Date(),
+        created_by: '3',
+        updated_at: new Date(),
+        updated_by: '4',
+        projects: [],
+        user_roles: [],
+        populateWhoColumns: jest.fn(),
+      },
+      {
+        id: '2',
+        email: 'user2@test.com',
+        user_status: 'active',
+        first_name: 'User',
+        last_name: 'Two',
+        name: 'User Two',
+        created_at: new Date(),
+        created_by: '3',
+        updated_at: new Date(),
+        updated_by: '4',
+        projects: [],
+        user_roles: [],
+        populateWhoColumns: jest.fn(),
+      },
+      {
+        id: '3',
+        email: 'admin@test.com',
+        user_status: 'active',
+        first_name: 'App',
+        last_name: 'Admin',
+        name: 'App Admin',
+        created_at: new Date(),
+        created_by: '3',
+        updated_at: new Date(),
+        updated_by: '4',
+        projects: [],
+        user_roles: [],
+        populateWhoColumns: jest.fn(),
+      },
+    ];
+
+    const createdByUsers = [
+      { id: '3', email: 'creator@test.com', user_status: 'active' } as User,
+    ];
+
+    const updatedByUsers = [
+      { id: '4', email: 'updater@test.com', user_status: 'active' } as User,
+    ];
+
+    const projectUserRoles = [
+      { userId: '1', roleId: 'role-1', projectId } as UserRole,
+      { userId: '2', roleId: 'role-2', projectId } as UserRole,
+      { userId: '3', roleId: 'app-admin-role', projectId } as UserRole,
+    ];
+
+    jest.spyOn(userRoleRepository, 'find')
+      .mockResolvedValueOnce(userRoles) // First call - get users for project OR app admins
+      .mockResolvedValueOnce(projectUserRoles); // Second call - get user roles for project
+
+    jest.spyOn(userRepository, 'find')
+      .mockResolvedValueOnce(users) // Main query for users
+      .mockResolvedValueOnce(createdByUsers) // createdByUsers query
+      .mockResolvedValueOnce(updatedByUsers); // updatedByUsers query
+
+    const result = await service.findAll(1, 10, 'id', 'ASC', {}, projectId);
+
+    expect(userRoleRepository.find).toHaveBeenCalledWith({
+      where: [
+        { projectId }, // Users with roles for the specific project
+        { projectId: IsNull() } // App admins with global access (projectId is null)
+      ],
+      relations: ['user'],
+      select: ['userId']
+    });
+
+    expect(userRepository.find).toHaveBeenCalledWith({
+      skip: 0,
+      take: 10,
+      order: { id: 'ASC' },
+      where: { id: expect.any(Object) }, // In(['1', '2', '3'])
+    });
+
+    expect(result).toHaveLength(3);
+    expect(result[0]).toEqual(expect.objectContaining({
+      id: '1',
+      email: 'user1@test.com',
+      isAppAdmin: true,
+      created_by: createdByUsers[0],
+      updated_by: updatedByUsers[0],
+    }));
+    expect(result[2]).toEqual(expect.objectContaining({
+      id: '3',
+      email: 'admin@test.com',
+      isAppAdmin: true, // App admin should have isAppAdmin: true
+      created_by: createdByUsers[0],
+      updated_by: updatedByUsers[0],
+    }));
+  });
+
+  it('should return empty array when no users found for project', async () => {
+    const projectId = 'non-existent-project';
+
+    jest.spyOn(userRoleRepository, 'find').mockResolvedValue([]);
+
+    const result = await service.findAll(1, 10, 'id', 'ASC', {}, projectId);
+
+    expect(userRoleRepository.find).toHaveBeenCalledWith({
+      where: [
+        { projectId }, // Users with roles for the specific project
+        { projectId: IsNull() } // App admins with global access (projectId is null)
+      ],
+      relations: ['user'],
+      select: ['userId']
+    });
+
+    expect(result).toEqual([]);
+    expect(userRepository.find).not.toHaveBeenCalled();
+  });
+
+  it('should return empty array when users query returns no results', async () => {
+    jest.spyOn(userRepository, 'find').mockResolvedValue([]);
+
+    const result = await service.findAll();
+
+    expect(userRepository.find).toHaveBeenCalled();
+    expect(result).toEqual([]);
+  });
+
+  it('should handle users with no created_by or updated_by values', async () => {
+    const users = [
+      {
+        id: '1',
+        email: 'test@example.com',
+        user_status: 'active',
+        first_name: 'Test',
+        last_name: 'User',
+        name: 'Test User',
+        created_at: new Date(),
+        created_by: null, // No creator
+        updated_at: new Date(),
+        updated_by: null, // No updater
+        projects: [],
+        user_roles: [],
+        populateWhoColumns: jest.fn(),
+      },
+    ];
+
+    jest.spyOn(userRepository, 'find')
+      .mockResolvedValueOnce(users) // Main query
+      .mockResolvedValueOnce([]) // createdByUsers (empty)
+      .mockResolvedValueOnce([]); // updatedByUsers (empty)
+
+    jest.spyOn(userRoleRepository, 'find').mockResolvedValue([]);
+
+    const result = await service.findAll();
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual(expect.objectContaining({
+      id: '1',
+      email: 'test@example.com',
+      isAppAdmin: false,
+      created_by: null,
+      updated_by: null,
+    }));
+  });
+
+  it('should handle findAll with custom pagination and sorting', async () => {
+    const users = [
+      {
+        id: '1',
+        email: 'test@example.com',
+        user_status: 'active',
+        first_name: 'Test',
+        last_name: 'User',
+        name: 'Test User',
+        created_at: new Date(),
+        created_by: '2',
+        updated_at: new Date(),
+        updated_by: '2',
+        projects: [],
+        user_roles: [],
+        populateWhoColumns: jest.fn(),
+      },
+    ];
+
+    jest.spyOn(userRepository, 'find')
+      .mockResolvedValueOnce(users) // Main query
+      .mockResolvedValueOnce([]) // createdByUsers
+      .mockResolvedValueOnce([]); // updatedByUsers
+
+    jest.spyOn(userRoleRepository, 'find').mockResolvedValue([]);
+
+    const filter = { user_status: 'active' };
+    const result = await service.findAll(2, 5, 'email', 'DESC', filter);
+
+    expect(userRepository.find).toHaveBeenCalledWith({
+      skip: 5, // (page - 1) * limit = (2 - 1) * 5
+      take: 5,
+      order: { email: 'DESC' },
+      where: filter,
+    });
+
+    expect(result).toHaveLength(1);
   });
 
   it('should throw NotFoundException if user is not found', async () => {
@@ -309,7 +529,7 @@ describe('UserService', () => {
     const permissions2 = ['read'];
 
     jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
-    
+
     // Mock the rolePermissionRepository.find method for allRolePermissions
     jest.spyOn(rolePermissionRepository, 'find').mockResolvedValue([
       {
@@ -340,6 +560,37 @@ describe('UserService', () => {
         projectName: 'Project 2',
         role: 'Editor',
         permissionsOfProject: permissions2,
+      },
+    ]);
+  });
+
+  it('should handle user roles with null projects (app admin roles)', async () => {
+    const email = 'test@example.com';
+    const userRole = new UserRole();
+    userRole.project = null; // App admin role has null project
+    userRole.role = { id: 'app-admin-role-id', role_name: 'App Admin' } as any;
+
+    const user = new User();
+    user.user_roles = [userRole];
+
+    jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
+
+    // Mock the rolePermissionRepository.find method for allRolePermissions
+    jest.spyOn(rolePermissionRepository, 'find').mockResolvedValue([
+      {
+        role: { id: 'app-admin-role-id' },
+        permission: { permission_name: 'admin' },
+      } as any,
+    ]);
+
+    const result = await service.getUserProjectsAndPermissions(email);
+
+    expect(result).toEqual([
+      {
+        projectId: null,
+        projectName: null,
+        role: 'App Admin',
+        permissionsOfProject: ['admin'],
       },
     ]);
   });
@@ -459,6 +710,15 @@ describe('UserService', () => {
     });
   });
 
+  it('should throw NotFoundException when inactivating user that does not exist', async () => {
+    const userId = 'non-existent-id';
+    jest.spyOn(userRepository, 'findOneBy').mockResolvedValue(null);
+
+    await expect(service.inactivate(userId)).rejects.toThrow(
+      new NotFoundException(`User with ID ${userId} not found`),
+    );
+  });
+
   // Database error handling tests
   describe('Database Error Handling', () => {
     const createUserDto = {
@@ -563,6 +823,19 @@ describe('UserService', () => {
       await expect(service.inactivate('1')).rejects.toThrow('Database update failed');
       expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
         'Failed to inactivate user',
+        dbError
+      );
+    });
+
+    it('should handle database errors in getUserProjectsAndPermissions and log them', async () => {
+      const dbError = new Error('Database query failed');
+      jest.spyOn(userRepository, 'findOne').mockRejectedValue(dbError);
+
+      await expect(service.getUserProjectsAndPermissions('test@example.com'))
+        .rejects.toThrow('Database query failed');
+
+      expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(
+        'Failed to get user projects and permissions',
         dbError
       );
     });

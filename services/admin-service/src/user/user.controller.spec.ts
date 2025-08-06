@@ -132,7 +132,7 @@ describe('UserController', () => {
     ).toEqual(user);
   });
 
-  it('should find all users', async () => {
+  it('should find all users without projectId', async () => {
     const users = [
       {
         id: '1',
@@ -168,8 +168,82 @@ describe('UserController', () => {
 
     jest.spyOn(service, 'findAll').mockResolvedValue(users);
 
-    expect(await controller.findAll(1, 1, 'id', 'ASC', '{}')).toEqual(users);
-    expect(await controller.findAll()).toEqual(users);
+    const result = await controller.findAll(1, 1, 'id', 'ASC', '{}');
+
+    expect(service.findAll).toHaveBeenCalledWith(1, 1, 'id', 'ASC', {}, undefined);
+    expect(result).toEqual(users);
+  });
+
+  it('should find all users with default parameters', async () => {
+    const users = [
+      {
+        id: '1',
+        first_name: '',
+        last_name: '',
+        name: '',
+        email: 'test',
+        user_status: 'active',
+        created_at: new Date(),
+        created_by: '1',
+        updated_at: new Date(),
+        updated_by: '1',
+        projects: [],
+        user_roles: [],
+        populateWhoColumns: jest.fn(),
+      },
+    ];
+
+    jest.spyOn(service, 'findAll').mockResolvedValue(users);
+
+    const result = await controller.findAll();
+
+    expect(service.findAll).toHaveBeenCalledWith(1, 10, 'id', 'ASC', {}, undefined);
+    expect(result).toEqual(users);
+  });
+
+  it('should find users by projectId', async () => {
+    const projectUsers = [
+      {
+        id: '1',
+        first_name: 'John',
+        last_name: 'Doe',
+        name: 'John Doe',
+        email: 'john@example.com',
+        user_status: 'active',
+        created_at: new Date(),
+        created_by: '1',
+        updated_at: new Date(),
+        updated_by: '1',
+        projects: [],
+        user_roles: [],
+        populateWhoColumns: jest.fn(),
+      },
+    ];
+
+    jest.spyOn(service, 'findAll').mockResolvedValue(projectUsers);
+
+    const result = await controller.findAll(1, 10, 'id', 'ASC', '{}', 'project-123');
+
+    expect(service.findAll).toHaveBeenCalledWith(1, 10, 'id', 'ASC', {}, 'project-123');
+    expect(result).toEqual(projectUsers);
+  });
+
+  it('should handle custom pagination and sorting with projectId', async () => {
+    const users = [];
+
+    jest.spyOn(service, 'findAll').mockResolvedValue(users);
+
+    const result = await controller.findAll(2, 5, 'email', 'DESC', '{"user_status": "active"}', 'project-456');
+
+    expect(service.findAll).toHaveBeenCalledWith(
+      2,
+      5,
+      'email',
+      'DESC',
+      { user_status: 'active' },
+      'project-456'
+    );
+    expect(result).toEqual(users);
   });
 
   it('should call service method getUserProjectsAndPermissions with email and projectId', async () => {

@@ -74,6 +74,7 @@ describe('MigrateScanService', () => {
         jobContext = {
             publishToErrorStream: jest.fn(),
             publishToCommandStream: jest.fn(),
+            publishBulkToCommandStream: jest.fn(),
             jobConfig: {
                 options: {
                     excludeOlderThan: new Date('2023-01-01'),
@@ -205,13 +206,14 @@ describe('MigrateScanService', () => {
 
     // --- publishCommands ---
     describe('publishCommands', () => {
-        it('should call publishToCommandStream for each command in publishCommands', async () => {
+        it('should call publishBulkToCommandStream for bulk commands in publishCommands', async () => {
             const commands = [
                 new Cmd('cmd1', '/src/file1', CommandStatus.READY, false, { COPY_FILE: { status: 'READY', params: {} } }),
                 new Cmd('cmd2', '/src/file2', CommandStatus.READY, false, { COPY_FILE: { status: 'READY', params: {} } }),
             ];
             await service.publishCommands({ jobContext, commands });
-            expect(jobContext.publishToCommandStream).toHaveBeenCalledTimes(2);
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledTimes(1);
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledWith(commands);
         });
     });
 
@@ -235,7 +237,7 @@ describe('MigrateScanService', () => {
             (shouldExcludeOrSkip as jest.Mock).mockReturnValue(true);
             const result = await service.scanDirectory(commandInput);
             expect(result.fileCount).toBe(0);
-            expect(jobContext.publishToCommandStream).not.toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
         });
 
         it('should chunk commands and call publishCommands in scanDirectory', async () => {
@@ -266,7 +268,7 @@ describe('MigrateScanService', () => {
 
             await service.scanDirectory(commandInput);
 
-            expect(jobContext.publishToCommandStream).toHaveBeenCalledTimes(3);
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledTimes(2);
         });
 
         it('should increment dirCount and subDirs for directories and publish command if not in target', async () => {
@@ -296,7 +298,7 @@ describe('MigrateScanService', () => {
 
             const result = await service.scanDirectory(commandInput);
             expect(result.dirCount).toBe(1);
-            expect(jobContext.publishToCommandStream).toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalled();
         });
 
         it('should not increment dirCount for symlink directories', async () => {
@@ -353,7 +355,7 @@ describe('MigrateScanService', () => {
 
             const result = await service.scanDirectory(commandInput);
             expect(result.fileCount).toBe(1);
-            expect(jobContext.publishToCommandStream).toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalled();
         });
 
         it('should build and publish command for file present in target if content updated', async () => {
@@ -395,7 +397,7 @@ describe('MigrateScanService', () => {
             });
 
             const result = await service.scanDirectory(commandInput);
-            expect(jobContext.publishToCommandStream).toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalled();
         });
 
         it('should skip item if fs.promises.access returns false for sourceContentPath', async () => {
@@ -417,7 +419,7 @@ describe('MigrateScanService', () => {
 
             const result = await service.scanDirectory(commandInput);
             expect(result.fileCount).toBe(0);
-            expect(jobContext.publishToCommandStream).not.toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
         });
 
         it('should handle error and publish to error stream', async () => {
@@ -491,7 +493,7 @@ describe('MigrateScanService', () => {
             };
 
             await service.scanDirectory(highRetryInput);
-            expect(jobContext.publishToCommandStream).toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalled();
         });
 
         it('should handle empty source directory gracefully', async () => {
@@ -503,7 +505,7 @@ describe('MigrateScanService', () => {
             expect(result.fileCount).toBe(0);
             expect(result.dirCount).toBe(0);
             expect(result.subDirs).toHaveLength(0);
-            expect(jobContext.publishToCommandStream).not.toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
         });
         it('should skip delete when skipDelete is true', async () => {
             jobContext.jobConfig.skipDelete = true;
@@ -515,7 +517,7 @@ describe('MigrateScanService', () => {
             });
             
             await service.scanDirectory(commandInput);
-            expect(jobContext.publishToCommandStream).not.toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
         });
 
         it('should handle command publishing in chunks during delete processing', async () => {
@@ -546,9 +548,8 @@ describe('MigrateScanService', () => {
 
             commandInput.targetPrefix = '/dst';
             await service.scanDirectory(commandInput);
-            expect(jobContext.publishToCommandStream).toHaveBeenCalledTimes(3);
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledTimes(2);
         });
-
 
         it('should handle empty source directory', async () => {
             jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
@@ -560,7 +561,7 @@ describe('MigrateScanService', () => {
             expect(result.fileCount).toBe(0);
             expect(result.dirCount).toBe(0);
             expect(result.subDirs).toEqual([]);
-            expect(jobContext.publishToCommandStream).not.toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
         });
 
         it('should handle target directory that does not exist during delete processing', async () => {
@@ -575,7 +576,7 @@ describe('MigrateScanService', () => {
             const result = await service.scanDirectory(commandInput);
 
             expect(result).toBeDefined();
-            expect(jobContext.publishToCommandStream).not.toHaveBeenCalled();
+            expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
         });
     });
 });
@@ -612,6 +613,7 @@ describe('MigrateScanService', () => {
         jobContext = {
             publishToErrorStream: jest.fn(),
             publishToCommandStream: jest.fn(),
+            publishBulkToCommandStream: jest.fn(),
             jobConfig: {
                 options: {
                     excludeOlderThan: new Date('2023-01-01'),
@@ -639,16 +641,17 @@ describe('MigrateScanService', () => {
         expect(service).toBeDefined();
     });
 
-    it('should call publishToCommandStream for sync command', async () => {
+    it('should call publishBulkToCommandStream for sync command', async () => {
         const commands = [
             new Cmd('cmd1', '/src/file1', CommandStatus.READY, false, { SYNC_FILE: { status: 'READY', params: {} } }),
         ];
         await service.publishCommands({ jobContext, commands });
-        expect(jobContext.publishToCommandStream).toHaveBeenCalledTimes(1);
+        expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledTimes(1);
+        expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledWith(commands);
     });
 
     it('should handle error in publishCommands gracefully', async () => {
-        jobContext.publishToCommandStream.mockImplementation(() => { throw new Error('fail'); });
+        jobContext.publishBulkToCommandStream.mockImplementation(() => { throw new Error('fail'); });
         const commands = [
             new Cmd('cmd1', '/src/file1', CommandStatus.READY, false, { SYNC_FILE: { status: 'READY', params: {} } }),
         ];

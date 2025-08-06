@@ -32,16 +32,15 @@ import { SignalWorkFlowPayload } from "src/workflow/workflow.types";
 import { FindManyOptions, Raw, Repository, UpdateResult } from "typeorm";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import { JobRunDetailsDTO, JobRunDto, JobRunsDTO } from "./dto/jobrun.dto";
-import {
-  ApprovalRequestDTO
-} from "./dto/jobrunactions.dto";
+import { ApprovalRequestDTO } from "./dto/jobrunactions.dto";
 import { JobErrorQueryDto } from "./dto/jobRunErrors.dto";
 import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { JobRunStats } from "./dto/jobstats";
 import { JobRunInitService } from "./jobrun.init.service";
 import { SuccessEmailType } from "src/utils/send-email.type";
-import { getErrorDisplayMessage } from './jobrun.utli';
+import { getErrorDisplayMessage } from "./jobrun.utli";
 import { WorkFlowFailureReason } from "./jobrun.types";
+import { MigrationConflictService } from "src/migration-conflict/migration-conflict.service";
 
 @Injectable()
 export class JobRunService {
@@ -67,7 +66,8 @@ export class JobRunService {
     private workFlowService: WorkflowService,
     private sendMailService: SendMailService,
     private errorRemedyService: ErrorRemedyService,
-    private readonly workerService: WorkersService
+    private readonly workerService: WorkersService,
+    private readonly migrationConflictService: MigrationConflictService
   ) {
     this.mountBasePath = this.configService.get<string>(
       "app.paths.mountBasePath"
@@ -153,9 +153,31 @@ export class JobRunService {
       throw new BadRequestException(
         `Job run can not be created to Inactive Job Config`
       );
+
+    if (
+      jobConfig.jobType === JobType.CUT_OVER ||
+      jobConfig.jobType === JobType.MIGRATE
+    ) {
+      const circularDependencies =
+        await this.migrationConflictService.checkMigrationConflicts({
+          migrateConfigs: [
+            {
+              sourcePathId: jobConfig.sourcePathId,
+              destinationPathId: [jobConfig.targetPathId],
+            },
+          ],
+        });
+      if (circularDependencies && circularDependencies.length > 0) {
+        throw new BadRequestException(
+          `Circular dependency detected for job config ${jobConfigId}`,
+          {
+            cause: circularDependencies,
+          }
+        );
+      }
+    }
     return await this.jobRunInitService.createJobRun(jobConfig.id, new Date());
   }
-
 
   //  ------------------- get JobRun Details ------------------ //
   /**
@@ -535,14 +557,25 @@ export class JobRunService {
                 volumePath: jobConfig.targetPath?.volumePath,
                 fileServer: { host: jobConfig.targetPath?.fileServer?.host },
               },
-            }
+            },
           });
         }
       }
       this.logger.log("job Run Stats", JSON.stringify(jobRunStats));
-      const terminalStatuses = [JobRunStatus.Completed, JobRunStatus.Failed, JobRunStatus.Errored, JobRunStatus.Stopped, JobRunStatus.Blocked];
-      const updateData: Partial<JobRunEntity> = { status: status, jobStats: jobRunStats };
-      if (terminalStatuses.includes(status)) { updateData.endTime = new Date(); }
+      const terminalStatuses = [
+        JobRunStatus.Completed,
+        JobRunStatus.Failed,
+        JobRunStatus.Errored,
+        JobRunStatus.Stopped,
+        JobRunStatus.Blocked,
+      ];
+      const updateData: Partial<JobRunEntity> = {
+        status: status,
+        jobStats: jobRunStats,
+      };
+      if (terminalStatuses.includes(status)) {
+        updateData.endTime = new Date();
+      }
       await this.jobRunRepo.update({ id: jobRunId }, updateData);
     } else {
       if (
@@ -563,7 +596,7 @@ export class JobRunService {
               volumePath: jobConfig.targetPath?.volumePath,
               fileServer: { host: jobConfig.targetPath?.fileServer?.host },
             },
-          }
+          },
         });
       }
       this.logger.log(`Job Run ${jobRunId} status updated to ${status}`);
@@ -580,7 +613,8 @@ export class JobRunService {
       jobRunId,
       errorType,
     } = taskQuery;
-    const data = await this.operationErrorRepo.query(`
+    const data = await this.operationErrorRepo.query(
+      `
       SELECT 
         MIN(oe.id::text) AS id,
         MIN(oe.error_message) AS "errorMessage",
@@ -596,9 +630,16 @@ export class JobRunService {
       LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
       WHERE o.job_run_id = $1 AND oe.error_type = $2
       GROUP BY oe.file_path
-      ORDER BY MIN($3) ${order.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'}
+      ORDER BY MIN($3) ${order.toUpperCase() === "DESC" ? "DESC" : "ASC"}
       LIMIT $4 OFFSET $5
-      `, [jobRunId, errorType, `oe.${sort}`, parseInt(limit, 10), (parseInt(page, 10) - 1) * parseInt(limit, 10)]
+      `,
+      [
+        jobRunId,
+        errorType,
+        `oe.${sort}`,
+        parseInt(limit, 10),
+        (parseInt(page, 10) - 1) * parseInt(limit, 10),
+      ]
     );
 
     // Map errors to include error remedy descriptions
@@ -616,9 +657,15 @@ export class JobRunService {
 
           return {
             ...error,
-            displayMessage: getErrorDisplayMessage(error.errorCode, error.errorMessage, errorRemedy?.description),
+            displayMessage: getErrorDisplayMessage(
+              error.errorCode,
+              error.errorMessage,
+              errorRemedy?.description
+            ),
             resolutionSteps: errorRemedy ? errorRemedy.resolutionSteps : null,
-            referenceCommands: errorRemedy ? errorRemedy.referenceCommands : null,
+            referenceCommands: errorRemedy
+              ? errorRemedy.referenceCommands
+              : null,
           };
         } catch (remedyError) {
           this.logger.error(
@@ -634,7 +681,7 @@ export class JobRunService {
         }
       })
     );
-    
+
     const totalResult = await this.operationErrorRepo
       .createQueryBuilder("oe")
       .leftJoin("oe.operation", "o")
@@ -654,7 +701,7 @@ export class JobRunService {
             const errorRemedies =
               await this.errorRemedyService.findByErrorCodes([
                 error.workerResponse.code,
-            ]);
+              ]);
             const errorRemedy = errorRemedies?.[0];
             return {
               errorMessage: error.workerResponse.message,
@@ -664,7 +711,9 @@ export class JobRunService {
                 errorRemedy?.description
               ),
               resolutionSteps: errorRemedy ? errorRemedy.resolutionSteps : null,
-              referenceCommands: errorRemedy ? errorRemedy.referenceCommands : null,
+              referenceCommands: errorRemedy
+                ? errorRemedy.referenceCommands
+                : null,
               errorType: "FATAL_ERROR",
               createdAt: error.workerResponse.createdAt,
               operationType: error.workerResponse.operation,
@@ -679,7 +728,10 @@ export class JobRunService {
       mappedData.sort((a, b) => {
         if (a.errorType === "FATAL_ERROR" && b.errorType !== "FATAL_ERROR") {
           return -1;
-        } else if (a.errorType !== "FATAL_ERROR" && b.errorType === "FATAL_ERROR") {
+        } else if (
+          a.errorType !== "FATAL_ERROR" &&
+          b.errorType === "FATAL_ERROR"
+        ) {
           return 1;
         }
         return 0;
@@ -794,7 +846,7 @@ export class JobRunService {
           resolutionSteps: error.resolutionSteps,
           referenceCommands: error.referenceCommands,
         })),
-      }
+      },
     });
   }
 
@@ -802,14 +854,20 @@ export class JobRunService {
     this.logger.log(`Checking the health of workers`);
     try {
       const runningJobRuns = await this.jobRunRepo.find({
-        where: [{ status: JobRunStatus.Running }, { status: JobRunStatus.Paused, pausedReason: PausedReason.SYSTEM_PAUSED}],
+        where: [
+          { status: JobRunStatus.Running },
+          {
+            status: JobRunStatus.Paused,
+            pausedReason: PausedReason.SYSTEM_PAUSED,
+          },
+        ],
         relations: {
           workerMap: {
             worker: { stats: true },
           },
         },
       });
-      if(!runningJobRuns.length) return;
+      if (!runningJobRuns.length) return;
       for (const jobRun of runningJobRuns) {
         const jobRunId = jobRun.id;
         const workerMap = jobRun.workerMap;
@@ -862,12 +920,21 @@ export class JobRunService {
     }
   }
 
-  async updateWorkerResponse(jobRunId: string, workerId: string, workerResponse: Record<string, any>): Promise<UpdateResult> {
+  async updateWorkerResponse(
+    jobRunId: string,
+    workerId: string,
+    workerResponse: Record<string, any>
+  ): Promise<UpdateResult> {
     try {
-      const updateCondition = workerId === 'all' ? { jobRunId } : { jobRunId, workerId };
-      return await this.workerJobRunMapRepo.update(updateCondition, { workerResponse });
+      const updateCondition =
+        workerId === "all" ? { jobRunId } : { jobRunId, workerId };
+      return await this.workerJobRunMapRepo.update(updateCondition, {
+        workerResponse,
+      });
     } catch (error) {
-      this.logger.error(`Error occurred while updating worker response for jobRunId ${jobRunId} and workerId ${workerId}: ${error}`);
+      this.logger.error(
+        `Error occurred while updating worker response for jobRunId ${jobRunId} and workerId ${workerId}: ${error}`
+      );
       throw new Error(`Failed to update worker response: ${error}`);
     }
   }
@@ -878,15 +945,17 @@ export class JobRunService {
         .createQueryBuilder("job")
         .where("job.jobRunId = :jobRunId", { jobRunId })
         .andWhere("job.workerResponse IS NOT NULL")
-        .andWhere(
-          "job.workerResponse ->> 'code' = ANY(:errorCodes)",
-          { errorCodes:  Object.values(WorkFlowFailureReason) }
-        )
+        .andWhere("job.workerResponse ->> 'code' = ANY(:errorCodes)", {
+          errorCodes: Object.values(WorkFlowFailureReason),
+        })
         .andWhere("job.workerResponse ->> 'status' = 'FAILED'")
         .getMany();
       return result;
     } catch (error) {
-      this.logger.error(`Error fetching worker setup errors for jobRunId ${jobRunId}:`, error);
+      this.logger.error(
+        `Error fetching worker setup errors for jobRunId ${jobRunId}:`,
+        error
+      );
       throw error;
     }
   }
