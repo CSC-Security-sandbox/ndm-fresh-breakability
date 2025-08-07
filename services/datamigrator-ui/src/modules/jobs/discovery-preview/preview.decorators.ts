@@ -393,7 +393,8 @@ export function extractAverageMaxDepth(jsonData: DataItemType[]) {
     (sum: number, item: DataItemType) => sum + (item.value as number),
     0,
   );
-  const avgDepth = parseFloat((total / depthData?.length).toFixed(1));
+  const avgDepth =
+    total === 0 ? 0 : parseFloat((total / depthData.length).toFixed(1));
 
   return { avgDepth, maxDepth };
 }
@@ -456,7 +457,8 @@ export function extractMaxAvgFilePath(data: DataItemType[]): {
     });
   }
 
-  const avgPath = totalLength / totalPath;
+  const avgPath =
+    totalPath === 0 || totalLength === 0 ? 0 : totalLength / totalPath;
 
   return {
     maxPath,
@@ -493,8 +495,12 @@ export function extractMaxAvgFileSize(data: DataItemType[]): {
   const { totalSpaceUsed, totalCount } =
     extractSystemFileStatAndDirectories(data);
 
+  const parsedTotalCount = parseInt(totalCount as string, 10);
+  const parsedTotalSpaceUsed = parseInt(totalSpaceUsed as string, 10);
   const avgFileSize =
-    parseInt(totalSpaceUsed as string) / parseInt(totalCount as string);
+    parsedTotalCount === 0 || parsedTotalSpaceUsed === 0
+      ? 0
+      : parsedTotalSpaceUsed / parsedTotalCount;
   return {
     maxFileSize,
     avgFileSize,
