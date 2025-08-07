@@ -44,7 +44,7 @@ export class LoggerService {
             ? (data as any).trackId
             : this.requestContext.getTrackId();
     
-    const projectId = this.requestContext.getProjectId();
+    const projectId = this.requestContext.getProjectId() ?? this.configService.get('worker.projectId');
 
     const baseLog = {
       message: message,
