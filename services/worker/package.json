@@ -23,7 +23,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:report": "jest --coverage --verbose",
-    "test:coverage": "jest --coverage --coverageDirectory=coverage --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text-summary --outputFile=coverage/unit-test-cases-results.json --json"
+    "test:coverage": "jest --coverage --coverageDirectory=coverage --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text-summary --outputFile=coverage/unit-test-cases-results.json --json --detectOpenHandles"
   },
   "pkg": {
     "assets": [
