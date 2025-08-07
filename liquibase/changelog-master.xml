@@ -443,4 +443,13 @@
       </rollback>
    </changeSet>
 
+   <changeSet id="20250807_05_discovery_report_proc_added_Top_File_Extensions-prefix-remove-special-file.sql"
+              author="gm67249">
+      <sqlFile
+              path="liquibase/20250807_05_discovery_report_proc_added_Top_File_Extensions-prefix-remove-special-file.sql"
+              splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
 </databaseChangeLog>

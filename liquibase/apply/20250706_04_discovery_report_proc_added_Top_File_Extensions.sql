@@ -335,7 +335,7 @@ select
     jsonb_agg(
             jsonb_build_object(
                     'category',
-                    'Top File Extensions (with file Capacity and Count)',
+                    'Top File Extensions',
                     'sub_category',
                     '.' || COALESCE(file_extension, 'none'),
                     'valueType',
@@ -533,13 +533,11 @@ from
         from
             temp_categorized_files
         union all
-        /*  select
-              'Special Files',
-              SUM(case when file_type = 'special_file' then 1 else 0 end),
-              'count' as valueType
-          from
-              temp_categorized_files
-          union all*/
+        select 'Special Files',
+               SUM(case when file_type = 'special_file' then 1 else 0 end),
+               'count' as valueType
+        from temp_categorized_files
+        union all
         select
             'Total Space for Regular Files',
             SUM(case when is_directory = false then file_size else 0 end),
