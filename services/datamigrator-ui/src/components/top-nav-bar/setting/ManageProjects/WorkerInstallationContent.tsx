@@ -13,12 +13,14 @@ import Box from "@/components/container/Box";
 
 const WorkerInstallationContent = ({
   workerSecret,
+  projectId,
   controlPlaneIp,
   workerId,
   isLoading,
   isError,
 }: {
   controlPlaneIp?: string;
+  projectId?: string;
   workerId?: string;
   workerSecret?: string;
   isLoading?: boolean;
@@ -70,6 +72,7 @@ const WorkerInstallationContent = ({
                 highLightLanguage={"bash"}
                 text={`export WORKER_ID=${workerId}
 export WORKER_SECRET=${workerSecret}
+export PROJECT_ID=${projectId}
 export CONTROL_PLANE_IP=${controlPlaneIp}
 sh ${WORKER_SCRIPT_PATH}`}
               />
