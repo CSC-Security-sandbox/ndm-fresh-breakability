@@ -424,7 +424,7 @@ export function extractMaxAvgFilePath(data: DataItemType[]): {
   }
 
   const avgPath =
-    totalPath === 0 || totalLength === 0 ? 0 : totalLength / totalPath;
+    totalPath === 0 ? 0 : totalLength / totalPath;
 
   return {
     maxPath,
