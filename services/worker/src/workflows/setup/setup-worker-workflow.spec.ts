@@ -1,5 +1,5 @@
 import { TestWorkflowEnvironment } from '@temporalio/testing';
-import { Worker, Runtime } from '@temporalio/worker';
+import { Worker } from '@temporalio/worker';
 import { SetupWorkerWorkflow } from './setup-worker-workflow';
 import { JobServiceJobType } from 'src/activities/common/enums';
 
@@ -29,7 +29,6 @@ describe('SetupWorkerWorkflow', () => {
             await worker?.shutdown();
         }
         await testEnv.teardown();
-        Runtime.instance().shutdown(); // clean up native handles
         // workflowCoverage.mergeIntoGlobalCoverage();
     });
 

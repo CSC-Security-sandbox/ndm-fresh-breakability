@@ -1,5 +1,5 @@
 import { TestWorkflowEnvironment } from '@temporalio/testing';
-import { Worker, Runtime } from '@temporalio/worker';
+import { Worker } from '@temporalio/worker';
 import { RedisMemoryCheckWorkflow } from './redis.memorycheck.workflow';
 
 
@@ -28,7 +28,6 @@ describe('RedisMemoryCheckWorkflow', () => {
         if (testEnv) {
             await testEnv.teardown();
         }
-        Runtime.instance().shutdown(); // clean up native handles
         // workflowCoverage.mergeIntoGlobalCoverage();
     });
 

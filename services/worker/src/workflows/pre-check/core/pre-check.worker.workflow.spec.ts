@@ -1,5 +1,5 @@
 import { TestWorkflowEnvironment } from '@temporalio/testing';
-import { Worker, Runtime } from '@temporalio/worker';
+import { Worker } from '@temporalio/worker';
 import { PreCheckWorkerValidationWorkflow } from './pre-check.worker.workflow';
 
 const mockedActivities = {
@@ -25,7 +25,6 @@ describe('PreCheckWorkerValidationWorkflow', () => {
             await worker?.shutdown();
         }
         await testEnv.teardown();
-        Runtime.instance().shutdown(); // clean up native handles
         // workflowCoverage.mergeIntoGlobalCoverage();
     });
     
