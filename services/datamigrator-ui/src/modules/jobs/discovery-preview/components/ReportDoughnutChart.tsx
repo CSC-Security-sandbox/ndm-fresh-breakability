@@ -144,9 +144,10 @@ const ReportDoughnutChart = () => {
               fileExtensionCounts.map(([, value]) => value),
               [totalSizeMB],
             ]}
+            value={totalSizeMB}
           />
 
-          <Box className="flex gap-4 w-full flex-wrap">
+          <Box className="flex gap-4 w-full flex-wrap max-h-60 overflow-y-auto pr-2">
             {legendsData.map((legend, index) => (
               <Legends
                 key={index}
