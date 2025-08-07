@@ -583,6 +583,17 @@ export async function compareFileACLs(
     return aclOps.compareFileACLs(sourceFile, targetFile, options);
 }
 
+export function aclToOneLineString(acl?: { permissions?: any[] }): string {
+    return (acl?.permissions ?? [])
+        .map(entry => {
+            const principal = entry.principal;
+            const accessType = entry.accessType;
+            const permissionCodes = (entry.permissions ?? []).map(p => p.code).join(',');
+            return `${principal}:${accessType}:${permissionCodes}`;
+        })
+        .join('|');
+}
+
 // Re-export everything
 export * from './aclOperations.types';
 export * from './aclOperations.constants';
