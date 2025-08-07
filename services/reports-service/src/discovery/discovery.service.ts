@@ -100,12 +100,11 @@ export class DiscoveryService {
   }
 
   async generatePdfFromData(reportData: any[]): Promise<Buffer> {
-    const sanitizedData = sanitizeReportData(reportData);
     const templatePath = path.join(__dirname, '../../templates/views/discovery_pdf_report.hbs');
     const templateSource = fs.readFileSync(templatePath, 'utf8');
     const template = hbs.compile(templateSource);
 
-    const categories: { [key: string]: any[] } = groupAndOrder(sanitizedData, ReportType.DISCOVERY);
+    const categories: { [key: string]: any[] } = groupAndOrder(reportData, ReportType.DISCOVERY);
 
     // Step 2: Generate HTML from template and data
     const htmlOutput = template(categories);
