@@ -140,7 +140,7 @@ describe("OverviewService", () => {
       const result = await service.getStorageAndJobsOverview(
         "project1",
         null,
-        null
+        null,
       );
 
       expect(result).toEqual(mockData);
@@ -175,11 +175,11 @@ describe("OverviewService", () => {
       const result = await service.getStorageAndJobsOverview(
         "project1",
         null,
-        null
+        null,
       );
-      expect(result.storageDetails.totalDiscoveredSize).toBe("0 Bytes");
-      expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
-      expect(result.storageDetails.totalPendingSize).toBe("0 Bytes");
+      expect(result.storageDetails.totalDiscoveredSize).toBe("0 B");
+      expect(result.storageDetails.totalMigratedSize).toBe("0 B");
+      expect(result.storageDetails.totalPendingSize).toBe("0 B");
       expect(result.jobDetails.totalDiscoverJobs).toBeDefined();
       expect(result.jobDetails.totalMigrateJobs).toBeDefined();
       expect(result.jobDetails.totalCutoverJobs).toBeDefined();
@@ -220,10 +220,10 @@ describe("OverviewService", () => {
       const result = await service.getStorageAndJobsOverview(
         "project1",
         null,
-        null
+        null,
       );
       expect(result.storageDetails.totalDiscoveredSize).toBeDefined();
-      expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
+      expect(result.storageDetails.totalMigratedSize).toBe("0 B");
     });
 
     it("should handle missing jobRunIds gracefully", async () => {
@@ -250,10 +250,10 @@ describe("OverviewService", () => {
       const result = await service.getStorageAndJobsOverview(
         "project1",
         null,
-        null
+        null,
       );
-      expect(result.storageDetails.totalDiscoveredSize).toBe("0 Bytes");
-      expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
+      expect(result.storageDetails.totalDiscoveredSize).toBe("0 B");
+      expect(result.storageDetails.totalMigratedSize).toBe("0 B");
     });
 
     it("should handle when migrateRun and cutOverRun are present", async () => {
@@ -302,7 +302,7 @@ describe("OverviewService", () => {
       const result = await service.getStorageAndJobsOverview(
         "project1",
         null,
-        null
+        null,
       );
       expect(result.storageDetails.totalDiscoveredSize).toBeDefined();
       expect(result.storageDetails.totalMigratedSize).toBeDefined();
@@ -348,7 +348,7 @@ describe("OverviewService", () => {
 
       // Verify that the logger was called with the expected message
       expect(mockLoggerFn).toHaveBeenCalledWith(
-        "No job runs found, skipping migration query"
+        "No job runs found, skipping migration query",
       );
 
       // Verify that totalMigratedSize was set to 0
