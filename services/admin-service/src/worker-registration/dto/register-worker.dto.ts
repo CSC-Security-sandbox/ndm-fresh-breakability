@@ -25,7 +25,7 @@ export class RegisterWorkerResponseDto {
   controlPlaneIp: string;
 
   constructor(
-    projectId?: string,
+    projectId: string,
     workerId?: string,
     workerSecret?: string,
     controlPlaneIp?: string,
