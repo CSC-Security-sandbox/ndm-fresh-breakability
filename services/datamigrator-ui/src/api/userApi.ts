@@ -10,6 +10,7 @@ export const usersApi = createApi({
     "CREATE_USER",
     "MY_DETAILS",
     "GET_SMTP",
+    "ALL_USERS_BY_PROJECT",
   ],
   baseQuery: fetchBaseQuery({
     baseUrl:
@@ -38,12 +39,22 @@ export const usersApi = createApi({
       query: ({ projectId }) => {
         return `/users?limit=${
           window?.env?.VITE_API_LIMIT || import.meta.env.VITE_API_LIMIT
-        }&projectId=${projectId}`;
+        }`;
       },
       transformResponse: (response) => {
         return response?.data?.items || response?.data || [];
       },
       providesTags: ["ALL_USERS"],
+    }),
+
+    getAllUserByProject: builder.query({
+      query: ({ projectId }) => {
+        return `/users?projectId=${projectId}`;
+      },
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || [];
+      },
+      providesTags: ["ALL_USERS_BY_PROJECT"],
     }),
 
     getAllUsersWithRoles: builder.query({
@@ -269,4 +280,5 @@ export const {
   useGetSmtpDetailsQuery,
   useCreateSmtpMutation,
   useUpdateSmtpDataMutation,
+  useGetAllUserByProjectQuery,
 } = usersApi;
