@@ -34,6 +34,7 @@ var (
 	NDM_WORKERS_PASSWORD    string
 	PROTOCOL_USERNAME       string
 	PROTOCOL_PASSWORD       string
+	SMB_EXECUTABLE_FILENAME string
 
 	ProtocolVersion3 ProtocolVersion
 
@@ -104,7 +105,7 @@ const (
 	FormatPDF                       Format          = "pdf"
 	FormatCSV                       Format          = "csv"
 	DefaultPollInterval                             = 5
-	MaxPollRetries                                  = 180
+	MaxPollRetries                                  = 70
 	WORKER_TIMEOUT                                  = 180
 	RUNNING_JOBRUN                                  = "RUNNING"
 	PAUSE_JOBRUN                                    = "PAUSE"
@@ -170,6 +171,8 @@ func init() {
 
 	SMB_PROTOCOL_USERNAME = os.Getenv("SMB_PROTOCOL_USERNAME")
 	SMB_PROTOCOL_PASSWORD = os.Getenv("SMB_PROTOCOL_PASSWORD")
+
+	SMB_EXECUTABLE_FILENAME = os.Getenv("SMB_EXECUTABLE_FILENAME")
 }
 
 func UpdateConfVariables(protocolType, sourceVolumesArgs, destinationVolumesArgs string) {

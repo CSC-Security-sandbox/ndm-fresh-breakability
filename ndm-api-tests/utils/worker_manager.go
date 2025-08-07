@@ -318,7 +318,8 @@ func CreateWorkerScript(resp *http.Response) (string, string, error) {
 
 	case ProtocolSMB:
 		script = fmt.Sprintf(
-			`"C:\Users\datamigrator\Downloads\windows-worker-installer-3551489.exe" /SILENT /WORKERID=%s /WORKERSECRET=%s /CONTROLPLANEIP=%s`,
+			`"C:\Users\datamigrator\Downloads\%s" /SILENT /WORKERID=%s /WORKERSECRET=%s /CONTROLPLANEIP=%s`,
+			SMB_EXECUTABLE_FILENAME,
 			workerId,
 			workerSecret,
 			controlPlaneIp,
