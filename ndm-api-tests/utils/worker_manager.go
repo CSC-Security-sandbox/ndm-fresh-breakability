@@ -8,32 +8,23 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 // Global raw configuration data.
 var (
 	// Global slices holding available and attached workers.
-	EnvWorkersConfigList  []SSHConfig
-	AttachedWorkersConfig map[string]SSHConfig
+	availableWorkers      []SSHConfig
+	attachedWorkersConfig map[string]SSHConfig
 )
 
-type AttachWorkerResult struct {
-	workerConfig SSHConfig
-	workerId     string
-	err          error
+// init automatically initializes worker configurations on package load.
+func init() {
+	initWorkers(NDM_WORKERS_HOST, NDM_WORKERS_PORT, NDM_WORKERS_PASSWORD, NDM_WORKERS_USER_NAME)
 }
 
-type DetachWorkerResult struct {
-	workerConfig SSHConfig
-	workerID     string
-	output       string
-	err          error
-}
-
-// InitWorkers parses the comma‑separated strings for IPs, ports, passwords, and usernames,
-// and builds the EnvWorkersConfigList slice.
-func InitWorkers(ips, ports, passwords, usernames string) {
+// initWorkers parses the comma‑separated strings for IPs, ports, passwords, and usernames,
+// and builds the availableWorkers slice.
+func initWorkers(ips, ports, passwords, usernames string) {
 	// Parse and trim IP addresses.
 	ipList := []string{}
 	for _, ip := range strings.Split(ips, ",") {
@@ -111,8 +102,8 @@ func InitWorkers(ips, ports, passwords, usernames string) {
 		LogFatalf("Insufficient number of usernames provided. Got %d usernames for %d IPs", len(usernameList), len(ipList))
 	}
 
-	// Build the EnvWorkersConfigList slice.
-	EnvWorkersConfigList = []SSHConfig{}
+	// Build the availableWorkers slice.
+	availableWorkers = []SSHConfig{}
 	for i, ip := range ipList {
 		worker := SSHConfig{
 			Username: usernameList[i],
@@ -120,27 +111,25 @@ func InitWorkers(ips, ports, passwords, usernames string) {
 			Port:     portList[i],
 			Password: passList[i],
 		}
-		EnvWorkersConfigList = append(EnvWorkersConfigList, worker)
+		availableWorkers = append(availableWorkers, worker)
 	}
-
-	LogDebug(fmt.Sprintf("Workers ssh config loaded from .env : %+v", strings.Join(ipList, ",")))
-	LogDebug(fmt.Sprintf("Worker count: %d", len(EnvWorkersConfigList)))
-	AttachedWorkersConfig = make(map[string]SSHConfig)
+	attachedWorkersConfig = make(map[string]SSHConfig)
+	// start with none attached
 }
 
-// getEnvWorkersConfigListCount returns the total count of available workers.
-func getEnvWorkersConfigListCount() int {
-	return len(EnvWorkersConfigList)
+// getAvailableWorkersCount returns the total count of available workers.
+func getAvailableWorkersCount() int {
+	return len(availableWorkers)
 }
 
 // getAttachedWorkerCount returns the current count of attached workers.
 func getAttachedWorkerCount() int {
-	return len(AttachedWorkersConfig)
+	return len(attachedWorkersConfig)
 }
 
 // containsWorker checks if a worker (by Host) is in the given slice.
-func containsWorker(AttachedWorkersConfig map[string]SSHConfig, item SSHConfig) bool {
-	for _, v := range AttachedWorkersConfig {
+func containsWorker(attachedWorkersConfig map[string]SSHConfig, item SSHConfig) bool {
+	for _, v := range attachedWorkersConfig {
 		if v.Host == item.Host {
 			return true
 		}
@@ -152,7 +141,7 @@ func containsWorker(AttachedWorkersConfig map[string]SSHConfig, item SSHConfig) 
 // A worker is considered attached only if the API call and SSH registration script succeed.
 // On success, it returns a map of worker IDs to their SSH configurations.
 func AttachWorkers(count int, authToken, accountId, projectId string) (map[string]SSHConfig, error) {
-	if count > getEnvWorkersConfigListCount() {
+	if count > getAvailableWorkersCount() {
 		return nil, errors.New("requested count exceeds total available workers")
 	}
 
@@ -161,43 +150,34 @@ func AttachWorkers(count int, authToken, accountId, projectId string) (map[strin
 		return nil, errors.New("already attached more workers than requested; please detach first")
 	}
 
-	var wg sync.WaitGroup
-	attachWorkerRes := make(chan AttachWorkerResult, len(EnvWorkersConfigList))
+	needed := count - current
 
-	// Iterate over EnvWorkersConfigList and for each not already attached, attempt to attach.
-	for _, workerConfig := range EnvWorkersConfigList {
-		if containsWorker(AttachedWorkersConfig, workerConfig) {
+	// Iterate over availableWorkers and for each not already attached, attempt to attach.
+	for _, workerConfig := range availableWorkers {
+		if needed == 0 {
+			break
+		}
+		if containsWorker(attachedWorkersConfig, workerConfig) {
 			continue
 		}
-
-		wg.Add(1)
 		// Try to register this worker.
-		go attachWorkerForConfig(workerConfig, authToken, accountId, projectId, attachWorkerRes, &wg)
-	}
-
-	go func() {
-		wg.Wait()
-		close(attachWorkerRes)
-	}()
-
-	for res := range attachWorkerRes {
-		if res.err != nil {
-			return nil, fmt.Errorf("failed to attach worker %s: %w", res.workerConfig.Host, res.err)
+		workerId, err := attachWorkerForConfig(workerConfig, authToken, accountId, projectId)
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach worker %s: %w", workerConfig.Host, err)
 		}
-		LogDebug(fmt.Sprintf("Successfully registered worker %s with workerId: %s", res.workerConfig.Host, res.workerId))
-		AttachedWorkersConfig[res.workerId] = res.workerConfig
+		LogDebug(fmt.Sprintf("Successfully registered worker %s with workerId: %s", workerConfig.Host, workerId))
+		attachedWorkersConfig[workerId] = workerConfig
+		needed--
 	}
-
 	if getAttachedWorkerCount() != count {
 		return nil, errors.New("failed to attach the required number of workers")
 	}
-	LogDebug(fmt.Sprintf("Total Worker Attached : %d", len(AttachedWorkersConfig)))
-	return AttachedWorkersConfig, nil
+	return attachedWorkersConfig, nil
 }
 
 // GetAttachedWorkersConfig returns the current map of attached workers.
 func GetAttachedWorkersConfig() map[string]SSHConfig {
-	return AttachedWorkersConfig
+	return attachedWorkersConfig
 }
 
 func GetAttachedWorkerDetails() SSHConfig {
@@ -212,59 +192,49 @@ func GetAttachedWorkerDetails() SSHConfig {
 
 // DetachWorkers detaches all attached workers by running the SSH detach script on each worker.
 // If a count is provided, it detaches that many workers from the start of the attachedWorkers slice.
-func DetachWorkers(workerIdsToDelete []string) error {
+func DetachWorkers(workerIdsToDelete []string) (string, error) {
+	var outputBuilder strings.Builder
 	var detachErrors []string
 
 	// Detach the specified worker by ID.
 	if len(workerIdsToDelete) == 0 {
-		return errors.New("no worker ID provided for detachment")
+		return "", errors.New("no worker ID provided for detachment")
 	}
 
-	var wg sync.WaitGroup
-	detachWorkerRes := make(chan DetachWorkerResult, len(workerIdsToDelete))
-
-	for workerId, workerConfig := range AttachedWorkersConfig {
+	for workerId, workerConfig := range attachedWorkersConfig {
 		for _, workerIdToDelete := range workerIdsToDelete {
 			if workerId == workerIdToDelete {
-				wg.Add(1)
-				go DetachWorker(workerConfig, workerId, detachWorkerRes, &wg)
+				output, err := DetachWorker(workerConfig)
+				if err != nil {
+					msg := fmt.Sprintf("Failed to detach worker %s: %v", workerConfig.Host, err)
+					LogError(msg, err)
+					outputBuilder.WriteString(msg + "\n")
+					detachErrors = append(detachErrors, msg)
+				} else {
+					msg := fmt.Sprintf("Successfully detached worker %s with output: %s", workerConfig.Host, output)
+					// Remove the worker from the attachedWorkersConfig map.
+					delete(attachedWorkersConfig, workerId)
+					LogDebug(msg)
+					outputBuilder.WriteString(msg + "\n")
+				}
 			}
 		}
 	}
-
-	go func() {
-		wg.Wait()
-		close(detachWorkerRes)
-	}()
-
-	for res := range detachWorkerRes {
-		if res.err != nil {
-			msg := fmt.Sprintf("Failed to detach worker %s: %v", res.workerConfig.Host, res.err)
-			LogError(msg, res.err)
-			detachErrors = append(detachErrors, msg)
-		} else {
-			msg := fmt.Sprintf("Successfully detached worker %s with output: %s", res.workerConfig.Host, res.output)
-			// Remove the worker from the AttachedWorkersConfig map.
-			delete(AttachedWorkersConfig, res.workerID)
-			LogDebug(msg)
-		}
-	}
-
 	if len(detachErrors) > 0 {
-		return errors.New(strings.Join(detachErrors, "; "))
+		return outputBuilder.String(), errors.New(strings.Join(detachErrors, "; "))
 	}
-	return nil
+	return outputBuilder.String(), nil
 }
 
 // DetachAllWorkers detaches all currently attached workers.
-func DetachAllWorkers() error {
-	if len(AttachedWorkersConfig) == 0 {
-		return errors.New("no workers currently attached")
+func DetachAllWorkers() (string, error) {
+	if len(attachedWorkersConfig) == 0 {
+		return "", errors.New("no workers currently attached")
 	}
 
 	// Collect all worker IDs to delete.
-	workerIdsToDelete := make([]string, 0, len(AttachedWorkersConfig))
-	for workerId := range AttachedWorkersConfig {
+	workerIdsToDelete := make([]string, 0, len(attachedWorkersConfig))
+	for workerId := range attachedWorkersConfig {
 		workerIdsToDelete = append(workerIdsToDelete, workerId)
 	}
 
@@ -303,11 +273,7 @@ func CreateWorkerScript(resp *http.Response) (string, string, error) {
 	workerSecret := workerResp.Data.Items.WorkerSecret
 	controlPlaneIp := workerResp.Data.Items.ControlPlaneIp
 
-	script := ""
-
-	switch PROTOCOL_TYPE {
-	case ProtocolNFS:
-		script = fmt.Sprintf(`
+	script := fmt.Sprintf(`
     sudo su -c '
     export WORKER_ID=%s
     export WORKER_SECRET=%s
@@ -315,28 +281,11 @@ func CreateWorkerScript(resp *http.Response) (string, string, error) {
     sh /opt/datamigrator/bin/worker_register.sh
     '
     `, workerId, workerSecret, controlPlaneIp)
-
-	case ProtocolSMB:
-		script = fmt.Sprintf(
-			`"C:\Users\datamigrator\Downloads\%s" /SILENT /WORKERID=%s /WORKERSECRET=%s /CONTROLPLANEIP=%s`,
-			SMB_EXECUTABLE_FILENAME,
-			workerId,
-			workerSecret,
-			controlPlaneIp,
-		)
-	}
-
 	return script, workerId, nil
 }
 
-func GetDetachWorkerScriptForSMB() string {
-	psScript := `Start-Process -Wait -FilePath "C:\datamigrator\unins000.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/LOG=C:\datamigrator_uninstall.log"; if (Test-Path "C:\datamigrator") { Remove-Item -Path "C:\datamigrator" -Recurse -Force }`
-
-	return fmt.Sprintf(`powershell.exe -Command "%s"`, psScript)
-}
-
-// GetDetachWorkerScriptForNFS generates a shell script to stop/disable and remove worker environment variables.
-func GetDetachWorkerScriptForNFS(workerConfig SSHConfig) string {
+// GetDetachWorkerScript generates a shell script to stop/disable and remove worker environment variables.
+func GetDetachWorkerScript() string {
 	script := fmt.Sprintf(`#!/bin/bash
 	set -e 
 
@@ -366,25 +315,14 @@ func GetDetachWorkerScriptForNFS(workerConfig SSHConfig) string {
 	echo "$SUDO_PASS" | sudo -S sed -i '/^REDIS_PASSWORD=/d' "$ENV_FILE"
 
 	echo "Successfully disabled worker service"
-	`, workerConfig.Password)
+	`, NDM_VM_PASSWORD)
 	return script
 }
 
 // DetachWorker runs the detach script on a given worker via SSH.
-func DetachWorker(workerConfig SSHConfig, workerID string, detachWorkerRes chan DetachWorkerResult, wg *sync.WaitGroup) {
-	defer wg.Done()
-	script := ""
-
-	switch PROTOCOL_TYPE {
-	case ProtocolNFS:
-		script = GetDetachWorkerScriptForNFS(workerConfig)
-	case ProtocolSMB:
-		script = GetDetachWorkerScriptForSMB()
-	}
-
-	LogDebug(fmt.Sprintf("Detaching Worker %s and running script: \n%s", workerConfig.Host, script))
-	output, err := sshRunScript(workerConfig, script)
-	detachWorkerRes <- DetachWorkerResult{workerConfig, workerID, output, err}
+func DetachWorker(config SSHConfig) (string, error) {
+	script := GetDetachWorkerScript()
+	return sshRunScript(config, script)
 }
 
 // StartWorker starts the worker service on a given worker via SSH.
@@ -405,7 +343,7 @@ func RestartWorker(config SSHConfig) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to start worker on %s: %w", config.Host, err)
 	}
-	LogDebug(fmt.Sprintf("Worker %s restarted successfully with output: %s", config.Host, output))
+	LogDebug(fmt.Sprintf("Worker %s started successfully with output: %s", config.Host, output))
 	return output, nil
 }
 
@@ -420,58 +358,54 @@ func StopWorker(config SSHConfig) (string, error) {
 	return output, nil
 }
 
-func attachWorkerForConfig(workerConfig SSHConfig, authToken, accountId, projectId string, attachWorkerRes chan AttachWorkerResult, wg *sync.WaitGroup) {
-	defer wg.Done()
-
+// attachWorkerForConfig registers a single worker via API call and SSH.
+// It returns the workerId if successful.
+func attachWorkerForConfig(worker SSHConfig, authToken, accountId, projectId string) (string, error) {
 	fullURL := CONFIG_SERVICE_URL + "/api/v1/worker-registration"
 	data := map[string]string{
 		"projectId": projectId,
 	}
 	reqBody, err := json.Marshal(data)
 	if err != nil {
-		attachWorkerRes <- AttachWorkerResult{workerConfig, "", err}
-		return
+		return "", err
 	}
 	headers := GetHeaders(authToken, ContentTypeJSON)
 	resp, err := SendAPIRequest("POST", fullURL, reqBody, headers)
 	if err != nil {
-		attachWorkerRes <- AttachWorkerResult{workerConfig, "", err}
-		return
+		return "", err
 	}
-
 	script, workerId, err := CreateWorkerScript(resp)
 	if err != nil {
-		attachWorkerRes <- AttachWorkerResult{workerConfig, workerId, err}
-		return
+		return workerId, err
 	}
-
-	LogDebug(fmt.Sprintf("Attaching Worker %s and running script: \n%s", workerConfig.Host, script))
-	_, err = sshRunScript(workerConfig, script)
+	LogDebug(fmt.Sprintf("For worker %s, running script: %s", worker.Host, script))
+	output, err := sshRunScript(worker, script)
 	if err != nil {
-		attachWorkerRes <- AttachWorkerResult{workerConfig, workerId, err}
-		return
+		return workerId, err
 	}
-	attachWorkerRes <- AttachWorkerResult{workerConfig, workerId, nil}
+	LogDebug(fmt.Sprintf("Output from worker %s: %s", worker.Host, output))
+	return workerId, nil
 }
 
-// GetWorkerIds returns a slice of worker IDs from the AttachedWorkersConfig map.
+// GetWorkerIds returns a slice of worker IDs from the attachedWorkersConfig map.
 func GetWorkerIds() []string {
-	workerIds := make([]string, 0, len(AttachedWorkersConfig))
+	workerIds := make([]string, 0, len(attachedWorkersConfig))
 
-	// Iterate over the AttachedWorkersConfig map and collect worker IDs.
-	if len(AttachedWorkersConfig) == 0 {
+	// Iterate over the attachedWorkersConfig map and collect worker IDs.
+	if len(attachedWorkersConfig) == 0 {
 		return workerIds // Return empty slice if no workers are attached.
 	}
 
-	// Collect worker IDs from the AttachedWorkersConfig map.
-	for workerId := range AttachedWorkersConfig {
+	// Collect worker IDs from the attachedWorkersConfig map.
+	for workerId := range attachedWorkersConfig {
 		workerIds = append(workerIds, workerId)
 	}
 	return workerIds
 }
 
-func getStopWorkerScriptForNFS() string {
-	return fmt.Sprintf(`#!/bin/bash
+// GetStopWorkerScript generates a shell script to stop worker service.
+func GetStopWorkerScript() string {
+	script := fmt.Sprintf(`#!/bin/bash
 	set -e 
 
 	SUDO_PASS="%s"
@@ -487,25 +421,12 @@ func getStopWorkerScriptForNFS() string {
 
 	echo "Successfully stopped worker service"
 	`, NDM_VM_PASSWORD)
+	return script
 }
 
-func getStopWorkerScriptForSMB() string {
-	return `cmd /C net stop "Datamigrator Worker"`
-}
-
-// GetStopWorkerScript generates a shell script to stop worker service.
-func GetStopWorkerScript() string {
-	switch PROTOCOL_TYPE {
-	case ProtocolNFS:
-		return getStopWorkerScriptForNFS()
-	case ProtocolSMB:
-		return getStopWorkerScriptForSMB()
-	}
-	return ""
-}
-
-func getStartWorkerScriptForNFS() string {
-	return fmt.Sprintf(`#!/bin/bash
+// GetStopWorkerScript generates a shell script to start worker service.
+func GetStartWorkerScript() string {
+	script := fmt.Sprintf(`#!/bin/bash
 	set -e 
 
 	SUDO_PASS="%s"
@@ -521,39 +442,11 @@ func getStartWorkerScriptForNFS() string {
 
 	echo "Successfully started worker service"
 	`, NDM_VM_PASSWORD)
-}
-
-func getStartWorkerScriptForSMB() string {
-	return `cmd /C net start "Datamigrator Worker"`
-}
-
-// GetStopWorkerScript generates a shell script to start worker service.
-func GetStartWorkerScript() string {
-	switch PROTOCOL_TYPE {
-	case ProtocolNFS:
-		return getStartWorkerScriptForNFS()
-	case ProtocolSMB:
-		return getStartWorkerScriptForSMB()
-	}
-	return ""
+	return script
 }
 
 // GetStopWorkerScript generates a shell script to restart worker service.
 func GetRestartWorkerScript() string {
-	switch PROTOCOL_TYPE {
-	case ProtocolNFS:
-		return getRestartWorkerScriptForNFS()
-	case ProtocolSMB:
-		return getRestartWorkerScriptForSMB()
-	}
-	return ""
-}
-
-func getRestartWorkerScriptForSMB() string {
-	return `cmd /C net stop "Datamigrator Worker" && net start "Datamigrator Worker"`
-}
-
-func getRestartWorkerScriptForNFS() string {
 	script := fmt.Sprintf(`#!/bin/bash
 	set -e 
 

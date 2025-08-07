@@ -33,11 +33,11 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 			workerId1 = workerIds[0]
 			workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
-			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, DESTINATION_VOLUMES[0])
-			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, DESTINATION_VOLUMES[1])
+			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME)
+			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME_1)
 
-			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[0])
-			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[1])
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME)
+			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME_1)
 		})
 
 		It("TC-010: Run discovery, migration with 'Exclude Path Patterns' option and run cutover on same", func() {
@@ -53,9 +53,9 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         PROTOCOL_USERNAME,
-				Password:         PROTOCOL_PASSWORD,
-				Protocol:         PROTOCOL_TYPE,
+				UserName:         "Root",
+				Password:         "",
+				Protocol:         ProtocolNFS,
 				ProtocolVersion:  ProtocolVersion3,
 				Host:             SOURCE_HOST_IP,
 				Workers:          []string{workerId1, workerId2},
@@ -68,10 +68,10 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceFileServerID, headers)
+			sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceFileServerID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceFileServerID, headers)
+			sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceFileServerID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a new discovery job for the source by providing exclude files type and file patterns")
@@ -120,9 +120,9 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         PROTOCOL_USERNAME,
-				Password:         PROTOCOL_PASSWORD,
-				Protocol:         PROTOCOL_TYPE,
+				UserName:         "Root",
+				Password:         "",
+				Protocol:         ProtocolNFS,
 				ProtocolVersion:  ProtocolVersion3,
 				Host:             DESTINATION_HOST_IP,
 				Workers:          []string{workerId1, workerId2},
@@ -134,10 +134,10 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 			defer resp.Body.Close()
 
 			By("Getting the destination file server by configId")
-			destinationPathID1, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationFileServerID, headers)
+			destinationPathID1, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationFileServerID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationFileServerID, headers)
+			destinationPathID2, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationFileServerID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a migration job by providing exclude files type and file patterns")

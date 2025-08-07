@@ -32,7 +32,7 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 	})
 
 	AfterAll(func() {
-		destinationVolumePath1 := fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, DESTINATION_VOLUMES[1])
+		destinationVolumePath1 := fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME_1)
 		clearVolumeErr := ClearVolume(destinationVolumePath1)
 		Expect(clearVolumeErr).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
 
@@ -54,9 +54,9 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         PROTOCOL_USERNAME,
-				Password:         PROTOCOL_PASSWORD,
-				Protocol:         PROTOCOL_TYPE,
+				UserName:         "Root",
+				Password:         "",
+				Protocol:         ProtocolNFS,
 				ProtocolVersion:  ProtocolVersion3,
 				Host:             SOURCE_HOST_IP,
 				Workers:          []string{workerId1, workerId2},
@@ -79,9 +79,9 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         PROTOCOL_USERNAME,
-				Password:         PROTOCOL_PASSWORD,
-				Protocol:         PROTOCOL_TYPE,
+				UserName:         "Root",
+				Password:         "",
+				Protocol:         ProtocolNFS,
 				ProtocolVersion:  ProtocolVersion3,
 				Host:             DESTINATION_HOST_IP,
 				Workers:          []string{workerId1, workerId2},
@@ -107,7 +107,7 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 			fileContent := FileContent{
 				FileName: "test_multiple_paths_file.csv",
 				FileSize: 2048,
-				Contents: fmt.Sprintf("path\n%s\n%s", SOURCE_VOLUMES[0], SOURCE_VOLUMES[1]),
+				Contents: fmt.Sprintf("path\n%s\n%s", NFS_SOURCE_VOLUME, NFS_SOURCE_VOLUME_1),
 			}
 			resp, uploadStats, err := UploadPathFile(FileServerId, fileContent, headers)
 			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
@@ -131,14 +131,14 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 			Expect(len(fileServerDetails.FileServers[0].Volumes)).To(BeNumerically("==", 2), "Expected two volumes to be present in the file server")
 
 			By("Getting volume details for the valid path")
-			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, SOURCE_VOLUMES[0])
+			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, NFS_SOURCE_VOLUME)
 			Expect(err).NotTo(HaveOccurred(), "Expected to find volume path")
 			Expect(validVolume.IsValid).To(BeTrue(), "Expected volume to be valid")
 			Expect(validVolume.IsDisabled).To(BeFalse(), "Expected volume to not be disabled")
 
 			By("Getting volume details for the invalid path")
-			invalidVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, SOURCE_VOLUMES[1])
-			Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '%s'", SOURCE_VOLUMES[1])
+			invalidVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, NFS_SOURCE_VOLUME_1)
+			Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '%s'", NFS_SOURCE_VOLUME_1)
 			Expect(invalidVolume.IsValid).To(BeTrue(), "Expected volume to be valid")
 			Expect(invalidVolume.IsDisabled).To(BeFalse(), "Expected volume to not be disabled")
 		})
@@ -147,8 +147,8 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 			By("Running discovery job on the valid volume")
 			fileServerDetails, err := GetFileServerDetails(SourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
-			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, SOURCE_VOLUMES[1])
-			Expect(err).NotTo(HaveOccurred(), "Expected to find volume path '%s'", SOURCE_VOLUMES[1])
+			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, NFS_SOURCE_VOLUME_1)
+			Expect(err).NotTo(HaveOccurred(), "Expected to find volume path '%s'", NFS_SOURCE_VOLUME_1)
 
 			jobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{validVolume.ID},
@@ -188,9 +188,9 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 			By("Running migration job")
 			fileServerDetails, err := GetFileServerDetails(SourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
-			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, SOURCE_VOLUMES[1])
-			Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '%s'", SOURCE_VOLUMES[1])
-			destinationPathID1, err := GetExportPathID("destination", DESTINATION_VOLUMES[1], DestinationConfigID, headers)
+			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, NFS_SOURCE_VOLUME_1)
+			Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '%s'", NFS_SOURCE_VOLUME_1)
+			destinationPathID1, err := GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, DestinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			migrationParams := MigrationJobParams{
@@ -231,9 +231,9 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 			By("Running cutover job")
 			fileServerDetails, err := GetFileServerDetails(SourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
-			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, SOURCE_VOLUMES[1])
-			Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '%s'", SOURCE_VOLUMES[1])
-			destinationPathID1, err := GetExportPathID("destination", DESTINATION_VOLUMES[1], DestinationConfigID, headers)
+			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, NFS_SOURCE_VOLUME_1)
+			Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '%s'", NFS_SOURCE_VOLUME_1)
+			destinationPathID1, err := GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, DestinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			cutoverParams := BulkCutoverJobParams{

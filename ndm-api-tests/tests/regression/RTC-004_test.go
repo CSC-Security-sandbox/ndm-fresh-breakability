@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("RTC-004: Test migration with single worker and make worker unhealthy during migration", func() {
+var _ = Describe("RTC-004: Test migration with single worker and make worker unhealthy during migration for NFS", func() {
 	var (
 		ProjectId             string
 		workerId              string
@@ -29,7 +29,7 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
 		})
 
-		It("RTC-004: Test migration with single worker and make worker unhealthy during migration", func() {
+		It("RTC-004: Test migration with single worker and make worker unhealthy during migration for NFS", func() {
 			By("########################## RTC-004 start ################################")
 
 			By("Creating the source file server")
@@ -38,9 +38,9 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         PROTOCOL_USERNAME,
-				Password:         PROTOCOL_PASSWORD,
-				Protocol:         PROTOCOL_TYPE,
+				UserName:         "Root",
+				Password:         "",
+				Protocol:         ProtocolNFS,
 				ProtocolVersion:  ProtocolVersion3,
 				Host:             SOURCE_HOST_IP,
 				Workers:          []string{workerId},
@@ -54,7 +54,7 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 			By("Getting the source file server by config ID and fetching the volumes")
-			sourceVolumeId, err := GetExportPathID("source", SOURCE_VOLUMES[0], SourceConfigId, headers)
+			sourceVolumeId, err := GetExportPathID("source", NFS_SOURCE_VOLUME, SourceConfigId, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating the destination file server")
@@ -63,9 +63,9 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         PROTOCOL_USERNAME,
-				Password:         PROTOCOL_PASSWORD,
-				Protocol:         PROTOCOL_TYPE,
+				UserName:         "Root",
+				Password:         "",
+				Protocol:         ProtocolNFS,
 				ProtocolVersion:  ProtocolVersion3,
 				Host:             DESTINATION_HOST_IP,
 				Workers:          []string{workerId},
@@ -79,7 +79,7 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 
 			By("Getting the destination file server by configId")
-			destinationVolumeID, err := GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationConfigID, headers)
+			destinationVolumeID, err := GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a migration job")
@@ -135,7 +135,7 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 		})
 
 		AfterEach(func() {
-			err := ClearVolume(fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, DESTINATION_VOLUMES[0]))
+			err := ClearVolume(fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME))
 			Expect(err).To(BeNil(), "Error during clearing destination volume")
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")

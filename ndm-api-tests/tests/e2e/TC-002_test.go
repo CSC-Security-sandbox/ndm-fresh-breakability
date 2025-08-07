@@ -33,10 +33,10 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			workerId1 = workerIds[0]
 			workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
-			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, DESTINATION_VOLUMES[0])
-			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, DESTINATION_VOLUMES[1])
-			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[0])
-			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, SOURCE_VOLUMES[1])
+			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME)
+			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME_1)
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME)
+			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME_1)
 		})
 
 		It("TC-002: Create a fileserver with 2 workers (1 offline) and check discovery and migration", func() {
@@ -68,9 +68,9 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         PROTOCOL_USERNAME,
-				Password:         PROTOCOL_PASSWORD,
-				Protocol:         PROTOCOL_TYPE,
+				UserName:         "Root",
+				Password:         "",
+				Protocol:         ProtocolNFS,
 				ProtocolVersion:  ProtocolVersion3,
 				Host:             SOURCE_HOST_IP,
 				Workers:          []string{workerId1, workerId2},
@@ -82,10 +82,10 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			defer resp.Body.Close()
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID1, headers)
+			sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID1, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID1, headers)
+			sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID1, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating the destination file server")
@@ -94,9 +94,9 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         PROTOCOL_USERNAME,
-				Password:         PROTOCOL_PASSWORD,
-				Protocol:         PROTOCOL_TYPE,
+				UserName:         "Root",
+				Password:         "",
+				Protocol:         ProtocolNFS,
 				ProtocolVersion:  ProtocolVersion3,
 				Host:             DESTINATION_HOST_IP,
 				Workers:          []string{workerId1, workerId2},
@@ -108,10 +108,10 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			defer resp.Body.Close()
 
 			By("Getting the destination file server by configId")
-			destinationPathID, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationConfigID, headers)
+			destinationPathID, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			destinationPathID1, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
+			destinationPathID1, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			attachedWorkersConfig := GetAttachedWorkersConfig()
@@ -244,7 +244,6 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 				"nfs_src_to_dest_vol_migration.json",
 				"nfs_src2_to_dest2_vol_migration.json",
 			}
-
 			// Get migration job run IDs and wait for completion
 			for i, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)

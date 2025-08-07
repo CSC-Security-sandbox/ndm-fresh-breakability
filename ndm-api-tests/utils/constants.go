@@ -12,7 +12,6 @@ type ProtocolVersion string
 
 // Package-level configuration variables loaded from the environment.
 var (
-	PROTOCOL_TYPE           Protocol
 	JOB_SERVICE_URL         string
 	CONFIG_SERVICE_URL      string
 	ADMIN_SERVICE_URL       string
@@ -32,39 +31,6 @@ var (
 	NDM_WORKERS_USER_NAME   string
 	NDM_WORKERS_PORT        string
 	NDM_WORKERS_PASSWORD    string
-	PROTOCOL_USERNAME       string
-	PROTOCOL_PASSWORD       string
-	SMB_EXECUTABLE_FILENAME string
-
-	ProtocolVersion3 ProtocolVersion
-
-	SOURCE_VOLUMES      []string
-	DESTINATION_VOLUMES []string
-)
-
-// NFS / SMB specific variables from the environment.
-var (
-	NFS_NDM_WORKERS_HOST      string
-	NFS_NDM_WORKERS_USER_NAME string
-	NFS_NDM_WORKERS_PORT      string
-	NFS_NDM_WORKERS_PASSWORD  string
-
-	SMB_NDM_WORKERS_HOST      string
-	SMB_NDM_WORKERS_USER_NAME string
-	SMB_NDM_WORKERS_PORT      string
-	SMB_NDM_WORKERS_PASSWORD  string
-
-	NFS_SOURCE_HOST_IP      string
-	NFS_DESTINATION_HOST_IP string
-
-	SMB_SOURCE_HOST_IP      string
-	SMB_DESTINATION_HOST_IP string
-
-	NFS_PROTOCOL_USERNAME string
-	NFS_PROTOCOL_PASSWORD string
-
-	SMB_PROTOCOL_USERNAME string
-	SMB_PROTOCOL_PASSWORD string
 )
 
 // Default environment variable constants (if needed).
@@ -121,9 +87,7 @@ const (
 	ConfigTypeFile                  ConfigType      = "FILE"
 	ServerTypeOtherNAS              ServerType      = "OtherNAS"
 	ProtocolNFS                     Protocol        = "NFS"
-	ProtocolSMB                     Protocol        = "SMB"
-	ProtocolVersionNFS_V3           ProtocolVersion = "v3"
-	ProtocolVersionSMB_V3           ProtocolVersion = "v3.0"
+	ProtocolVersion3                ProtocolVersion = "v3"
 	TIME_FORMAT                                     = "2006-01-02T15:04:05.000Z"
 )
 
@@ -144,73 +108,14 @@ func init() {
 	KEYCLOAK_IP = os.Getenv("KEYCLOAK_IP")
 	USERNAME = os.Getenv("NDM_USERNAME")
 	PASSWORD = os.Getenv("PASSWORD")
-
 	NDM_VM_USER_NAME = os.Getenv("NDM_VM_USER_NAME")
 	NDM_VM_HOST = os.Getenv("NDM_VM_HOST")
 	NDM_VM_PORT = os.Getenv("NDM_VM_PORT")
 	NDM_VM_PASSWORD = os.Getenv("NDM_VM_PASSWORD")
-
-	NFS_NDM_WORKERS_HOST = os.Getenv("NFS_NDM_WORKERS_HOST")
-	NFS_NDM_WORKERS_USER_NAME = os.Getenv("NFS_NDM_WORKERS_USER_NAME")
-	NFS_NDM_WORKERS_PORT = os.Getenv("NFS_NDM_WORKERS_PORT")
-	NFS_NDM_WORKERS_PASSWORD = os.Getenv("NFS_NDM_WORKERS_PASSWORD")
-
-	SMB_NDM_WORKERS_HOST = os.Getenv("SMB_NDM_WORKERS_HOST")
-	SMB_NDM_WORKERS_USER_NAME = os.Getenv("SMB_NDM_WORKERS_USER_NAME")
-	SMB_NDM_WORKERS_PORT = os.Getenv("SMB_NDM_WORKERS_PORT")
-	SMB_NDM_WORKERS_PASSWORD = os.Getenv("SMB_NDM_WORKERS_PASSWORD")
-
-	NFS_SOURCE_HOST_IP = os.Getenv("NFS_SOURCE_HOST_IP")
-	NFS_DESTINATION_HOST_IP = os.Getenv("NFS_DESTINATION_HOST_IP")
-
-	SMB_SOURCE_HOST_IP = os.Getenv("SMB_SOURCE_HOST_IP")
-	SMB_DESTINATION_HOST_IP = os.Getenv("SMB_DESTINATION_HOST_IP")
-
-	NFS_PROTOCOL_USERNAME = os.Getenv("NFS_PROTOCOL_USERNAME")
-	NFS_PROTOCOL_PASSWORD = os.Getenv("NFS_PROTOCOL_PASSWORD")
-
-	SMB_PROTOCOL_USERNAME = os.Getenv("SMB_PROTOCOL_USERNAME")
-	SMB_PROTOCOL_PASSWORD = os.Getenv("SMB_PROTOCOL_PASSWORD")
-
-	SMB_EXECUTABLE_FILENAME = os.Getenv("SMB_EXECUTABLE_FILENAME")
-}
-
-func UpdateConfVariables(protocolType, sourceVolumesArgs, destinationVolumesArgs string) {
-	PROTOCOL_TYPE = Protocol(protocolType)
-
-	SOURCE_VOLUMES = GetVolumesFromArgs(sourceVolumesArgs)
-	DESTINATION_VOLUMES = GetVolumesFromArgs(destinationVolumesArgs)
-
-	switch PROTOCOL_TYPE {
-	case ProtocolSMB:
-		NDM_WORKERS_HOST = SMB_NDM_WORKERS_HOST
-		NDM_WORKERS_USER_NAME = SMB_NDM_WORKERS_USER_NAME
-		NDM_WORKERS_PORT = SMB_NDM_WORKERS_PORT
-		NDM_WORKERS_PASSWORD = SMB_NDM_WORKERS_PASSWORD
-
-		SOURCE_HOST_IP = SMB_SOURCE_HOST_IP
-		DESTINATION_HOST_IP = SMB_DESTINATION_HOST_IP
-
-		PROTOCOL_USERNAME = SMB_PROTOCOL_USERNAME
-		PROTOCOL_PASSWORD = SMB_PROTOCOL_PASSWORD
-
-		ProtocolVersion3 = ProtocolVersionSMB_V3
-	case ProtocolNFS:
-		NDM_WORKERS_HOST = NFS_NDM_WORKERS_HOST
-		NDM_WORKERS_USER_NAME = NFS_NDM_WORKERS_USER_NAME
-		NDM_WORKERS_PORT = NFS_NDM_WORKERS_PORT
-		NDM_WORKERS_PASSWORD = NFS_NDM_WORKERS_PASSWORD
-
-		SOURCE_HOST_IP = NFS_SOURCE_HOST_IP
-		DESTINATION_HOST_IP = NFS_DESTINATION_HOST_IP
-
-		PROTOCOL_USERNAME = NFS_PROTOCOL_USERNAME
-		PROTOCOL_PASSWORD = NFS_PROTOCOL_PASSWORD
-
-		ProtocolVersion3 = ProtocolVersionNFS_V3
-	default:
-		LogFatalf("Invalid protocol type: %s", protocolType)
-	}
-
-	InitWorkers(NDM_WORKERS_HOST, NDM_WORKERS_PORT, NDM_WORKERS_PASSWORD, NDM_WORKERS_USER_NAME)
+	NDM_WORKERS_USER_NAME = os.Getenv("NDM_WORKERS_USER_NAME")
+	NDM_WORKERS_HOST = os.Getenv("NDM_WORKERS_HOST")
+	NDM_WORKERS_PORT = os.Getenv("NDM_WORKERS_PORT")
+	NDM_WORKERS_PASSWORD = os.Getenv("NDM_WORKERS_PASSWORD")
+	SOURCE_HOST_IP = os.Getenv("SOURCE_HOST_IP")
+	DESTINATION_HOST_IP = os.Getenv("DESTINATION_HOST_IP")
 }

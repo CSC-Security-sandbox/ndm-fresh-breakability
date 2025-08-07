@@ -38,9 +38,9 @@ var _ = Describe("RTC-003: Test discovery with single worker and restart the wor
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         PROTOCOL_USERNAME,
-				Password:         PROTOCOL_PASSWORD,
-				Protocol:         PROTOCOL_TYPE,
+				UserName:         "Root",
+				Password:         "",
+				Protocol:         ProtocolNFS,
 				ProtocolVersion:  ProtocolVersion3,
 				Host:             SOURCE_HOST_IP,
 				Workers:          []string{workerId},
@@ -54,7 +54,7 @@ var _ = Describe("RTC-003: Test discovery with single worker and restart the wor
 			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 			By("Getting the source file server by config ID and fetching the volumes")
-			volumeId, err := GetExportPathID("source", SOURCE_VOLUMES[0], ConfigID, headers)
+			volumeId, err := GetExportPathID("source", NFS_SOURCE_VOLUME, ConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a new discovery job on the file server")

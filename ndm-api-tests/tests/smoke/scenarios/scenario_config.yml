@@ -1,18 +1,18 @@
 files:
-  # - accounts.yml
+  - accounts.yml
   - auth.yml
-  # - user-roles-app-admin.yml
-  # - user-roles-project-admin.yml
+  - user-roles-app-admin.yml
+  - user-roles-project-admin.yml
   # - user-roles-project-viewer.yml
-  # - user-operations-app-admin.yml
-  # - user-operations-project-admin.yml
+  - user-operations-app-admin.yml
+  - user-operations-project-admin.yml
   # - user-operations-project-viewer.yml
-  # - login-logout-app-admin.yml
-  # - login-logout-project-admin.yml
-  # - login-logout-project-viewer.yml
-  # - project-management-app-admin.yml
-  # - project-management-project-admin.yml
-  # - project-management-project-viewer.yml
+  - login-logout-app-admin.yml
+  - login-logout-project-admin.yml
+  - login-logout-project-viewer.yml
+  - project-management-app-admin.yml
+  - project-management-project-admin.yml
+  - project-management-project-viewer.yml
   # - app-admin-source-fileserver.yml
   # - app-admin-destination-fileserver.yml
   # - app-admin-migration.yml

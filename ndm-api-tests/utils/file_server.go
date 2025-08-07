@@ -71,10 +71,10 @@ func init() {
 	}
 
 	sshConfig = SSHConfig{
-		Username: NDM_WORKERS_USER_NAME,
-		Host:     NDM_WORKERS_HOST,
+		Username: NDM_VM_USER_NAME,
+		Host:     NDM_VM_HOST,
 		Port:     port,
-		Password: NDM_WORKERS_HOST,
+		Password: NDM_VM_PASSWORD,
 	}
 }
 
@@ -97,15 +97,15 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 		"projectId":  params.ProjectID,
 		"fileServers": []map[string]interface{}{
 			{
-				"serverType":      params.ServerType,
-				"userName":        PROTOCOL_USERNAME,
-				"password":        params.Password,
-				"protocol":        params.Protocol,
-				"protocolVersion": params.ProtocolVersion,
-				"host":            params.Host,
-				"volumes":         []interface{}{},
-				"workers":         params.Workers,
-				// "exportPathSource": params.ExportPathSource,
+				"serverType":       params.ServerType,
+				"userName":         params.UserName,
+				"password":         params.Password,
+				"protocol":         params.Protocol,
+				"protocolVersion":  params.ProtocolVersion,
+				"host":             params.Host,
+				"volumes":          []interface{}{},
+				"workers":          params.Workers,
+				"exportPathSource": params.ExportPathSource,
 			},
 		},
 		"workingDirectory": map[string]interface{}{
@@ -114,12 +114,6 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 			"pathName":         "",
 		},
 	}
-
-	/*jsonBytes, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		fmt.Println("Error marshaling payload to JSON:", err)
-
-	}*/
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -164,14 +158,12 @@ func GetExportPathID(
 	var getSourceResp FileServerInfo
 
 	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
-		LogDebug(fmt.Sprintf("Refreshing FileServer for ID %s, attempt %d", configID, attempt))
 		resp, err := SendAPIRequest(http.MethodGet, refreshURL, nil, headers)
 		if err != nil {
 			return "", fmt.Errorf("error refreshing file server: %w", err)
 		}
 		defer resp.Body.Close()
 
-		LogDebug(fmt.Sprintf("Getting FileServer details for ID %s, attempt %d", configID, attempt))
 		resp, err = SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
 		if err != nil {
 			return "", err
@@ -219,29 +211,18 @@ func GetExportPathID(
 	return sourcePathID, nil
 }
 
-func ClearVolumeForSMB(export string) string {
-	split := strings.Split(export, ":")
-	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
-
-	mappedDrive := "Z:"
-
-	clearVolumeScript := fmt.Sprintf(`cmd /C
-	net use %s /delete /yes &
-	net use %s %s /user:%s "%s" &&
-	rmdir /s /q %s &&
-	net use %s /delete /yes
-	`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, mappedDrive, mappedDrive)
-
-	commands := []string{}
-	for _, v := range strings.Split(clearVolumeScript, "\n") {
-		commands = append(commands, strings.TrimSpace(v))
-	}
-
-	return strings.Join(commands, " ")
-}
-
-func ClearVolumeForNFS(export string) string {
+// ClearVolume removes all data from the NFS export mounted on the VM.
+func ClearVolume(export string) error {
 	destMount := "/mnt/remove_data"
+
+	config := GetAttachedWorkerDetails()
+
+	sshConfig = SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: NDM_VM_PASSWORD,
+	}
 
 	script := fmt.Sprintf(`
 	set -e
@@ -271,123 +252,24 @@ func ClearVolumeForNFS(export string) string {
 		destMount,
 		destMount, destMount)
 
-	return script
-}
-
-// ClearVolume removes all data from the NFS export mounted on the VM.
-func ClearVolume(export string) error {
-	script := ""
-
-	switch PROTOCOL_TYPE {
-	case ProtocolSMB:
-		script = ClearVolumeForSMB(export)
-	case ProtocolNFS:
-		script = ClearVolumeForNFS(export)
-	}
-
-	config := GetAttachedWorkerDetails()
-
-	sshConfig = SSHConfig{
-		Username: config.Username,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: config.Password,
-	}
-
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
 		return fmt.Errorf("RemoveDataFromFileserver failed: %w\noutput: %s", err, output)
 	}
-
 	return nil
 }
 
-// RemovePartialDeltaFromVolume removes number of files equals fileCount
-func RemovePartialDeltaFromVolume(export string, fileCount int) error {
-	if PROTOCOL_TYPE == ProtocolSMB {
-		// To be replaced with SMB code.
-		return fmt.Errorf("SMB-specific logic is not implemented")
-	}
+// AddDataToVolume creates a delta directory with 100 text files of 100KB each,
+func AddDataToVolume(export string) error {
+
 	config := GetAttachedWorkerDetails()
 
 	sshConfig = SSHConfig{
-		Username: config.Username,
+		Username: NDM_VM_USER_NAME,
 		Host:     config.Host,
 		Port:     config.Port,
-		Password: config.Password,
+		Password: NDM_VM_PASSWORD,
 	}
-
-	destMount := "/mnt/data_remove"
-
-	script := fmt.Sprintf(`
-	set -e
-
-	# Clean up any previous mount
-	sudo rm -rf "%s"
-
-	# Mount export NFS export
-
-	sudo mkdir -p "%s"
-	sudo mount -t nfs "%s" "%s"
-
-	# Navigate to delta folder inside mounted directory
-	cd "%s/%s"
-
-	# List matching files and remove
-	files=($(ls file*.txt 2>/dev/null))
-	count=${#files[@]}
-	if [ "$count" -le "%d" ]; then
-	    sudo rm -f "${files[@]}"
-	else
-	    for ((i=0; i< "%d"; i++)); do
-		    sudo rm -f "${files[$i]}"
-		done
-	fi
-
-	# Unmount and cleanup
-	cd /
-	sudo umount "%s"
-	sudo rm -rf "%s"
-	`, destMount, destMount, export, destMount, destMount, DeltaFolder, fileCount, fileCount, destMount, destMount)
-
-	output, err := sshRunScript(sshConfig, script)
-	if err != nil {
-		return fmt.Errorf("RemoveDeltaFromFileserver failed: %w\noutput: %s", err, output)
-	}
-	return nil
-}
-
-// AddDataToVolumeForSMB creates a delta directory with 100 text files of 100KB each
-func AddDataToVolumeForSMB(export string) string {
-	//fullCmd := `cmd /C "mkdir C:\delta_test_smb && for /L %i in (1,1,100) do fsutil file createnew C:\delta_test_smb\file%i.txt 102400"`
-
-	split := strings.Split(export, ":")
-	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
-
-	deltaDir := `C:\` + DeltaFolder
-	mappedDrive := `Z:`
-
-	cmd := fmt.Sprintf(`cmd /C
-	if exist %s rmdir /s /q %s &&
-	mkdir %s &&
-	net use %s /delete /y &
-	(for /L %%i in (1,1,100) do fsutil file createnew %s\file%%i.txt 102400) &&
-	net use %s %s /user:%s "%s" &&
-	(if exist %s\%s\ ( rmdir /s /q %s\%s ) else ( echo "delta not found" )) &
-	xcopy /E /I /Y %s %s\%s &&
-	net use %s /delete /y &&
-	rmdir /s /q %s
-	`, deltaDir, deltaDir, deltaDir, mappedDrive, deltaDir, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, smbShare, DeltaFolder, smbShare, DeltaFolder, deltaDir, smbShare, DeltaFolder, mappedDrive, deltaDir)
-
-	commands := []string{}
-	for _, v := range strings.Split(cmd, "\n") {
-		commands = append(commands, strings.TrimSpace(v))
-	}
-
-	return strings.Join(commands, " ")
-}
-
-func AddDataToVolumeForNFS(export string) string {
 	destMount := "/mnt/data_add"
 	deltaDir := "/" + DeltaFolder
 
@@ -416,61 +298,23 @@ sudo umount "%s"
 sudo rm -rf "%s"
 sudo rm -rf "%s"
 `, deltaDir, destMount, deltaDir, deltaDir, destMount, export, destMount, deltaDir, destMount, destMount, deltaDir, destMount)
-
-	return script
-}
-
-// AddDataToVolume creates a delta directory with 100 text files of 100KB each,
-func AddDataToVolume(export string) error {
-	script := ""
-
-	switch PROTOCOL_TYPE {
-	case ProtocolSMB:
-		script = AddDataToVolumeForSMB(export)
-	case ProtocolNFS:
-		script = AddDataToVolumeForNFS(export)
-	}
-
-	config := GetAttachedWorkerDetails()
-
-	sshConfig = SSHConfig{
-		Username: config.Username,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: config.Password,
-	}
-
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
 		return fmt.Errorf("AddDataToFileserver failed: %w\noutput: %s", err, output)
 	}
-
 	return nil
 }
 
-// RemoveDeltaFromVolumeForSMB removes the delta directory from the SMB export mounted on the VM.
-func RemoveDeltaFromVolumeForSMB(export string) string {
-	split := strings.Split(export, ":")
-	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
+// RemoveDeltaFromVolume removes the delta directory from the NFS export mounted on the VM.
+func RemoveDeltaFromVolume(export string) error {
+	config := GetAttachedWorkerDetails()
 
-	mappedDrive := "Z:"
-
-	removeDeltaScript := fmt.Sprintf(`cmd /C
-	net use %s /delete /yes &
-	net use %s %s /user:%s "%s" &&
-	(if exist %s\%s\ ( rmdir /s /q %s\%s ) else ( echo "delta not found" )) &
-	net use %s /delete /yes
-	`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, smbShare, DeltaFolder, smbShare, DeltaFolder, mappedDrive)
-
-	commands := []string{}
-	for _, v := range strings.Split(removeDeltaScript, "\n") {
-		commands = append(commands, strings.TrimSpace(v))
+	sshConfig = SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: NDM_VM_PASSWORD,
 	}
-
-	return strings.Join(commands, " ")
-}
-
-func RemoveDeltaFromVolumeForNFS(export string) string {
 	destMount := "/mnt/data_remove"
 
 	script := fmt.Sprintf(`
@@ -493,69 +337,28 @@ func RemoveDeltaFromVolumeForNFS(export string) string {
 	sudo rm -rf "%s"
 	`, destMount, destMount, export, destMount, destMount, DeltaFolder, destMount, DeltaFolder, destMount, destMount)
 
-	return script
-}
-
-// RemoveDeltaFromVolume removes the delta directory from the NFS export mounted on the VM.
-func RemoveDeltaFromVolume(export string) error {
-	script := ""
-
-	switch PROTOCOL_TYPE {
-	case ProtocolSMB:
-		script = RemoveDeltaFromVolumeForSMB(export)
-	case ProtocolNFS:
-		script = RemoveDeltaFromVolumeForNFS(export)
-	}
-
-	config := GetAttachedWorkerDetails()
-
-	sshConfig = SSHConfig{
-		Username: config.Username,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: config.Password,
-	}
-
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
 		return fmt.Errorf("RemoveDeltaFromFileserver failed: %w\noutput: %s", err, output)
 	}
-
 	return nil
 }
 
-func ModifyDataOnVolumeForSMB(export string) string {
-	appendLines := "# MODIFIED 1 # MODIFIED 2"
-
-	split := strings.Split(export, ":")
-	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
-
-	mappedDrive := "Z:"
-
-	modifyDataScript := fmt.Sprintf(`cmd /C
-	net use %s /delete /yes &
-	net use %s %s /user:%s "%s" &&
-	echo %s >> %s\modify1.text &&
-    echo %s >> %s\modify2.text &&
-	echo %s >> %s\modify3.text &&
-	net use %s /delete /yes
-	`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, appendLines, smbShare, appendLines, smbShare, appendLines, smbShare, mappedDrive)
-
-	commands := []string{}
-	for _, v := range strings.Split(modifyDataScript, "\n") {
-		commands = append(commands, strings.TrimSpace(v))
+// ModifyDataOnVolume appends lines to the text files in the NFS export mounted on the VM.
+func ModifyDataOnVolume(export string) error {
+	config := GetAttachedWorkerDetails()
+	sshConfig = SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: NDM_VM_PASSWORD,
 	}
-
-	return strings.Join(commands, " ")
-}
-
-func ModifyDataOnVolumeForNFS(export string) string {
 	destMount := "/mnt/data_modify"
 
 	// Lines to append
 	appendLines := "\n# MODIFIED LINE 1\n# MODIFIED LINE 2\n"
 
-	return fmt.Sprintf(`
+	script := fmt.Sprintf(`
     set -e
 
     # Mount export NFS export
@@ -575,26 +378,6 @@ func ModifyDataOnVolumeForNFS(export string) string {
 		appendLines, destMount,
 		appendLines, destMount,
 		destMount, destMount)
-}
-
-// ModifyDataOnVolume appends lines to the text files in the NFS export mounted on the VM.
-func ModifyDataOnVolume(export string) error {
-	script := ""
-
-	switch PROTOCOL_TYPE {
-	case ProtocolSMB:
-		script = ModifyDataOnVolumeForSMB(export)
-	case ProtocolNFS:
-		script = ModifyDataOnVolumeForNFS(export)
-	}
-
-	config := GetAttachedWorkerDetails()
-	sshConfig = SSHConfig{
-		Username: config.Username,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: config.Password,
-	}
 
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
@@ -603,33 +386,18 @@ func ModifyDataOnVolume(export string) error {
 	return nil
 }
 
-func RestoreOriginalDataOnVolumeForSMB(export string) string {
-	split := strings.Split(export, ":")
-	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
-
-	mappedDrive := "Z:"
-
-	restoreScript := fmt.Sprintf(`cmd /C
-	net use %s /delete /yes &
-	net use %s %s /user:%s "%s" &&
-	type nul > %s\modify1.text &&
-    type nul > %s\modify2.text &&
-	type nul > %s\modify3.text &&
-	net use %s /delete /yes
-	`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, smbShare, smbShare, smbShare, mappedDrive)
-
-	commands := []string{}
-	for _, v := range strings.Split(restoreScript, "\n") {
-		commands = append(commands, strings.TrimSpace(v))
+// RestoreOriginalDataOnVolume removes the appended lines from the text files in the NFS export mounted on the VM.
+func RestoreOriginalDataOnVolume(export string) error {
+	config := GetAttachedWorkerDetails()
+	sshConfig = SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: NDM_VM_PASSWORD,
 	}
-
-	return strings.Join(commands, " ")
-}
-
-func RestoreOriginalDataOnVolumeForNFS(export string) string {
 	destMount := "/mnt/data_restore"
 
-	return fmt.Sprintf(`
+	script := fmt.Sprintf(`
     set -e
 
     # Mount export NFS export
@@ -649,27 +417,6 @@ func RestoreOriginalDataOnVolumeForNFS(export string) string {
 		destMount,
 		destMount,
 		destMount, destMount)
-}
-
-// RestoreOriginalDataOnVolume removes the appended lines from the text files in the NFS export mounted on the VM.
-func RestoreOriginalDataOnVolume(export string) error {
-	script := ""
-
-	switch PROTOCOL_TYPE {
-	case ProtocolSMB:
-		script = RestoreOriginalDataOnVolumeForSMB(export)
-	case ProtocolNFS:
-		script = RestoreOriginalDataOnVolumeForNFS(export)
-	}
-
-	config := GetAttachedWorkerDetails()
-	sshConfig = SSHConfig{
-		Username: config.Username,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: config.Password,
-	}
-
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
 		return fmt.Errorf("RestoreOriginalDataOnVolume failed: %w\noutput: %s", err, output)
@@ -682,6 +429,7 @@ func GetVolumeID(response FileServerInfo, volumePath string) (string, error) {
 	for _, fileServer := range response.FileServers {
 		for _, volume := range fileServer.Volumes {
 			if volume.VolumePath == volumePath {
+				fmt.Printf("ID of the volume with path '%s': %s\n", volumePath, volume.ID)
 				return volume.ID, nil // Return the found ID and no error
 			}
 		}
@@ -728,12 +476,12 @@ func GetVolumeIDByName(volumeName, authToken, configId string) (string, error) {
 // GetFileUserGroupId mounts the NFS export, stats the given file‐path
 // (relative to that export) and returns its numeric UID and GID.
 func GetFileUserGroupId(export, fileName string) (uid, gid int, err error) {
-	config := GetAttachedWorkerDetails()
+	cfg := GetAttachedWorkerDetails()
 	sshCfg := SSHConfig{
-		Username: config.Username,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: config.Password,
+		Username: NDM_VM_USER_NAME,
+		Host:     cfg.Host,
+		Port:     cfg.Port,
+		Password: NDM_VM_PASSWORD,
 	}
 
 	// Build a shell script that mounts + stats with "%u %g"
