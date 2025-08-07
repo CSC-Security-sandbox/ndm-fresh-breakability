@@ -136,7 +136,8 @@
       ".*\\.module\\.ts$",
       "/coverage",
       "/dist",
-      "/test/"
+      "/test/",
+      "src/workflows/speed-test/speed-test-job-workflow.spec.ts"
     ],
     "coveragePathIgnorePatterns": [
       "/node_modules/",
@@ -146,22 +147,7 @@
       "/test/",
       "src/workflows/discovery/core/discovery-job-workflow.spec.ts",
       "src/logger/logger.service.ts",
-      "src/activities/work-manager/factory/worker-options.factory.service.ts",
-      "src/workflows/speed-test/speed-test-job-workflow.spec.ts",
-      "src/workflows/pre-check/core/pre-check.worker.workflow.spec.ts",
-      "src/workflows/redis/redis.memorycheck.workflow.spec.ts",
-      "src/workflows/setup/cleanup-worker-workflow.spec.ts",
-      "src/workflows/setup/setup-worker-workflow.spec.ts",
-      "src/workflows/validate-connection/validate-worker-connection.workflow.spec.ts",
-      "src/workflows/core/parent/cutover-parent-workflow.spec.ts",
-      "src/workflows/core/parent/discovery-parent-workflow.spec.ts",
-      "src/workflows/core/parent/migration-parent-workflow.spec.ts",
-      "src/workflows/list-path/list-path-worker.workflow.spec.ts",
-      "src/workflows/pre-check/core/pre-check.worker.workflow.spec.ts",
-      "src/workflows/pre-check/parent/pre-check.workflow.spec.ts",
-      "src/workflows/validate-connection/validate-connection.workflow.spec.ts",
-      "src/workflows/workflow-manager.spec.ts",
-      "src/workflows/working-directory/working-directory-worker.workflow.spec.ts"
+      "src/activities/work-manager/factory/worker-options.factory.service.ts"
     ]
   }
 }
