@@ -4,10 +4,10 @@ import { Divider } from "@mui/material";
 import {
   Card,
   CardContent,
+  CardHeader,
   CardTitle,
   DoughnutChart,
   MetricItemAdvance,
-  CardHeader,
   Popover,
 } from "@netapp/bxp-design-system-react";
 import { useMemo } from "react";
@@ -49,7 +49,7 @@ const ReportDoughnutChart = () => {
   const summary = createSummaryMap(reportData);
 
   const fileExtensionCounts = Object.entries(summary).filter(
-    ([key]) => key !== "total size (MiB)"
+    ([key]) => key !== "total size (MiB)",
   );
   const totalSizeMB = summary["total size (MiB)"];
 
@@ -57,23 +57,23 @@ const ReportDoughnutChart = () => {
   same colors in doughnut chart (random colors will be assigned 
   to the file extentions as this data will be dynamic) */
   const shuffledColors = [...availableChartColors]
-      .filter((c) => c !== "chart-1")
-      .sort(() => Math.random() - 0.5);  // Shuffle the colors
+    .filter((c) => c !== "chart-1")
+    .sort(() => Math.random() - 0.5); // Shuffle the colors
 
   const assignedColors: Record<string, string> = {};
   fileExtensionCounts.forEach((_, index) => {
     // Use modulo to cycle through available colors if there are more extensions than colors
     assignedColors[`chart-${index + 2}`] =
-        shuffledColors[index % shuffledColors.length];
+      shuffledColors[index % shuffledColors.length];
   });
 
-// For the chart, use the actual color names directly
+  // For the chart, use the actual color names directly
   const doughnutColors = [
     fileExtensionCounts.map((_, index) => `chart-${index + 2}`),
     ["chart-1"],
   ];
 
-// For the legend, use the same direct mapping to ensure consistency
+  // For the legend, use the same direct mapping to ensure consistency
   const legendsData = [
     ...fileExtensionCounts.map(([key, value], index) => ({
       title: key,
@@ -89,19 +89,19 @@ const ReportDoughnutChart = () => {
 
   const { avgDepth, maxDepth } = useMemo(
     () => extractAverageMaxDepth(reportData),
-    [reportData]
+    [reportData],
   );
   const { maxPath, avgPath } = useMemo(
     () => extractMaxAvgFilePath(reportData),
-    [reportData]
+    [reportData],
   );
   const { maxFileSize, avgFileSize } = useMemo(
     () => extractMaxAvgFileSize(reportData),
-    [reportData]
+    [reportData],
   );
   const { directories } = useMemo(
     () => extractSystemFileStatAndDirectories(reportData),
-    [reportData]
+    [reportData],
   );
 
   const maximumMap = [
@@ -120,7 +120,7 @@ const ReportDoughnutChart = () => {
       label: `${formatBytes(maxFileSize)}/${formatBytes(avgFileSize)}`,
       value: "Size",
     },
-      //as it is already included in the doughnut chart, we can comment this out
+    //as it is already included in the doughnut chart, we can comment this out
     /*{
       label: `${formatLargeNumber(directories as number)}`,
       value: "Directories",
@@ -144,9 +144,10 @@ const ReportDoughnutChart = () => {
               fileExtensionCounts.map(([, value]) => value),
               [totalSizeMB],
             ]}
+            value={totalSizeMB}
           />
 
-          <Box className="flex gap-4 w-full flex-wrap">
+          <Box className="flex gap-4 w-full flex-wrap max-h-60 overflow-y-auto pr-2">
             {legendsData.map((legend, index) => (
               <Legends
                 key={index}
