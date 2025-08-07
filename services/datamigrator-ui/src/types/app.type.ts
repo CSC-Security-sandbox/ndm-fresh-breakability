@@ -646,6 +646,7 @@ export enum ValidateConnectionStatus {
   COMPLETED = "COMPLETED",
   TERMINATED = "TERMINATED",
   TIMED_OUT = "TIMED_OUT",
+  FAILED = "FAILED",
 }
 
 export enum WorkerConnectionStatus {

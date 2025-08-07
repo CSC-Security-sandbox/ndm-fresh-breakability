@@ -72,4 +72,24 @@ export class WorkflowService implements OnModuleDestroy{
             this.logger.error(`Error while closing temporal connection : ${error}`)
         }
     }
+
+    async getWorkFlowPayload(workflowId: string) {
+        const client = await this.getClient();
+        const { history } = await client.workflowService.getWorkflowExecutionHistory({
+            namespace: 'default',
+            execution: { workflowId }
+        });
+        const startedEvent = history?.events?.find(e => e.workflowExecutionStartedEventAttributes);
+        const payloads = startedEvent?.workflowExecutionStartedEventAttributes?.input?.payloads;
+
+        if (!payloads || payloads.length === 0) {
+            console.warn(`No payloads found for workflow ${workflowId}`);
+            return [];
+        }
+        return payloads.map(p => {
+            const buffer = Buffer.from(p.data as Uint8Array);
+            const jsonString = buffer.toString('utf8');
+            return JSON.parse(jsonString);
+        });
+    }
 }
