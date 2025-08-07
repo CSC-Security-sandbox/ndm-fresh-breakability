@@ -36,10 +36,6 @@ export class RegisterWorkerResponseDto {
     this.controlPlaneIp = controlPlaneIp;
   }
 
-  set setProjectId(value: string) {
-    this.projectId = value;
-  }
-
   set setWorkerSecret(value: string) {
     this.workerSecret = value;
   }
