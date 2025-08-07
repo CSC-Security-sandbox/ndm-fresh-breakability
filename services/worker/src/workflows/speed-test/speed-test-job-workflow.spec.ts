@@ -1,5 +1,5 @@
 import { TestWorkflowEnvironment } from '@temporalio/testing';
-import { Worker } from '@temporalio/worker';
+import { Worker, Runtime } from '@temporalio/worker';
 import { temporal } from '@temporalio/proto';
 import { SpeedTestJobWorkflow } from './speed-test-job-workflow';
 import { JobRunStatus } from 'src/activities/common/enums';
@@ -33,6 +33,7 @@ describe('SpeedTestJobWorkflow', () => {
             await worker?.shutdown();
         }
         await testEnv.teardown();
+        Runtime.instance().shutdown(); // clean up native handles
         // workflowCoverage.mergeIntoGlobalCoverage();
     });
 
