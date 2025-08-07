@@ -147,7 +147,12 @@
       "src/workflows/discovery/core/discovery-job-workflow.spec.ts",
       "src/logger/logger.service.ts",
       "src/activities/work-manager/factory/worker-options.factory.service.ts",
-      "src/workflows/speed-test/speed-test-job-workflow.spec.ts"
+      "src/workflows/speed-test/speed-test-job-workflow.spec.ts",
+      "src/workflows/pre-check/core/pre-check.worker.workflow.spec.ts",
+      "src/workflows/redis/redis.memorycheck.workflow.spec.ts",
+      "src/workflows/setup/cleanup-worker-workflow.spec.ts",
+      "src/workflows/setup/setup-worker-workflow.spec.ts",
+      "src/workflows/validate-connection/validate-worker-connection.workflow.spec.ts"
     ]
   }
 }
