@@ -48,43 +48,33 @@ export class CsvService {
     async getInventoryDataQuery(jobRunId: string, limit: number, offset: number) {
         const dbSchema = process.env.SCHEMA;
         const query = `
-            SELECT
-                v_source.volume_path || i.path AS "Source Path",
-                v_target.volume_path || i.path AS "Target Path",
+           SELECT
+                v_source.volume_path || i.path as "Source Path",
+                v_target.volume_path || i.path as "Target Path",
                 jc.job_type AS "Migration Type",
                 i.created_at AS "Start Time",
                 i.updated_at AS "End Time",
-
                 CASE
-                    WHEN i.is_directory THEN 'success'
+                    WHEN is_directory THEN 'success'
                     ELSE
                         CASE
-                            WHEN i.source_checksum = i.target_checksum THEN 'success'
+                            WHEN source_checksum = target_checksum THEN 'success'
                             ELSE 'failed'
                         END
                 END AS status,
-
                 CASE 
-                    WHEN i.is_directory THEN 'd'
+                    WHEN is_directory THEN 'd'
                     ELSE 'f'
                 END AS type,
-
-                i.file_size AS "Size",
-
-                i.source_meta->>'checksum'      AS "Source Checksum",
-                i.target_meta->>'checksum'      AS "Target Checksum",
-
-                -- External mapping check via EXISTS
+                file_size as "Size",
+                source_checksum as "Source Checksum",
+                target_checksum as "Target Checksum",
                 CASE 
-                    WHEN EXISTS (
-                        SELECT 1
-                        FROM ${dbSchema}.identity_config_cross_mapping iccm
-                        WHERE iccm.job_config_id = jc.id
-                    ) THEN 'Yes'
+                    WHEN count(iccm.id) > 0 THEN 'Yes'
                     ELSE 'No'
-                END AS "External Mapping File Used",
+                END AS "External mapping file used",
 
-                -- Birth time
+                 -- Birth time
                 i.source_meta->>'birthTime'     AS "Source BirthTime",
                 i.target_meta->>'birthTime'     AS "Target BirthTime",
 
@@ -117,7 +107,9 @@ export class CsvService {
             LEFT JOIN ${dbSchema}.jobconfig jc ON jc.id = jobrun.job_config_id
             LEFT JOIN ${dbSchema}.volume v_source ON jc.source_path_id = v_source.id
             LEFT JOIN ${dbSchema}.volume v_target ON jc.target_path_id = v_target.id
-            WHERE i.job_run_id = $1
+            LEFT JOIN ${dbSchema}.identity_config_cross_mapping iccm ON iccm.job_config_id = jc.id
+            WHERE job_run_id = $1
+            GROUP BY v_source.volume_path, v_target.volume_path, i.path, jc.job_type, i.created_at, i.updated_at, i.is_directory, i.source_checksum, i.target_checksum, i.file_size, i.source_meta, i.target_meta
             ORDER BY i.created_at DESC
             LIMIT $2 OFFSET ($3 - 1) * $2;
         `;
