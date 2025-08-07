@@ -4,9 +4,9 @@ import "./index.css";
 import App from "@/App.tsx";
 import { BrowserRouter } from "react-router-dom";
 import { ThemeProvider } from "@netapp/bxp-design-system-react";
-import { Provider } from "react-redux";
+import { Provider, useSelector } from "react-redux";
 import { PersistGate } from "redux-persist/integration/react";
-import { _persistedStore, store } from "@/store/store.ts";
+import { _persistedStore, store, RootStateType } from "@/store/store.ts";
 import AuthGuard from "@/auth/AuthGuard.tsx";
 import AuthenticationProvider from "@/auth/AuthenticationProvider";
 import "@netapp/bxp-design-system-react/dist/index.css";
@@ -15,24 +15,36 @@ import SideDrawer from "@components/side-drawer/SideDrawer.tsx";
 import { Box } from "@components/container/index.tsx";
 import TopProgressBar from "@components/top-progress-bar/TopProgressBar.tsx";
 
+// ThemeWrapper component to properly use the useSelector hook
+const ThemeWrapper = ({ children }) => {
+  // Now useSelector is used inside a component function
+  const theme = useSelector((state: RootStateType) => state.appSlice.theme);
+
+  return (
+    <ThemeProvider theme={theme} isRoot={true}>
+      {children}
+    </ThemeProvider>
+  );
+};
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <Box className="!overflow-hidden h-screen">
       <BrowserRouter>
         <TopProgressBar />
-        <ThemeProvider theme="light" isRoot={true}>
-          <Provider store={store}>
-            <PersistGate persistor={_persistedStore}>
-              <AuthenticationProvider>
+        <Provider store={store}>
+          <PersistGate persistor={_persistedStore}>
+            <AuthenticationProvider>
+              <ThemeWrapper>
                 <AuthGuard>
                   <Modal />
                   <SideDrawer />
                   <App />
                 </AuthGuard>
-              </AuthenticationProvider>
-            </PersistGate>
-          </Provider>
-        </ThemeProvider>
+              </ThemeWrapper>
+            </AuthenticationProvider>
+          </PersistGate>
+        </Provider>
       </BrowserRouter>
     </Box>
   </StrictMode>

@@ -4,6 +4,8 @@ export default {
   theme: {
     extend: {
       colors: {
+        "main-background": "#111925",
+        "background-content": "#2B323D",
         "content-bg": "#F3F3F3",
         "light-error-bg": "#FFF5F5",
         "header-netapp-bg": "#0067C5",

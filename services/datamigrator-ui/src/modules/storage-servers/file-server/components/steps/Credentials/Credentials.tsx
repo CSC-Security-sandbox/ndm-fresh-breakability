@@ -1,6 +1,6 @@
 import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
 import { Box } from "@components/container/index";
-import { FormFieldInputNew } from "@netapp/bxp-design-system-react";
+import { Card, FormFieldInputNew } from "@netapp/bxp-design-system-react";
 import { useContext } from "react";
 import NFSCredentials from "@modules/storage-servers/file-server/components/steps/Credentials/components/NFSCredentials";
 import SMBCredentials from "@modules/storage-servers/file-server/components/steps/Credentials/components/SMBCredentials";
@@ -14,7 +14,7 @@ const Credentials = () => {
   return (
     <>
       <FormFrame>
-        <Box className="mt-4 flex flex-col p-6 w-3/6">
+        <Card className="mt-4 flex flex-col p-6 w-3/6">
           <FormFieldInputNew
             form={hostCredentialsForm}
             name="host"
@@ -28,7 +28,7 @@ const Credentials = () => {
               });
             }}
           />
-        </Box>
+        </Card>
       </FormFrame>
 
       <NFSCredentials />

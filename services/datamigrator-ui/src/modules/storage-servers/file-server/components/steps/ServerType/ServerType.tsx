@@ -2,6 +2,7 @@ import { Box } from "@components/container/index";
 import {
   FormFieldInputNew,
   FormFieldSelect,
+  Card,
 } from "@netapp/bxp-design-system-react";
 import { useContext } from "react";
 import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
@@ -11,7 +12,7 @@ const ServerType = () => {
   const { serverTypeForm, isJobRunning } = useContext(CommonFileServerContext);
   return (
     <FormFrame>
-      <Box className="flex gap-4 p-6">
+      <Card className="flex gap-4 p-6">
         <FormFieldInputNew
           form={serverTypeForm}
           name="configName"
@@ -38,7 +39,7 @@ const ServerType = () => {
             },
           ]}
         />
-      </Box>
+      </Card>
     </FormFrame>
   );
 };

@@ -33,11 +33,10 @@ const DetailButton = ({ projectId }: { projectId: string }) => (
     Trigger="oval-hidden"
   >
     <ActionMenu.CopyButton
-        label="Project ID"
-        value={projectId}
-        tooltip={projectId}
-      >
-    </ActionMenu.CopyButton>
+      label="Project ID"
+      value={projectId}
+      tooltip={projectId}
+    ></ActionMenu.CopyButton>
   </ActionMenu>
 );
 
@@ -95,9 +94,7 @@ const SwitchProjectContent = ({ projectList, selectedProjectId }: any) => {
   return (
     <Layout.Page>
       <WizardHeader label="Project" />
-      <Layout.Content
-        style={{ padding: 40, backgroundColor: "var(--light-bg)" }}
-      >
+      <Layout.Content style={{ padding: 40 }}>
         <SearchWidget
           placeholder={`Search Projects`}
           alwaysOpen

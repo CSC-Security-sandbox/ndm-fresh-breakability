@@ -4,12 +4,14 @@ interface appSliceType {
   project: string;
   account: string;
   allProjectList: any[];
+  theme: "light" | "dark";
 }
 
 const initialState: appSliceType = {
-  project: localStorage.getItem("selected_project_id") || "",
+  project: "",
   account: "",
   allProjectList: [],
+  theme: "light",
 };
 
 export const appSlice = createSlice({
@@ -18,7 +20,6 @@ export const appSlice = createSlice({
   reducers: {
     setProject: (state, action: PayloadAction<string>) => {
       state.project = action.payload;
-      localStorage.setItem("selected_project_id", action.payload);
     },
     setAccount: (state, action: PayloadAction<string>) => {
       state.account = action.payload;
@@ -26,7 +27,11 @@ export const appSlice = createSlice({
     setAllProjectList: (state, action: PayloadAction<any[]>) => {
       state.allProjectList = action.payload;
     },
+    setTheme: (state, action: PayloadAction<"light" | "dark">) => {
+      state.theme = action.payload;
+    },
   },
 });
 
-export const { setProject, setAccount, setAllProjectList } = appSlice.actions;
+export const { setProject, setAccount, setAllProjectList, setTheme } =
+  appSlice.actions;

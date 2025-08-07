@@ -12,13 +12,12 @@ function TabPanel(props: TabPanelProps) {
   return (
     <div
       role="tabpanel"
-      className="bg-main-background h-full"
       hidden={value !== index}
       id={`tabpanel-${index}`}
       aria-labelledby={`tab-${index}`}
       {...other}
     >
-      {value === index && <Box className="p-2">{children}</Box>}
+      {value === index && <Box>{children}</Box>}
     </div>
   );
 }

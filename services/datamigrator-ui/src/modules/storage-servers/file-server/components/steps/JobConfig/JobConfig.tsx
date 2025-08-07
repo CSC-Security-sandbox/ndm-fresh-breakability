@@ -4,6 +4,7 @@ import {
   FormFieldInputNew,
   FormFieldSelect,
   InlineNotification,
+  Card,
 } from "@netapp/bxp-design-system-react";
 import { useContext } from "react";
 import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
@@ -15,7 +16,7 @@ const JobConfig = () => {
 
   return (
     <FormFrame>
-      <Box className="p-6 flex flex-col gap-4">
+      <Card className="p-6 flex flex-col gap-4">
         <InlineNotification type="info" prefix="Information">
           This section is optional. However, without it,
           <strong>speed tests will not be possible</strong>.
@@ -50,7 +51,7 @@ const JobConfig = () => {
           placeholder="Working Directory"
           label="Working Directory"
         />
-      </Box>
+      </Card>
     </FormFrame>
   );
 };

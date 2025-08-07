@@ -12,12 +12,15 @@ import {
 import Cookies from "js-cookie";
 import { notify } from "@components/notification/NotificationWrapper";
 import { useAuth } from "react-oidc-context";
+import ThemeToggler from "@/components/theme-toggler/ThemeToggler";
 const UserDetailsContent = () => {
   const auth = useAuth();
 
   //TODO: Copy the session data to redux and access from there.
   const sessionData = JSON.parse(
-    sessionStorage.getItem(window?.env?.VITE_SESSION_KEY || import.meta.env.VITE_SESSION_KEY || "") || "{}"
+    sessionStorage.getItem(
+      window?.env?.VITE_SESSION_KEY || import.meta.env.VITE_SESSION_KEY || ""
+    ) || "{}"
   );
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -57,13 +60,22 @@ const UserDetailsContent = () => {
 
   return (
     <Layout.Page>
-      <WizardHeader Icon={UserIcon} label="User Settings" />
-      <Layout.Content
-        style={{ padding: 40, backgroundColor: "var(--light-bg)" }}
-      >
+      <WizardHeader
+        Icon={UserIcon}
+        label="User Settings"
+        logo={null}
+        children={null}
+        onClose={() => {}}
+        closeLink=""
+        Widgets={null}
+      />
+      <Layout.Content style={{ padding: 40 }}>
         <FormFieldInputNew form={form} name="email" label="Email ID" readOnly />
+        <div style={{ marginTop: 20 }}>
+          <ThemeToggler />
+        </div>
       </Layout.Content>
-      <WizardFooter>
+      <WizardFooter className="" style={{}}>
         <Button
           onClick={logout}
           isSubmitting={isLoading}

@@ -8,7 +8,7 @@ import {
 } from "@api/userApi";
 import { COL_DEF_FOR_USER } from "@/constant/app.constants";
 import { Collapse } from "@mui/material";
-import { Button } from "@netapp/bxp-design-system-react";
+import { Button, Layout } from "@netapp/bxp-design-system-react";
 import { useState } from "react";
 import CreateUserForm from "@components/top-nav-bar/setting/ManageUsers/CreateUserForm";
 import PermissionAuth from "@/auth/PermissionAuth";
@@ -105,7 +105,7 @@ const ManageUsers = () => {
   };
 
   return (
-    <Box className="h-[43.75rem] w-full p-6">
+    <Layout.Content className="h-[43.75rem] w-full p-6">
       <Collapse in={isCreateFormVisible} mountOnEnter unmountOnExit>
         <Box className="flex justify-around">
           <CreateUserForm
@@ -134,7 +134,7 @@ const ManageUsers = () => {
           isRefreshing={isFetching}
         />
       </Collapse>
-    </Box>
+    </Layout.Content>
   );
 };
 

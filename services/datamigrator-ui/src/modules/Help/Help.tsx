@@ -25,9 +25,7 @@ const HelpContent = () => {
           closeLink=""
           Widgets={null}
         />
-        <Layout.Content
-          style={{ padding: 20, backgroundColor: "var(--light-bg)" }}
-        >
+        <Layout.Content style={{ padding: 20 }}>
           <RenderEach
             renderList={HELP_ITEMS}
             renderItem={(item) => {
