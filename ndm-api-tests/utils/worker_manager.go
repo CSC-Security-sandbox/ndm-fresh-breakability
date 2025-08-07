@@ -539,6 +539,20 @@ func GetStartWorkerScript() string {
 
 // GetStopWorkerScript generates a shell script to restart worker service.
 func GetRestartWorkerScript() string {
+	switch PROTOCOL_TYPE {
+	case ProtocolNFS:
+		return getRestartWorkerScriptForNFS()
+	case ProtocolSMB:
+		return getRestartWorkerScriptForSMB()
+	}
+	return ""
+}
+
+func getRestartWorkerScriptForSMB() string {
+	return `cmd /C net stop "Datamigrator Worker" && net start "Datamigrator Worker"`
+}
+
+func getRestartWorkerScriptForNFS() string {
 	script := fmt.Sprintf(`#!/bin/bash
 	set -e 
 

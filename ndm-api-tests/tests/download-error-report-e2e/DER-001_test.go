@@ -57,9 +57,9 @@ var _ = Describe("Download Error Report", Ordered, func() {
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         "Root",
-				Password:         "",
-				Protocol:         ProtocolNFS,
+				UserName:         PROTOCOL_USERNAME,
+				Password:         PROTOCOL_PASSWORD,
+				Protocol:         PROTOCOL_TYPE,
 				ProtocolVersion:  ProtocolVersion3,
 				Host:             SOURCE_HOST_IP,
 				Workers:          []string{workerId1},
@@ -76,7 +76,7 @@ var _ = Describe("Download Error Report", Ordered, func() {
 			Wait(10)
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, SourceConfigID, headers)
+			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], SourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 			fmt.Println("Source Path ID:", sourcePathID1)
 
