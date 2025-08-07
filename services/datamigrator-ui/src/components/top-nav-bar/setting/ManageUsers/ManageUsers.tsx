@@ -2,7 +2,7 @@ import Box from "@/components/container/Box";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
 import { notify } from "@components/notification/NotificationWrapper";
 import {
-  useGetAllUsersQuery,
+  useGetAllUserByProjectQuery,
   useResetPasswordMutation,
   useUpdateUserStatusMutation,
 } from "@api/userApi";
@@ -29,7 +29,7 @@ const ManageUsers = () => {
     isLoading,
     isFetching,
     refetch,
-  } = useGetAllUsersQuery({ projectId: projectId.selectedProjectId });
+  } = useGetAllUserByProjectQuery({ projectId: projectId.selectedProjectId });
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const permission = useSelector(
     (state: RootStateType) => state.permissionSlice

@@ -179,7 +179,7 @@ export class CommandExecService {
             checksum : command.ops?.[OPS_CMD.COPY_FILE]?.params?.checksums?.sourceChecksum ?? '',
             uid: sourceStats.uid,
             gid: sourceStats.gid,
-                        sid: command.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.sourceAcl ?? ''
+            sid: command.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.sourceAcl ?? ''
         }
 
         const targetStats = await fs.promises.lstat(targetPath);
