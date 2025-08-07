@@ -147,7 +147,8 @@
       "/test/",
       "src/workflows/discovery/core/discovery-job-workflow.spec.ts",
       "src/logger/logger.service.ts",
-      "src/activities/work-manager/factory/worker-options.factory.service.ts"
+      "src/activities/work-manager/factory/worker-options.factory.service.ts",
+      "src/workflows/speed-test/speed-test-job-workflow.spec.ts"
     ]
   }
 }
