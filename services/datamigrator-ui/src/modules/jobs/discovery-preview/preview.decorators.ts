@@ -368,7 +368,7 @@ export function extractAverageMaxDepth(jsonData: DataItemType[]) {
     0
   );
   const avgDepth =
-    total === 0 ? 0 : parseFloat((total / depthData.length).toFixed(1));
+    total === 0 || depthData.length === 0 ? 0 : parseFloat((total / depthData.length).toFixed(1));
 
   return { avgDepth, maxDepth };
 }
