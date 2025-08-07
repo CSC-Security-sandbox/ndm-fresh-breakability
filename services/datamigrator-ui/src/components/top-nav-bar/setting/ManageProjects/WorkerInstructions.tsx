@@ -33,6 +33,7 @@ const WorkerInstallation = ({
             <WorkerInstallationContent
               workerId={generateSecretAPIResult?.workerId}
               workerSecret={generateSecretAPIResult?.workerSecret}
+              projectId={generateSecretAPIResult?.projectId}
               controlPlaneIp={generateSecretAPIResult?.controlPlaneIp}
               isLoading={isLoading}
               isError={isError}
