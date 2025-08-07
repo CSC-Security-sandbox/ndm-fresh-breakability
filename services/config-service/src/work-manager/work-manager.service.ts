@@ -215,6 +215,15 @@ export class WorkManagerService {
         throw new NotFoundException(`No workflow response found for ID: ${id}`);
       }
 
+      if (response.status === 'TERMINATED' || response.status === 'FAILED' || response.status === 'TIMED_OUT') {
+        const errorMessage = `Pre-check with ID ${id} is ${response.status.toLowerCase()}. Please check the workflow logs for more details.`;
+        return {
+          ...response,
+          workflow: {
+            errors: [errorMessage],
+          }
+        };
+      }
       return response;
     } catch (error) {
       this.logger.error(`Error in getChildWorkFlowRes: ${error.message}`);
