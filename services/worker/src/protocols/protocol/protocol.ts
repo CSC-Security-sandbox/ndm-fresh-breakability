@@ -64,7 +64,7 @@ export abstract class Protocol {
         try {
           // NON-BLOCKING: Use promisified exec with timeout
           const { stdout, stderr } = await execAsync(command, {
-            timeout: 5000, // 30 second timeout
+            timeout: 5000, // 5 second timeout
             maxBuffer: 1024 * 1024, // 1MB buffer
             encoding: 'utf8'
           });
@@ -73,13 +73,10 @@ export abstract class Protocol {
             const sanitizedStderr = sanitize(stderr, fieldsToSanitize);
             this.logger.warn(
               `[${traceId}] command: ${sanitizedCommand}, stderr: ${sanitizedStderr}`
-            );
-            
-            // Some commands write non-errors to stderr, check if it's actually an error
+            );                        
             throw new Error(sanitizedStderr);
         
-        }
-
+          }
           this.logger.log(
             `[${traceId}] command: ${sanitizedCommand}, stdout: ${stdout}`
           );
@@ -88,48 +85,12 @@ export abstract class Protocol {
           return response;
 
         } catch (error) {
-          const sanitizedError = sanitize(error?.message, fieldsToSanitize);
-          
+          const sanitizedError = sanitize(error?.message, fieldsToSanitize);          
           this.logger.error(
             `[${traceId}] command: ${sanitizedCommand}, error: ${sanitizedError}`
           );
-
-          response.message = `[${protocolType}] [${commandDescription}] Failed. Hostname: ${payload.hostname} Worker: ${this.workerId}. Error: ${sanitizedError}`;
-          response.status = 'error';
           throw new Error(sanitizedError);
         }
       }
 
-    /**
-     * Check if stderr contains an actual error or just warnings
-     */
-    private isActualError(stderr: string): boolean {
-      const errorPatterns = [
-        /error/i,
-        /failed/i,
-        /cannot/i,
-        /permission denied/i,
-        /access denied/i,
-        /not found/i,
-        /invalid/i,
-        /timeout/i
-      ];
-
-      const nonErrorPatterns = [
-        /warning/i,
-        /info/i,
-        /debug/i,
-        /note/i
-      ];
-
-      const lowerStderr = stderr.toLowerCase();
-      
-      // Check for non-errors first
-      if (nonErrorPatterns.some(pattern => pattern.test(lowerStderr))) {
-        return false;
-      }
-      
-      // Check for actual errors
-      return errorPatterns.some(pattern => pattern.test(lowerStderr));
-    }
 }
