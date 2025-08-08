@@ -20,6 +20,8 @@ import { NotifyConfigActivity } from './notify-config/notify-config.activity';
 import { StateDataCsvGenerationActivity } from './state-data-csv-generation/state-data-csv-generation.activity';
 import { SystemInventoryCsvGenerationActivity } from './system-inventory-csv-generation/system-inventory-csv-generation.activity';
 import { SystemInventoryProcessorService } from './system-inventory-csv-generation/system-inventory-processor.service';
+import { PerformanceMetricsCsvGenerationActivity } from './performance-metrics-csv-generation/performance-metrics-csv-generation.activity';
+import { PerformanceMetricsProcessorService } from './performance-metrics-csv-generation/performance-metrics-processor.service';
 
 @Module({
   imports: [
@@ -51,6 +53,13 @@ import { SystemInventoryProcessorService } from './system-inventory-csv-generati
 
     // Main service (depends on activities)
     ActivitiesService,
+    PerformanceMetricsCsvGenerationActivity,
+    ConfigService,
+    OperationErrorService,
+    PerformanceMetricsProcessorService,
+    PrometheusService,
+    PrometheusClientService,
+    ZipHandlerService,
   ],
   exports: [
     ActivitiesService,

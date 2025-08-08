@@ -4,3 +4,4 @@ export { ErrorLogsCsvGeneratorWorkflow } from './child-workflows/error-csv-gener
 export { ConfigurationDataCsvGeneratorWorkflow } from './child-workflows/configuration-data-csv-workflow';
 export { StateDataCsvGeneratorWorkflow } from './child-workflows/state-data-csv-generation-workflow';
 export { SystemInventoryCsvGeneratorWorkflow } from './child-workflows/system-inventory-csv-generation-workflow';
+export { PerformanceMetricsCsvGeneratorWorkflow } from './child-workflows/performance-metrics-csv-generation-workflow';

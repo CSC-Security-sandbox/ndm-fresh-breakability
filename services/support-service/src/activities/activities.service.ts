@@ -5,6 +5,7 @@ import { ErrorCsvGenerationActivity } from './error-csv-generation/error-csv-gen
 import { ConfigurationDataCsvGenerationActivity } from './config-data-csv-generation/config-data-csv-generation.activity';
 import { StateDataCsvGenerationActivity } from './state-data-csv-generation/state-data-csv-generation.activity';
 import { SystemInventoryCsvGenerationActivity } from './system-inventory-csv-generation/system-inventory-csv-generation.activity';
+import { PerformanceMetricsCsvGenerationActivity } from './performance-metrics-csv-generation/performance-metrics-csv-generation.activity';
 
 @Injectable()
 export class ActivitiesService {
@@ -15,6 +16,7 @@ export class ActivitiesService {
     private readonly configurationDataCsvGenerationActivity: ConfigurationDataCsvGenerationActivity,
     private readonly stateDataCsvGenerationActivity: StateDataCsvGenerationActivity,
     private readonly systemInventoryCsvGenerationActivity: SystemInventoryCsvGenerationActivity,
+    private readonly performanceMetricsCsvGenerationActivity: PerformanceMetricsCsvGenerationActivity,
   ) {}
 
   async fetchAndZipLogs({ traceId, payload }) {
@@ -45,6 +47,14 @@ export class ActivitiesService {
   }
   async generateSystemInventoryCsv({ traceId, payload }) {
     return this.systemInventoryCsvGenerationActivity.generateSystemInventoryCsv(
+      {
+        traceId,
+        payload,
+      },
+    );
+  }
+  async generatePerformanceMetricsCsv({ traceId, payload }) {
+    return this.performanceMetricsCsvGenerationActivity.generatePerformanceMetricsCsv(
       {
         traceId,
         payload,
