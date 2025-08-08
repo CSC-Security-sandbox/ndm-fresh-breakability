@@ -8,12 +8,17 @@ customScrapeConfigs:
       - targets:
           - prometheus-prometheus-pushgateway.prometheus.svc.cluster.local:9091
 
-
   - job_name: prometheus
     metrics_path: /metrics
     static_configs:
       - targets:
           - localhost:9090
+
+  - job_name: 'kube-state-metrics'
+    static_configs:
+      - targets: ['prometheus-kube-state-metrics.prometheus.svc.cluster.local:8080']
+    honor_labels: true
+    scrape_interval: 30s
 
   # A scrape configuration for running Prometheus on a Kubernetes cluster.
   # This uses separate scrape configs for cluster components (i.e. API server, node)

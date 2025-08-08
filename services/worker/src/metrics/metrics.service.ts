@@ -1,5 +1,8 @@
 import { HttpService } from '@nestjs/axios';
 import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import * as fs from 'fs';
+import * as os from 'os';
 import {
   collectDefaultMetrics,
   Counter,
@@ -8,7 +11,6 @@ import {
   Registry,
 } from 'prom-client';
 import * as systeminformation from 'systeminformation';
-import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class MetricsService implements OnModuleInit, OnModuleDestroy {
@@ -58,6 +60,13 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     registers: [this.registry],
   });
 
+  private readonly workerInfoGauge = new Gauge({
+    name: 'worker_info',
+    help: 'Worker information including version and platform',
+    labelNames: ['worker_id', 'label_build_version', 'platform'],
+    registers: [this.registry],
+  });
+
   private readonly logger: LoggerService;
 
   constructor(
@@ -102,6 +111,65 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private async readWorkerVersion(): Promise<string> {
+    try {
+      const platform = os.platform();
+      let versionsFilePath: string;
+
+      if (platform === 'win32') {
+        versionsFilePath = 'C:\\datamigrator\\conf\\versions.conf';
+      } else {
+        versionsFilePath = '/opt/datamigrator/conf/versions.conf';
+      }
+
+      try {
+        const content = await fs.promises.readFile(versionsFilePath, 'utf8');
+        const match = content.match(/current_version=(.+)/);
+        if (match && match[1]) {
+          return match[1].trim();
+        }
+      } catch (err) {
+          this.logger.error('Error reading worker version file:', err.message || err);
+        return 'unknown';
+      }
+
+      return 'unknown';
+    } catch (err) {
+      this.logger.error('Error reading worker version:', err.message || err);
+      return 'unknown';
+    }
+  }
+
+  private getPlatform(): string {
+    const platform = os.platform();
+    switch (platform) {
+      case 'win32':
+        return 'windows';
+      case 'linux':
+        return 'linux';
+      default:
+        return platform;
+    }
+  }
+
+  private async setWorkerInfo() {
+    try {
+      const version = await this.readWorkerVersion();
+      const platform = this.getPlatform();
+      
+      this.workerInfoGauge.set(
+        { 
+          worker_id: this.workerId, 
+          label_build_version: version, 
+          platform: platform 
+        }, 
+        1
+      );
+    } catch (err) {
+      this.logger.error('Failed to set worker info:', err.message || err);
+    }
+  }
+
   onModuleInit() {
     const metricsEnabled = process.env.METRICS_ENABLED !== 'false';
     if (!metricsEnabled) {
@@ -117,6 +185,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
       () => this.pushMetrics(),
       parseInt(process.env.METRICS_PUSH_INTERVAL || '15000')
     );
+    this.setWorkerInfo();
   }
 
   async onModuleDestroy() {

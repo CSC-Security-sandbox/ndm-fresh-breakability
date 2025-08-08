@@ -95,6 +95,12 @@ jobs:
           run: |
             Expand-Archive -Path "pkg.zip" -DestinationPath "pkg" -Force
 
+        - name: Extract app version
+          shell: pwsh
+          run: |
+            $appVersion = (Get-Content "app-deployment/ansible/worker/config/group_vars/all.yaml" | Select-String 'build_version:').Line -replace 'build_version:\s*"([^"]*)"', '$1'
+            echo "APP_VERSION=$appVersion" >> $env:GITHUB_ENV
+
         - name: Prepare Installer Directory
           shell: pwsh
           run: |
@@ -138,7 +144,23 @@ jobs:
             Copy-Item -Path "services/worker/wininstaller/installer.iss" -Destination "wininstaller\installer.iss" -Force
             Copy-Item -Path "services/worker/wininstaller/service.xml" -Destination "wininstaller\service.xml" -Force
             Copy-Item -Path "services/worker/wininstaller/fluentd.conf" -Destination "wininstaller\fluentd.conf" -Force
-  
+
+        - name: Update installer version
+          shell: pwsh
+          run: |
+            # Replace the version in installer.iss with the actual app version
+            (Get-Content "wininstaller\installer.iss") -replace '#define ApplicationVersion ".*"', '#define ApplicationVersion "${{ env.APP_VERSION }}"' | Set-Content "wininstaller\installer.iss"
+            Write-Host "Updated installer version to: ${{ env.APP_VERSION }}"
+
+        - name: Verify installer version update
+          shell: pwsh
+          run: |
+            Write-Host "Verifying installer.iss content after version update:"
+            Write-Host "=============================================="
+            Get-Content "wininstaller\installer.iss" | Select-Object -First 10 | ForEach-Object { Write-Host $_ }
+            Write-Host "=============================================="
+            Write-Host "APP_VERSION environment variable: ${{ env.APP_VERSION }}"
+
         - name: Download WinSW and rename
           shell: pwsh
           run: |
