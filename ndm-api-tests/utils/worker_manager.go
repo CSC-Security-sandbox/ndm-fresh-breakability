@@ -243,7 +243,7 @@ func DetachAllWorkers() (string, error) {
 }
 
 // CreateWorkerScript creates a shell script to register a worker using API response data.
-func CreateWorkerScript(resp *http.Response) (string, string, error) {
+func CreateWorkerScript(resp *http.Response, projectId string) (string, string, error) {
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		LogError(fmt.Sprintf("Error reading response body: %v", err), err)
@@ -277,10 +277,11 @@ func CreateWorkerScript(resp *http.Response) (string, string, error) {
     sudo su -c '
     export WORKER_ID=%s
     export WORKER_SECRET=%s
+	export PROJECT_ID=%s
     export CONTROL_PLANE_IP=%s
     sh /opt/datamigrator/bin/worker_register.sh
     '
-    `, workerId, workerSecret, controlPlaneIp)
+    `, workerId, workerSecret,projectId, controlPlaneIp)
 	return script, workerId, nil
 }
 
@@ -374,7 +375,7 @@ func attachWorkerForConfig(worker SSHConfig, authToken, accountId, projectId str
 	if err != nil {
 		return "", err
 	}
-	script, workerId, err := CreateWorkerScript(resp)
+	script, workerId, err := CreateWorkerScript(resp, projectId)
 	if err != nil {
 		return workerId, err
 	}
