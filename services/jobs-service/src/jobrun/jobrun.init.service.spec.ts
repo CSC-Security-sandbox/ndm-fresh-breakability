@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { IdentityTypes, JobContextFactory, JobStatus, SpeedTestJobConfig, SpeedTestJobContextProvider } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import axios from 'axios';
 import { JobRunStatus, JobType, JobStatus as JS, Protocol, WorkFlows } from 'src/constants/enums';
 import { ScheduleStatus } from 'src/constants/status';
@@ -124,6 +125,19 @@ describe('JobRunInitService', () => {
           useValue: {
             checkMigrationConflicts: jest.fn().mockResolvedValue([]),
             hasMigrationConflicts: jest.fn().mockResolvedValue(false),
+          },
+        },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              info: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
+              log: jest.fn(),
+              verbose: jest.fn(),
+            }),
           },
         },
       ],

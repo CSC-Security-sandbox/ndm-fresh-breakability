@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Logger, Param, Post, Query, UseGuards, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards, ValidationPipe } from '@nestjs/common';
 import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiResponse, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { WorkersStatusPageDto, WorkerStatusPageResponseDto } from './dto/workers.page.dto';
 import { WorkersService } from './workers.service';
