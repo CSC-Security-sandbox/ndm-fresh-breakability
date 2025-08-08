@@ -35,16 +35,23 @@ export class ConfigurationDataCsvGenerationActivity {
     traceId: string;
     payload: any;
   }) {
+    const workerIds = payload?.projectWorkerMap
+      .filter((item: any) => Array.isArray(item.workerIds))
+      .flatMap((item: any) => item.workerIds);
+
     const workerDetails = await this.dataSource.query(
       SQL_QUERIES.GET_WORKER_IDS,
+      [workerIds],
     );
-    const workerIds = workerDetails.map((row: any) => row.worker_id);
+    const validWorkerIds: string[] = workerDetails.map(
+      (row: any) => row.worker_id,
+    );
 
     if (
-      workerIds?.length > 0 &&
+      validWorkerIds?.length > 0 &&
       payload?.otherMetrics?.includes('Configuration Data')
     ) {
-      await this.generateWorkerCsv(workerIds, payload);
+      await this.generateWorkerCsv(validWorkerIds, payload);
     }
     return 'Configuration data CSV generation completed successfully';
   }
