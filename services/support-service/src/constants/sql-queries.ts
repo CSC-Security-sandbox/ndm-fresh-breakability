@@ -66,7 +66,6 @@ export const GET_OPERATION_ERRORS_BY_DATE_RANGE = `
     oe.error_message as "errorMessage",
     oe.created_at as "createdAt",
     oe.file_name as "fileName",
-    oe.file_path as "filePath",
     oe.error_type as "errorType",
     oe.operation_type as "operationType",
     oe.origin,
