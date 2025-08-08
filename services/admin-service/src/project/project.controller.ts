@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Inject,
   Param,
   Patch,
   Post,
@@ -23,11 +24,18 @@ import { ProjectDescriptions } from '../swagger/swagger-summary';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
 import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 @ApiTags('projects')
 @Controller('/api/v1/projects')
 export class ProjectController {
-  constructor(private readonly projectService: ProjectService) {}
+  private logger: LoggerService;
+  constructor(
+    private readonly projectService: ProjectService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(ProjectController.name);
+  }
 
   @Auth(Permission.ManageProject)
   @ApiBearerAuth()

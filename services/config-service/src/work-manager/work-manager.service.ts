@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  InternalServerErrorException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -36,7 +31,7 @@ export class WorkManagerService {
   constructor(
     @InjectRepository(WorkerEntity)
     private readonly workerEntity: Repository<WorkerEntity>,
-    private loggerFactory: LoggerFactory,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly workFlowService: WorkflowService,
     @InjectRepository(JobRunEntity)
     private readonly jobRunRepo: Repository<JobRunEntity>,
@@ -47,7 +42,7 @@ export class WorkManagerService {
     private readonly configService: ConfigService,
     private readonly sendMailService: SendMailService,
   ) {
-    this.logger = this.loggerFactory.create(WorkManagerService.name);
+    this.logger = loggerFactory.create(WorkManagerService.name);
   }
 
   async getConfiguration(

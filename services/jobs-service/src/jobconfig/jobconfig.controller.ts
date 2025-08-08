@@ -1,30 +1,39 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Res } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query, Res } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
-import {SpeedTestConfigEntity } from "src/entities/speed-test-job-config.entity"
+import { SpeedTestConfigEntity } from "src/entities/speed-test-job-config.entity"
 import { Auth, Permission, AuthWorker } from "@netapp-cloud-datamigrate/auth-lib";
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck, MigrateConfig} from './dto/jobdicoverybulk.dto';
+import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck, MigrateConfig } from './dto/jobdicoverybulk.dto';
 import { JobConfigSpeedTest, SpeedTestResult } from './dto/jobspeedTest.dto'
 import { JobConfigBulkCutoverRes, JobConfigBulkMigrateFinalResponse, JobConfigBulkMigrateRes, JobConfigPrecheckRes, SpeedTestEntry, SpeedTestJobRun } from './jobconfig.types';
 import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
 import { Response } from 'express';
 import { TemplateType } from 'src/constants/enums';
 import { PreCheckService } from './precheck.service';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @ApiTags('jobs')
 @Controller('jobs')
 export class JobConfigController {
+  private logger: LoggerService;
   constructor(
     private readonly jobConfigService: JobConfigService,
     private readonly preCheckService: PreCheckService,
-  ) {}
+
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(JobConfigController.name);
+  }
 
   @ApiOperation({ summary: 'Create a new discovery job' })
   @ApiResponse({ status: 201, description: 'Discovery job has been successfully created.' })
-  @Auth(Permission.ManageJob) 
+  @Auth(Permission.ManageJob)
   @ApiBearerAuth()
   @Post('/bulk-discovery')
   async createBulkDiscovery(@Body() bulkDiscovery: JobConfigDiscoverBulk): Promise<JobConfigEntity[]> {
@@ -37,7 +46,7 @@ export class JobConfigController {
 
   @ApiOperation({ summary: 'Create a new Speed Test job' })
   @ApiResponse({ status: 201, description: 'Speed Test job has been successfully created.' })
-  @Auth(Permission.ManageJob) 
+  @Auth(Permission.ManageJob)
   @ApiBearerAuth()
   @Post('/speed-test')
   async createSpeedTest(@Body() speedTest: JobConfigSpeedTest): Promise<SpeedTestConfigEntity[]> {
@@ -63,7 +72,7 @@ export class JobConfigController {
   @AuthWorker()
   @ApiBearerAuth()
   @Post('/speed-test/store-result')
-  async storeSpeedTestResult(@Body() speedTestResult: SpeedTestResult): Promise<any>{
+  async storeSpeedTestResult(@Body() speedTestResult: SpeedTestResult): Promise<any> {
     return this.jobConfigService.storeSpeedTestResult(speedTestResult);
   }
 
@@ -106,18 +115,18 @@ export class JobConfigController {
   @ApiBearerAuth()
   @Auth(Permission.ManageJob)
   @Post('/precheck')
-  async precheck(@Body() precheckData: JobConfigPrecheck) { 
-    return  await this.preCheckService.initiatePreCheck(precheckData);
+  async precheck(@Body() precheckData: JobConfigPrecheck) {
+    return await this.preCheckService.initiatePreCheck(precheckData);
   }
 
   @ApiOperation({ summary: 'Get all jobs' })
   @ApiResponse({ status: 200, description: 'Returns a list of all jobs.' })
-  @ApiQuery({name:'projectId',required:true,description:'Project Id',type:String})
+  @ApiQuery({ name: 'projectId', required: true, description: 'Project Id', type: String })
   @ApiBearerAuth()
   @Auth(Permission.ViewJob)
   @Get()
-  async getAllJobConfig(@Query('projectId')projectId:string): Promise<JobListingDTO[]> {
-    if(!projectId){
+  async getAllJobConfig(@Query('projectId') projectId: string): Promise<JobListingDTO[]> {
+    if (!projectId) {
       throw new BadRequestException(`Required parameters['ProjectId'] is missing in the request`);
     }
     return await this.jobConfigService.getAllJobConfig(projectId);
@@ -161,7 +170,7 @@ export class JobConfigController {
   @Auth(Permission.ViewJob)
   @Get('project/:projectId')
   async getConfigurationsByProjectId(@Param('projectId') projectId: string) {
-      return await this.jobConfigService.getConfigsByProjectId(projectId);
+    return await this.jobConfigService.getConfigsByProjectId(projectId);
   }
 
   @ApiOperation({ summary: 'Get notice board details by project ID' })

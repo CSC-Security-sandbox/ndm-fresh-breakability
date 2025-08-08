@@ -69,4 +69,4 @@ import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
   providers: [JobConfigService, WorkflowService, SendMailService, PreCheckService],
   controllers: [JobConfigController],
 })
-export class JobConfigModule {}
+export class JobConfigModule { }

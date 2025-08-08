@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Post, Request } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Post, Request } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from './user-permission-response-type';
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 class InviteUserDto {
   username: string;
@@ -18,7 +19,13 @@ class UserStatusDto {
 @ApiTags('auth')
 @Controller('/api/v1')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  private logger: LoggerService;
+  constructor(
+    private readonly authService: AuthService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(AuthController.name);
+  }
 
   @Auth()
   @ApiBearerAuth()

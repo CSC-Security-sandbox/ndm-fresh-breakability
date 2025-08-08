@@ -1,12 +1,19 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Inject, Post } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { EmailDto, SuccessEventEmailDto } from './dto/emailDto';
 import { EmailService } from './email.service';
 import { NOTIFICATION_TYPE } from './dto/notification.type';
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Controller('/api/v1/email')
 export class EmailController {
-  constructor(private readonly emailService: EmailService) {}
+  private logger: LoggerService;
+  constructor(
+    private readonly emailService: EmailService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(EmailController.name);
+  }
   @Post('/external')
   @ApiOperation({
     summary: 'Send Email Notification',

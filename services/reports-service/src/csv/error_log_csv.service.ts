@@ -2,6 +2,7 @@ import {
   Injectable,
   StreamableFile,
   BadRequestException,
+  Inject
 } from "@nestjs/common";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { Raw, Repository, In } from "typeorm";
@@ -14,15 +15,24 @@ import {
   sanitizeAndValidateFilePath,
   sanitizeIdentifier,
 } from "../utils/file-utils";
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class ErrorLogService {
+  private logger: LoggerService;
   constructor(
     @InjectRepository(OperationErrorEntity)
     private operationErrorRepo: Repository<OperationErrorEntity>,
     @InjectRepository(WorkerJobRunMap)
-    private workerJobRunMapRepo: Repository<WorkerJobRunMap>
-  ) {}
+    private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
+
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(ErrorLogService.name);
+  }
 
   async getPaginatedErrors({
     jobConfigId,

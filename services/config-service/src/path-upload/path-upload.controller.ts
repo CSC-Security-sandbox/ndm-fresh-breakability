@@ -4,18 +4,24 @@ import { join, basename } from 'path';
 
 import { Response } from "express";
 import { Auth, AuthWorker, Permission } from '@netapp-cloud-datamigrate/auth-lib';
-import { Controller, Post, Body, Param, Request, Get, Res, Patch, NotFoundException } from '@nestjs/common';
+import { Inject, Controller, Post, Body, Param, Request, Get, Res, Patch, NotFoundException } from '@nestjs/common';
 import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UpdateValidationResultDto, ImportVolumePathsDto as UploadVolumePathsDto } from './dto/path-upload.dto';
 import { UserDetails } from '../configurations/configuration.types';
 import { PathUploadService } from './path-upload.service';
-
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @ApiTags('Paths Upload')
 @Controller('paths-upload')
 export class PathUploadController {
+    private logger: LoggerService;
     
-    constructor(private pathUploadService: PathUploadService) {}
+    constructor(private pathUploadService: PathUploadService, @Inject(LoggerFactory) loggerFactory: LoggerFactory) {
+        this.logger = loggerFactory.create(PathUploadController.name);
+    }
     
     @ApiOperation({ summary: 'Upload Volume Paths' })
     @ApiBody({

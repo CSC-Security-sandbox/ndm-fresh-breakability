@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Inject,
   Param,
   Patch,
   Post,
@@ -17,11 +18,18 @@ import { PermissionDescription } from '../swagger/swagger-summary';
 import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
 import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 @ApiTags('permissions')
 @Controller('/api/v1/permission')
 export class PermissionController {
-  constructor(private readonly permissionService: PermissionService) {}
+  private logger: LoggerService;
+  constructor(
+    private readonly permissionService: PermissionService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(PermissionController.name);
+  }
 
   @Auth()
   @ApiBearerAuth()

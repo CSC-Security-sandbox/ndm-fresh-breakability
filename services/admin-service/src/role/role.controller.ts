@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Inject,
   Param,
   Patch,
   Post,
@@ -16,11 +17,18 @@ import { RoleDescription } from '../swagger/swagger-summary';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 @ApiTags('roles')
 @Controller('/api/v1/roles')
 export class RoleController {
-  constructor(private readonly roleService: RoleService) {}
+  private logger: LoggerService;
+  constructor(
+    private readonly roleService: RoleService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(RoleController.name);
+  }
 
   @Auth()
   @ApiBearerAuth()

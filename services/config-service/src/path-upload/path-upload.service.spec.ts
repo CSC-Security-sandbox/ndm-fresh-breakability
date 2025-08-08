@@ -163,7 +163,7 @@ describe('PathUploadService', () => {
         id: 'path_2',
         volumePath: '/srv/nfs_share/data/1'
       }
-    ]
+      ]
       const fileServer = new FileServerEntity();
       fileServer.exportPathSource = ExportPathSource.MANUAL_UPLOAD;
       jest.spyOn(fileServerRepo, 'findOneBy').mockResolvedValue(fileServer);
@@ -181,7 +181,7 @@ describe('PathUploadService', () => {
     });
 
     it('should process file upload successfully when paths no longer available', async () => {
-        const dto: ImportVolumePathsDto = {
+      const dto: ImportVolumePathsDto = {
         fileName: 'test.txt',
         contents: 'path\r\n/srv/nfs_share1\r\n/srv/nfs_share/data/1/2',
         fileSize: 1024,
@@ -194,7 +194,7 @@ describe('PathUploadService', () => {
         id: 'path_2',
         volumePath: '/srv/nfs_share/data/1'
       }
-    ]
+      ]
       const fileServer = new FileServerEntity();
       fileServer.exportPathSource = ExportPathSource.MANUAL_UPLOAD;
       jest.spyOn(fileServerRepo, 'findOneBy').mockResolvedValue(fileServer);
@@ -248,9 +248,9 @@ describe('PathUploadService', () => {
       const uploadId = 'non-existing-upload-id';
       jest.spyOn(uploadRepo, 'find').mockResolvedValue([]);
       jest.spyOn(fileServerRepo, 'createQueryBuilder').mockReturnValue({
-          leftJoinAndSelect: jest.fn().mockReturnThis(),
-          where: jest.fn().mockReturnThis(),
-          getOne: jest.fn().mockRejectedValueOnce(new Error(`Upload with ID ${uploadId} not found`)),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockRejectedValueOnce(new Error(`Upload with ID ${uploadId} not found`)),
       } as any);
       await expect(service.processUploadPathValidation(uploadId)).rejects.toThrow(`Upload with ID ${uploadId} not found`);
     });
@@ -262,8 +262,8 @@ describe('PathUploadService', () => {
       mockUpload.fileServerId = 'file-server-id';
       mockUpload.action = UploadPathAction.CREATE;
       jest.spyOn(uploadRepo, 'find').mockResolvedValue([mockUpload]);
-      jest.spyOn(fileServerRepo, 'findOne').mockResolvedValue({ 
-        id: mockUpload.fileServerId, 
+      jest.spyOn(fileServerRepo, 'findOne').mockResolvedValue({
+        id: mockUpload.fileServerId,
         exportPathSource: ExportPathSource.MANUAL_UPLOAD,
         protocolVersion: 'v3',
         host: 'localhost',
@@ -273,17 +273,17 @@ describe('PathUploadService', () => {
       } as any);
 
       jest.spyOn(fileServerRepo, 'createQueryBuilder').mockReturnValue({
-          leftJoinAndSelect: jest.fn().mockReturnThis(),
-          where: jest.fn().mockReturnThis(),
-          getOne: jest.fn().mockResolvedValue({ 
-            id: mockUpload.fileServerId, 
-            exportPathSource: ExportPathSource.MANUAL_UPLOAD,
-            protocolVersion: 'v3',
-            host: 'localhost',
-            protocol: 'NFS',
-            userName: 'test-user',
-            workers: [{ id: 'worker-id', name: 'test-worker' }],
-            uploads: [mockUpload],
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({
+          id: mockUpload.fileServerId,
+          exportPathSource: ExportPathSource.MANUAL_UPLOAD,
+          protocolVersion: 'v3',
+          host: 'localhost',
+          protocol: 'NFS',
+          userName: 'test-user',
+          workers: [{ id: 'worker-id', name: 'test-worker' }],
+          uploads: [mockUpload],
         } as any),
       } as any);
 
@@ -353,7 +353,7 @@ describe('PathUploadService', () => {
           id: 'path_2',
           reachableCount: 1,
         }
-      ],
+        ],
         invalidPaths: [{
           volumePath: '/srv/nfs_share/invalid',
           id: 'path_3',
@@ -559,7 +559,7 @@ describe('PathUploadService', () => {
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         getExists: jest.fn().mockResolvedValue([
-          { fileServerId: fileServerId, futureScheduleAt:  null } as any
+          { fileServerId: fileServerId, futureScheduleAt: null } as any
         ]),
       } as any);
       jest.spyOn(jobRunRepo, 'count').mockResolvedValue(1); // Simulating that a job is running

@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { In, Repository } from "typeorm";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Inject } from "@nestjs/common";
 
 import { Options } from "../constants/types";
 import { JobRunStatus, JobStatus, JobType, WorkFlows } from "../constants/enums";
@@ -16,10 +16,14 @@ import { PreChecks, PreCheckWorkflowOPayload, workerWithStatus } from "./jobconf
 import { JobRunEntity } from "src/entities/jobrun.entity";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { isUUID } from "class-validator";
+import {
+    LoggerFactory,
+    LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class PreCheckService {
-    private readonly logger = new Logger(PreCheckService.name);
+    private logger: LoggerService;
     constructor(
         @InjectRepository(VolumeEntity)
         private readonly volumeRepo: Repository<VolumeEntity>,
@@ -32,7 +36,11 @@ export class PreCheckService {
 
         @InjectRepository(InventoryEntity)
         private readonly inventoryRepo: Repository<InventoryEntity>,
-    ) { }
+
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    ) {
+        this.logger = loggerFactory.create(PreCheckService.name);
+    }
 
     async initiatePreCheck(data: JobConfigPreCheck): Promise<any> {
         const healthCheckTimeout = parseInt(this.configService.get("app.worker.healthCheckStatusTimout"));
@@ -109,7 +117,7 @@ export class PreCheckService {
         pathToWorkerMapping: VolumeEntity[],
         healthCheckTimeout: number
     ): Promise<void> {
-        for(const config of data.migrateConfigs) {
+        for (const config of data.migrateConfigs) {
             const sourceVolume = pathToWorkerMapping.find((p) => p.id === config.sourcePathId);
             if (sourceVolume) {
                 const discoveredSize = await this.getLatestDiscoveryInventorySize(config.sourcePathId);
@@ -167,7 +175,7 @@ export class PreCheckService {
     }
 
     async getLatestDiscoveryInventorySize(pathId: string): Promise<number> {
-        if(!isUUID(pathId)) return -1;
+        if (!isUUID(pathId)) return -1;
         const latestDiscoveryJobRun = await this.jobRunRepo.createQueryBuilder("jobRun")
             .innerJoinAndSelect("jobRun.jobConfig", "jobConfig")
             .where("jobConfig.source_path_id = :pathId", { pathId })
@@ -175,9 +183,9 @@ export class PreCheckService {
             .andWhere("jobRun.status = :status", { status: JobRunStatus.Completed })
             .orderBy("jobRun.created_at", "DESC")
             .getOne();
-        
-        if(!latestDiscoveryJobRun) return -1;
-        
+
+        if (!latestDiscoveryJobRun) return -1;
+
         const inventorySize = await this.inventoryRepo.createQueryBuilder("inventory")
             .where("inventory.job_run_id = :jobRunId", { jobRunId: latestDiscoveryJobRun.id })
             .andWhere("inventory.is_directory = :isDirectory", { isDirectory: false })

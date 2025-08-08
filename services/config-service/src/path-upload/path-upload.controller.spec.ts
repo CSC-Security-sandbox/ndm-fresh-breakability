@@ -6,6 +6,7 @@ import { ImportVolumePathsDto as UploadVolumePathsDto } from './dto/path-upload.
 
 jest.mock('fs');
 import * as fs from 'fs';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 
 describe('PathUploadController', () => {
@@ -36,7 +37,19 @@ describe('PathUploadController', () => {
         {
           provide: JwtService,
           useValue: {},
-        }
+        },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
+              verbose: jest.fn(),
+            }),
+          },
+        },
       ],
     }).compile();
 

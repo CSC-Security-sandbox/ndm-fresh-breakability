@@ -3,7 +3,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
-  Logger,
+  Inject,
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -78,10 +78,14 @@ import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 import { IncidentStatus, SyncEmailEntity } from "src/entities/sync-email.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { SuccessEmailType } from "src/utils/send-email.type";
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class JobConfigService {
-  private readonly logger = new Logger(JobConfigService.name);
+  private logger: LoggerService;
   constructor(
     @InjectRepository(FileServerEntity)
     private fileServerRepo: Repository<FileServerEntity>,
@@ -126,7 +130,11 @@ export class JobConfigService {
 
     @InjectRepository(WorkerJobRunMap)
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
-  ) {}
+
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(JobConfigService.name);
+  }
 
   // ------------ Bulk Discovery ---------------- //
   async createBulkDiscovery(
@@ -619,7 +627,7 @@ export class JobConfigService {
                 where: { id: jobConfig.sourcePathId },
                 select: { volumePath: true },
               });
-               console.log("sourcePath", sourcePath);
+              console.log("sourcePath", sourcePath);
               const targetPath = await this.volumeRepo.findOne({
                 where: { id: jobConfig.targetPathId },
                 select: { volumePath: true },
@@ -636,10 +644,10 @@ export class JobConfigService {
             }
           }
           this.logger.warn(inactiveJobWarnings);
-          continue; 
+          continue;
         }
-        
-        
+
+
         const existingSet = new Set(
           existingJobConfigs.map(
             (jobConfig) =>
@@ -774,20 +782,20 @@ export class JobConfigService {
           targetPathId,
         })
       );
-    } 
+    }
     if (jobConfigIdsToUpdate.length > 0) {
-        await this.updateMappingsWithMap(
-          jobConfigIdsToUpdate,
-          parsedMappings,
-          identityMap,
-          templateType
-        );
-      }
-      return {
-        jobs: savedJobConfigsmapData.length > 0 ? savedJobConfigsmapData : [],
-        warnings: inactiveJobWarnings.length > 0 ? inactiveJobWarnings : undefined,
-      };
-    
+      await this.updateMappingsWithMap(
+        jobConfigIdsToUpdate,
+        parsedMappings,
+        identityMap,
+        templateType
+      );
+    }
+    return {
+      jobs: savedJobConfigsmapData.length > 0 ? savedJobConfigsmapData : [],
+      warnings: inactiveJobWarnings.length > 0 ? inactiveJobWarnings : undefined,
+    };
+
   }
 
   async createBulkCutover(
@@ -980,8 +988,8 @@ export class JobConfigService {
             ? jobRun.endTime.getTime() - jobRun.startTime.getTime()
             : Date.now() - jobRun.startTime.getTime(),
         };
-        const jobRunStats = await this.calculateJobRunStats(jobRun.id); 
-      
+        const jobRunStats = await this.calculateJobRunStats(jobRun.id);
+
         if (jobRun.status === JobRunStatus.Completed) {
           this.logger.log(
             `Job Run ${jobRun.id} is completed , thus fetching the stats from the jobRunStats and job stats are  ${JSON.stringify(jobRunStats)}`
@@ -994,7 +1002,7 @@ export class JobConfigService {
             )?.toString(),
             totalScannedSize: formatBytes(Number(jobRunStats?.totalSize || 0)),
             totalMigratedSize: formatBytes(Number(jobRunStats?.totalSize || 0)),
-            errors: jobRunStats.errors || [] ,
+            errors: jobRunStats.errors || [],
           };
         }
         this.logger.log(
@@ -1009,7 +1017,7 @@ export class JobConfigService {
           scannedDirectoriesCount: BigInt(
             inventoryCounts.directories || "0"
           )?.toString(),
-          totalScannedSize: this.covertBytes(Number(inventoryCounts?.totalSize  || 0)),
+          totalScannedSize: this.covertBytes(Number(inventoryCounts?.totalSize || 0)),
           totalMigratedSize: formatBytes(Number(jobRunStats?.totalSize || 0)),
           errors: inventoryCounts.errors,
         };
@@ -1028,11 +1036,11 @@ export class JobConfigService {
 
       destinationServer: jobConfig.targetPath
         ? {
-            serverName:
-              jobConfig.targetPath?.fileServer?.config?.configName || null,
-            path: jobConfig.targetPath?.volumePath || null,
-            protocol: jobConfig.targetPath?.fileServer?.protocol || null,
-          }
+          serverName:
+            jobConfig.targetPath?.fileServer?.config?.configName || null,
+          path: jobConfig.targetPath?.volumePath || null,
+          protocol: jobConfig.targetPath?.fileServer?.protocol || null,
+        }
         : {},
 
       status: jobConfig.status,
@@ -1254,14 +1262,14 @@ export class JobConfigService {
       .getRawMany();
 
     const payload: JobListingDTO[] = [];
-    for(const job of allJobsDetails) {
-        let nextScheduleDate: Date | null = null;
+    for (const job of allJobsDetails) {
+      let nextScheduleDate: Date | null = null;
 
       if (job.jobconfigstatus === JobStatus.Active) {
         try {
           nextScheduleDate = nextDate(job.jobtype, job.firstrunat, job.futureschedule);
         } catch (err) {
-            this.logger.error(
+          this.logger.error(
             `Failed to calculate nextScheduleDate for jobConfigId ${job.jobconfigid}:`,
             (err as Error).message
           );
@@ -1284,10 +1292,10 @@ export class JobConfigService {
         },
         destinationServer: job.targetpath
           ? {
-              serverName: job.targetservername,
-              path: job.targetpath,
-              protocol: job.targetprotocol,
-            }
+            serverName: job.targetservername,
+            path: job.targetpath,
+            protocol: job.targetprotocol,
+          }
           : {},
         errors: errorCount,
         totalRuns: job.totalRuns,

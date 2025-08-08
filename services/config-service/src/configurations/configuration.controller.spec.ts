@@ -7,10 +7,12 @@ import { FindAllConfigPageDto } from './dto/findallconfig.dto';
 import { UserDetails } from './configuration.types';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { LoggerFactory } from '@local/logger-lib';
 
 describe('ConfigurationController', () => {
   let controller: ConfigurationController;
   let service: ConfigurationService;
+  let loggerFactory: LoggerFactory;
 
   const mockConfigurationService = {
     createConfiguration: jest.fn(),
@@ -34,7 +36,20 @@ describe('ConfigurationController', () => {
         {
           provide: JwtService,
           useValue: {},
-        }
+        },
+         {
+        provide: LoggerFactory,
+        useValue: {
+          createLogger: jest.fn().mockReturnValue({
+            create: jest.fn(),
+            log: jest.fn(),
+            error: jest.fn(),
+            warn: jest.fn(),
+            debug: jest.fn(),
+            verbose: jest.fn(),
+          }),
+        },
+      },
       ],
     }).compile();
 

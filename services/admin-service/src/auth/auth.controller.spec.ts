@@ -6,6 +6,8 @@ import { Reflector } from '@nestjs/core';
 import { User } from '../entities/user.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UserPermissionResponse } from './user-permission-response-type';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../test-utils/logger-mocks';
 
 describe('AuthController', () => {
   let authController: AuthController;
@@ -53,6 +55,10 @@ describe('AuthController', () => {
         {
           provide: getRepositoryToken(User),
           useValue: mockUserRepository,
+        },
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
         },
         Reflector,
         JwtAuthGuard,

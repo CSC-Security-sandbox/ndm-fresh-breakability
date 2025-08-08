@@ -4,6 +4,8 @@ import { WorkerRegistrationService } from './worker-registration.service';
 import { RegisterWorkerDto } from './dto/register-worker.dto';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 import { BadRequestException } from '@nestjs/common';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLoggerFactory } from '../test-utils/logger-mocks';
 
 describe('WorkerRegistrationController', () => {
   let controller: WorkerRegistrationController;
@@ -22,6 +24,10 @@ describe('WorkerRegistrationController', () => {
         {
           provide: JwtService,
           useValue: {},
+        },
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
         },
       ],
     }).compile();

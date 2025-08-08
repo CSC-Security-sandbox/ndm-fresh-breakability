@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Inject,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
@@ -71,7 +72,7 @@ export class ConfigurationService {
     private readonly WorkerEntity: Repository<WorkerEntity>,
     @InjectRepository(ProjectEntity)
     private readonly projectEntity: Repository<ProjectEntity>,
-    private loggerFactory: LoggerFactory,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly workFlowService: WorkflowService,
     private readonly sendMailService: SendMailService,
     private readonly configService: ConfigService,
@@ -85,7 +86,7 @@ export class ConfigurationService {
     @InjectRepository(PathUploadsEntity)
     private readonly pathUploadsRepo: Repository<PathUploadsEntity>,
   ) {
-    this.logger = this.loggerFactory.create(ConfigurationService.name);
+    this.logger = loggerFactory.create(ConfigurationService.name);
     this.timeout = this.configService.get<number>('app.worker.healthCheckStatusTimout');
     this.sanitizeHtml = sanitizeHtml;    
     this.escapeHtml = escapeHtml;

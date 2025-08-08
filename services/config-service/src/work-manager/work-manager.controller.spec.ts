@@ -5,6 +5,7 @@ import { WorkerConfiguration } from 'src/constants/types';
 import { CreateRequestDto } from './dto/validate-connection.dto';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 import { Platform } from 'src/constants/enums';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 describe('WorkManagerController', () => {
   let controller: WorkManagerController;
@@ -20,7 +21,20 @@ describe('WorkManagerController', () => {
       controllers: [WorkManagerController],
       providers: [
         { provide: WorkManagerService, useValue: serviceMock},
-         { provide: JwtService, useValue: {} }],
+         { provide: JwtService, useValue: {} },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
+              verbose: jest.fn(),
+            }),
+          },
+        },
+        ],
     }).compile();
 
     controller = module.get<WorkManagerController>(WorkManagerController);

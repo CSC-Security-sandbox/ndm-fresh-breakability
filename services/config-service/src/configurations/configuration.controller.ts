@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, Request, ValidationPipe } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, Request, ValidationPipe, Inject } from "@nestjs/common";
 import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Auth, Permission } from "@netapp-cloud-datamigrate/auth-lib";
 import { ConfigurationService } from "./configuration.service";
@@ -6,13 +6,21 @@ import { UserDetails } from "./configuration.types";
 import { ConfigDTO } from "./dto/config.dto";
 import { ConfigResponseDto, FindAllConfigPageDto, FileServerInfo} from "./dto/findallconfig.dto";
 import { ConfigApiDoc } from "src/swaggerdoc/swagger.doc";
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @ApiTags("Configuration")
 @Controller('servers')
 export class ConfigurationController{
+    private logger: LoggerService;
     constructor(
         private configurationService: ConfigurationService,
-    ){}
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    ){
+        this.logger = loggerFactory.create(ConfigurationController.name);
+    }
 
     @ApiOperation({ summary: 'Create Configuration' , description: ConfigApiDoc.CREATE_CONFIG})
     @ApiCreatedResponse({ description: 'Configuration Created Successfully.' })

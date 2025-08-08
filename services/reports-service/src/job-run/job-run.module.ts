@@ -12,9 +12,13 @@ import { TaskEntity } from "src/entities/task.entity";
 import { JobRunEntity } from "src/entities/jobrun.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { AuthKeycloakModule } from "@netapp-cloud-datamigrate/auth-lib";
+import {
+  LoggerModule
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Module({
   imports: [
+    LoggerModule.forRoot(),
     TypeOrmModule.forFeature([
       JobRunEntity,
       InventoryEntity,
@@ -28,4 +32,4 @@ import { AuthKeycloakModule } from "@netapp-cloud-datamigrate/auth-lib";
   controllers: [JobRunController],
   providers: [JobRunService, CsvService, Logger, ErrorLogService],
 })
-export class JobRunModule {}
+export class JobRunModule { }

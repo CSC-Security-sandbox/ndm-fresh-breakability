@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import {
@@ -51,10 +51,14 @@ import { v4 as uuid4 } from "uuid";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import { JobRunConfig } from "./jobrun.types";
 import { getWorkflowId } from "./jobrun.utli";
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class JobRunInitService {
-  private readonly logger = new Logger(JobRunInitService.name);
+  private logger: LoggerService;
   private readonly mountBasePath: string;
 
   constructor(
@@ -78,10 +82,13 @@ export class JobRunInitService {
     private identityMappingRepo: Repository<IdentityMappingEntity>,
     @InjectRepository(IdentityConfigCrossMappingEntity)
     private identityConfigCrossMappingRepo: Repository<IdentityConfigCrossMappingEntity>,
+
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
   ) {
     this.mountBasePath = this.configService.get<string>(
       "app.paths.mountBasePath",
     );
+    this.logger = loggerFactory.create(JobRunInitService.name);
   }
 
   // ------------------ Cron schedule -------------------- //
@@ -157,7 +164,7 @@ export class JobRunInitService {
     }
     await this.initiateWorkflow(jobRun.id, details);
     const workflowId = getWorkflowId(jobRun.id, details.jobType);
-    await this.jobRunRepo.update({ id: jobRun.id },{ workFlowId: workflowId });
+    await this.jobRunRepo.update({ id: jobRun.id }, { workFlowId: workflowId });
     return jobRun;
   }
 
@@ -216,7 +223,7 @@ export class JobRunInitService {
     }
     const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
     const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
-    const skipDelete : boolean = !(jobConfig?.futureScheduleAt !== null || jobConfig?.jobType === JobType.CUT_OVER);
+    const skipDelete: boolean = !(jobConfig?.futureScheduleAt !== null || jobConfig?.jobType === JobType.CUT_OVER);
 
 
     const details: JobRunConfig = {
@@ -314,16 +321,16 @@ export class JobRunInitService {
         ...config,
         fileServerDetails: fileServer
           ? {
-              fileServerId: fileServer.id,
-              host: fileServer.host,
-              userName: fileServer.userName,
-              password: fileServer.password,
-              fileServerProtocol: fileServer.protocol,
-              fileServerName: fileServer.config.configName,
-              volumes: fileServer.volumes[0],
-              workingDirectory: fileServer.workingDirectory,
-              workers: fileServer.workers,
-            }
+            fileServerId: fileServer.id,
+            host: fileServer.host,
+            userName: fileServer.userName,
+            password: fileServer.password,
+            fileServerProtocol: fileServer.protocol,
+            fileServerName: fileServer.config.configName,
+            volumes: fileServer.volumes[0],
+            workingDirectory: fileServer.workingDirectory,
+            workers: fileServer.workers,
+          }
           : null,
       };
     });
@@ -471,25 +478,25 @@ export class JobRunInitService {
     const createFileServerDetails = (credential: any) => {
       return credential.protocol === Protocol.NFS
         ? new FileServerDetails(
-            credential.host,
-            [new NFS(credential.username)],
-            credential.pathId,
-            credential.path,
-            credential?.username,
-            credential?.password,
-            credential?.workingDirectory,
-            credential.protocolVersion,
-          )
+          credential.host,
+          [new NFS(credential.username)],
+          credential.pathId,
+          credential.path,
+          credential?.username,
+          credential?.password,
+          credential?.workingDirectory,
+          credential.protocolVersion,
+        )
         : new FileServerDetails(
-            credential.host,
-            [new SMB(credential.username, credential.password)],
-            credential.pathId,
-            credential.path,
-            credential?.username,
-            credential?.password,
-            credential?.workingDirectory,
-            credential.protocolVersion,
-          );
+          credential.host,
+          [new SMB(credential.username, credential.password)],
+          credential.pathId,
+          credential.path,
+          credential?.username,
+          credential?.password,
+          credential?.workingDirectory,
+          credential.protocolVersion,
+        );
     };
     sourcefileServerDetails = createFileServerDetails(sourceCredential);
 

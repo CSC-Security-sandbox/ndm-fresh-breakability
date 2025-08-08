@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Inject } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import {
   ItemInfo,
@@ -17,10 +17,14 @@ import { DataSource, Repository, UpdateResult } from "typeorm";
 import { CreateInventory } from "./inventory.types";
 import { randomUUID } from "crypto";
 import { SpeedLogEntity, SpeedLogEntryEntity } from '../entities/speed-test.entity';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class InventoryService {
-  private readonly logger = new Logger(InventoryService.name);
+  private logger: LoggerService;
 
   constructor(
     private readonly dataSource: DataSource,
@@ -43,8 +47,10 @@ export class InventoryService {
 
     @InjectRepository(SpeedLogEntryEntity)
     private SpeedLogEntryRepo: Repository<SpeedLogEntryEntity>,
-  ) {
 
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(InventoryService.name);
   }
   mapSourceToTarget(file: ItemInfo, jobRunId: string, pathId: string): any {
     if (!file) {

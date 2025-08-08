@@ -1,13 +1,21 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as fs from 'fs';
 import * as fastCsv from 'fast-csv';
 import { validateFilePath } from 'src/utils/utils';
+import {
+    LoggerFactory,
+    LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class CsvService {
-    private readonly logger = new Logger(CsvService.name);
-    constructor(private readonly dataSource: DataSource) { }
+    private logger: LoggerService;
+    constructor(private readonly dataSource: DataSource,
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    ) {
+        this.logger = loggerFactory.create(CsvService.name);
+    }
 
     async generateCsv(filePath: string, jobRunId: string, batchSize: number = 10000) {
         if (!validateFilePath(filePath)) {
@@ -19,7 +27,7 @@ export class CsvService {
         const queryRunner = this.dataSource.createQueryRunner();
         await queryRunner.connect();
         try {
-            const fileStream = fs.createWriteStream(filePath); 
+            const fileStream = fs.createWriteStream(filePath);
             const csvStream = fastCsv.format({ headers: true });
             csvStream.pipe(fileStream);
             let offset = 1;

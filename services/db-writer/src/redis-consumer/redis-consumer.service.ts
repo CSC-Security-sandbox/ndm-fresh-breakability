@@ -1,10 +1,14 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Inject, OnModuleDestroy } from '@nestjs/common';
 import { GroupReaderType, JobContextFactory, JobManagerContext } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as path from 'path';
 import { Worker } from 'worker_threads';
 import { ConsumerType } from '../enum/redis-consumer.enum';
 import { InventoryService } from '../inventory/inventory.service';
 import { WorkflowService } from '../workflow/workflow.service';
+import {
+    LoggerFactory,
+    LoggerService,
+  } from '@netapp-cloud-datamigrate/logger-lib';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { FileConsumerContext, getWorkflowId, ReaderStatus, redisUtils } from './utils';
 import { defaultDataConverter } from '@temporalio/common';

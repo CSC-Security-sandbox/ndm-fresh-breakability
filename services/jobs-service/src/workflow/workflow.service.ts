@@ -1,4 +1,4 @@
-import { Injectable, } from '@nestjs/common';
+import { Inject, Injectable, } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Client, Connection, WorkflowExecutionDescription, WorkflowHandleWithFirstExecutionRunId } from '@temporalio/client';
 import { WorkFlows } from 'src/constants/enums';
@@ -8,20 +8,20 @@ import { defaultDataConverter } from '@temporalio/common';
 
 @Injectable()
 export class WorkflowService {
-    private logger : LoggerService
+    private logger: LoggerService
     private client: Client | null = null;
     private connection: Connection | null = null;
 
     constructor(
         private readonly configService: ConfigService,
-        private loggerFactory: LoggerFactory
-        ) {
-         this.logger = this.loggerFactory.create(WorkflowService.name)
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    ) {
+        this.logger = loggerFactory.create(WorkflowService.name)
     }
 
     private async getClient(): Promise<Client> {
-        if (this.client) 
-        return this.client;
+        if (this.client)
+            return this.client;
 
         try {
             this.connection = await Connection.connect(this.configService.get<any>('temporal'));
@@ -34,7 +34,7 @@ export class WorkflowService {
     }
 
     async startWorkflow(workflowName: WorkFlows, payload: StartWorkFlowPayload): Promise<WorkflowHandleWithFirstExecutionRunId> {
-        try{
+        try {
             const client = await this.getClient();
             this.logger.log(`Starting workflow: ${workflowName}`);
             const handle: WorkflowHandleWithFirstExecutionRunId = await client.workflow.start(workflowName, payload);
@@ -54,10 +54,10 @@ export class WorkflowService {
     async getWorkFlowRes(id: string) {
         const client = await this.getClient();
         const handle = client.workflow.getHandle(id);
-        const details: WorkflowExecutionDescription = await handle.describe() 
-        if(details.status.name ===  WorkflowExecutionStatus.COMPLETED) 
-            return { status: details.status.name, id: details.workflowId, pending: [], completed: await handle.result()} 
-        return { status: details.status.name, id: details.workflowId, pending: details?.raw?.pendingChildren, completed: []}
+        const details: WorkflowExecutionDescription = await handle.describe()
+        if (details.status.name === WorkflowExecutionStatus.COMPLETED)
+            return { status: details.status.name, id: details.workflowId, pending: [], completed: await handle.result() }
+        return { status: details.status.name, id: details.workflowId, pending: details?.raw?.pendingChildren, completed: [] }
     }
 
     async sendSignal(data: SignalWorkFlowPayload) {
@@ -67,8 +67,8 @@ export class WorkflowService {
             namespace: 'default',
             workflowExecution: { workflowId: data.workflowId },
             signalName: data.signalName,
-            input: { 
-                payloads:  [defaultDataConverter.payloadConverter.toPayload(data.payload) ]
+            input: {
+                payloads: [defaultDataConverter.payloadConverter.toPayload(data.payload)]
             }
         });
     }

@@ -1,4 +1,4 @@
-import { BadRequestException, Logger } from "@nestjs/common";
+import { BadRequestException, Inject, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { JobRunStatus } from "src/constants/enums";
 import { JobRunEntity } from "src/entities/jobrun.entity";
@@ -7,51 +7,60 @@ import { SignalWorkFlowPayload } from "src/workflow/workflow.types";
 import { In, Repository } from "typeorm";
 import { JobRunActions, JobRunActionsReq } from "./dto/jobrunactions.dto";
 import { SignalJobRunsInput } from "./jobrun-action.type";
-
-
-
+import {
+    LoggerFactory,
+    LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 export class JobRunActionService {
-    private readonly logger = new Logger(JobRunActionService.name);
+    private logger: LoggerService;
 
     constructor(
         @InjectRepository(JobRunEntity)
         private jobRunRepo: Repository<JobRunEntity>,
-           private workFlowService: WorkflowService,
-    ){}
+        private workFlowService: WorkflowService,
+
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    ) {
+        this.logger = loggerFactory.create(JobRunActionService.name);
+    }
 
     //  ------------------- JobRun actions ------------------ //
     async actions(jobRunActions: JobRunActionsReq) {
         switch (jobRunActions.action) {
             case JobRunActions.PAUSE: {
-                const jobRuns = await this.jobRunRepo.find({ where: {
-                    id: In(jobRunActions.jobRuns), 
-                    status: In([JobRunStatus.Running, JobRunStatus.Ready])
-                }, select: ["id", "workFlowId"]});
+                const jobRuns = await this.jobRunRepo.find({
+                    where: {
+                        id: In(jobRunActions.jobRuns),
+                        status: In([JobRunStatus.Running, JobRunStatus.Ready])
+                    }, select: ["id", "workFlowId"]
+                });
                 return await this.signalJobRuns({
                     jobRuns,
                     progressingStatus: JobRunStatus.Pausing,
                     signalStatus: JobRunStatus.Paused
-                 });
-                }
+                });
+            }
             case JobRunActions.STOP: {
-                 const jobRuns = await this.jobRunRepo.find({ where: {
-                    id: In(jobRunActions.jobRuns), 
-                    status: In([JobRunStatus.Paused, JobRunStatus.Running, JobRunStatus.Ready])
-                }, select: ["id", "workFlowId"]});
+                const jobRuns = await this.jobRunRepo.find({
+                    where: {
+                        id: In(jobRunActions.jobRuns),
+                        status: In([JobRunStatus.Paused, JobRunStatus.Running, JobRunStatus.Ready])
+                    }, select: ["id", "workFlowId"]
+                });
                 return await this.signalJobRuns({
                     jobRuns,
                     progressingStatus: JobRunStatus.Stopping,
                     signalStatus: JobRunStatus.Stopped
-                 });
-                }
+                });
+            }
             case JobRunActions.RESUME:
                 return await this.resumeJobRuns(jobRunActions.jobRuns);
             default:
                 throw new BadRequestException("Invalid Action Type");
-        }    
+        }
     }
 
-    async signalJobRuns({jobRuns, progressingStatus, signalStatus}: SignalJobRunsInput) {
+    async signalJobRuns({ jobRuns, progressingStatus, signalStatus }: SignalJobRunsInput) {
         return await Promise.allSettled(
             jobRuns.map(async (jobRun) => {
                 const signal: SignalWorkFlowPayload = {
@@ -59,22 +68,22 @@ export class JobRunActionService {
                     signalName: "action",
                     workflowId: jobRun.workFlowId
                 };
-                 try{
+                try {
                     await this.workFlowService.sendSignal(signal);
                     await this.jobRunRepo.update(jobRun.id, {
                         status: progressingStatus,
                     });
-                    return {details: "Operation Successful for jobRun: " + jobRun.id, status: "fulfilled"};
-                }catch (error) {
-                    this.logger.error(`Failed to send signal to workflow ${jobRun.workFlowId}: ${error.message}`); 
-                    return {details: "Operation Failed for jobRun: " + jobRun.id, status: "rejected"};
-                }  
+                    return { details: "Operation Successful for jobRun: " + jobRun.id, status: "fulfilled" };
+                } catch (error) {
+                    this.logger.error(`Failed to send signal to workflow ${jobRun.workFlowId}: ${error.message}`);
+                    return { details: "Operation Failed for jobRun: " + jobRun.id, status: "rejected" };
+                }
             })
         );
     }
 
     async resumeJobRuns(jobRunIds: string[]) {
-        const jobRuns = await this.jobRunRepo.find({ where: { id: In(jobRunIds) }, select: ["id", "workFlowId"]});
+        const jobRuns = await this.jobRunRepo.find({ where: { id: In(jobRunIds) }, select: ["id", "workFlowId"] });
         await this.jobRunRepo.update(jobRunIds, {
             status: JobRunStatus.Running,
         });
@@ -85,13 +94,13 @@ export class JobRunActionService {
                     signalName: "action",
                     workflowId: jobRun.workFlowId
                 };
-                try{
+                try {
                     await this.workFlowService.sendSignal(signal);
-                    return {details: "Operation Successful for jobRun: " + jobRun.id, status: "fulfilled"};
-                }catch (error) {
-                    this.logger.error(`Failed to send signal to workflow ${jobRun.workFlowId}: ${error.message}`); 
-                    return {details: "Operation Failed for jobRun: " + jobRun.id, status: "rejected"};
-                }  
+                    return { details: "Operation Successful for jobRun: " + jobRun.id, status: "fulfilled" };
+                } catch (error) {
+                    this.logger.error(`Failed to send signal to workflow ${jobRun.workFlowId}: ${error.message}`);
+                    return { details: "Operation Failed for jobRun: " + jobRun.id, status: "rejected" };
+                }
             })
         );
     }

@@ -1,20 +1,28 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Inject } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { WorkerStatsEntity } from "src/entities/worker-stats.entity";
 import { WorkerEntity } from "src/entities/worker.entity";
 import { Repository } from "typeorm";
 import { HealthcheckStats, SystemStats } from "./dto/healthcheck.dto";
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class HealthcheckService {
   // This service will handle the logic for health checks
-  private readonly logger = new Logger(HealthcheckService.name);
+  private logger: LoggerService;
   constructor(
     @InjectRepository(WorkerStatsEntity)
     private workerStatsEntity: Repository<WorkerStatsEntity>,
     @InjectRepository(WorkerEntity)
     private workerEntity: Repository<WorkerEntity>,
-  ) {}
+
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(HealthcheckService.name);
+  }
 
   async createOrUpdateHealthCheckStats(
     healthStats: HealthcheckStats,

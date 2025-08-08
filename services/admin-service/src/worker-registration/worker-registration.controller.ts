@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Inject, Post } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -12,13 +12,18 @@ import {
 } from './dto/register-worker.dto';
 import { WorkerRegistrationService } from './worker-registration.service';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 @ApiTags('worker-registration')
 @Controller('/api/v1/worker-registration')
 export class WorkerRegistrationController {
+  private logger: LoggerService;
   constructor(
     private readonly workerRegistrationService: WorkerRegistrationService,
-  ) {}
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(WorkerRegistrationController.name);
+  }
 
   @Auth(Permission.AgentDeployment)
   @ApiBearerAuth()

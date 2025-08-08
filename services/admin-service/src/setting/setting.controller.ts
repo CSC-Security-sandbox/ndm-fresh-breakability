@@ -1,13 +1,20 @@
-import { Controller, Get, Post, Body, Patch, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Inject } from '@nestjs/common';
 import { SettingService } from './setting.service';
 import { CreateSettingDto } from './dto/create-setting.dto';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 @ApiTags('Global Settings')
 @Controller('/api/v1/setting')
 export class SettingController {
-  constructor(private readonly settingService: SettingService) {}
+  private logger: LoggerService;
+  constructor(
+    private readonly settingService: SettingService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(SettingController.name);
+  }
 
   @Post()
   @Auth(Permission.ManageProject)

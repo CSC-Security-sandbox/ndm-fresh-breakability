@@ -1,35 +1,26 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Logger,
-  Param,
-  Post,
-  Req,
-} from '@nestjs/common';
-import {
-  ApiBody,
-  ApiNotFoundResponse,
-  ApiOkResponse,
-  ApiOperation,
-  ApiResponse,
-  ApiBearerAuth,
-} from '@nestjs/swagger';
-import {
-  Auth,
-  AuthWorker,
-  Permission,
-} from '@netapp-cloud-datamigrate/auth-lib';
+import { Body, Controller, Get, Inject, Param, Post, Req } from '@nestjs/common';
+import { ApiBody, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiResponse, ApiBearerAuth   } from '@nestjs/swagger';
+import { Auth, AuthWorker, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { WorkerConfiguration } from 'src/constants/types';
 import { ClientIp } from 'src/middleware/clientip';
 import { WorkManagerService } from './work-manager.service';
 import { CreateRequestDto } from './dto/validate-connection.dto';
 import { ConfigStatusPayloadDTO } from './dto/validate-export-path.dto';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
+
 
 @Controller('work-manager')
 export class WorkManagerController {
-  readonly logger = new Logger(WorkManagerController.name);
-  constructor(private workManagerService: WorkManagerService) {}
+    private logger: LoggerService;
+    constructor(
+        private workManagerService: WorkManagerService,
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    ) {
+       this.logger = loggerFactory.create(WorkManagerController.name);
+    }
 
   @ApiOperation({ summary: 'Get Configuration by ID' })
   @ApiOkResponse({

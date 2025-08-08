@@ -5,11 +5,11 @@ import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 import { WorkflowService } from './workflow.service';
 
 @Module({
-  imports:[
+  imports: [
     LoggerModule.forRoot(),
     ConfigModule.forRoot({ load: [temporalConfig] }),
   ],
   providers: [WorkflowService],
   exports: [WorkflowService],
 })
-export class WorkflowModule {}
+export class WorkflowModule { }

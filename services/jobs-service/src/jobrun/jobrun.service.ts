@@ -1,7 +1,7 @@
 import {
   BadRequestException,
   Injectable,
-  Logger,
+  Inject,
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -40,9 +40,13 @@ import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { JobRunStats } from "./dto/jobstats";
 import { JobRunInitService } from "./jobrun.init.service";
 import { SuccessEmailType } from "src/utils/send-email.type";
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 @Injectable()
 export class JobRunService {
-  private readonly logger = new Logger(JobRunService.name);
+  private logger: LoggerService;
   private readonly mountBasePath: string;
 
   constructor(
@@ -64,11 +68,14 @@ export class JobRunService {
     private workFlowService: WorkflowService,
     private sendMailService: SendMailService,
     private errorRemedyService: ErrorRemedyService,
-    private readonly workerService: WorkersService
+    private readonly workerService: WorkersService,
+
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
   ) {
     this.mountBasePath = this.configService.get<string>(
       "app.paths.mountBasePath"
     );
+    this.logger = loggerFactory.create(JobRunService.name);
   }
 
   async cutOverApproval(jobRunId: string, status: CutOverStatus) {
@@ -226,11 +233,11 @@ export class JobRunService {
       },
       destinationServer: jobConfigDetails.targetPath
         ? {
-            serverName:
-              jobConfigDetails.targetPath.fileServer.config.configName,
-            path: jobConfigDetails.targetPath.volumePath,
-            protocol: jobConfigDetails.targetPath.fileServer.protocol,
-          }
+          serverName:
+            jobConfigDetails.targetPath.fileServer.config.configName,
+          path: jobConfigDetails.targetPath.volumePath,
+          protocol: jobConfigDetails.targetPath.fileServer.protocol,
+        }
         : undefined,
       timeElapsed: jobRun.endTime
         ? jobRun.endTime.getTime() - jobRun.startTime.getTime()
@@ -390,10 +397,10 @@ export class JobRunService {
           },
           destinationServer: jobRun.targetvolumepath
             ? {
-                serverName: jobRun.targetconfigname,
-                path: jobRun.targetvolumepath,
-                protocol: jobRun.targetfileserverprotocol,
-              }
+              serverName: jobRun.targetconfigname,
+              path: jobRun.targetvolumepath,
+              protocol: jobRun.targetfileserverprotocol,
+            }
             : undefined,
           timeElapsed: jobRun.endtime
             ? jobRun.endtime.getTime() - jobRun.starttime.getTime()
@@ -653,7 +660,7 @@ export class JobRunService {
         }
       })
     );
-    
+
     const totalResult = await this.operationErrorRepo
       .createQueryBuilder("oe")
       .leftJoin("oe.operation", "o")
@@ -673,7 +680,7 @@ export class JobRunService {
             const errorRemedies =
               await this.errorRemedyService.findByErrorCodes([
                 error.workerResponse.code,
-            ]);
+              ]);
             const remedy = errorRemedies[0];
             return {
               errorMessage: error.workerResponse.message,
@@ -819,14 +826,14 @@ export class JobRunService {
     this.logger.log(`Checking the health of workers`);
     try {
       const runningJobRuns = await this.jobRunRepo.find({
-        where: [{ status: JobRunStatus.Running }, { status: JobRunStatus.Paused, pausedReason: PausedReason.SYSTEM_PAUSED}],
+        where: [{ status: JobRunStatus.Running }, { status: JobRunStatus.Paused, pausedReason: PausedReason.SYSTEM_PAUSED }],
         relations: {
           workerMap: {
             worker: { stats: true },
           },
         },
       });
-      if(!runningJobRuns.length) return;
+      if (!runningJobRuns.length) return;
       for (const jobRun of runningJobRuns) {
         const jobRunId = jobRun.id;
         const workerMap = jobRun.workerMap;

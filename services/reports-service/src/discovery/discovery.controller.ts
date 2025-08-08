@@ -1,4 +1,4 @@
-import { Controller, Query, BadRequestException, Get, Post, Body, Header, StreamableFile,Logger } from '@nestjs/common';
+import { Controller, Query, BadRequestException, Get, Post, Body, Header, StreamableFile, Inject } from '@nestjs/common';
 import { ApiQuery, ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { DiscoveryService } from './discovery.service';
 import {
@@ -10,15 +10,21 @@ import {
 import { DiscoveryCompletedPayload } from 'src/discovery/discovery.interface';
 import { Pattern, ReportType } from 'src/discovery/pattern.enum';
 import { Auth, AuthWorker, Permission } from '@netapp-cloud-datamigrate/auth-lib';
-
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @ApiTags('Get discovery inventory')
 @Controller('inventory')
 export class DiscoveryController {
-  private readonly logger = new Logger(DiscoveryController.name);
+  private logger: LoggerService;
   constructor(
     private readonly discoveryService: DiscoveryService,
-  ) { }
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(DiscoveryController.name);
+  }
 
 
   @Auth(Permission.Reports)
@@ -94,8 +100,8 @@ export class DiscoveryController {
 
   @ApiResponse({ status: 200, description: 'Files downloaded successfully' })
   @ApiResponse({ status: 400, description: 'Bad Request: Invalid input' })
-  @Header('Content-Type', 'application/zip') 
-  @Header('Content-Disposition', 'attachment; filename=reports.zip') 
+  @Header('Content-Type', 'application/zip')
+  @Header('Content-Disposition', 'attachment; filename=reports.zip')
   async downloadReports(
     @Body('jobRunId') jobRunIds: string[],
     @Body('report-type') reportType: ReportType,
@@ -124,10 +130,10 @@ export class DiscoveryController {
       type: 'object',
       properties: {
         jobRunId: { type: 'string', description: 'The ID of the job run' },
-        'report-type': { 
-          type: 'string', 
-          enum: Object.values(ReportType), 
-          description: 'The type of the report to generate' 
+        'report-type': {
+          type: 'string',
+          enum: Object.values(ReportType),
+          description: 'The type of the report to generate'
         },
       },
       required: ['jobRunId', 'report-type'],

@@ -1,18 +1,27 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { ErrorRemedyEntity } from '../entities/error-remedies.entity';
 import { OperationErrorEntity } from 'src/entities/operation-error.entity';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class ErrorRemedyService {
+  private logger: LoggerService;
   constructor(
     @InjectRepository(ErrorRemedyEntity)
     private readonly errorRemedyRepository: Repository<ErrorRemedyEntity>,
 
     @InjectRepository(OperationErrorEntity)
     private readonly operationErrorRepository: Repository<OperationErrorEntity>,
-  ) {}
+
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(ErrorRemedyService.name);
+  }
 
   async findByErrorCodes(codes: string[]): Promise<ErrorRemedyEntity[]> {
     return this.errorRemedyRepository.find({

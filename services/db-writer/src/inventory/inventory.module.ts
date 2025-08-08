@@ -7,9 +7,13 @@ import { TaskErrorEntity } from "../entities/task-error.entity";
 import { TaskEntity } from "../entities/task.entity";
 import { InventoryService } from "./inventory.service";
 import { SpeedLogEntity, SpeedLogEntryEntity } from '../entities/speed-test.entity';
+import {
+  LoggerModule
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Module({
   imports: [
+    LoggerModule.forRoot(),
     TypeOrmModule.forFeature([
       InventoryEntity,
       TaskEntity,

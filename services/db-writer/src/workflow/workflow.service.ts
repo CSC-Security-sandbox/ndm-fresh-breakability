@@ -1,6 +1,10 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Inject, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Client, Connection } from '@temporalio/client';
+import {
+    LoggerFactory,
+    LoggerService,
+  } from '@netapp-cloud-datamigrate/logger-lib';
 
 
 @Injectable()
@@ -8,11 +12,14 @@ export class WorkflowService implements OnModuleDestroy {
 
     private client: Client | null = null;
     private connection: Connection | null = null;
-    private readonly logger = new Logger(WorkflowService.name);
+    private readonly logger: LoggerService;
 
     constructor(
         private readonly configService: ConfigService,
-    ) { }
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    ) { 
+        this.logger = loggerFactory.create(WorkflowService.name);
+    }
 
     private async getClient(): Promise<Client> {
         if (this.client)

@@ -8,6 +8,7 @@ import {
   Post,
   Query,
   Request,
+  Inject,
 } from '@nestjs/common';
 import { RolePermissionService } from './role-permission.service';
 import { CreateRolePermissionDto } from './dto/create-role-permission.dto';
@@ -23,11 +24,18 @@ import { RolePermissionDescription } from '../swagger/swagger-summary';
 import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
 import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 @ApiTags('role-permissions')
 @Controller('/api/v1/role-permissions')
 export class RolePermissionController {
-  constructor(private readonly rolePermissionService: RolePermissionService) {}
+  private logger: LoggerService;
+  constructor(
+    private readonly rolePermissionService: RolePermissionService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(RolePermissionController.name);
+  }
 
   @Auth()
   @ApiBearerAuth()

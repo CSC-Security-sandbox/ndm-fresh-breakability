@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  Inject,
   Param,
   Patch,
   Post,
@@ -27,12 +28,19 @@ import { UserRoleRelationDto } from './dto/user-role.dto';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
 import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { allowedParamsForUserRolesGetAll } from '../constants/allowed-params';
 
 @ApiTags('user roles')
 @Controller('/api/v1/user-roles')
 export class UserRoleController {
-  constructor(private readonly userRoleService: UserRoleService) {}
+  private logger: LoggerService;
+  constructor(
+    private readonly userRoleService: UserRoleService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(UserRoleController.name);
+  }
 
   @Auth(Permission.InviteUser)
   @ApiBearerAuth()

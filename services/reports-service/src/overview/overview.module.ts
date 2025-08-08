@@ -5,10 +5,15 @@ import { InventoryEntity } from 'src/entities/inventory.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProjectEntity } from 'src/entities/project.entity';
 import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
+import {
+  LoggerModule
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([InventoryEntity,ProjectEntity]), AuthKeycloakModule],
+  imports: [
+    LoggerModule.forRoot(),
+    TypeOrmModule.forFeature([InventoryEntity, ProjectEntity]), AuthKeycloakModule],
   controllers: [OverviewController],
   providers: [OverviewService],
 })
-export class OverviewModule {}
+export class OverviewModule { }

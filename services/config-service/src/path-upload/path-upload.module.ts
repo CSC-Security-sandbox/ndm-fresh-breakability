@@ -23,7 +23,7 @@ import { JobRunEntity } from 'src/entities/jobrun.entity';
         AuthKeycloakModule,
         WorkflowModule
     ],
-    providers:[PathUploadService, WorkflowService],
+    providers: [PathUploadService, WorkflowService],
     controllers: [PathUploadController]
 })
-export class PathUploadModule {}
+export class PathUploadModule { }
