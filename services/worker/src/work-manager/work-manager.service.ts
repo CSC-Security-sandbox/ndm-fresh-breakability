@@ -78,8 +78,17 @@ export class WorkManagerService {
 
     try {
       this.loadingConfigs = true;
+      
+      // Yield event loop before heavy operations
+      await new Promise(resolve => setImmediate(resolve));
+      
       const accessToken = await this.authService.getAccessToken();
       if (!accessToken) throw new Error('Access token is null');
+      
+      // Yield event loop before HTTP request
+      await new Promise(resolve => setImmediate(resolve));
+      
+      // Increased timeout and added retry logic
       const response = await firstValueFrom(
         this.httpService.get(
           `${this.workerConfigUrl}/api/v1/work-manager/config`,
@@ -88,10 +97,14 @@ export class WorkManagerService {
               Authorization: `Bearer ${accessToken}`,
               'x-client-platform': this.platform,
             },
-            timeout: 5000,
+            timeout: 15000, // Increased from 5000 to 15000ms
           },
+        ).pipe(
+          retry({ count: 2, delay: 1000 }), // Retry twice with 1s delay
+          timeout(20000) // Overall timeout of 20s
         ),
       );
+      
       if (response.status !== 200) {
         throw new Error(
           `Failed to fetch configurations. Status: ${response.status}`,
@@ -100,10 +113,25 @@ export class WorkManagerService {
       this.logger.debug(
         `Fetched configurations: ${JSON.stringify(response.data)}`,
       );
+      
+      // Yield event loop before processing configurations
+      await new Promise(resolve => setImmediate(resolve));
+      
       await this.handleConfigurations(response.data);
+      
+      // Yield event loop before monitoring
+      await new Promise(resolve => setImmediate(resolve));
+      
       await this.monitorTaskQueues();
     } catch (error) {
       this.logger.error(`Error fetching configurations: ${error.message}`);
+      
+      // If timeout, wait a bit longer before next attempt
+      if (error.message.includes('timeout') || error.message.includes('TIMEOUT')) {
+        this.logger.warn('Configuration fetch timed out, will retry in next cycle');
+        // Add a small delay to prevent immediate retry
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
     } finally {
       this.loadingConfigs = false;
     }
@@ -115,21 +143,42 @@ export class WorkManagerService {
       string,
       WorkerConfiguration
     >();
+    
+    // Yield event loop before processing configs
+    await new Promise(resolve => setImmediate(resolve));
+    
     for (let i = 0; i < configs.length; i++) {
       const id = getWorkerIdentity(configs[i]);
       if (!this.activeWorkers.has(id)) configsToStart.set(id, configs[i]);
       activeConfigs.add(id);
+      
+      // Yield occasionally during config processing
+      if (i % 5 === 0) {
+        await new Promise(resolve => setImmediate(resolve));
+      }
     }
+    
+    // Handle worker shutdowns
     for (let [id, worker] of this.activeWorkers) {
       if (!activeConfigs.has(id)) {
         this.logger.log(`Stopping worker ${id}`);
+        
+        // Yield before shutdown operation
+        await new Promise(resolve => setImmediate(resolve));
+        
         await this.shutdownWorker(worker, false);
         this.activeWorkers.delete(id);
         activeConfigs.delete(id);
       }
     }
+    
+    // Handle worker startups
     for (let [id, config] of configsToStart) {
       this.logger.log(`Starting worker ${id} ${JSON.stringify(config)}`);
+      
+      // Yield before each worker startup
+      await new Promise(resolve => setImmediate(resolve));
+      
       const workerOptions = this.workerOptions.createWorkerOptions(
         id,
         config,
@@ -138,28 +187,59 @@ export class WorkManagerService {
       );
       await this.startWorker(id, workerOptions);
       configsToStart.delete(id);
+      
+      // Yield after each worker startup to keep event loop responsive
+      await new Promise(resolve => setImmediate(resolve));
     }
   }
 
   async startWorker(id: string, workerOptions: any) {
     try {
+      // Yield event loop before creating worker
+      await new Promise(resolve => setImmediate(resolve));
+      
       const worker: Worker = await Worker.create(workerOptions);
-      if (worker.getState() === WorkerState.INITIALIZED) worker.run();
-      while (worker.getState() !== WorkerState.RUNNING) {
-        this.logger.debug(
-          `Waiting for ${worker.options.identity} to be RUNNING. Current state: ${worker.getState()}`,
-        );
-        //sleep
-        await new Promise((resolve) =>
-          setTimeout(resolve, this.workerStartupTimeout),
-        );
+      
+      if (worker.getState() === WorkerState.INITIALIZED) {
+        worker.run();
       }
-      this.logger.log(`Worker ${id} started successfully`);
-      this.activeWorkers.set(id, worker);
-      this.taskQueuesToMonitor.push({
-        queueName: workerOptions.taskQueue,
-        workerId: id,
-      });
+      
+      // Add timeout protection for worker startup
+      const startupTimeout = setTimeout(() => {
+        this.logger.error(`Worker ${id} startup timed out after ${this.workerStartupTimeout * 10}ms`);
+      }, this.workerStartupTimeout * 10);
+      
+      let attempts = 0;
+      const maxAttempts = 30; // Prevent infinite loop
+      
+      while (worker.getState() !== WorkerState.RUNNING && attempts < maxAttempts) {
+        this.logger.debug(
+          `Waiting for ${worker.options.identity} to be RUNNING. Current state: ${worker.getState()} (attempt ${attempts + 1}/${maxAttempts})`,
+        );
+        
+        // Yield event loop during wait
+        await new Promise(resolve => setImmediate(resolve));
+        
+        // Sleep with shorter intervals for responsiveness
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.min(this.workerStartupTimeout, 1000)),
+        );
+        
+        attempts++;
+      }
+      
+      clearTimeout(startupTimeout);
+      
+      if (worker.getState() === WorkerState.RUNNING) {
+        this.logger.log(`Worker ${id} started successfully`);
+        this.activeWorkers.set(id, worker);
+        this.taskQueuesToMonitor.push({
+          queueName: workerOptions.taskQueue,
+          workerId: id,
+        });
+      } else {
+        throw new Error(`Worker ${id} failed to start after ${maxAttempts} attempts. Final state: ${worker.getState()}`);
+      }
     } catch (err) {
       this.logger.error(`Error starting worker ${id}: ${err}`);
     }
@@ -169,18 +249,32 @@ export class WorkManagerService {
     if (
       worker.getState() === WorkerState.RUNNING ||
       worker.getState() === WorkerState.INITIALIZED
-    )
+    ) {
       worker.shutdown();
+    }
 
     if (!force) {
-      while (worker.getState() !== WorkerState.STOPPED) {
+      let attempts = 0;
+      const maxAttempts = 20; // Prevent infinite loop
+      
+      while (worker.getState() !== WorkerState.STOPPED && attempts < maxAttempts) {
         this.logger.debug(
-          `Waiting for ${worker.options.identity} to be STOPPED. Current state: ${worker.getState()}`,
+          `Waiting for ${worker.options.identity} to be STOPPED. Current state: ${worker.getState()} (attempt ${attempts + 1}/${maxAttempts})`,
         );
-        //sleep
+        
+        // Yield event loop during shutdown wait
+        await new Promise(resolve => setImmediate(resolve));
+        
+        // Sleep with shorter intervals
         await new Promise((resolve) =>
-          setTimeout(resolve, this.workerStartupTimeout),
+          setTimeout(resolve, Math.min(this.workerStartupTimeout, 1000)),
         );
+        
+        attempts++;
+      }
+      
+      if (attempts >= maxAttempts) {
+        this.logger.warn(`Worker ${worker.options.identity} shutdown timed out after ${maxAttempts} attempts`);
       }
     } else {
       setTimeout(() => {
@@ -189,6 +283,7 @@ export class WorkManagerService {
         else this.logger.debug('Worker shutdown');
       }, this.workerStartupTimeout);
     }
+    
     // remove task queue from taskQueueArr
     this.taskQueuesToMonitor = this.taskQueuesToMonitor.filter(
       (taskQueue) => taskQueue.workerId !== worker.options.identity,
@@ -197,30 +292,49 @@ export class WorkManagerService {
 
   async monitorTaskQueues() {
     const workerToShutDown = [];
+    
+    // Yield event loop before monitoring
+    await new Promise(resolve => setImmediate(resolve));
+    
     for (const taskQueue of this.taskQueuesToMonitor) {
-      const response: any =
-        await this.temporalClientConnection.workflowService.describeTaskQueue({
-          namespace: 'default',
-          taskQueue: { name: taskQueue.queueName, kind: 1 },
-        });
-      const pollers = response.pollers || [];
-      if (pollers.length == 0) {
-        this.logger.log(
-          `No active workers for task queue: ${taskQueue.queueName}`,
-        );
-        workerToShutDown.push(this.activeWorkers.get(taskQueue.workerId));
+      try {
+        // Yield event loop before each monitoring call
+        await new Promise(resolve => setImmediate(resolve));
+        
+        const response: any =
+          await this.temporalClientConnection.workflowService.describeTaskQueue({
+            namespace: 'default',
+            taskQueue: { name: taskQueue.queueName, kind: 1 },
+          });
+        const pollers = response.pollers || [];
+        if (pollers.length == 0) {
+          this.logger.log(
+            `No active workers for task queue: ${taskQueue.queueName}`,
+          );
+          const worker = this.activeWorkers.get(taskQueue.workerId);
+          if (worker) {
+            workerToShutDown.push(worker);
+          }
+        }
+      } catch (error) {
+        this.logger.warn(`Failed to describe task queue ${taskQueue.queueName}: ${error.message}`);
+        // Continue with other queues even if one fails
       }
     }
+    
     for (const worker of workerToShutDown) {
       this.logger.log(`Shutting down worker ${worker.options.identity}`);
       try {
+        // Yield before shutdown
+        await new Promise(resolve => setImmediate(resolve));
+        
         await this.shutdownWorker(worker, true);
+        this.activeWorkers.delete(worker.options.identity);
       } catch (err) {
         this.logger.error(
           `Error shutting down worker ${worker.options.identity}: ${err}`,
         );
       }
-      this.activeWorkers.delete(worker.options.identity);
     }
   }
 }

@@ -1,7 +1,10 @@
 import { exec } from "child_process";
+import { promisify } from 'util';
 import { WorkersConfig } from "src/config/app.config";
 import { ProtocolPayload } from "./protocol.type";
 import { sanitize } from "src/utils/utilities";
+
+const execAsync = promisify(exec);
 import {
   LoggerFactory,
   LoggerService,
@@ -57,30 +60,76 @@ export abstract class Protocol {
         if (trimmedPassword) fieldsToSanitize.push(trimmedPassword);
         const sanitizedCommand = sanitize(command, fieldsToSanitize);
         this.logger.debug(`command: ${sanitizedCommand}`)
-        return new Promise((resolve, rejects) => {
-          exec(command, (error, stdout, stderr) => {
-            const sanitizedStderr = sanitize(stderr, fieldsToSanitize);
-            const sanitizedError = sanitize(error?.message, fieldsToSanitize);
-
-            this.logger.log(
-              `[${traceId}] command: ${sanitizedCommand}, stdout: ${stdout}, stderr: ${sanitizedStderr}, error: ${sanitizedError}`,
-            );
-      
-            if (error) {
-              response.message = `[${protocolType}] [${commandDescription}] Failed. Hostname: ${payload.hostname} Worker: ${this.workerId}. Error: ${sanitizedError}`;
-              response.status = 'error';
-              return rejects(sanitizedError);
-            }
-      
-            if (stderr) {
-              response.message = `[${protocolType}] [${commandDescription}] Failed. Hostname: ${payload.hostname} Worker: ${this.workerId}. Error: ${sanitizedStderr}`;
-              response.status = 'error';
-              return rejects(sanitizedStderr);
-            }
-      
-            response.message = `${stdout}`;
-            resolve(response);
+        
+        try {
+          // NON-BLOCKING: Use promisified exec with timeout
+          const { stdout, stderr } = await execAsync(command, {
+            timeout: 5000, // 30 second timeout
+            maxBuffer: 1024 * 1024, // 1MB buffer
+            encoding: 'utf8'
           });
-        });
+
+          if (stderr && stderr.trim().length > 0) {
+            const sanitizedStderr = sanitize(stderr, fieldsToSanitize);
+            this.logger.warn(
+              `[${traceId}] command: ${sanitizedCommand}, stderr: ${sanitizedStderr}`
+            );
+            
+            // Some commands write non-errors to stderr, check if it's actually an error
+            throw new Error(sanitizedStderr);
+        
+        }
+
+          this.logger.log(
+            `[${traceId}] command: ${sanitizedCommand}, stdout: ${stdout}`
+          );
+
+          response.message = `${stdout}`;
+          return response;
+
+        } catch (error) {
+          const sanitizedError = sanitize(error?.message, fieldsToSanitize);
+          
+          this.logger.error(
+            `[${traceId}] command: ${sanitizedCommand}, error: ${sanitizedError}`
+          );
+
+          response.message = `[${protocolType}] [${commandDescription}] Failed. Hostname: ${payload.hostname} Worker: ${this.workerId}. Error: ${sanitizedError}`;
+          response.status = 'error';
+          throw new Error(sanitizedError);
+        }
       }
+
+    /**
+     * Check if stderr contains an actual error or just warnings
+     */
+    private isActualError(stderr: string): boolean {
+      const errorPatterns = [
+        /error/i,
+        /failed/i,
+        /cannot/i,
+        /permission denied/i,
+        /access denied/i,
+        /not found/i,
+        /invalid/i,
+        /timeout/i
+      ];
+
+      const nonErrorPatterns = [
+        /warning/i,
+        /info/i,
+        /debug/i,
+        /note/i
+      ];
+
+      const lowerStderr = stderr.toLowerCase();
+      
+      // Check for non-errors first
+      if (nonErrorPatterns.some(pattern => pattern.test(lowerStderr))) {
+        return false;
+      }
+      
+      // Check for actual errors
+      return errorPatterns.some(pattern => pattern.test(lowerStderr));
+    }
 }

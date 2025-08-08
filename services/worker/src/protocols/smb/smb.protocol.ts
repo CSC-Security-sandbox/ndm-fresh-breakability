@@ -216,6 +216,9 @@ export class SMBProtocol extends Protocol {
       }
     }
 
+    // Add event loop yielding before heavy operations
+    await new Promise(resolve => setImmediate(resolve));
+
     const result = await this.executeCommand(
       traceId,
       ProtocolTypes.SMB,
@@ -223,6 +226,10 @@ export class SMBProtocol extends Protocol {
       this.getCommandPattern(CommandPattern.MOUNT_PATH),
       'SMB Mount',
     );
+    
+    // Yield event loop between operations
+    await new Promise(resolve => setImmediate(resolve));
+    
     if(result?.message?.toLowerCase().includes("successfully.")){
       const response = await this.executeCommand(
         traceId,
