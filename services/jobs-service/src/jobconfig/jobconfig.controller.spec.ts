@@ -41,12 +41,17 @@ import {OperationErrorEntity} from '../entities/operation-error.entity';
 import {SendMailService} from '../utils/send-email';
 import {WorkerJobRunMap} from '../entities/workerjobrun.entity';
 import {In} from 'typeorm';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 describe("JobConfigController", () => {
   let controller: JobConfigController;
   let service: JobConfigService;
   let volumeRepo: any;
   let preCheckService: PreCheckService;
+  let mockLogger: LoggerService;
 
   const mockPreCheckService = {
     initiatePreCheck: jest.fn(),
@@ -92,6 +97,19 @@ describe("JobConfigController", () => {
   };
 
   beforeEach(async () => {
+    // Create mock logger
+    mockLogger = {
+      error: jest.fn(),
+      log: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+    } as any;
+
+    // Create mock LoggerFactory
+    const mockLoggerFactory = {
+      create: jest.fn().mockReturnValue(mockLogger),
+    };
+
     // Setup mock implementations for the specific test cases
     mockJobConfigService.hasCommonWorkers.mockImplementation((data) => {
       // For the test case at line 807, return false
@@ -354,6 +372,10 @@ describe("JobConfigController", () => {
         {
           provide: JwtService,
           useValue: mockJwtService,
+        },
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
         },
       ],
     }).compile();

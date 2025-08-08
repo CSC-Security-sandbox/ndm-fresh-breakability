@@ -48,7 +48,8 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/config": "^4.0.1",
     "@nestjs/platform-express": "^11.0.1",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "@netapp-cloud-datamigrate/logger-lib": "0.0.14"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
