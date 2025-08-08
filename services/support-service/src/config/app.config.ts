@@ -14,5 +14,10 @@ export default registerAs(
     api: {
       configUrl: process.env.CONFIG_BASE_URL || 'http://localhost:3009/api/v1',
     },
+    prometheus: {
+      baseUrl:
+        process.env.PROMETHEUS_BASE_URL || 'http://localhost:52061/api/v1',
+      timeout: parseInt(process.env.PROMETHEUS_TIMEOUT || '30000', 10),
+    },
   }),
 );

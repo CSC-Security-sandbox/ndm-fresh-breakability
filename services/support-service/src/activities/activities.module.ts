@@ -12,6 +12,11 @@ import { ConfigurationDataCsvGenerationActivity } from './config-data-csv-genera
 import { ErrorCsvGenerationActivity } from './error-csv-generation/error-csv-generation.activity';
 import { LogGeneratorActivity } from './log-generator/log-generator.activity';
 import { NotifyConfigActivity } from './notify-config/notify-config.activity';
+import { PrometheusService } from 'src/prometheus/prometheus.service';
+import { PrometheusClientService } from 'src/prometheus/prometheus-client.service';
+import { PerformanceMetricsCsvGenerationActivity } from './performance-metrics-csv-generation/performance-metrics-csv-generation.activity';
+import { PerformanceMetricsProcessorService } from './performance-metrics-csv-generation/performance-metrics-processor.service';
+import { ZipHandlerService } from 'src/services/zip-handler.service';
 
 @Module({
   imports: [
@@ -24,8 +29,13 @@ import { NotifyConfigActivity } from './notify-config/notify-config.activity';
     NotifyConfigActivity,
     ErrorCsvGenerationActivity,
     ConfigurationDataCsvGenerationActivity,
+    PerformanceMetricsCsvGenerationActivity,
     ConfigService,
     OperationErrorService,
+    PerformanceMetricsProcessorService,
+    PrometheusService,
+    PrometheusClientService,
+    ZipHandlerService,
   ],
   exports: [
     ActivitiesService,
