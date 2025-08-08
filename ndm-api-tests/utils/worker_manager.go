@@ -281,7 +281,7 @@ func CreateWorkerScript(resp *http.Response, projectId string) (string, string, 
     export CONTROL_PLANE_IP=%s
     sh /opt/datamigrator/bin/worker_register.sh
     '
-    `, workerId, workerSecret,projectId, controlPlaneIp)
+    `, workerId, workerSecret, projectId, controlPlaneIp)
 	return script, workerId, nil
 }
 
