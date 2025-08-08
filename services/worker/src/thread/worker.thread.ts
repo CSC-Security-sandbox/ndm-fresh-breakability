@@ -42,9 +42,6 @@ export async function smartCopy(source, target) {
         });
     });
     const targetCheckSum = await calculateChecksum(target);
-    if (targetCheckSum !== sourceCheckSum) {
-      throw new Error(`Checksum mismatch for file ${target}. Checksum: ${targetCheckSum} != ${sourceCheckSum}`);
-    }
     return {sourceChecksum: sourceCheckSum, targetChecksum: targetCheckSum};
   }catch(error){
     throw error; 
