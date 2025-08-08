@@ -88,6 +88,10 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
     scanWorkflowOutput.dirCount += batchExecResults.dirCount;
     dirBatchIds = batchExecResults.batchDirs;
 
+    if(batchExecResults.error){
+      errors.push(batchExecResults.error);
+    }
+
     if(iterations > ITERATIONS_LIMIT ){
       console.warn(`ChildScanWorkflow ${jobRunId} has exceeded 1000 iterations, stopping to prevent infinite loop.`);                      
       await wf.continueAsNew({ 
@@ -95,10 +99,14 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
       });      
     }
   }
-
-  scanWorkflowOutput.status = isStopRequested ? JobRunStatus.Stopped : JobRunStatus.Completed;
-  scanWorkflowOutput.error = errors.length > 0 ? errors.join(', ') : undefined;
-
+  if(errors.length > 0) {
+    console.log(`[ERROR]ChildScanWorkflow ${jobRunId} encountered errors: ${errors.join(', ')}`);
+    scanWorkflowOutput.error = errors.length > 0 ? errors.join(', ') : undefined;
+    scanWorkflowOutput.status = JobRunStatus.Errored;
+  }else{
+     scanWorkflowOutput.status = isStopRequested ? JobRunStatus.Stopped : JobRunStatus.Completed;    
+  }
+  
   return  scanWorkflowOutput;
 }
 
@@ -119,16 +127,7 @@ export const executeBatchScan = async ({ batchSize, batches, isMigration, jobRun
         try {
           return await scanDirectories({batchSize, isMigration, jobRunId, batchId: batchId});
         } catch (error) {
-          if (error instanceof wf.ActivityFailure) {
-            return {
-              jobRunId: jobRunId,
-              fileCount: 0,
-              dirCount: 0,
-              subDirs: [],
-              error: error.message || 'Activity failed error',
-              batchDirs: [],
-            };
-          }
+          console.log(`[ERROR] Error scanning directories for batch ${batchId}: ${error.message}`);
           throw error;
         }
       })
