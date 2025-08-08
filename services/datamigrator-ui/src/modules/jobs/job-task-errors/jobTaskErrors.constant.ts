@@ -38,7 +38,7 @@ export const ERROR_COLUMN_DEF = [
   },
   {
     header: "Error Details",
-    accessor: "errorMessage",
+    accessor: "displayMessage",
     id: "6",
     Renderer: (props: BlueXpTableRowType<JobErrorType, string>) =>
       React.createElement(TooltipCellRenderer, { ...props }),
