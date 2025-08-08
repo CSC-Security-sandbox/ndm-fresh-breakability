@@ -103,11 +103,10 @@ export class ConfigurationDataCsvGenerationActivity {
 
     try {
       const jobConfigDetails =
-        SQL_QUERIES.GET_JOB_CONFIG_DETAILS_WITH_DATE_FILTER;
+        SQL_QUERIES.GET_JOB_CONFIG_DETAILS_WITH_PROJECT_ID_FILTER;
 
       const result = await this.dataSource.query(jobConfigDetails, [
-        payload.startDate,
-        payload.endDate,
+        projectIds,
       ]);
 
       this.logger.log(

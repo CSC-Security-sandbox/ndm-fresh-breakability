@@ -19,11 +19,9 @@ export const SQL_QUERIES = {
     FROM datamigrator.project`,
 
   /**
-   * Query to fetch job configuration details with date filtering
-   * Used in getJobConfigDetails method
-   * $1 = start date, $2 = end date (both in 'YYYY-MM-DD' format)
+   * Query to fetch job configuration details with multiple project IDs filtering
    */
-  GET_JOB_CONFIG_DETAILS_WITH_DATE_FILTER: `
+  GET_JOB_CONFIG_DETAILS_WITH_PROJECT_ID_FILTER: `
     SELECT 
       p.id as "Project Id",
       p.project_name as "Project Name",
@@ -51,11 +49,8 @@ export const SQL_QUERIES = {
       LEFT JOIN datamigrator.jobconfig jc ON v.id = jc.source_path_id
     WHERE v.volume_path IS NOT NULL 
       AND TRIM(v.volume_path) != ''
-      AND (
-        (DATE(jc.created_at) >= $1 AND DATE(jc.created_at) <= $2) OR
-        (DATE(jc.updated_at) >= $1 AND DATE(jc.updated_at) <= $2)
-      )
-    ORDER BY jc.id`,
+      AND p.id = ANY($1)
+    ORDER BY p.id, jc.id`,
 } as const;
 
 export const GET_OPERATION_ERRORS_BY_DATE_RANGE = `
