@@ -56,10 +56,9 @@ export class ConfigurationDataCsvGenerationActivity {
     traceId: string;
     payload: any;
   }) {
-    const projectDetails = await this.dataSource.query(
-      SQL_QUERIES.GET_PROJECT_IDS,
-    );
-    const projectIds = projectDetails.map((row: any) => row.project_id);
+    const projectIds: string[] = payload?.projectWorkerMap
+      .filter((item: any) => item.projectId !== undefined)
+      .map((item: any) => item.projectId);
 
     if (
       projectIds?.length > 0 &&
