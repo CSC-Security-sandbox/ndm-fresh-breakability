@@ -26,6 +26,8 @@ export const workerProviders = [
           ),
         generateStateDataCsv:
           activitiesService.generateStateDataCsv.bind(activitiesService),
+        generateSystemInventoryCsv:
+          activitiesService.generateSystemInventoryCsv.bind(activitiesService),
         generateConfigurationJobCsv:
           activitiesService.generateConfigurationJobCsv.bind(activitiesService),
       };

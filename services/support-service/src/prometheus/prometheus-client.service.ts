@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrometheusService } from './prometheus.service';
 import { PrometheusResponse } from '../activities/state-data-csv-generation/state-data-csv-generation.interface';
+// import { PrometheusResponse } from 'src/activities/system-inventory-csv-generation/system-inventory-csv-generation.interface';
 
 @Injectable()
 export class PrometheusClientService {
