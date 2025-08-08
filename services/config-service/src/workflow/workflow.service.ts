@@ -68,7 +68,7 @@ export class WorkflowService implements OnModuleDestroy {
       );
       return handle;
     } catch (error) {
-      this.logger.error(`Failed to start workflow heeheh: ${error}`);
+      this.logger.error(`Failed to start workflow: ${error}`);
     }
   }
 

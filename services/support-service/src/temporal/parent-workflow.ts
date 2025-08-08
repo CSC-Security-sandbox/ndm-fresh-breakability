@@ -70,7 +70,7 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
 
     if (!configurationDataCsvGeneratorWorkflowResult.success) {
       log.info(
-        `Error occured in ConfigurationDataCsvGeneratorWorkflow: ${configurationDataCsvGeneratorWorkflowResult.message}`,
+        `Error occurred in ConfigurationDataCsvGeneratorWorkflow: ${configurationDataCsvGeneratorWorkflowResult.message}`,
       );
       throw { message: configurationDataCsvGeneratorWorkflowResult.message };
     }
@@ -111,7 +111,7 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
 
     if (!systemInventoryCsvGeneratorWorkflowResult.success) {
       log.info(
-        `Error occured in SystemInventoryCsvGeneratorWorkflow: ${systemInventoryCsvGeneratorWorkflowResult.message}`,
+        `Error occurred in SystemInventoryCsvGeneratorWorkflow: ${systemInventoryCsvGeneratorWorkflowResult.message}`,
       );
       throw { message: systemInventoryCsvGeneratorWorkflowResult.message };
     }

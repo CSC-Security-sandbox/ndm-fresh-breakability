@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { writeToString } from '@fast-csv/format';
 
 export interface ProcessedNetworkConfig {
@@ -52,9 +52,7 @@ export interface PrometheusResponse {
 }
 
 @Injectable()
-export class ProcessorService {
-  private readonly logger = new Logger(ProcessorService.name);
-
+export class SystemInventoryProcessorService {
   private readonly NETWORK_CONFIG_HEADERS = [
     'device',
     'address',

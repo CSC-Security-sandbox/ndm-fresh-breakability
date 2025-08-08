@@ -1,21 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
-import SYS_INV_SPECS_QUERIES from './system-inventory-csv-generation.constants';
+import SYS_INV_SPECS_QUERIES from './system-inventory.constants';
 import { PrometheusClientService } from 'src/prometheus/prometheus-client.service';
-import { ProcessorService } from './system-inventory-csv-data-processor.service';
-import { CsvGeneratorService } from 'src/services/csv-generator.service';
+import { SystemInventoryProcessorService } from './system-inventory-processor.service';
 import { ZipHandlerService } from 'src/services/zip-handle.service';
 
 @Injectable()
 export class SystemInventoryCsvGenerationActivity {
-  // Activity implementation goes here
   private readonly logger = new Logger(
     SystemInventoryCsvGenerationActivity.name,
   );
 
   constructor(
     private readonly prometheusClient: PrometheusClientService,
-    private readonly processorService: ProcessorService,
-    private readonly csvGeneratorService: CsvGeneratorService,
+    private readonly processorService: SystemInventoryProcessorService,
     private readonly zipHandler: ZipHandlerService,
   ) {}
 
