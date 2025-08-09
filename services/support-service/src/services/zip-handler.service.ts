@@ -14,12 +14,15 @@ export class ZipHandlerService {
     zipLocation: string,
     folderName: string = 'CSV Files',
   ): Promise<void> {
-    const zipPath = this.getZipPath(zipLocation);
-    this.logger.log(`Adding CSV to zip file: ${zipPath}`);
+    try {
+      // Validate inputs
+      this.validateInputs(csvContent, fileName, zipLocation);
 
-    await fs.promises.mkdir(path.dirname(zipPath), { recursive: true });
+      const zipPath = this.getZipPath(zipLocation);
+      this.logger.log(`Adding CSV to zip file: ${zipPath}`);
 
-    const zipExists = await this.checkZipExists(zipPath);
+      // Ensure directory exists
+      await this.ensureDirectoryExists(path.dirname(zipPath));
 
     if (zipExists) {
       await this.addToExistingZip(csvContent, fileName, zipPath, folderName);
@@ -29,16 +32,40 @@ export class ZipHandlerService {
   }
 
   private getZipPath(zipLocation: string): string {
-    return zipLocation.endsWith('.zip')
-      ? zipLocation
-      : path.join(zipLocation, 'support-bundle.zip');
+    try {
+      if (!zipLocation || zipLocation.trim() === '') {
+        throw new Error('Zip location cannot be empty');
+      }
+
+      return zipLocation.endsWith('.zip')
+        ? zipLocation
+        : path.join(zipLocation, 'support-bundle.zip');
+    } catch (error: any) {
+      this.logger.error(`Error in getZipPath: ${error.message}`);
+      throw new Error(`Failed to determine zip path: ${error.message}`);
+    }
   }
 
   private async checkZipExists(zipPath: string): Promise<boolean> {
-    return fs.promises
-      .access(zipPath)
-      .then(() => true)
-      .catch(() => false);
+    try {
+      if (!zipPath) {
+        this.logger.debug('Zip path is empty, returning false');
+        return false;
+      }
+
+      await fs.promises.access(zipPath);
+      this.logger.debug(`Zip file exists: ${zipPath}`);
+      return true;
+    } catch (error: any) {
+      if (error.code === 'ENOENT') {
+        this.logger.debug(`Zip file does not exist: ${zipPath}`);
+        return false;
+      }
+
+      this.logger.error(`Error checking zip file existence: ${error.message}`);
+      // For other errors, we'll return false to be safe rather than throwing
+      return false;
+    }
   }
 
   private async createNewZipWithCsv(
@@ -48,20 +75,21 @@ export class ZipHandlerService {
     folderName: string,
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      const output = fs.createWriteStream(zipPath);
-      const archive = archiver('zip', { zlib: { level: 9 } });
+      try {
+        if (!csvContent || !fileName || !zipPath) {
+          reject(new Error('Missing required parameters for zip creation'));
+          return;
+        }
 
-      output.on('close', () => {
-        this.logger.log(
-          `New ZIP file created: ${zipPath} (${archive.pointer()} total bytes)`,
-        );
-        resolve();
-      });
+        const output = fs.createWriteStream(zipPath);
+        const archive = archiver('zip', { zlib: { level: 9 } });
 
-      archive.on('error', (err: Error) => {
-        this.logger.error(`Archive error: ${err.message}`);
-        reject(err);
-      });
+        output.on('close', () => {
+          this.logger.log(
+            `New ZIP file created: ${zipPath} (${archive.pointer()} total bytes)`,
+          );
+          resolve();
+        });
 
       archive.pipe(output);
       archive.append(csvContent, { name: `${folderName}/${fileName}` });
@@ -76,12 +104,22 @@ export class ZipHandlerService {
     folderName: string,
   ): Promise<void> {
     try {
+      if (!csvContent || !fileName || !zipPath) {
+        throw new Error(
+          'Missing required parameters for adding to existing zip',
+        );
+      }
+
+      // Validate that the zip file exists and is readable
+      await fs.promises.access(zipPath, fs.constants.R_OK | fs.constants.W_OK);
+
       const existingZip = new AdmZip(zipPath);
       existingZip.addFile(
         `${folderName}/${fileName}`,
         Buffer.from(csvContent, 'utf8'),
       );
       existingZip.writeZip(zipPath);
+
       this.logger.log(
         `CSV successfully added to existing ZIP file: ${zipPath}`,
       );
