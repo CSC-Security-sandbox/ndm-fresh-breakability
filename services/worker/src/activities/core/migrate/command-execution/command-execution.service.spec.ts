@@ -9,6 +9,7 @@ import { WorkerThreadService } from 'src/thread/worker.thread.service';
 import { StampMetaService } from './stamp-meta.service';
 import { mockLogger } from 'src/auth/auth.service.spec';
 import { dmError, getFilePermissions, getFileType,  } from 'src/activities/utils/utils';
+import { isPathExists } from '../../utils/utils';
 
 // Mock fs module
 jest.mock('fs', () => ({
@@ -28,12 +29,16 @@ jest.mock('path', () => ({
 }));
 
 // Mock utils functions
-jest.mock('src/activities/utils/utils', () => ({
-    dmError: jest.fn(),
-    getFilePermissions: jest.fn(),
-    getFileType: jest.fn(),
-    isPathExists: jest.fn(),
-}));
+jest.mock('src/activities/utils/utils', () => {
+    const actualUtils = jest.requireActual('src/activities/utils/utils');
+    return {
+        ...actualUtils,
+        dmError: jest.fn(),
+        getFilePermissions: jest.fn(),
+        getFileType: jest.fn(),
+        isPathExists: jest.fn(), // This ensures isPathExists is a Jest mock function
+    };
+});
 
 describe('CommandExecService', () => {
     let service: CommandExecService;
@@ -412,6 +417,7 @@ describe('CommandExecService', () => {
                 shouldStampMeta: false,
                 sourceErrors: [],
                 targetErrors: [],
+                shouldUpdateItemInfo: false,
             });
             jest.spyOn(service, 'publishFileInfo').mockResolvedValue();
 
@@ -744,6 +750,75 @@ describe('CommandExecService', () => {
                 } as any);
                 expect(jobContext.publishToErrorStream).toHaveBeenCalled();
             });
+        });
+
+
+    });
+    describe('copyFile', () => {
+        const createMockCommand = (status = OPS_STATUS.READY) => ({
+            id: 'cmd-1',
+            fPath: '/test.txt',
+            status: CommandStatus.READY,
+            isDir: false,
+            ops: {
+                [OPS_CMD.COPY_FILE]: { 
+                    status,
+                    params: {}
+                },
+            },
+            metadata: { 
+                size: 1024,
+                mtime: new Date(),
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+                mode: 644,
+                uid: 1000,
+                gid: 1000,
+                sid: 'test-sid'
+            },
+            serialize: jest.fn(),
+        });
+
+        const baseInput = {
+            sourcePath: '/source/test.txt',
+            targetPath: '/target/test.txt',
+            jobContext: {
+                    publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+                    jobConfig: {
+                        options: {
+                            preserveAccessTime: true
+                        }
+                    }
+                },
+            command: createMockCommand(),
+            errorType: ErrorType.RECOVERABLE_ERROR,
+        };
+
+        it('should skip if already completed', async () => {
+            const input = {
+                ...baseInput,
+                command: createMockCommand(OPS_STATUS.COMPLETED),
+            };
+
+            const result = await service.copyFile(input as any);
+
+            expect(result.shouldStampMeta).toBe(true);
+            expect(result.shouldUpdateItemInfo).toBe(false);
+            expect(workerThreadService.migrateWorkerThread).not.toHaveBeenCalled();
+        });
+        it('should successfully copy file and stamp meta', async () => {
+            const result = await service.copyFile(baseInput as any);
+
+            expect(workerThreadService.migrateWorkerThread).toHaveBeenCalledWith({
+                sourcePath: '/source/test.txt',
+                destinationPath: '/target/test.txt',
+                operationId: 'cmd-1',
+                size: 1024
+            });
+            expect(result.shouldStampMeta).toBe(true);
+            expect(result.shouldUpdateItemInfo).toBe(true);
+            expect(baseInput.command.ops[OPS_CMD.COPY_FILE].status).toBe(OPS_STATUS.COMPLETED);
         });
     });
 });

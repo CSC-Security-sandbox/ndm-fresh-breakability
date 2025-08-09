@@ -26,7 +26,7 @@ export class StampMetaService {
     }
 
     async stampMetaData(input: CommandExecInput): Promise<CommandOutput> {
-        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] };
+        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: true };
 
         if (
             input.command.ops[OPS_CMD.STAMP_META] &&

@@ -20,6 +20,7 @@ export interface CommandOutput {
     shouldStampMeta: boolean;
     sourceErrors: string[];
     targetErrors: string[];
+    shouldUpdateItemInfo: boolean;
 }
 
 

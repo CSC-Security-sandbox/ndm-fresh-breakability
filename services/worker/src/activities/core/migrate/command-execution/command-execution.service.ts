@@ -29,7 +29,7 @@ export class CommandExecService {
     async executeCommand(input: CommandExecInput): Promise<CommandExecOutput> {
 
         const output: CommandExecOutput = { sourceErrors: [], targetErrors: [], cmd: input.command };
-        let baseCmdRes: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] };
+        let baseCmdRes: CommandOutput = { shouldStampMeta: false, shouldUpdateItemInfo: false, sourceErrors: [], targetErrors: [] };
 
         // Copy File
         if(input.command.ops && input.command.ops[OPS_CMD.COPY_FILE]) 
@@ -54,11 +54,12 @@ export class CommandExecService {
 
        // Stamp Meta if needed
         if (baseCmdRes.shouldStampMeta) {
-            this.logger.log('Should stamp metadata ' + baseCmdRes.shouldStampMeta)
             const metaResult = await this.stampMetaService.stampMetaData(input);
-            this.logger.log(`Metadata result ${JSON.stringify(metaResult)}`)
+            baseCmdRes.shouldUpdateItemInfo = metaResult.shouldUpdateItemInfo;
             output.targetErrors.push(...metaResult.targetErrors);
             output.sourceErrors.push(...metaResult.sourceErrors);
+        }
+        if( baseCmdRes.shouldUpdateItemInfo ) {
             await this.publishFileInfo(input);
         }
         if (output.sourceErrors.length > 0 || output.targetErrors.length > 0) 
@@ -71,7 +72,7 @@ export class CommandExecService {
 
 
     async copyFile({command , jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
-        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] };
+        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] , shouldUpdateItemInfo: false };
         if(command.ops[OPS_CMD.COPY_FILE].status === OPS_STATUS.COMPLETED) {
             output.shouldStampMeta = true;
             return output;  // skip if already completed
@@ -84,30 +85,36 @@ export class CommandExecService {
                     new Error(`Source path does not exist: ${sourcePath}`), {name: command.fPath, path: sourcePath});
                 await jobContext.publishToErrorStream(dmErr);
             }
-            if(fs.existsSync(targetPath)) 
-            await this.stampMetaService.removeFileAttributeTemporarily(targetPath);
+            if(await isPathExists(targetPath))
+                await this.stampMetaService.removeFileAttributeTemporarily(targetPath);
             try {
                 const checksums = await this.workerThreadService.migrateWorkerThread({
                     sourcePath, destinationPath: targetPath, operationId: command.id, size: command.metadata?.size ?? 0
                 });
+                output.shouldUpdateItemInfo = true;
+                if(checksums?.targetChecksum !== checksums?.sourceChecksum) {
+                    command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.ERROR, params : { checksums } };
+                    throw new Error(`Checksum mismatch detected, source: ${checksums?.sourceChecksum}, target: ${checksums?.targetChecksum}`);
+                }
                 command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.COMPLETED, params : { checksums } };
                 output.shouldStampMeta = true;
             }catch(error){
-                command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.ERROR, params : {  } };
+                command.ops[OPS_CMD.COPY_FILE] = {  ... command.ops[OPS_CMD.COPY_FILE], status: OPS_STATUS.ERROR }; 
                 this.logger.error(`Copying FILE from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
                 await jobContext.publishToErrorStream(dmErr);   
                 output.targetErrors.push(error.code);
             }finally{
-                if(fs.existsSync(targetPath)) 
-                await this.stampMetaService.restoreFileAttribute(targetPath);
+                if(await isPathExists(targetPath)) {
+                    await this.stampMetaService.restoreFileAttribute(targetPath);
+                }
             }
         }
         return output;
     }
 
     async copyDirectory({command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
-        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] };
+        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: false };
         if(command.ops[OPS_CMD.COPY_DIR].status === OPS_STATUS.COMPLETED) {
             output.shouldStampMeta = true;
             return output;  // skip if already completed
@@ -117,7 +124,7 @@ export class CommandExecService {
                 await fs.promises.mkdir(targetPath, {recursive: true});                
                 command.ops[OPS_CMD.COPY_DIR].status = OPS_STATUS.COMPLETED;
                 output.shouldStampMeta = true;
-
+                output.shouldUpdateItemInfo = true;
             } catch (error) {
                 command.ops[OPS_CMD.COPY_DIR].status = OPS_STATUS.ERROR;
                 this.logger.error(`Copying DIR from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
@@ -130,7 +137,7 @@ export class CommandExecService {
     }
 
     async deleteFile({command , jobContext, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
-        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] };
+        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] , shouldUpdateItemInfo: false };
         if( command.ops[OPS_CMD.REMOVE_FILE].status !== OPS_STATUS.COMPLETED) {
             try {
                 await fs.promises.unlink(targetPath);
@@ -149,7 +156,7 @@ export class CommandExecService {
     }
 
     async deleteDirectory({command , jobContext, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
-        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] };
+        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] , shouldUpdateItemInfo: false };
         if ( command.ops[OPS_CMD.REMOVE_DIR].status !== OPS_STATUS.COMPLETED) {
             try {
                 await fs.promises.rm(targetPath, { recursive: true, force: true });

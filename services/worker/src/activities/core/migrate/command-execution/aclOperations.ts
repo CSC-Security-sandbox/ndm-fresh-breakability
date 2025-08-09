@@ -112,7 +112,7 @@ export class ACLOperations {
                 throw new ACLError(`Error executing icacls: ${stderr}`, 'ICACLS_ERROR', { stderr });
             }
 
-            const aclData = this.parseIcaclsOutput(stdout);
+            const aclData = this.parseIcaclsOutput(stdout, normalizedPath);
 
             // Only resolve SIDs if both flags are true and jobID is provided
             if (resolveSIDs && isIdentityMappingAvailable && jobID && this.redisService) {
@@ -337,7 +337,7 @@ export class ACLOperations {
     }
 
 
-private parseIcaclsOutput(output: string): ParsedACL {
+private parseIcaclsOutput(output: string, givenPath: string): ParsedACL {
   const lines = output.split('\n').map(l => l.trim()).filter(Boolean);
   const permissions: ACLEntry[] = [];
   let inheritance: string | null = null;
@@ -346,15 +346,14 @@ private parseIcaclsOutput(output: string): ParsedACL {
     throw new ACLError('Empty icacls output', 'PARSE_ERROR', { output });
   }
 
-  const firstLine = lines[0];
-  const pathMatch = firstLine.match(/^([a-zA-Z]:\\.*?)(?=\s\S+:\(|$)/);
-  const filePath = pathMatch ? pathMatch[1] : null;
+    const firstLine = lines[0];
 
-  if (!filePath) {
+    const remaining = firstLine.replace(givenPath, '').trim()
+
+  if (!givenPath) {
     throw new ACLError('Failed to parse file path from icacls output', 'PARSE_ERROR', { firstLine });
   }
 
-  const remaining = firstLine.slice(filePath.length).trim();
   if (remaining && remaining.match(/.+:\(.*\)/)) {
     this.parseAclLine(remaining, permissions);
   }

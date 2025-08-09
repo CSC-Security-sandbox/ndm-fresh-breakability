@@ -86,32 +86,6 @@ describe("smartCopy", () => {
     expect(result.sourceChecksum).toBe("checksum123");
   });
 
-  it("should throw error if checksums do not match", async () => {
-    // Mock fs.promises object
-    const mockMakeDir = jest.fn().mockResolvedValue(undefined);
-    
-    (fs as any).promises = {
-      mkdir: mockMakeDir
-    };
-
-    const streamHash = {
-      update: jest.fn().mockReturnThis(),
-      digest: jest.fn().mockReturnValueOnce("checksum-1"),
-    };
-
-    const checksumHash = {
-      update: jest.fn().mockReturnThis(),
-      digest: jest.fn().mockReturnValueOnce("checksum-2"),
-    };
-
-    (crypto.createHash as jest.Mock).mockReturnValueOnce(streamHash).mockReturnValueOnce(checksumHash);
-
-    (fs.createReadStream as jest.Mock).mockImplementation(() => mockFsStream(mockData));
-    (fs.createWriteStream as jest.Mock).mockImplementation(() => mockWritableStream());
-
-    await expect(smartCopy(sourcePath, destPath)).rejects.toThrow("Checksum mismatch");
-  });
-
   it("should make sure directory is always present", async () => {
     // Mock fs.promises object - mkdir succeeds regardless of directory existence
     const mockMakeDir = jest.fn().mockResolvedValue(undefined);
