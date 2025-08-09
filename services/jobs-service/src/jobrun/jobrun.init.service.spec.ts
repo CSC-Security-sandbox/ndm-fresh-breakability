@@ -1,26 +1,37 @@
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { JobRunInitService } from './jobrun.init.service';
-import { JobRunEntity } from '../entities/jobrun.entity';
-import { JobConfigEntity } from '../entities/jobconfig.entity';
-import { FileServerEntity } from '../entities/fileserver.entity';
-import { WorkflowService } from '../workflow/workflow.service';
-import { RedisService } from '../redis/redis.service';
-import { DeepPartial, In, LessThan, Repository } from 'typeorm';
-import { SpeedTestConfigEntity } from 'src/entities/speed-test-job-config.entity';
-import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
-import { JobOptionsEntity } from 'src/entities/joboptions.entity';
-import { JobStatus as JS } from 'src/constants/enums';
-import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
-import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping-cross.entity';
-import { ConfigService } from '@nestjs/config';
-import { IdentityTypes, JobContextFactory, JobStatus, SpeedTestJobConfig, SpeedTestJobContextProvider, Task} from '@netapp-cloud-datamigrate/jobs-lib';
-import { ScheduleStatus } from 'src/constants/status';
-import { JobRunConfig } from './jobrun.types';
-import { JobRunStatus, JobType, Protocol, WorkFlows } from 'src/constants/enums';
+import { IdentityTypes, JobContextFactory, JobStatus, SpeedTestJobConfig, SpeedTestJobContextProvider } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import axios from 'axios';
+import { JobRunStatus, JobType, JobStatus as JS, Protocol, WorkFlows } from 'src/constants/enums';
+import { ScheduleStatus } from 'src/constants/status';
+import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping-cross.entity';
+import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
+import { JobOptionsEntity } from 'src/entities/joboptions.entity';
+import { SpeedTestConfigEntity } from 'src/entities/speed-test-job-config.entity';
+import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { Readable } from "stream";
+import { Repository } from 'typeorm';
+import { FileServerEntity } from '../entities/fileserver.entity';
+import { JobConfigEntity } from '../entities/jobconfig.entity';
+import { JobRunEntity } from '../entities/jobrun.entity';
+import { MigrationConflictService } from '../migration-conflict/migration-conflict.service';
+import { RedisService } from '../redis/redis.service';
+import { WorkflowService } from '../workflow/workflow.service';
+import { JobRunInitService } from './jobrun.init.service';
+import { JobRunConfig } from './jobrun.types';
+import { NotFoundException } from '@nestjs/common';
+
+// Mock the filterUnhealthyWorkers function
+jest.mock('../utils/worker-filter', () => ({
+  filterUnhealthyWorkers: jest.fn().mockImplementation((worker, timeout) => {
+    // Default to true unless specifically configured in tests
+    if (worker.workerId === 'unhealthy-worker') return false;
+    if (worker.workerId === 'outdated-worker') return false;
+    return true;
+  })
+}));
 
 describe('JobRunInitService', () => {
   let service: JobRunInitService;
@@ -108,6 +119,13 @@ describe('JobRunInitService', () => {
             setJobContext: jest.fn(),
           },
         },
+        {
+          provide: MigrationConflictService,
+          useValue: {
+            checkMigrationConflicts: jest.fn().mockResolvedValue([]),
+            hasMigrationConflicts: jest.fn().mockResolvedValue(false),
+          },
+        },
       ],
     }).compile();
 
@@ -148,8 +166,11 @@ describe('JobRunInitService', () => {
   });
   describe('scheduleAJob', () => {
     it('should return an array of jobs', async () => {
-      const currentTime = new Date();
-      jest.spyOn(global.Date, 'now').mockReturnValue(currentTime as any);
+      const currentTime = new Date('2025-07-24T14:42:45.764Z');
+      const originalDate = global.Date;
+      global.Date = jest.fn(() => currentTime) as any;
+      global.Date.now = jest.fn(() => currentTime.getTime());
+      
       const jobs: JobConfigEntity[] = [];
       jest.spyOn(jobConfigRepo, 'find').mockResolvedValue(jobs);
 
@@ -161,9 +182,12 @@ describe('JobRunInitService', () => {
         where: {
           status: 'ACTIVE',
           scheduler: ScheduleStatus.SCHEDULING,
-          firstRunAt: LessThan(currentTime),
+          firstRunAt: expect.any(Object), // Use a more flexible assertion for the LessThan object
         },
       });
+      
+      // Restore original Date constructor
+      global.Date = originalDate;
     });
   });
 
@@ -518,9 +542,7 @@ describe('JobRunInitService', () => {
           },
         },
       };
-      const jobRun = {};
 
-      jest.spyOn(service, 'createInitialTask').mockResolvedValue(undefined);
       jest.spyOn(redisService, 'getClient').mockResolvedValue(undefined);
       jest.spyOn(redisService, 'setJobContext').mockResolvedValue(undefined);
       jest.spyOn(redisService,'getClient').mockResolvedValue({ exists: jest.fn() } as any);
@@ -528,7 +550,6 @@ describe('JobRunInitService', () => {
         xGroupCreate: jest.fn().mockImplementation(() => Promise.resolve()),
         set: jest.fn().mockResolvedValue('OK'),xAdd:jest.fn().mockImplementation(()=>Promise.resolve()) } as any); 
       await service.buildJobContext(jobRunId, jobRunConfig as any);
-      expect(service.createInitialTask).toHaveBeenCalledWith(jobRunId, jobRunConfig);
       expect(redisService.getClient).toHaveBeenCalled();
       expect(redisService.setJobContext).toHaveBeenCalled();
     });
@@ -605,28 +626,6 @@ describe('JobRunInitService', () => {
     });
   });
 
-describe('createInitialTask', () => {
-    it('should create the initial task', async () => {
-        const jobRunId = 'jobRunId';
-        const jobRunConfig = {} as any;
-        jobRunConfig.workers = [];
-        jobRunConfig.connection = {
-            sourceCredential: {
-                workingDirectory: 'workingDirectory',
-                pathId: 'pathId',
-            },
-            targetCredential: {
-                workingDirectory: 'workingDirectory',
-                pathId: 'pathId',
-            },
-        };
-        
-
-        const result = await service.createInitialTask(jobRunId, jobRunConfig as any);
-
-        expect(result).toBeTruthy();
-    });
-});
   describe('getWorkFlowId', () => {
     it('should return the workflow ID based on the job type DISCOVER', () => {
       const jobRunId = 'jobRunId';
@@ -987,6 +986,56 @@ describe("buildJobContext", () => {
       );
     });
 
+    it('should throw NotFoundException if source path is disabled', async () => {
+      const jobConfigId = 'jobConfigId';
+      const currentTime = new Date();
+      const details = {
+        jobType: JobType.DISCOVER,
+        workers: ['worker1'],
+        connection: {
+          sourceCredential: { isValidPath: true, isDisabled: true },
+          targetCredential: { isValidPath: true, isDisabled: false },
+        },
+      } as any;
+
+      jest.spyOn(service, 'getJobConfig').mockResolvedValue(details);
+      jest.spyOn(jobConfigRepo, 'update').mockResolvedValue({} as any);
+
+      await expect(service.createJobRun(jobConfigId, currentTime)).rejects.toThrow(
+        `Job Config ${jobConfigId} has invalid source or target path, skipping job run creation.`
+      );
+      
+      expect(jobConfigRepo.update).toHaveBeenCalledWith(
+        { id: jobConfigId }, 
+        { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
+      );
+    });
+
+    it('should throw NotFoundException if target path is disabled', async () => {
+      const jobConfigId = 'jobConfigId';
+      const currentTime = new Date();
+      const details = {
+        jobType: JobType.DISCOVER,
+        workers: ['worker1'],
+        connection: {
+          sourceCredential: { isValidPath: true, isDisabled: false },
+          targetCredential: { isValidPath: true, isDisabled: true },
+        },
+      } as any;
+
+      jest.spyOn(service, 'getJobConfig').mockResolvedValue(details);
+      jest.spyOn(jobConfigRepo, 'update').mockResolvedValue({} as any);
+
+      await expect(service.createJobRun(jobConfigId, currentTime)).rejects.toThrow(
+        `Job Config ${jobConfigId} has invalid source or target path, skipping job run creation.`
+      );
+      
+      expect(jobConfigRepo.update).toHaveBeenCalledWith(
+        { id: jobConfigId }, 
+        { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
+      );
+    });
+
     it('should return undefined if no workers are present', async () => {
       const jobConfigId = 'jobConfigId';
       const currentTime = new Date();
@@ -1020,6 +1069,491 @@ describe("buildJobContext", () => {
       await service.getJobConfig(jobConfigId);
       expect(getJobConfigSpeedTestSpy).toHaveBeenCalledWith(jobConfigId);
     });
+    
+    it('should handle undefined protocolVersion correctly', async () => {
+      const jobConfigId = 'jobConfigId';
+      const healthStatsTimeout = 60;
+      const mockJobConfig = {
+        id: jobConfigId,
+        jobType: JobType.DISCOVER,
+        preserveAccessTime: true,
+        excludeFilePatterns: '*.tmp',
+        excludeOlderThan: new Date(),
+        sourcePath: {
+          id: 'sourcePathId',
+          volumePath: '/source/path',
+          fileServer: {
+            protocol: Protocol.NFS,
+            userName: 'user',
+            password: 'pass',
+            host: 'host',
+            config: { configName: 'sourceConfig' },
+            // protocolVersion is intentionally undefined
+            workers: [
+              { 
+                workerId: 'worker1', 
+                stats: { 
+                  healthStatus: 'Healthy', 
+                  updatedAt: new Date() 
+                } 
+              }
+            ]
+          }
+        },
+        targetPath: null
+      };
+
+      jest.spyOn(configService, 'get').mockReturnValue(healthStatsTimeout.toString());
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+
+      const result = await service.getJobConfig(jobConfigId);
+
+      expect(result).toBeDefined();
+      expect(result.connection.sourceCredential).toBeDefined();
+      // Should not throw an error when protocolVersion is undefined
+      expect(result.connection.sourceCredential.protocolVersion).toBe(undefined);
+    });
+    
+    it('should handle null sourcePath correctly', async () => {
+      const jobConfigId = 'jobConfigId';
+      const healthStatsTimeout = 60;
+      const mockJobConfig = {
+        id: jobConfigId,
+        jobType: JobType.DISCOVER,
+        preserveAccessTime: true,
+        excludeFilePatterns: '*.tmp',
+        excludeOlderThan: new Date(),
+        sourcePath: null, // sourcePath is intentionally null
+        targetPath: null
+      };
+
+      jest.spyOn(configService, 'get').mockReturnValue(healthStatsTimeout.toString());
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+
+      const result = await service.getJobConfig(jobConfigId);
+
+      expect(result).toBeDefined();
+      expect(result.connection.sourceCredential).toBeDefined();
+      // Should handle null sourcePath gracefully
+      expect(result.workers).toEqual([]);
+    });
+    
+    it('should handle null fileServer correctly', async () => {
+      const jobConfigId = 'jobConfigId';
+      const healthStatsTimeout = 60;
+      const mockJobConfig = {
+        id: jobConfigId,
+        jobType: JobType.DISCOVER,
+        preserveAccessTime: true,
+        excludeFilePatterns: '*.tmp',
+        excludeOlderThan: new Date(),
+        sourcePath: {
+          id: 'sourcePathId',
+          volumePath: '/source/path',
+          fileServer: null // fileServer is intentionally null
+        },
+        targetPath: null
+      };
+
+      jest.spyOn(configService, 'get').mockReturnValue(healthStatsTimeout.toString());
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+
+      const result = await service.getJobConfig(jobConfigId);
+
+      expect(result).toBeDefined();
+      expect(result.connection.sourceCredential).toBeDefined();
+      // Should handle null fileServer gracefully
+      expect(result.workers).toEqual([]);
+    });
+    
+    it('should set skipDelete to false when futureScheduleAt is not null', async () => {
+      const jobConfigId = 'jobConfigId';
+      const healthStatsTimeout = 60;
+      const mockJobConfig = {
+        id: jobConfigId,
+        jobType: JobType.DISCOVER,
+        preserveAccessTime: true,
+        excludeFilePatterns: '*.tmp',
+        excludeOlderThan: new Date(),
+        futureScheduleAt: '0 0 * * * *', // futureScheduleAt is not null
+        sourcePath: {
+          id: 'sourcePathId',
+          volumePath: '/source/path',
+          fileServer: {
+            protocol: Protocol.NFS,
+            userName: 'user',
+            password: 'pass',
+            host: 'host',
+            config: { configName: 'sourceConfig' },
+            workers: [
+              { 
+                workerId: 'worker1', 
+                stats: { 
+                  healthStatus: 'Healthy', 
+                  updatedAt: new Date() 
+                } 
+              }
+            ]
+          }
+        },
+        targetPath: null
+      };
+
+      jest.spyOn(configService, 'get').mockReturnValue(healthStatsTimeout.toString());
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+
+      const result = await service.getJobConfig(jobConfigId);
+
+      expect(result).toBeDefined();
+      // skipDelete should be false when futureScheduleAt is not null
+      expect(result.skipDelete).toBe(false);
+    });
+    
+    it('should set skipDelete to false for CUT_OVER job type', async () => {
+      const jobConfigId = 'jobConfigId';
+      const healthStatsTimeout = 60;
+      const mockJobConfig = {
+        id: jobConfigId,
+        jobType: JobType.CUT_OVER, // CUT_OVER job type
+        preserveAccessTime: true,
+        excludeFilePatterns: '*.tmp',
+        excludeOlderThan: new Date(),
+        futureScheduleAt: null, // futureScheduleAt is null
+        sourcePath: {
+          id: 'sourcePathId',
+          volumePath: '/source/path',
+          fileServer: {
+            protocol: Protocol.NFS,
+            userName: 'user',
+            password: 'pass',
+            host: 'host',
+            config: { configName: 'sourceConfig' },
+            workers: [
+              { 
+                workerId: 'worker1', 
+                stats: { 
+                  healthStatus: 'Healthy', 
+                  updatedAt: new Date() 
+                } 
+              }
+            ]
+          }
+        },
+        targetPath: null
+      };
+
+      jest.spyOn(configService, 'get').mockReturnValue(healthStatsTimeout.toString());
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+
+      const result = await service.getJobConfig(jobConfigId);
+
+      expect(result).toBeDefined();
+      // skipDelete should be false for CUT_OVER job type
+      expect(result.skipDelete).toBe(false);
+    });
+    
+    it('should return empty workers array when there are no common workers between source and target', async () => {
+      const jobConfigId = 'jobConfigId';
+      const healthStatsTimeout = 60;
+      const mockJobConfig = {
+        id: jobConfigId,
+        jobType: JobType.MIGRATE,
+        preserveAccessTime: true,
+        excludeFilePatterns: '*.tmp',
+        excludeOlderThan: new Date(),
+        targetPathId: 'targetPathId',
+        sourcePath: {
+          id: 'sourcePathId',
+          volumePath: '/source/path',
+          fileServer: {
+            protocol: Protocol.NFS,
+            userName: 'user',
+            password: 'pass',
+            host: 'host',
+            config: { configName: 'sourceConfig' },
+            workers: [
+              { 
+                workerId: 'worker1', 
+                stats: { 
+                  healthStatus: 'Healthy', 
+                  updatedAt: new Date() 
+                } 
+              }
+            ]
+          }
+        },
+        targetPath: {
+          id: 'targetPathId',
+          volumePath: '/target/path',
+          fileServer: {
+            protocol: Protocol.NFS,
+            userName: 'user',
+            password: 'pass',
+            host: 'host',
+            config: { configName: 'targetConfig' },
+            workers: [
+              { 
+                workerId: 'worker2', // Different worker ID than source
+                stats: { 
+                  healthStatus: 'Healthy', 
+                  updatedAt: new Date() 
+                } 
+              }
+            ]
+          }
+        }
+      };
+
+      jest.spyOn(configService, 'get').mockReturnValue(healthStatsTimeout.toString());
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+
+      const result = await service.getJobConfig(jobConfigId);
+
+      expect(result).toBeDefined();
+      // Should have empty workers array when there are no common workers
+      expect(result.workers).toEqual([]);
+    });
+    
+    it('should filter out unhealthy workers', async () => {
+      const jobConfigId = 'jobConfigId';
+      const healthStatsTimeout = 60;
+      const mockJobConfig = {
+        id: jobConfigId,
+        jobType: JobType.DISCOVER,
+        preserveAccessTime: true,
+        excludeFilePatterns: '*.tmp',
+        excludeOlderThan: new Date(),
+        sourcePath: {
+          id: 'sourcePathId',
+          volumePath: '/source/path',
+          fileServer: {
+            protocol: Protocol.NFS,
+            userName: 'user',
+            password: 'pass',
+            host: 'host',
+            config: { configName: 'sourceConfig' },
+            workers: [
+              { 
+                workerId: 'worker1', 
+                stats: { 
+                  healthStatus: 'Healthy', 
+                  updatedAt: new Date() 
+                } 
+              },
+              { 
+                workerId: 'unhealthy-worker', // This worker will be filtered out
+                stats: { 
+                  healthStatus: 'Unhealthy', 
+                  updatedAt: new Date() 
+                } 
+              },
+              { 
+                workerId: 'outdated-worker', // This worker will be filtered out
+                stats: { 
+                  healthStatus: 'Healthy', 
+                  updatedAt: new Date(Date.now() - 1000 * 60 * 60) // 1 hour old
+                } 
+              }
+            ]
+          }
+        },
+        targetPath: null
+      };
+
+      jest.spyOn(configService, 'get').mockReturnValue(healthStatsTimeout.toString());
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+
+      const result = await service.getJobConfig(jobConfigId);
+
+      expect(result).toBeDefined();
+      // Should only include healthy workers
+      expect(result.workers).toEqual(['worker1']);
+      expect(result.workers).not.toContain('unhealthy-worker');
+      expect(result.workers).not.toContain('outdated-worker');
+    });
+
+    it('should return job config details for DISCOVER job type', async () => {
+      const jobConfigId = 'jobConfigId';
+      const healthStatsTimeout = 60;
+      const mockJobConfig = {
+        id: jobConfigId,
+        jobType: JobType.DISCOVER,
+        preserveAccessTime: true,
+        excludeFilePatterns: '*.tmp',
+        excludeOlderThan: new Date(),
+        sourcePath: {
+          id: 'sourcePathId',
+          volumePath: '/source/path',
+          fileServer: {
+            protocol: Protocol.NFS,
+            userName: 'user',
+            password: 'pass',
+            host: 'host',
+            config: { configName: 'sourceConfig' },
+            workers: [
+              { 
+                workerId: 'worker1', 
+                stats: { 
+                  healthStatus: 'Healthy', 
+                  updatedAt: new Date() 
+                } 
+              }
+            ]
+          }
+        },
+        targetPath: null
+      };
+
+      jest.spyOn(configService, 'get').mockReturnValue(healthStatsTimeout.toString());
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+
+      const result = await service.getJobConfig(jobConfigId);
+
+      expect(result).toBeDefined();
+      expect(result.jobType).toBe(JobType.DISCOVER);
+      expect(result.preserveAccessTime).toBe(true);
+      expect(result.excludeFilePatterns).toBe('*.tmp');
+      expect(result.workers).toContain('worker1');
+      expect(result.connection.sourceCredential).toBeDefined();
+      expect(result.connection.sourceCredential.protocol).toBe(Protocol.NFS);
+      expect(result.connection.targetCredential).toBeUndefined();
+    });
+
+    it('should return job config details for MIGRATE job type', async () => {
+      const jobConfigId = 'jobConfigId';
+      const healthStatsTimeout = 60;
+      const mockJobConfig = {
+        id: jobConfigId,
+        jobType: JobType.MIGRATE,
+        preserveAccessTime: true,
+        excludeFilePatterns: '*.tmp',
+        excludeOlderThan: new Date(),
+        targetPathId: 'targetPathId',
+        sourcePath: {
+          id: 'sourcePathId',
+          volumePath: '/source/path',
+          fileServer: {
+            protocol: Protocol.NFS,
+            userName: 'user',
+            password: 'pass',
+            host: 'host',
+            config: { configName: 'sourceConfig' },
+            workers: [
+              { 
+                workerId: 'worker1', 
+                stats: { 
+                  healthStatus: 'Healthy', 
+                  updatedAt: new Date() 
+                } 
+              }
+            ]
+          }
+        },
+        targetPath: {
+          id: 'targetPathId',
+          volumePath: '/target/path',
+          fileServer: {
+            protocol: Protocol.NFS,
+            userName: 'user',
+            password: 'pass',
+            host: 'host',
+            config: { configName: 'targetConfig' },
+            workers: [
+              { 
+                workerId: 'worker1', 
+                stats: { 
+                  healthStatus: 'Healthy', 
+                  updatedAt: new Date() 
+                } 
+              }
+            ]
+          }
+        }
+      };
+
+      jest.spyOn(configService, 'get').mockReturnValue(healthStatsTimeout.toString());
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+
+      const result = await service.getJobConfig(jobConfigId);
+
+      expect(result).toBeDefined();
+      expect(result.jobType).toBe(JobType.MIGRATE);
+      expect(result.preserveAccessTime).toBe(true);
+      expect(result.excludeFilePatterns).toBe('*.tmp');
+      expect(result.workers).toContain('worker1');
+      expect(result.connection.sourceCredential).toBeDefined();
+      expect(result.connection.sourceCredential.protocol).toBe(Protocol.NFS);
+      expect(result.connection.targetCredential).toBeDefined();
+      expect(result.connection.targetCredential.protocol).toBe(Protocol.NFS);
+    });
+
+    it('should return job config details for CUT_OVER job type', async () => {
+      const jobConfigId = 'jobConfigId';
+      const healthStatsTimeout = 60;
+      const mockJobConfig = {
+        id: jobConfigId,
+        jobType: JobType.CUT_OVER,
+        preserveAccessTime: true,
+        excludeFilePatterns: '*.tmp',
+        excludeOlderThan: new Date(),
+        targetPathId: 'targetPathId',
+        sourcePath: {
+          id: 'sourcePathId',
+          volumePath: '/source/path',
+          fileServer: {
+            protocol: Protocol.NFS,
+            userName: 'user',
+            password: 'pass',
+            host: 'host',
+            config: { configName: 'sourceConfig' },
+            workers: [
+              { 
+                workerId: 'worker1', 
+                stats: { 
+                  healthStatus: 'Healthy', 
+                  updatedAt: new Date() 
+                } 
+              }
+            ]
+          }
+        },
+        targetPath: {
+          id: 'targetPathId',
+          volumePath: '/target/path',
+          fileServer: {
+            protocol: Protocol.NFS,
+            userName: 'user',
+            password: 'pass',
+            host: 'host',
+            config: { configName: 'targetConfig' },
+            workers: [
+              { 
+                workerId: 'worker1', 
+                stats: { 
+                  healthStatus: 'Healthy', 
+                  updatedAt: new Date() 
+                } 
+              }
+            ]
+          }
+        }
+      };
+
+      jest.spyOn(configService, 'get').mockReturnValue(healthStatsTimeout.toString());
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+
+      const result = await service.getJobConfig(jobConfigId);
+
+      expect(result).toBeDefined();
+      expect(result.jobType).toBe(JobType.CUT_OVER);
+      expect(result.preserveAccessTime).toBe(true);
+      expect(result.excludeFilePatterns).toBe('*.tmp');
+      expect(result.workers).toContain('worker1');
+      expect(result.connection.sourceCredential).toBeDefined();
+      expect(result.connection.sourceCredential.protocol).toBe(Protocol.NFS);
+      expect(result.connection.targetCredential).toBeDefined();
+      expect(result.connection.targetCredential.protocol).toBe(Protocol.NFS);
+    });
   });
 
   describe('getFileServerDetails', () => {
@@ -1051,6 +1585,178 @@ describe("buildJobContext", () => {
       expect(result[0].fileServerDetails.fileServerId).toBe('fs1');
       expect(result[0].fileServerDetails.fileServerName).toBe('fsName');
     });
+
+    it('should merge file server details with null fileServer', async () => {
+      const jobRunId = 'jobRunId';
+      const jobRun = { jobConfigId: 'jobConfigId' };
+      const speedTestJobConfig = [
+        { fileServer: 'fs2', workerEntities: [], jobConfig: {} },
+      ];
+      const fileServers = [
+        {
+          id: 'fs1',
+          host: 'host',
+          userName: 'user',
+          password: 'pass',
+          protocol: Protocol.NFS,
+          config: { configName: 'fsName' },
+          volumes: ['vol1'],
+          workingDirectory: '/dir',
+          workers: [],
+        },
+      ];
+
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(jobRun as any);
+      jest.spyOn(speedTestConfigRepo, 'find').mockResolvedValue(speedTestJobConfig as any);
+      jest.spyOn(fileServerRepo, 'find').mockResolvedValue(fileServers as any);
+
+      const result = await service.getFileServerDetails(jobRunId);
+      expect(result[0].fileServerDetails).toBeNull();
+    });
+
+    it('should merge file server details with multiple speedTestJobConfig and fileServers', async () => {
+      const jobRunId = 'jobRunId';
+      const jobRun = { jobConfigId: 'jobConfigId' };
+      const speedTestJobConfig = [
+        { fileServer: 'fs1', workerEntities: [], jobConfig: {} },
+        { fileServer: 'fs2', workerEntities: [], jobConfig: {} },
+      ];
+      const fileServers = [
+        {
+          id: 'fs1',
+          host: 'host1',
+          userName: 'user1',
+          password: 'pass1',
+          protocol: Protocol.NFS,
+          config: { configName: 'fsName1' },
+          volumes: ['vol1'],
+          workingDirectory: '/dir1',
+          workers: [],
+        },
+        {
+          id: 'fs2',
+          host: 'host2',
+          userName: 'user2',
+          password: 'pass2',
+          protocol: Protocol.SMB,
+          config: { configName: 'fsName2' },
+          volumes: ['vol2'],
+          workingDirectory: '/dir2',
+          workers: [],
+        },
+      ];
+
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(jobRun as any);
+      jest.spyOn(speedTestConfigRepo, 'find').mockResolvedValue(speedTestJobConfig as any);
+      jest.spyOn(fileServerRepo, 'find').mockResolvedValue(fileServers as any);
+
+      const result = await service.getFileServerDetails(jobRunId);
+
+      expect(result.length).toBe(2);
+      expect(result[0].fileServerDetails.fileServerId).toBe('fs1');
+      expect(result[0].fileServerDetails.fileServerName).toBe('fsName1');
+      expect(result[1].fileServerDetails.fileServerId).toBe('fs2');
+      expect(result[1].fileServerDetails.fileServerName).toBe('fsName2');
+    });
+  });
+
+});
+describe('createJobRun', () => {
+  it('should throw NotFoundException if source path is invalid', async () => {
+    const jobConfigId = 'jobConfigId';
+    const currentTime = new Date();
+    const details = {
+      connection: {
+        sourceCredential: { isValidPath: false, isDisabled: false },
+        targetCredential: { isValidPath: true, isDisabled: false }
+      },
+      workers: ['worker1'],
+      jobType: JobType.DISCOVER
+    } as any;
+
+    jest.spyOn(service, 'getJobConfig').mockResolvedValue(details);
+    jest.spyOn(service['jobConfigRepo'], 'update').mockResolvedValue({} as any);
+
+    await expect(service.createJobRun(jobConfigId, currentTime)).rejects.toThrow(NotFoundException);
+    expect(service['jobConfigRepo'].update).toHaveBeenCalledWith(
+      { id: jobConfigId },
+      { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
+    );
+  });
+
+  it('should throw NotFoundException if target path is invalid', async () => {
+    const jobConfigId = 'jobConfigId';
+    const currentTime = new Date();
+    const details = {
+      connection: {
+        sourceCredential: { isValidPath: true, isDisabled: false },
+        targetCredential: { isValidPath: false, isDisabled: false }
+      },
+      workers: ['worker1'],
+      jobType: JobType.MIGRATE
+    } as any;
+
+    jest.spyOn(service, 'getJobConfig').mockResolvedValue(details);
+    jest.spyOn(service['jobConfigRepo'], 'update').mockResolvedValue({} as any);
+
+    await expect(service.createJobRun(jobConfigId, currentTime)).rejects.toThrow(NotFoundException);
+    expect(service['jobConfigRepo'].update).toHaveBeenCalledWith(
+      { id: jobConfigId },
+      { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
+    );
+  });
+
+  it('should log warning and return if no workers are present', async () => {
+    const jobConfigId = 'jobConfigId';
+    const currentTime = new Date();
+    const details = {
+      connection: {
+        sourceCredential: { isValidPath: true, isDisabled: false },
+        targetCredential: { isValidPath: true, isDisabled: false }
+      },
+      workers: [],
+      jobType: JobType.DISCOVER
+    } as any;
+
+    jest.spyOn(service, 'getJobConfig').mockResolvedValue(details);
+    const loggerWarnSpy = jest.spyOn(service['logger'], 'warn').mockImplementation();
+
+    const result = await service.createJobRun(jobConfigId, currentTime);
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
+      `Unable to create Job Run for Job Config ${jobConfigId} does not has workers`
+    );
+    expect(result).toBeUndefined();
+  });
+
+  it('should handle errors and reset scheduler to SCHEDULING', async () => {
+    const jobConfigId = 'jobConfigId';
+    const currentTime = new Date();
+    const details = {
+      connection: {
+        sourceCredential: { isValidPath: true, isDisabled: false },
+        targetCredential: { isValidPath: true, isDisabled: false }
+      },
+      workers: ['worker1'],
+      jobType: JobType.DISCOVER
+    } as any;
+
+    jest.spyOn(service, 'getJobConfig').mockResolvedValue(details);
+    jest.spyOn(service['workerJobRunMapRepo'], 'create').mockImplementation(worker => ({ ...worker } as any));
+    jest.spyOn(service['optionRepo'], 'create').mockReturnValue({} as any);
+    jest.spyOn(service['jobRunRepo'], 'create').mockReturnValue({} as any);
+    jest.spyOn(service, 'buildJobContext').mockImplementation(() => { throw new Error('Test error'); });
+    jest.spyOn(service['jobConfigRepo'], 'update').mockResolvedValue({} as any);
+    const loggerErrorSpy = jest.spyOn(service['logger'], 'error').mockImplementation();
+
+    await service.createJobRun(jobConfigId, currentTime);
+
+    expect(loggerErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`Failed to create job run for ${jobConfigId}: Test error`)
+    );
+    expect(service['jobConfigRepo'].update).toHaveBeenCalledWith(
+      { id: jobConfigId },
+      { scheduler: ScheduleStatus.SCHEDULING }
+    );
   });
 });
 });

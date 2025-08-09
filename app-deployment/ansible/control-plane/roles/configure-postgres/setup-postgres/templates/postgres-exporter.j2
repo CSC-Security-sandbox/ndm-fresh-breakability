@@ -29,7 +29,7 @@ spec:
     spec:
       containers:
         - name: postgres-exporter
-          image: prometheuscommunity/postgres-exporter:latest
+          image: prometheuscommunity/postgres-exporter:v0.17.1
           args:
             - --collector.stat_statements
           env:

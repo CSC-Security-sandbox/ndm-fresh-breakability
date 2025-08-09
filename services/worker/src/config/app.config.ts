@@ -38,6 +38,9 @@ export default registerAs(
     redisMemoryUsageThreshold: parseInt(process.env.REDIS_MEM_USAGE_THRESHOLD || '90'),
     maxActivityConcurrency: parseInt(process.env.JOB_TASK_ACTIVITY_CONCURRENCY || '1'),
 
+    // project id
+    projectId: process.env.PROJECT_ID || 'no-project-id-found',
+
     // thread pool
     thread: {
       threadBand: process.env.THREAD_BANDS || '1kb,1500;1mb,1000;10mb,100;100mb,10;1gb,1',

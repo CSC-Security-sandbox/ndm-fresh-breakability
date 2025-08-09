@@ -20,6 +20,12 @@ export const permissionApi = createApi({
         url: `/user-permissions`,
         method: "GET",
       }),
+      transformResponse: (response) => {
+        return {
+          data: response?.data?.items || response?.data || [],
+          id: response?.data?.id || "",
+        }
+      },
       providesTags: ["PERMISSIONS"],
     }),
   }),

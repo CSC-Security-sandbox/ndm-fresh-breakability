@@ -8,6 +8,10 @@ export class RegisterWorkerDto {
 }
 
 export class RegisterWorkerResponseDto {
+  @ApiProperty({ description: 'Project Id' })
+  @IsUUID()
+  projectId: string;
+
   @ApiProperty({ description: 'WorkerId' })
   @IsString()
   workerId: string;
@@ -21,10 +25,12 @@ export class RegisterWorkerResponseDto {
   controlPlaneIp: string;
 
   constructor(
+    projectId: string,
     workerId?: string,
     workerSecret?: string,
     controlPlaneIp?: string,
   ) {
+    this.projectId = projectId;
     this.workerId = workerId;
     this.workerSecret = workerSecret;
     this.controlPlaneIp = controlPlaneIp;

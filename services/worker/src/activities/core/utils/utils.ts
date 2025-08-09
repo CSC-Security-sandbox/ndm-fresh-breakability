@@ -1,6 +1,7 @@
 import { Cmd, JobManagerContext, TaskInfo, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { uuid4 } from "@temporalio/workflow";
 import { basePrefix } from "src/activities/utils/utils";
+import *  as fs from 'fs';
 
 
 export const buildTask = (taskType: TaskType, jobRunId: string, jobContext:  JobManagerContext, commands: Cmd[]): TaskInfo => new TaskInfo(
@@ -15,3 +16,15 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext:  Job
   '',
   0
 )
+
+export const isPathExists = async (path: string): Promise<boolean> => {
+  try {
+    await fs.promises.access(path, fs.constants.F_OK);
+    return true;
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return false; // Path does not exist
+    }
+  }
+  return false;
+}

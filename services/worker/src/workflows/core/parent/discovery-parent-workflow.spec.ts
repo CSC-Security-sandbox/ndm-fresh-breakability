@@ -1,5 +1,5 @@
 import { DiscoveryWorkflow } from './discovery-parent-workflow';
-import { JobRunStatus } from 'src/activities/discovery/enums';
+import { JobRunStatus } from 'src/activities/common/enums';
 import * as setupWorkflow from '../common/execute-setup-workflow';
 import * as memoryUtils from 'src/workflows/utils/memory-utils';
 import * as childWorkflows from '../common/execute-discover-child-workflows';

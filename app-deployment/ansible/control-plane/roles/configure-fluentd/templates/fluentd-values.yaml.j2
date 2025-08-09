@@ -15,14 +15,14 @@ service:
       containerPort: 32422    
 
 volumes:
-  - name: fluentd-logs
+  - name: ndm-logs
     hostPath:
-      path: /fluentd-logs
+      path: /ndm-logs
       type: DirectoryOrCreate
 
 volumeMounts:
-  - name: fluentd-logs
-    mountPath: /fluentd-logs
+  - name: ndm-logs
+    mountPath: /ndm-logs
 
 plugins:
   - fluent-plugin-grafana-loki
@@ -210,16 +210,56 @@ fileConfigs:
         </record>
       </filter>
 
+      <match kubernetes.**>
+        @type rewrite_tag_filter
+        <rule>
+          key namespace
+          pattern ^datamigrator$
+          tag datamigrator.${tag}
+        </rule>
+        <rule>
+          key namespace
+          pattern ^(?!datamigrator$).*
+          tag other.${tag}
+        </rule>
+      </match>
+
+      <match datamigrator.**>
+        @type relabel
+        @label @DATAMIGRATOR_FILE
+      </match>
+    </label>
+
+    <label @DATAMIGRATOR_FILE>
+      # Only include datamigrator service containers
+      <filter **>
+        @type grep
+        <regexp>
+          key $.kubernetes.container_name
+          pattern ^(db-writer|config-service|db-migrations|datamigrator-ui|reports-service|admin-service|jobs-service|keycloak-customizations|support-service)$
+        </regexp>
+      </filter>
+
+      <filter **>
+        @type record_transformer
+        enable_ruby true
+        <record>
+          # Determine service type
+          service_name ${begin; container = record['container_name'].to_s.downcase; case container; when /db-writer/; "db-writer"; when /config-service/; "config-service"; when /db-migrations/; "db-migrations"; when /datamigrator-ui/; "datamigrator-ui"; when /reports-service/; "reports-service"; when /admin-service/; "admin-service"; when /jobs-service/; "jobs-service"; when /keycloak-customizations/; "keycloak-customizations"; when /support-service/; "support-service"; else; container; end; rescue; record['container_name'].to_s; end}
+          component_type "control-plane"
+        </record>
+      </filter>
+
       <match **>
         @type file
-        path /fluentd-logs/%Y-%m-%d/${namespace}/${pod_name}/${container_name}
+        path /ndm-logs/%Y-%m-%d/${component_type}/${service_name}
         append true
-        <buffer time,namespace,pod_name,container_name>
+        <buffer time,component_type,service_name>
           @type file
-          path /var/log/fluentd-buffers/k8s
+          path /var/log/fluentd-buffers/datamigrator
           timekey 24h
           timekey_wait 120
-          timekey_use_utc false
+          timekey_use_utc true
           flush_mode interval
           flush_interval 5s
           flush_at_shutdown true
@@ -245,7 +285,7 @@ fileConfigs:
 
       <match worker.tag>
         @type file
-        path /fluentd-logs/%Y-%m-%d/worker/${worker_name}/worker
+        path /ndm-logs/%Y-%m-%d/worker/${worker_name}/worker
         append true
         <buffer time,worker_name>
           @type file
@@ -264,3 +304,4 @@ fileConfigs:
         </format>
       </match>
     </label>
+    

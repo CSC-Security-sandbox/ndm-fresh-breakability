@@ -886,7 +886,10 @@ export class ConfigurationService {
           update.id,
           traceId,
         );
-
+        await this.volumes.update(
+          { fileServerId: In(update.fileServers.map((fs) => fs.id)), isDisabled: false },
+          { isDisabled: true },
+        )
         this.refreshConfig(update.id, traceId);
       
       return update;

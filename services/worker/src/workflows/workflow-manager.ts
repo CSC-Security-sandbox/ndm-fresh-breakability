@@ -3,7 +3,7 @@ import { ValidateConnectionsWorkflow } from "./validate-connection/validate-conn
 import { DiscoveryWorkflow, ListPathsWorkflow } from "./workflows";
 import { ValidateWorkingDirectoryWorkflow } from "./working-directory/working-directory.workflow";
 import { ValidatePathsWorkflow } from "./validate-path/validate-path-workflow";
-import { WorkFlows } from "src/activities/work-manager/work-manager.types";
+import { WorkFlows } from "src/work-manager/work-manager.types";
 
 export class WorkflowManager {
   static createWorkflowInstance(name: string): any {

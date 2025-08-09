@@ -33,7 +33,7 @@ export enum FileSystemCategory {
   CREATED = "Created",
   ACCESS_TIME = "Access Time",
   BIGGEST = "Biggest",
-  TOP_FILE_EXTENSIONS = "Top File Extensions",
+  TOP_FILE_EXTENSIONS = "Top File Extensions (with file Capacity and Count)",
   MAXIMUM_VALUES = "Maximum Values",
   JOB_RUN_STATS = "Job Run Stats",
   FILE_SERVER_INFO = "File Server Info",
@@ -81,15 +81,15 @@ export enum FileSystemSubCategory {
  * Enum for byte units
  */
 export enum ByteUnits {
-  BYTES = 'B',
-  KB = "KB",
-  MB = "MB",
-  GB = "GB",
-  TB = "TB",
-  PB = "PB",
-  EB = "EB",
-  ZB = "ZB",
-  YB = "YB",
+  BYTES = "B",
+  KB = "KiB",
+  MB = "MiB",
+  GB = "GiB",
+  TB = "TiB",
+  PB = "PiB",
+  EB = "EiB",
+  ZB = "ZiB",
+  YB = "YiB",
 }
 
 /**
@@ -110,8 +110,17 @@ export const BYTE_UNITS = [
 /**
  * Simplified array of byte units for basic conversions
  */
-export const SIMPLIFIED_BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-
+export const SIMPLIFIED_BYTE_UNITS = [
+  "B",
+  "KiB",
+  "MiB",
+  "GiB",
+  "TiB",
+  "PiB",
+  "EiB",
+  "ZiB",
+  "YiB"
+];
 export const availableChartColors = [
   "chart-1",
   "chart-2",
@@ -293,4 +302,5 @@ export const ACCESS_TIME_COUNT_PREFIX = "File Count with Access Time";
 /**
  * Constant for byte conversion (1000 bytes = 1 KB)
  */
-export const BYTES_IN_KILOBYTE = 1000;
+export const BYTES_IN_KILOBYTE = 1024;
+export const DECIMAL_BASE = 1000;

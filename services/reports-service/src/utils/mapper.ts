@@ -1,10 +1,25 @@
-export const covertBytes = (bytes: number): string => {
+export const BYTES_IN_KILOBYTE = 1024;
+export const DECIMAL_BASE = 1000;
+export const LARGE_NUMBER_SUFFIXES = [
+  "",
+  "K",
+  "M",
+  "B",
+  "T",
+  "Q",
+  "Quint",
+  "Sext",
+  "Sept",
+];
+
+
+export const convertBytes = (bytes: number): string => {
   if (bytes === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
   let size = bytes;
   let unitIndex = 0;
-  while (size >= 1000 && unitIndex < units.length - 1) {
-    size /= 1000;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
     unitIndex++;
   }
   return size === Math.floor(size)
@@ -34,14 +49,14 @@ export const formatSeconds = (seconds: number): string => {
 };
 
 export const formatNumbersWithSuffix = (num: number): string => {
-  if (num >= 1_00_00_000) {
-    return (num / 1_00_00_000).toFixed(2) + " Cr";
-  } else if (num >= 1_00_000) {
-    return (num / 1_00_000).toFixed(2) + " L";
-  } else if (num >= 1_000) {
-    return (num / 1_000).toFixed(2) + " K";
-  }
-  return num.toString();
+  if (num === 0) return "0";
+
+  const i = Math.floor(Math.log10(num) / 3);
+
+  const formattedNumber = (num / Math.pow(DECIMAL_BASE, i)).toFixed(2);
+
+  return `${parseFloat(formattedNumber)}${LARGE_NUMBER_SUFFIXES[i]}`;
+
 };
 
 export const formatSizeAndCount = (input: string): string => {
@@ -54,9 +69,10 @@ export const formatSizeAndCount = (input: string): string => {
   const countValue = countMatch ? parseInt(countMatch[1], 10) : 0;
 
   // Format size using the formatBytes function (already in your codebase)
-  const formattedSize = covertBytes(sizeValue);
+  // Format size using the convertBytes function
+  let formattedSize = convertBytes(sizeValue);
 
-  // Format count using the formatLargeNumber function (already in your codebase)
+  // Format count using the formatNumbersWithSuffix function
   const formattedCount = formatNumbersWithSuffix(countValue);
 
   // Combine into the desired output format

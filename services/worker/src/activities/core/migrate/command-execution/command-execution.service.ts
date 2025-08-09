@@ -10,6 +10,7 @@ import { Operation, Origin } from "src/activities/utils/utils.types";
 import { WorkerThreadService } from "src/thread/worker.thread.service";
 import { CommandExecInput, CommandExecOutput, CommandOutput, ValidateCommandInput } from "./command-execution.type";
 import { StampMetaService } from "./stamp-meta.service";
+import { isPathExists } from "../../utils/utils";
 
 @Injectable()
 export class CommandExecService {
@@ -20,7 +21,7 @@ export class CommandExecService {
         @Inject(ConfigService) private readonly configService: ConfigService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
         private readonly workerThreadService: WorkerThreadService,
-        private readonly stampMetaService: StampMetaService
+        private readonly stampMetaService: StampMetaService,
     ) {
         this.workerId = this.configService?.get<string>('worker.workerId') ?? '';
         this.logger = loggerFactory.create(CommandExecService.name);
@@ -28,7 +29,7 @@ export class CommandExecService {
     async executeCommand(input: CommandExecInput): Promise<CommandExecOutput> {
 
         const output: CommandExecOutput = { sourceErrors: [], targetErrors: [], cmd: input.command };
-        let baseCmdRes: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] };
+        let baseCmdRes: CommandOutput = { shouldStampMeta: false, shouldUpdateItemInfo: false, sourceErrors: [], targetErrors: [] };
 
         // Copy File
         if(input.command.ops && input.command.ops[OPS_CMD.COPY_FILE]) 
@@ -51,11 +52,14 @@ export class CommandExecService {
         output.sourceErrors.push(...baseCmdRes.sourceErrors);
         output.targetErrors.push(...baseCmdRes.targetErrors);
 
-        // Stamp Meta if needed
+       // Stamp Meta if needed
         if (baseCmdRes.shouldStampMeta) {
             const metaResult = await this.stampMetaService.stampMetaData(input);
+            baseCmdRes.shouldUpdateItemInfo = metaResult.shouldUpdateItemInfo;
             output.targetErrors.push(...metaResult.targetErrors);
             output.sourceErrors.push(...metaResult.sourceErrors);
+        }
+        if( baseCmdRes.shouldUpdateItemInfo ) {
             await this.publishFileInfo(input);
         }
         if (output.sourceErrors.length > 0 || output.targetErrors.length > 0) 
@@ -68,46 +72,59 @@ export class CommandExecService {
 
 
     async copyFile({command , jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
-        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] };
+        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] , shouldUpdateItemInfo: false };
         if(command.ops[OPS_CMD.COPY_FILE].status === OPS_STATUS.COMPLETED) {
             output.shouldStampMeta = true;
             return output;  // skip if already completed
         }
         if( command.ops[OPS_CMD.COPY_FILE].status !== OPS_STATUS.COMPLETED) {
-            if(!fs.existsSync(sourcePath)) {
+            //TODO: convert this to async and non-blocking 
+            const pathExists = await isPathExists(sourcePath);
+            if(!pathExists) {
                 const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.COPY_CONTENT, errorType, command.id, 
                     new Error(`Source path does not exist: ${sourcePath}`), {name: command.fPath, path: sourcePath});
                 await jobContext.publishToErrorStream(dmErr);
             }
+            if(await isPathExists(targetPath))
+                await this.stampMetaService.removeFileAttributeTemporarily(targetPath);
             try {
                 const checksums = await this.workerThreadService.migrateWorkerThread({
                     sourcePath, destinationPath: targetPath, operationId: command.id, size: command.metadata?.size ?? 0
                 });
+                output.shouldUpdateItemInfo = true;
+                if(checksums?.targetChecksum !== checksums?.sourceChecksum) {
+                    command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.ERROR, params : { checksums } };
+                    throw new Error(`Checksum mismatch detected, source: ${checksums?.sourceChecksum}, target: ${checksums?.targetChecksum}`);
+                }
                 command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.COMPLETED, params : { checksums } };
                 output.shouldStampMeta = true;
             }catch(error){
-                command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.ERROR, params : {  } };
+                command.ops[OPS_CMD.COPY_FILE] = {  ... command.ops[OPS_CMD.COPY_FILE], status: OPS_STATUS.ERROR }; 
                 this.logger.error(`Copying FILE from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
                 await jobContext.publishToErrorStream(dmErr);   
                 output.targetErrors.push(error.code);
+            }finally{
+                if(await isPathExists(targetPath)) {
+                    await this.stampMetaService.restoreFileAttribute(targetPath);
+                }
             }
         }
         return output;
     }
 
     async copyDirectory({command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
-        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] };
+        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: false };
         if(command.ops[OPS_CMD.COPY_DIR].status === OPS_STATUS.COMPLETED) {
             output.shouldStampMeta = true;
             return output;  // skip if already completed
         }
         if( command.ops[OPS_CMD.COPY_DIR].status !== OPS_STATUS.COMPLETED) {
-            try {
-                fs.mkdirSync(targetPath, { recursive: true });  
+            try {                
+                await fs.promises.mkdir(targetPath, {recursive: true});                
                 command.ops[OPS_CMD.COPY_DIR].status = OPS_STATUS.COMPLETED;
                 output.shouldStampMeta = true;
-
+                output.shouldUpdateItemInfo = true;
             } catch (error) {
                 command.ops[OPS_CMD.COPY_DIR].status = OPS_STATUS.ERROR;
                 this.logger.error(`Copying DIR from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
@@ -120,7 +137,7 @@ export class CommandExecService {
     }
 
     async deleteFile({command , jobContext, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
-        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] };
+        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] , shouldUpdateItemInfo: false };
         if( command.ops[OPS_CMD.REMOVE_FILE].status !== OPS_STATUS.COMPLETED) {
             try {
                 await fs.promises.unlink(targetPath);
@@ -139,7 +156,7 @@ export class CommandExecService {
     }
 
     async deleteDirectory({command , jobContext, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
-        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] };
+        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] , shouldUpdateItemInfo: false };
         if ( command.ops[OPS_CMD.REMOVE_DIR].status !== OPS_STATUS.COMPLETED) {
             try {
                 await fs.promises.rm(targetPath, { recursive: true, force: true });
@@ -169,7 +186,7 @@ export class CommandExecService {
             checksum : command.ops?.[OPS_CMD.COPY_FILE]?.params?.checksums?.sourceChecksum ?? '',
             uid: sourceStats.uid,
             gid: sourceStats.gid,
-                        sid: command.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.sourceAcl ?? ''
+            sid: command.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.sourceAcl ?? ''
         }
 
         const targetStats = await fs.promises.lstat(targetPath);
@@ -211,14 +228,11 @@ export class CommandExecService {
         if (item.sourceMeta.permission !== item.targetMeta.permission) 
             validateMisMatch += `Permission Mismatch detected, source: ${item.sourceMeta.permission}, target: ${item.targetMeta.permission} \n`;
         
-        if (item.sourceMeta.birthTime.getTime() !== item.targetMeta.birthTime.getTime())
-            validateMisMatch += `BirthTime Mismatch detected, source: ${item.sourceMeta.birthTime.toISOString()}, target: ${item.targetMeta.birthTime.toISOString()} \n`;
-
-        if (item.sourceMeta.accessTime.getTime() !== item.targetMeta.accessTime.getTime())
+        if (jobContext.jobConfig.options.preserveAccessTime &&  item.sourceMeta.accessTime.getTime() !== item.targetMeta.accessTime.getTime())
             validateMisMatch += `AccessTime Mismatch detected, source: ${item.sourceMeta.accessTime.toISOString()}, target: ${item.targetMeta.accessTime.toISOString()} \n`;
 
-        if(cmd.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.failedSid?.length > 0) 
-            validateMisMatch += `SID Mapping Failed to Stamp for mapping ${cmd.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.failedSid} \n`;
+        if(cmd.ops?.[OPS_CMD.STAMP_META]?.params?.error?.length) 
+            validateMisMatch += `Stamping Errors Detected: ${cmd.ops?.[OPS_CMD.STAMP_META]?.params?.error} \n`;
 
         if(validateMisMatch.length > 0) {
             const error = new Error(validateMisMatch);

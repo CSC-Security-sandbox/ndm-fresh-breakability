@@ -1,0 +1,64 @@
+---
+- name: Create Otel directory
+  become: yes
+  file:
+    path: $HOME/otel
+    state: directory
+
+- name: Create Otel namespace manifest
+  become: yes
+  template:
+    src: ./templates/otel-namespace.j2
+    dest: $HOME/otel/otel-namespace.yaml
+
+- name: Create Otel values file for Helm
+  become: yes
+  template:
+    src: ./templates/otel-values.j2
+    dest: $HOME/otel/otel-values.yaml
+
+- name: Remove Otel installation
+  become: yes
+  shell: |
+    helm uninstall otel-collector --namespace otel
+    kubectl delete -f $HOME/otel/otel-namespace.yaml
+  when: otel_uninstall is defined
+
+- name: Apply Otel namespace
+  become: yes
+  shell: |
+    kubectl apply -f $HOME/otel/otel-namespace.yaml
+  register: SHELL_STDOUT
+
+- name: Deploy Otel Collector using Helm
+  become: yes
+  shell: |
+    helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+    helm repo update
+    helm upgrade --install otel-collector open-telemetry/opentelemetry-collector -f $HOME/otel/otel-values.yaml --namespace otel --version {{ otel_collector_version }}
+  register: SHELL_STDOUT
+
+- name: debug output
+  ansible.builtin.debug:
+    msg: "Helm Install (otel-collector): stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
+
+- name: Wait for Otel Collector pods to be ready
+  become: yes
+  shell: kubectl wait --namespace="otel" --for=condition=Ready pod --all --timeout=60s
+  register: kubectl_get_pods
+  retries: 10
+  delay: 25
+  until: kubectl_get_pods.rc == 0
+
+- name: Check Otel Collector pod status
+  shell: kubectl get pods -n otel
+  register: pod_status
+
+- debug:
+    var: pod_status.stdout
+
+- name: Delete Otel directory
+  become: yes
+  file:
+    path: $HOME/otel
+    state: absent

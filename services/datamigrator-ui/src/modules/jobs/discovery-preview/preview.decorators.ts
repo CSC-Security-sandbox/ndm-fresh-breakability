@@ -1,20 +1,20 @@
 import {DataItemType, FileInfo, ProcessedData} from '@/types/app.type';
 import {
-  ACCESS_TIME_COUNT_PREFIX,
-  ACCESS_TIME_SIZE_PREFIX,
-  BYTE_UNITS,
-  BYTES_IN_KILOBYTE,
-  CREATION_TIME_COUNT_PREFIX,
-  CREATION_TIME_SIZE_PREFIX,
-  FILE_COUNT_PREFIX,
-  FILE_SIZE_PREFIX,
-  FileSystemCategory,
-  FileSystemSubCategory,
-  LARGE_NUMBER_SUFFIXES,
-  MODIFICATION_TIME_COUNT_PREFIX,
-  MODIFICATION_TIME_SIZE_PREFIX,
-  SIMPLIFIED_BYTE_UNITS,
-  ValueType
+    ACCESS_TIME_COUNT_PREFIX,
+    ACCESS_TIME_SIZE_PREFIX,
+    BYTE_UNITS,
+    BYTES_IN_KILOBYTE,
+    CREATION_TIME_COUNT_PREFIX,
+    CREATION_TIME_SIZE_PREFIX, DECIMAL_BASE,
+    FILE_COUNT_PREFIX,
+    FILE_SIZE_PREFIX,
+    FileSystemCategory,
+    FileSystemSubCategory,
+    LARGE_NUMBER_SUFFIXES,
+    MODIFICATION_TIME_COUNT_PREFIX,
+    MODIFICATION_TIME_SIZE_PREFIX,
+    SIMPLIFIED_BYTE_UNITS,
+    ValueType
 } from '@modules/jobs/discovery-preview/preview.constants';
 import {getRegExp, StringComparisonPattern} from '@modules/jobs/discovery-preview/string-comparison.enum';
 
@@ -264,7 +264,7 @@ export const createSummaryMap = (
       // Extract the size value using regex
       const sizeMatch = value.toString().match(getRegExp(StringComparisonPattern.SIZE_EXTRACTION));
       const sizeValue = sizeMatch ? parseInt(sizeMatch[1], 10) : 0;
-      summary[sub_category +' (MB)'] = (summary[sub_category] || 0) + toMB(sizeValue) ;
+      summary[sub_category +' (MiB)'] = (summary[sub_category] || 0) + toMB(sizeValue) ;
     }
 
     if (
@@ -275,7 +275,7 @@ export const createSummaryMap = (
     }
   });
 
-  summary["total size (MB)"] = parseFloat(totalSizeMB.toFixed(2));
+  summary["total size (MiB)"] = parseFloat(totalSizeMB.toFixed(2));
 
   return summary;
 };
@@ -367,7 +367,8 @@ export function extractAverageMaxDepth(jsonData: DataItemType[]) {
     (sum: number, item: DataItemType) => sum + (item.value as number),
     0
   );
-  const avgDepth = parseFloat((total / depthData?.length).toFixed(1));
+  const avgDepth =
+    total === 0 || depthData.length === 0 ? 0 : parseFloat((total / depthData.length).toFixed(1));
 
   return { avgDepth, maxDepth };
 }
@@ -422,7 +423,8 @@ export function extractMaxAvgFilePath(data: DataItemType[]): {
     });
   }
 
-  const avgPath =totalLength / totalPath
+  const avgPath =
+    totalPath === 0 ? 0 : totalLength / totalPath;
 
   return {
     maxPath,
@@ -453,7 +455,12 @@ export function extractMaxAvgFileSize(data: DataItemType[]): {
   const maxFileSize = Math.max(...allFileSizes);
     const {totalSpaceUsed,totalCount} = extractSystemFileStatAndDirectories(data);
 
-  const avgFileSize = parseInt(totalSpaceUsed as string)/ parseInt(totalCount as string);
+  const parsedTotalCount = parseInt(totalCount as string, 10);
+  const parsedTotalSpaceUsed = parseInt(totalSpaceUsed as string, 10);
+  const avgFileSize =
+    parsedTotalCount === 0 || parsedTotalSpaceUsed === 0
+      ? 0
+      : parsedTotalSpaceUsed / parsedTotalCount;
   return {
     maxFileSize,
     avgFileSize,
@@ -513,7 +520,7 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
   /* This function smartly convert bytes to KB, MB, GB, TB, PB, EB, ZB or YB */
 }
 export function formatBytes(bytes: number, decimals = 2): string {
-  if (bytes === 0) return "0 Bytes";
+  if (bytes === 0) return "0 B";
 
   const k = BYTES_IN_KILOBYTE;
   const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -531,7 +538,7 @@ export function formatLargeNumber(num: number, decimals = 2): string {
 
   const i = Math.floor(Math.log10(num) / 3);
 
-  const formattedNumber = (num / Math.pow(BYTES_IN_KILOBYTE, i)).toFixed(decimals);
+  const formattedNumber = (num / Math.pow(DECIMAL_BASE, i)).toFixed(decimals);
 
   return `${parseFloat(formattedNumber)}${LARGE_NUMBER_SUFFIXES[i]}`;
 }

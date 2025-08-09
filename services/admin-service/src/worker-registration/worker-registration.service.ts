@@ -76,6 +76,7 @@ export class WorkerRegistrationService {
 
       if (response.status === 201) {
         return new RegisterWorkerResponseDto(
+          details.projectId,
           clientConfig.clientId,
           clientConfig.secret,
           this.workerRegisterConfig.controlPlaneIp,

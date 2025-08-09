@@ -16,9 +16,8 @@ import {
   JobRunStatus,
   JobStatus,
   JobType,
-  Protocol,
-  TemplateType,
-  WorkFlows,
+  SIZE_UNITS,
+  TemplateType
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
 import { Options } from "src/constants/types";
@@ -702,7 +701,6 @@ export class JobConfigService {
                 const redisClient = await this.redisService.getClient();
                 for (const jobRun of jobRunIdsToDeleteKey) {
                   const redisKey = `${jobRun.id}:mapping`;
-                  if (!redisClient.isOpen) await redisClient.connect();
 
                   const redisKeyExists = await redisClient.exists(redisKey);
                   if (redisKeyExists) {
@@ -1009,7 +1007,7 @@ export class JobConfigService {
           scannedDirectoriesCount: BigInt(
             inventoryCounts.directories || "0"
           )?.toString(),
-          totalScannedSize: this.covertBytes(Number(inventoryCounts?.totalSize  || 0)),
+          totalScannedSize: formatBytes(Number(inventoryCounts?.totalSize  || 0)),
           totalMigratedSize: formatBytes(Number(jobRunStats?.totalSize || 0)),
           errors: inventoryCounts.errors,
         };
@@ -1064,16 +1062,9 @@ export class JobConfigService {
 
   parseSize(size: string): number {
     if (!size) return 0;
+    const units = SIZE_UNITS;
 
-    const units = {
-      B: 1,
-      KB: 1024,
-      MB: 1024 ** 2,
-      GB: 1024 ** 3,
-      TB: 1024 ** 4,
-      PB: 1024 ** 5,
-    };
-    const match = size.match(/^([\d.]+)\s*(B|KB|MB|GB|TB|PB)$/);
+    const match = size.match(/^([\d.]+)\s*(B|KiB|MiB|GiB|TiB|PiB)$/);
 
     if (!match) return 0;
 
@@ -1327,27 +1318,6 @@ export class JobConfigService {
     fileStream.pipe(res);
   }
 
-  covertBytes(bytes: number): string {
-    const bytesInKB = 1024;
-    const bytesInMB = bytesInKB * 1024;
-    const bytesInGB = bytesInMB * 1024;
-    const bytesInTB = bytesInGB * 1024;
-    const bytesInPB = bytesInTB * 1024;
-
-    if (bytes < bytesInKB) {
-      return `${bytes} B`;
-    } else if (bytes < bytesInMB) {
-      return `${(bytes / bytesInKB).toFixed(2)} KB`;
-    } else if (bytes < bytesInGB) {
-      return `${(bytes / bytesInMB).toFixed(2)} MB`;
-    } else if (bytes < bytesInTB) {
-      return `${(bytes / bytesInGB).toFixed(2)} GB`;
-    } else if (bytes < bytesInPB) {
-      return `${(bytes / bytesInTB).toFixed(2)} TB`;
-    } else {
-      return `${(bytes / bytesInPB).toFixed(2)} PB`;
-    }
-  }
   hasCommonWorkers(data: any): boolean {
     const workerIds = new Set<string>();
     for (const volume of data) {
@@ -1365,6 +1335,7 @@ export class JobConfigService {
     }
     return false;
   }
+
   async findJobConfigs(
     conditions: { sourcePathId: string; destinationPathId: string }[]
   ) {

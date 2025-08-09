@@ -14,8 +14,8 @@ export const handleDownloadReport = async (
       "report-type": reportType,
     }).unwrap();
 
-    const mimeType = getMimeType(fileType);
-    const extension = fileType.toLowerCase();
+    const mimeType = isFileTypePdf ? getMimeType(fileType) : getMimeType("ZIP");
+    const extension = isFileTypePdf ? fileType.toLowerCase() : "zip";
 
     createAndDownloadBlob(
       response,
@@ -79,8 +79,8 @@ export const handleDownloadCocReport = async (
   }
 };
 
-const createAndDownloadBlob = (
-  data: BlobPart,
+export const createAndDownloadBlob = (
+  data: BlobPart | any,
   type: string,
   fileName: string
 ) => {

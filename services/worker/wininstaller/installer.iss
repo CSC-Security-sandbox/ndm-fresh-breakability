@@ -37,6 +37,7 @@ var
   ConfigControlPlaneIP: String;
   ConfigWorkerID: String;
   ConfigWorkerSecret: String;
+  ConfigProjectID: String;
 
 procedure InitializeWizard;
 begin
@@ -48,6 +49,7 @@ begin
   ConfigPage.Add('Worker ID:', False);
   ConfigPage.Add('Worker Secret:', True); 
   ConfigPage.Add('Control Plane IP:', False);
+  ConfigPage.Add('Project ID:', False);
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -77,9 +79,17 @@ begin
       Exit;
     end;
 
+    if Length(ConfigPage.Values[3]) < 1 then
+    begin
+      MsgBox('Project ID cannot be empty.', mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+
     ConfigWorkerID := ConfigPage.Values[0];
     ConfigWorkerSecret := ConfigPage.Values[1];
     ConfigControlPlaneIP := ConfigPage.Values[2];
+    ConfigProjectID := ConfigPage.Values[3];
   end;
 end;
 
@@ -253,7 +263,8 @@ begin
       'REDIS_HOST=' + ConfigControlPlaneIP + #13#10 +
       'REDIS_USERNAME=default' + #13#10 +
       'REDIS_PASSWORD=welcome' + #13#10 +
-      'BASE_WORKING_PATH=''C:\datamigrator\mnt''';
+      'BASE_WORKING_PATH=''C:\datamigrator\mnt''' + #13#10 +
+      'PROJECT_ID=' + ConfigProjectID;
 
     if not SaveStringToFile(ConfigPath, EnvContent, False) then
     begin

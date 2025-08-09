@@ -14,4 +14,3 @@ scenarios:
       - status_code: 201
     parse: {}
 
-

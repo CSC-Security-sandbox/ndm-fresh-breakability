@@ -79,12 +79,19 @@ export class UserController {
     type: String,
     description: 'Filter conditions as JSON string',
   })
+  @ApiQuery({
+    name: 'projectId',
+    required: false,
+    type: String,
+    description: 'Project ID to filter users by project association',
+  })
   findAll(
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 10,
     @Query('sortField') sortField: string = 'id',
     @Query('sortOrder') sortOrder: 'ASC' | 'DESC' = 'ASC',
     @Query('filter') filter: string = '{}',
+    @Query('projectId') projectId?: string,
   ) {
     return this.userService.findAll(
       page,
@@ -92,6 +99,7 @@ export class UserController {
       sortField,
       sortOrder,
       JSON.parse(filter),
+      projectId,
     );
   }
 

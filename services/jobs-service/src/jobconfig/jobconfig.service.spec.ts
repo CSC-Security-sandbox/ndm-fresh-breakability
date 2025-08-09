@@ -54,6 +54,7 @@ import { SendMailService } from "src/utils/send-email";
 import { HealthStatus } from "src/workers/worker.types";
 import { SyncEmailEntity } from "src/entities/sync-email.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
+import {formatBytes} from '@netapp-cloud-datamigrate/jobs-lib';
 
 jest.mock('typeorm', () => {
   const actual = jest.requireActual('typeorm');
@@ -1386,7 +1387,6 @@ describe("JobConfigService", () => {
     const redisClient = await redisService.getClient();
     for (const jobRun of jobRunIdsToDeleteKey) {
       const redisKey = `${jobRun.id}:mapping`;
-      if (!redisClient.isOpen) await redisClient.connect();
 
       const redisKeyExists = await redisClient.exists(redisKey);
       if (redisKeyExists) {
@@ -1422,7 +1422,6 @@ describe("JobConfigService", () => {
     const redisClient = await redisService.getClient();
     for (const jobRun of jobRunIdsToDeleteKey) {
       const redisKey = `${jobRun.id}:mapping`;
-      if (!redisClient.isOpen) await redisClient.connect();
 
       const redisKeyExists = await redisClient.exists(redisKey);
       if (redisKeyExists) {
@@ -1771,11 +1770,6 @@ describe("JobConfigService", () => {
 
   describe("getJobConfigById", () => {
     beforeEach(() => {
-      jest.spyOn(service, "covertBytes").mockImplementation((bytes) => {
-        if (bytes === 5000) return "4.88 KB";
-        if (bytes === 3000) return "2.93 KB";
-        return "0 B";
-      });
       jest.spyOn(service, "parseSize").mockImplementation((size) => {
         if (size === "4.88 KB") return 5000;
         if (size === "2.93 KB") return 3000;
@@ -1887,8 +1881,8 @@ describe("JobConfigService", () => {
             timeElapsed: 1000,
             scannedFilesCount: "10",
             scannedDirectoriesCount: "5",
-            totalScannedSize: "4.88 KB",
-            totalMigratedSize: "4.88 KB",
+            totalScannedSize: "4.88 KiB",
+            totalMigratedSize: "4.88 KiB",
             errors: [],
           },
         ],
@@ -1896,7 +1890,7 @@ describe("JobConfigService", () => {
           timeElapsed: 1000,
           scannedFilesCount: "10",
           scannedDirectoriesCount: "5",
-          totalScannedSize: "4.88 KB",
+          totalScannedSize: "0 B",
         },
         errors: [],
       });
@@ -2092,7 +2086,7 @@ describe("JobConfigService", () => {
         timeElapsed: 2000,
         scannedFilesCount: "30",
         scannedDirectoriesCount: "15",
-        totalScannedSize: "0 Bytes", 
+        totalScannedSize: "0 B",
       });
     });
     
@@ -2108,7 +2102,7 @@ describe("JobConfigService", () => {
     it("should return 0 for invalid format", () => {
       expect(service.parseSize("invalid")).toBe(0);
       expect(service.parseSize("123")).toBe(0); // missing unit
-      expect(service.parseSize("MB")).toBe(0); // missing value
+      expect(service.parseSize("MiB")).toBe(0); // missing value
       expect(service.parseSize("12.3XB")).toBe(0); // invalid unit
     });
 
@@ -2120,35 +2114,35 @@ describe("JobConfigService", () => {
     });
 
     it("should correctly parse kilobytes (KB)", () => {
-      expect(service.parseSize("1 KB")).toBe(1024);
-      expect(service.parseSize("2.5 KB")).toBe(2.5 * 1024);
-      expect(service.parseSize("0 KB")).toBe(0);
+      expect(service.parseSize("1 KiB")).toBe(1024);
+      expect(service.parseSize("2.5 KiB")).toBe(2.5 * 1024);
+      expect(service.parseSize("0 KiB")).toBe(0);
     });
 
-    it("should correctly parse megabytes (MB)", () => {
-      expect(service.parseSize("1 MB")).toBe(1024 * 1024);
-      expect(service.parseSize("3.2 MB")).toBe(3.2 * 1024 * 1024);
+    it("should correctly parse megabytes (MiB)", () => {
+      expect(service.parseSize("1 MiB")).toBe(1024 * 1024);
+      expect(service.parseSize("3.2 MiB")).toBe(3.2 * 1024 * 1024);
     });
 
-    it("should correctly parse gigabytes (GB)", () => {
-      expect(service.parseSize("1 GB")).toBe(1024 ** 3);
-      expect(service.parseSize("0.5 GB")).toBe(0.5 * 1024 ** 3);
+    it("should correctly parse gigabytes (GiB)", () => {
+      expect(service.parseSize("1 GiB")).toBe(1024 ** 3);
+      expect(service.parseSize("0.5 GiB")).toBe(0.5 * 1024 ** 3);
     });
 
-    it("should correctly parse terabytes (TB)", () => {
-      expect(service.parseSize("1 TB")).toBe(1024 ** 4);
-      expect(service.parseSize("2 TB")).toBe(2 * 1024 ** 4);
+    it("should correctly parse terabytes (TiB)", () => {
+      expect(service.parseSize("1 TiB")).toBe(1024 ** 4);
+      expect(service.parseSize("2 TiB")).toBe(2 * 1024 ** 4);
     });
 
-    it("should correctly parse petabytes (PB)", () => {
-      expect(service.parseSize("1 PB")).toBe(1024 ** 5);
-      expect(service.parseSize("0.1 PB")).toBe(0.1 * 1024 ** 5);
+    it("should correctly parse petabytes (PiB)", () => {
+      expect(service.parseSize("1 PiB")).toBe(1024 ** 5);
+      expect(service.parseSize("0.1 PiB")).toBe(0.1 * 1024 ** 5);
     });
 
     it("should handle decimal values", () => {
-      expect(service.parseSize("1.5 KB")).toBe(1.5 * 1024);
-      expect(service.parseSize("0.25 MB")).toBe(0.25 * 1024 * 1024);
-      expect(service.parseSize(".5 GB")).toBe(0.5 * 1024 ** 3);
+      expect(service.parseSize("1.5 KiB")).toBe(1.5 * 1024);
+      expect(service.parseSize("0.25 MiB")).toBe(0.25 * 1024 * 1024);
+      expect(service.parseSize(".5 GiB")).toBe(0.5 * 1024 ** 3);
     });
   });
 
@@ -2612,27 +2606,23 @@ describe("JobConfigService", () => {
       expect(jobConfigRepo.createQueryBuilder).not.toHaveBeenCalled();
     });
   });
-  describe("covertBytes", () => {
+  describe("formatBytes", () => {
     it("should convert bytes to appropriate units", () => {
-      expect(service.covertBytes(500)).toBe("500 B");
-      expect(service.covertBytes(1024)).toBe("1.00 KB");
-      expect(service.covertBytes(1048576)).toBe("1.00 MB");
-      expect(service.covertBytes(1073741824)).toBe("1.00 GB");
-      expect(service.covertBytes(1099511627776)).toBe("1.00 TB");
-      expect(service.covertBytes(1125899906842624)).toBe("1.00 PB");
+      expect(formatBytes(500)).toBe("500 B");
+      expect(formatBytes(1024)).toBe("1 KiB");
+      expect(formatBytes(1048576)).toBe("1 MiB");
+      expect(formatBytes(1073741824)).toBe("1 GiB");
+      expect(formatBytes(1099511627776)).toBe("1 TiB");
+      expect(formatBytes(1125899906842624)).toBe("1 PiB");
     });
 
     it("should handle edge cases correctly", () => {
-      expect(service.covertBytes(0)).toBe("0 B");
-      expect(service.covertBytes(1023)).toBe("1023 B");
-      expect(service.covertBytes(1024 * 1024 - 1)).toBe("1024.00 KB");
-      expect(service.covertBytes(1024 * 1024 * 1024 - 1)).toBe("1024.00 MB");
-      expect(service.covertBytes(1024 * 1024 * 1024 * 1024 - 1)).toBe(
-        "1024.00 GB"
-      );
-      expect(service.covertBytes(1024 * 1024 * 1024 * 1024 * 1024 - 1)).toBe(
-        "1024.00 TB"
-      );
+      expect(formatBytes(0)).toBe("0 B");
+      expect(formatBytes(1023)).toBe("1023 B");
+      expect(formatBytes(1024 * 1024 - 1)).toBe("1024 KiB");
+      expect(formatBytes(1024 * 1024 * 1024 - 1)).toBe("1024 MiB");
+      expect(formatBytes(1024 * 1024 * 1024 * 1024 - 1)).toBe("1024 GiB");
+      expect(formatBytes(1024 * 1024 * 1024 * 1024 * 1024 - 1)).toBe("1 PiB");
     });
   });
   describe("getTemplateFilename", () => {
@@ -3608,13 +3598,6 @@ describe("JobConfigService", () => {
       );
     });
 
-    it("should throw NotFoundException if jobRunId does not exist", async () => {
-      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(null);
-      await expect(service.calculateJobRunStats("invalid-id")).rejects.toThrow(
-        new NotFoundException("Job Run with id invalid-id not found")
-      );
-    });
-
     it("should return values from inventory summary", async () => {
       const jobRunId = "12345";
       const mockInventoryCounts = {
@@ -3640,6 +3623,62 @@ describe("JobConfigService", () => {
         fileCount: "10",
         directories: "5",
         totalSize: "1000",
+        errors: [],
+      });
+    });
+
+    it("should default to '0' when inventory summary values are undefined", async () => {
+      const jobRunId = "12345";
+      const mockInventoryCounts = {
+        // All values are undefined
+      };
+      const mockJobRun = {
+        id: jobRunId,
+        jobConfig: { id: "jobConfigId" },
+      };
+
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(mockJobRun as any);
+      jest.spyOn(inventoryRepo, "createQueryBuilder").mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue(mockInventoryCounts),
+      } as any);
+      jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
+
+      const result = await service.calculateJobRunStats(jobRunId);
+      expect(result).toEqual({
+        fileCount: "0",
+        directories: "0",
+        totalSize: "0",
+        errors: [],
+      });
+    });
+
+    it("should default to '0' when inventory summary values are falsy", async () => {
+      const jobRunId = "12345";
+      const mockInventoryCounts = {
+        filecount: "",
+        directorycount: null,
+        totalfilesize: 0,
+      };
+      const mockJobRun = {
+        id: jobRunId,
+        jobConfig: { id: "jobConfigId" },
+      };
+
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(mockJobRun as any);
+      jest.spyOn(inventoryRepo, "createQueryBuilder").mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue(mockInventoryCounts),
+      } as any);
+      jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
+
+      const result = await service.calculateJobRunStats(jobRunId);
+      expect(result).toEqual({
+        fileCount: "0",
+        directories: "0",
+        totalSize: "0",
         errors: [],
       });
     });

@@ -72,6 +72,10 @@ on:
             "db-migrations": {
               "tag": "latest",
               "branch": "main"
+            },
+            "support-service": {
+              "tag": "latest",
+              "branch": "main"
             }
           }
   schedule:
@@ -112,6 +116,8 @@ jobs:
       reports_service_branch: ${{ steps.parse-config.outputs.reports_service_branch }}
       db_migrations_tag: ${{ steps.parse-config.outputs.db_migrations_tag }}
       db_migrations_branch: ${{ steps.parse-config.outputs.db_migrations_branch }}
+      support_service_tag: ${{ steps.parse-config.outputs.support_service_tag }}
+      support_service_branch: ${{ steps.parse-config.outputs.support_service_branch }}
       binary_name: ${{ steps.worker-binary.outputs.binary_name }}
       binary_path: ${{ steps.worker-binary.outputs.binary_path }}
     steps:
@@ -147,7 +153,8 @@ jobs:
               "jobs-service": {"tag": "latest", "branch": "main"},
               "keycloak-customizations": {"tag": "latest", "branch": "main"},
               "reports-service": {"tag": "latest", "branch": "main"},
-              "db-migrations": {"tag": "latest", "branch": "main"}
+              "db-migrations": {"tag": "latest", "branch": "main"},
+              "support-service": {"tag": "latest", "branch": "main"}
             }'
           fi
           
@@ -161,6 +168,7 @@ jobs:
           KEYCLOAK_CUSTOMIZATIONS_TAG=$(echo "$SERVICES_CONFIG" | jq -r '."keycloak-customizations".tag // "latest"')
           REPORTS_SERVICE_TAG=$(echo "$SERVICES_CONFIG" | jq -r '."reports-service".tag // "latest"')
           DB_MIGRATIONS_TAG=$(echo "$SERVICES_CONFIG" | jq -r '."db-migrations".tag // "latest"')
+          SUPPORT_SERVICE_TAG=$(echo "$SERVICES_CONFIG" | jq -r '."support-service".tag // "latest"')
 
           # Extract branches for each service
           WORKER_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '.worker.branch // "main"' | sed 's#/#-#g')
@@ -172,6 +180,7 @@ jobs:
           KEYCLOAK_CUSTOMIZATIONS_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '."keycloak-customizations".branch // "main"' | sed 's#/#-#g')
           REPORTS_SERVICE_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '."reports-service".branch // "main"' | sed 's#/#-#g')
           DB_MIGRATIONS_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '."db-migrations".branch // "main"' | sed 's#/#-#g')
+          SUPPORT_SERVICE_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '."support-service".branch // "main"' | sed 's#/#-#g')
           
 
           # Set as step outputs for other jobs
@@ -184,6 +193,7 @@ jobs:
           echo "keycloak_customizations_tag=$KEYCLOAK_CUSTOMIZATIONS_TAG" >> $GITHUB_OUTPUT
           echo "reports_service_tag=$REPORTS_SERVICE_TAG" >> $GITHUB_OUTPUT
           echo "db_migrations_tag=$DB_MIGRATIONS_TAG" >> $GITHUB_OUTPUT
+          echo "support_service_tag=$SUPPORT_SERVICE_TAG" >> $GITHUB_OUTPUT
 
           echo "worker_branch=$WORKER_BRANCH" >> $GITHUB_OUTPUT
           echo "admin_service_branch=$ADMIN_SERVICE_BRANCH" >> $GITHUB_OUTPUT
@@ -194,6 +204,7 @@ jobs:
           echo "keycloak_customizations_branch=$KEYCLOAK_CUSTOMIZATIONS_BRANCH" >> $GITHUB_OUTPUT
           echo "reports_service_branch=$REPORTS_SERVICE_BRANCH" >> $GITHUB_OUTPUT
           echo "db_migrations_branch=$DB_MIGRATIONS_BRANCH" >> $GITHUB_OUTPUT
+          echo "support_service_branch=$SUPPORT_SERVICE_BRANCH" >> $GITHUB_OUTPUT
 
       - name: Determine build and ref
         id: build_version
@@ -241,6 +252,7 @@ jobs:
           echo "keycloak-customizations: tag=${{ steps.parse-config.outputs.keycloak_customizations_tag }}, branch=${{ steps.parse-config.outputs.keycloak_customizations_branch }}"
           echo "reports-service: tag=${{ steps.parse-config.outputs.reports_service_tag }}, branch=${{ steps.parse-config.outputs.reports_service_branch }}"
           echo "db-migrations: tag=${{ steps.parse-config.outputs.db_migrations_tag }}, branch=${{ steps.parse-config.outputs.db_migrations_branch }}"
+          echo "support-service: tag=${{ steps.parse-config.outputs.support_service_tag }}, branch=${{ steps.parse-config.outputs.support_service_branch }}"
           echo "build version: ${{ steps.build_version.outputs.build_version }}"
           echo "=================================================="
           
@@ -256,6 +268,7 @@ jobs:
           echo "| keycloak-customizations | \`${{ steps.parse-config.outputs.keycloak_customizations_tag }}\` | \`${{ steps.parse-config.outputs.keycloak_customizations_branch }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| reports-service | \`${{ steps.parse-config.outputs.reports_service_tag }}\` | \`${{ steps.parse-config.outputs.reports_service_branch }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| db-migrations | \`${{ steps.parse-config.outputs.db_migrations_tag }}\` | \`${{ steps.parse-config.outputs.db_migrations_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| support-service | \`${{ steps.parse-config.outputs.support_service_tag }}\` | \`${{ steps.parse-config.outputs.support_service_branch }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**build version**: \`${{ steps.build_version.outputs.build_version }}\`" >> $GITHUB_STEP_SUMMARY
 
@@ -271,6 +284,7 @@ jobs:
           KEYCLOAK_CUSTOMIZATIONS_TAG: ${{ steps.parse-config.outputs.keycloak_customizations_tag }}
           REPORTS_SERVICE_TAG: ${{ steps.parse-config.outputs.reports_service_tag }}
           DB_MIGRATIONS_TAG: ${{ steps.parse-config.outputs.db_migrations_tag }}
+          SUPPORT_SERVICE_TAG: ${{ steps.parse-config.outputs.support_service_tag }}
           WORKER_BRANCH: ${{ steps.parse-config.outputs.worker_branch }}
           ADMIN_SERVICE_BRANCH: ${{ steps.parse-config.outputs.admin_service_branch }}
           CONFIG_SERVICE_BRANCH: ${{ steps.parse-config.outputs.config_service_branch }}
@@ -280,6 +294,7 @@ jobs:
           KEYCLOAK_CUSTOMIZATIONS_BRANCH: ${{ steps.parse-config.outputs.keycloak_customizations_branch }}
           REPORTS_SERVICE_BRANCH: ${{ steps.parse-config.outputs.reports_service_branch }}
           DB_MIGRATIONS_BRANCH: ${{ steps.parse-config.outputs.db_migrations_branch }}
+          SUPPORT_SERVICE_BRANCH: ${{ steps.parse-config.outputs.support_service_branch }}
         run: |
           chmod +x ./app-deployment/scripts/get_tags.sh
           ./app-deployment/scripts/get_tags.sh ${{steps.build_version.outputs.build_version}} "${{ steps.build_version.outputs.ref_type }}" "${{ steps.build_version.outputs.ref_name }}"
@@ -554,6 +569,8 @@ jobs:
       REPORTS_SERVICE_BRANCH: ${{ needs.package-artifacts.outputs.reports_service_branch }}
       DB_MIGRATIONS_TAG: ${{ needs.package-artifacts.outputs.db_migrations_tag }}
       DB_MIGRATIONS_BRANCH: ${{ needs.package-artifacts.outputs.db_migrations_branch }}
+      SUPPORT_SERVICE_TAG: ${{ needs.package-artifacts.outputs.support_service_tag }}
+      SUPPORT_SERVICE_BRANCH: ${{ needs.package-artifacts.outputs.support_service_branch }}
     name: Build ${{ matrix.component }} on ${{ matrix.provider }}
     runs-on: openlab
     strategy:

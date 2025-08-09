@@ -24,7 +24,7 @@ export async function calculateChecksum(filePath) {
 
 export async function smartCopy(source, target) {
   const destDir = path.dirname(target);  
-  fs.mkdirSync(destDir, { recursive: true });
+  await fs.promises.mkdir(destDir, { recursive: true });
   let readStream: fs.ReadStream = null; 
   let writeStream: fs.WriteStream = null; 
   try{
@@ -42,9 +42,6 @@ export async function smartCopy(source, target) {
         });
     });
     const targetCheckSum = await calculateChecksum(target);
-    if (targetCheckSum !== sourceCheckSum) {
-      throw new Error(`Checksum mismatch for file ${target}. Checksum: ${targetCheckSum} != ${sourceCheckSum}`);
-    }
     return {sourceChecksum: sourceCheckSum, targetChecksum: targetCheckSum};
   }catch(error){
     throw error; 

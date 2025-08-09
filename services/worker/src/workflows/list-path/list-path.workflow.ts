@@ -1,6 +1,6 @@
 import { ChildWorkflowCancellationType, executeChild, ParentClosePolicy } from "@temporalio/workflow";
 import { ListPathWorkerWorkflow } from "./list-path-worker.workflow";
-import { WorkFlows } from "src/activities/work-manager/work-manager.types";
+import { WorkFlows } from "src/work-manager/work-manager.types";
 
 async function log(traceId: string, message: string) {
     console.log(`[${traceId}] ${message}`);

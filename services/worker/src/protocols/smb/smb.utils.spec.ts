@@ -27,6 +27,60 @@ describe('handleConnectionError', () => {
         expect(result).toBe(`Unable to connect to the server - ${SmbErrors.TIMEOUT}`);
     });
 
+    it('should return the correct error message for PROTOCOL_MISMATCH', () => {
+        const errorCode = SmbErrors.PROTOCOL_MISMATCH;
+        const result = handleConnectionError(errorCode);
+        expect(result).toBe(`Error: Protocol not supported by server - ${SmbErrors.PROTOCOL_MISMATCH}`);
+    });
+
+    it('should return the correct error message for NETWORK_UNREACHABLE', () => {
+        const errorCode = SmbErrors.NETWORK_UNREACHABLE;
+        const result = handleConnectionError(errorCode);
+        expect(result).toBe(`Error: Network unreachable - ${SmbErrors.NETWORK_UNREACHABLE}`);
+    });
+
+    it('should return the correct error message for HOST_UNREACHABLE', () => {
+        const errorCode = SmbErrors.HOST_UNREACHABLE;
+        const result = handleConnectionError(errorCode);
+        expect(result).toBe(`Error: Host unreachable - ${SmbErrors.HOST_UNREACHABLE}`);
+    });
+
+    it('should return the correct error message for PORT_BLOCKED', () => {
+        const errorCode = SmbErrors.PORT_BLOCKED;
+        const result = handleConnectionError(errorCode);
+        expect(result).toBe(`Error: Protocol port blocked or not accessible - ${SmbErrors.PORT_BLOCKED}`);
+    });
+
+    it('should detect version mismatch from error message pattern', () => {
+        const errorCode = 'SMB version mismatch detected';
+        const result = handleConnectionError(errorCode);
+        expect(result).toBe(`Error: SMB version mismatch between client and server - ${errorCode}`);
+    });
+
+    it('should detect protocol not supported from error message pattern', () => {
+        const errorCode = 'protocol not supported by target';
+        const result = handleConnectionError(errorCode);
+        expect(result).toBe(`Error: Protocol not supported by server - ${errorCode}`);
+    });
+
+    it('should detect port blocked from error message pattern', () => {
+        const errorCode = 'port 445 blocked by security policy';
+        const result = handleConnectionError(errorCode);
+        expect(result).toBe(`Error: Protocol port blocked or not accessible - ${errorCode}`);
+    });
+
+    it('should detect host unreachable from error message pattern', () => {
+        const errorCode = 'host unreachable or not found';
+        const result = handleConnectionError(errorCode);
+        expect(result).toBe(`Error: Host unreachable - ${errorCode}`);
+    });
+
+    it('should detect OS not supported from error message pattern', () => {
+        const errorCode = 'os not supported for this operation';
+        const result = handleConnectionError(errorCode);
+        expect(result).toBe(`Error: Host OS not supported for this operation - ${errorCode}`);
+    });
+
     it('should return the default error message for an unknown error code', () => {
         const errorCode = 'UNKNOWN_ERROR';
         const result = handleConnectionError(errorCode);

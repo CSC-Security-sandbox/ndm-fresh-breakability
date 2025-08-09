@@ -1,16 +1,16 @@
-import { CommandStatus, ErrorType, JobManagerContext, TaskInfo, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Context } from '@temporalio/activity';
+import { CommandStatus, ErrorType, JobManagerContext, TaskInfo, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
+import { ApplicationFailure, Context } from '@temporalio/activity';
 import { basePrefix, isFatalError, isSourceFatalError } from "src/activities/utils/utils";
-import { FatalError, RetryableError, RetryExceededError } from "src/errors/errors.types";
+import { FatalError, RetryExceededError } from "src/errors/errors.types";
 import { RedisService } from "src/redis/redis.service";
 import { CommonTaskService } from "../common/common-task.service";
 import { CommandExecService } from "./command-execution/command-execution.service";
 import { CommandExecInput, CommandExecOutput } from "./command-execution/command-execution.type";
 
-import { handleSyncTaskUpdateInput, SyncTaskInput, SyncTaskOutput } from "./sync-activity.type";
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { handleSyncTaskUpdateInput, SyncTaskInput, SyncTaskOutput } from "./sync-activity.type";
 
 @Injectable()
 export class SyncService {
@@ -123,8 +123,8 @@ export class SyncService {
           );
         }
     
-        throw new RetryableError(
-          `Sync Task Update Failed: ${errors.source.length} source errors and ${errors.target.length} target errors with retry count ${task.retryCount}`
+        throw ApplicationFailure.retryable(
+          `Sync Task Update Failed: ${errors.source.length} source errors and ${errors.target.length} target errors with retry count ${task.retryCount}`, 'RetryableError'
         );
     }
 

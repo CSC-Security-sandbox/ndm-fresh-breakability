@@ -9,7 +9,7 @@ azure_packer_vm_size         = "Standard_D8alds_v6"
 azure_region                 = "East US"
 
 // Azure Base Image Values
-os_disk_size_gb              = 100
+os_disk_size_gb              = 200
 os_type                      = "Linux"
 image_publisher              = "Canonical"
 image_offer                  = "ubuntu-24_04-lts"

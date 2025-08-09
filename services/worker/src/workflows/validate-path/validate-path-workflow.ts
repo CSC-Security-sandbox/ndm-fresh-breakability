@@ -1,7 +1,7 @@
 import { ChildWorkflowCancellationType, executeChild, ParentClosePolicy, proxyActivities } from "@temporalio/workflow";
 import { ValidatePathWorkerWorkflow } from "./validate-path-worker-workflow";
 import { ValidatePathActivity } from 'src/activities/validate-path/validate-path.service';
-import { WorkFlows } from "src/activities/work-manager/work-manager.types";
+import { WorkFlows } from "src/work-manager/work-manager.types";
 
 async function log(traceId: string, message: string) {
     console.log(`[${traceId}] ${message}`);

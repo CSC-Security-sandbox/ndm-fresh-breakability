@@ -1,5 +1,5 @@
 import { ScanActivityInput } from "src/activities/core/scan/scan-activity.type";
-import { JobRunStatus } from "src/activities/discovery/enums";
+import { JobRunStatus } from "src/activities/common/enums";
 
 export interface ChildScanWorkflowInput {
     jobRunId: string;

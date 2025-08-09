@@ -23,6 +23,9 @@ export const accountApi = createApi({
       query: () => {
         return "/accounts";
       },
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || [];
+      },
       providesTags: ["ALL_ACCOUNTS"],
     }),
 

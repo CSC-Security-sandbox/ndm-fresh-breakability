@@ -34,7 +34,7 @@
     "@nestjs/swagger": "^7.4.0",
     "@nestjs/typeorm": "^10.0.2",
     "@netapp-cloud-datamigrate/auth-lib": "0.0.3",
-    "@netapp-cloud-datamigrate/jobs-lib": "0.0.96",
+    "@netapp-cloud-datamigrate/jobs-lib": "0.1.2",
     "@netapp-cloud-datamigrate/logger-lib": "0.0.7",
     "@temporalio/client": "^1.11.7",
     "@types/jsonwebtoken": "^9.0.6",

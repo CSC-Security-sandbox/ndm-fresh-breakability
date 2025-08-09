@@ -19,6 +19,7 @@ import {
   RequestContextMiddleware,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { ScheduleModule } from '@nestjs/schedule';
+import { WorkManagerModule } from './work-manager/work-manager.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     ScheduleModule.forRoot(),
     AuthModule,
     MetricsModule,
+    WorkManagerModule
   ],
   providers: [WorkersConfig, CommandConfig, Protocols, NFSProtocol, SMBProtocol],
 })

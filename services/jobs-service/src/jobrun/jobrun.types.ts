@@ -40,3 +40,9 @@ export interface UnMountNotificationPayload{
     sPathId: string,
     tPathId?: string | undefined
 }
+
+export enum WorkFlowFailureReason {
+    SETUP_WORKER_FAILURE = "SETUP_WORKER_FAILURE",
+    WORKER_FAILURE = "WORKER_FAILURE",
+    TASK_FETCH_FAILURE = "TASK_FETCH_FAILURE",
+}

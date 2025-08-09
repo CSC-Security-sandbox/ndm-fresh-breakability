@@ -25,16 +25,16 @@ const WorkerInstallation = ({
       const generateSecretAPIResult = await generateSecretAPI({
         projectId: project_id,
       }).unwrap();
-      const data = generateSecretAPIResult?.data?.items;
       dispatch(
         setModalProps({
           isOpen: true,
           modalHeader: `Worker Installation Instructions`,
           modalContent: (
             <WorkerInstallationContent
-              workerId={data?.workerId}
-              workerSecret={data?.workerSecret}
-              controlPlaneIp={data?.controlPlaneIp}
+              workerId={generateSecretAPIResult?.workerId}
+              workerSecret={generateSecretAPIResult?.workerSecret}
+              projectId={generateSecretAPIResult?.projectId}
+              controlPlaneIp={generateSecretAPIResult?.controlPlaneIp}
               isLoading={isLoading}
               isError={isError}
             />

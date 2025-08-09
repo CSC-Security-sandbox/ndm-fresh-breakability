@@ -49,8 +49,7 @@ describe('StampMetaService', () => {
 
     const mockFs = fs as jest.Mocked<typeof fs>;
     const { dmError, formatDate, getUserACLs } = require('src/activities/utils/utils');
-    const { CommandConfig } = require('src/config/command.config');
-const validateSidMapping = require('./sid-mapping.util').validateSidMapping;
+
 
     beforeEach(async () => {
         shellService = {
@@ -225,70 +224,6 @@ const validateSidMapping = require('./sid-mapping.util').validateSidMapping;
         });
     });
 
-    describe('stampBirthTime', () => {
-        beforeEach(() => {
-            // Reset platform mock
-            Object.defineProperty(process, 'platform', {
-                value: 'linux',
-                writable: true,
-            });
-        });
-
-        it('should successfully stamp birth time on Linux/Unix platforms', async () => {
-            const input = createMockInput({ birthtime: new Date('2023-01-01T10:00:00Z') });
-            shellService.runCommand.mockResolvedValue('success');
-            formatDate.mockReturnValue('202301011000.00');
-
-            const result = await service.stampBirthTime(input);
-
-            expect(result.sourceErrors).toEqual([]);
-            expect(result.targetErrors).toEqual([]);
-            expect(formatDate).toHaveBeenCalledWith(new Date('2023-01-01T10:00:00Z'));
-            expect(shellService.runCommand).toHaveBeenCalledWith('touch -t 202301011000.00 /target/test-file.txt');
-        });
-
-
-        it('should handle directory paths correctly', async () => {
-            const input = createMockInput({ birthtime: new Date('2023-01-01T10:00:00Z') }, {}, true);
-            shellService.runCommand.mockResolvedValue('success');
-            formatDate.mockReturnValue('202301011000.00');
-
-            const result = await service.stampBirthTime(input);
-
-            expect(result.sourceErrors).toEqual([]);
-            expect(result.targetErrors).toEqual([]);
-            expect(shellService.runCommand).toHaveBeenCalledWith('touch -t 202301011000.00 /target/test-file.txt/');
-        });
-
-        it('should skip when birthtime is not available', async () => {
-            const input = createMockInput({ birthtime: undefined });
-
-            const result = await service.stampBirthTime(input);
-
-            expect(result.sourceErrors).toEqual([]);
-            expect(result.targetErrors).toEqual([]);
-            expect(shellService.runCommand).not.toHaveBeenCalled();
-        });
-
-        it('should handle shell command errors gracefully', async () => {
-            const input = createMockInput({ birthtime: new Date('2023-01-01T10:00:00Z') });
-            const error = new Error('Command failed') as any;
-            error.code = 'ENOENT';
-            shellService.runCommand.mockRejectedValue(error);
-            formatDate.mockReturnValue('202301011000.00');
-            dmError.mockReturnValue({});
-
-            const result = await service.stampBirthTime(input);
-
-            expect(result.sourceErrors).toEqual([]);
-            expect(result.targetErrors).toEqual(['ENOENT']);
-            expect(mockLogger.error).toHaveBeenCalledWith(
-                'Stamping BirthTime from /source/test-file.txt to /target/test-file.txt, Error: Command failed',
-                error.stack
-            );
-            expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
-        });
-    });
 
     describe('stampGIDandUID', () => {
         beforeEach(() => {
@@ -510,153 +445,177 @@ const validateSidMapping = require('./sid-mapping.util').validateSidMapping;
             expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
         });
 
-        });
-
-        describe('stampSIDAclToObject', () => {
+        describe('stampFileAttributeMeta', () => {
             beforeEach(() => {
-                Object.defineProperty(process, 'platform', {
-                    value: 'win32',
-                    writable: true,
-                });
+            Object.defineProperty(process, 'platform', {
+                value: 'win32',
+                writable: true,
+            });
             });
 
-            it('should skip stamping SID ACL if not on win32', async () => {
-                Object.defineProperty(process, 'platform', { value: 'linux' });
-                const input = createMockInput();
-                const result = await service.stampSIDAclToObject(input);
-                expect(result.sourceErrors).toEqual([]);
-                expect(result.targetErrors).toEqual([]);
+            it('should successfully synchronize file attributes', async () => {
+            const input = createMockInput();
+            shellService.runCommand
+                .mockResolvedValueOnce('A H') // source attributes
+                .mockResolvedValueOnce('A')   // target attributes
+                .mockResolvedValueOnce('A H') // verify after change
+            ;
+
+            const result = await service.stampFileAttributeMeta(input);
+
+            expect(result.sourceErrors).toEqual([]);
+            expect(result.targetErrors).toEqual([]);
             });
 
-            it('should handle error when getting source ACL fails', async () => {
-                const input = createMockInput();
-                const error = new Error('ACL error') as any;
-                error.code = 'EACL';
-                shellService.runCommand.mockRejectedValueOnce(error);
-                dmError.mockReturnValue({});
-                const result = await service.stampSIDAclToObject(input);
-                expect(result.sourceErrors).toEqual(['EACL']);
-                expect(result.targetErrors).toEqual([]);
-                expect(mockLogger.error).toHaveBeenCalledWith(
-                    'Getting ACL for /source/test-file.txt, Error: ACL error',
-                    error.stack
-                );
-                expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+            it('should skip when platform is not win32', async () => {
+            Object.defineProperty(process, 'platform', { value: 'linux' });
+            const input = createMockInput();
+
+            const result = await service.stampFileAttributeMeta(input);
+
+            expect(result.sourceErrors).toEqual([]);
+            expect(result.targetErrors).toEqual([]);
             });
 
-            it('should handle error when transferring ACL fails', async () => {
-                const input = createMockInput();
-                // Mock getAclScript and getTransferAclSript
-                jest.mock('./sid-mapping.util', () => ({
-                    getAclScript: jest.fn((path: string) => `get-acl ${path}`),
-                    getTransferAclSript: jest.fn((path: string, isDir: boolean, acl: any) => `set-acl ${path}`),
-                    validateSidMapping: jest.fn(() => ({})),
-                }));
-                // Mock shellService.runCommand for getAclScript
-                shellService.runCommand
-                    .mockResolvedValueOnce(JSON.stringify({ Access: { value: [] } })) // getSourceAcl
-                    .mockRejectedValueOnce(Object.assign(new Error('Transfer error'), { code: 'EFAIL' })); // transferAclSript
-                dmError.mockReturnValue({});
-                const result = await service.stampSIDAclToObject(input);
-                expect(result.sourceErrors).toEqual([]);
-                expect(result.targetErrors).toEqual(['EFAIL']);
-                expect(mockLogger.error).toHaveBeenCalledWith(
-                    'Transferring ACL to /target/test-file.txt, Error: Transfer error',
-                    expect.anything()
-                );
-                expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+            it('should handle error when getting source attributes', async () => {
+            const input = createMockInput();
+            const error = new Error('Source not found') as any;
+            error.code = 'ENOENT';
+            shellService.runCommand.mockRejectedValueOnce(error);
+
+            dmError.mockReturnValue({});
+
+            const result = await service.stampFileAttributeMeta(input);
+
+            expect(result.sourceErrors).toEqual(['ENOENT']);
+            expect(result.targetErrors).toEqual([]);
             });
 
-            it('should stamp SID ACL and validate mapping', async () => {
-                const input = createMockInput();
-                // Mock getAclScript and getTransferAclSript
-                const aclObj = { Access: { value: [{ IdentityReference: 'S-1-5-21' }] } };
-                const targetAclObj = { Access: { value: [{ IdentityReference: 'S-1-5-21' }] } };
-                jest.mock('./sid-mapping.util', () => ({
-                    getAclScript: jest.fn((path: string) => `get-acl ${path}`),
-                    getTransferAclSript: jest.fn((path: string, isDir: boolean, acl: any) => `set-acl ${path}`),
-                    validateSidMapping: jest.fn(() => ({ mapped: true })),
-                }));
-                shellService.runCommand
-                    .mockResolvedValueOnce(JSON.stringify(aclObj)) // getSourceAcl
-                    .mockResolvedValueOnce('success') // transferAclSript
-                    .mockResolvedValueOnce(JSON.stringify(targetAclObj)); // getTargetAcl
-                const result = await service.stampSIDAclToObject(input);
-                expect(result.sourceErrors).toEqual([]);
-                expect(result.targetErrors).toEqual([]);
-                expect(shellService.runCommand).toHaveBeenCalledTimes(3);
-                expect(validateSidMapping).toBeDefined();
+            it('should handle error when setting/removing attributes', async () => {
+            const input = createMockInput();
+            shellService.runCommand
+                .mockResolvedValueOnce('A H') // source attributes
+                .mockResolvedValueOnce('A')   // target attributes
+                .mockRejectedValueOnce(new Error('Failed to set attributes'))
+            ;
+            dmError.mockReturnValue({});
+
+            const result = await service.stampFileAttributeMeta(input);
+
+            expect(result.sourceErrors).toEqual([]);
             });
+
+            it('should log warning if verifying attribute changes fails', async () => {
+            const input = createMockInput();
+            shellService.runCommand
+                .mockResolvedValueOnce('A H') // source attributes
+                .mockResolvedValueOnce('A')   // target attributes
+                .mockResolvedValueOnce(undefined) // attrib command
+                .mockRejectedValueOnce(new Error('Verify failed')) // verify
+            ;
+
+            const result = await service.stampFileAttributeMeta(input);
+
+            expect(result.sourceErrors).toEqual([]);
+            expect(result.targetErrors).toEqual([]);
+            });
+
+            it('should log when no attribute changes are needed', async () => {
+            const input = createMockInput();
+            shellService.runCommand
+                .mockResolvedValueOnce('A H') // source attributes
+                .mockResolvedValueOnce('A H') // target attributes
+            ;
+
+            const result = await service.stampFileAttributeMeta(input);
+
+            expect(result.sourceErrors).toEqual([]);
+            expect(result.targetErrors).toEqual([]);
+            });
+
+            it('should handle error when getting target attributes', async () => {
+            const input = createMockInput();
+            shellService.runCommand
+                .mockResolvedValueOnce('A H') // source attributes
+                .mockRejectedValueOnce(new Error('Target not found'))
+            ;
+
+            const result = await service.stampFileAttributeMeta(input);
+
+            expect(result.sourceErrors).toEqual([]);
+            expect(result.targetErrors).toEqual([]);
         });
 
-        describe('stampFileAttrMeta', () => {
+
+        });
+
+
+        describe('removeFileAttributeTemporarily', () => {
             beforeEach(() => {
-                Object.defineProperty(process, 'platform', {
-                    value: 'win32',
-                    writable: true,
-                });
+            Object.defineProperty(process, 'platform', {
+                value: 'win32',
+                writable: true,
+            });
             });
 
-            it('should skip stamping file attributes if not on win32', async () => {
-                Object.defineProperty(process, 'platform', { value: 'linux' });
-                const input = createMockInput();
-                const result = await service.stampFileAttrMeta(input);
-                expect(result.sourceErrors).toEqual([]);
-                expect(result.targetErrors).toEqual([]);
+
+            it('should return false if no attributes to remove', async () => {
+            shellService.runCommand.mockResolvedValueOnce('A');
+
+            const result = await service.removeFileAttributeTemporarily('/some/file.txt');
+
+            expect(result).toBe(false);
             });
 
-            it('should handle error when getting file attributes fails', async () => {
-                const input = createMockInput();
-                const error = new Error('Attrib error') as any;
-                error.code = 'EATTR';
-                shellService.runCommand.mockRejectedValueOnce(error);
-                dmError.mockReturnValue({});
-                const result = await service.stampFileAttrMeta(input);
-                expect(result.sourceErrors).toEqual(['EATTR']);
-                expect(result.targetErrors).toEqual([]);
-                expect(mockLogger.error).toHaveBeenCalledWith(
-                    'Getting Attribute for /source/test-file.txt, Error: Attrib error',
-                    error.stack
-                );
-                expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+            it('should handle errors gracefully', async () => {
+            shellService.runCommand.mockRejectedValueOnce(new Error('Failed'));
+
+            const result = await service.removeFileAttributeTemporarily('/some/file.txt');
+
+            expect(result).toBe(false);
             });
 
-            it('should set file attributes on target when present', async () => {
-                const input = createMockInput();
-                shellService.runCommand
-                    .mockResolvedValueOnce('A H S R C:\\source\\test-file.txt') // attrib source
-                    .mockResolvedValueOnce('success'); // attrib target
-                const result = await service.stampFileAttrMeta(input);
-                expect(result.sourceErrors).toEqual([]);
-                expect(result.targetErrors).toEqual([]);
-                expect(shellService.runCommand).toHaveBeenCalledWith('attrib +H +S +R +A "/target/test-file.txt"');
-            });
+            it('should skip on non-win32 platforms', async () => {
+            Object.defineProperty(process, 'platform', { value: 'linux' });
 
-            it('should skip setting attributes if none present', async () => {
-                const input = createMockInput();
-                shellService.runCommand.mockResolvedValueOnce('C:\\source\\test-file.txt');
-                const result = await service.stampFileAttrMeta(input);
-                expect(result.sourceErrors).toEqual([]);
-                expect(result.targetErrors).toEqual([]);
-                // Only one call for getting attributes, not for setting
-                expect(shellService.runCommand).toHaveBeenCalledTimes(1);
-            });
+            const result = await service.removeFileAttributeTemporarily('/some/file.txt');
 
-            it('should handle error when setting file attributes fails', async () => {
-                const input = createMockInput();
-                shellService.runCommand
-                    .mockResolvedValueOnce('A H S R C:\\source\\test-file.txt') // attrib source
-                    .mockRejectedValueOnce(Object.assign(new Error('Set attrib error'), { code: 'EATTRSET' }));
-                dmError.mockReturnValue({});
-                const result = await service.stampFileAttrMeta(input);
-                expect(result.sourceErrors).toEqual([]);
-                expect(result.targetErrors).toEqual(['EATTRSET']);
-                expect(mockLogger.error).toHaveBeenCalledWith(
-                    'Transferring ACL to /target/test-file.txt, Error: Set attrib error',
-                    expect.anything()
-                );
-                expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+            expect(result).toBe(false);
             });
         });
+
+        describe('restoreFileAttribute', () => {
+            beforeEach(() => {
+            Object.defineProperty(process, 'platform', {
+                value: 'win32',
+                writable: true,
+            });
+            });
+
+            it('should return false if no attributes to add', async () => {
+            shellService.runCommand.mockResolvedValueOnce('A H R');
+
+            const result = await service.restoreFileAttribute('/some/file.txt');
+
+            expect(result).toBe(false);
+            });
+
+            it('should handle errors gracefully', async () => {
+            shellService.runCommand.mockRejectedValueOnce(new Error('Failed'));
+
+            const result = await service.restoreFileAttribute('/some/file.txt');
+
+            expect(result).toBe(false);
+            });
+
+            it('should skip on non-win32 platforms', async () => {
+            Object.defineProperty(process, 'platform', { value: 'linux' });
+
+            const result = await service.restoreFileAttribute('/some/file.txt');
+
+            expect(result).toBe(false);
+            });
+        });
+
     });
-
+})

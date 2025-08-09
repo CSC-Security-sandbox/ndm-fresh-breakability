@@ -87,7 +87,6 @@ describe('SetupActivityService', () => {
             mockRedisService as any,
             loggerFactory as LoggerFactory,
             protocols as Protocols,
-            mockWorkManagerService as any
         );
 
     });

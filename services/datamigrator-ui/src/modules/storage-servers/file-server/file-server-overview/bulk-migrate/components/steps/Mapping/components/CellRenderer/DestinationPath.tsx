@@ -43,6 +43,18 @@ const DestinationFileServer = ({
   const error =
     mappingStepForm.errors?.migrationDetailsTableConfigurationValue?.[rowId];
 
+  // DISABLE IF PATH IS ALREADY SELECTED IN OTHER ROWS
+  const isPathAlreadySelected = (pathId: string) => {
+    return mappingStepForm?.values?.migrationDetailsTableConfigurationValue?.some(
+      (config, index) =>
+        index !== rowId && // Exclude current row
+        config?.destinationPathDetails?.destinationPathId === pathId &&
+        mappingStepForm?.values?.selectedMountPathsId?.includes(
+          String(config.id)
+        ) // Only check selected rows
+    );
+  };
+
   return (
     <Autocomplete
       options={options}
@@ -51,7 +63,10 @@ const DestinationFileServer = ({
       }
       getOptionLabel={(option) => option?.pathName || ""}
       getOptionDisabled={(option) =>
-        option?.isDisabled || !option?.isValid || option?.reachableCount === 0
+        option?.isDisabled ||
+        !option?.isValid ||
+        option?.reachableCount === 0 ||
+        isPathAlreadySelected(option?.pathId)
       }
       className="w-full"
       size="small"
