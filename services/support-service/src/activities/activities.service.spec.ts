@@ -24,12 +24,25 @@ jest.mock('./config-data-csv-generation/config-data-csv-generation.activity', ()
   ConfigurationDataCsvGenerationActivity: jest.fn().mockImplementation(() => ({
     generateConfigurationDataCsv: jest.fn(),
   })),
-}));
+  }),
+);
+
+jest.mock(
+  './performance-metrics-csv-generation/performance-metrics-csv-generation.activity',
+  () => ({
+    PerformanceMetricsCsvGenerationActivity: jest
+      .fn()
+      .mockImplementation(() => ({
+        generatePerformanceMetricsCsv: jest.fn(),
+      })),
+  }),
+);
 
 import { LogGeneratorActivity } from './log-generator/log-generator.activity';
 import { NotifyConfigActivity } from './notify-config/notify-config.activity';
 import { ErrorCsvGenerationActivity } from './error-csv-generation/error-csv-generation.activity';
 import { ConfigurationDataCsvGenerationActivity } from './config-data-csv-generation/config-data-csv-generation.activity';
+import { PerformanceMetricsCsvGenerationActivity } from './performance-metrics-csv-generation/performance-metrics-csv-generation.activity';
 
 describe('ActivitiesService', () => {
   let service: ActivitiesService;
@@ -37,6 +50,7 @@ describe('ActivitiesService', () => {
   let notifyConfigActivity: any;
   let errorCsvGenerationActivity: any;
   let configurationDataCsvGenerationActivity: any;
+  let performanceMetricsCsvGenerationActivity: any;
 
   beforeEach(async () => {
     // Create mock instances with proper Jest mock functions
@@ -54,6 +68,11 @@ describe('ActivitiesService', () => {
 
     configurationDataCsvGenerationActivity = {
       generateConfigurationDataCsv: jest.fn(),
+      generateConfigurationJobCsv: jest.fn(),
+    };
+
+    performanceMetricsCsvGenerationActivity = {
+      generatePerformanceMetricsCsv: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -74,6 +93,10 @@ describe('ActivitiesService', () => {
         {
           provide: ConfigurationDataCsvGenerationActivity,
           useValue: configurationDataCsvGenerationActivity,
+        },
+        {
+          provide: PerformanceMetricsCsvGenerationActivity,
+          useValue: performanceMetricsCsvGenerationActivity,
         },
       ],
     }).compile();

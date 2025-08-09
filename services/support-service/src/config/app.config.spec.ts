@@ -244,6 +244,10 @@ describe('App Configuration', () => {
                 api: {
                     configUrl: 'https://env-config.example.com/api/v1',
                 },
+        prometheus: {
+          baseUrl: 'http://localhost:52061/api/v1',
+          timeout: 30000,
+        },
             });
         });
 
@@ -262,6 +266,10 @@ describe('App Configuration', () => {
                 api: {
                     configUrl: 'http://localhost:3009/api/v1',
                 },
+        prometheus: {
+          baseUrl: 'http://localhost:52061/api/v1',
+          timeout: 30000,
+        },
             });
         });
 
@@ -280,6 +288,10 @@ describe('App Configuration', () => {
                 api: {
                     configUrl: 'https://custom-config.example.com/api/v1',
                 },
+        prometheus: {
+          baseUrl: 'http://localhost:52061/api/v1',
+          timeout: 30000,
+        },
             });
         });
 
