@@ -6,12 +6,19 @@ export type SupportBundleContextType = {
   handleDownloadReport: () => void;
   handleGenerateBundle: () => void;
   bundleStatus: isBundleReadyApiType;
+  selectedItems: string[];
+  treeSelectStyles: any;
+  handleSelectionChange: (selectedItems: any[]) => void;
+  wrapperClass: string;
+  projectWorkerData: ProjectWorkerMap;
+  isDownloading: boolean;
 };
 
 export type SupportBundlePayloadType = {
   startDate: string;
   endDate: string;
   otherMetrics: any;
+  projectWorkerMap: ProjectWorkerMap;
 };
 
 export type SupportBundleFormType = {
@@ -26,3 +33,8 @@ export type SupportBundleFormErrorsType = {
   startDate?: string;
   endDate?: string;
 };
+
+type ProjectWorkerMap = {
+  projectId?: string;
+  workerIds?: string[];
+}[];

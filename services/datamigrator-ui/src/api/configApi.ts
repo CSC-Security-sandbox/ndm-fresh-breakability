@@ -158,6 +158,10 @@ export const configApi = createApi({
       query: () => "support-bundle/is-bundle-ready",
       providesTags: ["IS_BUNDLE_READY"],
     }),
+
+    fetchProjectWithWorker: builder.query<Array<Record<string, string>>, void>({
+      query: () => "support-bundle",
+    }),
   }),
 });
 
@@ -180,4 +184,5 @@ export const {
   useGenerateSupportBundleMutation,
   useLazyIsBundleReadyQuery,
   useLazyDownloadSupportBundleQuery,
+  useFetchProjectWithWorkerQuery,
 } = configApi;
