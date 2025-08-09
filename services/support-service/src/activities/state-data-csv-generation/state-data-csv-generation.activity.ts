@@ -23,14 +23,23 @@ export class StateDataCsvGenerationActivity {
   }) {
     this.logger.log(`[${traceId}] Starting State Data CSV generation`);
 
+    const workerIds = payload?.projectWorkerMap
+      .filter((item: any) => Array.isArray(item.workerIds))
+      .flatMap((item: any) => item.workerIds);
+    this.logger.log(
+      `[${traceId}] Worker IDs provided: ${workerIds.length > 0 ? workerIds.join(', ') : 'None'}`,
+    );
+
     const data = await this.prometheusDataProcessor.getPrometheusMetrics(
       payload.startDate as string,
       payload.endDate as string,
+      workerIds as string[],
     );
 
     this.logger.log(`[${traceId}] Retrieved metrics data`, {
       servicePods: data.servicePods?.length || 0,
       allMetrics: data.allMetrics?.length || 0,
+      buildDetails: data.buildDetails?.length || 0,
     });
 
     await this.generateCsvFiles(traceId, data, payload.zipLocation as string);
@@ -64,6 +73,15 @@ export class StateDataCsvGenerationActivity {
       const fileName = `metrics_data_${timestamp}.csv`;
       await this.zipHandler.addCsvToZip(csvContent, fileName, zipLocation);
       this.logger.log(`[${traceId}] Metrics CSV created: ${fileName}`);
+    }
+
+    if (data.buildDetails && data.buildDetails.length > 0) {
+      const csvContent = this.csvGenerator.createBuildDetailsCsvContent(
+        data.buildDetails,
+      );
+      const fileName = `build_details_${timestamp}.csv`;
+      await this.zipHandler.addCsvToZip(csvContent, fileName, zipLocation);
+      this.logger.log(`[${traceId}] Build details CSV created: ${fileName}`);
     }
   }
 }

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrometheusClientService } from './prometheus-client.service';
 import { PrometheusMetrics } from '../activities/state-data-csv-generation/state-data-csv-generation.interface';
 import { PROMETHEUS_QUERIES } from '../activities/state-data-csv-generation/state-data-csv-generation.constants';
+import { createWorkerQueriesForMultipleWorkers } from '../utils/prometheus-query.utils';
 
 @Injectable()
 export class PrometheusDataProcessorService {
@@ -12,9 +13,10 @@ export class PrometheusDataProcessorService {
   async getPrometheusMetrics(
     startDate: string,
     endDate: string,
+    workerIds: string[] = [],
   ): Promise<PrometheusMetrics> {
     try {
-      const queries = Object.values(PROMETHEUS_QUERIES);
+      const queries = this.buildQueries(workerIds);
       const results = await Promise.allSettled(
         queries.map((queryConfig) =>
           this.prometheusClient.callPrometheusApi(
@@ -34,6 +36,8 @@ export class PrometheusDataProcessorService {
         cpuUsageWorker,
         memoryUsageWorker,
         systemUpTime,
+        cpBuildDetails,
+        workerBuildDetails,
       ] = extractedResults;
 
       return {
@@ -45,11 +49,36 @@ export class PrometheusDataProcessorService {
           memoryUsageWorker,
           systemUpTime,
         }),
+        buildDetails: this.processBuildDetails({
+          cpBuildDetails,
+          workerBuildDetails,
+        }),
       };
     } catch (error) {
       this.logger.error(`Error fetching Prometheus metrics: ${error.message}`);
       throw error;
     }
+  }
+
+  private buildQueries(workerIds: string[]) {
+    const baseQueries = Object.values(PROMETHEUS_QUERIES);
+
+    if (workerIds.length === 0) {
+      return baseQueries;
+    }
+
+    return baseQueries.map((queryConfig) => {
+      if (queryConfig.query.includes('$worker')) {
+        return {
+          ...queryConfig,
+          query: createWorkerQueriesForMultipleWorkers(
+            queryConfig.query,
+            workerIds,
+          ),
+        };
+      }
+      return queryConfig;
+    });
   }
 
   private extractSuccessfulResults(results: any[]): any[] {
@@ -118,12 +147,43 @@ export class PrometheusDataProcessorService {
         const processedData = data.data.result[0].values.map((value: any) => ({
           Name: name,
           Timestamp: value[0],
-          Usage: value[1],
+          Usage: parseFloat(value[1] || 0).toFixed(3),
         }));
         allMetrics.push(...processedData);
       }
     });
 
     return allMetrics;
+  }
+
+  private processBuildDetails(buildDetailsData: {
+    cpBuildDetails: any;
+    workerBuildDetails: any;
+  }): any[] {
+    const buildDetails: any[] = [];
+
+    if (buildDetailsData.cpBuildDetails?.data?.result) {
+      buildDetailsData.cpBuildDetails.data.result.forEach((item: any) => {
+        buildDetails.push({
+          Pod: item.metric.pod,
+          'Build Version': item.metric.label_build_version,
+          Timestamp: item.values[0][0],
+        });
+      });
+    }
+
+    if (buildDetailsData.workerBuildDetails?.data?.result) {
+      buildDetailsData.workerBuildDetails.data.result.forEach((item: any) => {
+        buildDetails.push({
+          Pod: item.metric.job,
+          'Build Version': item.metric.label_build_version,
+          Platform: item.metric.platform,
+          'Worker Id': item.metric.worker_id,
+          Timestamp: item.values[0][0],
+        });
+      });
+    }
+
+    return buildDetails;
   }
 }
