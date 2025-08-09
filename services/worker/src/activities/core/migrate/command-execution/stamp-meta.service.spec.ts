@@ -49,8 +49,7 @@ describe('StampMetaService', () => {
 
     const mockFs = fs as jest.Mocked<typeof fs>;
     const { dmError, formatDate, getUserACLs } = require('src/activities/utils/utils');
-    const { CommandConfig } = require('src/config/command.config');
-const validateSidMapping = require('./sid-mapping.util').validateSidMapping;
+
 
     beforeEach(async () => {
         shellService = {
