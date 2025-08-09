@@ -23,9 +23,10 @@ export class StateDataCsvGenerationActivity {
   }) {
     this.logger.log(`[${traceId}] Starting State Data CSV generation`);
 
-    const workerIds = payload?.projectWorkerMap
-      .filter((item: any) => Array.isArray(item.workerIds))
-      .flatMap((item: any) => item.workerIds);
+    const workerIds =
+      payload?.projectWorkerMap
+        ?.filter((item: any) => Array.isArray(item.workerIds))
+        ?.flatMap((item: any) => item.workerIds) || [];
     this.logger.log(
       `[${traceId}] Worker IDs provided: ${workerIds.length > 0 ? workerIds.join(', ') : 'None'}`,
     );
