@@ -27,4 +27,13 @@ export const PROMETHEUS_QUERIES = {
     query: '(node_time_seconds - node_boot_time_seconds)/3600',
     step: process.env.STEP_1Hr,
   },
+  CP_BUILD_DETAILS: {
+    query:
+      'count by (pod, label_build_version) (kube_pod_labels{label_build_version!="", namespace="datamigrator"})',
+    step: process.env.STEP_4Hr,
+  },
+  WORKER_BUILD_DETAILS: {
+    query: 'worker_info{worker_id="$worker"}',
+    step: process.env.STEP_4Hr,
+  },
 };

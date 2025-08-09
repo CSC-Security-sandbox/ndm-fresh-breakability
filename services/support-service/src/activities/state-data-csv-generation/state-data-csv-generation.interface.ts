@@ -11,4 +11,5 @@ export interface PrometheusResponse {
 export interface PrometheusMetrics {
   servicePods?: any[];
   allMetrics?: any[];
+  buildDetails?: any[];
 }
