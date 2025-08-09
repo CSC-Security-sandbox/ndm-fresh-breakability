@@ -3,22 +3,19 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import { createObjectCsvWriter } from 'csv-writer';
 import AdmZip = require('adm-zip');
-import { ExportRequest, ExportResult, OperationErrorExportData } from 'src/constants/types';
+import {
+  ExportRequest,
+  ExportResult,
+  OperationErrorExportData,
+} from 'src/constants/types';
 import { OperationErrorService } from 'src/utils/error-csv-generation.service';
 
 @Injectable()
 export class ErrorCsvGenerationActivity {
   private readonly logger = new Logger(ErrorCsvGenerationActivity.name);
-  constructor(
-    private readonly operationErrorService: OperationErrorService,
-  ) { }
+  constructor(private readonly operationErrorService: OperationErrorService) {}
 
-  async generateErrorCsv(
-    {
-      traceId,
-      payload,
-    }
-  ): Promise<ExportResult> {
+  async generateErrorCsv({ traceId, payload }): Promise<ExportResult> {
     try {
       const data = await this.getOperationErrorsByDateRange(
         payload.startDate,
@@ -92,7 +89,10 @@ export class ErrorCsvGenerationActivity {
     zipFilePath: string,
   ): Promise<void> {
     // Check if zip file exists
-    const zipExists = await fs.access(zipFilePath).then(() => true).catch(() => false);
+    const zipExists = await fs
+      .access(zipFilePath)
+      .then(() => true)
+      .catch(() => false);
 
     if (!zipExists) {
       throw new Error(`Zip file not found: ${zipFilePath}`);
@@ -109,20 +109,26 @@ export class ErrorCsvGenerationActivity {
     // Log existing directory structure for debugging
     this.logger.log('Existing zip structure:');
     zipEntries
-      .filter(entry => entry.isDirectory)
+      .filter((entry) => entry.isDirectory)
       .slice(0, 10) // Show first 10 directories
-      .forEach(entry => this.logger.log(`${entry.entryName}`));
+      .forEach((entry) => this.logger.log(`${entry.entryName}`));
 
-    if (zipEntries.filter(entry => entry.isDirectory).length > 10) {
-      this.logger.log(`${zipEntries.filter(entry => entry.isDirectory).length - 10} more directories`);
+    if (zipEntries.filter((entry) => entry.isDirectory).length > 10) {
+      this.logger.log(
+        `${zipEntries.filter((entry) => entry.isDirectory).length - 10} more directories`,
+      );
     }
 
     // Process each date combination
     let totalFilesAdded = 0;
     for (const [date, errors] of groupedData.entries()) {
       // Ensure date is in YYYY-MM-DD format
-      const formattedDate = date.includes('/') ? date.replace(/\//g, '-') : date;
-      this.logger.log(`Processing Date '${formattedDate}' (${errors.length} errors)`);
+      const formattedDate = date.includes('/')
+        ? date.replace(/\//g, '-')
+        : date;
+      this.logger.log(
+        `Processing Date '${formattedDate}' (${errors.length} errors)`,
+      );
       await this.addCSVToZip(zip, formattedDate, errors, zipEntries);
       totalFilesAdded++;
     }
@@ -165,14 +171,18 @@ export class ErrorCsvGenerationActivity {
         // Use the date format (YYYY-MM-DD) as single folder
         targetPath = `ndm_logs/${date}/errorlog.csv`;
         foundStructure = true;
-        this.logger.log(`Found ndm_logs, creating structure: ndm_logs/${date}/`);
+        this.logger.log(
+          `Found ndm_logs, creating structure: ndm_logs/${date}/`,
+        );
       }
     }
 
     // Step 3: Fallback - create complete structure
     if (!foundStructure) {
       targetPath = `ndm_logs/${date}/errorlog.csv`;
-      this.logger.log(`No existing structure found, creating complete structure: ${targetPath}`);
+      this.logger.log(
+        `No existing structure found, creating complete structure: ${targetPath}`,
+      );
     }
 
     // Generate CSV content
@@ -181,22 +191,29 @@ export class ErrorCsvGenerationActivity {
     // Add the CSV file to the zip
     zip.addFile(targetPath, Buffer.from(csvContent, 'utf8'));
 
-    this.logger.log(`Successfully added CSV: ${targetPath} (${errors.length} records)`);
+    this.logger.log(
+      `Successfully added CSV: ${targetPath} (${errors.length} records)`,
+    );
   }
 
   /**
    * Helper method to find exact directory in zip entries
    */
-  private findExactDirectory(zipEntries: AdmZip.IZipEntry[], directoryPath: string): boolean {
-    return zipEntries.some(entry =>
-      entry.isDirectory && entry.entryName === directoryPath
+  private findExactDirectory(
+    zipEntries: AdmZip.IZipEntry[],
+    directoryPath: string,
+  ): boolean {
+    return zipEntries.some(
+      (entry) => entry.isDirectory && entry.entryName === directoryPath,
     );
   }
 
   /**
    * Generate CSV content as string
    */
-  private async generateCSVContent(errors: OperationErrorExportData[]): Promise<string> {
+  private async generateCSVContent(
+    errors: OperationErrorExportData[],
+  ): Promise<string> {
     // Create a temporary file to generate CSV content
     const tempDir = '/tmp';
     const tempFile = path.join(tempDir, `temp_${Date.now()}.csv`);
@@ -297,4 +314,3 @@ export class ErrorCsvGenerationActivity {
     return grouped;
   }
 }
-

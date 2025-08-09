@@ -18,9 +18,9 @@ export class OperationErrorService {
     startDate: string,
     endDate: string,
   ): Promise<OperationErrorExportData[]> {
-    return await this.operationErrorRepo.query(GET_OPERATION_ERRORS_BY_DATE_RANGE, [
-      startDate,
-      endDate,
-    ]);
+    return await this.operationErrorRepo.query(
+      GET_OPERATION_ERRORS_BY_DATE_RANGE,
+      [startDate, endDate],
+    );
   }
 }
