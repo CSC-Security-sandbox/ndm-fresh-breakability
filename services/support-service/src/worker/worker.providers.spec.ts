@@ -42,6 +42,7 @@ const mockActivitiesServiceClass = jest.fn().mockImplementation(() => ({
   getJobConfigIdsByProjectIds: jest.fn(),
   generateErrorCsv: jest.fn(),
   generateConfigurationDataCsv: jest.fn(),
+  generatePerformanceMetricsCsv: jest.fn(),
   generateConfigurationJobCsv: jest.fn(),
   generateStateDataCsv: jest.fn(),
   generateSystemInventoryCsv: jest.fn(),
