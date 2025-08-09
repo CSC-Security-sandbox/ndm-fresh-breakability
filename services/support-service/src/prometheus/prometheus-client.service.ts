@@ -40,6 +40,9 @@ export class PrometheusClientService {
         `Prometheus API returned error: ${response.error || 'Unknown error'}`,
       );
     } catch (error) {
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
       return this.handlePrometheusError(error);
     }
   }

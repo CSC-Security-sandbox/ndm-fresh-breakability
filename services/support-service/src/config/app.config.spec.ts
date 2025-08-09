@@ -75,6 +75,89 @@ describe('App Configuration', () => {
       const config = appConfig();
 
       expect(config.bundle.baseLogPath).toBe(specialPath);
+            expect(config).toHaveProperty('bundle');
+            expect(config).toHaveProperty('api');
+      expect(config).toHaveProperty('prometheus');
+            expect(config.bundle).toHaveProperty('baseLogPath');
+            expect(config.bundle).toHaveProperty('outputZipPath');
+            expect(config.api).toHaveProperty('configUrl');
+      expect(config.prometheus).toHaveProperty('baseUrl');
+      expect(config.prometheus).toHaveProperty('timeout');
+        });
+
+        it('should return correct structure when all environment variables are set', () => {
+            process.env.BASE_LOG_PATH = '/env/log/path';
+            process.env.OUTPUT_ZIP_PATH = '/env/zip/path';
+            process.env.CONFIG_BASE_URL = 'https://env-config.example.com/api/v1';
+
+            const config = appConfig();
+
+            expect(config).toEqual({
+                bundle: {
+                    baseLogPath: '/env/log/path',
+                    outputZipPath: '/env/zip/path',
+                },
+                api: {
+                    configUrl: 'https://env-config.example.com/api/v1',
+                },
+        prometheus: {
+          baseUrl: 'http://localhost:52061/api/v1',
+          timeout: 30000,
+        },
+            });
+        });
+
+        it('should return correct structure when no environment variables are set', () => {
+            delete process.env.BASE_LOG_PATH;
+            delete process.env.OUTPUT_ZIP_PATH;
+            delete process.env.CONFIG_BASE_URL;
+
+            const config = appConfig();
+
+            expect(config).toEqual({
+                bundle: {
+                    baseLogPath: '/private/tmp/ndm_logs',
+                    outputZipPath: '/private/tmp/generated_zips',
+                },
+                api: {
+                    configUrl: 'http://localhost:3009/api/v1',
+                },
+        prometheus: {
+          baseUrl: 'http://localhost:52061/api/v1',
+          timeout: 30000,
+        },
+            });
+        });
+
+        it('should return correct structure with mixed environment variables', () => {
+            process.env.BASE_LOG_PATH = '/custom/log/path';
+            delete process.env.OUTPUT_ZIP_PATH;
+            process.env.CONFIG_BASE_URL = 'https://custom-config.example.com/api/v1';
+
+            const config = appConfig();
+
+            expect(config).toEqual({
+                bundle: {
+                    baseLogPath: '/custom/log/path',
+                    outputZipPath: '/private/tmp/generated_zips',
+                },
+                api: {
+                    configUrl: 'https://custom-config.example.com/api/v1',
+                },
+        prometheus: {
+          baseUrl: 'http://localhost:52061/api/v1',
+          timeout: 30000,
+        },
+            });
+        });
+
+        it('should return Record<string, any> type as specified', () => {
+            const config = appConfig();
+
+            expect(typeof config).toBe('object');
+            expect(config).not.toBeNull();
+            expect(Array.isArray(config)).toBe(false);
+        });
     });
 
     it('should handle very long BASE_LOG_PATH', () => {

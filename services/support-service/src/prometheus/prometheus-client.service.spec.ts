@@ -505,6 +505,15 @@ describe('PrometheusClientService', () => {
   describe('integration scenarios', () => {
     it('should handle complex Prometheus responses with multiple metrics', async () => {
       const complexResponse: PrometheusResponse = {
+  });
+
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+
+  describe('callPrometheusApi', () => {
+    it('should call prometheus service with correct parameters', async () => {
+      const mockResponse: PrometheusResponse = {
         status: 'success',
         data: {
           resultType: 'matrix',
@@ -522,6 +531,8 @@ describe('PrometheusClientService', () => {
                 ['1641024000', '0.9'],
                 ['1641027600', '1'],
               ],
+              metric: { job: 'node-exporter' },
+              values: [[1691539200, '85.5']],
             },
           ],
         },
@@ -558,6 +569,319 @@ describe('PrometheusClientService', () => {
       results.forEach((result) => {
         expect(result.status).toBe('success');
       });
+      prometheusService.queryPrometheusRange.mockResolvedValue(mockResponse);
+
+      const result = await service.callPrometheusApi(
+        'up',
+        '2023-08-01',
+        '2023-08-02',
+        '5m',
+      );
+
+      expect(prometheusService.queryPrometheusRange).toHaveBeenCalledWith(
+        'up',
+        '2023-08-01',
+        '2023-08-02',
+        '5m',
+      );
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('should use default step value when not provided', async () => {
+      const mockResponse: PrometheusResponse = {
+        status: 'success',
+        data: { resultType: 'matrix', result: [] },
+      };
+
+      prometheusService.queryPrometheusRange.mockResolvedValue(mockResponse);
+
+      await service.callPrometheusApi('cpu_usage', '2023-08-01', '2023-08-02');
+
+      expect(prometheusService.queryPrometheusRange).toHaveBeenCalledWith(
+        'cpu_usage',
+        '2023-08-01',
+        '2023-08-02',
+        '5m',
+      );
+    });
+
+    it('should log query and date parameters', async () => {
+      const mockResponse: PrometheusResponse = {
+        status: 'success',
+        data: { resultType: 'matrix', result: [] },
+      };
+
+      prometheusService.queryPrometheusRange.mockResolvedValue(mockResponse);
+
+      const loggerSpy = jest.spyOn(service['logger'], 'log');
+
+      await service.callPrometheusApi(
+        'memory_usage',
+        '2023-12-01',
+        '2023-12-02',
+        '1h',
+      );
+
+      expect(loggerSpy).toHaveBeenCalledWith(
+        'Calling Prometheus API with query: memory_usage',
+      );
+      expect(loggerSpy).toHaveBeenCalledWith(
+        'Date params - start: 2023-12-01, end: 2023-12-02',
+      );
+    });
+
+    it('should log successful response status', async () => {
+      const mockResponse: PrometheusResponse = {
+        status: 'success',
+        data: { resultType: 'matrix', result: [] },
+      };
+
+      prometheusService.queryPrometheusRange.mockResolvedValue(mockResponse);
+
+      const loggerSpy = jest.spyOn(service['logger'], 'log');
+
+      await service.callPrometheusApi('up', '2023-08-01', '2023-08-02');
+
+      expect(loggerSpy).toHaveBeenCalledWith(
+        'Prometheus API response status: success',
+      );
+    });
+
+    it('should throw InternalServerErrorException for error status', async () => {
+      const errorResponse = {
+        status: 'error',
+        error: 'invalid query syntax',
+        data: null,
+      };
+
+      // Return the error response - the service will check status and throw
+      prometheusService.queryPrometheusRange.mockResolvedValue(
+        errorResponse as any,
+      );
+
+      await expect(
+        service.callPrometheusApi('invalid{', '2023-08-01', '2023-08-02'),
+      ).rejects.toThrow(InternalServerErrorException);
+
+      await expect(
+        service.callPrometheusApi('invalid{', '2023-08-01', '2023-08-02'),
+      ).rejects.toThrow('Prometheus API returned error: invalid query syntax');
+    });
+
+    it('should throw InternalServerErrorException for unknown error', async () => {
+      const errorResponse = {
+        status: 'error',
+        data: null,
+      };
+
+      prometheusService.queryPrometheusRange.mockResolvedValue(
+        errorResponse as any,
+      );
+
+      await expect(
+        service.callPrometheusApi('up', '2023-08-01', '2023-08-02'),
+      ).rejects.toThrow(InternalServerErrorException);
+
+      await expect(
+        service.callPrometheusApi('up', '2023-08-01', '2023-08-02'),
+      ).rejects.toThrow('Prometheus API returned error: Unknown error');
+    });
+
+    it('should handle ECONNREFUSED error', async () => {
+      const connRefusedError = new Error('Connection refused');
+      (connRefusedError as any).code = 'ECONNREFUSED';
+
+      prometheusService.queryPrometheusRange.mockRejectedValue(
+        connRefusedError,
+      );
+
+      await expect(
+        service.callPrometheusApi('up', '2023-08-01', '2023-08-02'),
+      ).rejects.toThrow(InternalServerErrorException);
+
+      await expect(
+        service.callPrometheusApi('up', '2023-08-01', '2023-08-02'),
+      ).rejects.toThrow(
+        'Cannot connect to Prometheus. Make sure Prometheus is running on localhost:52061',
+      );
+    });
+
+    it('should handle ENOTFOUND error', async () => {
+      const notFoundError = new Error('Host not found');
+      (notFoundError as any).code = 'ENOTFOUND';
+
+      prometheusService.queryPrometheusRange.mockRejectedValue(notFoundError);
+
+      await expect(
+        service.callPrometheusApi('up', '2023-08-01', '2023-08-02'),
+      ).rejects.toThrow(InternalServerErrorException);
+
+      await expect(
+        service.callPrometheusApi('up', '2023-08-01', '2023-08-02'),
+      ).rejects.toThrow(
+        'Prometheus server not found. Check if the URL is correct.',
+      );
+    });
+
+    it('should handle HTTP response errors', async () => {
+      const httpError = new Error('Request failed');
+      (httpError as any).response = {
+        status: 500,
+        statusText: 'Internal Server Error',
+        data: { error: 'server overloaded' },
+      };
+
+      prometheusService.queryPrometheusRange.mockRejectedValue(httpError);
+
+      await expect(
+        service.callPrometheusApi('up', '2023-08-01', '2023-08-02'),
+      ).rejects.toThrow(InternalServerErrorException);
+
+      await expect(
+        service.callPrometheusApi('up', '2023-08-01', '2023-08-02'),
+      ).rejects.toThrow(
+        'Prometheus API error: 500 - Internal Server Error. Data: {"error":"server overloaded"}',
+      );
+    });
+
+    it('should handle generic errors', async () => {
+      const genericError = new Error('Something went wrong');
+
+      prometheusService.queryPrometheusRange.mockRejectedValue(genericError);
+
+      await expect(
+        service.callPrometheusApi('up', '2023-08-01', '2023-08-02'),
+      ).rejects.toThrow(InternalServerErrorException);
+
+      await expect(
+        service.callPrometheusApi('up', '2023-08-01', '2023-08-02'),
+      ).rejects.toThrow('Failed to call Prometheus API: Something went wrong');
+    });
+
+    it('should log error details when available', async () => {
+      const httpError = new Error('Request failed');
+      (httpError as any).response = {
+        status: 400,
+        statusText: 'Bad Request',
+        data: { errorType: 'bad_data', error: 'invalid query' },
+      };
+      (httpError as any).config = {
+        params: {
+          query: 'invalid{',
+          start: '2023-08-01T00:00:00.000Z',
+          end: '2023-08-02T23:59:59.000Z',
+          step: '5m',
+        },
+      };
+
+      prometheusService.queryPrometheusRange.mockRejectedValue(httpError);
+
+      const loggerErrorSpy = jest.spyOn(service['logger'], 'error');
+
+      try {
+        await service.callPrometheusApi('invalid{', '2023-08-01', '2023-08-02');
+      } catch (error) {
+        // Expected error
+      }
+
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        'Error calling Prometheus API: Request failed',
+      );
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        'Prometheus response data: {"errorType":"bad_data","error":"invalid query"}',
+      );
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        'Request params: {"query":"invalid{","start":"2023-08-01T00:00:00.000Z","end":"2023-08-02T23:59:59.000Z","step":"5m"}',
+      );
+    });
+
+    it('should handle errors without response data gracefully', async () => {
+      const errorWithoutResponse = new Error('Network timeout');
+      (errorWithoutResponse as any).config = {
+        params: { query: 'up' },
+      };
+
+      prometheusService.queryPrometheusRange.mockRejectedValue(
+        errorWithoutResponse,
+      );
+
+      const loggerErrorSpy = jest.spyOn(service['logger'], 'error');
+
+      try {
+        await service.callPrometheusApi('up', '2023-08-01', '2023-08-02');
+      } catch (error) {
+        // Expected error
+      }
+
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        'Error calling Prometheus API: Network timeout',
+      );
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        'Request params: {"query":"up"}',
+      );
+      // Should not log response data since it doesn't exist
+      expect(loggerErrorSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Prometheus response data:'),
+      );
+    });
+
+    it('should handle complex queries correctly', async () => {
+      const complexQuery = 'rate(node_cpu_seconds_total{mode="idle"}[5m])';
+      const mockResponse: PrometheusResponse = {
+        status: 'success',
+        data: { resultType: 'matrix', result: [] },
+      };
+
+      prometheusService.queryPrometheusRange.mockResolvedValue(mockResponse);
+
+      const result = await service.callPrometheusApi(
+        complexQuery,
+        '2023-08-01',
+        '2023-08-02',
+        '30s',
+      );
+
+      expect(prometheusService.queryPrometheusRange).toHaveBeenCalledWith(
+        complexQuery,
+        '2023-08-01',
+        '2023-08-02',
+        '30s',
+      );
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('should handle empty response data', async () => {
+      const emptyResponse: PrometheusResponse = {
+        status: 'success',
+        data: { resultType: 'matrix', result: [] },
+      };
+
+      prometheusService.queryPrometheusRange.mockResolvedValue(emptyResponse);
+
+      const result = await service.callPrometheusApi(
+        'nonexistent_metric',
+        '2023-08-01',
+        '2023-08-02',
+      );
+
+      expect(result).toEqual(emptyResponse);
+    });
+
+    it('should handle timeout errors specifically', async () => {
+      const timeoutError = new Error('timeout of 30000ms exceeded');
+      (timeoutError as any).code = 'ECONNABORTED';
+
+      prometheusService.queryPrometheusRange.mockRejectedValue(timeoutError);
+
+      await expect(
+        service.callPrometheusApi('slow_query', '2023-08-01', '2023-08-02'),
+      ).rejects.toThrow(InternalServerErrorException);
+
+      await expect(
+        service.callPrometheusApi('slow_query', '2023-08-01', '2023-08-02'),
+      ).rejects.toThrow(
+        'Failed to call Prometheus API: timeout of 30000ms exceeded',
+      );
     });
   });
 });

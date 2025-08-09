@@ -46,11 +46,24 @@ jest.mock(
   }),
 );
 
+jest.mock(
+  './system-inventory-csv-generation/system-inventory-csv-generation.activity',
+  () => ({
+    SystemInventoryCsvGenerationActivity: jest.fn().mockImplementation(() => ({
+      generateSystemInventoryCsv: jest.fn(),
+    SystemInventoryCsvGenerationActivity: jest.fn().mockImplementation(() => ({
+      generateSystemInventoryCsv: jest.fn(),
+    })),
+  }), 
+})
+);
+
 import { LogGeneratorActivity } from './log-generator/log-generator.activity';
 import { NotifyConfigActivity } from './notify-config/notify-config.activity';
 import { ErrorCsvGenerationActivity } from './error-csv-generation/error-csv-generation.activity';
 import { ConfigurationDataCsvGenerationActivity } from './config-data-csv-generation/config-data-csv-generation.activity';
 import { StateDataCsvGenerationActivity } from './state-data-csv-generation/state-data-csv-generation.activity';
+import { SystemInventoryCsvGenerationActivity } from './system-inventory-csv-generation/system-inventory-csv-generation.activity';
 
 describe('ActivitiesService', () => {
   let service: ActivitiesService;
@@ -59,6 +72,7 @@ describe('ActivitiesService', () => {
   let errorCsvGenerationActivity: any;
   let configurationDataCsvGenerationActivity: any;
   let stateDataCsvGenerationActivity: any;
+  let systemInventoryCsvGenerationActivity: any;
 
   beforeEach(async () => {
     // Create mock instances with proper Jest mock functions
@@ -83,6 +97,10 @@ describe('ActivitiesService', () => {
       generateStateDataCsv: jest.fn(),
     };
 
+    systemInventoryCsvGenerationActivity = {
+      generateSystemInventoryCsv: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ActivitiesService,
@@ -105,6 +123,8 @@ describe('ActivitiesService', () => {
         {
           provide: StateDataCsvGenerationActivity,
           useValue: stateDataCsvGenerationActivity,
+          provide: SystemInventoryCsvGenerationActivity,
+          useValue: systemInventoryCsvGenerationActivity,
         },
       ],
     }).compile();
