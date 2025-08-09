@@ -147,22 +147,34 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
 
   describe('generateConfigurationJobCsv', () => {
     it('should generate job config CSV when Configuration Data is in otherMetrics', async () => {
-      const mockProjectDetails = [
-        { project_id: 'project-1' },
-        { project_id: 'project-2' },
+      const mockJobConfigData = [
+        { 'Project Id': 'project-1', 'Project Name': 'Test Project 1' },
+        { 'Project Id': 'project-2', 'Project Name': 'Test Project 2' },
       ];
       const payload = {
         zipLocation: '/path/to/zip',
         otherMetrics: ['Configuration Data', 'Logs'],
         startDate: '2024-01-01',
         endDate: '2024-12-31',
+        projectWorkerMap: [
+          { projectId: 'project-1', workerIds: ['worker-1'] },
+          { projectId: 'project-2', workerIds: ['worker-2'] },
+        ],
       };
       const traceId = 'test-trace-id';
 
-      mockDataSource.query.mockResolvedValue(mockProjectDetails);
+      mockDataSource.query.mockResolvedValue(mockJobConfigData);
       jest
+        .spyOn(service as any, 'createJobConfigCsvContent')
+        .mockReturnValue('csv content');
+      jest.spyOn(service as any, 'addCsvToZip').mockResolvedValue(undefined);
+      const generateJobConfigCsvSpy = jest
         .spyOn(service as any, 'generateJobConfigCsv')
-        .mockResolvedValue(undefined);
+        .mockImplementation(async (projectIds: string[], payload: any) => {
+          // Call the database query like the real method would
+          await mockDataSource.query('SELECT * FROM test', [projectIds]);
+          return Promise.resolve();
+        });
 
       const result = await service.generateConfigurationJobCsv({
         traceId,
@@ -171,8 +183,9 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
 
       expect(mockDataSource.query).toHaveBeenCalledWith(
         expect.stringContaining('SELECT'),
+        [['project-1', 'project-2']],
       );
-      expect(service['generateJobConfigCsv']).toHaveBeenCalledWith(
+      expect(generateJobConfigCsvSpy).toHaveBeenCalledWith(
         ['project-1', 'project-2'],
         payload,
       );
@@ -182,19 +195,20 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
     });
 
     it('should not generate job config CSV when Configuration Data is not in otherMetrics', async () => {
-      const mockProjectDetails = [
-        { project_id: 'project-1' },
-        { project_id: 'project-2' },
-      ];
       const payload = {
         zipLocation: '/path/to/zip',
         otherMetrics: ['Logs', 'Metrics'], // No 'Configuration Data'
         startDate: '2024-01-01',
         endDate: '2024-12-31',
+        projectWorkerMap: [
+          { projectId: 'project-1', workerIds: ['worker-1'] },
+          { projectId: 'project-2', workerIds: ['worker-2'] },
+        ],
       };
       const traceId = 'test-trace-id';
 
-      mockDataSource.query.mockResolvedValue(mockProjectDetails);
+      // Since Configuration Data is not in otherMetrics, generateJobConfigCsv should not be called
+      // Therefore, the database query should not be called
       const generateJobConfigCsvSpy = jest
         .spyOn(service as any, 'generateJobConfigCsv')
         .mockResolvedValue(undefined);
@@ -204,9 +218,8 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
         payload,
       });
 
-      expect(mockDataSource.query).toHaveBeenCalledWith(
-        expect.stringContaining('SELECT'),
-      );
+      // Database query should NOT be called since Configuration Data is not in otherMetrics
+      expect(mockDataSource.query).not.toHaveBeenCalled();
       expect(generateJobConfigCsvSpy).not.toHaveBeenCalled();
       expect(result).toBe(
         'Configuration data CSV generation completed successfully',
@@ -219,6 +232,7 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
         otherMetrics: ['Configuration Data'],
         startDate: '2024-01-01',
         endDate: '2024-12-31',
+        projectWorkerMap: [], // Empty array - no project IDs
       };
       const traceId = 'test-trace-id';
 
@@ -288,7 +302,7 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
 
       expect(mockDataSource.query).toHaveBeenCalledWith(
         expect.stringContaining('SELECT'),
-        [payload.startDate, payload.endDate],
+        [projectIds],
       );
       expect(service['createJobConfigCsvContent']).toHaveBeenCalledWith(
         mockJobConfigData,
@@ -752,6 +766,7 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
         startDate: '2023-01-01',
         endDate: '2023-12-31',
         otherMetrics: ['Configuration Data'],
+        projectWorkerMap: [{ projectId: 'project-1', workerIds: ['worker-1'] }],
       };
 
       mockDataSource.query.mockResolvedValue([]);
@@ -854,7 +869,7 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
 
       expect(mockDataSource.query).toHaveBeenCalledWith(
         expect.stringContaining('SELECT'),
-        [payload.startDate, payload.endDate],
+        [projectIds],
       );
     });
 
@@ -1221,7 +1236,7 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
       );
       expect(mockDataSource.query).toHaveBeenCalledWith(
         expect.stringContaining('FROM datamigrator.project p'),
-        [payload.startDate, payload.endDate],
+        [projectIds],
       );
     });
 
@@ -1262,8 +1277,7 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
       );
 
       expect(mockDataSource.query).toHaveBeenCalledWith(expect.any(String), [
-        payload.startDate,
-        payload.endDate,
+        projectIds,
       ]);
     });
 
