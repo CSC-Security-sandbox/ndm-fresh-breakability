@@ -35,13 +35,8 @@ export class ConfigurationDataCsvGenerationActivity {
     traceId: string;
     payload: any;
   }) {
-    const workerIds = payload?.projectWorkerMap
-      .filter((item: any) => Array.isArray(item.workerIds))
-      .flatMap((item: any) => item.workerIds);
-
     const workerDetails = await this.dataSource.query(
       SQL_QUERIES.GET_WORKER_IDS,
-      [workerIds],
     );
     const validWorkerIds: string[] = workerDetails.map(
       (row: any) => row.worker_id,
