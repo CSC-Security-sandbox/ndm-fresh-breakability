@@ -1,8 +1,11 @@
-import {ConfigService} from '@nestjs/config';
-import {Test, TestingModule} from '@nestjs/testing';
-import {LoggerFactory, LoggerService} from '@netapp-cloud-datamigrate/logger-lib';
-import {Client, Connection} from '@temporalio/client';
-import {WorkflowService} from './workflow.service';
+import { ConfigService } from '@nestjs/config';
+import { Test, TestingModule } from '@nestjs/testing';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
+import { Client, Connection } from '@temporalio/client';
+import { WorkflowService } from './workflow.service';
 
 jest.mock('@temporalio/client');
 
@@ -22,7 +25,7 @@ describe('WorkflowService', () => {
     loggerService = {
       log: jest.fn(),
       error: jest.fn(),
-      debug: jest.fn(,
+      debug: jest.fn(),
     } as unknown as jest.Mocked<LoggerService>;
 
     loggerFactory = {
@@ -36,7 +39,7 @@ describe('WorkflowService', () => {
     mockClient = {
       workflow: {
         start: jest.fn(),
-        getHandle: jest.fn()
+        getHandle: jest.fn(),
       },
     } as unknown as jest.Mocked<Client>;
 
@@ -65,7 +68,7 @@ describe('WorkflowService', () => {
       const client = await service['getClient']();
 
       expect(Connection.connect).toHaveBeenCalledWith({
-        address: 'localhost:7233'
+        address: 'localhost:7233',
       });
       expect(client).toBe(mockClient);
     });
@@ -86,7 +89,7 @@ describe('WorkflowService', () => {
 
       await expect(service['getClient']()).rejects.toThrow(error);
       expect(loggerService.error).toHaveBeenCalledWith(
-          `Failed to connect to Temporal: ${error}`
+        `Failed to connect to Temporal: ${error}`,
       );
     });
   });
@@ -128,7 +131,7 @@ describe('WorkflowService', () => {
           workflowId,
           raw: { pendingChildren: mockPending },
         }),
-        result: jest.fn()
+        result: jest.fn(),
       };
 
       mockClient.workflow.getHandle = jest.fn().mockReturnValue(mockHandle);
@@ -168,12 +171,12 @@ describe('WorkflowService', () => {
     function setPrivateClient(value: any) {
       Object.defineProperty(service, 'client', {
         value,
-        writable: true
+        writable: true,
       });
     }
     const mockClient = {
       connection: {
-        close: jest.fn()
+        close: jest.fn(),
       },
     };
     setPrivateClient(mockClient);
@@ -187,11 +190,11 @@ describe('WorkflowService', () => {
       const payload = {
         workflowId: 'test-workflow-id',
         taskQueue: 'test-queue',
-        args: ['arg1', 'arg2']
+        args: ['arg1', 'arg2'],
       };
       const mockHandle = {
         workflowId: 'test-workflow-id',
-        firstExecutionRunId: 'test-run-id'
+        firstExecutionRunId: 'test-run-id',
       };
 
       mockClient.workflow.start = jest.fn().mockResolvedValue(mockHandle);
@@ -199,8 +202,8 @@ describe('WorkflowService', () => {
       const result = await service.startWorkflow(workflowName as any, payload);
 
       expect(mockClient.workflow.start).toHaveBeenCalledWith(
-          workflowName,
-          payload
+        workflowName,
+        payload,
       );
       expect(result).toBe(mockHandle);
       expect(loggerService.log).toHaveBeenCalled();
@@ -211,21 +214,21 @@ describe('WorkflowService', () => {
       const payload = {
         workflowId: 'test-workflow-id',
         taskQueue: 'test-queue',
-        args: ['arg1', 'arg2']
+        args: ['arg1', 'arg2'],
       };
       const error = new Error('Failed to start workflow');
 
       mockClient.workflow.start = jest.fn().mockRejectedValue(error);
 
       await expect(
-          service.startWorkflow(workflowName as any, payload)
+        service.startWorkflow(workflowName as any, payload),
       ).rejects.toThrow(error);
       expect(mockClient.workflow.start).toHaveBeenCalledWith(
-          workflowName,
-          payload
+        workflowName,
+        payload,
       );
       expect(loggerService.error).toHaveBeenCalledWith(
-          `Failed to start workflow: ${error}`
+        `Failed to start workflow: ${error}`,
       );
     });
 
@@ -234,21 +237,21 @@ describe('WorkflowService', () => {
       const payload = {
         workflowId: 'tet-workflow-id',
         taskQueue: 'test-queue',
-        args: ['arg1', 'arg2']
+        args: ['arg1', 'arg2'],
       };
       const error = new Error('The specified project id was not found');
 
       mockClient.workflow.start = jest.fn().mockRejectedValue(error);
 
       await expect(
-          service.startWorkflow(workflowName as any, payload)
+        service.startWorkflow(workflowName as any, payload),
       ).rejects.toThrow('Please provide a valid Project ID');
       expect(mockClient.workflow.start).toHaveBeenCalledWith(
-          workflowName,
-          payload
+        workflowName,
+        payload,
       );
       expect(loggerService.error).toHaveBeenCalledWith(
-          `Failed to start workflow: ${error}`
+        `Failed to start workflow: ${error}`,
       );
     });
   });
