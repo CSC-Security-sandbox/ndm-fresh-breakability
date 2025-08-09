@@ -14,4 +14,16 @@ export class CsvGeneratorService {
     const headers = ['Name', 'Timestamp', 'Usage'];
     return createCsvString(headers, metrics);
   }
+
+  createBuildDetailsCsvContent(buildDetails: any[]): string {
+    if (buildDetails.length === 0) return '';
+    const headers = [
+      'Pod',
+      'Build Version',
+      'Platform',
+      'Worker Id',
+      'Timestamp',
+    ];
+    return createCsvString(headers, buildDetails);
+  }
 }
