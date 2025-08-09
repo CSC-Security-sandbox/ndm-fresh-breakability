@@ -84,7 +84,9 @@ export const GET_OPERATION_ERRORS_BY_DATE_RANGE = `
     )
   )
   INNER JOIN datamigrator.project p ON c.project_id = p.id
-  WHERE DATE(oe.created_at) >= $1
-    AND DATE(oe.created_at) <= $2
-  ORDER BY DATE(oe.created_at), oe.created_at, p.id
+  WHERE p.id = ANY($1)
+    AND DATE(oe.created_at) >= $2
+    AND DATE(oe.created_at) <= $3
+  ORDER BY p.id, DATE(oe.created_at), oe.created_at
 `;
+
