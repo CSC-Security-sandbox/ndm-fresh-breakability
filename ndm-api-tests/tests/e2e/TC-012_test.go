@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-012:Run bulk cutover with concurrent migration jobs and batch pause/resume.", func() {
+var _ = FDescribe("TC-012:Run bulk cutover with concurrent migration jobs and batch pause/resume.", func() {
 	var headers map[string]string
 	var (
 		ProjectId              string

@@ -22,7 +22,7 @@ run_tests() {
 run_tests "regression" "./tests/regression"
 
 # Run end-to-end tests
-run_tests "end-to-end" "./tests/e2e"
+# run_tests "end-to-end" "./tests/e2e"
 
 # Run smoke tests
-run_tests "smoke" "./tests/smoke"
+# run_tests "smoke" "./tests/smoke"

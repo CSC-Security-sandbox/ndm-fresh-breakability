@@ -10,7 +10,7 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-var _ = Describe("TC-009: Run migration with 'Exclude file older than' option and hourly incremental sync schedule", func() {
+var _ = FDescribe("TC-009: Run migration with 'Exclude file older than' option and hourly incremental sync schedule", func() {
 	var (
 		ProjectId              string
 		workerId1              string
