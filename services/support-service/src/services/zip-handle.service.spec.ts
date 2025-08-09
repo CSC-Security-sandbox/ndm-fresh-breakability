@@ -15,6 +15,8 @@ const mockArchiver = {
 const mockAdmZip = {
   addFile: jest.fn(),
   writeZip: jest.fn(),
+  getEntries: jest.fn(),
+  deleteFile: jest.fn(),
 };
 
 // Mock archiver completely
@@ -34,6 +36,10 @@ jest.mock('fs', () => ({
     access: jest.fn(),
   },
   createWriteStream: jest.fn(),
+  constants: {
+    R_OK: 4,
+    W_OK: 2,
+  },
 }));
 
 describe('ZipHandlerService', () => {
@@ -69,6 +75,12 @@ describe('ZipHandlerService', () => {
     mockArchiver.on.mockImplementation((event: string, callback: Function) => {
       // Don't trigger error by default
     });
+
+    // Reset AdmZip mock
+    mockAdmZip.getEntries.mockReturnValue([]);
+    mockAdmZip.addFile.mockReturnValue(undefined);
+    mockAdmZip.writeZip.mockReturnValue(undefined);
+    mockAdmZip.deleteFile.mockReturnValue(undefined);
   });
 
   it('should be defined', () => {
@@ -104,8 +116,9 @@ describe('ZipHandlerService', () => {
     });
 
     it('should handle empty string input', () => {
-      const result = (service as any).getZipPath('');
-      expect(result).toBe('support-bundle.zip');
+      expect(() => (service as any).getZipPath('')).toThrow(
+        'Failed to determine zip path: Zip location cannot be empty',
+      );
     });
 
     it('should handle paths with different extensions', () => {
@@ -128,7 +141,9 @@ describe('ZipHandlerService', () => {
     });
 
     it('should return false if zip file does not exist', async () => {
-      typedAccess.mockRejectedValue(new Error('File not found'));
+      const enoentError = new Error('File not found');
+      (enoentError as any).code = 'ENOENT';
+      typedAccess.mockRejectedValue(enoentError);
 
       const result = await (service as any).checkZipExists(
         '/test/path/bundle.zip',
@@ -306,6 +321,9 @@ describe('ZipHandlerService', () => {
       const fileName = 'test.csv';
       const zipPath = '/test/bundle.zip';
 
+      // Mock fs.access to allow file access
+      typedAccess.mockResolvedValue(undefined);
+
       await (service as any).addToExistingZip(csvContent, fileName, zipPath);
 
       expect(mockAdmZip.addFile).toHaveBeenCalledWith(
@@ -319,6 +337,9 @@ describe('ZipHandlerService', () => {
       const csvContent = 'header1,header2\nvalue1,value2';
       const fileName = 'test.csv';
       const zipPath = '/test/bundle.zip';
+
+      // Mock fs.access to allow file access
+      typedAccess.mockResolvedValue(undefined);
 
       // Make AdmZip throw an error
       mockAdmZip.addFile.mockImplementation(() => {
@@ -404,7 +425,8 @@ describe('ZipHandlerService', () => {
       const logSpy = jest.spyOn(service['logger'], 'log');
 
       typedAccess.mockResolvedValue(undefined);
-      mockAdmZip.addFile.mockImplementation(() => {
+      // Make getEntries fail to trigger the fallback
+      mockAdmZip.getEntries.mockImplementation(() => {
         throw new Error('Test error');
       });
 
@@ -421,11 +443,434 @@ describe('ZipHandlerService', () => {
       await service.addCsvToZip('content', 'file.csv', '/test/bundle.zip');
 
       expect(errorSpy).toHaveBeenCalledWith(
-        'Error adding CSV to existing zip with AdmZip: Test error',
+        expect.stringContaining(
+          'Error adding CSV to existing zip with AdmZip:',
+        ),
       );
       expect(logSpy).toHaveBeenCalledWith(
         'Falling back to archiver-based approach...',
       );
+    });
+  });
+
+  describe('Input Validation and Error Handling', () => {
+    describe('validateInputs', () => {
+      it('should throw error for empty CSV content', async () => {
+        await expect(
+          service.addCsvToZip('', 'file.csv', '/test/path'),
+        ).rejects.toThrow(
+          'CSV content is required and must be a non-empty string',
+        );
+      });
+
+      it('should throw error for non-string CSV content', async () => {
+        await expect(
+          service.addCsvToZip(null as any, 'file.csv', '/test/path'),
+        ).rejects.toThrow(
+          'CSV content is required and must be a non-empty string',
+        );
+      });
+
+      it('should throw error for empty file name', async () => {
+        await expect(
+          service.addCsvToZip('content', '', '/test/path'),
+        ).rejects.toThrow(
+          'File name is required and must be a non-empty string',
+        );
+      });
+
+      it('should throw error for non-string file name', async () => {
+        await expect(
+          service.addCsvToZip('content', null as any, '/test/path'),
+        ).rejects.toThrow(
+          'File name is required and must be a non-empty string',
+        );
+      });
+
+      it('should throw error for empty zip location', async () => {
+        await expect(
+          service.addCsvToZip('content', 'file.csv', ''),
+        ).rejects.toThrow(
+          'Zip location is required and must be a non-empty string',
+        );
+      });
+
+      it('should throw error for non-string zip location', async () => {
+        await expect(
+          service.addCsvToZip('content', 'file.csv', null as any),
+        ).rejects.toThrow(
+          'Zip location is required and must be a non-empty string',
+        );
+      });
+
+      it('should throw error for file name with invalid characters', async () => {
+        await expect(
+          service.addCsvToZip('content', 'file<>name.csv', '/test/path'),
+        ).rejects.toThrow('File name contains invalid characters');
+      });
+
+      it('should throw error for zip location with path traversal', async () => {
+        await expect(
+          service.addCsvToZip('content', 'file.csv', '../../../etc/passwd'),
+        ).rejects.toThrow('Invalid zip location path');
+      });
+
+      it('should throw error for zip location with null bytes', async () => {
+        await expect(
+          service.addCsvToZip('content', 'file.csv', '/test/path\0'),
+        ).rejects.toThrow('Invalid zip location path');
+      });
+    });
+
+    describe('ensureDirectoryExists error handling', () => {
+      it('should handle directory creation errors', async () => {
+        typedMkdir.mockRejectedValue(new Error('Permission denied'));
+
+        await expect(
+          service.addCsvToZip(
+            'content',
+            'file.csv',
+            '/readonly/path/bundle.zip',
+          ),
+        ).rejects.toThrow(
+          'Failed to add CSV to zip: Failed to create directory: Permission denied',
+        );
+
+        expect(typedMkdir).toHaveBeenCalledWith('/readonly/path', {
+          recursive: true,
+        });
+      });
+    });
+
+    describe('getZipPath error handling', () => {
+      it('should handle path.join errors gracefully', async () => {
+        // This test ensures the getZipPath method doesn't crash with edge cases
+        const service = new ZipHandlerService();
+
+        expect(() => (service as any).getZipPath('/valid/path')).not.toThrow();
+        expect(() =>
+          (service as any).getZipPath('/valid/path.zip'),
+        ).not.toThrow();
+      });
+    });
+  });
+
+  describe('checkZipExists enhanced error handling', () => {
+    it('should return false for empty zip path', async () => {
+      const result = await (service as any).checkZipExists('');
+      expect(result).toBe(false);
+    });
+
+    it('should return false for non-ENOENT access errors', async () => {
+      const accessError = new Error('Permission denied');
+      (accessError as any).code = 'EACCES';
+      typedAccess.mockRejectedValue(accessError);
+
+      const result = await (service as any).checkZipExists(
+        '/test/path/bundle.zip',
+      );
+      expect(result).toBe(false);
+    });
+
+    it('should return false for ENOENT errors', async () => {
+      const enoentError = new Error('File not found');
+      (enoentError as any).code = 'ENOENT';
+      typedAccess.mockRejectedValue(enoentError);
+
+      const result = await (service as any).checkZipExists(
+        '/test/path/bundle.zip',
+      );
+      expect(result).toBe(false);
+    });
+
+    it('should return true when file exists', async () => {
+      typedAccess.mockResolvedValue(undefined);
+
+      const result = await (service as any).checkZipExists(
+        '/test/path/bundle.zip',
+      );
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('createNewZipWithCsv enhanced error handling', () => {
+    it('should reject for missing parameters', async () => {
+      await expect(
+        (service as any).createNewZipWithCsv(
+          '',
+          'file.csv',
+          '/test/bundle.zip',
+        ),
+      ).rejects.toThrow('Missing required parameters for zip creation');
+    });
+
+    it('should handle output stream errors', async () => {
+      const mockWriteStream = {
+        on: jest.fn(),
+      };
+      typedCreateWriteStream.mockReturnValue(mockWriteStream as any);
+
+      const streamError = new Error('Stream write failed');
+      mockWriteStream.on.mockImplementation(
+        (event: string, callback: Function) => {
+          if (event === 'error') {
+            setTimeout(() => callback(streamError), 0);
+          }
+        },
+      );
+
+      await expect(
+        (service as any).createNewZipWithCsv(
+          'content',
+          'file.csv',
+          '/test/bundle.zip',
+        ),
+      ).rejects.toThrow('Failed to create zip file: Stream write failed');
+    });
+
+    it('should handle archive warnings that should be escalated', async () => {
+      const mockWriteStream = { on: jest.fn() };
+      typedCreateWriteStream.mockReturnValue(mockWriteStream as any);
+
+      const archiveWarning = new Error('Critical warning');
+      (archiveWarning as any).code = 'CRITICAL';
+
+      mockArchiver.on.mockImplementation(
+        (event: string, callback: Function) => {
+          if (event === 'warning') {
+            setTimeout(() => callback(archiveWarning), 0);
+          }
+        },
+      );
+
+      await expect(
+        (service as any).createNewZipWithCsv(
+          'content',
+          'file.csv',
+          '/test/bundle.zip',
+        ),
+      ).rejects.toThrow('Archive warning escalated: Critical warning');
+    });
+
+    it('should handle ENOENT archive warnings gracefully', async () => {
+      const mockWriteStream = { on: jest.fn() };
+      typedCreateWriteStream.mockReturnValue(mockWriteStream as any);
+
+      const enoentWarning = new Error('File not found in archive');
+      (enoentWarning as any).code = 'ENOENT';
+
+      let warningCallback: Function;
+      let closeCallback: Function;
+
+      mockArchiver.on.mockImplementation(
+        (event: string, callback: Function) => {
+          if (event === 'warning') {
+            warningCallback = callback;
+          }
+        },
+      );
+
+      mockWriteStream.on.mockImplementation(
+        (event: string, callback: Function) => {
+          if (event === 'close') {
+            closeCallback = callback;
+          }
+        },
+      );
+
+      const promise = (service as any).createNewZipWithCsv(
+        'content',
+        'file.csv',
+        '/test/bundle.zip',
+      );
+
+      // Trigger warning and then close
+      setTimeout(() => {
+        warningCallback(enoentWarning);
+        closeCallback();
+      }, 0);
+
+      await expect(promise).resolves.toBeUndefined();
+    });
+
+    it('should handle finalize errors', async () => {
+      const mockWriteStream = { on: jest.fn() };
+      typedCreateWriteStream.mockReturnValue(mockWriteStream as any);
+
+      mockArchiver.finalize.mockRejectedValue(new Error('Finalize failed'));
+
+      await expect(
+        (service as any).createNewZipWithCsv(
+          'content',
+          'file.csv',
+          '/test/bundle.zip',
+        ),
+      ).rejects.toThrow('Failed to finalize archive: Finalize failed');
+    });
+  });
+
+  describe('addToExistingZip enhanced error handling', () => {
+    beforeEach(() => {
+      typedAccess.mockResolvedValue(undefined);
+      mockAdmZip.getEntries.mockReturnValue([]);
+    });
+
+    it('should throw error for missing parameters', async () => {
+      await expect(
+        (service as any).addToExistingZip('', 'file.csv', '/test/bundle.zip'),
+      ).rejects.toThrow('Both primary and fallback zip operations failed');
+    });
+
+    it('should handle permission denied errors', async () => {
+      const accessError = new Error('Permission denied');
+      (accessError as any).code = 'EACCES';
+      typedAccess.mockRejectedValue(accessError);
+
+      await expect(
+        (service as any).addToExistingZip(
+          'content',
+          'file.csv',
+          '/test/bundle.zip',
+        ),
+      ).rejects.toThrow(
+        'Permission denied accessing zip file: /test/bundle.zip',
+      );
+    });
+
+    it('should handle file not found errors', async () => {
+      const enoentError = new Error('File not found');
+      (enoentError as any).code = 'ENOENT';
+      typedAccess.mockRejectedValue(enoentError);
+
+      await expect(
+        (service as any).addToExistingZip(
+          'content',
+          'file.csv',
+          '/test/bundle.zip',
+        ),
+      ).rejects.toThrow('Zip file not found: /test/bundle.zip');
+    });
+
+    it('should handle corrupted zip files with fallback', async () => {
+      mockAdmZip.addFile.mockImplementation(() => {
+        throw new Error('Invalid or unsupported zip format');
+      });
+
+      const mockWriteStream = { on: jest.fn() };
+      typedCreateWriteStream.mockReturnValue(mockWriteStream as any);
+      mockWriteStream.on.mockImplementation(
+        (event: string, callback: Function) => {
+          if (event === 'close') {
+            setTimeout(callback, 0);
+          }
+        },
+      );
+
+      await (service as any).addToExistingZip(
+        'content',
+        'file.csv',
+        '/test/bundle.zip',
+      );
+
+      expect(mockArchiver.append).toHaveBeenCalledWith('content', {
+        name: 'file.csv',
+      });
+    });
+
+    it('should replace existing files in zip', async () => {
+      const existingEntry = { entryName: 'file.csv' };
+      mockAdmZip.getEntries.mockReturnValue([existingEntry]);
+
+      await (service as any).addToExistingZip(
+        'content',
+        'file.csv',
+        '/test/bundle.zip',
+      );
+
+      expect(mockAdmZip.deleteFile).toHaveBeenCalledWith('file.csv');
+      expect(mockAdmZip.addFile).toHaveBeenCalledWith(
+        'file.csv',
+        Buffer.from('content', 'utf8'),
+      );
+    });
+
+    it('should handle both primary and fallback failures', async () => {
+      // Primary failure
+      mockAdmZip.addFile.mockImplementation(() => {
+        throw new Error('AdmZip failed');
+      });
+
+      // Fallback failure
+      const mockWriteStream = { on: jest.fn() };
+      typedCreateWriteStream.mockReturnValue(mockWriteStream as any);
+
+      const archiveError = new Error('Fallback archive failed');
+      mockArchiver.on.mockImplementation(
+        (event: string, callback: Function) => {
+          if (event === 'error') {
+            setTimeout(() => callback(archiveError), 0);
+          }
+        },
+      );
+
+      await expect(
+        (service as any).addToExistingZip(
+          'content',
+          'file.csv',
+          '/test/bundle.zip',
+        ),
+      ).rejects.toThrow('Both primary and fallback zip operations failed');
+    });
+  });
+
+  describe('createZipFromCsvString method', () => {
+    it('should create zip from CSV string successfully', async () => {
+      const mockWriteStream = { on: jest.fn() };
+      typedCreateWriteStream.mockReturnValue(mockWriteStream as any);
+
+      mockWriteStream.on.mockImplementation(
+        (event: string, callback: Function) => {
+          if (event === 'close') {
+            setTimeout(callback, 0);
+          }
+        },
+      );
+
+      const result = await service.createZipFromCsvString(
+        'content',
+        'test.csv',
+      );
+
+      expect(result).toMatch(/\/tmp\/test_\d+\.zip/);
+      expect(mockArchiver.append).toHaveBeenCalledWith('content', {
+        name: 'test.csv',
+      });
+    });
+
+    it('should handle validation errors in createZipFromCsvString', async () => {
+      await expect(
+        service.createZipFromCsvString('', 'test.csv'),
+      ).rejects.toThrow(
+        'Failed to create zip from CSV string: CSV content is required',
+      );
+    });
+
+    it('should handle zip creation errors in createZipFromCsvString', async () => {
+      const mockWriteStream = { on: jest.fn() };
+      typedCreateWriteStream.mockReturnValue(mockWriteStream as any);
+
+      const archiveError = new Error('Archive creation failed');
+      mockArchiver.on.mockImplementation(
+        (event: string, callback: Function) => {
+          if (event === 'error') {
+            setTimeout(() => callback(archiveError), 0);
+          }
+        },
+      );
+
+      await expect(
+        service.createZipFromCsvString('content', 'test.csv'),
+      ).rejects.toThrow('Failed to create zip from CSV string');
     });
   });
 });
