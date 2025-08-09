@@ -72,7 +72,11 @@ export const configApi = createApi({
         method: "GET",
       }),
       transformResponse: (response) => {
-        return response?.data?.items || response?.data || response || {};
+        let result = response?.data?.items || response?.data || response || {};
+        if (!!response?.data?.id) {
+          result["id"] = response?.data?.id;
+        }
+        return result;
       },
       providesTags: ["GET_FILE_SERVER_BY_ID"],
     }),

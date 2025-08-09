@@ -3,7 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NativeConnection, Worker } from '@temporalio/worker';
-import { firstValueFrom, retry, timeout, timer } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import {
   Platform,
   WorkerConfiguration,
@@ -98,9 +98,9 @@ export class WorkManagerService {
         );
       }
       this.logger.debug(
-        `Fetched configurations: ${JSON.stringify(response.data)}`,
+        `Fetched configurations: ${JSON.stringify(response.data.data.items)}`,
       );
-      await this.handleConfigurations(response.data);
+      await this.handleConfigurations(response.data.data.items);
       await this.monitorTaskQueues();
     } catch (error) {
       this.logger.error(`Error fetching configurations: ${error.message}`);
