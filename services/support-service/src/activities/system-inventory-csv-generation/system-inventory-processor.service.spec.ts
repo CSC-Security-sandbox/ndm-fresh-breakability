@@ -469,5 +469,318 @@ describe('SystemInventoryProcessorService', () => {
         expect((result.data[2] as any).job).toBe('prometheus');
       }
     });
+
+    it('should handle processes with missing metric data', async () => {
+      const mockResponse: PrometheusResponse = {
+        data: {
+          result: [
+            {
+              // Missing metric entirely
+              values: [[1691539200, '1691539000']],
+            },
+          ],
+        },
+      };
+
+      const result = await service.processMetricData(
+        'RUNNING_PROCESSES',
+        mockResponse,
+      );
+
+      expect(result.data).toHaveLength(1);
+      if (Array.isArray(result.data)) {
+        expect((result.data[0] as any).job).toBe('');
+        expect((result.data[0] as any).namespace).toBe('');
+        expect((result.data[0] as any).node).toBe('');
+        expect((result.data[0] as any).service).toBe('');
+        expect((result.data[0] as any).k8s_app).toBe('');
+        expect((result.data[0] as any).instance).toBe('');
+      }
+    });
+
+    it('should handle processes with missing values array', async () => {
+      const mockResponse: PrometheusResponse = {
+        data: {
+          result: [
+            {
+              metric: {
+                job: 'node-exporter',
+                namespace: 'monitoring',
+              },
+              // Missing values entirely
+            },
+          ],
+        },
+      };
+
+      const result = await service.processMetricData(
+        'RUNNING_PROCESSES',
+        mockResponse,
+      );
+
+      expect(result.data).toHaveLength(0);
+      expect(result.csvContent).toBeDefined();
+    });
+  });
+
+  describe('edge cases and error handling', () => {
+    it('should handle response with missing data property', async () => {
+      const invalidResponse = {
+        // Missing data property
+      } as any;
+
+      const result = await service.processMetricData(
+        'CPU_CORES',
+        invalidResponse,
+      );
+
+      expect(result.data).toBeNull();
+      expect(result.csvContent).toBe('');
+    });
+
+    it('should handle response with missing result property', async () => {
+      const invalidResponse: PrometheusResponse = {
+        data: {
+          // Missing result property
+        } as any,
+      };
+
+      const result = await service.processMetricData(
+        'CPU_CORES',
+        invalidResponse,
+      );
+
+      expect(result.data).toBeNull();
+      expect(result.csvContent).toBe('');
+    });
+
+    it('should handle undefined response', async () => {
+      const result = await service.processMetricData(
+        'CPU_CORES',
+        undefined as any,
+      );
+
+      expect(result.data).toBeNull();
+      expect(result.csvContent).toBe('');
+    });
+
+    it('should handle system metric with missing values path', async () => {
+      const mockResponse: PrometheusResponse = {
+        data: {
+          result: [
+            {
+              // Missing values entirely
+            },
+          ],
+        },
+      };
+
+      const result = await service.processMetricData('CPU_CORES', mockResponse);
+
+      expect(result.data).toBeNull();
+      expect(result.csvContent).toBe('');
+    });
+
+    it('should handle system metric with empty values array', async () => {
+      const mockResponse: PrometheusResponse = {
+        data: {
+          result: [
+            {
+              values: [], // Empty values array
+            },
+          ],
+        },
+      };
+
+      const result = await service.processMetricData('CPU_CORES', mockResponse);
+
+      expect(result.data).toBeNull();
+      expect(result.csvContent).toBe('');
+    });
+
+    it('should handle system metric with missing value in values array', async () => {
+      const mockResponse: PrometheusResponse = {
+        data: {
+          result: [
+            {
+              values: [[1691539200, '']], // Empty value string
+            },
+          ],
+        },
+      };
+
+      const result = await service.processMetricData('CPU_CORES', mockResponse);
+
+      expect(result.data).toBeNull();
+      expect(result.csvContent).toBe('');
+    });
+
+    it('should handle disk usage with missing result array', async () => {
+      const mockResponse: PrometheusResponse = {
+        data: {
+          result: [
+            // Missing values property
+          ],
+        },
+      };
+
+      const result = await service.processMetricData(
+        'DISK_USAGE',
+        mockResponse,
+      );
+
+      expect(result.data).toHaveLength(0);
+      expect(result.csvContent).toBeDefined();
+    });
+  });
+
+  describe('processBatchMetrics advanced cases', () => {
+    it('should handle no system spec metrics', async () => {
+      const metricsData = [
+        {
+          metric: 'NETWORK_CONFIG',
+          response: {
+            data: {
+              result: [
+                {
+                  metric: {
+                    device: 'eth0',
+                    address: '192.168.1.10',
+                    broadcast: '',
+                    adminstate: '',
+                    operstate: '',
+                    instance: '',
+                    job: '',
+                    node: '',
+                    namespace: '',
+                    service: '',
+                    helm_sh_chart: '',
+                    app_kubernetes_io_name: '',
+                    app_kubernetes_io_instance: '',
+                    app_kubernetes_io_component: '',
+                    app_kubernetes_io_version: '',
+                    app_kubernetes_io_managed_by: '',
+                    app_kubernetes_io_part_of: '',
+                  },
+                },
+              ],
+            },
+          } as PrometheusResponse,
+        },
+      ];
+
+      const result = await service.processBatchMetrics(metricsData);
+
+      expect(result.SYSTEM_SPECS).toBeUndefined();
+      expect(result.NETWORK_CONFIG).toBeDefined();
+    });
+
+    it('should handle only system spec metrics with all invalid', async () => {
+      const metricsData = [
+        {
+          metric: 'CPU_CORES',
+          response: {
+            data: {
+              result: [{ values: [[1691539200, 'invalid']] }],
+            },
+          } as PrometheusResponse,
+        },
+        {
+          metric: 'MEMORY_GB',
+          response: {
+            data: {
+              result: [{ values: [[1691539200, 'also_invalid']] }],
+            },
+          } as PrometheusResponse,
+        },
+      ];
+
+      const result = await service.processBatchMetrics(metricsData);
+
+      expect(result.SYSTEM_SPECS.data).toHaveLength(0);
+    });
+
+    it('should handle individual metrics that return null', async () => {
+      const metricsData = [
+        {
+          metric: 'CUSTOM_METRIC',
+          response: {
+            data: {
+              result: [{ values: [[1691539200, 'invalid']] }],
+            },
+          } as PrometheusResponse,
+        },
+        {
+          metric: 'NETWORK_CONFIG',
+          response: {
+            data: {
+              result: [
+                {
+                  metric: {
+                    device: 'eth0',
+                    address: '',
+                    broadcast: '',
+                    adminstate: '',
+                    operstate: '',
+                    instance: '',
+                    job: '',
+                    node: '',
+                    namespace: '',
+                    service: '',
+                    helm_sh_chart: '',
+                    app_kubernetes_io_name: '',
+                    app_kubernetes_io_instance: '',
+                    app_kubernetes_io_component: '',
+                    app_kubernetes_io_version: '',
+                    app_kubernetes_io_managed_by: '',
+                    app_kubernetes_io_part_of: '',
+                  },
+                },
+              ],
+            },
+          } as PrometheusResponse,
+        },
+      ];
+
+      const result = await service.processBatchMetrics(metricsData);
+
+      expect(result.CUSTOM_METRIC).toBeUndefined(); // Should be skipped because data is null
+      expect(result.NETWORK_CONFIG).toBeDefined();
+    });
+
+    it('should handle partial system specs and individual metrics', async () => {
+      const metricsData = [
+        {
+          metric: 'CPU_CORES',
+          response: {
+            data: {
+              result: [{ values: [[1691539200, '8.0']] }],
+            },
+          } as PrometheusResponse,
+        },
+        {
+          metric: 'MEMORY_GB',
+          response: {
+            data: {
+              result: [{ values: [[1691539200, 'invalid']] }],
+            },
+          } as PrometheusResponse,
+        },
+        {
+          metric: 'DISK_USAGE',
+          response: {
+            data: {
+              result: [{ values: [[1691539200, '85.5']] }],
+            },
+          } as PrometheusResponse,
+        },
+      ];
+
+      const result = await service.processBatchMetrics(metricsData);
+
+      expect(result.SYSTEM_SPECS).toBeDefined();
+      expect(result.SYSTEM_SPECS.data).toHaveLength(1); // Only CPU_CORES is valid
+      expect(result.DISK_USAGE).toBeDefined(); // Should be processed individually
+    });
   });
 });

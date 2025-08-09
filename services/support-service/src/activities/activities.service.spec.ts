@@ -43,6 +43,11 @@ jest.mock(
     StateDataCsvGenerationActivity: jest.fn().mockImplementation(() => ({
       generateStateDataCsv: jest.fn(),
     })),
+jest.mock('./config-data-csv-generation/config-data-csv-generation.activity', () => ({
+  ConfigurationDataCsvGenerationActivity: jest.fn().mockImplementation(() => ({
+    generateConfigurationDataCsv: jest.fn(),
+        generateConfigurationJobCsv: jest.fn(),
+  })),
   }),
 );
 
@@ -797,6 +802,179 @@ describe('ActivitiesService', () => {
         errorMessage: null,
       });
       expect(notifyResult).toBeUndefined();
+    });
+  });
+
+  describe('generateSystemInventoryCsv', () => {
+    it('should successfully generate system inventory CSV with valid inputs', async () => {
+      // Arrange
+      const traceId = 'test-trace-id-123';
+      const payload = {
+        startDate: '2025-07-30',
+        endDate: '2025-07-31',
+        userId: 'test-user',
+      };
+      const expectedResult = {
+        success: true,
+        filePath: '/test/output/system-inventory.csv',
+      };
+      systemInventoryCsvGenerationActivity.generateSystemInventoryCsv.mockResolvedValue(
+        expectedResult,
+      );
+
+      // Act
+      const result = await service.generateSystemInventoryCsv({
+        traceId,
+        payload,
+      });
+
+      // Assert
+      expect(result).toEqual(expectedResult);
+      expect(
+        systemInventoryCsvGenerationActivity.generateSystemInventoryCsv,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        systemInventoryCsvGenerationActivity.generateSystemInventoryCsv,
+      ).toHaveBeenCalledWith({ traceId, payload });
+    });
+
+    it('should handle errors when generating system inventory CSV', async () => {
+      // Arrange
+      const traceId = 'test-trace-id-error';
+      const payload = {
+        startDate: '2025-07-30',
+        endDate: '2025-07-31',
+        userId: 'test-user',
+      };
+      const mockError = new Error('Failed to generate system inventory CSV');
+      systemInventoryCsvGenerationActivity.generateSystemInventoryCsv.mockRejectedValue(
+        mockError,
+      );
+
+      // Act & Assert
+      await expect(
+        service.generateSystemInventoryCsv({ traceId, payload }),
+      ).rejects.toThrow('Failed to generate system inventory CSV');
+      expect(
+        systemInventoryCsvGenerationActivity.generateSystemInventoryCsv,
+      ).toHaveBeenCalledWith({ traceId, payload });
+    });
+
+    it('should pass through null traceId for system inventory CSV', async () => {
+      // Arrange
+      const traceId = null;
+      const payload = {
+        startDate: '2025-07-30',
+        endDate: '2025-07-31',
+        userId: 'test-user',
+      };
+      const expectedResult = { success: true };
+      systemInventoryCsvGenerationActivity.generateSystemInventoryCsv.mockResolvedValue(
+        expectedResult,
+      );
+
+      // Act
+      const result = await service.generateSystemInventoryCsv({
+        traceId,
+        payload,
+      });
+
+      // Assert
+      expect(result).toEqual(expectedResult);
+      expect(
+        systemInventoryCsvGenerationActivity.generateSystemInventoryCsv,
+      ).toHaveBeenCalledWith({ traceId: null, payload });
+    });
+  });
+
+  describe('generateConfigurationJobCsv', () => {
+    it('should successfully generate configuration job CSV with valid inputs', async () => {
+      // Arrange
+      const traceId = 'test-trace-id-123';
+      const payload = {
+        startDate: '2025-07-30',
+        endDate: '2025-07-31',
+        userId: 'test-user',
+      };
+      const expectedResult = {
+        success: true,
+        filePath: '/test/output/job-config.csv',
+      };
+      configurationDataCsvGenerationActivity.generateConfigurationJobCsv.mockResolvedValue(
+        expectedResult,
+      );
+
+      // Act
+      const result = await service.generateConfigurationJobCsv({
+        traceId,
+        payload,
+      });
+
+      // Assert
+      expect(result).toEqual(expectedResult);
+      expect(
+        configurationDataCsvGenerationActivity.generateConfigurationJobCsv,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        configurationDataCsvGenerationActivity.generateConfigurationJobCsv,
+      ).toHaveBeenCalledWith({ traceId, payload });
+    });
+
+    it('should handle errors when generating configuration job CSV', async () => {
+      // Arrange
+      const traceId = 'test-trace-id-error';
+      const payload = {
+        startDate: '2025-07-30',
+        endDate: '2025-07-31',
+        userId: 'test-user',
+      };
+      const mockError = new Error('Failed to generate configuration job CSV');
+      configurationDataCsvGenerationActivity.generateConfigurationJobCsv.mockRejectedValue(
+        mockError,
+      );
+
+      // Act & Assert
+      await expect(
+        service.generateConfigurationJobCsv({ traceId, payload }),
+      ).rejects.toThrow('Failed to generate configuration job CSV');
+      expect(
+        configurationDataCsvGenerationActivity.generateConfigurationJobCsv,
+      ).toHaveBeenCalledWith({ traceId, payload });
+    });
+
+    it('should pass through undefined payload for configuration job CSV', async () => {
+      // Arrange
+      const traceId = 'test-trace-id';
+      const payload = undefined;
+      configurationDataCsvGenerationActivity.generateConfigurationJobCsv.mockRejectedValue(
+        new Error('Missing payload'),
+      );
+
+      // Act & Assert
+      await expect(
+        service.generateConfigurationJobCsv({ traceId, payload }),
+      ).rejects.toThrow('Missing payload');
+      expect(
+        configurationDataCsvGenerationActivity.generateConfigurationJobCsv,
+      ).toHaveBeenCalledWith({ traceId, payload: undefined });
+    });
+
+    it('should handle promise rejection with non-Error objects for configuration job CSV', async () => {
+      // Arrange
+      const traceId = 'test-trace-id';
+      const payload = {
+        startDate: '2025-07-30',
+        endDate: '2025-07-31',
+        userId: 'test-user',
+      };
+      configurationDataCsvGenerationActivity.generateConfigurationJobCsv.mockRejectedValue(
+        'String error',
+      );
+
+      // Act & Assert
+      await expect(
+        service.generateConfigurationJobCsv({ traceId, payload }),
+      ).rejects.toBe('String error');
     });
   });
 });

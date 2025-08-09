@@ -892,6 +892,50 @@ describe('ErrorCsvGenerationActivity', () => {
       const result = (activity as any).groupDataByDate(nullDateData);
 
       expect(result.size).toBeGreaterThan(0);
+      const result = await activity.getOperationErrorsByDateRange(
+                startDate,
+                endDate,
+            );
+
+      expect(result).toEqual(mockOperationErrorData);
+      expect(
+        operationErrorService.getOperationErrorsByDateRange,
+      ).toHaveBeenCalledWith(startDate, endDate);
+        });
+
+        it('should handle service error', async () => {
+            const startDate = '2024-07-01';
+            const endDate = '2024-07-31';
+
+            operationErrorService.getOperationErrorsByDateRange.mockRejectedValue(new Error('Database error'));
+
+            await expect(activity.getOperationErrorsByDateRange(startDate, endDate))
+                .rejects.toThrow('Database error');
+        });
+
+        it('should handle empty result from service', async () => {
+            const startDate = '2024-07-01';
+            const endDate = '2024-07-31';
+
+            operationErrorService.getOperationErrorsByDateRange.mockResolvedValue([]);
+
+      const result = await activity.getOperationErrorsByDateRange(
+                startDate,
+                endDate,
+            );
+        });
+
+        it('should handle invalid date format', async () => {
+            const startDate = 'invalid-date';
+            const endDate = 'invalid-date';
+
+            operationErrorService.getOperationErrorsByDateRange.mockResolvedValue([]);
+
+      const result = await activity.getOperationErrorsByDateRange(
+                startDate,
+                endDate,
+            );
+        });
     });
 
     it('should handle empty array', () => {
@@ -1011,6 +1055,123 @@ describe('ErrorCsvGenerationActivity', () => {
         zipEntries,
       );
 
+            // Mock CSV content generation
+            jest.spyOn(activity as any, 'generateCSVContent').mockResolvedValue('mock,csv,content');
+        });
+
+        it('should use existing date folder when found', async () => {
+            const zipEntries = [
+                { isDirectory: true, entryName: 'ndm_logs/2024-07-15/' },
+            ] as AdmZip.IZipEntry[];
+
+            await (activity as any).addCSVToZip(
+                mockZip,
+                '2024-07-15',
+                [mockOperationErrorData[0]],
+                zipEntries,
+            );
+
+            expect(mockZip.addFile).toHaveBeenCalledWith(
+                'ndm_logs/2024-07-15/errorlog.csv',
+                expect.any(Buffer),
+            );
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '   ✓ Found existing date folder: ndm_logs/2024-07-15/',
+            );
+        });
+
+        it('should create date structure when ndm_logs exists', async () => {
+            const zipEntries = [
+                { isDirectory: true, entryName: 'ndm_logs/' },
+            ] as AdmZip.IZipEntry[];
+
+            await (activity as any).addCSVToZip(
+                mockZip,
+                '2024-07-15',
+                [mockOperationErrorData[0]],
+                zipEntries,
+            );
+
+            expect(mockZip.addFile).toHaveBeenCalledWith(
+                'ndm_logs/2024-07-15/errorlog.csv',
+                expect.any(Buffer),
+            );
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                'Found ndm_logs, creating structure: ndm_logs/2024-07-15/',
+            );
+        });
+
+        it('should create complete structure when no existing structure found', async () => {
+            const zipEntries = [] as AdmZip.IZipEntry[];
+
+            await (activity as any).addCSVToZip(
+                mockZip,
+                '2024-07-15',
+                [mockOperationErrorData[0]],
+                zipEntries,
+            );
+
+            expect(mockZip.addFile).toHaveBeenCalledWith(
+                'ndm_logs/2024-07-15/errorlog.csv',
+                expect.any(Buffer),
+            );
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                'No existing structure found, creating complete structure: ndm_logs/2024-07-15/errorlog.csv',
+            );
+        });
+
+        it('should log successful CSV addition', async () => {
+            const zipEntries = [] as AdmZip.IZipEntry[];
+            const errors = [mockOperationErrorData[0]];
+
+            await (activity as any).addCSVToZip(
+                mockZip,
+                '2024-07-15',
+                errors,
+                zipEntries,
+            );
+
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                'Successfully added CSV: ndm_logs/2024-07-15/errorlog.csv (1 records)',
+            );
+        });
+
+    it('should handle case when ndm_logs folder exists but not date folder', async () => {
+      const zipEntries = [
+        { isDirectory: true, entryName: 'ndm_logs/' },
+        { isDirectory: true, entryName: 'ndm_logs/2024-07-14/' }, // Different date
+        { isDirectory: true, entryName: 'ndm_logs/2024-07-16/' }, // Different date
+      ] as AdmZip.IZipEntry[];
+
+      await (activity as any).addCSVToZip(
+        mockZip,
+        '2024-07-15',
+        [mockOperationErrorData[0]],
+        zipEntries,
+      );
+
+      expect(mockZip.addFile).toHaveBeenCalledWith(
+        'ndm_logs/2024-07-15/errorlog.csv',
+        expect.any(Buffer),
+      );
+      expect(mockLogger.log).toHaveBeenCalledWith(
+        'Found ndm_logs, creating structure: ndm_logs/2024-07-15/',
+      );
+    });
+
+    it('should handle case when both ndm_logs and date folder do not exist', async () => {
+      const zipEntries = [
+        { isDirectory: true, entryName: 'some_other_folder/' },
+        { isDirectory: false, entryName: 'some_file.txt' },
+      ] as AdmZip.IZipEntry[];
+
+      await (activity as any).addCSVToZip(
+        mockZip,
+        '2024-07-15',
+        [mockOperationErrorData[0]],
+        zipEntries,
+      );
+
       expect(mockZip.addFile).toHaveBeenCalledWith(
         'ndm_logs/2024-07-15/errorlog.csv',
         expect.any(Buffer),
@@ -1018,6 +1179,26 @@ describe('ErrorCsvGenerationActivity', () => {
       expect(mockLogger.log).toHaveBeenCalledWith(
         'No existing structure found, creating complete structure: ndm_logs/2024-07-15/errorlog.csv',
       );
+    });
+
+    it('should handle CSV content generation error', async () => {
+      const zipEntries = [] as AdmZip.IZipEntry[];
+      const errors = [mockOperationErrorData[0]];
+
+      // Make generateCSVContent throw an error
+      jest
+        .spyOn(activity as any, 'generateCSVContent')
+        .mockRejectedValue(new Error('CSV generation failed'));
+
+      await expect(
+        (activity as any).addCSVToZip(
+          mockZip,
+          '2024-07-15',
+          errors,
+          zipEntries,
+        ),
+      ).rejects.toThrow('CSV generation failed');
+    });
     });
 
     it('should log successful CSV addition', async () => {
