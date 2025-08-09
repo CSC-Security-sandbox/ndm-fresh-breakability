@@ -1164,7 +1164,410 @@ describe('LogGeneratorActivity', () => {
         payload: emptyStringPayload,
       });
 
-      expect(result).toStrictEqual({ "message": "/test/output/ndm_test-user.zip", "success": true });
+      expect(result).toStrictEqual({
+        message: '/test/output/ndm_test-user.zip',
+        success: true,
+      });
+    });
+
+    it('should return error when base log path does not exist', async () => {
+      const payload = {
+        startDate: '2024-01-01',
+        endDate: '2024-01-02',
+        userId: 'test-user',
+        projectWorkerMap: { project1: ['worker1'] },
+      };
+
+      // Mock fs.existsSync to return false
+      mockFs.existsSync.mockReturnValue(false);
+
+      const result = await activity.fetchAndZipLogs({
+        traceId: 'base-path-missing',
+        payload,
+      });
+
+      expect(result).toEqual({
+        success: false,
+        message: `Base log path does not exist: ${baseLogPath}`,
+      });
+    });
+
+    it('should return error when no date paths are found for date range', async () => {
+      const payload = {
+        startDate: '2024-01-01',
+        endDate: '2024-01-01', // Same date to test edge case
+        userId: 'test-user',
+        projectWorkerMap: {},
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+
+      // Mock exec to return empty results (no matching directories)
+      mockExec.mockImplementation((cmd, callback) => {
+        setTimeout(() => {
+          callback(null, '', ''); // Empty stdout means no matching directories
+        }, 0);
+        return {} as any;
+      });
+
+      const result = await activity.fetchAndZipLogs({
+        traceId: 'no-date-paths',
+        payload,
+      });
+
+      expect(result).toStrictEqual({
+        success: false,
+        message:
+          'No date folders found in the specified range (2024-01-01 to 2024-01-01) at path: /test/logs',
+      });
+    });
+
+    it('should return error when exec command fails', async () => {
+      const payload = {
+        startDate: '2024-01-01',
+        endDate: '2024-01-02',
+        userId: 'test-user',
+        projectWorkerMap: { project1: ['worker1'] },
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+
+      mockExec.mockImplementation((cmd, callback) => {
+        setTimeout(() => {
+          const error: any = new Error('Command failed');
+          error.stderr = 'find: command not found';
+          callback(error, '', 'find: command not found');
+        }, 0);
+        return {} as any;
+      });
+
+      const result = await activity.fetchAndZipLogs({
+        traceId: 'exec-error',
+        payload,
+      });
+
+      expect(result).toEqual({
+        success: false,
+        message: 'Failed to execute find command: Command failed',
+      });
+    });
+
+    it('should handle archive warning with ENOENT code', async () => {
+      const payload = {
+        startDate: '2024-01-01',
+        endDate: '2024-01-02',
+        userId: 'test-user',
+        projectWorkerMap: { project1: ['worker1'] },
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+
+      const mockArchive = {
+        pipe: jest.fn(),
+        on: jest.fn(),
+        directory: jest.fn(),
+        finalize: jest.fn().mockResolvedValue(undefined),
+        pointer: jest.fn().mockReturnValue(1024),
+      };
+
+      const mockOutput = {
+        on: jest.fn(),
+        close: jest.fn(),
+      };
+
+      mockFs.createWriteStream.mockReturnValue(mockOutput as any);
+      mockArchiver.mockReturnValue(mockArchive as any);
+
+      mockExec.mockImplementation((cmd, callback) => {
+        setTimeout(() => {
+          callback(null, '/test/logs/2024-01-01\n', '');
+        }, 0);
+        return {} as any;
+      });
+
+      let warningHandler: any = null;
+      let endHandler: any = null;
+      let closeHandler: any = null;
+
+      // Set up archive event handling to trigger warning
+      mockArchive.on.mockImplementation((event, handler) => {
+        if (event === 'warning') {
+          warningHandler = handler;
+        } else if (event === 'end') {
+          endHandler = handler;
+        }
+      });
+
+      mockOutput.on.mockImplementation((event, handler) => {
+        if (event === 'close') {
+          closeHandler = handler;
+        }
+      });
+
+      const resultPromise = activity.fetchAndZipLogs({
+        traceId: 'warning-test',
+        payload,
+      });
+
+      // Wait a bit for setup
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Trigger the warning
+      if (warningHandler) {
+        const warningError: any = new Error('ENOENT warning');
+        warningError.code = 'ENOENT';
+        warningHandler(warningError);
+      }
+
+      // Trigger end and close events
+      if (endHandler) endHandler();
+      if (closeHandler) closeHandler();
+
+      const result = await resultPromise;
+
+      expect(result).toStrictEqual({
+        message: '/test/output/ndm_test-user.zip',
+        success: true,
+      });
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        '[warning-test] Archive warning:',
+        expect.objectContaining({ code: 'ENOENT' }),
+      );
+    }, 10000);
+
+    it('should return error when archive warning has non-ENOENT code', async () => {
+      const payload = {
+        startDate: '2024-01-01',
+        endDate: '2024-01-02',
+        userId: 'test-user',
+        projectWorkerMap: { project1: ['worker1'] },
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+
+      const mockArchive = {
+        pipe: jest.fn(),
+        on: jest.fn(),
+        directory: jest.fn(),
+        finalize: jest.fn().mockResolvedValue(undefined),
+      };
+
+      const mockOutput = {
+        on: jest.fn(),
+        close: jest.fn(),
+      };
+
+      mockFs.createWriteStream.mockReturnValue(mockOutput as any);
+      mockArchiver.mockReturnValue(mockArchive as any);
+
+      mockExec.mockImplementation((cmd, callback) => {
+        setTimeout(() => {
+          callback(null, '/test/logs/2024-01-01\n', '');
+        }, 0);
+        return {} as any;
+      });
+
+      // Set up archive event handling to trigger critical warning
+      mockArchive.on.mockImplementation((event, handler) => {
+        if (event === 'warning') {
+          setTimeout(() => {
+            const warningError: any = new Error('Critical warning');
+            warningError.code = 'CRITICAL';
+            handler(warningError);
+          }, 10);
+        }
+      });
+
+      const result = await activity.fetchAndZipLogs({
+        traceId: 'critical-warning-test',
+        payload,
+      });
+
+      expect(result).toEqual({
+        success: false,
+        message: 'Critical warning',
+      });
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        '[critical-warning-test] Archive warning:',
+        expect.objectContaining({ code: 'CRITICAL' }),
+      );
+    });
+
+    it('should handle entry events and log progress', async () => {
+      const payload = {
+        startDate: '2024-01-01',
+        endDate: '2024-01-02',
+        userId: 'test-user',
+        projectWorkerMap: { project1: ['worker1'] },
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+
+      const mockArchive = {
+        pipe: jest.fn(),
+        on: jest.fn(),
+        directory: jest.fn(),
+        finalize: jest.fn().mockResolvedValue(undefined),
+        pointer: jest.fn().mockReturnValue(1024),
+      };
+
+      const mockOutput = {
+        on: jest.fn(),
+        close: jest.fn(),
+      };
+
+      mockFs.createWriteStream.mockReturnValue(mockOutput as any);
+      mockArchiver.mockReturnValue(mockArchive as any);
+
+      mockExec.mockImplementation((cmd, callback) => {
+        setTimeout(() => {
+          callback(null, '/test/logs/2024-01-01\n', '');
+        }, 0);
+        return {} as any;
+      });
+
+      let entryHandler: any = null;
+      let endHandler: any = null;
+      let closeHandler: any = null;
+
+      // Set up archive event handling to trigger entry events
+      mockArchive.on.mockImplementation((event, handler) => {
+        if (event === 'entry') {
+          entryHandler = handler;
+        } else if (event === 'end') {
+          endHandler = handler;
+        }
+      });
+
+      mockOutput.on.mockImplementation((event, handler) => {
+        if (event === 'close') {
+          closeHandler = handler;
+        }
+      });
+
+      const resultPromise = activity.fetchAndZipLogs({
+        traceId: 'entry-test',
+        payload,
+      });
+
+      // Wait a bit for setup
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Trigger 100 entries to test progress logging
+      if (entryHandler) {
+        for (let i = 0; i < 100; i++) {
+          entryHandler({ name: `file${i}.log` });
+        }
+      }
+
+      // Trigger end and close events
+      if (endHandler) endHandler();
+      if (closeHandler) closeHandler();
+
+      const result = await resultPromise;
+
+      expect(result).toStrictEqual({
+        message: '/test/output/ndm_test-user.zip',
+        success: true,
+      });
+      expect(mockLogger.log).toHaveBeenCalledWith(
+        '[entry-test] Processed 100 entries...',
+      );
+    }, 10000);
+
+    it('should return error when adding folders to archive fails', async () => {
+      const payload = {
+        startDate: '2024-01-01',
+        endDate: '2024-01-02',
+        userId: 'test-user',
+        projectWorkerMap: { project1: ['worker1'] },
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+
+      const mockArchive = {
+        pipe: jest.fn(),
+        on: jest.fn(),
+        directory: jest.fn(() => {
+          throw new Error('Directory addition failed');
+        }),
+        finalize: jest.fn().mockResolvedValue(undefined),
+      };
+
+      const mockOutput = {
+        on: jest.fn(),
+        close: jest.fn(),
+      };
+
+      mockFs.createWriteStream.mockReturnValue(mockOutput as any);
+      mockArchiver.mockReturnValue(mockArchive as any);
+
+      mockExec.mockImplementation((cmd, callback) => {
+        setTimeout(() => {
+          callback(null, '/test/logs/2024-01-01\n', '');
+        }, 0);
+        return {} as any;
+      });
+
+      const result = await activity.fetchAndZipLogs({
+        traceId: 'folder-error-test',
+        payload,
+      });
+
+      expect(result).toEqual({
+        success: false,
+        message:
+          'Failed to add folder 2024-01-01 to zip: Directory addition failed',
+      });
+    });
+
+    it('should return error when archive finalize fails', async () => {
+      const payload = {
+        startDate: '2024-01-01',
+        endDate: '2024-01-02',
+        userId: 'test-user',
+        projectWorkerMap: { project1: ['worker1'] },
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+
+      const mockArchive = {
+        pipe: jest.fn(),
+        on: jest.fn(),
+        directory: jest.fn(),
+        finalize: jest.fn().mockRejectedValue(new Error('Finalize failed')),
+      };
+
+      const mockOutput = {
+        on: jest.fn(),
+        close: jest.fn(),
+      };
+
+      mockFs.createWriteStream.mockReturnValue(mockOutput as any);
+      mockArchiver.mockReturnValue(mockArchive as any);
+
+      mockExec.mockImplementation((cmd, callback) => {
+        setTimeout(() => {
+          callback(null, '/test/logs/2024-01-01\n', '');
+        }, 0);
+        return {} as any;
+      });
+
+      const result = await activity.fetchAndZipLogs({
+        traceId: 'finalize-error-test',
+        payload,
+      });
+
+      expect(result).toEqual({
+        success: false,
+        message: 'Failed to finalize zip archive: Finalize failed',
+      });
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        '[finalize-error-test] Error finalizing archive:',
+        expect.any(Error),
+      );
     });
 
     // Removed failing test: null and undefined values in projectWorkerMap
