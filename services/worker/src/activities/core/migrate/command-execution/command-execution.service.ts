@@ -231,9 +231,6 @@ export class CommandExecService {
         if (jobContext.jobConfig.options.preserveAccessTime &&  item.sourceMeta.accessTime.getTime() !== item.targetMeta.accessTime.getTime())
             validateMisMatch += `AccessTime Mismatch detected, source: ${item.sourceMeta.accessTime.toISOString()}, target: ${item.targetMeta.accessTime.toISOString()} \n`;
 
-        if(cmd.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.fail?.length > 0) 
-            validateMisMatch += `SID Mapping Failed to Stamp for mapping ${cmd.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.fail} \n`;
-
         if(cmd.ops?.[OPS_CMD.STAMP_META]?.params?.error?.length) 
             validateMisMatch += `Stamping Errors Detected: ${cmd.ops?.[OPS_CMD.STAMP_META]?.params?.error} \n`;
 
