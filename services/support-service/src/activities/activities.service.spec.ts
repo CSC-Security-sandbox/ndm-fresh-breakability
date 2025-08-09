@@ -723,6 +723,177 @@ describe('ActivitiesService', () => {
     });
   });
 
+  describe('generateConfigurationDataCsv', () => {
+    it('should successfully generate configuration data CSV with valid inputs', async () => {
+      // Arrange
+      const traceId = 'test-trace-id-config';
+      const payload = {
+        startDate: '2025-07-30',
+        endDate: '2025-07-31',
+        zipPath: '/test/output/ndm_test-user.zip',
+      };
+      const expectedResult = {
+        success: true,
+        message: 'Configuration CSV generated successfully',
+        filesCreated: 3,
+      };
+      configurationDataCsvGenerationActivity.generateConfigurationDataCsv.mockResolvedValue(
+        expectedResult,
+      );
+
+      // Act
+      const result = await service.generateConfigurationDataCsv({
+        traceId,
+        payload,
+      });
+
+      // Assert
+      expect(result).toEqual(expectedResult);
+      expect(
+        configurationDataCsvGenerationActivity.generateConfigurationDataCsv,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        configurationDataCsvGenerationActivity.generateConfigurationDataCsv,
+      ).toHaveBeenCalledWith({ traceId, payload });
+    });
+
+    it('should handle errors when generating configuration data CSV', async () => {
+      // Arrange
+      const traceId = 'test-trace-id-config-error';
+      const payload = {
+        startDate: '2025-07-30',
+        endDate: '2025-07-31',
+        zipPath: '/test/output/ndm_test-user.zip',
+      };
+      const mockError = new Error('Configuration CSV generation failed');
+      configurationDataCsvGenerationActivity.generateConfigurationDataCsv.mockRejectedValue(
+        mockError,
+      );
+
+      // Act & Assert
+      await expect(
+        service.generateConfigurationDataCsv({ traceId, payload }),
+      ).rejects.toThrow('Configuration CSV generation failed');
+      expect(
+        configurationDataCsvGenerationActivity.generateConfigurationDataCsv,
+      ).toHaveBeenCalledWith({ traceId, payload });
+    });
+  });
+
+  describe('generatePerformanceMetricsCsv', () => {
+    it('should successfully generate performance metrics CSV with valid inputs', async () => {
+      // Arrange
+      const traceId = 'test-trace-id-performance';
+      const payload = {
+        startDate: '2025-07-30',
+        endDate: '2025-07-31',
+        zipPath: '/test/output/ndm_test-user.zip',
+      };
+      const expectedResult = {
+        success: true,
+        message: 'Performance metrics CSV generated successfully',
+        filesCreated: 2,
+      };
+      performanceMetricsCsvGenerationActivity.generatePerformanceMetricsCsv.mockResolvedValue(
+        expectedResult,
+      );
+
+      // Act
+      const result = await service.generatePerformanceMetricsCsv({
+        traceId,
+        payload,
+      });
+
+      // Assert
+      expect(result).toEqual(expectedResult);
+      expect(
+        performanceMetricsCsvGenerationActivity.generatePerformanceMetricsCsv,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        performanceMetricsCsvGenerationActivity.generatePerformanceMetricsCsv,
+      ).toHaveBeenCalledWith({ traceId, payload });
+    });
+
+    it('should handle errors when generating performance metrics CSV', async () => {
+      // Arrange
+      const traceId = 'test-trace-id-performance-error';
+      const payload = {
+        startDate: '2025-07-30',
+        endDate: '2025-07-31',
+        zipPath: '/test/output/ndm_test-user.zip',
+      };
+      const mockError = new Error('Performance metrics CSV generation failed');
+      performanceMetricsCsvGenerationActivity.generatePerformanceMetricsCsv.mockRejectedValue(
+        mockError,
+      );
+
+      // Act & Assert
+      await expect(
+        service.generatePerformanceMetricsCsv({ traceId, payload }),
+      ).rejects.toThrow('Performance metrics CSV generation failed');
+      expect(
+        performanceMetricsCsvGenerationActivity.generatePerformanceMetricsCsv,
+      ).toHaveBeenCalledWith({ traceId, payload });
+    });
+  });
+
+  describe('generateConfigurationJobCsv', () => {
+    it('should successfully generate configuration job CSV with valid inputs', async () => {
+      // Arrange
+      const traceId = 'test-trace-id-job';
+      const payload = {
+        startDate: '2025-07-30',
+        endDate: '2025-07-31',
+        zipPath: '/test/output/ndm_test-user.zip',
+      };
+      const expectedResult = {
+        success: true,
+        message: 'Configuration job CSV generated successfully',
+        filesCreated: 1,
+      };
+      configurationDataCsvGenerationActivity.generateConfigurationJobCsv.mockResolvedValue(
+        expectedResult,
+      );
+
+      // Act
+      const result = await service.generateConfigurationJobCsv({
+        traceId,
+        payload,
+      });
+
+      // Assert
+      expect(result).toEqual(expectedResult);
+      expect(
+        configurationDataCsvGenerationActivity.generateConfigurationJobCsv,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        configurationDataCsvGenerationActivity.generateConfigurationJobCsv,
+      ).toHaveBeenCalledWith({ traceId, payload });
+    });
+
+    it('should handle errors when generating configuration job CSV', async () => {
+      // Arrange
+      const traceId = 'test-trace-id-job-error';
+      const payload = {
+        startDate: '2025-07-30',
+        endDate: '2025-07-31',
+        zipPath: '/test/output/ndm_test-user.zip',
+      };
+      const mockError = new Error('Configuration job CSV generation failed');
+      configurationDataCsvGenerationActivity.generateConfigurationJobCsv.mockRejectedValue(
+        mockError,
+      );
+
+      // Act & Assert
+      await expect(
+        service.generateConfigurationJobCsv({ traceId, payload }),
+      ).rejects.toThrow('Configuration job CSV generation failed');
+      expect(
+        configurationDataCsvGenerationActivity.generateConfigurationJobCsv,
+      ).toHaveBeenCalledWith({ traceId, payload });
+    });
+  });
+
   describe('Edge Cases and Error Handling', () => {
     it('should handle method calls with missing parameters', async () => {
       // Test fetchAndZipLogs with missing parameters
@@ -750,6 +921,39 @@ describe('ActivitiesService', () => {
           traceId: undefined,
           status: undefined,
           errorMessage: undefined,
+        }),
+      ).rejects.toThrow('Invalid input');
+
+      // Test generateConfigurationDataCsv with missing parameters
+      configurationDataCsvGenerationActivity.generateConfigurationDataCsv.mockRejectedValue(
+        new Error('Invalid input'),
+      );
+      await expect(
+        service.generateConfigurationDataCsv({
+          traceId: undefined,
+          payload: undefined,
+        }),
+      ).rejects.toThrow('Invalid input');
+
+      // Test generatePerformanceMetricsCsv with missing parameters
+      performanceMetricsCsvGenerationActivity.generatePerformanceMetricsCsv.mockRejectedValue(
+        new Error('Invalid input'),
+      );
+      await expect(
+        service.generatePerformanceMetricsCsv({
+          traceId: undefined,
+          payload: undefined,
+        }),
+      ).rejects.toThrow('Invalid input');
+
+      // Test generateConfigurationJobCsv with missing parameters
+      configurationDataCsvGenerationActivity.generateConfigurationJobCsv.mockRejectedValue(
+        new Error('Invalid input'),
+      );
+      await expect(
+        service.generateConfigurationJobCsv({
+          traceId: undefined,
+          payload: undefined,
         }),
       ).rejects.toThrow('Invalid input');
     });
