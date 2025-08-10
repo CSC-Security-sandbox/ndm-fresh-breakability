@@ -129,7 +129,67 @@ export class PerformanceMetricsCsvGenerationActivity {
         fileName,
         zipLocation,
       );
-      this.logger.log(`[${traceId}] System Metrics CSV created: ${fileName}`);
+      this.logger.log(
+        `[${traceId}] Network Throughput BPS CSV created: ${fileName}`,
+      );
+    }
+
+    // Generate separate CSV files for each service metric
+    if (
+      data.SERVICE_REQUEST_RATE &&
+      data.SERVICE_REQUEST_RATE?.data?.length > 0
+    ) {
+      const fileName = `Performance metrics/service_request_rate_${timestamp}.csv`;
+      await this.zipHandler.addCsvToZip(
+        data.SERVICE_REQUEST_RATE.csvContent,
+        fileName,
+        zipLocation,
+      );
+      this.logger.log(
+        `[${traceId}] Service Request Rate CSV created: ${fileName}`,
+      );
+    }
+
+    if (
+      data.SERVICE_LATENCY_P95 &&
+      data.SERVICE_LATENCY_P95?.data?.length > 0
+    ) {
+      const fileName = `Performance metrics/service_latency_p95_${timestamp}.csv`;
+      await this.zipHandler.addCsvToZip(
+        data.SERVICE_LATENCY_P95.csvContent,
+        fileName,
+        zipLocation,
+      );
+      this.logger.log(
+        `[${traceId}] Service Latency P95 CSV created: ${fileName}`,
+      );
+    }
+
+    if (data.CLIENT_ERROR_RATE && data.CLIENT_ERROR_RATE?.data?.length > 0) {
+      const fileName = `Performance metrics/client_error_rate_${timestamp}.csv`;
+      await this.zipHandler.addCsvToZip(
+        data.CLIENT_ERROR_RATE.csvContent,
+        fileName,
+        zipLocation,
+      );
+      this.logger.log(
+        `[${traceId}] Client Error Rate CSV created: ${fileName}`,
+      );
+    }
+
+    if (
+      data.SERVICE_ERROR_RATE_BY_TYPE &&
+      data.SERVICE_ERROR_RATE_BY_TYPE?.data?.length > 0
+    ) {
+      const fileName = `Performance metrics/service_error_rate_by_type_${timestamp}.csv`;
+      await this.zipHandler.addCsvToZip(
+        data.SERVICE_ERROR_RATE_BY_TYPE.csvContent,
+        fileName,
+        zipLocation,
+      );
+      this.logger.log(
+        `[${traceId}] Service Error Rate by Type CSV created: ${fileName}`,
+      );
     }
   }
 }
