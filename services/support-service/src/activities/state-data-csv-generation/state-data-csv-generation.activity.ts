@@ -31,9 +31,17 @@ export class StateDataCsvGenerationActivity {
       `[${traceId}] Worker IDs provided: ${workerIds.length > 0 ? workerIds.join(', ') : 'None'}`,
     );
 
+    // Check if State Data is requested in otherMetrics
+    if (!payload?.otherMetrics?.includes('State Data')) {
+      this.logger.log(
+        `[${traceId}] State Data not requested in otherMetrics, skipping`,
+      );
+      return 'State Data CSV generation skipped - not requested';
+    }
+
     const data = await this.prometheusDataProcessor.getPrometheusMetrics(
-      payload.startDate as string,
-      payload.endDate as string,
+      payload?.startDate as string,
+      payload?.endDate as string,
       workerIds as string[],
     );
 

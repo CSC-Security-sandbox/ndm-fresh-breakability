@@ -130,8 +130,129 @@ describe('StateDataCsvGenerationActivity', () => {
       startDate: '2023-01-01',
       endDate: '2023-01-31',
       zipLocation: '/path/to/zip',
+      otherMetrics: ['State Data'], // Include this to make tests pass the new condition
     };
 
+    // Test cases for otherMetrics condition (new feature)
+    describe('otherMetrics condition', () => {
+      it('should skip processing when State Data is not in otherMetrics', async () => {
+        const payload = {
+          ...basePayload,
+          otherMetrics: ['Other Metric'], // Does not include 'State Data'
+          projectWorkerMap: [{ workerIds: ['worker-1'] }],
+        };
+
+        const result = await activity.generateStateDataCsv({
+          traceId,
+          payload,
+        });
+
+        expect(logger.log).toHaveBeenCalledWith(
+          '[test-trace-id] Starting State Data CSV generation',
+        );
+        expect(logger.log).toHaveBeenCalledWith(
+          '[test-trace-id] Worker IDs provided: worker-1',
+        );
+        expect(logger.log).toHaveBeenCalledWith(
+          '[test-trace-id] State Data not requested in otherMetrics, skipping',
+        );
+        expect(result).toBe(
+          'State Data CSV generation skipped - not requested',
+        );
+        expect(
+          prometheusDataProcessor.getPrometheusMetrics,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('should skip processing when otherMetrics is undefined', async () => {
+        const payload = {
+          ...basePayload,
+          otherMetrics: undefined,
+          projectWorkerMap: [{ workerIds: ['worker-1'] }],
+        };
+
+        const result = await activity.generateStateDataCsv({
+          traceId,
+          payload,
+        });
+
+        expect(logger.log).toHaveBeenCalledWith(
+          '[test-trace-id] State Data not requested in otherMetrics, skipping',
+        );
+        expect(result).toBe(
+          'State Data CSV generation skipped - not requested',
+        );
+        expect(
+          prometheusDataProcessor.getPrometheusMetrics,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('should skip processing when otherMetrics is null', async () => {
+        const payload = {
+          ...basePayload,
+          otherMetrics: null,
+          projectWorkerMap: [{ workerIds: ['worker-1'] }],
+        };
+
+        const result = await activity.generateStateDataCsv({
+          traceId,
+          payload,
+        });
+
+        expect(logger.log).toHaveBeenCalledWith(
+          '[test-trace-id] State Data not requested in otherMetrics, skipping',
+        );
+        expect(result).toBe(
+          'State Data CSV generation skipped - not requested',
+        );
+        expect(
+          prometheusDataProcessor.getPrometheusMetrics,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('should skip processing when otherMetrics is empty array', async () => {
+        const payload = {
+          ...basePayload,
+          otherMetrics: [],
+          projectWorkerMap: [{ workerIds: ['worker-1'] }],
+        };
+
+        const result = await activity.generateStateDataCsv({
+          traceId,
+          payload,
+        });
+
+        expect(logger.log).toHaveBeenCalledWith(
+          '[test-trace-id] State Data not requested in otherMetrics, skipping',
+        );
+        expect(result).toBe(
+          'State Data CSV generation skipped - not requested',
+        );
+        expect(
+          prometheusDataProcessor.getPrometheusMetrics,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('should process when State Data is included along with other metrics', async () => {
+        const payload = {
+          ...basePayload,
+          otherMetrics: ['Other Metric', 'State Data', 'Another Metric'],
+          projectWorkerMap: [{ workerIds: ['worker-1'] }],
+        };
+
+        const result = await activity.generateStateDataCsv({
+          traceId,
+          payload,
+        });
+
+        expect(
+          prometheusDataProcessor.getPrometheusMetrics,
+        ).toHaveBeenCalledWith('2023-01-01', '2023-01-31', ['worker-1']);
+        expect(result).toBe('State Data CSV generation completed successfully');
+      });
+    });
+
+    // Existing test cases (updated with otherMetrics)
     it('should successfully generate CSV with worker IDs from projectWorkerMap', async () => {
       const payload = {
         ...basePayload,
@@ -207,7 +328,10 @@ describe('StateDataCsvGenerationActivity', () => {
     });
 
     it('should handle missing projectWorkerMap', async () => {
-      const payload = basePayload; // No projectWorkerMap
+      const payload = {
+        ...basePayload,
+        projectWorkerMap: undefined,
+      };
 
       await activity.generateStateDataCsv({ traceId, payload });
 
@@ -336,7 +460,8 @@ describe('StateDataCsvGenerationActivity', () => {
       );
     });
 
-    it('should handle prometheus service errors', async () => {
+    // Error handling tests (updated for new condition)
+    it('should handle prometheus service errors when State Data is requested', async () => {
       const error = new Error('Prometheus connection failed');
       prometheusDataProcessor.getPrometheusMetrics.mockRejectedValue(error);
 
@@ -420,6 +545,43 @@ describe('StateDataCsvGenerationActivity', () => {
         '/path/to/zip',
       );
     });
+
+    it('should handle duplicate worker IDs', async () => {
+      const payload = {
+        ...basePayload,
+        projectWorkerMap: [
+          { workerIds: ['worker-1', 'worker-2'] },
+          { workerIds: ['worker-2', 'worker-3'] }, // worker-2 is duplicate
+        ],
+      };
+
+      await activity.generateStateDataCsv({ traceId, payload });
+
+      expect(prometheusDataProcessor.getPrometheusMetrics).toHaveBeenCalledWith(
+        '2023-01-01',
+        '2023-01-31',
+        ['worker-1', 'worker-2', 'worker-2', 'worker-3'], // Contains duplicates
+      );
+    });
+
+    it('should handle very large worker ID arrays', async () => {
+      const largeWorkerArray = Array.from(
+        { length: 1000 },
+        (_, i) => `worker-${i}`,
+      );
+      const payload = {
+        ...basePayload,
+        projectWorkerMap: [{ workerIds: largeWorkerArray }],
+      };
+
+      await activity.generateStateDataCsv({ traceId, payload });
+
+      expect(prometheusDataProcessor.getPrometheusMetrics).toHaveBeenCalledWith(
+        '2023-01-01',
+        '2023-01-31',
+        largeWorkerArray,
+      );
+    });
   });
 
   describe('generateCsvFiles (private method)', () => {
@@ -436,6 +598,7 @@ describe('StateDataCsvGenerationActivity', () => {
         startDate: '2023-01-01',
         endDate: '2023-01-31',
         zipLocation,
+        otherMetrics: ['State Data'],
         projectWorkerMap: [{ workerIds: ['worker-1'] }],
       };
 
@@ -461,9 +624,9 @@ describe('StateDataCsvGenerationActivity', () => {
     it('should handle null payload gracefully', async () => {
       const payload = null;
 
-      await expect(
-        activity.generateStateDataCsv({ traceId, payload }),
-      ).rejects.toThrow();
+      const result = await activity.generateStateDataCsv({ traceId, payload });
+
+      expect(result).toBe('State Data CSV generation skipped - not requested');
     });
 
     it('should handle payload with null projectWorkerMap', async () => {
@@ -471,6 +634,7 @@ describe('StateDataCsvGenerationActivity', () => {
         startDate: '2023-01-01',
         endDate: '2023-01-31',
         zipLocation: '/path/to/zip',
+        otherMetrics: ['State Data'],
         projectWorkerMap: null,
       };
 
@@ -483,47 +647,6 @@ describe('StateDataCsvGenerationActivity', () => {
         '2023-01-01',
         '2023-01-31',
         [],
-      );
-    });
-
-    it('should handle very large worker ID arrays', async () => {
-      const largeWorkerArray = Array.from(
-        { length: 1000 },
-        (_, i) => `worker-${i}`,
-      );
-      const payload = {
-        startDate: '2023-01-01',
-        endDate: '2023-01-31',
-        zipLocation: '/path/to/zip',
-        projectWorkerMap: [{ workerIds: largeWorkerArray }],
-      };
-
-      await activity.generateStateDataCsv({ traceId, payload });
-
-      expect(prometheusDataProcessor.getPrometheusMetrics).toHaveBeenCalledWith(
-        '2023-01-01',
-        '2023-01-31',
-        largeWorkerArray,
-      );
-    });
-
-    it('should handle duplicate worker IDs', async () => {
-      const payload = {
-        startDate: '2023-01-01',
-        endDate: '2023-01-31',
-        zipLocation: '/path/to/zip',
-        projectWorkerMap: [
-          { workerIds: ['worker-1', 'worker-2'] },
-          { workerIds: ['worker-2', 'worker-3'] }, // worker-2 is duplicate
-        ],
-      };
-
-      await activity.generateStateDataCsv({ traceId, payload });
-
-      expect(prometheusDataProcessor.getPrometheusMetrics).toHaveBeenCalledWith(
-        '2023-01-01',
-        '2023-01-31',
-        ['worker-1', 'worker-2', 'worker-2', 'worker-3'], // Contains duplicates
       );
     });
   });
