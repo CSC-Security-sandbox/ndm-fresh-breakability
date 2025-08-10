@@ -78,6 +78,7 @@ const (
 	COMPLETED_JOBRUN                                = "COMPLETED"
 	RESUME_JOBRUN                                   = "RESUME"
 	STOP_JOBRUN                                     = "STOP"
+	STOPPED_JOBRUN                                  = "STOPPED"
 	READY_JOBRUN                                    = "READY"
 	BLOCKED_JOBRUN                                  = "BLOCKED"
 	APPROVED_JOBRUN                                 = "APPROVED"
