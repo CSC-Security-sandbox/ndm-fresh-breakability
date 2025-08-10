@@ -531,4 +531,472 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(result[1][3]).toBe(0);
     });
   });
+
+  describe('createCombinedServiceMetricsCsv', () => {
+    beforeEach(() => {
+      mockWriteToString.mockImplementation(async (rows, options) => {
+        const headers = options?.headers
+          ? 'timestamp,operation,service_name,service_role,error_type,request_rate,latency_p95_ms,client_error_rate,service_error_rate\n'
+          : '';
+        const csvRows = rows.map((row: any[]) => row.join(',')).join('\n');
+        return headers + csvRows;
+      });
+    });
+
+    it('should create combined CSV with all service metrics', async () => {
+      const mockData = {
+        SERVICE_REQUEST_RATE: {
+          data: [
+            [
+              '2025-08-10T10:00:00.000Z',
+              'get_users',
+              'user-service',
+              'api',
+              150.5,
+            ],
+            [
+              '2025-08-10T10:01:00.000Z',
+              'create_user',
+              'user-service',
+              'api',
+              75.2,
+            ],
+          ] as any[][],
+          csvContent: 'mock csv',
+        },
+        SERVICE_LATENCY_P95: {
+          data: [
+            [
+              '2025-08-10T10:00:00.000Z',
+              'get_users',
+              'user-service',
+              'api',
+              245.8,
+            ],
+            [
+              '2025-08-10T10:01:00.000Z',
+              'create_user',
+              'user-service',
+              'api',
+              380.1,
+            ],
+          ] as any[][],
+          csvContent: 'mock csv',
+        },
+        SERVICE_ERROR_RATE_BY_TYPE: {
+          data: [
+            [
+              '2025-08-10T10:00:00.000Z',
+              'get_users',
+              'user-service',
+              'api',
+              'timeout',
+              5.2,
+            ],
+          ] as any[][],
+          csvContent: 'mock csv',
+        },
+      } as any;
+
+      const result = await service.createCombinedServiceMetricsCsv(mockData);
+
+      expect(result.hasData).toBe(true);
+      expect(result.csvContent).toContain(
+        'timestamp,operation,service_name,service_role,error_type,request_rate,latency_p95_ms,client_error_rate,service_error_rate',
+      );
+      expect(result.csvContent).toContain(
+        '2025-08-10T10:00:00.000Z,get_users,user-service,api,,150.5,,,',
+      );
+      expect(result.csvContent).toContain(
+        '2025-08-10T10:00:00.000Z,get_users,user-service,api,,,245.8,,',
+      );
+      expect(result.csvContent).toContain(
+        '2025-08-10T10:00:00.000Z,get_users,user-service,api,timeout,,,,5.2',
+      );
+    });
+
+    it('should return hasData false when no service metrics available', async () => {
+      const mockDataNoService = {
+        CPU_PERCENT: {
+          data: [['timestamp', 'namespace', 'pod', 50]] as any[][],
+          csvContent: 'mock csv',
+        },
+      } as any;
+
+      const result =
+        await service.createCombinedServiceMetricsCsv(mockDataNoService);
+
+      expect(result.hasData).toBe(false);
+      expect(result.csvContent).toBe('');
+    });
+
+    it('should handle empty data object', async () => {
+      const result = await service.createCombinedServiceMetricsCsv({});
+
+      expect(result.hasData).toBe(false);
+      expect(result.csvContent).toBe('');
+    });
+
+    it('should handle SERVICE_ERROR_RATE_BY_TYPE with error_type properly', async () => {
+      const mockData = {
+        SERVICE_ERROR_RATE_BY_TYPE: {
+          data: [
+            [
+              '2025-08-10T10:00:00.000Z',
+              'get_users',
+              'user-service',
+              'api',
+              'timeout',
+              5.2,
+            ],
+            [
+              '2025-08-10T10:00:00.000Z',
+              'get_users',
+              'user-service',
+              'api',
+              'validation',
+              3.1,
+            ],
+          ] as any[][],
+          csvContent: 'mock csv',
+        },
+      } as any;
+
+      const result = await service.createCombinedServiceMetricsCsv(mockData);
+
+      expect(result.hasData).toBe(true);
+      expect(result.csvContent).toContain('timeout,,,,5.2');
+      expect(result.csvContent).toContain('validation,,,,3.1');
+    });
+
+    it('should handle mixed SERVICE_ERROR_RATE_BY_TYPE data with and without error_type', async () => {
+      const mockData = {
+        SERVICE_ERROR_RATE_BY_TYPE: {
+          data: [
+            // Row with error_type (5 elements)
+            [
+              '2025-08-10T10:00:00.000Z',
+              'get_users',
+              'user-service',
+              'timeout',
+              5.2,
+            ],
+            // Row without error_type (4 elements)
+            ['2025-08-10T10:00:00.000Z', 'get_users', 'user-service', 3.1],
+          ] as any[][],
+          csvContent: 'mock csv',
+        },
+      } as any;
+
+      const result = await service.createCombinedServiceMetricsCsv(mockData);
+
+      expect(result.hasData).toBe(true);
+      expect(result.csvContent).toContain('timeout');
+    });
+
+    it('should handle empty rest array in combined CSV processing', async () => {
+      const mockData = {
+        SERVICE_REQUEST_RATE: {
+          data: [
+            [
+              '2025-08-10T10:00:00.000Z',
+              'get_users',
+              'user-service',
+              // Missing value (empty rest array)
+            ],
+          ] as any[][],
+          csvContent: 'mock csv',
+        },
+      } as any;
+
+      const result = await service.createCombinedServiceMetricsCsv(mockData);
+
+      expect(result.hasData).toBe(true);
+      // Should handle empty rest array with default value 0
+      expect(result.csvContent).toContain('0');
+    });
+  });
+
+  describe('convertServiceMetricResultToRows', () => {
+    it('should handle response with null data', () => {
+      const response: PrometheusResponse = {
+        status: 'success',
+        data: null as any,
+      };
+
+      const result = service['convertServiceMetricResultToRows'](response, [
+        'operation',
+        'service_name',
+      ]);
+
+      expect(result).toEqual([]);
+    });
+
+    it('should handle response with null result', () => {
+      const response: PrometheusResponse = {
+        status: 'success',
+        data: {
+          resultType: 'matrix',
+          result: null as any,
+        },
+      };
+
+      const result = service['convertServiceMetricResultToRows'](response, [
+        'operation',
+        'service_name',
+      ]);
+
+      expect(result).toEqual([]);
+    });
+
+    it('should handle missing metric fields', () => {
+      const response: PrometheusResponse = {
+        status: 'success',
+        data: {
+          resultType: 'matrix',
+          result: [
+            {
+              metric: { operation: 'get_users' }, // missing service_name
+              values: [[1672531200, '150.5']],
+            },
+          ],
+        },
+      };
+
+      const result = service['convertServiceMetricResultToRows'](response, [
+        'operation',
+        'service_name',
+        'missing_field',
+      ]);
+
+      expect(result).toEqual([
+        ['2023-01-01T00:00:00.000Z', 'get_users', '', '', 150.5],
+      ]);
+    });
+
+    it('should apply valueParser correctly', () => {
+      const response: PrometheusResponse = {
+        status: 'success',
+        data: {
+          resultType: 'matrix',
+          result: [
+            {
+              metric: { operation: 'get_users', service_name: 'user-service' },
+              values: [[1672531200, '150.5555']],
+            },
+          ],
+        },
+      };
+
+      const valueParser = (v: number) => Number(v.toFixed(2));
+      const result = service['convertServiceMetricResultToRows'](
+        response,
+        ['operation', 'service_name'],
+        valueParser,
+      );
+
+      expect(result).toEqual([
+        ['2023-01-01T00:00:00.000Z', 'get_users', 'user-service', 150.56],
+      ]);
+    });
+
+    it('should handle NaN values with valueParser', () => {
+      const response: PrometheusResponse = {
+        status: 'success',
+        data: {
+          resultType: 'matrix',
+          result: [
+            {
+              metric: { operation: 'get_users', service_name: 'user-service' },
+              values: [[1672531200, 'NaN']],
+            },
+          ],
+        },
+      };
+
+      const valueParser = (v: number) =>
+        isNaN(v) ? 'NaN' : Number(v.toFixed(2));
+      const result = service['convertServiceMetricResultToRows'](
+        response,
+        ['operation', 'service_name'],
+        valueParser,
+      );
+
+      expect(result).toEqual([
+        ['2023-01-01T00:00:00.000Z', 'get_users', 'user-service', 'NaN'],
+      ]);
+    });
+
+    it('should handle empty values array', () => {
+      const response: PrometheusResponse = {
+        status: 'success',
+        data: {
+          resultType: 'matrix',
+          result: [
+            {
+              metric: { operation: 'get_users', service_name: 'user-service' },
+              values: [], // empty values
+            },
+          ],
+        },
+      };
+
+      const result = service['convertServiceMetricResultToRows'](response, [
+        'operation',
+        'service_name',
+      ]);
+
+      expect(result).toEqual([]);
+    });
+
+    it('should handle null values array', () => {
+      const response: PrometheusResponse = {
+        status: 'success',
+        data: {
+          resultType: 'matrix',
+          result: [
+            {
+              metric: { operation: 'get_users', service_name: 'user-service' },
+              values: null as any, // null values
+            },
+          ],
+        },
+      };
+
+      const result = service['convertServiceMetricResultToRows'](response, [
+        'operation',
+        'service_name',
+      ]);
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('Service metric processing with NaN handling', () => {
+    const mockServiceResponse: PrometheusResponse = {
+      status: 'success',
+      data: {
+        resultType: 'matrix',
+        result: [
+          {
+            metric: { operation: 'get_users', service_name: 'user-service' },
+            values: [
+              [1672531200, 'NaN'], // NaN value
+              [1672531500, '150.5555'], // Normal value
+            ],
+          },
+        ],
+      },
+    };
+
+    beforeEach(() => {
+      mockWriteToString.mockResolvedValue('mock,csv,content');
+    });
+
+    it('should handle NaN values in SERVICE_REQUEST_RATE', async () => {
+      const result = await service.processMetricData(
+        'SERVICE_REQUEST_RATE',
+        mockServiceResponse,
+      );
+
+      expect(result.data).toEqual([
+        ['2023-01-01T00:00:00.000Z', 'get_users', 'user-service', 'NaN'],
+        ['2023-01-01T00:05:00.000Z', 'get_users', 'user-service', 150.5555],
+      ]);
+    });
+
+    it('should handle NaN values in SERVICE_LATENCY_P95', async () => {
+      const result = await service.processMetricData(
+        'SERVICE_LATENCY_P95',
+        mockServiceResponse,
+      );
+
+      expect(result.data).toEqual([
+        ['2023-01-01T00:00:00.000Z', 'get_users', 'user-service', 'NaN'],
+        ['2023-01-01T00:05:00.000Z', 'get_users', 'user-service', 150.56],
+      ]);
+    });
+
+    it('should handle NaN values in CLIENT_ERROR_RATE', async () => {
+      const clientErrorResponse: PrometheusResponse = {
+        status: 'success',
+        data: {
+          resultType: 'matrix',
+          result: [
+            {
+              metric: { service_name: 'user-service', service_role: 'api' },
+              values: [[1672531200, 'NaN']],
+            },
+          ],
+        },
+      };
+
+      const result = await service.processMetricData(
+        'CLIENT_ERROR_RATE',
+        clientErrorResponse,
+      );
+
+      expect(result.data).toEqual([
+        ['2023-01-01T00:00:00.000Z', 'user-service', 'api', 'NaN'],
+      ]);
+    });
+
+    it('should handle NaN values in SERVICE_ERROR_RATE_BY_TYPE', async () => {
+      const errorTypeResponse: PrometheusResponse = {
+        status: 'success',
+        data: {
+          resultType: 'matrix',
+          result: [
+            {
+              metric: { service_name: 'user-service', error_type: 'timeout' },
+              values: [[1672531200, 'NaN']],
+            },
+          ],
+        },
+      };
+
+      const result = await service.processMetricData(
+        'SERVICE_ERROR_RATE_BY_TYPE',
+        errorTypeResponse,
+      );
+
+      expect(result.data).toEqual([
+        ['2023-01-01T00:00:00.000Z', 'user-service', 'timeout', 'NaN'],
+      ]);
+    });
+  });
+
+  describe('Edge cases for processMetricData', () => {
+    beforeEach(() => {
+      mockWriteToString.mockResolvedValue('mock,csv,content');
+    });
+
+    it('should handle response with empty result array', async () => {
+      const emptyResponse: PrometheusResponse = {
+        status: 'success',
+        data: {
+          resultType: 'matrix',
+          result: [],
+        },
+      };
+
+      const result = await service.processMetricData(
+        'SERVICE_REQUEST_RATE',
+        emptyResponse,
+      );
+
+      expect(result.data).toEqual([]);
+      expect(result.csvContent).toBe('mock,csv,content');
+    });
+
+    it('should handle undefined response', async () => {
+      const result = await service.processMetricData(
+        'SERVICE_REQUEST_RATE',
+        undefined as any,
+      );
+
+      expect(result.data).toBeNull();
+      expect(result.csvContent).toBe('');
+    });
+  });
 });

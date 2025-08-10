@@ -35,6 +35,25 @@ jest.mock('./performance-metrics.constants', () => ({
         '(sum(rate(container_network_receive_bytes_total{pod!=""}[2m])) by (namespace, pod) + sum(rate(container_network_transmit_bytes_total{pod!=""}[2m])) by (namespace, pod)) * 8',
       step: '1h',
     },
+    SERVICE_REQUEST_RATE: {
+      query:
+        'sum by (operation, service_name, service_role) (rate(service_requests[2m]))',
+      step: '1h',
+    },
+    SERVICE_LATENCY_P95: {
+      query:
+        'histogram_quantile(0.95, sum(rate(service_latency_bucket[5m])) by (operation, service_name, service_role, le)) * 1000',
+      step: '1h',
+    },
+    CLIENT_ERROR_RATE: {
+      query: 'sum by (service_name, service_role) (rate(client_errors[5m]))',
+      step: '1h',
+    },
+    SERVICE_ERROR_RATE_BY_TYPE: {
+      query:
+        'sum by (service_name, error_type) (rate(service_errors_with_type[5m]))',
+      step: '1h',
+    },
   },
 }));
 
@@ -156,7 +175,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
         `[${mockTraceId}] Performance metrics CSV generation completed successfully`,
       );
 
-      expect(prometheusClient.callPrometheusApi).toHaveBeenCalledTimes(5); // 5 different metrics
+      expect(prometheusClient.callPrometheusApi).toHaveBeenCalledTimes(9); // 9 different metrics (5 infrastructure + 4 service)
       expect(processorService.processBatchMetrics).toHaveBeenCalledTimes(1);
       expect(zipHandler.addCsvToZip).toHaveBeenCalledTimes(2); // CPU_PERCENT and MEMORY_MB
 
@@ -211,8 +230,8 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
       });
 
       // Verify that each metric query was called with correct parameters
-      // Should be called 5 times (CPU_PERCENT, MEMORY_MB, DISK_WRITE_BPS, DISK_READ_BPS, NETWORK_THROUGHPUT_BPS)
-      expect(prometheusClient.callPrometheusApi).toHaveBeenCalledTimes(5);
+      // Should be called 9 times (5 infrastructure + 4 service metrics)
+      expect(prometheusClient.callPrometheusApi).toHaveBeenCalledTimes(9);
 
       // Check that each call includes the step parameter (from env STEP_1hr)
       expect(prometheusClient.callPrometheusApi).toHaveBeenCalledWith(
@@ -594,6 +613,445 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
       expect(result).toBe(
         'Performance metrics CSV generation completed successfully',
       );
+    });
+  });
+
+  describe('Service Metrics CSV Generation', () => {
+    const mockServiceMetricsData: ProcessedMetricsBatchResult = {
+      SERVICE_REQUEST_RATE: {
+        data: [
+          ['2023-01-01T00:00:00.000Z', 'get_users', 'user-service', 150.5],
+        ],
+        csvContent:
+          'timestamp,operation,service_name,request_rate\n2023-01-01T00:00:00.000Z,get_users,user-service,150.5',
+      },
+      SERVICE_LATENCY_P95: {
+        data: [
+          ['2023-01-01T00:00:00.000Z', 'get_users', 'user-service', 245.8],
+        ],
+        csvContent:
+          'timestamp,operation,service_name,latency_p95_ms\n2023-01-01T00:00:00.000Z,get_users,user-service,245.8',
+      },
+      CLIENT_ERROR_RATE: {
+        data: [['2023-01-01T00:00:00.000Z', 'user-service', 'api', 2.5]],
+        csvContent:
+          'timestamp,service_name,service_role,client_error_rate\n2023-01-01T00:00:00.000Z,user-service,api,2.5',
+      },
+      SERVICE_ERROR_RATE_BY_TYPE: {
+        data: [['2023-01-01T00:00:00.000Z', 'user-service', 'timeout', 5.2]],
+        csvContent:
+          'timestamp,service_name,error_type,error_rate\n2023-01-01T00:00:00.000Z,user-service,timeout,5.2',
+      },
+    };
+
+    it('should generate CSV files for all service metrics', async () => {
+      const traceId = 'test-trace';
+      const zipLocation = '/test/zip/path';
+
+      prometheusClient.callPrometheusApi.mockResolvedValue(
+        mockPrometheusResponse,
+      );
+      processorService.processBatchMetrics.mockResolvedValue(
+        mockServiceMetricsData,
+      );
+      zipHandler.addCsvToZip.mockResolvedValue(undefined);
+
+      const result = await activity.generatePerformanceMetricsCsv({
+        traceId,
+        payload: {
+          startDate: '2023-01-01',
+          endDate: '2023-01-02',
+          zipLocation,
+        },
+      });
+
+      // Verify ZIP handler was called for each service metric
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+        mockServiceMetricsData.SERVICE_REQUEST_RATE!.csvContent,
+        expect.stringMatching(
+          /Performance metrics\/service_request_rate_\d+\.csv/,
+        ),
+        zipLocation,
+      );
+
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+        mockServiceMetricsData.SERVICE_LATENCY_P95!.csvContent,
+        expect.stringMatching(
+          /Performance metrics\/service_latency_p95_\d+\.csv/,
+        ),
+        zipLocation,
+      );
+
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+        mockServiceMetricsData.CLIENT_ERROR_RATE!.csvContent,
+        expect.stringMatching(
+          /Performance metrics\/client_error_rate_\d+\.csv/,
+        ),
+        zipLocation,
+      );
+
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+        mockServiceMetricsData.SERVICE_ERROR_RATE_BY_TYPE!.csvContent,
+        expect.stringMatching(
+          /Performance metrics\/service_error_rate_by_type_\d+\.csv/,
+        ),
+        zipLocation,
+      );
+
+      // Verify logging for each service metric
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /\[test-trace\] Service Request Rate CSV created: Performance metrics\/service_request_rate_\d+\.csv/,
+        ),
+      );
+
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /\[test-trace\] Service Latency P95 CSV created: Performance metrics\/service_latency_p95_\d+\.csv/,
+        ),
+      );
+
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /\[test-trace\] Client Error Rate CSV created: Performance metrics\/client_error_rate_\d+\.csv/,
+        ),
+      );
+
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /\[test-trace\] Service Error Rate by Type CSV created: Performance metrics\/service_error_rate_by_type_\d+\.csv/,
+        ),
+      );
+
+      expect(result).toBe(
+        'Performance metrics CSV generation completed successfully',
+      );
+    });
+
+    it('should skip service metrics with no data', async () => {
+      const traceId = 'test-trace';
+      const zipLocation = '/test/zip/path';
+
+      const dataWithEmptyMetrics: ProcessedMetricsBatchResult = {
+        SERVICE_REQUEST_RATE: {
+          data: [], // Empty data
+          csvContent: '',
+        },
+        SERVICE_LATENCY_P95: {
+          data: [
+            ['2023-01-01T00:00:00.000Z', 'get_users', 'user-service', 245.8],
+          ],
+          csvContent: 'mock csv',
+        },
+      };
+
+      prometheusClient.callPrometheusApi.mockResolvedValue(
+        mockPrometheusResponse,
+      );
+      processorService.processBatchMetrics.mockResolvedValue(
+        dataWithEmptyMetrics,
+      );
+      zipHandler.addCsvToZip.mockResolvedValue(undefined);
+
+      await activity.generatePerformanceMetricsCsv({
+        traceId,
+        payload: {
+          startDate: '2023-01-01',
+          endDate: '2023-01-02',
+          zipLocation,
+        },
+      });
+
+      // Should not call zip handler for SERVICE_REQUEST_RATE (empty data)
+      expect(zipHandler.addCsvToZip).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.stringMatching(/service_request_rate/),
+        expect.anything(),
+      );
+
+      // Should call zip handler for SERVICE_LATENCY_P95 (has data)
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+        'mock csv',
+        expect.stringMatching(/service_latency_p95/),
+        zipLocation,
+      );
+
+      // Should not log creation of empty metrics
+      expect(loggerSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Service Request Rate CSV created'),
+      );
+
+      // Should log creation of metrics with data
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/Service Latency P95 CSV created/),
+      );
+    });
+
+    it('should handle service metrics with null data property', async () => {
+      const traceId = 'test-trace';
+      const zipLocation = '/test/zip/path';
+
+      const dataWithNullMetrics: ProcessedMetricsBatchResult = {
+        SERVICE_REQUEST_RATE: {
+          data: null as any, // Null data
+          csvContent: 'mock csv',
+        },
+        CLIENT_ERROR_RATE: {
+          data: [['2023-01-01T00:00:00.000Z', 'user-service', 'api', 2.5]],
+          csvContent: 'mock csv',
+        },
+      };
+
+      prometheusClient.callPrometheusApi.mockResolvedValue(
+        mockPrometheusResponse,
+      );
+      processorService.processBatchMetrics.mockResolvedValue(
+        dataWithNullMetrics,
+      );
+      zipHandler.addCsvToZip.mockResolvedValue(undefined);
+
+      await activity.generatePerformanceMetricsCsv({
+        traceId,
+        payload: {
+          startDate: '2023-01-01',
+          endDate: '2023-01-02',
+          zipLocation,
+        },
+      });
+
+      // Should not call zip handler for SERVICE_REQUEST_RATE (null data)
+      expect(zipHandler.addCsvToZip).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.stringMatching(/service_request_rate/),
+        expect.anything(),
+      );
+
+      // Should call zip handler for CLIENT_ERROR_RATE (has valid data)
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+        'mock csv',
+        expect.stringMatching(/client_error_rate/),
+        zipLocation,
+      );
+    });
+
+    it('should handle individual service metric properties being undefined', async () => {
+      const traceId = 'test-trace';
+      const zipLocation = '/test/zip/path';
+
+      const partialData: ProcessedMetricsBatchResult = {
+        SERVICE_REQUEST_RATE: undefined as any, // Completely undefined
+        SERVICE_LATENCY_P95: {
+          data: [
+            ['2023-01-01T00:00:00.000Z', 'get_users', 'user-service', 245.8],
+          ],
+          csvContent: 'latency csv',
+        },
+        CLIENT_ERROR_RATE: null as any, // Null metric
+        SERVICE_ERROR_RATE_BY_TYPE: {
+          data: [['2023-01-01T00:00:00.000Z', 'user-service', 'timeout', 5.2]],
+          csvContent: 'error csv',
+        },
+      };
+
+      prometheusClient.callPrometheusApi.mockResolvedValue(
+        mockPrometheusResponse,
+      );
+      processorService.processBatchMetrics.mockResolvedValue(partialData);
+      zipHandler.addCsvToZip.mockResolvedValue(undefined);
+
+      await activity.generatePerformanceMetricsCsv({
+        traceId,
+        payload: {
+          startDate: '2023-01-01',
+          endDate: '2023-01-02',
+          zipLocation,
+        },
+      });
+
+      // Should only call zip handler for metrics that exist and have data
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledTimes(2); // Only SERVICE_LATENCY_P95 and SERVICE_ERROR_RATE_BY_TYPE
+
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+        'latency csv',
+        expect.stringMatching(/service_latency_p95/),
+        zipLocation,
+      );
+
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+        'error csv',
+        expect.stringMatching(/service_error_rate_by_type/),
+        zipLocation,
+      );
+
+      // Should only log creation of valid metrics
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/Service Latency P95 CSV created/),
+      );
+
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/Service Error Rate by Type CSV created/),
+      );
+
+      // Should not log creation of undefined/null metrics
+      expect(loggerSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Service Request Rate CSV created'),
+      );
+
+      expect(loggerSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Client Error Rate CSV created'),
+      );
+    });
+
+    it('should handle service metrics zip failures gracefully', async () => {
+      const traceId = 'test-trace';
+      const zipLocation = '/test/zip/path';
+
+      prometheusClient.callPrometheusApi.mockResolvedValue(
+        mockPrometheusResponse,
+      );
+      processorService.processBatchMetrics.mockResolvedValue({
+        SERVICE_REQUEST_RATE: {
+          data: [
+            ['2023-01-01T00:00:00.000Z', 'get_users', 'user-service', 150.5],
+          ],
+          csvContent: 'test csv',
+        },
+      });
+
+      zipHandler.addCsvToZip.mockRejectedValue(new Error('Zip write failed'));
+
+      await expect(
+        activity.generatePerformanceMetricsCsv({
+          traceId,
+          payload: {
+            startDate: '2023-01-01',
+            endDate: '2023-01-02',
+            zipLocation,
+          },
+        }),
+      ).rejects.toThrow('Zip write failed');
+    });
+
+    it('should use consistent timestamp for all service metric file names', async () => {
+      const traceId = 'test-trace';
+      const zipLocation = '/test/zip/path';
+
+      // Mock Date.now to return consistent timestamp
+      const mockTimestamp = 1672531200000;
+      jest.spyOn(Date, 'now').mockReturnValue(mockTimestamp);
+
+      prometheusClient.callPrometheusApi.mockResolvedValue(
+        mockPrometheusResponse,
+      );
+      processorService.processBatchMetrics.mockResolvedValue(
+        mockServiceMetricsData,
+      );
+      zipHandler.addCsvToZip.mockResolvedValue(undefined);
+
+      await activity.generatePerformanceMetricsCsv({
+        traceId,
+        payload: {
+          startDate: '2023-01-01',
+          endDate: '2023-01-02',
+          zipLocation,
+        },
+      });
+
+      // Verify all service metrics use the same timestamp
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+        expect.anything(),
+        `Performance metrics/service_request_rate_${mockTimestamp}.csv`,
+        zipLocation,
+      );
+
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+        expect.anything(),
+        `Performance metrics/service_latency_p95_${mockTimestamp}.csv`,
+        zipLocation,
+      );
+
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+        expect.anything(),
+        `Performance metrics/client_error_rate_${mockTimestamp}.csv`,
+        zipLocation,
+      );
+
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+        expect.anything(),
+        `Performance metrics/service_error_rate_by_type_${mockTimestamp}.csv`,
+        zipLocation,
+      );
+
+      // Restore Date.now
+      jest.restoreAllMocks();
+    });
+
+    it('should handle mixed infrastructure and service metrics', async () => {
+      const traceId = 'test-trace';
+      const zipLocation = '/test/zip/path';
+
+      const mixedData: ProcessedMetricsBatchResult = {
+        CPU_PERCENT: {
+          data: [['2023-01-01T00:00:00.000Z', 'default', 'pod1', 50.0]],
+          csvContent: 'cpu csv',
+        },
+        SERVICE_REQUEST_RATE: {
+          data: [
+            ['2023-01-01T00:00:00.000Z', 'get_users', 'user-service', 150.5],
+          ],
+          csvContent: 'request rate csv',
+        },
+        MEMORY_MB: {
+          data: [['2023-01-01T00:00:00.000Z', 'default', 'pod1', 1024.0]],
+          csvContent: 'memory csv',
+        },
+        CLIENT_ERROR_RATE: {
+          data: [['2023-01-01T00:00:00.000Z', 'user-service', 'api', 2.5]],
+          csvContent: 'client error csv',
+        },
+      };
+
+      prometheusClient.callPrometheusApi.mockResolvedValue(
+        mockPrometheusResponse,
+      );
+      processorService.processBatchMetrics.mockResolvedValue(mixedData);
+      zipHandler.addCsvToZip.mockResolvedValue(undefined);
+
+      await activity.generatePerformanceMetricsCsv({
+        traceId,
+        payload: {
+          startDate: '2023-01-01',
+          endDate: '2023-01-02',
+          zipLocation,
+        },
+      });
+
+      // Should create files for both infrastructure and service metrics
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+        'cpu csv',
+        expect.stringMatching(/cpu_percent_\d+\.csv/),
+        zipLocation,
+      );
+
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+        'memory csv',
+        expect.stringMatching(/memory_mb_\d+\.csv/),
+        zipLocation,
+      );
+
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+        'request rate csv',
+        expect.stringMatching(/service_request_rate_\d+\.csv/),
+        zipLocation,
+      );
+
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+        'client error csv',
+        expect.stringMatching(/client_error_rate_\d+\.csv/),
+        zipLocation,
+      );
+
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledTimes(4);
     });
   });
 
