@@ -54,6 +54,23 @@ jest.mock('./performance-metrics.constants', () => ({
         'sum by (service_name, error_type) (rate(service_errors_with_type[5m]))',
       step: '1h',
     },
+    REDIS_MEMORY_USED_KB: {
+      query: 'redis_memory_used_bytes / 1024',
+      step: '1h',
+    },
+    REDIS_CONNECTED_CLIENTS: {
+      query: 'redis_connected_clients',
+      step: '1h',
+    },
+    REDIS_UPTIME_SECONDS: {
+      query: 'redis_uptime_in_seconds',
+      step: '1h',
+    },
+    REDIS_HIT_RATIO: {
+      query:
+        'rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]))',
+      step: '1h',
+    },
   },
 }));
 
@@ -75,6 +92,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
 
     const mockProcessorService = {
       processBatchMetrics: jest.fn(),
+      createCombinedRedisMetricsCsv: jest.fn(),
     };
 
     const mockZipHandler = {
@@ -108,6 +126,12 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
 
     loggerSpy = jest.spyOn(activity['logger'], 'log').mockImplementation();
     loggerWarnSpy = jest.spyOn(activity['logger'], 'warn').mockImplementation();
+
+    // Set default mock return values
+    processorService.createCombinedRedisMetricsCsv.mockResolvedValue({
+      csvContent: '',
+      hasData: false,
+    });
   });
 
   afterEach(() => {
@@ -176,7 +200,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
         `[${mockTraceId}] Performance metrics CSV generation completed successfully`,
       );
 
-      expect(prometheusClient.callPrometheusApi).toHaveBeenCalledTimes(9); // 9 different metrics (5 infrastructure + 4 service)
+      expect(prometheusClient.callPrometheusApi).toHaveBeenCalledTimes(13); // 13 different metrics (5 infrastructure + 4 service + 4 redis)
       expect(processorService.processBatchMetrics).toHaveBeenCalledTimes(1);
       expect(zipHandler.addCsvToZip).toHaveBeenCalledTimes(2); // CPU_PERCENT and MEMORY_MB
 
@@ -231,8 +255,8 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
       });
 
       // Verify that each metric query was called with correct parameters
-      // Should be called 9 times (5 infrastructure + 4 service metrics)
-      expect(prometheusClient.callPrometheusApi).toHaveBeenCalledTimes(9);
+      // Should be called 13 times (5 infrastructure + 4 service + 4 redis metrics)
+      expect(prometheusClient.callPrometheusApi).toHaveBeenCalledTimes(13);
 
       // Check that each call includes the step parameter (from env STEP_1hr)
       expect(prometheusClient.callPrometheusApi).toHaveBeenCalledWith(
@@ -390,7 +414,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
           expect.stringContaining('skipping'),
         );
 
-        expect(prometheusClient.callPrometheusApi).toHaveBeenCalledTimes(9);
+        expect(prometheusClient.callPrometheusApi).toHaveBeenCalledTimes(13);
         expect(processorService.processBatchMetrics).toHaveBeenCalledTimes(1);
         expect(zipHandler.addCsvToZip).toHaveBeenCalledTimes(2);
 
@@ -565,7 +589,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
           expect.stringContaining('skipping'),
         );
 
-        expect(prometheusClient.callPrometheusApi).toHaveBeenCalledTimes(9);
+        expect(prometheusClient.callPrometheusApi).toHaveBeenCalledTimes(13);
         expect(processorService.processBatchMetrics).toHaveBeenCalledTimes(1);
         expect(zipHandler.addCsvToZip).toHaveBeenCalledTimes(2);
 
@@ -693,31 +717,31 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
 
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         'csv,content',
-        `Performance metrics/cpu_percent_${timestamp}.csv`,
+        `Performance metrics/cpu-percent-${timestamp}.csv`,
         mockZipLocation,
       );
 
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         'memory,csv,content',
-        `Performance metrics/memory_mb_${timestamp}.csv`,
+        `Performance metrics/memory-mb-${timestamp}.csv`,
         mockZipLocation,
       );
 
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         'disk,read,content',
-        `Performance metrics/disk_read_bps_${timestamp}.csv`,
+        `Performance metrics/disk-read-bps-${timestamp}.csv`,
         mockZipLocation,
       );
 
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         'disk,write,content',
-        `Performance metrics/disk_write_bps_${timestamp}.csv`,
+        `Performance metrics/disk-write-bps-${timestamp}.csv`,
         mockZipLocation,
       );
 
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         'network,content',
-        `Performance metrics/network_throughput_bps_${timestamp}.csv`,
+        `Performance metrics/network-throughput-bps-${timestamp}.csv`,
         mockZipLocation,
       );
 
@@ -745,7 +769,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
       expect(zipHandler.addCsvToZip).toHaveBeenCalledTimes(1);
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         'memory,csv,content',
-        `Performance metrics/memory_mb_${timestamp}.csv`,
+        `Performance metrics/memory-mb-${timestamp}.csv`,
         mockZipLocation,
       );
     });
@@ -806,6 +830,152 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
       expect(loggerSpy).not.toHaveBeenCalledWith(
         expect.stringContaining('CSV created'),
       );
+    });
+
+    describe('Redis metrics CSV generation', () => {
+      it('should generate single combined Redis CSV when Redis data exists', async () => {
+        const redisData: ProcessedMetricsBatchResult = {
+          CPU_PERCENT: {
+            data: [['2023-01-01T00:00:00.000Z', 'default', 'pod1', 1024]],
+            csvContent: 'csv,content',
+          } as any,
+          REDIS_MEMORY_USED_KB: {
+            data: [['2023-01-01T00:00:00.000Z', 'redis-01:6379', 1024.5]],
+            csvContent: 'redis,memory,csv,content',
+          } as any,
+          REDIS_CONNECTED_CLIENTS: {
+            data: [['2023-01-01T00:00:00.000Z', 'redis-01:6379', 5]],
+            csvContent: 'redis,clients,csv,content',
+          } as any,
+          REDIS_UPTIME_SECONDS: {
+            data: [['2023-01-01T00:00:00.000Z', 'redis-01:6379', 86400]],
+            csvContent: 'redis,uptime,csv,content',
+          } as any,
+          REDIS_HIT_RATIO: {
+            data: [['2023-01-01T00:00:00.000Z', 'redis-01:6379', 85.5]],
+            csvContent: 'redis,hit,ratio,csv,content',
+          } as any,
+        };
+
+        processorService.createCombinedRedisMetricsCsv.mockResolvedValue({
+          csvContent: 'combined,redis,csv,content',
+          hasData: true,
+        });
+
+        await activity['generateCsvFiles'](
+          mockTraceId,
+          redisData,
+          mockZipLocation,
+        );
+
+        // Should create 1 CPU CSV + 1 combined Redis CSV = 2 total
+        expect(zipHandler.addCsvToZip).toHaveBeenCalledTimes(2);
+
+        // Should create the combined Redis CSV file (not individual files)
+        expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+          'combined,redis,csv,content',
+          expect.stringMatching(/Performance metrics\/redis-metrics-\d+\.csv/),
+          mockZipLocation,
+        );
+
+        // Should NOT create individual Redis CSV files
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalledWith(
+          'redis,memory,csv,content',
+          expect.stringContaining('redis-memory-used-kb'),
+          mockZipLocation,
+        );
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalledWith(
+          'redis,clients,csv,content',
+          expect.stringContaining('redis-connected-clients'),
+          mockZipLocation,
+        );
+      });
+
+      it('should not create Redis CSV when no Redis data exists', async () => {
+        const dataWithoutRedis: ProcessedMetricsBatchResult = {
+          CPU_PERCENT: {
+            data: [['2023-01-01T00:00:00.000Z', 'default', 'pod1', 1024]],
+            csvContent: 'csv,content',
+          } as any,
+          MEMORY_MB: {
+            data: [['2023-01-01T00:00:00.000Z', 'default', 'pod1', 2048]],
+            csvContent: 'memory,content',
+          } as any,
+        };
+
+        processorService.createCombinedRedisMetricsCsv.mockResolvedValue({
+          csvContent: '',
+          hasData: false,
+        });
+
+        await activity['generateCsvFiles'](
+          mockTraceId,
+          dataWithoutRedis,
+          mockZipLocation,
+        );
+
+        // Should create only 2 CSV files (CPU and Memory), no Redis CSV
+        expect(zipHandler.addCsvToZip).toHaveBeenCalledTimes(2);
+
+        // Should NOT create any Redis CSV file
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalledWith(
+          expect.anything(),
+          expect.stringContaining('redis'),
+          mockZipLocation,
+        );
+      });
+
+      it('should handle Redis CSV generation failure gracefully', async () => {
+        const redisData: ProcessedMetricsBatchResult = {
+          REDIS_MEMORY_USED_KB: {
+            data: [['2023-01-01T00:00:00.000Z', 'redis-01:6379', 1024.5]],
+            csvContent: 'redis,memory,csv,content',
+          } as any,
+        };
+
+        processorService.createCombinedRedisMetricsCsv.mockResolvedValue({
+          csvContent: 'combined,redis,csv,content',
+          hasData: true,
+        });
+
+        zipHandler.addCsvToZip.mockRejectedValueOnce(new Error('Zip error'));
+
+        await expect(
+          activity['generateCsvFiles'](mockTraceId, redisData, mockZipLocation),
+        ).rejects.toThrow('Zip error');
+
+        expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+          'combined,redis,csv,content',
+          expect.stringMatching(/Performance metrics\/redis-metrics-\d+\.csv/),
+          mockZipLocation,
+        );
+      });
+
+      it('should log Redis CSV creation', async () => {
+        const redisData: ProcessedMetricsBatchResult = {
+          REDIS_MEMORY_USED_KB: {
+            data: [['2023-01-01T00:00:00.000Z', 'redis-01:6379', 1024.5]],
+            csvContent: 'redis,memory,csv,content',
+          } as any,
+        };
+
+        processorService.createCombinedRedisMetricsCsv.mockResolvedValue({
+          csvContent: 'combined,redis,csv,content',
+          hasData: true,
+        });
+
+        await activity['generateCsvFiles'](
+          mockTraceId,
+          redisData,
+          mockZipLocation,
+        );
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          expect.stringMatching(
+            /\[test-trace-id\] Redis Metrics CSV created: Performance metrics\/redis-metrics-\d+\.csv/,
+          ),
+        );
+      });
     });
   });
 
@@ -987,7 +1157,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         mockServiceMetricsData.SERVICE_REQUEST_RATE!.csvContent,
         expect.stringMatching(
-          /Performance metrics\/service_request_rate_\d+\.csv/,
+          /Performance metrics\/service-request-rate-\d+\.csv/,
         ),
         zipLocation,
       );
@@ -995,7 +1165,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         mockServiceMetricsData.SERVICE_LATENCY_P95!.csvContent,
         expect.stringMatching(
-          /Performance metrics\/service_latency_p95_\d+\.csv/,
+          /Performance metrics\/service-latency-p95-\d+\.csv/,
         ),
         zipLocation,
       );
@@ -1003,7 +1173,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         mockServiceMetricsData.CLIENT_ERROR_RATE!.csvContent,
         expect.stringMatching(
-          /Performance metrics\/client_error_rate_\d+\.csv/,
+          /Performance metrics\/client-error-rate-\d+\.csv/,
         ),
         zipLocation,
       );
@@ -1011,7 +1181,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         mockServiceMetricsData.SERVICE_ERROR_RATE_BY_TYPE!.csvContent,
         expect.stringMatching(
-          /Performance metrics\/service_error_rate_by_type_\d+\.csv/,
+          /Performance metrics\/service-error-rate-by-type-\d+\.csv/,
         ),
         zipLocation,
       );
@@ -1019,25 +1189,25 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
       // Verify logging for each service metric
       expect(loggerSpy).toHaveBeenCalledWith(
         expect.stringMatching(
-          /\[test-trace\] Service Request Rate CSV created: Performance metrics\/service_request_rate_\d+\.csv/,
+          /\[test-trace\] Service Request Rate CSV created: Performance metrics\/service-request-rate-\d+\.csv/,
         ),
       );
 
       expect(loggerSpy).toHaveBeenCalledWith(
         expect.stringMatching(
-          /\[test-trace\] Service Latency P95 CSV created: Performance metrics\/service_latency_p95_\d+\.csv/,
+          /\[test-trace\] Service Latency P95 CSV created: Performance metrics\/service-latency-p95-\d+\.csv/,
         ),
       );
 
       expect(loggerSpy).toHaveBeenCalledWith(
         expect.stringMatching(
-          /\[test-trace\] Client Error Rate CSV created: Performance metrics\/client_error_rate_\d+\.csv/,
+          /\[test-trace\] Client Error Rate CSV created: Performance metrics\/client-error-rate-\d+\.csv/,
         ),
       );
 
       expect(loggerSpy).toHaveBeenCalledWith(
         expect.stringMatching(
-          /\[test-trace\] Service Error Rate by Type CSV created: Performance metrics\/service_error_rate_by_type_\d+\.csv/,
+          /\[test-trace\] Service Error Rate by Type CSV created: Performance metrics\/service-error-rate-by-type-\d+\.csv/,
         ),
       );
 
@@ -1091,7 +1261,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
       // Should call zip handler for SERVICE_LATENCY_P95 (has data)
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         'mock csv',
-        expect.stringMatching(/service_latency_p95/),
+        expect.stringMatching(/service-latency-p95/),
         zipLocation,
       );
 
@@ -1149,7 +1319,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
       // Should call zip handler for CLIENT_ERROR_RATE (has valid data)
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         'mock csv',
-        expect.stringMatching(/client_error_rate/),
+        expect.stringMatching(/client-error-rate/),
         zipLocation,
       );
     });
@@ -1194,13 +1364,13 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
 
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         'latency csv',
-        expect.stringMatching(/service_latency_p95/),
+        expect.stringMatching(/service-latency-p95/),
         zipLocation,
       );
 
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         'error csv',
-        expect.stringMatching(/service_error_rate_by_type/),
+        expect.stringMatching(/service-error-rate-by-type/),
         zipLocation,
       );
 
@@ -1283,25 +1453,25 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
       // Verify all service metrics use the same timestamp
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         expect.anything(),
-        `Performance metrics/service_request_rate_${mockTimestamp}.csv`,
+        `Performance metrics/service-request-rate-${mockTimestamp}.csv`,
         zipLocation,
       );
 
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         expect.anything(),
-        `Performance metrics/service_latency_p95_${mockTimestamp}.csv`,
+        `Performance metrics/service-latency-p95-${mockTimestamp}.csv`,
         zipLocation,
       );
 
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         expect.anything(),
-        `Performance metrics/client_error_rate_${mockTimestamp}.csv`,
+        `Performance metrics/client-error-rate-${mockTimestamp}.csv`,
         zipLocation,
       );
 
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         expect.anything(),
-        `Performance metrics/service_error_rate_by_type_${mockTimestamp}.csv`,
+        `Performance metrics/service-error-rate-by-type-${mockTimestamp}.csv`,
         zipLocation,
       );
 
@@ -1353,25 +1523,25 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
       // Should create files for both infrastructure and service metrics
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         'cpu csv',
-        expect.stringMatching(/cpu_percent_\d+\.csv/),
+        expect.stringMatching(/cpu-percent-\d+\.csv/),
         zipLocation,
       );
 
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         'memory csv',
-        expect.stringMatching(/memory_mb_\d+\.csv/),
+        expect.stringMatching(/memory-mb-\d+\.csv/),
         zipLocation,
       );
 
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         'request rate csv',
-        expect.stringMatching(/service_request_rate_\d+\.csv/),
+        expect.stringMatching(/service-request-rate-\d+\.csv/),
         zipLocation,
       );
 
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         'client error csv',
-        expect.stringMatching(/client_error_rate_\d+\.csv/),
+        expect.stringMatching(/client-error-rate-\d+\.csv/),
         zipLocation,
       );
 

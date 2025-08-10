@@ -289,9 +289,9 @@ describe('PerformanceMetricsProcessorService', () => {
       });
     });
 
-    it('should process NETWORK_THROUGHPUT_KBPS metric', async () => {
+    it('should process NETWORK_THROUGHPUT_BPS metric', async () => {
       const result = await service.processMetricData(
-        'NETWORK_THROUGHPUT_KBPS',
+        'NETWORK_THROUGHPUT_BPS',
         mockResponse,
       );
 
@@ -997,6 +997,275 @@ describe('PerformanceMetricsProcessorService', () => {
 
       expect(result.data).toBeNull();
       expect(result.csvContent).toBe('');
+    });
+  });
+
+  describe('Redis metrics processing', () => {
+    const mockRedisResponse: PrometheusResponse = {
+      status: 'success',
+      data: {
+        resultType: 'matrix',
+        result: [
+          {
+            metric: { instance: 'redis-01:6379' },
+            values: [
+              [1609459200, '1024.50'], // timestamp, value
+              [1609459260, '2048.75'],
+            ],
+          },
+        ],
+      },
+    };
+
+    it('should process REDIS_MEMORY_USED_KB metric', async () => {
+      mockWriteToString.mockResolvedValue('mock,csv,content');
+
+      const result = await service.processMetricData(
+        'REDIS_MEMORY_USED_KB',
+        mockRedisResponse,
+      );
+
+      expect(result.data).toEqual([
+        ['2021-01-01T00:00:00.000Z', 'redis-01:6379', 1024.5],
+        ['2021-01-01T00:01:00.000Z', 'redis-01:6379', 2048.75],
+      ]);
+      expect(result.csvContent).toBe('mock,csv,content');
+      expect(mockWriteToString).toHaveBeenCalledWith(
+        [
+          ['2021-01-01T00:00:00.000Z', 'redis-01:6379', 1024.5],
+          ['2021-01-01T00:01:00.000Z', 'redis-01:6379', 2048.75],
+        ],
+        { headers: ['timestamp', 'instance', 'memory_used_kb'] },
+      );
+    });
+
+    it('should process REDIS_CONNECTED_CLIENTS metric', async () => {
+      mockWriteToString.mockResolvedValue('mock,csv,content');
+
+      const result = await service.processMetricData(
+        'REDIS_CONNECTED_CLIENTS',
+        mockRedisResponse,
+      );
+
+      expect(result.data).toEqual([
+        ['2021-01-01T00:00:00.000Z', 'redis-01:6379', 1024],
+        ['2021-01-01T00:01:00.000Z', 'redis-01:6379', 2048],
+      ]);
+      expect(result.csvContent).toBe('mock,csv,content');
+      expect(mockWriteToString).toHaveBeenCalledWith(expect.any(Array), {
+        headers: ['timestamp', 'instance', 'connected_clients'],
+      });
+    });
+
+    it('should process REDIS_UPTIME_SECONDS metric', async () => {
+      mockWriteToString.mockResolvedValue('mock,csv,content');
+
+      const result = await service.processMetricData(
+        'REDIS_UPTIME_SECONDS',
+        mockRedisResponse,
+      );
+
+      expect(result.data).toEqual([
+        ['2021-01-01T00:00:00.000Z', 'redis-01:6379', 1024],
+        ['2021-01-01T00:01:00.000Z', 'redis-01:6379', 2048],
+      ]);
+      expect(result.csvContent).toBe('mock,csv,content');
+    });
+
+    it('should process REDIS_HIT_RATIO metric with percentage conversion', async () => {
+      const hitRatioResponse: PrometheusResponse = {
+        status: 'success',
+        data: {
+          resultType: 'matrix',
+          result: [
+            {
+              metric: { instance: 'redis-01:6379' },
+              values: [
+                [1609459200, '0.85'], // 85%
+                [1609459260, '0.92'], // 92%
+              ],
+            },
+          ],
+        },
+      };
+
+      mockWriteToString.mockResolvedValue('mock,csv,content');
+
+      const result = await service.processMetricData(
+        'REDIS_HIT_RATIO',
+        hitRatioResponse,
+      );
+
+      expect(result.data).toEqual([
+        ['2021-01-01T00:00:00.000Z', 'redis-01:6379', 85.0],
+        ['2021-01-01T00:01:00.000Z', 'redis-01:6379', 92.0],
+      ]);
+      expect(result.csvContent).toBe('mock,csv,content');
+      expect(mockWriteToString).toHaveBeenCalledWith(expect.any(Array), {
+        headers: ['timestamp', 'instance', 'hit_ratio'],
+      });
+    });
+  });
+
+  describe('createCombinedRedisMetricsCsv', () => {
+    it('should create combined Redis CSV with all metrics', async () => {
+      const mockProcessedResults = {
+        REDIS_MEMORY_USED_KB: {
+          data: [['2021-01-01T00:00:00.000Z', 'redis-01:6379', 1024.5]],
+          csvContent: 'memory,csv,content',
+        },
+        REDIS_CONNECTED_CLIENTS: {
+          data: [['2021-01-01T00:00:00.000Z', 'redis-01:6379', 5]],
+          csvContent: 'clients,csv,content',
+        },
+        REDIS_UPTIME_SECONDS: {
+          data: [['2021-01-01T00:00:00.000Z', 'redis-01:6379', 86400]],
+          csvContent: 'uptime,csv,content',
+        },
+        REDIS_HIT_RATIO: {
+          data: [['2021-01-01T00:00:00.000Z', 'redis-01:6379', 85.5]],
+          csvContent: 'hit_ratio,csv,content',
+        },
+      } as any;
+
+      mockWriteToString.mockResolvedValue('combined,redis,csv,content');
+
+      const result =
+        await service.createCombinedRedisMetricsCsv(mockProcessedResults);
+
+      expect(result.hasData).toBe(true);
+      expect(result.csvContent).toBe('combined,redis,csv,content');
+      expect(mockWriteToString).toHaveBeenCalledWith(
+        [['2021-01-01T00:00:00.000Z', 'redis-01:6379', 1024.5, 5, 86400, 85.5]],
+        {
+          headers: [
+            'timestamp',
+            'instance',
+            'memory_used_kb',
+            'connected_clients',
+            'uptime_seconds',
+            'hit_ratio_percent',
+          ],
+        },
+      );
+    });
+
+    it('should return hasData false when no Redis metrics available', async () => {
+      const emptyResults = {};
+
+      const result = await service.createCombinedRedisMetricsCsv(emptyResults);
+
+      expect(result.hasData).toBe(false);
+      expect(result.csvContent).toBe('');
+    });
+
+    it('should handle partial Redis metrics data', async () => {
+      const partialResults = {
+        REDIS_MEMORY_USED_KB: {
+          data: [['2021-01-01T00:00:00.000Z', 'redis-01:6379', 1024.5]],
+          csvContent: 'memory,csv,content',
+        },
+        REDIS_HIT_RATIO: {
+          data: [['2021-01-01T00:00:00.000Z', 'redis-01:6379', 85.5]],
+          csvContent: 'hit_ratio,csv,content',
+        },
+      } as any;
+
+      mockWriteToString.mockResolvedValue('partial,redis,csv,content');
+
+      const result =
+        await service.createCombinedRedisMetricsCsv(partialResults);
+
+      expect(result.hasData).toBe(true);
+      expect(result.csvContent).toBe('partial,redis,csv,content');
+    });
+
+    it('should handle Redis metrics with empty data arrays', async () => {
+      const emptyDataResults = {
+        REDIS_MEMORY_USED_KB: {
+          data: [],
+          csvContent: '',
+        },
+        REDIS_CONNECTED_CLIENTS: {
+          data: [],
+          csvContent: '',
+        },
+      } as any;
+
+      const result =
+        await service.createCombinedRedisMetricsCsv(emptyDataResults);
+
+      expect(result.hasData).toBe(false);
+      expect(result.csvContent).toBe('');
+    });
+  });
+
+  describe('convertRedisMetricResultToRows', () => {
+    it('should handle response with null data', async () => {
+      const nullResponse: PrometheusResponse = {
+        status: 'success',
+        data: null as any,
+      };
+
+      const result = service['convertRedisMetricResultToRows'](nullResponse);
+      expect(result).toEqual([]);
+    });
+
+    it('should handle response with null result', async () => {
+      const nullResultResponse: PrometheusResponse = {
+        status: 'success',
+        data: {
+          resultType: 'matrix',
+          result: null as any,
+        },
+      };
+
+      const result =
+        service['convertRedisMetricResultToRows'](nullResultResponse);
+      expect(result).toEqual([]);
+    });
+
+    it('should handle missing instance property', async () => {
+      const noInstanceResponse: PrometheusResponse = {
+        status: 'success',
+        data: {
+          resultType: 'matrix',
+          result: [
+            {
+              metric: {}, // No instance property
+              values: [[1609459200, '1024']],
+            },
+          ],
+        },
+      };
+
+      const result =
+        service['convertRedisMetricResultToRows'](noInstanceResponse);
+      expect(result).toEqual([['2021-01-01T00:00:00.000Z', 'redis', 1024]]);
+    });
+
+    it('should apply valueParser correctly', async () => {
+      const response: PrometheusResponse = {
+        status: 'success',
+        data: {
+          resultType: 'matrix',
+          result: [
+            {
+              metric: { instance: 'redis-01:6379' },
+              values: [[1609459200, '1024.75']],
+            },
+          ],
+        },
+      };
+
+      const valueParser = (v: number) => Math.floor(v);
+      const result = service['convertRedisMetricResultToRows'](
+        response,
+        valueParser,
+      );
+      expect(result).toEqual([
+        ['2021-01-01T00:00:00.000Z', 'redis-01:6379', 1024],
+      ]);
     });
   });
 });

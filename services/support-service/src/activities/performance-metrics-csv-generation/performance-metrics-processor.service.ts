@@ -76,6 +76,31 @@ export class PerformanceMetricsProcessorService {
   }
 
   /**
+   * Convert Prometheus result to rows for Redis metrics
+   */
+  private convertRedisMetricResultToRows(
+    response: PrometheusResponse,
+    valueParser?: (v: number) => number | string,
+  ): any[][] {
+    if (!response.data || !response.data.result) return [];
+
+    const rows: any[][] = [];
+    for (const metricData of response.data.result) {
+      const instance = metricData.metric?.instance || 'redis';
+
+      for (const [timestamp, value] of metricData.values || []) {
+        const numericValue = Number(value);
+        rows.push([
+          new Date(Number(timestamp) * 1000).toISOString(), // ISO timestamp
+          instance,
+          valueParser ? valueParser(numericValue) : numericValue,
+        ]);
+      }
+    }
+    return rows;
+  }
+
+  /**
    * Process a single metric into CSV data
    */
   async processMetricData(metric: string, response: PrometheusResponse) {
@@ -118,9 +143,9 @@ export class PerformanceMetricsProcessorService {
         );
         break;
 
-      case 'NETWORK_THROUGHPUT_KBPS':
+      case 'NETWORK_THROUGHPUT_BPS':
         headers = ['timestamp', 'namespace', 'pod', 'network_bps'];
-        // query already converts to kbps, just format
+        // query already converts to bps, just format
         rows = this.convertPrometheusResultToRows(response, (v) =>
           isNaN(v) ? 'NaN' : Number(v.toFixed(2)),
         );
@@ -164,6 +189,35 @@ export class PerformanceMetricsProcessorService {
           response,
           ['service_name', 'error_type'],
           (v) => (isNaN(v) ? 'NaN' : Number(v.toFixed(4))),
+        );
+        break;
+
+      case 'REDIS_MEMORY_USED_KB':
+        headers = ['timestamp', 'instance', 'memory_used_kb'];
+        rows = this.convertRedisMetricResultToRows(response, (v) =>
+          isNaN(v) ? 'NaN' : Number(v.toFixed(2)),
+        );
+        break;
+
+      case 'REDIS_CONNECTED_CLIENTS':
+        headers = ['timestamp', 'instance', 'connected_clients'];
+        rows = this.convertRedisMetricResultToRows(response, (v) =>
+          isNaN(v) ? 'NaN' : Math.floor(v),
+        );
+        break;
+
+      case 'REDIS_UPTIME_SECONDS':
+        headers = ['timestamp', 'instance', 'uptime_seconds'];
+        rows = this.convertRedisMetricResultToRows(response, (v) =>
+          isNaN(v) ? 'NaN' : Math.floor(v),
+        );
+        break;
+
+      case 'REDIS_HIT_RATIO':
+        headers = ['timestamp', 'instance', 'hit_ratio'];
+        rows = this.convertRedisMetricResultToRows(
+          response,
+          (v) => (isNaN(v) ? 'NaN' : Number((v * 100).toFixed(2))), // Convert to percentage
         );
         break;
 
@@ -321,6 +375,100 @@ export class PerformanceMetricsProcessorService {
       'latency_p95_ms',
       'client_error_rate',
       'service_error_rate',
+    ];
+
+    const csvContent = await this.generateCsvContent(headers, allRows);
+    return { csvContent, hasData: true };
+  }
+
+  /**
+   * Combine Redis metrics into a single CSV with all metrics as columns
+   */
+  async createCombinedRedisMetricsCsv(
+    processedResults: ProcessedMetricsBatchResult,
+  ): Promise<{ csvContent: string; hasData: boolean }> {
+    const redisMetrics = [
+      'REDIS_MEMORY_USED_KB',
+      'REDIS_CONNECTED_CLIENTS',
+      'REDIS_UPTIME_SECONDS',
+      'REDIS_HIT_RATIO',
+    ] as const;
+
+    // Check if we have any Redis metrics data
+    const availableRedisMetrics = redisMetrics.filter(
+      (metric) =>
+        processedResults[metric] && processedResults[metric]!.data?.length > 0,
+    );
+
+    if (availableRedisMetrics.length === 0) {
+      return { csvContent: '', hasData: false };
+    }
+
+    // Create a map to group data by timestamp and instance
+    const dataByTimestampAndInstance = new Map<string, any>();
+
+    // Process each Redis metric and group by timestamp + instance
+    for (const metric of availableRedisMetrics) {
+      const data = processedResults[metric]?.data;
+      if (!data) continue;
+
+      for (const row of data) {
+        const [timestamp, instance, value] = row;
+        const key = `${timestamp}|${instance}`;
+
+        if (!dataByTimestampAndInstance.has(key)) {
+          dataByTimestampAndInstance.set(key, {
+            timestamp: String(timestamp),
+            instance: String(instance),
+            memory_used_kb: '',
+            connected_clients: '',
+            uptime_seconds: '',
+            hit_ratio_percent: '',
+          });
+        }
+
+        const entry = dataByTimestampAndInstance.get(key)!;
+
+        // Set the appropriate metric value
+        switch (metric) {
+          case 'REDIS_MEMORY_USED_KB':
+            entry.memory_used_kb = value;
+            break;
+          case 'REDIS_CONNECTED_CLIENTS':
+            entry.connected_clients = value;
+            break;
+          case 'REDIS_UPTIME_SECONDS':
+            entry.uptime_seconds = value;
+            break;
+          case 'REDIS_HIT_RATIO':
+            entry.hit_ratio_percent = value;
+            break;
+        }
+      }
+    }
+
+    // Convert map to array and sort by timestamp
+    const allRows = Array.from(dataByTimestampAndInstance.values()).map(
+      (entry) => [
+        entry.timestamp,
+        entry.instance,
+        entry.memory_used_kb,
+        entry.connected_clients,
+        entry.uptime_seconds,
+        entry.hit_ratio_percent,
+      ],
+    );
+
+    allRows.sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime());
+
+    // Headers for the combined CSV
+    const headers = [
+      'timestamp',
+      'instance',
+      'memory_used_kb',
+      'connected_clients',
+      'uptime_seconds',
+      'hit_ratio_percent',
     ];
 
     const csvContent = await this.generateCsvContent(headers, allRows);

@@ -46,6 +46,25 @@ const PERFORMANCE_METRICS_QUERIES = {
       'sum by (service_name, error_type) (rate(service_error_with_type[5m]))',
     step: process.env.STEP_1hr,
   },
+
+  // Redis Metrics
+  REDIS_MEMORY_USED_KB: {
+    query: 'redis_memory_used_bytes / 1024',
+    step: process.env.STEP_1hr,
+  },
+  REDIS_CONNECTED_CLIENTS: {
+    query: 'redis_connected_clients',
+    step: process.env.STEP_1hr,
+  },
+  REDIS_UPTIME_SECONDS: {
+    query: 'redis_uptime_in_seconds',
+    step: process.env.STEP_1hr,
+  },
+  REDIS_HIT_RATIO: {
+    query:
+      'rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]))',
+    step: process.env.STEP_1hr,
+  },
 };
 
 export default PERFORMANCE_METRICS_QUERIES;
