@@ -62,6 +62,7 @@ describe('SystemInventoryCsvGenerationActivity', () => {
       startDate: '2025-08-01T00:00:00Z',
       endDate: '2025-08-01T23:59:59Z',
       zipLocation: '/tmp/test.zip',
+      otherMetrics: ['System Inventory Data'],
     };
 
     it('should successfully generate CSV files for all metrics with data', async () => {
@@ -342,6 +343,380 @@ describe('SystemInventoryCsvGenerationActivity', () => {
           payload.startDate,
           payload.endDate,
           queryConfig.step,
+        );
+      });
+    });
+
+    describe('otherMetrics validation', () => {
+      const basePayload = {
+        startDate: '2025-08-01T00:00:00Z',
+        endDate: '2025-08-01T23:59:59Z',
+        zipLocation: '/tmp/test.zip',
+      };
+
+      it('should skip processing when System Inventory Data is not in otherMetrics array', async () => {
+        const payloadWithoutSystemInventory = {
+          ...basePayload,
+          otherMetrics: ['Other Metric', 'Another Metric'], // Doesn't include 'System Inventory Data'
+        };
+
+        const result = await activity.generateSystemInventoryCsv({
+          traceId,
+          payload: payloadWithoutSystemInventory,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${traceId}] System Inventory Data not requested in otherMetrics, skipping`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).not.toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).not.toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalled();
+
+        expect(result).toBe(
+          'System Inventory Data CSV generation skipped - not requested',
+        );
+      });
+
+      it('should skip processing when otherMetrics is empty array', async () => {
+        const payloadWithEmptyArray = {
+          ...basePayload,
+          otherMetrics: [], // Empty array
+        };
+
+        const result = await activity.generateSystemInventoryCsv({
+          traceId,
+          payload: payloadWithEmptyArray,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${traceId}] System Inventory Data not requested in otherMetrics, skipping`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).not.toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).not.toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalled();
+
+        expect(result).toBe(
+          'System Inventory Data CSV generation skipped - not requested',
+        );
+      });
+
+      it('should skip processing when otherMetrics is undefined', async () => {
+        const payloadWithUndefinedOtherMetrics = {
+          ...basePayload,
+          otherMetrics: undefined, // Undefined
+        };
+
+        const result = await activity.generateSystemInventoryCsv({
+          traceId,
+          payload: payloadWithUndefinedOtherMetrics,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${traceId}] System Inventory Data not requested in otherMetrics, skipping`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).not.toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).not.toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalled();
+
+        expect(result).toBe(
+          'System Inventory Data CSV generation skipped - not requested',
+        );
+      });
+
+      it('should skip processing when otherMetrics property is missing', async () => {
+        const payloadWithoutOtherMetrics = {
+          startDate: '2025-08-01T00:00:00Z',
+          endDate: '2025-08-01T23:59:59Z',
+          zipLocation: '/tmp/test.zip',
+          // No otherMetrics property
+        };
+
+        const result = await activity.generateSystemInventoryCsv({
+          traceId,
+          payload: payloadWithoutOtherMetrics,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${traceId}] System Inventory Data not requested in otherMetrics, skipping`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).not.toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).not.toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalled();
+
+        expect(result).toBe(
+          'System Inventory Data CSV generation skipped - not requested',
+        );
+      });
+
+      it('should process when System Inventory Data is included in otherMetrics array', async () => {
+        const payloadWithSystemInventory = {
+          ...basePayload,
+          otherMetrics: [
+            'Other Metric',
+            'System Inventory Data',
+            'Another Metric',
+          ], // Includes 'System Inventory Data'
+        };
+
+        const mockPrometheusResponse: PrometheusResponse = {
+          status: 'success',
+          data: {
+            resultType: 'matrix',
+            result: [{ metric: {}, values: [[1234567890, '60']] }],
+          },
+        };
+        const mockProcessedResults = {
+          NETWORK_CONFIG: {
+            data: [{ instance: 'node1', value: 'eth0' }],
+            csvContent: 'Instance,Interface\nnode1,eth0\n',
+          },
+        };
+
+        prometheusClient.callPrometheusApi.mockResolvedValue(
+          mockPrometheusResponse,
+        );
+        processorService.processBatchMetrics.mockResolvedValue(
+          mockProcessedResults,
+        );
+        zipHandler.addCsvToZip.mockResolvedValue(undefined);
+
+        const result = await activity.generateSystemInventoryCsv({
+          traceId,
+          payload: payloadWithSystemInventory,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${traceId}] Starting System Inventory CSV generation`,
+        );
+        expect(loggerSpy).not.toHaveBeenCalledWith(
+          expect.stringContaining('skipping'),
+        );
+
+        expect(prometheusClient.callPrometheusApi).toHaveBeenCalledTimes(
+          Object.keys(SYS_INV_SPECS_QUERIES).length,
+        );
+        expect(processorService.processBatchMetrics).toHaveBeenCalledTimes(1);
+        expect(zipHandler.addCsvToZip).toHaveBeenCalledTimes(1);
+
+        expect(result).toBe(
+          'System Inventory CSV generation completed successfully',
+        );
+      });
+
+      it('should be case sensitive when checking for System Inventory Data', async () => {
+        const payloadWithWrongCase = {
+          ...basePayload,
+          otherMetrics: [
+            'system inventory data',
+            'SYSTEM INVENTORY DATA',
+            'System inventory data',
+          ], // Wrong cases
+        };
+
+        const result = await activity.generateSystemInventoryCsv({
+          traceId,
+          payload: payloadWithWrongCase,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${traceId}] System Inventory Data not requested in otherMetrics, skipping`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).not.toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).not.toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalled();
+
+        expect(result).toBe(
+          'System Inventory Data CSV generation skipped - not requested',
+        );
+      });
+
+      it('should skip when otherMetrics is null', async () => {
+        const payloadWithNullOtherMetrics = {
+          ...basePayload,
+          otherMetrics: null, // Null
+        };
+
+        const result = await activity.generateSystemInventoryCsv({
+          traceId,
+          payload: payloadWithNullOtherMetrics,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${traceId}] System Inventory Data not requested in otherMetrics, skipping`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).not.toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).not.toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalled();
+
+        expect(result).toBe(
+          'System Inventory Data CSV generation skipped - not requested',
+        );
+      });
+
+      it('should process when otherMetrics is a string containing System Inventory Data', async () => {
+        const payloadWithStringOtherMetrics = {
+          ...basePayload,
+          otherMetrics: 'System Inventory Data', // String - should work since strings have includes method
+        };
+
+        const mockPrometheusResponse: PrometheusResponse = {
+          status: 'success',
+          data: {
+            resultType: 'matrix',
+            result: [{ metric: {}, values: [[1234567890, '60']] }],
+          },
+        };
+        const mockProcessedResults = {
+          NETWORK_CONFIG: {
+            data: [{ instance: 'node1', value: 'eth0' }],
+            csvContent: 'Instance,Interface\nnode1,eth0\n',
+          },
+        };
+
+        prometheusClient.callPrometheusApi.mockResolvedValue(
+          mockPrometheusResponse,
+        );
+        processorService.processBatchMetrics.mockResolvedValue(
+          mockProcessedResults,
+        );
+        zipHandler.addCsvToZip.mockResolvedValue(undefined);
+
+        const result = await activity.generateSystemInventoryCsv({
+          traceId,
+          payload: payloadWithStringOtherMetrics,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${traceId}] Starting System Inventory CSV generation`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).toHaveBeenCalled();
+
+        expect(result).toBe(
+          'System Inventory CSV generation completed successfully',
+        );
+      });
+
+      it('should skip when otherMetrics string does not contain System Inventory Data', async () => {
+        const payloadWithWrongString = {
+          ...basePayload,
+          otherMetrics: 'Other Metrics Only', // String without 'System Inventory Data'
+        };
+
+        const result = await activity.generateSystemInventoryCsv({
+          traceId,
+          payload: payloadWithWrongString,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${traceId}] System Inventory Data not requested in otherMetrics, skipping`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).not.toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).not.toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalled();
+
+        expect(result).toBe(
+          'System Inventory Data CSV generation skipped - not requested',
+        );
+      });
+
+      it('should skip when otherMetrics is a partial match string', async () => {
+        const payloadWithPartialMatch = {
+          ...basePayload,
+          otherMetrics: 'System Inventory', // Partial match - should not work
+        };
+
+        const result = await activity.generateSystemInventoryCsv({
+          traceId,
+          payload: payloadWithPartialMatch,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${traceId}] System Inventory Data not requested in otherMetrics, skipping`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).not.toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).not.toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalled();
+
+        expect(result).toBe(
+          'System Inventory Data CSV generation skipped - not requested',
+        );
+      });
+
+      it('should handle payload being null when checking otherMetrics', async () => {
+        const result = await activity.generateSystemInventoryCsv({
+          traceId,
+          payload: null,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${traceId}] System Inventory Data not requested in otherMetrics, skipping`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).not.toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).not.toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalled();
+
+        expect(result).toBe(
+          'System Inventory Data CSV generation skipped - not requested',
+        );
+      });
+
+      it('should proceed when otherMetrics contains only System Inventory Data', async () => {
+        const payloadWithOnlySystemInventory = {
+          ...basePayload,
+          otherMetrics: ['System Inventory Data'], // Only System Inventory Data
+        };
+
+        const mockPrometheusResponse: PrometheusResponse = {
+          status: 'success',
+          data: {
+            resultType: 'matrix',
+            result: [{ metric: {}, values: [[1234567890, '60']] }],
+          },
+        };
+        const mockProcessedResults = {
+          NETWORK_CONFIG: {
+            data: [{ instance: 'node1', value: 'eth0' }],
+            csvContent: 'Instance,Interface\nnode1,eth0\n',
+          },
+        };
+
+        prometheusClient.callPrometheusApi.mockResolvedValue(
+          mockPrometheusResponse,
+        );
+        processorService.processBatchMetrics.mockResolvedValue(
+          mockProcessedResults,
+        );
+        zipHandler.addCsvToZip.mockResolvedValue(undefined);
+
+        const result = await activity.generateSystemInventoryCsv({
+          traceId,
+          payload: payloadWithOnlySystemInventory,
+        });
+
+        expect(loggerSpy).not.toHaveBeenCalledWith(
+          expect.stringContaining('skipping'),
+        );
+
+        expect(prometheusClient.callPrometheusApi).toHaveBeenCalledTimes(
+          Object.keys(SYS_INV_SPECS_QUERIES).length,
+        );
+        expect(processorService.processBatchMetrics).toHaveBeenCalledTimes(1);
+        expect(zipHandler.addCsvToZip).toHaveBeenCalledTimes(1);
+
+        expect(result).toBe(
+          'System Inventory CSV generation completed successfully',
         );
       });
     });

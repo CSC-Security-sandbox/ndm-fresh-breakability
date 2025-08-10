@@ -25,6 +25,13 @@ export class SystemInventoryCsvGenerationActivity {
   }) {
     this.logger.log(`[${traceId}] Starting System Inventory CSV generation`);
 
+    if (!payload?.otherMetrics?.includes('System Inventory Data')) {
+      this.logger.log(
+        `[${traceId}] System Inventory Data not requested in otherMetrics, skipping`,
+      );
+      return 'System Inventory Data CSV generation skipped - not requested';
+    }
+
     const queries = Object.entries(SYS_INV_SPECS_QUERIES);
 
     const results = await Promise.allSettled(
