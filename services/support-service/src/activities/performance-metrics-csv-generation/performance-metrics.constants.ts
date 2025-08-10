@@ -43,7 +43,7 @@ const PERFORMANCE_METRICS_QUERIES = {
   },
   SERVICE_ERROR_RATE_BY_TYPE: {
     query:
-      'sum by (service_name, error_type) (rate(service_errors_with_type[5m]))',
+      'sum by (service_name, error_type) (rate(service_error_with_type[5m]))',
     step: process.env.STEP_1hr,
   },
 };
