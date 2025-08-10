@@ -505,15 +505,6 @@ describe('PrometheusClientService', () => {
   describe('integration scenarios', () => {
     it('should handle complex Prometheus responses with multiple metrics', async () => {
       const complexResponse: PrometheusResponse = {
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-
-  describe('callPrometheusApi', () => {
-    it('should call prometheus service with correct parameters', async () => {
-      const mockResponse: PrometheusResponse = {
         status: 'success',
         data: {
           resultType: 'matrix',
@@ -531,8 +522,6 @@ describe('PrometheusClientService', () => {
                 ['1641024000', '0.9'],
                 ['1641027600', '1'],
               ],
-              metric: { job: 'node-exporter' },
-              values: [[1691539200, '85.5']],
             },
           ],
         },
@@ -548,7 +537,44 @@ describe('PrometheusClientService', () => {
       );
 
       expect(result).toEqual(complexResponse);
-      expect(result.data?.result).toHaveLength(2);
+    });
+  });
+
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+
+  describe('callPrometheusApi', () => {
+    it('should call prometheus service with correct parameters', async () => {
+      const mockResponse: PrometheusResponse = {
+        status: 'success',
+        data: {
+          resultType: 'matrix',
+          result: [
+            {
+              metric: { job: 'node-exporter' },
+              values: [[1691539200, '85.5']],
+            },
+          ],
+        },
+      };
+
+      prometheusService.queryPrometheusRange.mockResolvedValue(mockResponse);
+
+      const result = await service.callPrometheusApi(
+        'up',
+        '2025-01-01T00:00:00Z',
+        '2025-01-02T00:00:00Z',
+        '1h',
+      );
+
+      expect(prometheusService.queryPrometheusRange).toHaveBeenCalledWith(
+        'up',
+        '2025-01-01T00:00:00Z',
+        '2025-01-02T00:00:00Z',
+        '1h',
+      );
+      expect(result).toEqual(mockResponse);
     });
 
     it('should handle concurrent API calls', async () => {
@@ -569,22 +595,6 @@ describe('PrometheusClientService', () => {
       results.forEach((result) => {
         expect(result.status).toBe('success');
       });
-      prometheusService.queryPrometheusRange.mockResolvedValue(mockResponse);
-
-      const result = await service.callPrometheusApi(
-        'up',
-        '2023-08-01',
-        '2023-08-02',
-        '5m',
-      );
-
-      expect(prometheusService.queryPrometheusRange).toHaveBeenCalledWith(
-        'up',
-        '2023-08-01',
-        '2023-08-02',
-        '5m',
-      );
-      expect(result).toEqual(mockResponse);
     });
 
     it('should use default step value when not provided', async () => {

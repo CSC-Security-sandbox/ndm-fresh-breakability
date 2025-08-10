@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { SystemInventoryCsvGenerationActivity } from './system-inventory-csv-generation.activity';
 import { PrometheusClientService } from 'src/prometheus/prometheus-client.service';
 import { SystemInventoryProcessorService } from './system-inventory-processor.service';
-import { ZipHandlerService } from 'src/services/zip-handle.service';
+import { ZipHandlerService } from 'src/services/zip-handler.service';
 import { PrometheusResponse } from './system-inventory-csv-generation.interface';
 import SYS_INV_SPECS_QUERIES from './system-inventory.constants';
 
@@ -115,23 +115,27 @@ describe('SystemInventoryCsvGenerationActivity', () => {
       expect(zipHandler.addCsvToZip).toHaveBeenCalledTimes(4);
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         mockProcessedResults.NETWORK_CONFIG.csvContent,
-        expect.stringContaining('network_config'),
+        expect.stringContaining('system-inventory-network-config'),
         payload.zipLocation,
+        'System Inventory',
       );
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         mockProcessedResults.DISK_USAGE.csvContent,
-        expect.stringContaining('disk_usage'),
+        expect.stringContaining('system-inventory-disk-usage'),
         payload.zipLocation,
+        'System Inventory',
       );
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         mockProcessedResults.RUNNING_PROCESSES.csvContent,
-        expect.stringContaining('running_processes'),
+        expect.stringContaining('system-inventory-running-processes'),
         payload.zipLocation,
+        'System Inventory',
       );
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         mockProcessedResults.SYSTEM_SPECS.csvContent,
-        expect.stringContaining('system_metrics'),
+        expect.stringContaining('system-inventory-system-metrics'),
         payload.zipLocation,
+        'System Inventory',
       );
       expect(loggerSpy).toHaveBeenCalledWith(
         `[${traceId}] Starting System Inventory CSV generation`,
@@ -266,13 +270,15 @@ describe('SystemInventoryCsvGenerationActivity', () => {
       expect(zipHandler.addCsvToZip).toHaveBeenCalledTimes(2);
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         mockProcessedResults.NETWORK_CONFIG.csvContent,
-        expect.stringContaining('network_config'),
+        expect.stringContaining('system-inventory-network-config'),
         payload.zipLocation,
+        'System Inventory',
       );
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         mockProcessedResults.RUNNING_PROCESSES.csvContent,
-        expect.stringContaining('running_processes'),
+        expect.stringContaining('system-inventory-running-processes'),
         payload.zipLocation,
+        'System Inventory',
       );
     });
 
@@ -308,8 +314,9 @@ describe('SystemInventoryCsvGenerationActivity', () => {
       // Assert
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         mockProcessedResults.NETWORK_CONFIG.csvContent,
-        `System Inventory/network_config_${mockTimestamp}.csv`,
+        `system-inventory-network-config-${mockTimestamp}.csv`,
         payload.zipLocation,
+        'System Inventory',
       );
     });
 

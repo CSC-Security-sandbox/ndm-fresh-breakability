@@ -1293,9 +1293,6 @@ describe('LogGeneratorActivity', () => {
       });
 
       expect(result).toStrictEqual({
-        message: '/test/output/ndm_test-user.zip',
-        success: true,
-      });
         success: false,
         message: 'Other warning',
       });

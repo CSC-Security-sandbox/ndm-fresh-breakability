@@ -43,11 +43,18 @@ jest.mock(
     StateDataCsvGenerationActivity: jest.fn().mockImplementation(() => ({
       generateStateDataCsv: jest.fn(),
     })),
-jest.mock('./config-data-csv-generation/config-data-csv-generation.activity', () => ({
-  ConfigurationDataCsvGenerationActivity: jest.fn().mockImplementation(() => ({
-    generateConfigurationDataCsv: jest.fn(),
+  }),
+);
+
+jest.mock(
+  './config-data-csv-generation/config-data-csv-generation.activity',
+  () => ({
+    ConfigurationDataCsvGenerationActivity: jest
+      .fn()
+      .mockImplementation(() => ({
+        generateConfigurationDataCsv: jest.fn(),
         generateConfigurationJobCsv: jest.fn(),
-  })),
+      })),
   }),
 );
 
@@ -56,11 +63,8 @@ jest.mock(
   () => ({
     SystemInventoryCsvGenerationActivity: jest.fn().mockImplementation(() => ({
       generateSystemInventoryCsv: jest.fn(),
-    SystemInventoryCsvGenerationActivity: jest.fn().mockImplementation(() => ({
-      generateSystemInventoryCsv: jest.fn(),
     })),
-  }), 
-})
+  }),
 );
 
 import { LogGeneratorActivity } from './log-generator/log-generator.activity';
@@ -128,6 +132,8 @@ describe('ActivitiesService', () => {
         {
           provide: StateDataCsvGenerationActivity,
           useValue: stateDataCsvGenerationActivity,
+        },
+        {
           provide: SystemInventoryCsvGenerationActivity,
           useValue: systemInventoryCsvGenerationActivity,
         },

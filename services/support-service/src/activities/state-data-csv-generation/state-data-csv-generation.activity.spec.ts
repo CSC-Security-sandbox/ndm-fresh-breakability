@@ -371,16 +371,19 @@ describe('StateDataCsvGenerationActivity', () => {
         'service,pods,csv,content',
         `service_pods_${mockTimestamp}.csv`,
         '/path/to/zip',
+        'State Data',
       );
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         'metrics,csv,content',
         `metrics_data_${mockTimestamp}.csv`,
         '/path/to/zip',
+        'State Data',
       );
       expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
         'build,details,csv,content',
         `build_details_${mockTimestamp}.csv`,
         '/path/to/zip',
+        'State Data',
       );
 
       expect(logger.log).toHaveBeenCalledWith(
@@ -543,6 +546,7 @@ describe('StateDataCsvGenerationActivity', () => {
         'service,pods,csv,content',
         `service_pods_${mockTimestamp}.csv`,
         '/path/to/zip',
+        'State Data',
       );
     });
 
