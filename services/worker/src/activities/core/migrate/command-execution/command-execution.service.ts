@@ -52,13 +52,13 @@ export class CommandExecService {
         output.sourceErrors.push(...baseCmdRes.sourceErrors);
         output.targetErrors.push(...baseCmdRes.targetErrors);
 
-       // Stamp Meta if needed
-        if (baseCmdRes.shouldStampMeta) {
-            const metaResult = await this.stampMetaService.stampMetaData(input);
-            baseCmdRes.shouldUpdateItemInfo = metaResult.shouldUpdateItemInfo;
-            output.targetErrors.push(...metaResult.targetErrors);
-            output.sourceErrors.push(...metaResult.sourceErrors);
-        }
+       // Stamp Meta if needed // commented for testing the SMB speed without metadata stamping, Need to be uncommented later
+        // if (baseCmdRes.shouldStampMeta) {
+        //     const metaResult = await this.stampMetaService.stampMetaData(input);
+        //     baseCmdRes.shouldUpdateItemInfo = metaResult.shouldUpdateItemInfo;
+        //     output.targetErrors.push(...metaResult.targetErrors);
+        //     output.sourceErrors.push(...metaResult.sourceErrors);
+        // }
         if( baseCmdRes.shouldUpdateItemInfo ) {
             await this.publishFileInfo(input);
         }
