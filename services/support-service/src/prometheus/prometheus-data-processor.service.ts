@@ -3,6 +3,7 @@ import { PrometheusClientService } from './prometheus-client.service';
 import { PrometheusMetrics } from '../activities/state-data-csv-generation/state-data-csv-generation.interface';
 import { PROMETHEUS_QUERIES } from '../activities/state-data-csv-generation/state-data-csv-generation.constants';
 import { createWorkerQueriesForMultipleWorkers } from '../utils/prometheus-query.utils';
+import { formatUnixTimestamp } from '../utils/timestamp.utils';
 
 @Injectable()
 export class PrometheusDataProcessorService {
@@ -110,7 +111,7 @@ export class PrometheusDataProcessorService {
           Namespace: item.metric.namespace,
           Pod: item.metric.pod,
           Status: item.metric.phase,
-          Timestamp: item.values[0][0],
+          Timestamp: formatUnixTimestamp(item.values[0][0]),
         });
       });
 
@@ -146,7 +147,7 @@ export class PrometheusDataProcessorService {
       if (data?.data?.result?.[0]?.values) {
         const processedData = data.data.result[0].values.map((value: any) => ({
           Name: name,
-          Timestamp: value[0],
+          Timestamp: formatUnixTimestamp(value[0]),
           Usage: parseFloat(value[1] || 0).toFixed(3),
         }));
         allMetrics.push(...processedData);
@@ -167,7 +168,7 @@ export class PrometheusDataProcessorService {
         buildDetails.push({
           Pod: item.metric.pod,
           'Build Version': item.metric.label_build_version,
-          Timestamp: item.values[0][0],
+          Timestamp: formatUnixTimestamp(item.values[0][0]),
         });
       });
     }
@@ -179,7 +180,7 @@ export class PrometheusDataProcessorService {
           'Build Version': item.metric.label_build_version,
           Platform: item.metric.platform,
           'Worker Id': item.metric.worker_id,
-          Timestamp: item.values[0][0],
+          Timestamp: formatUnixTimestamp(item.values[0][0]),
         });
       });
     }
