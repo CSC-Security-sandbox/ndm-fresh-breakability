@@ -59,7 +59,7 @@ export class PerformanceMetricsCsvGenerationActivity {
     );
 
     this.logger.log(
-      `[${traceId}] Performance metrics CSV generation completed successfully`,
+      `[${traceId}] Performance metrics CSV generation completed successfully.`,
     );
 
     return 'Performance metrics CSV generation completed successfully';
