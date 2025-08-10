@@ -86,7 +86,7 @@ export class SystemInventoryCsvGenerationActivity {
     const timestamp = Date.now();
 
     if (data['NETWORK_CONFIG'] && data['NETWORK_CONFIG']?.data?.length > 0) {
-      const fileName = `System Inventory/network_config_${timestamp}.csv`;
+      const fileName = `system-inventory-network-config-${timestamp}.csv`;
       await this.zipHandler.addCsvToZip(
         data['NETWORK_CONFIG'].csvContent,
         fileName,
@@ -96,7 +96,7 @@ export class SystemInventoryCsvGenerationActivity {
     }
 
     if (data['DISK_USAGE'] && data['DISK_USAGE']?.data?.length > 0) {
-      const fileName = `System Inventory/disk_usage_${timestamp}.csv`;
+      const fileName = `system-inventory-disk-usage-${timestamp}.csv`;
       await this.zipHandler.addCsvToZip(
         data['DISK_USAGE'].csvContent,
         fileName,
@@ -109,7 +109,7 @@ export class SystemInventoryCsvGenerationActivity {
       data['RUNNING_PROCESSES'] &&
       data['RUNNING_PROCESSES']?.data?.length > 0
     ) {
-      const fileName = `System Inventory/running_processes_${timestamp}.csv`;
+      const fileName = `system-inventory-running-processes-${timestamp}.csv`;
       await this.zipHandler.addCsvToZip(
         data['RUNNING_PROCESSES'].csvContent,
         fileName,
@@ -121,7 +121,7 @@ export class SystemInventoryCsvGenerationActivity {
     }
 
     if (data['SYSTEM_SPECS'] && data['SYSTEM_SPECS']?.data?.length > 0) {
-      const fileName = `System Inventory/system_metrics_${timestamp}.csv`;
+      const fileName = `system-inventory-system-metrics-${timestamp}.csv`;
       await this.zipHandler.addCsvToZip(
         data['SYSTEM_SPECS'].csvContent,
         fileName,
