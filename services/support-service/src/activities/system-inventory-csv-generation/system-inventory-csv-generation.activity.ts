@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import SYS_INV_SPECS_QUERIES from './system-inventory.constants';
 import { PrometheusClientService } from 'src/prometheus/prometheus-client.service';
 import { SystemInventoryProcessorService } from './system-inventory-processor.service';
-import { ZipHandlerService } from 'src/services/zip-handle.service';
+import { ZipHandlerService } from 'src/services/zip-handler.service';
 
 @Injectable()
 export class SystemInventoryCsvGenerationActivity {
@@ -91,6 +91,7 @@ export class SystemInventoryCsvGenerationActivity {
         data['NETWORK_CONFIG'].csvContent,
         fileName,
         zipLocation,
+        'System Inventory',
       );
       this.logger.log(`[${traceId}] Network Config CSV created: ${fileName}`);
     }
@@ -101,6 +102,7 @@ export class SystemInventoryCsvGenerationActivity {
         data['DISK_USAGE'].csvContent,
         fileName,
         zipLocation,
+        'System Inventory',
       );
       this.logger.log(`[${traceId}] Disk Usage CSV created: ${fileName}`);
     }
@@ -114,6 +116,7 @@ export class SystemInventoryCsvGenerationActivity {
         data['RUNNING_PROCESSES'].csvContent,
         fileName,
         zipLocation,
+        'System Inventory',
       );
       this.logger.log(
         `[${traceId}] Running Processes CSV created: ${fileName}`,
@@ -126,6 +129,7 @@ export class SystemInventoryCsvGenerationActivity {
         data['SYSTEM_SPECS'].csvContent,
         fileName,
         zipLocation,
+        'System Inventory',
       );
       this.logger.log(`[${traceId}] System Metrics CSV created: ${fileName}`);
     }

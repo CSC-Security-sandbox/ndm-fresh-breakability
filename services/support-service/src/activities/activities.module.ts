@@ -9,6 +9,7 @@ import { WorkerEntity } from 'src/entities/worker.entity';
 import { PrometheusService } from 'src/prometheus/prometheus.service';
 import { PrometheusClientService } from 'src/prometheus/prometheus-client.service';
 import { PrometheusDataProcessorService } from 'src/prometheus/prometheus-data-processor.service';
+import { CsvGeneratorService } from 'src/services/csv-generator.service';
 import { ZipHandlerService } from 'src/services/zip-handler.service';
 import { OperationErrorService } from 'src/utils/error-csv-generation.service';
 import { ActivitiesService } from './activities.service';
@@ -18,7 +19,6 @@ import { LogGeneratorActivity } from './log-generator/log-generator.activity';
 import { NotifyConfigActivity } from './notify-config/notify-config.activity';
 import { StateDataCsvGenerationActivity } from './state-data-csv-generation/state-data-csv-generation.activity';
 import { SystemInventoryCsvGenerationActivity } from './system-inventory-csv-generation/system-inventory-csv-generation.activity';
-
 import { SystemInventoryProcessorService } from './system-inventory-csv-generation/system-inventory-processor.service';
 
 @Module({
@@ -27,24 +27,30 @@ import { SystemInventoryProcessorService } from './system-inventory-csv-generati
     ConfigModule.forRoot({ load: [appConfig, databaseConfig, temporalConfig] }),
   ],
   providers: [
-    ActivitiesService,
+    // Base services first
+    ConfigService,
+    OperationErrorService,
+
+    // Prometheus services
+    PrometheusService,
+    PrometheusClientService,
+    PrometheusDataProcessorService,
+
+    // Utility services
+    CsvGeneratorService,
+    ZipHandlerService,
+    SystemInventoryProcessorService,
+
+    // Activities
     LogGeneratorActivity,
     NotifyConfigActivity,
     ErrorCsvGenerationActivity,
     ConfigurationDataCsvGenerationActivity,
     StateDataCsvGenerationActivity,
-    ConfigService,
-    OperationErrorService,
-    PrometheusService,
-    PrometheusClientService,
-    PrometheusDataProcessorService,
     SystemInventoryCsvGenerationActivity,
-    ConfigService,
-    OperationErrorService,
-    SystemInventoryProcessorService,
-    PrometheusService,
-    PrometheusClientService,
-    ZipHandlerService,
+
+    // Main service (depends on activities)
+    ActivitiesService,
   ],
   exports: [
     ActivitiesService,
