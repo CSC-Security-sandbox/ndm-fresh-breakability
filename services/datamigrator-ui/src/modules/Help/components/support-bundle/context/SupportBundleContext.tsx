@@ -115,7 +115,7 @@ export const SupportBundleProvider = ({
       createAndDownloadBlob(
         response,
         mimeType,
-        `ndm_log-${permissionData?.id}.zip`
+        `ndm_log_${permissionData?.id}.zip`
       );
     } catch (error) {
       console.error("Failed to download Error Report:", error?.data?.message);
