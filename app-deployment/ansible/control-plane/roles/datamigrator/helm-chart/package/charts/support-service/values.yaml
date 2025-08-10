@@ -66,6 +66,9 @@ env:
   - name: STEP_5MIN
     value: "5m"
 
+  - name: NODE_DISK_THRESHOLD
+    value: "90"
+
 service:
   type: ClusterIP
   port: 3000
