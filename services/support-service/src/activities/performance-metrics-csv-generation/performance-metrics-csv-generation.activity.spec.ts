@@ -124,6 +124,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
       startDate: '2023-01-01',
       endDate: '2023-01-02',
       zipLocation: '/test/path/bundle.zip',
+      otherMetrics: ['Performance Metrics'],
     };
 
     const mockPrometheusResponse: PrometheusResponse = {
@@ -266,6 +267,312 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
           payload: mockPayload,
         }),
       ).rejects.toThrow('Zip creation failed');
+    });
+
+    describe('otherMetrics validation', () => {
+      it('should skip processing when otherMetrics is not in array', async () => {
+        const payloadWithoutPerformanceMetrics = {
+          ...mockPayload,
+          otherMetrics: ['Other Metric', 'Another Metric'], // Doesn't include 'Performance Metrics'
+        };
+
+        const result = await activity.generatePerformanceMetricsCsv({
+          traceId: mockTraceId,
+          payload: payloadWithoutPerformanceMetrics,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${mockTraceId}] Performance Metrics not requested in otherMetrics, skipping`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).not.toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).not.toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalled();
+
+        expect(result).toBe(
+          'Performance Metrics CSV generation skipped - not requested',
+        );
+      });
+
+      it('should skip processing when otherMetrics is empty array', async () => {
+        const payloadWithEmptyArray = {
+          ...mockPayload,
+          otherMetrics: [], // Empty array
+        };
+
+        const result = await activity.generatePerformanceMetricsCsv({
+          traceId: mockTraceId,
+          payload: payloadWithEmptyArray,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${mockTraceId}] Performance Metrics not requested in otherMetrics, skipping`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).not.toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).not.toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalled();
+
+        expect(result).toBe(
+          'Performance Metrics CSV generation skipped - not requested',
+        );
+      });
+
+      it('should skip processing when otherMetrics is undefined', async () => {
+        const payloadWithUndefinedOtherMetrics = {
+          ...mockPayload,
+          otherMetrics: undefined, // Undefined
+        };
+
+        const result = await activity.generatePerformanceMetricsCsv({
+          traceId: mockTraceId,
+          payload: payloadWithUndefinedOtherMetrics,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${mockTraceId}] Performance Metrics not requested in otherMetrics, skipping`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).not.toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).not.toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalled();
+
+        expect(result).toBe(
+          'Performance Metrics CSV generation skipped - not requested',
+        );
+      });
+
+      it('should skip processing when otherMetrics property is missing', async () => {
+        const payloadWithoutOtherMetrics = {
+          startDate: '2023-01-01',
+          endDate: '2023-01-02',
+          zipLocation: '/test/path/bundle.zip',
+          // No otherMetrics property
+        };
+
+        const result = await activity.generatePerformanceMetricsCsv({
+          traceId: mockTraceId,
+          payload: payloadWithoutOtherMetrics,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${mockTraceId}] Performance Metrics not requested in otherMetrics, skipping`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).not.toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).not.toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalled();
+
+        expect(result).toBe(
+          'Performance Metrics CSV generation skipped - not requested',
+        );
+      });
+
+      it('should process when Performance Metrics is included in otherMetrics array', async () => {
+        const payloadWithPerformanceMetrics = {
+          ...mockPayload,
+          otherMetrics: [
+            'Other Metric',
+            'Performance Metrics',
+            'Another Metric',
+          ], // Includes 'Performance Metrics'
+        };
+
+        const result = await activity.generatePerformanceMetricsCsv({
+          traceId: mockTraceId,
+          payload: payloadWithPerformanceMetrics,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${mockTraceId}] Starting Performance metrics CSV generation`,
+        );
+        expect(loggerSpy).not.toHaveBeenCalledWith(
+          expect.stringContaining('skipping'),
+        );
+
+        expect(prometheusClient.callPrometheusApi).toHaveBeenCalledTimes(9);
+        expect(processorService.processBatchMetrics).toHaveBeenCalledTimes(1);
+        expect(zipHandler.addCsvToZip).toHaveBeenCalledTimes(2);
+
+        expect(result).toBe(
+          'Performance metrics CSV generation completed successfully',
+        );
+      });
+
+      it('should be case sensitive when checking for Performance Metrics', async () => {
+        const payloadWithWrongCase = {
+          ...mockPayload,
+          otherMetrics: [
+            'performance metrics',
+            'PERFORMANCE METRICS',
+            'Performance metrics',
+          ], // Wrong cases
+        };
+
+        const result = await activity.generatePerformanceMetricsCsv({
+          traceId: mockTraceId,
+          payload: payloadWithWrongCase,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${mockTraceId}] Performance Metrics not requested in otherMetrics, skipping`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).not.toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).not.toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalled();
+
+        expect(result).toBe(
+          'Performance Metrics CSV generation skipped - not requested',
+        );
+      });
+
+      it('should skip when otherMetrics is null', async () => {
+        const payloadWithNullOtherMetrics = {
+          ...mockPayload,
+          otherMetrics: null, // Null
+        };
+
+        const result = await activity.generatePerformanceMetricsCsv({
+          traceId: mockTraceId,
+          payload: payloadWithNullOtherMetrics,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${mockTraceId}] Performance Metrics not requested in otherMetrics, skipping`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).not.toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).not.toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalled();
+
+        expect(result).toBe(
+          'Performance Metrics CSV generation skipped - not requested',
+        );
+      });
+
+      it('should process when otherMetrics is a string containing Performance Metrics', async () => {
+        const payloadWithStringOtherMetrics = {
+          ...mockPayload,
+          otherMetrics: 'Performance Metrics', // String - should work since strings have includes method
+        };
+
+        prometheusClient.callPrometheusApi.mockResolvedValue(
+          mockPrometheusResponse,
+        );
+        processorService.processBatchMetrics.mockResolvedValue(
+          mockProcessedResults,
+        );
+        zipHandler.addCsvToZip.mockResolvedValue(undefined);
+
+        const result = await activity.generatePerformanceMetricsCsv({
+          traceId: mockTraceId,
+          payload: payloadWithStringOtherMetrics,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${mockTraceId}] Starting Performance metrics CSV generation`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).toHaveBeenCalled();
+
+        expect(result).toBe(
+          'Performance metrics CSV generation completed successfully',
+        );
+      });
+
+      it('should skip when otherMetrics string does not contain Performance Metrics', async () => {
+        const payloadWithWrongString = {
+          ...mockPayload,
+          otherMetrics: 'Other Metrics Only', // String without 'Performance Metrics'
+        };
+
+        const result = await activity.generatePerformanceMetricsCsv({
+          traceId: mockTraceId,
+          payload: payloadWithWrongString,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${mockTraceId}] Performance Metrics not requested in otherMetrics, skipping`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).not.toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).not.toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalled();
+
+        expect(result).toBe(
+          'Performance Metrics CSV generation skipped - not requested',
+        );
+      });
+
+      it('should skip when otherMetrics is a partial match string', async () => {
+        const payloadWithPartialMatch = {
+          ...mockPayload,
+          otherMetrics: 'Performance', // Partial match - should not work
+        };
+
+        const result = await activity.generatePerformanceMetricsCsv({
+          traceId: mockTraceId,
+          payload: payloadWithPartialMatch,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${mockTraceId}] Performance Metrics not requested in otherMetrics, skipping`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).not.toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).not.toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalled();
+
+        expect(result).toBe(
+          'Performance Metrics CSV generation skipped - not requested',
+        );
+      });
+
+      it('should handle payload being null when checking otherMetrics', async () => {
+        const result = await activity.generatePerformanceMetricsCsv({
+          traceId: mockTraceId,
+          payload: null,
+        });
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+          `[${mockTraceId}] Performance Metrics not requested in otherMetrics, skipping`,
+        );
+
+        expect(prometheusClient.callPrometheusApi).not.toHaveBeenCalled();
+        expect(processorService.processBatchMetrics).not.toHaveBeenCalled();
+        expect(zipHandler.addCsvToZip).not.toHaveBeenCalled();
+
+        expect(result).toBe(
+          'Performance Metrics CSV generation skipped - not requested',
+        );
+      });
+
+      it('should proceed when otherMetrics contains only Performance Metrics', async () => {
+        const payloadWithOnlyPerformanceMetrics = {
+          ...mockPayload,
+          otherMetrics: ['Performance Metrics'], // Only Performance Metrics
+        };
+
+        const result = await activity.generatePerformanceMetricsCsv({
+          traceId: mockTraceId,
+          payload: payloadWithOnlyPerformanceMetrics,
+        });
+
+        expect(loggerSpy).not.toHaveBeenCalledWith(
+          expect.stringContaining('skipping'),
+        );
+
+        expect(prometheusClient.callPrometheusApi).toHaveBeenCalledTimes(9);
+        expect(processorService.processBatchMetrics).toHaveBeenCalledTimes(1);
+        expect(zipHandler.addCsvToZip).toHaveBeenCalledTimes(2);
+
+        expect(result).toBe(
+          'Performance metrics CSV generation completed successfully',
+        );
+      });
     });
   });
 
@@ -519,6 +826,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
     it('should handle missing payload properties', async () => {
       const incompletePayload = {
         startDate: '2023-01-01',
+        otherMetrics: ['Performance Metrics'],
         // Missing endDate and zipLocation
       };
 
@@ -538,12 +846,18 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
     });
 
     it('should handle null payload', async () => {
-      await expect(
-        activity.generatePerformanceMetricsCsv({
-          traceId: 'test-trace',
-          payload: null as any,
-        }),
-      ).rejects.toThrow(TypeError);
+      const result = await activity.generatePerformanceMetricsCsv({
+        traceId: 'test-trace',
+        payload: null as any,
+      });
+
+      expect(loggerSpy).toHaveBeenCalledWith(
+        '[test-trace] Performance Metrics not requested in otherMetrics, skipping',
+      );
+
+      expect(result).toBe(
+        'Performance Metrics CSV generation skipped - not requested',
+      );
     });
 
     it('should handle empty traceId', async () => {
@@ -558,6 +872,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
           startDate: '2023-01-01',
           endDate: '2023-01-02',
           zipLocation: '/test',
+          otherMetrics: ['Performance Metrics'],
         },
       });
 
@@ -582,6 +897,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
           startDate: '2023-01-01',
           endDate: '2023-01-02',
           zipLocation: '/test',
+          otherMetrics: ['Performance Metrics'],
         },
       });
 
@@ -607,6 +923,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
           startDate: '2023-01-01',
           endDate: '2023-01-02',
           zipLocation: '/test',
+          otherMetrics: ['Performance Metrics'],
         },
       });
 
@@ -662,6 +979,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
           startDate: '2023-01-01',
           endDate: '2023-01-02',
           zipLocation,
+          otherMetrics: ['Performance Metrics'],
         },
       });
 
@@ -759,6 +1077,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
           startDate: '2023-01-01',
           endDate: '2023-01-02',
           zipLocation,
+          otherMetrics: ['Performance Metrics'],
         },
       });
 
@@ -816,6 +1135,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
           startDate: '2023-01-01',
           endDate: '2023-01-02',
           zipLocation,
+          otherMetrics: ['Performance Metrics'],
         },
       });
 
@@ -865,6 +1185,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
           startDate: '2023-01-01',
           endDate: '2023-01-02',
           zipLocation,
+          otherMetrics: ['Performance Metrics'],
         },
       });
 
@@ -927,6 +1248,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
             startDate: '2023-01-01',
             endDate: '2023-01-02',
             zipLocation,
+            otherMetrics: ['Performance Metrics'],
           },
         }),
       ).rejects.toThrow('Zip write failed');
@@ -954,6 +1276,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
           startDate: '2023-01-01',
           endDate: '2023-01-02',
           zipLocation,
+          otherMetrics: ['Performance Metrics'],
         },
       });
 
@@ -1023,6 +1346,7 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
           startDate: '2023-01-01',
           endDate: '2023-01-02',
           zipLocation,
+          otherMetrics: ['Performance Metrics'],
         },
       });
 

@@ -26,6 +26,13 @@ export class PerformanceMetricsCsvGenerationActivity {
   }) {
     this.logger.log(`[${traceId}] Starting Performance metrics CSV generation`);
 
+    if (!payload?.otherMetrics?.includes('Performance Metrics')) {
+      this.logger.log(
+        `[${traceId}] Performance Metrics not requested in otherMetrics, skipping`,
+      );
+      return 'Performance Metrics CSV generation skipped - not requested';
+    }
+
     const queries = Object.entries(PERFORMANCE_METRICS_QUERIES);
 
     const results = await Promise.allSettled(
