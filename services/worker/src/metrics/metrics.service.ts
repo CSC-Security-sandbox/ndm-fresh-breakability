@@ -1,5 +1,6 @@
 import { HttpService } from '@nestjs/axios';
 import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -71,6 +72,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly httpService: HttpService,
+    @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
   ) {
     collectDefaultMetrics({
@@ -111,15 +113,14 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async readWorkerVersion(): Promise<string> {
+  private async readWorkerVersion(platform: string): Promise<string> {
     try {
-      const platform = os.platform();
       let versionsFilePath: string;
 
-      if (platform === 'win32') {
-        versionsFilePath = 'C:\\datamigrator\\conf\\versions.conf';
+      if (platform === 'windows') {
+        versionsFilePath = this.configService.get<string>('worker.metrics.versionsPathWindows');
       } else {
-        versionsFilePath = '/opt/datamigrator/conf/versions.conf';
+        versionsFilePath = this.configService.get<string>('worker.metrics.versionsPathLinux');
       }
 
       try {
@@ -154,8 +155,8 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
 
   private async setWorkerInfo() {
     try {
-      const version = await this.readWorkerVersion();
       const platform = this.getPlatform();
+      const version = await this.readWorkerVersion(platform);
       
       this.workerInfoGauge.set(
         { 

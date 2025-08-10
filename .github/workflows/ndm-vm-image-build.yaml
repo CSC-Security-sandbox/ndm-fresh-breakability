@@ -21,6 +21,7 @@ on:
           - all
           - control-plane
           - worker
+          - windows-installer
       provider:
         description: 'Cloud provider'
         required: false
@@ -118,7 +119,8 @@ jobs:
       db_migrations_branch: ${{ steps.parse-config.outputs.db_migrations_branch }}
       support_service_tag: ${{ steps.parse-config.outputs.support_service_tag }}
       support_service_branch: ${{ steps.parse-config.outputs.support_service_branch }}
-      binary_name: ${{ steps.worker-binary.outputs.binary_name }}
+      linux_binary_name: ${{ steps.worker-binary.outputs.linux_binary_name }}
+      windows_binary_name: ${{ steps.worker-binary.outputs.windows_binary_name }}
       binary_path: ${{ steps.worker-binary.outputs.binary_path }}
     steps:
       - name: Checkout repository
@@ -305,6 +307,7 @@ jobs:
           ansible-playbook ./app-deployment/ansible/control-plane/playbooks/package-helm-chart.yaml -i ./app-deployment/ansible/control-plane/config/local-inventory.yaml --extra-vars "build_version=${{ steps.build_version.outputs.build_version }}" --extra-vars "@./app-deployment/ansible/control-plane/config/group_vars/vars.yaml"
 
       - name: Upload Docker tar and Helm chart tgz to artifactory
+        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         run: |
           BUILD_TYPE="${{ steps.build_version.outputs.build_type }}"
           BUILD_VERSION="${{ steps.build_version.outputs.build_version }}"
@@ -348,6 +351,7 @@ jobs:
           fi
 
       - name: Download Worker Binary from Artifactory
+        if: ${{ github.event.inputs.component == 'worker' || github.event.inputs.component == 'windows-installer' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         id: worker-binary
         run: |
           BUILD_VERSION="${{ steps.build_version.outputs.build_version }}"
@@ -420,17 +424,6 @@ jobs:
           fi
           echo "Worker binary downloaded successfully."
 
-          echo "Downloading windows worker installer from Artifactory..."
-          curl -s -o "windows-worker-installer.exe" \
-            -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
-            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACT_PATH}/windows-worker-installer-${SELECTED_VERSION}.exe"
-
-          if [ ! -f "windows-worker-installer.exe" ] || [ ! -s "windows-worker-installer.exe" ]; then
-            echo "Error: Failed to download windows worker installer or file is empty"
-            exit 1
-          fi
-          echo "Windows worker installer downloaded successfully."
-
           echo "Downloading worker.env from Artifactory..."
           curl -s -o "worker.env" \
             -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
@@ -446,41 +439,48 @@ jobs:
           unzip worker.zip -d $GITHUB_WORKSPACE/worker_bin
           
           if [[ -f "$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" ]]; then
-            echo "Binary exists at $GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64"
-            NEW_BINARY_NAME="datamigrator-worker-${BUILD_VERSION}"
-            mv "$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" "$GITHUB_WORKSPACE/worker_bin/pkg/$NEW_BINARY_NAME"
-            echo "Renamed binary to $NEW_BINARY_NAME"
-            # Create tar.gz archive to preserve file integrity
-            tar -czf "$GITHUB_WORKSPACE/worker_bin/pkg/${NEW_BINARY_NAME}.tar.gz" -C "$GITHUB_WORKSPACE/worker_bin/pkg" "$NEW_BINARY_NAME"
-            echo "Created tarball ${NEW_BINARY_NAME}.tar.gz"
+            echo "Linux binary exists at $GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64"
+            LINUX_BINARY_NAME="datamigrator-worker-${BUILD_VERSION}"
+            mv "$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" "$GITHUB_WORKSPACE/worker_bin/pkg/$LINUX_BINARY_NAME"
+            echo "Renamed binary to $LINUX_BINARY_NAME"
           else
-            echo "Binary not found!"
+            echo "Linux binary not found!"
             ls -la $GITHUB_WORKSPACE/worker_bin/pkg/
             exit 1
           fi
-          echo "binary_name=$NEW_BINARY_NAME" >> $GITHUB_OUTPUT
+
+          if [[ -f "$GITHUB_WORKSPACE/worker_bin/pkg/worker-win-x64.exe" ]]; then
+            echo "Windows binary exists at $GITHUB_WORKSPACE/worker_bin/pkg/worker-win-x64.exe"
+            WINDOWS_BINARY_NAME="datamigrator-worker-${BUILD_VERSION}.exe"
+            mv "$GITHUB_WORKSPACE/worker_bin/pkg/worker-win-x64.exe" "$GITHUB_WORKSPACE/worker_bin/pkg/$WINDOWS_BINARY_NAME"
+            echo "Renamed binary to $WINDOWS_BINARY_NAME"
+          else
+            echo "Windows binary not found!"
+            ls -la $GITHUB_WORKSPACE/worker_bin/pkg/
+            exit 1
+          fi
+
+          # Create combined tarball with both Linux and Windows binaries
+          BINARIES_TARBALL="datamigrator-worker-${BUILD_VERSION}-binaries.tar.gz"
+          tar -czf "$GITHUB_WORKSPACE/worker_bin/pkg/${BINARIES_TARBALL}" -C "$GITHUB_WORKSPACE/worker_bin/pkg" "$LINUX_BINARY_NAME" "$WINDOWS_BINARY_NAME"
+          echo "Created binaries tarball ${BINARIES_TARBALL} with both Linux and Windows binaries"
+
+          echo "linux_binary_name=$LINUX_BINARY_NAME" >> $GITHUB_OUTPUT
+          echo "windows_binary_name=$WINDOWS_BINARY_NAME" >> $GITHUB_OUTPUT
 
           # Upload assets to Artifactory
           if [[ ! "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
             ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/worker"
-            BINARY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/worker/${NEW_BINARY_NAME}.tar.gz"
-            INSTALLER_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/worker/windows-worker-installer-${BUILD_VERSION}.exe"
+            BINARIES_TARBALL_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/worker/${BINARIES_TARBALL}"
             ENV_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/worker/worker-${BUILD_VERSION}.env"
             
             for REPO_PATH in "cicd/ndm" "team/ndm"; do
-              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${BINARY_PATH}"
-              echo "Uploading worker binary tarball to $TARGET_URL..."
-              curl --silent --show-error --fail --request PUT --upload-file "$GITHUB_WORKSPACE/worker_bin/pkg/${NEW_BINARY_NAME}.tar.gz" \
+              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${BINARIES_TARBALL_PATH}"
+              echo "Uploading worker binaries tarball to $TARGET_URL..."
+              curl --silent --show-error --fail --request PUT --upload-file "$GITHUB_WORKSPACE/worker_bin/pkg/${BINARIES_TARBALL}" \
                 "$TARGET_URL" \
                 -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
-              echo "Worker binary tarball uploaded successfully to $TARGET_URL."
-
-              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${INSTALLER_PATH}"
-              echo "Uploading Windows worker installer to $TARGET_URL..."
-              curl --silent --show-error --fail --request PUT --upload-file "windows-worker-installer.exe" \
-                "$TARGET_URL" \
-                -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
-              echo "Windows worker installer uploaded successfully to $TARGET_URL."
+              echo "Worker binaries tarball uploaded successfully to $TARGET_URL."
 
               TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ENV_PATH}"
               echo "Uploading worker environment file to $TARGET_URL..."
@@ -512,12 +512,12 @@ jobs:
           name: datamigrator-images
           path: app-deployment/artifacts/datamigrator-*.tar
 
-      - name: Upload Worker Binary as Artifact
-        if: ${{ github.event.inputs.component == 'worker' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+      - name: Upload Worker Binaries as Artifact
+        if: ${{ github.event.inputs.component == 'worker' || github.event.inputs.component == 'windows-installer' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: worker-binary
-          path: ${{ github.workspace }}/worker_bin/pkg/datamigrator-worker-${{ steps.build_version.outputs.build_version }}
+          path: ${{ github.workspace }}/worker_bin/pkg/
           
   determine-matrix:
     runs-on: openlab
@@ -543,8 +543,216 @@ jobs:
           # Create the matrix JSON
           echo "matrix={\"component\":${COMPONENTS},\"provider\":${PROVIDERS}}" >> $GITHUB_OUTPUT
 
-    
+  build-windows-installer:
+    if: ${{ github.event.inputs.component == 'windows-installer' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+    runs-on: windows-latest
+    needs: package-artifacts
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+      BUILD_VERSION: ${{ needs.package-artifacts.outputs.build_version }}
+    steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+
+        - name: Download Binary Artifact
+          uses: actions/download-artifact@v4
+          with:
+            name: worker-binary
+            path: .
+
+        - name: Prepare Installer Directory
+          shell: pwsh
+          run: |
+            New-Item -ItemType Directory -Force -Path wininstaller
+            New-Item -ItemType Directory -Force -Path wininstaller\redist
+            New-Item -ItemType Directory -Force -Path wininstaller\fluentd
+            Move-Item -Path "${{ needs.package-artifacts.outputs.windows_binary_name }}" -Destination "wininstaller\worker.exe" -Force
+
+        - name: Download Redistributables
+          shell: pwsh
+          run: |
+            # Download VC++ Redistributable
+            Write-Host "Downloading VC++ Redistributable..."
+            Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "wininstaller\redist\vc_redist.x64.exe"
+            
+            # Download fluent-package MSI
+            Write-Host "Downloading fluent-package..."
+            Invoke-WebRequest -Uri "https://s3.amazonaws.com/packages.treasuredata.com/5/windows/fluent-package-5.2.0-x64.msi" -OutFile "wininstaller\fluentd\fluent-package-5.2.0-x64.msi"
+
+            # Verify downloads
+            Write-Host "Verifying downloads..."
+            if (Test-Path "wininstaller\redist\vc_redist.x64.exe") {
+                $vcSize = (Get-Item "wininstaller\redist\vc_redist.x64.exe").Length
+                Write-Host "VC++ Redistributable downloaded: $vcSize bytes"
+            } else {
+                throw "VC++ Redistributable download failed"
+            }
+
+            if (Test-Path "wininstaller\fluentd\fluent-package-5.2.0-x64.msi") {
+                $fluentSize = (Get-Item "wininstaller\fluentd\fluent-package-5.2.0-x64.msi").Length
+                Write-Host "fluent-package downloaded: $fluentSize bytes"
+            } else {
+                throw "fluent-package download failed"
+            }
+
+        - name: Copy environment file and installer files
+          shell: pwsh
+          run: |
+            Write-Host "Current working directory: $(Get-Location)"
+            Copy-Item -Path "app-deployment/ansible/worker/roles/configure-worker/templates/worker.env.j2" -Destination "wininstaller\worker.env.j2" -Force
+            Copy-Item -Path "services/worker/wininstaller/installer.iss" -Destination "wininstaller\installer.iss" -Force
+            Copy-Item -Path "services/worker/wininstaller/service.xml" -Destination "wininstaller\service.xml" -Force
+            Copy-Item -Path "services/worker/wininstaller/fluentd.conf" -Destination "wininstaller\fluentd.conf" -Force
+
+        - name: Update installer version
+          shell: pwsh
+          run: |
+            # Replace the version in installer.iss with the actual app version
+            (Get-Content "wininstaller\installer.iss") -replace '#define ApplicationVersion ".*"', '#define ApplicationVersion "${{ env.BUILD_VERSION }}"' | Set-Content "wininstaller\installer.iss"
+            Write-Host "Updated installer version to: ${{ env.BUILD_VERSION }}"
+
+        - name: Verify installer version update
+          shell: pwsh
+          run: |
+            Write-Host "Verifying installer.iss content after version update:"
+            Write-Host "=============================================="
+            Get-Content "wininstaller\installer.iss" | Select-Object -First 10 | ForEach-Object { Write-Host $_ }
+            Write-Host "=============================================="
+            Write-Host "BUILD_VERSION environment variable: ${{ env.BUILD_VERSION }}"
+
+        - name: Download WinSW and rename
+          shell: pwsh
+          run: |
+            # Download a specific version of WinSW
+            Invoke-WebRequest -Uri "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe" -OutFile "wininstaller\winsw.exe"
+  
+        - name: List files in wininstaller directory
+          shell: pwsh
+          run: |
+            Write-Host "Files in wininstaller directory:"
+            Get-ChildItem -Path "wininstaller" | ForEach-Object { Write-Host "  - $($_.Name)" }
+  
+        - name: Install Inno Setup
+          shell: pwsh
+          run: choco install innosetup -y
+  
+        - name: Build Windows Installer with Inno Setup
+          shell: cmd
+          run: |
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "wininstaller\installer.iss"
+
+        - name: Upload Windows Installer as Artifact
+          uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+          with:
+            name: windows-worker-installer
+            path: wininstaller/datamigrator-worker-setup.exe
+
+  upload-windows-installer:
+    needs: [package-artifacts, build-windows-installer]
+    runs-on: openlab
+    steps:
+      - name: Download Windows Installer Artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: windows-worker-installer
+          path: ./
+
+      - name: Upload Windows Installer to Artifactory
+        run: |
+          BUILD_TYPE="${{ needs.package-artifacts.outputs.build_type }}"
+          BUILD_VERSION="${{ needs.package-artifacts.outputs.build_version }}"
+          INSTALLER_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/windows-installer/windows-worker-installer-${BUILD_VERSION}.exe"
+          for REPO_PATH in "cicd/ndm" "team/ndm"; do
+            TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${INSTALLER_PATH}"
+            echo "Uploading Windows worker installer to $TARGET_URL..."
+            curl --silent --show-error --fail --request PUT --upload-file "datamigrator-worker-setup.exe" \
+              "$TARGET_URL" \
+              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+            echo "Windows worker installer uploaded successfully to $TARGET_URL."
+          done
+
+      - name: Generate and upload manifests for windows-installer
+        run: |
+          set -e
+          BUILD_VERSION="${{ needs.package-artifacts.outputs.build_version }}"
+          BUILD_TYPE="${{ needs.package-artifacts.outputs.build_type }}"
+          WINDOWS_BINARY_NAME="${{ needs.package-artifacts.outputs.windows_binary_name }}"
+          BINARY_PATH="${{ needs.package-artifacts.outputs.binary_path }}"
+          COMPONENT="windows-installer"
+          BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          COMMIT="${GITHUB_SHA}"
+          SHORT_COMMIT="${GITHUB_SHA::7}"
+          RUN_ID="${GITHUB_RUN_ID}"
+          WORKFLOW_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
+          INSTALLER_FILENAME="windows-worker-installer-${BUILD_VERSION}.exe"
+
+          # Generate metadata.json for windows installer
+          cat > metadata.json <<EOF
+          {
+            "build_version": "$BUILD_VERSION",
+            "component": "$COMPONENT",
+            "windows_binary_name": "$WINDOWS_BINARY_NAME",
+            "binary_path": "$BINARY_PATH",
+            "installer_filename": "$INSTALLER_FILENAME",
+            "installer_path": "builds/${BUILD_TYPE}/${BUILD_VERSION}/windows-installer/${INSTALLER_FILENAME}",
+            "build_timestamp": "$BUILD_TIMESTAMP",
+            "commit": "$COMMIT",
+            "short_commit": "$SHORT_COMMIT",
+            "workflow_run_id": "$RUN_ID",
+            "workflow_run_url": "$WORKFLOW_RUN_URL"
+          }
+          EOF
+
+          ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            METADATA_PATH="releases/${BUILD_VERSION}/manifests/${COMPONENT}/${COMPONENT}.json"
+          else
+            METADATA_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/manifests/${COMPONENT}/${COMPONENT}.json"
+            LATEST_PATH="builds/$BUILD_TYPE/${COMPONENT}-latest.json"
+          fi
+
+          # Generate latest.json for windows installer
+          cat > latest.json <<EOF
+          {
+            "build_version": "$BUILD_VERSION",
+            "component": "$COMPONENT",
+            "installer_filename": "$INSTALLER_FILENAME",
+            "installer_path": "builds/${BUILD_TYPE}/${BUILD_VERSION}/windows-installer/${INSTALLER_FILENAME}",
+            "commit": "${GITHUB_SHA}",
+            "short_commit": "${GITHUB_SHA::7}",
+            "timestamp": "$ISO_TIME",
+            "metadata_path": "$METADATA_PATH",
+            "published_by": "${{ github.actor }}"
+          }
+          EOF
+
+          FILES_TO_UPLOAD="metadata.json"
+          if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            echo "Release branch detected, will only upload metadata.json"
+          else
+            FILES_TO_UPLOAD="$FILES_TO_UPLOAD latest.json"
+            echo "Non-release branch detected, will upload both metadata.json and latest.json"
+          fi
+
+          for FILE in $FILES_TO_UPLOAD; do
+            if [[ "$FILE" == "metadata.json" ]]; then
+              ARTIFACTORY_PATH="$METADATA_PATH"
+            else
+              ARTIFACTORY_PATH="$LATEST_PATH"
+            fi
+            for REPO_PATH in "cicd/ndm" "team/ndm"; do
+              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
+              echo "Uploading $FILE to $TARGET_URL..."
+              curl --silent --show-error --fail --request PUT --upload-file $FILE \
+                "$TARGET_URL" \
+                -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+              echo "$FILE uploaded successfully to $TARGET_URL."
+            done
+          done
+
   packer:
+    if: ${{ github.event.inputs.component != 'windows-installer' }}
     needs: [package-artifacts, determine-matrix]
     env:
       ref_name: ${{ needs.package-artifacts.outputs.ref_name }}
@@ -927,7 +1135,7 @@ jobs:
         run: |
           set -e
           BUILD_VERSION="${{ env.build_version }}"
-          BINARY_NAME="${{ needs.package-artifacts.outputs.binary_name }}"
+          LINUX_BINARY_NAME="${{ needs.package-artifacts.outputs.linux_binary_name }}"
           BINARY_PATH="${{ needs.package-artifacts.outputs.binary_path }}"
           PROVIDER="${{ matrix.provider }}"
           COMPONENT="${{ matrix.component }}"
@@ -943,7 +1151,7 @@ jobs:
             "build_version": "$BUILD_VERSION",
             "provider": "$PROVIDER",
             "component": "$COMPONENT",
-            "binary_name": "$BINARY_NAME",
+            "binary_name": "$LINUX_BINARY_NAME",
             "binary_path": "$BINARY_PATH",
             "image_name": "$IMAGE_NAME",
             "build_timestamp": "$BUILD_TIMESTAMP",
@@ -968,7 +1176,7 @@ jobs:
             "build_version": "$BUILD_VERSION",
             "provider": "$PROVIDER",
             "component": "$COMPONENT",
-            "binary_name": "$BINARY_NAME",
+            "binary_name": "$LINUX_BINARY_NAME",
             "binary_path": "$BINARY_PATH",
             "commit": "${GITHUB_SHA}",
             "short_commit": "${GITHUB_SHA::7}",
@@ -1044,7 +1252,7 @@ jobs:
 
   notify-build-completion:
     if: ${{ github.event_name == 'schedule' }}
-    needs: [package-artifacts, packer]
+    needs: [package-artifacts, packer, upload-windows-installer]
     runs-on: openlab
     steps:
       - name: Download Image Info Artifacts

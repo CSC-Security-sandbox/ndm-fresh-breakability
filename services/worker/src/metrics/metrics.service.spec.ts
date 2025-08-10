@@ -1,18 +1,34 @@
 import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Gauge } from 'prom-client';
 import { MetricsService } from './metrics.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { mockLoggerFactory } from '../auth/auth.service.spec';
+import * as fs from 'fs';
+import * as os from 'os';
 
 describe('MetricsService', () => {
   let service: MetricsService;
   let httpService: HttpService;
-  const gauges = ['cpuUsageGauge', 'memoryUsageGauge', 'diskUsageGauge', 'networkIOGauge'];
+  let configService: ConfigService;
+  const gauges = ['cpuUsageGauge', 'memoryUsageGauge', 'diskUsageGauge', 'networkIOGauge', 'workerInfoGauge'];
   const metricMethods = ['collectCPUMetrics', 'collectMemoryMetrics', 'collectDiskUsageMetrics', 'collectNetworkIOMetrics'];
 
   const setupHttpServiceMock = () => ({
     axiosRef: { interceptors: { response: { use: jest.fn() } } },
+  });
+
+  const setupConfigServiceMock = () => ({
+    get: jest.fn((key: string) => {
+      if (key === 'worker.metrics.versionsPathWindows') {
+        return 'C:\\datamigrator\\conf\\versions.conf';
+      }
+      if (key === 'worker.metrics.versionsPathLinux') {
+        return '/opt/datamigrator/conf/versions.conf';
+      }
+      return undefined;
+    }),
   });
 
   beforeEach(async () => {
@@ -20,6 +36,7 @@ describe('MetricsService', () => {
       providers: [
         MetricsService,
         { provide: HttpService, useValue: setupHttpServiceMock() },
+        { provide: ConfigService, useValue: setupConfigServiceMock() },
         {
           provide: LoggerFactory,
           useValue: mockLoggerFactory,
@@ -28,6 +45,7 @@ describe('MetricsService', () => {
     }).compile();
     service = module.get<MetricsService>(MetricsService);
     httpService = module.get<HttpService>(HttpService);
+    configService = module.get<ConfigService>(ConfigService);
   });
 
   it('should be defined', () => {
@@ -47,7 +65,7 @@ describe('MetricsService', () => {
     let interceptor: Function, errorInterceptor: Function;
     beforeEach(() => {
       jest.spyOn(service.httpRequestCounter, 'inc').mockImplementation(jest.fn());
-      [interceptor, errorInterceptor] = (httpService.axiosRef.interceptors.response.use as jest.Mock).mock.calls[0];
+      [interceptor, errorInterceptor] = (httpService.axiosRef.interceptors.response.use as any).mock.calls[0];
     });
     it.each([
       ['successful response', { config: { method: 'get', url: 'http://example.com/api' }, status: 200 }, 'GET', 200],
@@ -214,10 +232,174 @@ describe('MetricsService', () => {
     });
   });
 
+  describe('readWorkerVersion', () => {
+    beforeEach(() => {
+      jest.spyOn((service as any).logger, 'error').mockImplementation(jest.fn());
+    });
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should read version from Windows path when platform is windows', async () => {
+      const mockFileContent = 'current_version=2.1.0\nother_info=test';
+      jest.spyOn(fs.promises, 'readFile').mockResolvedValue(mockFileContent);
+      
+      const version = await (service as any).readWorkerVersion('windows');
+      
+      expect(configService.get).toHaveBeenCalledWith('worker.metrics.versionsPathWindows');
+      expect(fs.promises.readFile).toHaveBeenCalledWith('C:\\datamigrator\\conf\\versions.conf', 'utf8');
+      expect(version).toBe('2.1.0');
+    });
+
+    it('should read version from Linux path when platform is linux', async () => {
+      const mockFileContent = 'current_version=3.2.1\nother_info=test';
+      jest.spyOn(fs.promises, 'readFile').mockResolvedValue(mockFileContent);
+      
+      const version = await (service as any).readWorkerVersion('linux');
+      
+      expect(configService.get).toHaveBeenCalledWith('worker.metrics.versionsPathLinux');
+      expect(fs.promises.readFile).toHaveBeenCalledWith('/opt/datamigrator/conf/versions.conf', 'utf8');
+      expect(version).toBe('3.2.1');
+    });
+
+    it('should return unknown when version file does not exist', async () => {
+      jest.spyOn(fs.promises, 'readFile').mockRejectedValue(new Error('ENOENT: no such file or directory'));
+      
+      const version = await (service as any).readWorkerVersion('linux');
+      
+      expect(version).toBe('unknown');
+      expect((service as any).logger.error).toHaveBeenCalledWith(
+        'Error reading worker version file:', 
+        'ENOENT: no such file or directory'
+      );
+    });
+
+    it('should return unknown when version pattern is not found in file', async () => {
+      const mockFileContent = 'some_other_version=1.0.0\nno_current_version_here=test';
+      jest.spyOn(fs.promises, 'readFile').mockResolvedValue(mockFileContent);
+      
+      const version = await (service as any).readWorkerVersion('windows');
+      
+      expect(version).toBe('unknown');
+    });
+
+    it('should trim whitespace from version', async () => {
+      const mockFileContent = 'current_version=  4.5.6  \n';
+      jest.spyOn(fs.promises, 'readFile').mockResolvedValue(mockFileContent);
+      
+      const version = await (service as any).readWorkerVersion('linux');
+      
+      expect(version).toBe('4.5.6');
+    });
+
+    it('should handle config service error', async () => {
+      jest.spyOn(configService, 'get').mockImplementation(() => {
+        throw new Error('Config error');
+      });
+      
+      const version = await (service as any).readWorkerVersion('linux');
+      
+      expect(version).toBe('unknown');
+      expect((service as any).logger.error).toHaveBeenCalledWith('Error reading worker version:', 'Config error');
+    });
+  });
+
+  describe('getPlatform', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should return windows for win32 platform', () => {
+      jest.spyOn(os, 'platform').mockReturnValue('win32' as any);
+      
+      const platform = (service as any).getPlatform();
+      
+      expect(platform).toBe('windows');
+    });
+
+    it('should return linux for linux platform', () => {
+      jest.spyOn(os, 'platform').mockReturnValue('linux' as any);
+      
+      const platform = (service as any).getPlatform();
+      
+      expect(platform).toBe('linux');
+    });
+
+    it('should return original platform for other platforms', () => {
+      jest.spyOn(os, 'platform').mockReturnValue('darwin' as any);
+      
+      const platform = (service as any).getPlatform();
+      
+      expect(platform).toBe('darwin');
+    });
+  });
+
+  describe('setWorkerInfo', () => {
+    beforeEach(() => {
+      jest.spyOn((service as any).workerInfoGauge, 'set').mockImplementation(jest.fn());
+      jest.spyOn((service as any).logger, 'error').mockImplementation(jest.fn());
+    });
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should set worker info gauge with platform and version', async () => {
+      jest.spyOn(service as any, 'getPlatform').mockReturnValue('linux');
+      jest.spyOn(service as any, 'readWorkerVersion').mockResolvedValue('1.2.3');
+      
+      await (service as any).setWorkerInfo();
+      
+      expect((service as any).getPlatform).toHaveBeenCalled();
+      expect((service as any).readWorkerVersion).toHaveBeenCalledWith('linux');
+      expect((service as any).workerInfoGauge.set).toHaveBeenCalledWith(
+        {
+          worker_id: (service as any).workerId,
+          label_build_version: '1.2.3',
+          platform: 'linux'
+        },
+        1
+      );
+    });
+
+    it('should set worker info gauge with unknown version on error', async () => {
+      jest.spyOn(service as any, 'getPlatform').mockReturnValue('windows');
+      jest.spyOn(service as any, 'readWorkerVersion').mockResolvedValue('unknown');
+      
+      await (service as any).setWorkerInfo();
+      
+      expect((service as any).workerInfoGauge.set).toHaveBeenCalledWith(
+        {
+          worker_id: (service as any).workerId,
+          label_build_version: 'unknown',
+          platform: 'windows'
+        },
+        1
+      );
+    });
+
+    it('should log error when setWorkerInfo fails', async () => {
+      jest.spyOn(service as any, 'getPlatform').mockImplementation(() => {
+        throw new Error('Platform error');
+      });
+      
+      await (service as any).setWorkerInfo();
+      
+      expect((service as any).logger.error).toHaveBeenCalledWith('Failed to set worker info:', 'Platform error');
+    });
+  });
+
+  describe('workerInfoGauge initialization', () => {
+    it('should initialize workerInfoGauge with correct configuration', () => {
+      expect((service as any).workerInfoGauge).toBeDefined();
+      expect((service as any).workerInfoGauge).toBeInstanceOf(Gauge);
+    });
+  });
+
   describe('onModuleInit', () => {
     beforeEach(() => {
       jest.spyOn((service as any).logger, 'warn').mockImplementation(jest.fn());
       jest.spyOn((service as any).logger, 'log').mockImplementation(jest.fn());
+      jest.spyOn((service as any), 'setWorkerInfo').mockImplementation(jest.fn());
       jest.spyOn(global, 'setInterval').mockImplementation(((fn: any) => fn()) as any);
     });
     afterEach(() => jest.restoreAllMocks());
@@ -234,6 +416,7 @@ describe('MetricsService', () => {
       process.env.METRICS_PUSH_INTERVAL = '1';
       (service as any).onModuleInit();
       expect((service as any).logger.log).toHaveBeenCalledWith('Starting metrics collection');
+      expect((service as any).setWorkerInfo).toHaveBeenCalled();
     });
 
     it('should handle unset intervals', () => {
@@ -242,6 +425,7 @@ describe('MetricsService', () => {
       delete process.env.METRICS_PUSH_INTERVAL;
       (service as any).onModuleInit();
       expect((service as any).logger.log).toHaveBeenCalledWith('Starting metrics collection');
+      expect((service as any).setWorkerInfo).toHaveBeenCalled();
     });
 
     it('should handle invalid intervals', () => {
@@ -250,6 +434,7 @@ describe('MetricsService', () => {
       process.env.METRICS_PUSH_INTERVAL = 'xyz';
       (service as any).onModuleInit();
       expect((service as any).logger.log).toHaveBeenCalledWith('Starting metrics collection');
+      expect((service as any).setWorkerInfo).toHaveBeenCalled();
     });
   });
 
