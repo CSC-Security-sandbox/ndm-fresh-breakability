@@ -87,7 +87,7 @@ export class PerformanceMetricsCsvGenerationActivity {
     const timestamp = Date.now();
 
     if (data?.CPU_PERCENT && data.CPU_PERCENT?.data?.length > 0) {
-      const fileName = `Performance metrics/cpu_percent_${timestamp}.csv`;
+      const fileName = `Performance metrics/cpu-percent-${timestamp}.csv`;
       await this.zipHandler.addCsvToZip(
         data.CPU_PERCENT.csvContent,
         fileName,
@@ -97,7 +97,7 @@ export class PerformanceMetricsCsvGenerationActivity {
     }
 
     if (data.MEMORY_MB && data.MEMORY_MB?.data?.length > 0) {
-      const fileName = `Performance metrics/memory_mb_${timestamp}.csv`;
+      const fileName = `Performance metrics/memory-mb-${timestamp}.csv`;
       await this.zipHandler.addCsvToZip(
         data.MEMORY_MB.csvContent,
         fileName,
@@ -107,7 +107,7 @@ export class PerformanceMetricsCsvGenerationActivity {
     }
 
     if (data.DISK_READ_BPS && data.DISK_READ_BPS?.data?.length > 0) {
-      const fileName = `Performance metrics/disk_read_bps_${timestamp}.csv`;
+      const fileName = `Performance metrics/disk-read-bps-${timestamp}.csv`;
       await this.zipHandler.addCsvToZip(
         data.DISK_READ_BPS.csvContent,
         fileName,
@@ -117,7 +117,7 @@ export class PerformanceMetricsCsvGenerationActivity {
     }
 
     if (data.DISK_WRITE_BPS && data.DISK_WRITE_BPS?.data?.length > 0) {
-      const fileName = `Performance metrics/disk_write_bps_${timestamp}.csv`;
+      const fileName = `Performance metrics/disk-write-bps-${timestamp}.csv`;
       await this.zipHandler.addCsvToZip(
         data.DISK_WRITE_BPS.csvContent,
         fileName,
@@ -130,7 +130,7 @@ export class PerformanceMetricsCsvGenerationActivity {
       data.NETWORK_THROUGHPUT_BPS &&
       data.NETWORK_THROUGHPUT_BPS?.data?.length > 0
     ) {
-      const fileName = `Performance metrics/network_throughput_bps_${timestamp}.csv`;
+      const fileName = `Performance metrics/network-throughput-bps-${timestamp}.csv`;
       await this.zipHandler.addCsvToZip(
         data.NETWORK_THROUGHPUT_BPS.csvContent,
         fileName,
@@ -146,7 +146,7 @@ export class PerformanceMetricsCsvGenerationActivity {
       data.SERVICE_REQUEST_RATE &&
       data.SERVICE_REQUEST_RATE?.data?.length > 0
     ) {
-      const fileName = `Performance metrics/service_request_rate_${timestamp}.csv`;
+      const fileName = `Performance metrics/service-request-rate-${timestamp}.csv`;
       await this.zipHandler.addCsvToZip(
         data.SERVICE_REQUEST_RATE.csvContent,
         fileName,
@@ -161,7 +161,7 @@ export class PerformanceMetricsCsvGenerationActivity {
       data.SERVICE_LATENCY_P95 &&
       data.SERVICE_LATENCY_P95?.data?.length > 0
     ) {
-      const fileName = `Performance metrics/service_latency_p95_${timestamp}.csv`;
+      const fileName = `Performance metrics/service-latency-p95-${timestamp}.csv`;
       await this.zipHandler.addCsvToZip(
         data.SERVICE_LATENCY_P95.csvContent,
         fileName,
@@ -173,7 +173,7 @@ export class PerformanceMetricsCsvGenerationActivity {
     }
 
     if (data.CLIENT_ERROR_RATE && data.CLIENT_ERROR_RATE?.data?.length > 0) {
-      const fileName = `Performance metrics/client_error_rate_${timestamp}.csv`;
+      const fileName = `Performance metrics/client-error-rate-${timestamp}.csv`;
       await this.zipHandler.addCsvToZip(
         data.CLIENT_ERROR_RATE.csvContent,
         fileName,
@@ -188,7 +188,7 @@ export class PerformanceMetricsCsvGenerationActivity {
       data.SERVICE_ERROR_RATE_BY_TYPE &&
       data.SERVICE_ERROR_RATE_BY_TYPE?.data?.length > 0
     ) {
-      const fileName = `Performance metrics/service_error_rate_by_type_${timestamp}.csv`;
+      const fileName = `Performance metrics/service-error-rate-by-type-${timestamp}.csv`;
       await this.zipHandler.addCsvToZip(
         data.SERVICE_ERROR_RATE_BY_TYPE.csvContent,
         fileName,
@@ -197,6 +197,19 @@ export class PerformanceMetricsCsvGenerationActivity {
       this.logger.log(
         `[${traceId}] Service Error Rate by Type CSV created: ${fileName}`,
       );
+    }
+
+    // Generate combined Redis metrics CSV file (single file for all Redis metrics)
+    const redisData =
+      await this.processorService.createCombinedRedisMetricsCsv(data);
+    if (redisData.hasData) {
+      const fileName = `Performance metrics/redis-metrics-${timestamp}.csv`;
+      await this.zipHandler.addCsvToZip(
+        redisData.csvContent,
+        fileName,
+        zipLocation,
+      );
+      this.logger.log(`[${traceId}] Redis Metrics CSV created: ${fileName}`);
     }
   }
 }
