@@ -12,6 +12,7 @@ export class ZipHandlerService {
     csvContent: string,
     fileName: string,
     zipLocation: string,
+    folderName: string = 'CSV Files',
   ): Promise<void> {
     const zipPath = this.getZipPath(zipLocation);
     this.logger.log(`Adding CSV to zip file: ${zipPath}`);
@@ -21,9 +22,9 @@ export class ZipHandlerService {
     const zipExists = await this.checkZipExists(zipPath);
 
     if (zipExists) {
-      await this.addToExistingZip(csvContent, fileName, zipPath);
+      await this.addToExistingZip(csvContent, fileName, zipPath, folderName);
     } else {
-      await this.createNewZipWithCsv(csvContent, fileName, zipPath);
+      await this.createNewZipWithCsv(csvContent, fileName, zipPath, folderName);
     }
   }
 
@@ -44,6 +45,7 @@ export class ZipHandlerService {
     csvContent: string,
     fileName: string,
     zipPath: string,
+    folderName: string,
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const output = fs.createWriteStream(zipPath);
@@ -62,7 +64,7 @@ export class ZipHandlerService {
       });
 
       archive.pipe(output);
-      archive.append(csvContent, { name: `State Data/${fileName}` });
+      archive.append(csvContent, { name: `${folderName}/${fileName}` });
       void archive.finalize();
     });
   }
@@ -71,11 +73,12 @@ export class ZipHandlerService {
     csvContent: string,
     fileName: string,
     zipPath: string,
+    folderName: string,
   ): Promise<void> {
     try {
       const existingZip = new AdmZip(zipPath);
       existingZip.addFile(
-        `State Data/${fileName}`,
+        `${folderName}/${fileName}`,
         Buffer.from(csvContent, 'utf8'),
       );
       existingZip.writeZip(zipPath);
@@ -87,7 +90,7 @@ export class ZipHandlerService {
         `Error adding CSV to existing zip with AdmZip: ${error.message}`,
       );
       this.logger.log('Falling back to archiver-based approach...');
-      await this.createNewZipWithCsv(csvContent, fileName, zipPath);
+      await this.createNewZipWithCsv(csvContent, fileName, zipPath, folderName);
     }
   }
 }

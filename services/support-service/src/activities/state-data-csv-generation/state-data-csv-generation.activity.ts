@@ -71,7 +71,12 @@ export class StateDataCsvGenerationActivity {
         data.servicePods,
       );
       const fileName = `service_pods_${timestamp}.csv`;
-      await this.zipHandler.addCsvToZip(csvContent, fileName, zipLocation);
+      await this.zipHandler.addCsvToZip(
+        csvContent,
+        fileName,
+        zipLocation,
+        'State Data',
+      );
       this.logger.log(`[${traceId}] Service pods CSV created: ${fileName}`);
     }
 
@@ -80,7 +85,12 @@ export class StateDataCsvGenerationActivity {
         data.allMetrics,
       );
       const fileName = `metrics_data_${timestamp}.csv`;
-      await this.zipHandler.addCsvToZip(csvContent, fileName, zipLocation);
+      await this.zipHandler.addCsvToZip(
+        csvContent,
+        fileName,
+        zipLocation,
+        'State Data',
+      );
       this.logger.log(`[${traceId}] Metrics CSV created: ${fileName}`);
     }
 
@@ -89,7 +99,12 @@ export class StateDataCsvGenerationActivity {
         data.buildDetails,
       );
       const fileName = `build_details_${timestamp}.csv`;
-      await this.zipHandler.addCsvToZip(csvContent, fileName, zipLocation);
+      await this.zipHandler.addCsvToZip(
+        csvContent,
+        fileName,
+        zipLocation,
+        'State Data',
+      );
       this.logger.log(`[${traceId}] Build details CSV created: ${fileName}`);
     }
   }
