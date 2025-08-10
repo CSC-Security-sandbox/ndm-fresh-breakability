@@ -41,15 +41,30 @@ env:
 
   - name: TEMPORAL_ADDRESS
     value: "temporaltest-frontend.temporal.svc.cluster.local:7233"
-  
+
   - name: BASE_LOG_PATH
     value: "/ndm-logs"
 
   - name: OUTPUT_ZIP_PATH
     value: "/generated-zips"
-  
+
   - name: CONFIG_BASE_URL
     value: "http://config-service-service:3000/api/v1"
+
+  - name: PROMETHEUS_BASE_URL
+    value: "http://prometheus-server.prometheus.svc.cluster.local:80/api/v1"
+
+  - name: PROMETHEUS_TIMEOUT
+    value: "5m"
+
+  - name: STEP_1Hr
+    value: "1h"
+
+  - name: STEP_4Hr
+    value: "4h"
+
+  - name: STEP_5MIN
+    value: "5m"
 
 service:
   type: ClusterIP
@@ -63,4 +78,3 @@ persistentVolumes:
   - name: generated-zips
     mountPath: /generated-zips
     hostPath: /generated-zips
-  
