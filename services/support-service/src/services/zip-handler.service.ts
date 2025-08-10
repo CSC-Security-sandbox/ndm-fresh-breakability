@@ -24,10 +24,22 @@ export class ZipHandlerService {
       // Ensure directory exists
       await this.ensureDirectoryExists(path.dirname(zipPath));
 
-    if (zipExists) {
-      await this.addToExistingZip(csvContent, fileName, zipPath, folderName);
-    } else {
-      await this.createNewZipWithCsv(csvContent, fileName, zipPath, folderName);
+      // Check if zip file already exists
+      const zipExists = await this.checkZipExists(zipPath);
+
+      if (zipExists) {
+        await this.addToExistingZip(csvContent, fileName, zipPath, folderName);
+      } else {
+        await this.createNewZipWithCsv(
+          csvContent,
+          fileName,
+          zipPath,
+          folderName,
+        );
+      }
+    } catch (error: any) {
+      this.logger.error(`Error adding CSV to zip: ${error.message}`);
+      throw new Error(`Failed to add CSV to zip: ${error.message}`);
     }
   }
 
@@ -91,9 +103,20 @@ export class ZipHandlerService {
           resolve();
         });
 
-      archive.pipe(output);
-      archive.append(csvContent, { name: `${folderName}/${fileName}` });
-      void archive.finalize();
+        output.on('error', (err) => {
+          reject(err);
+        });
+
+        archive.on('error', (err) => {
+          reject(err);
+        });
+
+        archive.pipe(output);
+        archive.append(csvContent, { name: `${folderName}/${fileName}` });
+        void archive.finalize();
+      } catch (error) {
+        reject(error);
+      }
     });
   }
 
@@ -129,6 +152,34 @@ export class ZipHandlerService {
       );
       this.logger.log('Falling back to archiver-based approach...');
       await this.createNewZipWithCsv(csvContent, fileName, zipPath, folderName);
+    }
+  }
+
+  private validateInputs(
+    csvContent: string,
+    fileName: string,
+    zipLocation: string,
+  ): void {
+    if (!csvContent || csvContent.trim() === '') {
+      throw new Error('CSV content cannot be empty');
+    }
+    if (!fileName || fileName.trim() === '') {
+      throw new Error('File name cannot be empty');
+    }
+    if (!zipLocation || zipLocation.trim() === '') {
+      throw new Error('Zip location cannot be empty');
+    }
+  }
+
+  private async ensureDirectoryExists(dirPath: string): Promise<void> {
+    try {
+      await fs.promises.mkdir(dirPath, { recursive: true });
+    } catch (error: any) {
+      if (error.code !== 'EEXIST') {
+        throw new Error(
+          `Failed to create directory ${dirPath}: ${error.message}`,
+        );
+      }
     }
   }
 }
