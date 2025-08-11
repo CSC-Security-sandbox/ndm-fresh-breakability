@@ -50,7 +50,7 @@ export class SetupActivityService {
       mountBasePath: this.baseWorkingPath,
       pathId: server.pathId,
       jobRunId,
-    });
+    }, true);
     console.log(
       `[${jobRunId}] - Worker ${this.workerId} set up for ${server.hostname}/${server.path}`,
     );
@@ -70,7 +70,7 @@ export class SetupActivityService {
       mountBasePath: this.baseWorkingPath,
       pathId: server.pathId,
       jobRunId,
-    });
+    }, true);
     console.log(
       `[${jobRunId}] - Worker ${this.workerId} cleanup completed for ${server.hostname}/${server.path}`,
     );

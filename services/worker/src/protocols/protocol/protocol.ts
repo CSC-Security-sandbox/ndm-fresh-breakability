@@ -7,6 +7,7 @@ import {
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 
+
 export abstract class Protocol {
     protected readonly logger: LoggerService;
     protected workerId = WorkersConfig.get('workerId');
@@ -16,11 +17,12 @@ export abstract class Protocol {
     abstract listPaths(traceId: string, payload: ProtocolPayload): Promise<string[]>;
     abstract getProtocolVersions(traceId: string, payload: ProtocolPayload): Promise<string[]>;
     abstract validateConnection(traceId: string, payload: ProtocolPayload): Promise<any>;
-    abstract mountPath(traceId: string, payload: ProtocolPayload): Promise<any>;  
-    abstract unmountPath(traceId: string, payload: ProtocolPayload): Promise<any>;
+    abstract mountPath(traceId: string, payload: ProtocolPayload, manageMount: boolean): Promise<any>;
+    abstract unmountPath(traceId: string, payload: ProtocolPayload, manageMount: boolean): Promise<any>;
     abstract disconnectSession(traceId: string, payload: ProtocolPayload): Promise<any>;
     abstract getTotalUsedMemory(traceId: string, payload: ProtocolPayload): Promise<any>;
     abstract getAvailableDiskSpace(traceId: string, payload: ProtocolPayload): Promise<any>;
+    abstract updateBootMounts({ platform, fstabPath, workerId}, payload, action, traceId): void;
 
     constructor(loggerFactory: LoggerFactory) {
       this.logger = loggerFactory.create(this.constructor.name);
