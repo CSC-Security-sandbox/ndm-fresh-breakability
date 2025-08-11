@@ -2,25 +2,18 @@ import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import {
-  Command,
   FileServerDetails,
   JobConfig,
   JobContextFactory,
   NFS,
   SMB,
-  SpeedTestJobConfig,
-  Task
+  SpeedTestJobConfig
 } from "@netapp-cloud-datamigrate/jobs-lib";
 import {
   IdentityTypes,
-  JobStatus as JobContextStatus,
-  OPS_CMD,
-  OPS_STATUS,
-  TaskStatus,
-  TaskType,
+  JobStatus as JobContextStatus
 } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/enums";
 import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
-import { WorkflowHandleWithFirstExecutionRunId } from "@temporalio/client";
 import axios from "axios";
 import {
   JobRunStatus,
@@ -199,6 +192,7 @@ export class JobRunInitService {
       ) || [];
 
     const details: JobRunConfig = {
+      id: jobConfig.id,
       preserveAccessTime: jobConfig?.preserveAccessTime,
       excludeFilePatterns: jobConfig?.excludeFilePatterns,
       excludeOlderThan: jobConfig?.excludeOlderThan,
@@ -242,6 +236,7 @@ export class JobRunInitService {
     // skip if job Is migration and futureScheduleAt is not set or empty
     const skipDelete : boolean = jobConfig?.jobType === JobType.MIGRATE && (!jobConfig?.futureScheduleAt || jobConfig?.futureScheduleAt === "")
     const details: JobRunConfig = {
+      id: jobConfig.id,
       preserveAccessTime: jobConfig.preserveAccessTime,
       excludeFilePatterns: jobConfig.excludeFilePatterns,
       excludeOlderThan: jobConfig.excludeOlderThan,
@@ -354,7 +349,7 @@ export class JobRunInitService {
   }
   // ------------------ InitiateWorkflow -------------------- //
   async initiateWorkflow(jobRunId: string, jobRunConfig: JobRunConfig) {
-    let jobRunWorkflow: WorkflowHandleWithFirstExecutionRunId | null = null;
+
     const options = new Options();
     options.workflowExecutionTimeout = "120s";
     options.workflowTaskTimeout = "120s";
@@ -370,7 +365,7 @@ export class JobRunInitService {
           options: options,
         };
 
-        jobRunWorkflow = await this.workFlowService.startWorkflow(
+        await this.workFlowService.startWorkflow(
           WorkFlows.DISCOVERY,
           startWorkFlowPayload,
         );
@@ -390,7 +385,8 @@ export class JobRunInitService {
           ],
           options: options,
         };
-        jobRunWorkflow = await this.workFlowService.startWorkflow(
+
+        await this.workFlowService.startWorkflow(
           WorkFlows.SPEED_TEST,
           startWorkFlowPayload,
         );
@@ -406,7 +402,7 @@ export class JobRunInitService {
           ],
           options: options,
         };
-        jobRunWorkflow = await this.workFlowService.startWorkflow(
+        await this.workFlowService.startWorkflow(
           WorkFlows.CUT_OVER,
           startWorkFlowPayload,
         );
@@ -430,7 +426,7 @@ export class JobRunInitService {
           ],
           options: options,
         };
-        jobRunWorkflow = await this.workFlowService.startWorkflow(
+        await this.workFlowService.startWorkflow(
           WorkFlows.MIGRATE,
           startWorkFlowPayload,
         );
@@ -438,15 +434,6 @@ export class JobRunInitService {
       }
     }
     await this.startStreamConsumer(jobRunId);
-    if (jobRunWorkflow) {
-      await this.jobRunRepo.update(
-        { id: jobRunId },
-        { workFlowId: jobRunWorkflow.workflowId },
-      );
-      this.logger.log(
-        `Starting ${jobRunConfig.jobType} workflow for jobRunId: ${jobRunId}, with workflowId: ${jobRunWorkflow.workflowId}`,
-      );
-    }
   }
   // TODO deprecated, remove later
   // ------------------ BuildJobContext for SpeedTest -------------------- //
@@ -521,14 +508,10 @@ export class JobRunInitService {
       jobRunConfig.jobType === JobType.MIGRATE ||
       jobRunConfig.jobType === JobType.CUT_OVER
     ) {
-      const jobConfigId = await this.jobRunRepo.findOne({
-        where: { id: jobRunId },
-        select: { jobConfigId: true },
-      });
-      if (jobConfigId) {
+      if (jobRunConfig.id) {
         const identityCrossMappings =
           await this.identityConfigCrossMappingRepo.find({
-            where: { jobConfigId: jobConfigId.jobConfigId, isOrphan: false },
+            where: { jobConfigId: jobRunConfig.id, isOrphan: false },
           });
         if (identityCrossMappings.length > 0) {
           isIdentityMapping = true;
