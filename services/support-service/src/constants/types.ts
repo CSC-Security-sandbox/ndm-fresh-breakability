@@ -4,8 +4,6 @@ export interface OperationErrorExportData {
   errorCode: string;
   errorMessage: string;
   createdAt: string;
-  fileName: string;
-  filePath: string;
   errorType: string;
   operationType: string;
   origin: string;
