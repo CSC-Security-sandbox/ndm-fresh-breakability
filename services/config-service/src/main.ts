@@ -16,7 +16,7 @@ async function bootstrap() {
     new ResponseInterceptor([], [], await loggerFactory),
   );
   const jsonPayloadLimit = configService.get<string>(
-    'app.options.jsonPayloadLit',
+    'app.options.jsonPayloadLimit',
   );
   const host: string = configService.get<string>('app.http.host');
   const port: number = configService.get<number>('app.http.port');
