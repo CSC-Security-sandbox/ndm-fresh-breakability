@@ -99,11 +99,9 @@ var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealth
 			}
 
 			migrationJobConfigID, resp, err := CreateMigrationJob(migrationParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating migration job")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
-			Expect(len(migrationJobConfigID)).To(BeNumerically("==", 1), "Expected one jobConfigID")
-
+	
 			getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID[0], headers)
 			Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")

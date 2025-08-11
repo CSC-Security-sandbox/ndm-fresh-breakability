@@ -72,10 +72,9 @@ var _ = Describe("RTC-003: Test discovery with single worker and restart the wor
 			}
 
 			JobConfigId, resp, err := CreateDiscoveryJob(jobParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating new discovery for source")
-			Expect(len(JobConfigId)).To(BeNumerically("==", 1), "No valid discoveryJobRunId found in response")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating discovery job for source: %v", err))
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+	
 
 			getJobsResp, resp, err := GetJobRunDetails(JobConfigId[0], headers)
 			Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")

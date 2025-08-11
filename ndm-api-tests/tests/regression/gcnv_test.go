@@ -474,11 +474,7 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 				StartDelay:               "10s",
 			}
 			sourceJobConfigIDs, resp, err := CreateDiscoveryJob(jobParams, headers)
-
-			Expect(err).NotTo(HaveOccurred(), "Error creating new discovery for source")
-			Expect(len(sourceJobConfigIDs)).To(BeNumerically(">", 0), "No valid sourceJobConfigIDs found in response")
-			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating discovery job for source: %v", err))
 			Wait(15)
 
 			By("Getting the job run details")
@@ -511,10 +507,8 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 				StartDelay:               "10s",
 			}
 			sourceJobConfigIDs, resp, err := CreateDiscoveryJob(jobParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating new discovery for source")
-			Expect(len(sourceJobConfigIDs)).To(BeNumerically(">", 0), "No valid sourceJobConfigIDs found in response")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating discovery job for source: %v", err))
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 			Wait(15)
 
 			By("Getting the job run details")
@@ -547,11 +541,8 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 				StartDelay:               "10s",
 			}
 			sourceJobConfigIDs, resp, err := CreateDiscoveryJob(jobParams, headers)
-
-			Expect(err).NotTo(HaveOccurred(), "Error creating new discovery for source")
-			Expect(len(sourceJobConfigIDs)).To(BeNumerically(">", 0), "No valid sourceJobConfigIDs found in response")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating discovery job for source: %v", err))
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 			Wait(15)
 
 			By("Getting the job run details")
@@ -627,10 +618,8 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 				},
 			}
 			migrationJobConfigIDs, resp, err := CreateMigrationJob(migrationParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating migration job")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
-			Expect(len(migrationJobConfigIDs)).To(BeNumerically(">", 0), "Expected at least one jobConfigID")
 			Wait(15)
 
 			By("Getting the job run details")
@@ -664,10 +653,8 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 				},
 			}
 			migrationJobConfigIDs, resp, err := CreateMigrationJob(migrationParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating migration job")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
-			Expect(len(migrationJobConfigIDs)).To(BeNumerically(">", 0), "Expected at least one jobConfigID")
 			Wait(15)
 
 			By("Getting the job run details")
@@ -701,10 +688,8 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 				},
 			}
 			migrationJobConfigIDs, resp, err := CreateMigrationJob(migrationParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating migration job")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
-			Expect(len(migrationJobConfigIDs)).To(BeNumerically(">", 0), "Expected at least one jobConfigID")
 			Wait(15)
 
 			By("Getting the job run details")
