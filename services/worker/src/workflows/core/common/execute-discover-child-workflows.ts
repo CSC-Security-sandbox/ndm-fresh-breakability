@@ -23,6 +23,7 @@ const {
   heartbeatTimeout: '2m',
 });
 
+const { updateWorkerResponse: updateWorkerResponse } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '10m' });
 
 const actionSignal = wf.defineSignal<[string]>('action');
 
@@ -69,6 +70,15 @@ export const executeDiscoveryChildWorkflows = async ( {jobRunId } : DiscoveryWor
             }else {
                 console.log(`[${jobRunId}] Error in ChildScanWorkflow: ${error.message}`);
                 output.status = JobRunStatus.Failed;
+                await updateWorkerResponse(jobRunId, 'all', {
+                    status: output.status,
+                    code: `${error.message}`,
+                    operation: 'Scan Workflow Failed',
+                    occurrence: 1,
+                    origin: 'ChildScanWorkflow',
+                    message: `Scan workflow failed with error: ${error.message}`,
+                    createdAt: new Date()
+            });                
             }      
         }
     }
