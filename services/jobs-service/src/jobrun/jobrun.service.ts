@@ -442,7 +442,7 @@ export class JobRunService {
                 ? formatBytes(Number(inventoryStats?.totalSize || 0))
                 : "0 B",
             totalMigratedSize:
-              jobRun.jobtype === JobType.MIGRATE
+              jobRun.jobtype === JobType.MIGRATE || jobRun.jobtype === JobType.CUT_OVER
                 ? formatBytes(Number(inventoryStats?.totalSize || 0))
                 : "0 B",
             errors: await this.getErrorCounts(jobRun.jobrunid),

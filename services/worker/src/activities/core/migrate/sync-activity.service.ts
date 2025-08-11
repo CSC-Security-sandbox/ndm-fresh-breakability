@@ -55,8 +55,7 @@ export class SyncService {
           syncOutput = await this.executeSyncTask(taskId, task, jobContext);
           await this.updateAndReportTaskStatus({ taskHashId: taskId, jobContext, errors: syncOutput.errors, task });
           syncOutput.status = TaskStatus.COMPLETED;
-        } catch (error) {
-            if(error instanceof FatalError) throw error;
+        } catch (error) {            
             this.logger.error(`[${jobRunId}] Error in syncTaskActivity: ${error.message}`, error.stack);        
             throw error;
         } finally {

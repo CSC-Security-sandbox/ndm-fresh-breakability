@@ -1,8 +1,6 @@
 import { Protocol } from './protocol';
 import { exec } from 'child_process';
-import { WorkersConfig } from 'src/config/app.config';
 import { ProtocolPayload } from './protocol.type';
-import { sanitize } from 'src/utils/utilities';
 import { mockLoggerFactory } from '../../auth/auth.service.spec';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
@@ -41,10 +39,10 @@ class TestProtocol extends Protocol {
   disconnectSession(traceId: string, payload: ProtocolPayload): Promise<any> {
     throw new Error('Method not implemented.');
   }
-  mountPath(traceId: string, payload: ProtocolPayload): Promise<any> {
+  mountPath(traceId: string, payload: ProtocolPayload, manageMount: boolean): Promise<any> {
     return Promise.resolve([]);
   }
-  unmountPath(traceId: string, payload: ProtocolPayload): Promise<any> {
+  unmountPath(traceId: string, payload: ProtocolPayload, manageMount: boolean): Promise<any> {
     return Promise.resolve([]);
   }
   listPaths(traceId: string, payload: ProtocolPayload): Promise<string[]> {

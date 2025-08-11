@@ -179,7 +179,7 @@ describe('NFSProtocol', () => {
       // Mock fs.promises.rmdir
       const mockRmdir = jest.spyOn(fs.promises, 'rmdir').mockResolvedValue(undefined);
 
-      const result = await nfsProtocol.unmountPath('traceId', payload);
+      const result = await nfsProtocol.unmountPath('traceId', payload, false);
       
       expect(mockLogger.log).toHaveBeenCalled();
       expect(mockAccess).toHaveBeenCalledWith('/mnt/job123/path456', fs.constants.F_OK);
@@ -209,7 +209,7 @@ describe('NFSProtocol', () => {
       // Mock fs.promises.rmdir
       const mockRmdir = jest.spyOn(fs.promises, 'rmdir').mockResolvedValue(undefined);
 
-      const result = await nfsProtocol.unmountPath('traceId', payload);
+      const result = await nfsProtocol.unmountPath('traceId', payload, false);
       
       expect(mockLogger.log).toHaveBeenCalled();
       expect(mockAccess).toHaveBeenCalledWith('/mnt/job123/path456', fs.constants.F_OK);

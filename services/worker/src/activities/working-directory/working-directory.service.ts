@@ -139,11 +139,11 @@ export class ValidateWorkingDirectoryActivity {
         };
 
         this.logger.log(`Mounting export path for host ${fileServer.host}`);
-        await protocol.mountPath(traceId, mountPathPayload);
+        await protocol.mountPath(traceId, mountPathPayload, false);
         this.logger.log("Mounted export path successfully");
 
         this.logger.log(`Unmounting export path for host ${fileServer.host}`);
-        await protocol.unmountPath(traceId, mountPathPayload);
+        await protocol.unmountPath(traceId, mountPathPayload, false);
         this.logger.log("Unmounted export path successfully");
       }
     } catch (error) {
@@ -187,7 +187,7 @@ export class ValidateWorkingDirectoryActivity {
         };
 
         this.logger.log(`Mounting export path for host ${fileServer.host}`);
-        await protocol.mountPath(traceId, mountPathPayload);
+        await protocol.mountPath(traceId, mountPathPayload, false);
         this.logger.log("Mounted export path successfully");
 
         this.logger.log("Started validating the working directory");
@@ -205,7 +205,7 @@ export class ValidateWorkingDirectoryActivity {
         }
 
         this.logger.log(`Unmounting export path for host ${fileServer.host}`);
-        await protocol.unmountPath(traceId, mountPathPayload);
+        await protocol.unmountPath(traceId, mountPathPayload, false);
         this.logger.log("Unmounted export path successfully");
 
         if (isDirectoryValid && !hasWritePermission) {

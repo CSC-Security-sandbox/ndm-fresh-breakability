@@ -10,7 +10,6 @@ import { isPathExists } from 'src/activities/core/utils/utils';
 
 @Injectable()
 export class SMBProtocol extends Protocol {
- 
   protected getCommandPattern( key : string): string {
     return CommandConfig.getSMBCommand(this.platform, key)
   }
@@ -254,6 +253,11 @@ export class SMBProtocol extends Protocol {
   }
 
   getTotalSizeLinux(traceId: string, payload: ProtocolPayload): Promise<any> {
+    throw new Error('Method not implemented.');
+  }
+
+  updateBootMounts({ platform, fstabPath, workerId }: { platform: any; fstabPath: any; workerId: any; }, payload: any, action: any, traceId: any): void {
+    this.logger.log(`[${traceId}] updateBootMount not implemented for SMB protocol`);
     throw new Error('Method not implemented.');
   }
 

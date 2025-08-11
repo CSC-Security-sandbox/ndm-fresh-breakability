@@ -49,7 +49,7 @@ export class PrecheckActivity {
     let mountSuccess = false;
     try {
       await protocol.validateConnection(traceId, protocolPayload);
-      await protocol.mountPath(traceId, protocolPayload);
+      await protocol.mountPath(traceId, protocolPayload, false);
       mountSuccess = true;
     } catch (error) {
       this.logger.error(`Error mounting path ${serverPaths.pathName} on server ${serverCredentials.host}`);
@@ -180,7 +180,7 @@ export class PrecheckActivity {
       await Promise.all(checkPromises);
 
       try {
-        await protocol.unmountPath(traceId, protocolPayload);
+        await protocol.unmountPath(traceId, protocolPayload, false);
         this.logger.log(`Unmounted path ${serverPaths.pathName} on server ${serverCredentials.host}`);
       } catch (error) {
         this.logger.error(`Error unmounting path ${serverPaths.pathName} on server ${serverCredentials.host}`);
