@@ -1,24 +1,61 @@
-import {BadRequestException, Injectable, InternalServerErrorException, NotFoundException} from '@nestjs/common';
-import {InjectRepository} from '@nestjs/typeorm';
-import {LoggerFactory, LoggerService} from '@netapp-cloud-datamigrate/logger-lib';
-import {FindManyOptions, Repository} from 'typeorm';
-import {ConfigEntity} from 'src/entities/config.entity';
-import {FileServerEntity} from 'src/entities/fileserver.entity';
-import {FileServerWorkingDirectoryMappingEntity} from 'src/entities/fileserver_workingdirectory_mapping.entity';
-import {VolumeEntity} from 'src/entities/volume.entity';
-import {WorkerEntity} from 'src/entities/worker.entity';
-import {JobConfigEntity} from 'src/entities/jobconfig.entity';
-import {JobRunEntity} from 'src/entities/jobrun.entity';
-import {WorkflowService} from 'src/workflow/workflow.service';
-import {FindAllConfigPageDto} from './dto/findallconfig.dto';
-import {ProjectEntity} from 'src/entities/project.entity';
-import {SendMailService} from 'src/util/send-email';
-import {ConfigService} from '@nestjs/config';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
+import { FindManyOptions, In, Repository } from 'typeorm';
+import { validate as isUUID } from 'uuid';
+import {
+  ConfigErrorMsg,
+  ConfigStatus,
+  ProtocolVersionError,
+  WorkerStatus,
+  WorkFlows,
+} from 'src/constants/enums';
+import { ConfigEntity } from 'src/entities/config.entity';
+import { FileServerEntity } from 'src/entities/fileserver.entity';
+import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
+import { VolumeEntity } from 'src/entities/volume.entity';
+import { WorkerEntity } from 'src/entities/worker.entity';
+import {
+  JobConfigEntity,
+  JobStatus,
+  JobType,
+} from 'src/entities/jobconfig.entity';
+import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
+import { WorkflowService } from 'src/workflow/workflow.service';
+import { ConfigDTO } from './dto/config.dto';
+import { ValidateExportPathAndWorkingDirectoryDTO } from './dto/validate-export-path-working-directory.dto';
+import { FindAllConfigPageDto } from './dto/findallconfig.dto';
+import {
+  CreateRequestDto,
+  Options,
+} from 'src/work-manager/dto/validate-connection.dto';
+import { ListPathDTO } from 'src/work-manager/dto/validate-export-path.dto';
+import {
+  StartWorkFlowPayload,
+  WorkflowExecutionStatus,
+} from 'src/workflow/workflow.types';
+import {
+  Credentials,
+  ListPathWorkflowStatus,
+  PathsMap,
+} from './configuration.types';
+import { ProjectEntity } from 'src/entities/project.entity';
+import { SendMailService } from 'src/util/send-email';
+import { ConfigService } from '@nestjs/config';
+import { isWorkerHealthy } from 'src/utils/transformers';
 import sanitizeHtml from 'sanitize-html';
 import escapeHtml from 'escape-html';
 
-import {PathUploadsEntity} from 'src/entities/pathupload.entity';
-
+import { PathUploadsEntity } from 'src/entities/pathupload.entity';
+import { SuccessEmailType } from 'src/util/send-email.type';
 @Injectable()
 export class ConfigurationService {
   private logger: LoggerService;
@@ -88,12 +125,14 @@ export class ConfigurationService {
             serverName: fileServer.config.configName,
             hasScratchPath:
               fileServer.config.workingDirectory &&
-              fileServer.config.workingDirectory.workingDirectory !== '',
+              fileServer.config.workingDirectory.workingDirectory !== ''
+                ? true
+                : false,
             status: fileServer.config.status,
             fileServers: [],
           };
         }
-        ac[configId].fileServers.push({
+        acc[configId].fileServers.push({
           id: fileServer.id,
           protocol: fileServer.protocol,
           workers: fileServer.workers
@@ -108,7 +147,7 @@ export class ConfigurationService {
 
       return Object.values(groupedByConfig);
     } catch (error) {
-      this.logger.error(`Error fetching all configurations: ${error}`);
+      this.logger.error(`Error fetching all file servers: ${error.message}`);
       if (
         error instanceof BadRequestException ||
         error instanceof NotFoundException
@@ -116,7 +155,7 @@ export class ConfigurationService {
         throw error;
       }
       throw new InternalServerErrorException(
-        `Failed to fetch all configurations. Error: ${error.message`,
+        `Failed to fetch all file servers: ${error.message}`,
       );
     }
   }
@@ -174,15 +213,15 @@ export class ConfigurationService {
       }
       return { serverConfig, total };
     } catch (error) {
-      this.logger.error(`Error fetching configurations: ${error}`);
+      this.logger.error(`Error fetching configurations: ${error.message}`);
       if (
-          error instanceof BadRequestException ||
-          error instanceof NotFoundException
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
       ) {
         throw error;
       }
       throw new InternalServerErrorException(
-          `Failed to fetch configurations. Error: ${error.message}`,
+        `Failed to fetch configurations ${error.message}`,
       );
     }
   }
@@ -261,7 +300,7 @@ export class ConfigurationService {
         where: {
           fileServerId: In(config.fileServers.map((fs) => fs.id)),
           id: In(
-              config.fileServers.flatMap((fs) => fs.volumes.map((v) => v.id)),
+            config.fileServers.flatMap((fs) => fs.volumes.map((v) => v.id)),
           ),
         },
       });
@@ -275,14 +314,14 @@ export class ConfigurationService {
           volumes: fileServer.volumes.map((volume) => ({
             ...volume,
             validationResult:
-                uploads.find((upload) => upload.id === volume.id)
-                    ?.validationResponse || '',
+              uploads.find((upload) => upload.id === volume.id)
+                ?.validationResponse || '',
           })),
           workers: fileServer.workers.map((worker) => ({
             ...worker,
             status: isWorkerHealthy(worker.stats.updatedAt, this.timeout)
-                ? WorkerStatus.Online
-                : WorkerStatus.Offline,
+              ? WorkerStatus.Online
+              : WorkerStatus.Offline,
           })),
         }));
       }
@@ -303,10 +342,10 @@ export class ConfigurationService {
         }));
       }
       const isUploadInProgress = await this.isUploadInProgress(
-          config.fileServers.map((fs) => fs.id),
+        config.fileServers.map((fs) => fs.id),
       );
       const isRefreshAvailable =
-          !isUploadInProgress && (await this.isRefreshPossible(config.id));
+        !isUploadInProgress && (await this.isRefreshPossible(config.id));
 
       return { ...config, isRefreshAvailable, isUploadInProgress };
     } catch (error) {
@@ -318,7 +357,7 @@ export class ConfigurationService {
         throw error;
       }
       throw new InternalServerErrorException(
-          `Failed to retrieve configuration for ${id} Error: ${error.message}`,
+        `Failed to retrieve configuration for ID: ${id} Error: ${error.message}`,
       );
     }
   }
@@ -337,13 +376,13 @@ export class ConfigurationService {
     } catch (error) {
       this.logger.error(`Error fetching cutover details: ${error.message}`);
       if (
-          error instanceof BadRequestException ||
-          error instanceof NotFoundException
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
       ) {
         throw error;
       }
       throw new InternalServerErrorException(
-          `An error occurred while processing the request. Error: ${error.message}`,
+        `An error occurred while processing the request.Error : ${error.message}`,
       );
     }
   }
@@ -354,7 +393,7 @@ export class ConfigurationService {
   ): Promise<{ isUnique: boolean }> {
     try {
       const projectExists = await this.projectEntity.findOne({
-        where: {id: projectId},
+        where: { id: projectId },
       });
       if (!projectExists) {
         throw new NotFoundException('Invalid Project ID');
@@ -364,28 +403,23 @@ export class ConfigurationService {
       const sanitizedConfigName = await this.sanitizeConfigName(configName);
 
       const existingConfig = await this.configEntity.findOne({
-        where: {projectId, configName: sanitizedConfigName},
+        where: { projectId, configName: sanitizedConfigName },
       });
 
       if (existingConfig) {
         throw new BadRequestException(
-            'Config name already exists for this project.',
+          'Config name already exists for this project.',
         );
       }
 
-      return {isUnique: true};
-    } catch (error) {
-      this.logger.error(
-          `Error checking config name uniqueness: ${error.message}`,
-      );
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      if (error instanceof BadRequestException) {
-        throw error;
+      return { isUnique: true };
+    } catch (e) {
+      this.logger.error(`Error checking config name uniqueness: ${e.message}`);
+      if (e instanceof NotFoundException || e instanceof BadRequestException) {
+        throw e;
       }
       throw new InternalServerErrorException(
-          `Failed to check config name uniqueness. Error: ${error.message}`,
+        `Failed to check config name uniqueness.${e.message}`,
       );
     }
   }
@@ -449,9 +483,7 @@ export class ConfigurationService {
       });
 
       if (!config) {
-        throw new InternalServerErrorException(
-            `Config for id ${configId} not found.`,
-        );
+        throw new NotFoundException(`Config for id ${configId} not found.`);
       }
 
       return config;
@@ -466,7 +498,7 @@ export class ConfigurationService {
         throw error;
       }
       throw new InternalServerErrorException(
-          `Failed to fetch config details. Error: ${error.message}`,
+        `Failed to fetch config details. ${error.message}`,
       );
     }
   }
@@ -478,19 +510,19 @@ export class ConfigurationService {
           volume.jobConfig
             .filter((jobConfig) => {
               const isCompletedCutOverExits =
-                  jobConfig.jobType === JobType.CutOver &&
-                  jobConfig.status === JobStatus.Active &&
-                  jobConfig.jobRunDetails.some(
-                      (jobRun) => jobRun.status === JobRunStatus.Errored,
-                  );
+                jobConfig.jobType === JobType.CutOver &&
+                jobConfig.status === JobStatus.Active &&
+                jobConfig.jobRunDetails.some(
+                  (jobRun) => jobRun.status === JobRunStatus.Errored,
+                );
               const isAnyCompletedActiveMigrationExists =
-                  jobConfig.jobType === JobType.Migrate &&
-                  jobConfig.status !== JobStatus.InActive &&
-                  jobConfig.jobRunDetails.some(
-                      (jobRun) => jobRun.status === JobRunStatus.Completed,
-                  );
+                jobConfig.jobType === JobType.Migrate &&
+                jobConfig.status !== JobStatus.InActive &&
+                jobConfig.jobRunDetails.some(
+                  (jobRun) => jobRun.status === JobRunStatus.Completed,
+                );
               return (
-                  isCompletedCutOverExits || isAnyCompletedActiveMigrationExists
+                isCompletedCutOverExits || isAnyCompletedActiveMigrationExists
               );
             })
             .map((job) => ({
@@ -511,13 +543,13 @@ export class ConfigurationService {
     } catch (error) {
       this.logger.error(`Error extracting valid job configs: ${error.message}`);
       if (
-          error instanceof BadRequestException ||
-          error instanceof NotFoundException
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
       ) {
         throw error;
       }
       throw new InternalServerErrorException(
-          `Failed to extract valid job configurations. Error: ${error.message}`,
+        `Failed to extract valid job configurations. ${error.message} `,
       );
     }
   }
@@ -534,7 +566,7 @@ export class ConfigurationService {
       ].filter(Boolean);
 
       if (volumeIds.length === 0) {
-        throw new InternalServerErrorException(
+        throw new NotFoundException(
           'No valid volumes found for the given config.',
         );
       }
@@ -558,30 +590,30 @@ export class ConfigurationService {
       });
 
       if (!volumeDetails.length) {
-        throw new InternalServerErrorException('Volume details not found.');
+        throw new NotFoundException('Volume details not found.');
       }
 
       return new Map(
-          volumeDetails
-              .filter((v) => v.isValid && !v.isDisabled)
-              .map((volume) => [
-                volume.id,
-                {
-                  id: volume.id,
-                  sourcePathName: volume.volumePath,
-                  destinationPathName: volume.volumePath,
-                  configId: volume.fileServer?.config?.id || '',
-                  configName: volume.fileServer?.config?.configName || '',
-                },
-              ]),
+        volumeDetails
+          .filter((v) => v.isValid && !v.isDisabled)
+          .map((volume) => [
+            volume.id,
+            {
+              id: volume.id,
+              sourcePathName: volume.volumePath,
+              destinationPathName: volume.volumePath,
+              configId: volume.fileServer?.config?.id || '',
+              configName: volume.fileServer?.config?.configName || '',
+            },
+          ]),
       );
     } catch (error) {
       this.logger.error(`Error fetching volume details: ${error.message}`);
-      if (error instanceof BadRequestException) {
+      if (error instanceof NotFoundException) {
         throw error;
       }
       throw new InternalServerErrorException(
-          `Failed to retrieve volume details. Error: ${error.message}`,
+        `Failed to retrieve volume details. ${error.message}`,
       );
     }
   }
@@ -621,13 +653,13 @@ export class ConfigurationService {
     } catch (error) {
       this.logger.error(`Error constructing response: ${error.message}`);
       if (
-          error instanceof BadRequestException ||
-          error instanceof NotFoundException
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
       ) {
         throw error;
       }
       throw new InternalServerErrorException(
-          `Failed to construct response. Error: ${error.message}`,
+        `Failed to construct response.${error.message}`,
       );
     }
   }
@@ -654,7 +686,7 @@ export class ConfigurationService {
 
     // Sanitize configName input
     const sanitizedConfigName = await this.sanitizeConfigName(
-        createConfig.configName,
+      createConfig.configName,
     );
 
     const credentials: Credentials[] = [];
@@ -723,10 +755,15 @@ export class ConfigurationService {
         return update;
       }
       await this.startValidateWorkingDirectoryWorkflow(
-          createConfig,
-          update.id,
-          traceId,
+        createConfig,
+        update.id,
+        traceId,
       );
+      const workerNames = config.fileServers.flatMap((fileServer) => {
+        return fileServer.workers.map((worker) => {
+          return worker?.workerName;
+        });
+      });
 
       await this.sendMailService.sendMail({
         successEmailType: SuccessEmailType.CREATE_CONFIGURATION,
@@ -741,13 +778,13 @@ export class ConfigurationService {
         },
       });
       const workingDirectory =
-          this.fileServerWorkingDirectoryMappingEntity.create({
-            pathName: createConfig?.workingDirectory?.pathName,
-            pathId: createConfig?.workingDirectory?.pathId,
-            workingDirectory: createConfig?.workingDirectory?.workingDirectory,
-            configId: update.id,
-            createdBy: userId,
-          });
+        this.fileServerWorkingDirectoryMappingEntity.create({
+          pathName: createConfig?.workingDirectory?.pathName,
+          pathId: createConfig?.workingDirectory?.pathId,
+          workingDirectory: createConfig?.workingDirectory?.workingDirectory,
+          configId: update.id,
+          createdBy: userId,
+        });
       await this.fileServerWorkingDirectoryMappingEntity.save(workingDirectory);
       this.refreshConfig(update.id, traceId);
 
@@ -763,7 +800,7 @@ export class ConfigurationService {
         throw error;
       }
       throw new InternalServerErrorException(
-        'Error Occurred during creating Config',
+        `Error Occurred during creating Config ${error.message}`,
       );
     }
   }
@@ -777,7 +814,7 @@ export class ConfigurationService {
     try {
       if (!isUUID(id)) throw new BadRequestException('Invalid configId');
       const config = await this.configEntity.findOne({
-        where: {id},
+        where: { id },
         relations: {
           fileServers: {
             workers: true,
@@ -793,7 +830,7 @@ export class ConfigurationService {
       let allUnHealthy = false;
       const hasPathName = updateConfig?.workingDirectory?.pathName?.length > 0;
       const hasWorkers = updateConfig?.fileServers?.some(
-          (fs) => fs?.workers?.length > 0,
+        (fs) => fs?.workers?.length > 0,
       );
 
       config.configName = updateConfig.configName;
@@ -801,10 +838,10 @@ export class ConfigurationService {
       config.createdBy = updateConfig.createdBy || userId;
       config.updatedBy = userId;
       config.status = hasWorkers
-          ? hasPathName
-              ? ConfigStatus.IN_PROGRESS
-              : ConfigStatus.ACTIVE
-          : ConfigStatus.DRAFT;
+        ? hasPathName
+          ? ConfigStatus.IN_PROGRESS
+          : ConfigStatus.ACTIVE
+        : ConfigStatus.DRAFT;
 
       const fileServerPromises = config.fileServers.map(async (fileServer) => {
         const update = updateConfig.fileServers.find(
@@ -817,15 +854,15 @@ export class ConfigurationService {
           : [];
 
         const workersWithStats: WorkerEntity[] = Array.isArray(update?.workers)
-            ? await this.WorkerEntity.find({
-              where: {workerId: In(update.workers)},
-              relations: {stats: true},
+          ? await this.WorkerEntity.find({
+              where: { workerId: In(update.workers) },
+              relations: { stats: true },
             })
-            : [];
+          : [];
 
         if (
-            workersWithStats?.length > 0 &&
-            (await this.isAllWorkerUnHealthy(workersWithStats))
+          workersWithStats?.length > 0 &&
+          (await this.isAllWorkerUnHealthy(workersWithStats))
         )
           allUnHealthy = true;
 
@@ -928,16 +965,17 @@ export class ConfigurationService {
       });
 
       await this.startValidateWorkingDirectoryWorkflow(
-          updateConfig,
-          update.id,
-          traceId,
+        updateConfig,
+        update.id,
+        traceId,
       );
+
       await this.volumes.update(
-          {
-            fileServerId: In(update.fileServers.map((fs) => fs.id)),
-            isDisabled: false,
-          },
-          {isDisabled: true},
+        {
+          fileServerId: In(update.fileServers.map((fs) => fs.id)),
+          isDisabled: false,
+        },
+        { isDisabled: true },
       );
       this.refreshConfig(update.id, traceId);
 
@@ -947,16 +985,14 @@ export class ConfigurationService {
         `Error Occurred during updating Config ${error.message} for traceId ${traceId}`,
       );
 
-      // If the error is a NotFoundException or BadRequestException, re-throw it
-      if (
-          error instanceof NotFoundException ||
-          error instanceof BadRequestException
-      ) {
+      // If the error is a NotFoundException, re-throw it
+      if (error instanceof NotFoundException) {
         throw error;
       }
+
       // Otherwise, throw an InternalServerErrorException for any other errors
       throw new InternalServerErrorException(
-          `Error Occurred during updating Config. Error: ${error.message}`,
+        `Error Occurred during updating Config ${error.message}`,
       );
     }
   }
@@ -966,14 +1002,21 @@ export class ConfigurationService {
     configId: string,
     traceId: string,
   ) {
+    // Validate input parameters - throw InternalServerErrorException if any required parameter is empty
+    if (!createConfig || !configId || !traceId || !createConfig.fileServers || createConfig.fileServers.length === 0) {
+      throw new InternalServerErrorException(
+        'Failed to start ValidateWorkingDirectoryWorkflow. Invalid input parameters.'
+      );
+    }
+
     try {
       const listPathPayload: ListPathDTO[] = [];
 
       createConfig?.fileServers?.forEach((fileServer) => {
         const payload: ListPathDTO = {
           type: fileServer?.protocol,
-          protocolVersion: fileServer?.protocolVersion.replace(/^v/, ''),
-          host: fileServer?.host.trim(),
+          protocolVersion: fileServer?.protocolVersion?.replace(/^v/, ''),
+          host: fileServer?.host?.trim(),
           username: fileServer?.userName,
           password: fileServer?.password,
           exportPathSource: fileServer.exportPathSource,
@@ -1027,7 +1070,15 @@ export class ConfigurationService {
       this.logger.error(
         `Error while starting ValidateWorkingDirectoryWorkflow - ${error.message}`,
       );
-      // Log the error but don't rethrow it to match test expectations
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        `Failed to start ValidateWorkingDirectoryWorkflow. ${error.message}`,
+      );
     }
   }
 
@@ -1046,9 +1097,7 @@ export class ConfigurationService {
       ) {
         throw error;
       }
-      throw new InternalServerErrorException(
-          `Failed to remove config. Error: ${error.message}`,
-      );
+      throw new InternalServerErrorException('Failed to remove config.');
     }
   }
 
@@ -1062,7 +1111,7 @@ export class ConfigurationService {
       if (!isRefreshAvailable) {
         this.logger.warn(`Refresh not available for configId: ${configId}`);
         throw new BadRequestException(
-            'Refresh not available for this configuration.',
+          'Refresh not available for this configuration.',
         );
       }
 
@@ -1135,7 +1184,7 @@ export class ConfigurationService {
         throw error;
       }
       throw new InternalServerErrorException(
-          `Failed to refresh config. Error: ${error.message}`,
+        `Failed to refresh config. ${error.message}`,
       );
     }
   }
@@ -1168,13 +1217,13 @@ export class ConfigurationService {
     } catch (error) {
       this.logger.error(`Unexpected error in updateResult: ${error.message}`);
       if (
-          error instanceof BadRequestException ||
-          error instanceof NotFoundException
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
       ) {
         throw error;
       }
       throw new InternalServerErrorException(
-          `Failed to update workflow result. Error: ${error.message}`,
+        `Failed to update workflow result. ${error.message}`,
       );
     }
   }
@@ -1217,11 +1266,11 @@ export class ConfigurationService {
             fileServerId: fileServer.id,
             volumePath: In(pathsMap[fileServer.protocol].paths),
           },
-            {
-              reachableCount: pathsMap[fileServer.protocol].workers,
-              isValid: true,
-              isDisabled: false,
-            },
+          {
+            reachableCount: pathsMap[fileServer.protocol].workers,
+            isValid: true,
+            isDisabled: false,
+          },
         );
 
         const existingPaths = new Set(
@@ -1250,22 +1299,22 @@ export class ConfigurationService {
         // Disable volumes that are no longer in the completed payload
         const validPaths = new Set(pathsMap[fileServer.protocol].paths);
         const pathsToDisable = fileServer.volumes
-            .filter((vol) => !validPaths.has(vol.volumePath))
-            .map((vol) => vol.volumePath);
+          .filter((vol) => !validPaths.has(vol.volumePath))
+          .map((vol) => vol.volumePath);
         if (pathsToDisable.length > 0)
           await this.volumes.update(
-              {fileServerId: fileServer.id, volumePath: In(pathsToDisable)},
-              {isDisabled: true},
+            { fileServerId: fileServer.id, volumePath: In(pathsToDisable) },
+            { isDisabled: true },
           );
       }
 
       // update job configurations to inactive if any volume is disabled or invalid associated with it
       const volumeIds = await this.volumes
-          .createQueryBuilder('volume')
+        .createQueryBuilder('volume')
         .select('volume.id')
-          .where('volume.file_server_id IN (:...fileServersIds)', {
-            fileServersIds: fileServersIds,
-          })
+        .where('volume.file_server_id IN (:...fileServersIds)', {
+          fileServersIds: fileServersIds,
+        })
         .andWhere('volume.is_valid = :isValid', { isValid: false })
         .orWhere('volume.is_disabled = :isDisabled', { isDisabled: true })
         .getMany();
@@ -1273,15 +1322,15 @@ export class ConfigurationService {
       if (volumeIds.length > 0) {
         const volumeIdList = volumeIds.map((vol) => vol.id);
         await this.jobConfigRepo
-            .createQueryBuilder('jobConfig')
-            .update()
-            .set({status: JobStatus.InActive})
-            .where(
-                'jobConfig.source_path_id IN (:...volumeIds) OR jobConfig.target_path_id IN (:...volumeIds)',
-                {volumeIds: volumeIdList},
-            )
-            .andWhere('jobConfig.status = :status', {status: JobStatus.Active})
-            .execute();
+          .createQueryBuilder('jobConfig')
+          .update()
+          .set({ status: JobStatus.InActive })
+          .where(
+            'jobConfig.source_path_id IN (:...volumeIds) OR jobConfig.target_path_id IN (:...volumeIds)',
+            { volumeIds: volumeIdList },
+          )
+          .andWhere('jobConfig.status = :status', { status: JobStatus.Active })
+          .execute();
       }
 
       await this.configEntity.update({ id }, { scannedDate: new Date() });
@@ -1294,7 +1343,7 @@ export class ConfigurationService {
         throw error;
       }
       throw new InternalServerErrorException(
-          `Failed to update paths. Error: ${error.message}`,
+        `Failed to update paths ${error.message}`,
       );
     }
   }
@@ -1302,12 +1351,12 @@ export class ConfigurationService {
   async isRefreshPossible(configId: string): Promise<boolean> {
     try {
       const fileServers = await this.configEntity.find({
-        where: {id: configId},
-        relations: {fileServers: {volumes: true}},
+        where: { id: configId },
+        relations: { fileServers: { volumes: true } },
       });
 
       const volumeIds = fileServers.flatMap((fs) =>
-          fs.fileServers.flatMap((v) => v.volumes.map((vol) => vol.id)),
+        fs.fileServers.flatMap((v) => v.volumes.map((vol) => vol.id)),
       ); // volume ids from all file servers
       if (volumeIds.length === 0) {
         this.logger.warn(`No valid volumes found for config ID ${configId}.`);
@@ -1319,18 +1368,18 @@ export class ConfigurationService {
         their sourcePathId or targetPathId and status is ACTIVE
       */
       const jobConfigs = await this.jobConfigRepo
-          .createQueryBuilder('jobConfig')
-          .where(
-              'jobConfig.source_path_id IN (:...volumeIds) OR jobConfig.target_path_id IN (:...volumeIds)',
-              {volumeIds},
-          )
-          .andWhere('jobConfig.status = :status', {status: 'ACTIVE'})
-          .getMany();
+        .createQueryBuilder('jobConfig')
+        .where(
+          'jobConfig.source_path_id IN (:...volumeIds) OR jobConfig.target_path_id IN (:...volumeIds)',
+          { volumeIds },
+        )
+        .andWhere('jobConfig.status = :status', { status: 'ACTIVE' })
+        .getMany();
 
       // check if any job config has schedule as SCHEDULING if yes then return false
       if (jobConfigs.some((jc) => jc.scheduler === 'SCHEDULING')) {
         this.logger.warn(
-            `Refresh is not possible for configuration ${configId} as there are jobs with SCHEDULING status`,
+          `Refresh is not possible for configuration ${configId} as there are jobs with SCHEDULING status`,
         );
         return false;
       }
@@ -1338,7 +1387,7 @@ export class ConfigurationService {
       // check if futureScheduleAt is not null for any job config, if yes then return false
       if (jobConfigs.some((jc) => !!jc.futureScheduleAt)) {
         this.logger.warn(
-            `Refresh is not possible for configuration ${configId} as there are jobs with futureScheduleAt set`,
+          `Refresh is not possible for configuration ${configId} as there are jobs with futureScheduleAt set`,
         );
         return false;
       }
@@ -1357,7 +1406,7 @@ export class ConfigurationService {
 
       if (runningJobs > 0) {
         this.logger.warn(
-            `Refresh is not possible for configuration ${configId} as there are running jobs`,
+          `Refresh is not possible for configuration ${configId} as there are running jobs`,
         );
         return false;
       }
@@ -1366,7 +1415,16 @@ export class ConfigurationService {
       return true;
     } catch (error) {
       this.logger.error(`Error checking refresh possibility: ${error.message}`);
-      throw error;
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        `Failed to check refresh possibility. ${error.message}`,
+      );
+      return false;
     }
   }
 
@@ -1380,7 +1438,7 @@ export class ConfigurationService {
       const uploadId = latestUpload?.uploadId;
       if (!uploadId) {
         this.logger.warn(
-            `No uploads found for file server IDs: ${fileServerIds.join(', ')}`,
+          `No uploads found for file server IDs: ${fileServerIds.join(', ')}`,
         );
         return false;
       }
@@ -1392,13 +1450,19 @@ export class ConfigurationService {
         return false;
       }
       const isUploadInProgress =
-          workflowRes.status === WorkflowExecutionStatus.RUNNING;
+        workflowRes.status === WorkflowExecutionStatus.RUNNING;
       this.logger.log(
-          `Upload with ID ${uploadId} is in progress: ${isUploadInProgress}`,
+        `Upload with ID ${uploadId} is in progress: ${isUploadInProgress}`,
       );
       return isUploadInProgress;
     } catch (error) {
       this.logger.error(`Error checking upload in progress: ${error.message}`);
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
       return false;
     }
   }

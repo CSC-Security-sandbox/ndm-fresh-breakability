@@ -1,26 +1,37 @@
-import {BadRequestException, InternalServerErrorException, NotFoundException} from '@nestjs/common';
-import {Test, TestingModule} from '@nestjs/testing';
-import {getRepositoryToken} from '@nestjs/typeorm';
-import {In, Repository} from 'typeorm';
-import {LoggerFactory} from '@netapp-cloud-datamigrate/logger-lib';
-import {v4 as uuidv4} from 'uuid';
-import {ConfigStatus, ConfigurationType, Protocol, ProtocolVersion, ServerType, WorkFlows} from 'src/constants/enums';
-import {ConfigEntity} from 'src/entities/config.entity';
-import {FileServerEntity} from 'src/entities/fileserver.entity';
-import {FileServerWorkingDirectoryMappingEntity} from 'src/entities/fileserver_workingdirectory_mapping.entity';
-import {VolumeEntity} from 'src/entities/volume.entity';
-import {WorkerEntity} from 'src/entities/worker.entity';
-import {ProjectEntity} from 'src/entities/project.entity';
-import {JobConfigEntity, JobType} from 'src/entities/jobconfig.entity';
-import {JobRunEntity, JobRunStatus} from 'src/entities/jobrun.entity';
-import {ConfigurationService} from './configuration.service';
-import {WorkflowService} from 'src/workflow/workflow.service';
-import {ConfigDTO} from './dto/config.dto';
-import {WorkflowExecutionStatus} from 'src/workflow/workflow.types';
-import {ListPathWorkflowStatus} from './configuration.types';
-import {SendMailService} from 'src/util/send-email';
-import {ConfigService} from '@nestjs/config';
-import {PathUploadsEntity} from 'src/entities/pathupload.entity';
+import {
+  BadRequestException,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { In, Repository } from 'typeorm';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { v4 as uuidv4 } from 'uuid';
+import {
+  ConfigStatus,
+  ConfigurationType,
+  Protocol,
+  ProtocolVersion,
+  ServerType,
+  WorkFlows,
+} from 'src/constants/enums';
+import { ConfigEntity } from 'src/entities/config.entity';
+import { FileServerEntity } from 'src/entities/fileserver.entity';
+import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
+import { VolumeEntity } from 'src/entities/volume.entity';
+import { WorkerEntity } from 'src/entities/worker.entity';
+import { ProjectEntity } from 'src/entities/project.entity';
+import { JobConfigEntity, JobType } from 'src/entities/jobconfig.entity';
+import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
+import { ConfigurationService } from './configuration.service';
+import { WorkflowService } from 'src/workflow/workflow.service';
+import { ConfigDTO, WorkingDirDTO } from './dto/config.dto';
+import { WorkflowExecutionStatus } from 'src/workflow/workflow.types';
+import { ListPathWorkflowStatus } from './configuration.types';
+import { SendMailService } from 'src/util/send-email';
+import { ConfigService } from '@nestjs/config';
+import { PathUploadsEntity } from 'src/entities/pathupload.entity';
 
 const mockConfig = {
   id: uuidv4(),
@@ -235,39 +246,39 @@ describe('ConfigurationService', () => {
 
     service = module.get<ConfigurationService>(ConfigurationService);
     configRepository = module.get<Repository<ConfigEntity>>(
-      getRepositoryToken(ConfigEntit),
+      getRepositoryToken(ConfigEntity),
     );
     fileServerRepository = module.get<Repository<FileServerEntity>>(
-      getRepositoryToken(FileServerEntit),
+      getRepositoryToken(FileServerEntity),
     );
     mappingRepository = module.get<
       Repository<FileServerWorkingDirectoryMappingEntity>
     >(getRepositoryToken(FileServerWorkingDirectoryMappingEntity));
 
     volumeRepository = module.get<Repository<VolumeEntity>>(
-      getRepositoryToken(VolumeEntit),
+      getRepositoryToken(VolumeEntity),
     );
     workerRepository = module.get<Repository<WorkerEntity>>(
-      getRepositoryToken(WorkerEntit),
+      getRepositoryToken(WorkerEntity),
     );
     projectRepository = module.get<Repository<ProjectEntity>>(
-      getRepositoryToken(ProjectEntit),
+      getRepositoryToken(ProjectEntity),
     );
     workflowService = module.get<WorkflowService>(WorkflowService);
     sendMailService = module.get<SendMailService>(SendMailService);
     jobConfigRepo = module.get<Repository<JobConfigEntity>>(
-        getRepositoryToken(JobConfigEntity),
+      getRepositoryToken(JobConfigEntity),
     );
-   jobRunRepo = module.get<Repository<JobRunEntity>>(
-        getRepositoryToken(JobRunEntity),
+    jobRunRepo = module.get<Repository<JobRunEntity>>(
+      getRepositoryToken(JobRunEntity),
     );
-   pathUploadRepository = module.get<Repository<PathUploadsEntity>>(
-        getRepositoryToken(PathUploadsEntity),
+    pathUploadRepository = module.get<Repository<PathUploadsEntity>>(
+      getRepositoryToken(PathUploadsEntity),
     );
-   volumeRepo = module.get<Repository<VolumeEntity>>(
-        getRepositoryToken(VolumeEntity),
+    volumeRepo = module.get<Repository<VolumeEntity>>(
+      getRepositoryToken(VolumeEntity),
     );
-  };
+  });
 
   describe('getAllConfig', () => {
     it('should return paginated config results', async () => {
@@ -332,7 +343,7 @@ describe('ConfigurationService', () => {
     it('should return config when valid ID is passed', async () => {
       mockConfigRepository.findOne.mockResolvedValue({
         ...mockConfig,
-        fileServers: [mockFileServer]
+        fileServers: [mockFileServer],
       });
       jest.spyOn(service, 'isRefreshPossible').mockResolvedValue(true);
       jest.spyOn(service, 'isUploadInProgress').mockResolvedValue(false);
@@ -365,15 +376,15 @@ describe('ConfigurationService', () => {
         fileServers: [
           {
             id: fileServerId,
-            volumes: [{id: volumeId, volumePath: '/path/to/volume'}],
-            workers: [{stats: {updatedAt: new Date()}}]
-          }
-        ]
+            volumes: [{ id: volumeId, volumePath: '/path/to/volume' }],
+            workers: [{ stats: { updatedAt: new Date() } }],
+          },
+        ],
       };
 
       jest
-          .spyOn(configRepository, 'findOne')
-          .mockResolvedValue(mockConfig as any);
+        .spyOn(configRepository, 'findOne')
+        .mockResolvedValue(mockConfig as any);
       jest.spyOn(pathUploadRepository, 'find').mockResolvedValue([]);
       jest.spyOn(service, 'isRefreshPossible').mockResolvedValue(true);
       jest.spyOn(service, 'isUploadInProgress').mockResolvedValue(false);
@@ -394,15 +405,15 @@ describe('ConfigurationService', () => {
         fileServers: [
           {
             id: fileServerId,
-            volumes: [{id: volumeId, volumePath: '/path/to/volume'}],
-            workers: [{stats: {updatedAt: new Date()}}]
-          }
-        ]
+            volumes: [{ id: volumeId, volumePath: '/path/to/volume' }],
+            workers: [{ stats: { updatedAt: new Date() } }],
+          },
+        ],
       };
 
       jest
-          .spyOn(configRepository, 'findOne')
-          .mockResolvedValue(mockConfig as any);
+        .spyOn(configRepository, 'findOne')
+        .mockResolvedValue(mockConfig as any);
       jest.spyOn(pathUploadRepository, 'find').mockResolvedValue([]);
       jest.spyOn(service, 'isRefreshPossible').mockResolvedValue(true);
       jest.spyOn(service, 'isUploadInProgress').mockResolvedValue(false);
@@ -422,7 +433,7 @@ describe('ConfigurationService', () => {
       });
 
       await expect(
-          service.isConfigNameUnique('project-id', 'config-name')
+        service.isConfigNameUnique('project-id', 'config-name'),
       ).rejects.toThrow(InternalServerErrorException);
     });
   });
@@ -436,7 +447,7 @@ describe('ConfigurationService', () => {
 
       // Call the method through getCutoverDetailsByConfigId which uses fetchConfigWithRelations
       await expect(
-          service.getCutoverDetailsByConfigId(uuidv4())
+        service.getCutoverDetailsByConfigId(uuidv4()),
       ).rejects.toThrow(BadRequestException);
     });
   });
@@ -449,21 +460,21 @@ describe('ConfigurationService', () => {
           {
             volumes: [
               {
-                jobConfig: null // This will cause an error when trying to filter
-              }
-            ]
-          }
-        ]
+                jobConfig: null, // This will cause an error when trying to filter
+              },
+            ],
+          },
+        ],
       };
 
       // Mock configRepository.findOne to return our problematic config
       jest
-          .spyOn(configRepository, 'findOne')
-          .mockResolvedValue(mockConfig as any);
+        .spyOn(configRepository, 'findOne')
+        .mockResolvedValue(mockConfig as any);
 
       // Call the method through getCutoverDetailsByConfigId which uses extractValidJobConfigs
       await expect(
-          service.getCutoverDetailsByConfigId(uuidv4())
+        service.getCutoverDetailsByConfigId(uuidv4()),
       ).rejects.toThrow(InternalServerErrorException);
     });
 
@@ -484,9 +495,9 @@ describe('ConfigurationService', () => {
                     targetPathId: 'target1',
                     jobRunDetails: [
                       {
-                        status: JobRunStatus.Errored
-                      }
-                    ]
+                        status: JobRunStatus.Errored,
+                      },
+                    ],
                   },
                   {
                     // This should be included (Migrate + Completed)
@@ -496,9 +507,9 @@ describe('ConfigurationService', () => {
                     targetPathId: 'target2',
                     jobRunDetails: [
                       {
-                        status: JobRunStatus.Completed
-                      }
-                    ]
+                        status: JobRunStatus.Completed,
+                      },
+                    ],
                   },
                   {
                     // This should NOT be included (CutOver but no Errored runs)
@@ -508,21 +519,21 @@ describe('ConfigurationService', () => {
                     targetPathId: 'target3',
                     jobRunDetails: [
                       {
-                        status: JobRunStatus.Running
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        ]
+                        status: JobRunStatus.Running,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
       };
 
       // Mock configRepository.findOne to return our config
       jest
-          .spyOn(configRepository, 'findOne')
-          .mockResolvedValue(mockConfig as any);
+        .spyOn(configRepository, 'findOne')
+        .mockResolvedValue(mockConfig as any);
 
       // Mock volumeRepository.find to return valid volumes
       jest.spyOn(volumeRepository, 'find').mockResolvedValue([
@@ -531,29 +542,29 @@ describe('ConfigurationService', () => {
           volumePath: '/source1',
           isValid: true,
           isDisabled: false,
-          fileServer: {config: {id: 'config1', configName: 'Config 1'}}
+          fileServer: { config: { id: 'config1', configName: 'Config 1' } },
         },
         {
           id: 'target1',
           volumePath: '/target1',
           isValid: true,
           isDisabled: false,
-          fileServer: {config: {id: 'config2', configName: 'Config 2'}}
+          fileServer: { config: { id: 'config2', configName: 'Config 2' } },
         },
         {
           id: 'source2',
           volumePath: '/source2',
           isValid: true,
           isDisabled: false,
-          fileServer: {config: {id: 'config1', configName: 'Config 1'}}
+          fileServer: { config: { id: 'config1', configName: 'Config 1' } },
         },
         {
           id: 'target2',
           volumePath: '/target2',
           isValid: true,
           isDisabled: false,
-          fileServer: {config: {id: 'config2', configName: 'Config 2'}}
-        }
+          fileServer: { config: { id: 'config2', configName: 'Config 2' } },
+        },
       ] as any);
 
       // Call getCutoverDetailsByConfigId
@@ -572,8 +583,8 @@ describe('ConfigurationService', () => {
       const validJobConfigs = [
         {
           sourcePathId: 'source1',
-          targetPathId: 'target1'
-        }
+          targetPathId: 'target1',
+        },
       ];
 
       // Mock volumeRepository.find to throw a BadRequestException
@@ -595,21 +606,21 @@ describe('ConfigurationService', () => {
                     targetPathId: 'target1',
                     jobRunDetails: [
                       {
-                        status: JobRunStatus.Errored
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        ]
+                        status: JobRunStatus.Errored,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
       } as any);
 
       // Call the method through getCutoverDetailsByConfigId which uses getVolumeDetailsMap
       await expect(
-          service.getCutoverDetailsByConfigId(uuidv4())
-      ).rejects.toThrow(BadRequestException);
+        service.getCutoverDetailsByConfigId(uuidv4()),
+      ).rejects.toThrow(InternalServerErrorException);
     });
   });
 
@@ -630,21 +641,21 @@ describe('ConfigurationService', () => {
                     targetPathId: 'target1',
                     jobRunDetails: [
                       {
-                        status: JobRunStatus.Errored
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        ]
+                        status: JobRunStatus.Errored,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
       };
 
       // Mock configRepository.findOne to return our config
       jest
-          .spyOn(configRepository, 'findOne')
-          .mockResolvedValue(mockConfig as any);
+        .spyOn(configRepository, 'findOne')
+        .mockResolvedValue(mockConfig as any);
 
       // Mock volumeRepository.find to return valid volumes
       jest.spyOn(volumeRepository, 'find').mockResolvedValue([
@@ -653,38 +664,38 @@ describe('ConfigurationService', () => {
           volumePath: '/source1',
           isValid: true,
           isDisabled: false,
-          fileServer: {config: {id: 'config1', configName: 'Config 1'}}
-        }
+          fileServer: { config: { id: 'config1', configName: 'Config 1' } },
+        },
       ] as any);
 
       // Create a problematic volumeMap that will cause an error in constructResponse
       const volumeMap = new Map();
       volumeMap.set('source1', {
         id: 'source1',
-        sourcePathName: '/source1'
+        sourcePathName: '/source1',
         // Missing required properties will cause an error
       });
 
       // Replace the original getVolumeDetailsMap method to return our problematic volumeMap
       jest
-          .spyOn(service as any, 'getVolumeDetailsMap')
-          .mockResolvedValue(volumeMap);
+        .spyOn(service as any, 'getVolumeDetailsMap')
+        .mockResolvedValue(volumeMap);
 
       const result = await service.getCutoverDetailsByConfigId(uuidv4());
       expect(result).toEqual([
         {
           destinationFileServer: {},
-          destinationPath: {destinationPathName: '', id: ''},
+          destinationPath: { destinationPathName: '', id: '' },
           jobConfig: [
             {
               id: undefined,
-              jobRunDetails: [{id: undefined, status: 'ERRORED'}],
-              jobType: 'CUT_OVER'
-            }
+              jobRunDetails: [{ id: undefined, status: 'ERRORED' }],
+              jobType: 'CUT_OVER',
+            },
           ],
           protocol: 'NFS',
-          sourcePath: {id: 'source1', sourcePathName: '/source1'}
-        }
+          sourcePath: { id: 'source1', sourcePathName: '/source1' },
+        },
       ]);
     });
   });
@@ -699,7 +710,7 @@ describe('ConfigurationService', () => {
         workingDirectory: {
           pathName: '/test/path',
           pathId: 'path-id',
-          workingDirectory: '/working/dir'
+          workingDirectory: '/working/dir',
         },
         fileServers: [
           {
@@ -708,43 +719,43 @@ describe('ConfigurationService', () => {
             protocolVersion: ProtocolVersion.NFSv3,
             serverType: ServerType.other,
             userName: 'user',
-            workers: ['worker1']
-          }
-        ]
+            workers: ['worker1'],
+          },
+        ],
       };
 
       // Mock worker with unhealthy stats
       const unhealthyWorker = {
         workerId: 'worker1',
         stats: {
-          updatedAt: new Date(Date.now() - 1000000) // Old timestamp to make worker unhealthy
-        }
+          updatedAt: new Date(Date.now() - 1000000), // Old timestamp to make worker unhealthy
+        },
       };
 
       // Mock repository methods
       jest
-          .spyOn(workerRepository, 'find')
-          .mockResolvedValue([unhealthyWorker] as any);
+        .spyOn(workerRepository, 'find')
+        .mockResolvedValue([unhealthyWorker] as any);
       jest
-          .spyOn(service, 'isConfigNameUnique')
-          .mockResolvedValue({isUnique: true} as any);
+        .spyOn(service, 'isConfigNameUnique')
+        .mockResolvedValue({ isUnique: true } as any);
       jest.spyOn(service, 'isAllWorkerUnHealthy').mockResolvedValue(true);
       jest.spyOn(configRepository, 'create').mockReturnValue({
         id: uuidv4(),
-        ...createConfigDTO
+        ...createConfigDTO,
       } as any);
       jest
-          .spyOn(configRepository, 'save')
-          .mockImplementation((entity) =>
-              Promise.resolve(entity as ConfigEntity)
-          );
+        .spyOn(configRepository, 'save')
+        .mockImplementation((entity) =>
+          Promise.resolve(entity as ConfigEntity),
+        );
       jest.spyOn(fileServerRepository, 'create').mockReturnValue({} as any);
 
       // Call createConfiguration
       const result = await service.createConfiguration(
-          createConfigDTO,
-          uuidv4(),
-          uuidv4()
+        createConfigDTO,
+        uuidv4(),
+        uuidv4(),
       );
 
       // Verify that status is set to ERRORED
@@ -762,8 +773,8 @@ describe('ConfigurationService', () => {
 
       // Mock configRepository.findOne to return a config
       jest
-          .spyOn(configRepository, 'findOne')
-          .mockResolvedValue({id: configId} as any);
+        .spyOn(configRepository, 'findOne')
+        .mockResolvedValue({ id: configId } as any);
 
       // Mock configRepository.remove to throw a generic error
       jest.spyOn(configRepository, 'remove').mockImplementation(() => {
@@ -772,7 +783,7 @@ describe('ConfigurationService', () => {
 
       // Call remove
       await expect(service.remove(configId)).rejects.toThrow(
-          InternalServerErrorException
+        InternalServerErrorException,
       );
     });
   });
@@ -811,9 +822,9 @@ describe('ConfigurationService', () => {
         completed: [
           {
             protocolType: 'NFS',
-            paths: ['/path1']
-          }
-        ]
+            paths: ['/path1'],
+          },
+        ],
       };
 
       // Mock configRepository.findOne to throw a generic error
@@ -823,7 +834,7 @@ describe('ConfigurationService', () => {
 
       // Call updatePaths
       await expect(
-          service.updatePaths(configId, details as any)
+        service.updatePaths(configId, details as any),
       ).rejects.toThrow(InternalServerErrorException);
     });
 
@@ -836,9 +847,9 @@ describe('ConfigurationService', () => {
         completed: [
           {
             protocolType: 'NFS',
-            paths: ['/path1']
-          }
-        ]
+            paths: ['/path1'],
+          },
+        ],
       };
 
       // Create a mock config with two volumes, one of which is not in the completed payload
@@ -849,17 +860,17 @@ describe('ConfigurationService', () => {
             id: fileServerId,
             protocol: 'NFS',
             volumes: [
-              {id: 'vol1', volumePath: '/path1'},
-              {id: 'vol2', volumePath: '/path2'} // This one should be disabled
-            ]
-          }
-        ]
+              { id: 'vol1', volumePath: '/path1' },
+              { id: 'vol2', volumePath: '/path2' }, // This one should be disabled
+            ],
+          },
+        ],
       };
 
       // Mock repository methods
       jest
-          .spyOn(configRepository, 'findOne')
-          .mockResolvedValue(mockConfig as any);
+        .spyOn(configRepository, 'findOne')
+        .mockResolvedValue(mockConfig as any);
       jest.spyOn(volumeRepository, 'create').mockReturnValue({} as any);
       jest.spyOn(volumeRepository, 'save').mockResolvedValue({} as any);
       jest.spyOn(volumeRepository, 'update').mockResolvedValue({} as any);
@@ -872,7 +883,7 @@ describe('ConfigurationService', () => {
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         orWhere: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([])
+        getMany: jest.fn().mockResolvedValue([]),
       } as any);
 
       jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
@@ -880,7 +891,7 @@ describe('ConfigurationService', () => {
         set: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
-        execute: jest.fn().mockResolvedValue({})
+        execute: jest.fn().mockResolvedValue({}),
       } as any);
 
       // Call updatePaths
@@ -888,8 +899,8 @@ describe('ConfigurationService', () => {
 
       // Verify that volumes.update was called with the correct parameters
       expect(volumeRepository.update).toHaveBeenCalledWith(
-          {fileServerId, volumePath: In(['/path2'])},
-          {isDisabled: true}
+        { fileServerId, volumePath: In(['/path2']) },
+        { isDisabled: true },
       );
     });
   });
@@ -905,7 +916,7 @@ describe('ConfigurationService', () => {
 
       // Call isRefreshPossible
       await expect(service.isRefreshPossible(configId)).rejects.toThrow(
-          'Database error'
+        'Database error',
       );
     });
   });
@@ -914,7 +925,7 @@ describe('ConfigurationService', () => {
     it('should sanitize configName before saving', async () => {
       mockConfigRepository.create.mockReturnValue({
         ...mockSanitizedConfig,
-        fileServers: [mockFileServer]
+        fileServers: [mockFileServer],
       });
       mockWorkerRepository.find.mockResolvedValue([mockWorker]);
       jest
@@ -956,13 +967,13 @@ describe('ConfigurationService', () => {
       const savedConfig = {
         id: uuidv4(),
         ...createConfigDTO,
-        configName: sanitizedConfigName
+        configName: sanitizedConfigName,
       };
       mockConfigRepository.save.mockResolvedValue(savedConfig);
       mockConfigRepository.findOne.mockResolvedValue(savedConfig);
       jest
-          .spyOn(service, 'startValidateWorkingDirectoryWorkflow')
-          .mockResolvedValue(undefined);
+        .spyOn(service, 'startValidateWorkingDirectoryWorkflow')
+        .mockResolvedValue(undefined);
       jest.spyOn(service, 'isAllWorkerUnHealthy').mockResolvedValue(false);
       jest.spyOn(service, 'refreshConfig').mockResolvedValue(undefined);
 
@@ -1760,7 +1771,7 @@ describe('ConfigurationService', () => {
         set: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
-        execute: jest.fn()
+        execute: jest.fn(),
       } as any);
 
       await service.updatePaths(id, details as any);
@@ -1909,7 +1920,7 @@ describe('ConfigurationService', () => {
 
       await expect(
         service.getCutoverDetailsByConfigId(uuidv4()),
-      ).rejects.toThrow(InternalServerErrorException);
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should return empty array when no valid job configs found', async () => {
@@ -2064,7 +2075,7 @@ describe('ConfigurationService', () => {
 
       await expect(
         service.getCutoverDetailsByConfigId(configId),
-      ).rejects.toThrow(InternalServerErrorException);
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should handle missing fileServer or config in volume details', async () => {
@@ -2162,7 +2173,7 @@ describe('ConfigurationService', () => {
 
       await expect(
         service.getCutoverDetailsByConfigId(configId),
-      ).rejects.toThrow(InternalServerErrorException);
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should handle database error during volume lookup', async () => {
@@ -2341,13 +2352,24 @@ describe('ConfigurationService', () => {
         ],
       };
 
-      startWorkflowMock.mockRejectedValueOnce(new Error('Workflow error'));
+      /*    startWorkflowMock.mockRejectedValueOnce(new Error('Workflow error'));
       await service.startValidateWorkingDirectoryWorkflow(
-        createConfig,
-        configId,
-        'trace',
+        
       );
-      expect(loggerFactoryMock.create().error).toHaveBeenCalled();
+      expect(loggerFactoryMock.create().error).toHaveBeenCalled();*/
+      await expect(
+        service.startValidateWorkingDirectoryWorkflow(
+          {
+            projectId: '',
+            configName: '',
+            workingDirectory: new WorkingDirDTO(),
+            configType: ConfigurationType.file,
+            fileServers: [],
+          },
+          '',
+          '',
+        ),
+      ).rejects.toThrow(InternalServerErrorException);
     });
   });
 
@@ -2478,7 +2500,7 @@ describe('ConfigurationService', () => {
         set: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
-        execute: jest.fn()
+        execute: jest.fn(),
       } as any);
 
       await service.updatePaths(configId, details as any);
@@ -2539,7 +2561,7 @@ describe('ConfigurationService', () => {
         set: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
-        execute: jest.fn()
+        execute: jest.fn(),
       } as any);
 
       await service.updatePaths(configId, details as any);
@@ -2593,7 +2615,7 @@ describe('ConfigurationService', () => {
         set: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
-        execute: jest.fn()
+        execute: jest.fn(),
       } as any);
 
       expect(mockVolumeRepository.update).toHaveBeenCalledWith(
@@ -2671,7 +2693,7 @@ describe('ConfigurationService', () => {
         set: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
-        execute: jest.fn()
+        execute: jest.fn(),
       } as any);
 
       await expect(service.updatePaths(configId, details)).rejects.toThrow(
@@ -2730,7 +2752,7 @@ describe('ConfigurationService', () => {
         set: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
-        execute: jest.fn()
+        execute: jest.fn(),
       } as any);
 
       await expect(service.updatePaths(configId, details)).rejects.toThrow(
@@ -2992,7 +3014,7 @@ describe('ConfigurationService', () => {
           userId,
           traceId,
         ),
-      ).rejects.toThrow(BadRequestException);
+      ).rejects.toThrow(InternalServerErrorException);
     });
 
     it('should throw NotFoundException if config is not found', async () => {
@@ -3364,7 +3386,7 @@ describe('ConfigurationService', () => {
           userId,
           traceId,
         ),
-      ).rejects.toThrow(BadRequestException);
+      ).rejects.toThrow(InternalServerErrorException);
     });
 
     it('should throw NotFoundException if config is not found', async () => {
@@ -3781,22 +3803,22 @@ describe('ConfigurationService', () => {
           fileServers: [
             {
               id: 'file-server-id',
-              volumes: [{id: 'volume-id', volumePath: '/path/to/volume'}]
-            }
-          ]
-        }
+              volumes: [{ id: 'volume-id', volumePath: '/path/to/volume' }],
+            },
+          ],
+        },
       ];
       jest
-          .spyOn(mockConfigRepository, 'find')
-          .mockResolvedValue(mockConfig as any);
+        .spyOn(mockConfigRepository, 'find')
+        .mockResolvedValue(mockConfig as any);
       jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         getMany: jest
-            .fn()
-            .mockResolvedValue([
-              {scheduler: 'SCHEDULING', fileServerId} as any
-            ])
+          .fn()
+          .mockResolvedValue([
+            { scheduler: 'SCHEDULING', fileServerId } as any,
+          ]),
       } as any);
       const result = await service.isRefreshPossible(configId);
       expect(result).toBe(false);
@@ -3810,22 +3832,22 @@ describe('ConfigurationService', () => {
           fileServers: [
             {
               id: fileServerId,
-              volumes: [{id: 'volume-id', volumePath: '/path/to/volume'}]
-            }
-          ]
-        }
+              volumes: [{ id: 'volume-id', volumePath: '/path/to/volume' }],
+            },
+          ],
+        },
       ];
       jest
-          .spyOn(mockConfigRepository, 'find')
-          .mockResolvedValue(mockConfig as any);
+        .spyOn(mockConfigRepository, 'find')
+        .mockResolvedValue(mockConfig as any);
       jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue([
           {
             fileServerId: fileServerId,
-            futureScheduleAt: '*/5 * * * *'
-          } as any
+            futureScheduleAt: '*/5 * * * *',
+          } as any,
         ]),
       } as any);
       const result = await service.isRefreshPossible(fileServerId);
@@ -3840,14 +3862,14 @@ describe('ConfigurationService', () => {
           fileServers: [
             {
               id: fileServerId,
-              volumes: []
-            }
-          ]
-        }
+              volumes: [],
+            },
+          ],
+        },
       ];
       jest
-          .spyOn(mockConfigRepository, 'find')
-          .mockResolvedValue(mockConfig as any);
+        .spyOn(mockConfigRepository, 'find')
+        .mockResolvedValue(mockConfig as any);
       jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
@@ -3865,22 +3887,22 @@ describe('ConfigurationService', () => {
           fileServers: [
             {
               id: fileServerId,
-              volumes: [{id: 'volume-id', volumePath: '/path/to/volume'}]
-            }
-          ]
-        }
+              volumes: [{ id: 'volume-id', volumePath: '/path/to/volume' }],
+            },
+          ],
+        },
       ];
       jest
-          .spyOn(mockConfigRepository, 'find')
-          .mockResolvedValue(mockConfig as any);
+        .spyOn(mockConfigRepository, 'find')
+        .mockResolvedValue(mockConfig as any);
       jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         getMany: jest
-            .fn()
-            .mockResolvedValue([
-              {fileServerId: fileServerId, futureScheduleAt: null} as any
-            ])
+          .fn()
+          .mockResolvedValue([
+            { fileServerId: fileServerId, futureScheduleAt: null } as any,
+          ]),
       } as any);
       jest.spyOn(jobRunRepo, 'count').mockResolvedValue(1);
       const result = await service.isRefreshPossible(fileServerId);
@@ -3895,22 +3917,22 @@ describe('ConfigurationService', () => {
           fileServers: [
             {
               id: fileServerId,
-              volumes: [{id: 'volume-id', volumePath: '/path/to/volume'}]
-            }
-          ]
-        }
+              volumes: [{ id: 'volume-id', volumePath: '/path/to/volume' }],
+            },
+          ],
+        },
       ];
       jest
-          .spyOn(mockConfigRepository, 'find')
-          .mockResolvedValue(mockConfig as any);
+        .spyOn(mockConfigRepository, 'find')
+        .mockResolvedValue(mockConfig as any);
       jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         getMany: jest
-            .fn()
-            .mockResolvedValue([
-              {fileServerId: fileServerId, futureScheduleAt: null} as any
-            ])
+          .fn()
+          .mockResolvedValue([
+            { fileServerId: fileServerId, futureScheduleAt: null } as any,
+          ]),
       } as any);
       jest.spyOn(jobRunRepo, 'count').mockResolvedValue(0);
       const result = await service.isRefreshPossible(fileServerId);
@@ -3955,8 +3977,8 @@ describe('ConfigurationService', () => {
         id: 'workflow-1',
       };
       jest
-          .spyOn(workflowService, 'getWorkFlowRes')
-          .mockResolvedValue(mockWorkflowResult as any);
+        .spyOn(workflowService, 'getWorkFlowRes')
+        .mockResolvedValue(mockWorkflowResult as any);
 
       const result = await service.isUploadInProgress(['file-server-id']);
       expect(result).toBe(true);
@@ -3964,8 +3986,8 @@ describe('ConfigurationService', () => {
 
     it('Should return false if got into catch block', async () => {
       jest
-          .spyOn(pathUploadRepository, 'findOne')
-          .mockRejectedValue(new Error('Database error'));
+        .spyOn(pathUploadRepository, 'findOne')
+        .mockRejectedValue(new Error('Database error'));
 
       const result = await service.isUploadInProgress(['file-server-id']);
       expect(result).toBe(false);

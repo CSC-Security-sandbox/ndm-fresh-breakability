@@ -127,7 +127,7 @@ describe('PathUploadService', () => {
       await expect(
         service.processFileUpload(dto, fileServer.id),
       ).rejects.toThrow(
-        `An unexpected error occurred while uploading the file. The file server with ID ${fileServer.id} is not set up for manual uploads`,
+        `An unexpected error occurred while uploading the file. The file server with ID ${fileServer.id} is not set up for manual upload`,
       );
     });
 

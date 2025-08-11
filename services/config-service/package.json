@@ -35,7 +35,7 @@
     "@nestjs/websockets": "^10.4.1",
     "@netapp-cloud-datamigrate/api-handler-lib": "0.0.4",
     "@netapp-cloud-datamigrate/auth-lib": "0.0.5",
-    "@netapp-cloud-datamigrate/logger-lib": "0.0.13",
+    "@netapp-cloud-datamigrate/logger-lib": "0.0.15",
     "@temporalio/client": "^1.11.6",
     "@temporalio/worker": "^1.11.6",
     "@temporalio/workflow": "^1.11.6",
@@ -83,6 +83,9 @@
     "ts-node": "^10.9.1",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.1.3"
+  },
+  "overrides": {
+    "@netapp-cloud-datamigrate/logger-lib": "0.0.15"
   },
   "jest-junit": {
     "suiteName": "Unit Tests",

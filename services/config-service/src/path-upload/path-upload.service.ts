@@ -1,19 +1,27 @@
-import {v4 as uuid} from 'uuid';
-import {Brackets, In, Repository} from 'typeorm';
-import {InjectRepository} from '@nestjs/typeorm';
-import {BadRequestException, Injectable, InternalServerErrorException, NotFoundException} from '@nestjs/common';
-import {LoggerFactory, LoggerService} from '@netapp-cloud-datamigrate/logger-lib';
+import { v4 as uuid } from 'uuid';
+import { Brackets, In, Repository } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
-import {WorkflowService} from '../workflow/workflow.service';
-import {StartWorkFlowPayload} from '../workflow/workflow.types';
-import {FileServerEntity} from '../entities/fileserver.entity';
-import {VolumeEntity} from '../entities/volume.entity';
-import {UserDetails} from '../configurations/configuration.types';
-import {PathUploadsEntity} from 'src/entities/pathupload.entity';
-import {ImportVolumePathsDto} from './dto/path-upload.dto';
-import {ExportPathSource, UploadPathAction} from 'src/constants/enums';
-import {JobConfigEntity, JobStatus} from 'src/entities/jobconfig.entity';
-import {JobRunEntity, JobRunStatus} from 'src/entities/jobrun.entity';
+import { WorkflowService } from '../workflow/workflow.service';
+import { StartWorkFlowPayload } from '../workflow/workflow.types';
+import { FileServerEntity } from '../entities/fileserver.entity';
+import { VolumeEntity } from '../entities/volume.entity';
+import { UserDetails } from '../configurations/configuration.types';
+import { PathUploadsEntity } from 'src/entities/pathupload.entity';
+import { ImportVolumePathsDto } from './dto/path-upload.dto';
+import {ExportPathSource, UploadPathAction, WorkFlows} from 'src/constants/enums';
+import { JobConfigEntity, JobStatus } from 'src/entities/jobconfig.entity';
+import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 import * as fs from 'fs';
 
 @Injectable()
@@ -83,7 +91,7 @@ export class PathUploadService {
       // parsedData should contain at least one row after removing the header
       if (!parsedData.length) {
         throw new BadRequestException(
-          'An unexpected error occurred while uploading the file. The CSV file is empty or lacks valid export paths.,
+          'An unexpected error occurred while uploading the file. The CSV file is empty or lacks valid export paths.',
         );
       }
 
@@ -94,7 +102,7 @@ export class PathUploadService {
       };
       const uploadId = uuid();
       const existingPaths = await this.volumeRepo.find({
-        where: { fileServerId }
+        where: { fileServerId },
       });
 
       for (const row of parsedData) {
@@ -105,11 +113,11 @@ export class PathUploadService {
           existingPaths.filter(
             (path) =>
               path.volumePath === trimmedPath &&
-              path.fileServerId === fileServerId
+              path.fileServerId === fileServerId,
           ).length > 0
         ) {
           this.logger.warn(
-            `Path ${trimmedPath} already exists for file server ${fileServerId}`
+            `Path ${trimmedPath} already exists for file server ${fileServerId}`,
           );
           uploadStats.alreadyExitingPaths++;
           // createUpload
@@ -133,7 +141,7 @@ export class PathUploadService {
           createdBy: userDetails?.user?.id || null,
         });
         this.logger.log(
-          `New path ${trimmedPath} added for file server ${fileServerId}`
+          `New path ${trimmedPath} added for file server ${fileServerId}`,
         );
         uploadStats.newPaths++;
       }
@@ -145,12 +153,12 @@ export class PathUploadService {
       */
       existingPaths.filter(async (path) => {
         const isPathNoLongerAvailable = !parsedData.some(
-          (row) => row[0].trim() === path.volumePath
+          (row) => row[0].trim() === path.volumePath,
         );
         if (isPathNoLongerAvailable) {
           uploadStats.noLongerAvailablePaths++;
           this.logger.warn(
-            `Path ${path.volumePath} is no longer available for file server ${fileServerId}`
+            `Path ${path.volumePath} is no longer available for file server ${fileServerId}`,
           );
           await this.createUpload({
             id: path.id,
@@ -182,13 +190,13 @@ export class PathUploadService {
         throw error;
       }
       throw new InternalServerErrorException(
-        `Error processing file upload  ${error.message}`
+        `Error processing file upload  ${error.message}`,
       );
     }
   }
 
   async createUpload(
-    uploadData: Partial<PathUploadsEntity>
+    uploadData: Partial<PathUploadsEntity>,
   ): Promise<Partial<PathUploadsEntity>> {
     const newUpload = this.uploadRepo.create(uploadData);
     const savedUpload = await this.uploadRepo.save(newUpload);
@@ -196,7 +204,7 @@ export class PathUploadService {
   }
 
   async processUploadPathValidation(
-    uploadId: string
+    uploadId: string,
   ): Promise<{ message: string; workflowId?: string }> {
     try {
       const fileServer = await this.fileServerRepo
@@ -222,11 +230,11 @@ export class PathUploadService {
       }
       await this.volumeRepo.update(
         { fileServerId: fileServer.id, volumePath: In(disabledPaths) },
-        { isDisabled: true }
+        { isDisabled: true },
       );
       await this.volumeRepo.update(
         { fileServerId: fileServer.id, volumePath: In(enabledPaths) },
-        { isDisabled: false }
+        { isDisabled: false },
       );
 
       const traceId = uploadId;
@@ -248,21 +256,21 @@ export class PathUploadService {
                 protocolVersion: fileServer?.protocolVersion.replace(/^v/, ''),
                 host: fileServer?.host.trim(),
                 username: fileServer?.userName,
-                password: fileServer?.password
+                password: fileServer?.password,
               },
-              workerIds: fileServer.workers.map((worker) => worker.workerId)
+              workerIds: fileServer.workers.map((worker) => worker.workerId),
             },
             options: {
               workflowExecutionTimeout: '1h',
               workflowTaskTimeout: '120s',
-              workflowRunTimeout: '120s'
-            }
-          }
-        ]
+              workflowRunTimeout: '120s',
+            },
+          },
+        ],
       };
       const workflow = await this.workFlowService.startWorkflow(
         WorkFlows.VALIDATE_PATHS,
-        startWorkFlowPayload
+        startWorkFlowPayload,
       );
       return {
         message: 'Export path upload processed successfully',
@@ -278,7 +286,7 @@ export class PathUploadService {
       }
       throw new InternalServerErrorException(
         'An unexpected error occurred while uploading export paths. ' +
-          error.message
+          error.message,
       );
     }
   }
@@ -286,7 +294,7 @@ export class PathUploadService {
   async processUploadUpdate(validationResult: any[], uploadId: string) {
     try {
       const updateResult = await this.uploadRepo.findOne({
-        where: { uploadId }
+        where: { uploadId },
       });
       if (!updateResult) {
         this.logger.error(`No upload found with ID ${uploadId}.`);
@@ -299,18 +307,18 @@ export class PathUploadService {
       ) {
         this.logger.error('The validation result is missing or invalid.');
         throw new BadRequestException(
-          'The validation result is missing or invalid.'
+          'The validation result is missing or invalid.',
         );
       }
 
       const fileServerId = updateResult.fileServerId;
       const result = await this.processValidationResult(
         fileServerId,
-        validationResult
+        validationResult,
       );
       if (!result) {
         throw new BadRequestException(
-          'Unable to process the validation result.'
+          'Unable to process the validation result.',
         );
       }
 
@@ -320,26 +328,26 @@ export class PathUploadService {
           ...p,
           isValid: true,
           reachableCount: p.reachableCount,
-          createdBy
+          createdBy,
         })),
         ...result.invalidPaths.map((p) => ({
           ...p,
           isValid: false,
           reachableCount: 0,
-          createdBy
-        }))
+          createdBy,
+        })),
       ];
 
       const existingPaths = await this.volumeRepo.find({
         where: {
           fileServerId,
-          volumePath: In(allPaths.map((p) => p.volumePath))
+          volumePath: In(allPaths.map((p) => p.volumePath)),
         },
-        select: ['id', 'volumePath', 'isValid', 'reachableCount']
+        select: ['id', 'volumePath', 'isValid', 'reachableCount'],
       });
 
       const existingPathsMap = new Map(
-        existingPaths.map((v) => [`${v.volumePath}-${fileServerId}`, v])
+        existingPaths.map((v) => [`${v.volumePath}-${fileServerId}`, v]),
       );
       const newPaths: VolumeEntity[] = [];
 
@@ -360,15 +368,15 @@ export class PathUploadService {
             fileServerId,
             isValid: path.isValid,
             reachableCount: path.reachableCount,
-            createdBy: createdBy
+            createdBy: createdBy,
           });
           newPaths.push(newVolume);
         }
         // update the upload record with validation response
         await this.uploadRepo.update(path.id, {
           validationResponse: JSON.stringify(
-            `${path.isValid ? 'SUCCESS: ' : 'ERROR: '} ${path.message}`
-          )
+            `${path.isValid ? 'SUCCESS: ' : 'ERROR: '} ${path.message}`,
+          ),
         });
       }
       if (newPaths.length > 0) await this.volumeRepo.save(newPaths);
@@ -377,9 +385,9 @@ export class PathUploadService {
       const inValidPaths = await this.volumeRepo.find({
         where: [
           { fileServerId, isValid: false },
-          { fileServerId, isDisabled: true }
+          { fileServerId, isDisabled: true },
         ],
-        select: ['id']
+        select: ['id'],
       });
       if (inValidPaths.length) {
         await this.jobConfigRepo
@@ -388,7 +396,7 @@ export class PathUploadService {
           .set({ status: JobStatus.InActive })
           .where(
             'jobConfig.source_path_id IN (:...invalidVolumePaths) OR jobConfig.target_path_id IN (:...invalidVolumePaths)',
-            { invalidVolumePaths: inValidPaths.map((path) => path.id) }
+            { invalidVolumePaths: inValidPaths.map((path) => path.id) },
           )
           .andWhere('jobConfig.status = :status', { status: JobStatus.Active })
           .execute();
@@ -403,16 +411,16 @@ export class PathUploadService {
         throw error;
       }
       throw new InternalServerErrorException(
-        'Process Upload Path are failed. ' + error.message
+        'Process Upload Path are failed. ' + error.message,
       );
     }
   }
 
   async createVolumeForFileServer(
-    data: Partial<VolumeEntity>
+    data: Partial<VolumeEntity>,
   ): Promise<VolumeEntity> {
     const fileServer = await this.fileServerRepo.findOne({
-      where: { id: data.fileServerId }
+      where: { id: data.fileServerId },
     });
     if (!fileServer) {
       this.logger.error(`File server with ID ${data.fileServerId} not found`);
@@ -425,7 +433,7 @@ export class PathUploadService {
 
   async processValidationResult(
     fileServerId: string,
-    validationResult: any[]
+    validationResult: any[],
   ): Promise<{ validPaths: any[]; invalidPaths: any[] }> {
     try {
       const validPaths = new Map<string, any>();
@@ -440,7 +448,7 @@ export class PathUploadService {
               volumePath: path,
               reachableCount: 0,
               fileServerId,
-              message: result.result.message
+              message: result.result.message,
             };
           }
           if (result.result.status === 'success') {
@@ -457,12 +465,12 @@ export class PathUploadService {
 
       return {
         validPaths: Array.from(validPaths.values()) as any,
-        invalidPaths: Array.from(invalidPaths.values()) as any
+        invalidPaths: Array.from(invalidPaths.values()) as any,
       };
     } catch (error) {
       this.logger.error(
         `Error processing validation result for file server ${fileServerId}`,
-        error
+        error,
       );
       if (
         error instanceof BadRequestException ||
@@ -471,7 +479,7 @@ export class PathUploadService {
         throw error;
       }
       throw new InternalServerErrorException(
-        `Error processing validation result: ${error.message}`
+        `Error processing validation result: ${error.message}`,
       );
     }
   }
@@ -485,7 +493,7 @@ export class PathUploadService {
       if (!fileServer) {
         this.logger.error(`File server with ID ${fileServerId} not found`);
         throw new NotFoundException(
-          `File server with ID ${fileServerId} not found`
+          `File server with ID ${fileServerId} not found`,
         );
       }
 
@@ -495,13 +503,13 @@ export class PathUploadService {
         .createQueryBuilder('jobConfig')
         .where(
           '(jobConfig.sourcePathId IN (:...volumeIds) OR jobConfig.targetPathId IN (:...volumeIds))',
-          { volumeIds }
+          { volumeIds },
         )
         .andWhere('jobConfig.status = :status', { status: 'ACTIVE' })
         .andWhere(
           new Brackets((qb) => {
             qb.where('jobConfig.scheduler = :scheduling', {
-              scheduling: 'SCHEDULING'
+              scheduling: 'SCHEDULING',
             }).orWhere('jobConfig.futureScheduleAt IS NOT NULL');
           }),
         )
@@ -509,7 +517,7 @@ export class PathUploadService {
 
       if (blockingJobConfigExists) {
         this.logger.warn(
-          `Refresh is not possible for file server ${fileServerId} due to active job configs with scheduler=SCHEDULING or futureScheduleAt set.`
+          `Refresh is not possible for file server ${fileServerId} due to active job configs with scheduler=SCHEDULING or futureScheduleAt set.`,
         );
         return false;
       }
@@ -521,14 +529,14 @@ export class PathUploadService {
         .where('jobRun.status = :status', { status: JobRunStatus.Running })
         .andWhere(
           '(jobConfig.sourcePathId IN (:...volumeIds) OR jobConfig.targetPathId IN (:...volumeIds))',
-          { volumeIds }
+          { volumeIds },
         )
         .andWhere('jobConfig.status = :status', { status: 'ACTIVE' })
         .getCount();
 
       if (runningJobs > 0) {
         this.logger.warn(
-          `Refresh is not possible for file server ${fileServerId} as there are running jobs`
+          `Refresh is not possible for file server ${fileServerId} as there are running jobs`,
         );
         return false;
       }
@@ -538,7 +546,7 @@ export class PathUploadService {
     } catch (error) {
       this.logger.error(
         `Error checking if refresh is possible for file server ${fileServerId}`,
-        error
+        error,
       );
       if (
         error instanceof BadRequestException ||
@@ -547,7 +555,7 @@ export class PathUploadService {
         throw error;
       }
       throw new InternalServerErrorException(
-        `Error checking if refresh is possible: ${error.message}`
+        `Error checking if refresh is possible: ${error.message}`,
       );
     }
   }
@@ -559,7 +567,7 @@ export class PathUploadService {
   }
 
   async getUploadedPaths(
-    fileServerId: string
+    fileServerId: string,
   ): Promise<
     { path: string; action: string; message: string; is_valid: boolean }[]
   > {
@@ -589,20 +597,20 @@ export class PathUploadService {
 
       if (!uploads || uploads.length === 0) {
         this.logger.warn(
-          `No export paths found to download. Please manually upload the export paths for file server ${fileServerId}`
+          `No export paths found to download. Please manually upload the export paths for file server ${fileServerId}`,
         );
         throw new NotFoundException(
-          `No export paths found to download. Please manually upload the export paths for file server ${fileServerId}`
+          `No export paths found to download. Please manually upload the export paths for file server ${fileServerId}`,
         );
       }
       this.logger.log(
-        `Found ${uploads.length} uploads for file server ${fileServerId}`
+        `Found ${uploads.length} uploads for file server ${fileServerId}`,
       );
       return uploads;
     } catch (error) {
       this.logger.error(
         `Error fetching uploaded paths for file server ${fileServerId}`,
-        error
+        error,
       );
       if (
         error instanceof BadRequestException ||
@@ -611,7 +619,7 @@ export class PathUploadService {
         throw error;
       }
       throw new InternalServerErrorException(
-        `Error fetching uploaded paths: ${error.message}`
+        `Error fetching uploaded paths: ${error.message}`,
       );
     }
   }

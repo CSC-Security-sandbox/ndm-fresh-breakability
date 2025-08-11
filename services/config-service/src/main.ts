@@ -12,7 +12,9 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
   const loggerFactory = app.resolve(LoggerFactory);
-  app.useGlobalInterceptors(new ResponseInterceptor([], [], await loggerFacry));
+  app.useGlobalInterceptors(
+    new ResponseInterceptor([], [], await loggerFactory),
+  );
   const jsonPayloadLimit = configService.get<string>(
     'app.options.jsonPayloadLit',
   );
