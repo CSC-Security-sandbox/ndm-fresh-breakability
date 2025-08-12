@@ -100,6 +100,8 @@ describe("JobConfigService", () => {
     loggerService = {
       log: jest.fn(),
       error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
     } as unknown as jest.Mocked<LoggerService>;
     redisService = {
       getClient: jest.fn().mockReturnValue(createClient()),
@@ -117,7 +119,6 @@ describe("JobConfigService", () => {
         SendMailService,
         { provide: ConfigService, useValue: configService },
         { provide: LoggerFactory, useValue: loggerFactory },
-        { provide: LoggerService, useValue: loggerService },
         { provide: "winston", useValue: winston },
         {
           provide: getRepositoryToken(JobConfigEntity),

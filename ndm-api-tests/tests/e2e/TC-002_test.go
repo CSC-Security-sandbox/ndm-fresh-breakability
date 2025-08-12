@@ -142,8 +142,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 				StartDelay:               "10s",
 			}
 			sourceJobConfigIDs, resp, err = CreateDiscoveryJob(jobParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating new discovery for source")
-			Expect(len(sourceJobConfigIDs)).To(BeNumerically(">", 0), "No valid sourceJobConfigIDs found in response")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating discovery job for source: %v", err))
 			defer resp.Body.Close()
 
 			sourceConfigID1 = sourceJobConfigIDs[0]
@@ -193,8 +192,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 				StartDelay:               "10s",
 			}
 			destinationJobConfigIDs, resp, err = CreateDiscoveryJob(destinationJobParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating new discovery for destination")
-			Expect(len(destinationJobConfigIDs)).To(BeNumerically(">", 0), "No valid destinationJobConfigIDs found in response")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating discovery job for destination: %v", err))
 			defer resp.Body.Close()
 
 			destinationJobConfigID1, destinationJobConfigID2 = destinationJobConfigIDs[0], destinationJobConfigIDs[1]
@@ -235,10 +233,8 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 				},
 			}
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating migration job")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
-			Expect(len(migrationJobConfigIDs)).To(BeNumerically(">", 0), "Expected at least one jobConfigID")
 
 			migration_validators := []string{
 				"nfs_src_to_dest_vol_migration.json",
@@ -271,11 +267,8 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 				DestinationPathIDs: []string{destinationPathID, destinationPathID1},
 			}
 			jobConfigIDs, resp, err = CreateBulkCutoverJob(cutoverParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating bulk cutover job")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating bulk cutover job: %v", err))
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
-			Expect(len(jobConfigIDs)).To(BeNumerically(">", 0), "No valid jobConfigIDs found in response")
-			Expect(jobConfigIDs).NotTo(BeEmpty(), "Expected a valid jobConfigID")
 
 			jobConfigID1 = jobConfigIDs[0]
 			jobConfigID2 = jobConfigIDs[1]

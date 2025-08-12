@@ -3,7 +3,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
-  Logger,
+  Inject,
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -34,6 +34,10 @@ import {
   SpeedTestConfigEntity,
   SpeedTestConfigWorkerEntity,
 } from "src/entities/speed-test-job-config.entity";
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 import {
   SpeedLogEntity,
@@ -80,7 +84,8 @@ import { SuccessEmailType } from "src/utils/send-email.type";
 
 @Injectable()
 export class JobConfigService {
-  private readonly logger = new Logger(JobConfigService.name);
+  private readonly logger: LoggerService;
+
   constructor(
     @InjectRepository(FileServerEntity)
     private fileServerRepo: Repository<FileServerEntity>,
@@ -122,10 +127,12 @@ export class JobConfigService {
     @InjectRepository(OperationErrorEntity)
     private operationErrorRepo: Repository<OperationErrorEntity>,
     private sendMailService: SendMailService,
-
     @InjectRepository(WorkerJobRunMap)
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
-  ) {}
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(JobConfigService.name);
+  }
 
   // ------------ Bulk Discovery ---------------- //
   async createBulkDiscovery(
@@ -634,7 +641,7 @@ export class JobConfigService {
               })
             }
           }
-          this.logger.warn(inactiveJobWarnings);
+          this.logger.warn(JSON.stringify(inactiveJobWarnings));
           continue; 
         }
         

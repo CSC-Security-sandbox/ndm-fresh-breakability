@@ -3,7 +3,8 @@ import { v4 as uuidv4 } from "uuid";
 import { In, Repository } from "typeorm";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Inject } from "@nestjs/common";
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { Options } from "../constants/types";
 import { JobRunStatus, JobStatus, JobType, WorkFlows } from "../constants/enums";
 import { VolumeEntity } from "../entities/volume.entity";
@@ -20,7 +21,7 @@ import { JobConfigEntity } from 'src/entities/jobconfig.entity';
 
 @Injectable()
 export class PreCheckService {
-    private readonly logger = new Logger(PreCheckService.name);
+    private readonly logger: LoggerService;
     constructor(
         @InjectRepository(VolumeEntity)
         private readonly volumeRepo: Repository<VolumeEntity>,
@@ -37,7 +38,10 @@ export class PreCheckService {
         private readonly jobConfigEntity: Repository<JobConfigEntity>,
         
         private readonly migrationConflictService: MigrationConflictService,
-    ) { }
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    ) {
+        this.logger = loggerFactory.create(PreCheckService.name);
+    }
 
 async checkMigrationConflicts(data: JobConfigPreCheck): Promise<PreCheckCircularDependency[]> {
         return this.migrationConflictService.checkMigrationConflicts(data);
