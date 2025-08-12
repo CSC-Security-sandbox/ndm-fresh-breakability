@@ -84,6 +84,10 @@ export  class JobManagerContext {
         await this.commandStream.ackAndPurge(ids, groupType);
     }
 
+    async getCmdStreamLen(): Promise<number> {
+        return this.commandStream.getLength();
+    }
+
     // Task Stream Methods
     async publishToTaskStream(task: TaskInfo): Promise<string> {
         return await this.taskStream.append(task);

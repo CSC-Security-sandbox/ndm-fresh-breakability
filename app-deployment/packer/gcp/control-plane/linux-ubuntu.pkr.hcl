@@ -86,6 +86,7 @@ locals {
 
 locals {
   formatted_timestamp = formatdate("DD-MM-YYYY-hh-mm-ss", timestamp())
+  image_name          = "${var.project_name}-control-plane-${local.formatted_timestamp}"
 }
 
 # "###################################"
@@ -100,19 +101,22 @@ source "googlecompute" "gcp_ubuntu" {
   machine_type          = var.gcp_packer_machine_type
   network               = var.gcp_network
   subnetwork            = var.gcp_subnetwork
-  image_name            = "${var.project_name}-control-plane-${local.formatted_timestamp}"
+  image_name            = local.image_name
   region                = var.gcp_region
   ssh_username          = var.ssh_username
   omit_external_ip      = true
   use_internal_ip       = true
-  tags                  = ["packer", "control-plane"]
 
   metadata = {
-    "StackName" = "${var.project_name}-control-plane-${local.formatted_timestamp}"
-    "CreatedBy" = "Packer"
-    "Project"   = var.project_name
-    "Cloud"     = "GCP"
     block-project-ssh-keys = "true"
+  }
+
+  image_labels = {
+    "stackname" = local.image_name
+    "createdby" = "packer"
+    "project"   = var.project_name
+    "cloud"     = "gcp"
+    "creator"   = "vasudev"
   }
 
   temporary_key_pair_type      = var.temporary_key_pair_type
