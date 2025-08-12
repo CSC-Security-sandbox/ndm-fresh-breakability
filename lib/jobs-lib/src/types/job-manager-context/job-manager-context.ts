@@ -85,7 +85,7 @@ export  class JobManagerContext {
     }
 
     async getCmdStreamLen(): Promise<number> {
-        return await this.commandStream.getLength();
+        return this.commandStream.getLength();
     }
 
     // Task Stream Methods
