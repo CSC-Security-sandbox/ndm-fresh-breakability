@@ -1,4 +1,4 @@
-name: Run E2E API Automation Tests for NDM
+name: Run E2E API Automation Tests for NDM on vSphere
 
 env:
   GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
@@ -39,11 +39,12 @@ jobs:
       worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.worker_vm_ip_addresses }}
     env:
       NDM_VM_PORT: 22
-      NDM_WORKERS_PORT: 22
-      SOURCE_HOST_IP: ${{ secrets.TEST_AUTO_FILE_SERVER_SOURCE_IP }}
-      DESTINATION_HOST_IP: ${{ secrets.TEST_AUTO_FILE_SERVER_DESTINATION_IP }}
+      NFS_NDM_WORKERS_PORT: 22
+      NFS_SOURCE_HOST_IP: ${{ secrets.TEST_AUTO_FILE_SERVER_SOURCE_IP }}
+      NFS_DESTINATION_HOST_IP: ${{ secrets.TEST_AUTO_FILE_SERVER_DESTINATION_IP }}
       NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
       PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+      NFS_PROTOCOL_USERNAME: "Root"
     steps:
       
       - name: Checkout repository
@@ -72,8 +73,8 @@ jobs:
           echo "VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
           echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
           
 
           echo "TF_VAR_vsphere_server=$(echo "${{ secrets.VSPHERE_SERVER }}" | base64 --decode)" >> $GITHUB_ENV
@@ -124,7 +125,7 @@ jobs:
         run: |
           cd app-deployment/terraform/vsphere/environments/api
           WORKER_IPS=$(terraform output -json worker_vm_ip_addresses | jq -r '.[]' | paste -sd, -)
-          echo "NDM_WORKERS_HOST=$WORKER_IPS" >> $GITHUB_ENV
+          echo "NFS_NDM_WORKERS_HOST=$WORKER_IPS" >> $GITHUB_ENV
 
       - name: Set VM IP Address for API Tests
         run: |

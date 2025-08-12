@@ -8,6 +8,8 @@ SERVICE="boot-microk8s.service"
 TIMEOUT=1800
 INTERVAL=30
 ELAPSED=0
+DNS_REFRESHED=false
+CLOUD_PROVIDER=${4:-"vsphere"}
 
 echo "Monitoring service $SERVICE on $IP (timeout: ${TIMEOUT}s, interval: ${INTERVAL}s)"
 
@@ -23,6 +25,20 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
                 
   echo "Service Status: (${ELAPSED}s)"
   echo "$SERVICE_STATE"
+
+  # Run DNS refresh after 60 seconds
+  if [ $ELAPSED -ge 60 ] && [ "$DNS_REFRESHED" = "false" ] && [ "$CLOUD_PROVIDER" = "azure" ]; then
+    echo "======================================"
+    echo "RUNNING DNS REFRESH AT ${ELAPSED}s"
+    echo "======================================"
+    
+    sshpass -p "$PASSWORD" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    $USERNAME@$IP "microk8s disable dns && microk8s enable dns"
+    
+    DNS_REFRESHED=true
+    echo "DNS refresh completed"
+    echo "======================================"
+  fi
 
   # Check for completion
   COMPLETED=$(sshpass -p "$PASSWORD" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \

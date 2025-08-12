@@ -120,6 +120,7 @@ jobs:
       support_service_branch: ${{ steps.parse-config.outputs.support_service_branch }}
       binary_name: ${{ steps.worker-binary.outputs.binary_name }}
       binary_path: ${{ steps.worker-binary.outputs.binary_path }}
+      windows_worker_installer_url: ${{ steps.worker-binary.outputs.windows_worker_installer_url }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -421,15 +422,18 @@ jobs:
           echo "Worker binary downloaded successfully."
 
           echo "Downloading windows worker installer from Artifactory..."
+          WINDOWS_INSTALLER_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACT_PATH}/windows-worker-installer-${SELECTED_VERSION}.exe"
           curl -s -o "windows-worker-installer.exe" \
             -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
-            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACT_PATH}/windows-worker-installer-${SELECTED_VERSION}.exe"
+            "$WINDOWS_INSTALLER_URL"
 
           if [ ! -f "windows-worker-installer.exe" ] || [ ! -s "windows-worker-installer.exe" ]; then
             echo "Error: Failed to download windows worker installer or file is empty"
             exit 1
           fi
           echo "Windows worker installer downloaded successfully."
+          echo "windows_worker_installer_url=$WINDOWS_INSTALLER_URL" >> $GITHUB_OUTPUT
+          
 
           echo "Downloading worker.env from Artifactory..."
           curl -s -o "worker.env" \
@@ -580,8 +584,11 @@ jobs:
       provider: ${{ matrix.provider }}
       component: ${{ matrix.component }}
       image_name: ${{ steps.image-info.outputs.image_name }}
-      control_plane_template: ${{ steps.set-template.outputs.control_plane_template }}
-      worker_template: ${{ steps.set-template.outputs.worker_template }}
+      build_image_version: ${{ steps.image-info.outputs.build_image_version }}
+      control_plane_template: ${{ steps.set-template-vsphere.outputs.control_plane_template }}
+      worker_template: ${{ steps.set-template-vsphere.outputs.worker_template }}
+      control_plane_image_version: ${{ steps.set-template-azure.outputs.control_plane_image_version }}
+      worker_image_version: ${{ steps.set-template-azure.outputs.worker_image_version }}
     steps:  
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -758,9 +765,11 @@ jobs:
             IMAGE_NAME=$(grep 'ManagedImageName' $GITHUB_WORKSPACE/packer.log | awk '{print $2}')
             IMAGE_ID=$(grep 'ManagedImageId' $GITHUB_WORKSPACE/packer.log | awk '{print $2}')
             IMAGE_LOCATION=$(grep 'ManagedImageLocation' $GITHUB_WORKSPACE/packer.log | awk '{print $2}')
+            IMAGE_VERSION=$(grep 'SharedImageGalleryImageVersion' $GITHUB_WORKSPACE/packer.log | awk '{print $2}')
       
             echo "image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
             echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
+            echo "build_image_version=$IMAGE_VERSION" >> $GITHUB_OUTPUT
             echo "resource_group=$IMAGE_RESOURCE_GROUP" >> $GITHUB_OUTPUT
             echo "location=$IMAGE_LOCATION" >> $GITHUB_OUTPUT
       
@@ -768,6 +777,7 @@ jobs:
             echo "Captured image info for ${{ matrix.provider }}-${{ matrix.component }}"
             echo "Image ID: $IMAGE_ID"
             echo "Image Name: $IMAGE_NAME"
+            echo "Image Version: $IMAGE_VERSION"
             echo "Resource Group: $IMAGE_RESOURCE_GROUP"
             echo "Location: $IMAGE_LOCATION"
             ;;
@@ -812,6 +822,7 @@ jobs:
           case "${{ matrix.provider }}" in
             azure)
               echo "${{ steps.image-info.outputs.image_name }}" > ${{ matrix.component }}-${{ matrix.provider }}-image.txt
+              echo "${{ steps.image-info.outputs.build_image_version }}" > ${{ matrix.component }}-${{ matrix.provider }}-version.txt
               ;;
             vsphere)
               echo "${{ steps.image-info.outputs.image_name }}" > ${{ matrix.component }}-${{ matrix.provider }}-image.txt
@@ -826,6 +837,13 @@ jobs:
         with:
           name: image-info-${{ matrix.component }}-${{ matrix.provider }}
           path: ${{ matrix.component }}-${{ matrix.provider }}-image.txt
+
+      - name: Upload Image Version Info (Azure)
+        if: ${{ matrix.provider == 'azure' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: image-version-${{ matrix.component }}-${{ matrix.provider }}
+          path: ${{ matrix.component }}-${{ matrix.provider }}-version.txt
 
       - name: Generate and upload images and manifests for control-plane
         if: ${{ matrix.component == 'control-plane' }}
@@ -844,6 +862,7 @@ jobs:
           PROVIDER="${{ matrix.provider }}"
           COMPONENT="${{ matrix.component }}"
           IMAGE_NAME="${{ steps.image-info.outputs.image_name }}"
+          IMAGE_VERSION="${{ steps.image-info.outputs.build_image_version }}"
           BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           COMMIT="${GITHUB_SHA}"
           SHORT_COMMIT="${GITHUB_SHA::7}"
@@ -864,7 +883,28 @@ jobs:
             HELM_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/helm/datamigrator-$BUILD_VERSION.tgz"
           fi
 
-          cat > metadata.json <<EOF
+          if [[ "$PROVIDER" == "azure" ]]; then
+            cat > metadata.json <<EOF
+          {
+            "build_version": "$BUILD_VERSION",
+            "provider": "$PROVIDER",
+            "component": "$COMPONENT",
+            "image_name": "$IMAGE_NAME",
+            "image_version": "$IMAGE_VERSION",
+            "build_timestamp": "$BUILD_TIMESTAMP",
+            "commit": "$COMMIT",
+            "short_commit": "$SHORT_COMMIT",
+            "workflow_run_id": "$RUN_ID",
+            "workflow_run_url": "$WORKFLOW_RUN_URL",
+            "chart": $CHART_JSON,
+            "services": {
+              "path": "$DOCKER_PATH",
+              "items": $SERVICES_JSON
+            }
+          }
+          EOF
+          else
+            cat > metadata.json <<EOF
           {
             "build_version": "$BUILD_VERSION",
             "provider": "$PROVIDER",
@@ -882,6 +922,7 @@ jobs:
             }
           }
           EOF
+          fi
 
           cat > latest.json <<EOF
           {
@@ -932,13 +973,32 @@ jobs:
           PROVIDER="${{ matrix.provider }}"
           COMPONENT="${{ matrix.component }}"
           IMAGE_NAME="${{ steps.image-info.outputs.image_name }}"
+          IMAGE_VERSION="${{ steps.image-info.outputs.build_image_version }}"
           BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           COMMIT="${GITHUB_SHA}"
           SHORT_COMMIT="${GITHUB_SHA::7}"
           RUN_ID="${GITHUB_RUN_ID}"
           WORKFLOW_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
 
-          cat > metadata.json <<EOF
+          if [[ "$PROVIDER" == "azure" ]]; then
+            cat > metadata.json <<EOF
+          {
+            "build_version": "$BUILD_VERSION",
+            "provider": "$PROVIDER",
+            "component": "$COMPONENT",
+            "binary_name": "$BINARY_NAME",
+            "binary_path": "$BINARY_PATH",
+            "image_name": "$IMAGE_NAME",
+            "image_version": "$IMAGE_VERSION",
+            "build_timestamp": "$BUILD_TIMESTAMP",
+            "commit": "$COMMIT",
+            "short_commit": "$SHORT_COMMIT",
+            "workflow_run_id": "$RUN_ID",
+            "workflow_run_url": "$WORKFLOW_RUN_URL"
+          }
+          EOF
+          else
+            cat > metadata.json <<EOF
           {
             "build_version": "$BUILD_VERSION",
             "provider": "$PROVIDER",
@@ -953,6 +1013,7 @@ jobs:
             "workflow_run_url": "$WORKFLOW_RUN_URL"
           }
           EOF
+          fi
 
           ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           BUILD_TYPE="${{ env.build_type }}"
@@ -1032,8 +1093,18 @@ jobs:
             exit 1
           fi
       
-      - name: Set template output
-        id: set-template
+      - name: Set template output for azure
+        id: set-template-azure
+        if: ${{ matrix.provider == 'azure' }}
+        run: |
+          if [ "${{ matrix.component }}" == "control-plane" ]; then
+            echo "control_plane_image_version=${{ steps.image-info.outputs.build_image_version }}" >> $GITHUB_OUTPUT
+          elif [ "${{ matrix.component }}" == "worker" ]; then
+            echo "worker_image_version=${{ steps.image-info.outputs.build_image_version }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set template output for vsphere
+        id: set-template-vsphere
         if: ${{ matrix.provider == 'vsphere' }}
         run: |
           if [ "${{ matrix.component }}" == "control-plane" ]; then
@@ -1051,6 +1122,13 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           pattern: image-info-*
+          merge-multiple: true
+          path: ./image-info/
+
+      - name: Download Image Version Artifacts (Azure)
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: image-version-*
           merge-multiple: true
           path: ./image-info/
 
@@ -1093,6 +1171,8 @@ jobs:
           for provider in "azure" "vsphere" "gcp"; do
             CONTROL_PLANE_FILE="./image-info/control-plane-${provider}-image.txt"
             WORKER_FILE="./image-info/worker-${provider}-image.txt"
+            CONTROL_PLANE_VERSION_FILE="./image-info/control-plane-${provider}-version.txt"
+            WORKER_VERSION_FILE="./image-info/worker-${provider}-version.txt"
             
             if [[ -f "$CONTROL_PLANE_FILE" || -f "$WORKER_FILE" ]]; then
               case "$provider" in
@@ -1128,6 +1208,15 @@ jobs:
                     "value": "'"${CP_NAME}"'"
                   }'
                 FACTS_ADDED=true
+                
+                if [[ "$provider" == "azure" && -f "$CONTROL_PLANE_VERSION_FILE" ]]; then
+                  CP_VERSION=$(cat "$CONTROL_PLANE_VERSION_FILE")
+                  CARD_BODY+=',
+                  {
+                    "title": "Control Plane Image Version:",
+                    "value": "'"${CP_VERSION}"'"
+                  }'
+                fi
               fi
               
               if [[ -f "$WORKER_FILE" ]]; then
@@ -1140,6 +1229,16 @@ jobs:
                     "title": "Worker:",
                     "value": "'"${WORKER_NAME}"'"
                   }'
+                FACTS_ADDED=true
+                
+                if [[ "$provider" == "azure" && -f "$WORKER_VERSION_FILE" ]]; then
+                  WORKER_VERSION=$(cat "$WORKER_VERSION_FILE")
+                  CARD_BODY+=',
+                  {
+                    "title": "Worker Image Version:",
+                    "value": "'"${WORKER_VERSION}"'"
+                  }'
+                fi
               fi
               
               CARD_BODY+='
@@ -1176,10 +1275,20 @@ jobs:
 
           echo "Build notification sent successfully"
 
-  run-ndm-api-tests:
+  run-azure-ndm-api-tests:
+    if: ${{ needs.packer.outputs.control_plane_image_version != '' && needs.packer.outputs.worker_image_version != '' }}
+    needs: [package-artifacts, packer, determine-matrix]
+    uses: ./.github/workflows/run-api-tests-azure.yaml
+    with:
+      control_plane_image_version: ${{ needs.packer.outputs.control_plane_image_version }}
+      worker_image_version: ${{ needs.packer.outputs.worker_image_version }}
+      windows_worker_installer_url: ${{ needs.package-artifacts.outputs.windows_worker_installer_url }}
+    secrets: inherit
+
+  run-vsphere-ndm-api-tests:
     if: ${{ needs.packer.outputs.control_plane_template != '' && needs.packer.outputs.worker_template != '' }}
-    needs: [packer, determine-matrix]
-    uses: ./.github/workflows/run-api-tests.yaml
+    needs: [package-artifacts, packer, determine-matrix]
+    uses: ./.github/workflows/run-api-tests-vsphere.yaml
     with:
       control_plane_template: ${{ needs.packer.outputs.control_plane_template }}
       worker_template: ${{ needs.packer.outputs.worker_template }}
