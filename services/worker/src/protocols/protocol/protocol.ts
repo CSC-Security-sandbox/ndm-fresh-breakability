@@ -70,10 +70,7 @@ export abstract class Protocol {
           });
 
           if (stderr && stderr.trim().length > 0) {
-            const sanitizedStderr = sanitize(stderr, fieldsToSanitize);
-            this.logger.warn(
-              `[${traceId}] command: ${sanitizedCommand}, stderr: ${sanitizedStderr}`
-            );                        
+            const sanitizedStderr = sanitize(stderr, fieldsToSanitize);                                
             throw new Error(sanitizedStderr);
         
           }
@@ -84,12 +81,11 @@ export abstract class Protocol {
           response.message = `${stdout}`;
           return response;
 
-        } catch (error) {
-          const sanitizedError = sanitize(error?.message, fieldsToSanitize);          
+        } catch (error) {                 
           this.logger.error(
-            `[${traceId}] command: ${sanitizedCommand}, error: ${sanitizedError}`
+            `[${traceId}] command: ${sanitizedCommand}, error: ${error}`
           );
-          throw new Error(sanitizedError);
+          throw error;
         }
       }
 
