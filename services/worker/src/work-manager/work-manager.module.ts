@@ -9,6 +9,7 @@ import keycloakConfig from 'src/config/keycloak.config';
 import { WorkerOptionsService } from './factory/worker-options.factory.service';
 import { WorkManagerService } from './work-manager.service';
 import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
+import { PingWorkerService } from './ping-worker.service';
 
 @Module({
   imports: [ 
@@ -19,6 +20,6 @@ import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
     ActivitiesModule,
     AuthModule
   ],
-  providers: [WorkManagerService, WorkerOptionsService]
+  providers: [WorkManagerService, WorkerOptionsService, PingWorkerService]
 })
 export class WorkManagerModule {}

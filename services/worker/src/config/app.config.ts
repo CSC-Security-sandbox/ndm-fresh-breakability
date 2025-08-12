@@ -8,6 +8,7 @@ export default registerAs(
     buildId: process.env.BUILD_ID || '1.0.0',
     baseWorkingPath: process.env.BASE_WORKING_PATH || '/mnt/datamigrate',
     platform: process.platform,
+    controlPlaneIP: process.env.CONTROL_PLANE_IP || 'CONTROL-PLANE-IP',
     // connection
     connection: {
       workerConfigUrl: process.env.WORKER_CONFIG_URL || 'http://localhost:3002',
