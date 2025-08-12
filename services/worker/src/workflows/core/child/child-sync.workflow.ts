@@ -21,7 +21,7 @@ const ITERATION_LIMIT = 1000;
 const {
     syncTaskActivity: SyncTaskActivity,
 } = proxyActivities<SyncService>({ 
-    retry: { initialInterval: '10s', backoffCoefficient: 1.2,  maximumInterval: '30s', nonRetryableErrorTypes: ['ActivityFailure','FatalError'], },
+    retry: { initialInterval: '10s', backoffCoefficient: 1.2,  maximumInterval: '30s', nonRetryableErrorTypes: ['ActivityFailure','FatalError', 'RetryExceededError'], },
      startToCloseTimeout: '5h', heartbeatTimeout: '30s', });
 
 const {
