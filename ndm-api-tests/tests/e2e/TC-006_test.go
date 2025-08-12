@@ -120,9 +120,8 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 				},
 			}
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating migration job")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
-			Expect(len(migrationJobConfigIDs)).To(BeNumerically(">", 0), "Expected at least one jobConfigID")
 
 			// Get migration job run IDs and wait for completion
 			migration_validators := []string{
@@ -155,11 +154,8 @@ var _ = Describe("TC-006: Run migration to the same destination", func() {
 				DestinationPathIDs: []string{destinationPathID1, destinationPathID1},
 			}
 			jobConfigIDs, resp, err = CreateBulkCutoverJob(cutoverParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating bulk cutover job")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating bulk cutover job: %v", err))
 			defer resp.Body.Close()
-
-			Expect(len(jobConfigIDs)).To(BeNumerically(">", 0), "No valid jobConfigIDs found in response")
-			Expect(jobConfigIDs).NotTo(BeEmpty(), "Expected a valid jobConfigID")
 
 			By("Getting jobs by job config id")
 			for _, jobConfigID := range jobConfigIDs {

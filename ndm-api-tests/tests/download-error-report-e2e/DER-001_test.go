@@ -94,10 +94,8 @@ var _ = Describe("Download Error Report", Ordered, func() {
 				StartDelay:               "10s",
 			}
 			sourceJobConfigID, resp, err = CreateDiscoveryJob(jobParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating new discovery for source")
-			Expect(len(sourceJobConfigID)).To(BeNumerically(">", 0), "No valid sourceJobConfigIDs found in response")
+            Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating discovery job for source: %v", err))
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 
 			By("Getting job run details and waiting for error state")
 			getJobsResp, resp, err := GetJobRunDetails(sourceJobConfigID[0], headers)

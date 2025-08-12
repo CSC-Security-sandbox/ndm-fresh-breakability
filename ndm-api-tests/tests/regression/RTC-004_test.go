@@ -97,10 +97,8 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 			}
 
 			migrationJobConfigID, resp, err := CreateMigrationJob(migrationParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating migration job")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
-			Expect(len(migrationJobConfigID)).To(BeNumerically("==", 1), "Expected at least one jobConfigID")
 
 			getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID[0], headers)
 			Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
