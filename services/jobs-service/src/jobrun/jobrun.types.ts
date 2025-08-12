@@ -32,6 +32,7 @@ export interface JobRunConfig{
     workers: string[],
     skipFile?: string,
     skipDelete?: boolean,
+    id: string,
 }
 
 

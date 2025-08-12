@@ -895,6 +895,7 @@ describe("JobRunService", () => {
       });
 
       expect(result).toEqual({
+        id:'123',
         connection: {
           sourceCredential: {
             path: "/source/path",
@@ -1014,6 +1015,7 @@ describe("JobRunService", () => {
       });
 
       expect(result).toEqual({
+        id:'123',
         connection: {
           sourceCredential: {
             path: "/source/path",
