@@ -5,12 +5,23 @@ import { Transport } from '@nestjs/microservices';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { ResponseInterceptor } from '@netapp-cloud-datamigrate/api-handler-lib';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const loggerFactory = await app.resolve(LoggerFactory);
   const configService = app.get(ConfigService);
   const host: string = configService.get<string>('app.http.host');
   const port: number = configService.get<number>('app.http.port');
+
+  app.useGlobalInterceptors(
+      new ResponseInterceptor(
+        [],
+        [],
+        loggerFactory,
+      ),
+  );
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   

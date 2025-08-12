@@ -1,4 +1,4 @@
-import { Injectable, } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Client, Connection, WorkflowExecutionDescription, WorkflowHandleWithFirstExecutionRunId } from '@temporalio/client';
 import { WorkFlows } from 'src/constants/enums';
@@ -14,7 +14,7 @@ export class WorkflowService {
 
     constructor(
         private readonly configService: ConfigService,
-        private loggerFactory: LoggerFactory
+        @Inject(LoggerFactory) private loggerFactory: LoggerFactory
         ) {
          this.logger = this.loggerFactory.create(WorkflowService.name)
     }
