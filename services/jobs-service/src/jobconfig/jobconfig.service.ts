@@ -660,7 +660,7 @@ export class JobConfigService {
             {
               excludeFilePatterns: bulkMigrate?.options?.excludeFilePatterns,
               preserveAccessTime: bulkMigrate?.options?.preserveAccessTime,
-              excludeOlderThan: bulkMigrate?.options?.excludeOlderThan,
+              excludeOlderThan: bulkMigrate?.options?.excludeOlderThan ?? null,
               skipFile: bulkMigrate?.options?.skipFile,
               status: JobStatus.Active,
               firstRunAt: firstRunAt,

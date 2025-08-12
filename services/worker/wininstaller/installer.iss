@@ -313,7 +313,8 @@ begin
       'REDIS_USERNAME=default' + #13#10 +
       'REDIS_PASSWORD=welcome' + #13#10 +
       'BASE_WORKING_PATH=''C:\datamigrator\mnt''' + #13#10 +
-      'PROJECT_ID=' + ConfigProjectID;
+      'PROJECT_ID=' + ConfigProjectID + #13#10 +
+      'OTEL_COLLECTOR_ENDPOINT=' + ConfigControlPlaneIP + ':4318';
 
     if not SaveStringToFile(ConfigPath, EnvContent, False) then
     begin
