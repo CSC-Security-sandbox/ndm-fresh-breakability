@@ -97,6 +97,7 @@ export class WorkManagerService {
           `Failed to fetch configurations. Status: ${response.status}`,
         );
       }
+      this.logger.debug(`Received response: ${JSON.stringify(response.data)}`);
       this.logger.debug(
         `Fetched configurations: ${JSON.stringify(response.data.data.items)}`,
       );

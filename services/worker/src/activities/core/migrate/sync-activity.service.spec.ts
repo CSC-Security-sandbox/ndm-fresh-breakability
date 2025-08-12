@@ -157,7 +157,8 @@ describe('SyncService', () => {
             const fatalError = new FatalError('Fatal error occurred');
             commonTaskService.ensureTaskValid.mockRejectedValue(fatalError);
 
-            await expect(service.syncTaskActivity(mockSyncInput)).rejects.toThrow(FatalError);            
+            await expect(service.syncTaskActivity(mockSyncInput)).rejects.toThrow(FatalError);
+            expect(mockLogger.error).toHaveBeenCalled(); // FatalError should not be logged
         });
 
         it('should handle and rethrow non-FatalError', async () => {
