@@ -7,8 +7,9 @@ import useAccountDetails from "@hooks/useAccountDetails";
 import CreateFirstProject from "@modules/create-first-project/CreateFirstProject";
 import { Outlet } from "react-router-dom";
 import { Show } from "@components/show/Show";
+import { Layout } from "@netapp/bxp-design-system-react";
 
-const Layout = () => {
+const RootLayout = () => {
   const { accountDetails } = useAccountDetails();
   const { data: projectList } = useGetAllProjectsQuery(accountDetails?.id);
 
@@ -22,14 +23,14 @@ const Layout = () => {
         <TopNavBar />
         <Box className="relative flex overflow-hidden h-[calc(100vh-5rem)]">
           <SideBar />
-          <Box className="relative dark:bg-[#111925] left-[5rem] w-[calc(100vw-5rem)] bg-content-bg overflow-y-auto">
+          <Layout.Content className="relative left-[5rem] w-[calc(100vw-5rem)] overflow-y-auto">
             <TabHeaderWrapper />
             <Outlet />
-          </Box>
+          </Layout.Content>
         </Box>
       </Show.Else>
     </Show>
   );
 };
 
-export default Layout;
+export default RootLayout;

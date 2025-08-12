@@ -1,4 +1,4 @@
-import Layout from "@components/route-layout/Layout";
+import RootLayout from "@/components/root-layout/RootLayout";
 import "@netapp/bxp-design-system-react/dist/index.css";
 import { Suspense } from "react";
 import { Route, Routes } from "react-router-dom";
@@ -32,7 +32,7 @@ const App = () => {
   return (
     <Suspense fallback={<Box>Loading...</Box>}>
       <Routes>
-        <Route path="/" element={<Layout />}>
+        <Route path="/" element={<RootLayout />}>
           {renderRoutes(routeConfig)}
         </Route>
       </Routes>
