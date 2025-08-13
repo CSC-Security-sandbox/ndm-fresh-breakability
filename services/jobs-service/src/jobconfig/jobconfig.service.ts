@@ -81,6 +81,7 @@ import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 import { IncidentStatus, SyncEmailEntity } from "src/entities/sync-email.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { SuccessEmailType } from "src/utils/send-email.type";
+import { WorkFlowFailureReason } from "src/jobrun/jobrun.types";
 
 @Injectable()
 export class JobConfigService {
@@ -1747,16 +1748,18 @@ export class JobConfigService {
       errorTypeCounts = [];
     }
 
-    const setupFailedErrors = await this.workerJobRunMapRepo.find({
-      where: {
-        jobRunId,
-        workerResponse: Raw(alias => `${alias} IS NOT NULL AND ${alias} ->> 'code' = 'SETUP_WORKER_FAILURE' AND ${alias} ->> 'status' = 'FAILED'`),
-      },
-    });
+    const setupFailedErrors = await this.workerJobRunMapRepo
+      .createQueryBuilder("job")
+      .where("job.jobRunId = :jobRunId", { jobRunId })
+      .andWhere("job.workerResponse IS NOT NULL")
+      .andWhere("job.workerResponse ->> 'code' = ANY(:errorCodes)", {
+        errorCodes: Object.values(WorkFlowFailureReason),
+      })
+      .andWhere("job.workerResponse ->> 'status' = 'FAILED'")
+      .getMany();
+
     if (setupFailedErrors?.length > 0) {
-      const fatalError = errorTypeCounts.find(
-        (error) => error.errorType === "FATAL_ERROR"
-      );
+      const fatalError = errorTypeCounts.find((error) => error.errorType === "FATAL_ERROR");
       if (fatalError) {
         fatalError.count += setupFailedErrors.length;
       } else {
