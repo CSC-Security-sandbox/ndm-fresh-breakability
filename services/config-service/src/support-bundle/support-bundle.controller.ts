@@ -25,6 +25,7 @@ import {
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { UpdateStatusDto } from './dto/update-status.dto';
+import { NetworkLatencyEntity } from 'src/entities/network-latency.entity';
 
 @Controller('support-bundle')
 export class SupportBundleController {
@@ -64,6 +65,16 @@ export class SupportBundleController {
   @Post('workflow-status-update')
   async updateStatus(@Body() updateStatusDto: UpdateStatusDto) {
     return await this.supportBundleService.updateSupportBundleStatus(updateStatusDto);
+  }
+
+  @ApiOperation({ summary: 'Save network latency measurements' })
+  @ApiResponse({ status: 201, description: 'Network latency measurements saved successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid input data' })
+  @ApiBearerAuth()
+  @Auth()
+  @Post('network-latency')
+  async saveNetworkLatency(@Body() body: { measurements: Partial<NetworkLatencyEntity>[] }) {
+    return await this.supportBundleService.saveNetworkLatency(body.measurements);
   }
 
   @ApiOperation({ summary: 'Check if bundle is ready for download' })

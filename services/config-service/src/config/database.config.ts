@@ -12,6 +12,7 @@ import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver
 import { WorkerStatsEntity } from 'src/entities/worker-stats.entity';
 import { PathUploadsEntity } from 'src/entities/pathupload.entity';
 import { SupportBundleEntity } from 'src/entities/support-bundle-log.entity';
+import { NetworkLatencyEntity } from 'src/entities/network-latency.entity';
 
 export default registerAs(
   'typeorm',
@@ -39,6 +40,7 @@ export default registerAs(
       WorkerStatsEntity,
       PathUploadsEntity,
       SupportBundleEntity,
+      NetworkLatencyEntity
     ],
     migrations: [],
   }),

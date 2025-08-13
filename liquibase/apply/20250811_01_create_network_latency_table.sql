@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS network_latency (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    worker_id VARCHAR(255) NOT NULL,
+    control_plane_ip VARCHAR(255) NOT NULL,
+    min DOUBLE PRECISION NOT NULL,
+    max DOUBLE PRECISION NOT NULL,
+    avg DOUBLE PRECISION NOT NULL,
+    measured_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);

@@ -8,11 +8,12 @@ import { WorkflowService } from 'src/workflow/workflow.service';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 import { ProjectEntity } from 'src/entities/project.entity';
+import { NetworkLatencyEntity } from 'src/entities/network-latency.entity';
 
 @Module({
   imports: [
     LoggerModule.forRoot(),
-    TypeOrmModule.forFeature([SupportBundleEntity, ProjectEntity]),
+    TypeOrmModule.forFeature([SupportBundleEntity, ProjectEntity, NetworkLatencyEntity]),
   ],
   controllers: [SupportBundleController],
   providers: [SupportBundleService, WorkflowService, ConfigService, JwtService],

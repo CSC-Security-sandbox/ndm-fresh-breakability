@@ -18,6 +18,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { CreateSupportBundleDTO } from './dto/create-support-bundle.dto';
 import { SupportBundleWorkflowPayloadDTO } from './dto/support-bundle-workflow.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
+import { NetworkLatencyEntity } from 'src/entities/network-latency.entity';
 
 @Injectable()
 export class SupportBundleService {
@@ -26,7 +27,8 @@ export class SupportBundleService {
   constructor(
     @InjectRepository(SupportBundleEntity)
     private readonly supportBundleRepo: Repository<SupportBundleEntity>,
- 
+    @InjectRepository(NetworkLatencyEntity)
+    private readonly networkLatencyRepo: Repository<NetworkLatencyEntity>,
     private loggerFactory: LoggerFactory,
     private readonly workFlowService: WorkflowService,
     private readonly configService: ConfigService,
@@ -113,6 +115,12 @@ export class SupportBundleService {
         `Support bundle not found for traceId: ${updateStatusDto.traceId}`,
       );
     }
+  }
+
+  async saveNetworkLatency(measurements: Partial<NetworkLatencyEntity>[]) {
+    this.logger.log(`Inside saveNetworkLatency method to save data ${JSON.stringify(measurements)}`);
+    const saved = await this.networkLatencyRepo.save(measurements);
+    return { message: 'Network Latency Batch saved successfully', count: saved.length };
   }
 
   async isBundleReady(userId: string): Promise<BundleStatus> {
