@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { AboutNDMApiRespType } from "@/types/app.type";
 import { Show } from "@/components/show/Show";
 import { useLazyAboutNdmQuery } from "@api/userApi";
-import { notify } from "@components/notification/NotificationWrapper";
 
 const AboutNDMContent = () => {
   const [getAboutNDM, { isError, isLoading }] = useLazyAboutNdmQuery();
