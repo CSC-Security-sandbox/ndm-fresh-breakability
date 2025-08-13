@@ -90,6 +90,7 @@ describe('WorkManagerService', () => {
           useValue: {
             startWorkflow: jest.fn(),
             getWorkFlowRes: jest.fn(),
+            getWorkFlowPayload: jest.fn(),
           },
         },
         {
@@ -356,6 +357,40 @@ describe('WorkManagerService', () => {
       expect(logger.error).toHaveBeenCalledWith(
         `Error in getChildWorkFlowRes: ${error.message}`,
       );
+    });
+
+    // terminated, failed, or timed out workflows
+    it('should handle terminated, failed, or timed out workflows', async () => {
+      const response = {
+        status: 'TERMINATED',
+        id: 'child-id',
+        pending: [],
+        completed: [],
+      };
+      const payload = [
+        {
+          payload: {
+            preChecks: [
+              {
+                pathId: 'source-path',
+                destinations: [{ pathId: 'dest1' }, { pathId: 'dest2' }],
+              },
+            ],
+          },
+        },
+      ];
+      (workflowService.getWorkFlowRes as jest.Mock).mockResolvedValue(response);
+      jest.spyOn(workflowService, 'getWorkFlowPayload').mockResolvedValue(payload);
+
+      const result = await service.getChildWorkFlowRes('child-id');
+      expect(result).toEqual({
+        ...response,
+        workflow: {
+          errors: [`Pre-check with ID child-id is terminated. Please check the workflow logs for more details.`],
+          sourcePathId: 'source-path',
+          destinationPathIds: ['dest1', 'dest2'],
+        },
+      });
     });
   });
 
