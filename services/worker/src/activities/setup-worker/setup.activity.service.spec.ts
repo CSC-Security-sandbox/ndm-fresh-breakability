@@ -33,7 +33,7 @@ const mockProtocol = {
     unmountPath: jest.fn()
 };
 
-const mockWorkManagerService ={
+const mockWorkManagerService = {
     fetchWorkerConfiguration: jest.fn(),
     getWorkerIdentity: jest.fn().mockReturnValue('worker-123'),
     getWorkerId: jest.fn().mockReturnValue('worker-123'),
@@ -79,8 +79,8 @@ describe('SetupActivityService', () => {
         jest.spyOn(protocols, 'getProtocol').mockReturnValue({
             mountPath: mockProtocol.mountPath,
             unmountPath: mockProtocol.unmountPath,
-          } as any);
-          
+        } as any);
+
         service = new SetupActivityService(
             mockConfigService as any,
             mockAuthService as any,
@@ -111,9 +111,11 @@ describe('SetupActivityService', () => {
                 mountBasePath: '/mnt/worker',
                 pathId: 'pid',
                 jobRunId: 'job-1'
-            }));
-        });
+            }),
+            true
+        );
     });
+});
 
     describe('unmountPath', () => {
         it('should call protocol.unmountPath with correct params', async () => {
@@ -126,16 +128,20 @@ describe('SetupActivityService', () => {
                 pathId: 'pid'
             } as any;
             await service.unmountPath(server, mockProtocol as any, 'job-2');
-            expect(mockProtocol.unmountPath).toHaveBeenCalledWith('job-2', expect.objectContaining({
-                hostname: 'host',
-                username: 'user',
-                password: 'pass',
-                protocolVersion: 'v1',
-                path: '/data',
-                mountBasePath: '/mnt/worker',
-                pathId: 'pid',
-                jobRunId: 'job-2'
-            }));
+            expect(mockProtocol.unmountPath).toHaveBeenCalledWith(
+                'job-2',
+                expect.objectContaining({
+                    hostname: 'host',
+                    username: 'user',
+                    password: 'pass',
+                    protocolVersion: 'v1',
+                    path: '/data',
+                    mountBasePath: '/mnt/worker',
+                    pathId: 'pid',
+                    jobRunId: 'job-2'
+                }),
+                true  // Add this third parameter that's being passed
+            );
         });
     });
 
@@ -418,7 +424,7 @@ describe('SetupActivityService', () => {
 
         it('should handle general cleanup error', async () => {
             mockRedisService.getJobManagerContext.mockRejectedValue(new Error('Redis error'));
-            
+
             await expect(service.cleanup('job-redis-error')).rejects.toThrow(RetryableError);
         });
     });

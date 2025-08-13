@@ -54,6 +54,14 @@ class TestProtocol extends Protocol {
   validateConnection(traceId: string, payload: ProtocolPayload): Promise<any> {
     return Promise.resolve();
   }
+  updateBootMounts(
+    { platform, fstabPath, workerId }: { platform: any; fstabPath: any; workerId: any; },
+    payload: any,
+    action: any,
+    traceId: any
+  ): void {
+    // Empty implementation for testing
+  }
   
 }
 
