@@ -1,0 +1,27 @@
+{
+  "name": "ndm-ui-tests",
+  "version": "1.0.0",
+  "description": "UI tests for NetApp Data Migrator",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test --project=firefox",
+    "test:headed": "playwright test --headed --project=firefox",
+    "test:debug": "playwright test --debug --project=firefox",
+    "test:stay-open": "STAY_OPEN=true playwright test --headed --project=firefox",
+    "test:report": "playwright show-report",
+    "install-browsers": "playwright install firefox"
+  },
+  "keywords": [
+    "playwright",
+    "testing",
+    "netapp",
+    "data-migration"
+  ],
+  "author": "NetApp",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.54.2",
+    "@types/node": "^24.2.1"
+  }
+}
