@@ -604,21 +604,53 @@ export class JobRunInitService {
         `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
         { jobRunId },
       );
+
       let count = 0;
-      while (response.status !== 201 && count < 3) {
+      while (response.status !== 200 && count < 3) {
         await new Promise((resolve) => setTimeout(resolve, 5000));
         response = await axios.post(
           `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
           { jobRunId },
         );
+
+        this.logger.log(`Retry attempt ${count + 1} for ${jobRunId}:`, {
+          status: response.status,
+          statusText: response.statusText,
+          data: response.data,
+        });
+
         count++;
       }
-      if (response.status !== 201)
-        throw new Error(
-          `Failed to start consumer after retries, ${response.data}`,
+      this.logger.log(
+          `Redis consumer response for ${jobRunId}:`,
+          {
+            status: response.status,
+            statusText: response.statusText,
+            data: response.data,
+          },
+      );
+      if (response.status !== 200) {
+        this.logger.error(
+          `Failed to start consumer after retries for ${jobRunId}:`,
+          {
+            status: response.status,
+            statusText: response.statusText,
+            data: response.data,
+          },
         );
-      this.logger.log(`Started consumer for ${jobRunId}:`, response.data);
-      return response.data;
+        throw new Error(
+          `Failed to start consumer after retries. Status: ${response.status}, Response: ${JSON.stringify(response.data, null, 2)}`,
+        );
+      }
+
+      const responseData = response.data;
+      
+      const success = responseData.data?.items?.success || false;
+      
+      return {
+        success: success,
+        message: responseData.message || "Consumer started successfully."
+      };
     } catch (error) {
       this.logger.error(
         `Failed to start consumer for ${jobRunId}:`,
