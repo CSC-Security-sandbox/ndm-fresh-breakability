@@ -96,8 +96,9 @@ describe('ValidatePathActivity', () => {
                 jobRunId: input.uploadId,
                 pathId: input.pathId,
                 path: input.path,
-            }));
-            expect(mockProtocolInstance.unmountPath).toHaveBeenCalledWith(input.uploadId, expect.any(Object));
+            }),
+                false);
+            expect(mockProtocolInstance.unmountPath).toHaveBeenCalledWith(input.uploadId, expect.any(Object), false);
             expect(result).toEqual({
                 traceId: input.uploadId,
                 status: 'success',
