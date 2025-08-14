@@ -9,7 +9,7 @@ export class PrometheusService {
   constructor(private readonly configService: ConfigService) {
     this.httpClient = axios.create({
       baseURL: this.configService.get<string>(
-        'PROMETHEUS_BASE_URL',
+        'prometheusBaseIp',
         'http://localhost:52061/api/v1',
       ),
       timeout: this.configService.get<number>('PROMETHEUS_TIMEOUT', 30000),

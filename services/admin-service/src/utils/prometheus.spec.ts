@@ -23,15 +23,15 @@ describe('PrometheusService', () => {
 
     mockConfigService = {
       get: jest.fn().mockImplementation((key: string, defaultValue?: any) => {
-        switch (key) {
-          case 'PROMETHEUS_BASE_URL':
-            return process.env.PROMETHEUS_BASE_URL || defaultValue;
-          case 'PROMETHEUS_TIMEOUT':
-            const envTimeout = process.env.PROMETHEUS_TIMEOUT;
-            return envTimeout ? parseInt(envTimeout, 10) : defaultValue;
-          default:
-            return defaultValue;
+        const envValue = process.env[key];
+        if (envValue !== undefined) {
+          // Handle numeric values
+          if (key === 'PROMETHEUS_TIMEOUT') {
+            return parseInt(envValue, 10);
+          }
+          return envValue;
         }
+        return defaultValue;
       }),
     } as any;
 
@@ -58,7 +58,7 @@ describe('PrometheusService', () => {
 
   afterEach(() => {
     // Clean up environment variables
-    delete process.env.PROMETHEUS_BASE_URL;
+    delete process.env.prometheusBaseIp;
     delete process.env.PROMETHEUS_TIMEOUT;
   });
 
@@ -82,10 +82,20 @@ describe('PrometheusService', () => {
     });
 
     it('should create axios instance with custom PROMETHEUS_BASE_URL', () => {
-      process.env.PROMETHEUS_BASE_URL = 'http://custom-prometheus:9090/api/v1';
+      process.env.prometheusBaseIp = 'http://custom-prometheus:9090/api/v1';
 
       // Create a new service instance to test constructor with env var
       new PrometheusService(mockConfigService);
+
+      // Verify the mock was called with the right parameters
+      expect(mockConfigService.get).toHaveBeenCalledWith(
+        'prometheusBaseIp',
+        'http://localhost:52061/api/v1',
+      );
+      expect(mockConfigService.get).toHaveBeenCalledWith(
+        'PROMETHEUS_TIMEOUT',
+        30000,
+      );
 
       expect(mockedAxios.create).toHaveBeenCalledWith({
         baseURL: 'http://custom-prometheus:9090/api/v1',
@@ -106,7 +116,7 @@ describe('PrometheusService', () => {
     });
 
     it('should create axios instance with both custom env variables', () => {
-      process.env.PROMETHEUS_BASE_URL = 'http://prod-prometheus:9090/api/v1';
+      process.env.prometheusBaseIp = 'http://prod-prometheus:9090/api/v1';
       process.env.PROMETHEUS_TIMEOUT = '45000';
 
       // Create a new service instance to test constructor with both env vars

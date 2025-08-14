@@ -8,17 +8,16 @@ import { useLazyAboutNdmQuery } from "@api/userApi";
 
 const AboutNDMContent = () => {
   const [getAboutNDM, { isError, isLoading }] = useLazyAboutNdmQuery();
-  const [aboutNdm, setAboutNdm] = useState<
-    AboutNDMApiRespType["data"]["items"] | null
-  >({} as AboutNDMApiRespType["data"]["items"]);
+  const [aboutNdm, setAboutNdm] = useState<AboutNDMApiRespType | null>(
+    {} as AboutNDMApiRespType
+  );
 
   useEffect(() => {
     (async () => {
       try {
         const result: AboutNDMApiRespType = await getAboutNDM("").unwrap();
-        if (result.data?.items) {
-          setAboutNdm(result.data.items);
-        }
+
+        setAboutNdm(result);
       } catch (error) {
         console.error(error);
       }
