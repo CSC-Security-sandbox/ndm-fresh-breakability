@@ -20,6 +20,8 @@ jest.mock("crypto");
 describe("smartCopy", () => {
   const sourcePath = "source.txt";
   const destPath = "dest/target.txt";
+  const size = 1024*4;
+  const maxBufferSize = 1024*1024;
   const mockData = Buffer.from("test file data");
 
   beforeEach(() => {
@@ -79,7 +81,7 @@ describe("smartCopy", () => {
 
     (crypto.createHash as jest.Mock).mockReturnValueOnce(fakeHash).mockReturnValueOnce(fakeHash);
 
-    const result = await smartCopy(sourcePath, destPath);
+    const result = await smartCopy(sourcePath, destPath, size, maxBufferSize);
 
     // Verify directory creation was called
     expect(mockMakeDir).toHaveBeenCalledWith("dest", { recursive: true });
@@ -104,7 +106,7 @@ describe("smartCopy", () => {
 
     (crypto.createHash as jest.Mock).mockReturnValueOnce(fakeHash).mockReturnValueOnce(fakeHash);
 
-    const result = await smartCopy(sourcePath, destPath);
+    const result = await smartCopy(sourcePath, destPath, size, maxBufferSize);
 
     // Verify directory creation was called (mkdir is always called in implementation)
     expect(mockMakeDir).toHaveBeenCalledWith("dest", { recursive: true });
