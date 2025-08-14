@@ -64,7 +64,7 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			SourceConfigID, resp, err = CreateFileServer(sourceServerParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
 			Expect(SourceConfigID).NotTo(BeEmpty(), "SourceConfigID is empty")
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			defer resp.Body.Close()
 		})
 
@@ -135,19 +135,19 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 				Contents: fmt.Sprintf("path\n%s", NFS_SOURCE_VOLUME_1),
 			}
 			resp, uploadStats, err := UploadPathFile(FileServerId, fileContent, headers)
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(err).NotTo(HaveOccurred(), "Error uploading path file")
 			defer resp.Body.Close()
 			Expect(uploadStats.UploadId).NotTo(BeEmpty(), "Expected non-empty upload ID")
 			Expect(uploadStats.NewPaths).To(BeNumerically("==", 1), "Expected new path to be uploaded")
-			Expect(uploadStats.AlreadyExistingPaths).To(BeNumerically("==", 0), "Expected no already existing paths")
+			Expect(uploadStats.AlreadyExitingPaths).To(BeNumerically("==", 0), "Expected no already existing paths")
 			Expect(uploadStats.NoLongerAvailablePaths).To(BeNumerically("==", 0), "Expected no paths to be no longer available")
 			Wait(10)
 
 			// Confirm the upload and wait for 30 seconds
 			confirmResp, confirmStats, err := ConfirmPathFileUpload(uploadStats.UploadId, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error confirming path file upload")
-			Expect(confirmResp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(confirmResp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(confirmStats.WorkflowId).NotTo(BeEmpty(), "Expected non-empty workflow ID")
 			Wait(20)
 
@@ -169,18 +169,18 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 				Contents: "path\n/srv/invalid_share",
 			}
 			resp, uploadStats, err := UploadPathFile(FileServerId, fileContent, headers)
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(err).NotTo(HaveOccurred(), "Error uploading path file")
 			defer resp.Body.Close()
 			Expect(uploadStats.UploadId).NotTo(BeEmpty(), "Expected non-empty upload ID")
 			Expect(uploadStats.NewPaths).To(BeNumerically("==", 1), "Expected one new paths to be uploaded")
-			Expect(uploadStats.AlreadyExistingPaths).To(BeNumerically("==", 0), "Expected no already existing paths")
+			Expect(uploadStats.AlreadyExitingPaths).To(BeNumerically("==", 0), "Expected no already existing paths")
 			Expect(uploadStats.NoLongerAvailablePaths).To(BeNumerically("==", 1), "Expected one path to be no longer available")
 			Wait(10)
 			// Confirm the upload and wait for 30 seconds
 			confirmResp, confirmStats, err := ConfirmPathFileUpload(uploadStats.UploadId, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error confirming path file upload")
-			Expect(confirmResp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(confirmResp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(confirmStats.WorkflowId).NotTo(BeEmpty(), "Expected non-empty workflow ID")
 			Wait(20)
 
@@ -213,19 +213,19 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 				Contents: fmt.Sprintf("path\n%s", NFS_SOURCE_VOLUME_1),
 			}
 			resp, uploadStats, err := UploadPathFile(FileServerId, fileContent, headers)
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(err).NotTo(HaveOccurred(), "Error reuploading path file")
 			defer resp.Body.Close()
 			Expect(uploadStats.UploadId).NotTo(BeEmpty(), "Expected non-empty upload ID")
 			Expect(uploadStats.NewPaths).To(BeNumerically("==", 0), "Expected no new paths to be uploaded")
-			Expect(uploadStats.AlreadyExistingPaths).To(BeNumerically("==", 1), "Expected one already existing path")
+			Expect(uploadStats.AlreadyExitingPaths).To(BeNumerically("==", 1), "Expected one already existing path")
 			Expect(uploadStats.NoLongerAvailablePaths).To(BeNumerically("==", 1), "Expected one paths to be no longer available")
 			Wait(10)
 
 			// Confirm the upload and wait for 30 seconds
 			confirmResp, confirmStats, err := ConfirmPathFileUpload(uploadStats.UploadId, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error confirming path file upload")
-			Expect(confirmResp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(confirmResp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(confirmStats.WorkflowId).NotTo(BeEmpty(), "Expected non-empty workflow ID")
 			Wait(20)
 
@@ -258,19 +258,19 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 				Contents: "path\n/srv/invalid_share",
 			}
 			resp, uploadStats, err := UploadPathFile(FileServerId, fileContent, headers)
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(err).NotTo(HaveOccurred(), "Error reuploading path file")
 			defer resp.Body.Close()
 			Expect(uploadStats.UploadId).NotTo(BeEmpty(), "Expected non-empty upload ID")
 			Expect(uploadStats.NewPaths).To(BeNumerically("==", 0), "Expected no new paths to be uploaded")
-			Expect(uploadStats.AlreadyExistingPaths).To(BeNumerically("==", 1), "Expected one already existing paths")
+			Expect(uploadStats.AlreadyExitingPaths).To(BeNumerically("==", 1), "Expected one already existing paths")
 			Expect(uploadStats.NoLongerAvailablePaths).To(BeNumerically("==", 1), "Expected one path to be no longer available")
 			Wait(10)
 
 			// Confirm the upload and wait for 30 seconds
 			confirmResp, confirmStats, err := ConfirmPathFileUpload(uploadStats.UploadId, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error confirming path file upload")
-			Expect(confirmResp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(confirmResp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(confirmStats.WorkflowId).NotTo(BeEmpty(), "Expected non-empty workflow ID")
 			Wait(20)
 
@@ -303,19 +303,19 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 				Contents: fmt.Sprintf("path\n%s\n/srv/invalid_share", NFS_SOURCE_VOLUME_1),
 			}
 			resp, uploadStats, err := UploadPathFile(FileServerId, fileContent, headers)
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(err).NotTo(HaveOccurred(), "Error reuploading path file")
 			defer resp.Body.Close()
 			Expect(uploadStats.UploadId).NotTo(BeEmpty(), "Expected non-empty upload ID")
 			Expect(uploadStats.NewPaths).To(BeNumerically("==", 0), "Expected no new paths to be uploaded")
-			Expect(uploadStats.AlreadyExistingPaths).To(BeNumerically("==", 2), "Expected two already existing paths")
+			Expect(uploadStats.AlreadyExitingPaths).To(BeNumerically("==", 2), "Expected two already existing paths")
 			Expect(uploadStats.NoLongerAvailablePaths).To(BeNumerically("==", 0), "Expected no paths to be no longer available")
 			Wait(10)
 
 			// Confirm the upload and wait for 30 seconds
 			confirmResp, confirmStats, err := ConfirmPathFileUpload(uploadStats.UploadId, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error confirming path file upload")
-			Expect(confirmResp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(confirmResp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(confirmStats.WorkflowId).NotTo(BeEmpty(), "Expected non-empty workflow ID")
 			Wait(20)
 
@@ -348,20 +348,20 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 				Contents: fmt.Sprintf("path\n%s", NFS_SOURCE_VOLUME),
 			}
 			resp, uploadStats, err := UploadPathFile(FileServerId, fileContent, headers)
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(err).NotTo(HaveOccurred(), "Error uploading path file")
 			defer resp.Body.Close()
 
 			Expect(uploadStats.UploadId).NotTo(BeEmpty(), "Expected non-empty upload ID")
 			Expect(uploadStats.NewPaths).To(BeNumerically("==", 1), "Expected new path to be uploaded")
-			Expect(uploadStats.AlreadyExistingPaths).To(BeNumerically("==", 0), "Expected no already existing paths")
+			Expect(uploadStats.AlreadyExitingPaths).To(BeNumerically("==", 0), "Expected no already existing paths")
 			Expect(uploadStats.NoLongerAvailablePaths).To(BeNumerically("==", 2), "Expected two paths to be no longer available")
 			Wait(10)
 
 			// Confirm the upload and wait for 30 seconds
 			confirmResp, confirmStats, err := ConfirmPathFileUpload(uploadStats.UploadId, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error confirming path file upload")
-			Expect(confirmResp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(confirmResp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(confirmStats.WorkflowId).NotTo(BeEmpty(), "Expected non-empty workflow ID")
 			Wait(30)
 
@@ -402,20 +402,20 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			}
 
 			resp, uploadStats, err := UploadPathFile(FileServerId, fileContent, headers)
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(err).NotTo(HaveOccurred(), "Error uploading path file")
 			defer resp.Body.Close()
 
 			Expect(uploadStats.UploadId).NotTo(BeEmpty(), "Expected non-empty upload ID")
 			Expect(uploadStats.NewPaths).To(BeNumerically("==", 1), "Expected new path to be uploaded")
-			Expect(uploadStats.AlreadyExistingPaths).To(BeNumerically("==", 1), "Expected one already existing path")
+			Expect(uploadStats.AlreadyExitingPaths).To(BeNumerically("==", 1), "Expected one already existing path")
 			Expect(uploadStats.NoLongerAvailablePaths).To(BeNumerically("==", 2), "Expected two paths to be no longer available")
 			Wait(10)
 
 			// Confirm the upload and wait for 30 seconds
 			confirmResp, confirmStats, err := ConfirmPathFileUpload(uploadStats.UploadId, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error confirming path file upload")
-			Expect(confirmResp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(confirmResp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(confirmStats.WorkflowId).NotTo(BeEmpty(), "Expected non-empty workflow ID")
 			Wait(30)
 
@@ -575,7 +575,7 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			DestinationConfigID, resp, err = CreateFileServer(destinationServerParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
 			Expect(DestinationConfigID).NotTo(BeEmpty(), "DestinationConfigID is empty")
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			defer resp.Body.Close()
 		})
 
