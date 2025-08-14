@@ -8,10 +8,9 @@ import { Operation, Origin } from "src/activities/utils/utils.types";
 import { RedisService } from "src/redis/redis.service";
 import { CommandExecInput, CommandOutput } from "./command-execution.type";
 import { StampMetaOutput } from "./stamp-meta.type";
+import { AclOperations } from "./aclOperations";
+import { FileAccessError } from "./aclOperations.errors";
 
-import {
-    ACLOperations, aclToOneLineString, FileAccessError
-} from './aclOperations';
 
 @Injectable()
 export class StampMetaService {
@@ -20,6 +19,7 @@ export class StampMetaService {
     constructor(
         private readonly shellService: ShellService,
         private readonly redisService: RedisService,
+        private readonly aclOperations: AclOperations,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     ) {
         this.logger = loggerFactory.create(StampMetaService.name);
@@ -166,64 +166,31 @@ export class StampMetaService {
     }
 
 
-
     async stampSIDAclToObject({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
-        if (process.platform !== 'win32') return output;
-
-        const logData: string[] = [];
-
         try {
-            try {
-                await Promise.all([
-                    fs.promises.access(sourcePath, fs.constants.F_OK),
-                    fs.promises.access(targetPath, fs.constants.F_OK)
-                ]);
-            } catch (accessError) {
-                const missingFile = await fs.promises.access(sourcePath, fs.constants.F_OK)
-                    .then(() => targetPath, () => sourcePath);
-
-                this.logger.warn(`[${command.id}] File not accessible for ACL stamping: ${missingFile}`);
-                const dmErr = dmError("OPERATION",
-                    missingFile === sourcePath ? Origin.SOURCE : Origin.DESTINATION,
-                    Operation.STAMP_META,
-                    errorType,
-                    command.id,
-                    accessError,
-                    { name: command.fPath, path: missingFile }
-                );
-                await jobContext.publishToErrorStream(dmErr);
-                if (missingFile === sourcePath) {
-                    output.sourceErrors.push('FILE_NOT_FOUND');
-                } else {
-                    output.targetErrors.push('FILE_NOT_FOUND');
-                }
-                return output;
-            }
-
-            const aclOps = new ACLOperations(this.redisService);
             this.logger.log(`[${command.id}] Starting ACL stamp from ${sourcePath} to ${targetPath}`);
-
-            const stampData = await aclOps.stampFileACL(sourcePath, targetPath, {
-                preserveExisting: false,
-                excludePrincipals: [],
-                includePrincipals: [],
-                resolveSIDs: true,
-                isIdentityMappingAvailable: jobContext.jobConfig.options.isIdentityMappingAvailable,
-                jobID: jobContext.jobRunId,
-                disableInheritance: false
-            });
-
-            this.logger.log(`[${command.id}] ACL stamp completed. Success: ${stampData.success}, Operations: ${stampData.operations.length}`);
-
+            // calculate time taken for acl stamping
+            const startTime = Date.now();
+            const stampData = await this.aclOperations.stampFileACL(
+                sourcePath,
+                targetPath,
+                {
+                    preserveExisting: false,
+                    excludePrincipals: [],
+                    includePrincipals: [],
+                    isIdentityMappingAvailable: jobContext.jobConfig.options.isIdentityMappingAvailable,
+                    jobID: jobContext.jobRunId,
+                    disableInheritance: false
+                })
+            const endTime = Date.now();
+            this.logger.log(`[${command.id}] ACL stamp completed in ${endTime - startTime}ms. Success: ${stampData.success}, Operations: ${stampData.operations.length}`);
             let grantCount = 0;
             let denyCount = 0;
             let skipCount = 0;
             let failCount = 0;
-
             const criticalErrors: string[] = [];
             const noMappingErrors: string[] = [];
-
             for (const op of stampData.operations) {
                 switch (op.status) {
                     case 'completed':
@@ -233,150 +200,91 @@ export class StampMetaService {
                     case 'failed':
                         failCount++;
                         if (op.error?.includes('No mapping') || op.error?.includes('1332')) {
-                            noMappingErrors.push(`${op.type.toUpperCase()} ${op.principal}: ${op.error}`);
+                            noMappingErrors.push(`SKIP : ${op.type.toUpperCase()} ${op.principal}: ${op.error}`);
                         } else {
-                            criticalErrors.push(`${op.type.toUpperCase()} ${op.principal}: ${op.error}`);
+                            criticalErrors.push(`failed : ${op.type.toUpperCase()} ${op.principal}: ${op.error}`);
                         }
                         break;
                     case 'skipped':
                         skipCount++;
                         if (op.reason?.includes('unresolved SID')) {
-                            noMappingErrors.push(`SKIP ${op.principal}: ${op.reason}`);
+                            noMappingErrors.push(`SKIP : ${op.principal}: ${op.reason}`);
+                        } else {
+                            criticalErrors.push(`SKIP : ${op.principal}: ${op.reason}`);
                         }
                         break;
                 }
             }
 
-            const summary = `ACL stamping summary for ${targetPath}: ${grantCount} granted, ${denyCount} denied, ${skipCount} skipped, ${failCount} failed`;
-            this.logger.log(`[${command.id}] ${summary}`);
+            try {
+                const comparisonResult = await this.aclOperations.compareFileACLs(sourcePath, targetPath, {
+                    isIdentityMappingAvailable: jobContext.jobConfig.options.isIdentityMappingAvailable,
+                    jobID: jobContext.jobRunId
+                });
+                if (!comparisonResult.isEqual) {
+                    if (comparisonResult.differences.onlyInSource.length > 0) {
+                        noMappingErrors.push(`Missing in target (${comparisonResult.differences.onlyInSource.length} entries):`);
+                        let index = 1;
+                        for (const entry of comparisonResult.differences.onlyInSource) {
+                            const prefix = entry.accessType === 'deny' ? 'DENY -' : '-';
+                            noMappingErrors.push(`${index++}: ${prefix} ${entry.principal} (${entry.accessType})`);
+                        }
+                    }
 
-            if (failCount > 0 && criticalErrors.length > 0) {
-                const errorMessage = `ACL stamping had ${criticalErrors.length} critical failures`;
-                this.logger.error(`[${command.id}] ${errorMessage}`);
-                const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id,
-                    new Error(`${errorMessage}: ${criticalErrors.slice(0, 3).join('; ')}${criticalErrors.length > 3 ? '...' : ''}`),
-                    { name: command.fPath, path: targetPath });
-                await jobContext.publishToErrorStream(dmErr);
-                output.targetErrors.push('ACL_STAMP_FAILED');
-                return output;
-            }
-
-            if (command.ops[OPS_CMD.STAMP_META].params) {
-                command.ops[OPS_CMD.STAMP_META].params.aclStats = {
-                    granted: grantCount,
-                    denied: denyCount,
-                    skipped: skipCount,
-                    failed: failCount,
-                    success: stampData.success
+                    if (comparisonResult.differences.different.length > 0) {
+                        noMappingErrors.push(`Different permissions (${comparisonResult.differences.different.length} entries):`);
+                        let index = 1;
+                        for (const diff of comparisonResult.differences.different) {
+                            noMappingErrors.push(`{${index++}: ${diff.principal}: source=[${diff.sourcePermissions.map(p => p.code).join(',')}] vs target=[${diff.targetPermissions.map(p => p.code).join(',')}]}`);
+                        }
+                    }
+                }
+                command.ops[OPS_CMD.STAMP_META].params.sidMap = {
+                    targetAcl: this.aclOperations.aclToOneLineString(comparisonResult.target),
+                    sourceAcl: this.aclOperations.aclToOneLineString(comparisonResult.source),
                 };
+            } catch (error) {
+                criticalErrors.push(`Error comparing ACLs: ${error.message}`);
             }
 
             if (stampData.success || failCount < stampData.operations.length) {
-                try {
-                    await Promise.all([
-                        fs.promises.access(sourcePath, fs.constants.F_OK),
-                        fs.promises.access(targetPath, fs.constants.F_OK)
-                    ]);
+                this.logger.log(`[${command.id}] ACL stamp completed with warnings: ${failCount} failed operations`);
+                if (criticalErrors.length > 0 || noMappingErrors.length > 0) {
+                    const combinedLogSet = new Set([...noMappingErrors, ...criticalErrors]);
+                    this.logger.log(`[${command.id}] ACL stamping log for ${targetPath}:\n${[...combinedLogSet].join('\n')}`);
 
-                    const comparisonResult = await aclOps.compareFileACLs(sourcePath, targetPath, {
-                        resolveSIDs: true,
-                        isIdentityMappingAvailable: jobContext.jobConfig.options.isIdentityMappingAvailable,
-                        jobID: jobContext.jobRunId
-                    });
-
-                    if (!comparisonResult.isEqual) {
-                        if (failCount > 0 || (denyCount === 0 && stampData.operations.some(op => op.type === 'deny'))) {
-                            if (comparisonResult.differences.onlyInSource.length > 0) {
-                                logData.push(`Missing in target (${comparisonResult.differences.onlyInSource.length} entries):`);
-                                for (const entry of comparisonResult.differences.onlyInSource) {
-                                    const prefix = entry.accessType === 'deny' ? 'DENY -' : '-';
-                                    logData.push(`${prefix} ${entry.principal} (${entry.accessType})`);
-                                }
-                            }
-
-                            if (comparisonResult.differences.different.length > 0) {
-                                logData.push(`Different permissions (${comparisonResult.differences.different.length} entries):`);
-                                for (const diff of comparisonResult.differences.different) {
-                                    logData.push(`- ${diff.principal}: source=[${diff.sourcePermissions.map(p => p.code).join(',')}] vs target=[${diff.targetPermissions.map(p => p.code).join(',')}]`);
-                                }
-                            }
-                        }
-
-                        if (logData.length > 0 || noMappingErrors.length > 0) {
-                            const combinedLogSet = new Set([...logData, ...noMappingErrors]);
-                            this.logger.log(`[${command.id}] ACL stamping log for ${targetPath}:\n${[...combinedLogSet].join('\n')}`);
-
-                            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, new Error([...combinedLogSet].join('\n')),
-                                { name: command.fPath, path: sourcePath });
-                            await jobContext.publishToErrorStream(dmErr);
+                    const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, new Error([...combinedLogSet].join('\n')),
+                        { name: command.fPath, path: sourcePath });
+                    await jobContext.publishToErrorStream(dmErr);
                 }
-                    if (command.ops[OPS_CMD.STAMP_META].params) {
-                        command.ops[OPS_CMD.STAMP_META].params.aclComparison = {
-                            isEqual: comparisonResult.isEqual,
-                            onlyInSourceCount: comparisonResult.differences.onlyInSource.length,
-                            onlyInTargetCount: comparisonResult.differences.onlyInTarget.length,
-                            differentCount: comparisonResult.differences.different.length,
-                            identicalCount: comparisonResult.differences.identical.length
-                        };
-                    }
-                }
-                    command.ops[OPS_CMD.STAMP_META].params.sidMap = {
-                        targetAcl: aclToOneLineString(comparisonResult.target),
-                        sourceAcl: aclToOneLineString(comparisonResult.source),
-                    };
+            } else {
+                if (criticalErrors.length > 0 || noMappingErrors.length > 0) {
+                    const combinedLogSet = new Set([...noMappingErrors, ...criticalErrors]);
+                    this.logger.log(`[${command.id}] ACL stamping log for ${targetPath}:\n${[...combinedLogSet].join('\n')}`);
 
-            } catch (compareError) {
-                const message = compareError instanceof FileAccessError
-                    ? `Cannot compare ACLs - file no longer accessible: ${compareError.message}`
-                    : `Failed to compare ACLs: ${compareError.message}`;
-                this.logger.warn(`[${command.id}] ${message}`);
+                    const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, new Error([...combinedLogSet].join('\n')),
+                        { name: command.fPath, path: sourcePath });
+                    await jobContext.publishToErrorStream(dmErr);
+                }
             }
-        }
 
-        if (!stampData.success) {
-            const errorDetails = stampData.operations
-                .filter(op => op.status === 'failed')
-                .map(op => `${op.type} ${op.principal}: ${op.error}`)
-                .join('; ');
 
-            const unresolvedSIDs = stampData.operations
-                .filter(op => op.type === 'skip' && op.reason?.includes('unresolved SID'))
-                .length;
 
-            const errorMessage = errorDetails
-                ? `ACL stamping failed: ${errorDetails}${unresolvedSIDs > 0 ? ` (${unresolvedSIDs} unresolved SIDs skipped)` : ''}`
-                : `ACL stamping failed${unresolvedSIDs > 0 ? ` (${unresolvedSIDs} unresolved SIDs skipped)` : ''}`;
-            this.logger.error(`[${command.id}] ${errorMessage}`);
-            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id,
-                new Error(`${errorMessage}: ${criticalErrors.slice(0, 3).join('; ')}${criticalErrors.length > 3 ? '...' : ''}`),
-                { name: command.fPath, path: targetPath });
+        } catch (error) {
+            this.logger.error(`[${command.id}] Error occurred while starting ACL stamp: ${error.message}`, error.stack);
+            const origin = error instanceof FileAccessError ? Origin.SOURCE : Origin.DESTINATION;
+            const dmErr = dmError("OPERATION", origin, Operation.STAMP_META, errorType, command.id, error,
+                { name: command.fPath, path: origin === Origin.SOURCE ? sourcePath : targetPath });
             await jobContext.publishToErrorStream(dmErr);
-            output.targetErrors.push('ACL_STAMP_FAILED');
-            command.ops[OPS_CMD.STAMP_META].params.error = errorMessage;
-            return output;
-        }
-
-       
-
-    } catch (error) {
-        this.logger.error(`[${command.id}] Stamping ACLs from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
-        const origin = error instanceof FileAccessError ? Origin.SOURCE : Origin.DESTINATION;
-        const errorCode = error.code || 'UNKNOWN_ERROR';
-        const dmErr = dmError("OPERATION", origin, Operation.STAMP_META, errorType, command.id, error,
-            { name: command.fPath, path: origin === Origin.SOURCE ? sourcePath : targetPath });
-        await jobContext.publishToErrorStream(dmErr);
-        if (origin === Origin.SOURCE) {
-            output.sourceErrors.push('FILE_ACCESS_ERROR');
-        } else {
+            const errorCode = error.code || 'UNKNOWN_ERROR';
             output.targetErrors.push(errorCode);
         }
+        return output;
     }
 
-    return output;
-}
 
 
-async stampFileAttributeMeta({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
+    async stampFileAttributeMeta({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         if (process.platform !== 'win32') return output;
         let sourceAttributes = '';
