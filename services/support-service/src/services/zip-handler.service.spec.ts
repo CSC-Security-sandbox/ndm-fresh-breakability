@@ -85,6 +85,7 @@ describe('ZipHandlerService', () => {
         csvContent,
         fileName,
         zipPath,
+        'CSV Files',
       );
       expect(mockLogger.log).toHaveBeenCalledWith(
         `Adding CSV to zip file: ${zipPath}`,
@@ -109,6 +110,7 @@ describe('ZipHandlerService', () => {
         csvContent,
         fileName,
         zipPath,
+        'CSV Files',
       );
     });
 
@@ -195,6 +197,7 @@ describe('ZipHandlerService', () => {
         csvContent,
         fileName,
         zipPath,
+        'State Data',
       );
 
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -222,7 +225,12 @@ describe('ZipHandlerService', () => {
 
       mockAdmZip.mockReturnValue(mockAdmZipInstance);
 
-      await (service as any).addToExistingZip(csvContent, fileName, zipPath);
+      await (service as any).addToExistingZip(
+        csvContent,
+        fileName,
+        zipPath,
+        'State Data',
+      );
 
       expect(mockAdmZip).toHaveBeenCalledWith(zipPath);
       expect(mockAdmZipInstance.addFile).toHaveBeenCalledWith(
@@ -255,7 +263,12 @@ describe('ZipHandlerService', () => {
         .spyOn(service as any, 'createNewZipWithCsv')
         .mockResolvedValue(undefined);
 
-      await (service as any).addToExistingZip(csvContent, fileName, zipPath);
+      await (service as any).addToExistingZip(
+        csvContent,
+        fileName,
+        zipPath,
+        undefined,
+      );
 
       expect(mockLogger.error).toHaveBeenCalledWith(
         `Error adding CSV to existing zip with AdmZip: ${admZipError.message}`,
@@ -264,6 +277,7 @@ describe('ZipHandlerService', () => {
         csvContent,
         fileName,
         zipPath,
+        undefined,
       );
     });
   });
@@ -287,6 +301,7 @@ describe('ZipHandlerService', () => {
         '',
         fileName,
         '/test/path/support-bundle.zip',
+        'CSV Files',
       );
     });
 
@@ -308,6 +323,7 @@ describe('ZipHandlerService', () => {
         csvContent,
         fileName,
         '/test/path/support-bundle.zip',
+        'CSV Files',
       );
     });
   });

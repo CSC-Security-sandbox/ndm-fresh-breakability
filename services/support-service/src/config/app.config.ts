@@ -1,8 +1,9 @@
 import { registerAs } from '@nestjs/config';
+import { SupportBundleConfig } from './app.config.interface';
 
 export default registerAs(
   'support-bundle',
-  (): Record<string, any> => ({
+  (): SupportBundleConfig => ({
     bundle: {
       baseLogPath: process.env.BASE_LOG_PATH || '/private/tmp/ndm_logs',
       outputZipPath:
@@ -13,7 +14,7 @@ export default registerAs(
     },
     prometheus: {
       baseUrl:
-        process.env.PROMETHEUS_BASE_URL || 'http://localhost:52061/api/v1',
+        process.env.PROMETHEUS_BASE_URL || 'http://localhost:56825/api/v1',
       timeout: parseInt(process.env.PROMETHEUS_TIMEOUT || '30000', 10),
     },
   }),

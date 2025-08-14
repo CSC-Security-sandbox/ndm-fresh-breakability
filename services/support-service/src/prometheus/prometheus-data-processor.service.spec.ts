@@ -167,13 +167,13 @@ describe('PrometheusDataProcessorService', () => {
             Namespace: 'test-namespace',
             Pod: 'test-pod-1',
             Status: 'Running',
-            Timestamp: '1641024000',
+            Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
           },
           {
             Namespace: 'test-namespace-2',
             Pod: 'test-pod-2',
             Status: 'Running',
-            Timestamp: '1641024000',
+            Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
           },
         ],
         allMetrics: expect.any(Array),
@@ -181,14 +181,14 @@ describe('PrometheusDataProcessorService', () => {
           {
             Pod: 'control-plane-pod',
             'Build Version': 'v1.0.0',
-            Timestamp: '1641024000',
+            Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
           },
           {
             Pod: 'worker-job',
             'Build Version': 'v1.0.0',
             Platform: 'linux',
             'Worker Id': 'worker-1',
-            Timestamp: '1641024000',
+            Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
           },
         ],
       });
@@ -342,7 +342,7 @@ describe('PrometheusDataProcessorService', () => {
         Namespace: 'test-ns',
         Pod: 'pod-1',
         Status: 'Running',
-        Timestamp: '1641024000',
+        Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
       });
     });
 
@@ -508,12 +508,12 @@ describe('PrometheusDataProcessorService', () => {
       expect(result).toHaveLength(4); // 2 CPU CP + 1 Memory CP + 1 System Uptime
       expect(result[0]).toEqual({
         Name: 'CPU Usage of CP',
-        Timestamp: '1641024000',
+        Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
         Usage: '50.500',
       });
       expect(result[1]).toEqual({
         Name: 'CPU Usage of CP',
-        Timestamp: '1641027600',
+        Timestamp: 'Saturday, 1 January 2022 at 2:30 pm',
         Usage: '60.200',
       });
     });
@@ -615,14 +615,14 @@ describe('PrometheusDataProcessorService', () => {
       expect(result[0]).toEqual({
         Pod: 'cp-pod-1',
         'Build Version': 'v1.0.0',
-        Timestamp: '1641024000',
+        Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
       });
       expect(result[1]).toEqual({
         Pod: 'worker-job-1',
         'Build Version': 'v1.1.0',
         Platform: 'linux',
         'Worker Id': 'worker-1',
-        Timestamp: '1641024000',
+        Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
       });
     });
 

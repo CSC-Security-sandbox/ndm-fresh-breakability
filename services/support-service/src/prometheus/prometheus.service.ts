@@ -1,15 +1,19 @@
 import { Injectable } from '@nestjs/common';
-import axios, { AxiosInstance } from 'axios';
+import { ConfigService } from '@nestjs/config';
+import axios, { AxiosInstance, AxiosResponse } from 'axios';
 
 @Injectable()
 export class PrometheusService {
   private httpClient: AxiosInstance;
 
-  constructor() {
+  constructor(private readonly configService: ConfigService) {
     this.httpClient = axios.create({
-      baseURL:
-        process.env.PROMETHEUS_BASE_URL || 'http://localhost:52061/api/v1',
-      timeout: parseInt(process.env.PROMETHEUS_TIMEOUT || '30000', 10),
+      baseURL: this.configService.get<string>(
+        'support-bundle.prometheus.baseUrl',
+      ),
+      timeout: this.configService.get<number>(
+        'support-bundle.prometheus.timeout',
+      ),
     });
   }
 
@@ -18,11 +22,11 @@ export class PrometheusService {
     startDate: string,
     endDate: string,
     step: string,
-  ) {
+  ): Promise<any> {
     const startParam = `${startDate}T00:00:00.000Z`;
     const endParam = `${endDate}T23:59:59.000Z`;
 
-    const response = await this.httpClient.get('/query_range', {
+    const response: AxiosResponse = await this.httpClient.get('/query_range', {
       params: {
         query,
         start: startParam,

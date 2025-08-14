@@ -6,6 +6,7 @@
 /* eslint-disable prettier/prettier */
 
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { PrometheusService } from './prometheus.service';
 
@@ -15,15 +16,12 @@ const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('PrometheusService', () => {
   let service: PrometheusService;
+  let configService: jest.Mocked<ConfigService>;
   let mockAxiosInstance: {
     get: jest.MockedFunction<any>;
   };
 
   beforeEach(async () => {
-    // Reset environment variables before each test
-    delete process.env.PROMETHEUS_BASE_URL;
-    delete process.env.PROMETHEUS_TIMEOUT;
-
     // Create mock axios instance
     mockAxiosInstance = {
       get: jest.fn(),
@@ -31,6 +29,23 @@ describe('PrometheusService', () => {
 
     // Mock axios.create to return our mock instance
     mockedAxios.create = jest.fn().mockReturnValue(mockAxiosInstance);
+
+    // Create mock ConfigService
+    configService = {
+      get: jest.fn(),
+    } as any;
+
+    // Set default config values
+    configService.get.mockImplementation((key: string) => {
+      switch (key) {
+        case 'support-bundle.prometheus.baseUrl':
+          return 'http://localhost:56825/api/v1';
+        case 'support-bundle.prometheus.timeout':
+          return 30000;
+        default:
+          return undefined;
+      }
+    });
 
     // Set up default mock response for all tests
     mockAxiosInstance.get.mockResolvedValue({
@@ -44,7 +59,10 @@ describe('PrometheusService', () => {
     });
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [PrometheusService],
+      providers: [
+        PrometheusService,
+        { provide: ConfigService, useValue: configService },
+      ],
     }).compile();
 
     service = module.get<PrometheusService>(PrometheusService);
@@ -52,26 +70,39 @@ describe('PrometheusService', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
-    // Clean up environment variables
-    delete process.env.PROMETHEUS_BASE_URL;
-    delete process.env.PROMETHEUS_TIMEOUT;
+    // Reset the axios.create mock to clear call history
+    mockedAxios.create.mockClear();
   });
 
   describe('Constructor', () => {
-    it('should create service with default configuration when environment variables are not set', () => {
-      // Environment variables are already cleared in beforeEach
-      new PrometheusService();
-
+    it('should create service with default configuration', () => {
       expect(mockedAxios.create).toHaveBeenCalledWith({
-        baseURL: 'http://localhost:52061/api/v1',
+        baseURL: 'http://localhost:56825/api/v1',
         timeout: 30000,
       });
     });
 
-    it('should create service with custom base URL from environment variable', () => {
-      process.env.PROMETHEUS_BASE_URL = 'https://custom-prometheus:9090/api/v1';
+    it('should create service with custom base URL from config', async () => {
+      // Create a new service with different config
+      configService.get.mockImplementation((key: string) => {
+        switch (key) {
+          case 'support-bundle.prometheus.baseUrl':
+            return 'https://custom-prometheus:9090/api/v1';
+          case 'support-bundle.prometheus.timeout':
+            return 30000;
+          default:
+            return undefined;
+        }
+      });
 
-      new PrometheusService();
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          PrometheusService,
+          { provide: ConfigService, useValue: configService },
+        ],
+      }).compile();
+
+      module.get<PrometheusService>(PrometheusService);
 
       expect(mockedAxios.create).toHaveBeenCalledWith({
         baseURL: 'https://custom-prometheus:9090/api/v1',
@@ -79,70 +110,31 @@ describe('PrometheusService', () => {
       });
     });
 
-    it('should create service with custom timeout from environment variable', () => {
-      process.env.PROMETHEUS_TIMEOUT = '60000';
+    it('should create service with custom timeout from config', async () => {
+      // Create a new service with different config
+      configService.get.mockImplementation((key: string) => {
+        switch (key) {
+          case 'support-bundle.prometheus.baseUrl':
+            return 'http://localhost:56825/api/v1';
+          case 'support-bundle.prometheus.timeout':
+            return 60000;
+          default:
+            return undefined;
+        }
+      });
 
-      new PrometheusService();
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          PrometheusService,
+          { provide: ConfigService, useValue: configService },
+        ],
+      }).compile();
 
-      expect(mockedAxios.create).toHaveBeenCalledWith({
-        baseURL: 'http://localhost:52061/api/v1',
+      module.get<PrometheusService>(PrometheusService);
+
+      expect(mockedAxios.create).toHaveBeenLastCalledWith({
+        baseURL: 'http://localhost:56825/api/v1',
         timeout: 60000,
-      });
-    });
-
-    it('should create service with both custom base URL and timeout from environment variables', () => {
-      process.env.PROMETHEUS_BASE_URL = 'https://prod-prometheus:9090/api/v1';
-      process.env.PROMETHEUS_TIMEOUT = '45000';
-
-      new PrometheusService();
-
-      expect(mockedAxios.create).toHaveBeenCalledWith({
-        baseURL: 'https://prod-prometheus:9090/api/v1',
-        timeout: 45000,
-      });
-    });
-
-    it('should use default timeout when PROMETHEUS_TIMEOUT is not a valid number', () => {
-      process.env.PROMETHEUS_TIMEOUT = 'invalid-number';
-
-      new PrometheusService();
-
-      expect(mockedAxios.create).toHaveBeenCalledWith({
-        baseURL: 'http://localhost:52061/api/v1',
-        timeout: 30000, // Default value when parseInt fails
-      });
-    });
-
-    it('should use default timeout when PROMETHEUS_TIMEOUT is empty string', () => {
-      process.env.PROMETHEUS_TIMEOUT = '';
-
-      new PrometheusService();
-
-      expect(mockedAxios.create).toHaveBeenCalledWith({
-        baseURL: 'http://localhost:52061/api/v1',
-        timeout: 30000,
-      });
-    });
-
-    it('should parse zero timeout correctly', () => {
-      process.env.PROMETHEUS_TIMEOUT = '0';
-
-      new PrometheusService();
-
-      expect(mockedAxios.create).toHaveBeenCalledWith({
-        baseURL: 'http://localhost:52061/api/v1',
-        timeout: 0,
-      });
-    });
-
-    it('should parse negative timeout correctly', () => {
-      process.env.PROMETHEUS_TIMEOUT = '-5000';
-
-      new PrometheusService();
-
-      expect(mockedAxios.create).toHaveBeenCalledWith({
-        baseURL: 'http://localhost:52061/api/v1',
-        timeout: -5000,
       });
     });
   });
