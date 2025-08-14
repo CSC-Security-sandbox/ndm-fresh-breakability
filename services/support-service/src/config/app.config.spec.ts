@@ -3,431 +3,458 @@ import { Test, TestingModule } from '@nestjs/testing';
 import appConfig from './app.config';
 
 describe('App Configuration', () => {
-    let originalEnv: NodeJS.ProcessEnv;
+  let originalEnv: NodeJS.ProcessEnv;
 
-    beforeEach(() => {
-        // Save original environment variables
-        originalEnv = { ...process.env };
+  beforeEach(() => {
+    // Save original environment variables
+    originalEnv = { ...process.env };
+  });
+
+  afterEach(() => {
+    // Restore original environment variables
+    process.env = originalEnv;
+  });
+
+  describe('Configuration Factory Function', () => {
+    it('should be defined and return a function', () => {
+      expect(appConfig).toBeDefined();
+      expect(typeof appConfig).toBe('function');
     });
 
-    afterEach(() => {
-        // Restore original environment variables
-        process.env = originalEnv;
+    it('should have correct namespace', () => {
+      expect(appConfig.KEY).toBe('CONFIGURATION(support-bundle)');
+    });
+  });
+
+  describe('Bundle Configuration - baseLogPath', () => {
+    it('should use environment variable when BASE_LOG_PATH is set', () => {
+      const customLogPath = '/custom/log/path';
+      process.env.BASE_LOG_PATH = customLogPath;
+
+      const config = appConfig();
+
+      expect(config.bundle.baseLogPath).toBe(customLogPath);
     });
 
-    describe('Configuration Factory Function', () => {
-        it('should be defined and return a function', () => {
-            expect(appConfig).toBeDefined();
-            expect(typeof appConfig).toBe('function');
-        });
+    it('should use default value when BASE_LOG_PATH is not set', () => {
+      delete process.env.BASE_LOG_PATH;
 
-        it('should have correct namespace', () => {
-            expect(appConfig.KEY).toBe('CONFIGURATION(support-bundle)');
-        });
+      const config = appConfig();
+
+      expect(config.bundle.baseLogPath).toBe('/private/tmp/ndm_logs');
     });
 
-    describe('Bundle Configuration - baseLogPath', () => {
-        it('should use environment variable when BASE_LOG_PATH is set', () => {
-            const customLogPath = '/custom/log/path';
-            process.env.BASE_LOG_PATH = customLogPath;
+    it('should use default value when BASE_LOG_PATH is empty string', () => {
+      process.env.BASE_LOG_PATH = '';
 
-            const config = appConfig();
+      const config = appConfig();
 
-            expect(config.bundle.baseLogPath).toBe(customLogPath);
-        });
-
-        it('should use default value when BASE_LOG_PATH is not set', () => {
-            delete process.env.BASE_LOG_PATH;
-
-            const config = appConfig();
-
-            expect(config.bundle.baseLogPath).toBe('/private/tmp/ndm_logs');
-        });
-
-        it('should use default value when BASE_LOG_PATH is empty string', () => {
-            process.env.BASE_LOG_PATH = '';
-
-            const config = appConfig();
-
-            expect(config.bundle.baseLogPath).toBe('/private/tmp/ndm_logs');
-        });
-
-        it('should use default value when BASE_LOG_PATH is undefined', () => {
-            process.env.BASE_LOG_PATH = undefined;
-
-            const config = appConfig();
-
-            expect(config.bundle.baseLogPath).toBe('/private/tmp/ndm_logs');
-        });
-
-        it('should handle BASE_LOG_PATH with whitespace', () => {
-            process.env.BASE_LOG_PATH = '   ';
-
-            const config = appConfig();
-
-            expect(config.bundle.baseLogPath).toBe('   ');
-        });
-
-        it('should handle BASE_LOG_PATH with special characters', () => {
-            const specialPath = '/path/with/@#$%^&*()_+-={}[]|\\:";\'<>?,./';
-            process.env.BASE_LOG_PATH = specialPath;
-
-            const config = appConfig();
-
-            expect(config.bundle.baseLogPath).toBe(specialPath);
-        });
-
-        it('should handle very long BASE_LOG_PATH', () => {
-            const longPath = '/very/long/path/' + 'a'.repeat(1000);
-            process.env.BASE_LOG_PATH = longPath;
-
-            const config = appConfig();
-
-            expect(config.bundle.baseLogPath).toBe(longPath);
-        });
+      expect(config.bundle.baseLogPath).toBe('/private/tmp/ndm_logs');
     });
 
-    describe('Bundle Configuration - outputZipPath', () => {
-        it('should use environment variable when OUTPUT_ZIP_PATH is set', () => {
-            const customZipPath = '/custom/zip/path';
-            process.env.OUTPUT_ZIP_PATH = customZipPath;
+    it('should use default value when BASE_LOG_PATH is undefined', () => {
+      process.env.BASE_LOG_PATH = undefined;
 
-            const config = appConfig();
+      const config = appConfig();
 
-            expect(config.bundle.outputZipPath).toBe(customZipPath);
-        });
-
-        it('should use default value when OUTPUT_ZIP_PATH is not set', () => {
-            delete process.env.OUTPUT_ZIP_PATH;
-
-            const config = appConfig();
-
-            expect(config.bundle.outputZipPath).toBe('/private/tmp/generated_zips');
-        });
-
-        it('should use default value when OUTPUT_ZIP_PATH is empty string', () => {
-            process.env.OUTPUT_ZIP_PATH = '';
-
-            const config = appConfig();
-
-            expect(config.bundle.outputZipPath).toBe('/private/tmp/generated_zips');
-        });
-
-        it('should use default value when OUTPUT_ZIP_PATH is undefined', () => {
-            process.env.OUTPUT_ZIP_PATH = undefined;
-
-            const config = appConfig();
-
-            expect(config.bundle.outputZipPath).toBe('/private/tmp/generated_zips');
-        });
-
-        it('should handle OUTPUT_ZIP_PATH with whitespace', () => {
-            process.env.OUTPUT_ZIP_PATH = '   ';
-
-            const config = appConfig();
-
-            expect(config.bundle.outputZipPath).toBe('   ');
-        });
-
-        it('should handle OUTPUT_ZIP_PATH with special characters', () => {
-            const specialPath = '/zip/path/with/@#$%^&*()_+-={}[]|\\:";\'<>?,./';
-            process.env.OUTPUT_ZIP_PATH = specialPath;
-
-            const config = appConfig();
-
-            expect(config.bundle.outputZipPath).toBe(specialPath);
-        });
-
-        it('should handle very long OUTPUT_ZIP_PATH', () => {
-            const longPath = '/very/long/zip/path/' + 'z'.repeat(1000);
-            process.env.OUTPUT_ZIP_PATH = longPath;
-
-            const config = appConfig();
-
-            expect(config.bundle.outputZipPath).toBe(longPath);
-        });
+      expect(config.bundle.baseLogPath).toBe('/private/tmp/ndm_logs');
     });
 
-    describe('API Configuration - configUrl', () => {
-        it('should use environment variable when CONFIG_BASE_URL is set', () => {
-            const customConfigUrl = 'https://custom-config.example.com/api/v2';
-            process.env.CONFIG_BASE_URL = customConfigUrl;
+    it('should handle BASE_LOG_PATH with whitespace', () => {
+      process.env.BASE_LOG_PATH = '   ';
 
-            const config = appConfig();
+      const config = appConfig();
 
-            expect(config.api.configUrl).toBe(customConfigUrl);
-        });
-
-        it('should use default value when CONFIG_BASE_URL is not set', () => {
-            delete process.env.CONFIG_BASE_URL;
-
-            const config = appConfig();
-
-            expect(config.api.configUrl).toBe('http://localhost:3009/api/v1');
-        });
-
-        it('should use default value when CONFIG_BASE_URL is empty string', () => {
-            process.env.CONFIG_BASE_URL = '';
-
-            const config = appConfig();
-
-            expect(config.api.configUrl).toBe('http://localhost:3009/api/v1');
-        });
-
-        it('should use default value when CONFIG_BASE_URL is undefined', () => {
-            process.env.CONFIG_BASE_URL = undefined;
-
-            const config = appConfig();
-
-            expect(config.api.configUrl).toBe('http://localhost:3009/api/v1');
-        });
-
-        it('should handle CONFIG_BASE_URL with whitespace', () => {
-            process.env.CONFIG_BASE_URL = '   ';
-
-            const config = appConfig();
-
-            expect(config.api.configUrl).toBe('   ');
-        });
-
-        it('should handle CONFIG_BASE_URL with different protocols', () => {
-            const httpsUrl = 'https://secure-config.example.com:8443/api/v1';
-            process.env.CONFIG_BASE_URL = httpsUrl;
-
-            const config = appConfig();
-
-            expect(config.api.configUrl).toBe(httpsUrl);
-        });
-
-        it('should handle CONFIG_BASE_URL with query parameters', () => {
-            const urlWithQuery = 'http://config.example.com/api/v1?tenant=test&env=prod';
-            process.env.CONFIG_BASE_URL = urlWithQuery;
-
-            const config = appConfig();
-
-            expect(config.api.configUrl).toBe(urlWithQuery);
-        });
-
-        it('should handle CONFIG_BASE_URL with port numbers', () => {
-            const urlWithPort = 'http://config.example.com:8080/api/v1';
-            process.env.CONFIG_BASE_URL = urlWithPort;
-
-            const config = appConfig();
-
-            expect(config.api.configUrl).toBe(urlWithPort);
-        });
+      expect(config.bundle.baseLogPath).toBe('   ');
     });
 
-    describe('Complete Configuration Structure', () => {
-        it('should return complete configuration object with all required properties', () => {
-            const config = appConfig();
+    it('should handle BASE_LOG_PATH with special characters', () => {
+      const specialPath = '/path/with/@#$%^&*()_+-={}[]|\\:";\'<>?,./';
+      process.env.BASE_LOG_PATH = specialPath;
 
-            expect(config).toHaveProperty('bundle');
-            expect(config).toHaveProperty('api');
-            expect(config.bundle).toHaveProperty('baseLogPath');
-            expect(config.bundle).toHaveProperty('outputZipPath');
-            expect(config.api).toHaveProperty('configUrl');
-        });
+      const config = appConfig();
 
-        it('should return correct structure when all environment variables are set', () => {
-            process.env.BASE_LOG_PATH = '/env/log/path';
-            process.env.OUTPUT_ZIP_PATH = '/env/zip/path';
-            process.env.CONFIG_BASE_URL = 'https://env-config.example.com/api/v1';
-
-            const config = appConfig();
-
-            expect(config).toEqual({
-                bundle: {
-                    baseLogPath: '/env/log/path',
-                    outputZipPath: '/env/zip/path',
-                },
-                api: {
-                    configUrl: 'https://env-config.example.com/api/v1',
-                },
-            });
-        });
-
-        it('should return correct structure when no environment variables are set', () => {
-            delete process.env.BASE_LOG_PATH;
-            delete process.env.OUTPUT_ZIP_PATH;
-            delete process.env.CONFIG_BASE_URL;
-
-            const config = appConfig();
-
-            expect(config).toEqual({
-                bundle: {
-                    baseLogPath: '/private/tmp/ndm_logs',
-                    outputZipPath: '/private/tmp/generated_zips',
-                },
-                api: {
-                    configUrl: 'http://localhost:3009/api/v1',
-                },
-            });
-        });
-
-        it('should return correct structure with mixed environment variables', () => {
-            process.env.BASE_LOG_PATH = '/custom/log/path';
-            delete process.env.OUTPUT_ZIP_PATH;
-            process.env.CONFIG_BASE_URL = 'https://custom-config.example.com/api/v1';
-
-            const config = appConfig();
-
-            expect(config).toEqual({
-                bundle: {
-                    baseLogPath: '/custom/log/path',
-                    outputZipPath: '/private/tmp/generated_zips',
-                },
-                api: {
-                    configUrl: 'https://custom-config.example.com/api/v1',
-                },
-            });
-        });
-
-        it('should return Record<string, any> type as specified', () => {
-            const config = appConfig();
-
-            expect(typeof config).toBe('object');
-            expect(config).not.toBeNull();
-            expect(Array.isArray(config)).toBe(false);
-        });
+      expect(config.bundle.baseLogPath).toBe(specialPath);
     });
 
-    describe('Environment Variable Edge Cases', () => {
-        it('should handle null values as falsy (converts to empty string)', () => {
-            process.env.BASE_LOG_PATH = null as any;
-            process.env.OUTPUT_ZIP_PATH = null as any;
-            process.env.CONFIG_BASE_URL = null as any;
+    it('should handle very long BASE_LOG_PATH', () => {
+      const longPath = '/very/long/path/' + 'a'.repeat(1000);
+      process.env.BASE_LOG_PATH = longPath;
 
-            const config = appConfig();
+      const config = appConfig();
 
-            expect(config.bundle.baseLogPath).toBe('/private/tmp/ndm_logs');
-            expect(config.bundle.outputZipPath).toBe('/private/tmp/generated_zips');
-            expect(config.api.configUrl).toBe('http://localhost:3009/api/v1');
-        });
+      expect(config.bundle.baseLogPath).toBe(longPath);
+    });
+  });
 
-        it('should handle number values in environment variables', () => {
-            process.env.BASE_LOG_PATH = '12345' as any;
-            process.env.OUTPUT_ZIP_PATH = '67890' as any;
-            process.env.CONFIG_BASE_URL = '99999' as any;
+  describe('Bundle Configuration - outputZipPath', () => {
+    it('should use environment variable when OUTPUT_ZIP_PATH is set', () => {
+      const customZipPath = '/custom/zip/path';
+      process.env.OUTPUT_ZIP_PATH = customZipPath;
 
-            const config = appConfig();
+      const config = appConfig();
 
-            expect(config.bundle.baseLogPath).toBe('12345');
-            expect(config.bundle.outputZipPath).toBe('67890');
-            expect(config.api.configUrl).toBe('99999');
-        });
-
-        it('should handle boolean-like strings in environment variables', () => {
-            process.env.BASE_LOG_PATH = 'true';
-            process.env.OUTPUT_ZIP_PATH = 'false';
-            process.env.CONFIG_BASE_URL = 'yes';
-
-            const config = appConfig();
-
-            expect(config.bundle.baseLogPath).toBe('true');
-            expect(config.bundle.outputZipPath).toBe('false');
-            expect(config.api.configUrl).toBe('yes');
-        });
-
-        it('should handle JSON-like strings in environment variables', () => {
-            process.env.BASE_LOG_PATH = '{"path": "/json/path"}';
-            process.env.OUTPUT_ZIP_PATH = '["/array/path"]';
-            process.env.CONFIG_BASE_URL = '{"url": "http://json.com"}';
-
-            const config = appConfig();
-
-            expect(config.bundle.baseLogPath).toBe('{"path": "/json/path"}');
-            expect(config.bundle.outputZipPath).toBe('["/array/path"]');
-            expect(config.api.configUrl).toBe('{"url": "http://json.com"}');
-        });
+      expect(config.bundle.outputZipPath).toBe(customZipPath);
     });
 
-    describe('Integration with NestJS ConfigModule', () => {
-        let module: TestingModule;
+    it('should use default value when OUTPUT_ZIP_PATH is not set', () => {
+      delete process.env.OUTPUT_ZIP_PATH;
 
-        beforeEach(async () => {
-            module = await Test.createTestingModule({
-                imports: [
-                    ConfigModule.forRoot({
-                        load: [appConfig],
-                    }),
-                ],
-            }).compile();
-        });
+      const config = appConfig();
 
-        afterEach(async () => {
-            if (module) {
-                await module.close();
-            }
-        });
-
-        it('should be loadable by NestJS ConfigModule', () => {
-            expect(module).toBeDefined();
-        });
-
-        it('should be accessible through ConfigService', async () => {
-            const configService = module.get(ConfigService);
-            expect(configService).toBeDefined();
-
-            const bundleConfig = configService.get('support-bundle.bundle');
-            const apiConfig = configService.get('support-bundle.api');
-
-            expect(bundleConfig).toBeDefined();
-            expect(apiConfig).toBeDefined();
-            expect(bundleConfig).toHaveProperty('baseLogPath');
-            expect(bundleConfig).toHaveProperty('outputZipPath');
-            expect(apiConfig).toHaveProperty('configUrl');
-        });
-
-        it('should work with environment variables through ConfigService', async () => {
-            process.env.BASE_LOG_PATH = '/integration/test/path';
-            process.env.OUTPUT_ZIP_PATH = '/integration/test/zip';
-            process.env.CONFIG_BASE_URL = 'https://integration-test.example.com/api/v1';
-
-            // Recreate module to pick up new environment variables
-            await module.close();
-            module = await Test.createTestingModule({
-                imports: [
-                    ConfigModule.forRoot({
-                        load: [appConfig],
-                    }),
-                ],
-            }).compile();
-
-            const configService = module.get(ConfigService);
-
-            expect(configService.get('support-bundle.bundle.baseLogPath')).toBe('/integration/test/path');
-            expect(configService.get('support-bundle.bundle.outputZipPath')).toBe('/integration/test/zip');
-            expect(configService.get('support-bundle.api.configUrl')).toBe('https://integration-test.example.com/api/v1');
-        });
+      expect(config.bundle.outputZipPath).toBe('/private/tmp/generated_zips');
     });
 
-    describe('Configuration Consistency and Immutability', () => {
-        it('should return the same configuration when called multiple times', () => {
-            const config1 = appConfig();
-            const config2 = appConfig();
+    it('should use default value when OUTPUT_ZIP_PATH is empty string', () => {
+      process.env.OUTPUT_ZIP_PATH = '';
 
-            expect(config1).toEqual(config2);
-        });
+      const config = appConfig();
 
-        it('should return new object instances on each call', () => {
-            const config1 = appConfig();
-            const config2 = appConfig();
-
-            expect(config1).not.toBe(config2);
-            expect(config1.bundle).not.toBe(config2.bundle);
-            expect(config1.api).not.toBe(config2.api);
-        });
-
-        it('should not be affected by modifications to returned objects', () => {
-            const config1 = appConfig();
-            config1.bundle.baseLogPath = 'modified';
-            config1.api.configUrl = 'modified';
-
-            const config2 = appConfig();
-
-            expect(config2.bundle.baseLogPath).not.toBe('modified');
-            expect(config2.api.configUrl).not.toBe('modified');
-        });
+      expect(config.bundle.outputZipPath).toBe('/private/tmp/generated_zips');
     });
+
+    it('should use default value when OUTPUT_ZIP_PATH is undefined', () => {
+      process.env.OUTPUT_ZIP_PATH = undefined;
+
+      const config = appConfig();
+
+      expect(config.bundle.outputZipPath).toBe('/private/tmp/generated_zips');
+    });
+
+    it('should handle OUTPUT_ZIP_PATH with whitespace', () => {
+      process.env.OUTPUT_ZIP_PATH = '   ';
+
+      const config = appConfig();
+
+      expect(config.bundle.outputZipPath).toBe('   ');
+    });
+
+    it('should handle OUTPUT_ZIP_PATH with special characters', () => {
+      const specialPath = '/zip/path/with/@#$%^&*()_+-={}[]|\\:";\'<>?,./';
+      process.env.OUTPUT_ZIP_PATH = specialPath;
+
+      const config = appConfig();
+
+      expect(config.bundle.outputZipPath).toBe(specialPath);
+    });
+
+    it('should handle very long OUTPUT_ZIP_PATH', () => {
+      const longPath = '/very/long/zip/path/' + 'z'.repeat(1000);
+      process.env.OUTPUT_ZIP_PATH = longPath;
+
+      const config = appConfig();
+
+      expect(config.bundle.outputZipPath).toBe(longPath);
+    });
+  });
+
+  describe('API Configuration - configUrl', () => {
+    it('should use environment variable when CONFIG_BASE_URL is set', () => {
+      const customConfigUrl = 'https://custom-config.example.com/api/v2';
+      process.env.CONFIG_BASE_URL = customConfigUrl;
+
+      const config = appConfig();
+
+      expect(config.api.configUrl).toBe(customConfigUrl);
+    });
+
+    it('should use default value when CONFIG_BASE_URL is not set', () => {
+      delete process.env.CONFIG_BASE_URL;
+
+      const config = appConfig();
+
+      expect(config.api.configUrl).toBe('http://localhost:3009/api/v1');
+    });
+
+    it('should use default value when CONFIG_BASE_URL is empty string', () => {
+      process.env.CONFIG_BASE_URL = '';
+
+      const config = appConfig();
+
+      expect(config.api.configUrl).toBe('http://localhost:3009/api/v1');
+    });
+
+    it('should use default value when CONFIG_BASE_URL is undefined', () => {
+      process.env.CONFIG_BASE_URL = undefined;
+
+      const config = appConfig();
+
+      expect(config.api.configUrl).toBe('http://localhost:3009/api/v1');
+    });
+
+    it('should handle CONFIG_BASE_URL with whitespace', () => {
+      process.env.CONFIG_BASE_URL = '   ';
+
+      const config = appConfig();
+
+      expect(config.api.configUrl).toBe('   ');
+    });
+
+    it('should handle CONFIG_BASE_URL with different protocols', () => {
+      const httpsUrl = 'https://secure-config.example.com:8443/api/v1';
+      process.env.CONFIG_BASE_URL = httpsUrl;
+
+      const config = appConfig();
+
+      expect(config.api.configUrl).toBe(httpsUrl);
+    });
+
+    it('should handle CONFIG_BASE_URL with query parameters', () => {
+      const urlWithQuery =
+        'http://config.example.com/api/v1?tenant=test&env=prod';
+      process.env.CONFIG_BASE_URL = urlWithQuery;
+
+      const config = appConfig();
+
+      expect(config.api.configUrl).toBe(urlWithQuery);
+    });
+
+    it('should handle CONFIG_BASE_URL with port numbers', () => {
+      const urlWithPort = 'http://config.example.com:8080/api/v1';
+      process.env.CONFIG_BASE_URL = urlWithPort;
+
+      const config = appConfig();
+
+      expect(config.api.configUrl).toBe(urlWithPort);
+    });
+  });
+
+  describe('Complete Configuration Structure', () => {
+    it('should return complete configuration object with all required properties', () => {
+      const config = appConfig();
+
+      expect(config).toHaveProperty('bundle');
+      expect(config).toHaveProperty('api');
+      expect(config.bundle).toHaveProperty('baseLogPath');
+      expect(config.bundle).toHaveProperty('outputZipPath');
+      expect(config.api).toHaveProperty('configUrl');
+    });
+
+    it('should return correct structure when all environment variables are set', () => {
+      process.env.BASE_LOG_PATH = '/env/log/path';
+      process.env.OUTPUT_ZIP_PATH = '/env/zip/path';
+      process.env.CONFIG_BASE_URL = 'https://env-config.example.com/api/v1';
+      process.env.PROMETHEUS_BASE_URL =
+        'https://env-prometheus.example.com/api/v1';
+      process.env.PROMETHEUS_TIMEOUT = '60000';
+
+      const config = appConfig();
+
+      expect(config).toEqual({
+        bundle: {
+          baseLogPath: '/env/log/path',
+          outputZipPath: '/env/zip/path',
+        },
+        api: {
+          configUrl: 'https://env-config.example.com/api/v1',
+        },
+        prometheus: {
+          baseUrl: 'https://env-prometheus.example.com/api/v1',
+          timeout: 60000,
+        },
+      });
+    });
+
+    it('should return correct structure when no environment variables are set', () => {
+      delete process.env.BASE_LOG_PATH;
+      delete process.env.OUTPUT_ZIP_PATH;
+      delete process.env.CONFIG_BASE_URL;
+      delete process.env.PROMETHEUS_BASE_URL;
+      delete process.env.PROMETHEUS_TIMEOUT;
+
+      const config = appConfig();
+
+      expect(config).toEqual({
+        bundle: {
+          baseLogPath: '/private/tmp/ndm_logs',
+          outputZipPath: '/private/tmp/generated_zips',
+        },
+        api: {
+          configUrl: 'http://localhost:3009/api/v1',
+        },
+        prometheus: {
+          baseUrl: 'http://localhost:52061/api/v1',
+          timeout: 30000,
+        },
+      });
+    });
+
+    it('should return correct structure with mixed environment variables', () => {
+      process.env.BASE_LOG_PATH = '/custom/log/path';
+      delete process.env.OUTPUT_ZIP_PATH;
+      process.env.CONFIG_BASE_URL = 'https://custom-config.example.com/api/v1';
+      delete process.env.PROMETHEUS_BASE_URL;
+      delete process.env.PROMETHEUS_TIMEOUT;
+
+      const config = appConfig();
+
+      expect(config).toEqual({
+        bundle: {
+          baseLogPath: '/custom/log/path',
+          outputZipPath: '/private/tmp/generated_zips',
+        },
+        api: {
+          configUrl: 'https://custom-config.example.com/api/v1',
+        },
+        prometheus: {
+          baseUrl: 'http://localhost:52061/api/v1',
+          timeout: 30000,
+        },
+      });
+    });
+
+    it('should return Record<string, any> type as specified', () => {
+      const config = appConfig();
+
+      expect(typeof config).toBe('object');
+      expect(config).not.toBeNull();
+      expect(Array.isArray(config)).toBe(false);
+    });
+  });
+
+  describe('Environment Variable Edge Cases', () => {
+    it('should handle null values as falsy (converts to empty string)', () => {
+      process.env.BASE_LOG_PATH = null as any;
+      process.env.OUTPUT_ZIP_PATH = null as any;
+      process.env.CONFIG_BASE_URL = null as any;
+
+      const config = appConfig();
+
+      expect(config.bundle.baseLogPath).toBe('/private/tmp/ndm_logs');
+      expect(config.bundle.outputZipPath).toBe('/private/tmp/generated_zips');
+      expect(config.api.configUrl).toBe('http://localhost:3009/api/v1');
+    });
+
+    it('should handle number values in environment variables', () => {
+      process.env.BASE_LOG_PATH = '12345' as any;
+      process.env.OUTPUT_ZIP_PATH = '67890' as any;
+      process.env.CONFIG_BASE_URL = '99999' as any;
+
+      const config = appConfig();
+
+      expect(config.bundle.baseLogPath).toBe('12345');
+      expect(config.bundle.outputZipPath).toBe('67890');
+      expect(config.api.configUrl).toBe('99999');
+    });
+
+    it('should handle boolean-like strings in environment variables', () => {
+      process.env.BASE_LOG_PATH = 'true';
+      process.env.OUTPUT_ZIP_PATH = 'false';
+      process.env.CONFIG_BASE_URL = 'yes';
+
+      const config = appConfig();
+
+      expect(config.bundle.baseLogPath).toBe('true');
+      expect(config.bundle.outputZipPath).toBe('false');
+      expect(config.api.configUrl).toBe('yes');
+    });
+
+    it('should handle JSON-like strings in environment variables', () => {
+      process.env.BASE_LOG_PATH = '{"path": "/json/path"}';
+      process.env.OUTPUT_ZIP_PATH = '["/array/path"]';
+      process.env.CONFIG_BASE_URL = '{"url": "http://json.com"}';
+
+      const config = appConfig();
+
+      expect(config.bundle.baseLogPath).toBe('{"path": "/json/path"}');
+      expect(config.bundle.outputZipPath).toBe('["/array/path"]');
+      expect(config.api.configUrl).toBe('{"url": "http://json.com"}');
+    });
+  });
+
+  describe('Integration with NestJS ConfigModule', () => {
+    let module: TestingModule;
+
+    beforeEach(async () => {
+      module = await Test.createTestingModule({
+        imports: [
+          ConfigModule.forRoot({
+            load: [appConfig],
+          }),
+        ],
+      }).compile();
+    });
+
+    afterEach(async () => {
+      if (module) {
+        await module.close();
+      }
+    });
+
+    it('should be loadable by NestJS ConfigModule', () => {
+      expect(module).toBeDefined();
+    });
+
+    it('should be accessible through ConfigService', async () => {
+      const configService = module.get(ConfigService);
+      expect(configService).toBeDefined();
+
+      const bundleConfig = configService.get('support-bundle.bundle');
+      const apiConfig = configService.get('support-bundle.api');
+
+      expect(bundleConfig).toBeDefined();
+      expect(apiConfig).toBeDefined();
+      expect(bundleConfig).toHaveProperty('baseLogPath');
+      expect(bundleConfig).toHaveProperty('outputZipPath');
+      expect(apiConfig).toHaveProperty('configUrl');
+    });
+
+    it('should work with environment variables through ConfigService', async () => {
+      process.env.BASE_LOG_PATH = '/integration/test/path';
+      process.env.OUTPUT_ZIP_PATH = '/integration/test/zip';
+      process.env.CONFIG_BASE_URL =
+        'https://integration-test.example.com/api/v1';
+
+      // Recreate module to pick up new environment variables
+      await module.close();
+      module = await Test.createTestingModule({
+        imports: [
+          ConfigModule.forRoot({
+            load: [appConfig],
+          }),
+        ],
+      }).compile();
+
+      const configService = module.get(ConfigService);
+
+      expect(configService.get('support-bundle.bundle.baseLogPath')).toBe(
+        '/integration/test/path',
+      );
+      expect(configService.get('support-bundle.bundle.outputZipPath')).toBe(
+        '/integration/test/zip',
+      );
+      expect(configService.get('support-bundle.api.configUrl')).toBe(
+        'https://integration-test.example.com/api/v1',
+      );
+    });
+  });
+
+  describe('Configuration Consistency and Immutability', () => {
+    it('should return the same configuration when called multiple times', () => {
+      const config1 = appConfig();
+      const config2 = appConfig();
+
+      expect(config1).toEqual(config2);
+    });
+
+    it('should return new object instances on each call', () => {
+      const config1 = appConfig();
+      const config2 = appConfig();
+
+      expect(config1).not.toBe(config2);
+      expect(config1.bundle).not.toBe(config2.bundle);
+      expect(config1.api).not.toBe(config2.api);
+    });
+
+    it('should not be affected by modifications to returned objects', () => {
+      const config1 = appConfig();
+      config1.bundle.baseLogPath = 'modified';
+      config1.api.configUrl = 'modified';
+
+      const config2 = appConfig();
+
+      expect(config2.bundle.baseLogPath).not.toBe('modified');
+      expect(config2.api.configUrl).not.toBe('modified');
+    });
+  });
 });

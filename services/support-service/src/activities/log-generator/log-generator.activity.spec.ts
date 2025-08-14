@@ -224,7 +224,10 @@ describe('LogGeneratorActivity', () => {
         payload: mockPayload,
       });
 
-      expect(result).toStrictEqual({ "message": "/test/output/ndm_test-user-123.zip", "success": true });
+      expect(result).toStrictEqual({
+        message: '/test/output/ndm_test-user-123.zip',
+        success: true,
+      });
       expect(mockLogger.log).toHaveBeenCalledWith(
         '[trace-123] Started fetchAndZipLogs activity',
       );
@@ -279,7 +282,11 @@ describe('LogGeneratorActivity', () => {
 
       // Mock the exec function to return test directories
       mockExec.mockImplementation((cmd, callback) => {
-        callback(null, '/test/logs/2024-01-01\n/test/logs/2024-01-02\n/test/logs/2024-01-03', '');
+        callback(
+          null,
+          '/test/logs/2024-01-01\n/test/logs/2024-01-02\n/test/logs/2024-01-03',
+          '',
+        );
       });
 
       await activity.fetchAndZipLogs({ traceId, payload: mockPayload });
@@ -295,10 +302,14 @@ describe('LogGeneratorActivity', () => {
         startDate: 'invalid-date',
       };
 
-      const result = await activity.fetchAndZipLogs({ traceId, payload: invalidPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId,
+        payload: invalidPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Invalid date format. Expected YYYY-MM-DD format. Received startDate: invalid-date, endDate: 2024-01-03'
+        message:
+          'Invalid date format. Expected YYYY-MM-DD format. Received startDate: invalid-date, endDate: 2024-01-03',
       });
     });
 
@@ -308,10 +319,14 @@ describe('LogGeneratorActivity', () => {
         endDate: 'invalid-date',
       };
 
-      const result = await activity.fetchAndZipLogs({ traceId, payload: invalidPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId,
+        payload: invalidPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Invalid date format. Expected YYYY-MM-DD format. Received startDate: 2024-01-01, endDate: invalid-date'
+        message:
+          'Invalid date format. Expected YYYY-MM-DD format. Received startDate: 2024-01-01, endDate: invalid-date',
       });
     });
 
@@ -322,10 +337,14 @@ describe('LogGeneratorActivity', () => {
         endDate: '2024-01-01',
       };
 
-      const result = await activity.fetchAndZipLogs({ traceId, payload: invalidPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId,
+        payload: invalidPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Invalid date range: start date "2024-01-05" is after end date "2024-01-01". Please ensure the start date is earlier than or equal to the end date.'
+        message:
+          'Invalid date range: start date "2024-01-05" is after end date "2024-01-01". Please ensure the start date is earlier than or equal to the end date.',
       });
     });
 
@@ -374,7 +393,11 @@ describe('LogGeneratorActivity', () => {
 
       // Mock the exec function to return test directories
       mockExec.mockImplementation((cmd, callback) => {
-        callback(null, '/test/logs/2024-01-01\n/test/logs/2024-01-02\n/test/logs/2024-01-03', '');
+        callback(
+          null,
+          '/test/logs/2024-01-01\n/test/logs/2024-01-02\n/test/logs/2024-01-03',
+          '',
+        );
       });
 
       await activity.fetchAndZipLogs({ traceId, payload: mockPayload });
@@ -411,12 +434,22 @@ describe('LogGeneratorActivity', () => {
 
       // Mock the exec function to return test directories
       mockExec.mockImplementation((cmd, callback) => {
-        callback(null, '/test/logs/2024-01-01\n/test/logs/2024-01-02\n/test/logs/2024-01-03', '');
+        callback(
+          null,
+          '/test/logs/2024-01-01\n/test/logs/2024-01-02\n/test/logs/2024-01-03',
+          '',
+        );
       });
 
       // Should not throw error because projectWorkerMap is not used in the implementation
-      const result = await activity.fetchAndZipLogs({ traceId, payload: emptyMapPayload });
-      expect(result).toEqual({ "message": "/test/output/ndm_test-user-123.zip", "success": true });
+      const result = await activity.fetchAndZipLogs({
+        traceId,
+        payload: emptyMapPayload,
+      });
+      expect(result).toEqual({
+        message: '/test/output/ndm_test-user-123.zip',
+        success: true,
+      });
     });
 
     it.skip('should handle projectWorkerMap with missing projectId', async () => {
@@ -490,10 +523,13 @@ describe('LogGeneratorActivity', () => {
         return {} as any;
       });
 
-      const result = await activity.fetchAndZipLogs({ traceId, payload: mockPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId,
+        payload: mockPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Failed to execute find command: Command execution failed'
+        message: 'Failed to execute find command: Command execution failed',
       });
 
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -510,10 +546,14 @@ describe('LogGeneratorActivity', () => {
         return {} as any;
       });
 
-      const result = await activity.fetchAndZipLogs({ traceId, payload: mockPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId,
+        payload: mockPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'No date folders found in the specified range (2024-01-01 to 2024-01-03) at path: /test/logs'
+        message:
+          'No date folders found in the specified range (2024-01-01 to 2024-01-03) at path: /test/logs',
       });
     });
 
@@ -540,13 +580,20 @@ describe('LogGeneratorActivity', () => {
 
       // Mock the exec function to return test directories
       mockExec.mockImplementation((cmd, callback) => {
-        callback(null, '/test/logs/2024-01-01\n/test/logs/2024-01-02\n/test/logs/2024-01-03', '');
+        callback(
+          null,
+          '/test/logs/2024-01-01\n/test/logs/2024-01-02\n/test/logs/2024-01-03',
+          '',
+        );
       });
 
-      const result = await activity.fetchAndZipLogs({ traceId, payload: mockPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId,
+        payload: mockPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Failed to create zip archive: Archiver failed'
+        message: 'Failed to create zip archive: Archiver failed',
       });
 
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -603,7 +650,10 @@ describe('LogGeneratorActivity', () => {
 
       expect(result).toStrictEqual({
         success: true,
-        message: path.join(outputZipPath, 'ndm_test@user-123_special.chars.zip')
+        message: path.join(
+          outputZipPath,
+          'ndm_test@user-123_special.chars.zip',
+        ),
       });
     });
 
@@ -708,10 +758,13 @@ describe('LogGeneratorActivity', () => {
         throw error;
       });
 
-      const result = await activity.fetchAndZipLogs({ traceId, payload: mockPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId,
+        payload: mockPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'General processing error'
+        message: 'General processing error',
       });
 
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -884,18 +937,26 @@ describe('LogGeneratorActivity', () => {
     });
 
     it('should handle missing payload gracefully', async () => {
-      const result = await activity.fetchAndZipLogs({ traceId: 'test', payload: null });
+      const result = await activity.fetchAndZipLogs({
+        traceId: 'test',
+        payload: null,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Missing required payload fields: startDate, endDate, or userId'
+        message:
+          'Missing required payload fields: startDate, endDate, or userId',
       });
     });
 
     it('should handle undefined payload gracefully', async () => {
-      const result = await activity.fetchAndZipLogs({ traceId: 'test', payload: undefined });
+      const result = await activity.fetchAndZipLogs({
+        traceId: 'test',
+        payload: undefined,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Missing required payload fields: startDate, endDate, or userId'
+        message:
+          'Missing required payload fields: startDate, endDate, or userId',
       });
     });
 
@@ -918,7 +979,8 @@ describe('LogGeneratorActivity', () => {
       });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Missing required payload fields: startDate, endDate, or userId'
+        message:
+          'Missing required payload fields: startDate, endDate, or userId',
       });
     });
 
@@ -940,10 +1002,13 @@ describe('LogGeneratorActivity', () => {
         throw new Error('Permission denied');
       });
 
-      const result = await activity.fetchAndZipLogs({ traceId: 'test', payload: mockPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId: 'test',
+        payload: mockPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Permission denied'
+        message: 'Permission denied',
       });
     });
 
@@ -965,10 +1030,13 @@ describe('LogGeneratorActivity', () => {
         throw new Error('File is locked');
       });
 
-      const result = await activity.fetchAndZipLogs({ traceId: 'test', payload: mockPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId: 'test',
+        payload: mockPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'File is locked'
+        message: 'File is locked',
       });
     });
 
@@ -1003,10 +1071,13 @@ describe('LogGeneratorActivity', () => {
         return {} as any;
       });
 
-      const result = await activity.fetchAndZipLogs({ traceId: 'test', payload: mockPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId: 'test',
+        payload: mockPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Cannot create write stream'
+        message: 'Cannot create write stream',
       });
     });
 
@@ -1064,7 +1135,10 @@ describe('LogGeneratorActivity', () => {
         traceId: 'test',
         payload: mockPayload,
       });
-      expect(result).toStrictEqual({ "message": "/test/output/ndm_test-user.zip", "success": true });
+      expect(result).toStrictEqual({
+        message: '/test/output/ndm_test-user.zip',
+        success: true,
+      });
     });
 
     it('should handle exec error with message only', async () => {
@@ -1095,10 +1169,13 @@ describe('LogGeneratorActivity', () => {
         return {} as any;
       });
 
-      const result = await activity.fetchAndZipLogs({ traceId: 'test', payload: mockPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId: 'test',
+        payload: mockPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Failed to execute find command: Command not found'
+        message: 'Failed to execute find command: Command not found',
       });
 
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -1164,7 +1241,10 @@ describe('LogGeneratorActivity', () => {
         payload: emptyStringPayload,
       });
 
-      expect(result).toStrictEqual({ "message": "/test/output/ndm_test-user.zip", "success": true });
+      expect(result).toStrictEqual({
+        message: '/test/output/ndm_test-user.zip',
+        success: true,
+      });
     });
 
     // Removed failing test: null and undefined values in projectWorkerMap
