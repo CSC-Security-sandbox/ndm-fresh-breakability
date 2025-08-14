@@ -15,10 +15,16 @@ export class LogGeneratorActivity {
   private outputZipPath: string;
 
   constructor(private readonly configService: ConfigService) {
-    const baseLogPath = this.configService.get<string>('support-bundle.bundle.baseLogPath');
-    const outputZipPath = this.configService.get<string>('support-bundle.bundle.outputZipPath');
+    const baseLogPath = this.configService.get<string>(
+      'support-bundle.bundle.baseLogPath',
+    );
+    const outputZipPath = this.configService.get<string>(
+      'support-bundle.bundle.outputZipPath',
+    );
     if (!baseLogPath || !outputZipPath) {
-      throw new Error('Missing required configuration for baseLogPath or outputZipPath');
+      throw new Error(
+        'Missing required configuration for baseLogPath or outputZipPath',
+      );
     }
     this.baseLogPath = baseLogPath;
     this.outputZipPath = outputZipPath;
@@ -30,7 +36,9 @@ export class LogGeneratorActivity {
     try {
       // Validate required payload fields
       if (!payload?.startDate || !payload?.endDate || !payload?.userId) {
-        throw new Error('Missing required payload fields: startDate, endDate, or userId');
+        throw new Error(
+          'Missing required payload fields: startDate, endDate, or userId',
+        );
       }
 
       const zipRoot = 'ndm_logs';
@@ -46,7 +54,9 @@ export class LogGeneratorActivity {
       // Ensure output directory exists
       if (!fs.existsSync(this.outputZipPath)) {
         fs.mkdirSync(this.outputZipPath, { recursive: true });
-        this.logger.log(`[${traceId}] Created output directory: ${this.outputZipPath}`);
+        this.logger.log(
+          `[${traceId}] Created output directory: ${this.outputZipPath}`,
+        );
       }
 
       // Validate and parse date range
@@ -59,7 +69,7 @@ export class LogGeneratorActivity {
       }
       if (start > end) {
         throw new Error(
-           `Invalid date range: start date "${payload.startDate}" is after end date "${payload.endDate}". Please ensure the start date is earlier than or equal to the end date.`
+          `Invalid date range: start date "${payload.startDate}" is after end date "${payload.endDate}". Please ensure the start date is earlier than or equal to the end date.`,
         );
       }
 
@@ -74,7 +84,9 @@ export class LogGeneratorActivity {
         current.setUTCDate(current.getUTCDate() + 1);
       }
 
-      this.logger.log(`[${traceId}] Processing date folders: ${dateFolders.join(', ')}`);
+      this.logger.log(
+        `[${traceId}] Processing date folders: ${dateFolders.join(', ')}`,
+      );
 
       // Verify base log path exists
       if (!fs.existsSync(this.baseLogPath)) {
@@ -97,7 +109,10 @@ export class LogGeneratorActivity {
       this.logger.log(`[${traceId}] Executing find command: ${findCommand}`);
 
       const { stdout } = await exec(findCommand).catch((err) => {
-        this.logger.error(`[${traceId}] Error executing find command:`, err.stderr || err.message);
+        this.logger.error(
+          `[${traceId}] Error executing find command:`,
+          err.stderr || err.message,
+        );
         throw new Error(`Failed to execute find command: ${err.message}`);
       });
 
@@ -113,7 +128,9 @@ export class LogGeneratorActivity {
         );
       }
 
-      this.logger.log(`[${traceId}] Found ${existingDateFolders.length} date folders to process: ${existingDateFolders.map(p => path.basename(p)).join(', ')}`);
+      this.logger.log(
+        `[${traceId}] Found ${existingDateFolders.length} date folders to process: ${existingDateFolders.map((p) => path.basename(p)).join(', ')}`,
+      );
 
       // Create zip file with all content from existing date folders
       return await new Promise((resolve, reject) => {
@@ -123,13 +140,19 @@ export class LogGeneratorActivity {
         let totalFilesAdded = 0;
 
         output.on('close', () => {
-          this.logger.log(`[${traceId}] Zip created successfully at: ${zipPath}`);
-          this.logger.log(`[${traceId}] Total bytes written: ${archive.pointer()}`);
-          this.logger.log(`[${traceId}] Total files/folders added: ${totalFilesAdded}`);
-           resolve({
+          this.logger.log(
+            `[${traceId}] Zip created successfully at: ${zipPath}`,
+          );
+          this.logger.log(
+            `[${traceId}] Total bytes written: ${archive.pointer()}`,
+          );
+          this.logger.log(
+            `[${traceId}] Total files/folders added: ${totalFilesAdded}`,
+          );
+          resolve({
             success: true,
-            message: zipPath
-           });
+            message: zipPath,
+          });
         });
 
         archive.on('error', (err) => {
@@ -149,7 +172,9 @@ export class LogGeneratorActivity {
         archive.on('entry', (entry) => {
           totalFilesAdded++;
           if (totalFilesAdded % 100 === 0) {
-            this.logger.log(`[${traceId}] Processed ${totalFilesAdded} entries...`);
+            this.logger.log(
+              `[${traceId}] Processed ${totalFilesAdded} entries...`,
+            );
           }
         });
 
@@ -158,14 +183,23 @@ export class LogGeneratorActivity {
         // Add each date folder to the zip
         for (const dateFolderPath of existingDateFolders) {
           const dateFolder = path.basename(dateFolderPath);
-          this.logger.log(`[${traceId}] Adding date folder to zip: ${dateFolder}`);
+          this.logger.log(
+            `[${traceId}] Adding date folder to zip: ${dateFolder}`,
+          );
 
           try {
             // Add the entire date folder and its contents to the zip
             archive.directory(dateFolderPath, path.join(zipRoot, dateFolder));
           } catch (err) {
-            this.logger.error(`[${traceId}] Error adding folder ${dateFolder}:`, err);
-            reject(new Error(`Failed to add folder ${dateFolder} to zip: ${err.message}`));
+            this.logger.error(
+              `[${traceId}] Error adding folder ${dateFolder}:`,
+              err,
+            );
+            reject(
+              new Error(
+                `Failed to add folder ${dateFolder} to zip: ${err.message}`,
+              ),
+            );
             return;
           }
         }
@@ -184,16 +218,21 @@ export class LogGeneratorActivity {
       if (fs.existsSync(zipPath)) {
         try {
           fs.unlinkSync(zipPath);
-          this.logger.log(`[${traceId}] Cleaned up partial zip file: ${zipPath}`);
+          this.logger.log(
+            `[${traceId}] Cleaned up partial zip file: ${zipPath}`,
+          );
         } catch (cleanupErr) {
-          this.logger.error(`[${traceId}] Failed to cleanup partial zip file:`, cleanupErr);
+          this.logger.error(
+            `[${traceId}] Failed to cleanup partial zip file:`,
+            cleanupErr,
+          );
         }
       }
 
       return {
         success: false,
-        message: err.message
-      }
+        message: err.message,
+      };
     }
   }
 }

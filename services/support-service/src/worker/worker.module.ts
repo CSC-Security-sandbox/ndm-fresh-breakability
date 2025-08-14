@@ -6,10 +6,7 @@ import { ConfigModule } from '@nestjs/config';
 import temporalConfig from 'src/config/temporal.config';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot({ load: [temporalConfig] }), 
-    ActivitiesModule
-  ],
-  providers: [...workerProviders, WorkerService]
+  imports: [ConfigModule.forRoot({ load: [temporalConfig] }), ActivitiesModule],
+  providers: [...workerProviders, WorkerService],
 })
-export class WorkerModule { }
+export class WorkerModule {}
