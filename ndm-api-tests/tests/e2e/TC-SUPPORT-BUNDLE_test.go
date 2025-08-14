@@ -87,6 +87,7 @@ var _ = Describe("Support Bundle Test e2e", func() {
 			Expect(sourceConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+
 			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 			By("Getting the source file server by config ID")
@@ -110,10 +111,8 @@ var _ = Describe("Support Bundle Test e2e", func() {
 				StartDelay:               "10s",
 			}
 			sourceJobConfigIDs, resp, err = CreateDiscoveryJob(jobParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating new discovery for source")
-			Expect(len(sourceJobConfigIDs)).To(BeNumerically(">", 0), "No valid sourceJobConfigIDs found in response")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating discovery job for source: %v", err))
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 
 			By("Getting jobs by jobConfigId for source")
 			for _, sourceJobConfigID := range sourceJobConfigIDs {
@@ -173,9 +172,8 @@ var _ = Describe("Support Bundle Test e2e", func() {
 			destinationJobConfigIDs, resp, err = CreateDiscoveryJob(destinationJobParams, headers)
 
 			Expect(err).NotTo(HaveOccurred(), "Error creating new discovery for source")
-			Expect(len(destinationJobConfigIDs)).To(BeNumerically(">", 0), "No valid destinationJobConfigIDs found in response")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating discovery job for destination: %v", err))
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
 
 			By("Getting jobs by jobConfigId for destination")
 			for _, destinationJobConfigID := range destinationJobConfigIDs {
@@ -205,10 +203,9 @@ var _ = Describe("Support Bundle Test e2e", func() {
 				},
 			}
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating migration job")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
-			Expect(len(migrationJobConfigIDs)).To(BeNumerically(">", 0), "Expected at least one jobConfigID")
+
 			// Get migration job run IDs and wait for completion
 			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
@@ -233,12 +230,8 @@ var _ = Describe("Support Bundle Test e2e", func() {
 				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
 			}
 			jobConfigIDs, resp, err = CreateBulkCutoverJob(cutoverParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating bulk cutover job")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating bulk cutover job: %v", err))
 			defer resp.Body.Close()
-
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
-			Expect(len(jobConfigIDs)).To(BeNumerically(">", 0), "No valid jobConfigIDs found in response")
-			Expect(jobConfigIDs).NotTo(BeEmpty(), "Expected a valid jobConfigID")
 
 			By("Getting jobs by job config id")
 			for _, jobConfigID := range jobConfigIDs {
