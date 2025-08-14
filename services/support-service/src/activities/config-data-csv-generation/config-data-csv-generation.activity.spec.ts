@@ -86,7 +86,7 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
     // Get the mocked fs module
     mockFs = fs as jest.Mocked<typeof fs>;
     mockArchiver = archiver as jest.MockedFunction<typeof archiver>;
-    mockAdmZip = AdmZip as jest.MockedClass<typeof AdmZip>;
+    mockAdmZip = AdmZip;
 
     // Create mock repository and data source
     mockWorkerRepo = {
