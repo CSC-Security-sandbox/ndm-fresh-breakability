@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { PrometheusService } from './prometheus';
 import axios from 'axios';
 
@@ -9,6 +10,7 @@ const mockedAxios = axios as jest.Mocked<typeof axios>;
 describe('PrometheusService', () => {
   let service: PrometheusService;
   let mockAxiosInstance: jest.Mocked<any>;
+  let mockConfigService: jest.Mocked<ConfigService>;
 
   beforeEach(async () => {
     // Reset environment variables
@@ -19,10 +21,30 @@ describe('PrometheusService', () => {
       get: jest.fn(),
     };
 
+    mockConfigService = {
+      get: jest.fn().mockImplementation((key: string, defaultValue?: any) => {
+        switch (key) {
+          case 'PROMETHEUS_BASE_URL':
+            return process.env.PROMETHEUS_BASE_URL || defaultValue;
+          case 'PROMETHEUS_TIMEOUT':
+            const envTimeout = process.env.PROMETHEUS_TIMEOUT;
+            return envTimeout ? parseInt(envTimeout, 10) : defaultValue;
+          default:
+            return defaultValue;
+        }
+      }),
+    } as any;
+
     mockedAxios.create.mockReturnValue(mockAxiosInstance);
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [PrometheusService],
+      providers: [
+        PrometheusService,
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
+        },
+      ],
     }).compile();
 
     service = module.get<PrometheusService>(PrometheusService);
@@ -51,7 +73,7 @@ describe('PrometheusService', () => {
 
     it('should create axios instance with default configuration', () => {
       // Create a new instance to test constructor
-      new PrometheusService();
+      new PrometheusService(mockConfigService);
 
       expect(mockedAxios.create).toHaveBeenCalledWith({
         baseURL: 'http://localhost:52061/api/v1',
@@ -63,7 +85,7 @@ describe('PrometheusService', () => {
       process.env.PROMETHEUS_BASE_URL = 'http://custom-prometheus:9090/api/v1';
 
       // Create a new service instance to test constructor with env var
-      new PrometheusService();
+      new PrometheusService(mockConfigService);
 
       expect(mockedAxios.create).toHaveBeenCalledWith({
         baseURL: 'http://custom-prometheus:9090/api/v1',
@@ -75,7 +97,7 @@ describe('PrometheusService', () => {
       process.env.PROMETHEUS_TIMEOUT = '60000';
 
       // Create a new service instance to test constructor with env var
-      new PrometheusService();
+      new PrometheusService(mockConfigService);
 
       expect(mockedAxios.create).toHaveBeenCalledWith({
         baseURL: 'http://localhost:52061/api/v1',
@@ -88,7 +110,7 @@ describe('PrometheusService', () => {
       process.env.PROMETHEUS_TIMEOUT = '45000';
 
       // Create a new service instance to test constructor with both env vars
-      new PrometheusService();
+      new PrometheusService(mockConfigService);
 
       expect(mockedAxios.create).toHaveBeenCalledWith({
         baseURL: 'http://prod-prometheus:9090/api/v1',
@@ -100,7 +122,7 @@ describe('PrometheusService', () => {
       process.env.PROMETHEUS_TIMEOUT = 'invalid_number';
 
       // Create a new service instance to test constructor with invalid timeout
-      new PrometheusService();
+      new PrometheusService(mockConfigService);
 
       expect(mockedAxios.create).toHaveBeenCalledWith({
         baseURL: 'http://localhost:52061/api/v1',

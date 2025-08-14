@@ -1,4 +1,8 @@
-import { Inject, Injectable } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import {
   LoggerFactory,
   LoggerService,
@@ -6,6 +10,7 @@ import {
 import { PrometheusService } from 'src/utils/prometheus';
 import BUILD_VERSION_QUERIES from './about-ndm.constants';
 import { AboutNdmResponse } from './about-ndm.interface';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AboutNdmService {
@@ -14,6 +19,7 @@ export class AboutNdmService {
   constructor(
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly prometheusService: PrometheusService,
+    private readonly configService: ConfigService,
   ) {
     this.logger = loggerFactory.create(AboutNdmService.name);
   }
@@ -46,14 +52,19 @@ export class AboutNdmService {
           },
         },
         contact: {
-          email: process.env.NDM_CONTACT_EMAIL || 'niharika@netapp.com',
-          phone: process.env.NDM_CONTACT_PHONE || null,
-          website: process.env.NDM_CONTACT_WEBSITE || null,
+          email: this.configService.get<string>(
+            'NDM_CONTACT_EMAIL',
+            'niharika@netapp.com',
+          ),
+          phone: this.configService.get<string>('NDM_CONTACT_PHONE', null),
+          website: this.configService.get<string>('NDM_CONTACT_WEBSITE', null),
         },
       };
     } catch (error) {
       this.logger.error('Error getting build version', error);
-      throw error;
+      throw new InternalServerErrorException(
+        `Failed to get build version, error: ${error.message}`,
+      );
     }
   }
 

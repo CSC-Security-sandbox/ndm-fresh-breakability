@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AboutNdmService } from './about-ndm.service';
 import { PrometheusService } from '../utils/prometheus';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { ConfigService } from '@nestjs/config';
 import BUILD_VERSION_QUERIES from './about-ndm.constants';
 
 describe('AboutNdmService', () => {
@@ -19,6 +20,20 @@ describe('AboutNdmService', () => {
     create: jest.fn().mockReturnValue(mockLogger),
   };
 
+  const mockConfigService = {
+    get: jest.fn().mockImplementation((key: string, defaultValue?: any) => {
+      switch (key) {
+        case 'NDM_CONTACT_EMAIL':
+          return 'niharika@netapp.com';
+        case 'NDM_CONTACT_PHONE':
+          return null;
+        case 'NDM_CONTACT_WEBSITE':
+          return null;
+        default:
+          return defaultValue;
+      }
+    }),
+  } as any;
   beforeEach(async () => {
     const mockPrometheusService = {
       queryPrometheus: jest.fn(),
@@ -34,6 +49,10 @@ describe('AboutNdmService', () => {
         {
           provide: LoggerFactory,
           useValue: mockLoggerFactory,
+        },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
         },
       ],
     }).compile();
