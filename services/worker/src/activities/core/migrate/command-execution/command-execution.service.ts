@@ -78,14 +78,16 @@ export class CommandExecService {
             return output;  // skip if already completed
         }
         if( command.ops[OPS_CMD.COPY_FILE].status !== OPS_STATUS.COMPLETED) {
-            //TODO: convert this to async and non-blocking 
-            const pathExists = await isPathExists(sourcePath);
-            if(!pathExists) {
+            let [srcPathExists, targetPathExists] = await Promise.all([
+                  isPathExists(sourcePath),
+                  isPathExists(targetPath),
+            ])
+            if(!srcPathExists) {
                 const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.COPY_CONTENT, errorType, command.id, 
                     new Error(`Source path does not exist: ${sourcePath}`), {name: command.fPath, path: sourcePath});
                 await jobContext.publishToErrorStream(dmErr);
             }
-            if(await isPathExists(targetPath))
+            if(targetPathExists)
                 await this.stampMetaService.removeFileAttributeTemporarily(targetPath);
             try {
                 const checksums = await this.workerThreadService.migrateWorkerThread({
@@ -176,7 +178,10 @@ export class CommandExecService {
 
     async publishFileInfo({command , jobContext, targetPath, sourcePath, errorType  }: CommandExecInput): Promise<void> {
         // TODO: add sid - uid - gid to meta
-        const sourceStats = await fs.promises.lstat(sourcePath);
+        const [sourceStats, targetStats] = await Promise.all([
+            fs.promises.lstat(sourcePath),
+            fs.promises.lstat(targetPath),
+        ]);
 
         const sourceMeta: ItemMeta = {
             accessTime: sourceStats.atime,
@@ -189,7 +194,6 @@ export class CommandExecService {
             sid: command.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.sourceAcl ?? ''
         }
 
-        const targetStats = await fs.promises.lstat(targetPath);
         const isDirectory = targetStats.isDirectory();
         const targetMeta: ItemMeta = {
             accessTime: targetStats.atime,
