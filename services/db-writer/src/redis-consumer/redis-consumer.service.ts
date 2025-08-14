@@ -1,5 +1,6 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, Inject, Logger, Optional } from '@nestjs/common';
 import { GroupReaderType, JobContextFactory, JobManagerContext } from '@netapp-cloud-datamigrate/jobs-lib';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import * as path from 'path';
 import { Worker } from 'worker_threads';
 import { ConsumerType } from '../enum/redis-consumer.enum';
@@ -8,13 +9,14 @@ import { WorkflowService } from '../workflow/workflow.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { FileConsumerContext, getWorkflowId, ReaderStatus } from './utils';
 import { defaultDataConverter } from '@temporalio/common';
+import { RedisError, ValidationError, WorkerError, ConfigurationError } from '../errors/custom-errors';
 import { RedisUtils } from '@netapp-cloud-datamigrate/jobs-lib/dist/redis/redis-utils';
 
 
 
 @Injectable()
 export class RedisConsumerService implements OnModuleDestroy {
-    private logger = new Logger(RedisConsumerService.name);
+    private readonly logger: LoggerService;
     private redisClient: any
     private readonly REDIS_KEY_PREFIX = process.env.REDIS_KEY_PREFIX || 'db-writer';
     private lastFile: string = process.env.LAST_FILE_NAME || "LAST_FILE";
@@ -30,7 +32,14 @@ export class RedisConsumerService implements OnModuleDestroy {
     constructor(
         private readonly inventoryService: InventoryService,
         private readonly workflowService: WorkflowService,
+        @Optional() @Inject(LoggerFactory) private readonly loggerFactory?: LoggerFactory,
     ) {
+        if (this.loggerFactory) {
+            this.logger = this.loggerFactory.create(RedisConsumerService.name);
+        } else {
+            // Fallback to basic NestJS Logger for worker threads
+            this.logger = new Logger(RedisConsumerService.name) as any;
+        }
         this.initializeRedisConnection();
     }
 
@@ -53,7 +62,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                 this.logger.log('Redis client ready');
             }
         } catch (error) {
-            this.logger.error(`Error initializing Redis: ${error.message}`);
+            this.logger.error(`Error initializing Redis: ${error.message}`, error?.stack || error);
             this.redisClient = null;
             // Retry logic: wait and retry until connection is established
             let attempt = 1;
@@ -144,7 +153,7 @@ export class RedisConsumerService implements OnModuleDestroy {
 
             this.logger.log('RedisConsumerService cleanup completed');
         } catch (error) {
-            this.logger.error(`Error during cleanup: ${error.message}`);
+            this.logger.error(`Error during cleanup: ${error.message}`, error?.stack || error);
         }
     }
 
@@ -190,7 +199,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             this.logger.warn('Redis client not available for updateConsumerStatus, attempting to reinitialize');
             await this.initializeRedisConnection();
             if (!this.isValidRedisClient()) {
-                throw new Error('Redis client not available');
+                throw new RedisError('Redis client not available');
             }
         }
 
@@ -243,7 +252,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                 await this.initializeRedisConnection();
 
                 if (!this.isValidRedisClient()) {
-                    this.logger.error('Failed to reinitialize Redis client');
+                    this.logger.error('Failed to reinitialize Redis client', new Error('Redis client initialization failed'));
                     return {};
                 }
             }
@@ -251,7 +260,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             const result = await this.redisClient.hGetAll(this.buildRedisKey(jobId)) as Record<string, ReaderStatus>;
             return result || {};
         } catch (error) {
-            this.logger.error(`Error getting consumer statuses for jobRunId=${jobId}: ${error.message}`);
+            this.logger.error(`Error getting consumer statuses for jobRunId=${jobId}: ${error.message}`, error?.stack || error);
             return {};
         }
     }
@@ -282,7 +291,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             const redisStatus = await this.getConsumerStatus(jobId, consumerType);
             isRunning = redisStatus === 'active';
         } catch (error) {
-            this.logger.error(`Error checking Redis for jobId=${jobId}, consumerType=${consumerType}: ${error.message}`);
+            this.logger.error(`Error checking Redis for jobId=${jobId}, consumerType=${consumerType}: ${error.message}`, error?.stack || error);
         }
 
         return isRunning;
@@ -311,7 +320,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             );
             return true;
         } catch (error) {
-            this.logger.error(`Error saving consumers to Redis: ${error.message}`);
+            this.logger.error(`Error saving consumers to Redis: ${error.message}`, error?.stack || error);
             throw error;
         }
     }
@@ -339,7 +348,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                 this.logger.warn('Redis client not available in cron, attempting to reinitialize');
                 await this.initializeRedisConnection();
                 if (!this.isValidRedisClient()) {
-                    this.logger.error('Cannot run cron without Redis client');
+                    this.logger.error('Cannot run cron without Redis client', new Error('Redis client not available for cron job'));
                     return;
                 }
             }
@@ -365,7 +374,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                             this.activeWorkers.delete(jobId);
                         })
                         .catch(error => {
-                            this.logger.error(`Error in worker thread for job ${jobId}: ${error.message}`);
+                            this.logger.error(`Error in worker thread for job ${jobId}: ${error.message}`, error?.stack || error);
                             this.activeWorkers.delete(jobId);
 
                             for (const [consumerType, status] of Object.entries(consumerStatuses)) {
@@ -386,7 +395,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             }
 
         } catch (err) {
-            this.logger.error(`Error in cron: ${err.message}`);
+            this.logger.error(`Error in cron: ${err.message}`, err?.stack || err);
         }
     }
 
@@ -418,8 +427,8 @@ export class RedisConsumerService implements OnModuleDestroy {
                     this.logger.log(`Worker thread completed successfully for job ${jobRunId}`);
                     resolve();
                 } else {
-                    this.logger.error(`Worker thread failed for job ${jobRunId}: ${result.error}`);
-                    reject(new Error(result.error));
+                    this.logger.error(`Worker thread failed for job ${jobRunId}: ${result.error}`, result.error);
+                    reject(new WorkerError(result.error));
                 }
             });
 
@@ -432,7 +441,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                 worker.removeAllListeners();
 
                 if (code !== 0) {
-                    this.logger.error(`Worker stopped unexpectedly with exit code ${code} for job ${jobRunId}`);
+                    this.logger.error(`Worker stopped unexpectedly with exit code ${code} for job ${jobRunId}`, new WorkerError(`Worker exit code: ${code}`, code));
                 } else {
                     this.logger.log(`Worker thread exited normally for job ${jobRunId}`);
                 }
@@ -474,7 +483,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                 await Promise.all(consumerPromises);
                 this.logger.log(`All consumers completed for job ${jobRunId}`);
             } catch (error) {
-                this.logger.error(`One or more consumers failed for jobRunId=${jobRunId}: ${error.message}`);
+                this.logger.error(`One or more consumers failed for jobRunId=${jobRunId}: ${error.message}`, error?.stack || error);
                 throw error;
             }
         } else {
@@ -507,8 +516,8 @@ export class RedisConsumerService implements OnModuleDestroy {
             jobContext = await contextProvider.getContext(jobRunId);
 
             if (!jobContext) {
-                this.logger.error(`Job context not found for jobRunId=${jobRunId}`);
-                throw new Error('jobContext is null');
+                this.logger.error(`Job context not found for jobRunId=${jobRunId}`, new ConfigurationError('Job context is null'));
+                throw new ConfigurationError('jobContext is null');
             }
 
             this.logger.log(`Job context acquired for ${consumerType} in job ${jobRunId}`);
@@ -542,7 +551,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                     }
 
                 } catch (readerError) {
-                    this.logger.error(`Reader error in iteration ${iterationCount} for job ${jobRunId}: ${readerError.message}`);
+                    this.logger.error(`Reader error in iteration ${iterationCount} for job ${jobRunId}: ${readerError.message}`, readerError?.stack || readerError);
                     if (readerError?.message?.includes('NOGROUP')) {
                         break; // Stop processing if no consumer group exists
                     }
@@ -577,7 +586,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             this.logger.log(`Consumer ${consumerType} stopped for job ${jobRunId}. Total processed: ${totalFilesReceived} items`);
 
         } catch (error) {
-            this.logger.error(`Error running consumer for jobRunId=${jobRunId} and consumerType=${consumerType}: ${error.message}`);
+            this.logger.error(`Error running consumer for jobRunId=${jobRunId} and consumerType=${consumerType}: ${error.message}`, error?.stack || error);
             await this.stopConsumer(jobRunId, consumerType);
             throw error;
         } finally {
@@ -629,7 +638,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                         }
                         await jobContext.groupAckErrorStream([stream.id], GroupReaderType.DB_WRITER);
                     } catch (e) {
-                        this.logger.error(`Data updating error for ${jobRunId}:${consumerType}`);
+                        this.logger.error(`Data updating error for ${jobRunId}:${consumerType}`, e?.stack || e);
                     }
                     break;
 
@@ -674,7 +683,7 @@ export class RedisConsumerService implements OnModuleDestroy {
 
     private getStreamReader(jobContext: JobManagerContext, consumerType: string) {
         if (!jobContext) {
-            throw new Error("getReader: jobContext is null or undefined.");
+            throw new ValidationError("getReader: jobContext is null or undefined.", 'jobContext');
         }
 
         const readerMap: Record<string, any> = {
@@ -684,13 +693,13 @@ export class RedisConsumerService implements OnModuleDestroy {
         };
 
         if (!(consumerType in readerMap)) {
-            throw new Error(`getReader: Invalid consumer type '${consumerType}'`);
+            throw new ValidationError(`getReader: Invalid consumer type '${consumerType}'`, 'consumerType');
         }
 
         const reader = readerMap[consumerType];
 
         if (!reader) {
-            throw new Error(`getReader: Reader function not found for consumer type '${consumerType}'`);
+            throw new ConfigurationError(`getReader: Reader function not found for consumer type '${consumerType}'`);
         }
 
         return reader;

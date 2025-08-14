@@ -97,6 +97,7 @@ export class WorkerOptionsService {
           getGroupOfTasksActivity: this.commonTaskService.getGroupOfTasksActivity.bind(this.commonTaskService),
           scanDirectories: this.scanService.scanDirectories.bind(this.scanService),
           createInitialDirBatch: this.commonTaskService.createInitialDirBatch.bind(this.commonTaskService),
+          isCmdStreamLenValid: this.commonTaskService.isCmdStreamLenValid.bind(this.commonTaskService),
         }, this.jobTaskActivityConcurrency);
       default:
         return undefined;

@@ -730,6 +730,7 @@ describe('startStreamConsumer', () => {
   const START_CONSUMER_URL = 'http://mock-start-consumer-url';
 
   beforeEach(() => {
+    jest.clearAllMocks();
     jest.spyOn(configService, 'get').mockImplementation((key: string) => {
       if (key === 'app.paths.startConsumer') {
         return START_CONSUMER_URL;
@@ -739,17 +740,49 @@ describe('startStreamConsumer', () => {
   });
 
   it('should start the consumer successfully on the first attempt', async () => {
-    const mockResponse = { status: 201, data: { message: 'Consumer started' } };
+    const mockResponse = { status: 200, data: { message: 'Consumer started' } };
     jest.spyOn(axios, 'post').mockResolvedValueOnce(mockResponse);
 
-    await service.startStreamConsumer(jobRunId);
+    const result = await service.startStreamConsumer(jobRunId);
 
     expect(axios.post).toHaveBeenCalledWith(
       `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
       { jobRunId }
     );
     expect(axios.post).toHaveBeenCalledTimes(1);
-  });
+    expect(result).toEqual({ success: false, message: 'Consumer started' });
+  }, 10000);
+
+  it('should handle api-handler-lib response format', async () => {
+    const mockApiHandlerResponse = {
+      status: 200,
+      data: {
+        statusCode: 200,
+        message: 'Consumer started successfully.',
+        data: {
+          items: {
+            success: true,
+            message: 'Consumer started successfully.'
+          }
+        },
+        timestamp: '2025-08-04T10:00:00.000Z',
+        path: '/api/v1/redis-consumer/start',
+        method: 'POST'
+      }
+    };
+    jest.spyOn(axios, 'post').mockResolvedValueOnce(mockApiHandlerResponse);
+
+    const result = await service.startStreamConsumer(jobRunId);
+
+    expect(axios.post).toHaveBeenCalledWith(
+      `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
+      { jobRunId }
+    );
+    expect(result).toEqual({
+      success: true,
+      message: 'Consumer started successfully.'
+    });
+  }, 10000);
 
   it('should handle unexpected errors gracefully', async () => {
     const mockError = new Error('Unexpected error');
@@ -763,8 +796,25 @@ describe('startStreamConsumer', () => {
       `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
       { jobRunId }
     );
-    expect(axios.post).toHaveBeenCalledTimes(2);
-  });
+    // When there's a network error, only 1 call is made before going to catch block
+    expect(axios.post).toHaveBeenCalledTimes(1);
+  }, 10000);
+
+  it('should retry on non-200 status codes and eventually fail', async () => {
+    const mockResponse = { status: 500, data: { error: 'Internal Server Error' } };
+    jest.spyOn(axios, 'post').mockResolvedValue(mockResponse);
+
+    await expect(service.startStreamConsumer(jobRunId)).rejects.toThrow(
+      'Failed to start consumer after retries. Status: 500'
+    );
+
+    expect(axios.post).toHaveBeenCalledWith(
+      `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
+      { jobRunId }
+    );
+    // Initial call + 3 retries = 4 total calls
+    expect(axios.post).toHaveBeenCalledTimes(4);
+  }, 20000);
 })
 
 

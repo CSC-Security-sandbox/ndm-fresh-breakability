@@ -177,4 +177,123 @@ describe('WorkflowService', () => {
 
     });
 
+  describe('getWorkFlowPayload', () => {
+    let mockWorkflowService: any;
+    beforeEach(() => {
+      mockWorkflowService = {
+        getWorkflowExecutionHistory: jest.fn(),
+      };
+
+      (service as any).client = {
+        workflowService: mockWorkflowService,
+      };
+      jest.spyOn<any, any>(service, 'getClient').mockResolvedValue((service as any).client);
+    });
+
+    it('should return parsed payloads when workflow has input payloads', async () => {
+      const workflowId = 'wf-123';
+      const payloadData = JSON.stringify({ foo: 'bar' });
+      const payloadUint8 = new Uint8Array(Buffer.from(payloadData, 'utf8'));
+
+      mockWorkflowService.getWorkflowExecutionHistory.mockResolvedValue({
+        history: {
+          events: [
+            {
+              workflowExecutionStartedEventAttributes: {
+                input: { payloads: [{ data: payloadUint8 }] },
+              },
+            },
+          ],
+        },
+      });
+
+      const result = await service.getWorkFlowPayload(workflowId);
+
+      expect(mockWorkflowService.getWorkflowExecutionHistory).toHaveBeenCalledWith({
+        namespace: 'default',
+        execution: { workflowId },
+      });
+      expect(result).toEqual([{ foo: 'bar' }]);
+    });
+
+    it('should return empty array and log warning if no payloads found', async () => {
+      const workflowId = 'wf-no-payloads';
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => { });
+
+      mockWorkflowService.getWorkflowExecutionHistory.mockResolvedValue({
+        history: {
+          events: [
+            {
+              workflowExecutionStartedEventAttributes: {
+                input: { payloads: [] },
+              },
+            },
+          ],
+        },
+      });
+
+      const result = await service.getWorkFlowPayload(workflowId);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        `No payloads found for workflow ${workflowId}`
+      );
+      expect(result).toEqual([]);
+
+      warnSpy.mockRestore();
+    });
+
+    it('should return empty array and log warning if startedEvent has no input', async () => {
+      const workflowId = 'wf-no-input';
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => { });
+
+      mockWorkflowService.getWorkflowExecutionHistory.mockResolvedValue({
+        history: {
+          events: [
+            {
+              workflowExecutionStartedEventAttributes: {},
+            },
+          ],
+        },
+      });
+
+      const result = await service.getWorkFlowPayload(workflowId);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        `No payloads found for workflow ${workflowId}`
+      );
+      expect(result).toEqual([]);
+
+      warnSpy.mockRestore();
+    });
+
+    it('should return empty array if no startedEvent found', async () => {
+      const workflowId = 'wf-no-started-event';
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => { });
+
+      mockWorkflowService.getWorkflowExecutionHistory.mockResolvedValue({
+        history: {
+          events: [
+            { someOtherEvent: {} },
+          ],
+        },
+      });
+
+      const result = await service.getWorkFlowPayload(workflowId);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        `No payloads found for workflow ${workflowId}`
+      );
+      expect(result).toEqual([]);
+
+      warnSpy.mockRestore();
+    });
+
+    it('should throw error if getWorkflowExecutionHistory fails', async () => {
+      const workflowId = 'wf-error';
+      const error = new Error('Temporal service down');
+      mockWorkflowService.getWorkflowExecutionHistory.mockRejectedValue(error);
+
+      await expect(service.getWorkFlowPayload(workflowId)).rejects.toThrow(error);
+    });
+  });
 });
