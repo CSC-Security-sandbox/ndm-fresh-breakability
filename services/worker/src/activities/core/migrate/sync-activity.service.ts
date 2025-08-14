@@ -71,22 +71,22 @@ export class SyncService {
         const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
         const errorType = ++task.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
 
-        for (const command of task.commands) {
-            if (command.status === CommandStatus.COMPLETED) continue;
-
-            const scanInput: CommandExecInput = {
+        const results = await Promise.all(task.commands.filter(command => command.status !== CommandStatus.COMPLETED).map(command => {
+              const scanInput: CommandExecInput = {
                 sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
                 targetPath: `${baseTargetPrefixPath}${command.fPath}`,
                 command,
                 jobContext,
                 errorType
-            };
+              };
 
-            const output: CommandExecOutput = await this.commandExecService.executeCommand(scanInput);
+              return this.commandExecService.executeCommand(scanInput);
+        }));
+        results.forEach((output:CommandExecOutput) => {
             syncOutput.errors.source.push(...output.sourceErrors);
             syncOutput.errors.target.push(...output.targetErrors);
-            await jobContext.setTask(taskHashId, task);
-        }
+        });
+        await jobContext.setTask(taskHashId, task);
         return syncOutput
     }
 
