@@ -1,10 +1,10 @@
-FROM registry.access.redhat.com/ubi9/nodejs-22-minimal:9.6-1753796458
+FROM public.ecr.aws/docker/library/node:22.18.0-trixie-slim
 
-USER root
-
-RUN microdnf update -y && \
-    microdnf clean all && \
-    npm install -g @nestjs/cli pm2@latest
+RUN apt-get update \
+    && apt update -y \
+    && apt-get install -y ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g @nestjs/cli pm2@latest
 
 WORKDIR /app
 
