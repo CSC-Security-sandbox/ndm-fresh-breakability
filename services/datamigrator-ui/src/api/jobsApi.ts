@@ -142,6 +142,9 @@ export const jobsApi = createApi({
         }
         return url;
       },
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      },
     }),
 
     bulkMigrate: builder.mutation({
@@ -161,7 +164,7 @@ export const jobsApi = createApi({
       }),
       transformResponse: (response) => {
         return response?.data?.items || response?.data || response || [];
-      }
+      },
     }),
 
     getAllFileServersWithVolume: builder.query({
@@ -239,7 +242,7 @@ export const jobsApi = createApi({
       }),
       transformResponse: (response) => {
         return response?.data?.items || response?.data || response || [];
-      }
+      },
     }),
 
     getNoticeBoardDetails: builder.query({
@@ -250,7 +253,7 @@ export const jobsApi = createApi({
       transformResponse: (response) => {
         return response?.data?.items || response?.data || response;
       },
-      }),
+    }),
 
     getFileServerWorkers: builder.query({
       query: ({ jobRunId }) => ({
