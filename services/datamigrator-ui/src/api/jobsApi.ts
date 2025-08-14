@@ -227,6 +227,9 @@ export const jobsApi = createApi({
 
     getJobRunErrors: builder.query({
       query: (queryParams) => `job-run/errors?${queryParams}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      }
     }),
 
     getJobRunErrorsOverview: builder.query({
