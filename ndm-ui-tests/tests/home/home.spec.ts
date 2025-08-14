@@ -6,13 +6,11 @@ const ADMIN_CREDENTIALS = {
   password: "Root@123",
 };
 
-let sharedBrowser: Browser;
 let sharedContext: BrowserContext;
 let sharedPage: Page;
 
 test.describe.serial("Home Page Tests", () => {
   test.beforeAll(async ({ browser }) => {
-    sharedBrowser = browser;
     sharedContext = await browser.newContext();
     sharedPage = await sharedContext.newPage();
   });
@@ -59,8 +57,25 @@ test.describe.serial("Home Page Tests", () => {
     // Hover over sidebar to expand it
     await sidebarContainer.hover();
     await sharedPage.locator("text=Storage Servers").click();
-    await sharedPage.waitForSelector("text=File Servers", { timeout: 5000 });
-    await sharedPage.locator("text=File Servers").click();
+
+    // Wait for the submenu to appear and be properly positioned
+    await sharedPage.waitForSelector(
+      '[data-testid="ps-submenu-content-test-id"]',
+      {
+        state: "visible",
+        timeout: 5000,
+      }
+    );
+
+    // Wait a bit for the submenu animation/positioning to complete
+    await sharedPage.waitForTimeout(1000);
+
+    // Click on File Servers within the submenu
+    await sharedPage
+      .locator(
+        '[data-testid="ps-submenu-content-test-id"] >> text=File Servers'
+      )
+      .click();
     await sharedPage.waitForLoadState("networkidle");
 
     // Hover over sidebar again and navigate to Workers
@@ -70,10 +85,11 @@ test.describe.serial("Home Page Tests", () => {
     await sharedPage.waitForLoadState("networkidle");
 
     // Hover over sidebar again and navigate to Jobs
-    await sidebarContainer.hover();
-    await sharedPage.waitForTimeout(1000);
-    await sharedPage.locator("text=Jobs").click();
-    await sharedPage.waitForLoadState("networkidle");
+    await sidebarContainer.hover().then(() => {
+      sharedPage.waitForTimeout(1000);
+      sharedPage.locator("text=Jobs").click();
+      sharedPage.waitForLoadState("networkidle");
+    });
 
     // Hover over sidebar again and navigate back to Home
     await sidebarContainer.hover();
