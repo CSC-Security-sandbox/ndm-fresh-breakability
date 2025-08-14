@@ -116,34 +116,33 @@ export class WorkManagerService {
         return workerMetaConfig.metaConfig;
       }
       this.logger.warn(`project ID : ${projectId}`);
-      if (isRebootCall) {
-        const newWorker = this.workerEntity.create({
-          workerId: id,
-          ipAddress: ip,
-          metaConfig: this.createWorkerConfiguration(id),
-          status: WorkerStatus.Online,
-          workerName: id,
-          createdBy: id,
-          projectId,
-          platform: platform,
+
+      const newWorker = this.workerEntity.create({
+        workerId: id,
+        ipAddress: ip,
+        metaConfig: this.createWorkerConfiguration(id),
+        status: WorkerStatus.Online,
+        workerName: id,
+        createdBy: id,
+        projectId,
+        platform: platform,
+        envVariables: envVariables,
+      });
+      const result = await this.workerEntity.save(newWorker);
+
+      await this.sendMailService.sendMail({
+        successEmailType: SuccessEmailType.WORKER_USAGE,
+        workerUsage: { id, ip },
+      });
+      await this.workerEntity.update(
+        { workerId: result.workerId },
+        {
+          workerName: generateWorkerName(result.workerNumber, platform),
           envVariables: envVariables,
-        });
-        const result = await this.workerEntity.save(newWorker);
+        },
+      );
 
-        await this.sendMailService.sendMail({
-          successEmailType: SuccessEmailType.WORKER_USAGE,
-          workerUsage: { id, ip },
-        });
-        await this.workerEntity.update(
-          { workerId: result.workerId },
-          {
-            workerName: generateWorkerName(result.workerNumber, platform),
-            envVariables: envVariables,
-          },
-        );
-
-        return result.metaConfig;
-      }
+      return result.metaConfig;
     } catch (error) {
       this.logger.error(
         `Error while fetching worker configuration for workerId: ${id}, ${error}`,
