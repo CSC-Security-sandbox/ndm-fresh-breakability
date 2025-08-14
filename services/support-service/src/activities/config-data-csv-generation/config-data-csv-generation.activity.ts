@@ -58,10 +58,9 @@ export class ConfigurationDataCsvGenerationActivity {
     traceId: string;
     payload: any;
   }) {
-    const projectDetails = await this.dataSource.query(
-      SQL_QUERIES.GET_PROJECT_IDS,
-    );
-    const projectIds = projectDetails.map((row: any) => row.project_id);
+    const projectIds: string[] = payload?.projectWorkerMap
+      .filter((item: any) => item.projectId !== undefined)
+      .map((item: any) => item.projectId);
 
     if (
       projectIds?.length > 0 &&
@@ -105,11 +104,10 @@ export class ConfigurationDataCsvGenerationActivity {
 
     try {
       const jobConfigDetails =
-        SQL_QUERIES.GET_JOB_CONFIG_DETAILS_WITH_DATE_FILTER;
+        SQL_QUERIES.GET_JOB_CONFIG_DETAILS_WITH_PROJECT_ID_FILTER;
 
       const result = await this.dataSource.query(jobConfigDetails, [
-        payload.startDate,
-        payload.endDate,
+        projectIds,
       ]);
 
       this.logger.log(
