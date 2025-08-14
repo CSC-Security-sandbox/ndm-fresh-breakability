@@ -9,12 +9,15 @@ import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, load: [appConfig, databaseConfig, temporalConfig] }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [appConfig, databaseConfig, temporalConfig],
+    }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) =>
-       configService.getOrThrow<TypeOrmModuleOptions>('typeorm'),
+        configService.getOrThrow<TypeOrmModuleOptions>('typeorm'),
     }),
     WorkerModule,
     ActivitiesModule,
@@ -23,4 +26,3 @@ import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
   providers: [],
 })
 export class AppModule {}
-
