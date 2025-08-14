@@ -162,48 +162,37 @@ func fetchReport(
 	const retryDelay = DefaultPollInterval // adjust as needed
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		// 4) send POST
 		resp, err := SendAPIRequest(http.MethodPost, url, bodyBytes, headers)
-		fmt.Println("report api response : ", resp)
 		if err != nil {
-			return nil, fmt.Errorf("POST %s: %w", url, err)
+			return nil, err
 		}
-		defer resp.Body.Close()
-
-		// 5) read response
-		respBytes, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("read response body: %w", err)
+		respBytes, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+	
+		// Check if CSV inside ZIP is empty
+		zr, _ := zip.NewReader(bytes.NewReader(respBytes), int64(len(respBytes)))
+		emptyCSV := false
+		for _, f := range zr.File {
+			if strings.HasSuffix(f.Name, ".csv") {
+				rc, _ := f.Open()
+				content, _ := io.ReadAll(rc)
+				rc.Close()
+				if len(content) == 0 {
+					emptyCSV = true
+				}
+			}
 		}
-
-		// 6) expect 200 OK or 201 CREATED
+		if emptyCSV {
+			if attempt < maxRetries {
+				Wait(retryDelay)
+				continue
+			}
+			return nil, fmt.Errorf("empty CSV after %d retries", maxRetries)
+		}
+	
 		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
 			return respBytes, nil
 		}
-
-		// Retry on 500 Internal Server Error
-		if resp.StatusCode == http.StatusInternalServerError {
-			if attempt < maxRetries {
-				Wait(retryDelay)
-				continue
-			}
-			return nil, fmt.Errorf("received HTTP 500 after %d retries: %s", maxRetries, string(respBytes))
-		}
-
-		// Retry on 404 with specific message
-		if resp.StatusCode == http.StatusNotFound {
-			// Try to parse the response body as JSON to check the message
-
-			if attempt < maxRetries {
-				Wait(retryDelay)
-				continue
-			}
-			return nil, fmt.Errorf("received HTTP 404 after %d retries: %s", maxRetries, string(respBytes))
-
-		}
-
-		// For other status codes, return error immediately
-		return nil, fmt.Errorf("unexpected HTTP %d: %s", resp.StatusCode, string(respBytes))
 	}
 
 	return nil, fmt.Errorf("failed to fetch report after %d retries", maxRetries)
