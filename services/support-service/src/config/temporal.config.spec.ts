@@ -2,7 +2,6 @@ import temporalConfig from './temporal.config';
 
 describe('temporalConfig', () => {
   it('should return the default Temporal address when environment variable is not set', () => {
-
     const originalAddress = process.env.TEMPORAL_ADDRESS;
     delete process.env.TEMPORAL_ADDRESS;
     const config = temporalConfig();
