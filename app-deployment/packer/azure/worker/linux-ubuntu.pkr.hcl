@@ -245,10 +245,11 @@ source "azure-arm" "azure_ubuntu" {
   }
 
   azure_tags = {
-    "StackName" = local.image_name
-    "CreatedBy" = "Packer"
-    "Project"   = var.project_name
-    "Cloud"     = var.ssh_username
+    "stackname" = local.image_name
+    "createdby" = "packer"
+    "project"   = var.project_name
+    "cloud"     = "azure"
+    "creator"   = "vasudev"
   }
 }
 

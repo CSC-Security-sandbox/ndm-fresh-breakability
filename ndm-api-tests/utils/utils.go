@@ -42,6 +42,21 @@ type KeycloakCredentials struct {
 	ClientSecret  string
 }
 
+// =============================================================================
+// GENERIC API RESPONSE TYPES
+// =============================================================================
+
+// Generic API response wrapper that handles both single objects and arrays in items
+type ApiResponse[T any] struct {
+	Data    struct {
+		Items FlexibleItems[T] `json:"items"`
+	} `json:"data"`
+}
+
+// FlexibleItems can unmarshal either a single object or an array of objects
+type FlexibleItems[T any] []T
+
+
 // getBearerToken retrieves a bearer token using provided credentials or environment variables.
 func GetBearerToken(userN, pass string) (string, string, error) {
 	tokenUrl := fmt.Sprintf("https://%s/%s", KEYCLOAK_IP, TOKEN_URL)
@@ -958,7 +973,7 @@ func DeleteUserRolesByIDs(roleIDs []string) error {
 		url := fmt.Sprintf("%s/api/v1/user-roles/%s", ADMIN_SERVICE_URL, roleID)
 		resp, err := SendAPIRequest("DELETE", url, nil, headers)
 		if err != nil {
-			errors = append(errors, fmt.Sprintf("failed to delete user role %s: %v", err))
+			errors = append(errors, fmt.Sprintf("failed to delete user role %s:", err))
 			continue
 		}
 		resp.Body.Close()
@@ -1017,6 +1032,20 @@ func DeleteProjectsByIDs(projectIDs []string) error {
 	}
 
 	return nil
+}
+
+func DeleteKeycloakUser(username string) {
+	if username != "" {
+		keycloakAuthToken, err := GetKeyCloakAccessToken(KeycloakUser, KeycloakPassword)
+		if err == nil {
+			userKeycloakID, err := FetchUserID(username, keycloakAuthToken)
+			if err == nil {
+				deleteURL := fmt.Sprintf("https://%s/%s/%s", KEYCLOAK_IP, KEYCLOAK_BASE_URL, userKeycloakID)
+				headers := GetHeaders(keycloakAuthToken, ContentTypeJSON)
+				SendAPIRequest("DELETE", deleteURL, nil, headers)
+			}
+		}
+	}
 }
 
 func CleanupUsers(authToken, keycloakToken string) error {
@@ -1270,4 +1299,32 @@ func CreateUserRole(projectId, accountId, userId, roleId string, headers map[str
 
 	data := responseData["data"].(map[string]interface{})
 	return data, nil
+}
+
+// Helper function to unmarshal any API response with data.items structure
+func UnmarshalApiResponse[T any](data []byte) (*ApiResponse[T], error) {
+	var resp ApiResponse[T]
+	err := json.Unmarshal(data, &resp)
+	return &resp, err
+}
+
+// UnmarshalJSON implements custom unmarshaling for FlexibleItems
+// It can handle both single objects and arrays
+func (f *FlexibleItems[T]) UnmarshalJSON(data []byte) error {
+	// Try to unmarshal as an array first
+	var items []T
+	if err := json.Unmarshal(data, &items); err == nil {
+		*f = FlexibleItems[T](items)
+		return nil
+	}
+
+	// If that fails, try to unmarshal as a single object
+	var item T
+	if err := json.Unmarshal(data, &item); err == nil {
+		*f = FlexibleItems[T]([]T{item})
+		return nil
+	}
+
+	// If both fail, return the array unmarshaling error
+	return json.Unmarshal(data, &items)
 }

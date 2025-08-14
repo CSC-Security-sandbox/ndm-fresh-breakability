@@ -33,6 +33,7 @@ describe('WorkersController', () => {
           provide: WorkersService,
           useValue: {
             findAllWorkers: jest.fn(),
+            updateWorkerJobRunStatus: jest.fn(),
           },
         },
         {
@@ -53,8 +54,9 @@ describe('WorkersController', () => {
   describe('getWorkers', () => {
     it('should return a list of workers', async () => {
       const query: WorkersStatusPageDto = { };
-      jest.spyOn(service, 'findAllWorkers').mockResolvedValue({data: [], total: 0});
-      expect(await controller.getWorkers(query))
+      jest.spyOn(service, 'findAllWorkers').mockResolvedValue([]);
+      const result = await controller.getWorkers(query);
+      expect(result).toEqual([]);
     });
 
     it('should handle invalid query parameters', async () => {

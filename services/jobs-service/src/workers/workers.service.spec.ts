@@ -8,6 +8,10 @@ import { WorkerStatus } from "src/constants/enums";
 import { ConfigService } from "@nestjs/config";
 import { HealthStatus } from "./worker.types";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 describe("WorkersService", () => {
   let service: WorkersService;
@@ -41,6 +45,18 @@ describe("WorkersService", () => {
         {
           provide: ConfigService,
           useValue: configService,
+        },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
+              verbose: jest.fn(),
+            }),
+          },
         },
       ],
     }).compile();
@@ -85,7 +101,7 @@ describe("WorkersService", () => {
       const result = await service.findAllWorkers(workerStatusPageDto);
 
       // Assertions
-      expect(result).toEqual({ data: workers, total });
+      expect(result).toEqual(workers);
       expect(repository.find).toHaveBeenCalledWith({
         where: {
           workerId: "345678",
@@ -131,7 +147,7 @@ describe("WorkersService", () => {
       const result = await service.findAllWorkers(workerStatusPageDto);
 
       // Assertions
-      expect(result).toEqual({ data: workers, total });
+      expect(result).toEqual(workers);
       expect(repository.find).toHaveBeenCalledWith({
         where: {},
         order: { name: "asc" },
@@ -151,7 +167,7 @@ describe("WorkersService", () => {
       const result = await service.findAllWorkers(workerStatusPageDto);
 
       // Assertions
-      expect(result).toEqual({ data: [], total: 0 });
+      expect(result).toEqual([]);
       expect(repository.find).toHaveBeenCalled();
       expect(repository.count).toHaveBeenCalled();
     });
@@ -197,7 +213,7 @@ describe("WorkersService", () => {
       const result = await service.findAllWorkers(workerStatusPageDto);
 
       // Assertions
-      expect(result).toEqual({ data: workers, total });
+      expect(result).toEqual(workers);
       expect(repository.find).toHaveBeenCalledWith({
         where: {
           workerId: "345678",
@@ -263,9 +279,9 @@ describe("WorkersService", () => {
 
     const result = await service.findAllWorkers(workerStatusPageDto);
 
-    expect(result.data[0].status).toBe(WorkerStatus.Online);
-    expect(result.data[1].status).toBe(WorkerStatus.Offline);
-    expect(result.data[2].status).toBe(WorkerStatus.Offline);
+    expect(result[0].status).toBe(WorkerStatus.Online);
+    expect(result[1].status).toBe(WorkerStatus.Offline);
+    expect(result[2].status).toBe(WorkerStatus.Offline);
   });
 
   describe("updateWorkerJobRunStatus", () => {

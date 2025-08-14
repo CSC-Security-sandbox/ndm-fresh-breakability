@@ -17,6 +17,7 @@ export default registerAs(
 
     healthCheckInterval: process.env.HEALTH_CHECK_INTERVAL || '5',
     checkSpaceForPreCheck: process.env.CHECK_AVAILABLE_DISK_SPACE === 'true',
+    otelCollectorEndPoint: process.env.OTEL_COLLECTOR_ENDPOINT || 'localhost:4318',
 
     //core operations
     maxRetryCount: parseInt(process.env.MAX_OPERATION_RETRY || '3'),
@@ -28,6 +29,7 @@ export default registerAs(
     operationTimeout: parseInt(process.env.OPERATION_TIMEOUT || '5000'),
     groupSize: parseInt(process.env.REDIS_STREAM_GROUP_SIZE || '1000'),
     commandsInTask: parseInt(process.env.COMMANDS_IN_TASK || '100'),
+    maxCmdStreamLen: parseInt(process.env.MAX_CMDS_IN_STREAM || '5000'),
 
     // speed test
     speedTestFileName: process.env.SPEED_TEST_FILE_NAME || '1GB_zero_file.bin',

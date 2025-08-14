@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RedisConsumerService } from './redis-consumer.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { WorkflowService } from '../workflow/workflow.service';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { ConsumerType } from '../enum/redis-consumer.enum';
 import { JobContextFactory, JobManagerContext } from '@netapp-cloud-datamigrate/jobs-lib';
 import { RedisUtils } from '@netapp-cloud-datamigrate/jobs-lib/dist/redis/redis-utils';
@@ -148,6 +149,18 @@ describe('RedisConsumerService', () => {
           provide: WorkflowService,
           useValue: {
             signalWorkflow: jest.fn(),
+          },
+        },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              info: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
+              log: jest.fn(),
+            }),
           },
         },
       ],

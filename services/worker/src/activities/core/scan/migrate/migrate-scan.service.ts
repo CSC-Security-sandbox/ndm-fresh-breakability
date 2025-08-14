@@ -215,7 +215,8 @@ export class MigrateScanService {
             atime: sFile.atime,
             ctime: sFile.ctime,
             birthtime: sFile.birthtime,
-            sid: undefined
+            sid: undefined,
+            isSymLink: sFile.isSymbolicLink() ? true : false
         }
 
         if (isContentUpdate(sFile, dFile)) {

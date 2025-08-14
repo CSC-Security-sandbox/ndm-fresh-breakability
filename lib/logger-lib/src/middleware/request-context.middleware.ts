@@ -23,18 +23,15 @@ export class RequestContextMiddleware implements NestMiddleware {
 
     const projectId = (req.get('projectId') as string);    
 
+    // Sanitize URL to remove sensitive query parameters
+    const sanitizedUrl = req.url.split('?')[0];
+    
     const context: RequestContextData = { trackId: trackId, projectId: projectId };
     req['trackId'] = trackId;
 
     this.requestContext.run(context, () => {
-      this.logger.log(`Incoming request: [${req.method}] ${req.url}`,{
-        ip: req.ip,
+      this.logger.log(`Incoming request: [${req.method}] ${sanitizedUrl}`, {
         projectId,
-        headers: (() => {
-          const headers = { ...req.headers };
-          delete headers['authorization'];
-          return headers;
-        })(),
       });
 
       res.on('finish', () => {
@@ -43,7 +40,7 @@ export class RequestContextMiddleware implements NestMiddleware {
 
         this.logger.log(logLevel, {
           projectId,
-          message: `Response sent: [${req.method}] ${req.url} - ${statusCode}`,
+          message: `Response sent: [${req.method}] ${sanitizedUrl} - ${statusCode}`,
         });
       });
 

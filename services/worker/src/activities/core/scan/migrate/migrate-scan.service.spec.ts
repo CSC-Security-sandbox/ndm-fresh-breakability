@@ -147,6 +147,7 @@ describe('MigrateScanService', () => {
         it('should build command if content updated', () => {
             const mockStat = {
                 isDirectory: () => false,
+                isSymbolicLink: () => false,
                 size: 1,
                 mtime: new Date(),
                 mode: 777,
@@ -198,8 +199,11 @@ describe('MigrateScanService', () => {
         });
 
         it('should return undefined if not content updated', () => {
+            const mockSFile = {
+                isSymbolicLink: jest.fn().mockReturnValue(false),
+            };
             (isContentUpdate as jest.Mock).mockReturnValue(false);
-            const result = service.buildCommand({} as any, 'file/path');
+            const result = service.buildCommand(mockSFile as any, 'file/path');
             expect(result).toBeUndefined();
         });
     });

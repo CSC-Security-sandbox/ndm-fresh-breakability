@@ -7,6 +7,22 @@ import (
 	"net/http"
 )
 
+// =============================================================================
+// JOB DATA STRUCTURES
+// =============================================================================
+
+// Unified job item that works for all job types
+type JobItem struct {
+	ID     string `json:"id"`
+	Status string `json:"status,omitempty"`
+}
+
+// For migration responses that have nested jobs array
+type MigrationResponseItems struct {
+	Jobs []JobItem `json:"jobs"`
+}
+
+// Detailed job response structure
 type GetJobResponse struct {
 	JobConfigId       string          `json:"jobConfigId"`
 	JobType           string          `json:"jobType"`
@@ -38,14 +54,16 @@ type AggregateData struct {
 	TotalScannedSize        string `json:"totalScannedSize"`
 }
 
-type JobResponse []struct {
-	ID string `json:"id"`
-}
+// =============================================================================
+// TYPE ALIASES FOR DIFFERENT RESPONSE PATTERNS
+// =============================================================================
 
-type BulkCutoverJobParams struct {
-	SourcePathIDs      []string
-	DestinationPathIDs []string
-}
+type JobResponse = ApiResponse[JobItem]
+type MigrationResponse = ApiResponse[MigrationResponseItems]
+
+// =============================================================================
+// PARAMETER STRUCTURES
+// =============================================================================
 
 type DiscoveryJobParams struct {
 	SourcePathIDs            []string
@@ -58,18 +76,37 @@ type DiscoveryJobParams struct {
 	WorkflowTaskTimeout      string
 	WorkflowRunTimeout       string
 	StartDelay               string
+	Extra                    map[string]interface{}
+}
 
-	Extra map[string]interface{}
+type MigrationJobParams struct {
+	FirstRunAt         string
+	FutureRunSchedule  string
+	SourcePathIDs      []string
+	DestinationPathIDs []string
+	SidMapping         bool
+	Options            map[string]interface{}
+	ExtraParams        map[string]interface{}
+}
+
+type BulkCutoverJobParams struct {
+	SourcePathIDs      []string
+	DestinationPathIDs []string
 }
 
 type AdHocJobRunRequest struct {
 	JobConfigId string `json:"jobConfigId"`
 }
 
-// Struct for response (top-level id is jobRunId)
 type AdHocJobRunResponse struct {
-	ID string `json:"id"`
+	Data struct {
+		ID string `json:"id"`
+	} `json:"data"`
 }
+
+// =============================================================================
+// JOB CREATION FUNCTIONS
+// =============================================================================
 
 // CreateDiscoveryJob creates a discovery job using the provided parameters and headers,
 // parses the response, and returns the destination job configuration ID.
@@ -104,39 +141,44 @@ func CreateDiscoveryJob(params DiscoveryJobParams, headers map[string]string) ([
 
 	resp, err := SendAPIRequest(http.MethodPost, createDiscoveryURL, payloadBytes, headers)
 	if err != nil {
+		err = fmt.Errorf("discovery job creation failed: API request error: %v", err)
 		return nil, nil, err
+	}
+
+	// Validate HTTP response status
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("discovery job creation failed: expected HTTP 200 OK, got %d", resp.StatusCode)
+		return nil, resp, err
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
+		err = fmt.Errorf("discovery job creation failed: error reading response body: %v", err)
 		return nil, resp, err
 	}
 
 	var jobDestResp JobResponse
 	err = json.Unmarshal(bodyBytes, &jobDestResp)
 	if err != nil {
+		err = fmt.Errorf("discovery job creation failed: error unmarshaling response: %v", err)
 		return nil, resp, err
 	}
 
 	// Collect all job config IDs
 	var jobConfigIDs []string
-	for _, job := range jobDestResp {
+	for _, job := range jobDestResp.Data.Items {
 		if job.ID != "" {
 			jobConfigIDs = append(jobConfigIDs, job.ID)
 		}
 	}
 
-	return jobConfigIDs, resp, nil
-}
+	// Validate job count and non-empty results
+	if len(jobConfigIDs) == 0 {
+		err = fmt.Errorf("discovery job creation failed: no valid jobConfigIDs found in response")
+		return nil, resp, err
+	}
 
-type MigrationJobParams struct {
-	FirstRunAt         string
-	FutureRunSchedule  string
-	SourcePathIDs      []string
-	DestinationPathIDs []string
-	SidMapping         bool
-	Options            map[string]interface{}
-	ExtraParams        map[string]interface{}
+	return jobConfigIDs, resp, nil
 }
 
 // CreateMigrationJob creates migration jobs for all combinations of source and destination path IDs.
@@ -178,29 +220,47 @@ func CreateMigrationJob(params MigrationJobParams, headers map[string]string) ([
 
 	resp, err := SendAPIRequest(http.MethodPost, createMigrationURL, payloadBytes, headers)
 	if err != nil {
+		err = fmt.Errorf("migration job creation failed: API request error: %v", err)
 		return nil, nil, err
+	}
+
+	// Validate HTTP response status
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("migration job creation failed: expected HTTP 200 OK, got %d", resp.StatusCode)
+		return nil, resp, err
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
+		err = fmt.Errorf("migration job creation failed: error reading response body: %v", err)
 		return nil, resp, err
 	}
 
-	var migrationResp struct {
-		Jobs []map[string]interface{} `json:"jobs"`
-	}
+	var migrationResp MigrationResponse
 	err = json.Unmarshal(bodyBytes, &migrationResp)
 	if err != nil {
+		err = fmt.Errorf("migration job creation failed: error unmarshaling response: %v", err)
 		return nil, resp, err
 	}
 
 	var jobConfigIDs []string
-	for _, job := range migrationResp.Jobs {
-		if id, ok := job["id"].(string); ok && id != "" {
-			jobConfigIDs = append(jobConfigIDs, id)
+	// Migration response has nested structure: data.items[0].jobs[]
+	if len(migrationResp.Data.Items) > 0 {
+		jobs := migrationResp.Data.Items[0].Jobs
+		for _, job := range jobs {
+			if job.ID != "" {
+				jobConfigIDs = append(jobConfigIDs, job.ID)
+			}
 		}
 	}
 
+	// Validate job count and non-empty results
+	if len(jobConfigIDs) == 0 {
+		err = fmt.Errorf("migration job creation failed: no valid jobConfigIDs found in response")
+		return nil, resp, err
+	}
+
+	LogDebug(fmt.Sprintf("Migration job creation completed successfully. Created %d jobs with IDs: %v", len(jobConfigIDs), jobConfigIDs))
 	return jobConfigIDs, resp, nil
 }
 
@@ -231,29 +291,103 @@ func CreateBulkCutoverJob(params BulkCutoverJobParams, headers map[string]string
 
 	resp, err := SendAPIRequest(http.MethodPost, createBulkCutoverURL, payloadBytes, headers)
 	if err != nil {
+		err = fmt.Errorf("cutover job creation failed: API request error: %v", err)
 		return nil, nil, err
+	}
+
+	// Validate HTTP response status
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("cutover job creation failed: expected HTTP 200 OK, got %d", resp.StatusCode)
+		return nil, resp, err
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
+		err = fmt.Errorf("cutover job creation failed: error reading response body: %v", err)
 		return nil, resp, err
 	}
 
-	var bulkCutoverResp []map[string]interface{}
+	var bulkCutoverResp JobResponse
 	err = json.Unmarshal(bodyBytes, &bulkCutoverResp)
 	if err != nil {
+		err = fmt.Errorf("cutover job creation failed: error unmarshaling response: %v", err)
 		return nil, resp, err
 	}
 
 	var jobConfigIDs []string
-	for _, job := range bulkCutoverResp {
-		if id, ok := job["id"].(string); ok && id != "" {
-			jobConfigIDs = append(jobConfigIDs, id)
+	for i, job := range bulkCutoverResp.Data.Items {
+		LogDebug(fmt.Sprintf("Cutover job %d: ID='%s'", i, job.ID))
+		if job.ID != "" {
+			jobConfigIDs = append(jobConfigIDs, job.ID)
 		}
+	}
+
+	// Validate job count and non-empty results
+	if len(jobConfigIDs) == 0 {
+		err = fmt.Errorf("cutover job creation failed: no valid jobConfigIDs found in response")
+		return nil, resp, err
 	}
 
 	return jobConfigIDs, resp, nil
 }
+
+// TriggerAdHocJobRun triggers an ad-hoc job run for the given jobConfigId.
+func TriggerAdHocJobRun(jobConfigId string) (string, *http.Response, error) {
+	url := fmt.Sprintf("%s%s", CONFIG_SERVICE_URL, ADHOC_JOBRUN_URL)
+
+	// Prepare request body
+	reqBody := AdHocJobRunRequest{JobConfigId: jobConfigId}
+	payloadBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", nil, fmt.Errorf("adhoc job run failed: error marshaling request: %v", err)
+	}
+
+	// Prepare headers
+	headers := GetHeaders(AuthToken, ContentTypeJSON)
+
+	// Send request using your utility
+	resp, err := SendAPIRequest(http.MethodPost, url, payloadBytes, headers)
+	if err != nil {
+		return "", nil, fmt.Errorf("adhoc job run failed: API request error: %v", err)
+	}
+
+	// Validate HTTP response status
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return "", resp, fmt.Errorf("adhoc job run failed: expected HTTP 200 OK or 201 Created, got %d", resp.StatusCode)
+	}
+
+	LogDebug(fmt.Sprintf("adhoc run response status: %v", resp.StatusCode))
+
+	// Read response
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", resp, fmt.Errorf("adhoc job run failed: error reading response body: %v", err)
+	}
+
+	// Print the raw API response for debugging
+	LogDebug(fmt.Sprintf("adhoc job run raw API response: %s", string(bodyBytes)))
+
+	// Parse response
+	var jobRunResp AdHocJobRunResponse
+	err = json.Unmarshal(bodyBytes, &jobRunResp)
+	if err != nil {
+		return "", resp, fmt.Errorf("adhoc job run failed: error unmarshaling response: %v", err)
+	}
+
+	// Print the parsed response structure for debugging
+	LogDebug(fmt.Sprintf("adhoc job run parsed response: %+v", jobRunResp))
+
+	if jobRunResp.Data.ID == "" {
+		return "", resp, fmt.Errorf("adhoc job run failed: job run ID not found in response")
+	}
+
+	return jobRunResp.Data.ID, resp, nil
+}
+
+
+// =============================================================================
+// JOB MANAGEMENT FUNCTIONS
+// =============================================================================
 
 // ApproveRejectBulkCutoverJob sends an approval (or rejection) action for a bulk cutover job run.
 // action should be "APPROVED" or "REJECTED".
@@ -275,6 +409,10 @@ func ApproveRejectBulkCutoverJob(jobRunID, action string, headers map[string]str
 	return resp, nil
 }
 
+// =============================================================================
+// JOB MONITORING FUNCTIONS
+// =============================================================================
+
 // GetJobRunDetails fetches GetJobResponse struct and job runs, status from same for a given jobConfigID, this function can be used to validated
 // other details from response by modifying the GetJobResponse struct
 func GetJobRunDetails(jobConfigID string, headers map[string]string, needRetryAttempt ...bool) (GetJobResponse, *http.Response, error) {
@@ -284,7 +422,7 @@ func GetJobRunDetails(jobConfigID string, headers map[string]string, needRetryAt
 	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
 		resp, err := SendAPIRequest(http.MethodGet, jobsURL, nil, headers)
 		if err != nil {
-			return GetJobResponse{}, resp, fmt.Errorf("error while sending api request , err : %v", err)
+			return GetJobResponse{}, resp, fmt.Errorf("error while sending api request, err: %v", err)
 		}
 
 		bodyBytes, err := io.ReadAll(resp.Body)
@@ -293,28 +431,30 @@ func GetJobRunDetails(jobConfigID string, headers map[string]string, needRetryAt
 			return GetJobResponse{}, resp, fmt.Errorf("error reading response body: %w", err)
 		}
 
-		var getJobsResp GetJobResponse
-		err = json.Unmarshal(bodyBytes, &getJobsResp)
+		apiResp, err := UnmarshalApiResponse[GetJobResponse](bodyBytes)
 		if err != nil {
-			return GetJobResponse{}, resp, fmt.Errorf("error unmrashling response: %w", err)
+			return GetJobResponse{}, resp, fmt.Errorf("error unmarshaling response: %w", err)
 		}
 
-		if len(needRetryAttempt) > 0 {
-			return getJobsResp, resp, nil
-		}
+		if len(apiResp.Data.Items) > 0 {
+			getJobsResp := apiResp.Data.Items[0]
 
-		if len(getJobsResp.JobRuns) > 0 {
-			return getJobsResp, resp, nil
+			if len(needRetryAttempt) > 0 {
+				return getJobsResp, resp, nil
+			}
+
+			if len(getJobsResp.JobRuns) > 0 {
+				return getJobsResp, resp, nil
+			}
 		}
 
 		Wait(DefaultPollInterval)
 	}
 
-	return GetJobResponse{}, resp, fmt.Errorf("failed to get job run details after %d ", MaxPollRetries)
+	return GetJobResponse{}, resp, fmt.Errorf("failed to get job run details after %d attempts", MaxPollRetries)
 }
 
 // WaitForJobState polls the job run status until it matches the desired state or times out.
-
 func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int) error {
 	// Determine the number of retries to use
 	retryCount := MaxPollRetries
@@ -351,6 +491,55 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 
 	return fmt.Errorf("job %s did not reach state %s after %d retries", jobRunID, desiredJobState, retryCount)
 }
+
+// GetJobSummaryByConfigID gets the summary of Job config which includes NextScheduled Time
+// GetJobSummaryByConfigID is different than GetJobRunDetails because the later only gives state
+// of current job runs using configID and not of NextScheduled Time which are already present whereas
+// prior gives NextScheduled Time details, both functions end points are also different
+func GetJobSummaryByConfigID(
+	projectID,
+	desiredConfigID string,
+	headers map[string]string,
+) (*GetJobResponse, error) {
+	// build URL
+	url := fmt.Sprintf("%s/api/v1/jobs?projectId=%s", JOB_SERVICE_URL, projectID)
+
+	// send request
+	resp, err := SendAPIRequest(http.MethodGet, url, nil, headers)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %d", resp.StatusCode)
+	}
+
+	// read & unmarshal using the flexible wrapper
+	buf, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read body: %w", err)
+	}
+
+	// Use the flexible wrapper since all responses are now data.items
+	allJobsResp, err := UnmarshalApiResponse[GetJobResponse](buf)
+	if err != nil {
+		return nil, fmt.Errorf("invalid JSON: %w", err)
+	}
+
+	// find the one matching desiredConfigID
+	for i := range allJobsResp.Data.Items {
+		if allJobsResp.Data.Items[i].JobConfigId == desiredConfigID {
+			return &allJobsResp.Data.Items[i], nil
+		}
+	}
+
+	return nil, fmt.Errorf("jobConfigId %q not found", desiredConfigID)
+}
+
+// =============================================================================
+// JOB STATE MANAGEMENT FUNCTIONS
+// =============================================================================
 
 // HandleJobRunStateChange changes the state of a job run (PAUSE, RESUME, STOP).
 func HandleJobRunStateChange(jobRunID, stateType string, jobRunIDs []string) error {
@@ -400,14 +589,20 @@ func checkJobRunStatus(jobRunID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error reading response body: %v", err)
 	}
-	var temp struct {
-		Status string `json:"status"`
-	}
-	if err := json.Unmarshal(body, &temp); err != nil {
+
+	// Use the flexible wrapper since all responses are now data.items
+	statusResp, err := UnmarshalApiResponse[JobItem](body)
+	if err != nil {
 		return "", fmt.Errorf("error parsing JSON: %v", err)
 	}
-	LogDebug(fmt.Sprintf("Status check response: %s", temp.Status))
-	return temp.Status, nil
+
+	if len(statusResp.Data.Items) == 0 {
+		return "", fmt.Errorf("no status found in response")
+	}
+
+	status := statusResp.Data.Items[0].Status
+	LogDebug(fmt.Sprintf("Status check response: %s", status))
+	return status, nil
 }
 
 // ChangeJobRunState sends the actual state change request to the API.
@@ -436,87 +631,4 @@ func ChangeJobRunState(action string, jobRunIDs []string) error {
 	}
 	LogDebug(fmt.Sprintf("ChangeJobRunStateAPI response body: %s", body))
 	return nil
-}
-
-func TriggerAdHocJobRun(jobConfigId string) (string, *http.Response, error) {
-	url := fmt.Sprintf("%s%s", CONFIG_SERVICE_URL, ADHOC_JOBRUN_URL)
-	// Prepare request body
-	reqBody := AdHocJobRunRequest{JobConfigId: jobConfigId}
-	payloadBytes, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", nil, err
-	}
-	// Prepare headers
-	headers := GetHeaders(AuthToken, ContentTypeJSON)
-
-	// Send request using your utility
-	resp, err := SendAPIRequest(http.MethodPost, url, payloadBytes, headers)
-	if err != nil {
-		return "", nil, err
-	}
-	defer resp.Body.Close()
-
-	LogDebug(fmt.Sprintf("adhoc run response : ", resp))
-	// Read response
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", resp, err
-	}
-
-	// Parse response
-	var jobRunResp AdHocJobRunResponse
-	err = json.Unmarshal(bodyBytes, &jobRunResp)
-	if err != nil {
-		return "", resp, err
-	}
-
-	if jobRunResp.ID == "" {
-		return "", resp, fmt.Errorf("JobRunId not found in response")
-	}
-
-	return jobRunResp.ID, resp, nil
-}
-
-// This function gets the summary of Job config which includes NextScheduled Time
-// GetJobSummaryByConfigID is different than GetJobRunDetails because the later only gives state
-// of current job runs using configID and not of NextScheduled Time which are already present whereas
-// prior gives NextScheduled Time details, both functions end points are also different
-func GetJobSummaryByConfigID(
-	projectID,
-	desiredConfigID string,
-	headers map[string]string,
-) (*GetJobResponse, error) {
-	// build URL
-	url := fmt.Sprintf("%s/api/v1/jobs?projectId=%s", JOB_SERVICE_URL, projectID)
-
-	// send request
-	resp, err := SendAPIRequest(http.MethodGet, url, nil, headers)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status %d", resp.StatusCode)
-	}
-
-	// read & unmarshal
-	buf, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read body: %w", err)
-	}
-
-	var allJobs []GetJobResponse
-	if err := json.Unmarshal(buf, &allJobs); err != nil {
-		return nil, fmt.Errorf("invalid JSON: %w", err)
-	}
-
-	// find the one matching desiredConfigID
-	for i := range allJobs {
-		if allJobs[i].JobConfigId == desiredConfigID {
-			return &allJobs[i], nil
-		}
-	}
-
-	return nil, fmt.Errorf("jobConfigId %q not found", desiredConfigID)
 }

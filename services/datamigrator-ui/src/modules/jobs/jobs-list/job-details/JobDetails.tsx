@@ -30,6 +30,7 @@ import { useParams } from "react-router-dom";
 import {
   handleDownloadReport,
   handleDownloadErrorsLogs,
+  handleDownloadCocReport,
 } from "@modules/jobs/jobs.utils";
 import {
   getActionMenu,
@@ -127,6 +128,7 @@ const JobDetails = () => {
       ? getReportActions(
           row,
           handleDownloadReport,
+          handleDownloadCocReport,
           downloadReportApi,
           getPdfReportApi
         )

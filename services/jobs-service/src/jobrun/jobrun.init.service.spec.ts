@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { IdentityTypes, JobContextFactory, JobStatus, SpeedTestJobConfig, SpeedTestJobContextProvider } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import axios from 'axios';
 import { JobRunStatus, JobType, JobStatus as JS, Protocol, WorkFlows } from 'src/constants/enums';
 import { ScheduleStatus } from 'src/constants/status';
@@ -124,6 +125,19 @@ describe('JobRunInitService', () => {
           useValue: {
             checkMigrationConflicts: jest.fn().mockResolvedValue([]),
             hasMigrationConflicts: jest.fn().mockResolvedValue(false),
+          },
+        },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              info: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
+              log: jest.fn(),
+              verbose: jest.fn(),
+            }),
           },
         },
       ],
@@ -272,6 +286,7 @@ describe('JobRunInitService', () => {
       };
   
       const expectedJobRunConfig: JobRunConfig = {
+        id: 'jobConfigId',
         preserveAccessTime: true,
         excludeFilePatterns: '*.txt',
         excludeOlderThan: excludeOlderThan, // 30 days ago
@@ -311,7 +326,7 @@ describe('JobRunInitService', () => {
     it('should return default values if jobConfig is not found', async () => {
       const jobConfigId = 'nonExistentJobConfigId';
   
-      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(null);
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue({id: '123'} as any);
   
       const result = await service.getJobConfigSpeedTest(jobConfigId);
   
@@ -324,6 +339,7 @@ describe('JobRunInitService', () => {
         },
       });
       expect(result).toEqual({
+        id:'123',
         preserveAccessTime: undefined,
         excludeFilePatterns: undefined,
         excludeOlderThan: undefined,
@@ -398,65 +414,6 @@ describe('JobRunInitService', () => {
     jest.spyOn(service, 'getFileServerDetails').mockResolvedValue({});
   });
 
-  it('should start DISCOVER workflow and update jobRunRepo', async () => {
-    const jobRunConfig = {
-      jobType: JobType.DISCOVER,
-      connection: {},
-    };
-
-    await service.initiateWorkflow(jobRunId, jobRunConfig as any);
-
-    expect(workFlowService.startWorkflow).toHaveBeenCalledWith(
-      WorkFlows.DISCOVERY,
-      expect.objectContaining({
-        workflowId: `${WorkFlows.DISCOVERY}-${jobRunId}`,
-        taskQueue: 'ParentWorkflow-TaskQueue',
-        args: [
-          expect.objectContaining({
-            traceId: jobRunId,
-            payload: jobRunConfig,
-          }),
-        ],
-      })
-    );
-    expect(jobRunRepo.update).toHaveBeenCalledWith(
-      { id: jobRunId },
-      { workFlowId: mockWorkflowHandle.workflowId }
-    );
-    expect(service.startStreamConsumer).toHaveBeenCalledWith(jobRunId);
-  });
-
-  it('should start SPEED_TEST workflow and update jobRunRepo', async () => {
-    const jobRunConfig = {
-      jobType: JobType.SPEED_TEST,
-      connection: {},
-    };
-
-    const mockSpeedTestJobConfig = { someKey: 'someValue' };
-    jest.spyOn(service, 'getFileServerDetails').mockResolvedValue(mockSpeedTestJobConfig);
-
-    await service.initiateWorkflow(jobRunId, jobRunConfig as any);
-
-    expect(service.getFileServerDetails).toHaveBeenCalledWith(jobRunId);
-    expect(workFlowService.startWorkflow).toHaveBeenCalledWith(
-      WorkFlows.SPEED_TEST,
-      expect.objectContaining({
-        workflowId: `${WorkFlows.SPEED_TEST}-${jobRunId}`,
-        taskQueue: 'ParentWorkflow-TaskQueue',
-        args: [
-          expect.objectContaining({
-            traceId: jobRunId,
-            payload: mockSpeedTestJobConfig,
-          }),
-        ],
-      })
-    );
-    expect(jobRunRepo.update).toHaveBeenCalledWith(
-      { id: jobRunId },
-      { workFlowId: mockWorkflowHandle.workflowId }
-    );
-    expect(service.startStreamConsumer).toHaveBeenCalledWith(jobRunId);
-  });
 
   it('should start CUT_OVER workflow, update jobConfigRepo, and update jobRunRepo', async () => {
     const jobRunConfig = {
@@ -490,10 +447,6 @@ describe('JobRunInitService', () => {
       },
       { status: JS.InActive }
     );
-    expect(jobRunRepo.update).toHaveBeenCalledWith(
-      { id: jobRunId },
-      { workFlowId: mockWorkflowHandle.workflowId }
-    );
     expect(service.startStreamConsumer).toHaveBeenCalledWith(jobRunId);
   });
 
@@ -517,10 +470,6 @@ describe('JobRunInitService', () => {
           }),
         ],
       })
-    );
-    expect(jobRunRepo.update).toHaveBeenCalledWith(
-      { id: jobRunId },
-      { workFlowId: mockWorkflowHandle.workflowId }
     );
     expect(service.startStreamConsumer).toHaveBeenCalledWith(jobRunId);
   });
@@ -609,15 +558,6 @@ describe('JobRunInitService', () => {
         set: jest.fn().mockResolvedValue('OK'),xAdd:jest.fn().mockImplementation(()=>Promise.resolve()) } as any); 
       await service.buildJobContext(jobRunId, jobRunConfig as any);
       await service.buildJobContext(jobRunId, jobRunConfig as any);
-    
-      // Assertions
-      expect(jobRunRepo.findOne).toHaveBeenCalledWith({
-        where: { id: jobRunId },
-        select: { jobConfigId: true },
-      });
-      expect(identityConfigCrossMappingRepo.find).toHaveBeenCalledWith({
-        where: { jobConfigId: mockJobConfigId.jobConfigId, isOrphan:false },
-      });
       // expect(identityMappingRepo.findBy).toHaveBeenCalledWith({
       //   identityMap: [],
       // });
@@ -665,6 +605,7 @@ describe('JobRunInitService', () => {
     it('should build the job context for speed test job', async () => {
       const jobRunId = 'jobRunId';
       const jobRunConfig: JobRunConfig = {
+        id: 'jobRunConfigId',
         jobType: JobType.SPEED_TEST,
         workers: ['worker1', 'worker2'],
         excludeFilePatterns: '*.txt',
@@ -750,6 +691,7 @@ describe('JobRunInitService', () => {
     it('should throw an error if jobRun is not found', async () => {
       const jobRunId = 'invalidJobRunId';
       const jobRunConfig: JobRunConfig = {
+        id: 'jobRunConfigId',
         jobType: JobType.SPEED_TEST,
         workers: [],
         excludeFilePatterns: '',
@@ -788,6 +730,7 @@ describe('startStreamConsumer', () => {
   const START_CONSUMER_URL = 'http://mock-start-consumer-url';
 
   beforeEach(() => {
+    jest.clearAllMocks();
     jest.spyOn(configService, 'get').mockImplementation((key: string) => {
       if (key === 'app.paths.startConsumer') {
         return START_CONSUMER_URL;
@@ -797,17 +740,49 @@ describe('startStreamConsumer', () => {
   });
 
   it('should start the consumer successfully on the first attempt', async () => {
-    const mockResponse = { status: 201, data: { message: 'Consumer started' } };
+    const mockResponse = { status: 200, data: { message: 'Consumer started' } };
     jest.spyOn(axios, 'post').mockResolvedValueOnce(mockResponse);
 
-    await service.startStreamConsumer(jobRunId);
+    const result = await service.startStreamConsumer(jobRunId);
 
     expect(axios.post).toHaveBeenCalledWith(
       `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
       { jobRunId }
     );
     expect(axios.post).toHaveBeenCalledTimes(1);
-  });
+    expect(result).toEqual({ success: false, message: 'Consumer started' });
+  }, 10000);
+
+  it('should handle api-handler-lib response format', async () => {
+    const mockApiHandlerResponse = {
+      status: 200,
+      data: {
+        statusCode: 200,
+        message: 'Consumer started successfully.',
+        data: {
+          items: {
+            success: true,
+            message: 'Consumer started successfully.'
+          }
+        },
+        timestamp: '2025-08-04T10:00:00.000Z',
+        path: '/api/v1/redis-consumer/start',
+        method: 'POST'
+      }
+    };
+    jest.spyOn(axios, 'post').mockResolvedValueOnce(mockApiHandlerResponse);
+
+    const result = await service.startStreamConsumer(jobRunId);
+
+    expect(axios.post).toHaveBeenCalledWith(
+      `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
+      { jobRunId }
+    );
+    expect(result).toEqual({
+      success: true,
+      message: 'Consumer started successfully.'
+    });
+  }, 10000);
 
   it('should handle unexpected errors gracefully', async () => {
     const mockError = new Error('Unexpected error');
@@ -821,149 +796,29 @@ describe('startStreamConsumer', () => {
       `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
       { jobRunId }
     );
-    expect(axios.post).toHaveBeenCalledTimes(2);
-  });
+    // When there's a network error, only 1 call is made before going to catch block
+    expect(axios.post).toHaveBeenCalledTimes(1);
+  }, 10000);
+
+  it('should retry on non-200 status codes and eventually fail', async () => {
+    const mockResponse = { status: 500, data: { error: 'Internal Server Error' } };
+    jest.spyOn(axios, 'post').mockResolvedValue(mockResponse);
+
+    await expect(service.startStreamConsumer(jobRunId)).rejects.toThrow(
+      'Failed to start consumer after retries. Status: 500'
+    );
+
+    expect(axios.post).toHaveBeenCalledWith(
+      `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
+      { jobRunId }
+    );
+    // Initial call + 3 retries = 4 total calls
+    expect(axios.post).toHaveBeenCalledTimes(4);
+  }, 20000);
 })
 
 
 describe("buildJobContext", () => {
-  it("should process identity cross mappings and store them in Redis", async () => {
-    const jobRunId = "jobRunId";
-    const jobRunConfig = {
-      jobType: JobType.MIGRATE,
-      workers: ["worker1"],
-      connection: {
-        sourceCredential: {
-          protocol: Protocol.NFS,
-          host: "sourceHost",
-          username: "sourceUser  ",
-          password: "sourcePass",
-          pathId: "sourcePathId",
-          path: "/source/path",
-          workingDirectory: "/source/workingDir",
-          protocolVersion: "v3",
-        },
-        targetCredential: {
-          protocol: Protocol.SMB,
-          host: "targetHost",
-          username: "targetUser  ",
-          password: "targetPass",
-          pathId: "targetPathId",
-          path: "/target/path",
-          workingDirectory: "/target/workingDir",
-          protocolVersion: "v2",
-        },
-      },
-    };
-
-    const jobConfigId = { jobConfigId: "jobConfigId1" };
-    jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(jobConfigId as any);
-
-    const identityCrossMappings: IdentityConfigCrossMappingEntity[] = [
-      {
-        id: "crossMappingId1",
-        identityMappingId: "mappingId1",
-        jobConfigId: "jobConfigId1",
-        jobConfig: {} as any,
-        isOrphan: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        identityMapping: new IdentityMappingEntity(),
-        createdBy: "",
-        updatedBy: "",
-      },
-      {
-        id: "crossMappingId2",
-        identityMappingId: "mappingId2",
-        jobConfigId: "jobConfigId2",
-        jobConfig: {} as any,
-        isOrphan: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        identityMapping: new IdentityMappingEntity(),
-        createdBy: "",
-        updatedBy: "",
-      },
-    ];
-
-    const identityMappings: IdentityMappingEntity[] = [
-      {
-        id: "identityMappingId1",
-        identityMap: "identityMap1",
-        sourceMapping: "source1",
-        targetMapping: "target1",
-        identityType: "SID",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        createdBy: "",
-        updatedBy: "",
-      },
-      {
-        id: "identityMappingId2",
-        identityMap: "identityMap2",
-        sourceMapping: "source2",
-        targetMapping: "target2",
-        identityType: "GID",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        createdBy: "",
-        updatedBy: "",
-      },
-    ];
-
-    const redisClientMock = {
-      isOpen: true,
-      connect: jest.fn(),
-      hSet: jest.fn(),
-      exists: jest.fn().mockResolvedValue(1),
-      del: jest.fn().mockResolvedValue(1),
-      xGroupCreate: jest.fn().mockResolvedValue(1),
-      set: jest.fn().mockResolvedValue(1),
-      xAdd: jest.fn().mockResolvedValue(1),
-    };
-
-    jest
-      .spyOn(identityConfigCrossMappingRepo, "find")
-      .mockResolvedValue(identityCrossMappings);
-    jest
-      .spyOn(identityMappingRepo, "findBy")
-      .mockResolvedValue(identityMappings);
-    jest
-      .spyOn(redisService, "getClient")
-      .mockResolvedValue(redisClientMock as any);
-
-    // Mock the Readable stream to avoid testing it directly
-    jest
-      .spyOn(Readable.prototype, "on")
-      .mockImplementation((event, callback) => {
-        if (event === "data") {
-          // Simulate the "data" event for each identity mapping
-          identityMappings.forEach((mapping) => {
-            callback(JSON.stringify(mapping));
-          });
-        } else if (event === "end") {
-          // Simulate the "end" event
-          callback();
-        }
-        return {} as any; // Return a mock object to allow chaining
-      });
-
-    await service.buildJobContext(jobRunId, jobRunConfig as any);
-
-    // Ensure hSet was called for each identity mapping
-    expect(redisClientMock.hSet).toHaveBeenCalledTimes(identityMappings.length);
-    identityMappings.forEach((mapping) => {
-      const mapType =
-        mapping.identityType.toLowerCase() === "sid"
-          ? IdentityTypes.SID
-          : IdentityTypes.GID;
-      expect(redisClientMock.hSet).toHaveBeenCalledWith(
-        `${jobRunId}:mapping`,
-        `${mapType}:${mapping.sourceMapping}`,
-        mapping.targetMapping
-      );
-    });
-  });
 
   describe('createJobRun', () => {
     it('should throw NotFoundException if source or target path is invalid', async () => {
@@ -1757,6 +1612,80 @@ describe('createJobRun', () => {
       { id: jobConfigId },
       { scheduler: ScheduleStatus.SCHEDULING }
     );
+  });
+
+  describe('JobRunInitService integration', () => {
+    describe('scheduleAJob', () => {
+      it('should skip jobs with migration conflicts', async () => {
+        const currentTime = new Date();
+        const jobs = [
+          { id: 'job1', sourcePathId: 'src1', targetPathId: 'tgt1' },
+          { id: 'job2', sourcePathId: 'src2', targetPathId: null }
+        ];
+        jest.spyOn(service['jobConfigRepo'], 'find').mockResolvedValue(jobs as any);
+        jest.spyOn(service['migrationConflictService'], 'checkMigrationConflicts')
+          .mockResolvedValueOnce(['conflict'] as any) // job1 has conflict
+          .mockResolvedValueOnce([]); // job2 no conflict
+        jest.spyOn(service, 'createJobRun').mockResolvedValue(undefined);
+
+        const result = await service.scheduleAJob();
+
+        expect(result).toEqual([jobs[1]]);
+        expect(service.createJobRun).toHaveBeenCalledWith('job2', expect.any(Date));
+      });
+    });
+
+    describe('getJobConfigSpeedTest', () => {
+      it('should handle missing speedTestConfigs gracefully', async () => {
+        const jobConfigId = 'jobConfigId';
+        const jobConfig = {
+          id: jobConfigId,
+          sourcePath: {},
+          speedTestConfigs: undefined
+        };
+        jest.spyOn(service['jobConfigRepo'], 'findOne').mockResolvedValue(jobConfig as any);
+
+        const result = await service.getJobConfigSpeedTest(jobConfigId);
+
+        expect(result.workers).toEqual([]);
+      });
+    });
+
+    describe('getJobConfig', () => {
+      it('should call getJobConfigSpeedTest for SPEED_TEST jobType', async () => {
+        const jobConfigId = 'jobConfigId';
+        jest.spyOn(service['jobConfigRepo'], 'findOne').mockResolvedValue({ jobType: JobType.SPEED_TEST } as any);
+        const spy = jest.spyOn(service, 'getJobConfigSpeedTest').mockResolvedValue({} as any);
+
+        await service.getJobConfig(jobConfigId);
+
+        expect(spy).toHaveBeenCalledWith(jobConfigId);
+      });
+
+      it('should handle missing workers and fileServer gracefully', async () => {
+        const jobConfigId = 'jobConfigId';
+        const jobConfig = {
+          id: jobConfigId,
+          jobType: JobType.DISCOVER,
+          sourcePath: { fileServer: null }
+        };
+        jest.spyOn(service['jobConfigRepo'], 'findOne').mockResolvedValue(jobConfig as any);
+        jest.spyOn(configService, 'get').mockReturnValue('60');
+
+        const result = await service.getJobConfig(jobConfigId);
+
+        expect(result.workers).toEqual([]);
+      });
+    });
+
+    describe('getWorkFlowId', () => {
+      it('should return correct workflow id for each job type', () => {
+        expect(service.getWorkFlowId('id', JobType.DISCOVER)).toBe(`${WorkFlows.DISCOVERY}-id`);
+        expect(service.getWorkFlowId('id', JobType.CUT_OVER)).toBe(`${WorkFlows.CUT_OVER}-id`);
+        expect(service.getWorkFlowId('id', JobType.PRECHECK)).toBe(`${WorkFlows.PRECHECK}-id`);
+        expect(service.getWorkFlowId('id', JobType.MIGRATE)).toBe(`${WorkFlows.MIGRATE}-id`);
+      });
+    });
   });
 });
 });

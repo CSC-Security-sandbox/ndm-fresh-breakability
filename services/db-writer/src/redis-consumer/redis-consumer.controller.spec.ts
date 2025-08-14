@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RedisConsumerController } from './redis-consumer.controller';
 import { RedisConsumerService } from './redis-consumer.service';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { ConsumerDto } from './redis-consumer.dto';
 
 describe('RedisConsumerController', () => {
@@ -18,6 +19,18 @@ describe('RedisConsumerController', () => {
         {
           provide: RedisConsumerService,
           useValue: mockRedisConsumerService,
+        },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              info: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
+              log: jest.fn(),
+            }),
+          },
         },
       ],
     }).compile();
