@@ -188,7 +188,6 @@ describe('PrometheusDataProcessorService', () => {
             Pod: 'worker-job',
             Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
             'Worker Id': 'worker-1',
-            Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
           },
         ],
       });
