@@ -487,6 +487,72 @@ describe('PerformanceMetricsProcessorService', () => {
       );
     });
 
+    it('should process LATENCY metric correctly', async () => {
+      const latencyResponse: PrometheusResponse = {
+        status: 'success',
+        data: {
+          resultType: 'matrix',
+          result: [
+            {
+              metric: {
+                worker_id: 'worker-1',
+                control_plane_ip: '10.0.0.1',
+                metric_type: 'avg',
+              },
+              values: [['1641024000', '12.345']],
+            },
+            {
+              metric: {
+                worker_id: 'worker-2',
+                control_plane_ip: '10.0.0.1',
+                metric_type: 'min',
+              },
+              values: [['1641024000', '8.567']],
+            },
+          ],
+        },
+      };
+
+      const result = await service.processMetricData(
+        'LATENCY',
+        latencyResponse,
+      );
+
+      expect(result.data).toBeTruthy();
+      expect(result.csvContent).toBe('mocked,csv,content\n');
+      expect(fastCsv.writeToString).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.arrayContaining([
+            expect.stringMatching(
+              /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
+            ),
+            'worker-1',
+            '10.0.0.1',
+            'avg',
+            12.35, // rounded to 2 decimal places
+          ]),
+          expect.arrayContaining([
+            expect.stringMatching(
+              /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
+            ),
+            'worker-2',
+            '10.0.0.1',
+            'min',
+            8.57, // rounded to 2 decimal places
+          ]),
+        ]),
+        {
+          headers: [
+            'timestamp',
+            'worker_id',
+            'control_plane_ip',
+            'metric_type',
+            'latency_ms',
+          ],
+        },
+      );
+    });
+
     it('should process unknown metric type and return default case', async () => {
       const result = await service.processMetricData(
         'UNKNOWN_METRIC' as any,
@@ -1646,6 +1712,33 @@ describe('PerformanceMetricsProcessorService', () => {
 
       expect(result.data).toHaveLength(1);
       expect(result.data?.[0][3]).toBe('NaN');
+    });
+
+    it('should handle NaN values in LATENCY metric', async () => {
+      const responseWithNaN = {
+        status: 'success' as const,
+        data: {
+          resultType: 'vector',
+          result: [
+            {
+              metric: {
+                worker_id: 'worker-1',
+                control_plane_ip: '10.0.0.1',
+                metric_type: 'avg',
+              },
+              values: [['1699123456', 'invalid_latency']],
+            },
+          ],
+        },
+      };
+
+      const result = await service.processMetricData(
+        'LATENCY',
+        responseWithNaN,
+      );
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data?.[0][4]).toBe('NaN'); // latency_ms field
     });
 
     it('should handle NaN values in CLIENT_ERROR_RATE metric', async () => {

@@ -221,5 +221,17 @@ export class PerformanceMetricsCsvGenerationActivity {
       );
       this.logger.log(`[${traceId}] Redis Metrics CSV created: ${fileName}`);
     }
+
+    // Generate separate latency CSV file
+    if (data.LATENCY && data.LATENCY?.data?.length > 0) {
+      const fileName = `network-latency-${timestamp}.csv`;
+      await this.zipHandler.addCsvToZip(
+        data.LATENCY.csvContent,
+        fileName,
+        zipLocation,
+        'Performance Metrics',
+      );
+      this.logger.log(`[${traceId}] Network Latency CSV created: ${fileName}`);
+    }
   }
 }

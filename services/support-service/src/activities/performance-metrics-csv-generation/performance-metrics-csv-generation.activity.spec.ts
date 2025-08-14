@@ -622,6 +622,85 @@ describe('PerformanceMetricsCsvGenerationActivity', () => {
       expect(zipHandler.addCsvToZip).toHaveBeenCalledTimes(0);
     });
 
+    it('should generate network latency CSV file when LATENCY data is available', async () => {
+      const mockData: ProcessedMetricsBatchResult = {
+        LATENCY: {
+          data: [
+            ['2024-01-01T00:00:00.000Z', 'worker-1', '10.0.0.1', 'avg', 12.34],
+            ['2024-01-01T00:00:00.000Z', 'worker-1', '10.0.0.1', 'min', 8.56],
+          ] as any,
+          csvContent:
+            'timestamp,worker_id,control_plane_ip,metric_type,latency_ms\n2024-01-01T00:00:00.000Z,worker-1,10.0.0.1,avg,12.34\n2024-01-01T00:00:00.000Z,worker-1,10.0.0.1,min,8.56',
+        },
+      };
+
+      processorService.createCombinedRedisMetricsCsv.mockResolvedValue({
+        csvContent: '',
+        hasData: false,
+      });
+
+      await (activity as any).generateCsvFiles(traceId, mockData, zipLocation);
+
+      expect(zipHandler.addCsvToZip).toHaveBeenCalledWith(
+        mockData.LATENCY!.csvContent,
+        `network-latency-${timestamp}.csv`,
+        zipLocation,
+        'Performance Metrics',
+      );
+      expect(mockLogger.log).toHaveBeenCalledWith(
+        `[${traceId}] Network Latency CSV created: network-latency-${timestamp}.csv`,
+      );
+    });
+
+    it('should not generate network latency CSV file when LATENCY data is empty', async () => {
+      const mockData: ProcessedMetricsBatchResult = {
+        LATENCY: {
+          data: [],
+          csvContent: '',
+        },
+      };
+
+      processorService.createCombinedRedisMetricsCsv.mockResolvedValue({
+        csvContent: '',
+        hasData: false,
+      });
+
+      await (activity as any).generateCsvFiles(traceId, mockData, zipLocation);
+
+      // Should not generate latency CSV when data is empty
+      expect(zipHandler.addCsvToZip).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.stringMatching(/network-latency-.*\.csv/),
+        expect.anything(),
+        expect.anything(),
+      );
+      expect(mockLogger.log).not.toHaveBeenCalledWith(
+        expect.stringContaining('Network Latency CSV created'),
+      );
+    });
+
+    it('should not generate network latency CSV file when LATENCY data is undefined', async () => {
+      const mockData: ProcessedMetricsBatchResult = {};
+
+      processorService.createCombinedRedisMetricsCsv.mockResolvedValue({
+        csvContent: '',
+        hasData: false,
+      });
+
+      await (activity as any).generateCsvFiles(traceId, mockData, zipLocation);
+
+      // Should not generate latency CSV when LATENCY is not in the data
+      expect(zipHandler.addCsvToZip).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.stringMatching(/network-latency-.*\.csv/),
+        expect.anything(),
+        expect.anything(),
+      );
+      expect(mockLogger.log).not.toHaveBeenCalledWith(
+        expect.stringContaining('Network Latency CSV created'),
+      );
+    });
+
     it('should skip generating CSV files when data is empty', async () => {
       const mockData: ProcessedMetricsBatchResult = {
         CPU_PERCENT: {

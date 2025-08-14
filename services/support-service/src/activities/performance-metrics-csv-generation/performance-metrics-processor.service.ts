@@ -101,6 +101,35 @@ export class PerformanceMetricsProcessorService {
   }
 
   /**
+   * Convert Prometheus result to rows for latency metrics (worker network latency)
+   */
+  private convertLatencyMetricResultToRows(
+    response: PrometheusResponse,
+    valueParser?: (v: number) => number | string,
+  ): any[][] {
+    if (!response.data || !response.data.result) return [];
+
+    const rows: any[][] = [];
+    for (const metricData of response.data.result) {
+      const workerId = metricData.metric?.worker_id || '';
+      const controlPlaneIp = metricData.metric?.control_plane_ip || '';
+      const metricType = metricData.metric?.metric_type || '';
+
+      for (const [timestamp, value] of metricData.values || []) {
+        const numericValue = Number(value);
+        rows.push([
+          new Date(Number(timestamp) * 1000).toISOString(), // ISO timestamp
+          workerId,
+          controlPlaneIp,
+          metricType,
+          valueParser ? valueParser(numericValue) : numericValue,
+        ]);
+      }
+    }
+    return rows;
+  }
+
+  /**
    * Process a single metric into CSV data
    */
   async processMetricData(metric: string, response: PrometheusResponse) {
@@ -218,6 +247,19 @@ export class PerformanceMetricsProcessorService {
         rows = this.convertRedisMetricResultToRows(
           response,
           (v) => (isNaN(v) ? 'NaN' : Number((v * 100).toFixed(2))), // Convert to percentage
+        );
+        break;
+
+      case 'LATENCY':
+        headers = [
+          'timestamp',
+          'worker_id',
+          'control_plane_ip',
+          'metric_type',
+          'latency_ms',
+        ];
+        rows = this.convertLatencyMetricResultToRows(response, (v) =>
+          isNaN(v) ? 'NaN' : Number(v.toFixed(2)),
         );
         break;
 

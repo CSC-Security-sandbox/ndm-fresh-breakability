@@ -18,6 +18,7 @@ import {
   LoggerFactory,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { WorkerThreadService } from 'src/thread/worker.thread.service';
+import * as ping from 'ping';
 
 @Injectable()
 export class MetricsService implements OnModuleInit, OnModuleDestroy {
@@ -26,13 +27,23 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
   private pushInterval: NodeJS.Timeout;
   private collectSystemMetricsInterval: NodeJS.Timeout;
   private collectWorkerThreadMetricsInterval: NodeJS.Timeout;
+  private collectPingMetricsInterval: NodeJS.Timeout;
 
   private readonly workerId: string = process.env.WORKER_ID || 'worker-id';
   private readonly pushgatewayUrl: string = `http://${process.env.CONTROL_PLANE_IP || '127.0.0.1'}:9091`;
-  private readonly metricsEnabled: boolean = process.env.METRICS_ENABLED !== 'false';
-  private readonly collectionInterval: number = parseInt(process.env.METRICS_COLLECTION_INTERVAL || '5000');
-  private readonly pushIntervalMs: number = parseInt(process.env.METRICS_PUSH_INTERVAL || '15000');
-  private readonly workerThreadMetricsInterval: number = parseInt(process.env.WORKER_METRICS_COLLECTION_INTERVAL || '2000');
+  private readonly metricsEnabled: boolean =
+    process.env.METRICS_ENABLED !== 'false';
+  private readonly collectionInterval: number = parseInt(
+    process.env.METRICS_COLLECTION_INTERVAL || '5000',
+  );
+  private readonly pushIntervalMs: number = parseInt(
+    process.env.METRICS_PUSH_INTERVAL || '15000',
+  );
+  private readonly workerThreadMetricsInterval: number = parseInt(
+    process.env.WORKER_METRICS_COLLECTION_INTERVAL || '2000',
+  );
+  private readonly controlPlaneIP: string =
+    process.env.CONTROL_PLANE_IP || '127.0.0.1';
 
   public readonly httpRequestCounter = new Counter({
     name: 'worker_http_requests_total',
@@ -98,6 +109,13 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     registers: [this.registry],
   });
 
+  private readonly networkLatencyGauge = new Gauge({
+    name: 'worker_network_latency',
+    help: 'Network latency to control plane in milliseconds',
+    labelNames: ['worker_id', 'control_plane_ip', 'metric_type'],
+    registers: [this.registry],
+  });
+
   private readonly logger: LoggerService;
   private workerThreadService: WorkerThreadService;
 
@@ -160,10 +178,10 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     this.logger.log('Starting metrics collection');
-    
+
     // Initialize worker thread metrics with baseline values immediately
     this.initializeWorkerThreadMetrics();
-    
+
     this.collectSystemMetricsInterval = setInterval(
       () => this.collectSystemMetrics(),
       this.collectionInterval,
@@ -176,17 +194,25 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
       () => this.pushMetrics(),
       this.pushIntervalMs,
     );
+    this.collectPingMetricsInterval = setInterval(
+      () => this.collectPingMetrics(),
+      30000, // 30 seconds
+    );
   }
 
   async onModuleDestroy() {
     clearInterval(this.pushInterval);
     clearInterval(this.collectSystemMetricsInterval);
     clearInterval(this.collectWorkerThreadMetricsInterval);
+    clearInterval(this.collectPingMetricsInterval);
 
     try {
       await this.pushgateway.delete({ jobName: `worker-${this.workerId}` });
     } catch (err) {
-      this.logger.error(`Failed to delete metrics on shutdown:`, err.message || err);
+      this.logger.error(
+        `Failed to delete metrics on shutdown:`,
+        err.message || err,
+      );
     }
   }
 
@@ -364,7 +390,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
 
   private initializeWorkerThreadMetrics() {
     // ensure metrics are available even before any migration is triggered
-    
+
     if (this.workerThreadService) {
       // If WorkerThreadService is already available, collect actual metrics
       this.collectWorkerThreadMetrics();
@@ -372,7 +398,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
       // If not available yet, set reasonable defaults
       // These will be updated once the WorkerThreadService becomes available
       this.logger.debug('Setting baseline worker thread metrics to zeros');
-      
+
       // Set all metrics to zero initially (will be updated by interval collection)
       this.workerThreadsGauge.set(
         { worker_id: this.workerId, status: 'total' },
@@ -386,14 +412,11 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         { worker_id: this.workerId, status: 'busy' },
         0,
       );
-      this.workerTasksActiveGauge.set(
-        { worker_id: this.workerId },
-        0,
-      );
+      this.workerTasksActiveGauge.set({ worker_id: this.workerId }, 0);
 
       // Set default queue depths for all known bands
       const defaultBands = ['1kb', '1mb', '10mb', '100mb', '1gb'];
-      defaultBands.forEach(bandName => {
+      defaultBands.forEach((bandName) => {
         this.workerTasksQueueGauge.set(
           { worker_id: this.workerId, band_name: bandName },
           0,
@@ -409,7 +432,10 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         const workerThreadMetrics =
           this.workerThreadService.getWorkerThreadMetrics();
 
-        this.logger.debug(`Worker thread metrics collected:`, workerThreadMetrics);
+        this.logger.debug(
+          `Worker thread metrics collected:`,
+          workerThreadMetrics,
+        );
 
         // Update worker thread status metrics
         this.workerThreadsGauge.set(
@@ -440,7 +466,9 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
           },
         );
       } else {
-        this.logger.warn('WorkerThreadService not available for metrics collection');
+        this.logger.warn(
+          'WorkerThreadService not available for metrics collection',
+        );
       }
     } catch (err) {
       this.logger.error(
@@ -454,11 +482,117 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
   public setWorkerThreadService(workerThreadService: any) {
     this.workerThreadService = workerThreadService;
   }
-  
+
   public recordWorkerThreadError(errorType: string) {
     this.workerThreadErrorCounter.inc({
       worker_id: this.workerId,
       error_type: errorType,
     });
+  }
+
+  private async collectPingMetrics() {
+    try {
+      const res = await ping.promise.probe(this.controlPlaneIP, {
+        timeout: 2,
+        extra: ['-c', '5'],
+      });
+
+      this.logger.debug(
+        `Ping result for ${this.controlPlaneIP}: ${JSON.stringify(res)}`,
+      );
+
+      if (res.alive) {
+        const min = parseFloat(res.min) || 0;
+        const max = parseFloat(res.max) || 0;
+        const avg = parseFloat(res.avg) || 0;
+
+        this.networkLatencyGauge.set(
+          {
+            worker_id: this.workerId,
+            control_plane_ip: this.controlPlaneIP,
+            metric_type: 'min',
+          },
+          min,
+        );
+        this.networkLatencyGauge.set(
+          {
+            worker_id: this.workerId,
+            control_plane_ip: this.controlPlaneIP,
+            metric_type: 'max',
+          },
+          max,
+        );
+        this.networkLatencyGauge.set(
+          {
+            worker_id: this.workerId,
+            control_plane_ip: this.controlPlaneIP,
+            metric_type: 'avg',
+          },
+          avg,
+        );
+
+        this.logger.debug(
+          `Network latency metrics collected - min: ${min}ms, max: ${max}ms, avg: ${avg}ms`,
+        );
+      } else {
+        // Set high values to indicate connectivity issues
+        this.networkLatencyGauge.set(
+          {
+            worker_id: this.workerId,
+            control_plane_ip: this.controlPlaneIP,
+            metric_type: 'min',
+          },
+          -1,
+        );
+        this.networkLatencyGauge.set(
+          {
+            worker_id: this.workerId,
+            control_plane_ip: this.controlPlaneIP,
+            metric_type: 'max',
+          },
+          -1,
+        );
+        this.networkLatencyGauge.set(
+          {
+            worker_id: this.workerId,
+            control_plane_ip: this.controlPlaneIP,
+            metric_type: 'avg',
+          },
+          -1,
+        );
+
+        this.logger.warn(
+          `Unable to ping control plane at ${this.controlPlaneIP}`,
+        );
+      }
+    } catch (err) {
+      this.logger.error('Error collecting ping metrics:', err.message || err);
+
+      // Set error state values
+      this.networkLatencyGauge.set(
+        {
+          worker_id: this.workerId,
+          control_plane_ip: this.controlPlaneIP,
+          metric_type: 'min',
+        },
+        -1,
+      );
+      this.networkLatencyGauge.set(
+        {
+          worker_id: this.workerId,
+          control_plane_ip: this.controlPlaneIP,
+          metric_type: 'max',
+        },
+        -1,
+      );
+      this.networkLatencyGauge.set(
+        {
+          worker_id: this.workerId,
+          control_plane_ip: this.controlPlaneIP,
+          metric_type: 'avg',
+        },
+        -1,
+      );
+    }
   }
 }

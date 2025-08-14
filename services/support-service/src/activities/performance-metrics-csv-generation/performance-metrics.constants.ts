@@ -65,6 +65,12 @@ const PERFORMANCE_METRICS_QUERIES = {
       'rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]))',
     step: process.env.STEP_1hr,
   },
+
+  // NETWORK_LATENCY
+  LATENCY: {
+    query: 'worker_network_latency',
+    step: process.env.STEP_1hr,
+  },
 };
 
 export default PERFORMANCE_METRICS_QUERIES;
