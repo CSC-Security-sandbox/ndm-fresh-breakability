@@ -36,6 +36,7 @@ export class WorkManagerService {
   private temporalClientConnection: Connection = null;
   private platform: Platform;
   private readonly logger: LoggerService;
+  private isRebootCall: boolean = true;
 
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
@@ -81,17 +82,23 @@ export class WorkManagerService {
       const accessToken = await this.authService.getAccessToken();
       if (!accessToken) throw new Error('Access token is null');
       const response = await firstValueFrom(
-        this.httpService.get(
+        this.httpService.post(
           `${this.workerConfigUrl}/api/v1/work-manager/config`,
+          {
+            envVariables: process.env,
+            isRebootCall: this.isRebootCall,
+          },
           {
             headers: {
               Authorization: `Bearer ${accessToken}`,
               'x-client-platform': this.platform,
+              'Content-Type': 'application/json',
             },
             timeout: 5000,
           },
         ),
       );
+      this.isRebootCall = false;
       if (response.status !== 200) {
         throw new Error(
           `Failed to fetch configurations. Status: ${response.status}`,
