@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-004: Run discovery with exclude path pattern and batch pause/resume, TC-005 : Run discovery with exclude path pattern and batch stop/start ", func() {
+var _ = FDescribe("TC-004: Run discovery with exclude path pattern and batch pause/resume, TC-005 : Run discovery with exclude path pattern and batch stop/start ", func() {
 	var headers map[string]string
 	var (
 		ProjectId              string
