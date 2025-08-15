@@ -85,8 +85,6 @@ export class SystemInventoryCsvGenerationActivity {
   ) {
     const timestamp = Date.now();
 
-    console.log(data);
-
     if (data['NETWORK_CONFIG'] && data['NETWORK_CONFIG']?.data?.length > 0) {
       const fileName = `system-inventory-network-config-${timestamp}.csv`;
       await this.zipHandler.addCsvToZip(
