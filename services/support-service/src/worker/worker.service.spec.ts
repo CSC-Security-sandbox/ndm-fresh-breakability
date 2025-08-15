@@ -68,13 +68,13 @@ describe('WorkerService', () => {
       mockWorker.close.mockImplementation(() => closePromise);
 
       const serviceClosePromise = service.close();
-      
+
       // At this point, service.close() should be waiting
       expect(mockWorker.close).toHaveBeenCalledTimes(1);
-      
+
       // Resolve the worker close
       resolveClose!();
-      
+
       // Now service.close() should complete
       await serviceClosePromise;
     });

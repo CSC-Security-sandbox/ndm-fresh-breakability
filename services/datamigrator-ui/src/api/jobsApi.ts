@@ -159,6 +159,9 @@ export const jobsApi = createApi({
         method: "POST",
         body,
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      }
     }),
 
     getAllFileServersWithVolume: builder.query({
@@ -231,6 +234,9 @@ export const jobsApi = createApi({
         url: `job-run/${jobRunId}/errors/overview`,
         method: "GET",
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      }
     }),
 
     getNoticeBoardDetails: builder.query({

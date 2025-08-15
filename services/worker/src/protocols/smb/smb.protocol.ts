@@ -10,7 +10,6 @@ import { isPathExists } from 'src/activities/core/utils/utils';
 
 @Injectable()
 export class SMBProtocol extends Protocol {
- 
   protected getCommandPattern( key : string): string {
     return CommandConfig.getSMBCommand(this.platform, key)
   }
@@ -36,7 +35,10 @@ export class SMBProtocol extends Protocol {
     ).then((response) => {
       this.logger.log(`[${traceId}] ${response.message}`);
       return parseProtocolVersions(response.message);
-    });    
+    }).catch((error) => {
+      this.logger.error(`[${traceId}] Error getting protocol versions: ${error.message}`);
+      throw error;
+    });
   }
 
   // --------------------------- List Paths MAC and LINUX-------------------------- //
@@ -83,6 +85,8 @@ export class SMBProtocol extends Protocol {
 
         this.logger.log(`[${traceId}] ${response.message}`);
         return parseWindowsShares(response.message);
+      }else{
+        throw new Error(`Mount operation failed: ${result.message}`);
       }
     }
     catch(e) {
@@ -112,20 +116,15 @@ export class SMBProtocol extends Protocol {
   }
 
   // --------------------------- Get total size of a mounted path -------------------------- //
-  async getTotalUsedMemory(traceId: string, payload: ProtocolPayload): Promise<number> {
-    this.logger.debug("inside getTotalUsedMemory method for windows");
+  async getTotalUsedMemory(traceId: string, payload: ProtocolPayload): Promise<number> {    
     try {
-      return this.executeCommand(
-        traceId,
-        ProtocolTypes.SMB,
-        payload,
+      const response   = await this.executeCommand(traceId,
+        ProtocolTypes.SMB, payload,
         this.getCommandPattern(CommandPattern.MOUNTED_FOLDER_SIZE),
         'SMB Mounted Folder size',
-      ).then((response) => {
-        this.logger.log(`response of executeCommand in getTotalUsedMemory - ${JSON.stringify(response)}`);
-        this.logger.log(`[${traceId}] ${response.message}`);
-        return parseInt(response.message.trim()) || 0;
-      });
+      );
+      this.logger.log(`response of executeCommand in getTotalUsedMemory - ${JSON.stringify(response)}`);
+      return parseInt(response.message.trim()) || 0;
     } catch (error) {
       this.logger.error(`[${traceId}] Error checking total data size : ${error.message}`);
       throw new Error(`Failed to calculate size: ${error.message}`);
@@ -134,23 +133,22 @@ export class SMBProtocol extends Protocol {
 
    // --------------------------- Available Disc Space -------------------------- //
     async getAvailableDiskSpace(traceId: string, payload: ProtocolPayload): Promise<{ size: number }> {
-      this.logger.debug("inside getAvailableDiskSpace method for windows");
       try {
         this.logger.log(`[${traceId}] Checking available disk space at path: ${payload?.path}`);
-        return this.executeCommand(
+        const response = await this.executeCommand(
           traceId,
-          ProtocolTypes.NFS,
+          ProtocolTypes.SMB,
           payload,
           this.getCommandPattern(CommandPattern.AVAILABLE_DISK_SPACE),
           'SMB Available Disk Space',
-        ).then((response) => {
+        );
+        if(response.status = "success"){
           this.logger.log(`response of getAvailableDiskSpace in smb.protocol ${JSON.stringify(response)}`);
           this.logger.log(`[${traceId}] ${response.message}`);
           const available = parseInt(response.message.trim(), 10);
           this.logger.log(`[${traceId}] Available space at ${payload?.path}: ${available} bytes`);
-          return { size: available };
-        });
-       
+          return { size: available };             
+        }        
       } catch (error) {
         this.logger.error(`[${traceId}] Error checking disk space for path ${payload?.path}: ${error.message}`);
         throw new Error(`Failed to get available disk space at ${payload?.path}`);
@@ -162,7 +160,8 @@ export class SMBProtocol extends Protocol {
     this.logger.log(
       `[${traceId}] Unmounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
-    const response = await this.executeCommand(
+    try{
+       const response = await this.executeCommand(
       traceId,
       ProtocolTypes.SMB,
       payload,
@@ -180,17 +179,15 @@ export class SMBProtocol extends Protocol {
       );
       this.logger.log(`[${traceId}] ${response.message}`);
     }
+    return response;
 
-    // if (response['status'] === 'success') {
-    //   const mountDir = `${this.baseMountDir}/${payload.jobRunId}`;
-    //   if (fs.existsSync(mountDir)) {
-    //     fs.rmdirSync(mountDir, { recursive: false });
-    //     this.logger.log(`[${traceId}] Directory removed: ${mountDir}`);
-    //   } else {
-    //     this.logger.log(`[${traceId}] Directory does not exist: ${mountDir}`);
-    //   }
-      return response;
-    // }
+    }catch(error){
+      this.logger.log(
+          `[${traceId}] Error Unmounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}: ${error.message}`,
+      )
+      throw error;
+    }
+   
   }
 
   async mountPath(traceId: string, payload: any): Promise<any> {
@@ -216,26 +213,32 @@ export class SMBProtocol extends Protocol {
           }
       }
     }
-
-    const result = await this.executeCommand(
-      traceId,
-      ProtocolTypes.SMB,
-      payload,
-      this.getCommandPattern(CommandPattern.MOUNT_PATH),
-      'SMB Mount',
-    );
-    if(result?.message?.toLowerCase().includes("successfully.")){
-      const response = await this.executeCommand(
+    try{
+        const result = await this.executeCommand(
         traceId,
         ProtocolTypes.SMB,
         payload,
-        this.getCommandPattern(CommandPattern.CREATE_PATH_LINK),
-        'SMB Show Shares',
+        this.getCommandPattern(CommandPattern.MOUNT_PATH),
+        'SMB Mount',
       );
+    
+      if(result?.message?.toLowerCase().includes("successfully.")){
+        const response = await this.executeCommand(
+          traceId,
+          ProtocolTypes.SMB,
+          payload,
+          this.getCommandPattern(CommandPattern.CREATE_PATH_LINK),
+          'SMB Show Shares',
+        );
 
-      this.logger.log(`[${traceId}] ${response.message}`);
-      return response;
+        this.logger.log(`[${traceId}] ${response.message}`);
+        return response;
+      }
+    }catch(error){
+      this.logger.error(`[${traceId}] Error mounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}: ${error.message}`);
+      throw new Error(`Failed to mount path at ${payload.hostname}, reason: ${error.message}`);
     }
+    
 
   }
   
@@ -243,17 +246,30 @@ export class SMBProtocol extends Protocol {
     this.logger.log(
       `[${traceId}] disconnecting session  ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
-    const response  = await this.executeCommand(
-      traceId,
-      ProtocolTypes.SMB,
-      payload,
-      this.getCommandPattern(CommandPattern.DISCONNECT_SESSION),
-      'SMB Disconnect Session',
-    );
-    return response;
+    try{
+        const response  = await this.executeCommand(
+          traceId,
+          ProtocolTypes.SMB,
+          payload,
+          this.getCommandPattern(CommandPattern.DISCONNECT_SESSION),
+          'SMB Disconnect Session',
+        );
+      return response;
+    }catch(error){
+      this.logger.log(
+          `[${traceId}] error disconnecting session  ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}: ${error.message}`,
+      )
+      throw error;
+    }
+    
   }
 
   getTotalSizeLinux(traceId: string, payload: ProtocolPayload): Promise<any> {
+    throw new Error('Method not implemented.');
+  }
+
+  updateBootMounts({ platform, fstabPath, workerId }: { platform: any; fstabPath: any; workerId: any; }, payload: any, action: any, traceId: any): void {
+    this.logger.log(`[${traceId}] updateBootMount not implemented for SMB protocol`);
     throw new Error('Method not implemented.');
   }
 

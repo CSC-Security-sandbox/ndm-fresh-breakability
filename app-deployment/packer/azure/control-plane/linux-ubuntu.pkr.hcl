@@ -183,7 +183,7 @@ locals {
 locals {
   formatted_timestamp = formatdate("DD-MM-YYYY-hh-mm-ss", timestamp())
   version             = formatdate("YYYY.DD.MMhhmmss", timestamp())
-  image_name          = "${var.project_name}-worker-${local.formatted_timestamp}"
+  image_name          = "${var.project_name}-control-plane-${local.formatted_timestamp}"
 }
 
 # "###################################"
@@ -199,7 +199,7 @@ source "azure-arm" "azure_ubuntu" {
 
   os_disk_size_gb                     = var.os_disk_size_gb
   #disk_additional_size               = [ 150 ]
-  managed_image_name                  = "${var.project_name}-control-plane-${local.formatted_timestamp}"
+  managed_image_name                  = local.image_name
   managed_image_resource_group_name   = var.azure_resource_group
   image_publisher                     = var.image_publisher
   image_offer                         = var.image_offer
@@ -238,10 +238,11 @@ source "azure-arm" "azure_ubuntu" {
   }
 
   azure_tags = {
-    "StackName" = "${var.project_name}-control-plane-image-${local.formatted_timestamp}"
-    "CreatedBy" = "Packer"
-    "Project"   = var.project_name
-    "Cloud"     = "Azure"
+    "stackname" = local.image_name
+    "createdby" = "packer"
+    "project"   = var.project_name
+    "cloud"     = "azure"
+    "creator"   = "vasudev"
   }
 }
 

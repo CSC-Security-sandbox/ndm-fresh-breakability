@@ -3,16 +3,18 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import { createObjectCsvWriter } from 'csv-writer';
 import AdmZip = require('adm-zip');
-import { ExportRequest, ExportResult, OperationErrorExportData } from 'src/constants/types';
+import {
+  ExportRequest,
+  ExportResult,
+  OperationErrorExportData,
+} from 'src/constants/types';
 import { OperationErrorService } from 'src/utils/error-csv-generation.service';
 import { formatDateTime, getProjectIds, groupDataByProjectAndDate } from 'src/utils/error-csv-generation.util';
 
 @Injectable()
 export class ErrorCsvGenerationActivity {
   private readonly logger = new Logger(ErrorCsvGenerationActivity.name);
-  constructor(
-    private readonly operationErrorService: OperationErrorService,
-  ) { }
+  constructor(private readonly operationErrorService: OperationErrorService) {}
 
   /**
     * Main export method that can be called from controller
@@ -163,7 +165,10 @@ export class ErrorCsvGenerationActivity {
     traceId: string,
   ): Promise<void> {
     // Check if zip file exists
-    const zipExists = await fs.access(zipFilePath).then(() => true).catch(() => false);
+    const zipExists = await fs
+      .access(zipFilePath)
+      .then(() => true)
+      .catch(() => false);
 
     if (!zipExists) {
       throw new Error(`Zip file not found: ${zipFilePath}`);
@@ -407,4 +412,3 @@ export class ErrorCsvGenerationActivity {
     }
   }
 }
-

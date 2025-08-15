@@ -32,6 +32,7 @@ export interface JobRunConfig{
     workers: string[],
     skipFile?: string,
     skipDelete?: boolean,
+    id: string,
 }
 
 
@@ -45,4 +46,5 @@ export enum WorkFlowFailureReason {
     SETUP_WORKER_FAILURE = "SETUP_WORKER_FAILURE",
     WORKER_FAILURE = "WORKER_FAILURE",
     TASK_FETCH_FAILURE = "TASK_FETCH_FAILURE",
+    SCAN_ACTIVITY_FAILURE = "SCAN_ACTIVITY_FAILURE",
 }

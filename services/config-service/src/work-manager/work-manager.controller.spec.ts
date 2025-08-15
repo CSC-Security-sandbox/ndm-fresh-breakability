@@ -51,7 +51,12 @@ describe('WorkManagerController', () => {
         },
       };
 
-      const result = await controller.getConfiguration(ip, reqMock);
+      const bodyMock = {
+        envVariables: { TEST_VAR: 'test_value' },
+        isRebootCall: false,
+      };
+
+      const result = await controller.getConfiguration(ip, reqMock, bodyMock);
 
       expect(result).toEqual(mockConfig);
       expect(serviceMock.getConfiguration).toHaveBeenCalledWith(
@@ -59,6 +64,8 @@ describe('WorkManagerController', () => {
         ip,
         projectId,
         Platform.WINDOWS,
+        { TEST_VAR: 'test_value' },
+        false,
       );
     });
   });

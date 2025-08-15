@@ -20,6 +20,20 @@ const {
   createInitialDirBatch: createInitialDirBatchActivity,
 } = wf.proxyActivities<CommonTaskService>({ startToCloseTimeout: '10m' });
 
+
+const {  
+  isCmdStreamLenValid: isCmdStreamLenValidActivity,
+} = wf.proxyActivities<CommonTaskService>({ 
+  startToCloseTimeout: '5m' ,
+   retry: {
+    maximumAttempts: 3,       // Retry up to 3 times if it fails
+    initialInterval: '2s',    // Start with 2 second delay
+    backoffCoefficient: 2.0,  // Double the delay each retry
+    maximumInterval: '30s',   // Cap retry delay at 30 seconds
+    nonRetryableErrorTypes: ['ApplicationFailure'] // Don't retry certain errors
+  }  
+});
+
 const {
     scanDirectories: scanDirectories,
 } = wf.proxyActivities<ScanService>({
@@ -88,6 +102,10 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
     scanWorkflowOutput.dirCount += batchExecResults.dirCount;
     dirBatchIds = batchExecResults.batchDirs;
 
+    if(batchExecResults.error){
+      errors.push(batchExecResults.error);
+    }
+
     if(iterations > ITERATIONS_LIMIT ){
       console.warn(`ChildScanWorkflow ${jobRunId} has exceeded 1000 iterations, stopping to prevent infinite loop.`);                      
       await wf.continueAsNew({ 
@@ -95,13 +113,36 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
       });      
     }
   }
-
-  scanWorkflowOutput.status = isStopRequested ? JobRunStatus.Stopped : JobRunStatus.Completed;
-  scanWorkflowOutput.error = errors.length > 0 ? errors.join(', ') : undefined;
-
+  if(errors.length > 0) {
+    console.log(`[ERROR]ChildScanWorkflow ${jobRunId} encountered errors: ${errors.join(', ')}`);
+    scanWorkflowOutput.error = errors.length > 0 ? errors.join(', ') : undefined;
+    scanWorkflowOutput.status = JobRunStatus.Errored;
+  }else{
+     scanWorkflowOutput.status = isStopRequested ? JobRunStatus.Stopped : JobRunStatus.Completed;    
+  }
+  
   return  scanWorkflowOutput;
 }
 
+async function validateCommandStreamLength(jobRunId: string): Promise<void> {
+  let checkCount = 0;
+  const maxChecks = 100;
+
+   while(checkCount < maxChecks){
+      checkCount++;
+      try{
+        const isCmdStreamLenValid = await isCmdStreamLenValidActivity(jobRunId);
+        if(isCmdStreamLenValid) break;        
+        console.warn(`[WARNING] For jobRunId ${jobRunId}, Waiting for stream to be valid.`);                          
+        await wf.sleep('30s'); // wait before checking again        
+      }catch(error){
+        console.error(`[ERROR] Error validating command stream length for jobRunId ${jobRunId}: ${error.message}`);       
+      }      
+    }
+    if (checkCount >= maxChecks) {
+      console.warn(`[WARNING] For jobRunId ${jobRunId}, Maximum checks reached. Exiting validation loop.`);
+    }
+}
 
 export const executeBatchScan = async ({ batchSize, batches, isMigration, jobRunId}: ExecuteBatchScanInput): Promise<ExecuteBatchScansOutput> => {
   const output: ExecuteBatchScansOutput = {
@@ -113,22 +154,16 @@ export const executeBatchScan = async ({ batchSize, batches, isMigration, jobRun
 
 
   for (let i = 0; i < batches.length; i += MAX_CONCURRENT_BATCHES) {
-    const batchSlice = batches.slice(i, i + MAX_CONCURRENT_BATCHES);
-    const batchResults = await Promise.all(
-      batchSlice.map(async (batchId) => {
+    if(isMigration){
+      await validateCommandStreamLength(jobRunId);
+    }
+  const batchSlice = batches.slice(i, i + MAX_CONCURRENT_BATCHES);
+  const batchResults = await Promise.all(
+    batchSlice.map(async (batchId) => {
         try {
           return await scanDirectories({batchSize, isMigration, jobRunId, batchId: batchId});
         } catch (error) {
-          if (error instanceof wf.ActivityFailure) {
-            return {
-              jobRunId: jobRunId,
-              fileCount: 0,
-              dirCount: 0,
-              subDirs: [],
-              error: error.message || 'Activity failed error',
-              batchDirs: [],
-            };
-          }
+          console.log(`[ERROR] Error scanning directories for batch ${batchId}: ${error.message}`);
           throw error;
         }
       })

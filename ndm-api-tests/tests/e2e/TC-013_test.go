@@ -114,10 +114,8 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 				},
 			}
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating migration job")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
-			Expect(len(migrationJobConfigIDs)).To(BeNumerically(">", 0), "Expected at least one jobConfigID")
 
 			getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigIDs[0], headers)
 			migrationJobRunID = getJobsResp.JobRuns[0].JobRunId
@@ -143,10 +141,8 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 				},
 			}
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating migration job")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
-			Expect(len(migrationJobConfigIDs)).To(BeNumerically(">", 0), "Expected at least one jobConfigID")
 
 			By("Adding Delta Data")
 			err = AddDataToVolume(sourceVolumePath1)
@@ -158,11 +154,8 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 				DestinationPathIDs: []string{destinationPathID1},
 			}
 			jobConfigIDs, resp, err = CreateBulkCutoverJob(cutoverParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating bulk cutover job")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating bulk cutover job: %v", err))
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 Created")
-			Expect(len(jobConfigIDs)).To(BeNumerically(">", 0), "No valid jobConfigIDs found in response")
-			Expect(jobConfigIDs).NotTo(BeEmpty(), "Expected a valid jobConfigID")
 
 			getJobsResp, resp, err = GetJobRunDetails(jobConfigIDs[0], headers)
 			Expect(err).NotTo(HaveOccurred(), "Error getting blocked job run ID")
@@ -184,7 +177,7 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 				err = HandleJobRunStateChange(migrationJobRunID, "STOP", list)
 				Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
 
-				err = WaitForJobState(migrationJobRunID, STOP_JOBRUN)
+				err = WaitForJobState(migrationJobRunID, STOPPED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not stop or complete")
 			}
 

@@ -73,6 +73,7 @@ export class Cmd implements Serializable {
         isDir: boolean,
         ops: Operations,
         metadata?: CmdMeta,
+        
     ) {
         this.id = id;
         this.fPath = fPath;
@@ -102,6 +103,7 @@ export interface CmdMeta {
     uid: number;
     gid: number;
     sid: string;
+    isSymLink?: boolean;
 }
 
 export interface Operations {

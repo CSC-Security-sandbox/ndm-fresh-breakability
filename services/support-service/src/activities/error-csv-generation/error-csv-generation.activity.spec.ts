@@ -10,16 +10,16 @@ import * as errorCsvGenerationUtil from 'src/utils/error-csv-generation.util';
 
 // Mock external dependencies
 jest.mock('fs', () => ({
-    promises: {
-        access: jest.fn(),
-        mkdir: jest.fn(),
-        readFile: jest.fn(),
-        unlink: jest.fn(),
-    },
+  promises: {
+    access: jest.fn(),
+    mkdir: jest.fn(),
+    readFile: jest.fn(),
+    unlink: jest.fn(),
+  },
 }));
 
 jest.mock('csv-writer', () => ({
-    createObjectCsvWriter: jest.fn(),
+  createObjectCsvWriter: jest.fn(),
 }));
 
 jest.mock('adm-zip');
@@ -36,60 +36,62 @@ const MockAdmZip = AdmZip as jest.MockedClass<typeof AdmZip>;
 const mockErrorCsvGenerationUtil = errorCsvGenerationUtil as jest.Mocked<typeof errorCsvGenerationUtil>;
 
 describe('ErrorCsvGenerationActivity', () => {
-    let activity: ErrorCsvGenerationActivity;
-    let operationErrorService: jest.Mocked<OperationErrorService>;
-    let mockZipInstance: jest.Mocked<AdmZip>;
-    let mockCsvWriter: any;
-    let mockLogger: jest.Mocked<Logger>;
+  let activity: ErrorCsvGenerationActivity;
+  let operationErrorService: jest.Mocked<OperationErrorService>;
+  let mockZipInstance: jest.Mocked<AdmZip>;
+  let mockCsvWriter: any;
+  let mockLogger: jest.Mocked<Logger>;
 
-    const mockOperationErrorData: OperationErrorExportData[] = [
-        {
-            id: '1',
-            operationId: 'op-001',
-            errorCode: 'ERR001',
-            errorMessage: 'Test error message',
-            createdAt: '2024-07-15T10:30:00Z',
-            fileName: 'test-file.txt',
-            filePath: '/path/to/test-file.txt',
-            errorType: 'VALIDATION_ERROR',
-            operationType: 'COPY',
-            origin: 'SOURCE',
-            projectId: 'project-123',
-            projectName: 'Test Project',
-        },
-        {
-            id: '2',
-            operationId: 'op-002',
-            errorCode: 'ERR002',
-            errorMessage: 'Another test error',
-            createdAt: '2024-07-16T14:45:00Z',
-            fileName: 'another-file.txt',
-            filePath: '/path/to/another-file.txt',
-            errorType: 'NETWORK_ERROR',
-            operationType: 'MOVE',
-            origin: 'DESTINATION',
-            projectId: 'project-456',
-            projectName: 'Another Project',
-        },
-    ];
+  const mockOperationErrorData: OperationErrorExportData[] = [
+    {
+      id: '1',
+      operationId: 'op-001',
+      errorCode: 'ERR001',
+      errorMessage: 'Test error message',
+      createdAt: '2024-07-15T10:30:00Z',
+      fileName: 'test-file.txt',
+      filePath: '/path/to/test-file.txt',
+      errorType: 'VALIDATION_ERROR',
+      operationType: 'COPY',
+      origin: 'SOURCE',
+      projectId: 'project-123',
+      projectName: 'Test Project',
+    },
+    {
+      id: '2',
+      operationId: 'op-002',
+      errorCode: 'ERR002',
+      errorMessage: 'Another test error',
+      createdAt: '2024-07-16T14:45:00Z',
+      fileName: 'another-file.txt',
+      filePath: '/path/to/another-file.txt',
+      errorType: 'NETWORK_ERROR',
+      operationType: 'MOVE',
+      origin: 'DESTINATION',
+      projectId: 'project-456',
+      projectName: 'Another Project',
+    },
+  ];
 
     beforeEach(async () => {
         const mockOperationErrorServiceValue = {
             getOperationErrorsByProjectAndDateRange: jest.fn(),
         };
 
-        const module: TestingModule = await Test.createTestingModule({
-            providers: [
-                ErrorCsvGenerationActivity,
-                {
-                    provide: OperationErrorService,
-                    useValue: mockOperationErrorServiceValue,
-                },
-            ],
-        }).compile();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        ErrorCsvGenerationActivity,
+        {
+          provide: OperationErrorService,
+          useValue: mockOperationErrorServiceValue,
+        },
+      ],
+    }).compile();
 
-        activity = module.get<ErrorCsvGenerationActivity>(ErrorCsvGenerationActivity);
-        operationErrorService = module.get(OperationErrorService);
+    activity = module.get<ErrorCsvGenerationActivity>(
+      ErrorCsvGenerationActivity,
+    );
+    operationErrorService = module.get(OperationErrorService);
 
         // Mock logger
         mockLogger = {
@@ -160,7 +162,7 @@ describe('ErrorCsvGenerationActivity', () => {
 
             mockErrorCsvGenerationUtil.getProjectIds.mockReturnValue([]);
 
-            const result = await activity.generateErrorCsv(request);
+      const result = await activity.generateErrorCsv(request);
 
             expect(result.success).toBe(true);
             expect(result.message).toBe('No valid project IDs found for CSV generation');
@@ -180,7 +182,7 @@ describe('ErrorCsvGenerationActivity', () => {
 
             operationErrorService.getOperationErrorsByProjectAndDateRange.mockResolvedValue([]);
 
-            const result = await activity.generateErrorCsv(request);
+      const result = await activity.generateErrorCsv(request);
 
             expect(result.success).toBe(true);
             expect(result.message).toBe('No operation errors found for the given date range and projects');
@@ -203,7 +205,7 @@ describe('ErrorCsvGenerationActivity', () => {
             // Mock the exportOperationErrorsToZip method
             jest.spyOn(activity, 'exportOperationErrorsToZip').mockResolvedValue(undefined);
 
-            const result = await activity.generateErrorCsv(request);
+      const result = await activity.generateErrorCsv(request);
 
             expect(result.success).toBe(true);
             expect(result.message).toContain('Successfully exported operation errors');
@@ -233,7 +235,7 @@ describe('ErrorCsvGenerationActivity', () => {
             const error = new Error('Database connection failed');
             operationErrorService.getOperationErrorsByProjectAndDateRange.mockRejectedValue(error);
 
-            const result = await activity.generateErrorCsv(request);
+      const result = await activity.generateErrorCsv(request);
 
             expect(result.success).toBe(false);
             expect(result.message).toContain('Export failed: Failed to fetch operation errors from database: Database connection failed');
@@ -259,7 +261,7 @@ describe('ErrorCsvGenerationActivity', () => {
 
             operationErrorService.getOperationErrorsByProjectAndDateRange.mockRejectedValue('String error');
 
-            const result = await activity.generateErrorCsv(request);
+      const result = await activity.generateErrorCsv(request);
 
             expect(result.success).toBe(false);
             expect(result.message).toContain('Export failed: Failed to fetch operation errors from database: String error');
@@ -279,10 +281,10 @@ describe('ErrorCsvGenerationActivity', () => {
             operationErrorService.getOperationErrorsByProjectAndDateRange.mockResolvedValue(mockOperationErrorData);
             jest.spyOn(activity, 'exportOperationErrorsToZip').mockResolvedValue(undefined);
 
-            const result = await activity.generateErrorCsv(request);
+      const result = await activity.generateErrorCsv(request);
 
-            expect(result.success).toBe(true);
-        });
+      expect(result.success).toBe(true);
+    });
 
         it('should handle export operation error during zip creation', async () => {
             const request = {
@@ -298,7 +300,7 @@ describe('ErrorCsvGenerationActivity', () => {
             operationErrorService.getOperationErrorsByProjectAndDateRange.mockResolvedValue(mockOperationErrorData);
             jest.spyOn(activity, 'exportOperationErrorsToZip').mockRejectedValue(new Error('Zip creation failed'));
 
-            const result = await activity.generateErrorCsv(request);
+      const result = await activity.generateErrorCsv(request);
 
             expect(result.success).toBe(false);
             expect(result.message).toContain('Export failed: Zip creation failed');
@@ -377,8 +379,10 @@ describe('ErrorCsvGenerationActivity', () => {
 
             operationErrorService.getOperationErrorsByProjectAndDateRange.mockResolvedValue(mockOperationErrorData);
 
-            // Mock the addCSVFilesToZip method
-            jest.spyOn(activity as any, 'addCSVFilesToZip').mockResolvedValue(undefined);
+      // Mock the addCSVFilesToZip method
+      jest
+        .spyOn(activity as any, 'addCSVFilesToZip')
+        .mockResolvedValue(undefined);
 
             await activity.exportOperationErrorsToZip(request, traceId);
 
@@ -459,16 +463,19 @@ describe('ErrorCsvGenerationActivity', () => {
             const zipFilePath = '/path/to/output.zip';
             const traceId = 'trace-123';
 
-            // Mock zip file exists
-            mockFs.access.mockResolvedValue(undefined);
+      // Mock zip file exists
+      mockFs.access.mockResolvedValue(undefined);
 
-            // Mock zip entries
-            const mockEntries = [
-                { isDirectory: true, entryName: 'ndm_logs/' },
-                { isDirectory: true, entryName: 'ndm_logs/2024-07-15/' },
-                { isDirectory: true, entryName: 'ndm_logs/2024-07-15/project-123/' },
-                { isDirectory: true, entryName: 'ndm_logs/2024-07-15/project-123/control_plane/' },
-            ] as AdmZip.IZipEntry[];
+      // Mock zip entries
+      const mockEntries = [
+        { isDirectory: true, entryName: 'ndm_logs/' },
+        { isDirectory: true, entryName: 'ndm_logs/2024-07-15/' },
+        { isDirectory: true, entryName: 'ndm_logs/2024-07-15/project-123/' },
+        {
+          isDirectory: true,
+          entryName: 'ndm_logs/2024-07-15/project-123/control_plane/',
+        },
+      ] as AdmZip.IZipEntry[];
 
             mockZipInstance.getEntries.mockReturnValue(mockEntries);
 
@@ -490,8 +497,8 @@ describe('ErrorCsvGenerationActivity', () => {
             const zipFilePath = '/path/to/nonexistent.zip';
             const traceId = 'trace-123';
 
-            // Mock zip file does not exist
-            mockFs.access.mockRejectedValue(new Error('File not found'));
+      // Mock zip file does not exist
+      mockFs.access.mockRejectedValue(new Error('File not found'));
 
             await expect((activity as any).addCSVFilesToZip(groupedData, zipFilePath, traceId))
                 .rejects.toThrow('Zip file not found: /path/to/nonexistent.zip');
@@ -809,23 +816,27 @@ describe('ErrorCsvGenerationActivity', () => {
             const errors = [mockOperationErrorData[0]];
             const traceId = 'trace-123';
 
-            mockFs.mkdir.mockResolvedValue(undefined);
-            mockCsvWriter.writeRecords.mockRejectedValue(new Error('CSV write failed'));
-            mockFs.unlink.mockResolvedValue(undefined);
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockCsvWriter.writeRecords.mockRejectedValue(
+        new Error('CSV write failed'),
+      );
+      mockFs.unlink.mockResolvedValue(undefined);
 
             await expect((activity as any).generateCSVContent(errors, traceId))
                 .rejects.toThrow('CSV content generation failed: Failed to write CSV records: CSV write failed');
 
-            expect(mockFs.unlink).toHaveBeenCalled();
-        });
+      expect(mockFs.unlink).toHaveBeenCalled();
+    });
 
         it('should handle cleanup errors gracefully', async () => {
             const errors = [mockOperationErrorData[0]];
             const traceId = 'trace-123';
 
-            mockFs.mkdir.mockResolvedValue(undefined);
-            mockCsvWriter.writeRecords.mockRejectedValue(new Error('CSV write failed'));
-            mockFs.unlink.mockRejectedValue(new Error('Cleanup failed'));
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockCsvWriter.writeRecords.mockRejectedValue(
+        new Error('CSV write failed'),
+      );
+      mockFs.unlink.mockRejectedValue(new Error('Cleanup failed'));
 
             await expect((activity as any).generateCSVContent(errors, traceId))
                 .rejects.toThrow('CSV content generation failed: Failed to write CSV records: CSV write failed');
@@ -840,7 +851,7 @@ describe('ErrorCsvGenerationActivity', () => {
             const errors = [mockOperationErrorData[0]];
             const traceId = 'trace-123';
 
-            mockFs.mkdir.mockRejectedValue(new Error('Directory creation failed'));
+      mockFs.mkdir.mockRejectedValue(new Error('Directory creation failed'));
 
             await expect((activity as any).generateCSVContent(errors, traceId))
                 .rejects.toThrow('CSV content generation failed: Failed to create temp directory /tmp: Directory creation failed');
@@ -857,8 +868,8 @@ describe('ErrorCsvGenerationActivity', () => {
             await expect((activity as any).generateCSVContent(errors, traceId))
                 .rejects.toThrow('CSV content generation failed: Failed to read CSV file: File read failed');
 
-            expect(mockFs.unlink).toHaveBeenCalled();
-        });
+      expect(mockFs.unlink).toHaveBeenCalled();
+    });
 
         it('should handle empty errors array', async () => {
             const errors = [];

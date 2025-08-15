@@ -16,10 +16,16 @@ export class LogGeneratorActivity {
   private outputZipPath: string;
 
   constructor(private readonly configService: ConfigService) {
-    const baseLogPath = this.configService.get<string>('support-bundle.bundle.baseLogPath');
-    const outputZipPath = this.configService.get<string>('support-bundle.bundle.outputZipPath');
+    const baseLogPath = this.configService.get<string>(
+      'support-bundle.bundle.baseLogPath',
+    );
+    const outputZipPath = this.configService.get<string>(
+      'support-bundle.bundle.outputZipPath',
+    );
     if (!baseLogPath || !outputZipPath) {
-      throw new Error('Missing required configuration for baseLogPath or outputZipPath');
+      throw new Error(
+        'Missing required configuration for baseLogPath or outputZipPath',
+      );
     }
     this.baseLogPath = baseLogPath;
     this.outputZipPath = outputZipPath;
@@ -43,7 +49,9 @@ export class LogGeneratorActivity {
     try {
       // Validate required payload fields
       if (!payload?.startDate || !payload?.endDate || !payload?.userId) {
-        throw new Error('Missing required payload fields: startDate, endDate, or userId');
+        throw new Error(
+          'Missing required payload fields: startDate, endDate, or userId',
+        );
       }
 
       // Validate projectWorkerMap if provided
@@ -102,7 +110,9 @@ export class LogGeneratorActivity {
         current.setUTCDate(current.getUTCDate() + 1);
       }
 
-      this.logger.log(`[${traceId}] Processing date folders: ${dateFolders.join(', ')}`);
+      this.logger.log(
+        `[${traceId}] Processing date folders: ${dateFolders.join(', ')}`,
+      );
 
       // Verify base log path exists
       if (!(await this.pathExists(this.baseLogPath))) {

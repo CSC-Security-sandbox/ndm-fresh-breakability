@@ -89,6 +89,7 @@ describe("JobRunService", () => {
       log: jest.fn(),
       error: jest.fn(),
       warn: jest.fn(),
+      debug: jest.fn(),
     }),
   };
 
@@ -895,6 +896,7 @@ describe("JobRunService", () => {
       });
 
       expect(result).toEqual({
+        id:'123',
         connection: {
           sourceCredential: {
             path: "/source/path",
@@ -1014,6 +1016,7 @@ describe("JobRunService", () => {
       });
 
       expect(result).toEqual({
+        id:'123',
         connection: {
           sourceCredential: {
             path: "/source/path",

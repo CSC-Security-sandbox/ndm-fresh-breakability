@@ -35,9 +35,9 @@ export const ConfigurationDataCsvGeneratorWorkflow = async ({
 
     return {
       success: true,
-      message: 'Successfully generated configuration data CSV files for workers and jobs',
-    }
-
+      message:
+        'Successfully generated configuration data CSV files for workers and jobs',
+    };
   } catch (error) {
     log.error(
       `[${traceId}] Error in ConfigurationDataCsvGeneratorWorkflow: ${error.message}`,

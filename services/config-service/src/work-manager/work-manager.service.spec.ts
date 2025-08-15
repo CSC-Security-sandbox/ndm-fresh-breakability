@@ -90,6 +90,7 @@ describe('WorkManagerService', () => {
           useValue: {
             startWorkflow: jest.fn(),
             getWorkFlowRes: jest.fn(),
+            getWorkFlowPayload: jest.fn(),
           },
         },
         {
@@ -167,6 +168,8 @@ describe('WorkManagerService', () => {
         ip,
         projectId,
         Platform.WINDOWS,
+        { TEST_VAR: 'test_value' },
+        false,
       );
       expect(result).toEqual([{ key: 'value1' }, { key: 'value2' }]);
       // Verify that debug logging is called for each workerMap entry
@@ -201,6 +204,8 @@ describe('WorkManagerService', () => {
         ip,
         projectId,
         Platform.LINUX,
+        {},
+        true,
       );
       expect(result).toEqual(savedWorker.metaConfig);
       expect(sendMailService.sendMail).toHaveBeenCalledWith({
@@ -213,7 +218,10 @@ describe('WorkManagerService', () => {
       // Ensure update worker name is called after saving
       expect(workerRepo.update).toHaveBeenCalledWith(
         { workerId: savedWorker.workerId },
-        { workerName: `nfs-worker-${savedWorker.workerNumber}` },
+        {
+          workerName: `nfs-worker-${savedWorker.workerNumber}`,
+          envVariables: {},
+        },
       );
     });
 
@@ -222,7 +230,14 @@ describe('WorkManagerService', () => {
         new Error('DB error'),
       );
       await expect(
-        service.getConfiguration(workerId, ip, projectId, Platform.LINUX),
+        service.getConfiguration(
+          workerId,
+          ip,
+          projectId,
+          Platform.LINUX,
+          {},
+          false,
+        ),
       ).rejects.toThrow('Error while fetching worker configuration');
       expect(logger.error).toHaveBeenCalled();
     });
@@ -356,6 +371,40 @@ describe('WorkManagerService', () => {
       expect(logger.error).toHaveBeenCalledWith(
         `Error in getChildWorkFlowRes: ${error.message}`,
       );
+    });
+
+    // terminated, failed, or timed out workflows
+    it('should handle terminated, failed, or timed out workflows', async () => {
+      const response = {
+        status: 'TERMINATED',
+        id: 'child-id',
+        pending: [],
+        completed: [],
+      };
+      const payload = [
+        {
+          payload: {
+            preChecks: [
+              {
+                pathId: 'source-path',
+                destinations: [{ pathId: 'dest1' }, { pathId: 'dest2' }],
+              },
+            ],
+          },
+        },
+      ];
+      (workflowService.getWorkFlowRes as jest.Mock).mockResolvedValue(response);
+      jest.spyOn(workflowService, 'getWorkFlowPayload').mockResolvedValue(payload);
+
+      const result = await service.getChildWorkFlowRes('child-id');
+      expect(result).toEqual({
+        ...response,
+        workflow: {
+          errors: [`Pre-check with ID child-id is terminated. Please check the workflow logs for more details.`],
+          sourcePathId: 'source-path',
+          destinationPathIds: ['dest1', 'dest2'],
+        },
+      });
     });
   });
 

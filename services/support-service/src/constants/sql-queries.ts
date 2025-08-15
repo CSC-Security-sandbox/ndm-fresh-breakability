@@ -1,14 +1,12 @@
 export const SQL_QUERIES = {
   /**
-   * Query to fetch worker IDs for all projects
+   * Query to fetch worker IDs for multiple specific workers
    */
   GET_WORKER_IDS: `
-    SELECT w.id as worker_id, w.env_variables
+    SELECT w.id as worker_id
     FROM datamigrator.project p
     INNER JOIN datamigrator.worker w ON p.id = w.project_id
-    WHERE w.env_variables IS NOT NULL 
-      AND json_typeof(w.env_variables) = 'object'
-      AND w.env_variables::text != '{}'
+    WHERE w.id = ANY($1)
     ORDER BY w.id`,
 
   /**
@@ -19,11 +17,9 @@ export const SQL_QUERIES = {
     FROM datamigrator.project`,
 
   /**
-   * Query to fetch job configuration details with date filtering
-   * Used in getJobConfigDetails method
-   * $1 = start date, $2 = end date (both in 'YYYY-MM-DD' format)
+   * Query to fetch job configuration details with multiple project IDs filtering
    */
-  GET_JOB_CONFIG_DETAILS_WITH_DATE_FILTER: `
+  GET_JOB_CONFIG_DETAILS_WITH_PROJECT_ID_FILTER: `
     SELECT 
       p.id as "Project Id",
       p.project_name as "Project Name",
@@ -51,11 +47,8 @@ export const SQL_QUERIES = {
       LEFT JOIN datamigrator.jobconfig jc ON v.id = jc.source_path_id
     WHERE v.volume_path IS NOT NULL 
       AND TRIM(v.volume_path) != ''
-      AND (
-        (DATE(jc.created_at) >= $1 AND DATE(jc.created_at) <= $2) OR
-        (DATE(jc.updated_at) >= $1 AND DATE(jc.updated_at) <= $2)
-      )
-    ORDER BY jc.id`,
+      AND p.id = ANY($1)
+    ORDER BY p.id, jc.id`,
 } as const;
 
 export const GET_OPERATION_ERRORS_BY_DATE_RANGE = `

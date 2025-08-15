@@ -38,13 +38,15 @@ export class ConfigurationDataCsvGenerationActivity {
     const workerDetails = await this.dataSource.query(
       SQL_QUERIES.GET_WORKER_IDS,
     );
-    const workerIds = workerDetails.map((row: any) => row.worker_id);
+    const validWorkerIds: string[] = workerDetails.map(
+      (row: any) => row.worker_id,
+    );
 
     if (
-      workerIds?.length > 0 &&
+      validWorkerIds?.length > 0 &&
       payload?.otherMetrics?.includes('Configuration Data')
     ) {
-      await this.generateWorkerCsv(workerIds, payload);
+      await this.generateWorkerCsv(validWorkerIds, payload);
     }
     return 'Configuration data CSV generation completed successfully';
   }
@@ -56,10 +58,9 @@ export class ConfigurationDataCsvGenerationActivity {
     traceId: string;
     payload: any;
   }) {
-    const projectDetails = await this.dataSource.query(
-      SQL_QUERIES.GET_PROJECT_IDS,
-    );
-    const projectIds = projectDetails.map((row: any) => row.project_id);
+    const projectIds: string[] = payload?.projectWorkerMap
+      .filter((item: any) => item.projectId !== undefined)
+      .map((item: any) => item.projectId);
 
     if (
       projectIds?.length > 0 &&
@@ -103,11 +104,10 @@ export class ConfigurationDataCsvGenerationActivity {
 
     try {
       const jobConfigDetails =
-        SQL_QUERIES.GET_JOB_CONFIG_DETAILS_WITH_DATE_FILTER;
+        SQL_QUERIES.GET_JOB_CONFIG_DETAILS_WITH_PROJECT_ID_FILTER;
 
       const result = await this.dataSource.query(jobConfigDetails, [
-        payload.startDate,
-        payload.endDate,
+        projectIds,
       ]);
 
       this.logger.log(

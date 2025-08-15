@@ -24,14 +24,14 @@ describe('OperationErrorService', () => {
         service = new OperationErrorService(mockRepository);
     });
 
-    afterEach(() => {
-        jest.clearAllMocks();
-    });
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
 
-    describe('constructor', () => {
-        it('should be defined', () => {
-            expect(service).toBeDefined();
-        });
+  describe('constructor', () => {
+    it('should be defined', () => {
+      expect(service).toBeDefined();
+    });
 
         it('should inject repository correctly', () => {
             expect(service).toBeDefined();
@@ -94,8 +94,8 @@ describe('OperationErrorService', () => {
             expect(result).toHaveLength(2);
         });
 
-        it('should return empty array when no errors found', async () => {
-            mockQuery.mockResolvedValue([]);
+    it('should return empty array when no errors found', async () => {
+      mockQuery.mockResolvedValue([]);
 
             const result = await service.getOperationErrorsByProjectAndDateRange(
                 projectIds,
@@ -141,9 +141,9 @@ describe('OperationErrorService', () => {
             );
         });
 
-        it('should propagate errors thrown by the repository', async () => {
-            const error = new Error('Unexpected DB error');
-            mockQuery.mockRejectedValue(error);
+    it('should propagate errors thrown by the repository', async () => {
+      const error = new Error('Unexpected DB error');
+      mockQuery.mockRejectedValue(error);
 
             await expect(
                 service.getOperationErrorsByProjectAndDateRange(

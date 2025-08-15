@@ -55,6 +55,8 @@ export class WorkManagerService {
     ip: string,
     projectId: string,
     platform: Platform,
+    envVariables: Record<string, any>,
+    isRebootCall: boolean,
   ): Promise<WorkerConfiguration[]> {
     try {
       const workerMetaConfig = await this.workerEntity.findOne({
@@ -98,19 +100,23 @@ export class WorkManagerService {
             });
           }
         });
-        await this.workerEntity.update(
-          { workerId: workerMetaConfig.workerId },
-          {
-            workerName: generateWorkerName(
-              workerMetaConfig.workerNumber,
-              platform,
-            ),
-            platform: platform,
-          },
-        );
+        if (isRebootCall) {
+          await this.workerEntity.update(
+            { workerId: workerMetaConfig.workerId },
+            {
+              workerName: generateWorkerName(
+                workerMetaConfig.workerNumber,
+                platform,
+              ),
+              platform: platform,
+              envVariables: envVariables,
+            },
+          );
+        }
         return workerMetaConfig.metaConfig;
       }
       this.logger.warn(`project ID : ${projectId}`);
+
       const newWorker = this.workerEntity.create({
         workerId: id,
         ipAddress: ip,
@@ -120,16 +126,20 @@ export class WorkManagerService {
         createdBy: id,
         projectId,
         platform: platform,
+        envVariables: envVariables,
       });
-
       const result = await this.workerEntity.save(newWorker);
+
       await this.sendMailService.sendMail({
         successEmailType: SuccessEmailType.WORKER_USAGE,
         workerUsage: { id, ip },
       });
       await this.workerEntity.update(
         { workerId: result.workerId },
-        { workerName: generateWorkerName(result.workerNumber, platform) },
+        {
+          workerName: generateWorkerName(result.workerNumber, platform),
+          envVariables: envVariables,
+        },
       );
 
       return result.metaConfig;
@@ -215,6 +225,18 @@ export class WorkManagerService {
         throw new NotFoundException(`No workflow response found for ID: ${id}`);
       }
 
+      if (response.status === 'TERMINATED' || response.status === 'FAILED' || response.status === 'TIMED_OUT') {
+        const errorMessage = `Pre-check with ID ${id} is ${response.status.toLowerCase()}. Please check the workflow logs for more details.`;
+        const payload = await this.workFlowService.getWorkFlowPayload(id);
+        return {
+          ...response,
+          workflow: {
+            errors: [errorMessage],
+            sourcePathId: payload?.[0]?.payload?.preChecks?.[0]?.pathId ?? null,
+            destinationPathIds: payload?.[0]?.payload?.preChecks?.[0]?.destinations?.map(d => d?.pathId) ?? null,
+          },
+        };
+      }
       return response;
     } catch (error) {
       this.logger.error(`Error in getChildWorkFlowRes: ${error.message}`);

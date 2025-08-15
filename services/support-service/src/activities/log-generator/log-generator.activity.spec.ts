@@ -337,10 +337,14 @@ describe('LogGeneratorActivity', () => {
         startDate: 'invalid-date',
       };
 
-      const result = await activity.fetchAndZipLogs({ traceId, payload: invalidPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId,
+        payload: invalidPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Invalid date format. Expected YYYY-MM-DD format. Received startDate: invalid-date, endDate: 2024-01-03'
+        message:
+          'Invalid date format. Expected YYYY-MM-DD format. Received startDate: invalid-date, endDate: 2024-01-03',
       });
     });
 
@@ -350,10 +354,14 @@ describe('LogGeneratorActivity', () => {
         endDate: 'invalid-date',
       };
 
-      const result = await activity.fetchAndZipLogs({ traceId, payload: invalidPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId,
+        payload: invalidPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Invalid date format. Expected YYYY-MM-DD format. Received startDate: 2024-01-01, endDate: invalid-date'
+        message:
+          'Invalid date format. Expected YYYY-MM-DD format. Received startDate: 2024-01-01, endDate: invalid-date',
       });
     });
 
@@ -364,10 +372,14 @@ describe('LogGeneratorActivity', () => {
         endDate: '2024-01-01',
       };
 
-      const result = await activity.fetchAndZipLogs({ traceId, payload: invalidPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId,
+        payload: invalidPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Invalid date range: start date "2024-01-05" is after end date "2024-01-01". Please ensure the start date is earlier than or equal to the end date.'
+        message:
+          'Invalid date range: start date "2024-01-05" is after end date "2024-01-01". Please ensure the start date is earlier than or equal to the end date.',
       });
     });
 
@@ -410,7 +422,10 @@ describe('LogGeneratorActivity', () => {
         return Promise.resolve(undefined);
       });
 
-      const result = await activity.fetchAndZipLogs({ traceId, payload: mockPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId,
+        payload: mockPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
         message: 'No date folders found in the specified range (2024-01-01 to 2024-01-03) at path: /test/logs'
@@ -436,7 +451,10 @@ describe('LogGeneratorActivity', () => {
         return {} as any;
       });
 
-      const result = await activity.fetchAndZipLogs({ traceId, payload: mockPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId,
+        payload: mockPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
         message: 'No matching log files found for the specified criteria (2024-01-01 to 2024-01-03) with provided project-worker mapping'
@@ -471,10 +489,13 @@ describe('LogGeneratorActivity', () => {
         callback(null, '/test/logs/2024-01-01/project-1/control_plane/test1.log\n', '');
       });
 
-      const result = await activity.fetchAndZipLogs({ traceId, payload: mockPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId,
+        payload: mockPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Failed to create zip archive: Archiver failed'
+        message: 'Failed to create zip archive: Archiver failed',
       });
 
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -544,10 +565,13 @@ describe('LogGeneratorActivity', () => {
         callback(null, '/test/logs/2024-01-01/project-1/control_plane/test1.log\n', '');
       });
 
-      const result = await activity.fetchAndZipLogs({ traceId, payload: mockPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId,
+        payload: mockPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'General processing error'
+        message: 'General processing error',
       });
 
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -700,18 +724,26 @@ describe('LogGeneratorActivity', () => {
     });
 
     it('should handle missing payload gracefully', async () => {
-      const result = await activity.fetchAndZipLogs({ traceId: 'test', payload: null });
+      const result = await activity.fetchAndZipLogs({
+        traceId: 'test',
+        payload: null,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Missing required payload fields: startDate, endDate, or userId'
+        message:
+          'Missing required payload fields: startDate, endDate, or userId',
       });
     });
 
     it('should handle undefined payload gracefully', async () => {
-      const result = await activity.fetchAndZipLogs({ traceId: 'test', payload: undefined });
+      const result = await activity.fetchAndZipLogs({
+        traceId: 'test',
+        payload: undefined,
+      });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Missing required payload fields: startDate, endDate, or userId'
+        message:
+          'Missing required payload fields: startDate, endDate, or userId',
       });
     });
 
@@ -733,7 +765,8 @@ describe('LogGeneratorActivity', () => {
       });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Missing required payload fields: startDate, endDate, or userId'
+        message:
+          'Missing required payload fields: startDate, endDate, or userId',
       });
     });
 
@@ -760,7 +793,10 @@ describe('LogGeneratorActivity', () => {
 
       mockFsPromises.mkdir.mockRejectedValue(new Error('Permission denied'));
 
-      const result = await activity.fetchAndZipLogs({ traceId: 'test', payload: mockPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId: 'test',
+        payload: mockPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
         message: 'Failed to create output directory /test/output: Permission denied'
@@ -871,7 +907,10 @@ describe('LogGeneratorActivity', () => {
         return {} as any;
       });
 
-      const result = await activity.fetchAndZipLogs({ traceId: 'test', payload: mockPayload });
+      const result = await activity.fetchAndZipLogs({
+        traceId: 'test',
+        payload: mockPayload,
+      });
       expect(result).toStrictEqual({
         success: false,
         message: 'No matching log files found for the specified criteria (2024-01-01 to 2024-01-01) with provided project-worker mapping'

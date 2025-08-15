@@ -52,7 +52,7 @@
     "@nestjs/core": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/schedule": "^4.1.2",
-    "@netapp-cloud-datamigrate/jobs-lib": "0.1.2",
+    "@netapp-cloud-datamigrate/jobs-lib": "0.1.4",
     "@netapp-cloud-datamigrate/logger-lib": "0.0.15",
     "@temporalio/client": "^1.11.6",
     "@temporalio/nyc-test-coverage": "^1.11.8",
@@ -138,6 +138,14 @@
       "/dist",
       "/test/",
       "src/workflows/speed-test/speed-test-job-workflow.spec.ts"
+    ],
+    "globals": {
+      "ts-jest": {
+        "isolatedModules": true
+      }
+    },
+    "setupFiles": [
+      "<rootDir>/jest.setup.js"
     ],
     "coveragePathIgnorePatterns": [
       "/node_modules/",

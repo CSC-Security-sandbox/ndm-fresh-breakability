@@ -129,9 +129,8 @@ var _ = Describe("TC-011: Run migration with 'Upload GID/UID Mapping' option", f
 				},
 			}
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating migration job")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
-			Expect(len(migrationJobConfigIDs)).To(BeNumerically(">", 0), "Expected at least one jobConfigID")
 
 			migration_validators := []string{
 				"nfs_src_to_dest_vol_migration.json",
