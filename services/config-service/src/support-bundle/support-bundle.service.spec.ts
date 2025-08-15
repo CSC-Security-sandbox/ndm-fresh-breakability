@@ -166,6 +166,12 @@ describe('SupportBundleService', () => {
     const mockCreateDto: CreateSupportBundleDTO = {
       startDate: '2023-01-01T00:00:00Z',
       endDate: '2023-01-31T23:59:59Z',
+      projectWorkerMap: [
+        {
+          projectId: 'project-1',
+          workerIds: ['worker-1', 'worker-2'],
+        },
+      ],
       otherMetrics: ['state data', 'inventory data'],
     };
 
@@ -187,6 +193,7 @@ describe('SupportBundleService', () => {
         filters: {
           startDate: mockCreateDto.startDate,
           endDate: mockCreateDto.endDate,
+          projectWorkerMap: mockCreateDto.projectWorkerMap,
           otherMetrics: mockCreateDto.otherMetrics,
         },
       });
@@ -204,6 +211,7 @@ describe('SupportBundleService', () => {
       const dtoWithoutOptionalFields = {
         startDate: '2023-01-01T00:00:00Z',
         endDate: '2023-01-31T23:59:59Z',
+        projectWorkerMap: [],
       };
       const mockEntity = { id: 1, requestId: mockUuid };
       supportBundleRepo.create.mockReturnValue(mockEntity as any);
@@ -225,6 +233,7 @@ describe('SupportBundleService', () => {
         filters: {
           startDate: dtoWithoutOptionalFields.startDate,
           endDate: dtoWithoutOptionalFields.endDate,
+          projectWorkerMap: [],
           otherMetrics: [],
         },
       });
@@ -265,6 +274,7 @@ describe('SupportBundleService', () => {
                 traceId: mockUuid,
                 startDate: mockCreateDto.startDate,
                 endDate: mockCreateDto.endDate,
+                projectWorkerMap: mockCreateDto.projectWorkerMap,
                 userId: mockUserDetails.user.id,
                 otherMetrics: mockCreateDto.otherMetrics,
               }),
@@ -329,11 +339,7 @@ describe('SupportBundleService', () => {
     const userId = 'user-123';
 
     it('should return bundle ready status for completed bundle', async () => {
-      const mockFilters = {
-        startDate: '2023-01-01',
-        endDate: '2023-01-31',
-        otherMetrics: [],
-      };
+      const mockFilters = { startDate: '2023-01-01', endDate: '2023-01-31', projectWorkerMap: [], otherMetrics: [] };
       const mockCreatedAt = new Date('2023-01-01T10:00:00Z');
       const mockBundle = {
         status: SupportBundleStatus.COMPLETED,
@@ -366,11 +372,7 @@ describe('SupportBundleService', () => {
     });
 
     it('should return processing status for in-progress bundle', async () => {
-      const mockFilters = {
-        startDate: '2023-01-01',
-        endDate: '2023-01-31',
-        otherMetrics: ['metric1'],
-      };
+      const mockFilters = { startDate: '2023-01-01', endDate: '2023-01-31', projectWorkerMap: [], otherMetrics: ['metric1'] };
       const mockCreatedAt = new Date('2023-01-01T10:00:00Z');
       const mockBundle = {
         status: SupportBundleStatus.IN_PROGRESS,
@@ -392,11 +394,7 @@ describe('SupportBundleService', () => {
 
     it('should throw InternalServerErrorException for failed bundle', async () => {
       const errorMessage = 'Bundle generation failed';
-      const mockFilters = {
-        startDate: '2023-01-01',
-        endDate: '2023-01-31',
-        otherMetrics: [],
-      };
+      const mockFilters = { startDate: '2023-01-01', endDate: '2023-01-31', projectWorkerMap: [], otherMetrics: [] };
       const mockCreatedAt = new Date('2023-01-01T10:00:00Z');
       const mockBundle = {
         status: SupportBundleStatus.FAILED,
@@ -425,11 +423,7 @@ describe('SupportBundleService', () => {
     });
 
     it('should throw InternalServerErrorException with default message when no error message provided', async () => {
-      const mockFilters = {
-        startDate: '2023-01-01',
-        endDate: '2023-01-31',
-        otherMetrics: [],
-      };
+      const mockFilters = { startDate: '2023-01-01', endDate: '2023-01-31', projectWorkerMap: [], otherMetrics: [] };
       const mockCreatedAt = new Date('2023-01-01T10:00:00Z');
       const mockBundle = {
         status: SupportBundleStatus.FAILED,
@@ -445,11 +439,7 @@ describe('SupportBundleService', () => {
     });
 
     it('should return default status for unknown status', async () => {
-      const mockFilters = {
-        startDate: '2023-01-01',
-        endDate: '2023-01-31',
-        otherMetrics: [],
-      };
+      const mockFilters = { startDate: '2023-01-01', endDate: '2023-01-31', projectWorkerMap: [], otherMetrics: [] };
       const mockCreatedAt = new Date('2023-01-01T10:00:00Z');
       const mockBundle = {
         status: 'UNKNOWN_STATUS',
