@@ -6,6 +6,7 @@ import {
   ProcessedMetricsBatchResult,
 } from './performance-metrics.interface';
 import { PrometheusResponse } from '../state-data-csv-generation/state-data-csv-generation.interface';
+import { formatUnixTimestamp } from 'src/utils/timestamp.utils';
 
 @Injectable()
 export class PerformanceMetricsProcessorService {
@@ -36,7 +37,7 @@ export class PerformanceMetricsProcessorService {
       for (const [timestamp, value] of metricData.values || []) {
         const numericValue = Number(value);
         rows.push([
-          new Date(Number(timestamp) * 1000).toISOString(), // ISO timestamp
+          formatUnixTimestamp(timestamp),
           namespace,
           pod,
           valueParser ? valueParser(numericValue) : numericValue,
@@ -66,7 +67,7 @@ export class PerformanceMetricsProcessorService {
       for (const [timestamp, value] of metricData.values || []) {
         const numericValue = Number(value);
         rows.push([
-          new Date(Number(timestamp) * 1000).toISOString(), // ISO timestamp
+          formatUnixTimestamp(timestamp),
           ...labelValues,
           valueParser ? valueParser(numericValue) : numericValue,
         ]);
@@ -91,7 +92,7 @@ export class PerformanceMetricsProcessorService {
       for (const [timestamp, value] of metricData.values || []) {
         const numericValue = Number(value);
         rows.push([
-          new Date(Number(timestamp) * 1000).toISOString(), // ISO timestamp
+          formatUnixTimestamp(timestamp),
           instance,
           valueParser ? valueParser(numericValue) : numericValue,
         ]);
@@ -118,7 +119,7 @@ export class PerformanceMetricsProcessorService {
       for (const [timestamp, value] of metricData.values || []) {
         const numericValue = Number(value);
         rows.push([
-          new Date(Number(timestamp) * 1000).toISOString(), // ISO timestamp
+          formatUnixTimestamp(timestamp),
           workerId,
           controlPlaneIp,
           metricType,
