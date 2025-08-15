@@ -1,9 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm/dist/common/typeorm.decorators';
-import * as fs from 'fs';
-import * as path from 'path';
-import archiver from 'archiver';
-import AdmZip from 'adm-zip';
 import {
   ALLOWED_KEYWORDS,
   CSV_FILE_EXTENSION,
@@ -14,6 +10,7 @@ import {
 import { SQL_QUERIES } from 'src/constants/sql-queries';
 import { createCsvString } from 'src/utils/config-data-csv-generation.utils';
 import { WorkerEntity } from 'src/entities/worker.entity';
+import { ZipHandlerService } from 'src/services/zip-handler.service';
 import { DataSource, In, Repository } from 'typeorm';
 
 @Injectable()
@@ -26,6 +23,7 @@ export class ConfigurationDataCsvGenerationActivity {
     @InjectRepository(WorkerEntity)
     private readonly workerRepo: Repository<WorkerEntity>,
     private readonly dataSource: DataSource,
+    private readonly zipHandler: ZipHandlerService,
   ) {}
 
   async generateConfigurationDataCsv({
@@ -35,8 +33,13 @@ export class ConfigurationDataCsvGenerationActivity {
     traceId: string;
     payload: any;
   }) {
+    const workerIds: string[] = payload?.projectWorkerMap
+      .filter((item: any) => item.workerIds !== undefined)
+      .map((item: any) => item.workerIds);
+
     const workerDetails = await this.dataSource.query(
       SQL_QUERIES.GET_WORKER_IDS,
+      [workerIds],
     );
     const validWorkerIds: string[] = workerDetails.map(
       (row: any) => row.worker_id,
@@ -132,7 +135,14 @@ export class ConfigurationDataCsvGenerationActivity {
     if (workers.length === 0) return '';
 
     const csvData = workers.map((worker) => this.formatWorkerForCsv(worker));
-    const headers = Object.keys(csvData[0]);
+
+    // Collect all unique headers from ALL workers (not just the first one)
+    const allHeaders = new Set<string>();
+    csvData.forEach((row) => {
+      Object.keys(row).forEach((header) => allHeaders.add(header));
+    });
+
+    const headers = Array.from(allHeaders);
 
     return this.createCsvString(headers, csvData);
   }
@@ -156,79 +166,17 @@ export class ConfigurationDataCsvGenerationActivity {
     fileName: string,
     zipLocation: string,
   ): Promise<void> {
-    const zipPath = zipLocation.endsWith('.zip')
-      ? zipLocation
-      : path.join(zipLocation, 'support-bundle.zip');
-
-    this.logger.log(`Adding CSV to zip file: ${zipPath}`);
-
-    await fs.promises.mkdir(path.dirname(zipPath), { recursive: true });
-
-    const zipExists = await fs.promises
-      .access(zipPath)
-      .then(() => true)
-      .catch(() => false);
-
-    if (zipExists) {
-      await this.addToExistingZip(csvContent, fileName, zipPath);
-    } else {
-      await this.createNewZipWithCsv(csvContent, fileName, zipPath);
-    }
-  }
-
-  private async createNewZipWithCsv(
-    csvContent: string,
-    fileName: string,
-    zipPath: string,
-  ): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      const output = fs.createWriteStream(zipPath);
-      const archive = archiver('zip', { zlib: { level: 9 } });
-
-      output.on('close', () => {
-        this.logger.log(
-          `New ZIP file created: ${zipPath} (${archive.pointer()} total bytes)`,
-        );
-        resolve();
-      });
-
-      archive.on('error', (err: Error) => {
-        this.logger.error(`Archive error: ${err.message}`);
-        reject(err);
-      });
-
-      archive.pipe(output);
-      archive.append(csvContent, { name: `configuration data/${fileName}` });
-      void archive.finalize();
-    });
-  }
-
-  private async addToExistingZip(
-    csvContent: string,
-    fileName: string,
-    zipPath: string,
-  ): Promise<void> {
-    try {
-      const existingZip = new AdmZip(zipPath);
-      existingZip.addFile(
-        `configuration data/${fileName}`,
-        Buffer.from(csvContent, 'utf8'),
-      );
-      existingZip.writeZip(zipPath);
-      this.logger.log(
-        `CSV successfully added to existing ZIP file: ${zipPath}`,
-      );
-    } catch (error: any) {
-      this.logger.error(
-        `Error adding CSV to existing zip with AdmZip: ${error.message}`,
-      );
-      this.logger.log('Falling back to archiver-based approach...');
-      await this.createNewZipWithCsv(csvContent, fileName, zipPath);
-    }
+    await this.zipHandler.addCsvToZip(
+      csvContent,
+      fileName,
+      zipLocation,
+      'configuration data',
+    );
   }
 
   private formatWorkerForCsv(worker: WorkerEntity): Record<string, string> {
     const filteredEnvVariables = this.filterEnvVariables(worker.envVariables);
+
     return {
       'Project ID': worker.projectId || '',
       ...filteredEnvVariables,
@@ -238,7 +186,13 @@ export class ConfigurationDataCsvGenerationActivity {
   private filterEnvVariables(
     envVariables: Record<string, any>,
   ): Record<string, string> {
-    if (!envVariables || typeof envVariables !== 'object') return {};
+    if (!envVariables || typeof envVariables !== 'object') {
+      this.logger.log(
+        'envVariables is null/undefined or not an object:',
+        envVariables,
+      );
+      return {};
+    }
 
     return Object.entries(envVariables)
       .filter(([key]) => this.isConfigurationVariable(key))
