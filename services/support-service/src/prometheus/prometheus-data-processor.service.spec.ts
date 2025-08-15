@@ -179,16 +179,15 @@ describe('PrometheusDataProcessorService', () => {
         allMetrics: expect.any(Array),
         buildDetails: [
           {
-            Pod: 'control-plane-pod',
             'Build Version': 'v1.0.0',
             Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
           },
           {
-            Pod: 'worker-job',
             'Build Version': 'v1.0.0',
             Platform: 'linux',
-            'Worker Id': 'worker-1',
+            Pod: 'worker-job',
             Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
+            'Worker Id': 'worker-1',
           },
         ],
       });
