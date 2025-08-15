@@ -60,6 +60,7 @@ export class SupportBundleService {
       filters: {
         startDate: dto.startDate,
         endDate: dto.endDate,
+        projectWorkerMap: dto.projectWorkerMap ?? [],
         otherMetrics: dto.otherMetrics ?? [],
       },
     });
@@ -74,6 +75,7 @@ export class SupportBundleService {
       const payload: SupportBundleWorkflowPayloadDTO = {
         startDate: dto.startDate,
         endDate: dto.endDate,
+        projectWorkerMap: dto.projectWorkerMap ?? [],
         userId: userDetails.user.id,
         options: new Options(),
         otherMetrics: dto.otherMetrics ?? [],

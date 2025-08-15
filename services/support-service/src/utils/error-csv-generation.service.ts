@@ -12,15 +12,19 @@ export class OperationErrorService {
     private operationErrorRepo: Repository<OperationErrorEntity>,
   ) {}
 
-  // Fetches operation errors for given date range using raw SQL
+  /**
+     * Fetch operation errors for given project IDs and date range using raw SQL
+     */
 
-  async getOperationErrorsByDateRange(
+  async getOperationErrorsByProjectAndDateRange(
+    projectIds: string[],
     startDate: string,
     endDate: string,
   ): Promise<OperationErrorExportData[]> {
-    return await this.operationErrorRepo.query(
-      GET_OPERATION_ERRORS_BY_DATE_RANGE,
-      [startDate, endDate],
-    );
+    return await this.operationErrorRepo.query(GET_OPERATION_ERRORS_BY_DATE_RANGE, [
+      projectIds,
+      startDate,
+      endDate,
+    ]);
   }
 }
