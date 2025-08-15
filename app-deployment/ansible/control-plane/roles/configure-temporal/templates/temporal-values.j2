@@ -1,5 +1,9 @@
 server:
   enabled: true
+  image:
+    repository: temporalio/server
+    tag: 1.27.1
+    pullPolicy: IfNotPresent
   replicaCount: 2
   metrics:
     annotations:
@@ -49,6 +53,10 @@ server:
 
 web:
   enabled: true
+  image:
+    repository: temporalio/ui
+    tag: 2.36.0
+    pullPolicy: IfNotPresent
   ingress:
     enabled: true
     annotations:
@@ -61,8 +69,12 @@ web:
     - name: TEMPORAL_UI_PUBLIC_PATH
       value: "/temporal/ui"
 
-adminTools:
+admintools:
   enabled: true
+  image:
+    repository: temporalio/admin-tools
+    tag: 1.27.1
+    pullPolicy: IfNotPresent
 
 postgresql:
   enabled: false

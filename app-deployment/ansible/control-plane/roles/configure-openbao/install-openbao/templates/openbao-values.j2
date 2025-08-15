@@ -8,6 +8,11 @@ server:
     annotations: {}
     labels: 
       role: openbao-data
+  image:
+    registry: "ghcr.io"
+    repository: "openbao/openbao"
+    tag: "2.2.0"
+    pullPolicy: IfNotPresent
     
   affinity: {}
 
@@ -50,3 +55,16 @@ server:
     failureThreshold: 5
 ui:
   enabled: true
+
+injector:
+  image:
+    registry: "public.ecr.aws"
+    repository: "hashicorp/vault-k8s"
+    tag: "1.4.2"
+    pullPolicy: IfNotPresent
+
+  agentImage:
+    registry: "ghcr.io"
+    repository: "openbao/openbao"
+    tag: "2.2.0"
+    pullPolicy: IfNotPresent

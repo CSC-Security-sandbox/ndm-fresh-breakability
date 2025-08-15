@@ -2,6 +2,8 @@
 
 architecture: standalone
 global:
+  security:
+    allowInsecureImages: true
   postgresql:
     auth:
       username: dmadmin
@@ -10,6 +12,13 @@ global:
       secretKeys:
         adminPasswordKey: postgres-password
         userPasswordKey: password
+
+{% if local_cluster is not defined %}
+image:
+  registry: public.ecr.aws
+  repository: bitnami/postgresql
+  tag: 17.2.0-debian-12-r2
+{% endif %}
 
 primary:
   persistence:
@@ -67,6 +76,21 @@ primary:
 
 volumePermissions:
   enabled: true
+{% if local_cluster is not defined %}
+  image:
+    registry: public.ecr.aws
+    repository: bitnami/os-shell
+    tag: 12-debian-12-r33
+{% endif %}
 
 readReplicas:
     replicaCount: 0
+
+metrics:
+  enabled: false
+{% if local_cluster is not defined %}
+  image:
+    registry: public.ecr.aws
+    repository: bitnami/postgres-exporter
+    tag: 0.16.0-debian-12-r1
+{% endif %}

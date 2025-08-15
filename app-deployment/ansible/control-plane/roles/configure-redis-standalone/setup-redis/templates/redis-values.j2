@@ -1,10 +1,22 @@
 #reference: https://artifacthub.io/packages/helm/bitnami/redis?modal=values
+global:
+  security:
+    allowInsecureImages: true
+
 architecture: standalone
 auth:
   enabled: true
   password: "welcome"
 
 existingConfigmap: "redis-config"
+
+{% if local_cluster is not defined %}
+image:
+  registry: public.ecr.aws
+  repository: bitnami/redis
+  tag: 7.4.2-debian-12-r4
+  pullPolicy: IfNotPresent
+{% endif %}
 
 master:
   count: 1
@@ -50,6 +62,13 @@ master:
 
 volumePermissions:
   enabled: true
+{% if local_cluster is not defined %}
+  image:
+    registry: public.ecr.aws
+    repository: bitnami/os-shell
+    tag: 12-debian-12-r38
+    pullPolicy: IfNotPresent
+{% endif %}
 
 replica:
   replicaCount: 0
@@ -67,3 +86,20 @@ metrics:
     capabilities:
       drop:
         - ALL 
+{% if local_cluster is not defined %}
+  image:
+    registry: public.ecr.aws
+    repository: bitnami/redis-exporter
+    tag: 1.67.0-debian-12-r9
+    pullPolicy: IfNotPresent
+{% endif %}
+
+
+{% if local_cluster is not defined %}
+kubectl:
+  image:
+    registry: public.ecr.aws
+    repository: bitnami/kubectl
+    tag: 1.32.2-debian-12-r2
+    pullPolicy: IfNotPresent
+{% endif %}

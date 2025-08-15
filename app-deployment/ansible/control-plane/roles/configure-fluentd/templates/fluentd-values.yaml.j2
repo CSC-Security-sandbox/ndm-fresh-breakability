@@ -8,6 +8,11 @@ resources:
     cpu: 400m
     memory: 128Mi
 
+image:
+  repository: "fluent/fluentd-kubernetes-daemonset"
+  pullPolicy: "IfNotPresent"
+  tag: ""
+
 service:
   ports:
     - name: logs

@@ -1,5 +1,16 @@
+global:
+  security:
+    allowInsecureImages: true
+
 postgresql:
     enabled: false
+
+{% if local_cluster is not defined %}
+image:
+  registry: public.ecr.aws
+  repository: bitnami/keycloak
+  tag: 26.2.4-debian-12-r0
+{% endif %}
 
 externalDatabase:
     host: "postgresql.postgres.svc.cluster.local"
