@@ -56,7 +56,7 @@ const SupportBundleForm = () => {
               <TreeSelect
                 name="projectWorker"
                 form={supportBundleForm}
-                treeData={projectWorkerData || []}
+                treeData={projectWorkerData?.data?.items || []}
                 isSearchable
                 menuType="multi"
                 uniqueIdentifier="id"

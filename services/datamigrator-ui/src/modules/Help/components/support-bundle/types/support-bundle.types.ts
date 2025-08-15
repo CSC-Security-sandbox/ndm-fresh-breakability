@@ -27,6 +27,7 @@ export type SupportBundleFormType = {
   otherMetrics: any;
   isValid: boolean;
   isProcessing: boolean;
+  projectWorker: ProjectWorkerMap;
 };
 
 export type SupportBundleFormErrorsType = {

@@ -145,6 +145,7 @@ export const SupportBundleProvider = ({
   };
 
   const handleGenerateBundle = async () => {
+    supportBundleForm.formState.projectWorker = selectedItems;
     if (!supportBundleForm?.isValid) return;
 
     const { formState } = supportBundleForm;
@@ -154,7 +155,10 @@ export const SupportBundleProvider = ({
       [];
 
     const payload: SupportBundlePayloadType = {
-      projectWorkerMap: buildProjectWorkerMap(formState, projectWorkerData),
+      projectWorkerMap: buildProjectWorkerMap(
+        formState,
+        projectWorkerData?.data?.items || []
+      ),
       startDate: formatDateToYMD(formState?.startDate),
       endDate: formatDateToYMD(formState?.endDate),
       otherMetrics,
