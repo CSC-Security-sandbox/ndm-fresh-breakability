@@ -273,7 +273,7 @@ describe('App Configuration', () => {
           configUrl: 'http://localhost:3009/api/v1',
         },
         prometheus: {
-          baseUrl: 'http://localhost:52061/api/v1',
+          baseUrl: 'http://localhost:56825/api/v1',
           timeout: 30000,
         },
       });
@@ -297,7 +297,7 @@ describe('App Configuration', () => {
           configUrl: 'https://custom-config.example.com/api/v1',
         },
         prometheus: {
-          baseUrl: 'http://localhost:52061/api/v1',
+          baseUrl: 'http://localhost:56825/api/v1',
           timeout: 30000,
         },
       });
