@@ -2,7 +2,7 @@ import {
   Body,
   Controller,
   Get,
-  Logger,
+  Inject,
   Param,
   Patch,
   Post,
@@ -31,16 +31,24 @@ import { JobRunInitService } from "./jobrun.init.service";
 import { JobErrorQueryDto } from "./dto/jobRunErrors.dto";
 import { Auth, AuthWorker, Permission } from "@netapp-cloud-datamigrate/auth-lib";
 import { JobRunActionService } from "./jobrun-action.service";
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @ApiTags("jobs run")
 @Controller("job-run")
 export class JobRunController {
-  private readonly logger = new Logger(JobRunController.name);
+  private readonly logger: LoggerService;
+
   constructor(
     private readonly jobRunService: JobRunService,
     private readonly jobRunInitService: JobRunInitService,
-    private readonly jobRunActionService: JobRunActionService
-  ) {}
+    private readonly jobRunActionService: JobRunActionService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(JobRunController.name);
+  }
 
   // remove the schedule cron job
   @Cron(CronExpression.EVERY_10_SECONDS)
@@ -116,7 +124,7 @@ export class JobRunController {
   @Auth(Permission.ManageJob)
   @Put("/cutover/approve")
   async cutoverApprove(@Body() approval: ApprovalRequestDTO) {
-    this.logger.log(approval);
+    this.logger.log(JSON.stringify(approval));
     return this.jobRunService.approveCutoverRequest(approval);
   }
 

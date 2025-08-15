@@ -14,6 +14,7 @@ Compression=lzma
 SolidCompression=yes
 PrivilegesRequired=admin
 SetupLogging=yes
+UsePreviousAppDir=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -39,24 +40,61 @@ var
   ConfigWorkerSecret: String;
   ConfigProjectID: String;
 
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
+  
+  ConfigWorkerID := ExpandConstant('{param:WORKERID|}');
+  ConfigWorkerSecret := ExpandConstant('{param:WORKERSECRET|}');
+  ConfigControlPlaneIP := ExpandConstant('{param:CONTROLPLANEIP|}');
+  ConfigProjectID := ExpandConstant('{param:PROJECTID|}');
+  
+  if WizardSilent() then
+  begin
+    if (ConfigWorkerID = '') or (ConfigWorkerSecret = '') or (ConfigControlPlaneIP = '') then
+    begin
+      Log('Error: Silent installation requires all parameters: WORKERID, WORKERSECRET, CONTROLPLANEIP, PROJECTID');
+      Result := False;
+      Exit;
+    end;
+    Log('Silent installation with parameters: Worker ID=' + ConfigWorkerID + ', Control Plane IP=' + ConfigControlPlaneIP + ', Project ID=' + ConfigProjectID);
+  end
+  else
+  begin
+    Log('Interactive installation - will show configuration page');
+  end;
+end;
+
 procedure InitializeWizard;
 begin
-  ConfigPage := CreateInputQueryPage(wpSelectDir,
-    'Configuration Settings',
-    'Please enter the required configuration details',
-    'These settings are required for the Datamigrator Worker service.');
+  if not WizardSilent() then
+  begin
+    ConfigPage := CreateInputQueryPage(wpSelectDir,
+      'Configuration Settings',
+      'Please enter the required configuration details',
+      'These settings are required for the Datamigrator Worker service.');
 
-  ConfigPage.Add('Worker ID:', False);
-  ConfigPage.Add('Worker Secret:', True); 
-  ConfigPage.Add('Control Plane IP:', False);
-  ConfigPage.Add('Project ID:', False);
+    ConfigPage.Add('Worker ID:', False);
+    ConfigPage.Add('Worker Secret:', True); 
+    ConfigPage.Add('Control Plane IP:', False);
+    ConfigPage.Add('Project Id:', False);
+    
+    if ConfigWorkerID <> '' then
+      ConfigPage.Values[0] := ConfigWorkerID;
+    if ConfigWorkerSecret <> '' then
+      ConfigPage.Values[1] := ConfigWorkerSecret;
+    if ConfigControlPlaneIP <> '' then
+      ConfigPage.Values[2] := ConfigControlPlaneIP;
+    if ConfigProjectID <> '' then
+      ConfigPage.Values[3] := ConfigProjectID;
+  end;
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   Result := True;
   
-  if CurPageID = ConfigPage.ID then
+  if (ConfigPage <> nil) and (CurPageID = ConfigPage.ID) then
   begin
     if Length(ConfigPage.Values[0]) < 1 then
     begin
@@ -201,15 +239,24 @@ begin
   end;
 end;
 
+function InitializeUninstall(): Boolean;
+begin
+  Result := True;
+  Log('Uninstallation initiated');
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-var
-  ResultCode: Integer;
 begin
   if CurUninstallStep = usUninstall then
   begin
-    Log('Stopping fluentdwinsvc service (keeping fluent-package installed)...');
-    Exec('net.exe', 'stop fluentdwinsvc', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Log('Fluentd service stopped. Fluentd remains installed for future worker installations.');
+    Log('Running uninstallation process');
+  end
+  else if CurUninstallStep = usPostUninstall then
+  begin
+    if not UninstallSilent() then
+      MsgBox('Datamigrator Worker has been successfully uninstalled.', mbInformation, MB_OK)
+    else
+      Log('Uninstallation completed successfully');
   end;
 end;
 
@@ -234,7 +281,8 @@ begin
       if not LoadStringFromFile(TemplatePath, TemplateContent) then
       begin
         Log('Failed to read template file: ' + TemplatePath);
-        MsgBox('Error reading template file.', mbError, MB_OK);
+        if not WizardSilent() then
+          MsgBox('Error reading template file.', mbError, MB_OK);
         exit;
       end;
       Log('Successfully read template file');
@@ -246,7 +294,8 @@ begin
     else
     begin
       Log('Template worker.env.j2 not found at: ' + TemplatePath);
-      MsgBox('Template file missing.', mbError, MB_OK);
+      if not WizardSilent() then
+        MsgBox('Template file missing.', mbError, MB_OK);
       exit;
     end;
 
@@ -264,12 +313,14 @@ begin
       'REDIS_USERNAME=default' + #13#10 +
       'REDIS_PASSWORD=welcome' + #13#10 +
       'BASE_WORKING_PATH=''C:\datamigrator\mnt''' + #13#10 +
-      'PROJECT_ID=' + ConfigProjectID;
+      'PROJECT_ID=' + ConfigProjectID + #13#10 +
+      'OTEL_COLLECTOR_ENDPOINT=' + ConfigControlPlaneIP + ':4318';
 
     if not SaveStringToFile(ConfigPath, EnvContent, False) then
     begin
       Log('Failed to create configuration file.');
-      MsgBox('Failed to create the configuration file.', mbError, MB_OK);
+      if not WizardSilent() then
+        MsgBox('Failed to create the configuration file.', mbError, MB_OK);
     end
     else
     begin
@@ -326,9 +377,10 @@ begin
     end;
 
     Sleep(2000);
-    MsgBox('Datamigrator Worker and Fluentd installed successfully.' + #13#10 + 
-           'Worker logs will be forwarded to Control Plane at ' + ConfigControlPlaneIP, 
-           mbInformation, MB_OK);
+    if not WizardSilent() then
+      MsgBox('Datamigrator Worker and Fluentd installed successfully.' + #13#10 + 
+             'Worker logs will be forwarded to Control Plane at ' + ConfigControlPlaneIP, 
+             mbInformation, MB_OK);
   end;
 end;
 

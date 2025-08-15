@@ -215,6 +215,18 @@ export class WorkManagerService {
         throw new NotFoundException(`No workflow response found for ID: ${id}`);
       }
 
+      if (response.status === 'TERMINATED' || response.status === 'FAILED' || response.status === 'TIMED_OUT') {
+        const errorMessage = `Pre-check with ID ${id} is ${response.status.toLowerCase()}. Please check the workflow logs for more details.`;
+        const payload = await this.workFlowService.getWorkFlowPayload(id);
+        return {
+          ...response,
+          workflow: {
+            errors: [errorMessage],
+            sourcePathId: payload?.[0]?.payload?.preChecks?.[0]?.pathId ?? null,
+            destinationPathIds: payload?.[0]?.payload?.preChecks?.[0]?.destinations?.map(d => d?.pathId) ?? null,
+          },
+        };
+      }
       return response;
     } catch (error) {
       this.logger.error(`Error in getChildWorkFlowRes: ${error.message}`);

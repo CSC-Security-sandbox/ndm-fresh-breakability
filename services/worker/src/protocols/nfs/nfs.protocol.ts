@@ -2,9 +2,9 @@ import { CommandConfig, CommandPattern } from 'src/config/command.config';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { handleConnectionError, parseExports, parseProtocolVersions } from './nfs.utils';
 import * as net from 'net';
+import * as fs from 'fs';
 import { ProtocolTypes } from 'src/protocols/protocols';
 import { ProtocolPayload } from 'src/protocols/protocol/protocol.type'; 
-import * as fs from 'fs';
 import { Injectable } from '@nestjs/common';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { isPathExists } from 'src/activities/core/utils/utils';
@@ -12,8 +12,12 @@ import { isPathExists } from 'src/activities/core/utils/utils';
 @Injectable()
 export class NFSProtocol extends Protocol {
 
-  protected getCommandPattern( key : string): string {
+  protected getCommandPattern(key: string): string {
     return CommandConfig.getNFSCommand(this.platform, key)
+  }
+
+  protected getFstabPath(path: string): string {
+    return CommandConfig.getFstabPath(this.platform, path);
   }
 
   constructor(private readonly loggerFactory: LoggerFactory) {
@@ -21,7 +25,7 @@ export class NFSProtocol extends Protocol {
   }
 
   // --------------------------- Validate Connection -------------------------- //
-  async validateConnection(traceId:string, options: ProtocolPayload ): Promise<any> {
+  async validateConnection(traceId: string, options: ProtocolPayload ): Promise<any> {
     const client = new net.Socket();
     const timeout = 2000;
     try {
@@ -147,7 +151,7 @@ export class NFSProtocol extends Protocol {
     }
   }
 
-  async unmountPath(traceId: string, payload: any): Promise<any> {
+  async unmountPath(traceId: string, payload: any, manageMount: boolean): Promise<any> {
     this.logger.log(
       `[${traceId}] Unmounting path for ${payload.hostname} of type ${ProtocolTypes.NFS} from ${this.workerId} with payload: ${JSON.stringify(payload)}`,
     );
@@ -169,13 +173,25 @@ export class NFSProtocol extends Protocol {
       } else {
         this.logger.log(`[${traceId}] Directory does not exist: ${mountDir}`);
       }
-      
+
+      if (manageMount) {
+        this.updateBootMounts(
+          {
+            platform: this.platform,
+            fstabPath: this.getFstabPath(CommandPattern.FSTAB_PATH),
+            workerId: this.workerId,
+          },
+          payload,
+          'delete',
+          traceId
+        );
+      }
       return response;
     }
   }
 
-  async mountPath(traceId: string, payload: any): Promise<any> {
-   console.log(
+  async mountPath(traceId: string, payload: any, manageMount: boolean): Promise<any> {
+    this.logger.log(
       `[${traceId}] Mounting path for ${payload.hostname} of type ${payload} from ${this.workerId}`,
     );
 
@@ -217,9 +233,79 @@ export class NFSProtocol extends Protocol {
       'NFS Mount',
     );
     await new Promise((resolve) => setTimeout(resolve, 5000));
-    this.logger.log(`[${traceId}] Mount result: ${JSON.stringify(mountResult)}`);  
-    return mountResult;
+    this.logger.log(`[${traceId}] Mount result: ${JSON.stringify(mountResult)}`);
+
+    payload.mountDir = mountDir;
+    if (manageMount && mountResult.status === 'success') {
+      this.updateBootMounts(
+      {
+        platform: this.platform,
+        fstabPath: this.getFstabPath(CommandPattern.FSTAB_PATH),
+        workerId: this.workerId,
+      },
+      payload,
+      'insert',
+      traceId
+      );
+    }
+  return mountResult;
+}
+
+  // This file updates the /etc/fstab file to ensure that the mount persists across reboots.
+  public updateBootMounts({ platform, fstabPath, workerId}, payload, action, traceId) {
+    try {
+      const fstabEntry = `${payload.hostname}:${payload.path} ${payload.mountDir} nfs defaults 0 0\n`;
+      if (platform === 'linux') {
+        const fstabContent = fs.readFileSync(fstabPath, 'utf-8');
+        const entryExists = fstabContent.includes(fstabEntry);
+
+        if (action === 'insert') {
+          if (!entryExists) {
+            fs.appendFileSync(fstabPath, fstabEntry);
+            this.logger.log(`[${traceId}] Added entry to ${fstabPath}`);
+          } else {
+            this.logger.log(`[${traceId}] Entry already exists in /etc/fstab`);
+          }
+        } else if (action === 'delete') {
+          if (entryExists) {
+            const filteredLines = fstabContent
+              .split('\n')
+              .filter(line => line.trim() !== fstabEntry.trim());
+            let newContent = filteredLines.join('\n');
+            // Preserve original ending newline if present
+            if (fstabContent.endsWith('\n') && newContent.length > 0) {
+              newContent += '\n';
+            }
+            fs.writeFileSync(fstabPath, newContent);
+            this.logger.log(`[${traceId}] Removed entry from /etc/fstab`);
+          } else {
+            this.logger.log(`[${traceId}] Entry not found in /etc/fstab`);
+          }
+        } else {
+          this.logger.error(`[${traceId}] Unknown action: ${action}`);
+          return {
+            traceId,
+            status: 'error',
+            protocolType: 'NFS',
+            hostname: payload.hostname,
+            workerId,
+            message: `[${traceId}] Unknown action: ${action}`,
+          };
+        }
+      }
+    } catch (error) {
+      this.logger.error(`[${traceId}] Error updating /etc/fstab: ${error.message}`);
+      return {
+        traceId,
+        status: 'error',
+        protocolType: 'NFS',
+        hostname: payload.hostname,
+        workerId,
+        message: `[${traceId}] Error updating /etc/fstab: ${error.message}`,
+      };
+    }
   }
+
   disconnectSession(traceId: string, payload: ProtocolPayload): Promise<any> {
     throw new Error('Method not implemented.');
   }

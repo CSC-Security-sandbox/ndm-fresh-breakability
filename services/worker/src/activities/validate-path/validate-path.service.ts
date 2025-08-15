@@ -50,7 +50,7 @@ export class ValidatePathActivity {
                 jobRunId: uploadId,
                 pathId,
                 path
-            });
+            }, false);
             // unmount the path
             this.logger.log(`[${this.workerId}] Unmounting path for worker ${this.workerId} with uploadId: ${uploadId}`);
             await protocolIns.unmountPath(uploadId, {
@@ -62,7 +62,7 @@ export class ValidatePathActivity {
                 jobRunId: uploadId,
                 pathId,
                 path,
-            });
+            }, false);
 
             this.logger.log(`[${this.workerId}] Validating paths for worker ${this.workerId}`);
             return {

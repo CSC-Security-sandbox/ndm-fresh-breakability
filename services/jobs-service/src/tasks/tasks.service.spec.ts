@@ -4,8 +4,11 @@ import { In, Repository } from 'typeorm';
 import { TaskEntity } from 'src/entities/task.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { TaskQueryParamsDto } from './dto/taskpage.dto';
-import { Logger } from '@nestjs/common';
 import { TaskStatus } from 'src/constants/enums';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 describe('TasksService', () => {
   let tasksService: TasksService;
@@ -24,7 +27,18 @@ describe('TasksService', () => {
           provide: getRepositoryToken(TaskEntity),
           useValue: mockTaskRepo,
         },
-        Logger,
+       {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              log: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
+              verbose: jest.fn(),
+            }),
+          },
+        },
       ],
     }).compile();
 

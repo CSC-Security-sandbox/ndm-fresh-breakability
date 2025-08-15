@@ -3,6 +3,7 @@ import { WorkerThreadService } from './worker.thread.service';
 import { WorkerThreadOutput, ThreadOperation, MigrateFile } from './worker.thread.type';
 import { ConfigService } from '@nestjs/config';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { MetricsService } from '../metrics/metrics.service';
 import { mockLogger } from 'src/auth/auth.service.spec';
 
 jest.mock('worker_threads', () => {
@@ -40,6 +41,13 @@ describe('WorkerThreadService', () => {
         {
           provide: LoggerFactory,
           useValue: mockLoggerFactory,
+        },
+        {
+          provide: MetricsService,
+          useValue: {
+            recordWorkerThreadError: jest.fn(),
+            setWorkerThreadService: jest.fn(),
+          },
         },
       ],
     }).compile();
@@ -210,8 +218,13 @@ describe('WorkerThreadService', () => {
       create: jest.fn().mockReturnValue(loggerMock),
     };
 
+    const metricsServiceMock = {
+      recordWorkerThreadError: jest.fn(),
+      setWorkerThreadService: jest.fn(),
+    };
+
     const WorkerThreadServiceModule = (await import('./worker.thread.service')).WorkerThreadService;
-    const service = new WorkerThreadServiceModule(configServiceMock as any, loggerFactoryMock as any);
+    const service = new WorkerThreadServiceModule(configServiceMock as any, loggerFactoryMock as any, metricsServiceMock as any);
 
     // Assert
     expect(service['sizes']).toBeDefined()
@@ -298,6 +311,16 @@ describe('WorkerThreadService', () => {
     expect(service.getTaskBand(10485761)).toBe('100mb');
     expect(service.getTaskBand(104857600)).toBe('100mb');
     expect(service.getTaskBand(104857601)).toBe('1gb');
+  });
+
+  it('should return worker metrics correctly', () => {
+    const metrics = service.getWorkerThreadMetrics();
+    
+    expect(metrics).toHaveProperty('totalThreads');
+    expect(metrics).toHaveProperty('availableThreads');
+    expect(metrics).toHaveProperty('activeTasks');
+    expect(metrics).toHaveProperty('queueDepths');
+    expect(typeof metrics.queueDepths).toBe('object');
   });
 
 });

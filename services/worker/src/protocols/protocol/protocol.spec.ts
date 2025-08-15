@@ -1,14 +1,20 @@
-import { Protocol } from './protocol';
-import { exec } from 'child_process';
-import { WorkersConfig } from 'src/config/app.config';
 import { ProtocolPayload } from './protocol.type';
-import { sanitize } from 'src/utils/utilities';
 import { mockLoggerFactory } from '../../auth/auth.service.spec';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
+// Mock child_process and util before importing the Protocol class
 jest.mock('child_process', () => ({
   exec: jest.fn(),
 }));
+
+const mockExecAsync = jest.fn();
+jest.mock('util', () => ({
+  ...jest.requireActual('util'),
+  promisify: jest.fn(() => mockExecAsync),
+}));
+
+// Import Protocol after mocks are set up
+import { Protocol } from './protocol';
 
 jest.mock('src/config/app.config', () => ({
   WorkersConfig: {
@@ -41,10 +47,10 @@ class TestProtocol extends Protocol {
   disconnectSession(traceId: string, payload: ProtocolPayload): Promise<any> {
     throw new Error('Method not implemented.');
   }
-  mountPath(traceId: string, payload: ProtocolPayload): Promise<any> {
+  mountPath(traceId: string, payload: ProtocolPayload, manageMount: boolean): Promise<any> {
     return Promise.resolve([]);
   }
-  unmountPath(traceId: string, payload: ProtocolPayload): Promise<any> {
+  unmountPath(traceId: string, payload: ProtocolPayload, manageMount: boolean): Promise<any> {
     return Promise.resolve([]);
   }
   listPaths(traceId: string, payload: ProtocolPayload): Promise<string[]> {
@@ -56,7 +62,9 @@ class TestProtocol extends Protocol {
   validateConnection(traceId: string, payload: ProtocolPayload): Promise<any> {
     return Promise.resolve();
   }
-  
+  updateBootMounts({ platform, fstabPath, workerId}, payload, action, traceId){
+    return Promise.resolve();
+  }
 }
 
 describe('Protocol', () => {
@@ -64,6 +72,7 @@ describe('Protocol', () => {
 
   beforeEach(() => {
     protocol = new TestProtocol(mockLoggerFactory as unknown as LoggerFactory);
+    mockExecAsync.mockReset();
   });
 
   describe('executeCommand', () => {
@@ -79,9 +88,8 @@ describe('Protocol', () => {
       };
       const commandPattern = 'echo ${HOST}';
       const commandDescription = 'Test command';
-      (exec as unknown as jest.Mock).mockImplementation((command, callback) => {
-        callback(null, 'Command executed successfully', '');
-      });
+      
+      mockExecAsync.mockResolvedValue({ stdout: 'Command executed successfully', stderr: '' });
 
       const response = await protocol.executeCommand('trace-123', 'test-protocol', payload, commandPattern, commandDescription);
 
@@ -97,9 +105,7 @@ describe('Protocol', () => {
       const commandPattern = 'echo ${HOST}';
       const commandDescription = 'Test Command';
 
-      (exec as unknown as jest.Mock).mockImplementation((command, callback) => {
-        callback(null, '', 'Execution stderr');
-      });
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: 'Execution stderr' });
 
       await expect(
         protocol.executeCommand('traceId', 'TestProtocol', payload, commandPattern, commandDescription),

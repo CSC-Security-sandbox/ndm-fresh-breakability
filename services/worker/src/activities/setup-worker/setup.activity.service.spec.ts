@@ -33,7 +33,7 @@ const mockProtocol = {
     unmountPath: jest.fn()
 };
 
-const mockWorkManagerService ={
+const mockWorkManagerService = {
     fetchWorkerConfiguration: jest.fn(),
     getWorkerIdentity: jest.fn().mockReturnValue('worker-123'),
     getWorkerId: jest.fn().mockReturnValue('worker-123'),
@@ -79,8 +79,8 @@ describe('SetupActivityService', () => {
         jest.spyOn(protocols, 'getProtocol').mockReturnValue({
             mountPath: mockProtocol.mountPath,
             unmountPath: mockProtocol.unmountPath,
-          } as any);
-          
+        } as any);
+
         service = new SetupActivityService(
             mockConfigService as any,
             mockAuthService as any,
@@ -111,7 +111,7 @@ describe('SetupActivityService', () => {
                 mountBasePath: '/mnt/worker',
                 pathId: 'pid',
                 jobRunId: 'job-1'
-            }));
+            }), true);
         });
     });
 
@@ -134,8 +134,8 @@ describe('SetupActivityService', () => {
                 path: '/data',
                 mountBasePath: '/mnt/worker',
                 pathId: 'pid',
-                jobRunId: 'job-2'
-            }));
+                jobRunId: 'job-2',                      
+            }), true);
         });
     });
 
@@ -418,7 +418,7 @@ describe('SetupActivityService', () => {
 
         it('should handle general cleanup error', async () => {
             mockRedisService.getJobManagerContext.mockRejectedValue(new Error('Redis error'));
-            
+
             await expect(service.cleanup('job-redis-error')).rejects.toThrow(RetryableError);
         });
     });
