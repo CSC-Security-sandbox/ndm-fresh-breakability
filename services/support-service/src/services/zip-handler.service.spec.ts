@@ -76,7 +76,12 @@ describe('ZipHandlerService', () => {
         .spyOn(service as any, 'createNewZipWithCsv')
         .mockResolvedValue(undefined);
 
-      await service.addCsvToZip(csvContent, fileName, zipLocation);
+      await service.addCsvToZip(
+        csvContent,
+        fileName,
+        zipLocation,
+        'State Data',
+      );
 
       expect(mockFs.promises.mkdir).toHaveBeenCalledWith('/test', {
         recursive: true,
@@ -85,7 +90,7 @@ describe('ZipHandlerService', () => {
         csvContent,
         fileName,
         zipPath,
-        'CSV Files',
+        'State Data',
       );
       expect(mockLogger.log).toHaveBeenCalledWith(
         `Adding CSV to zip file: ${zipPath}`,
@@ -104,13 +109,18 @@ describe('ZipHandlerService', () => {
         .spyOn(service as any, 'addToExistingZip')
         .mockResolvedValue(undefined);
 
-      await service.addCsvToZip(csvContent, fileName, zipLocation);
+      await service.addCsvToZip(
+        csvContent,
+        fileName,
+        zipLocation,
+        'State Data',
+      );
 
       expect(addToExistingSpy).toHaveBeenCalledWith(
         csvContent,
         fileName,
         zipPath,
-        'CSV Files',
+        'State Data',
       );
     });
 
@@ -204,10 +214,49 @@ describe('ZipHandlerService', () => {
       await promise;
 
       expect(mockArchive.append).toHaveBeenCalledWith(csvContent, {
-        name: `CSV Files/${fileName}`,
+        name: `State Data/${fileName}`,
       });
       expect(mockLogger.log).toHaveBeenCalledWith(
         `New ZIP file created: ${zipPath} (1024 total bytes)`,
+      );
+    });
+
+    it('should handle archive errors and reject promise', async () => {
+      const csvContent = 'Name,Value\nTest,123\n';
+      const fileName = 'test.csv';
+      const zipPath = '/test/path/test.zip';
+
+      const mockOutput = { on: jest.fn() };
+      const mockArchive = {
+        on: jest.fn(),
+        pipe: jest.fn(),
+        append: jest.fn(),
+        finalize: jest.fn(),
+        pointer: jest.fn().mockReturnValue(1024),
+      };
+
+      mockFs.createWriteStream.mockReturnValue(mockOutput);
+      mockArchiver.mockReturnValue(mockArchive);
+
+      const archiveError = new Error('Compression failed');
+
+      // Simulate archive error
+      mockArchive.on.mockImplementation((event: string, callback: Function) => {
+        if (event === 'error') {
+          setTimeout(() => callback(archiveError), 0);
+        }
+      });
+
+      const promise = (service as any).createNewZipWithCsv(
+        csvContent,
+        fileName,
+        zipPath,
+        'State Data',
+      );
+
+      await expect(promise).rejects.toThrow('Compression failed');
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        `Archive error: ${archiveError.message}`,
       );
     });
   });
@@ -219,6 +268,7 @@ describe('ZipHandlerService', () => {
       const zipPath = '/test/path/test.zip';
 
       const mockAdmZipInstance = {
+        getEntries: jest.fn().mockReturnValue([]),
         addFile: jest.fn(),
         writeZip: jest.fn(),
       };
@@ -234,12 +284,82 @@ describe('ZipHandlerService', () => {
 
       expect(mockAdmZip).toHaveBeenCalledWith(zipPath);
       expect(mockAdmZipInstance.addFile).toHaveBeenCalledWith(
-        'CSV Files/test.csv',
+        'State Data/test.csv',
         Buffer.from(csvContent, 'utf8'),
       );
       expect(mockAdmZipInstance.writeZip).toHaveBeenCalledWith(zipPath);
       expect(mockLogger.log).toHaveBeenCalledWith(
-        `CSV successfully added to existing ZIP file: ${zipPath}`,
+        `CSV successfully added to existing ZIP file: ${zipPath} at State Data/test.csv`,
+      );
+    });
+
+    it('should handle existing ndm_logs folder and add CSV to it', async () => {
+      const csvContent = 'Name,Value\nTest,123\n';
+      const fileName = 'test.csv';
+      const zipPath = '/test/path/test.zip';
+
+      const mockEntries = [
+        {
+          entryName: 'ndm_logs_20250101/some_file.txt',
+        },
+      ];
+
+      const mockAdmZipInstance = {
+        getEntries: jest.fn().mockReturnValue(mockEntries),
+        addFile: jest.fn(),
+        writeZip: jest.fn(),
+      };
+
+      mockAdmZip.mockReturnValue(mockAdmZipInstance);
+
+      await (service as any).addToExistingZip(
+        csvContent,
+        fileName,
+        zipPath,
+        'State Data',
+      );
+
+      expect(mockAdmZipInstance.addFile).toHaveBeenCalledWith(
+        'ndm_logs_20250101/State Data/test.csv',
+        Buffer.from(csvContent, 'utf8'),
+      );
+      expect(mockLogger.log).toHaveBeenCalledWith(
+        'Found existing ndm_logs folder: ndm_logs_20250101. Adding CSV to: ndm_logs_20250101/State Data/test.csv',
+      );
+    });
+
+    it('should log when no existing ndm_logs folder found', async () => {
+      const csvContent = 'Name,Value\nTest,123\n';
+      const fileName = 'test.csv';
+      const zipPath = '/test/path/test.zip';
+
+      const mockEntries = [
+        {
+          entryName: 'other_folder/some_file.txt',
+        },
+      ];
+
+      const mockAdmZipInstance = {
+        getEntries: jest.fn().mockReturnValue(mockEntries),
+        addFile: jest.fn(),
+        writeZip: jest.fn(),
+      };
+
+      mockAdmZip.mockReturnValue(mockAdmZipInstance);
+
+      await (service as any).addToExistingZip(
+        csvContent,
+        fileName,
+        zipPath,
+        'State Data',
+      );
+
+      expect(mockAdmZipInstance.addFile).toHaveBeenCalledWith(
+        'State Data/test.csv',
+        Buffer.from(csvContent, 'utf8'),
+      );
+      expect(mockLogger.log).toHaveBeenCalledWith(
+        'No existing ndm_logs folder found. Adding CSV to: State Data/test.csv',
       );
     });
 
@@ -250,9 +370,10 @@ describe('ZipHandlerService', () => {
       const admZipError = new Error('AdmZip operation failed');
 
       const mockAdmZipInstance = {
-        addFile: jest.fn().mockImplementation(() => {
+        getEntries: jest.fn().mockImplementation(() => {
           throw admZipError;
         }),
+        addFile: jest.fn(),
         writeZip: jest.fn(),
       };
 
@@ -278,6 +399,48 @@ describe('ZipHandlerService', () => {
         fileName,
         zipPath,
         undefined,
+      );
+    });
+
+    it('should handle non-Error objects in catch block', async () => {
+      const csvContent = 'Name,Value\nTest,123\n';
+      const fileName = 'test.csv';
+      const zipPath = '/test/path/test.zip';
+      const nonErrorObject = 'String error message';
+
+      const mockAdmZipInstance = {
+        getEntries: jest.fn().mockImplementation(() => {
+          throw nonErrorObject;
+        }),
+        addFile: jest.fn(),
+        writeZip: jest.fn(),
+      };
+
+      mockAdmZip.mockReturnValue(mockAdmZipInstance);
+
+      const createNewZipSpy = jest
+
+        .spyOn(service as any, 'createNewZipWithCsv')
+        .mockResolvedValue(undefined);
+
+      await (service as any).addToExistingZip(
+        csvContent,
+        fileName,
+        zipPath,
+        'CSV Files',
+      );
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Error adding CSV to existing zip with AdmZip: Unknown error',
+      );
+      expect(mockLogger.log).toHaveBeenCalledWith(
+        'Falling back to archiver-based approach...',
+      );
+      expect(createNewZipSpy).toHaveBeenCalledWith(
+        csvContent,
+        fileName,
+        zipPath,
+        'CSV Files',
       );
     });
   });

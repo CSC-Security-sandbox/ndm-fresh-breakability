@@ -77,9 +77,8 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            expect.stringMatching(
-              /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
-            ), // ISO timestamp
+            'Saturday, 1 January 2022 at 1:30 pm', // ISO timestamp
+            ,
             'test-namespace',
             'test-pod',
             50.5,
@@ -100,12 +99,16 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            expect.stringMatching(
-              /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
-            ),
+            'Saturday, 1 January 2022 at 1:30 pm',
             'test-namespace',
             'test-pod',
             50.5,
+          ]),
+          expect.arrayContaining([
+            'Saturday, 1 January 2022 at 2:30 pm',
+            'test-namespace',
+            'test-pod',
+            60.2,
           ]),
         ]),
         { headers: ['timestamp', 'namespace', 'pod', 'memory_mb'] },
@@ -123,9 +126,8 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            expect.stringMatching(
-              /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
-            ),
+            'Saturday, 1 January 2022 at 1:30 pm',
+            ,
             'test-namespace',
             'test-pod',
             50.5,
@@ -146,9 +148,8 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            expect.stringMatching(
-              /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
-            ),
+            'Saturday, 1 January 2022 at 1:30 pm',
+            ,
             'test-namespace',
             'test-pod',
             50.5,
@@ -197,9 +198,8 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            expect.stringMatching(
-              /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
-            ),
+            'Saturday, 1 January 2022 at 1:30 pm',
+            ,
             'redis-master:6379',
             25, // Math.floor(25.7)
           ]),
@@ -234,9 +234,8 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            expect.stringMatching(
-              /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
-            ),
+            'Saturday, 1 January 2022 at 1:30 pm',
+            ,
             'redis-slave:6379',
             85.12, // (0.85123 * 100).toFixed(2) = 85.12
           ]),
@@ -271,9 +270,8 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            expect.stringMatching(
-              /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
-            ),
+            'Saturday, 1 January 2022 at 1:30 pm',
+            ,
             'redis:6379',
             2048.79, // toFixed(2)
           ]),
@@ -308,9 +306,8 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            expect.stringMatching(
-              /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
-            ),
+            'Saturday, 1 January 2022 at 1:30 pm',
+            ,
             'redis:6379',
             86400, // Math.floor(86400.9)
           ]),
@@ -349,9 +346,8 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            expect.stringMatching(
-              /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
-            ),
+            'Saturday, 1 January 2022 at 1:30 pm',
+            ,
             'GET /api',
             'api-service',
             120.5,
@@ -388,9 +384,8 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            expect.stringMatching(
-              /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
-            ),
+            'Saturday, 1 January 2022 at 1:30 pm',
+            ,
             'POST /data',
             'data-service',
             250.79, // rounded to 2 decimal places
@@ -429,9 +424,8 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            expect.stringMatching(
-              /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
-            ),
+            'Saturday, 1 January 2022 at 1:30 pm',
+            ,
             'auth-service',
             'backend',
             0.0512, // rounded to 4 decimal places
@@ -475,9 +469,8 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            expect.stringMatching(
-              /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
-            ),
+            'Saturday, 1 January 2022 at 1:30 pm',
+            ,
             'api-service',
             '500_internal_error',
             0.0123, // rounded to 4 decimal places
@@ -523,18 +516,16 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            expect.stringMatching(
-              /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
-            ),
+            'Saturday, 1 January 2022 at 1:30 pm',
+            ,
             'worker-1',
             '10.0.0.1',
             'avg',
             12.35, // rounded to 2 decimal places
           ]),
           expect.arrayContaining([
-            expect.stringMatching(
-              /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
-            ),
+            'Saturday, 1 January 2022 at 1:30 pm',
+            ,
             'worker-2',
             '10.0.0.1',
             'min',
@@ -1095,10 +1086,15 @@ describe('PerformanceMetricsProcessorService', () => {
         },
       };
 
-      // Should throw because Date constructor with invalid timestamp will cause toISOString() to fail
-      await expect(
-        service.processMetricData('CPU_PERCENT', responseWithInvalidTimestamp),
-      ).rejects.toThrow();
+      // Should handle invalid timestamp gracefully by returning timestamp as string
+      const result = await service.processMetricData(
+        'CPU_PERCENT',
+        responseWithInvalidTimestamp,
+      );
+
+      expect(result.data).toBeTruthy();
+      expect(result.data![0][0]).toBe('abc'); // Invalid timestamp returned as string
+      expect(result.csvContent).toBe('mocked,csv,content\n');
     });
 
     it('should handle missing metric labels', async () => {
