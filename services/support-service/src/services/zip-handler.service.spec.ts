@@ -204,7 +204,7 @@ describe('ZipHandlerService', () => {
       await promise;
 
       expect(mockArchive.append).toHaveBeenCalledWith(csvContent, {
-        name: `State Data/${fileName}`,
+        name: `CSV Files/${fileName}`,
       });
       expect(mockLogger.log).toHaveBeenCalledWith(
         `New ZIP file created: ${zipPath} (1024 total bytes)`,
@@ -234,7 +234,7 @@ describe('ZipHandlerService', () => {
 
       expect(mockAdmZip).toHaveBeenCalledWith(zipPath);
       expect(mockAdmZipInstance.addFile).toHaveBeenCalledWith(
-        'State Data/test.csv',
+        'CSV Files/test.csv',
         Buffer.from(csvContent, 'utf8'),
       );
       expect(mockAdmZipInstance.writeZip).toHaveBeenCalledWith(zipPath);
