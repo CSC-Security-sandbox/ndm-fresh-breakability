@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { writeToString } from '@fast-csv/format';
+import { formatUnixTimestamp } from 'src/utils/timestamp.utils';
 
 export interface ProcessedNetworkConfig {
   device: string;
@@ -121,7 +122,7 @@ export class SystemInventoryProcessorService {
       const usage = parseFloat(value);
       if (isNaN(usage)) continue;
 
-      const dateTime = new Date(timestamp * 1000).toISOString();
+      const dateTime = formatUnixTimestamp(timestamp);
       processed.push({
         usage: parseFloat(usage.toFixed(2)),
         timestamp: dateTime,
@@ -160,8 +161,8 @@ export class SystemInventoryProcessorService {
           service: labels.service || '',
           k8s_app: labels.k8s_app || '',
           instance: labels.instance || '',
-          start_time_iso: startTimeISO,
-          scrape_timestamp: scrapeTimeISO,
+          start_time_iso: formatUnixTimestamp(startTimeStr),
+          scrape_timestamp: formatUnixTimestamp(scrapeTimeUnix),
         });
 
         rows.push([
@@ -171,8 +172,8 @@ export class SystemInventoryProcessorService {
           labels.service || '',
           labels.k8s_app || '',
           labels.instance || '',
-          startTimeISO,
-          scrapeTimeISO,
+          formatUnixTimestamp(startTimeStr),
+          formatUnixTimestamp(scrapeTimeUnix),
         ]);
       }
     }
