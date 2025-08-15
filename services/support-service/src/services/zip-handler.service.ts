@@ -76,18 +76,39 @@ export class ZipHandlerService {
     folderName: string,
   ): Promise<void> {
     try {
-      const existingZip = new AdmZip(zipPath);
-      existingZip.addFile(
-        `${folderName}/${fileName}`,
-        Buffer.from(csvContent, 'utf8'),
+      const existingZip = new (AdmZip as any)(zipPath);
+
+      const entries = existingZip.getEntries();
+      const existingNdmLogsFolder = entries.find(
+        (entry: any) =>
+          entry.entryName.startsWith('ndm_logs_') &&
+          (entry.entryName.endsWith('/') || entry.entryName.includes('/')),
       );
+
+      let targetPath: string;
+      if (existingNdmLogsFolder) {
+        const ndmLogsFolderName = existingNdmLogsFolder.entryName.split('/')[0];
+        targetPath = `${ndmLogsFolderName}/${folderName}/${fileName}`;
+        this.logger.log(
+          `Found existing ndm_logs folder: ${ndmLogsFolderName}. Adding CSV to: ${targetPath}`,
+        );
+      } else {
+        targetPath = `${folderName}/${fileName}`;
+        this.logger.log(
+          `No existing ndm_logs folder found. Adding CSV to: ${targetPath}`,
+        );
+      }
+
+      existingZip.addFile(targetPath, Buffer.from(csvContent, 'utf8'));
       existingZip.writeZip(zipPath);
       this.logger.log(
-        `CSV successfully added to existing ZIP file: ${zipPath}`,
+        `CSV successfully added to existing ZIP file: ${zipPath} at ${targetPath}`,
       );
     } catch (error: any) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(
-        `Error adding CSV to existing zip with AdmZip: ${error.message}`,
+        `Error adding CSV to existing zip with AdmZip: ${errorMessage}`,
       );
       this.logger.log('Falling back to archiver-based approach...');
       await this.createNewZipWithCsv(csvContent, fileName, zipPath, folderName);
