@@ -70,6 +70,12 @@ describe('SupportBundleController', () => {
     const mockCreateSupportBundleDTO: CreateSupportBundleDTO = {
       startDate: '2023-01-01T00:00:00Z',
       endDate: '2023-01-31T23:59:59Z',
+      projectWorkerMap: [
+        {
+          projectId: 'project-1',
+          workerIds: ['worker-1', 'worker-2'],
+        },
+      ],
       otherMetrics: ['state data', 'inventory data'],
     };
 
