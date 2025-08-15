@@ -18,6 +18,8 @@ import { ErrorCsvGenerationActivity } from './error-csv-generation/error-csv-gen
 import { LogGeneratorActivity } from './log-generator/log-generator.activity';
 import { NotifyConfigActivity } from './notify-config/notify-config.activity';
 import { StateDataCsvGenerationActivity } from './state-data-csv-generation/state-data-csv-generation.activity';
+import { PerformanceMetricsCsvGenerationActivity } from './performance-metrics-csv-generation/performance-metrics-csv-generation.activity';
+import { PerformanceMetricsProcessorService } from './performance-metrics-csv-generation/performance-metrics-processor.service';
 
 @Module({
   imports: [
@@ -31,6 +33,8 @@ import { StateDataCsvGenerationActivity } from './state-data-csv-generation/stat
     ErrorCsvGenerationActivity,
     ConfigurationDataCsvGenerationActivity,
     StateDataCsvGenerationActivity,
+    PerformanceMetricsCsvGenerationActivity,
+    PerformanceMetricsProcessorService,
     ConfigService,
     OperationErrorService,
     PrometheusService,

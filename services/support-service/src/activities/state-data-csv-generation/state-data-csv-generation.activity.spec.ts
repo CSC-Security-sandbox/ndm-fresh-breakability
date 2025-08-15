@@ -586,6 +586,43 @@ describe('StateDataCsvGenerationActivity', () => {
         largeWorkerArray,
       );
     });
+
+    it('should handle duplicate worker IDs', async () => {
+      const payload = {
+        ...basePayload,
+        projectWorkerMap: [
+          { workerIds: ['worker-1', 'worker-2'] },
+          { workerIds: ['worker-2', 'worker-3'] }, // worker-2 is duplicate
+        ],
+      };
+
+      await activity.generateStateDataCsv({ traceId, payload });
+
+      expect(prometheusDataProcessor.getPrometheusMetrics).toHaveBeenCalledWith(
+        '2023-01-01',
+        '2023-01-31',
+        ['worker-1', 'worker-2', 'worker-2', 'worker-3'], // Contains duplicates
+      );
+    });
+
+    it('should handle very large worker ID arrays', async () => {
+      const largeWorkerArray = Array.from(
+        { length: 1000 },
+        (_, i) => `worker-${i}`,
+      );
+      const payload = {
+        ...basePayload,
+        projectWorkerMap: [{ workerIds: largeWorkerArray }],
+      };
+
+      await activity.generateStateDataCsv({ traceId, payload });
+
+      expect(prometheusDataProcessor.getPrometheusMetrics).toHaveBeenCalledWith(
+        '2023-01-01',
+        '2023-01-31',
+        largeWorkerArray,
+      );
+    });
   });
 
   describe('generateCsvFiles (private method)', () => {
