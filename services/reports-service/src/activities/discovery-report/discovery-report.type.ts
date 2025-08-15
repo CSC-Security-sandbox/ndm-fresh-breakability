@@ -71,6 +71,13 @@ export interface TopBiggestFileNameInput {
     path: string;
     file_size: string;
 }
+export interface JobRunDetailsInput {
+    stat_value: string;
+    volume_path: string;
+    status: string;
+    config_name: string;
+    protocol: string;
+}
 
 
 export interface DiscoveryReportSection {

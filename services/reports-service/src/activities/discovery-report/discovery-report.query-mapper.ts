@@ -1,5 +1,5 @@
-import { ACCESS_TIME_DISTRIBUTION, CREATED_TIME_DISTRIBUTION, DEPTH_DISTRIBUTION, EXTENSION_DISTRIBUTION, FILE_SYSTEM_DISTRIBUTION, MAX_VALUES, MODIFIED_TIME_DISTRIBUTION, NUMBER_OF_FILES_BY_SIZE, TOP_BIGGEST_FILE_NAME, TOP_DIRECOTRY_WITH_MAX_COUNT_CHILD, TOP_DIRECOTRY_WITH_MAX_SIZE, TOP_LONGEST_DIRECTORY_NAMES, TOP_LONGEST_DIRECTORY_PATHS, TOP_LONGEST_FILE_NAMES, TOP_LONGEST_FILE_PATHS } from "./discovery-report.query";
-import { AccessTimeDistributionInput, CreatedTimeDistributionInput, DepthDistributionInput, DiscoveryReportSection, ExtensionDistributionInput, FileSystemDistributionInput, MaxValuesInput, ModifiedTimeDistributionInput, NumberOfFilesBySizeInput, TopBiggestFileNameInput, TopDirectoryWithMaxCountChildInput, TopDirectoryWithMaxSizeInput, TopLongestDirectoryNamesInput, TopLongestDirectoryPathsInput, TopLongestFileNamesInput, TopLongestFilePathsInput } from "./discovery-report.type";
+import { ACCESS_TIME_DISTRIBUTION, CREATED_TIME_DISTRIBUTION, DEPTH_DISTRIBUTION, EXTENSION_DISTRIBUTION, FILE_SYSTEM_DISTRIBUTION, JOB_RUN_DETAILS, MAX_VALUES, MODIFIED_TIME_DISTRIBUTION, NUMBER_OF_FILES_BY_SIZE, TOP_BIGGEST_FILE_NAME, TOP_DIRECOTRY_WITH_MAX_COUNT_CHILD, TOP_DIRECOTRY_WITH_MAX_SIZE, TOP_LONGEST_DIRECTORY_NAMES, TOP_LONGEST_DIRECTORY_PATHS, TOP_LONGEST_FILE_NAMES, TOP_LONGEST_FILE_PATHS } from "./discovery-report.query";
+import { AccessTimeDistributionInput, CreatedTimeDistributionInput, DepthDistributionInput, DiscoveryReportSection, ExtensionDistributionInput, FileSystemDistributionInput, JobRunDetailsInput, MaxValuesInput, ModifiedTimeDistributionInput, NumberOfFilesBySizeInput, TopBiggestFileNameInput, TopDirectoryWithMaxCountChildInput, TopDirectoryWithMaxSizeInput, TopLongestDirectoryNamesInput, TopLongestDirectoryPathsInput, TopLongestFileNamesInput, TopLongestFilePathsInput } from "./discovery-report.type";
 
 
 export const NUMBER_OF_FILES_BY_SIZE_MAPPER = (input:NumberOfFilesBySizeInput[]) : DiscoveryReportSection[]=> {
@@ -232,6 +232,39 @@ export const TOP_BIGGEST_FILE_NAME_MAPPER = (input: TopBiggestFileNameInput[]) :
     return output;
 }
 
+export const JOB_RUN_DETAILS_MAPPER = (input: JobRunDetailsInput[]) : DiscoveryReportSection[] => {
+    const output: DiscoveryReportSection[] = [];
+    if (input.length > 0) {
+        const item = input[0];
+        const fileServerInfo = [
+            { value: item.volume_path, sub_category: 'Path' },
+            { value: item.config_name, sub_category: 'Config Name' },
+            { value: item.protocol, sub_category: 'Protocol' }
+        ];
+        fileServerInfo.forEach(({ value, sub_category }) => {
+            output.push({
+                value,
+                category: 'File Server Info',
+                valueType: 'string',
+                sub_category
+            });
+        });
+        output.push({
+            value: item.status,
+            category: 'Job Run Stats',
+            valueType: 'status',
+            sub_category: 'Status'
+        });
+        output.push({
+            value: item.stat_value,
+            category: 'Job Run Stats',
+            valueType: 'time',
+            sub_category: 'Total Time'
+        });
+    }
+    return output;
+}
+
 export const QueryMapper = {
     ['NUMBER_OF_FILES_BY_SIZE']: {query: NUMBER_OF_FILES_BY_SIZE , mapper: NUMBER_OF_FILES_BY_SIZE_MAPPER},
     ['MODIFIED_TIME_DISTRIBUTION']: {query: MODIFIED_TIME_DISTRIBUTION, mapper: MODIFIED_TIME_DISTRIBUTION_MAPPER},
@@ -248,6 +281,7 @@ export const QueryMapper = {
     ['TOP_LONGEST_DIRECTORY_PATHS']: {query: TOP_LONGEST_DIRECTORY_PATHS, mapper: TOP_LONGEST_DIRECTORY_PATHS_MAPPER},
     ['TOP_LONGEST_FILE_PATHS']: {query: TOP_LONGEST_FILE_PATHS, mapper: TOP_LONGEST_FILE_PATHS_MAPPER},
     ['TOP_BIGGEST_FILE_NAME']: {query: TOP_BIGGEST_FILE_NAME, mapper: TOP_BIGGEST_FILE_NAME_MAPPER},
+    ['JOB_RUN_DETAILS']: {query : JOB_RUN_DETAILS, mapper: JOB_RUN_DETAILS_MAPPER}
 }
 
 export const QueryList = Object.keys(QueryMapper);

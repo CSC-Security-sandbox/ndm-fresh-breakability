@@ -231,3 +231,17 @@ export const TOP_BIGGEST_FILE_NAME = `
     LIMIT 5;
 `
 
+export const JOB_RUN_DETAILS = `
+    select 
+        COALESCE(EXTRACT(EPOCH FROM (jr.end_time - jr.start_time))::INT, 0)::TEXT AS stat_value,
+        v.volume_path,
+        jr.status,
+        c.config_name,
+        fsrv.protocol
+    from datamigrator.jobRun jr
+    inner join datamigrator.jobconfig jc on jc.id = jr.job_config_id
+    inner join datamigrator.volume v on v.id = jc.source_path_id
+    inner join datamigrator.file_server fsrv on fsrv.id = file_server_id
+    inner join datamigrator.config c on c.id = fsrv.config_id
+    where jr.id = $1
+`
