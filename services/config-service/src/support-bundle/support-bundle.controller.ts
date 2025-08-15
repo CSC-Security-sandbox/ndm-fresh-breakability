@@ -111,7 +111,7 @@ export class SupportBundleController {
     @Request() userDetails: UserDetails,
     @Res() res: Response,
   ) {
-    const fullFileName = `ndm_${userDetails?.user?.id}.zip`;
+    const fullFileName = `ndm_logs_${userDetails?.user?.id}.zip`;
     const filePath =
       this.supportBundleService.downloadSupportBundle(fullFileName);
 
