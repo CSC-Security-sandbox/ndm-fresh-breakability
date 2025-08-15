@@ -5,11 +5,8 @@ import { createObjectCsvWriter } from 'csv-writer';
 import AdmZip = require('adm-zip');
 import { ErrorCsvGenerationActivity } from './error-csv-generation.activity';
 import { OperationErrorService } from 'src/utils/error-csv-generation.service';
-import {
-  ExportRequest,
-  ExportResult,
-  OperationErrorExportData,
-} from 'src/constants/types';
+import { ExportRequest, ExportResult, OperationErrorExportData } from 'src/constants/types';
+import * as errorCsvGenerationUtil from 'src/utils/error-csv-generation.util';
 
 // Mock external dependencies
 jest.mock('fs', () => ({
@@ -27,11 +24,16 @@ jest.mock('csv-writer', () => ({
 
 jest.mock('adm-zip');
 
+jest.mock('src/utils/error-csv-generation.util', () => ({
+    getProjectIds: jest.fn(),
+    groupDataByProjectAndDate: jest.fn(),
+    formatDateTime: jest.fn(),
+}));
+
 const mockFs = fs as jest.Mocked<typeof fs>;
-const mockCreateObjectCsvWriter = createObjectCsvWriter as jest.MockedFunction<
-  typeof createObjectCsvWriter
->;
-const MockAdmZip = AdmZip;
+const mockCreateObjectCsvWriter = createObjectCsvWriter as jest.MockedFunction<typeof createObjectCsvWriter>;
+const MockAdmZip = AdmZip as jest.MockedClass<typeof AdmZip>;
+const mockErrorCsvGenerationUtil = errorCsvGenerationUtil as jest.Mocked<typeof errorCsvGenerationUtil>;
 
 describe('ErrorCsvGenerationActivity', () => {
   let activity: ErrorCsvGenerationActivity;
@@ -71,11 +73,10 @@ describe('ErrorCsvGenerationActivity', () => {
     },
   ];
 
-  beforeEach(async () => {
-    const mockOperationErrorServiceValue = {
-      getOperationErrorsByDateRange: jest.fn(),
-      getErrorCountByProject: jest.fn(),
-    };
+    beforeEach(async () => {
+        const mockOperationErrorServiceValue = {
+            getOperationErrorsByProjectAndDateRange: jest.fn(),
+        };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -114,438 +115,375 @@ describe('ErrorCsvGenerationActivity', () => {
     );
     operationErrorService = module.get(OperationErrorService);
 
-    // Mock logger
-    mockLogger = {
-      log: jest.fn(),
-      error: jest.fn(),
-      warn: jest.fn(),
-      debug: jest.fn(),
-      verbose: jest.fn(),
-    } as any;
-    (activity as any).logger = mockLogger;
+        // Mock logger
+        mockLogger = {
+            log: jest.fn(),
+            error: jest.fn(),
+            warn: jest.fn(),
+            debug: jest.fn(),
+            verbose: jest.fn(),
+        } as any;
+        (activity as any).logger = mockLogger;
 
-    // Reset all mocks
-    jest.clearAllMocks();
-  });
+        // Mock zip instance
+        mockZipInstance = {
+            getEntries: jest.fn(),
+            addFile: jest.fn(),
+            writeZip: jest.fn(),
+        } as any;
 
-  describe('generateErrorCsv', () => {
-    // it('should successfully generate CSV when data exists', async () => {
-    //     const request = {
-    //         traceId: 'trace-123',
-    //         payload: {
-    //             zipLocation: '/path/to/output.zip',
-    //             startDate: '2024-07-01',
-    //             endDate: '2024-07-31',
-    //         },
-    //     };
+        // Mock CSV writer
+        mockCsvWriter = {
+            writeRecords: jest.fn(),
+        };
+        mockCreateObjectCsvWriter.mockReturnValue(mockCsvWriter);
 
-    //     // Mock getOperationErrorsByDateRange instead of getOperationErrorsByProjectAndDateRange
-    //     jest
-    //         .spyOn(activity, 'getOperationErrorsByDateRange')
-    //         .mockResolvedValue(mockOperationErrorData);
+        // Reset all mocks
+        jest.clearAllMocks();
 
-    //     // Mock the exportOperationErrorsToZip method
-    //     jest.spyOn(activity, 'exportOperationErrorsToZip').mockResolvedValue(undefined);
+        // Setup default util mocks
+        mockErrorCsvGenerationUtil.getProjectIds.mockReturnValue(['project-123', 'project-456']);
+        mockErrorCsvGenerationUtil.formatDateTime.mockImplementation((date) => '2024-07-15 10:30:00');
+        mockErrorCsvGenerationUtil.groupDataByProjectAndDate.mockReturnValue(
+            new Map([
+                ['project-123', new Map([
+                    ['2024-07-15', [mockOperationErrorData[0]]],
+                ])],
+                ['project-456', new Map([
+                    ['2024-07-16', [mockOperationErrorData[1]]],
+                ])],
+            ])
+        );
+    });
 
-    //     const result = await activity.generateErrorCsv(request);
+    describe('generateErrorCsv', () => {
+        it('should throw error when zipLocation is missing', async () => {
+            const request = {
+                traceId: 'trace-123',
+                payload: {
+                    zipLocation: '',
+                    startDate: '2024-07-01',
+                    endDate: '2024-07-31',
+                    projectWorkerMap: [{ projectId: 'project-123' }],
+                },
+            };
 
-    //     expect(result.success).toBe(true);
-    //     expect(result.message).toContain('Successfully exported operation errors');
-    //     expect(activity.getOperationErrorsByDateRange).toHaveBeenCalledWith(
-    //         request.payload.startDate,
-    //         request.payload.endDate,
-    //     );
-    // });
+            await expect(activity.generateErrorCsv(request)).rejects.toThrow('zipLocation is required for error CSV generation');
+        });
 
-    // it('should return success message when data exists', async () => {
-    //     const request = {
-    //         traceId: 'trace-123',
-    //         payload: {
-    //             zipLocation: '/path/to/output.zip',
-    //             startDate: '2024-07-01',
-    //             endDate: '2024-07-31',
-    //         },
-    //     };
+        it('should return success message when no project IDs found', async () => {
+            const request = {
+                traceId: 'trace-123',
+                payload: {
+                    zipLocation: '/path/to/output.zip',
+                    startDate: '2024-07-01',
+                    endDate: '2024-07-31',
+                    projectWorkerMap: [],
+                },
+            };
 
-    //     // Mock getOperationErrorsByDateRange instead of getOperationErrorsByProjectAndDateRange
-    //     jest.spyOn(activity, 'getOperationErrorsByDateRange').mockResolvedValue(mockOperationErrorData);
-
-    //     // Mock the exportOperationErrorsToZip method
-    //     jest.spyOn(activity, 'exportOperationErrorsToZip').mockResolvedValue(undefined);
-
-    //     const result = await activity.generateErrorCsv(request);
-
-    //     expect(result.success).toBe(true);
-    //     expect(result.message).toContain('Successfully exported operation errors');
-    //     expect(activity.getOperationErrorsByDateRange).toHaveBeenCalledWith(
-    //         request.payload.startDate,
-    //         request.payload.endDate,
-    //     );
-    // });
-
-    it('should return success message when no data exists', async () => {
-      const request = {
-        traceId: 'trace-123',
-        payload: {
-          zipLocation: '/path/to/output.zip',
-          startDate: '2024-07-01',
-          endDate: '2024-07-31',
-        },
-      };
-
-      jest
-        .spyOn(activity, 'getOperationErrorsByDateRange')
-        .mockResolvedValue([]);
+            mockErrorCsvGenerationUtil.getProjectIds.mockReturnValue([]);
 
       const result = await activity.generateErrorCsv(request);
 
-      expect(result.success).toBe(true);
-      expect(result.message).toBe(
-        'No operation errors found for the given criteria',
-      );
-    });
+            expect(result.success).toBe(true);
+            expect(result.message).toBe('No valid project IDs found for CSV generation');
+            expect(result.filesCreated).toBe(0);
+        });
 
-    it('should handle errors and return failure result', async () => {
-      const request = {
-        traceId: 'trace-123',
-        payload: {
-          zipLocation: '/path/to/output.zip',
-          startDate: '2024-07-01',
-          endDate: '2024-07-31',
-        },
-      };
+        it('should return success message when no operation errors found', async () => {
+            const request = {
+                traceId: 'trace-123',
+                payload: {
+                    zipLocation: '/path/to/output.zip',
+                    startDate: '2024-07-01',
+                    endDate: '2024-07-31',
+                    projectWorkerMap: [{ projectId: 'project-123' }],
+                },
+            };
 
-      const error = new Error('Database connection failed');
-      jest
-        .spyOn(activity, 'getOperationErrorsByDateRange')
-        .mockRejectedValue(error);
-
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+            operationErrorService.getOperationErrorsByProjectAndDateRange.mockResolvedValue([]);
 
       const result = await activity.generateErrorCsv(request);
 
-      expect(result.success).toBe(false);
-      expect(result.message).toContain(
-        'Export failed: Database connection failed',
-      );
-      expect(consoleSpy).toHaveBeenCalledWith(
-        'Error exporting operation errors:',
-        error,
-      );
+            expect(result.success).toBe(true);
+            expect(result.message).toBe('No operation errors found for the given date range and projects');
+            expect(result.filesCreated).toBe(0);
+        });
 
-      consoleSpy.mockRestore();
-    });
+        it('should successfully generate CSV when data exists', async () => {
+            const request = {
+                traceId: 'trace-123',
+                payload: {
+                    zipLocation: '/path/to/output.zip',
+                    startDate: '2024-07-01',
+                    endDate: '2024-07-31',
+                    projectWorkerMap: [{ projectId: 'project-123' }],
+                },
+            };
 
-    it('should handle non-Error exceptions', async () => {
-      const request = {
-        traceId: 'trace-123',
-        payload: {
-          zipLocation: '/path/to/output.zip',
-          startDate: '2024-07-01',
-          endDate: '2024-07-31',
-        },
-      };
+            operationErrorService.getOperationErrorsByProjectAndDateRange.mockResolvedValue(mockOperationErrorData);
 
-      jest
-        .spyOn(activity, 'getOperationErrorsByDateRange')
-        .mockRejectedValue('String error');
-
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+            // Mock the exportOperationErrorsToZip method
+            jest.spyOn(activity, 'exportOperationErrorsToZip').mockResolvedValue(undefined);
 
       const result = await activity.generateErrorCsv(request);
 
-      expect(result.success).toBe(false);
-      expect(result.message).toContain('Export failed: String error');
+            expect(result.success).toBe(true);
+            expect(result.message).toContain('Successfully exported operation errors');
+            expect(result.filesCreated).toBe(2); // 2 files created based on grouped data
+            expect(activity.exportOperationErrorsToZip).toHaveBeenCalledWith(
+                {
+                    projectIds: ['project-123', 'project-456'],
+                    startDate: request.payload.startDate,
+                    endDate: request.payload.endDate,
+                    outputLocation: request.payload.zipLocation,
+                },
+                request.traceId
+            );
+        });
 
-      consoleSpy.mockRestore();
-    });
+        it('should handle errors and return failure result', async () => {
+            const request = {
+                traceId: 'trace-123',
+                payload: {
+                    zipLocation: '/path/to/output.zip',
+                    startDate: '2024-07-01',
+                    endDate: '2024-07-31',
+                    projectWorkerMap: [{ projectId: 'project-123' }],
+                },
+            };
 
-    // Additional comprehensive test cases
-    it('should handle empty payload gracefully', async () => {
-      const request = {
-        traceId: 'trace-123',
-        payload: {
-          zipLocation: '',
-          startDate: '',
-          endDate: '',
-        },
-      };
-
-      jest
-        .spyOn(activity, 'getOperationErrorsByDateRange')
-        .mockResolvedValue([]);
-
-      const result = await activity.generateErrorCsv(request);
-
-      expect(result.success).toBe(true);
-      expect(result.message).toBe(
-        'No operation errors found for the given criteria',
-      );
-    });
-
-    it('should handle invalid date range', async () => {
-      const request = {
-        traceId: 'trace-123',
-        payload: {
-          zipLocation: '/path/to/output.zip',
-          startDate: '2024-12-31',
-          endDate: '2024-01-01', // End date before start date
-        },
-      };
-
-      jest
-        .spyOn(activity, 'getOperationErrorsByDateRange')
-        .mockResolvedValue([]);
+            const error = new Error('Database connection failed');
+            operationErrorService.getOperationErrorsByProjectAndDateRange.mockRejectedValue(error);
 
       const result = await activity.generateErrorCsv(request);
 
-      expect(result.success).toBe(true);
-      expect(result.message).toBe(
-        'No operation errors found for the given criteria',
-      );
-    });
+            expect(result.success).toBe(false);
+            expect(result.message).toContain('Export failed: Failed to fetch operation errors from database: Database connection failed');
+            expect(result.filesCreated).toBe(0);
+            expect(mockLogger.error).toHaveBeenCalledWith(
+                `[${request.traceId}] Error exporting operation errors:`,
+                expect.objectContaining({
+                    message: 'Failed to fetch operation errors from database: Database connection failed'
+                })
+            );
+        });
 
-    it('should handle large dataset efficiently', async () => {
-      const request = {
-        traceId: 'trace-123',
-        payload: {
-          zipLocation: '/path/to/output.zip',
-          startDate: '2024-07-01',
-          endDate: '2024-07-31',
-        },
-      };
+        it('should handle non-Error exceptions', async () => {
+            const request = {
+                traceId: 'trace-123',
+                payload: {
+                    zipLocation: '/path/to/output.zip',
+                    startDate: '2024-07-01',
+                    endDate: '2024-07-31',
+                    projectWorkerMap: [{ projectId: 'project-123' }],
+                },
+            };
 
-      // Create a large dataset (1000 records)
-      const largeDataset = Array.from({ length: 1000 }, (_, index) => ({
-        ...mockOperationErrorData[0],
-        id: `${index + 1}`,
-        operationId: `op-${String(index + 1).padStart(3, '0')}`,
-        createdAt: `2024-07-${String((index % 30) + 1).padStart(2, '0')}T10:30:00Z`,
-      }));
-
-      jest
-        .spyOn(activity, 'getOperationErrorsByDateRange')
-        .mockResolvedValue(largeDataset);
-      jest
-        .spyOn(activity, 'exportOperationErrorsToZip')
-        .mockResolvedValue(undefined);
+            operationErrorService.getOperationErrorsByProjectAndDateRange.mockRejectedValue('String error');
 
       const result = await activity.generateErrorCsv(request);
 
-      expect(result.success).toBe(true);
-      expect(result.message).toContain(
-        'Successfully exported operation errors',
-      );
-    });
+            expect(result.success).toBe(false);
+            expect(result.message).toContain('Export failed: Failed to fetch operation errors from database: String error');
+        });
 
-    it('should handle missing traceId', async () => {
-      const request = {
-        traceId: undefined,
-        payload: {
-          zipLocation: '/path/to/output.zip',
-          startDate: '2024-07-01',
-          endDate: '2024-07-31',
-        },
-      };
+        it('should handle missing traceId', async () => {
+            const request = {
+                traceId: undefined,
+                payload: {
+                    zipLocation: '/path/to/output.zip',
+                    startDate: '2024-07-01',
+                    endDate: '2024-07-31',
+                    projectWorkerMap: [{ projectId: 'project-123' }],
+                },
+            };
 
-      jest
-        .spyOn(activity, 'getOperationErrorsByDateRange')
-        .mockResolvedValue(mockOperationErrorData);
-      jest
-        .spyOn(activity, 'exportOperationErrorsToZip')
-        .mockResolvedValue(undefined);
+            operationErrorService.getOperationErrorsByProjectAndDateRange.mockResolvedValue(mockOperationErrorData);
+            jest.spyOn(activity, 'exportOperationErrorsToZip').mockResolvedValue(undefined);
 
       const result = await activity.generateErrorCsv(request);
 
       expect(result.success).toBe(true);
     });
 
-    it('should handle export operation error during zip creation', async () => {
-      const request = {
-        traceId: 'trace-123',
-        payload: {
-          zipLocation: '/path/to/output.zip',
-          startDate: '2024-07-01',
-          endDate: '2024-07-31',
-        },
-      };
+        it('should handle export operation error during zip creation', async () => {
+            const request = {
+                traceId: 'trace-123',
+                payload: {
+                    zipLocation: '/path/to/output.zip',
+                    startDate: '2024-07-01',
+                    endDate: '2024-07-31',
+                    projectWorkerMap: [{ projectId: 'project-123' }],
+                },
+            };
 
-      jest
-        .spyOn(activity, 'getOperationErrorsByDateRange')
-        .mockResolvedValue(mockOperationErrorData);
-      jest
-        .spyOn(activity, 'exportOperationErrorsToZip')
-        .mockRejectedValue(new Error('Zip creation failed'));
-
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+            operationErrorService.getOperationErrorsByProjectAndDateRange.mockResolvedValue(mockOperationErrorData);
+            jest.spyOn(activity, 'exportOperationErrorsToZip').mockRejectedValue(new Error('Zip creation failed'));
 
       const result = await activity.generateErrorCsv(request);
 
-      expect(result.success).toBe(false);
-      expect(result.message).toContain('Export failed: Zip creation failed');
-
-      consoleSpy.mockRestore();
-    });
-  });
-
-  describe('getOperationErrorsByDateRange', () => {
-    it('should delegate to operation error service', async () => {
-      const startDate = '2024-07-01';
-      const endDate = '2024-07-31';
-
-      operationErrorService.getOperationErrorsByDateRange.mockResolvedValue(
-        mockOperationErrorData,
-      );
-
-      const result = await activity.getOperationErrorsByDateRange(
-        startDate,
-        endDate,
-      );
-
-      expect(result).toEqual(mockOperationErrorData);
-      expect(
-        operationErrorService.getOperationErrorsByDateRange,
-      ).toHaveBeenCalledWith(startDate, endDate);
+            expect(result.success).toBe(false);
+            expect(result.message).toContain('Export failed: Zip creation failed');
+        });
     });
 
-    it('should handle service error', async () => {
-      const startDate = '2024-07-01';
-      const endDate = '2024-07-31';
+    describe('getOperationErrorsByProjectAndDateRange', () => {
+        it('should delegate to operation error service', async () => {
+            const projectIds = ['project-123'];
+            const startDate = '2024-07-01';
+            const endDate = '2024-07-31';
 
-      operationErrorService.getOperationErrorsByDateRange.mockRejectedValue(
-        new Error('Database error'),
-      );
+            operationErrorService.getOperationErrorsByProjectAndDateRange.mockResolvedValue(mockOperationErrorData);
 
-      await expect(
-        activity.getOperationErrorsByDateRange(startDate, endDate),
-      ).rejects.toThrow('Database error');
+            const result = await activity.getOperationErrorsByProjectAndDateRange(projectIds, startDate, endDate);
+
+            expect(result).toEqual(mockOperationErrorData);
+            expect(operationErrorService.getOperationErrorsByProjectAndDateRange).toHaveBeenCalledWith(
+                projectIds,
+                startDate,
+                endDate,
+            );
+        });
+
+        it('should handle service error', async () => {
+            const projectIds = ['project-123'];
+            const startDate = '2024-07-01';
+            const endDate = '2024-07-31';
+
+            operationErrorService.getOperationErrorsByProjectAndDateRange.mockRejectedValue(new Error('Database error'));
+
+            await expect(activity.getOperationErrorsByProjectAndDateRange(projectIds, startDate, endDate))
+                .rejects.toThrow('Failed to fetch operation errors from database: Database error');
+        });
+
+        it('should handle empty result from service', async () => {
+            const projectIds = ['project-123'];
+            const startDate = '2024-07-01';
+            const endDate = '2024-07-31';
+
+            operationErrorService.getOperationErrorsByProjectAndDateRange.mockResolvedValue([]);
+
+            const result = await activity.getOperationErrorsByProjectAndDateRange(projectIds, startDate, endDate);
+
+            expect(result).toEqual([]);
+        });
+
+        it('should throw error when no project IDs provided', async () => {
+            const projectIds = [];
+            const startDate = '2024-07-01';
+            const endDate = '2024-07-31';
+
+            await expect(activity.getOperationErrorsByProjectAndDateRange(projectIds, startDate, endDate))
+                .rejects.toThrow('No project IDs found for error CSV generation');
+        });
+
+        it('should handle null project IDs', async () => {
+            const projectIds = null as any;
+            const startDate = '2024-07-01';
+            const endDate = '2024-07-31';
+
+            await expect(activity.getOperationErrorsByProjectAndDateRange(projectIds, startDate, endDate))
+                .rejects.toThrow('No project IDs found for error CSV generation');
+        });
     });
 
-    it('should handle empty result from service', async () => {
-      const startDate = '2024-07-01';
-      const endDate = '2024-07-31';
+    describe('exportOperationErrorsToZip', () => {
+        it('should process data and add CSV files to zip', async () => {
+            const request: ExportRequest = {
+                projectIds: ['project-123'],
+                startDate: '2024-07-01',
+                endDate: '2024-07-31',
+                outputLocation: '/path/to/output.zip',
+            };
+            const traceId = 'trace-123';
 
-      operationErrorService.getOperationErrorsByDateRange.mockResolvedValue([]);
-
-      const result = await activity.getOperationErrorsByDateRange(
-        startDate,
-        endDate,
-      );
-
-      expect(result).toEqual([]);
-      expect(
-        operationErrorService.getOperationErrorsByDateRange,
-      ).toHaveBeenCalledWith(startDate, endDate);
-    });
-
-    it('should handle invalid date format', async () => {
-      const startDate = 'invalid-date';
-      const endDate = 'invalid-date';
-
-      operationErrorService.getOperationErrorsByDateRange.mockResolvedValue([]);
-
-      const result = await activity.getOperationErrorsByDateRange(
-        startDate,
-        endDate,
-      );
-
-      expect(result).toEqual([]);
-      expect(
-        operationErrorService.getOperationErrorsByDateRange,
-      ).toHaveBeenCalledWith(startDate, endDate);
-    });
-  });
-
-  describe('exportOperationErrorsToZip', () => {
-    it('should process data and add CSV files to zip', async () => {
-      const request: ExportRequest = {
-        startDate: '2024-07-01',
-        endDate: '2024-07-31',
-        outputLocation: '/path/to/output.zip',
-      };
-
-      jest
-        .spyOn(activity, 'getOperationErrorsByDateRange')
-        .mockResolvedValue(mockOperationErrorData);
+            operationErrorService.getOperationErrorsByProjectAndDateRange.mockResolvedValue(mockOperationErrorData);
 
       // Mock the addCSVFilesToZip method
       jest
         .spyOn(activity as any, 'addCSVFilesToZip')
         .mockResolvedValue(undefined);
 
-      await activity.exportOperationErrorsToZip(request);
+            await activity.exportOperationErrorsToZip(request, traceId);
 
-      expect(activity.getOperationErrorsByDateRange).toHaveBeenCalledWith(
-        request.startDate,
-        request.endDate,
-      );
+            expect(operationErrorService.getOperationErrorsByProjectAndDateRange).toHaveBeenCalledWith(
+                request.projectIds,
+                request.startDate,
+                request.endDate,
+            );
+            expect((activity as any).addCSVFilesToZip).toHaveBeenCalledWith(
+                expect.any(Map),
+                request.outputLocation,
+                traceId
+            );
+        });
+
+        it('should handle empty data from service', async () => {
+            const request: ExportRequest = {
+                projectIds: ['project-123'],
+                startDate: '2024-07-01',
+                endDate: '2024-07-31',
+                outputLocation: '/path/to/output.zip',
+            };
+            const traceId = 'trace-123';
+
+            operationErrorService.getOperationErrorsByProjectAndDateRange.mockResolvedValue([]);
+
+            await activity.exportOperationErrorsToZip(request, traceId);
+
+            expect(mockLogger.warn).toHaveBeenCalledWith(`[${traceId}] No operation errors found for export criteria`);
+        });
+
+        it('should handle service error gracefully', async () => {
+            const request: ExportRequest = {
+                projectIds: ['project-123'],
+                startDate: '2024-07-01',
+                endDate: '2024-07-31',
+                outputLocation: '/path/to/output.zip',
+            };
+            const traceId = 'trace-123';
+
+            operationErrorService.getOperationErrorsByProjectAndDateRange.mockRejectedValue(new Error('Service error'));
+
+            await expect(activity.exportOperationErrorsToZip(request, traceId))
+                .rejects.toThrow('Failed to export errors to zip: Failed to fetch operation errors from database: Service error');
+        });
+
+        it('should handle empty grouped data after processing', async () => {
+            const request: ExportRequest = {
+                projectIds: ['project-123'],
+                startDate: '2024-07-01',
+                endDate: '2024-07-31',
+                outputLocation: '/path/to/output.zip',
+            };
+            const traceId = 'trace-123';
+
+            operationErrorService.getOperationErrorsByProjectAndDateRange.mockResolvedValue(mockOperationErrorData);
+            mockErrorCsvGenerationUtil.groupDataByProjectAndDate.mockReturnValue(new Map());
+
+            await activity.exportOperationErrorsToZip(request, traceId);
+
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                `[${traceId}] No grouped data by project ID and date available after processing ${mockOperationErrorData.length} records for error CSV generation`
+            );
+        });
     });
 
-    it('should handle empty data from service', async () => {
-      const request: ExportRequest = {
-        startDate: '2024-07-01',
-        endDate: '2024-07-31',
-        outputLocation: '/path/to/output.zip',
-      };
+    describe('addCSVFilesToZip', () => {
+        beforeEach(() => {
+            MockAdmZip.mockImplementation(() => mockZipInstance);
+        });
 
-      jest
-        .spyOn(activity, 'getOperationErrorsByDateRange')
-        .mockResolvedValue([]);
-      jest
-        .spyOn(activity as any, 'addCSVFilesToZip')
-        .mockResolvedValue(undefined);
-
-      await activity.exportOperationErrorsToZip(request);
-
-      expect(activity.getOperationErrorsByDateRange).toHaveBeenCalledWith(
-        request.startDate,
-        request.endDate,
-      );
-
-      // Should still call addCSVFilesToZip with empty grouped data
-      expect((activity as any).addCSVFilesToZip).toHaveBeenCalledWith(
-        expect.any(Map),
-        request.outputLocation,
-      );
-    });
-
-    it('should handle service error gracefully', async () => {
-      const request: ExportRequest = {
-        startDate: '2024-07-01',
-        endDate: '2024-07-31',
-        outputLocation: '/path/to/output.zip',
-      };
-
-      jest
-        .spyOn(activity, 'getOperationErrorsByDateRange')
-        .mockRejectedValue(new Error('Service error'));
-
-      await expect(
-        activity.exportOperationErrorsToZip(request),
-      ).rejects.toThrow('Service error');
-    });
-  });
-
-  describe('addCSVFilesToZip', () => {
-    let mockZip: jest.Mocked<AdmZip>;
-    let mockFs: jest.Mocked<typeof fs>;
-
-    beforeEach(() => {
-      mockZip = {
-        getEntries: jest.fn(),
-        addFile: jest.fn(),
-        writeZip: jest.fn(),
-      } as any;
-
-      mockFs = fs as jest.Mocked<typeof fs>;
-      AdmZip.mockImplementation(() => mockZip);
-    });
-
-    it('should add CSV files to existing zip structure', async () => {
-      const groupedData = new Map([
-        ['project-123', new Map([['2024-07-15', [mockOperationErrorData[0]]]])],
-      ]);
-      const zipFilePath = '/path/to/output.zip';
+        it('should add CSV files to existing zip structure', async () => {
+            const groupedData = new Map([
+                ['project-123', new Map([
+                    ['2024-07-15', [mockOperationErrorData[0]]],
+                ])],
+            ]);
+            const zipFilePath = '/path/to/output.zip';
+            const traceId = 'trace-123';
 
       // Mock zip file exists
       mockFs.access.mockResolvedValue(undefined);
@@ -561,157 +499,344 @@ describe('ErrorCsvGenerationActivity', () => {
         },
       ] as AdmZip.IZipEntry[];
 
-      mockZip.getEntries.mockReturnValue(mockEntries);
+            mockZipInstance.getEntries.mockReturnValue(mockEntries);
 
-      // Mock CSV content generation
-      jest
-        .spyOn(activity as any, 'generateCSVContent')
-        .mockResolvedValue('mock,csv,content');
+            // Mock CSV content generation
+            jest.spyOn(activity as any, 'generateCSVContent').mockResolvedValue('mock,csv,content');
+            jest.spyOn(activity as any, 'addCSVToZip').mockResolvedValue(true);
 
-      await (activity as any).addCSVFilesToZip(groupedData, zipFilePath);
+            await (activity as any).addCSVFilesToZip(groupedData, zipFilePath, traceId);
 
-      expect(mockFs.access).toHaveBeenCalledWith(zipFilePath);
-      expect(mockZip.getEntries).toHaveBeenCalled();
-      expect(mockZip.addFile).toHaveBeenCalled();
-      expect(mockZip.writeZip).toHaveBeenCalledWith(zipFilePath);
-      expect(mockLogger.log).toHaveBeenCalledWith(
-        `Loading existing zip file: ${zipFilePath}`,
-      );
-      expect(mockLogger.log).toHaveBeenCalledWith(
-        `Zip file updated successfully: ${zipFilePath}`,
-      );
-    });
+            expect(mockFs.access).toHaveBeenCalledWith(zipFilePath);
+            expect(mockZipInstance.getEntries).toHaveBeenCalled();
+            expect(mockZipInstance.writeZip).toHaveBeenCalledWith(zipFilePath);
+            expect(mockLogger.log).toHaveBeenCalledWith(`[${traceId}] Loading existing zip file: ${zipFilePath}`);
+            expect(mockLogger.log).toHaveBeenCalledWith(`[${traceId}] Zip file updated successfully: ${zipFilePath}`);
+        });
 
-    it('should throw error when zip file does not exist', async () => {
-      const groupedData = new Map();
-      const zipFilePath = '/path/to/nonexistent.zip';
+        it('should throw error when zip file does not exist', async () => {
+            const groupedData = new Map();
+            const zipFilePath = '/path/to/nonexistent.zip';
+            const traceId = 'trace-123';
 
       // Mock zip file does not exist
       mockFs.access.mockRejectedValue(new Error('File not found'));
 
-      await expect(
-        (activity as any).addCSVFilesToZip(groupedData, zipFilePath),
-      ).rejects.toThrow('Zip file not found: /path/to/nonexistent.zip');
+            await expect((activity as any).addCSVFilesToZip(groupedData, zipFilePath, traceId))
+                .rejects.toThrow('Zip file not found: /path/to/nonexistent.zip');
+        });
+
+        it('should handle empty grouped data', async () => {
+            const groupedData = new Map();
+            const zipFilePath = '/path/to/output.zip';
+            const traceId = 'trace-123';
+
+            mockFs.access.mockResolvedValue(undefined);
+            mockZipInstance.getEntries.mockReturnValue([]);
+
+            await (activity as any).addCSVFilesToZip(groupedData, zipFilePath, traceId);
+
+            expect(mockZipInstance.writeZip).toHaveBeenCalledWith(zipFilePath);
+            expect(mockLogger.log).toHaveBeenCalledWith(`[${traceId}] Total CSV files added: 0`);
+        });
+
+        it('should handle zip loading error', async () => {
+            const groupedData = new Map();
+            const zipFilePath = '/path/to/output.zip';
+            const traceId = 'trace-123';
+
+            mockFs.access.mockResolvedValue(undefined);
+            MockAdmZip.mockImplementation(() => {
+                throw new Error('Failed to load zip');
+            });
+
+            await expect((activity as any).addCSVFilesToZip(groupedData, zipFilePath, traceId))
+                .rejects.toThrow('Failed to load existing zip file: Failed to load zip');
+        });
+
+        it('should handle dates with slashes and replace them', async () => {
+            const groupedData = new Map([
+                ['project-123', new Map([
+                    ['2024/07/15', [mockOperationErrorData[0]]],
+                ])],
+            ]);
+            const zipFilePath = '/path/to/output.zip';
+            const traceId = 'trace-123';
+
+            mockFs.access.mockResolvedValue(undefined);
+            mockZipInstance.getEntries.mockReturnValue([]);
+
+            jest.spyOn(activity as any, 'addCSVToZip').mockResolvedValue(true);
+
+            await (activity as any).addCSVFilesToZip(groupedData, zipFilePath, traceId);
+
+            expect((activity as any).addCSVToZip).toHaveBeenCalledWith(
+                mockZipInstance,
+                'project-123',
+                '2024-07-15', // Should be converted from slash to dash
+                [mockOperationErrorData[0]],
+                [],
+                traceId
+            );
+        });
     });
 
-    it('should handle empty grouped data', async () => {
-      const groupedData = new Map();
-      const zipFilePath = '/path/to/output.zip';
+    describe('addCSVToZip', () => {
+        beforeEach(() => {
+            // Mock CSV content generation
+            jest.spyOn(activity as any, 'generateCSVContent').mockResolvedValue('mock,csv,content');
+        });
 
-      mockFs.access.mockResolvedValue(undefined);
-      mockZip.getEntries.mockReturnValue([]);
+        it('should add CSV to zip with existing control_plane structure', async () => {
+            const zipEntries = [
+                { isDirectory: true, entryName: 'ndm_logs/2024-07-15/project-123/control_plane/' },
+            ] as AdmZip.IZipEntry[];
 
-      await (activity as any).addCSVFilesToZip(groupedData, zipFilePath);
+            const result = await (activity as any).addCSVToZip(
+                mockZipInstance,
+                'project-123',
+                '2024-07-15',
+                [mockOperationErrorData[0]],
+                zipEntries,
+                'trace-123'
+            );
 
-      expect(mockZip.writeZip).toHaveBeenCalledWith(zipFilePath);
-      expect(mockLogger.log).toHaveBeenCalledWith('Total CSV files added: 0');
+            expect(result).toBe(true);
+            expect(mockZipInstance.addFile).toHaveBeenCalledWith(
+                'ndm_logs/2024-07-15/project-123/control_plane/error-report.csv',
+                expect.any(Buffer)
+            );
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '[trace-123] Found exact control_plane match: ndm_logs/2024-07-15/project-123/control_plane/'
+            );
+        });
+
+        it('should create control_plane structure when project folder exists', async () => {
+            const zipEntries = [
+                { isDirectory: true, entryName: 'ndm_logs/2024-07-15/project-123/' },
+            ] as AdmZip.IZipEntry[];
+
+            const result = await (activity as any).addCSVToZip(
+                mockZipInstance,
+                'project-123',
+                '2024-07-15',
+                [mockOperationErrorData[0]],
+                zipEntries,
+                'trace-123'
+            );
+
+            expect(result).toBe(true);
+            expect(mockZipInstance.addFile).toHaveBeenCalledWith(
+                'ndm_logs/2024-07-15/project-123/control_plane/error-report.csv',
+                expect.any(Buffer)
+            );
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '[trace-123] Found project folder, will add control_plane: ndm_logs/2024-07-15/project-123/'
+            );
+        });
+
+        it('should create project structure when date folder exists', async () => {
+            const zipEntries = [
+                { isDirectory: true, entryName: 'ndm_logs/2024-07-15/' },
+            ] as AdmZip.IZipEntry[];
+
+            const result = await (activity as any).addCSVToZip(
+                mockZipInstance,
+                'project-123',
+                '2024-07-15',
+                [mockOperationErrorData[0]],
+                zipEntries,
+                'trace-123'
+            );
+
+            expect(result).toBe(true);
+            expect(mockZipInstance.addFile).toHaveBeenCalledWith(
+                'ndm_logs/2024-07-15/project-123/control_plane/error-report.csv',
+                expect.any(Buffer)
+            );
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '[trace-123] Found date folder, will create project structure: ndm_logs/2024-07-15/'
+            );
+        });
+
+        it('should handle file entries and extract directory paths correctly', async () => {
+            const zipEntries = [
+                { isDirectory: false, entryName: 'ndm_logs/2024-07-15/project-123/control_plane/some-file.txt' },
+                { isDirectory: false, entryName: 'ndm_logs/2024-07-15/project-123/worker/worker-1/log.txt' },
+            ] as AdmZip.IZipEntry[];
+
+            const result = await (activity as any).addCSVToZip(
+                mockZipInstance,
+                'project-123',
+                '2024-07-15',
+                [mockOperationErrorData[0]],
+                zipEntries,
+                'trace-123'
+            );
+
+            expect(result).toBe(true);
+            expect(mockZipInstance.addFile).toHaveBeenCalledWith(
+                'ndm_logs/2024-07-15/project-123/control_plane/error-report.csv',
+                expect.any(Buffer)
+            );
+        });
+
+        it('should return false when no suitable location found', async () => {
+            const zipEntries = [
+                { isDirectory: true, entryName: 'other_logs/' },
+                { isDirectory: true, entryName: 'different_structure/2024-07-15/' },
+            ] as AdmZip.IZipEntry[];
+
+            const result = await (activity as any).addCSVToZip(
+                mockZipInstance,
+                'project-123',
+                '2024-07-15',
+                [mockOperationErrorData[0]],
+                zipEntries,
+                'trace-123'
+            );
+
+            expect(result).toBe(false);
+            expect(mockZipInstance.addFile).not.toHaveBeenCalled();
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '[trace-123] No suitable location found for project \'project-123\' and date \'2024-07-15\' - skipping'
+            );
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '[trace-123] We looked for these patterns:'
+            );
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '[trace-123]  - ndm_logs/2024-07-15/project-123/control_plane/'
+            );
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '[trace-123]  - ndm_logs/2024-07-15/project-123/'
+            );
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '[trace-123]  - ndm_logs/2024-07-15/'
+            );
+        });
+
+        it('should handle CSV content generation error', async () => {
+            const zipEntries = [
+                { isDirectory: true, entryName: 'ndm_logs/2024-07-15/' },
+            ] as AdmZip.IZipEntry[];
+
+            jest.spyOn(activity as any, 'generateCSVContent').mockRejectedValue(new Error('CSV generation failed'));
+
+            const result = await (activity as any).addCSVToZip(
+                mockZipInstance,
+                'project-123',
+                '2024-07-15',
+                [mockOperationErrorData[0]],
+                zipEntries,
+                'trace-123'
+            );
+
+            expect(result).toBe(false);
+            expect(mockLogger.error).toHaveBeenCalledWith(
+                '[trace-123] Unexpected error in addCSVToZip for project \'project-123\' date \'2024-07-15\':',
+                expect.any(Error)
+            );
+        });
+
+        it('should handle zip addFile error gracefully', async () => {
+            const zipEntries = [
+                { isDirectory: true, entryName: 'ndm_logs/2024-07-15/' },
+            ] as AdmZip.IZipEntry[];
+
+            mockZipInstance.addFile.mockImplementation(() => {
+                throw new Error('Add file failed');
+            });
+
+            const result = await (activity as any).addCSVToZip(
+                mockZipInstance,
+                'project-123',
+                '2024-07-15',
+                [mockOperationErrorData[0]],
+                zipEntries,
+                'trace-123'
+            );
+
+            expect(result).toBe(false);
+            expect(mockLogger.error).toHaveBeenCalledWith(
+                '[trace-123] Unexpected error in addCSVToZip for project \'project-123\' date \'2024-07-15\':',
+                expect.any(Error)
+            );
+        });
+
+        it('should log discovered paths count', async () => {
+            const zipEntries = [
+                { isDirectory: true, entryName: 'ndm_logs/2024-07-15/project-123/' },
+                { isDirectory: false, entryName: 'ndm_logs/2024-07-15/project-123/control_plane/some-file.txt' },
+                { isDirectory: true, entryName: 'ndm_logs/2024-07-15/project-456/' },
+            ] as AdmZip.IZipEntry[];
+
+            await (activity as any).addCSVToZip(
+                mockZipInstance,
+                'project-123',
+                '2024-07-15',
+                [mockOperationErrorData[0]],
+                zipEntries,
+                'trace-123'
+            );
+
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '[trace-123] Discovered 3 unique paths in ZIP'
+            );
+        });
+
+        it('should handle mixed directory and file entries correctly', async () => {
+            const zipEntries = [
+                { isDirectory: false, entryName: 'ndm_logs/2024-07-15/project-123/control_plane/existing-file.log' },
+                { isDirectory: true, entryName: 'ndm_logs/2024-07-15/project-456/' },
+                { isDirectory: false, entryName: 'ndm_logs/2024-07-16/project-789/worker/worker-1/log.txt' },
+            ] as AdmZip.IZipEntry[];
+
+            const result = await (activity as any).addCSVToZip(
+                mockZipInstance,
+                'project-123',
+                '2024-07-15',
+                [mockOperationErrorData[0]],
+                zipEntries,
+                'trace-123'
+            );
+
+            expect(result).toBe(true);
+            expect(mockZipInstance.addFile).toHaveBeenCalledWith(
+                'ndm_logs/2024-07-15/project-123/control_plane/error-report.csv',
+                expect.any(Buffer)
+            );
+        });
     });
 
-    it('should handle zip with many directories (>10)', async () => {
-      const groupedData = new Map([
-        ['2024-07-15', [mockOperationErrorData[0]]],
-      ]);
-      const zipFilePath = '/path/to/output.zip';
+    describe('generateCSVContent', () => {
+        beforeEach(() => {
+            mockCsvWriter.writeRecords.mockResolvedValue(undefined);
+        });
 
-      mockFs.access.mockResolvedValue(undefined);
+        it('should generate CSV content successfully', async () => {
+            const errors = [mockOperationErrorData[0]];
+            const mockCsvContent = 'ID,Operation ID,Error Code\n1,op-001,ERR001';
+            const traceId = 'trace-123';
 
-      // Create more than 10 directory entries
-      const manyEntries = Array.from({ length: 15 }, (_, i) => ({
-        isDirectory: true,
-        entryName: `ndm_logs/dir${i}/`,
-      }));
+            mockFs.mkdir.mockResolvedValue(undefined);
+            mockFs.readFile.mockResolvedValue(mockCsvContent);
+            mockFs.unlink.mockResolvedValue(undefined);
 
-      const mockEntries = [
-        { isDirectory: true, entryName: 'ndm_logs/' },
-        ...manyEntries,
-      ] as AdmZip.IZipEntry[];
+            const result = await (activity as any).generateCSVContent(errors, traceId);
 
-      mockZip.getEntries.mockReturnValue(mockEntries);
+            expect(result).toBe(mockCsvContent);
+            expect(mockFs.mkdir).toHaveBeenCalledWith('/tmp', { recursive: true });
+            expect(mockCreateObjectCsvWriter).toHaveBeenCalled();
+            expect(mockCsvWriter.writeRecords).toHaveBeenCalledWith([{
+                ...errors[0],
+                createdAt: '2024-07-15 10:30:00' // Formatted by mock
+            }]);
+            expect(mockFs.unlink).toHaveBeenCalled();
+        });
 
-      jest.spyOn(activity as any, 'addCSVToZip').mockResolvedValue(undefined);
-
-      await (activity as any).addCSVFilesToZip(groupedData, zipFilePath);
-
-      // Check that it logs the total number of entries
-      expect(mockLogger.log).toHaveBeenCalledWith(
-        'Found 16 entries in zip file',
-      );
-      expect(mockLogger.log).toHaveBeenCalledWith('6 more directories');
-    });
-
-    it('should handle dates with slashes and replace them', async () => {
-      const groupedData = new Map([
-        ['2024/07/15', [mockOperationErrorData[0]]],
-      ]);
-      const zipFilePath = '/path/to/output.zip';
-
-      mockFs.access.mockResolvedValue(undefined);
-      mockZip.getEntries.mockReturnValue([]);
-
-      jest.spyOn(activity as any, 'addCSVToZip').mockResolvedValue(undefined);
-
-      await (activity as any).addCSVFilesToZip(groupedData, zipFilePath);
-
-      expect((activity as any).addCSVToZip).toHaveBeenCalledWith(
-        mockZip,
-        '2024-07-15', // Should be converted from slash to dash
-        [mockOperationErrorData[0]],
-        [],
-      );
-    });
-
-    it('should handle multiple date entries', async () => {
-      const groupedData = new Map([
-        ['2024-07-15', [mockOperationErrorData[0]]],
-        ['2024-07-16', [mockOperationErrorData[1]]],
-        ['2024-07-17', [mockOperationErrorData[0], mockOperationErrorData[1]]],
-      ]);
-      const zipFilePath = '/path/to/output.zip';
-
-      mockFs.access.mockResolvedValue(undefined);
-      mockZip.getEntries.mockReturnValue([]);
-
-      jest.spyOn(activity as any, 'addCSVToZip').mockResolvedValue(undefined);
-
-      await (activity as any).addCSVFilesToZip(groupedData, zipFilePath);
-
-      expect(mockLogger.log).toHaveBeenCalledWith('Total CSV files added: 3');
-      expect((activity as any).addCSVToZip).toHaveBeenCalledTimes(3);
-    });
-  });
-
-  describe('generateCSVContent', () => {
-    let mockFs: jest.Mocked<typeof fs>;
-    let mockCsvWriter: jest.Mocked<any>;
-
-    beforeEach(() => {
-      mockFs = fs as jest.Mocked<typeof fs>;
-      mockCsvWriter = {
-        writeRecords: jest.fn(),
-      };
-      (createObjectCsvWriter as jest.Mock).mockReturnValue(mockCsvWriter);
-    });
-
-    it('should generate CSV content successfully', async () => {
-      const errors = [mockOperationErrorData[0]];
-      const mockCsvContent = 'ID,Operation ID,Error Code\n1,op-001,ERR001';
-
-      mockFs.mkdir.mockResolvedValue(undefined);
-      mockFs.readFile.mockResolvedValue(mockCsvContent);
-      mockFs.unlink.mockResolvedValue(undefined);
-      mockCsvWriter.writeRecords.mockResolvedValue(undefined);
-
-      const result = await (activity as any).generateCSVContent(errors);
-
-      expect(result).toBe(mockCsvContent);
-      expect(mockFs.mkdir).toHaveBeenCalledWith('/tmp', { recursive: true });
-      expect(createObjectCsvWriter).toHaveBeenCalled();
-      expect(mockCsvWriter.writeRecords).toHaveBeenCalledWith(errors);
-      expect(mockFs.unlink).toHaveBeenCalled();
-    });
-
-    it('should clean up temp file on error', async () => {
-      const errors = [mockOperationErrorData[0]];
+        it('should clean up temp file on CSV writer error', async () => {
+            const errors = [mockOperationErrorData[0]];
+            const traceId = 'trace-123';
 
       mockFs.mkdir.mockResolvedValue(undefined);
       mockCsvWriter.writeRecords.mockRejectedValue(
@@ -719,15 +844,15 @@ describe('ErrorCsvGenerationActivity', () => {
       );
       mockFs.unlink.mockResolvedValue(undefined);
 
-      await expect(
-        (activity as any).generateCSVContent(errors),
-      ).rejects.toThrow('CSV write failed');
+            await expect((activity as any).generateCSVContent(errors, traceId))
+                .rejects.toThrow('CSV content generation failed: Failed to write CSV records: CSV write failed');
 
       expect(mockFs.unlink).toHaveBeenCalled();
     });
 
-    it('should handle cleanup errors gracefully', async () => {
-      const errors = [mockOperationErrorData[0]];
+        it('should handle cleanup errors gracefully', async () => {
+            const errors = [mockOperationErrorData[0]];
+            const traceId = 'trace-123';
 
       mockFs.mkdir.mockResolvedValue(undefined);
       mockCsvWriter.writeRecords.mockRejectedValue(
@@ -735,327 +860,65 @@ describe('ErrorCsvGenerationActivity', () => {
       );
       mockFs.unlink.mockRejectedValue(new Error('Cleanup failed'));
 
-      await expect(
-        (activity as any).generateCSVContent(errors),
-      ).rejects.toThrow('CSV write failed');
-    });
+            await expect((activity as any).generateCSVContent(errors, traceId))
+                .rejects.toThrow('CSV content generation failed: Failed to write CSV records: CSV write failed');
 
-    it('should handle mkdir error', async () => {
-      const errors = [mockOperationErrorData[0]];
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                `[${traceId}] Failed to cleanup temp file during error handling:`,
+                expect.any(Error)
+            );
+        });
+
+        it('should handle mkdir error', async () => {
+            const errors = [mockOperationErrorData[0]];
+            const traceId = 'trace-123';
 
       mockFs.mkdir.mockRejectedValue(new Error('Directory creation failed'));
 
-      await expect(
-        (activity as any).generateCSVContent(errors),
-      ).rejects.toThrow('Directory creation failed');
-    });
+            await expect((activity as any).generateCSVContent(errors, traceId))
+                .rejects.toThrow('CSV content generation failed: Failed to create temp directory /tmp: Directory creation failed');
+        });
 
-    it('should handle readFile error', async () => {
-      const errors = [mockOperationErrorData[0]];
+        it('should handle readFile error', async () => {
+            const errors = [mockOperationErrorData[0]];
+            const traceId = 'trace-123';
 
-      mockFs.mkdir.mockResolvedValue(undefined);
-      mockCsvWriter.writeRecords.mockResolvedValue(undefined);
-      mockFs.readFile.mockRejectedValue(new Error('File read failed'));
-      mockFs.unlink.mockResolvedValue(undefined);
+            mockFs.mkdir.mockResolvedValue(undefined);
+            mockFs.readFile.mockRejectedValue(new Error('File read failed'));
+            mockFs.unlink.mockResolvedValue(undefined);
 
-      await expect(
-        (activity as any).generateCSVContent(errors),
-      ).rejects.toThrow('File read failed');
+            await expect((activity as any).generateCSVContent(errors, traceId))
+                .rejects.toThrow('CSV content generation failed: Failed to read CSV file: File read failed');
 
       expect(mockFs.unlink).toHaveBeenCalled();
     });
 
-    it('should handle empty errors array', async () => {
-      const errors = [];
-      const mockCsvContent = 'ID,Operation ID,Error Code\n';
+        it('should handle empty errors array', async () => {
+            const errors = [];
+            const mockCsvContent = 'ID,Operation ID,Error Code\n';
+            const traceId = 'trace-123';
 
-      mockFs.mkdir.mockResolvedValue(undefined);
-      mockFs.readFile.mockResolvedValue(mockCsvContent);
-      mockFs.unlink.mockResolvedValue(undefined);
-      mockCsvWriter.writeRecords.mockResolvedValue(undefined);
+            mockFs.mkdir.mockResolvedValue(undefined);
+            mockFs.readFile.mockResolvedValue(mockCsvContent);
+            mockFs.unlink.mockResolvedValue(undefined);
 
-      const result = await (activity as any).generateCSVContent(errors);
+            const result = await (activity as any).generateCSVContent(errors, traceId);
 
-      expect(result).toBe(mockCsvContent);
-      expect(mockCsvWriter.writeRecords).toHaveBeenCalledWith([]);
+            expect(result).toBe(mockCsvContent);
+            expect(mockCsvWriter.writeRecords).toHaveBeenCalledWith([]);
+        });
+
+        it('should handle createObjectCsvWriter error', async () => {
+            const errors = [mockOperationErrorData[0]];
+            const traceId = 'trace-123';
+
+            mockFs.mkdir.mockResolvedValue(undefined);
+            mockCreateObjectCsvWriter.mockImplementation(() => {
+                throw new Error('CSV writer creation failed');
+            });
+
+            await expect((activity as any).generateCSVContent(errors, traceId))
+                .rejects.toThrow('CSV content generation failed: Failed to create CSV writer: CSV writer creation failed');
+        });
     });
-  });
-
-  describe('groupDataByDate', () => {
-    it('should group data by date correctly', () => {
-      const result = (activity as any).groupDataByDate(mockOperationErrorData);
-
-      expect(result.size).toBe(2); // Two different dates
-      expect(result.has('2024-07-15')).toBe(true);
-      expect(result.has('2024-07-16')).toBe(true);
-
-      const date1Data = result.get('2024-07-15');
-      expect(date1Data).toHaveLength(1);
-
-      const date2Data = result.get('2024-07-16');
-      expect(date2Data).toHaveLength(1);
-    });
-
-    it('should handle invalid date formats gracefully', () => {
-      const invalidDateData: OperationErrorExportData[] = [
-        {
-          ...mockOperationErrorData[0],
-          createdAt: 'invalid-date' as any,
-        },
-      ];
-
-      const result = (activity as any).groupDataByDate(invalidDateData);
-
-      expect(result.size).toBe(1);
-      // Should still create a date entry even with invalid date
-      expect(result.size).toBeGreaterThan(0);
-    });
-
-    it('should handle string dates correctly', () => {
-      const stringDateData: OperationErrorExportData[] = [
-        {
-          ...mockOperationErrorData[0],
-          createdAt: '2024-07-20T15:30:00Z' as any,
-        },
-      ];
-
-      const result = (activity as any).groupDataByDate(stringDateData);
-
-      expect(result.size).toBe(1);
-      expect(result.has('2024-07-20')).toBe(true);
-    });
-
-    it('should handle legacy date formats', () => {
-      const legacyDateData: OperationErrorExportData[] = [
-        {
-          ...mockOperationErrorData[0],
-          createdAt: 'Fri Jul 11 2025' as any,
-        },
-      ];
-
-      const result = (activity as any).groupDataByDate(legacyDateData);
-
-      expect(result.size).toBe(1);
-      // Check that it creates a date entry (the actual parsed date format)
-      expect(result.size).toBeGreaterThan(0);
-    });
-
-    it('should handle Date objects correctly', () => {
-      const dateObjectData: OperationErrorExportData[] = [
-        {
-          ...mockOperationErrorData[0],
-          createdAt: new Date('2024-08-20T12:00:00Z') as any,
-        },
-      ];
-
-      const result = (activity as any).groupDataByDate(dateObjectData);
-
-      expect(result.size).toBe(1);
-      expect(result.has('2024-08-20')).toBe(true);
-    });
-
-    it('should handle mixed date formats in same dataset', () => {
-      const mixedDateData: OperationErrorExportData[] = [
-        {
-          ...mockOperationErrorData[0],
-          createdAt: '2024-07-15T10:30:00Z',
-        },
-        {
-          ...mockOperationErrorData[1],
-          createdAt: new Date('2024-07-15T14:45:00Z') as any,
-        },
-        {
-          ...mockOperationErrorData[0],
-          id: '3',
-          createdAt: 'Mon Jul 15 2024 10:30:00 GMT' as any,
-        },
-      ];
-
-      const result = (activity as any).groupDataByDate(mixedDateData);
-
-      // Check that we have valid grouping - allow for fallback to unknown-date if parsing fails
-      expect(result.size).toBeGreaterThanOrEqual(1);
-      if (result.has('2024-07-15')) {
-        expect(result.get('2024-07-15').length).toBeGreaterThanOrEqual(2);
-      }
-      // At least the first two dates should parse correctly to 2024-07-15
-      const has2024_07_15 = result.has('2024-07-15');
-      const hasUnknownDate = result.has('unknown-date');
-      expect(has2024_07_15 || hasUnknownDate).toBe(true);
-    });
-
-    it('should handle dates with slashes and convert to dashes', () => {
-      const slashDateData: OperationErrorExportData[] = [
-        {
-          ...mockOperationErrorData[0],
-          createdAt: '2024/07/15T10:30:00Z' as any,
-        },
-      ];
-
-      const result = (activity as any).groupDataByDate(slashDateData);
-
-      expect(result.size).toBe(1);
-      // Should extract the first 10 characters and handle the slash format
-      expect(result.size).toBeGreaterThan(0);
-    });
-
-    it('should handle null or undefined dates', () => {
-      const nullDateData: OperationErrorExportData[] = [
-        {
-          ...mockOperationErrorData[0],
-          createdAt: null as any,
-        },
-        {
-          ...mockOperationErrorData[1],
-          createdAt: undefined as any,
-        },
-      ];
-
-      const result = (activity as any).groupDataByDate(nullDateData);
-
-      expect(result.size).toBeGreaterThan(0);
-    });
-
-    it('should handle empty array', () => {
-      const result = (activity as any).groupDataByDate([]);
-
-      expect(result.size).toBe(0);
-    });
-  });
-
-  describe('findExactDirectory', () => {
-    it('should find exact directory match', () => {
-      const zipEntries = [
-        { isDirectory: true, entryName: 'ndm_logs/' },
-        { isDirectory: true, entryName: 'ndm_logs/2024-07-15/' },
-        { isDirectory: false, entryName: 'ndm_logs/file.txt' },
-      ] as AdmZip.IZipEntry[];
-
-      const result = (activity as any).findExactDirectory(
-        zipEntries,
-        'ndm_logs/2024-07-15/',
-      );
-
-      expect(result).toBe(true);
-    });
-
-    it('should return false when directory not found', () => {
-      const zipEntries = [
-        { isDirectory: true, entryName: 'ndm_logs/' },
-        { isDirectory: false, entryName: 'ndm_logs/file.txt' },
-      ] as AdmZip.IZipEntry[];
-
-      const result = (activity as any).findExactDirectory(
-        zipEntries,
-        'ndm_logs/2024-07-15/',
-      );
-
-      expect(result).toBe(false);
-    });
-
-    it('should not match files as directories', () => {
-      const zipEntries = [
-        { isDirectory: false, entryName: 'ndm_logs/' },
-      ] as AdmZip.IZipEntry[];
-
-      const result = (activity as any).findExactDirectory(
-        zipEntries,
-        'ndm_logs/',
-      );
-
-      expect(result).toBe(false);
-    });
-  });
-
-  describe('addCSVToZip - directory structure logic', () => {
-    let mockZip: jest.Mocked<AdmZip>;
-
-    beforeEach(() => {
-      mockZip = {
-        addFile: jest.fn(),
-      } as any;
-
-      // Mock CSV content generation
-      jest
-        .spyOn(activity as any, 'generateCSVContent')
-        .mockResolvedValue('mock,csv,content');
-    });
-
-    it('should use existing date folder when found', async () => {
-      const zipEntries = [
-        { isDirectory: true, entryName: 'ndm_logs/2024-07-15/' },
-      ] as AdmZip.IZipEntry[];
-
-      await (activity as any).addCSVToZip(
-        mockZip,
-        '2024-07-15',
-        [mockOperationErrorData[0]],
-        zipEntries,
-      );
-
-      expect(mockZip.addFile).toHaveBeenCalledWith(
-        'ndm_logs/2024-07-15/errorlog.csv',
-        expect.any(Buffer),
-      );
-      expect(mockLogger.log).toHaveBeenCalledWith(
-        '   ✓ Found existing date folder: ndm_logs/2024-07-15/',
-      );
-    });
-
-    it('should create date structure when ndm_logs exists', async () => {
-      const zipEntries = [
-        { isDirectory: true, entryName: 'ndm_logs/' },
-      ] as AdmZip.IZipEntry[];
-
-      await (activity as any).addCSVToZip(
-        mockZip,
-        '2024-07-15',
-        [mockOperationErrorData[0]],
-        zipEntries,
-      );
-
-      expect(mockZip.addFile).toHaveBeenCalledWith(
-        'ndm_logs/2024-07-15/errorlog.csv',
-        expect.any(Buffer),
-      );
-      expect(mockLogger.log).toHaveBeenCalledWith(
-        'Found ndm_logs, creating structure: ndm_logs/2024-07-15/',
-      );
-    });
-
-    it('should create complete structure when no existing structure found', async () => {
-      const zipEntries = [] as AdmZip.IZipEntry[];
-
-      await (activity as any).addCSVToZip(
-        mockZip,
-        '2024-07-15',
-        [mockOperationErrorData[0]],
-        zipEntries,
-      );
-
-      expect(mockZip.addFile).toHaveBeenCalledWith(
-        'ndm_logs/2024-07-15/errorlog.csv',
-        expect.any(Buffer),
-      );
-      expect(mockLogger.log).toHaveBeenCalledWith(
-        'No existing structure found, creating complete structure: ndm_logs/2024-07-15/errorlog.csv',
-      );
-    });
-
-    it('should log successful CSV addition', async () => {
-      const zipEntries = [] as AdmZip.IZipEntry[];
-      const errors = [mockOperationErrorData[0]];
-
-      await (activity as any).addCSVToZip(
-        mockZip,
-        '2024-07-15',
-        errors,
-        zipEntries,
-      );
-
-      expect(mockLogger.log).toHaveBeenCalledWith(
-        'Successfully added CSV: ndm_logs/2024-07-15/errorlog.csv (1 records)',
-      );
-    });
-  });
 });
