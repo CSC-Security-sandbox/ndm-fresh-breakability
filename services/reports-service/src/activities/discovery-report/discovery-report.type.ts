@@ -2,41 +2,41 @@
 /* query-mapper.ts */
 export interface NumberOfFilesBySizeInput {
     size_group: string;
-    count: number;
-    total_size: number;
+    count: string;
+    total_size: string;
 }
 export interface ModifiedTimeDistributionInput {
     modified_group: string;
-    count: number;
-    total_size: number;
+    count: string;
+    total_size: string;
 }
 export interface CreatedTimeDistributionInput {
     created_group: string;
-    count: number;
-    total_size: number;
+    count: string;
+    total_size: string;
 }
 export interface AccessTimeDistributionInput {
     access_group: string;
-    count: number;
-    total_size: number;
+    count: string;
+    total_size: string;
 }
 export interface DepthDistributionInput {
     depth_group: string;
-    count: number;
-    total_size: number;
+    count: string;
+    total_size: string;
 }
 export interface FileSystemDistributionInput {
-    total_count: number
-    regular_files: number;
-    symbolic_links: number;
-    total_space_regular_files: number;
-    total_space_directories: number;
-    total_space_used: number;
+    total_count: string
+    regular_files: string;
+    symbolic_links: string;
+    total_space_regular_files: string;
+    total_space_directories: string;
+    total_space_used: string;
 }
 export interface ExtensionDistributionInput {
     extension: string;
-    count: number;
-    total_size: number;
+    count: string;
+    total_size: string;
 }
 export interface MaxValuesInput {
     max_file_size: string;
@@ -45,31 +45,31 @@ export interface MaxValuesInput {
 }
 export interface TopLongestFileNamesInput {
     path: string;
-    length: number;
+    length: string;
 }
 export interface TopLongestDirectoryNamesInput {
     path: string;
-    length: number;
+    length: string;
 }
 export interface TopDirectoryWithMaxSizeInput {
     directory: string;
-    total_size: number;
+    total_size: string;
 }
 export interface TopDirectoryWithMaxCountChildInput {
     directory: string;
-    child: number;
+    child: string;
 }
 export interface TopLongestDirectoryPathsInput {
     path: string;
-    length: number;
+    length: string;
 }
 export interface TopLongestFilePathsInput {
     path: string;
-    length: number;
+    length: string;
 }
 export interface TopBiggestFileNameInput {
     path: string;
-    file_size: number;
+    file_size: string;
 }
 
 

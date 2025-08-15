@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DiscoveryReportService } from './discovery-report/discovery-report.serivce';
-import { GenerateDiscoveryReportJsonInput } from './discovery-report/discovery-report.type';
+import { DiscoveryReportSection, GenerateDiscoveryReportJsonInput } from './discovery-report/discovery-report.type';
 
 @Injectable()
 export class ActivitiesService {
@@ -10,8 +10,8 @@ export class ActivitiesService {
         return this.discoveryReportService.generateJsonReport(input);
     }
 
-    async generateDiscoveryPdfReport() {
-        return this.discoveryReportService.generatePdfReport();
+    async generateDiscoveryPdfReport(section: DiscoveryReportSection[]) {
+        return this.discoveryReportService.generatePdfReport(section);
     }
 
     async generateDiscoveryCsvReport() {

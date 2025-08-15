@@ -97,7 +97,7 @@ export const ACCESS_TIME_DISTRIBUTION = `
             else 'invalid'
         end as access_group,
         count(1),
-        sum(case when i.is_directory = false then i.file_size else 0 end) as size
+        sum(case when i.is_directory = false then i.file_size else 0 end) as total_size
     from datamigrator.inventory i
     where i.job_run_id = $1
     group by access_group;

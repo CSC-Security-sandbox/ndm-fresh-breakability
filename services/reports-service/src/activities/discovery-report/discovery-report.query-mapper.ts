@@ -1,4 +1,3 @@
-import { map } from "rxjs";
 import { ACCESS_TIME_DISTRIBUTION, CREATED_TIME_DISTRIBUTION, DEPTH_DISTRIBUTION, EXTENSION_DISTRIBUTION, FILE_SYSTEM_DISTRIBUTION, MAX_VALUES, MODIFIED_TIME_DISTRIBUTION, NUMBER_OF_FILES_BY_SIZE, TOP_BIGGEST_FILE_NAME, TOP_DIRECOTRY_WITH_MAX_COUNT_CHILD, TOP_DIRECOTRY_WITH_MAX_SIZE, TOP_LONGEST_DIRECTORY_NAMES, TOP_LONGEST_DIRECTORY_PATHS, TOP_LONGEST_FILE_NAMES, TOP_LONGEST_FILE_PATHS } from "./discovery-report.query";
 import { AccessTimeDistributionInput, CreatedTimeDistributionInput, DepthDistributionInput, DiscoveryReportSection, ExtensionDistributionInput, FileSystemDistributionInput, MaxValuesInput, ModifiedTimeDistributionInput, NumberOfFilesBySizeInput, TopBiggestFileNameInput, TopDirectoryWithMaxCountChildInput, TopDirectoryWithMaxSizeInput, TopLongestDirectoryNamesInput, TopLongestDirectoryPathsInput, TopLongestFileNamesInput, TopLongestFilePathsInput } from "./discovery-report.type";
 
@@ -7,16 +6,16 @@ export const NUMBER_OF_FILES_BY_SIZE_MAPPER = (input:NumberOfFilesBySizeInput[])
     const output: DiscoveryReportSection[] = [];
     input.forEach(item => {
         output.push({
-            value: item.count,
+            value: parseInt(item.count, 0),
             category: 'Number of Files',
             valueType: 'count',
-            sub_category: `File Count With ${item.size_group}`
+            sub_category: `File Count with ${item.size_group}`
         });
         output.push({
-            value: item.total_size,
+            value: parseInt(item.total_size, 0),
             category: 'Space Used',
             valueType: 'size',
-            sub_category: `Capacity With ${item.size_group}`
+            sub_category: `Capacity with ${item.size_group}`
         });
     });
     return output;
@@ -26,16 +25,16 @@ export const MODIFIED_TIME_DISTRIBUTION_MAPPER = (input: ModifiedTimeDistributio
     const output: DiscoveryReportSection[] = [];
     input.forEach(item => {
         output.push({
-            value: item.count,
+            value: parseInt(item.count, 0),
             category: 'Modified',
             valueType: 'count',
-            sub_category: `File Count With ${item.modified_group}`
+            sub_category: `File Count with Modification Time ${item.modified_group}`
         });
         output.push({
-            value: item.total_size,
+            value: parseInt(item.total_size, 0),
             category: 'Modified',
             valueType: 'size',
-            sub_category: `Capacity With ${item.modified_group}`
+            sub_category: `Capacity With Modification Time ${item.modified_group}`
         });
     });
     return output;
@@ -45,16 +44,16 @@ export const CREATED_TIME_DISTRIBUTION_MAPPER = (input: CreatedTimeDistributionI
     const output: DiscoveryReportSection[] = [];
     input.forEach(item => {
         output.push({
-            value: item.count,
+            value: parseInt(item.count, 0),
             category: 'Created',
             valueType: 'count',
-            sub_category: `File Count With ${item.created_group}`
+            sub_category: `File Count with Creation Time${item.created_group}`
         });
         output.push({
-            value: item.total_size,
+            value: parseInt(item.total_size, 0),
             category: 'Created',
             valueType: 'size',
-            sub_category: `Capacity With ${item.created_group}`
+            sub_category: `Capacity with Creation Time ${item.created_group}`
         });
     });
     return output;
@@ -64,16 +63,16 @@ export const ACCESS_TIME_DISTRIBUTION_MAPPER = (input: AccessTimeDistributionInp
     const output: DiscoveryReportSection[] = [];
     input.forEach(item => {
         output.push({
-            value: item.count,
+            value: parseInt(item.count, 0),
             category: 'Access Time',
             valueType: 'count',
-            sub_category: `File Count With ${item.access_group}`
+            sub_category: `File Count with Access Time ${item.access_group}`
         });
         output.push({
-            value: item.total_size,
+            value: parseInt(item.total_size, 0),
             category: 'Access Time',
             valueType: 'size',
-            sub_category: `Capacity With ${item.access_group}`
+            sub_category: `Capacity with Access Time ${item.access_group}`
         });
     });
     return output;
@@ -83,16 +82,16 @@ export const DEPTH_DISTRIBUTION_MAPPER = (input: DepthDistributionInput[]) : Dis
     const output: DiscoveryReportSection[] = [];
     input.forEach(item => {
         output.push({
-            value: item.count,
+            value: parseInt(item.count, 0),
             category: 'Depth',
             valueType: 'count',
-            sub_category: `Files and Directory with ${item.depth_group}`
+            sub_category: `Files and Directory with depth: ${item.depth_group}`
         });
         output.push({
-            value: item.total_size,
+            value: parseInt(item.total_size, 0),
             category: 'Depth',
             valueType: 'size',
-            sub_category: `Capacity With ${item.depth_group}`
+            sub_category: `Capacity with depth: ${item.depth_group}`
         });
     });
     return output;
@@ -101,12 +100,12 @@ export const DEPTH_DISTRIBUTION_MAPPER = (input: DepthDistributionInput[]) : Dis
 export const FILE_SYSTEM_DISTRIBUTION_MAPPER = (input: FileSystemDistributionInput) : DiscoveryReportSection[] => {
     const output: DiscoveryReportSection[] = [];
     const mappings = [
-        { value: input.total_count, valueType: 'count', sub_category: 'Total Count' },
-        { value: input.regular_files, valueType: 'count', sub_category: 'Regular Files' },
-        { value: input.symbolic_links, valueType: 'count', sub_category: 'Symbolic Links' },
-        { value: input.total_space_regular_files, valueType: 'size', sub_category: 'Total Space for Regular Files' },
-        { value: input.total_space_directories, valueType: 'size', sub_category: 'Total Space for Directories' },
-        { value: input.total_space_used, valueType: 'size', sub_category: 'Total Space Used' },
+        { value: input[0].total_count, valueType: 'count', sub_category: 'Total Count' },
+        { value: input[0].regular_files, valueType: 'count', sub_category: 'Regular Files' },
+        { value: input[0].symbolic_links, valueType: 'count', sub_category: 'Symbolic Links' },
+        { value: input[0].total_space_regular_files, valueType: 'size', sub_category: 'Total Space for Regular Files' },
+        { value: input[0].total_space_directories, valueType: 'size', sub_category: 'Total Space for Directories' },
+        { value: input[0].total_space_used, valueType: 'size', sub_category: 'Total Space Used' },
     ];
     mappings.forEach(({ value, valueType, sub_category }) => {
         output.push({
@@ -136,19 +135,19 @@ export const MAX_VALUES_MAPPER = (input: MaxValuesInput[]) : DiscoveryReportSect
     const output: DiscoveryReportSection[] = [];
     input.forEach(item => {
         output.push({
-            value: item.max_file_size,
+            value: parseInt(item.max_file_size, 0),
             category: 'Maximum Values',
             valueType: 'size',
             sub_category: 'max_file_size'
         });
         output.push({
-            value: item.max_name_length,
+            value: parseInt(item.max_name_length, 0),
             category: 'Maximum Values',
             valueType: 'length',
             sub_category: 'max_name_length'
         });
         output.push({
-            value: item.total_directories,
+            value: parseInt(item.total_directories, 0),
             category: 'Maximum Values',
             valueType: 'count',
             sub_category: 'total_directories'
