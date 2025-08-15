@@ -577,6 +577,9 @@ describe('ErrorCsvGenerationActivity', () => {
                 'ndm_logs/2024-07-15/project-123/control_plane/error-report.csv',
                 expect.any(Buffer)
             );
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '[trace-123] Found exact control_plane match: ndm_logs/2024-07-15/project-123/control_plane/'
+            );
         });
 
         it('should create control_plane structure when project folder exists', async () => {
@@ -597,6 +600,9 @@ describe('ErrorCsvGenerationActivity', () => {
             expect(mockZipInstance.addFile).toHaveBeenCalledWith(
                 'ndm_logs/2024-07-15/project-123/control_plane/error-report.csv',
                 expect.any(Buffer)
+            );
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '[trace-123] Found project folder, will add control_plane: ndm_logs/2024-07-15/project-123/'
             );
         });
 
@@ -619,11 +625,37 @@ describe('ErrorCsvGenerationActivity', () => {
                 'ndm_logs/2024-07-15/project-123/control_plane/error-report.csv',
                 expect.any(Buffer)
             );
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '[trace-123] Found date folder, will create project structure: ndm_logs/2024-07-15/'
+            );
+        });
+
+        it('should handle file entries and extract directory paths correctly', async () => {
+            const zipEntries = [
+                { isDirectory: false, entryName: 'ndm_logs/2024-07-15/project-123/control_plane/some-file.txt' },
+                { isDirectory: false, entryName: 'ndm_logs/2024-07-15/project-123/worker/worker-1/log.txt' },
+            ] as AdmZip.IZipEntry[];
+
+            const result = await (activity as any).addCSVToZip(
+                mockZipInstance,
+                'project-123',
+                '2024-07-15',
+                [mockOperationErrorData[0]],
+                zipEntries,
+                'trace-123'
+            );
+
+            expect(result).toBe(true);
+            expect(mockZipInstance.addFile).toHaveBeenCalledWith(
+                'ndm_logs/2024-07-15/project-123/control_plane/error-report.csv',
+                expect.any(Buffer)
+            );
         });
 
         it('should return false when no suitable location found', async () => {
             const zipEntries = [
                 { isDirectory: true, entryName: 'other_logs/' },
+                { isDirectory: true, entryName: 'different_structure/2024-07-15/' },
             ] as AdmZip.IZipEntry[];
 
             const result = await (activity as any).addCSVToZip(
@@ -637,6 +669,21 @@ describe('ErrorCsvGenerationActivity', () => {
 
             expect(result).toBe(false);
             expect(mockZipInstance.addFile).not.toHaveBeenCalled();
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '[trace-123] No suitable location found for project \'project-123\' and date \'2024-07-15\' - skipping'
+            );
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '[trace-123] We looked for these patterns:'
+            );
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '[trace-123]  - ndm_logs/2024-07-15/project-123/control_plane/'
+            );
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '[trace-123]  - ndm_logs/2024-07-15/project-123/'
+            );
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '[trace-123]  - ndm_logs/2024-07-15/'
+            );
         });
 
         it('should handle CSV content generation error', async () => {
@@ -657,12 +704,12 @@ describe('ErrorCsvGenerationActivity', () => {
 
             expect(result).toBe(false);
             expect(mockLogger.error).toHaveBeenCalledWith(
-                '[trace-123] Failed to generate CSV content for project \'project-123\' date \'2024-07-15\':',
+                '[trace-123] Unexpected error in addCSVToZip for project \'project-123\' date \'2024-07-15\':',
                 expect.any(Error)
             );
         });
 
-        it('should handle zip addFile error', async () => {
+        it('should handle zip addFile error gracefully', async () => {
             const zipEntries = [
                 { isDirectory: true, entryName: 'ndm_logs/2024-07-15/' },
             ] as AdmZip.IZipEntry[];
@@ -682,8 +729,52 @@ describe('ErrorCsvGenerationActivity', () => {
 
             expect(result).toBe(false);
             expect(mockLogger.error).toHaveBeenCalledWith(
-                '[trace-123] Failed to add CSV file to zip:',
+                '[trace-123] Unexpected error in addCSVToZip for project \'project-123\' date \'2024-07-15\':',
                 expect.any(Error)
+            );
+        });
+
+        it('should log discovered paths count', async () => {
+            const zipEntries = [
+                { isDirectory: true, entryName: 'ndm_logs/2024-07-15/project-123/' },
+                { isDirectory: false, entryName: 'ndm_logs/2024-07-15/project-123/control_plane/some-file.txt' },
+                { isDirectory: true, entryName: 'ndm_logs/2024-07-15/project-456/' },
+            ] as AdmZip.IZipEntry[];
+
+            await (activity as any).addCSVToZip(
+                mockZipInstance,
+                'project-123',
+                '2024-07-15',
+                [mockOperationErrorData[0]],
+                zipEntries,
+                'trace-123'
+            );
+
+            expect(mockLogger.log).toHaveBeenCalledWith(
+                '[trace-123] Discovered 3 unique paths in ZIP'
+            );
+        });
+
+        it('should handle mixed directory and file entries correctly', async () => {
+            const zipEntries = [
+                { isDirectory: false, entryName: 'ndm_logs/2024-07-15/project-123/control_plane/existing-file.log' },
+                { isDirectory: true, entryName: 'ndm_logs/2024-07-15/project-456/' },
+                { isDirectory: false, entryName: 'ndm_logs/2024-07-16/project-789/worker/worker-1/log.txt' },
+            ] as AdmZip.IZipEntry[];
+
+            const result = await (activity as any).addCSVToZip(
+                mockZipInstance,
+                'project-123',
+                '2024-07-15',
+                [mockOperationErrorData[0]],
+                zipEntries,
+                'trace-123'
+            );
+
+            expect(result).toBe(true);
+            expect(mockZipInstance.addFile).toHaveBeenCalledWith(
+                'ndm_logs/2024-07-15/project-123/control_plane/error-report.csv',
+                expect.any(Buffer)
             );
         });
     });

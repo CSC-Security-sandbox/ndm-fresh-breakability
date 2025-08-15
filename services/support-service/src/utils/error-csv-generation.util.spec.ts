@@ -160,15 +160,26 @@ describe('error-csv-generation.util', () => {
                 },
                 {
                     ...mockData[1],
-                    createdAt: 'Fri Jul 11 2025' as any
+                    createdAt: '2025-01-15T10:30:00Z' as any // Valid date
                 }
             ];
 
+            // Mock console.warn to avoid console output during tests
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
             const result = groupDataByProjectAndDate(dataWithInvalidDates);
 
+            // Should only process the valid date entry
             expect(result.size).toBe(1);
             const projectData = result.get('project1')!;
-            expect(projectData.size).toBeGreaterThan(0);
+            expect(projectData.has('2025-01-15')).toBe(true);
+            expect(projectData.get('2025-01-15')!.length).toBe(1);
+
+            // Should have logged a warning for the invalid date
+            expect(consoleSpy).toHaveBeenCalledWith('Invalid date found for item 1: invalid-date');
+
+            // Restore console.warn
+            consoleSpy.mockRestore();
         });
 
         it('should handle empty data array', () => {
@@ -212,136 +223,138 @@ describe('error-csv-generation.util', () => {
             const date = new Date('2025-01-15T10:30:45Z');
             const result = formatDateTime(date);
 
-            // Format should match expected pattern (local time conversion)
-            expect(result).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
-            expect(result).toContain('2025-01-15');
+            // Using sv-SE locale gives YYYY-MM-DD HH:mm:ss format
+            expect(result).toBe('2025-01-15 10:30:45');
         });
 
-        it('should format string date correctly', () => {
+        it('should format ISO string date correctly', () => {
             const dateString = '2025-01-15T10:30:45Z';
             const result = formatDateTime(dateString);
 
-            // Format should match expected pattern (local time conversion)
-            expect(result).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
-            expect(result).toContain('2025-01-15');
+            expect(result).toBe('2025-01-15 10:30:45');
         });
 
-        it('should handle ISO date string', () => {
+        it('should handle ISO date string with milliseconds', () => {
             const isoString = '2025-12-25T23:59:59.999Z';
             const result = formatDateTime(isoString);
 
-            // Format should match expected pattern (local time conversion)
-            expect(result).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
-            // Should be next day due to timezone conversion
-            expect(result).toContain('2025-12-2');
+            expect(result).toBe('2025-12-25 23:59:59');
         });
 
-        it('should handle date with different timezone', () => {
-            const date = new Date('2025-06-15T14:30:45+05:30');
-            const result = formatDateTime(date);
+        it('should handle date with timezone offset', () => {
+            const dateString = '2025-06-15T14:30:45+05:30';
+            const result = formatDateTime(dateString);
 
-            // Should format in UTC
-            expect(result).toMatch(/2025-06-15 \d{2}:\d{2}:\d{2}/);
+            // Should convert to UTC and format
+            expect(result).toBe('2025-06-15 09:00:45');
         });
 
-        it('should handle invalid date input gracefully', () => {
+        it('should throw error for invalid date input', () => {
             const invalidDate = 'not-a-date';
-            const result = formatDateTime(invalidDate);
 
-            expect(result).toBe('not-a-date');
+            expect(() => formatDateTime(invalidDate)).toThrow('Invalid date format: not-a-date');
         });
 
-        it('should handle null input', () => {
-            const result = formatDateTime(null);
-
-            // null gets converted to epoch time in local timezone
-            expect(result).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
-        });
-
-        it('should handle undefined input', () => {
-            const result = formatDateTime(undefined);
+        it('should return empty string for null input', () => {
+            const result = formatDateTime(null as any);
 
             expect(result).toBe('');
         });
 
-        it('should handle number input (timestamp)', () => {
-            const timestamp = new Date('2025-01-15T10:30:45Z').getTime();
-            const result = formatDateTime(timestamp);
+        it('should return empty string for undefined input', () => {
+            const result = formatDateTime(undefined as any);
 
-            // Format should match expected pattern (local time conversion)
-            expect(result).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
-            expect(result).toContain('2025-01-15');
+            expect(result).toBe('');
         });
 
-        it('should handle edge case dates', () => {
+        it('should return empty string for empty string input', () => {
+            const result = formatDateTime('');
+
+            expect(result).toBe('');
+        });
+
+        it('should handle edge case dates correctly', () => {
             // Test leap year
             const leapYear = new Date('2024-02-29T12:00:00Z');
             const result1 = formatDateTime(leapYear);
-            expect(result1).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
-            expect(result1).toContain('2024-02-29');
+            expect(result1).toBe('2024-02-29 12:00:00');
 
             // Test year boundaries
             const newYear = new Date('2025-01-01T00:00:00Z');
             const result2 = formatDateTime(newYear);
-            expect(result2).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
-            expect(result2).toContain('2025-01-01');
+            expect(result2).toBe('2025-01-01 00:00:00');
 
             // Test end of year
             const endYear = new Date('2025-12-31T23:59:59Z');
             const result3 = formatDateTime(endYear);
-            expect(result3).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
-            // Should be next day due to timezone conversion
-            expect(result3).toContain('2026-01-01');
+            expect(result3).toBe('2025-12-31 23:59:59');
         });
 
         it('should pad single digits correctly', () => {
             const date = new Date('2025-01-05T09:08:07Z');
             const result = formatDateTime(date);
 
-            // Format should match expected pattern (local time conversion)
-            expect(result).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
-            expect(result).toContain('2025-01-05');
+            expect(result).toBe('2025-01-05 09:08:07');
         });
 
-        it('should handle various string formats', () => {
-            // Different string formats that JavaScript Date can parse
-            const formats = [
-                '2025-01-15',
-                '01/15/2025',
-                'Jan 15, 2025',
-                'January 15, 2025',
-                '2025-01-15 10:30:45'
+        it('should handle various valid ISO string formats', () => {
+            const testCases = [
+                { input: '2025-01-15T00:00:00Z', expected: '2025-01-15 00:00:00' },
+                { input: '2025-01-15T12:30:45Z', expected: '2025-01-15 12:30:45' },
+                { input: '2025-01-15T23:59:59Z', expected: '2025-01-15 23:59:59' },
             ];
 
-            formats.forEach(format => {
-                const result = formatDateTime(format);
-                expect(result).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+            testCases.forEach(({ input, expected }) => {
+                const result = formatDateTime(input);
+                expect(result).toBe(expected);
             });
         });
 
-        it('should handle error during formatting', () => {
-            // Mock Date constructor to throw error
-            const originalDate = global.Date;
-            global.Date = jest.fn(() => {
-                throw new Error('Date constructor error');
-            }) as any;
+        it('should handle Date objects with different times', () => {
+            const testCases = [
+                { input: new Date('2025-01-15T00:00:00Z'), expected: '2025-01-15 00:00:00' },
+                { input: new Date('2025-01-15T12:30:45Z'), expected: '2025-01-15 12:30:45' },
+                { input: new Date('2025-01-15T23:59:59Z'), expected: '2025-01-15 23:59:59' },
+            ];
 
-            const result = formatDateTime('2025-01-15');
-
-            expect(result).toBe('2025-01-15');
-
-            // Restore original Date
-            global.Date = originalDate;
+            testCases.forEach(({ input, expected }) => {
+                const result = formatDateTime(input);
+                expect(result).toBe(expected);
+            });
         });
 
-        it('should handle objects that can be converted to dates', () => {
-            const dateObj = {
-                toString: () => '2025-01-15T10:30:45Z'
-            };
+        it('should throw error for non-ISO string formats', () => {
+            const invalidFormats = [
+                '2025-13-45', // Invalid month and day
+                'completely-invalid-date-string'
+            ];
 
-            const result = formatDateTime(dateObj);
+            // Valid formats that Date constructor can parse (but we want to check they work)
+            const validButUnexpectedFormats = [
+                '01/15/2025',
+                'Jan 15, 2025',
+                'January 15, 2025'
+            ];
 
-            expect(result).toMatch(/2025-01-15 \d{2}:\d{2}:\d{2}/);
+            // Test truly invalid formats
+            invalidFormats.forEach(format => {
+                expect(() => formatDateTime(format)).toThrow(`Invalid date format: ${format}`);
+            });
+
+            // Test that some formats that Date can parse actually work
+            validButUnexpectedFormats.forEach(format => {
+                expect(() => formatDateTime(format)).not.toThrow();
+            });
+        });
+
+        it('should handle midnight and edge times', () => {
+            const midnight = new Date('2025-01-15T00:00:00Z');
+            const result1 = formatDateTime(midnight);
+            expect(result1).toBe('2025-01-15 00:00:00');
+
+            const almostMidnight = new Date('2025-01-15T23:59:59Z');
+            const result2 = formatDateTime(almostMidnight);
+            expect(result2).toBe('2025-01-15 23:59:59');
         });
     });
 

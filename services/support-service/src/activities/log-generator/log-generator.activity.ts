@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 import archiver from 'archiver';
 import { promisify } from 'util';
@@ -24,6 +25,18 @@ export class LogGeneratorActivity {
     this.outputZipPath = outputZipPath;
   }
 
+  /**
+   * Helper method to check if a path exists asynchronously
+   */
+  private async pathExists(path: string): Promise<boolean> {
+    try {
+      await fsPromises.access(path);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async fetchAndZipLogs({ traceId, payload }): Promise<any> {
     this.logger.log(`[${traceId}] Started fetchAndZipLogs activity`);
 
@@ -45,15 +58,23 @@ export class LogGeneratorActivity {
       const zipPath = path.join(this.outputZipPath, zipFileName);
 
       // Remove existing zip file if it exists
-      if (fs.existsSync(zipPath)) {
-        fs.unlinkSync(zipPath);
-        this.logger.log(`[${traceId}] Removed existing zip file: ${zipPath}`);
+      if (await this.pathExists(zipPath)) {
+        try {
+          await fsPromises.unlink(zipPath);
+          this.logger.log(`[${traceId}] Removed existing zip file: ${zipPath}`);
+        } catch (error) {
+          this.logger.warn(`[${traceId}] Failed to remove existing zip file: ${zipPath}`, error.message);
+        }
       }
 
       // Ensure output directory exists
-      if (!fs.existsSync(this.outputZipPath)) {
-        fs.mkdirSync(this.outputZipPath, { recursive: true });
-        this.logger.log(`[${traceId}] Created output directory: ${this.outputZipPath}`);
+      if (!(await this.pathExists(this.outputZipPath))) {
+        try {
+          await fsPromises.mkdir(this.outputZipPath, { recursive: true });
+          this.logger.log(`[${traceId}] Created output directory: ${this.outputZipPath}`);
+        } catch (error) {
+          throw new Error(`Failed to create output directory ${this.outputZipPath}: ${error.message}`);
+        }
       }
 
       // Validate and parse date range
@@ -84,14 +105,18 @@ export class LogGeneratorActivity {
       this.logger.log(`[${traceId}] Processing date folders: ${dateFolders.join(', ')}`);
 
       // Verify base log path exists
-      if (!fs.existsSync(this.baseLogPath)) {
+      if (!(await this.pathExists(this.baseLogPath))) {
         throw new Error(`Base log path does not exist: ${this.baseLogPath}`);
       }
 
       // Check if any date folders exist in the base log path
-      const existingDateFolders = dateFolders.filter(date =>
-        fs.existsSync(path.join(this.baseLogPath, date))
-      );
+      const existingDateFolders: string[] = [];
+      for (const date of dateFolders) {
+        const datePath = path.join(this.baseLogPath, date);
+        if (await this.pathExists(datePath)) {
+          existingDateFolders.push(date);
+        }
+      }
 
       if (existingDateFolders.length === 0) {
         throw new Error(
@@ -118,11 +143,11 @@ export class LogGeneratorActivity {
       this.logger.error(`[${traceId}] Error in fetchAndZipLogs:`, err.message);
 
       // Clean up partial zip file if it exists
-      const zipFileName = `ndm_${payload?.userId}.zip`;
+      const zipFileName = `ndm_logs_${payload?.userId}.zip`;
       const zipPath = path.join(this.outputZipPath, zipFileName);
-      if (fs.existsSync(zipPath)) {
+      if (await this.pathExists(zipPath)) {
         try {
-          fs.unlinkSync(zipPath);
+          await fsPromises.unlink(zipPath);
           this.logger.log(`[${traceId}] Cleaned up partial zip file: ${zipPath}`);
         } catch (cleanupErr) {
           this.logger.error(`[${traceId}] Failed to cleanup partial zip file:`, cleanupErr);
@@ -150,7 +175,7 @@ export class LogGeneratorActivity {
       const datePath = path.join(this.baseLogPath, date);
 
       // Check if date folder exists
-      if (!fs.existsSync(datePath)) {
+      if (!(await this.pathExists(datePath))) {
         this.logger.log(`[${traceId}] Date folder not found: ${datePath}`);
         continue;
       }
@@ -161,7 +186,7 @@ export class LogGeneratorActivity {
       for (const mapping of projectWorkerMap) {
         const projectPath = path.join(datePath, mapping.projectId);
 
-        if (!fs.existsSync(projectPath)) {
+        if (!(await this.pathExists(projectPath))) {
           this.logger.log(`[${traceId}] Project folder not found: ${projectPath}`);
           continue;
         }
@@ -173,7 +198,7 @@ export class LogGeneratorActivity {
         const workerParentPath = path.join(projectPath, 'worker');
 
         // Add control_plane files if they exist
-        if (fs.existsSync(controlPlanePath)) {
+        if (await this.pathExists(controlPlanePath)) {
           const controlPlaneFiles = await this.findFilesInDirectory(controlPlanePath, traceId);
           filteredPaths.push(...controlPlaneFiles.map(filePath => ({
             sourcePath: filePath,
@@ -183,11 +208,11 @@ export class LogGeneratorActivity {
         }
 
         // Add worker files for specified worker IDs
-        if (fs.existsSync(workerParentPath)) {
+        if (await this.pathExists(workerParentPath)) {
           for (const workerId of mapping.workerIds) {
             const workerPath = path.join(workerParentPath, workerId);
 
-            if (!fs.existsSync(workerPath)) {
+            if (!(await this.pathExists(workerPath))) {
               this.logger.log(`[${traceId}] Worker folder not found: ${workerPath}`);
               continue;
             }

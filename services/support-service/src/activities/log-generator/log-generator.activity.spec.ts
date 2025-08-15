@@ -2,13 +2,22 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
 import * as fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import * as path from 'path';
-import archiver from 'archiver';
 import { LogGeneratorActivity } from './log-generator.activity';
 
 // Mock external dependencies
-jest.mock('fs');
-jest.mock('archiver');
+jest.mock('fs', () => ({
+  promises: {
+    access: jest.fn(),
+    mkdir: jest.fn(),
+    unlink: jest.fn(),
+  },
+  createWriteStream: jest.fn(),
+}));
+
+// Mock archiver with default export
+jest.mock('archiver', () => jest.fn());
 
 // Mock child_process exec function
 const mockExec = jest.fn();
@@ -46,7 +55,8 @@ describe('LogGeneratorActivity', () => {
   let mockLogger: jest.Mocked<Logger>;
 
   const mockFs = fs as jest.Mocked<typeof fs>;
-  const mockArchiver = archiver as jest.MockedFunction<typeof archiver>;
+  const mockFsPromises = fsPromises as jest.Mocked<typeof fsPromises>;
+  const mockArchiver = require('archiver') as jest.MockedFunction<any>;
 
   const baseLogPath = '/test/logs';
   const outputZipPath = '/test/output';
@@ -93,10 +103,10 @@ describe('LogGeneratorActivity', () => {
     // Reset all mocks
     jest.clearAllMocks();
 
-    // Setup default fs mocks
-    mockFs.existsSync.mockReturnValue(true);
-    mockFs.mkdirSync.mockReturnValue(undefined);
-    mockFs.unlinkSync.mockReturnValue(undefined);
+    // Setup default fs.promises mocks
+    mockFsPromises.access.mockResolvedValue(undefined); // Path exists
+    mockFsPromises.mkdir.mockResolvedValue(undefined);
+    mockFsPromises.unlink.mockResolvedValue(undefined);
     mockFs.createWriteStream.mockReturnValue({
       on: jest.fn(),
       write: jest.fn(),
@@ -171,9 +181,9 @@ describe('LogGeneratorActivity', () => {
 
     beforeEach(() => {
       // Mock fs methods
-      mockFs.existsSync.mockReturnValue(true); // Mock base log path exists
-      mockFs.mkdirSync.mockReturnValue(undefined);
-      mockFs.unlinkSync.mockReturnValue(undefined);
+      mockFsPromises.access.mockResolvedValue(undefined); // Mock paths exist
+      mockFsPromises.mkdir.mockResolvedValue(undefined);
+      mockFsPromises.unlink.mockResolvedValue(undefined);
       mockFs.createWriteStream.mockReturnValue({
         on: jest.fn((event, callback) => {
           if (event === 'close') {
@@ -211,16 +221,8 @@ describe('LogGeneratorActivity', () => {
     });
 
     it('should successfully create zip when everything is valid', async () => {
-      // Mock date folder existence
-      mockFs.existsSync.mockImplementation((path) => {
-        const pathStr = path.toString();
-        if (pathStr === baseLogPath) return true;
-        if (pathStr === outputZipPath) return true;
-        if (pathStr.includes('2024-01-01') || pathStr.includes('2024-01-02') || pathStr.includes('2024-01-03')) return true;
-        if (pathStr.includes('project-1') || pathStr.includes('project-2')) return true;
-        if (pathStr.includes('control_plane') || pathStr.includes('worker')) return true;
-        return false;
-      });
+      // Mock path exists for various calls
+      mockFsPromises.access.mockResolvedValue(undefined);
 
       const mockOutput = {
         on: jest.fn((event, callback) => {
@@ -263,17 +265,8 @@ describe('LogGeneratorActivity', () => {
     });
 
     it('should remove existing zip file if it exists', async () => {
-      // Mock date folder existence
-      mockFs.existsSync.mockImplementation((path) => {
-        const pathStr = path.toString();
-        if (pathStr === baseLogPath) return true;
-        if (pathStr === outputZipPath) return true;
-        if (pathStr.includes('ndm_logs_test-user-123.zip')) return true;
-        if (pathStr.includes('2024-01-01') || pathStr.includes('2024-01-02') || pathStr.includes('2024-01-03')) return true;
-        if (pathStr.includes('project-1') || pathStr.includes('project-2')) return true;
-        if (pathStr.includes('control_plane') || pathStr.includes('worker')) return true;
-        return false;
-      });
+      // Mock path exists for various calls
+      mockFsPromises.access.mockResolvedValue(undefined);
 
       const mockOutput = {
         on: jest.fn((event, callback) => {
@@ -294,20 +287,18 @@ describe('LogGeneratorActivity', () => {
 
       await activity.fetchAndZipLogs({ traceId, payload: mockPayload });
 
-      expect(mockFs.unlinkSync).toHaveBeenCalledWith(
+      expect(mockFsPromises.unlink).toHaveBeenCalledWith(
         '/test/output/ndm_logs_test-user-123.zip',
       );
     });
 
     it('should create output directory if it does not exist', async () => {
-      mockFs.existsSync.mockImplementation((path) => {
-        const pathStr = path.toString();
-        if (pathStr === baseLogPath) return true;
-        if (pathStr === outputZipPath) return false;
-        if (pathStr.includes('2024-01-01') || pathStr.includes('2024-01-02') || pathStr.includes('2024-01-03')) return true;
-        if (pathStr.includes('project-1') || pathStr.includes('project-2')) return true;
-        if (pathStr.includes('control_plane') || pathStr.includes('worker')) return true;
-        return false;
+      // Mock output directory doesn't exist initially
+      mockFsPromises.access.mockImplementation((path) => {
+        if (path.toString() === outputZipPath) {
+          return Promise.reject(new Error('ENOENT'));
+        }
+        return Promise.resolve(undefined);
       });
 
       const mockOutput = {
@@ -335,7 +326,7 @@ describe('LogGeneratorActivity', () => {
 
       await activity.fetchAndZipLogs({ traceId, payload: mockPayload });
 
-      expect(mockFs.mkdirSync).toHaveBeenCalledWith(outputZipPath, {
+      expect(mockFsPromises.mkdir).toHaveBeenCalledWith(outputZipPath, {
         recursive: true,
       });
     });
@@ -408,12 +399,15 @@ describe('LogGeneratorActivity', () => {
     });
 
     it('should return error when no date folders exist', async () => {
-      mockFs.existsSync.mockImplementation((path) => {
+      // Mock base log path exists but date folders don't
+      mockFsPromises.access.mockImplementation((path) => {
         const pathStr = path.toString();
-        if (pathStr === baseLogPath) return true;
-        if (pathStr === outputZipPath) return true;
-        // No date folders exist
-        return false;
+        if (pathStr === baseLogPath) return Promise.resolve(undefined);
+        if (pathStr === outputZipPath) return Promise.resolve(undefined);
+        if (pathStr.includes('2024-01-01') || pathStr.includes('2024-01-02') || pathStr.includes('2024-01-03')) {
+          return Promise.reject(new Error('ENOENT')); // Date folders don't exist
+        }
+        return Promise.resolve(undefined);
       });
 
       const result = await activity.fetchAndZipLogs({ traceId, payload: mockPayload });
@@ -424,13 +418,14 @@ describe('LogGeneratorActivity', () => {
     });
 
     it('should return error when no matching log files found', async () => {
-      mockFs.existsSync.mockImplementation((path) => {
+      // Mock paths exist but no project folders
+      mockFsPromises.access.mockImplementation((path) => {
         const pathStr = path.toString();
-        if (pathStr === baseLogPath) return true;
-        if (pathStr === outputZipPath) return true;
-        if (pathStr.includes('2024-01-01') || pathStr.includes('2024-01-02') || pathStr.includes('2024-01-03')) return true;
+        if (pathStr === baseLogPath) return Promise.resolve(undefined);
+        if (pathStr === outputZipPath) return Promise.resolve(undefined);
+        if (pathStr.includes('2024-01-01') || pathStr.includes('2024-01-02') || pathStr.includes('2024-01-03')) return Promise.resolve(undefined);
         // No project folders exist - this will cause no files to be found
-        return false;
+        return Promise.reject(new Error('ENOENT'));
       });
 
       // Mock exec to return empty result when no files are found
@@ -449,15 +444,7 @@ describe('LogGeneratorActivity', () => {
     });
 
     it('should handle archiver error', async () => {
-      mockFs.existsSync.mockImplementation((path) => {
-        const pathStr = path.toString();
-        if (pathStr === baseLogPath) return true;
-        if (pathStr === outputZipPath) return true;
-        if (pathStr.includes('2024-01-01') || pathStr.includes('2024-01-02') || pathStr.includes('2024-01-03')) return true;
-        if (pathStr.includes('project-1') || pathStr.includes('project-2')) return true;
-        if (pathStr.includes('control_plane') || pathStr.includes('worker')) return true;
-        return false;
-      });
+      mockFsPromises.access.mockResolvedValue(undefined);
 
       const mockOutput = {
         on: jest.fn(),
@@ -502,15 +489,7 @@ describe('LogGeneratorActivity', () => {
         userId: 'test@user-123_special.chars',
       };
 
-      mockFs.existsSync.mockImplementation((path) => {
-        const pathStr = path.toString();
-        if (pathStr === baseLogPath) return true;
-        if (pathStr === outputZipPath) return true;
-        if (pathStr.includes('2024-01-01') || pathStr.includes('2024-01-02') || pathStr.includes('2024-01-03')) return true;
-        if (pathStr.includes('project-1') || pathStr.includes('project-2')) return true;
-        if (pathStr.includes('control_plane') || pathStr.includes('worker')) return true;
-        return false;
-      });
+      mockFsPromises.access.mockResolvedValue(undefined);
 
       const mockOutput = {
         on: jest.fn((event, callback) => {
@@ -538,10 +517,10 @@ describe('LogGeneratorActivity', () => {
     });
 
     it('should handle base log path not existing', async () => {
-      mockFs.existsSync.mockImplementation((path) => {
+      mockFsPromises.access.mockImplementation((path) => {
         const pathStr = path.toString();
-        if (pathStr === baseLogPath) return false; // Base log path doesn't exist
-        return true;
+        if (pathStr === baseLogPath) return Promise.reject(new Error('ENOENT')); // Base log path doesn't exist
+        return Promise.resolve(undefined);
       });
 
       const result = await activity.fetchAndZipLogs({ traceId, payload: mockPayload });
@@ -558,15 +537,7 @@ describe('LogGeneratorActivity', () => {
         throw error;
       });
 
-      mockFs.existsSync.mockImplementation((path) => {
-        const pathStr = path.toString();
-        if (pathStr === baseLogPath) return true;
-        if (pathStr === outputZipPath) return true;
-        if (pathStr.includes('2024-01-01') || pathStr.includes('2024-01-02') || pathStr.includes('2024-01-03')) return true;
-        if (pathStr.includes('project-1') || pathStr.includes('project-2')) return true;
-        if (pathStr.includes('control_plane') || pathStr.includes('worker')) return true;
-        return false;
-      });
+      mockFsPromises.access.mockResolvedValue(undefined);
 
       // Mock the exec function to return test files
       mockExec.mockImplementation((cmd, callback) => {
@@ -589,28 +560,28 @@ describe('LogGeneratorActivity', () => {
   describe('Date range generation', () => {
     beforeEach(() => {
       // Reset only specific mocks, but keep the config service setup
-      mockFs.existsSync.mockClear();
-      mockFs.mkdirSync.mockClear();
-      mockFs.unlinkSync.mockClear();
+      mockFsPromises.access.mockClear();
+      mockFsPromises.mkdir.mockClear();
+      mockFsPromises.unlink.mockClear();
       mockFs.createWriteStream.mockClear();
       mockArchiver.mockClear();
       mockExec.mockClear();
       mockLogger.log.mockClear();
       mockLogger.error.mockClear();
 
-      // Mock fs methods - ensure base log path exists for these tests
-      mockFs.existsSync.mockImplementation((path) => {
+      // Mock fs methods - ensure base log path exists for these tests  
+      mockFsPromises.access.mockImplementation((path) => {
         const pathStr = path.toString();
-        if (pathStr === baseLogPath) return true; // Base log path exists
-        if (pathStr === outputZipPath) return false; // Output path doesn't exist
-        if (pathStr.includes('2024-02') || pathStr.includes('2024-03')) return true;
-        if (pathStr.includes('2024-01') || pathStr.includes('2023-12')) return true;
-        if (pathStr.includes('project-1')) return true;
-        if (pathStr.includes('control_plane') || pathStr.includes('worker')) return true;
-        return false;
+        if (pathStr === baseLogPath) return Promise.resolve(undefined); // Base log path exists
+        if (pathStr === outputZipPath) return Promise.reject(new Error('ENOENT')); // Output path doesn't exist
+        if (pathStr.includes('2024-02') || pathStr.includes('2024-03')) return Promise.resolve(undefined);
+        if (pathStr.includes('2024-01') || pathStr.includes('2023-12')) return Promise.resolve(undefined);
+        if (pathStr.includes('project-1')) return Promise.resolve(undefined);
+        if (pathStr.includes('control_plane') || pathStr.includes('worker')) return Promise.resolve(undefined);
+        return Promise.reject(new Error('ENOENT'));
       });
-      mockFs.mkdirSync.mockReturnValue(undefined);
-      mockFs.unlinkSync.mockReturnValue(undefined);
+      mockFsPromises.mkdir.mockResolvedValue(undefined);
+      mockFsPromises.unlink.mockResolvedValue(undefined);
       mockFs.createWriteStream.mockReturnValue({
         on: jest.fn((event, callback) => {
           if (event === 'close') {
@@ -718,9 +689,9 @@ describe('LogGeneratorActivity', () => {
   describe('Advanced Error Handling and Edge Cases', () => {
     beforeEach(() => {
       // Reset mocks
-      mockFs.existsSync.mockClear();
-      mockFs.mkdirSync.mockClear();
-      mockFs.unlinkSync.mockClear();
+      mockFsPromises.access.mockClear();
+      mockFsPromises.mkdir.mockClear();
+      mockFsPromises.unlink.mockClear();
       mockFs.createWriteStream.mockClear();
       mockArchiver.mockClear();
       mockExec.mockClear();
@@ -766,7 +737,7 @@ describe('LogGeneratorActivity', () => {
       });
     });
 
-    it('should handle mkdirSync errors', async () => {
+    it('should handle mkdir errors', async () => {
       const mockPayload = {
         userId: 'test-user',
         startDate: '2024-01-01',
@@ -779,19 +750,24 @@ describe('LogGeneratorActivity', () => {
         ],
       };
 
-      mockFs.existsSync.mockReturnValue(false);
-      mockFs.mkdirSync.mockImplementation(() => {
-        throw new Error('Permission denied');
+      // Mock output directory doesn't exist
+      mockFsPromises.access.mockImplementation((path) => {
+        if (path.toString() === outputZipPath) {
+          return Promise.reject(new Error('ENOENT'));
+        }
+        return Promise.resolve(undefined);
       });
+
+      mockFsPromises.mkdir.mockRejectedValue(new Error('Permission denied'));
 
       const result = await activity.fetchAndZipLogs({ traceId: 'test', payload: mockPayload });
       expect(result).toStrictEqual({
         success: false,
-        message: 'Permission denied'
+        message: 'Failed to create output directory /test/output: Permission denied'
       });
     });
 
-    it('should handle unlinkSync errors', async () => {
+    it('should handle unlink errors', async () => {
       const mockPayload = {
         userId: 'test-user',
         startDate: '2024-01-01',
@@ -804,16 +780,43 @@ describe('LogGeneratorActivity', () => {
         ],
       };
 
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.unlinkSync.mockImplementation(() => {
-        throw new Error('File is locked');
+      // Mock that zip file exists so unlink will be called
+      mockFsPromises.access.mockResolvedValue(undefined);
+      mockFsPromises.unlink.mockRejectedValue(new Error('File is locked'));
+
+      // Mock the rest of the execution path
+      const mockOutput = {
+        on: jest.fn((event, callback) => {
+          if (event === 'close') {
+            setTimeout(callback, 0);
+          }
+        }),
+      };
+      const mockArchive = {
+        on: jest.fn(),
+        pipe: jest.fn(),
+        file: jest.fn(),
+        finalize: jest.fn().mockResolvedValue(undefined),
+        pointer: jest.fn().mockReturnValue(1024),
+      };
+
+      mockFs.createWriteStream.mockReturnValue(mockOutput as any);
+      mockArchiver.mockReturnValue(mockArchive as any);
+
+      // Mock the exec function to return test files so execution continues
+      mockExec.mockImplementation((cmd, callback) => {
+        callback(null, '/test/logs/2024-01-01/project-1/control_plane/test1.log\n', '');
       });
 
       const result = await activity.fetchAndZipLogs({ traceId: 'test', payload: mockPayload });
-      expect(result).toStrictEqual({
-        success: false,
-        message: 'File is locked'
-      });
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        '[test] Failed to remove existing zip file: /test/output/ndm_logs_test-user.zip',
+        'File is locked'
+      );
+
+      // Should still succeed despite unlink failure
+      expect(result.success).toBe(true);
     });
 
     it('should handle missing projectWorkerMap', async () => {
@@ -858,15 +861,7 @@ describe('LogGeneratorActivity', () => {
         ],
       };
 
-      mockFs.existsSync.mockImplementation((path) => {
-        const pathStr = path.toString();
-        if (pathStr === baseLogPath) return true;
-        if (pathStr === outputZipPath) return true;
-        if (pathStr.includes('2024-01-01')) return true;
-        if (pathStr.includes('project-1')) return true;
-        if (pathStr.includes('control_plane') || pathStr.includes('worker')) return true;
-        return false;
-      });
+      mockFsPromises.access.mockResolvedValue(undefined);
 
       // Mock exec to fail with error
       mockExec.mockImplementation((cmd, callback) => {
@@ -896,15 +891,7 @@ describe('LogGeneratorActivity', () => {
         ],
       };
 
-      mockFs.existsSync.mockImplementation((path) => {
-        const pathStr = path.toString();
-        if (pathStr === baseLogPath) return true;
-        if (pathStr === outputZipPath) return true;
-        if (pathStr.includes('2024-01-01')) return true;
-        if (pathStr.includes('project-1')) return true;
-        if (pathStr.includes('control_plane') || pathStr.includes('worker')) return true;
-        return false;
-      });
+      mockFsPromises.access.mockResolvedValue(undefined);
 
       const mockOutput = {
         on: jest.fn(),

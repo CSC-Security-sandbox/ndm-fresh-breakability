@@ -29,18 +29,22 @@ export class ErrorCsvGenerationActivity {
 
     this.logger.log(`[${traceId}] Starting error CSV generation for date range: ${payload.startDate} to ${payload.endDate}`);
 
-    const projectIds = getProjectIds({ payload });
+    let projectIds: string[] = [];
+    try {
+      projectIds = getProjectIds({ payload });
 
-    if (projectIds.length === 0) {
-      this.logger.warn(`[${traceId}] No valid project IDs found in projectWorkerMap`);
-      return {
-        success: true,
-        message: 'No valid project IDs found for CSV generation',
-        filesCreated: 0,
-      };
+      if (projectIds.length === 0) {
+        this.logger.warn(`[${traceId}] No valid project IDs found in projectWorkerMap`);
+        return {
+          success: true,
+          message: 'No valid project IDs found for CSV generation',
+          filesCreated: 0,
+        };
+      }
+      this.logger.log(`[${traceId}] Processing ${projectIds.length} projects: [${projectIds.join(', ')}]`);
+    } catch (error) {
+      this.logger.error(`[${traceId}] Failed to extract project IDs:`, error);
     }
-
-    this.logger.log(`[${traceId}] Processing ${projectIds.length} projects: [${projectIds.join(', ')}]`);
 
     try {
       const data = await this.getOperationErrorsByProjectAndDateRange(
@@ -179,24 +183,19 @@ export class ErrorCsvGenerationActivity {
     const zipEntries = zip.getEntries();
     this.logger.log(`[${traceId}] Found ${zipEntries.length} entries in zip file`);
 
-    // Log existing directory structure for debugging
-    this.logger.log(`[${traceId}] Existing zip structure:`);
-    this.logger.log(`[${traceId}] All entries (files and directories):`);
-    zipEntries.forEach(entry => {
-      const type = entry.isDirectory ? '[DIR]' : '[FILE]';
-      this.logger.log(`[${traceId}]    ${type} ${entry.entryName}`);
-    });
-
-    this.logger.log(`[${traceId}] Directories only:`);
-    const directories = zipEntries.filter(entry => entry.isDirectory);
-    if (directories.length === 0) {
-      this.logger.log(`[${traceId}] No directories found in ZIP file!`);
+    // Log a concise summary of the zip structure for debugging
+    if (zipEntries.length === 0) {
+      this.logger.warn(`[${traceId}] Zip file is empty.`);
     } else {
-      directories.forEach(entry => this.logger.log(`[${traceId}]    ${entry.entryName}`));
+      const dirCount = zipEntries.filter(e => e.isDirectory).length;
+      const fileCount = zipEntries.length - dirCount;
+      this.logger.log(`[${traceId}] Zip contains ${dirCount} directories and ${fileCount} files.`);
     }
 
     // Process each project and date combination
     let totalFilesAdded = 0;
+    const addCsvPromises: Promise<boolean>[] = [];
+
     for (const [projectId, dateGroups] of groupedData.entries()) {
       this.logger.log(`[${traceId}] Processing project: ${projectId}`);
       for (const [date, errors] of dateGroups.entries()) {
@@ -204,12 +203,16 @@ export class ErrorCsvGenerationActivity {
         const formattedDate = date.includes('/') ? date.replace(/\//g, '-') : date;
         this.logger.log(`[${traceId}] Processing: Project '${projectId}', Date '${formattedDate}' (${errors.length} errors)`);
 
-        const addedSuccessfully = await this.addCSVToZip(zip, projectId, formattedDate, errors, zipEntries, traceId);
-        if (addedSuccessfully) {
-          totalFilesAdded++;
-        }
+        // Collect promises for parallel execution
+        addCsvPromises.push(
+          this.addCSVToZip(zip, projectId, formattedDate, errors, zipEntries, traceId)
+        );
       }
     }
+
+    // Wait for all CSV additions to complete in parallel
+    const results = await Promise.all(addCsvPromises);
+    totalFilesAdded = results.filter(Boolean).length;
 
     // Save the zip file
     zip.writeZip(zipFilePath);
@@ -232,104 +235,83 @@ export class ErrorCsvGenerationActivity {
     try {
       this.logger.log(`[${traceId}] Looking for existing location for project '${projectId}' and date '${date}'`);
 
+      // Extract all possible directory paths from file entries
+      const allPaths = new Set<string>();
+      zipEntries.forEach(entry => {
+        if (entry.isDirectory) {
+          allPaths.add(entry.entryName);
+        } else {
+          const dirPath = entry.entryName.substring(0, entry.entryName.lastIndexOf('/') + 1);
+          if (dirPath) allPaths.add(dirPath);
+        }
+      });
+
+      // Build all possible target patterns in order of preference
+      const patterns = [
+        { pattern: `ndm_logs/${date}/${projectId}/control_plane/`, type: 'control_plane' },
+        { pattern: `ndm_logs/${date}/${projectId}/`, type: 'project' },
+        { pattern: `ndm_logs/${date}/`, type: 'date' }
+      ];
+
+      this.logger.log(`[${traceId}] Discovered ${allPaths.size} unique paths in ZIP`);
+
+      // Find the best matching path using the exact same logic as before
       let targetPath = '';
       let foundLocation = false;
 
-      // Build the expected path pattern: */ndm_logs/date/projectId/control_plane/
-      const expectedControlPlanePath = `ndm_logs/${date}/${projectId}/control_plane/`;
+      for (const { pattern, type } of patterns) {
+        for (const possiblePath of allPaths) {
+          let isMatch = false;
 
-      this.logger.log(`[${traceId}] Looking for pattern: ${expectedControlPlanePath}`);
-
-      // First, let's extract all possible directory paths from file entries
-      const allPaths = new Set<string>();
-      try {
-        zipEntries.forEach(entry => {
-          if (entry.isDirectory) {
-            allPaths.add(entry.entryName);
-          } else {
-            // Extract directory path from file path
-            const dirPath = entry.entryName.substring(0, entry.entryName.lastIndexOf('/') + 1);
-            if (dirPath) {
-              allPaths.add(dirPath);
+          if (type === 'control_plane') {
+            // Original logic: possiblePath.includes(expectedControlPlanePath)
+            isMatch = possiblePath.includes(pattern);
+            if (isMatch) {
+              targetPath = `${possiblePath}error-report.csv`;
+              this.logger.log(`[${traceId}] Found exact control_plane match: ${possiblePath}`);
+            }
+          } else if (type === 'project') {
+            // Original logic: possiblePath.includes(expectedProjectPath) && possiblePath.endsWith(`${projectId}/`)
+            isMatch = possiblePath.includes(pattern) && possiblePath.endsWith(`${projectId}/`);
+            if (isMatch) {
+              targetPath = `${possiblePath}control_plane/error-report.csv`;
+              this.logger.log(`[${traceId}] Found project folder, will add control_plane: ${possiblePath}`);
+            }
+          } else if (type === 'date') {
+            // Original logic: possiblePath.includes(expectedDatePath) && possiblePath.endsWith(`${date}/`)
+            isMatch = possiblePath.includes(pattern) && possiblePath.endsWith(`${date}/`);
+            if (isMatch) {
+              targetPath = `${possiblePath}${projectId}/control_plane/error-report.csv`;
+              this.logger.log(`[${traceId}] Found date folder, will create project structure: ${possiblePath}`);
             }
           }
-        });
-      } catch (pathError) {
-        this.logger.error(`[${traceId}] Error extracting paths from zip entries:`, pathError);
-        return false;
-      }
 
-      this.logger.log(`[${traceId}] All discovered paths in ZIP:`);
-      Array.from(allPaths).sort().forEach(p => this.logger.log(`[${traceId}]       ${p}`));
+          if (isMatch) {
+            foundLocation = true;
+            break;
+          }
+        }
 
-      // Look for existing control_plane folder that matches the exact structure
-      for (const possiblePath of allPaths) {
-        if (possiblePath.includes(expectedControlPlanePath)) {
-          targetPath = `${possiblePath}error-report.csv`;
-          foundLocation = true;
-          this.logger.log(`[${traceId}] Found exact control_plane match: ${possiblePath}`);
+        if (foundLocation) {
           break;
         }
       }
 
-      // If no control_plane found, look for project folder to extend
-      if (!foundLocation) {
-        const expectedProjectPath = `ndm_logs/${date}/${projectId}/`;
-        this.logger.log(`[${traceId}] Looking for project folder pattern: ${expectedProjectPath}`);
-
-        for (const possiblePath of allPaths) {
-          if (possiblePath.includes(expectedProjectPath) && possiblePath.endsWith(`${projectId}/`)) {
-            targetPath = `${possiblePath}control_plane/error-report.csv`;
-            foundLocation = true;
-            this.logger.log(`[${traceId}] Found project folder, will add control_plane: ${possiblePath}`);
-            break;
-          }
-        }
-      }
-
-      // If still no location found, look for date folder to extend
-      if (!foundLocation) {
-        const expectedDatePath = `ndm_logs/${date}/`;
-        this.logger.log(`[${traceId}] Looking for date folder pattern: ${expectedDatePath}`);
-
-        for (const possiblePath of allPaths) {
-          if (possiblePath.includes(expectedDatePath) && possiblePath.endsWith(`${date}/`)) {
-            targetPath = `${possiblePath}${projectId}/control_plane/error-report.csv`;
-            foundLocation = true;
-            this.logger.log(`[${traceId}] Found date folder, will create project structure: ${possiblePath}`);
-            break;
-          }
-        }
-      }
-
-      // If still no location found, skip this CSV
       if (!foundLocation) {
         this.logger.log(`[${traceId}] No suitable location found for project '${projectId}' and date '${date}' - skipping`);
         this.logger.log(`[${traceId}] We looked for these patterns:`);
-        this.logger.log(`[${traceId}]  - ${expectedControlPlanePath}`);
+        this.logger.log(`[${traceId}]  - ndm_logs/${date}/${projectId}/control_plane/`);
         this.logger.log(`[${traceId}]  - ndm_logs/${date}/${projectId}/`);
         this.logger.log(`[${traceId}]  - ndm_logs/${date}/`);
         return false;
       }
 
-      // Generate CSV content
-      let csvContent: string;
-      try {
-        csvContent = await this.generateCSVContent(errors, traceId);
-      } catch (csvError) {
-        this.logger.error(`[${traceId}] Failed to generate CSV content for project '${projectId}' date '${date}':`, csvError);
-        return false;
-      }
+      // Generate CSV content and add to zip
+      const csvContent = await this.generateCSVContent(errors, traceId);
+      zip.addFile(targetPath, Buffer.from(csvContent, 'utf8'));
 
-      // Add the CSV file to the zip
-      try {
-        zip.addFile(targetPath, Buffer.from(csvContent, 'utf8'));
-        this.logger.log(`[${traceId}] Successfully added CSV: ${targetPath} (${errors.length} records)`);
-        return true;
-      } catch (addFileError) {
-        this.logger.error(`[${traceId}] Failed to add CSV file to zip:`, addFileError);
-        return false;
-      }
+      this.logger.log(`[${traceId}] Successfully added CSV: ${targetPath} (${errors.length} records)`);
+      return true;
 
     } catch (error) {
       this.logger.error(`[${traceId}] Unexpected error in addCSVToZip for project '${projectId}' date '${date}':`, error);

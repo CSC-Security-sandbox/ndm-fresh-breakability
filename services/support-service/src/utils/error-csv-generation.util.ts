@@ -15,79 +15,61 @@ export function groupDataByProjectAndDate(
     const grouped = new Map<string, Map<string, OperationErrorExportData[]>>();
 
     for (const item of data) {
-        // Properly format date to YYYY-MM-DD
-        let date: string;
-        try {
-            // Handle both Date objects and string dates
-            const dateObj = new Date(item.createdAt);
-            if (isNaN(dateObj.getTime())) {
-                // If invalid date, try to extract from string manually
-                date = item.createdAt.toString().substring(0, 10);
-            } else {
-                // Format as YYYY-MM-DD
-                date = dateObj.toISOString().split('T')[0];
-            }
-        } catch (error) {
-            // Fallback: try to extract date string manually
-            const dateStr = item.createdAt.toString();
-            if (dateStr.includes('-')) {
-                date = dateStr.split('T')[0];
-            } else {
-                // For dates like "Fri Jul 11 2025", parse and format
-                const parsed = new Date(dateStr);
-                date = parsed.toISOString().split('T')[0];
-            }
+        // Extract date in YYYY-MM-DD format
+        // Since createdAt is already a string (likely ISO format), convert to Date then extract date part
+        const dateObj = new Date(item.createdAt);
+
+        // Check if the date is valid
+        if (isNaN(dateObj.getTime())) {
+            console.warn(`Invalid date found for item ${item.id}: ${item.createdAt}`);
+            continue; // Skip items with invalid dates
         }
 
+        const date = dateObj.toISOString().split('T')[0];
         const projectId = item.projectId;
 
-        if (!grouped.has(projectId)) {
-            grouped.set(projectId, new Map());
+        // Get or create project group
+        let projectGroup = grouped.get(projectId);
+        if (!projectGroup) {
+            projectGroup = new Map<string, OperationErrorExportData[]>();
+            grouped.set(projectId, projectGroup);
         }
 
-        const projectGroup = grouped.get(projectId)!;
-        if (!projectGroup.has(date)) {
-            projectGroup.set(date, []);
+        // Get or create date group
+        let dateGroup = projectGroup.get(date);
+        if (!dateGroup) {
+            dateGroup = [];
+            projectGroup.set(date, dateGroup);
         }
 
-        projectGroup.get(date)!.push(item);
+        dateGroup.push(item);
     }
 
     return grouped;
 }
 
 /**
-* Format date/time for CSV display
-*/
-export function formatDateTime(dateInput: any): string {
-    try {
-        let date: Date;
-
-        if (dateInput instanceof Date) {
-            date = dateInput;
-        } else if (typeof dateInput === 'string') {
-            date = new Date(dateInput);
-        } else {
-            // Handle other formats
-            date = new Date(dateInput);
-        }
-
-        // Check if date is valid
-        if (isNaN(date.getTime())) {
-            return dateInput?.toString() || '';
-        }
-
-        // Format as YYYY-MM-DD HH:mm:ss
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        const seconds = String(date.getSeconds()).padStart(2, '0');
-
-        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-    } catch (error) {
-        // Fallback to original value if formatting fails
-        return dateInput?.toString() || '';
+ * Format date/time for CSV display
+ * Accepts both Date objects and ISO format strings
+ */
+export function formatDateTime(dateInput: string | Date): string {
+    if (!dateInput) {
+        return '';
     }
+
+    const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+
+    if (isNaN(date.getTime())) {
+        throw new Error(`Invalid date format: ${dateInput}`);
+    }
+
+    // Use UTC methods to ensure consistent formatting regardless of timezone
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
