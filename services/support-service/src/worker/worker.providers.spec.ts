@@ -45,6 +45,7 @@ const mockActivitiesServiceClass = jest.fn().mockImplementation(() => ({
   generateConfigurationJobCsv: jest.fn(),
   generateStateDataCsv: jest.fn(),
   generatePerformanceMetricsCsv: jest.fn(),
+  generateSystemInventoryCsv: jest.fn(),
 }));
 
 // Mock the activities service module
