@@ -6,6 +6,7 @@ import { ActivitiesService } from 'src/activities/activities.service';
 import { ConfigurationDataCsvGeneratorWorkflow } from './child-workflows/configuration-data-csv-workflow';
 import { StateDataCsvGeneratorWorkflow } from './child-workflows/state-data-csv-generation-workflow';
 import { PerformanceMetricsCsvGeneratorWorkflow } from './child-workflows/performance-metrics-csv-generation-workflow';
+import { SystemInventoryCsvGeneratorWorkflow } from './child-workflows/system-inventory-csv-generation-workflow';
 
 const { notifyWorkflowCompletion } = proxyActivities<ActivitiesService>({
   startToCloseTimeout: '1 minute',
@@ -117,6 +118,27 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
     }
 
     workflowResults.push(performanceMetricsCsvGeneratorWorkflowResult.message);
+
+    //------System Inventory Data Generation Workflow------
+    const systemInventoryCsvGeneratorWorkflow = await startChild(
+      SystemInventoryCsvGeneratorWorkflow,
+      {
+        args: [{ traceId, payload }],
+        workflowId: `SystemInventoryCsvGeneratorWorkflow-${traceId}`,
+      },
+    );
+
+    const systemInventoryCsvGeneratorWorkflowResult =
+      await systemInventoryCsvGeneratorWorkflow.result();
+
+    if (!systemInventoryCsvGeneratorWorkflowResult.success) {
+      log.info(
+        `Error occurred in SystemInventoryCsvGeneratorWorkflow: ${systemInventoryCsvGeneratorWorkflowResult.message}`,
+      );
+      throw { message: systemInventoryCsvGeneratorWorkflowResult.message };
+    }
+
+    workflowResults.push(systemInventoryCsvGeneratorWorkflowResult.message);
 
     await notifyWorkflowCompletion({
       traceId,
