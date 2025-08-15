@@ -180,6 +180,7 @@ describe('PrometheusDataProcessorService', () => {
         buildDetails: [
           {
             'Build Version': 'v1.0.0',
+            Pod: 'control-plane-pod',
             Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
           },
           {
