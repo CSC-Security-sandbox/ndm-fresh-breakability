@@ -14,4 +14,10 @@ export const PRECHECK_ERROR_STATUS = {
   SOURCE_PATH_UNMOUNT_FAILED: "The source path failed to unmount.",
   ALL_COMMON_WORKERS_UNHEALTHY: "All common workers are unhealthy.",
   MIGRATION_CONFLICTS_FOUND: "Migration conflicts detected during precheck.",
+  INSUFFICIENT_DESTINATION_SPACE: "There is insufficient space at the destination path.",
+  NO_SPACE_LEFT_ON_SOURCE_PATH: "There is no space left on the source path.",
+  NO_SPACE_LEFT_ON_DESTINATION_PATH: "There is no space left on the destination path.",
+  DESTINATION_AVAILABLE_SPACE_CALCULATION_FAILED: "Failed to calculate available space at the destination.",
+  DESTINATION_EMPTY_PATH_CHECK_FAILED: "Failed to verify if the destination path is empty.",
+  DESTINATION_PATH_UNMOUNT_FAILED: "The destination path failed to unmount.",
 };

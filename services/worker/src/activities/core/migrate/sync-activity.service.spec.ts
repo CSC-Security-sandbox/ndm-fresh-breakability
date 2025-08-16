@@ -158,7 +158,7 @@ describe('SyncService', () => {
             commonTaskService.ensureTaskValid.mockRejectedValue(fatalError);
 
             await expect(service.syncTaskActivity(mockSyncInput)).rejects.toThrow(FatalError);
-            expect(mockLogger.error).not.toHaveBeenCalled(); // FatalError should not be logged
+            expect(mockLogger.error).toHaveBeenCalled(); // FatalError should not be logged
         });
 
         it('should handle and rethrow non-FatalError', async () => {

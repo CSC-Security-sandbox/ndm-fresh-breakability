@@ -55,6 +55,7 @@ describe('worker.config factory', () => {
 
     // thread pool defaults
     expect(cfg.thread).toEqual({
+      maxBufferSize : 1048576,
       threadBand: '1kb,1500;1mb,1000;10mb,100;100mb,10;1gb,1',
       threadCount: 5,
     });

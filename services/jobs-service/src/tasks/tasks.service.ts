@@ -1,18 +1,25 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { TaskQueryParamsDto } from './dto/taskpage.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { TaskEntity } from 'src/entities/task.entity';
 import { FindManyOptions, In, Repository } from 'typeorm';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class TasksService {
 
-    private logger: Logger = new Logger(TasksService.name);
+    private readonly logger: LoggerService;
 
     constructor(
         @InjectRepository(TaskEntity)
         private readonly taskRepo: Repository<TaskEntity>,
-      ) {}
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+      ) {
+        this.logger = loggerFactory.create(TasksService.name);
+      }
 
 
     async getTaskList(taskQuery: TaskQueryParamsDto) {

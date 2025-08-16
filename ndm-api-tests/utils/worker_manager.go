@@ -315,6 +315,8 @@ func GetDetachWorkerScript() string {
 	echo "$SUDO_PASS" | sudo -S sed -i '/^REDIS_USERNAME=/d' "$ENV_FILE"
 	echo "$SUDO_PASS" | sudo -S sed -i '/^REDIS_PASSWORD=/d' "$ENV_FILE"
 	echo "$SUDO_PASS" | sudo -S sed -i '/^PROJECT_ID=/d' "$ENV_FILE"
+	echo "$SUDO_PASS" | sudo -S sed -i '/^OTEL_COLLECTOR_ENDPOINT=/d' "$ENV_FILE"
+
 
 	echo "Successfully disabled worker service"
 	`, NDM_VM_PASSWORD)

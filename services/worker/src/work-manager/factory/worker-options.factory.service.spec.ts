@@ -88,6 +88,7 @@ const CommonTaskServiceMock = {
   generateDiscoveryReport: jest.fn(),
   updateCutOverStatus: jest.fn(),
   generateCOCReport: jest.fn(),
+  isCmdStreamLenValid: jest.fn()
 };
 
 const ScanServiceMock = {

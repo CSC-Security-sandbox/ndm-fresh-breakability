@@ -12,7 +12,8 @@ import { Repository, In } from 'typeorm';
 import { JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
 import { HealthStatus } from 'src/workers/worker.types';
 import { v4 as uuidv4 } from 'uuid';
-import { BadRequestException } from '@nestjs/common'; 
+import { BadRequestException } from '@nestjs/common';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib'; 
 // Streamlined and optimized test suite for PreCheckService
 
 describe('PreCheckService', () => {
@@ -49,6 +50,19 @@ describe('PreCheckService', () => {
           useValue: {
             checkMigrationConflicts: jest.fn().mockResolvedValue([]),
             hasMigrationConflicts: jest.fn().mockResolvedValue(false),
+          },
+        },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              info: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
+              log: jest.fn(),
+              verbose: jest.fn(),
+            }),
           },
         },
       ],

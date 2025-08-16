@@ -294,7 +294,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
         mountBasePath: service.baseWorkingPath,
         pathId: 'trace-id',
         jobRunId: 'trace-id',
-      });
+      }, false);
       expect(mockProtocol.unmountPath).toHaveBeenCalled();
       expect(logger.log).toHaveBeenCalledWith('Mounting export path for host test-host');
       expect(logger.log).toHaveBeenCalledWith('Mounted export path successfully');

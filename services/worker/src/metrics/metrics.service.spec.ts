@@ -1,12 +1,12 @@
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
-import { Gauge } from 'prom-client';
-import { MetricsService } from './metrics.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
-import { mockLoggerFactory } from '../auth/auth.service.spec';
 import * as fs from 'fs';
 import * as os from 'os';
+import { Gauge } from 'prom-client';
+import { mockLoggerFactory } from '../auth/auth.service.spec';
+import { MetricsService } from './metrics.service';
 
 describe('MetricsService', () => {
   let service: MetricsService;
@@ -404,34 +404,61 @@ describe('MetricsService', () => {
     });
     afterEach(() => jest.restoreAllMocks());
 
-    it('should not start metrics if METRICS_ENABLED is false', () => {
+    it('should not start metrics if METRICS_ENABLED is false', async () => {
+      // Set environment variable before creating service
       process.env.METRICS_ENABLED = 'false';
-      (service as any).onModuleInit();
-      expect((service as any).logger.warn).toHaveBeenCalledWith('Metrics collection is disabled.');
+      
+      // Create new service instance with metrics disabled
+      const module = await Test.createTestingModule({
+        providers: [
+          MetricsService,
+          { provide: HttpService, useValue: setupHttpServiceMock() },
+          { provide: ConfigService, useValue: setupConfigServiceMock() },
+          {
+            provide: LoggerFactory,
+            useValue: mockLoggerFactory,
+          }
+        ],
+      }).compile();
+      
+      const disabledService = module.get<MetricsService>(MetricsService);
+      jest.spyOn((disabledService as any).logger, 'warn').mockImplementation(jest.fn());
+      
+      (disabledService as any).onModuleInit();
+      expect((disabledService as any).logger.warn).toHaveBeenCalledWith('Metrics collection is disabled.');
     });
 
     it('should start metrics with custom intervals', () => {
+      // Set the metricsEnabled property directly
+      (service as any).metricsEnabled = true;
       process.env.METRICS_ENABLED = 'true';
       process.env.METRICS_COLLECTION_INTERVAL = '1';
       process.env.METRICS_PUSH_INTERVAL = '1';
+      jest.spyOn((service as any).logger, 'log').mockImplementation(jest.fn());
       (service as any).onModuleInit();
       expect((service as any).logger.log).toHaveBeenCalledWith('Starting metrics collection');
       expect((service as any).setWorkerInfo).toHaveBeenCalled();
     });
 
     it('should handle unset intervals', () => {
+      // Set the metricsEnabled property directly
+      (service as any).metricsEnabled = true;
       process.env.METRICS_ENABLED = 'true';
       delete process.env.METRICS_COLLECTION_INTERVAL;
       delete process.env.METRICS_PUSH_INTERVAL;
+      jest.spyOn((service as any).logger, 'log').mockImplementation(jest.fn());
       (service as any).onModuleInit();
       expect((service as any).logger.log).toHaveBeenCalledWith('Starting metrics collection');
       expect((service as any).setWorkerInfo).toHaveBeenCalled();
     });
 
     it('should handle invalid intervals', () => {
+      // Set the metricsEnabled property directly
+      (service as any).metricsEnabled = true;
       process.env.METRICS_ENABLED = 'true';
       process.env.METRICS_COLLECTION_INTERVAL = 'abc';
       process.env.METRICS_PUSH_INTERVAL = 'xyz';
+      jest.spyOn((service as any).logger, 'log').mockImplementation(jest.fn());
       (service as any).onModuleInit();
       expect((service as any).logger.log).toHaveBeenCalledWith('Starting metrics collection');
       expect((service as any).setWorkerInfo).toHaveBeenCalled();
@@ -442,6 +469,7 @@ describe('MetricsService', () => {
     it('should clear intervals and handle delete error', async () => {
       (service as any).pushInterval = setInterval(() => {}, 1000);
       (service as any).collectSystemMetricsInterval = setInterval(() => {}, 1000);
+      (service as any).collectWorkerThreadMetricsInterval = setInterval(() => {}, 1000);
       const deleteMock = jest.fn().mockRejectedValue(new Error('fail-delete'));
       (service as any).pushgateway.delete = deleteMock;
       jest.spyOn((service as any).logger, 'error').mockImplementation(jest.fn());
@@ -453,6 +481,7 @@ describe('MetricsService', () => {
     it('should handle no intervals set', async () => {
       (service as any).pushInterval = undefined;
       (service as any).collectSystemMetricsInterval = undefined;
+      (service as any).collectWorkerThreadMetricsInterval = undefined;
       const deleteMock = jest.fn().mockResolvedValue(undefined);
       (service as any).pushgateway.delete = deleteMock;
       jest.spyOn((service as any).logger, 'error').mockImplementation(jest.fn());
@@ -516,6 +545,162 @@ describe('MetricsService', () => {
 
     it('should handle empty string', () => {
       expect((service as any).extractHost('')).toBe('unknown');
+    });
+  });
+
+  describe('Worker Thread Metrics', () => {
+    beforeEach(() => {
+      jest.spyOn((service as any).workerThreadsGauge, 'set').mockImplementation(jest.fn());
+      jest.spyOn((service as any).workerTasksQueueGauge, 'set').mockImplementation(jest.fn());
+      jest.spyOn((service as any).workerTasksActiveGauge, 'set').mockImplementation(jest.fn());
+      jest.spyOn((service as any).workerThreadErrorCounter, 'inc').mockImplementation(jest.fn());
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should record worker thread error', () => {
+      service.recordWorkerThreadError('FILE_NOT_FOUND');
+      expect((service as any).workerThreadErrorCounter.inc).toHaveBeenCalledWith({
+        worker_id: (service as any).workerId,
+        error_type: 'FILE_NOT_FOUND'
+      });
+    });
+
+    it('should set worker thread service reference', () => {
+      const mockWorkerService = { getWorkerThreadMetrics: jest.fn() };
+      service.setWorkerThreadService(mockWorkerService);
+      expect((service as any).workerThreadService).toBe(mockWorkerService);
+    });
+
+    it('should collect worker thread metrics when worker service is set', async () => {
+      const mockWorkerService = {
+        getWorkerThreadMetrics: jest.fn().mockReturnValue({
+          totalThreads: 5,
+          availableThreads: 2,
+          activeTasks: 3,
+          queueDepths: {
+            '1mb': 10,
+            '10mb': 5
+          }
+        })
+      };
+
+      service.setWorkerThreadService(mockWorkerService);
+      await (service as any).collectWorkerThreadMetrics();
+
+      expect(mockWorkerService.getWorkerThreadMetrics).toHaveBeenCalled();
+      expect((service as any).workerThreadsGauge.set).toHaveBeenCalledWith(
+        { worker_id: (service as any).workerId, status: 'total' },
+        5
+      );
+      expect((service as any).workerTasksQueueGauge.set).toHaveBeenCalledWith(
+        { worker_id: (service as any).workerId, band_name: '1mb' },
+        10
+      );
+      expect((service as any).workerTasksQueueGauge.set).toHaveBeenCalledWith(
+        { worker_id: (service as any).workerId, band_name: '10mb' },
+        5
+      );
+    });
+
+    it('should handle missing worker service in collectWorkerThreadMetrics', async () => {
+      const loggerSpy = jest.spyOn((service as any).logger, 'error').mockClear();
+      await (service as any).collectWorkerThreadMetrics();
+      
+      // Should not throw error and should not call any metrics methods
+      expect(loggerSpy).not.toHaveBeenCalled();
+    });
+
+    it('should initialize worker thread metrics with defaults when worker service is not available', () => {
+      (service as any).workerThreadService = null;
+      
+      const loggerSpy = jest.spyOn((service as any).logger, 'debug').mockImplementation(jest.fn());
+      
+      (service as any).initializeWorkerThreadMetrics();
+      
+      expect(loggerSpy).toHaveBeenCalledWith('Setting baseline worker thread metrics to zeros');
+      
+      // Verify that metrics are set to initial values
+      expect((service as any).workerThreadsGauge.set).toHaveBeenCalledWith(
+        { worker_id: (service as any).workerId, status: 'total' },
+        0
+      );
+      expect((service as any).workerThreadsGauge.set).toHaveBeenCalledWith(
+        { worker_id: (service as any).workerId, status: 'available' },
+        0
+      );
+      expect((service as any).workerThreadsGauge.set).toHaveBeenCalledWith(
+        { worker_id: (service as any).workerId, status: 'busy' },
+        0
+      );
+      expect((service as any).workerTasksActiveGauge.set).toHaveBeenCalledWith(
+        { worker_id: (service as any).workerId },
+        0
+      );
+    });
+
+    it('should call collectWorkerThreadMetrics when worker service is available during initialization', () => {
+      const mockWorkerService = { 
+        getWorkerThreadMetrics: jest.fn().mockReturnValue({
+          totalThreads: 3,
+          availableThreads: 1,
+          activeTasks: 2,
+          queueDepths: {}
+        })
+      };
+      
+      // Set the worker service before initialization
+      (service as any).workerThreadService = mockWorkerService;
+      
+      const collectSpy = jest.spyOn(service as any, 'collectWorkerThreadMetrics').mockImplementation(jest.fn());
+      
+      (service as any).initializeWorkerThreadMetrics();
+      
+      expect(collectSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('Pushgateway Error Handling', () => {
+    it('should handle Pushgateway initialization error and log properly', () => {
+      // Mock the Pushgateway constructor to throw an error
+      const originalPushgateway = require('prom-client').Pushgateway;
+      const mockError = new Error('Pushgateway connection failed');
+      
+      // Mock logger
+      const mockLogger = {
+        error: jest.fn(),
+        debug: jest.fn(),
+      };
+      
+      const mockLoggerFactory = {
+        create: jest.fn().mockReturnValue(mockLogger),
+      };
+
+      // Temporarily replace Pushgateway with a version that throws
+      require('prom-client').Pushgateway = jest.fn().mockImplementation(() => {
+        throw mockError;
+      });
+
+      try {
+        // Try to create a new instance which should fail
+        new MetricsService(
+          { axiosRef: { interceptors: { response: { use: jest.fn() } } } } as any,
+          setupConfigServiceMock() as any,
+          mockLoggerFactory as any
+        );
+        // Should not reach here
+        fail('Expected constructor to throw error');
+      } catch (error) {
+        // Verify the error was logged properly and the original error was rethrown
+        expect(mockLoggerFactory.create).toHaveBeenCalledWith('MetricsService');
+        expect(mockLogger.error).toHaveBeenCalledWith('Failed to initialize Pushgateway', mockError);
+        expect(error).toBe(mockError);
+      } finally {
+        // Restore the original Pushgateway
+        require('prom-client').Pushgateway = originalPushgateway;
+      }
     });
   });
 });

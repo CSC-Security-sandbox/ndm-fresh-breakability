@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Res } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, Inject } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import {SpeedTestConfigEntity } from "src/entities/speed-test-job-config.entity"
@@ -13,14 +13,23 @@ import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
 import { Response } from 'express';
 import { TemplateType } from 'src/constants/enums';
 import { PreCheckService } from './precheck.service';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @ApiTags('jobs')
 @Controller('jobs')
 export class JobConfigController {
+  private readonly logger: LoggerService;
+
   constructor(
     private readonly jobConfigService: JobConfigService,
     private readonly preCheckService: PreCheckService,
-  ) {}
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(JobConfigController.name);
+  }
 
   @ApiOperation({ summary: 'Create a new discovery job' })
   @ApiResponse({ status: 201, description: 'Discovery job has been successfully created.' })

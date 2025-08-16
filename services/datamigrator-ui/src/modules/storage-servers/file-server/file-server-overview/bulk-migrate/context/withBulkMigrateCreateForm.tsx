@@ -425,6 +425,14 @@ export function withBulkMigrateCreateForm(
                   handleSubmit(onSuccessfulSubmit);
                 }
               }
+            } else if (data?.status === ValidateConnectionStatus.FAILED) {
+              const precheckState = getPreCheckStatus(data);
+              setPreCheckStatus(precheckState);
+              setIsPrecheckLoading(false);
+              setIsSubmitting(false);
+              if (interval.current) {
+                clearInterval(interval.current);
+              }
             } else if (data?.status === ValidateConnectionStatus.TERMINATED) {
               const error = new Error(
                 `Seems like pre-check got terminated, please try again.`

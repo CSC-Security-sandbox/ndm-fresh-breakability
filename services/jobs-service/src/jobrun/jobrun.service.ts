@@ -1,7 +1,7 @@
 import {
   BadRequestException,
   Injectable,
-  Logger,
+  Inject,
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -40,11 +40,15 @@ import { JobRunInitService } from "./jobrun.init.service";
 import { SuccessEmailType } from "src/utils/send-email.type";
 import { getErrorDisplayMessage } from "./jobrun.utli";
 import { WorkFlowFailureReason } from "./jobrun.types";
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 import { MigrationConflictService } from "src/migration-conflict/migration-conflict.service";
 
 @Injectable()
 export class JobRunService {
-  private readonly logger = new Logger(JobRunService.name);
+  private readonly logger: LoggerService;
   private readonly mountBasePath: string;
 
   constructor(
@@ -66,9 +70,11 @@ export class JobRunService {
     private workFlowService: WorkflowService,
     private sendMailService: SendMailService,
     private errorRemedyService: ErrorRemedyService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly workerService: WorkersService,
     private readonly migrationConflictService: MigrationConflictService
   ) {
+    this.logger = loggerFactory.create(JobRunService.name);
     this.mountBasePath = this.configService.get<string>(
       "app.paths.mountBasePath"
     );
@@ -442,7 +448,7 @@ export class JobRunService {
                 ? formatBytes(Number(inventoryStats?.totalSize || 0))
                 : "0 B",
             totalMigratedSize:
-              jobRun.jobtype === JobType.MIGRATE
+              jobRun.jobtype === JobType.MIGRATE || jobRun.jobtype === JobType.CUT_OVER
                 ? formatBytes(Number(inventoryStats?.totalSize || 0))
                 : "0 B",
             errors: await this.getErrorCounts(jobRun.jobrunid),
