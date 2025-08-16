@@ -10,18 +10,22 @@ import { escapeCsvValue } from 'src/utils/utils';
 import { DataSource } from 'typeorm';
 import { QueryMapper } from './discovery-report.query-mapper';
 import { DiscoveryReportSection, GenerateDiscoveryReportJsonInput } from './discovery-report.type';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class DiscoveryReportService {
+
     private readonly logger = new Logger(DiscoveryReportService.name);
     private pdfTemplatePath: string;
     private basePath: string;
+
     constructor(
         private dataSource: DataSource,
-        private readonly pdfGenerator: PDFGeneratorService
+        private readonly pdfGenerator: PDFGeneratorService,
+        private readonly configService: ConfigService
     ) {
         this.pdfTemplatePath = path.join(__dirname,"../../../templates/views/discovery_pdf_report.hbs");
-        this.basePath = process.env.REPORT_DOWNLOAD_LOCATION || "/tmp";
+        this.basePath = this.configService.get<string>('app.baseDir') ;
     }
 
     async generateJsonReport({ jobRunId, section }: GenerateDiscoveryReportJsonInput): Promise<DiscoveryReportSection[]> {
@@ -30,8 +34,8 @@ export class DiscoveryReportService {
     }
 
     async generatePdfReport(section: DiscoveryReportSection[]) {
-        const templateSource = fs.readFileSync(this.pdfTemplatePath, "utf8");
         // Build PDF from the template
+        const templateSource = await fs.promises.readFile(this.pdfTemplatePath, "utf8");
         const template = hbs.compile(templateSource);
         const categories = groupAndOrder(section, ReportType.DISCOVERY);
         const htmlOutput = template(categories);
@@ -41,6 +45,7 @@ export class DiscoveryReportService {
         const pdfBuffer = await this.pdfGenerator.generatePDF(htmlOutput, options);
         const pdfFilePath = path.join(this.basePath, `discovery_report_${Date.now()}.pdf`);
         await fs.promises.writeFile(pdfFilePath, pdfBuffer);
+        this.logger.log(`PDF report generated at: ${pdfFilePath}`);
         return { message: 'PDF report generated successfully', path: pdfFilePath };
     }
 
@@ -72,6 +77,8 @@ export class DiscoveryReportService {
         // Write CSV to file
         const csvFilePath = path.join(this.basePath, `discovery_report_${Date.now()}.csv`);
         await fs.promises.writeFile(csvFilePath, csvContent);
+
+        this.logger.log(`CSV report generated at: ${csvFilePath}`);
 
         return { message: 'CSV report generated successfully', path: csvFilePath };
     }

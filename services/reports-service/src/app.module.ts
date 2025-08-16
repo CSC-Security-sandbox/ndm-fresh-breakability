@@ -14,7 +14,7 @@ import { GeneratorModule } from './generator/generator.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ load: [databaseConfig, appConfig] }),
+    ConfigModule.forRoot({ isGlobal: true, load: [databaseConfig, appConfig] }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) =>
