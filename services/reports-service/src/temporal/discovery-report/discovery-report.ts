@@ -49,7 +49,7 @@ export const GenerateDiscoveryReportWorkflow = async ({ jobRunId }: GenerateDisc
   await Promise.allSettled(
     [
       generateDiscoveryPdfReport(output),
-      generateDiscoveryCsvReport()
+      generateDiscoveryCsvReport(output)
     ]
   )
   

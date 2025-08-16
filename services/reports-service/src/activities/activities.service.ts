@@ -14,7 +14,7 @@ export class ActivitiesService {
         return this.discoveryReportService.generatePdfReport(section);
     }
 
-    async generateDiscoveryCsvReport() {
-        return this.discoveryReportService.generateCsvReport();
+    async generateDiscoveryCsvReport(section: DiscoveryReportSection[]) {
+        return this.discoveryReportService.generateCsvReport(section);
     }
 }
