@@ -7,6 +7,8 @@ import * as fs from 'fs';
 import { Injectable } from '@nestjs/common';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { isPathExists } from 'src/activities/core/utils/utils';
+import { execSync } from 'child_process';
+import path = require('path');
 
 @Injectable()
 export class SMBProtocol extends Protocol {
@@ -156,7 +158,7 @@ export class SMBProtocol extends Protocol {
     }
 
 
-  async unmountPath(traceId: string, payload: any): Promise<any> {
+  async unmountPath(traceId: string, payload: any, manageMount: boolean): Promise<any> {
     this.logger.log(
       `[${traceId}] Unmounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
@@ -179,6 +181,20 @@ export class SMBProtocol extends Protocol {
       );
       this.logger.log(`[${traceId}] ${response.message}`);
     }
+
+    if (manageMount) {
+      this.updateBootMounts(
+        {
+          platform: this.platform,
+          workerId: this.workerId,
+        },
+        payload,
+        'delete',
+        traceId
+      );
+    }
+
+    this.logger.log(`[${traceId}] Unmounted path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`);
     return response;
 
     }catch(error){
@@ -190,7 +206,7 @@ export class SMBProtocol extends Protocol {
    
   }
 
-  async mountPath(traceId: string, payload: any): Promise<any> {
+  async mountPath(traceId: string, payload: any, manageMount: boolean): Promise<any> {
     this.logger.log(
       `[${traceId}] Mounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
@@ -231,6 +247,18 @@ export class SMBProtocol extends Protocol {
           'SMB Show Shares',
         );
 
+        if (manageMount) {
+          this.updateBootMounts(
+          {
+            platform: this.platform,
+            workerId: this.workerId,
+          },
+          payload,
+          'insert',
+          traceId
+          );
+        }
+
         this.logger.log(`[${traceId}] ${response.message}`);
         return response;
       }
@@ -268,9 +296,58 @@ export class SMBProtocol extends Protocol {
     throw new Error('Method not implemented.');
   }
 
-  updateBootMounts({ platform, fstabPath, workerId }: { platform: any; fstabPath: any; workerId: any; }, payload: any, action: any, traceId: any): void {
-    this.logger.log(`[${traceId}] updateBootMount not implemented for SMB protocol`);
-    throw new Error('Method not implemented.');
-  }
+ 
+  // This function manages persistent SMB mounts on Windows using symbolic links
+  updateBootMounts({ platform, workerId }, payload, action, traceId) {
+    this.logger.log(`Ashish kumar sinha`);
+    this.logger.log(`[${traceId}] Updating SMB mount for worker ${workerId} on platform ${platform} with action ${action}`);
+    try {
+      if (platform === 'win32') {
+        this.logger.log(`[${traceId}] mountBasePath: ${payload.mountBasePath}, jobRunId: ${payload.jobRunId}, pathId: ${payload.pathId}`);
+        const mountDir = `${payload.mountBasePath}\\${payload.jobRunId}\\${payload.pathId}`;
 
+        // Ensure the mount root exists
+        if (!fs.existsSync(mountDir)) {
+          fs.mkdirSync(mountDir, { recursive: true });
+        }
+
+        if (action === 'insert') {
+          if (!fs.existsSync(mountDir)) {
+            const cmd = `net use ${mountDir} \\\\${payload.hostname}\\${payload.path} /user:${payload.username} ${payload.password} /persistent:yes`;
+            this.logger.log(`[${traceId}] command: ${cmd}`);
+            execSync(cmd, { shell: 'cmd.exe' });
+            this.logger.log(`[${traceId}] Persisted the mount path using the command:  ${cmd}`);
+          } else {
+            this.logger.log(`[${traceId}] Symbolic link ${mountDir} already exists`);
+          }
+        } else if (action === 'delete') {
+          const cmd = `net use ${mountDir} /delete`;
+          this.logger.log(`[${traceId}] command: ${cmd}`);
+          execSync(cmd, { shell: 'cmd.exe' });
+          this.logger.log(`[${traceId}] Removed the symbolic link using the command: ${cmd}`);
+        } else {
+          this.logger.error(`[${traceId}] Unknown action: ${action}`);
+          return {
+            traceId,
+            status: 'error',
+            protocolType: 'SMB',
+            hostname: payload.hostname,
+            workerId,
+            message: `[${traceId}] Unknown action: ${action}`,
+          };
+        }
+      }
+    } catch (error) {
+      this.logger.error(`[${traceId}] Error updating SMB mount: ${error.message}`);
+      return {
+        traceId,
+        status: 'error',
+        protocolType: 'SMB',
+        hostname: payload.hostname,
+        workerId,
+        message: `[${traceId}] Error updating SMB mount: ${error.message}`,
+      };
+    }
+  }
 }
+
