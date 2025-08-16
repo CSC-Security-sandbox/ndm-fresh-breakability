@@ -7,10 +7,13 @@ import { ReportType } from 'src/constants/enums';
 import { PDFGeneratorService } from 'src/generator/pdf-generator.service';
 import { groupAndOrder } from 'src/utils/group-order';
 import { escapeCsvValue } from 'src/utils/utils';
-import { DataSource } from 'typeorm';
-import { QueryMapper } from './discovery-report.query-mapper';
-import { DiscoveryReportSection, GenerateDiscoveryReportJsonInput } from './discovery-report.type';
+import { DataSource, Repository } from 'typeorm';
+import { DiscoveryReportSection, GenerateDiscoveryReportInput,  GetDiscoverySectionInput,  UpdateDiscoveryReportInput } from './discovery-report.type';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { ReportsEntity } from 'src/entities/reports.entity';
+import { JobRunEntity } from 'src/entities/jobrun.entity';
+import { QueryMapper } from './query/discovery-report.query-mapper';
 
 @Injectable()
 export class DiscoveryReportService {
@@ -22,35 +25,39 @@ export class DiscoveryReportService {
     constructor(
         private dataSource: DataSource,
         private readonly pdfGenerator: PDFGeneratorService,
-        private readonly configService: ConfigService
+        private readonly configService: ConfigService,
+        @InjectRepository(ReportsEntity)
+        private readonly reportsRepo: Repository<ReportsEntity>,
+        @InjectRepository(JobRunEntity)
+        private readonly jobRunRepo: Repository<JobRunEntity>,
     ) {
         this.pdfTemplatePath = path.join(__dirname,"../../../templates/views/discovery_pdf_report.hbs");
         this.basePath = this.configService.get<string>('app.baseDir') ;
     }
 
-    async generateJsonReport({ jobRunId, section }: GenerateDiscoveryReportJsonInput): Promise<DiscoveryReportSection[]> {
+    async getSection({ jobRunId, section }: GetDiscoverySectionInput): Promise<DiscoveryReportSection[]> {
         const output = await this.dataSource.query(QueryMapper[section].query, [jobRunId]);
         return QueryMapper[section].mapper(output);
     }
 
-    async generatePdfReport(section: DiscoveryReportSection[]) {
+    async generatePdfReport({data, jobRunId}: GenerateDiscoveryReportInput) {
         // Build PDF from the template
         const templateSource = await fs.promises.readFile(this.pdfTemplatePath, "utf8");
         const template = hbs.compile(templateSource);
-        const categories = groupAndOrder(section, ReportType.DISCOVERY);
+        const categories = groupAndOrder(data, ReportType.DISCOVERY);
         const htmlOutput = template(categories);
         const options: PDFOptions = { format: "A4", printBackground: true };
 
         // Generate PDF using the PDF generator service
         const pdfBuffer = await this.pdfGenerator.generatePDF(htmlOutput, options);
-        const pdfFilePath = path.join(this.basePath, `discovery_report_${Date.now()}.pdf`);
+        const pdfFilePath = path.join(this.basePath, `${jobRunId}-discovery-report.pdf`);
         await fs.promises.writeFile(pdfFilePath, pdfBuffer);
         this.logger.log(`PDF report generated at: ${pdfFilePath}`);
         return { message: 'PDF report generated successfully', path: pdfFilePath };
     }
 
-    async generateCsvReport(section: DiscoveryReportSection[]) {
-        const reportData = Object.values(groupAndOrder(section, ReportType.DISCOVERY)).flat()
+    async generateCsvReport({data, jobRunId}: GenerateDiscoveryReportInput) {
+        const reportData = Object.values(groupAndOrder(data, ReportType.DISCOVERY)).flat()
         
         // Dynamically determine headers based on sub_category
         const dynamicHeaders = new Set<string>();  
@@ -75,11 +82,26 @@ export class DiscoveryReportService {
         const csvContent = [headers.join(","), rows.map(escapeCsvValue).join(",")].join("\n");
 
         // Write CSV to file
-        const csvFilePath = path.join(this.basePath, `discovery_report_${Date.now()}.csv`);
+        const csvFilePath = path.join(this.basePath, `${jobRunId}-discovery-report.csv`);
         await fs.promises.writeFile(csvFilePath, csvContent);
 
         this.logger.log(`CSV report generated at: ${csvFilePath}`);
-
         return { message: 'CSV report generated successfully', path: csvFilePath };
+    }
+
+    async updateJsonReport(input: UpdateDiscoveryReportInput) {
+        let report = await this.reportsRepo.findOne({ where: { jobRunId: input.jobRunId, reportType: ReportType.DISCOVERY } });
+        if (!report) {
+            report = this.reportsRepo.create({
+                jobRunId: input.jobRunId,
+                reportType: ReportType.DISCOVERY,
+                reportData: JSON.stringify(input.data),
+                createdAt: new Date().toISOString(),
+            });
+        }
+        const updatedReport = await this.reportsRepo.save(report);
+        await this.jobRunRepo.update({ id: input.jobRunId }, { isReportReady: true });
+        this.logger.log(`Discovery report updated for jobRunId: ${input.jobRunId}`);
+        return updatedReport;
     }
 }

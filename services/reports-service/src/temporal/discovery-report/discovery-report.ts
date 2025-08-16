@@ -3,19 +3,19 @@
 
 import { proxyActivities, log } from '@temporalio/workflow';
 import { ActivitiesService } from 'src/activities/activities.service';
-import { QueryList } from 'src/activities/discovery-report/discovery-report.query-mapper';
 import { DiscoveryReportSection } from 'src/activities/discovery-report/discovery-report.type';
+import { QueryList } from 'src/activities/discovery-report/query/discovery-report.query-mapper';
 
 const { generateDiscoveryJsonReport } =
   proxyActivities<ActivitiesService>({
-    startToCloseTimeout: '10h',
+    startToCloseTimeout: '1h',
     retry: {
       maximumAttempts: 3,
       maximumInterval: '3s',
     },
 });
 
-const { generateDiscoveryPdfReport, generateDiscoveryCsvReport } =
+const { generateDiscoveryPdfReport, generateDiscoveryCsvReport , updateDiscoveryReport} =
   proxyActivities<ActivitiesService>({
     startToCloseTimeout: '10m',
     retry: {
@@ -48,10 +48,15 @@ export const GenerateDiscoveryReportWorkflow = async ({ jobRunId }: GenerateDisc
 
   await Promise.allSettled(
     [
-      generateDiscoveryPdfReport(output),
-      generateDiscoveryCsvReport(output)
+      generateDiscoveryPdfReport({data: output, jobRunId}),
+      generateDiscoveryCsvReport({data: output, jobRunId}),
     ]
-  )
-  
+  );
+
+  await updateDiscoveryReport({
+    jobRunId,
+    data: output
+  });
+
   return output
 };

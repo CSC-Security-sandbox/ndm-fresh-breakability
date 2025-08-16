@@ -18,6 +18,7 @@ export const workerProviders = [
         generateDiscoveryJsonReport: activitiesService.generateDiscoveryJsonReport.bind(activitiesService),
         generateDiscoveryPdfReport: activitiesService.generateDiscoveryPdfReport.bind(activitiesService),
         generateDiscoveryCsvReport: activitiesService.generateDiscoveryCsvReport.bind(activitiesService),
+        updateDiscoveryReport: activitiesService.updateDiscoveryReport.bind(activitiesService),
 
       };
 
