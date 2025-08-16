@@ -160,7 +160,7 @@ export const MAX_VALUES_MAPPER = (input: MaxValuesInput[]) : DiscoveryReportSect
 export const TOP_LONGEST_FILE_NAMES_MAPPER = (input: TopLongestFileNamesInput[]) : DiscoveryReportSection[] => {
     const output: DiscoveryReportSection[] = [];
     output.push({
-        value: input.map(item=> `${item.path} (${item.length})`).join(', '),
+        value: input.map(item=> `${item.path} (${item.length})`).join('; '),
         category: 'Biggest',
         valueType: 'string',
         sub_category:'Top 5 Longest File Names'
@@ -171,7 +171,7 @@ export const TOP_LONGEST_FILE_NAMES_MAPPER = (input: TopLongestFileNamesInput[])
 export const TOP_LONGEST_DIRECTORY_NAMES_MAPPER = (input: TopLongestDirectoryNamesInput[]) : DiscoveryReportSection[] => {
     const output: DiscoveryReportSection[] = [];
     output.push({
-        value: input.map(item=> `${item.path} (${item.length})`).join(', '),
+        value: input.map(item=> `${item.path} (${item.length})`).join('; '),
         category: 'Biggest',
         valueType: 'string',
         sub_category:'Top 5 Longest Directory Names'
@@ -182,7 +182,7 @@ export const TOP_LONGEST_DIRECTORY_NAMES_MAPPER = (input: TopLongestDirectoryNam
 export const TOP_DIRECTORY_WITH_MAX_SIZE_MAPPER = (input: TopDirectoryWithMaxSizeInput[]) : DiscoveryReportSection[] => {
     const output: DiscoveryReportSection[] = [];
     output.push({
-        value: input.map(item=> `${item.directory} (${item.total_size})`).join(', '),
+        value: input.map(item=> `${item.directory} (${item.total_size})`).join('; '),
         category: 'Biggest',
         valueType: 'string',
         sub_category: 'Top 5 Biggest Directory With Capacity'
@@ -193,7 +193,7 @@ export const TOP_DIRECTORY_WITH_MAX_SIZE_MAPPER = (input: TopDirectoryWithMaxSiz
 export const TOP_DIRECOTRY_WITH_MAX_COUNT_CHILD_MAPPER = (input: TopDirectoryWithMaxCountChildInput[]) : DiscoveryReportSection[] => {
     const output: DiscoveryReportSection[] = [];
     output.push({
-        value: input.map(item=> `${item.directory} (${item.child})`).join(', '),
+        value: input.map(item=> `${item.directory} (${item.child})`).join('; '),
         category: 'Biggest',
         valueType: 'string',
         sub_category: 'Top 5 Biggest Directory With Count'
@@ -204,10 +204,10 @@ export const TOP_DIRECOTRY_WITH_MAX_COUNT_CHILD_MAPPER = (input: TopDirectoryWit
 export const TOP_LONGEST_DIRECTORY_PATHS_MAPPER = (input: TopLongestDirectoryPathsInput[]) : DiscoveryReportSection[] => {
     const output: DiscoveryReportSection[] = [];
     output.push({
-        value: input.map(item=> `${item.path} (${item.length})`).join(', '),
+        value: input.map(item=> `${item.path} (${item.length})`).join('; '),
         category: 'Biggest',
         valueType: 'string',
-        sub_category: 'Top 5 Longest File Path'
+        sub_category: 'Top 5 Longest Directory Path'
     });
     return output;
 }
@@ -215,7 +215,7 @@ export const TOP_LONGEST_DIRECTORY_PATHS_MAPPER = (input: TopLongestDirectoryPat
 export const TOP_LONGEST_FILE_PATHS_MAPPER = (input: TopLongestFilePathsInput[]) : DiscoveryReportSection[] => {
     const output: DiscoveryReportSection[] = [];
     output.push({
-        value: input.map(item=> `${item.path} (${item.length})`).join(', '),
+        value: input.map(item=> `${item.path} (${item.length})`).join('; '),
         category: 'Biggest',
         valueType: 'string',
         sub_category: 'Top 5 Longest File Path'
@@ -225,7 +225,7 @@ export const TOP_LONGEST_FILE_PATHS_MAPPER = (input: TopLongestFilePathsInput[])
 export const TOP_BIGGEST_FILE_NAME_MAPPER = (input: TopBiggestFileNameInput[]) : DiscoveryReportSection[] => {
     const output: DiscoveryReportSection[] = [];
     output.push({
-        value: input.map(item=> `${item.path} (${item.file_size})`).join(', '),
+        value: input.map(item=> `${item.path} (${item.file_size})`).join('; '),
         category: 'Biggest',
         valueType: 'string',
         sub_category: 'Top 5 Biggest File Names'

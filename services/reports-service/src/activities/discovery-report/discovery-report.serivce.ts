@@ -50,7 +50,7 @@ export class DiscoveryReportService {
 
         // Generate PDF using the PDF generator service
         const pdfBuffer = await this.pdfGenerator.generatePDF(htmlOutput, options);
-        const pdfFilePath = path.join(this.basePath, `${jobRunId}-discovery-report.pdf`);
+        const pdfFilePath = path.join(this.basePath, `${jobRunId}-discover-report.pdf`);
         await fs.promises.writeFile(pdfFilePath, pdfBuffer);
         this.logger.log(`PDF report generated at: ${pdfFilePath}`);
         return { message: 'PDF report generated successfully', path: pdfFilePath };
@@ -82,7 +82,7 @@ export class DiscoveryReportService {
         const csvContent = [headers.join(","), rows.map(escapeCsvValue).join(",")].join("\n");
 
         // Write CSV to file
-        const csvFilePath = path.join(this.basePath, `${jobRunId}-discovery-report.csv`);
+        const csvFilePath = path.join(this.basePath, `${jobRunId}-discover-report.csv`);
         await fs.promises.writeFile(csvFilePath, csvContent);
 
         this.logger.log(`CSV report generated at: ${csvFilePath}`);
@@ -96,7 +96,6 @@ export class DiscoveryReportService {
                 jobRunId: input.jobRunId,
                 reportType: ReportType.DISCOVERY,
                 reportData: JSON.stringify(input.data),
-                createdAt: new Date().toISOString(),
             });
         }
         const updatedReport = await this.reportsRepo.save(report);
