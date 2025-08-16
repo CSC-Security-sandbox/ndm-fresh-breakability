@@ -1,7 +1,6 @@
-import { RedisJobManagerContext } from "./job-manager-redis";
-import { JobManagerContext } from "./job-manager-context";
-import { RedisFileCollection, RedisErrorCollection, RedisCommandCollection, RedisTaskCollection } from "../../redis/redis-collections";
+import { RedisCommandCollection, RedisErrorCollection, RedisFileCollection, RedisTaskCollection } from "../../redis/redis-collections";
 import { RedisHMapCollection } from "../../redis/redis-hmap-collection";
+import { RedisJobManagerContext } from "./job-manager-redis";
 
 jest.mock("../../redis/redis-collections");
 jest.mock("../../redis/redis-hmap-collection");

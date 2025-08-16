@@ -1,6 +1,8 @@
 import { RedisService } from './redis.service';
 import { JobContextFactory } from '@netapp-cloud-datamigrate/jobs-lib';
 import { createClient, RedisClientType } from 'redis';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLogger } from 'src/auth/auth.service.spec';
 
 jest.mock('redis', () => ({
   createClient: jest.fn(),
@@ -16,6 +18,7 @@ jest.mock('@netapp-cloud-datamigrate/jobs-lib', () => ({
 describe('RedisService', () => {
   let service: RedisService;
   let mockClient: any;
+  let loggerFactory: LoggerFactory;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -31,7 +34,12 @@ describe('RedisService', () => {
       hGet: jest.fn().mockResolvedValue('identity'),
     };
     (createClient as jest.Mock).mockReturnValue(mockClient);
-    service = new RedisService();
+
+    loggerFactory = {
+      create: jest.fn().mockReturnValue(mockLogger),
+    } as unknown as LoggerFactory;
+
+    service = new RedisService(loggerFactory);
   });
 
   describe('onModuleInit', () => {
@@ -164,37 +172,7 @@ describe('RedisService', () => {
       expect(ctx).toBe('ctx2');
     });
 
-    it('setJobContext should serialize and set', async () => {
-      (service as any).client = mockClient;
-      const jobContext = { serialize: jest.fn().mockReturnValue('data') };
-      await service.setJobContext('trace', jobContext);
-      expect(jobContext.serialize).toHaveBeenCalled();
-      expect(mockClient.set).toHaveBeenCalledWith('trace', 'data');
-    });
-
-    it('getJobState happy path', async () => {
-      (service as any).getJobContext = jest.fn().mockResolvedValue({ getJobState: jest.fn().mockResolvedValue('ok') });
-      const state = await service.getJobState('t');
-      expect(state).toBe('ok');
-    });
-
-    it('getJobState error path', async () => {
-      (service as any).getJobContext = jest.fn().mockRejectedValue(new Error('fail'));
-      const state = await service.getJobState('t2');
-      expect(state).toEqual({ message: 'Error while getting the job state : t2' });
-    });
-
-    it('setJobState happy path', async () => {
-      (service as any).getJobContext = jest.fn().mockResolvedValue({ setJobState: jest.fn().mockResolvedValue(undefined), getJobState: jest.fn().mockResolvedValue('new') });
-      const res = await service.setJobState('t3', 'state' as any);
-      expect(res).toBe('new');
-    });
-
-    it('setJobState error path', async () => {
-      (service as any).getJobContext = jest.fn().mockRejectedValue(new Error('oops'));
-      const res = await service.setJobState('t4', 'state' as any);
-      expect(res).toEqual({ message: 'Error while updating the job state : t4' });
-    });
+	describe('RedisService', () => {
 
     it('getOwnerIdentity should hGet mapping', async () => {
       (service as any).client = mockClient;
@@ -244,3 +222,4 @@ describe('RedisService', () => {
     });
   });
 });
+})

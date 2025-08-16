@@ -1,5 +1,10 @@
-import { FILE_SERVER_STATUS, JOB_CONFIG_STATUS_ENUM, JOBS_TYPE } from "@/types/app.type";
-import crypto from 'crypto';
+import {
+  FILE_SERVER_STATUS_ENUM,
+  JOB_CONFIG_STATUS_ENUM,
+  JOBS_TYPE,
+} from "@/types/app.type";
+import crypto from "crypto";
+import { USER_ROLES_ENUM } from "@/types/app.type";
 
 export const getJobType = (type: JOBS_TYPE) => {
   switch (type) {
@@ -115,12 +120,14 @@ export const getGrafanaLogUrl = (searchParam: string) => {
 
   const encodedQuery = encodeURIComponent(query);
 
-  return `${window?.env?.VITE_GRAFANA_URL || import.meta.env.VITE_GRAFANA_URL}/explore?left=${encodedQuery}`;
+  return `${
+    window?.env?.VITE_GRAFANA_URL || import.meta.env.VITE_GRAFANA_URL
+  }/explore?left=${encodedQuery}`;
 };
 
-export const getFileServerStatusFormat = (status: FILE_SERVER_STATUS) => {
+export const getFileServerStatusFormat = (status: FILE_SERVER_STATUS_ENUM) => {
   switch (status) {
-    case FILE_SERVER_STATUS.IN_PROGRESS:
+    case FILE_SERVER_STATUS_ENUM.IN_PROGRESS:
       return "In Progress";
     default:
       return toTitleCase(status);
@@ -129,29 +136,41 @@ export const getFileServerStatusFormat = (status: FILE_SERVER_STATUS) => {
 
 export const decryptData = (encryptedWithIv: string): string => {
   try {
-    const [ivHex, encryptedPassword] = encryptedWithIv.split(':');
-    const iv = Buffer.from(ivHex, 'hex');
-    const keyString = window?.env?.VITE_KEYCLOAK_CLIENT_SECRET || import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET;
-    const key = crypto.createHash('sha256').update(keyString).digest();
-    const decipher = crypto.createDecipheriv('aes-256-ctr', key, iv);
-    let decrypted = decipher.update(encryptedPassword, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
+    const [ivHex, encryptedPassword] = encryptedWithIv.split(":");
+    const iv = Buffer.from(ivHex, "hex");
+    const keyString =
+      window?.env?.VITE_KEYCLOAK_CLIENT_SECRET ||
+      import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET;
+    const key = crypto.createHash("sha256").update(keyString).digest();
+    const decipher = crypto.createDecipheriv("aes-256-ctr", key, iv);
+    let decrypted = decipher.update(encryptedPassword, "hex", "utf8");
+    decrypted += decipher.final("utf8");
     return decrypted;
   } catch (error) {
-    throw new Error('An internal error occurred');
+    throw new Error("An internal error occurred");
   }
 };
 
 export const encryptData = (data: string): string => {
   try {
     const iv = crypto.randomBytes(16);
-    const keyString = window?.env?.VITE_KEYCLOAK_CLIENT_SECRET || import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET;
-    const key = crypto.createHash('sha256').update(keyString).digest();
-    const cipher = crypto.createCipheriv('aes-256-ctr', key, iv);
-    let encrypted = cipher.update(data, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    return `${iv.toString('hex')}:${encrypted}`;
+    const keyString =
+      window?.env?.VITE_KEYCLOAK_CLIENT_SECRET ||
+      import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET;
+    const key = crypto.createHash("sha256").update(keyString).digest();
+    const cipher = crypto.createCipheriv("aes-256-ctr", key, iv);
+    let encrypted = cipher.update(data, "utf8", "hex");
+    encrypted += cipher.final("hex");
+    return `${iv.toString("hex")}:${encrypted}`;
   } catch (error) {
-    throw new Error('An internal error occurred');
+    throw new Error("An internal error occurred");
   }
+};
+
+export const getProjectPermissions = (projectId: string, userPermissions) => {
+  return userPermissions.roles.find(
+    (row) =>
+      row.projects.includes(projectId) ||
+      (row.role_name === USER_ROLES_ENUM.APP_ADMIN && row.projects.length === 0)
+  )?.permissions;
 };

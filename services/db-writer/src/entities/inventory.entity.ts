@@ -91,5 +91,12 @@ export class InventoryEntity {
     @ApiProperty({ description: 'updated_at' })
     @UpdateDateColumn({ name: 'updated_at',nullable:true })
     updatedAt: Date;
-  
+
+    @ApiProperty({ description: 'Source Metadata', nullable: true })
+    @Column({ name: 'source_meta', type: 'jsonb', nullable: true })
+    sourceMeta: Record<string, any>;    
+
+    @ApiProperty({ description: 'Target Metadata', nullable: true })
+    @Column({ name: 'target_meta', type: 'jsonb', nullable: true })
+    targetMeta: Record<string, any>;    
 }

@@ -10,11 +10,12 @@ import { HealthcheckStats } from "./dto/healthcheck.dto";
 import { HealthCheckResponse } from "./dto/healthcheck-response.dto";
 import { HttpStatus, InternalServerErrorException } from "@nestjs/common";
 import { JwtService } from "@netapp-cloud-datamigrate/auth-lib";
-import { Logger } from '@nestjs/common';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 describe("HealthcheckController", () => {
   let controller: HealthcheckController;
   let service: HealthcheckService;
+  let mockLogger: LoggerService;
 
   const mockJwtService = {
     verifyToken: jest.fn().mockResolvedValue({
@@ -34,6 +35,19 @@ describe("HealthcheckController", () => {
   };
 
   beforeEach(async () => {
+    // Create mock logger
+    mockLogger = {
+      error: jest.fn(),
+      log: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+    } as any;
+
+    // Create mock LoggerFactory
+    const mockLoggerFactory = {
+      create: jest.fn().mockReturnValue(mockLogger),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [HealthcheckController],
       providers: [
@@ -47,7 +61,10 @@ describe("HealthcheckController", () => {
           provide: JwtService,
           useValue: mockJwtService,
         },
-       Logger,
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
+        },
       ],
     }).compile();
 
@@ -86,6 +103,9 @@ describe("HealthcheckController", () => {
     expect(service.createOrUpdateHealthCheckStats).toHaveBeenCalledWith(
       healthStats,
     );
+    expect(mockLogger.log).toHaveBeenCalledWith(
+      `Received health check stats from worker: mock-worker-id`
+    );
     expect(response).toEqual({
       statusCode: HttpStatus.OK,
     });
@@ -114,9 +134,14 @@ describe("HealthcheckController", () => {
     await expect(controller.healthCheck(healthStats,mockReq)).rejects.toThrow(
       InternalServerErrorException,
     );
+    
     // Assert
     expect(service.createOrUpdateHealthCheckStats).toHaveBeenCalledWith(
       healthStats,
+    );
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      "Error creating or updating health check stats:",
+      "Worker not found",
     );
   });
 });

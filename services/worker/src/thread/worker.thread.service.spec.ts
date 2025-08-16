@@ -2,7 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { WorkerThreadService } from './worker.thread.service';
 import { WorkerThreadOutput, ThreadOperation, MigrateFile } from './worker.thread.type';
 import { ConfigService } from '@nestjs/config';
-import { Logger } from '@nestjs/common';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { MetricsService } from '../metrics/metrics.service';
+import { mockLogger } from 'src/auth/auth.service.spec';
 
 jest.mock('worker_threads', () => {
   const EventEmitter = require('events');
@@ -21,7 +23,12 @@ const WorkerThreadServiceModule = require('./worker.thread.service').WorkerThrea
 describe('WorkerThreadService', () => {
   let service: WorkerThreadService;
   let configService: ConfigService;
-  let logger: Logger;
+  let loggerFactory: LoggerFactory;
+  let logger: LoggerService;
+
+  const mockLoggerFactory = {
+    create: jest.fn().mockReturnValue(mockLogger),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -32,15 +39,23 @@ describe('WorkerThreadService', () => {
           useValue: { get: jest.fn().mockReturnValue(5) },
         },
         {
-          provide: Logger,
-          useValue: new Logger(),
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
+        },
+        {
+          provide: MetricsService,
+          useValue: {
+            recordWorkerThreadError: jest.fn(),
+            setWorkerThreadService: jest.fn(),
+          },
         },
       ],
     }).compile();
 
     service = module.get<WorkerThreadService>(WorkerThreadService);
     configService = module.get<ConfigService>(ConfigService);
-    logger = module.get<Logger>(Logger);
+    loggerFactory = module.get<LoggerFactory>(LoggerFactory);
+    logger = loggerFactory.create(WorkerThreadService.name);
   });
 
   afterEach(() => {
@@ -191,9 +206,25 @@ describe('WorkerThreadService', () => {
         return undefined;
       }),
     };
-    const loggerMock = { log: jest.fn(), error: jest.fn() };
+
+    const loggerMock = {
+      log: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+    };
+
+    const loggerFactoryMock = {
+      create: jest.fn().mockReturnValue(loggerMock),
+    };
+
+    const metricsServiceMock = {
+      recordWorkerThreadError: jest.fn(),
+      setWorkerThreadService: jest.fn(),
+    };
+
     const WorkerThreadServiceModule = (await import('./worker.thread.service')).WorkerThreadService;
-    const service = new WorkerThreadServiceModule(configServiceMock as any, loggerMock as any);
+    const service = new WorkerThreadServiceModule(configServiceMock as any, loggerFactoryMock as any, metricsServiceMock as any);
 
     // Assert
     expect(service['sizes']).toBeDefined()
@@ -280,6 +311,16 @@ describe('WorkerThreadService', () => {
     expect(service.getTaskBand(10485761)).toBe('100mb');
     expect(service.getTaskBand(104857600)).toBe('100mb');
     expect(service.getTaskBand(104857601)).toBe('1gb');
+  });
+
+  it('should return worker metrics correctly', () => {
+    const metrics = service.getWorkerThreadMetrics();
+    
+    expect(metrics).toHaveProperty('totalThreads');
+    expect(metrics).toHaveProperty('availableThreads');
+    expect(metrics).toHaveProperty('activeTasks');
+    expect(metrics).toHaveProperty('queueDepths');
+    expect(typeof metrics.queueDepths).toBe('object');
   });
 
 });

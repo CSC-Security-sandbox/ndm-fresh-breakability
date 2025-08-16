@@ -4,16 +4,29 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { WorkerStatsEntity } from "src/entities/worker-stats.entity";
 import { WorkerEntity } from "src/entities/worker.entity";
-import { LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
+import { LoggerService, LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
 import { HealthcheckStats } from "./dto/healthcheck.dto";
 
 describe("HealthcheckService", () => {
   let service: HealthcheckService;
   let workerRepository: Repository<WorkerEntity>;
   let workerStatsRepository: Repository<WorkerStatsEntity>;
-  let logger: LoggerService;
+  let mockLogger: LoggerService;
 
   beforeEach(async () => {
+    // Create mock logger
+    mockLogger = {
+      error: jest.fn(),
+      log: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+    } as any;
+
+    // Create mock LoggerFactory
+    const mockLoggerFactory = {
+      create: jest.fn().mockReturnValue(mockLogger),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         HealthcheckService,
@@ -26,11 +39,8 @@ describe("HealthcheckService", () => {
           useClass: Repository,
         },
         {
-          provide: LoggerService,
-          useValue: {
-            error: jest.fn(),
-            log: jest.fn(),
-          },
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
         },
       ],
     }).compile();
@@ -42,7 +52,6 @@ describe("HealthcheckService", () => {
     workerStatsRepository = module.get<Repository<WorkerStatsEntity>>(
       getRepositoryToken(WorkerStatsEntity),
     );
-    logger = module.get<LoggerService>(LoggerService);
   });
 
   it("should be defined", () => {
@@ -178,7 +187,7 @@ describe("HealthcheckService", () => {
     jest
       .spyOn(workerRepository, "findOne")
       .mockRejectedValue(new Error("Database error"));
-    jest.spyOn(logger, "error");
+    jest.spyOn(mockLogger, "error");
 
     await expect(
       service.createOrUpdateHealthCheckStats(healthStats),

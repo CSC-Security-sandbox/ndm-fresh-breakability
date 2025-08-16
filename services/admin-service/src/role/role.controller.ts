@@ -14,7 +14,7 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RoleDescription } from '../swagger/swagger-summary';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
-import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
+import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
 
 @ApiTags('roles')
@@ -37,7 +37,7 @@ export class RoleController {
     return this.roleService.create(createRoleDto, userPermissionResponse);
   }
 
-  @Auth()
+  @Auth(Permission.ManageProject)
   @ApiBearerAuth()
   @Get()
   @ApiOperation({

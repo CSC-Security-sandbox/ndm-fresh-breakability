@@ -1,7 +1,7 @@
 import { proxyActivities, continueAsNew, ContinueAsNew } from '@temporalio/workflow';
 import { SpeedTestActivities } from '../../activities/speed-test/speed-test-activities';
 import { CommonActivityService } from '../../activities/common/common.service';
-import { JobRunStatus, TaskStatus } from '../../activities/discovery/enums';
+import { JobRunStatus, TaskStatus } from '../../activities/common/enums';
 import { SpeedTestOutput } from '../../activities/speed-test/speed-test.type';
 
 
@@ -17,9 +17,9 @@ const {
   startToCloseTimeout: '24h', 
  });
 
-const { 
-  getJobState: getJobStateActivity,
-} = proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
+// const { 
+//   getJobState: getJobStateActivity,
+// } = proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 
 export async function SpeedTestJobWorkflow(args: any): Promise<any> {
   const { traceId, options, workerId, volumeId, tests } = args;
@@ -27,10 +27,10 @@ export async function SpeedTestJobWorkflow(args: any): Promise<any> {
   
   try {
     await updateStatusActivity({jobRunId:traceId, status :JobRunStatus.Running})
-    const jobState = await getJobStateActivity(traceId);
-    if(jobState.status !== JobRunStatus.Running) {
-      return { message: `Job status changed to ${jobState.status}` };
-    }
+    // const jobState = await getJobStateActivity(traceId);
+    // if(jobState.status !== JobRunStatus.Running) {
+    //   return { message: `Job status changed to ${jobState.status}` };
+    // }
     const data = await postResultsActivity(traceId, workerId, args.fileServerId, null)
     
     let writeResult:SpeedTestOutput, readResult:SpeedTestOutput, networkPerformanceResult: SpeedTestOutput;

@@ -1,13 +1,19 @@
 import { JobContext, JobContextFactory } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { createClient, RedisClientType } from 'redis';
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private client: RedisClientType;
-  private readonly logger = new Logger(RedisService.name);
+  private readonly logger : LoggerService;
+
+  constructor (
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(RedisService.name);
+  }
 
   async onModuleInit(): Promise<void> {
     await this.createClient();
@@ -24,7 +30,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     if (this.client && this.client.isOpen) {
       return;
     }
-    
+
     const redisClientOptions: any = {
       url: `redis://${process.env.REDIS_HOST || '127.0.0.1'}:${process.env.REDIS_PORT || 6379}`,
     };
@@ -85,7 +91,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     const serializedContext = jobContext.serialize();
     await this.client.set(traceId, serializedContext);
   }
-
   async getJobState(traceId: string): Promise<any> {
     try {
       const jobContext = await this.getJobContext(traceId);
@@ -94,7 +99,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       return { message: 'Error while getting the job state : ' + traceId };
     }
   }
-
   async setJobState(traceId: string, jobState: JobState): Promise<any> {
     try {
       const jobContext = await this.getJobContext(traceId);
@@ -105,7 +109,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       return { message: 'Error while updating the job state : ' + traceId };
     }
   }
-
   async getOwnerIdentity(jobRunId: string, id: string, type: 'SID' | 'UID' | 'GID') {
     return await this.client.hGet(`${jobRunId}:mapping`, `${type}:${id}`)
   }
@@ -116,7 +119,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     const parsedInfo = this.parseMemoryStats(memoryInfo);
     return parsedInfo;
   }
-
   parseMemoryStats(stats: string): { used_memory: number; total_system_memory: number } {
     let usedMemory = 0;
     let totalSystemMemory = 0;

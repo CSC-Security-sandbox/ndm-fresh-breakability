@@ -1,12 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { Logger } from '@nestjs/common';
 import axios from 'axios';
 import * as fs from 'fs';
 import { AuthService } from 'src/auth/auth.service';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import { ConfigError, ConfigStatus } from './working-directory.type';
 import { ValidateWorkingDirectoryActivity } from './working-directory.service';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { SMBProtocol } from '../../protocols/smb/smb.protocol';
+import { NFSProtocol } from '../../protocols/nfs/nfs.protocol';
+import { WorkersConfig } from 'src/config/app.config';
+import { CommandConfig } from 'src/config/command.config';
+import { mockLogger } from 'src/auth/auth.service.spec';
 
 // Mock Temporal dependencies to avoid native binary issues
 jest.mock('@temporalio/core-bridge', () => ({}));
@@ -24,26 +29,19 @@ const mockedFs = fs as jest.Mocked<typeof fs>;
 describe('ValidateWorkingDirectoryActivity', () => {
   let service: ValidateWorkingDirectoryActivity;
   let configService: jest.Mocked<ConfigService>;
-  let logger: jest.Mocked<Logger>;
   let authService: jest.Mocked<AuthService>;
   let mockProtocol: any;
+  let loggerFactory: LoggerFactory;
+  let protocols: Protocols;
+  let logger: LoggerService;
 
   beforeEach(async () => {
     // Reset all mocks
     jest.clearAllMocks();
 
-    // Create mock protocol
-    mockProtocol = {
-      mountPath: jest.fn(),
-      unmountPath: jest.fn(),
-    };
 
-    // Mock Protocols.getProtocol
-    jest.mocked(Protocols.getProtocol).mockReturnValue(mockProtocol);
-
-    // Create mock config service with immediate return values
     const mockConfigService = {
-      get: jest.fn().mockImplementation((key: string) => {
+      get: jest.fn((key: string) => {
         switch (key) {
           case 'worker.workerId':
             return 'test-worker-id';
@@ -57,6 +55,30 @@ describe('ValidateWorkingDirectoryActivity', () => {
       }),
     };
 
+    WorkersConfig.configService = mockConfigService as unknown as ConfigService;
+    CommandConfig.configService = mockConfigService as unknown as ConfigService;
+
+    // Create mock protocol
+    mockProtocol = {
+      mountPath: jest.fn(),
+      unmountPath: jest.fn(),
+    };
+
+    const mockLoggerFactory = {
+      create: jest.fn().mockReturnValue(mockLogger),
+    };
+
+    loggerFactory = mockLoggerFactory as unknown as LoggerFactory;
+
+    protocols = new Protocols(
+      new NFSProtocol(loggerFactory),
+      new SMBProtocol(loggerFactory)
+    );
+
+    const mockProtocols = {
+      getProtocol: jest.fn().mockReturnValue(mockProtocol),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ValidateWorkingDirectoryActivity,
@@ -65,11 +87,8 @@ describe('ValidateWorkingDirectoryActivity', () => {
           useValue: mockConfigService,
         },
         {
-          provide: Logger,
-          useValue: {
-            log: jest.fn(),
-            error: jest.fn(),
-          },
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
         },
         {
           provide: AuthService,
@@ -77,13 +96,23 @@ describe('ValidateWorkingDirectoryActivity', () => {
             getAccessToken: jest.fn(),
           },
         },
+        {
+          provide: LoggerService,
+          useValue: mockLogger as any,
+        },
+        {
+          provide: Protocols,
+          useValue: mockProtocols,
+        },
       ],
     }).compile();
 
     service = module.get<ValidateWorkingDirectoryActivity>(ValidateWorkingDirectoryActivity);
     configService = module.get(ConfigService);
-    logger = module.get(Logger);
+    loggerFactory = module.get<LoggerFactory>(LoggerFactory);
+    logger = module.get<LoggerService>(LoggerService);
     authService = module.get(AuthService);
+    protocols = module.get(Protocols);
   });
 
   describe('validateWorkingDirectory', () => {
@@ -187,10 +216,52 @@ describe('ValidateWorkingDirectoryActivity', () => {
       expect(result).toBe(ConfigError.PROTOCOL_NOT_SUPPORTED);
     });
 
-    it('should return original error message for other errors', () => {
-      const error = { message: 'Some other error' };
+    it('should return PROTOCOL_NOT_SUPPORTED for version mismatch error', () => {
+      const error = { message: 'version mismatch detected' };
       const result = service['getNfsMountErrorMessage'](error);
-      expect(result).toBe('Some other error');
+      expect(result).toBe(ConfigError.PROTOCOL_NOT_SUPPORTED);
+    });
+
+    it('should return PROTOCOL_PORT_BLOCKED for port blocked error', () => {
+      const error = { message: 'port 2049 is blocked by firewall' };
+      const result = service['getNfsMountErrorMessage'](error);
+      expect(result).toBe(ConfigError.PROTOCOL_PORT_BLOCKED);
+    });
+
+    it('should return PROTOCOL_PORT_BLOCKED for port filtered error', () => {
+      const error = { message: 'port access is filtered' };
+      const result = service['getNfsMountErrorMessage'](error);
+      expect(result).toBe(ConfigError.PROTOCOL_PORT_BLOCKED);
+    });
+
+    it('should return HOST_OS_NOT_SUPPORTED for OS not supported error', () => {
+      const error = { message: 'os not supported for this operation' };
+      const result = service['getNfsMountErrorMessage'](error);
+      expect(result).toBe(ConfigError.HOST_OS_NOT_SUPPORTED);
+    });
+
+    it('should return HOST_OS_NOT_SUPPORTED for unsupported OS error', () => {
+      const error = { message: 'current os is unsupported' };
+      const result = service['getNfsMountErrorMessage'](error);
+      expect(result).toBe(ConfigError.HOST_OS_NOT_SUPPORTED);
+    });
+
+    it('should return the actual error message for other errors', () => {
+      const error = { message: 'Some other random error' };
+      const result = service['getNfsMountErrorMessage'](error);
+      expect(result).toBe('Some other random error');
+    });
+
+    it('should return empty string when error message is undefined', () => {
+      const error = {};
+      const result = service['getNfsMountErrorMessage'](error);
+      expect(result).toBe('');
+    });
+
+    it('should return empty string when error is null', () => {
+      const error = null;
+      const result = service['getNfsMountErrorMessage'](error);
+      expect(result).toBe('');
     });
   });
 
@@ -223,7 +294,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
         mountBasePath: service.baseWorkingPath,
         pathId: 'trace-id',
         jobRunId: 'trace-id',
-      });
+      }, false);
       expect(mockProtocol.unmountPath).toHaveBeenCalled();
       expect(logger.log).toHaveBeenCalledWith('Mounting export path for host test-host');
       expect(logger.log).toHaveBeenCalledWith('Mounted export path successfully');

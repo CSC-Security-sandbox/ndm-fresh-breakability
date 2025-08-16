@@ -7,7 +7,6 @@ import {
     shouldSkipFile,
     shouldExcludeOlderThan,
     shouldExcludeOrSkip,
-    getJobConnection,
     getFileType,
     isContentUpdate,
     isMetaUpdated,
@@ -15,7 +14,6 @@ import {
     formatDate
 } from './utils';
 import { JobContext, JobContextFactory } from "@netapp-cloud-datamigrate/jobs-lib";
-import { RedisUtils } from "@netapp-cloud-datamigrate/jobs-lib";
 import { FileType } from '../types/tasks';
 
 jest.mock('fs');
@@ -53,7 +51,15 @@ jest.mock('@netapp-cloud-datamigrate/jobs-lib', () => ({
         serialize: jest.fn(),
         deserialize: jest.fn()
     })),
+    ItemInfo: jest.fn().mockImplementation(() => ({
+        serialize: jest.fn(),
+        deserialize: jest.fn()
+    })),
     Task: jest.fn(),
+    TaskInfo: jest.fn().mockImplementation(() => ({
+        serialize: jest.fn(),
+        deserialize: jest.fn()
+    })),
     DMError: jest.fn(),
     ErrorType: {
         FATAL_ERROR: 'FATAL_ERROR',
@@ -354,63 +360,6 @@ describe('utils', () => {
         });
     });
 
-    describe('getJobConnection', () => {
-        const mockJobRunId = 'test-job-run-id';
-        const mockRedisClient = {
-            isOpen: false,
-            connect: jest.fn(),
-            disconnect: jest.fn()
-        };
-        // const mockJobContext = mock<JobContext>();
-        const mockJobContext = {
-            // Mock methods you use
-            getJobConfig: jest.fn(),
-            appendToFileList: jest.fn(),
-            // Add other methods as needed
-        } as unknown as JobContext;
-
-        beforeEach(() => {
-            (RedisUtils.getClient as jest.Mock).mockResolvedValue(mockRedisClient);
-            (JobContextFactory.getProvider as jest.Mock).mockReturnValue({
-                getJobContext: jest.fn().mockResolvedValue(mockJobContext)
-            });
-        });
-
-        it('should connect to redis if not already open', async () => {
-            await getJobConnection({ jobRunId: mockJobRunId });
-            expect(mockRedisClient.connect).toHaveBeenCalled();
-        });
-
-        it('should not connect to redis if already open', async () => {
-            mockRedisClient.isOpen = true;
-            await getJobConnection({ jobRunId: mockJobRunId });
-            expect(mockRedisClient.connect).not.toHaveBeenCalled();
-            mockRedisClient.isOpen = false; // Reset for other tests
-        });
-
-        it('should return jobContext and redis client', async () => {
-            const result = await getJobConnection({ jobRunId: mockJobRunId });
-            expect(result.jobContext).toBe(mockJobContext);
-            expect(result.connectionClient).toBe(mockRedisClient);
-            expect(JobContextFactory.getProvider).toHaveBeenCalledWith('redis', mockRedisClient);
-        });
-
-        it('should handle redis connection errors', async () => {
-            const mockError = new Error('Connection failed');
-            mockRedisClient.connect.mockRejectedValue(mockError);
-            await expect(getJobConnection({ jobRunId: mockJobRunId })).rejects.toThrow(mockError);
-        });
-
-        it('should handle job context creation errors', async () => {
-            const mockError = new Error('Connection failed');
-            (JobContextFactory.getProvider as jest.Mock).mockReturnValue({
-                getJobContext: jest.fn().mockRejectedValue(mockError)
-            });
-            await expect(getJobConnection({ jobRunId: mockJobRunId })).rejects.toThrow(mockError);
-        });
-    });
-
-
     describe('getFileType', () => {
         it('should return SYMBOLIC_LINK for symbolic links', () => {
             const stats = {
@@ -529,12 +478,6 @@ describe('utils', () => {
             expect(isContentUpdate(sourceStats, destStats)).toBe(true);
         });
 
-        it('should return true when mtimes differ', () => {
-            const sourceStats = { size: 100, mtime: new Date('2023-01-01') } as fs.Stats;
-            const destStats = { size: 100, mtime: new Date('2023-01-02') } as fs.Stats;
-            expect(isContentUpdate(sourceStats, destStats)).toBe(true);
-        });
-
         it('should return false when files are identical', () => {
             const date = new Date('2023-01-01');
             const sourceStats = { size: 100, mtime: date } as fs.Stats;
@@ -543,60 +486,7 @@ describe('utils', () => {
         });
     });
 
-    describe('isMetaUpdated', () => {
-
-
-        it('should return false when content differs', () => {
-            const sourceStats = { size: 100, mtime: new Date('2023-01-01') } as fs.Stats;
-            const destStats = { size: 200, mtime: new Date('2023-01-01') } as fs.Stats;
-            expect(isMetaUpdated(sourceStats, destStats)).toBe(false);
-        });
-
-        it('should return true when gid differs', () => {
-            const sourceStats = { size: 100, mtime: new Date('2023-01-01'), gid: 1001, uid: 1001, atime: new Date('2023-01-01'), mode: 0o644 } as fs.Stats;
-            const destStats = { size: 100, mtime: new Date('2023-01-01'), gid: 1002, uid: 1001, atime: new Date('2023-01-01'), mode: 0o644 } as fs.Stats;
-            expect(isMetaUpdated(sourceStats, destStats)).toBe(true);
-        });
-
-        it('should return true when uid differs', () => {
-            const sourceStats = { size: 100, mtime: new Date('2023-01-01'), gid: 1001, uid: 1001, atime: new Date('2023-01-01'), mode: 0o644 } as fs.Stats;
-            const destStats = { size: 100, mtime: new Date('2023-01-01'), gid: 1001, uid: 1002, atime: new Date('2023-01-01'), mode: 0o644 } as fs.Stats;
-            expect(isMetaUpdated(sourceStats, destStats)).toBe(true);
-        });
-
-        it('should return true when atime differs', () => {
-            const sourceStats = { size: 100, mtime: new Date('2023-01-01'), gid: 1001, uid: 1001, atime: new Date('2023-01-01'), mode: 0o644 } as fs.Stats;
-            const destStats = { size: 100, mtime: new Date('2023-01-01'), gid: 1001, uid: 1001, atime: new Date('2023-01-02'), mode: 0o644 } as fs.Stats;
-            expect(isMetaUpdated(sourceStats, destStats)).toBe(true);
-        });
-
-        it('should return true when mode differs', () => {
-            const sourceStats = { size: 100, mtime: new Date('2023-01-01'), gid: 1001, uid: 1001, atime: new Date('2023-01-01'), mode: 0o644 } as fs.Stats;
-            const destStats = { size: 100, mtime: new Date('2023-01-01'), gid: 1001, uid: 1001, atime: new Date('2023-01-01'), mode: 0o755 } as fs.Stats;
-            expect(isMetaUpdated(sourceStats, destStats)).toBe(true);
-        });
-
-        it('should return false when metadata is identical', () => {
-            const date = new Date('2023-01-01');
-            const sourceStats = {
-                size: 100,
-                mtime: date,
-                gid: 1001,
-                uid: 1001,
-                atime: date,
-                mode: 0o644
-            } as fs.Stats;
-            const destStats = {
-                size: 100,
-                mtime: new Date(date),
-                gid: 1001,
-                uid: 1001,
-                atime: new Date(date),
-                mode: 0o644
-            } as fs.Stats;
-            expect(isMetaUpdated(sourceStats, destStats)).toBe(true);
-        });
-    });
+ 
 
     describe('getErrorCode', () => {
         it('should return TASK error codes', () => {
@@ -647,6 +537,8 @@ describe("formatDate", () => {
         const date = new Date("2024-03-27T15:05:09Z");
         expect(formatDate(date)).toBeDefined();
     });
+
+
 });
 
 

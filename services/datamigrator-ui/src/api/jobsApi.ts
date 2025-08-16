@@ -26,6 +26,9 @@ export const jobsApi = createApi({
   endpoints: (builder) => ({
     getJobConfigs: builder.query({
       query: ({ projectId }) => `jobs?projectId=${projectId}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      },
       providesTags: ["ALL_JOB_CONFIGS"],
     }),
 
@@ -43,6 +46,12 @@ export const jobsApi = createApi({
           status,
         },
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      },
+      transformErrorResponse: (error: any) => {
+        return error?.data?.error || error?.data || error || {};
+      },
       invalidatesTags: ["ALL_JOB_CONFIGS", "JOB_CONFIG_DETAILS"],
     }),
 
@@ -80,11 +89,17 @@ export const jobsApi = createApi({
 
     getJobConfigDetails: builder.query({
       query: ({ jobConfigId }) => `jobs/${jobConfigId}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || {};
+      },
       providesTags: ["JOB_CONFIG_DETAILS"],
     }),
 
     getJobRuns: builder.query({
       query: ({ projectId }) => `job-run?projectId=${projectId}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      },
       providesTags: ["ALL_JOB_RUNS"],
     }),
 
@@ -127,6 +142,9 @@ export const jobsApi = createApi({
         }
         return url;
       },
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      },
     }),
 
     bulkMigrate: builder.mutation({
@@ -144,6 +162,9 @@ export const jobsApi = createApi({
         method: "POST",
         body,
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      },
     }),
 
     getAllFileServersWithVolume: builder.query({
@@ -151,6 +172,9 @@ export const jobsApi = createApi({
         url: `jobs/project/${projectId}`,
         method: "GET",
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      },
     }),
 
     bulkCutOver: builder.mutation({
@@ -206,6 +230,9 @@ export const jobsApi = createApi({
 
     getJobRunErrors: builder.query({
       query: (queryParams) => `job-run/errors?${queryParams}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      }
     }),
 
     getJobRunErrorsOverview: builder.query({
@@ -213,6 +240,9 @@ export const jobsApi = createApi({
         url: `job-run/${jobRunId}/errors/overview`,
         method: "GET",
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      },
     }),
 
     getNoticeBoardDetails: builder.query({
@@ -220,6 +250,9 @@ export const jobsApi = createApi({
         url: `jobs/notice-board/${projectId}`,
         method: "GET",
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response;
+      },
     }),
 
     getFileServerWorkers: builder.query({
@@ -241,7 +274,7 @@ export const {
   useUpdateJobStatusMutation,
   useUpdateJobRunStatusMutation,
   useJobAdhocRunMutation,
-  useLazyGetJobTasksQuery,
+  useGetJobTasksQuery,
   useBulkMigrateMutation,
   usePrecheckMutation,
   useLazyGetAllFileServersWithVolumeQuery,

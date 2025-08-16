@@ -1,6 +1,6 @@
 import { TASK_STATUS_TYPE_ENUM, TASK_TYPE_TYPE_ENUM } from "@/types/app.type";
 import { getGrafanaLogUrl, toTitleCase } from "@/utils/common.utils";
-import { useLazyGetJobTasksQuery } from "@api/jobsApi";
+import { useGetJobTasksQuery } from "@api/jobsApi";
 import { Box } from "@components/container/index";
 import useFetchWorkers from "@hooks/useFetchWorkers";
 import TaskFilters from "@modules/jobs/jobs-list/job-details/job-run-details/job-tasks/TaskFilters";
@@ -13,27 +13,23 @@ import {
   useTable,
 } from "@netapp/bxp-design-system-react";
 import { useEffect, useMemo, useState } from "react";
-import {
-  Link,
-  useNavigate,
-  useParams,
-  useSearchParams,
-} from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { FetchBaseQueryError } from "@reduxjs/toolkit/query";
+import { SerializedError } from "@reduxjs/toolkit";
+import RefreshButton from "@components/refresh-button/RefreshButton";
 
 const JobTasks = () => {
   const [searchParams] = useSearchParams();
   const status = searchParams.get("status");
   const jobTasksCount = Number(searchParams.get("count"));
   const { jobId, jobRunId } = useParams<{ jobRunId: string; jobId: string }>();
-  const navigate = useNavigate();
   const [tableRows, setTableRows] = useState([]);
-  const [error, setError] = useState();
+  const [error, setError] = useState<FetchBaseQueryError | SerializedError>();
   const [totalCount, setTotalCount] = useState(0); // Total number of rows will come from the API
   const pageSize = 10; // rows per page
   const pageCount = Math.ceil(totalCount / pageSize);
   const rowsCountArray = Array(totalCount);
-  const [getJobTasks, { data: jobTaskData, isFetching: isLoading }] =
-    useLazyGetJobTasksQuery();
+  const [taskPayload, setTaskPayload] = useState<Record<string, string>>({});
   const [currentFilters, setCurrentFilters] = useState<any>(
     status ? { status: [{ label: toTitleCase(status), value: status }] } : {}
   );
@@ -51,10 +47,6 @@ const JobTasks = () => {
     isSorting: true,
     defaultSortState: { sortOrder: "desc", column: "createdAt" },
   });
-
-  useEffect(() => {
-    fetchRecords();
-  }, [pagination.pageIndex, sortState, currentFilters]);
 
   const fetchRecords = async () => {
     const payload: any = {
@@ -78,16 +70,30 @@ const JobTasks = () => {
         );
       }
     });
-
-    try {
-      setError(undefined);
-      await getJobTasks(payload).unwrap();
-    } catch (error) {
-      console.error({ error, level: "Task listing" });
-      if (error?.name === "AbortError") return;
-      setError(error);
-    }
+    setTaskPayload(payload);
   };
+
+  const {
+    data: jobTaskData,
+    isFetching: isLoading,
+    refetch,
+    error: jobTaskError,
+  } = useGetJobTasksQuery(taskPayload, {
+    skip: !jobRunId || !taskPayload?.jobRunId,
+  });
+
+  useEffect(() => {
+    if (jobRunId) {
+      fetchRecords();
+    }
+  }, [pagination?.pageIndex, sortState, currentFilters, jobRunId]);
+
+  useEffect(() => {
+    if (jobTaskError) {
+      if (jobTaskError?.name === "AbortError") return;
+      setError(jobTaskError);
+    }
+  }, [jobTaskError]);
 
   const getWorkersId = (workerName: string) => {
     return workers?.find((row) => row.workerName === workerName)?.workerId;
@@ -171,6 +177,9 @@ const JobTasks = () => {
           setFilters={setCurrentFilters}
           preSelectedFilter={preSelectedFilter}
         />
+        <Box className="flex justify-end m-2">
+          <RefreshButton isLoading={isLoading} onRefresh={refetch} />
+        </Box>
         <Table
           isLoading={isLoading}
           headerContainerStyle={{ top: 0 }}
@@ -180,12 +189,10 @@ const JobTasks = () => {
           toggleSort={toggleSort}
           rowState={rowState}
           fixedHeight="calc(100vh - 330px)"
-          rowMenu={rowMenu}
-          {...
-            (jobTasksCount > 0 && {
-              noDataLabel: import.meta.env.VITE_REFRESH_TO_GET_LATEST_DATA,
-            })
-          }
+          // rowMenu={rowMenu}
+          {...(jobTasksCount > 0 && {
+            noDataLabel: import.meta.env.VITE_REFRESH_TO_GET_LATEST_DATA,
+          })}
         />
         {tableRows.length > 0 && totalCount >= tableRows.length && (
           <Box>{RenderTablePager}</Box>

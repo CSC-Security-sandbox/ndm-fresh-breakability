@@ -1,0 +1,10 @@
+<p>Hello</p>
+<p>Config {{createConfig.configName}} has been created successfully</p>
+<p>with below server details:</p>
+
+{{#each createConfig.fileServers}}
+  <p>Server Name: {{host}}</p>
+  <p>Server Type: {{serverType}}</p>
+  <p>Protocol: {{protocol}}</p>
+  <p>Workers: {{workerNames.join ', '}}</p>
+{{/each}}

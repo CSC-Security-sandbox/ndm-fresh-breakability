@@ -1,14 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DataMigrator Alert</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DataMigrator Alert</title>
 </head>
 <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
-    <div style="max-width: 600px; background: #fff; padding: 20px;">
-        <p><strong>{{body}}</p>
-        <hr>
-    </div>
+  <div style="max-width: 600px; background: #fff; padding: 20px;">
+    {{#if (eq successEmailType 'create_configuration')}}
+      {{> create_configuration }}
+    {{/if}}
+
+    {{#if (eq successEmailType 'error_remedy')}}
+      {{> error_remedy }}
+    {{/if}}
+
+    {{#if (eq successEmailType 'job_creation')}}
+      {{> job_creation }}
+    {{/if}}
+
+    {{#if (eq successEmailType 'job_update')}}
+      {{> job_update }}
+    {{/if}}
+
+    {{#if (eq successEmailType 'update_configuration')}}
+      {{> update_configuration }}
+    {{/if}}
+
+    {{#if (eq successEmailType 'worker_usage')}}
+      {{> worker_usage }}
+    {{/if}}
+  </div>
 </body>
 </html>

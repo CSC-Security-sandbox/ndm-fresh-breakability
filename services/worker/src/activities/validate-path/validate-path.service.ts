@@ -1,8 +1,9 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import { AuthService } from "../../auth/auth.service";
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 type ValidatePathActivityInput = {
     path: string;
@@ -20,18 +21,22 @@ export class ValidatePathActivity {
     private readonly workerId: string;
     private readonly mountBasePath: string;
     private readonly workerConfigUrl: string;
+    private readonly logger: LoggerService;
+
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
-        private readonly logger: Logger,
         private readonly authService: AuthService,
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+        private readonly protocols: Protocols
     ) {
         this.workerId = this.configService.get('worker.workerId');
         this.mountBasePath = this.configService.get('worker.baseWorkingPath');
         this.workerConfigUrl = this.configService.get('worker.connection.workerConfigUrl');
+        this.logger = loggerFactory.create(ValidatePathActivity.name);
     }
 
     async validatePath({ path, host, username, password, protocol, uploadId, protocolVersion, pathId }: ValidatePathActivityInput): Promise<any> {
-        const protocolIns = Protocols.getProtocol(ProtocolTypes[protocol]);
+        const protocolIns = this.protocols.getProtocol(ProtocolTypes[protocol]);
         const mountBasePath = this.mountBasePath;
         try {
             // mount the path
@@ -45,7 +50,7 @@ export class ValidatePathActivity {
                 jobRunId: uploadId,
                 pathId,
                 path
-            });
+            }, false);
             // unmount the path
             this.logger.log(`[${this.workerId}] Unmounting path for worker ${this.workerId} with uploadId: ${uploadId}`);
             await protocolIns.unmountPath(uploadId, {
@@ -57,7 +62,7 @@ export class ValidatePathActivity {
                 jobRunId: uploadId,
                 pathId,
                 path,
-            });
+            }, false);
 
             this.logger.log(`[${this.workerId}] Validating paths for worker ${this.workerId}`);
             return {

@@ -17,6 +17,7 @@ import {
   JOB_CONFIG_STATUS_ENUM,
   JOB_STATUS_TYPE_ENUM,
   JobRunApiType,
+  JobRunErrorsOverviewApiType,
   JOBS_TYPE,
 } from "@/types/app.type";
 import { Breadcrumbs, Button, Heading } from "@netapp/bxp-design-system-react";
@@ -26,7 +27,11 @@ import JobErrors from "@modules/jobs/jobs-list/job-details/components/JobErrors"
 import JobHeader from "@modules/jobs/jobs-list/job-details/components/JobHeader";
 import { JOB_RUN_LIST_COLUMN_DEFS } from "@modules/jobs/jobs-list/job-details/job-details.constants";
 import { useParams } from "react-router-dom";
-import { handleDownloadReport } from "@modules/jobs/jobs.utils";
+import {
+  handleDownloadReport,
+  handleDownloadErrorsLogs,
+  handleDownloadCocReport,
+} from "@modules/jobs/jobs.utils";
 import {
   getActionMenu,
   getReportActions,
@@ -34,16 +39,29 @@ import {
 import { useMemo, useState, useEffect } from "react";
 import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
 import useAdhocRun from "@hooks/useAdhocRun";
+import {
+  useIsErrorLogsCsvReadyQuery,
+  useLazyGenerateErrorLogsQuery,
+  useLazyDownloadErrorLogsCSVQuery,
+} from "@api/reportApi";
+import { ErrorLogActionButton } from "@modules/jobs/job-task-errors/components/ErrorLogActionButton";
+import {
+  DOWNLOAD_BULK_ERROR_REPORT,
+  GENERATE_BULK_ERROR_REPORT,
+} from "@modules/jobs/job-task-errors/jobTaskErrors.constant";
 
 const JobDetails = () => {
   const LOWER_TIME_INTERVAL_FOR_IN_PROGRESS = 5000; // 5 seconds
+  const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
   const adhocRun = useAdhocRun();
-  const { jobId } = useParams<{ jobId: string }>();
+
   const [openConfirmation, setOpenConfirmation] = useState(false);
   const [selectedJobRunId, setSelectedJobRunId] = useState("");
   const [isFrequentInterval, setIsFrequentInterval] = useState<boolean>(false);
 
+  const [showGeneratingReportBtn, setShowGeneratingReportBtn] =
+    useState<Record<string, boolean>>();
   const {
     data: jobConfigDetails,
     isLoading,
@@ -61,6 +79,18 @@ const JobDetails = () => {
       skipPollingIfUnfocused: true,
     }
   );
+  const [downloadErrorLogs] = useLazyDownloadErrorLogsCSVQuery();
+  const [generateErrorLogs] = useLazyGenerateErrorLogsQuery();
+  const { data } = useIsErrorLogsCsvReadyQuery(
+    { type: "job-config", id: jobId },
+    {
+      pollingInterval: Number(
+        window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
+      ),
+      skipPollingIfUnfocused: true,
+      skip: !jobId,
+    }
+  );
 
   useEffect(() => {
     if (jobConfigDetails?.jobRuns?.length === 0) {
@@ -73,9 +103,7 @@ const JobDetails = () => {
   const [downloadReportApi] = useDownloadReportsMutation();
   const [getPdfReportApi] = useGetPdfReportMutation();
 
-  const canDownloadReport = hasPermission(
-    USER_PERMISSION_TYPE_ENUM.Reports
-  );
+  const canDownloadReport = hasPermission(USER_PERMISSION_TYPE_ENUM.Reports);
 
   const [updateStatus, { isLoading: isUpdating }] =
     useUpdateJobRunStatusMutation();
@@ -100,6 +128,7 @@ const JobDetails = () => {
       ? getReportActions(
           row,
           handleDownloadReport,
+          handleDownloadCocReport,
           downloadReportApi,
           getPdfReportApi
         )
@@ -158,6 +187,13 @@ const JobDetails = () => {
     defaultSortState: { sortOrder: "desc", column: "startTime" },
   };
 
+  const errorsCount = useMemo(() => {
+    if (!jobConfigDetails?.jobRuns) return [];
+    return jobConfigDetails.jobRuns.flatMap((run) =>
+      run.errors ? run.errors.map((error) => error.count || 0) : []
+    );
+  }, [jobConfigDetails]);
+
   const latestJobRunId = useMemo(() => {
     if (!jobConfigDetails?.jobRuns || jobConfigDetails.jobRuns.length === 0) {
       return undefined;
@@ -171,6 +207,53 @@ const JobDetails = () => {
 
     return sortedJobRuns[0]?.jobRunId;
   }, [jobConfigDetails?.jobRuns]);
+
+  useEffect(() => {
+    if (data?.ready || data?.processing) {
+      setShowGeneratingReportBtn({});
+    }
+  }, [data]);
+
+  const generateErrorReport = async () => {
+    try {
+      await generateErrorLogs({ type: "job-config", id: jobId }).unwrap();
+      setShowGeneratingReportBtn({
+        ready: false,
+        processing: true,
+      });
+      notify.success("Error Report generation started successfully.");
+    } catch (error) {
+      const errorMsg = "Error while downloading error logs.";
+      notify.error(error?.data?.displayMessage || errorMsg);
+      console.error(`errorMsg ${error?.data?.message}`);
+    }
+  };
+
+  const isDisplayGeneratingLabel = useMemo(() => {
+    const hasReportData =
+      showGeneratingReportBtn && Object.keys(showGeneratingReportBtn).length;
+
+    return hasReportData ? showGeneratingReportBtn : data;
+  }, [showGeneratingReportBtn]);
+
+  const errorLogContent = useMemo(() => {
+    return (
+      <ErrorLogActionButton
+        generateLabel={GENERATE_BULK_ERROR_REPORT}
+        downloadLabel={DOWNLOAD_BULK_ERROR_REPORT}
+        data={isDisplayGeneratingLabel}
+        disabled={errorsCount.length === 0}
+        handleGenerate={generateErrorReport}
+        handleDownload={() =>
+          handleDownloadErrorsLogs(
+            downloadErrorLogs,
+            { type: "job-config", id: jobId },
+            "CSV"
+          )
+        }
+      />
+    );
+  }, [jobId, downloadErrorLogs, generateErrorReport]);
 
   return (
     <Box className="flex flex-col gap-4">
@@ -224,7 +307,7 @@ const JobDetails = () => {
         isLoading={isLoading}
         rowMenu={rowMenu}
         label="Run History"
-        content={<></>}
+        content={errorLogContent}
         isTogglingColumns={true}
         originalColumns={JOB_RUN_LIST_COLUMN_DEFS}
         refetchTableData={refetch}

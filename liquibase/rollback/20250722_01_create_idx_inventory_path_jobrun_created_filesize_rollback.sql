@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS datamigrator.idx_inventory_path_jobrun_created_filesize;

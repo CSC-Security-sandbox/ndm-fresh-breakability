@@ -1,5 +1,5 @@
 import { SpeedTestWorkflow } from './speed-test-workflow';
-import { TaskStatus } from 'src/activities/discovery/enums';
+import { TaskStatus } from 'src/activities/common/enums';
 const { executeChild } = require('@temporalio/workflow');
 const { proxyActivities } = require('@temporalio/workflow');
 

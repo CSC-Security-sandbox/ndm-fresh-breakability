@@ -1,5 +1,5 @@
 import { proxyActivities } from '@temporalio/workflow';
-import { JobServiceJobType } from '../../activities/discovery/enums';
+import { JobServiceJobType } from '../../activities/common/enums';
 import { SetupActivityService } from '../../activities/setup-worker/setup.activity.service';
 import { SetupWorkerParams } from '../../activities/types/tasks';
 

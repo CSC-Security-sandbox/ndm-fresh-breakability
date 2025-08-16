@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SpeedTestActivities } from './speed-test-activities';
-import { Logger } from '@nestjs/common';
 import { mocked } from 'jest-mock';
 import { RedisService } from 'src/redis/redis.service';
 import axios from 'axios';
@@ -8,6 +7,8 @@ import { WorkersConfig } from 'src/config/app.config';
 import * as ping from 'ping';
 import { FileServerDetails, NFS } from '@netapp-cloud-datamigrate/jobs-lib';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLogger } from 'src/auth/auth.service.spec';
 
 jest.mock('ping', () => ({
   promise: {
@@ -19,14 +20,6 @@ jest.mock('axios');
 const mockPingProbe = mocked(ping.promise.probe);
 const mockAxiosPost = mocked(axios.post);
 const mockWorkersConfigGet = jest.spyOn(WorkersConfig, 'get');
-
-const mockLogger = {
-  log: jest.fn(),
-  error: jest.fn(),
-  warn: jest.fn(),
-  debug: jest.fn(),
-  verbose: jest.fn(),
-};
 
 const mockJobContext = {
   getJobState: jest.fn().mockResolvedValue({}),
@@ -43,14 +36,21 @@ describe('SpeedTestActivities', () => {
   let redisService: RedisService;
   let mockReadFile: jest.SpyInstance;
   let mockCreateFile: jest.SpyInstance;
+  let loggerFactory: LoggerFactory;
 
   beforeEach(async () => {
+    const mockLoggerFactory = {
+      create: jest.fn().mockReturnValue(mockLogger),
+    };
+
+    loggerFactory = mockLoggerFactory as unknown as LoggerFactory;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SpeedTestActivities,
         {
-          provide: Logger,
-          useValue: mockLogger,
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
         },
         {
           provide: RedisService,

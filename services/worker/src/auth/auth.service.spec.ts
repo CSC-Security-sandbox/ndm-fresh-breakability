@@ -4,13 +4,25 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { of, throwError } from 'rxjs';
 import { AxiosResponse } from 'axios';
-import { Logger } from 'src/logger/logger.service';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+
+export const mockLogger = {
+  log: jest.fn(),
+  error: jest.fn(),
+  warn: jest.fn(),
+  debug: jest.fn(),
+};
+
+export const mockLoggerFactory = {
+  create: jest.fn().mockReturnValue(mockLogger),
+};
 
 describe('AuthService', () => {
   let authService: AuthService;
   let httpService: HttpService;
   let configService: ConfigService;
-  let logger: Logger;
+  let loggerFactory: LoggerFactory;
+  let logger: LoggerService;
 
   const mockKeycloakConfig = {
     baseUrl: 'http://localhost:8080',
@@ -43,12 +55,9 @@ describe('AuthService', () => {
             }),
           },
         },
-        {
-          provide: Logger,
-          useValue: {
-            log: jest.fn(),
-            error: jest.fn(),
-          },
+        { 
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory
         },
       ],
     }).compile();
@@ -56,7 +65,8 @@ describe('AuthService', () => {
     authService = moduleRef.get<AuthService>(AuthService);
     httpService = moduleRef.get<HttpService>(HttpService);
     configService = moduleRef.get<ConfigService>(ConfigService);
-    logger = moduleRef.get<Logger>(Logger);
+    loggerFactory = moduleRef.get<LoggerFactory>(LoggerFactory);
+    logger = loggerFactory.create(AuthService.name);
   });
 
   afterEach(() => {

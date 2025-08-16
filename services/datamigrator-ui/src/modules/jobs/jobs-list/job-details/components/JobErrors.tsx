@@ -23,14 +23,21 @@ const JobErrors = ({ latestJobRunId }: { latestJobRunId: string }) => {
   const handlerErrorNavigation = useCallback(() => {
     if (latestJobRunId) {
       // FOR JOB DETAILS SCREEN
-      navigate(`run/${latestJobRunId}/errors`);
+      navigate(`${latestJobRunId}/errors`);
     } else {
       // FOR JOB RUN DETAILS SCREEN
       navigate(`errors`);
     }
   }, [latestJobRunId, navigate]);
 
-  const totalErrorsCount = useMemo(() => errorDetails.reduce((totalErrors, error) => totalErrors + Number(error.count), 0), [errorDetails]);
+  const totalErrorsCount = useMemo(
+    () =>
+      errorDetails.reduce(
+        (totalErrors, error) => totalErrors + Number(error.count),
+        0
+      ),
+    [errorDetails]
+  );
 
   return (
     <Card className="h-full">

@@ -44,6 +44,13 @@
       <rollback>
       </rollback>
    </changeSet>
+
+   <changeSet id="20250729_01_alter_worker_table_add_env_variables.sql" author="rutuja">
+      <sqlFile path="liquibase/20250729_01_alter_worker_table_add_env_variables.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/rollback/20250729_01_alter_worker_table_add_env_variables_rollback.sql"/>
+      </rollback>
+   </changeSet>
    
    <changeSet id="20250228_01_error_message_column.sql" author="aniketd">
       <sqlFile path="liquibase/20250228_01_error_message_column.sql"/>
@@ -380,5 +387,69 @@
         <rollback>
         </rollback>
     </changeSet>
+
+   <changeSet id="20250721_01_update_no_space_left_error_remedy.sql" author="harshitasaxena">
+      <sqlFile path="liquibase/20250721_01_update_no_space_left_error_remedy.sql" splitStatements="false"/>
+      <rollback>
+         <sqlFile path="liquibase/20250721_01_update_no_space_left_error_remedy_rollback.sql" splitStatements="false"/>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250725_01_alter_inventory_add_meta_column.sql" author="akunal">
+      <sqlFile path="liquibase/20250725_01_alter_inventory_add_meta_column.sql" splitStatements="false"/>
+      <rollback>
+         <sqlFile path="liquibase/20250725_01_alter_inventory_add_meta_column_rollback.sql" splitStatements="false"/>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250722_01_create_idx_inventory_path_jobrun_created_filesize.sql" author="salim-jujara">
+      <sqlFile path="liquibase/20250722_01_create_idx_inventory_path_jobrun_created_filesize.sql" splitStatements="false"/>
+      <rollback>
+         <sqlFile path="liquibase/20250722_01_create_idx_inventory_path_jobrun_created_filesize_rollback.sql" splitStatements="false"/>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250724_07_add_smtp_permission.sql" author="ramyag">
+      <sqlFile path="liquibase/20250724_07_add_smtp_permission.sql" splitStatements="false"/>
+      <rollback></rollback>
+   </changeSet>
+
+   <changeSet id="20250727_01_inventory_table_index.sql" author="dinesh_seervi" runInTransaction="false">
+      <sqlFile path="liquibase/20250727_01_inventory_table_index.sql" splitStatements="false"/>
+      <rollback></rollback>
+   </changeSet>
+
+   <changeSet id="20250727_02_jobs_report_proc.sql" author="dinesh_seervi">
+      <sqlFile path="liquibase/20250727_02_jobs_report_proc.sql" splitStatements="false"/>
+      <rollback></rollback>
+   </changeSet>
+
+   <changeSet id="20250729_01_add_listusers_permission_to_project_viewer_role" author="mshubha1">
+      <sqlFile path="liquibase/20250729_01_add_listusers_permission_to_project_viewer_role.sql" splitStatements="false"/>
+      <rollback> </rollback>
+   </changeSet>
+
+   <changeSet id="20250714_01_create_support_bundle_table.sql" author="aniketd">
+      <sqlFile path="liquibase/20250714_01_create_support_bundle_table.sql" splitStatements="false"/>
+      <rollback>
+         <sqlFile path="liquibase/20250714_01_create_support_bundle_table_rollback.sql"/>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250804_01_add_createproject_permission" author="aniketd">
+      <sqlFile path="liquibase/20250804_01_add_createproject_permission.sql" splitStatements="false"/>
+      <rollback>
+         <sqlFile path="liquibase/20250804_01_add_createproject_permission_rollback.sql"/>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20250807_05_discovery_report_proc_added_Top_File_Extensions-suffix-removed-special-file.sql"
+              author="gm67249">
+      <sqlFile
+              path="liquibase/20250807_05_discovery_report_proc_added_Top_File_Extensions-suffix-removed-special-file.sql"
+              splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
 
 </databaseChangeLog>

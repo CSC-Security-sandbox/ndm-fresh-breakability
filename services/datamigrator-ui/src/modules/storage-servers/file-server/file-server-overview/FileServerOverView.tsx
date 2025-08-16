@@ -14,8 +14,13 @@ import { InitialFileServerOverviewApiData } from "@modules/storage-servers/file-
 import { notify } from "@components/notification/NotificationWrapper";
 
 const FileServerOverView = () => {
-  const { fileServerDetails, allExportPaths, allWorkersList } =
-    useFileServerDetails();
+  const {
+    fileServerDetails,
+    allExportPaths,
+    allWorkersList,
+    refetch,
+    isFetching,
+  } = useFileServerDetails();
   const [getFileOverviewApi, { isLoading, isError, data }] =
     useLazyGetFileOverviewQuery({
       pollingInterval: Number(
@@ -78,6 +83,8 @@ const FileServerOverView = () => {
         fileServerDetails={fileServerDetails}
         allExportPaths={allExportPaths}
         allWorkersList={allWorkersList}
+        refetch={refetch}
+        isFetching={isFetching}
       />
     </Box>
   );

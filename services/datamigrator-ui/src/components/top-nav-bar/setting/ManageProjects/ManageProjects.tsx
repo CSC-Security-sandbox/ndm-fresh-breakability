@@ -1,15 +1,17 @@
-import {Button} from '@netapp/bxp-design-system-react';
-import {useState} from 'react';
-import Box from '@/components/container/Box';
-import TableWrapper from '@components/table-wrapper/TableWrapper';
-import {COL_DEF_FOR_PROJECT} from '@/constant/app.constants';
-import CreateProjectForm from '@components/top-nav-bar/setting/ManageProjects/CreateProject';
-import useAccountDetails from '@/hooks/useAccountDetails';
-import {useGetAllProjectsQuery} from '@api/projectApi';
-import {hasPermission} from '@/auth/auth.utils';
-import {USER_PERMISSION_TYPE_ENUM} from '@auth/permissionAuth.constant';
-import PermissionAuth from '@/auth/PermissionAuth';
-import {Collapse} from '@mui/material';
+import { Button } from "@netapp/bxp-design-system-react";
+import { useState } from "react";
+import Box from "@/components/container/Box";
+import TableWrapper from "@components/table-wrapper/TableWrapper";
+import { COL_DEF_FOR_PROJECT } from "@/constant/app.constants";
+import CreateProjectForm from "@components/top-nav-bar/setting/ManageProjects/CreateProject";
+import useAccountDetails from "@/hooks/useAccountDetails";
+import { useGetAllProjectsQuery } from "@api/projectApi";
+import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
+import PermissionAuth from "@/auth/PermissionAuth";
+import { Collapse } from "@mui/material";
+import { useSelector } from "react-redux";
+import { RootStateType } from "@store/store";
+import { getProjectPermissions } from "@/utils/common.utils";
 
 const ManageProject = () => {
   const [editSelectedProject, setEditSelectedProject] = useState();
@@ -27,9 +29,17 @@ const ManageProject = () => {
     setIsCreateFormVisible(false);
   };
 
-  const canManageProject: boolean = hasPermission(
-    USER_PERMISSION_TYPE_ENUM.UpdateProject
+  const userPermissions = useSelector(
+    (state: RootStateType) => state.permissionSlice?.userPermissions
   );
+
+  const canManageProject = (projectId: string): boolean => {
+    return (
+      getProjectPermissions(projectId, userPermissions)?.includes(
+        USER_PERMISSION_TYPE_ENUM.UpdateProject
+      ) ?? false
+    );
+  };
 
   const rowMenu = (row) => {
     return [
@@ -39,14 +49,14 @@ const ManageProject = () => {
           setEditSelectedProject(row);
           setIsCreateFormVisible(true);
         },
-        disabled: !canManageProject,
+        disabled: !canManageProject(row.id),
       },
     ];
   };
 
   const tableStateProps = {
     columns: COL_DEF_FOR_PROJECT,
-    rows: projectList?.data?.items,
+    rows: projectList,
     isSorting: true,
     pageSize: 10,
   };
@@ -68,9 +78,9 @@ const ManageProject = () => {
           label="Projects"
           content={
             <PermissionAuth
-              permissionName={USER_PERMISSION_TYPE_ENUM.DeleteProject}
+              permissionName={USER_PERMISSION_TYPE_ENUM.CreateProject}
             >
-              <Button onClick={() => setIsCreateFormVisible(true)} className="ml-4">
+              <Button onClick={() => setIsCreateFormVisible(true)}>
                 Add Project
               </Button>
             </PermissionAuth>

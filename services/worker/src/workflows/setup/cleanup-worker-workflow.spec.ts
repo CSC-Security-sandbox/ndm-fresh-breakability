@@ -1,7 +1,7 @@
 import { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
 import { CleanupWorkerWorkflow } from './cleanup-worker-workflow'
-import { JobServiceJobType } from 'src/activities/discovery/enums';
+import { JobServiceJobType } from 'src/activities/common/enums';
 
 
 const mockedActivities = {

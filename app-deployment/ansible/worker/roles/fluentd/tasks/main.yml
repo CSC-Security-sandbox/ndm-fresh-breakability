@@ -1,0 +1,66 @@
+---
+- name: Install Fluentd for Ubuntu 24.04 Noble LTS
+  shell: |
+    curl -fsSL https://toolbelt.treasuredata.com/sh/install-ubuntu-noble-fluent-package5-lts.sh | sh
+  when: 
+    - ansible_distribution == "Ubuntu"
+    - ansible_distribution_version == "24.04"
+  tags:
+    - fluentd
+    - install
+
+- name: Verify Fluentd installation
+  command: /opt/fluent/bin/fluentd --version
+  register: fluentd_verify
+  changed_when: false
+  tags:
+    - fluentd
+    - install
+
+- name: Create fluentd log directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: _fluentd
+    group: _fluentd
+    mode: '0755'
+  loop:
+    - /var/log/fluentd
+    - /var/log/fluentd/buffer
+  tags:
+    - fluentd
+    - configure
+
+- name: Generate fluentd configuration
+  template:
+    src: fluentd.conf.j2
+    dest: /etc/fluent/fluentd.conf
+    mode: '0644'
+    backup: yes
+  tags:
+    - fluentd
+    - configure
+
+- name: Ensure fluentd service is in stopped state
+  systemd:
+    name: fluentd
+    enabled: false
+    state: stopped
+  tags:
+    - fluentd
+    - service
+
+- name: Check fluentd service status
+  systemd:
+    name: fluentd
+  register: fluentd_status
+  tags:
+    - fluentd
+    - verify
+
+- name: Display fluentd service status
+  debug:
+    msg: "Fluentd service is {{ fluentd_status.status.ActiveState }} (will be started during worker registration)"
+  tags:
+    - fluentd
+    - verify

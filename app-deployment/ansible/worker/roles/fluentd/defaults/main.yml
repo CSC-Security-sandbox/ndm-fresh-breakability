@@ -1,0 +1,17 @@
+---
+# Fluentd configuration variables
+fluentd_control_plane_port: 32422
+fluentd_log_level: "info"
+
+fluentd_worker_log_path: "/opt/datamigrator/logs/*.log"
+fluentd_pos_file_path: "/var/log/fluentd"
+fluentd_buffer_path: "/var/log/fluentd/buffer"
+
+# Service configuration
+fluentd_flush_interval: "30s"
+fluentd_retry_wait: "5s"
+fluentd_retry_max_interval: "300s"
+fluentd_retry_timeout: "24h"
+fluentd_send_timeout: "60s"
+fluentd_heartbeat_interval: "15s"
+

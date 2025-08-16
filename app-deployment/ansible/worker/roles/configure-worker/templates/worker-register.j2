@@ -5,6 +5,7 @@ MAX_RETRIES=3
 RETRY_DELAY=5
 WAIT_TIMEOUT=600
 ENV_FILE="/opt/datamigrator/conf/worker.env"
+FLUENTD_CONFIG="/etc/fluent/fluentd.conf"
 
 # Function to log messages with timestamps
 log_message() {
@@ -39,17 +40,50 @@ handle_failure() {
     exit 1
 }
 
+# Function to update Fluentd configuration
+update_fluentd_config() {
+    log_message "Updating Fluentd configuration with worker details..."
+
+    if systemctl is-active --quiet fluentd; then
+        log_message "Fluentd service is currently running. Stopping it before configuration update..."
+        retry "$MAX_RETRIES" "systemctl stop fluentd" || log_message "WARNING: Failed to stop Fluentd service."
+    fi
+    
+    if grep -q "PLACEHOLDER_WORKER_ID\|PLACEHOLDER_CONTROL_PLANE_IP" "$FLUENTD_CONFIG"; then
+        log_message "First-time registration detected. Updating placeholder values..."
+        sed -i "s/PLACEHOLDER_WORKER_ID/${WORKER_ID}/g" "$FLUENTD_CONFIG"
+        sed -i "s/PLACEHOLDER_CONTROL_PLANE_IP/${CONTROL_PLANE_IP}/g" "$FLUENTD_CONFIG"
+    else
+        log_message "Re-registration detected. Updating existing values..."
+        sed -i "s/worker_id [^[:space:]]*/worker_id ${WORKER_ID}/g" "$FLUENTD_CONFIG"
+        sed -i "s/host [^[:space:]]*/host ${CONTROL_PLANE_IP}/g" "$FLUENTD_CONFIG"
+        sed -i "s/self_hostname [^[:space:]]*/self_hostname ${WORKER_ID}-linux/g" "$FLUENTD_CONFIG"
+    fi
+    
+    if [ "$?" -eq 0 ]; then
+        log_message "Fluentd configuration updated successfully."
+
+        log_message "Starting Fluentd service with updated configuration..."
+        retry "$MAX_RETRIES" "systemctl start fluentd" || log_message "WARNING: Failed to start Fluentd service. You may need to start it manually."
+        
+        log_message "Ensuring Fluentd service is enabled for automatic startup..."
+        retry "$MAX_RETRIES" "systemctl enable fluentd" || log_message "WARNING: Failed to enable Fluentd service for automatic startup."
+    else
+        log_message "WARNING: Failed to update Fluentd configuration."
+    fi
+}
+
 # Check if required environment variables are set
 log_message "Checking required environment variables..."
-if [ -z "$CONTROL_PLANE_IP" ] || [ -z "$WORKER_ID" ] || [ -z "$WORKER_SECRET" ] ; then
-    handle_failure "One or more required environment variables (CONTROL_PLANE_IP, WORKER_ID, WORKER_SECRET) are missing."
+if [ -z "$CONTROL_PLANE_IP" ] || [ -z "$WORKER_ID" ] || [ -z "$WORKER_SECRET" ] || [ -z "$PROJECT_ID" ]; then
+    handle_failure "One or more required environment variables (CONTROL_PLANE_IP, WORKER_ID, WORKER_SECRET, PROJECT_ID) are missing."
 fi
 log_message "Required environment variables are set."
 
 # Check for existing environment variables in the worker.env file
 log_message "Checking for existing variables in $ENV_FILE."
 if [ -f "$ENV_FILE" ]; then
-    if grep -E "^(WORKER_CONFIG_URL|WORKER_JOB_SERVICE_URL|TEMPORAL_ADDRESS|WORKER_REPORT_SERVICE_URL|KEYCLOAK_BASE_URL|WORKER_ID|WORKER_SECRET|REDIS_HOST|REDIS_USERNAME|REDIS_PASSWORD)=" "$ENV_FILE" >/dev/null; then
+    if grep -E "^(WORKER_CONFIG_URL|WORKER_JOB_SERVICE_URL|TEMPORAL_ADDRESS|WORKER_REPORT_SERVICE_URL|KEYCLOAK_BASE_URL|WORKER_ID|WORKER_SECRET|REDIS_HOST|REDIS_USERNAME|REDIS_PASSWORD|CONTROL_PLANE_IP|PROJECT_ID|OTEL_COLLECTOR_ENDPOINT)=" "$ENV_FILE" >/dev/null; then
         log_message "WARNING: Some environment variables already exist in $ENV_FILE."
         handle_failure "Existing variables detected in $ENV_FILE. Manual intervention required."
     fi
@@ -70,6 +104,8 @@ log_message "Creating $ENV_FILE with necessary environment variables."
     echo "REDIS_HOST=${CONTROL_PLANE_IP}"
     echo "REDIS_USERNAME=default"
     echo "REDIS_PASSWORD=welcome"
+    echo "PROJECT_ID=${PROJECT_ID}"
+    echo "OTEL_COLLECTOR_ENDPOINT=${CONTROL_PLANE_IP}:4318"
 } >> "$ENV_FILE"
 
 # Check if the worker.env file was created successfully
@@ -77,6 +113,15 @@ if [ "$?" -ne 0 ]; then
     handle_failure "Failed to create $ENV_FILE."
 fi
 log_message "$ENV_FILE file created successfully."
+
+update_fluentd_config
+
+log_message "Verifying Fluentd service status..."
+if systemctl is-active --quiet fluentd; then
+    log_message "Fluentd service is running successfully."
+else
+    log_message "WARNING: Fluentd service is not running. Check logs with: journalctl -u fluentd"
+fi
 
 # Start the worker service 
 log_message "Starting the worker service."
@@ -86,4 +131,4 @@ retry "$MAX_RETRIES" "systemctl start datamigrator-worker.service" || handle_fai
 log_message "Enabling worker service to start on boot."
 retry "$MAX_RETRIES" "systemctl enable datamigrator-worker.service" || handle_failure "Failed to enable worker service to start on boot."
 
-log_message "Worker service setup complete. Service started and enabled successfully."
+log_message "Worker registration complete. Worker service and Fluentd logging service started and enabled successfully."

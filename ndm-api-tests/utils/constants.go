@@ -15,6 +15,7 @@ var (
 	JOB_SERVICE_URL         string
 	CONFIG_SERVICE_URL      string
 	ADMIN_SERVICE_URL       string
+	REPORT_SERVICE_URL      string
 	KEYCLOAK_IP             string
 	CLIENT_SECRET           string
 	USERNAME                string
@@ -64,6 +65,9 @@ const (
 	JOBS_ENDPOINT                                   = "/api/v1/jobs"
 	FILE_SERVER_REFRESH_URL                         = "/api/v1/servers/refresh"
 	ADHOC_JOBRUN_URL                                = "/api/v1/job-run/ad-hoc"
+	IS_SUPPORT_BUNDLE_READY_URL                     = "/api/v1/support-bundle/is-bundle-ready"
+	GENERATE_SUPPORT_BUNDLE_URL                     = "/api/v1/support-bundle"
+	DOWNLOAD_SUPPORT_BUNDLE_URL                     = "/api/v1/support-bundle/download"
 	JobTypeDiscovery                JobType         = "DISCOVER"
 	JobTypeCutover                  JobType         = "CUTOVER"
 	JobTypeMigration                JobType         = "MIGRATE"
@@ -77,6 +81,7 @@ const (
 	COMPLETED_JOBRUN                                = "COMPLETED"
 	RESUME_JOBRUN                                   = "RESUME"
 	STOP_JOBRUN                                     = "STOP"
+	STOPPED_JOBRUN                                  = "STOPPED"
 	READY_JOBRUN                                    = "READY"
 	BLOCKED_JOBRUN                                  = "BLOCKED"
 	APPROVED_JOBRUN                                 = "APPROVED"
@@ -103,6 +108,7 @@ func init() {
 	JOB_SERVICE_URL = os.Getenv("JOB_SERVICE_URL")
 	CONFIG_SERVICE_URL = os.Getenv("CONFIG_SERVICE_URL")
 	ADMIN_SERVICE_URL = os.Getenv("ADMIN_SERVICE_URL")
+	REPORT_SERVICE_URL = os.Getenv("REPORT_SERVICE_URL")
 	KEYCLOAK_IP = os.Getenv("KEYCLOAK_IP")
 	USERNAME = os.Getenv("NDM_USERNAME")
 	PASSWORD = os.Getenv("PASSWORD")

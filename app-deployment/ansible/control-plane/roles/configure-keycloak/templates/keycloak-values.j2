@@ -123,6 +123,24 @@ tls:
 proxy: edge
 production: true
 
+{% if local_cluster is defined %}
+resources:
+  requests:
+    cpu: 350m
+    memory: 700Mi
+  limits:
+    cpu: 1000m
+    memory: 1000Mi
+{% else %}
+resources:
+  requests:
+    cpu: 750m
+    memory: 1000Mi
+  limits:
+    cpu: 1350m
+    memory: 1350Mi
+{% endif %}
+
 extraEnvVars:
     - name: MY_HOST_IP
       valueFrom:
@@ -154,4 +172,4 @@ containerSecurityContext:
   runAsUser: {{ vm_uid }}
   runAsNonRoot: true
   runAsGroup: {{ vm_gid }}
-  fsGroup: {{ vm_gid }}
+

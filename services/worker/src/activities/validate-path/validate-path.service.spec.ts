@@ -1,20 +1,15 @@
 import { ValidatePathActivity } from './validate-path.service';
 import { ConfigService } from '@nestjs/config';
-import { Logger } from '@nestjs/common';
 import axios from 'axios';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import { AuthService } from 'src/auth/auth.service';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { SMBProtocol } from '../../protocols/smb/smb.protocol';
+import { NFSProtocol } from '../../protocols/nfs/nfs.protocol';
+import { mockLogger } from 'src/auth/auth.service.spec';
+import { WorkersConfig } from 'src/config/app.config';
 
 jest.mock('axios');
-jest.mock('src/protocols/protocols', () => ({
-    Protocols: {
-        getProtocol: jest.fn(),
-    },
-    ProtocolTypes: {
-        NFS: 'NFS',
-        SMB: 'SMB',
-    },
-}));
 
 const mockConfigService = {
     get: jest.fn(),
@@ -24,11 +19,6 @@ const mockAuthService = {
     getAccessToken: jest.fn().mockResolvedValue('mocked-access-token'),
 }
 
-const mockLogger = {
-    log: jest.fn(),
-    error: jest.fn(),
-};
-
 const mockProtocolInstance = {
     mountPath: jest.fn(),
     unmountPath: jest.fn(),
@@ -36,6 +26,9 @@ const mockProtocolInstance = {
 
 describe('ValidatePathActivity', () => {
     let service: ValidatePathActivity;
+    let protocols: Protocols;
+    let loggerFactory: LoggerFactory;
+    let mockLoggerInstance: any;
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -51,11 +44,27 @@ describe('ValidatePathActivity', () => {
                     return undefined;
             }
         });
-        (Protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocolInstance);
+
+        WorkersConfig.configService = mockConfigService as any;
+
+        loggerFactory = {
+            create: jest.fn().mockReturnValue(mockLogger),
+        } as any;
+
+
+        protocols = new Protocols(
+            new NFSProtocol(loggerFactory),
+            new SMBProtocol(loggerFactory)
+        );
+
+        jest.spyOn(protocols, 'getProtocol').mockReturnValue(mockProtocolInstance as any);
+
         service = new ValidatePathActivity(
             mockConfigService as any as ConfigService,
-            mockLogger as any as Logger,
+            // mockLogger as any as Logger,
             mockAuthService as any as AuthService,
+            loggerFactory as LoggerFactory,
+            protocols as Protocols,
         );
     });
 
@@ -77,7 +86,7 @@ describe('ValidatePathActivity', () => {
 
             const result = await service.validatePath(input as any);
 
-            expect(Protocols.getProtocol).toHaveBeenCalledWith(ProtocolTypes[input.protocol]);
+            expect(protocols.getProtocol).toHaveBeenCalledWith(ProtocolTypes[input.protocol]);
             expect(mockProtocolInstance.mountPath).toHaveBeenCalledWith(input.uploadId, expect.objectContaining({
                 hostname: input.host,
                 username: input.username,
@@ -87,8 +96,8 @@ describe('ValidatePathActivity', () => {
                 jobRunId: input.uploadId,
                 pathId: input.pathId,
                 path: input.path,
-            }));
-            expect(mockProtocolInstance.unmountPath).toHaveBeenCalledWith(input.uploadId, expect.any(Object));
+            }), false);
+            expect(mockProtocolInstance.unmountPath).toHaveBeenCalledWith(input.uploadId, expect.any(Object), false);
             expect(result).toEqual({
                 traceId: input.uploadId,
                 status: 'success',

@@ -1,16 +1,19 @@
 import { Injectable, NestMiddleware, Inject } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
-import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
-import { Logger } from 'winston';
 import { v4 as uuidv4 } from 'uuid';
 import {RequestContext, RequestContextData} from "./request-context";
+import { LoggerService } from '../logger/logger.service';
+import { LoggerFactory } from '../logger/logger.factory';
 
 @Injectable()
 export class RequestContextMiddleware implements NestMiddleware {
+  readonly logger: LoggerService
   constructor(
-    @Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger,
-    @Inject(RequestContext) private readonly requestContext: RequestContext
-  ) {}
+    @Inject(RequestContext) private readonly requestContext: RequestContext,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory
+  ) {
+    this.logger = loggerFactory.create(RequestContextMiddleware.name);
+  }
 
   use(req: Request, res: Response, next: NextFunction) {
     // Extract trackId from headers or generate a new one
@@ -18,20 +21,17 @@ export class RequestContextMiddleware implements NestMiddleware {
         (req.get('trackId') as string) ||
         uuidv4();
 
-    const context: RequestContextData = { trackId: trackId };
+    const projectId = (req.get('projectId') as string);    
+
+    // Sanitize URL to remove sensitive query parameters
+    const sanitizedUrl = req.url.split('?')[0];
+    
+    const context: RequestContextData = { trackId: trackId, projectId: projectId };
     req['trackId'] = trackId;
 
     this.requestContext.run(context, () => {
-      this.logger.info({
-        context: RequestContextMiddleware.name,
-        trackId,
-        message: `Incoming request: [${req.method}] ${req.url}`,
-        ip: req.ip,
-        headers: (() => {
-          const headers = { ...req.headers };
-          delete headers['authorization'];
-          return headers;
-        })(),
+      this.logger.log(`Incoming request: [${req.method}] ${sanitizedUrl}`, {
+        projectId,
       });
 
       res.on('finish', () => {
@@ -39,9 +39,8 @@ export class RequestContextMiddleware implements NestMiddleware {
         const logLevel = statusCode >= 400 ? 'error' : 'info';
 
         this.logger.log(logLevel, {
-          context: RequestContextMiddleware.name,
-          trackId,
-          message: `Response sent: [${req.method}] ${req.url} - ${statusCode}`,
+          projectId,
+          message: `Response sent: [${req.method}] ${sanitizedUrl} - ${statusCode}`,
         });
       });
 

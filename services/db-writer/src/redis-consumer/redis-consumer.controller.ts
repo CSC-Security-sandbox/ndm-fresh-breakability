@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Inject } from '@nestjs/common';
 import { ApiBody, ApiExcludeController, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { ConsumerDto } from './redis-consumer.dto';
 import { RedisConsumerService } from './redis-consumer.service';
 import { ConsumerType } from '../enum/redis-consumer.enum';
@@ -7,7 +8,14 @@ import { ConsumerType } from '../enum/redis-consumer.enum';
 @Controller('redis-consumer')
 @ApiExcludeController() // Exclude this controller from Swagger documentation
 export class RedisConsumerController {
-    constructor(private redisConsumerService: RedisConsumerService) {}
+    private readonly logger: LoggerService;
+
+    constructor(
+        private redisConsumerService: RedisConsumerService,
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    ) {
+        this.logger = loggerFactory.create(RedisConsumerController.name);
+    }
 
     /**
      * Start a consumer for a specific job.
@@ -21,62 +29,17 @@ export class RedisConsumerController {
     @ApiResponse({ status: 500, description: 'Internal server error.' })
     async start(@Body() consumerDto: ConsumerDto) {
         const { jobRunId } = consumerDto;
-         this.redisConsumerService.startConsumer(jobRunId);
+        // Fire-and-forget: start the consumer process but don't wait for completion
+        (async () => {
+            try {
+                await this.redisConsumerService.saveJobConsumersToRedis(jobRunId);
+            } catch (error) {
+                this.logger.error(`Failed to start consumer for job ${jobRunId}:`, error);
+            }
+        })();
+      
         return { success: true, message: 'Consumer started successfully.' };
     }
 
-    /**
-     * Stop a consumer for a specific job.
-     * UnAuthenticated as this endpoint is called internally by the jobs service.
-     * Marked as hidden from the Swagger documentation using @ApiExcludeController.
-     */
-    @Post('stop')
-    @ApiQuery({ name: 'jobRunId', type: String, description: 'The ID of the job run.' })
-    @ApiQuery({ name: 'consumerType', enum: ConsumerType, required: false, description: 'The type of consumer to stop.' })
-    @ApiQuery({ name: 'all', type: Boolean, required: false, description: 'Stop all consumers for the job.' })
-    @ApiResponse({ status: 200, description: 'Consumer stopped successfully.' })
-    @ApiResponse({ status: 400, description: 'Invalid input data.' })
-    @ApiResponse({ status: 500, description: 'Internal server error.' })
-    async stop(
-        @Query('jobRunId') jobRunId: string,
-        @Query('consumerType') consumerType?: ConsumerType,
-        @Query('all') all?: boolean,
-    ) {
-        await this.redisConsumerService.stopConsumer(jobRunId, consumerType, all === true);
-        return { success: true, message: 'Consumer stopped successfully.' };
-    }
 
-    /**
-     * List all active consumers.
-     * UnAuthenticated as this endpoint is called internally by the jobs service.
-     * Marked as hidden from the Swagger documentation using @ApiExcludeController.
-     */
-    @Get('active-consumers')
-    @ApiResponse({ status: 200, description: 'List of active consumers retrieved successfully.' })
-    @ApiResponse({ status: 500, description: 'Internal server error.' })
-    async listActiveConsumers() {
-        const activeConsumers = await this.redisConsumerService.listActiveConsumers();
-        return { success: true, data: activeConsumers };
-    }
-
-    /**
-     * Check if a specific consumer is running.
-     * UnAuthenticated as this endpoint is called internally by the jobs service.
-     * Marked as hidden from the Swagger documentation using @ApiExcludeController.
-     */
-    @Get('is-running')
-    @ApiQuery({ name: 'jobRunId', type: String, description: 'The ID of the job run.' })
-    @ApiQuery({ name: 'consumerType', enum: ConsumerType, description: 'The type of consumer to check.' })
-    @ApiResponse({ status: 200, description: 'Consumer status retrieved successfully.' })
-    @ApiResponse({ status: 400, description: 'Invalid input data.' })
-    @ApiResponse({ status: 500, description: 'Internal server error.' })
-    async isConsumerRunning(
-        @Query('jobRunId') jobRunId: string,
-        @Query('consumerType') consumerType: ConsumerType,
-    ) {
-        const isRunning = await this.redisConsumerService.isConsumerRunning(
-            this.redisConsumerService.getConsumerKey(jobRunId, consumerType),
-        );
-        return { success: true, isRunning };
-    }
 }

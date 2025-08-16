@@ -59,6 +59,7 @@ data:
         loginWithEmailAllowed: true,
         duplicateEmailsAllowed: false,
         resetPasswordAllowed: true,
+        loginTheme: 'datamigrate',
 
         // Brute force detection settings
         bruteForceProtected: true,                 // Enables brute force protection
@@ -82,7 +83,7 @@ data:
      # Set password policy for the realm
     PASSWORD_POLICY_PAYLOAD=$(node -pe "
     JSON.stringify({
-        passwordPolicy: 'length(8) and maxLength(64) and specialChars(1) and upperCase(1) and lowerCase(1) and digits(1)'
+        passwordPolicy: 'length(8) and maxLength(64) and specialChars(1) and upperCase(1) and lowerCase(1) and digits(1) and passwordHistory(3)'
     });
     ")
 
@@ -229,6 +230,7 @@ data:
         attributes: {
         'oidc.ciba.grant.enabled': false,
         'backchannel.logout.session.required': true,
+        'login_theme': 'datamigrate',
         'oauth2.device.authorization.grant.enabled': true,
         'display.on.consent.screen': false,
         'backchannel.logout.revoke.offline.tokens': false

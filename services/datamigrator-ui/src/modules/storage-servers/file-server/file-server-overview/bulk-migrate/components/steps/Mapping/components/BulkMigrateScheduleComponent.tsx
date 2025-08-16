@@ -9,74 +9,102 @@ import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
+import {
+  DATE_FORMAT,
+  DEFAULT_MINUTES_AHEAD,
+  SCHEDULE_OPTIONS,
+} from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 
 dayjs.extend(utc);
+
+const getDefaultDateTime = (scheduleType: string) => {
+  const minutesAhead =
+    scheduleType === SCHEDULE_OPTIONS?.START_NOW
+      ? DEFAULT_MINUTES_AHEAD?.START_NOW
+      : DEFAULT_MINUTES_AHEAD?.SCHEDULE_DATE;
+
+  return dayjs.utc().add(minutesAhead, "minute");
+};
 
 const BulkMigrateScheduleComponent = ({
   mappingStepForm,
 }: {
   mappingStepForm: FormikProps<MappingStepFormikFormType>;
 }) => {
-  const { values, setFieldValue } = mappingStepForm;
-  const [error, setError] = useState<string | null>(null);
+  const { values, setFieldValue, errors } = mappingStepForm;
+  const [pickerError, setPickerError] = useState<string | null>(null);
 
-  // Reset error state on first render
   useEffect(() => {
-    setError(null);
-  }, []);
+    if (values?.scheduleTime === SCHEDULE_OPTIONS?.START_NOW) {
+      setFieldValue(
+        "scheduledDateTime",
+        getDefaultDateTime(SCHEDULE_OPTIONS?.START_NOW)
+      );
+    } else {
+      setFieldValue(
+        "scheduledDateTime",
+        getDefaultDateTime(SCHEDULE_OPTIONS?.SCHEDULE_DATE)
+      );
+    }
+  }, [values?.scheduleTime]);
 
   const errorMessage = useMemo(() => {
-    switch (error) {
-      case "disablePast":
-        return "You can't select a date in the past";
-      default:
-        return "";
+    const scheduledError = errors?.scheduledDateTime;
+    if (typeof scheduledError === "string") {
+      return scheduledError;
     }
-  }, [error]);
+
+    if (pickerError === "disablePast") {
+      return "You can't select a date in the past";
+    }
+
+    return "";
+  }, [pickerError, errors?.scheduledDateTime]);
 
   return (
     <Box className="w-1/2">
       <Text>Job Schedule</Text>
       <RadioGroup
         name="scheduleTime"
-        value={values.scheduleTime || "start_now"}
+        value={values?.scheduleTime || SCHEDULE_OPTIONS?.START_NOW}
         onChange={(e) => {
-          if (e.target.value === "start_now") {
-            setFieldValue("scheduledDateTime", dayjs().add(1, "minute"));
-          }
           setFieldValue("scheduleTime", e.target.value);
         }}
       >
         <Box className="flex">
           <FormControlLabel
-            value="start_now"
+            value={SCHEDULE_OPTIONS?.START_NOW}
             control={<Radio />}
             label="Start Now"
           />
           <FormControlLabel
-            value="schedule_date"
+            value={SCHEDULE_OPTIONS?.SCHEDULE_DATE}
             control={<Radio />}
             label="Schedule Date & Time (UTC)"
           />
         </Box>
       </RadioGroup>
-      {values.scheduleTime === "schedule_date" && (
+      {values.scheduleTime === SCHEDULE_OPTIONS?.SCHEDULE_DATE && (
         <Box className="flex gap-3 mt-3">
           <LocalizationProvider dateAdapter={AdapterDayjs}>
             <DateTimePicker
-              value={values.scheduledDateTime || dayjs().add(1, "minute")}
+              value={
+                values.scheduledDateTime ||
+                getDefaultDateTime(SCHEDULE_OPTIONS?.SCHEDULE_DATE)
+              }
               timezone="UTC"
               slotProps={{
                 textField: {
                   helperText: errorMessage,
+                  error: !!errorMessage,
                 },
               }}
-              onError={(newError) => setError(newError)}
+              onError={(newError) => setPickerError(newError)}
               onChange={(newValue) => {
                 setFieldValue("scheduledDateTime", newValue);
-                setError(null);
+                setPickerError(null);
               }}
-              format="DD/MM/YYYY hh:mm:A UTC"
+              format={DATE_FORMAT}
               disablePast
               timeSteps={{ minutes: 1 }}
             />

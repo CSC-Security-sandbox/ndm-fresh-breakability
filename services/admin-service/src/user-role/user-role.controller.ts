@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,6 +10,7 @@ import {
   Query,
   Request,
 } from '@nestjs/common';
+import { Request as ExpressRequest } from 'express';
 import { UserRoleService } from './user-role.service';
 import { CreateUserRoleDto } from './dto/create-user-role.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
@@ -25,6 +27,7 @@ import { UserRoleRelationDto } from './dto/user-role.dto';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
 import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
+import { allowedParamsForUserRolesGetAll } from '../constants/allowed-params';
 
 @ApiTags('user roles')
 @Controller('/api/v1/user-roles')
@@ -224,6 +227,7 @@ export class UserRoleController {
     description: 'Account ID',
   })
   async findAll(
+    @Request() req: ExpressRequest,
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 10,
     @Query('sortField') sortField: string = 'id',
@@ -233,6 +237,15 @@ export class UserRoleController {
     @Query('project_id') project_id?: string,
     @Query('account_id') account_id?: string,
   ): Promise<UserRole[]> {
+
+    const unexpected = Object.keys(req.query).filter(
+      key => !allowedParamsForUserRolesGetAll.includes(key),
+    );
+    if (unexpected.length > 0) {
+      throw new BadRequestException(
+        `Unexpected query parameters: ${unexpected.join(', ')}`,
+      );
+    }
     const filter: Partial<CreateUserRoleDto> = {
       user_id,
       role_id,
@@ -248,3 +261,4 @@ export class UserRoleController {
     );
   }
 }
+

@@ -1,15 +1,16 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Command, ErrorType, FileInfo, JobManagerContext, MetaData, OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Cmd, CmdMeta, Command, CommandStatus, ErrorType, FileInfo, ItemMeta, JobManagerContext, MetaData, Operations, Ops, OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
 import * as path from "path";
-import { dmError, getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
+import { dmError, getFileInfo, isContentUpdate, isMetaUpdated, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishCommandInput } from "./migrate-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
-
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { isPathExists } from "../../utils/utils";
 
 @Injectable()
 export class MigrateScanService {
@@ -17,29 +18,30 @@ export class MigrateScanService {
     readonly maxMigrationCommand : number;
     readonly maxConcurrency: number;
     readonly maxRetryCount: number;
+    private readonly logger: LoggerService;
 
     constructor(
         @Inject(ConfigService) 
         private readonly configService: ConfigService,
-        private readonly logger: Logger,
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100; 
-        this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;  
+        this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
+        this.logger = loggerFactory.create(MigrateScanService.name);
     }
 
 
     async publishCommands({ jobContext, commands}: PublishCommandInput)  {
-        //TODO: make bulk publish to command stream. 
-        for(const command of commands)
-            await jobContext.publishToCommandStream(command);
+        await jobContext.publishBulkToCommandStream(commands);
     }
 
     async getDirContents({path, origin, jobContext, errorType, command}: DirContentsInput): Promise<Set<string>>{
         let content = new Set<string>();
         try{
-            if (!fs.existsSync(path)) {
+            const pathExists = await isPathExists(path);
+            if (!pathExists) {
                 if (origin === Origin.SOURCE)  
                     throw new FatalError(`Source directory does not exist: ${path}`);
                 return content; 
@@ -48,7 +50,7 @@ export class MigrateScanService {
         }catch(error){
             if(error instanceof FatalError) 
                 errorType = ErrorType.FATAL_ERROR;
-            const ndmError = dmError("OPERATION", origin, Operation.READ_DIR, errorType, command.commandId, error, {name: command.fPath, path: path});
+            const ndmError = dmError("OPERATION", origin, Operation.READ_DIR, errorType, command.id, error, {name: command.fPath, path: path});
             await jobContext.publishToErrorStream(ndmError);
             throw error; 
         }
@@ -56,10 +58,10 @@ export class MigrateScanService {
     }
 
     
-    async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings , targetPrefix}: ScanDirectoryInput): Promise<ScanDirectoryOutput> { 
+    async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings , targetPrefix, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> { 
 
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
-        let commands: Command[] = [], errorType: ErrorType = command.retryCount+1 > this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
+        let commands: Cmd[] = [];
 
         const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command});
         const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});
@@ -67,8 +69,8 @@ export class MigrateScanService {
         for (const item of sourceContent) {
             try {
                 const sourceContentPath = path.join(sourcePath, item);
-                if (!fs.existsSync(sourceContentPath)) continue;
-
+                const sourceContentExists = await isPathExists(sourceContentPath);
+                if (!sourceContentExists) continue;                
                 const sourceStat = await fs.promises.lstat(sourceContentPath);
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
                 
@@ -104,7 +106,8 @@ export class MigrateScanService {
                     if (command) commands.push(command);
                 } else {
                     const targetFilePath = path.join(targetPath, item);
-                    if (fs.existsSync(targetFilePath)) {
+                    const targetFileExists = await isPathExists(targetFilePath);
+                    if (targetFileExists) {
                        const targetStatLstat = await fs.promises.lstat(targetFilePath);
                         let targetStat: fs.Stats;
                         if (targetStatLstat.isSymbolicLink()) {
@@ -124,11 +127,12 @@ export class MigrateScanService {
                 
             }catch(error) {
                 this.logger.error(`Error processing item ${item} in directory ${sourcePath}: ${error}`);
-                const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.commandId, error, {name: command.fPath, path: targetPath});
+                const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.id, error, {name: command.fPath, path: targetPath});
                 await jobContext.publishToErrorStream(dmErr);
                 throw error; 
             }
         }
+        
         if (jobContext?.jobConfig?.skipDelete === false) {
             //TODO: remove command as it is not required. 
             await this.processDeletedItems({
@@ -149,40 +153,7 @@ export class MigrateScanService {
         return output
     }
 
-    buildCommand = (sFile: fs.Stats, fPath: string, dFile?: fs.Stats): Command | undefined => {
-         if (!sFile) {
-            return new Command(
-                fPath,{
-                    0: { cmd: dFile.isDirectory() ? OPS_CMD.REMOVE_DIR:  OPS_CMD.REMOVE_FILE, status: OPS_STATUS.READY }
-            },
-                uuid4(),
-                0
-            );
-        }
-        const metadata: MetaData =  { 
-            size: sFile.size,
-            mtime: sFile.mtime,
-            mode: sFile.mode,
-            uid: sFile.uid,
-            gid: sFile.gid,
-            atime: sFile.atime,
-            ctime: sFile.ctime,
-            birthtime: sFile.birthtime,
-            sid: undefined
-        } 
-        if (isContentUpdate(sFile, dFile) ) 
-            return new Command(
-                fPath,
-                {
-                    0: { cmd: sFile.isDirectory() ? OPS_CMD.COPY_DIR:  OPS_CMD.COPY_CONTENT, status: OPS_STATUS.READY },
-                    1: { cmd: OPS_CMD.STAMP_META, status: OPS_STATUS.READY, metadata}
-                },
-                uuid4(),
-                0
-            );
 
-        return undefined;
-    }
     async processDeletedItems({ sourceContent, targetContent, targetPath, targetPrefix, jobContext, errorType, command, commands }: {
         sourceContent: Set<string>,
         targetContent: Set<string>,
@@ -190,14 +161,15 @@ export class MigrateScanService {
         targetPrefix: string,
         jobContext: JobManagerContext,
         errorType: ErrorType,
-        command: Command,
-        commands: Command[]
+        command: Cmd,
+        commands: Cmd[]
     }) {
         for (const targetItem of targetContent) {
             if (!sourceContent.has(targetItem)) {
                 const targetContentPath = path.join(targetPath, targetItem);
                 try {
-                    if (fs.existsSync(targetContentPath)) {
+                    const targetContentExists = await isPathExists(targetContentPath);
+                    if (targetContentExists) {
                         const targetStat = await fs.promises.lstat(targetContentPath);
                         const relativeSourcePath = removePrefix(targetContentPath, targetPrefix);
                         const deleteCommand = this.buildCommand(null, relativeSourcePath, targetStat);
@@ -211,11 +183,72 @@ export class MigrateScanService {
                     }
                 } catch (error) {
                     this.logger.error(`[${jobContext.jobRunId}] Error processing  ${targetContentPath}: ${error}`);
-                    const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.commandId, error, { name: command.fPath, path: targetPath });
+                    const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.id, error, { name: command.fPath, path: targetPath });
                     await jobContext.publishToErrorStream(dmErr);
                     throw error;
                 }
             }
         }
+    }
+
+    buildCommand = (sFile: fs.Stats | undefined, fPath: string, dFile?: fs.Stats): Cmd | undefined => {
+
+        if (!sFile) {
+            const isDirectory = dFile ? dFile.isDirectory() : false;
+            return new Cmd(
+                uuid4(),
+                fPath,
+                CommandStatus.READY,
+                isDirectory,
+                {
+                    [isDirectory ? OPS_CMD.REMOVE_DIR : OPS_CMD.REMOVE_FILE]:
+                        { status: OPS_STATUS.READY, params: {} }
+                }
+            )
+        }
+        const metadata: CmdMeta = {
+            size: sFile.size,
+            mtime: sFile.mtime,
+            mode: sFile.mode,
+            uid: sFile.uid,
+            gid: sFile.gid,
+            atime: sFile.atime,
+            ctime: sFile.ctime,
+            birthtime: sFile.birthtime,
+            sid: undefined,
+            isSymLink: sFile.isSymbolicLink() ? true : false
+        }
+
+        if (isContentUpdate(sFile, dFile)) {
+            const isDirectory = sFile.isDirectory();
+            return new Cmd(
+                uuid4(),
+                fPath,
+                CommandStatus.READY,
+                isDirectory,
+                {
+                    [isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE]: { status: OPS_STATUS.READY, params: {} },
+                    [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: {} }
+                },
+                metadata,
+            )
+        }
+      
+
+        if (isMetaUpdated(sFile, dFile)) {
+            const isDirectory = sFile.isDirectory();
+            return new Cmd(
+                uuid4(),
+                fPath,
+                CommandStatus.READY,
+                isDirectory,
+                {
+                    [isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE]: { status: OPS_STATUS.COMPLETED , params: {} },
+                    [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: {} }
+                },
+                metadata,
+            )
+        }
+        return undefined;
     }
 }

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+    tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+    tr:hover {
+      background-color: #ddd;
+    }
+  </style>
+</head>
+<body>
+  <h1>Data Summary</h1>
+
+  {{#each this}}
+    <h2>{{@key}}</h2>
+    <table>
+      <tr>
+        <th>Sub Category</th>
+        <th></th>
+      </tr>
+
+      {{#each this}}
+        {{#if sub_category}}
+          <tr>
+            <td>{{sub_category}}</td>
+            <td>{{#if value}}{{value}}{{/if}}</td>
+          </tr>
+        {{/if}}
+      {{/each}}
+    </table>
+  {{/each}}
+
+</body>
+</html>

@@ -1,6 +1,7 @@
 import { Protocols, ProtocolTypes } from './protocols';
 import { SMBProtocol } from './smb/smb.protocol';
 import { NFSProtocol } from './nfs/nfs.protocol';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 jest.mock('./smb/smb.protocol', () => {
     return {
@@ -19,18 +20,22 @@ jest.mock('./nfs/nfs.protocol', () => {
 });
 
 describe('Protocols', () => {
+    let protocols: Protocols;
+
     beforeEach(() => {
         jest.clearAllMocks();
+        const loggerFactory = {} as LoggerFactory;
+        protocols = new Protocols(new NFSProtocol(loggerFactory), new SMBProtocol(loggerFactory));
     });
 
     it('should return an instance of SMBProtocol when protocolType is SMB', () => {
-        const protocol = Protocols.getProtocol(ProtocolTypes.SMB);
+        protocols.getProtocol(ProtocolTypes.SMB);
         expect(SMBProtocol).toHaveBeenCalledTimes(1);
 
     });
 
     it('should return an instance of NFSProtocol when protocolType is NFS', () => {
-        const protocol = Protocols.getProtocol(ProtocolTypes.NFS);
+        protocols.getProtocol(ProtocolTypes.NFS);
         expect(NFSProtocol).toHaveBeenCalledTimes(1);
 
     });
@@ -38,7 +43,7 @@ describe('Protocols', () => {
     it('should throw an error for unsupported protocol types', () => {
         const unsupportedProtocol = 'UNKNOWN' as ProtocolTypes;
 
-        expect(() => Protocols.getProtocol(unsupportedProtocol)).toThrowError(
+        expect(() => protocols.getProtocol(unsupportedProtocol)).toThrowError(
             `Unsupported protocol type: ${unsupportedProtocol}`
         );
     });

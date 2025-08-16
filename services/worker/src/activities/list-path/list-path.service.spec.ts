@@ -1,17 +1,28 @@
 import { Test, TestingModule } from '@nestjs/testing';
  import { ConfigService } from '@nestjs/config';
- import { Logger } from '@nestjs/common';
  import { ListPathActivity } from './list-path.service';
  import { Protocols } from 'src/protocols/protocols';
- 
+ import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+ import { mockLogger } from 'src/auth/auth.service.spec';
+
  jest.mock('src/protocols/protocols');
  
  describe('ListPathActivity', () => {
    let service: ListPathActivity;
    let configService: ConfigService;
-   let logger: Logger;
+  let loggerFactory: LoggerFactory;
+  let logger: LoggerService;
+  let protocols: Protocols;
  
    beforeEach(async () => {
+    const mockProtocols = {
+      getProtocol: jest.fn(),
+    };
+
+    const mockLoggerFactory = {
+      create: jest.fn().mockReturnValue(mockLogger),
+    };
+
      const module: TestingModule = await Test.createTestingModule({
        providers: [
          ListPathActivity,
@@ -24,18 +35,26 @@ import { Test, TestingModule } from '@nestjs/testing';
              }),
            },
          },
-         {
-           provide: Logger,
-           useValue: {
-             log: jest.fn(),
-           },
-         },
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
+        },
+        {
+          provide: LoggerService,
+          useValue: mockLogger as any,
+        },
+        {
+          provide: Protocols,
+          useValue: mockProtocols,
+        },
        ],
      }).compile();
  
      service = module.get<ListPathActivity>(ListPathActivity);
      configService = module.get<ConfigService>(ConfigService);
-     logger = module.get<Logger>(Logger);
+      loggerFactory = module.get<LoggerFactory>(LoggerFactory);
+      logger = module.get<LoggerService>(LoggerService);
+      protocols = module.get<Protocols>(Protocols);
    });
  
    it('should be defined', () => {
@@ -55,7 +74,7 @@ import { Test, TestingModule } from '@nestjs/testing';
        const mockProtocol = {
          listPaths: jest.fn().mockResolvedValue(['path1', 'path2']),
        };
-       (Protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+       (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
  
        const result = await service.listPath(traceId, protocolType, payload);
  
@@ -78,7 +97,7 @@ import { Test, TestingModule } from '@nestjs/testing';
        const mockProtocol = {
          listPaths: jest.fn().mockRejectedValue(new Error('Protocol error')),
        };
-       (Protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+       (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
  
        const result = await service.listPath(traceId, protocolType, payload);
  

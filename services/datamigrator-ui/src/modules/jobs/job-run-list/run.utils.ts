@@ -4,7 +4,7 @@ import {
   JOB_STATUS_TYPE_ENUM,
   JobRunApiType,
   JOBS_TYPE,
-  ReportENUM,
+  REPORT_TYPES_ENUM,
 } from "@/types/app.type";
 
 export const getJobRunListFlaternList = (list: JobRunApiType[]) => {
@@ -83,8 +83,13 @@ export const getReportActions = (
   handleDownloadReport: (
     downloadReports: (arg: any) => void,
     jobRunId: string,
-    reportType: ReportENUM,
+    reportType: REPORT_TYPES_ENUM,
     fileType: string
+  ) => void,
+  handleDownloadCocReport: (
+    downloadReports: (arg: any) => void,
+    jobRunId: string,
+    reportType?: string
   ) => void,
   downloadReportApi: (arg: any) => void,
   getPdfReportApi: (arg: any) => void,
@@ -96,6 +101,8 @@ export const getReportActions = (
       JOB_STATUS_TYPE_ENUM.BLOCKED,
       JOB_STATUS_TYPE_ENUM.APPROVED,
       JOB_STATUS_TYPE_ENUM.REJECTED,
+      JOB_STATUS_TYPE_ENUM.ERRORED,
+      JOB_STATUS_TYPE_ENUM.FAILED,
     ].includes(row.status) && row.isReportReady;
 
   switch (row.jobType) {
@@ -110,8 +117,8 @@ export const getReportActions = (
             handleDownloadReport(
               downloadReportApi,
               row.jobRunId,
-              ReportENUM.DISCOVERY,
-              "csv"
+              REPORT_TYPES_ENUM.DISCOVERY,
+              "CSV"
             );
           },
           disabled: !isReportReady,
@@ -125,8 +132,8 @@ export const getReportActions = (
             handleDownloadReport(
               getPdfReportApi,
               row.jobRunId,
-              ReportENUM.DISCOVERY,
-              "pdf"
+              REPORT_TYPES_ENUM.DISCOVERY,
+              "PDF"
             );
           },
           disabled: !isReportReady,
@@ -137,12 +144,7 @@ export const getReportActions = (
         {
           label: type === "rowMenu" ? "Download CoC Report" : "CoC Report",
           onClick: () => {
-            handleDownloadReport(
-              downloadReportApi,
-              row.jobRunId,
-              ReportENUM.COC,
-              "csv"
-            );
+            handleDownloadCocReport(downloadReportApi, row?.jobRunId);
           },
           disabled: !isReportReady,
         },
@@ -152,12 +154,7 @@ export const getReportActions = (
         {
           label: type === "rowMenu" ? "Download CoC Report" : "CoC Report",
           onClick: () => {
-            handleDownloadReport(
-              downloadReportApi,
-              row.jobRunId,
-              ReportENUM.COC,
-              "csv"
-            );
+            handleDownloadCocReport(downloadReportApi, row?.jobRunId);
           },
           disabled: !isReportReady,
         },
@@ -167,8 +164,8 @@ export const getReportActions = (
             handleDownloadReport(
               getPdfReportApi,
               row.jobRunId,
-              ReportENUM.JOBS_REPORT,
-              "pdf"
+              REPORT_TYPES_ENUM.JOBS_REPORT,
+              "PDF"
             );
           },
           disabled: !isReportReady,

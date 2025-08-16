@@ -5,80 +5,87 @@ on:
     branches:
       - main
     paths:
-      - "services/admin-service/**"
-      - "services/config-service/**"
-      - "services/db-writer/**"
-      - "services/datamigrator-ui/**"
-      - "services/jobs-service/**"
-      - "services/keycloak-customizations/**"
-      - "services/reports-service/**"
-      - "liquibase/**"
+      - 'services/admin-service/**'
+      - 'services/config-service/**'
+      - 'services/db-writer/**'
+      - 'services/datamigrator-ui/**'
+      - 'services/jobs-service/**'
+      - 'services/keycloak-customizations/**'
+      - 'services/reports-service/**'
+      - 'services/support-service/**'
+      - 'liquibase/**'
   push:
     branches:
       - main
     paths:
-      - "services/admin-service/**"
-      - "services/config-service/**"
-      - "services/db-writer/**"
-      - "services/datamigrator-ui/**"
-      - "services/jobs-service/**"
-      - "services/keycloak-customizations/**"
-      - "services/reports-service/**"
-      - "liquibase/**"
+      - 'services/admin-service/**'
+      - 'services/config-service/**'
+      - 'services/db-writer/**'
+      - 'services/datamigrator-ui/**'
+      - 'services/jobs-service/**'
+      - 'services/keycloak-customizations/**'
+      - 'services/reports-service/**'
+      - 'services/support-service/**'
+      - 'liquibase/**'
   workflow_dispatch:
     inputs:
       admin-service:
-        description: "admin-service"
+        description: 'admin-service'
         required: false
         type: boolean
         default: false
       config-service:
-        description: "config-service"
+        description: 'config-service'
         required: false
         type: boolean
         default: false
       db-writer:
-        description: "db-writer"
+        description: 'db-writer'
         required: false
         type: boolean
         default: false
       datamigrator-ui:
-        description: "datamigrator-ui"
+        description: 'datamigrator-ui'
         required: false
         type: boolean
         default: false
       jobs-service:
-        description: "jobs-service"
+        description: 'jobs-service'
         required: false
         type: boolean
         default: false
       keycloak-customizations:
-        description: "keycloak-customizations"
+        description: 'keycloak-customizations'
         required: false
         type: boolean
         default: false
       reports-service:
-        description: "reports-service"
+        description: 'reports-service'
         required: false
         type: boolean
         default: false
       db-migrations:
-        description: "db-migrations (liquibase)"
+        description: 'db-migrations (liquibase)'
+        required: false
+        type: boolean
+        default: false
+      support-service:
+        description: 'support-service'
         required: false
         type: boolean
         default: false
       all-services:
-        description: "all services"
+        description: 'all services'
         required: false
         type: boolean
         default: true
-
-  workflow_call:
+  
+  workflow_call: 
     inputs:
       build:
-        description: "Build to release"
+        description: 'Build to release'
         required: true
-        type: string
+        type: string 
 
 permissions:
   contents: read
@@ -105,13 +112,57 @@ jobs:
         id: set-matrix
         shell: bash
         run: |
-          services=( "db-writer" "keycloak-customizations" "reports-service" "admin-service" "config-service" "datamigrator-ui" "jobs-service" )
-
-
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            targets=("${services[@]}")
-            targets+=("db-migrations")
-          else
+          services=( "db-writer" "keycloak-customizations" "reports-service" "admin-service" "config-service" "datamigrator-ui" "jobs-service" "support-service" )
+          targets=()
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base_branch="${{ github.event.pull_request.base.ref }}"
+            git fetch origin "$base_branch"
+            base_sha=$(git rev-parse origin/$base_branch)
+            head_sha="${{ github.sha }}"
+            for service in "${services[@]}"; do
+              if git diff --name-only "$base_sha" "$head_sha" | grep -q "^services/$service/"; then
+                targets+=("$service")
+              fi
+            done
+            if git diff --name-only "$base_sha" "$head_sha" | grep -q "^liquibase/"; then
+              targets+=("db-migrations")
+            fi
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Check if "all-services" is selected
+            if [ "${{ github.event.inputs.all-services }}" = "true" ]; then
+              targets=("${services[@]}")
+              targets+=("db-migrations")
+            else
+              # Add individually selected services
+              if [ "${{ github.event.inputs.admin-service }}" = "true" ]; then
+                targets+=("admin-service")
+              fi
+              if [ "${{ github.event.inputs.config-service }}" = "true" ]; then
+                targets+=("config-service")
+              fi
+              if [ "${{ github.event.inputs.db-writer }}" = "true" ]; then
+                targets+=("db-writer")
+              fi
+              if [ "${{ github.event.inputs.datamigrator-ui }}" = "true" ]; then
+                targets+=("datamigrator-ui")
+              fi
+              if [ "${{ github.event.inputs.jobs-service }}" = "true" ]; then
+                targets+=("jobs-service")
+              fi
+              if [ "${{ github.event.inputs.keycloak-customizations }}" = "true" ]; then
+                targets+=("keycloak-customizations")
+              fi
+              if [ "${{ github.event.inputs.reports-service }}" = "true" ]; then
+                targets+=("reports-service")
+              fi
+              if [ "${{ github.event.inputs.db-migrations }}" = "true" ]; then
+                targets+=("db-migrations")
+              fi
+              if [ "${{ github.event.inputs.support-service }}" = "true" ]; then
+                targets+=("support-service")
+              fi
+            fi
+          elif [ "${{ github.event_name }}" = "push" ]; then
             # services
             for service in "${services[@]}"; do
               if git diff --name-only HEAD~1 HEAD | grep -q "^services/$service/"; then
@@ -193,21 +244,21 @@ jobs:
         uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37
         continue-on-error: true
         with:
-          image-ref: "${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
-          format: "json"
-          output: "trivy-results-${{ matrix.service }}.json"
-          exit-code: "1"
-          severity: "CRITICAL,HIGH"
+          image-ref: '${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}'
+          format: 'json'
+          output: 'trivy-results-${{ matrix.service }}.json'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
           ignore-unfixed: false
 
       - name: Convert Trivy JSON to SARIF and Table format
         run: |
           FILE="trivy-results-${{ matrix.service }}.json"
-
+      
           if [ -f "$FILE" ]; then
             echo "Converting $FILE to SARIF"
             trivy convert --format sarif --output trivy-results-${{ matrix.service }}.sarif "$FILE"
-
+      
             echo "Converting $FILE to table"
             trivy convert --format table --output trivy-table-${{ matrix.service }}.txt "$FILE"
           else
@@ -231,7 +282,7 @@ jobs:
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@bc02a25f6449997c5e9d5a368879b28f56ae19a1
         with:
-          sarif_file: "trivy-results-${{ matrix.service }}.sarif"
+          sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
 
       - name: Generate Trivy Vulnerability Summary
         id: summary
@@ -305,7 +356,7 @@ jobs:
               newBody = `${botComment.body}
             ---
             ## :hourglass: Trivy Scan Run at ${runTime}
-
+      
             ${summary}${securityLine}`;
               // Update the existing comment
               await github.rest.issues.updateComment({
@@ -318,7 +369,7 @@ jobs:
               // Create a new comment for this service
               newBody = `${marker}
             ## :hourglass: Trivy Scan Run at ${runTime}
-
+      
             ${summary}${securityLine}`;
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
@@ -590,7 +641,7 @@ jobs:
           SERVICES=$(echo "${{ toJSON(needs.determine-matrix.outputs.matrix) }}" | jq -r '.service | join(",")')
           echo "Built services: $SERVICES"
           echo ""
-
+          
           IMAGE_TAGS="{}" 
           # Process each service's metadata.json
           for dir in artifacts/build-artifacts-*/; do
@@ -605,22 +656,22 @@ jobs:
               fi
             fi
           done
-
+          
           echo "Image tags for NDM VM image build:"
           echo "$IMAGE_TAGS" | jq '.'
           echo ""
           echo "Copy the above JSON and paste it into the 'services_config' input of the NDM VM image build workflow."
-
+          
           echo "## NDM Service Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Built Services" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Service | Image Tag | Branch |" >> $GITHUB_STEP_SUMMARY
           echo "| ------- | --------- | ------ |" >> $GITHUB_STEP_SUMMARY
-
+          
           # Add each service to the table
           echo "$IMAGE_TAGS" | jq -r 'to_entries[] | "| \(.key) | `\(.value.tag)` | `\(.value.branch)` |"' >> $GITHUB_STEP_SUMMARY
-
+          
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Services Configuration JSON" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

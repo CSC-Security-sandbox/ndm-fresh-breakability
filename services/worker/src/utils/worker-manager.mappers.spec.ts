@@ -1,4 +1,5 @@
 
+
 import { WorkerConfiguration } from 'src/work-manager/work-manager.types';
 import { getWorkerIdentity } from './worker-manager.mappers';
 

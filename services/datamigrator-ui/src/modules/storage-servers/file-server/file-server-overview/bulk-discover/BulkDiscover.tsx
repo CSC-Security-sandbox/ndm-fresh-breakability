@@ -13,7 +13,10 @@ import {
 import { Box } from "@components/container/index";
 import AppFooter from "@components/layout/app-footer/AppFooter";
 import { notify } from "@components/notification/NotificationWrapper";
-import { BULK_DISCOVERY_FORM_SCHEMA } from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discover.constant";
+import {
+  BULK_DISCOVERY_FORM_SCHEMA,
+  DEFAULT_MINUTES_AHEAD,
+} from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discover.constant";
 import { generateBulkDiscoveryPayload } from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discover.utils";
 import { bulkDiscoveryFormType } from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discovery.interface";
 import BulkDiscoveryFooter from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/components/BulkDiscoveryFooter";
@@ -33,6 +36,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BULK_DISCOVERY_DEFAULT_COLUMN_STATE } from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
+import { SCHEDULE_OPTIONS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
+
 dayjs.extend(utc);
 
 const BulkDiscover = () => {
@@ -73,6 +78,23 @@ const BulkDiscover = () => {
     defaultState,
     BULK_DISCOVERY_FORM_SCHEMA
   );
+
+  // Update firstRunAt based on scheduleTime
+  useEffect(() => {
+    const { scheduleTime } = bulkDiscoveryForm?.formState ?? {};
+    const isScheduledLater = scheduleTime !== SCHEDULE_OPTIONS.START_NOW;
+
+    const offsetMinutes = isScheduledLater
+      ? DEFAULT_MINUTES_AHEAD.SCHEDULE_DATE
+      : DEFAULT_MINUTES_AHEAD.START_NOW;
+
+    const firstRunAt = dayjs.utc().add(offsetMinutes, "minute");
+
+    bulkDiscoveryForm.resetForm({
+      ...bulkDiscoveryForm?.formState,
+      firstRunAt,
+    });
+  }, [bulkDiscoveryForm?.formState?.scheduleTime]);
 
   useEffect(() => {
     setSelectedExportPathsIds([]);

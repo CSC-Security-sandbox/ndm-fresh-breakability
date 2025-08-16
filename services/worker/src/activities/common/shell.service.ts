@@ -1,5 +1,6 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 interface ShellTask {
   command: string;
@@ -16,7 +17,7 @@ class ShellWorker {
     private readonly args: string[],
     private readonly endMarker: string,
     private readonly markerCommand: string,
-    private readonly logger: Logger,
+    private readonly logger: LoggerService,
     private readonly onIdle: () => void,
   ) {
     this.shellProcess = spawn(shellCommand, args, {
@@ -95,9 +96,13 @@ export class ShellService implements OnModuleInit, OnModuleDestroy {
   private readonly args: string[];
   private readonly endMarker = 'END_OF_COMMAND_OUTPUT';
   private readonly markerCommand: string;
+  private readonly logger: LoggerService;
 
-  constructor(private readonly logger: Logger) {
+  constructor(
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory
+  ) {
     this.isWindows = process.platform === 'win32';
+    this.logger = loggerFactory.create(ShellService.name);
 
     if (this.isWindows) {
       this.shellCommand = 'powershell.exe';

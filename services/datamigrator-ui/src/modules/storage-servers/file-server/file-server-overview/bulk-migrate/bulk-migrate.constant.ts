@@ -11,6 +11,7 @@ import ValidationCellRenderer from "@components/custom-cell-renderer/ValidationC
 import Mapping from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/Mapping";
 import Options from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Options/Options";
 import Review from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Review/Review";
+import { INCREMENTAL_SYNC_SCHEDULE_ENUM } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/IncrementalSyncSchedule/incremental-sync-schedule.constants";
 
 export const STEPS_MAP_BULK_MIGRATION = {
   mapping: Mapping,
@@ -41,12 +42,6 @@ export enum INCREMENTAL_SYNC_SCHEDULE_SET_ENUM {
 export enum INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM {
   DAY = "day",
   WEEKDAY = "weekday",
-}
-
-export enum INCREMENTAL_SYNC_SCHEDULE_ENUM {
-  OFF = "Off",
-  SCHEDULE = "schedule",
-  CRON_EXPRESSION = "cron_expression",
 }
 
 export enum MIGRATE_OPTION_ENUM {
@@ -206,4 +201,24 @@ export const BULK_MIGRATE_STEPS_IDS = {
   mapping: 0,
   options: 1,
   review: 2,
+};
+
+export const SCHEDULE_OPTIONS = {
+  START_NOW: "start_now",
+  SCHEDULE_DATE: "schedule_date",
+};
+
+export const DEFAULT_MINUTES_AHEAD = {
+  START_NOW: 1,
+  SCHEDULE_DATE: 5,
+};
+
+export const DATE_FORMAT = "DD/MM/YYYY hh:mm:A UTC";
+
+export const TIMESTAMP_VALIDATION = {
+  SCHEDULE_FUTURE_TIMESTAMP: "Scheduled date and time must be in the future",
+  SCHEDULE_LATER_TIMESTAMP:
+    "Date and time is required when scheduling for later",
+  SCHEDULE_ONE_MINUTE_AHEAD_TIMESTAMP:
+    "Scheduled date and time must be at least 1 minute from now",
 };

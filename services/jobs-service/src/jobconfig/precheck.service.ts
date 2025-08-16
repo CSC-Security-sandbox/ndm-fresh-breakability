@@ -3,8 +3,8 @@ import { v4 as uuidv4 } from "uuid";
 import { In, Repository } from "typeorm";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Injectable, Logger } from "@nestjs/common";
-
+import { BadRequestException, Injectable, Inject } from "@nestjs/common";
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { Options } from "../constants/types";
 import { JobRunStatus, JobStatus, JobType, WorkFlows } from "../constants/enums";
 import { VolumeEntity } from "../entities/volume.entity";
@@ -12,14 +12,16 @@ import { JobConfigPrecheck as JobConfigPreCheck } from "./dto/jobdicoverybulk.dt
 import { WorkflowService } from "../workflow/workflow.service";
 import { filterUnhealthyWorkers } from "../utils/worker-filter";
 import { StartWorkFlowPayload } from "../workflow/workflow.types";
-import { PreChecks, PreCheckWorkflowOPayload, workerWithStatus } from "./jobconfig.types";
+import { PreCheckCircularDependency, PreChecks, PreCheckWorkflowOPayload, workerWithStatus, } from "./jobconfig.types";
+import { MigrationConflictService } from "../migration-conflict/migration-conflict.service";
 import { JobRunEntity } from "src/entities/jobrun.entity";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { isUUID } from "class-validator";
+import { JobConfigEntity } from 'src/entities/jobconfig.entity';
 
 @Injectable()
 export class PreCheckService {
-    private readonly logger = new Logger(PreCheckService.name);
+    private readonly logger: LoggerService;
     constructor(
         @InjectRepository(VolumeEntity)
         private readonly volumeRepo: Repository<VolumeEntity>,
@@ -29,16 +31,36 @@ export class PreCheckService {
         @InjectRepository(JobRunEntity)
         private readonly jobRunRepo: Repository<JobRunEntity>,
 
-
         @InjectRepository(InventoryEntity)
         private readonly inventoryRepo: Repository<InventoryEntity>,
-    ) { }
+        
+        @InjectRepository(JobConfigEntity)
+        private readonly jobConfigEntity: Repository<JobConfigEntity>,
+        
+        private readonly migrationConflictService: MigrationConflictService,
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    ) {
+        this.logger = loggerFactory.create(PreCheckService.name);
+    }
 
+async checkMigrationConflicts(data: JobConfigPreCheck): Promise<PreCheckCircularDependency[]> {
+        return this.migrationConflictService.checkMigrationConflicts(data);
+    }
     async initiatePreCheck(data: JobConfigPreCheck): Promise<any> {
         const healthCheckTimeout = parseInt(this.configService.get("app.worker.healthCheckStatusTimout"));
         const traceId: string = uuidv4();
 
         try {
+            const checkMigrationConflicts = await this.checkMigrationConflicts(data);
+            if (checkMigrationConflicts && checkMigrationConflicts.length > 0) {
+                throw new BadRequestException({
+                    status: "error",
+                    errors: ["MIGRATION_CONFLICTS_FOUND"],
+                    details: checkMigrationConflicts,
+                    message: "Migration conflicts detected during precheck.",
+                });
+            }
+
             const preCheckPayload = this.createInitialPreCheckPayload(data.preserveAccessTime);
             const pathIds = this.collectAllPathIds(data);
             const pathToWorkerMapping = await this.fetchVolumesWithWorkers(pathIds);
@@ -54,6 +76,12 @@ export class PreCheckService {
 
         } catch (error) {
             this.logger.error(`${traceId}] Failed to perform the pre check: ${error}`);
+            if (error instanceof BadRequestException) {
+                const response = error.getResponse();
+                if (typeof response === 'object' && response !== null && Array.isArray((response as any).errors) && (response as any).errors.includes("MIGRATION_CONFLICTS_FOUND")) {
+                    throw error;
+                }
+            }
             return {
                 status: "error",
                 erros: ["PRECHECK_FAILED"],
@@ -180,7 +208,7 @@ export class PreCheckService {
         
         const inventorySize = await this.inventoryRepo.createQueryBuilder("inventory")
             .where("inventory.job_run_id = :jobRunId", { jobRunId: latestDiscoveryJobRun.id })
-            .andWhere("inventory.is_directory = :isDirectory", { isDirectory: true })
+            .andWhere("inventory.is_directory = :isDirectory", { isDirectory: false })
             .select("SUM(inventory.file_size)", "totalSize")
             .getRawOne();
         if (!inventorySize || !inventorySize.totalSize) return 0;

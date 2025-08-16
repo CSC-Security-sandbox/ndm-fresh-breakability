@@ -1,15 +1,23 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Inject, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { JobContextFactory, RedisUtils } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import { createClient, RedisClientType } from 'redis';
-
+import {
+    LoggerFactory,
+    LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private client: RedisClientType;
-  private readonly logger = new Logger(RedisService.name);
+  private readonly logger: LoggerService;
 
-async onModuleInit(): Promise<void> {
+    constructor(@Inject(LoggerFactory) loggerFactory: LoggerFactory) {
+        this.logger = loggerFactory.create(RedisService.name);
+    }
+
+
+    async onModuleInit(): Promise<void> {
     await this.createClient();
   }
 
@@ -23,7 +31,7 @@ async onModuleInit(): Promise<void> {
     if (this.client && this.client.isOpen) {
       return;
     }
-    
+
     const redisClientOptions: any = {
       url: `redis://${process.env.REDIS_HOST || '127.0.0.1'}:${process.env.REDIS_PORT || 6379}`,
     };
@@ -46,7 +54,7 @@ async onModuleInit(): Promise<void> {
 
     await this.client.connect();
   }
-  
+
   async ensureClient(): Promise<void> {
     if (!this.client || !this.client.isOpen) {
       this.logger.warn('Redis client not initialized. Attempting to reconnect...');
@@ -92,7 +100,6 @@ async onModuleInit(): Promise<void> {
       return { message: 'Error while getting the job state : ' + traceId };
     }
   }
-
   async setJobState(traceId: string, jobState: JobState): Promise<any> {
     try {
       const jobContext = await this.getJobContext(traceId);

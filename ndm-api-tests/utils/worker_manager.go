@@ -243,7 +243,7 @@ func DetachAllWorkers() (string, error) {
 }
 
 // CreateWorkerScript creates a shell script to register a worker using API response data.
-func CreateWorkerScript(resp *http.Response) (string, string, error) {
+func CreateWorkerScript(resp *http.Response, projectId string) (string, string, error) {
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		LogError(fmt.Sprintf("Error reading response body: %v", err), err)
@@ -277,10 +277,11 @@ func CreateWorkerScript(resp *http.Response) (string, string, error) {
     sudo su -c '
     export WORKER_ID=%s
     export WORKER_SECRET=%s
+	export PROJECT_ID=%s
     export CONTROL_PLANE_IP=%s
     sh /opt/datamigrator/bin/worker_register.sh
     '
-    `, workerId, workerSecret, controlPlaneIp)
+    `, workerId, workerSecret, projectId, controlPlaneIp)
 	return script, workerId, nil
 }
 
@@ -313,6 +314,9 @@ func GetDetachWorkerScript() string {
 	echo "$SUDO_PASS" | sudo -S sed -i '/^REDIS_HOST=/d' "$ENV_FILE"
 	echo "$SUDO_PASS" | sudo -S sed -i '/^REDIS_USERNAME=/d' "$ENV_FILE"
 	echo "$SUDO_PASS" | sudo -S sed -i '/^REDIS_PASSWORD=/d' "$ENV_FILE"
+	echo "$SUDO_PASS" | sudo -S sed -i '/^PROJECT_ID=/d' "$ENV_FILE"
+	echo "$SUDO_PASS" | sudo -S sed -i '/^OTEL_COLLECTOR_ENDPOINT=/d' "$ENV_FILE"
+
 
 	echo "Successfully disabled worker service"
 	`, NDM_VM_PASSWORD)
@@ -328,6 +332,17 @@ func DetachWorker(config SSHConfig) (string, error) {
 // StartWorker starts the worker service on a given worker via SSH.
 func StartWorker(config SSHConfig) (string, error) {
 	script := GetStartWorkerScript()
+	output, err := sshRunScript(config, script)
+	if err != nil {
+		return "", fmt.Errorf("failed to start worker on %s: %w", config.Host, err)
+	}
+	LogDebug(fmt.Sprintf("Worker %s started successfully with output: %s", config.Host, output))
+	return output, nil
+}
+
+// RestartWorker starts the worker service on a given worker via SSH.
+func RestartWorker(config SSHConfig) (string, error) {
+	script := GetRestartWorkerScript()
 	output, err := sshRunScript(config, script)
 	if err != nil {
 		return "", fmt.Errorf("failed to start worker on %s: %w", config.Host, err)
@@ -363,7 +378,7 @@ func attachWorkerForConfig(worker SSHConfig, authToken, accountId, projectId str
 	if err != nil {
 		return "", err
 	}
-	script, workerId, err := CreateWorkerScript(resp)
+	script, workerId, err := CreateWorkerScript(resp, projectId)
 	if err != nil {
 		return workerId, err
 	}
@@ -430,6 +445,20 @@ func GetStartWorkerScript() string {
 	fi
 
 	echo "Successfully started worker service"
+	`, NDM_VM_PASSWORD)
+	return script
+}
+
+// GetStopWorkerScript generates a shell script to restart worker service.
+func GetRestartWorkerScript() string {
+	script := fmt.Sprintf(`#!/bin/bash
+	set -e 
+
+	SUDO_PASS="%s"
+
+	SERVICE="datamigrator-worker.service"
+	echo "$SUDO_PASS" | sudo -S systemctl restart "$SERVICE"
+
 	`, NDM_VM_PASSWORD)
 	return script
 }

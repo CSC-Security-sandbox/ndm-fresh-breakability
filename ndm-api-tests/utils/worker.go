@@ -8,10 +8,7 @@ import (
 )
 
 // Returns the Worker list for a given project ID
-type Response struct {
-	Data  []Worker `json:"data"`
-	Total int      `json:"total"`
-}
+type WorkerResponse = ApiResponse[Worker]
 
 // Worker represents a worker in the system with its details
 type Worker struct {
@@ -66,14 +63,14 @@ func ListWorkers(projectID string, headers map[string]string) ([]Worker, error) 
 		}
 
 		// Parse the response JSON
-		var response Response
+		var response WorkerResponse
 		err = json.Unmarshal(bodyBytes, &response)
 		if err != nil {
 			return nil, fmt.Errorf("error unmarshalling response JSON: %w", err)
 		}
 
-		if len(response.Data) > 0 {
-			return response.Data, nil
+		if len(response.Data.Items) > 0 {
+			return response.Data.Items, nil
 		}
 		Wait(DefaultPollInterval)
 	}
@@ -99,15 +96,15 @@ func GetWorkerStatus(projectID string, workerIDs []string) (map[string]string, e
 		}
 
 		// Parse the response JSON
-		var response Response
+		var response WorkerResponse
 		err = json.Unmarshal(bodyBytes, &response)
 		if err != nil {
 			return nil, fmt.Errorf("error unmarshalling response JSON: %w", err)
 		}
 
-		if len(response.Data) > 0 {
+		if len(response.Data.Items) > 0 {
 			workerStatus := make(map[string]string)
-			for _, worker := range response.Data {
+			for _, worker := range response.Data.Items {
 				for _, workerID := range workerIDs {
 					if workerID == worker.WorkerID {
 						workerStatus[workerID] = worker.Status
@@ -119,4 +116,22 @@ func GetWorkerStatus(projectID string, workerIDs []string) (map[string]string, e
 		Wait(DefaultPollInterval)
 	}
 	return nil, fmt.Errorf("no workers found for project ID: %s", projectID)
+}
+
+func GetAddFilesToWorkerScript(localFilePath, remoteTargetPath, workerInstance string) string {
+	script := fmt.Sprintf(`#!/bin/bash
+    set -e
+
+    SUDO_PASS="%%s"
+
+    FILE_SRC="%s"
+    FILE_DEST="%s"
+    INSTANCE="%s"
+
+    echo "Transferring $FILE_SRC to $INSTANCE:$FILE_DEST"
+    multipass transfer "$FILE_SRC" "$INSTANCE:$FILE_DEST"
+
+    echo "File successfully transferred."
+    `, localFilePath, remoteTargetPath, workerInstance)
+	return script
 }

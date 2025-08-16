@@ -9,12 +9,18 @@ import { JobRunActionsReq, ApprovalRequestDTO } from './dto/jobrunactions.dto';
 import { AdHocRunDTO } from './dto/adhockjobrun.dto';
 import { CutOverStatus, JobRunStatus } from 'src/constants/enums';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 describe('JobRunController', () => {
   let controller: JobRunController;
   let jobRunService: jest.Mocked<JobRunService>;
   let jobRunInitService: jest.Mocked<JobRunInitService>;
   let jobRunActionService: jest.Mocked<JobRunActionService>;
+  let mockLogger: LoggerService;
+
   const mockJwtService = {
     verifyToken: jest.fn().mockResolvedValue({
       user: {
@@ -33,6 +39,19 @@ describe('JobRunController', () => {
   };
 
   beforeEach(async () => {
+    // Create mock logger
+    mockLogger = {
+      error: jest.fn(),
+      log: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+    } as any;
+
+    // Create mock LoggerFactory
+    const mockLoggerFactory = {
+      create: jest.fn().mockReturnValue(mockLogger),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [JobRunController],
       providers: [
@@ -66,6 +85,10 @@ describe('JobRunController', () => {
           useValue: {
             actions: jest.fn(),
           },
+        },
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
         },
       ],
     }).compile();

@@ -21,6 +21,8 @@ export interface TableRendererPropsType {
   allExportPaths: VolumeType[];
   allWorkersList: WorkerApiType[];
   fileServerDetails: ConfigListTypeApiType;
+  refetch: () => void;
+  isFetching: boolean;
 }
 
 export interface OverviewTabsPropsType {

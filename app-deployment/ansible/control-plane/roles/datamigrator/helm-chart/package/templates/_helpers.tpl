@@ -92,21 +92,25 @@ spec:
           periodSeconds: {{ .Values.readinessProbe.periodSeconds | default 5 }}
         {{- end }}
         imagePullPolicy: {{ if .Values.global.local_cluster }}Always{{ else }}Never{{ end }}
-        {{- if and .Values.persistentVolume .Values.persistentVolume.enabled }}
+        {{- if .Values.persistentVolumes }}
         volumeMounts:
-          - name: {{ .Values.persistentVolume.name }}
-            mountPath: {{ .Values.persistentVolume.mountPath }}
+          {{- range .Values.persistentVolumes }}
+          - name: {{ .name }}
+            mountPath: {{ .mountPath }}
+          {{- end }}
         {{- end }}
 
-      {{- if and .Values.persistentVolume .Values.persistentVolume.enabled }}
+      {{- if .Values.persistentVolumes }}
       volumes:
-        - name: {{ .Values.persistentVolume.name }}
+        {{- range .Values.persistentVolumes }}
+        - name: {{ .name }}
           hostPath:
-            path: {{ .Values.persistentVolume.hostPath }}
+            path: {{ .hostPath }}
             type: DirectoryOrCreate
+        {{- end }}
       {{- end }}
 {{- end }}
-        
+
 {{/* Default Template for Service. All Sub-Charts under this Chart can include the below template. */}}
 {{- define "datamigrator.servicetemplate" }}
 apiVersion: v1

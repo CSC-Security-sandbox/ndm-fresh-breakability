@@ -1,5 +1,5 @@
 import { HttpService } from '@nestjs/axios';
-import { Injectable, OnModuleInit, Logger, Inject } from '@nestjs/common';
+import { Injectable, OnModuleInit, Inject } from '@nestjs/common';
 import { firstValueFrom } from 'rxjs';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -10,6 +10,7 @@ import {
 import { AuthService } from 'src/auth/auth.service';
 import { CronJob } from 'cron';
 import { SchedulerRegistry } from '@nestjs/schedule';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class HealthcheckService implements OnModuleInit {
@@ -18,10 +19,11 @@ export class HealthcheckService implements OnModuleInit {
   private readonly workerJobServiceUrl: string;
   private readonly memoryLimitGb: number;
   private diskLimitGb: number = -1;
+  private readonly logger: LoggerService;
 
   constructor(
     private readonly httpService: HttpService,
-    private readonly logger: Logger,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly schedulerRegistry: SchedulerRegistry,
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject('totalmem') private readonly totalmem: () => number,
@@ -39,6 +41,7 @@ export class HealthcheckService implements OnModuleInit {
     );
     this.memoryLimitGb = this.getSafeMemoryLimit();
     this.setupDiskLimit();
+    this.logger = loggerFactory.create(HealthcheckService.name);
   }
 
   private getSafeMemoryLimit(): number {
@@ -100,7 +103,7 @@ export class HealthcheckService implements OnModuleInit {
     ).catch((error) => {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      this.logger.error(`Error in making statscheck API call: ${errorMessage}`);
+        this.logger.error(`Error in making statscheck API call: ${errorMessage}`);
     });
   }
 

@@ -16,7 +16,8 @@ export enum CommandPattern{
     SET_SID_FOR_OBJECT='setSIDforObject',
     SET_SID_FOR_OBJECT_DIR='setSIDforDirObject',
     MOUNTED_FOLDER_SIZE='mountedFolderSize',
-    AVAILABLE_DISK_SPACE='availableDiskSpace'
+    AVAILABLE_DISK_SPACE='availableDiskSpace',
+    FSTAB_PATH='fstabPath'
 }
 
 // @types 
@@ -46,6 +47,7 @@ export interface BaseCommands {
     setSIDforObject?: string | undefined
     mountedFolderSize? : string | undefined
     availableDiskSpace? : string | undefined
+    fstabPath? : string | undefined
 }
 
 export default registerAs(
@@ -67,7 +69,8 @@ export default registerAs(
                 versionDetails: process.env.NFS_LINUX_VERSION_DETAIL_CMD,
                 unmountPath:  process.env.NFS_LINUX_UNMOUNT_PATH_CMD,
                 availableDiskSpace: process.env.LINUX_AVAILABLE_DISK_SPACE_CMD,
-                mountedFolderSize: process.env.LINUX_USED_DISK_SPACE
+                mountedFolderSize: process.env.LINUX_USED_DISK_SPACE,
+                fstabPath: process.env.LINUX_FSTAB_PATH
             },
             darwin: {
                 listPath: process.env.NFS_UNIX_LIST_PATH_CMD,
@@ -76,7 +79,8 @@ export default registerAs(
                 versionDetails: process.env.NFS_UNIX_VERSION_DETAIL_CMD,
                 unmountPath:  process.env.NFS_UNIX_UNMOUNT_PATH_CMD,
                 availableDiskSpace: process.env.UNIX_AVAILABLE_DISK_SPACE_CMD,
-                mountedFolderSize: process.env.UNIX_USED_DISK_SPACE
+                mountedFolderSize: process.env.UNIX_USED_DISK_SPACE,
+                fstabPath: process.env.UNIX_FSTAB_PATH
             },
         },
         smb: {
@@ -129,5 +133,9 @@ export class CommandConfig {
 
   static getNFSCommand(platform: NodeJS.Platform, key: string): any {
     return CommandConfig.configService.get(`cmd.nfs.${platform}.${key}`);
+  }
+
+  static getFstabPath(platform: NodeJS.Platform, fstabPath: string): any {
+    return CommandConfig.configService.get(`cmd.nfs.${platform}.${fstabPath}`);
   }
 }

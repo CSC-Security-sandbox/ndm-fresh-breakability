@@ -5,7 +5,7 @@ import { ConfigListTypeApiType } from "@/types/app.type";
 import { Button } from "@netapp/bxp-design-system-react";
 import { EditIcon } from "@netapp/bxp-style/react-icons/Action";
 import { useNavigate } from "react-router-dom";
-import { FILE_SERVER_STATUS } from "@/types/app.type";
+import { FILE_SERVER_STATUS_ENUM } from "@/types/app.type";
 
 const JobsAction = ({
   fileServerDetails,
@@ -15,7 +15,7 @@ const JobsAction = ({
   const navigate = useNavigate();
   const pathname = window.location.pathname;
 
-  const isActive = fileServerDetails?.status === FILE_SERVER_STATUS.ACTIVE;
+  const isActive = fileServerDetails?.status === FILE_SERVER_STATUS_ENUM.ACTIVE;
 
   const handleEdit = () => {
     navigate(`/edit-file-server/${fileServerDetails?.id}`);

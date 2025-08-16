@@ -8,6 +8,8 @@ const TableRenderer = ({
   fileServerDetails,
   allExportPaths,
   allWorkersList,
+  refetch,
+  isFetching,
 }: TableRendererPropsType) => {
   const [currentTab, setCurrentTab] = useState<number>(1);
   return (
@@ -26,6 +28,8 @@ const TableRenderer = ({
           fileServerDetails={fileServerDetails}
           showRefetch={true}
           setSelectedExportPathsIds={() => {}}
+          refetch={refetch}
+          isFetching={isFetching}
         />
       ) : (
         <WorkersTable

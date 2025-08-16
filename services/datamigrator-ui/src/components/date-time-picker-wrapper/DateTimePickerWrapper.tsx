@@ -4,7 +4,10 @@ import { DemoContainer } from "@mui/x-date-pickers/internals/demo";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
-import { DateTimePickerWrapperPropsType } from "@components/date-time-picker-wrapper/DateTimePickerWrapper.interface";
+import {
+  DateTimePickerWrapperPropsType,
+  FormErrors,
+} from "@components/date-time-picker-wrapper/DateTimePickerWrapper.interface";
 import { useMemo, useState } from "react";
 
 dayjs.extend(utc);
@@ -17,15 +20,19 @@ const DateTimePickerWrapper = ({
   const [error, setError] = useState<string | null>("");
 
   const errorMessage = useMemo(() => {
-    switch (error) {
-      case "disablePast":
-        return "You can't select a date in the past";
+    const formErrors = bulkDiscoveryForm?.formErrors as FormErrors;
+    const firstRunAtError = formErrors?.firstRunAt;
 
-      default: {
-        return "";
-      }
+    if (typeof firstRunAtError === "string") {
+      return firstRunAtError;
     }
-  }, [error]);
+
+    if (error === "disablePast") {
+      return "You can't select a date in the past";
+    }
+
+    return "";
+  }, [error, bulkDiscoveryForm?.formErrors]);
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -37,6 +44,7 @@ const DateTimePickerWrapper = ({
           slotProps={{
             textField: {
               helperText: errorMessage,
+              error: !!errorMessage,
             },
           }}
           onError={(newError) => setError(newError)}

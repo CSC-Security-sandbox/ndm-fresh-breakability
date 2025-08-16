@@ -24,7 +24,10 @@ import {
 import JobDescription from "@modules/jobs/jobs-list/job-details/components/JobDescription";
 import JobRunHeader from "@modules/jobs/jobs-list/job-details/components/JobRunHeader";
 import JobRunTaskCard from "@modules/jobs/jobs-list/job-details/components/JobRunTaskDetails";
-import { handleDownloadReport } from "@modules/jobs/jobs.utils";
+import {
+  handleDownloadReport,
+  handleDownloadCocReport,
+} from "@modules/jobs/jobs.utils";
 import {
   ActionMenu,
   ActionMenuButtonStyle,
@@ -37,6 +40,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import useAdhocRun from "@hooks/useAdhocRun";
 import { Show } from "@components/show/Show";
 import JobErrors from "@modules/jobs/jobs-list/job-details/components/JobErrors";
+import { GENERATING_REPORT_LABEL } from "@modules/jobs/jobs-list/job-details/job-details.constants";
 
 const JobRunDetails = () => {
   const navigate = useNavigate();
@@ -100,9 +104,7 @@ const JobRunDetails = () => {
   const [downloadReportApi] = useDownloadReportsMutation();
   const [getPdfReportApi] = useGetPdfReportMutation();
 
-  const canDownloadReport = hasPermission(
-    USER_PERMISSION_TYPE_ENUM.Reports
-  );
+  const canDownloadReport = hasPermission(USER_PERMISSION_TYPE_ENUM.Reports);
   const reportActionButtons =
     jobRunDetails && canDownloadReport
       ? getReportActions(
@@ -112,6 +114,7 @@ const JobRunDetails = () => {
             jobRunId,
           },
           handleDownloadReport,
+          handleDownloadCocReport,
           downloadReportApi,
           getPdfReportApi,
           "button"
@@ -182,7 +185,7 @@ const JobRunDetails = () => {
                   isJobStatusValid(jobRunDetails?.status)
                 }
               >
-                <ReportsGeneratingLoader />
+                <ReportsGeneratingLoader label={GENERATING_REPORT_LABEL} />
               </Show.When>
 
               <Show.When

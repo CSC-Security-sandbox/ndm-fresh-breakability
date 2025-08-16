@@ -1,8 +1,9 @@
 import { DirMap, TaskMap } from "src/redis/hmap-collection";
-import { JobConfig } from "../job-config";
-import { CommandCollection, ErrorCollection, FileCollection, TaskCollection } from "../stream-collection";
-import { Command, DMError, FileInfo, Task } from "../metadata-types";
+import { Cmd, ItemInfo, TaskInfo } from "../../datatype/stream-datatypes";
 import { GroupReaderType } from "../enums";
+import { JobConfig } from "../job-config";
+import { DMError, Task } from "../metadata-types";
+import { CommandCollection, ErrorCollection, ItemInfoCollection, TaskInfoCollection } from "../stream-collection";
 
 
 
@@ -11,10 +12,10 @@ export  class JobManagerContext {
     jobRunId: string;
     jobConfig: JobConfig;
     jobRunStatus: string;
-    fileStream: FileCollection;
+    fileStream: ItemInfoCollection;
     errorStream: ErrorCollection;
     commandStream: CommandCollection;
-    taskStream: TaskCollection;
+    taskStream: TaskInfoCollection;
     taskMap: TaskMap;
     dirBatchMap: DirMap;
 
@@ -41,11 +42,11 @@ export  class JobManagerContext {
     // streams Methods
 
     // file stream methods
-    async publishToFileStream(file: FileInfo): Promise<string> {
+    async publishToFileStream(file: ItemInfo): Promise<string> {
         return await this.fileStream.append(file);
     }
 
-    async *groupReadFileStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: FileInfo; id: string; }> {
+    async *groupReadFileStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: ItemInfo; id: string; }> {
         yield* this.fileStream.groupReadWithoutAck(readerName, batchSize, groupType);
     }
 
@@ -67,11 +68,15 @@ export  class JobManagerContext {
     }
 
     // Command Stream Methods
-    async publishToCommandStream(command: Command): Promise<string> {
+    async publishToCommandStream(command: Cmd): Promise<string> {
         return await this.commandStream.append(command);
     }
+       
+    async publishBulkToCommandStream(commands: Cmd[]): Promise<string[]> {
+        return await this.commandStream.appendBulk(commands);
+    }
 
-    async *groupReadCommandStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: Command; id: string; }> {
+    async *groupReadCommandStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: Cmd; id: string; }> {
         yield* this.commandStream.groupReadWithoutAck(readerName, batchSize, groupType);
     }
 
@@ -79,11 +84,15 @@ export  class JobManagerContext {
         await this.commandStream.ackAndPurge(ids, groupType);
     }
 
+    async getCmdStreamLen(): Promise<number> {
+        return this.commandStream.getLength();
+    }
+
     // Task Stream Methods
-    async publishToTaskStream(task: Task): Promise<string> {
+    async publishToTaskStream(task: TaskInfo): Promise<string> {
         return await this.taskStream.append(task);
     }
-    async *groupReadTaskStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: Task; id: string; }> {
+    async *groupReadTaskStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: TaskInfo; id: string; }> {
         yield* this.taskStream.groupReadWithoutAck(readerName, batchSize, groupType);
     }
     async groupAckTaskStream(ids:string[], groupType: GroupReaderType): Promise<void> {
@@ -92,15 +101,15 @@ export  class JobManagerContext {
 
 
     // Task Map Methods
-    async setTask(key: string, value: Task): Promise<void> {
+    async setTask(key: string, value: TaskInfo): Promise<void> {
         await this.taskMap.setValue(key, value);
     }
 
-    async setTaskIfNotExists(key: string, value: Task): Promise<boolean> {
+    async setTaskIfNotExists(key: string, value: TaskInfo): Promise<boolean> {
         return await this.taskMap.setValueIfNotExists(key, value);
     }
 
-    async getTask(key: string): Promise<Task | null> {
+    async getTask(key: string): Promise<TaskInfo | null> {
         return await this.taskMap.getValue(key);
     }
 

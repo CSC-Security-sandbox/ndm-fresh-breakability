@@ -2,11 +2,16 @@ import { BadRequestException } from "@nestjs/common";
 import { JobRunActionService } from "./jobrun-action.service";
 import { JobRunStatus } from "src/constants/enums";
 import { JobRunActions } from "./dto/jobrunactions.dto";
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 describe("JobRunActionService", () => {
     let service: JobRunActionService;
     let jobRunRepo: any;
     let workFlowService: any;
+    let loggerFactory: LoggerFactory;
 
     beforeEach(() => {
         jobRunRepo = {
@@ -16,7 +21,16 @@ describe("JobRunActionService", () => {
         workFlowService = {
             sendSignal: jest.fn(),
         };
-        service = new JobRunActionService(jobRunRepo, workFlowService);
+        loggerFactory = {
+            create: jest.fn().mockReturnValue({
+                log: jest.fn(),
+                error: jest.fn(),
+                warn: jest.fn(),
+                debug: jest.fn(),
+                verbose: jest.fn(),
+            }),
+        } as any;
+        service = new JobRunActionService(jobRunRepo, workFlowService, loggerFactory);
     });
 
     describe("actions", () => {

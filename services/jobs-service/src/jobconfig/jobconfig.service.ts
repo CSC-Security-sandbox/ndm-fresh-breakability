@@ -3,7 +3,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
-  Logger,
+  Inject,
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -16,9 +16,8 @@ import {
   JobRunStatus,
   JobStatus,
   JobType,
-  Protocol,
-  TemplateType,
-  WorkFlows,
+  SIZE_UNITS,
+  TemplateType
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
 import { Options } from "src/constants/types";
@@ -28,7 +27,6 @@ import { ProjectEntity } from "src/entities/project.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
 import { nextDate } from "src/utils/mapper";
 import { WorkflowService } from "src/workflow/workflow.service";
-import { StartWorkFlowPayload } from "src/workflow/workflow.types";
 import { In, Raw, Repository } from "typeorm";
 import { validate as isUUID, v4 as uuidv4 } from "uuid";
 import { JobConfigEntity } from "../entities/jobconfig.entity";
@@ -36,6 +34,10 @@ import {
   SpeedTestConfigEntity,
   SpeedTestConfigWorkerEntity,
 } from "src/entities/speed-test-job-config.entity";
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 import {
   SpeedLogEntity,
@@ -66,26 +68,25 @@ import {
   SpeedTestJobRun,
   workerWithStatus,
 } from "./jobconfig.types";
-import { run } from "node:test";
 import { FileServerEntity } from "src/entities/fileserver.entity";
 import { WorkerEntity } from "src/entities/worker.entity";
 import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
 import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
 import { ParsedMapping } from "src/utils/indentity-mapping.type";
 import { RedisService } from "src/redis/redis.service";
-import { JobRunService } from "src/jobrun/jobrun.service";
 import { JobRunStats } from "src/jobrun/dto/jobstats";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { SendMailService } from "src/utils/send-email";
-import { filterUnhealthyWorkers } from "../utils/worker-filter";
-import { filter } from "rxjs";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 import { IncidentStatus, SyncEmailEntity } from "src/entities/sync-email.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
+import { SuccessEmailType } from "src/utils/send-email.type";
+import { WorkFlowFailureReason } from "src/jobrun/jobrun.types";
 
 @Injectable()
 export class JobConfigService {
-  private readonly logger = new Logger(JobConfigService.name);
+  private readonly logger: LoggerService;
+
   constructor(
     @InjectRepository(FileServerEntity)
     private fileServerRepo: Repository<FileServerEntity>,
@@ -127,10 +128,12 @@ export class JobConfigService {
     @InjectRepository(OperationErrorEntity)
     private operationErrorRepo: Repository<OperationErrorEntity>,
     private sendMailService: SendMailService,
-
     @InjectRepository(WorkerJobRunMap)
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
-  ) {}
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(JobConfigService.name);
+  }
 
   // ------------ Bulk Discovery ---------------- //
   async createBulkDiscovery(
@@ -639,7 +642,7 @@ export class JobConfigService {
               })
             }
           }
-          this.logger.warn(inactiveJobWarnings);
+          this.logger.warn(JSON.stringify(inactiveJobWarnings));
           continue; 
         }
         
@@ -665,7 +668,7 @@ export class JobConfigService {
             {
               excludeFilePatterns: bulkMigrate?.options?.excludeFilePatterns,
               preserveAccessTime: bulkMigrate?.options?.preserveAccessTime,
-              excludeOlderThan: bulkMigrate?.options?.excludeOlderThan,
+              excludeOlderThan: bulkMigrate?.options?.excludeOlderThan ?? null,
               skipFile: bulkMigrate?.options?.skipFile,
               status: JobStatus.Active,
               firstRunAt: firstRunAt,
@@ -706,7 +709,6 @@ export class JobConfigService {
                 const redisClient = await this.redisService.getClient();
                 for (const jobRun of jobRunIdsToDeleteKey) {
                   const redisKey = `${jobRun.id}:mapping`;
-                  if (!redisClient.isOpen) await redisClient.connect();
 
                   const redisKeyExists = await redisClient.exists(redisKey);
                   if (redisKeyExists) {
@@ -758,23 +760,17 @@ export class JobConfigService {
         );
       }
 
-      const mailBody =
-        `Hello,<br/>
-      The following Migrate jobs has been created:<br/><br/>
-      ` +
-        savedJobConfigs
-          .map(
-            (jobConfig) => `
-                <p>Job ID: ${jobConfig.id}</p>
-                <p>Source Path: ${jobConfig.sourcePath?.volumePath}</p>
-                <p>Target Path: ${jobConfig.targetPath?.volumePath}</p>
-                <p>Job Type: ${jobConfig.jobType}</p>
-                <br/>
-              `
-          )
-          .join("");
-      const payload = { body: mailBody };
-      await this.sendMailService.sendMail(payload);
+      await this.sendMailService.sendMail({
+        successEmailType: SuccessEmailType.JOB_CREATION,
+        migrateJob: {
+          savedJobConfigs: savedJobConfigs.map(jobConfig => ({
+            id: jobConfig.id,
+            sourcePath: jobConfig.sourcePath?.volumePath,
+            targetPath: jobConfig.targetPath?.volumePath,
+            jobType: jobConfig.jobType,
+          })),
+        }
+      });
       savedJobConfigsmapData =  savedJobConfigs.map(
         ({ id, jobType, sourcePathId, targetPathId }) => ({
           id,
@@ -871,6 +867,7 @@ export class JobConfigService {
                   status: JobStatus.Active,
                   preserveAccessTime: config.preserveAccessTime,
                   firstRunAt: new Date(),
+                  excludeOlderThan: config.excludeOlderThan,
                 })
               );
             } else {
@@ -1018,7 +1015,7 @@ export class JobConfigService {
           scannedDirectoriesCount: BigInt(
             inventoryCounts.directories || "0"
           )?.toString(),
-          totalScannedSize: this.covertBytes(Number(inventoryCounts?.totalSize  || 0)),
+          totalScannedSize: formatBytes(Number(inventoryCounts?.totalSize  || 0)),
           totalMigratedSize: formatBytes(Number(jobRunStats?.totalSize || 0)),
           errors: inventoryCounts.errors,
         };
@@ -1073,16 +1070,9 @@ export class JobConfigService {
 
   parseSize(size: string): number {
     if (!size) return 0;
+    const units = SIZE_UNITS;
 
-    const units = {
-      B: 1,
-      KB: 1024,
-      MB: 1024 ** 2,
-      GB: 1024 ** 3,
-      TB: 1024 ** 4,
-      PB: 1024 ** 5,
-    };
-    const match = size.match(/^([\d.]+)\s*(B|KB|MB|GB|TB|PB)$/);
+    const match = size.match(/^([\d.]+)\s*(B|KiB|MiB|GiB|TiB|PiB)$/);
 
     if (!match) return 0;
 
@@ -1336,27 +1326,6 @@ export class JobConfigService {
     fileStream.pipe(res);
   }
 
-  covertBytes(bytes: number): string {
-    const bytesInKB = 1024;
-    const bytesInMB = bytesInKB * 1024;
-    const bytesInGB = bytesInMB * 1024;
-    const bytesInTB = bytesInGB * 1024;
-    const bytesInPB = bytesInTB * 1024;
-
-    if (bytes < bytesInKB) {
-      return `${bytes} B`;
-    } else if (bytes < bytesInMB) {
-      return `${(bytes / bytesInKB).toFixed(2)} KB`;
-    } else if (bytes < bytesInGB) {
-      return `${(bytes / bytesInMB).toFixed(2)} MB`;
-    } else if (bytes < bytesInTB) {
-      return `${(bytes / bytesInGB).toFixed(2)} GB`;
-    } else if (bytes < bytesInPB) {
-      return `${(bytes / bytesInTB).toFixed(2)} TB`;
-    } else {
-      return `${(bytes / bytesInPB).toFixed(2)} PB`;
-    }
-  }
   hasCommonWorkers(data: any): boolean {
     const workerIds = new Set<string>();
     for (const volume of data) {
@@ -1374,6 +1343,7 @@ export class JobConfigService {
     }
     return false;
   }
+
   async findJobConfigs(
     conditions: { sourcePathId: string; destinationPathId: string }[]
   ) {
@@ -1778,16 +1748,18 @@ export class JobConfigService {
       errorTypeCounts = [];
     }
 
-    const setupFailedErrors = await this.workerJobRunMapRepo.find({
-      where: {
-        jobRunId,
-        workerResponse: Raw(alias => `${alias} IS NOT NULL AND ${alias} ->> 'code' = 'SETUP_WORKER_FAILURE' AND ${alias} ->> 'status' = 'FAILED'`),
-      },
-    });
+    const setupFailedErrors = await this.workerJobRunMapRepo
+      .createQueryBuilder("job")
+      .where("job.jobRunId = :jobRunId", { jobRunId })
+      .andWhere("job.workerResponse IS NOT NULL")
+      .andWhere("job.workerResponse ->> 'code' = ANY(:errorCodes)", {
+        errorCodes: Object.values(WorkFlowFailureReason),
+      })
+      .andWhere("job.workerResponse ->> 'status' = 'FAILED'")
+      .getMany();
+
     if (setupFailedErrors?.length > 0) {
-      const fatalError = errorTypeCounts.find(
-        (error) => error.errorType === "FATAL_ERROR"
-      );
+      const fatalError = errorTypeCounts.find((error) => error.errorType === "FATAL_ERROR");
       if (fatalError) {
         fatalError.count += setupFailedErrors.length;
       } else {

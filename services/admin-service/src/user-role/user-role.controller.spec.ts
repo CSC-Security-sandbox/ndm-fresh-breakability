@@ -13,6 +13,8 @@ import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { mockLoggerFactory } from '../test-utils/logger-mocks';
+import { BadRequestException } from '@nestjs/common';
+import { Request as ExpressRequest } from 'express';
 
 describe('UserRoleController', () => {
   let controller: UserRoleController;
@@ -116,10 +118,77 @@ describe('UserRoleController', () => {
       project_id: '1',
       account_id: '1',
     };
+    const mockRequest = { query: {} } as ExpressRequest;
     jest
       .spyOn(service, 'findAll')
       .mockImplementation(async () => [userRole] as any);
-    expect(await controller.findAll()).toStrictEqual([userRole]);
+    expect(await controller.findAll(mockRequest)).toStrictEqual([userRole]);
+  });
+
+  it('should find all user-roles with query parameters', async () => {
+    const userRole = {
+      user_id: '1',
+      role_id: '1',
+      project_id: '1',
+      account_id: '1',
+    };
+    const mockRequest = { 
+      query: { 
+        page: '2',
+        limit: '20',
+        sortField: 'user_id',
+        sortOrder: 'DESC',
+        user_id: '1',
+        role_id: '1',
+        project_id: '1',
+        account_id: '1'
+      } 
+    } as any;
+    jest
+      .spyOn(service, 'findAll')
+      .mockImplementation(async () => [userRole] as any);
+    expect(await controller.findAll(mockRequest, 2, 20, 'user_id', 'DESC', '1', '1', '1', '1')).toStrictEqual([userRole]);
+    expect(service.findAll).toHaveBeenCalledWith(2, 20, 'user_id', 'DESC', {
+      user_id: '1',
+      role_id: '1',
+      project_id: '1',
+      account_id: '1',
+    });
+  });
+
+  it('should throw BadRequestException for unexpected query parameters', async () => {
+    const mockRequest = { 
+      query: { 
+        unexpectedParam: 'value',
+        anotherUnexpected: 'test'
+      } 
+    } as any;
+    
+    await expect(controller.findAll(mockRequest)).rejects.toThrow(
+      new BadRequestException('Unexpected query parameters: unexpectedParam, anotherUnexpected')
+    );
+  });
+
+  it('should find all user-roles with default pagination values', async () => {
+    const userRole = {
+      user_id: '1',
+      role_id: '1',
+      project_id: '1',
+      account_id: '1',
+    };
+    const mockRequest = { query: {} } as ExpressRequest;
+    jest
+      .spyOn(service, 'findAll')
+      .mockImplementation(async () => [userRole] as any);
+    
+    await controller.findAll(mockRequest);
+    
+    expect(service.findAll).toHaveBeenCalledWith(1, 10, 'id', 'ASC', {
+      user_id: undefined,
+      role_id: undefined,
+      project_id: undefined,
+      account_id: undefined,
+    });
   });
 
   it('should find an user-role', async () => {

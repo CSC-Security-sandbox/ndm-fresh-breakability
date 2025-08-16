@@ -2,6 +2,7 @@ import useSelectedProjectId from "@/hooks/useSelectedProjectId";
 import { RootStateType } from "@store/store";
 import { ReactNode, useEffect, useState } from "react";
 import { useSelector } from "react-redux";
+import { getProjectPermissions } from '@/utils/common.utils';
 
 interface AuthProps {
   permissionName: string;
@@ -17,23 +18,15 @@ const Auth = ({ permissionName, children }: AuthProps) => {
   );
   const { selectedProjectId } = useSelectedProjectId();
 
-  const permissionCurrent = (projectId: string) =>
-    userPermissions.roles.find((row) => row.projects.includes(projectId))
-      ?.permissions;
+  const permissionCurrent = (projectId: string) => getProjectPermissions(projectId, userPermissions);
 
   useEffect(() => {
     const fetchUserPermissions = async () => {
       setHasPermission(false);
-      if (
-        userPermissions.roles.length > 0 &&
-        userPermissions.roles[0].projects.length === 0
-      ) {
+
+      const userPermissions = permissionCurrent(selectedProjectId);
+      if (userPermissions?.includes(permissionName)) {
         setHasPermission(true);
-      } else {
-        const userPermissions = permissionCurrent(selectedProjectId);
-        if (userPermissions?.includes(permissionName)) {
-          setHasPermission(true);
-        }
       }
       setLoading(false);
     };

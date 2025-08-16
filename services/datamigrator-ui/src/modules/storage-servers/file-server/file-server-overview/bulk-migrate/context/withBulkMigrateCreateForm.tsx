@@ -19,7 +19,6 @@ import useFileServerDetails from "@hooks/useFileServerDetails";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
 import {
   DOW_OPTIONS,
-  INCREMENTAL_SYNC_SCHEDULE_ENUM,
   INCREMENTAL_SYNC_SCHEDULE_SET_ENUM,
   INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM,
   MIGRATE_OPTION_ENUM,
@@ -62,6 +61,7 @@ import {
   setModalProps,
 } from "@store/reducer/commonComponentSlice";
 import useFetchWorkers from "@hooks/useFetchWorkers";
+import { INCREMENTAL_SYNC_SCHEDULE_ENUM } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/IncrementalSyncSchedule/incremental-sync-schedule.constants";
 
 export function withBulkMigrateCreateForm(
   WrappedComponent: ComponentType<any>
@@ -98,8 +98,13 @@ export function withBulkMigrateCreateForm(
     const [preCheckApi, { isLoading: isPrecheckSubmitting }] =
       usePrecheckMutation();
 
-    const { fileServerDetails, allExportPaths, allWorkersList } =
-      useFileServerDetails();
+    const {
+      fileServerDetails,
+      allExportPaths,
+      allWorkersList,
+      refetch,
+      isFetching,
+    } = useFileServerDetails();
     const [getAllFileServersApi] = useLazyGetAllFileServersWithVolumeQuery();
     const [getWorkerDetails] = useLazyCheckConnectionRespQuery();
 
@@ -395,9 +400,14 @@ export function withBulkMigrateCreateForm(
               }
               setIsSubmitting(false);
               if (precheckState.errors.length === 0) {
-                if (precheckState?.warnings.length > 0) {
+                if (
+                  precheckState?.warnings &&
+                  precheckState.warnings.length > 0
+                ) {
                   const warning = precheckState.warnings.filter((warning) =>
-                    warning?.warnings.includes("INSUFFICIENT_DESTINATION_SPACE")
+                    warning?.warnings?.includes(
+                      "INSUFFICIENT_DESTINATION_SPACE"
+                    )
                   );
                   if (warning.length > 0) {
                     dispatch(
@@ -411,7 +421,17 @@ export function withBulkMigrateCreateForm(
                   } else {
                     handleSubmit(onSuccessfulSubmit);
                   }
+                } else {
+                  handleSubmit(onSuccessfulSubmit);
                 }
+              }
+            } else if (data?.status === ValidateConnectionStatus.FAILED) {
+              const precheckState = getPreCheckStatus(data);
+              setPreCheckStatus(precheckState);
+              setIsPrecheckLoading(false);
+              setIsSubmitting(false);
+              if (interval.current) {
+                clearInterval(interval.current);
               }
             } else if (data?.status === ValidateConnectionStatus.TERMINATED) {
               const error = new Error(
@@ -431,8 +451,27 @@ export function withBulkMigrateCreateForm(
             }
           }, timeIntervalInSeconds);
         })
-        .catch((e) => {
-          showErrorOnFailure(e);
+        .catch((err) => {
+          if (
+            err?.data?.errors &&
+            err.data.errors.includes("MIGRATION_CONFLICTS_FOUND")
+          ) {
+            const conflictError = err.data;
+            setPreCheckStatus({
+              success: [],
+              failed: [],
+              errors: [],
+              warnings: [],
+              migrationConflicts: conflictError.details || [],
+            });
+            setIsPrecheckLoading(false);
+            setIsSubmitting(false);
+            if (interval.current) {
+              clearInterval(interval.current);
+            }
+          } else {
+            showErrorOnFailure(err);
+          }
         });
     };
 
@@ -606,6 +645,8 @@ export function withBulkMigrateCreateForm(
       fileName,
       listOfNotReachableExportPaths,
       sourceDisabledPaths,
+      refetch,
+      isFetching,
     };
 
     return <WrappedComponent {...props} {...createBulkMigrateHelpers} />;

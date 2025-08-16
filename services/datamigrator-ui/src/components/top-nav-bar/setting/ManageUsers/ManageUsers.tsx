@@ -1,29 +1,35 @@
-import Box from '@/components/container/Box';
-import TableWrapper from '@components/table-wrapper/TableWrapper';
-import {notify} from '@components/notification/NotificationWrapper';
-import {useGetAllUsersQuery, useResetPasswordMutation, useUpdateUserStatusMutation} from '@api/userApi';
-import {COL_DEF_FOR_USER} from '@/constant/app.constants';
-import {Collapse} from '@mui/material';
-import {Button} from '@netapp/bxp-design-system-react';
-import {useState} from 'react';
-import CreateUserForm from '@components/top-nav-bar/setting/ManageUsers/CreateUserForm';
-import PermissionAuth from '@/auth/PermissionAuth';
-import {USER_PERMISSION_TYPE_ENUM} from '@auth/permissionAuth.constant';
-import {hasPermission} from '@/auth/auth.utils';
-import {useSelector} from 'react-redux';
-import {RootStateType} from '@store/store';
-import {DEFAULT_COLUMN_STATE} from '@components/top-nav-bar/setting/ManageUsers/ManageUsers.constant';
-import {decryptData} from '@/utils/common.utils';
+import Box from "@/components/container/Box";
+import TableWrapper from "@components/table-wrapper/TableWrapper";
+import { notify } from "@components/notification/NotificationWrapper";
+import {
+  useGetAllUserByProjectQuery,
+  useResetPasswordMutation,
+  useUpdateUserStatusMutation,
+} from "@api/userApi";
+import { COL_DEF_FOR_USER } from "@/constant/app.constants";
+import { Collapse } from "@mui/material";
+import { Button } from "@netapp/bxp-design-system-react";
+import { useState } from "react";
+import CreateUserForm from "@components/top-nav-bar/setting/ManageUsers/CreateUserForm";
+import PermissionAuth from "@/auth/PermissionAuth";
+import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
+import { hasPermission } from "@/auth/auth.utils";
+import { useSelector } from "react-redux";
+import { RootStateType } from "@store/store";
+import { DEFAULT_COLUMN_STATE } from "@components/top-nav-bar/setting/ManageUsers/ManageUsers.constant";
+import { decryptData } from "@/utils/common.utils";
+import useSelectedProjectId from "@hooks/useSelectedProjectId";
 
 const ManageUsers = () => {
   const [updateUserStatus] = useUpdateUserStatusMutation();
   const [resetPasswordApi] = useResetPasswordMutation();
+  const projectId = useSelectedProjectId();
   const {
     data: userData,
     isLoading,
     isFetching,
     refetch,
-  } = useGetAllUsersQuery("");
+  } = useGetAllUserByProjectQuery({ projectId: projectId.selectedProjectId });
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const permission = useSelector(
     (state: RootStateType) => state.permissionSlice
@@ -31,20 +37,24 @@ const ManageUsers = () => {
   const [isCreateFormVisible, setIsCreateFormVisible] =
     useState<boolean>(false);
 
-  const updateUserStatusWrapper = (body: { email: string; enable: boolean }) => {
+  const updateUserStatusWrapper = (body: {
+    email: string;
+    enable: boolean;
+  }) => {
     updateUserStatus(body)
       .unwrap()
-        .then((res) => {
-          notify.success(res?.message);
+      .then((res) => {
+        notify.success(res?.message);
       })
       .catch((err) => {
-        console.log('error', err);
-        const errorDetails = err.data?.error;
-        notify.error(errorDetails?.message);
+        console.error("error", err);
+        notify.error(
+          err?.error || err?.message || "Failed to update user status"
+        );
       });
   };
 
-  const canManageProject: boolean = hasPermission(
+  const canManageUser: boolean = hasPermission(
     USER_PERMISSION_TYPE_ENUM.CreateUser
   );
   const rowMenu = (row: any) => [
@@ -58,11 +68,11 @@ const ManageUsers = () => {
         updateUserStatusWrapper(body);
       },
 
-      disabled: permission?.userPermissions?.id === row.id || !canManageProject,
+      disabled: permission?.userPermissions?.id === row.id || !canManageUser,
     },
     {
       label: "Reset Password",
-      disabled: row.user_status !== "active" || !canManageProject,
+      disabled: row.user_status !== "active" || !canManageUser,
       onClick: () => {
         const body = {
           email: row.email,
@@ -71,7 +81,7 @@ const ManageUsers = () => {
           .unwrap()
           .then((res) => {
             setIsCreateFormVisible(true);
-            setTemporaryPassword(decryptData(res?.data?.items?.newPassword));
+            setTemporaryPassword(decryptData(res?.newPassword));
           })
           .catch((err) => {
             notify.error(err.message);
@@ -87,7 +97,7 @@ const ManageUsers = () => {
   };
   const tableStateProps = {
     columns: COL_DEF_FOR_USER,
-    rows: userData?.data?.items || [],
+    rows: userData || [],
     isSorting: true,
     pageSize: 10,
     defaultColumnState: DEFAULT_COLUMN_STATE,
@@ -114,10 +124,7 @@ const ManageUsers = () => {
             <PermissionAuth
               permissionName={USER_PERMISSION_TYPE_ENUM.CreateUser}
             >
-              <Button
-                onClick={() => setIsCreateFormVisible(true)}
-                className="ml-4"
-              >
+              <Button onClick={() => setIsCreateFormVisible(true)}>
                 Add User
               </Button>
             </PermissionAuth>

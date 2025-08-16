@@ -4,13 +4,16 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { VolumeEntity } from '../entities/volume.entity';
 import { JobRunEntity } from '../entities/jobrun.entity';
 import { InventoryEntity } from '../entities/inventory.entity';
+import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { WorkflowService } from '../workflow/workflow.service';
 import { ConfigService } from '@nestjs/config';
+import { MigrationConflictService } from '../migration-conflict/migration-conflict.service';
 import { Repository, In } from 'typeorm';
 import { JobConfigPrecheck } from './dto/jobdicoverybulk.dto';
 import { HealthStatus } from 'src/workers/worker.types';
 import { v4 as uuidv4 } from 'uuid';
-
+import { BadRequestException } from '@nestjs/common';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib'; 
 // Streamlined and optimized test suite for PreCheckService
 
 describe('PreCheckService', () => {
@@ -39,8 +42,29 @@ describe('PreCheckService', () => {
         { provide: getRepositoryToken(VolumeEntity), useValue: { find: jest.fn() } },
         { provide: getRepositoryToken(JobRunEntity), useValue: { createQueryBuilder: jest.fn() } },
         { provide: getRepositoryToken(InventoryEntity), useValue: { createQueryBuilder: jest.fn() } },
+        { provide: getRepositoryToken(JobConfigEntity), useValue: { find: jest.fn(), createQueryBuilder: jest.fn() } },
         { provide: WorkflowService, useValue: { startWorkflow: jest.fn() } },
         { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('60') } },
+        {
+          provide: MigrationConflictService,
+          useValue: {
+            checkMigrationConflicts: jest.fn().mockResolvedValue([]),
+            hasMigrationConflicts: jest.fn().mockResolvedValue(false),
+          },
+        },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              info: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
+              log: jest.fn(),
+              verbose: jest.fn(),
+            }),
+          },
+        },
       ],
     }).compile();
 
@@ -136,10 +160,43 @@ describe('PreCheckService', () => {
 
   });
 
-  // Additional edge cases can be added here: 
-  // - invalid UUID pathId
-  // - inventory size query returns zero
-  // - filterUnhealthyWorkers filters correctly
+  it('should throw BadRequestException with MIGRATION_CONFLICTS_FOUND when migration conflicts are detected', async () => {
+  // Arrange
+  const migrationConflictResult = [{
+    status: 'ACTIVE',
+    jobId: 'job-1',
+    jobRunIds: ['run-1'],
+    sourcePathId: 'src1',
+    targetPathId: 'dest1',
+    sourceServerId: 'source-server',
+    targetServerId: 'target-server',
+  }];
+  jest.spyOn(service['migrationConflictService'], 'checkMigrationConflicts').mockResolvedValue(migrationConflictResult);
+
+  // Act & Assert
+  try {
+    await service.initiatePreCheck({
+      preserveAccessTime: true,
+      migrateConfigs: [{ sourcePathId: 'src1', destinationPathId: ['dest1'] }],
+      options: {
+        workflowExecutionTimeout: '300',
+        workflowTaskTimeout: '60',
+        workflowRunTimeout: '600',
+        startDelay: '10',
+      },
+    });
+    expect(true).toBe(false); // Should not reach here
+  } catch (error) {
+    expect(error).toBeInstanceOf(BadRequestException);
+    const response = error.getResponse();
+    expect(response).toMatchObject({
+      status: 'error',
+      errors: ['MIGRATION_CONFLICTS_FOUND'],
+      details: migrationConflictResult,
+      message: 'Migration conflicts detected during precheck.',
+    });
+  }
+});
 
 
    describe('getLatestDiscoveryInventorySize', () => {

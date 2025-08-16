@@ -7,8 +7,8 @@
  * Form - <form_name>FormType e.g. CreateProjectFormType
  */
 
-import {ReactNode} from 'react';
-import {WorkingDirectoryDetailsType} from '@modules/storage-servers/file-server/fileServer.interface';
+import { ReactNode } from "react";
+import { WorkingDirectoryDetailsType } from "@modules/storage-servers/file-server/fileServer.interface";
 
 export type GraphLoaderType = {
   label: string;
@@ -172,7 +172,7 @@ export type ConfigListTypeApiType = {
   project: ProjectType;
   fileServers: FileServerApiType[];
   workingDirectory: WorkingDirectoryDetailsType;
-  status: FILE_SERVER_STATUS;
+  status: FILE_SERVER_STATUS_ENUM;
   isRefreshAvailable?: boolean;
   isUploadInProgress?: boolean;
 };
@@ -508,7 +508,7 @@ export interface ProjectApiType {
   };
 }
 
-export enum FILE_SERVER_STATUS {
+export enum FILE_SERVER_STATUS_ENUM {
   ACTIVE = "ACTIVE",
   DRAFT = "DRAFT",
   IN_PROGRESS = "IN_PROGRESS",
@@ -646,6 +646,7 @@ export enum ValidateConnectionStatus {
   COMPLETED = "COMPLETED",
   TERMINATED = "TERMINATED",
   TIMED_OUT = "TIMED_OUT",
+  FAILED = "FAILED",
 }
 
 export enum WorkerConnectionStatus {
@@ -677,7 +678,7 @@ export type TemporaryPasswordPropsType = {
   isAddUser: boolean;
 };
 
-export enum ReportENUM {
+export enum REPORT_TYPES_ENUM {
   DISCOVERY = "DISCOVER",
   COC = "COC",
   JOBS_REPORT = "JOBS_REPORT",
@@ -724,7 +725,10 @@ export interface BlueXpTableStateType<T> {
 export interface JobErrorType {
   id: string;
   errorCode: string;
-  errorMessage: string;
+  errorMessage: string; // Original system message
+  displayMessage?: string; // User-friendly mapped message
+  resolutionSteps?: string; // Resolution steps from error_remedies
+  referenceCommands?: string; // Diagnostic commands
   fileName: string;
   filePath: string;
   createdAt: string;
@@ -787,3 +791,15 @@ type ErrorType = {
 export interface ErrorNumberCellRendererProps {
   value: ErrorType[];
 }
+
+export type isBundleReadyApiType = {
+  isBundleReady: boolean;
+  isProcessing: boolean;
+  error: null | string;
+  filters?: {
+    startDate: string;
+    endDate: string;
+    otherMetrics: string[];
+  };
+  createdAt?: string;
+};

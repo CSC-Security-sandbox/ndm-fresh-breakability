@@ -26,7 +26,7 @@ export class PdfService {
 
     async generatePdf(jobRunId: string, reportType: ReportType): Promise<Buffer> {
       this.logger.log(`Checking for existing report for jobRunId: ${jobRunId} and reportType: ${reportType}`);
-      const sanitizedFileName = `${jobRunId.replace(/[^a-zA-Z0-9-]/g, '')}-${reportType.toLowerCase().replace(/[^a-zA-Z0-9_-]/g, '')}-report.pdf`;
+      const sanitizedFileName = `${jobRunId.toString().replace(/[^a-zA-Z0-9-]/g, '')}-${reportType.toLowerCase().replace(/[^a-zA-Z0-9_-]/g, '')}-report.pdf`;
       const filePath = path.join(this.reportsDirectory, sanitizedFileName);
       
       if (!filePath.startsWith(path.resolve(this.reportsDirectory))) {

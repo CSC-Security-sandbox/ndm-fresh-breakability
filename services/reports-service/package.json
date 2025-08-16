@@ -30,7 +30,7 @@
     "@nestjs/swagger": "^7.4.2",
     "@nestjs/typeorm": "^10.0.2",
     "@netapp-cloud-datamigrate/auth-lib": "0.0.5",
-    "@netapp-cloud-datamigrate/jobs-lib": "0.0.83",
+    "@netapp-cloud-datamigrate/jobs-lib": "0.1.2",
     "@netapp-cloud-datamigrate/logger-lib": "0.0.10",
     "@types/puppeteer": "^7.0.4",
     "amqp-connection-manager": "^4.1.14",
@@ -40,7 +40,7 @@
     "class-validator": "^0.14.1",
     "fast-csv": "^5.0.2",
     "hbs": "^4.2.0",
-    "multer": "^2.0.1",
+    "multer": "^2.0.2",
     "pg": "^8.13.0",
     "puppeteer": "^23.11.1",
     "reflect-metadata": "^0.2.0",
@@ -91,7 +91,8 @@
       "!**/dist/**",
       "!**/coverage/**",
       "!**.eslintrc.js",
-      "!**/main.ts"
+      "!**/main.ts",
+      "!**/*.types.ts"
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
@@ -115,11 +116,12 @@
       "/test/",
       "/config/",
       "/entities/",
-      "/dto/"
+      "/dto/",
+      ".*types\\.ts$"
     ]
   },
   "overrides": {
-    "multer": "^2.0.1",
+    "multer": "^2.0.2",
     "brace-expansion": "1.1.12"
   }
 }

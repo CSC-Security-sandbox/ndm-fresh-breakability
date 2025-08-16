@@ -1,8 +1,9 @@
 import { WorkflowManager } from './workflow-manager';
-import { WorkFlows } from "src/work-manager/work-manager.types";
 import { ValidateConnectionsWorkflow } from "./validate-connection/validate-connection.workflow";
 import { DiscoveryWorkflow, ListPathsWorkflow } from "./workflows";
 import { ValidateWorkingDirectoryWorkflow } from "./working-directory/working-directory.workflow";
+import { WorkFlows } from 'src/work-manager/work-manager.types';
+
 
 describe('WorkflowManager', () => {
   describe('createWorkflowInstance', () => {

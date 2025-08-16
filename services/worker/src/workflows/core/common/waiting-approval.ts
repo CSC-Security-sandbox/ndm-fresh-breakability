@@ -1,6 +1,6 @@
 import * as wf from '@temporalio/workflow';
-import { MigrationTaskService } from 'src/activities/migrate/migrate.taskmanager.service';
-import { CutOverStatus } from "src/activities/migrate/migrate.type";
+import { CommonActivityService } from 'src/activities/common/common.service';
+import { CutOverStatus } from 'src/activities/common/enums';
 
 
 export  enum  JobReportType {
@@ -11,7 +11,7 @@ export  enum  JobReportType {
 
 const {
   updateCutOverStatus: updateCutOverStatusActivity
-} = wf.proxyActivities<MigrationTaskService>({ startToCloseTimeout: '5h' });
+} = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
 
 export const approveSignal =  wf.defineSignal<[string]>('approve');
 export const isBlockedQuery = wf.defineQuery<boolean>('isBlocked');

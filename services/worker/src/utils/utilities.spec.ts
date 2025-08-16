@@ -53,4 +53,10 @@ describe('sanitize', () => {
         const sanitizedMessage = sanitize(message, ["john.doe", "secret$123"]);
         expect(sanitizedMessage).toBe('User ****** logged in with password ******');
     });
+
+    it('should handle empty strings in sensitive fields array', () => {
+        const message = 'User john.doe logged in with password secret$123';
+        const sanitizedMessage = sanitize(message, ["", '']);
+        expect(sanitizedMessage).toBe('User john.doe logged in with password secret$123');
+    });
 });

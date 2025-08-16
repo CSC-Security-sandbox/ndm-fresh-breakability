@@ -29,7 +29,7 @@ import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
 export class ProjectController {
   constructor(private readonly projectService: ProjectService) {}
 
-  @Auth(Permission.ManageProject)
+  @Auth(Permission.CreateProject)
   @ApiBearerAuth()
   @Post()
   @ApiOperation({

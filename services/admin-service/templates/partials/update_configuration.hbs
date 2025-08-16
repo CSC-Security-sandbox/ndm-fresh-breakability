@@ -1,0 +1,18 @@
+<p>Hello</p>
+<p>Config {{createConfig.configName}} has been updated successfully</p>
+
+{{#each createConfig.fileServers}}
+  {{#if removedWorkers.length}}
+    <p>Below is the list of disassociated workers:</p>
+    {{#each removedWorkers}}
+      <p>Worker Name: {{this}}</p>
+    {{/each}}
+  {{/if}}
+
+  {{#if addedWorkers.length}}
+    <p>Below is the list of newly associated workers:</p>
+    {{#each addedWorkers}}
+      <p>Worker Name: {{this}}</p>
+    {{/each}}
+  {{/if}}
+{{/each}}

@@ -1,13 +1,14 @@
 import { Inject } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { ErrorType, FileInfo } from "@netapp-cloud-datamigrate/jobs-lib";
+import { ErrorType, FileInfo, ItemInfo, ItemMeta } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as fs from 'fs';
 import * as path from 'path';
-import { dmError, getFileInfo, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
+import { dmError, getFileInfo, getFilePermissions, getFileType, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
-import { DirContentsInput } from "./discovery-scan.type";
+import { DirContentsInput, PublishItemInfoInput } from "./discovery-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
+import { isPathExists } from "../../utils/utils";
 
 
 export class DiscoveryScanService {
@@ -28,22 +29,22 @@ export class DiscoveryScanService {
     async getDirContents({path, jobContext, errorType, command}: DirContentsInput): Promise<fs.Dirent[]>{
         let content:fs.Dirent[] = [];
         try{
-            if (!fs.existsSync(path)) 
+            const pathExists = await isPathExists(path);
+            if (!pathExists) 
                     throw new FatalError(`Source directory does not exist: ${path}`);
             content = await fs.promises.readdir(path,{ withFileTypes: true }); 
         }catch(error){
             if(error instanceof FatalError) 
                 errorType = ErrorType.FATAL_ERROR;
-            const ndmError = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, errorType, command.commandId, error, {name: command.fPath, path: path});
+            const ndmError = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, errorType, command.id, error, {name: command.fPath, path: path});
             await jobContext.publishToErrorStream(ndmError);
             throw error; 
         }
         return content;
     }
 
-    async scanDirectory({ jobContext, sourcePath, sourcePrefix, command, settings}: ScanDirectoryInput): Promise<ScanDirectoryOutput> {
+    async scanDirectory({ jobContext, sourcePath, sourcePrefix, command, settings, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> {
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
-        const errorType: ErrorType = command.retryCount+1 > this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
         const sourceContent = await this.getDirContents({path: sourcePath, jobContext, errorType, command});
         try {
             for (const item of sourceContent) {
@@ -60,8 +61,9 @@ export class DiscoveryScanService {
                 })) continue;
 
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
-                const fileInfo: FileInfo = await getFileInfo({ name: item.name, fullFilePath: sourceContentPath, relativePath: relativeSourcePath });
-                await jobContext.publishToFileStream(fileInfo);
+                await this.publishFileInfo({
+                    stats: sourceStat, command, jobContext, fPath: sourceContentPath, relativeSourcePath
+                });
                 
                 if (sourceStat.isDirectory()) {
                     if(sourceStat.isSymbolicLink()) continue;
@@ -70,7 +72,7 @@ export class DiscoveryScanService {
                 } else output.fileCount++;
             }
         }catch(error) {
-            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.commandId, error, {name: command.fPath, path: sourcePath});
+            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.id, error, {name: command.fPath, path: sourcePath});
             await jobContext.publishToErrorStream(dmErr);
             throw error; 
         }
@@ -78,4 +80,26 @@ export class DiscoveryScanService {
     }
     
     
+    async publishFileInfo({jobContext, stats, fPath, relativeSourcePath}: PublishItemInfoInput): Promise<void> {
+            const isDirectory = stats.isDirectory();
+            const sourceMeta: ItemMeta = {
+                accessTime: stats.atime,
+                birthTime: stats.birthtime,
+                modifiedTime: stats.mtime,
+                permission: getFilePermissions(stats, isDirectory),
+            }
+            const itemInfo = new ItemInfo(
+                relativeSourcePath,
+                isDirectory,
+                stats.isSymbolicLink(),
+                relativeSourcePath.split('/').length - 2,
+                path.extname(fPath),
+                getFileType(stats, isDirectory),
+                sourceMeta,
+                sourceMeta,
+                stats.size
+            )
+            await jobContext.publishToFileStream(itemInfo);
+        }
+
 }

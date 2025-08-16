@@ -8,9 +8,17 @@ import {
   MigrationDetailsTableConfigurationType,
   PreCheckStatusType,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.interface";
-import { REVIEW_LIST_COLUMN_DEFS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
+import {
+  REVIEW_LIST_COLUMN_DEFS,
+  SCHEDULE_OPTIONS,
+  TIMESTAMP_VALIDATION,
+} from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import { AllFileServerWithVolumesApiType } from "@/types/app.type";
 import { notify } from "@components/notification/NotificationWrapper";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+
+dayjs.extend(utc);
 
 export const downloadBulkMigrationCsv = async (
   mappingStepForm: FormikProps<MappingStepFormikFormType>,
@@ -153,6 +161,29 @@ export const validateMappingStepForm = (values: MappingStepFormikFormType) => {
     values.selectedMountPathsId.length === 0
   ) {
     errors.selectedMountPathsId = "At least one path must be selected";
+  }
+
+  // Validate schedule date when scheduling for later
+  if (values?.scheduleTime === SCHEDULE_OPTIONS?.SCHEDULE_DATE) {
+    if (!values?.scheduledDateTime) {
+      errors.scheduledDateTime = TIMESTAMP_VALIDATION?.SCHEDULE_LATER_TIMESTAMP;
+    } else {
+      const now = dayjs.utc();
+      const scheduledDateTime = dayjs.utc(values?.scheduledDateTime);
+
+      // Check if date is in the future
+      if (scheduledDateTime.isBefore(now)) {
+        errors.scheduledDateTime =
+          TIMESTAMP_VALIDATION?.SCHEDULE_FUTURE_TIMESTAMP;
+      } else {
+        // Check if date is at least 1 minute from now
+        const minimumTime = now.add(1, "minute");
+        if (scheduledDateTime.isBefore(minimumTime)) {
+          errors.scheduledDateTime =
+            TIMESTAMP_VALIDATION?.SCHEDULE_ONE_MINUTE_AHEAD_TIMESTAMP;
+        }
+      }
+    }
   }
 
   if (

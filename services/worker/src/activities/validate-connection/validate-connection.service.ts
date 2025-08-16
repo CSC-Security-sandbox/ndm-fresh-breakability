@@ -1,18 +1,21 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class ValidateConnectionActivity {
-
+  private readonly logger: LoggerService;
   readonly workerId: string;
+
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
-    private readonly logger: Logger,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    private readonly protocols: Protocols
   ) {
     this.workerId = this.configService.get('worker.workerId');
+    this.logger = loggerFactory.create(ValidateConnectionActivity.name);
   }
 
   async validate(traceId: string, protocolType: string, payload: any, feature: any): Promise<any> {
@@ -30,7 +33,7 @@ export class ValidateConnectionActivity {
       message: `[${protocolType}] Connection to ${payload.hostname} from ${this.workerId} validated successfully`,
     };
     try {
-      const protocol: Protocol = Protocols.getProtocol(ProtocolTypes[protocolType]);
+      const protocol: Protocol = this.protocols.getProtocol(ProtocolTypes[protocolType]);
       await protocol.validateConnection(traceId, payload);
       if (feature.enablePreListPath) {
         response.paths = await protocol.listPaths(traceId, payload);

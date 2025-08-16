@@ -6,17 +6,16 @@ import { ActivitiesModule } from 'src/activities/activities.module';
 import { AuthModule } from 'src/auth/auth.module';
 import appConfig from 'src/config/app.config';
 import keycloakConfig from 'src/config/keycloak.config';
-import { LoggerModule } from 'src/logger/logger.module';
 import { WorkerOptionsService } from './factory/worker-options.factory.service';
 import { WorkManagerService } from './work-manager.service';
-
+import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Module({
   imports: [ 
     ConfigModule.forRoot({ load: [appConfig, keycloakConfig] }), 
     ScheduleModule.forRoot(), 
     HttpModule,
-    LoggerModule,
+    LoggerModule.forRoot(),
     ActivitiesModule,
     AuthModule
   ],

@@ -3,6 +3,12 @@
 import { RedisClientType } from "redis";
 import { Serializable } from "src/types/serializable";
 import { WorkerRunningTaskMapCollection } from "./hmap-collection";
+import * as zlib from 'zlib';
+import { promisify } from "util";
+
+const compress = promisify(zlib.gzip); 
+const decompress = promisify(zlib.gunzip);
+
 
 export class RedisHMapCollection<T extends Serializable> implements WorkerRunningTaskMapCollection<T> {
     jobRunId: string;
@@ -30,21 +36,30 @@ export class RedisHMapCollection<T extends Serializable> implements WorkerRunnin
     }
 
     async setValue(key: string, value: T): Promise<void> {
-        await this.redisClient.hSet(this.redisMapKey, key, JSON.stringify(value));
+        const compressedValue = await this.compressValue(value)
+        await this.redisClient.hSet(this.redisMapKey, key, compressedValue);
     }
 
     async setValueIfNotExists(key: string, value: T): Promise<boolean> {
-        const result = await this.redisClient.hSetNX(this.redisMapKey, key, JSON.stringify(value));
+        const compressedValue = await this.compressValue(value);
+        const result = await this.redisClient.hSetNX(this.redisMapKey, key, compressedValue);
         return result;
     }
 
-    async getAll(): Promise<any> {
-        return await this.redisClient.hGetAll(this.redisMapKey);
+    async getAll(): Promise<any> {        
+        const compressedValues = await this.redisClient.hGetAll(this.redisMapKey);
+        const decompressedValues: Record<string, T> = {};
+        for (const [key, compressedValue] of Object.entries(compressedValues)) {
+            decompressedValues[key] = await this.decompressValue(compressedValue);
+        }
+        return decompressedValues;
     }
 
     async getValue(key: string): Promise<T | null> {
         const value = await this.redisClient.hGet(this.redisMapKey, key);
-        return value ? JSON.parse(value) : null;
+        if (!value) return null;
+        const decompressedValue = await this.decompressValue(value);
+        return decompressedValue;
     }
 
     async deleteValue(key: string): Promise<void> {
@@ -55,6 +70,7 @@ export class RedisHMapCollection<T extends Serializable> implements WorkerRunnin
         await this.redisClient.del(this.redisMapKey);
     }
 
+    //TODO: delete not used anymore 
     async getOneValue(): Promise<{ key: string, value: T } | null> {
         const allValues = await this.getAll();
         const keys = Object.keys(allValues);
@@ -64,6 +80,7 @@ export class RedisHMapCollection<T extends Serializable> implements WorkerRunnin
         return { key: firstKey, value: JSON.parse(value) };
     }
 
+    //TODO: delete not used anymore
     async assignToSelf(key: string): Promise<T | null> {
         const existingEntry = await this.getOneValue();
         if (!existingEntry) return null;
@@ -80,5 +97,16 @@ export class RedisHMapCollection<T extends Serializable> implements WorkerRunnin
         const allValues = await this.getAll();
         if (!allValues) return 0;
         return Object.keys(allValues).length;
+    }
+
+    async compressValue(value: T): Promise<string> {
+        const buffer = await compress(JSON.stringify(value));
+        return buffer.toString('base64');
+    }
+
+    async decompressValue(value: string): Promise<T> {
+        const buffer = Buffer.from(value, 'base64');
+        const decompressedBuffer = await decompress(buffer);        
+        return JSON.parse(decompressedBuffer.toString('utf-8'));
     }
 }

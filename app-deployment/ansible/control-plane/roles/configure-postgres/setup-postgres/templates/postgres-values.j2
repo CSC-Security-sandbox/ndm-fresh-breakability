@@ -31,7 +31,7 @@ primary:
     tcp_keepalives_interval = 10
     tcp_keepalives_count = 5
     shared_buffers = 768MB
-    work_mem = 16MB
+    work_mem = 32MB
     maintenance_work_mem = 256MB
     max_parallel_workers_per_gather = 2
     parallel_tuple_cost = 0.1
@@ -39,6 +39,7 @@ primary:
     wal_buffers = 8MB
     checkpoint_completion_target = 0.9
     max_wal_size = 1GB
+    shared_preload_libraries = 'pg_stat_statements'
               
   initdb:
     scriptsConfigMap: postgres-init-config

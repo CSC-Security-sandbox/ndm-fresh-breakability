@@ -7,21 +7,28 @@ import {
   InternalServerErrorException,
   Post,
   Req,
-  Logger
 } from "@nestjs/common";
 import { HealthcheckService } from "./healthcheck.service";
 import { HealthcheckStats } from "./dto/healthcheck.dto";
 import { HealthCheckResponse } from "./dto/healthcheck-response.dto";
 import { AuthWorker } from "@netapp-cloud-datamigrate/auth-lib";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @ApiTags('jobs')
 @Controller("statscheck")
 export class HealthcheckController {
+  private readonly logger: LoggerService;
+
   constructor(
     private healthcheckService: HealthcheckService,
-    private logger: Logger,
-  ) {}
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(HealthcheckController.name);
+  }
 
   @Post("/")
   @AuthWorker()

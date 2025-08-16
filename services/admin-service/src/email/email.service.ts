@@ -9,7 +9,7 @@ import * as path from 'path';
 import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { SettingType } from 'src/setting/dto/create-setting.dto';
 import { Repository } from 'typeorm';
-import hbs from 'nodemailer-express-handlebars';
+import hbsPlugin from 'nodemailer-express-handlebars';
 import { NOTIFICATION_TYPE } from './dto/notification.type';
 
 import { IncidentStatus, SyncEmail } from 'src/entities/sync-email.entity';
@@ -143,7 +143,7 @@ export class EmailService implements OnModuleDestroy {
           emailContent,
           fromAddress,
           toAddress,
-        );
+        ); 
       } else {
         await this.sendEmailForSuccessEvent(
           emailContent,
@@ -274,15 +274,17 @@ export class EmailService implements OnModuleDestroy {
 
       this.transporter.use(
         'compile',
-        hbs({
+        hbsPlugin({
           viewEngine: {
             extname: '.hbs',
+            partialsDir: path.join(__dirname, '../../templates/partials'),
             layoutsDir: path.join(__dirname, '../../templates/views'),
             defaultLayout: templateName,
+            helpers: { eq: (a, b) => a === b },
           },
           viewPath: path.join(__dirname, '../../templates/views'),
           extName: '.hbs',
-        }),
+        })
       );
 
       this.logger.log('Email template setup completed', { templateName });
@@ -293,18 +295,13 @@ export class EmailService implements OnModuleDestroy {
   }
   async sendEmailForSuccessEvent(content: any, from: string, to: string) {
     try {
-      const body = content?.body;
-
       this.logger.log('Sending success notification email');
-
       const mailOptions = {
         from: from,
         to: to,
         subject: `DataMigrator Alert`,
         template: 'success',
-        context: {
-          body,
-        },
+        context: content
       };
 
       await this.transporter.sendMail(mailOptions);

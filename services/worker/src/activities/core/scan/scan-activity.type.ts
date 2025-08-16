@@ -1,4 +1,4 @@
-import { Command, JobManagerContext, Task } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Cmd, Command, ErrorType, JobManagerContext, Task, TaskInfo } from "@netapp-cloud-datamigrate/jobs-lib";
 
 
 export interface ScanActivityInput {
@@ -22,8 +22,9 @@ export interface ScanDirectoryInput {
     sourcePrefix: string;
     targetPrefix:string
     jobContext: JobManagerContext;
-    command: Command;
+    command: Cmd;
     settings: ScanDirectorySettings;
+    errorType?: ErrorType;
 }
 
 export interface ScanDirectorySettings  {
@@ -43,7 +44,7 @@ export interface UpdateAndReportTaskInput {
     taskHashId: string;
     jobContext: JobManagerContext;
     errors:string[];
-    task: Task,
+    task: TaskInfo,
     retryCount: number;
 }
 
@@ -55,7 +56,7 @@ export interface TaskExecOutput {
 
 export interface TaskExecInput {
     jobRunId:string;
-    task:Task;
+    task:TaskInfo;
     jobContext: JobManagerContext;
     activityId:string
     isMigration: boolean;

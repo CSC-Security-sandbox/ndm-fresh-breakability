@@ -1,0 +1,71 @@
+<system>
+  log_level {{ fluentd_log_level }}
+  suppress_repeated_stacktrace true
+</system>
+
+# Input: worker application logs
+<source>
+  @type tail
+  path {{ fluentd_worker_log_path }}
+  pos_file {{ fluentd_pos_file_path }}/worker.log.pos
+  tag worker.tag
+  <parse>
+    @type none
+    message_key log
+  </parse>
+  read_from_head false
+</source>
+
+# Filter: Add worker metadata to worker logs
+<filter worker.tag>
+  @type record_transformer
+  <record>
+    worker_id PLACEHOLDER_WORKER_ID
+    worker_type linux
+    worker_platform linux
+    hostname ${hostname}
+    source_type datamigrator_log
+    log_source datamigrator
+  </record>
+</filter>
+
+# Output: Forward all logs to control plane
+<match **>
+  @type forward
+  send_timeout {{ fluentd_send_timeout }}
+  recover_wait 10s
+  heartbeat_interval {{ fluentd_heartbeat_interval }}
+  phi_threshold 16
+  hard_timeout 60s
+  
+  <server>
+    name control-plane
+    host PLACEHOLDER_CONTROL_PLANE_IP
+    port {{ fluentd_control_plane_port }}
+    weight 60
+  </server>
+  
+  <security>
+    self_hostname PLACEHOLDER_WORKER_ID-linux
+    shared_key secure_communication_is_awesome
+  </security>
+  
+  <buffer>
+    @type file
+    path {{ fluentd_buffer_path }}/forward
+    flush_mode interval
+    flush_interval {{ fluentd_flush_interval }}
+    flush_at_shutdown true
+    retry_type exponential_backoff
+    retry_wait {{ fluentd_retry_wait }}
+    retry_max_interval {{ fluentd_retry_max_interval }}
+    retry_timeout {{ fluentd_retry_timeout }}
+    queued_chunks_limit_size 128
+    chunk_limit_size 64MB
+    total_limit_size 2GB
+    overflow_action drop_oldest_chunk
+    timekey 1h
+    timekey_wait 300
+    compress gzip
+  </buffer>
+</match>

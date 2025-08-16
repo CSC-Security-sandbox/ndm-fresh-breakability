@@ -17,6 +17,7 @@ export default registerAs(
 
     healthCheckInterval: process.env.HEALTH_CHECK_INTERVAL || '5',
     checkSpaceForPreCheck: process.env.CHECK_AVAILABLE_DISK_SPACE === 'true',
+    otelCollectorEndPoint: process.env.OTEL_COLLECTOR_ENDPOINT || 'localhost:4318',
 
     //core operations
     maxRetryCount: parseInt(process.env.MAX_OPERATION_RETRY || '3'),
@@ -26,6 +27,9 @@ export default registerAs(
     migrationChunkSize: parseInt(process.env.CHUNK_SIZE || '1048576'),
     maxCommandConcurrency: parseInt(process.env.MAX_COMMAND_CONCURRENCY || '100'),
     operationTimeout: parseInt(process.env.OPERATION_TIMEOUT || '5000'),
+    groupSize: parseInt(process.env.REDIS_STREAM_GROUP_SIZE || '1000'),
+    commandsInTask: parseInt(process.env.COMMANDS_IN_TASK || '100'),
+    maxCmdStreamLen: parseInt(process.env.MAX_CMDS_IN_STREAM || '5000'),
 
     // speed test
     speedTestFileName: process.env.SPEED_TEST_FILE_NAME || '1GB_zero_file.bin',
@@ -36,10 +40,14 @@ export default registerAs(
     redisMemoryUsageThreshold: parseInt(process.env.REDIS_MEM_USAGE_THRESHOLD || '90'),
     maxActivityConcurrency: parseInt(process.env.JOB_TASK_ACTIVITY_CONCURRENCY || '1'),
 
+    // project id
+    projectId: process.env.PROJECT_ID || 'no-project-id-found',
+
     // thread pool
     thread: {
       threadBand: process.env.THREAD_BANDS || '1kb,1500;1mb,1000;10mb,100;100mb,10;1gb,1',
       threadCount: parseInt(process.env.THREAD_COUNT || '5'),
+      maxBufferSize: parseInt(process.env.MAX_BUFFER_SIZE) || 1048576,
     }
   }),
 );

@@ -1,5 +1,10 @@
 import { CsvService } from "./../csv/csv_export.service";
-import { Injectable, Logger, NotFoundException, NotAcceptableException } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  NotAcceptableException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { JobRunStatus, JobType, ReportType } from "src/constants/enums";
 import { InventoryEntity } from "src/entities/inventory.entity";
@@ -16,7 +21,7 @@ import { InventoryStatusSummary, TaskStatusCount } from "./job-run.type";
 import * as fs from "fs";
 import * as crypto from "crypto";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
-import * as path from 'path';
+import * as path from "path";
 
 @Injectable()
 export class JobRunService {
@@ -82,16 +87,20 @@ export class JobRunService {
     };
 
     const reportTypes = await this.reportsRepo
-      .createQueryBuilder('report')
-      .innerJoin('jobrun', 'jobrun', 'jobrun.id = report.job_run_id')
-      .innerJoin('jobconfig', 'jobconfig', 'jobconfig.id = jobrun.job_config_id')
-      .where('report.job_run_id = :jobRunId', { jobRunId: id })
-      .andWhere('jobconfig.job_type = :jobType', { jobType: JobType.CutOver })
-      .andWhere('report.report_type IN (:...types)', {
+      .createQueryBuilder("report")
+      .innerJoin("jobrun", "jobrun", "jobrun.id = report.job_run_id")
+      .innerJoin(
+        "jobconfig",
+        "jobconfig",
+        "jobconfig.id = jobrun.job_config_id"
+      )
+      .where("report.job_run_id = :jobRunId", { jobRunId: id })
+      .andWhere("jobconfig.job_type = :jobType", { jobType: JobType.CutOver })
+      .andWhere("report.report_type IN (:...types)", {
         types: [ReportType.COC, ReportType.JOBS_RREPORT],
       })
-      .select('report.report_type', 'report_type')
-      .groupBy('report.report_type')
+      .select("report.report_type", "report_type")
+      .groupBy("report.report_type")
       .getRawMany();
 
     if (reportTypes.length === 2) {
@@ -125,7 +134,7 @@ export class JobRunService {
     });
 
     if (!jobRun)
-      throw new NotFoundException(`Jon Run Dues not exit for id :${id}`);
+      throw new NotFoundException(`Job Run does not exist for id: ${id}`);
     let response: JobRunDetailsResponseDto = {
       ...jobRun,
       jobConfig: {
@@ -134,7 +143,8 @@ export class JobRunService {
         sourceServer: {
           protocol: jobRun?.jobConfig?.sourcePath?.fileServer?.protocol,
           path: jobRun?.jobConfig?.sourcePath?.volumePath,
-          serverName: jobRun?.jobConfig?.sourcePath?.fileServer?.config?.configName,
+          serverName:
+            jobRun?.jobConfig?.sourcePath?.fileServer?.config?.configName,
         },
         destinationServer: {
           protocol: jobRun?.jobConfig?.destinationPath?.fileServer?.protocol,
@@ -216,13 +226,16 @@ export class JobRunService {
         throw new NotFoundException(
           `Job Run with id ${jobRunId} is not a migration job`
         );
-      const sanitizedFileName = `${jobRunId}-coc-report.csv`.replace(/[^a-zA-Z0-9-_.]/g, "");
+      const sanitizedFileName = `${jobRunId}-coc-report.csv`.replace(
+        /[^a-zA-Z0-9-_.]/g,
+        ""
+      );
       const filePath = path.join(this.getReportsDirectory, sanitizedFileName);
       if (!filePath.startsWith(this.getReportsDirectory)) {
         throw new NotAcceptableException(`Invalid file path: ${filePath}`);
       }
 
-      if (fs.existsSync(filePath)) return filePath; 
+      if (fs.existsSync(filePath)) return filePath;
       await this.csvService.generateCsv(filePath, jobRunId);
 
       if (jobRun.jobConfig.jobType !== JobType.CutOver) {
@@ -230,10 +243,10 @@ export class JobRunService {
         await this.jobRunRepo.update({ id: jobRunId }, { isReportReady: true });
       }
 
-      if (!fs.existsSync(filePath)) 
+      if (!fs.existsSync(filePath))
         throw new Error(`File not found: ${filePath}`);
 
-      const fileBuffer = fs.readFileSync(filePath); 
+      const fileBuffer = fs.readFileSync(filePath);
       const reportData = {
         filePath,
         size: fileBuffer.length,
@@ -250,9 +263,6 @@ export class JobRunService {
     } catch (error) {
       console.log(
         `Error while generating COC report for jobRunId: ${jobRunId} - ERROR: ${error}`
-      );
-      throw new NotFoundException(
-        `Error while generating report for jobRunId: ${jobRunId}`
       );
     }
   }

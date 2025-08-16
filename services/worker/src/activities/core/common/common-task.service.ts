@@ -1,51 +1,57 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Command, CommandStatus, GroupReaderType, Task, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Cmd, Command, CommandStatus, GroupReaderType, Task, TaskInfo, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { Context } from "@temporalio/activity";
 import { Connection } from "@temporalio/client";
 import { uuid4 } from "@temporalio/workflow";
 import { RetryExceededError } from "src/errors/errors.types";
 import { RedisService } from "src/redis/redis.service";
-import { buildTask, calculateCommandHash } from "../../utils/utils";
-import { handleInitTaskInput } from "../migrate/migrate-sync.types";
 import { BuildOrGetScanTaskInput, CreateInitBatchInput } from "./common-task.type";
 import { calculateHash } from "src/activities/utils/checksum-utils";
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { calculateCommandHash } from "src/activities/utils/utils";
+import { buildTask } from "../utils/utils";
+import { InitTaskInput } from "../migrate/sync-activity.type";
 
 
 @Injectable()
 export class CommonTaskService {
-
+  private readonly logger : LoggerService;
   readonly workerId: string;
   readonly maxRetryCount: number;
   readonly temporalAddress: string; // Default Temporal address, can be overridden in config
+  readonly groupSize: number;
+  readonly commandsInTask: number;
+  readonly maxCmdStreamLen: number;
 
   constructor(
       @Inject(ConfigService) private readonly configService: ConfigService,
-      private readonly logger: Logger,
+      @Inject(LoggerFactory) loggerFactory: LoggerFactory,
       private readonly redisService: RedisService,
     ) {
       this.workerId = this.configService.get('worker.workerId');
       this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
-      this.temporalAddress = this.configService.get('temporal.address') || 'localhost:7233'; 
+      this.temporalAddress = this.configService.get('temporal.address') || 'localhost:7233';
+      this.groupSize = this.configService.get<number>('worker.groupSize') || 1000;
+      this.commandsInTask = this.configService.get<number>('worker.commandsInTask') || 100;
+      this.logger = loggerFactory.create(CommonTaskService.name);
+      this.maxCmdStreamLen = this.configService.get<number>('worker.maxCmdStreamLen') || 5000;
     }
 
     // TO-DO : make this adaptive resource based task creation
-    async getGroupOfTasksActivity(jobRunId,  groupSize = 1000, workerConcurrency = 20): Promise<string[]> {
-      const activityContext = Context.current();      
-      const heartBeatInterval = setInterval(() => { activityContext.heartbeat({});}, 2000);
+    async getGroupOfTasksActivity(jobRunId): Promise<string[]> {
       let taskIds: string[] = [];
-      const commandsInTask = Math.floor(groupSize/ workerConcurrency);
       try{
         const jobContext = await this.redisService.getJobManagerContext(jobRunId);
-        let commands:Command[] = [], streamIds = [];
-        for await (const {data, id} of jobContext.groupReadCommandStream(jobRunId, groupSize, GroupReaderType.WORKER)) {
+        let commands:Cmd[] = [], streamIds = [];
+        for await (const {data, id} of jobContext.groupReadCommandStream(jobRunId, this.groupSize, GroupReaderType.WORKER)) {
           commands.push(data);
           streamIds.push(id);
-          if (commands.length >= commandsInTask) {
+          if (commands.length >= this.commandsInTask) {
             const task = buildTask(TaskType.MIGRATE, jobRunId, jobContext, commands);
             const hashKey = calculateCommandHash(commands); 
             taskIds.push(hashKey);
-             this.logger.debug(`Task created with ID: ${task.id} and hash: ${hashKey}`);
+            this.logger.debug(`Task created with ID: ${task.id} and hash: ${hashKey}`);
             await jobContext.setTaskIfNotExists(hashKey, task);   
             commands = [];
           }
@@ -63,15 +69,13 @@ export class CommonTaskService {
       }catch (error) {
         this.logger.error(`Error in getGroupOfTasksActivity: ${error.message}`, error.stack);
         throw new Error(`Failed to get group of tasks activity: ${error.message}`);
-      }finally{
-        clearInterval(heartBeatInterval);
       }
       return taskIds;
     }
 
   
-  async buildOrGetValidScanTask({jobContext , taskHashId , jobRunId, batchId}: BuildOrGetScanTaskInput): Promise<Task> {
-    let task: Task | undefined = await jobContext.getTask(taskHashId);
+  async buildOrGetValidScanTask({jobContext , taskHashId , jobRunId, batchId}: BuildOrGetScanTaskInput): Promise<TaskInfo> {
+    let task: TaskInfo | undefined = await jobContext.getTask(taskHashId);
     if(!task && batchId) {
       const batch = await jobContext.getBatchDir(batchId);
       if(batch) {
@@ -85,15 +89,14 @@ export class CommonTaskService {
   }
 
 
-  async ensureTaskValid({task, jobContext}: handleInitTaskInput) : Promise<Task> {
-      let retryCount = 0;
+  async ensureTaskValid({task, jobContext}: InitTaskInput) : Promise<TaskInfo> {
+
       for (let i = 0; i < task.commands.length; i++) {
-        retryCount = Math.max(retryCount, task.commands[i].retryCount);
         if (task.commands[i].status !== CommandStatus.COMPLETED)
           task.commands[i].status = CommandStatus.IN_PROCESS
       }
   
-      if (retryCount >= this.maxRetryCount) {
+      if (task.retryCount >= this.maxRetryCount) {
         task.status = TaskStatus.ERRORED;
         await jobContext.publishToTaskStream(task);
         throw new RetryExceededError(`Task ${task.id} has exceeded maximum retry count of ${this.maxRetryCount}`);
@@ -119,6 +122,12 @@ export class CommonTaskService {
     const batchId: string = calculateHash(dirsToScan);
     await jobContext.setBatchDir(batchId, dirsToScan);
     return batchId;
+  }
+
+  async isCmdStreamLenValid(jobRunId:string): Promise<boolean> {
+    const jobContext = await this.redisService.getJobManagerContext(jobRunId);
+    const currStreamLen =  await jobContext.getCmdStreamLen();
+    return this.maxCmdStreamLen >= currStreamLen;
   }
     
 }
