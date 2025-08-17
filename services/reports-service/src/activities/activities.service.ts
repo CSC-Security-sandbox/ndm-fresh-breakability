@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DiscoveryReportService } from './discovery-report/discovery-report.serivce';
+import { DiscoveryReportService } from './discovery-report/discovery-report.service';
 import { GenerateDiscoveryReportInput, GetDiscoverySectionInput, UpdateDiscoveryReportInput } from './discovery-report/discovery-report.type';
 
 @Injectable()

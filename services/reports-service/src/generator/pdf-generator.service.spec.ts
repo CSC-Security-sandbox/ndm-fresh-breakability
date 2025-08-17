@@ -1,141 +1,220 @@
-import { PDFGeneratorService } from "./pdf-generator.service";
-import puppeteer, { Browser, Page, PDFOptions } from "puppeteer";
+// ---- MOCKS MUST BE FIRST ----
+const mockLaunch = jest.fn();
+jest.mock("puppeteer", () => ({
+  __esModule: true,
+  default: { launch: mockLaunch },
+  launch: mockLaunch,
+}));
 
-jest.mock("puppeteer");
+jest.mock("fs", () => ({
+  promises: { readFile: jest.fn() },
+}));
+
+jest.mock("hbs", () => ({
+  compile: jest.fn(),
+}));
+
+// ---- THEN IMPORTS ----
+import { Test, TestingModule } from "@nestjs/testing";
+import { PDFGeneratorService } from "./pdf-generator.service";
+import { GeneratePDFInput, PDF_TEMPLATE_PATHS } from "./pdf-generator.type";
+import * as fs from "fs";
+import * as hbs from "hbs";
 
 describe("PDFGeneratorService", () => {
-    let service: PDFGeneratorService;
-    let mockBrowser: jest.Mocked<Browser>;
-    let mockPage: jest.Mocked<Page>;
+  let service: PDFGeneratorService;
+  let mockBrowser: any;
+  let mockPage: any;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    mockPage = {
+      setContent: jest.fn(),
+      pdf: jest.fn().mockResolvedValue(Buffer.from("pdf-content")),
+      close: jest.fn(),
+      isClosed: jest.fn().mockReturnValue(false),
+    };
+
+    mockBrowser = {
+      newPage: jest.fn().mockResolvedValue(mockPage),
+      close: jest.fn(),
+      connected: true,
+    };
+
+    mockLaunch.mockResolvedValue(mockBrowser);
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [PDFGeneratorService],
+    }).compile();
+
+    service = module.get<PDFGeneratorService>(PDFGeneratorService);
+  });
+
+  describe("initBrowser", () => {
+    it("should initialize browser when not already initialized", async () => {
+      await service.initBrowser();
+      expect(mockLaunch).toHaveBeenCalled();
+    });
+
+    it("should not reinitialize browser if already initialized", async () => {
+      await service.initBrowser();
+      mockLaunch.mockClear();
+      await service.initBrowser();
+      expect(mockLaunch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("generatePDF", () => {
+    const mockInput: GeneratePDFInput = {
+      data: { title: "Test Report" },
+      template: "reportTemplate" as keyof typeof PDF_TEMPLATE_PATHS,
+      pdfOptions: { format: "Letter" as const },
+    };
 
     beforeEach(() => {
-        mockPage = {
-            setContent: jest.fn().mockResolvedValue(undefined),
-            pdf: jest.fn().mockResolvedValue(Buffer.from("pdf-content")),
-            close: jest.fn().mockResolvedValue(undefined),
-            isClosed: jest.fn().mockReturnValue(false),
-            // @ts-ignore
-            ...{},
-        } as unknown as jest.Mocked<Page>;
-
-        mockBrowser = {
-            newPage: jest.fn().mockResolvedValue(mockPage),
-            close: jest.fn().mockResolvedValue(undefined),
-            connected: true,
-            // @ts-ignore
-            ...{},
-        } as unknown as jest.Mocked<Browser>;
-
-        (puppeteer.launch as jest.Mock).mockResolvedValue(mockBrowser);
-
-        service = new PDFGeneratorService();
+      (fs.promises.readFile as jest.Mock).mockResolvedValue("<html>{{title}}</html>");
+      (hbs.compile as jest.Mock).mockReturnValue(() => "<html>Test Report</html>");
     });
 
-    afterEach(() => {
-        jest.clearAllMocks();
+    it("should generate PDF successfully", async () => {
+      const result = await service.generatePDF(mockInput);
+      expect(fs.promises.readFile).toHaveBeenCalled();
+      expect(hbs.compile).toHaveBeenCalled();
+      expect(mockPage.setContent).toHaveBeenCalledWith(
+        "<html>Test Report</html>",
+        { waitUntil: "networkidle0" }
+      );
+      expect(mockPage.pdf).toHaveBeenCalledWith({
+        format: "Letter",
+        printBackground: true,
+      });
+      expect(result).toEqual(Buffer.from("pdf-content"));
+      expect(mockPage.close).toHaveBeenCalled();
     });
 
-    describe("init", () => {
-        it("should launch puppeteer browser if not initialized", async () => {
-            await service.init();
-            expect(puppeteer.launch).toHaveBeenCalledWith({
-                headless: true,
-                args: [
-                    "--no-sandbox",
-                    "--disable-setuid-sandbox",
-                    "--disable-gpu",
-                    "--disable-dev-shm-usage",
-                    "--disable-accelerated-2d-canvas",
-                ],
-                protocolTimeout: 60000,
-            });
-        });
-
-        it("should not launch browser if already initialized", async () => {
-            await service.init();
-            await service.init();
-            expect(puppeteer.launch).toHaveBeenCalledTimes(1);
-        });
+    it("should use default PDF options when not provided", async () => {
+      const inputWithoutOptions: GeneratePDFInput = {
+        data: { title: "Test" },
+        template: "reportTemplate" as keyof typeof PDF_TEMPLATE_PATHS,
+      };
+      await service.generatePDF(inputWithoutOptions);
+      expect(mockPage.pdf).toHaveBeenCalledWith({
+        format: "A4",
+        printBackground: true,
+      });
     });
 
-    describe("getBrowser", () => {
-        it("should throw if browser is not initialized", () => {
-            expect(() => service.getBrowser()).toThrow(
-                "Puppeteer browser is not initialized yet."
-            );
-        });
-
-        it("should return browser if initialized", async () => {
-            await service.init();
-            expect(service.getBrowser()).toBe(mockBrowser);
-        });
+    it("should close page even if PDF generation fails", async () => {
+      mockPage.pdf.mockRejectedValue(new Error("PDF generation failed"));
+      await expect(service.generatePDF(mockInput)).rejects.toThrow("PDF generation failed");
+      expect(mockPage.close).toHaveBeenCalled();
     });
 
-    describe("getNewPage", () => {
-        it("should return a new page from the browser", async () => {
-            await service.init();
-            const page = await service.getNewPage();
-            expect(mockBrowser.newPage).toHaveBeenCalled();
-            expect(page).toBe(mockPage);
-        });
+    it("should not attempt to close page if already closed", async () => {
+      mockPage.isClosed.mockReturnValue(true);
+      await service.generatePDF(mockInput);
+      expect(mockPage.close).not.toHaveBeenCalled();
     });
 
-    describe("generatePDF", () => {
-        it("should generate a PDF buffer from HTML", async () => {
-            const html = "<html><body>Hello</body></html>";
-            await service.init();
-            const buffer = await service.generatePDF(html);
-            expect(mockPage.setContent).toHaveBeenCalledWith(html, { waitUntil: "networkidle0" });
-            expect(mockPage.pdf).toHaveBeenCalledWith({
-                format: "A4",
-                printBackground: true,
-            });
-            expect(buffer).toBeInstanceOf(Buffer);
-            expect(buffer.toString()).toBe("pdf-content");
-            expect(mockPage.close).toHaveBeenCalled();
-        });
-
-        it("should pass custom PDFOptions", async () => {
-            const html = "<html></html>";
-            const options: PDFOptions = { landscape: true };
-            await service.init();
-            await service.generatePDF(html, options);
-            expect(mockPage.pdf).toHaveBeenCalledWith(
-                expect.objectContaining({ landscape: true, format: "A4", printBackground: true })
-            );
-        });
-
-        it("should close the page even if setContent throws", async () => {
-            mockPage.setContent.mockRejectedValueOnce(new Error("fail"));
-            await service.init();
-            await expect(service.generatePDF("<html></html>")).rejects.toThrow("fail");
-            expect(mockPage.close).toHaveBeenCalled();
-        });
-
-        it("should not close the page if already closed", async () => {
-            mockPage.isClosed.mockReturnValueOnce(true);
-            await service.init();
-            await service.generatePDF("<html></html>");
-            expect(mockPage.close).not.toHaveBeenCalled();
-        });
+    it("should handle template compilation errors", async () => {
+      (hbs.compile as jest.Mock).mockImplementation(() => {
+        throw new Error("Template compilation failed");
+      });
+      await expect(service.generatePDF(mockInput)).rejects.toThrow("Template compilation failed");
     });
 
-    describe("onApplicationShutdown", () => {
-        it("should close the browser if connected", async () => {
-            await service.init();
-            await service.onApplicationShutdown();
-            expect(mockBrowser.close).toHaveBeenCalled();
-        });
-
-        it("should not close the browser if not connected", async () => {
-            await service.init();
-            (mockBrowser as any).connected = false;
-            await service.onApplicationShutdown();
-            expect(mockBrowser.close).not.toHaveBeenCalled();
-        });
-
-        it("should not throw if browser is not initialized", async () => {
-            await expect(service.onApplicationShutdown()).resolves.toBeUndefined();
-        });
+    it("should handle file read errors", async () => {
+      (fs.promises.readFile as jest.Mock).mockRejectedValue(new Error("File not found"));
+      await expect(service.generatePDF(mockInput)).rejects.toThrow("File not found");
     });
+  });
+
+  describe("onApplicationShutdown", () => {
+    it("should close browser if connected", async () => {
+      await service.initBrowser();
+      await service.onApplicationShutdown();
+      expect(mockBrowser.close).toHaveBeenCalled();
+    });
+
+    it("should not close browser if not connected", async () => {
+      await service.initBrowser();
+      mockBrowser.connected = false;
+      await service.onApplicationShutdown();
+      expect(mockBrowser.close).not.toHaveBeenCalled();
+    });
+
+    it("should not throw error if browser is null", async () => {
+      await expect(service.onApplicationShutdown()).resolves.not.toThrow();
+    });
+
+    it("should handle browser close errors gracefully", async () => {
+      await service.initBrowser();
+      mockBrowser.close.mockRejectedValue(new Error("Close failed"));
+      await expect(service.onApplicationShutdown()).rejects.toThrow("Close failed");
+    });
+  });
+
+  describe("edge cases", () => {
+
+    it("should handle setContent failure", async () => {
+      mockPage.setContent.mockRejectedValue(new Error("Failed to set content"));
+      (fs.promises.readFile as jest.Mock).mockResolvedValue("<html></html>");
+      (hbs.compile as jest.Mock).mockReturnValue(() => "<html></html>");
+      await expect(service.generatePDF({
+        data: {},
+        template: "reportTemplate" as keyof typeof PDF_TEMPLATE_PATHS,
+      })).rejects.toThrow("Failed to set content");
+      expect(mockPage.close).toHaveBeenCalled();
+    });
+
+    it("should handle null page scenario in finally block", async () => {
+      mockBrowser.newPage.mockResolvedValue(null);
+      await expect(service.generatePDF({
+        data: {},
+        template: "reportTemplate" as keyof typeof PDF_TEMPLATE_PATHS,
+      })).rejects.toThrow();
+    });
+
+
+    it("should correctly merge PDF options", async () => {
+      const customOptions: GeneratePDFInput = {
+        data: { title: "Test" },
+        template: "reportTemplate" as keyof typeof PDF_TEMPLATE_PATHS,
+        pdfOptions: {
+          format: "A3" as const,
+          margin: { top: "1cm", bottom: "1cm" },
+          landscape: true,
+        },
+      };
+      await service.generatePDF(customOptions);
+      expect(mockPage.pdf).toHaveBeenCalledWith({
+        format: "A3",
+        printBackground: true,
+        margin: { top: "1cm", bottom: "1cm" },
+        landscape: true,
+      });
+    });
+  });
+
+  describe("browser lifecycle", () => {
+    it("should handle browser launch timeout", async () => {
+      mockLaunch.mockRejectedValueOnce(new Error("Timeout during launch"));
+      await expect(service.initBrowser()).rejects.toThrow("Timeout during launch");
+    });
+
+    it("should maintain browser instance across multiple PDF generations", async () => {
+      await service.generatePDF({
+        data: { title: "First" },
+        template: "reportTemplate" as keyof typeof PDF_TEMPLATE_PATHS,
+      });
+      mockLaunch.mockClear();
+      await service.generatePDF({
+        data: { title: "Second" },
+        template: "reportTemplate" as keyof typeof PDF_TEMPLATE_PATHS,
+      });
+      expect(mockLaunch).not.toHaveBeenCalled();
+      expect(mockBrowser.newPage).toHaveBeenCalledTimes(2);
+    });
+  });
 });

@@ -11,7 +11,7 @@ MAX_VALUES_MAPPER,
 TOP_LONGEST_FILE_NAMES_MAPPER,
 TOP_LONGEST_DIRECTORY_NAMES_MAPPER,
 TOP_DIRECTORY_WITH_MAX_SIZE_MAPPER,
-TOP_DIRECOTRY_WITH_MAX_COUNT_CHILD_MAPPER,
+TOP_DIRECTORY_WITH_MAX_COUNT_CHILD_MAPPER,
 TOP_LONGEST_DIRECTORY_PATHS_MAPPER,
 TOP_LONGEST_FILE_PATHS_MAPPER,
 TOP_BIGGEST_FILE_NAME_MAPPER,
@@ -67,7 +67,7 @@ it('CREATED_TIME_DISTRIBUTION_MAPPER maps input correctly', () => {
             value: 3,
             category: 'Created',
             valueType: 'count',
-            sub_category: 'File Count with Creation Time2023'
+            sub_category: 'File Count with Creation Time 2023'
         },
         {
             value: 75,
@@ -198,9 +198,9 @@ it('TOP_DIRECTORY_WITH_MAX_SIZE_MAPPER maps input correctly', () => {
     ]);
 });
 
-it('TOP_DIRECOTRY_WITH_MAX_COUNT_CHILD_MAPPER maps input correctly', () => {
+it('TOP_DIRECTORY_WITH_MAX_COUNT_CHILD_MAPPER maps input correctly', () => {
     const input = [{ directory: '/dir1', child: 10 }, { directory: '/dir2', child: 20 }];
-    const result = TOP_DIRECOTRY_WITH_MAX_COUNT_CHILD_MAPPER(input as any);
+    const result = TOP_DIRECTORY_WITH_MAX_COUNT_CHILD_MAPPER(input as any);
     expect(result).toEqual([
         {
             value: '/dir1 (10); /dir2 (20)',

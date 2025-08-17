@@ -1,15 +1,19 @@
-
-FROM node:20-bullseye-slim
+FROM public.ecr.aws/docker/library/node:22.18.0-trixie-slim
 
 USER root
 
-# Install system dependencies and global npm packages for Puppeteer/Chrome
+# Install system dependencies required for Chromium and Puppeteer PDF generation
 RUN apt-get update \
     && apt-get install -y \
         ca-certificates \
         wget \
         gnupg \
         fonts-liberation \
+        libnss3 \
+        libx11-xcb1 \
+        libxcomposite1 \
+        libxdamage1 \
+        libxrandr2 \
         libasound2 \
         libatk-bridge2.0-0 \
         libatk1.0-0 \
@@ -18,17 +22,10 @@ RUN apt-get update \
         libgbm1 \
         libgtk-3-0 \
         libnspr4 \
-        libnss3 \
-        libx11-xcb1 \
-        libxcomposite1 \
-        libxdamage1 \
-        libxrandr2 \
-        xdg-utils \
         --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g @nestjs/cli pm2@latest puppeteer
 
-# Set environment variables for Puppeteer
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false \
     NODE_ENV=production
 

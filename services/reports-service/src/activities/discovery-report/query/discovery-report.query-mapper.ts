@@ -1,5 +1,5 @@
 import { DiscoveryReportSection } from "../discovery-report.type";
-import { ACCESS_TIME_DISTRIBUTION, CREATED_TIME_DISTRIBUTION, DEPTH_DISTRIBUTION, EXTENSION_DISTRIBUTION, FILE_SYSTEM_DISTRIBUTION, JOB_RUN_DETAILS, MAX_VALUES, MODIFIED_TIME_DISTRIBUTION, NUMBER_OF_FILES_BY_SIZE, TOP_BIGGEST_FILE_NAME, TOP_DIRECOTRY_WITH_MAX_COUNT_CHILD, TOP_DIRECOTRY_WITH_MAX_SIZE, TOP_LONGEST_DIRECTORY_NAMES, TOP_LONGEST_DIRECTORY_PATHS, TOP_LONGEST_FILE_NAMES, TOP_LONGEST_FILE_PATHS } from "./discovery-report.query";
+import { ACCESS_TIME_DISTRIBUTION, CREATED_TIME_DISTRIBUTION, DEPTH_DISTRIBUTION, EXTENSION_DISTRIBUTION, FILE_SYSTEM_DISTRIBUTION, JOB_RUN_DETAILS, MAX_VALUES, MODIFIED_TIME_DISTRIBUTION, NUMBER_OF_FILES_BY_SIZE, TOP_BIGGEST_FILE_NAME, TOP_DIRECTORY_WITH_MAX_COUNT_CHILD, TOP_DIRECTORY_WITH_MAX_SIZE, TOP_LONGEST_DIRECTORY_NAMES, TOP_LONGEST_DIRECTORY_PATHS, TOP_LONGEST_FILE_NAMES, TOP_LONGEST_FILE_PATHS } from "./discovery-report.query";
 import { AccessTimeDistributionInput, CreatedTimeDistributionInput, DepthDistributionInput, ExtensionDistributionInput, FileSystemDistributionInput, JobRunDetailsInput, MaxValuesInput, ModifiedTimeDistributionInput, NumberOfFilesBySizeInput, TopBiggestFileNameInput, TopDirectoryWithMaxCountChildInput, TopDirectoryWithMaxSizeInput, TopLongestDirectoryNamesInput, TopLongestDirectoryPathsInput, TopLongestFileNamesInput, TopLongestFilePathsInput } from "./discovery-report.query.type";
 
 
@@ -48,7 +48,7 @@ export const CREATED_TIME_DISTRIBUTION_MAPPER = (input: CreatedTimeDistributionI
             value: parseInt(item.count, 0),
             category: 'Created',
             valueType: 'count',
-            sub_category: `File Count with Creation Time${item.created_group}`
+            sub_category: `File Count with Creation Time ${item.created_group}`
         });
         output.push({
             value: parseInt(item.total_size, 0),
@@ -190,7 +190,7 @@ export const TOP_DIRECTORY_WITH_MAX_SIZE_MAPPER = (input: TopDirectoryWithMaxSiz
     return output;
 }
 
-export const TOP_DIRECOTRY_WITH_MAX_COUNT_CHILD_MAPPER = (input: TopDirectoryWithMaxCountChildInput[]) : DiscoveryReportSection[] => {
+export const TOP_DIRECTORY_WITH_MAX_COUNT_CHILD_MAPPER = (input: TopDirectoryWithMaxCountChildInput[]) : DiscoveryReportSection[] => {
     const output: DiscoveryReportSection[] = [];
     output.push({
         value: input.map(item=> `${item.directory} (${item.child})`).join('; '),
@@ -277,8 +277,8 @@ export const QueryMapper = {
     ['MAX_VALUES']: {query: MAX_VALUES, mapper: MAX_VALUES_MAPPER},
     ['TOP_LONGEST_FILE_NAMES']: {query: TOP_LONGEST_FILE_NAMES, mapper: TOP_LONGEST_FILE_NAMES_MAPPER},
     ['TOP_LONGEST_DIRECTORY_NAMES']: {query: TOP_LONGEST_DIRECTORY_NAMES, mapper: TOP_LONGEST_DIRECTORY_NAMES_MAPPER},
-    ['TOP_DIRECOTRY_WITH_MAX_SIZE']: {query: TOP_DIRECOTRY_WITH_MAX_SIZE, mapper: TOP_DIRECTORY_WITH_MAX_SIZE_MAPPER},
-    ['TOP_DIRECOTRY_WITH_MAX_COUNT_CHILD']: {query: TOP_DIRECOTRY_WITH_MAX_COUNT_CHILD, mapper: TOP_DIRECOTRY_WITH_MAX_COUNT_CHILD_MAPPER},
+    ['TOP_DIRECTORY_WITH_MAX_SIZE']: {query: TOP_DIRECTORY_WITH_MAX_SIZE, mapper: TOP_DIRECTORY_WITH_MAX_SIZE_MAPPER},
+    ['TOP_DIRECTORY_WITH_MAX_COUNT_CHILD']: {query: TOP_DIRECTORY_WITH_MAX_COUNT_CHILD, mapper: TOP_DIRECTORY_WITH_MAX_COUNT_CHILD_MAPPER},
     ['TOP_LONGEST_DIRECTORY_PATHS']: {query: TOP_LONGEST_DIRECTORY_PATHS, mapper: TOP_LONGEST_DIRECTORY_PATHS_MAPPER},
     ['TOP_LONGEST_FILE_PATHS']: {query: TOP_LONGEST_FILE_PATHS, mapper: TOP_LONGEST_FILE_PATHS_MAPPER},
     ['TOP_BIGGEST_FILE_NAME']: {query: TOP_BIGGEST_FILE_NAME, mapper: TOP_BIGGEST_FILE_NAME_MAPPER},

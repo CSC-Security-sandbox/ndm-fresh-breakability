@@ -173,7 +173,7 @@ export const TOP_LONGEST_DIRECTORY_NAMES = `
     LIMIT 5;
 `
 
-export const TOP_DIRECOTRY_WITH_MAX_SIZE = `
+export const TOP_DIRECTORY_WITH_MAX_SIZE = `
     WITH cleaned_inventory AS (
         SELECT
             regexp_replace(regexp_replace(i."path", '/+$', ''), '/[^/]+$', '') AS directory,
@@ -188,7 +188,7 @@ export const TOP_DIRECOTRY_WITH_MAX_SIZE = `
     LIMIT 5;
 `
 
-export const TOP_DIRECOTRY_WITH_MAX_COUNT_CHILD = `
+export const TOP_DIRECTORY_WITH_MAX_COUNT_CHILD = `
     WITH cleaned_inventory AS (
         SELECT
             regexp_replace(regexp_replace(i."path", '/+$', ''), '/[^/]+$', '') AS directory

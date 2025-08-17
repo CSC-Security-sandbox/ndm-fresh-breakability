@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { GeneratorModule } from 'src/generator/generator.module';
 import { ActivitiesService } from './activities.service';
-import { DiscoveryReportService } from './discovery-report/discovery-report.serivce';
+import { DiscoveryReportService } from './discovery-report/discovery-report.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ReportsEntity } from 'src/entities/reports.entity';
 import { JobRunEntity } from 'src/entities/jobrun.entity';

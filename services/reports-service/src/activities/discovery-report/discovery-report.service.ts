@@ -1,25 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
 import * as fs from "fs";
-import * as hbs from "hbs";
-import * as path from "path";
-import { PDFOptions } from 'puppeteer';
 import { ReportType } from 'src/constants/enums';
+import { JobRunEntity } from 'src/entities/jobrun.entity';
+import { ReportsEntity } from 'src/entities/reports.entity';
 import { PDFGeneratorService } from 'src/generator/pdf-generator.service';
+import { PDFTemplate } from 'src/generator/pdf-generator.type';
 import { groupAndOrder } from 'src/utils/group-order';
 import { escapeCsvValue } from 'src/utils/utils';
 import { DataSource, Repository } from 'typeorm';
-import { DiscoveryReportSection, GenerateDiscoveryReportInput,  GetDiscoverySectionInput,  UpdateDiscoveryReportInput } from './discovery-report.type';
-import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { ReportsEntity } from 'src/entities/reports.entity';
-import { JobRunEntity } from 'src/entities/jobrun.entity';
+import { DiscoveryReportSection, GenerateDiscoveryReportInput, GetDiscoverySectionInput, UpdateDiscoveryReportInput } from './discovery-report.type';
 import { QueryMapper } from './query/discovery-report.query-mapper';
 
 @Injectable()
 export class DiscoveryReportService {
 
     private readonly logger = new Logger(DiscoveryReportService.name);
-    private pdfTemplatePath: string;
     private basePath: string;
 
     constructor(
@@ -31,7 +28,6 @@ export class DiscoveryReportService {
         @InjectRepository(JobRunEntity)
         private readonly jobRunRepo: Repository<JobRunEntity>,
     ) {
-        this.pdfTemplatePath = path.join(__dirname,"../../../templates/views/discovery_pdf_report.hbs");
         this.basePath = this.configService.get<string>('app.baseDir') ;
     }
 
@@ -41,16 +37,13 @@ export class DiscoveryReportService {
     }
 
     async generatePdfReport({data, jobRunId}: GenerateDiscoveryReportInput) {
-        // Build PDF from the template
-        const templateSource = await fs.promises.readFile(this.pdfTemplatePath, "utf8");
-        const template = hbs.compile(templateSource);
         const categories = groupAndOrder(data, ReportType.DISCOVERY);
-        const htmlOutput = template(categories);
-        const options: PDFOptions = { format: "A4", printBackground: true };
-
         // Generate PDF using the PDF generator service
-        const pdfBuffer = await this.pdfGenerator.generatePDF(htmlOutput, options);
-        const pdfFilePath = path.join(this.basePath, `${jobRunId}-discover-report.pdf`);
+        const pdfBuffer = await this.pdfGenerator.generatePDF({
+          data: categories,
+          template: PDFTemplate.DISCOVERY_REPORT,
+        });
+        const pdfFilePath = `${this.basePath}/${jobRunId}-discover-report.pdf`;
         await fs.promises.writeFile(pdfFilePath, pdfBuffer);
         this.logger.log(`PDF report generated at: ${pdfFilePath}`);
         return { message: 'PDF report generated successfully', path: pdfFilePath };
@@ -82,7 +75,7 @@ export class DiscoveryReportService {
         const csvContent = [headers.join(","), rows.map(escapeCsvValue).join(",")].join("\n");
 
         // Write CSV to file
-        const csvFilePath = path.join(this.basePath, `${jobRunId}-discover-report.csv`);
+        const csvFilePath = `${this.basePath}/${jobRunId}-discover-report.csv`;
         await fs.promises.writeFile(csvFilePath, csvContent);
 
         this.logger.log(`CSV report generated at: ${csvFilePath}`);

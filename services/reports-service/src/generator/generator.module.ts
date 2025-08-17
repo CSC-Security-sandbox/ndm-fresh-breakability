@@ -10,6 +10,6 @@ export class GeneratorModule implements OnModuleInit {
   constructor(private readonly pdfGenerator: PDFGeneratorService) {}
 
   onModuleInit() {
-    this.pdfGenerator.init();
+    this.pdfGenerator.initBrowser();
   }
 }
