@@ -1,6 +1,7 @@
 
 # Environment variables
 .env
+.env.local
 
 # Playwright
 node_modules/
@@ -8,4 +9,6 @@ node_modules/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
-/playwright/.auth/
+
+# Authentication states (contain sensitive session data)
+playwright/.auth

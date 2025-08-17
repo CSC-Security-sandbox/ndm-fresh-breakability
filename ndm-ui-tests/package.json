@@ -4,10 +4,12 @@
   "description": "UI tests for NetApp Data Migrator",
   "main": "index.js",
   "scripts": {
-    "test": "playwright test --project=firefox",
-    "test:headed": "playwright test --headed --project=firefox",
-    "test:debug": "playwright test --debug --project=firefox",
-    "test:stay-open": "STAY_OPEN=true playwright test --headed --project=firefox",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:app-admin": "playwright test --project=app-admin",
+    "test:project-admin": "playwright test --project=project-admin", 
+    "test:project-viewer": "playwright test --project=project-viewer",
     "test:report": "playwright show-report",
     "install-browsers": "playwright install firefox"
   },

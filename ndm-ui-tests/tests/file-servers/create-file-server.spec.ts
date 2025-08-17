@@ -14,7 +14,10 @@ let NFS_VALID_FILE_SERVER_DETAILS;
 // Configure this test suite to run in serial mode
 test.describe.configure({ mode: "serial" });
 
-test.describe("Create File Server Tests", () => {
+// Admin and Project Admin tests (can create file servers)
+test.describe("FS - Create File Server Tests - App Admin", () => {
+  test.use({ storageState: "playwright/.auth/app-admin.json" });
+
   test.beforeEach(async () => {
     console.log("✅ Setting up test data for file server tests");
 
@@ -46,7 +49,7 @@ test.describe("Create File Server Tests", () => {
     }
   });
 
-  test("should validate worker and show error for invalid host/IP", async ({
+  test("Should validate worker and show error for invalid host/IP", async ({
     browser,
   }) => {
     // Create a new page for this specific test with video recording

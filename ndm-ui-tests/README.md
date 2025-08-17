@@ -2,6 +2,30 @@
 
 This directory contains UI test for the NetApp Data Migrator application using Playwright with Firefox browser.
 
+## 🔒 Security Notice
+
+**Authentication state files** (`playwright/.auth/*.json`) contain sensitive session cookies and tokens. These files:
+- Are automatically excluded from git via `.gitignore`
+- Should **NEVER** be committed to the repository
+- Are regenerated each time you run the setup
+
+## Multi-User Authentication
+
+The test suite supports three user roles:
+- **App Admin**: Full application access
+- **Project Admin**: Project management access  
+- **Project Viewer**: Read-only access
+
+```bash
+# Run tests for specific roles
+npx playwright test --project=app-admin
+npx playwright test --project=project-admin
+npx playwright test --project=project-viewer
+
+# Run all roles
+npx playwright test
+```
+
 ## Test Structure
 
 ### Test Files
