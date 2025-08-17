@@ -1,10 +1,5 @@
 import { Page, expect } from "@playwright/test";
-
-const BASE_URL = "http://localhost:3111";
-const ADMIN_CREDENTIALS = {
-  username: "admin@datamigrator.local",
-  password: "Root@123",
-};
+import { BASE_URL, ADMIN_CREDENTIALS } from "../config/env";
 
 export async function loginAsAdmin(page: Page) {
   await page.goto(BASE_URL);

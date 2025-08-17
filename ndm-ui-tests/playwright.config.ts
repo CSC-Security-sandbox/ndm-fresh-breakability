@@ -5,6 +5,8 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./tests",
+  /* Global setup for authentication */
+  globalSetup: "./global-setup.ts",
   /* Run tests in files in parallel */
   fullyParallel: false,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
@@ -31,16 +33,25 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: "https://localhost:3111",
+    baseURL: "http://localhost:3111", // Fixed: was https but should be http based on your env
 
-    /* Collect trace for all tests */
-    trace: "on",
+    /* Always run in headed mode (show browser window) */
+    headless: false,
 
-    /* Record video for all tests */
-    video: "on",
+    /* Remove fixed viewport to let content use full browser window */
+    viewport: null, // This allows content to use the full browser window size
 
-    /* Take screenshot for all tests */
-    screenshot: "on",
+    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
+    trace: "on-first-retry",
+
+    /* Take screenshot only when test fails */
+    screenshot: "only-on-failure",
+
+    /* Disable global video recording - we'll enable it per test in browser context */
+    video: "off",
+
+    /* Use saved authentication state */
+    storageState: "playwright/.auth/user.json",
 
     /* Ignore HTTPS errors */
     ignoreHTTPSErrors: true,
