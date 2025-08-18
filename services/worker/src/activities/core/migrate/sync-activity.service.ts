@@ -18,6 +18,7 @@ export class SyncService {
     readonly CHUNK_SIZE: number;
     readonly maxRetryCount: number;
     readonly maxConcurrency: number;
+    readonly maxExecuteSyncConcurrency: number;
     private readonly logger: LoggerService;
 
     constructor(
@@ -32,6 +33,7 @@ export class SyncService {
         this.logger = loggerFactory.create(SyncService.name);
         this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100;
+        this.maxExecuteSyncConcurrency = 20;
     }
 
 
@@ -71,21 +73,25 @@ export class SyncService {
         const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
         const errorType = ++task.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
 
-        const results = await Promise.all(task.commands.filter(command => command.status !== CommandStatus.COMPLETED).map(command => {
-              const scanInput: CommandExecInput = {
-                sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
-                targetPath: `${baseTargetPrefixPath}${command.fPath}`,
-                command,
-                jobContext,
-                errorType
-              };
-
-              return this.commandExecService.executeCommand(scanInput);
-        }));
-        results.forEach((output:CommandExecOutput) => {
-            syncOutput.errors.source.push(...output.sourceErrors);
-            syncOutput.errors.target.push(...output.targetErrors);
-        });
+        let offset = 0;
+        while (offset < task.commands.length) {
+            let slice = task.commands.slice(offset, offset + this.maxExecuteSyncConcurrency)
+            offset += this.maxExecuteSyncConcurrency;
+            const results = await Promise.all(slice.filter(command => command.status !== CommandStatus.COMPLETED).map(command => {
+                const scanInput: CommandExecInput = {
+                  sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
+                  targetPath: `${baseTargetPrefixPath}${command.fPath}`,
+                  command,
+                  jobContext,
+                  errorType
+                };
+                return this.commandExecService.executeCommand(scanInput);
+            }));
+            results.forEach((output:CommandExecOutput) => {
+                syncOutput.errors.source.push(...output.sourceErrors);
+                syncOutput.errors.target.push(...output.targetErrors);
+            });
+        }
         await jobContext.setTask(taskHashId, task);
         return syncOutput
     }
