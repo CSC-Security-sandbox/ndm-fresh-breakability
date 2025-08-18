@@ -124,7 +124,8 @@
       "!**/dist/**",
       "!**/coverage/**",
       "!**.eslintrc.js",
-      "!**/main.ts"
+      "!**/main.ts",
+      "!src/workflows/**"
     ],
     "coverageDirectory": "coverage",
     "testEnvironment": "node",
