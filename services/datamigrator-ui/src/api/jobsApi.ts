@@ -3,7 +3,7 @@ import {
   JOB_CONFIG_STATUS_ENUM,
 } from "@/types/app.type";
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import { prepareHeaders } from "@api/api.utils";
+import { prepareHeaders, structuredErrorResponse } from "@api/api.utils";
 import { reportApi } from "@api/reportApi";
 import { SpeedTestJobsType } from "@modules/speed-test/types/speed-test.types";
 import { SpeedTestDetailsType } from "@modules/speed-test/types/speed-test-details.types";
@@ -49,9 +49,7 @@ export const jobsApi = createApi({
       transformResponse: (response) => {
         return response?.data?.items || response?.data || response || [];
       },
-      transformErrorResponse: (error: any) => {
-        return error?.data?.error || error?.data || error || {};
-      },
+      transformErrorResponse: structuredErrorResponse,
       invalidatesTags: ["ALL_JOB_CONFIGS", "JOB_CONFIG_DETAILS"],
     }),
 
@@ -165,6 +163,7 @@ export const jobsApi = createApi({
       transformResponse: (response) => {
         return response?.data?.items || response?.data || response || [];
       },
+      transformErrorResponse: structuredErrorResponse,
     }),
 
     getAllFileServersWithVolume: builder.query({
