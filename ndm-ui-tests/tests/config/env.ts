@@ -22,3 +22,6 @@ export const PROJECT_VIEWER_CREDENTIALS = {
   username: process.env.PROJECT_VIEWER_USERNAME || "viewer@datamigrator.local",
   password: process.env.PROJECT_VIEWER_PASSWORD || "Root@123",
 };
+
+// Navigation URLs
+export const FILE_SERVER_URL = `${BASE_URL}/${process.env.FILE_SERVER || "file-server"}`;

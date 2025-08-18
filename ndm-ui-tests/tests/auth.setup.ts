@@ -31,24 +31,24 @@ setup("authenticate app admin", async ({ page }) => {
 });
 
 // Setup for Project Admin
-setup("authenticate project admin", async ({ page }) => {
-  await page.goto(BASE_URL);
+// setup("authenticate project admin", async ({ page }) => {
+//   await page.goto(BASE_URL);
 
-  // Use modern Playwright locators
-  await page
-    .getByPlaceholder("Enter Email")
-    .fill(PROJECT_ADMIN_CREDENTIALS.username);
-  await page
-    .getByRole("textbox", { name: "password" })
-    .fill(PROJECT_ADMIN_CREDENTIALS.password);
-  await page.getByRole("button", { name: /submit|login|sign in/i }).click();
+//   // Use modern Playwright locators
+//   await page
+//     .getByPlaceholder("Enter Email")
+//     .fill(PROJECT_ADMIN_CREDENTIALS.username);
+//   await page
+//     .getByRole("textbox", { name: "password" })
+//     .fill(PROJECT_ADMIN_CREDENTIALS.password);
+//   await page.getByRole("button", { name: /submit|login|sign in/i }).click();
 
-  await page.waitForURL((url) => !url.toString().includes("/login"));
+//   await page.waitForURL((url) => !url.toString().includes("/login"));
 
-  await page
-    .context()
-    .storageState({ path: "playwright/.auth/project-admin.json" });
-});
+//   await page
+//     .context()
+//     .storageState({ path: "playwright/.auth/project-admin.json" });
+// });
 
 // Setup for Project Viewer (commented out until user account is created)
 // setup('authenticate project viewer', async ({ page }) => {
