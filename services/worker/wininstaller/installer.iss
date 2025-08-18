@@ -1,12 +1,12 @@
-#define MyAppName "Datamigrator Worker"
-#define MyAppVersion "1.0.0"
+#define ApplicationName "Datamigrator Worker"
+#define ApplicationVersion ""
 
 [Setup]
 AppId=MyProgram
-AppName={#MyAppName}
-AppVersion={#MyAppVersion}
+AppName={#ApplicationName}
+AppVersion={#ApplicationVersion}
 DefaultDirName={sd}\datamigrator
-DefaultGroupName={#MyAppName}
+DefaultGroupName={#ApplicationName}
 AllowNoIcons=yes
 OutputDir=.
 OutputBaseFilename=datamigrator-worker-setup
@@ -31,6 +31,7 @@ Source: "fluentd.conf"; DestDir: "{tmp}";
 [Dirs]
 Name: "{app}\logs"
 Name: "{app}\mnt"
+Name: "{app}\conf"
 
 [Code]
 var
@@ -218,6 +219,28 @@ begin
   end;
 end;
 
+procedure CreateVersionsConfig();
+var
+  VersionsContent: AnsiString;
+  VersionsFile: String;
+begin
+  VersionsFile := ExpandConstant('{app}\conf\versions.conf');
+  
+  Log('Creating versions configuration at: ' + VersionsFile);
+  
+  VersionsContent := 'current_version={#ApplicationVersion}';
+  
+  if not SaveStringToFile(VersionsFile, VersionsContent, False) then
+  begin
+    Log('Failed to create versions configuration file at: ' + VersionsFile);
+    MsgBox('Failed to create versions configuration.', mbError, MB_OK);
+  end
+  else
+  begin
+    Log('Versions configuration created successfully with version: {#ApplicationVersion}');
+  end;
+end;
+
 function StartFluentdService(): Boolean;
 var
   ResultCode: Integer;
@@ -326,6 +349,8 @@ begin
     begin
       Log('Configuration file created successfully');
     end;
+
+    CreateVersionsConfig();
 
     // Install prerequisites and fluent-package
     if VCRedistNeedsInstall then

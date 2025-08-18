@@ -9,6 +9,10 @@ serverFiles:
     scrape_configs: {{ customScrapeConfigs }}
   alerting_rules.yml:
     groups: {{ customAlertingRules }}
+    
+kube-state-metrics:
+  metricLabelsAllowlist:
+    - pods=[build-version]
 
 server:
   retention: "30d"

@@ -6,6 +6,7 @@
 
 global:
   registry: {{ acr_registry }}
+  build_version: {{ build_version }}
 {% if local_cluster is defined %}
   local_cluster: {{ local_cluster }}
 {% endif %}
