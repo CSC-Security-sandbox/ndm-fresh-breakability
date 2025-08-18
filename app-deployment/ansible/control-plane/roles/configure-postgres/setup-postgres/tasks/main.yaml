@@ -68,7 +68,7 @@
 - name: remove previous installation
   become: yes
   shell: |
-    helm delete postgres --namespace "postgres"
+    helm delete postgresql --namespace "postgres"
     kubectl delete pvc --all --namespace "postgres"
     kubectl delete -f $HOME/postgres/postgres-configmap.yaml
     kubectl delete -f $HOME/postgres/postgres-primary-pv.yaml

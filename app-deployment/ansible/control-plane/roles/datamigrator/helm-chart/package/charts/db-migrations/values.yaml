@@ -3,6 +3,12 @@ appName: db-migrations
 image:
   repository: ndm-db-migrations
 
+customLabels:
+  app.kubernetes.io/name: "datamigrator"
+  app.kubernetes.io/service: "db-migrations"
+  app.kubernetes.io/part-of: "datamigrator"
+  app.kubernetes.io/managed-by: "helm"
+
 annotations:
   vault.hashicorp.com/agent-inject: "true"
   vault.hashicorp.com/agent-pre-populate-only: "true"

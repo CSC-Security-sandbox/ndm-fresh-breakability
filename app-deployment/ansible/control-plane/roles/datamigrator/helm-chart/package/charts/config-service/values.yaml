@@ -5,6 +5,12 @@ replicaCount: 1
 image:
   repository: ndm-config-service
 
+customLabels:
+  app.kubernetes.io/name: "datamigrator"
+  app.kubernetes.io/service: "config-service"
+  app.kubernetes.io/part-of: "datamigrator"
+  app.kubernetes.io/managed-by: "helm"
+
 annotations:
   vault.hashicorp.com/agent-inject: "true"
   vault.hashicorp.com/agent-init-first: "true"

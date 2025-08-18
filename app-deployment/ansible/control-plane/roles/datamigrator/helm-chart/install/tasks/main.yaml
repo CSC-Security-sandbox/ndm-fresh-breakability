@@ -130,6 +130,15 @@
   ignore_errors: yes
   when: local_cluster is defined
 
+- name: Uninstall existing Helm release
+  become: yes
+  shell: |
+    helm uninstall datamigrator -n datamigrator || true
+  ignore_errors: yes
+  when: 
+    - local_cluster is defined
+    - dm_uninstall is defined
+
 - name: Install Helm chart
   become: yes
   shell: |
@@ -142,20 +151,20 @@
     var: helm_install_output.stdout_lines
   when: local_cluster is defined
 
-- name: Wait for pods to come up and handle failure
+- name: Wait for pods with label "app.kubernetes.io/name=datamigrator" to come up and handle failure
   block:
     - name: Wait for pods to come up
       become: yes
-      shell: kubectl wait --namespace="datamigrator" --for=condition=Ready pod --all
+      shell: kubectl wait --namespace="datamigrator" --for=condition=Ready pod -l app.kubernetes.io/name=datamigrator
       register: kubectl_get_pods
-      retries: 10 # debug retries
+      retries: 10
       delay: 25
       until: kubectl_get_pods.rc == 0
   rescue:
     - name: Fetch and display pod logs
       become: yes
       shell: |
-        for pod in $(kubectl get pods -n datamigrator -o jsonpath='{.items[*].metadata.name}'); do
+        for pod in $(kubectl get pods -n datamigrator -l app.kubernetes.io/name=datamigrator -o jsonpath='{.items[*].metadata.name}'); do
           echo "Logs for pod: $pod"
           kubectl logs -n datamigrator $pod --all-containers=true
           echo "----------------------------------------"
@@ -166,7 +175,7 @@
         msg: "{{ pod_logs.stdout }}"
     - name: Fail the play due to pod readiness failure
       fail:
-        msg: "Pods did not become ready within the expected time frame."
+        msg: "Pods with label app.kubernetes.io/name=datamigrator did not become ready within the expected time frame."
   when: local_cluster is defined
 
 - name: debug output

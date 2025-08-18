@@ -6,6 +6,12 @@ name: datamigrator
 image:
   repository: ndm-db-writer
 
+customLabels:
+  app.kubernetes.io/name: "datamigrator"
+  app.kubernetes.io/service: "db-writer"
+  app.kubernetes.io/part-of: "datamigrator"
+  app.kubernetes.io/managed-by: "helm"
+
 annotations:
   vault.hashicorp.com/agent-inject: "true"
   vault.hashicorp.com/agent-init-first: "true"

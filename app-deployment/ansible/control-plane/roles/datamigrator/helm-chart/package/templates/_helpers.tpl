@@ -16,9 +16,12 @@ spec:
         {{- toYaml .Values.annotations | nindent 8}}
       {{- end }}
       labels:
-        app: {{ .Values.appName  }}
+        app: {{ .Values.appName }}
         {{- if .Values.global.build_version }}
         build-version: "{{ .Values.global.build_version }}"
+        {{- end }}
+        {{- if .Values.customLabels }}
+        {{ toYaml .Values.customLabels | nindent 8 }}
         {{- end }}
     spec:
       # {{- if not .Values.global.local_cluster }}
@@ -210,6 +213,9 @@ metadata:
   name: {{ .Values.appName }}
   labels:
     app: {{ .Values.appName }}
+    {{- if .Values.customLabels }}
+    {{ toYaml .Values.customLabels | nindent 4 }}
+    {{- end }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade,pre-rollback
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
