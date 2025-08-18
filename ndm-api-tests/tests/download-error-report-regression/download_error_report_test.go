@@ -63,7 +63,7 @@ var _ = Describe("Download Error Report", Ordered, func() {
 			SourceConfigID, resp, err = CreateFileServer(sourceParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
 			Expect(SourceConfigID).NotTo(BeEmpty(), "SourceConfigID is empty")
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			defer resp.Body.Close()
 			Wait(10)
 

@@ -87,7 +87,7 @@ func CheckLogFileExistsAndNotEmpty(baseDir, relativeLogPath string) error {
 }
 
 func GenerateSupportBundle() error {
-	url := ADMIN_SERVICE_URL + "/api/v1/support-bundle"
+	url := ADMIN_SERVICE_URL + GENERATE_SUPPORT_BUNDLE_URL
 	today := time.Now().Format("2006-01-02")
 	body := []byte(fmt.Sprintf(`{"startDate":"%s","endDate":"%s","otherMetrics":["Configuration Data"]}`, today, today))
 	headers := GetHeaders(AuthToken, ContentTypeJSON)
@@ -112,21 +112,10 @@ func GenerateSupportBundle() error {
 }
 
 func DownloadSupportBundleZip() error {
-	canDownloadURL := ADMIN_SERVICE_URL + "/api/v1/support-bundle/is-bundle-ready"
-	downloadURL := ADMIN_SERVICE_URL + "/api/v1/support-bundle/download"
-	headers := GetHeaders(AuthToken, ContentTypeJSON)
+	canDownloadURL := ADMIN_SERVICE_URL + IS_SUPPORT_BUNDLE_READY_URL
+	downloadURL := ADMIN_SERVICE_URL + DOWNLOAD_SUPPORT_BUNDLE_URL
 
-	type CanDownloadResp struct {
-		IsProcessing  bool `json:"isProcessing"`
-		IsBundleReady bool `json:"isBundleReady"`
-		Filters       struct {
-			EndDate      string   `json:"endDate"`
-			StartDate    string   `json:"startDate"`
-			OtherMetrics []string `json:"otherMetrics"`
-		} `json:"filters"`
-		CreatedAt string      `json:"createdAt"`
-		Error     interface{} `json:"error"` // Keep if error may still be present
-	}
+	headers := GetHeaders(AuthToken, ContentTypeJSON)
 
 	// Poll until isBundleReady is true
 	maxAttempts := MaxPollRetries
@@ -148,7 +137,7 @@ func DownloadSupportBundleZip() error {
 			return fmt.Errorf("failed to parse can-download response: %w", err)
 		}
 
-		if lastResp.IsBundleReady {
+		if lastResp.Data.Items.IsBundleReady {
 			LogDebug("Support bundle is ready for download.")
 			break
 		}

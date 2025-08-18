@@ -453,16 +453,15 @@ export function withBulkMigrateCreateForm(
         })
         .catch((err) => {
           if (
-            err?.data?.errors &&
-            err.data.errors.includes("MIGRATION_CONFLICTS_FOUND")
+            err?.errors &&
+            err.errors.includes("MIGRATION_CONFLICTS_FOUND")
           ) {
-            const conflictError = err.data;
             setPreCheckStatus({
               success: [],
               failed: [],
               errors: [],
               warnings: [],
-              migrationConflicts: conflictError.details || [],
+              migrationConflicts: err.details || [],
             });
             setIsPrecheckLoading(false);
             setIsSubmitting(false);

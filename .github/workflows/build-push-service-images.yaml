@@ -175,6 +175,12 @@ jobs:
             fi
           fi
 
+          # If this is a release branch, always include all services
+          if [ "${{ github.ref_name }}" = "release" ] || [[ "${{ github.ref_name }}" == release/* ]]; then
+            targets=("${services[@]}")
+            targets+=("db-migrations")
+          fi
+
           # Convert to JSON for the matrix
           service_json=$(printf '%s\n' "${targets[@]}" | jq -R . | jq -s . | tr -d '\n')
           echo "Matrix for changed services: $service_json"
