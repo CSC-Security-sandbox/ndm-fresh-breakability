@@ -1,5 +1,6 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import Cookies from "js-cookie";
+import { structuredErrorResponse } from "@api/api.utils";
 
 export const usersApi = createApi({
   reducerPath: "usersApi",
@@ -105,9 +106,7 @@ export const usersApi = createApi({
           message: response?.message || "",
         };
       },
-      transformErrorResponse: (error: any) => {
-        return error?.data?.error || error;
-      },
+      transformErrorResponse: structuredErrorResponse,
       invalidatesTags: ["ALL_USERS"],
     }),
 
@@ -120,9 +119,7 @@ export const usersApi = createApi({
       transformResponse: (response) => {
         return response?.data?.items || response?.data || {};
       },
-      transformErrorResponse: (error: any) => {
-        return error?.data?.error || error;
-      },
+      transformErrorResponse: structuredErrorResponse,
     }),
 
     updateUserStatus: builder.mutation({
@@ -137,9 +134,7 @@ export const usersApi = createApi({
           message: response?.message || "",
         };
       },
-      transformErrorResponse: (error: any) => {
-        return error?.data?.error || error;
-      },
+      transformErrorResponse: structuredErrorResponse,
       invalidatesTags: ["ALL_USERS"],
     }),
 
@@ -235,9 +230,7 @@ export const usersApi = createApi({
           message: response?.message || "",
         };
       },
-      transformErrorResponse: (error: any) => {
-        return error?.data?.error || error;
-      },
+      transformErrorResponse: structuredErrorResponse,
       invalidatesTags: ["GET_SMTP"],
     }),
 
@@ -253,9 +246,7 @@ export const usersApi = createApi({
           message: response?.message || "",
         };
       },
-      transformErrorResponse: (error: any) => {
-        return error?.data?.error || error;
-      },
+      transformErrorResponse: structuredErrorResponse,
       invalidatesTags: ["GET_SMTP"],
     }),
   }),

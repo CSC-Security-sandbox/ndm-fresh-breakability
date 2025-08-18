@@ -11,3 +11,8 @@ export const prepareHeaders = (headers: Headers) => {
 
   return headers;
 };
+
+export const structuredErrorResponse = (error: any) => {
+  console.error("API Error:", error);
+  return error?.data?.error || error?.data || error || {};
+}
