@@ -249,6 +249,15 @@ export const usersApi = createApi({
       transformErrorResponse: structuredErrorResponse,
       invalidatesTags: ["GET_SMTP"],
     }),
+
+    aboutNdm: builder.query({
+      query: () => {
+        return `/about-ndm`;
+      },
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || [];
+      },
+    }),
   }),
 });
 
@@ -272,4 +281,5 @@ export const {
   useCreateSmtpMutation,
   useUpdateSmtpDataMutation,
   useGetAllUserByProjectQuery,
+  useLazyAboutNdmQuery,
 } = usersApi;

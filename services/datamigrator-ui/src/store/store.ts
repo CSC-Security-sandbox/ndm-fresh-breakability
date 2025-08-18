@@ -14,6 +14,7 @@ import { jobsApi } from "@api/jobsApi";
 import { workersApi } from "@api/workersApi";
 import { reportApi } from "@api/reportApi";
 import { workerManagerApi } from "@api/workerManagerApi";
+import { aboutApi } from "@api/aboutApi";
 
 const createNoopStorage = () => {
   return {
@@ -54,6 +55,7 @@ const reducer = combineReducers({
   [workersApi.reducerPath]: workersApi.reducer,
   [reportApi.reducerPath]: reportApi.reducer,
   [workerManagerApi.reducerPath]: workerManagerApi.reducer,
+  [aboutApi.reducerPath]: aboutApi.reducer,
 });
 
 const persistedReducer = persistReducer(persistConfig, reducer);
@@ -70,7 +72,8 @@ export const store = configureStore({
       jobsApi.middleware,
       workersApi.middleware,
       reportApi.middleware,
-      workerManagerApi.middleware
+      workerManagerApi.middleware,
+      aboutApi.middleware
     ),
 });
 
