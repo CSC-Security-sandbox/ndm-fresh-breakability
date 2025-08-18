@@ -14,15 +14,6 @@ const (
 	ManualUpload ExportPathSource = "MANUAL_UPLOAD"
 )
 
-type FileServerDetails struct {
-	ConfigName  string       `json:"configName"`
-	ID          string       `json:"id"`
-	ConfigType  ConfigType   `json:"configType"`
-	ProjectID   string       `json:"projectId"`
-	FileServers []FileServer `json:"fileServers"`
-	Status      string       `json:"status"`
-}
-
 type CreateServereParams struct {
 	ConfigName       string
 	ConfigType       ConfigType
@@ -123,11 +114,10 @@ func GetExportPathID(
 	configID string,
 	headers map[string]string,
 ) (string, error) {
-	getSourceURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configID)
 	// Calling this API because the export path is sometimes not retrieved without first hitting the refresh URL.
 	refreshURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILE_SERVER_REFRESH_URL, configID)
 
-	var getSourceResp FileServerInfo
+	var getSourceResp FileServerDetailsItems
 
 	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
 		resp, err := SendAPIRequest(http.MethodGet, refreshURL, nil, headers)
@@ -136,24 +126,13 @@ func GetExportPathID(
 		}
 		defer resp.Body.Close()
 
-		resp, err = SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
-		if err != nil {
-			return "", err
-		}
-		defer resp.Body.Close()
-
-		bodyBytes, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return "", err
-		}
-
-		err = json.Unmarshal(bodyBytes, &getSourceResp)
+		getSourceResp, err = GetFileServerDetails(configID, headers)
 		if err != nil {
 			return "", err
 		}
 
 		// Check if volumes exist
-		if len(getSourceResp.Data.Items.FileServers) > 0 && len(getSourceResp.Data.Items.FileServers[0].Volumes) > 0 {
+		if len(getSourceResp.FileServers) > 0 && len(getSourceResp.FileServers[0].Volumes) > 0 {
 			break // Volumes found, proceed
 		}
 
@@ -163,14 +142,15 @@ func GetExportPathID(
 	}
 
 	// After retries, check again
-	if len(getSourceResp.Data.Items.FileServers) == 0 {
+	if len(getSourceResp.FileServers) == 0 {
 		return "", fmt.Errorf("no fileServers found in source response after %d attempts", MaxPollRetries)
 	}
-	if len(getSourceResp.Data.Items.FileServers[0].Volumes) == 0 {
+	if len(getSourceResp.FileServers[0].Volumes) == 0 {
 		return "", fmt.Errorf("no volumes found for source file server after %d attempts", MaxPollRetries)
 	}
+
 	// Now fetch the volume ID
-	volumeID, err := GetVolumeIDByName(volumeName, AuthToken, configID)
+	volumeID, err := GetVolumeID(getSourceResp, volumeName)
 	if err != nil {
 		return "", fmt.Errorf("error handling volume for '%s': %w", "Getting the source file server by config ID", err)
 	}
@@ -397,8 +377,8 @@ func RestoreOriginalDataOnVolume(export string) error {
 }
 
 // GetVolumeID retrieves the ID of a volume by its path from the FileServerInfo response.
-func GetVolumeID(response FileServerInfo, volumePath string) (string, error) {
-	for _, fileServer := range response.Data.Items.FileServers {
+func GetVolumeID(response FileServerDetailsItems, volumePath string) (string, error) {
+	for _, fileServer := range response.FileServers {
 		for _, volume := range fileServer.Volumes {
 			if volume.VolumePath == volumePath {
 				fmt.Printf("ID of the volume with path '%s': %s\n", volumePath, volume.ID)
@@ -408,41 +388,6 @@ func GetVolumeID(response FileServerInfo, volumePath string) (string, error) {
 	}
 	// If no volume is found, return an error
 	return "", fmt.Errorf("no volume found with path '%s'", volumePath)
-}
-
-func GetVolumeIDByName(volumeName, authToken, configId string) (string, error) {
-	// Build the full URL
-	fullURL := fmt.Sprintf("%s/api/v1/servers/%s", JOB_SERVICE_URL, configId)
-	var reqBody []byte
-
-	// Get extra headers
-	headers := GetHeaders(authToken, ContentTypeForm)
-	// Send the API request
-	resp, err := SendAPIRequest(http.MethodGet, fullURL, reqBody, headers)
-	if err != nil {
-		return "", fmt.Errorf("error sending API request: %w", err)
-	}
-	defer resp.Body.Close() // Ensure the response body is closed
-	// Read the response body
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("error reading response body: %w", err)
-	}
-
-	// Unmarshal the response
-	var response FileServerInfo
-	err = json.Unmarshal(bodyBytes, &response)
-	if err != nil {
-		return "", fmt.Errorf("error unmarshalling response: %w", err)
-	}
-
-	// Find the volume ID
-	foundID, err := GetVolumeID(response, volumeName)
-	if err != nil {
-		return "", fmt.Errorf("error finding volume ID: %w", err)
-	}
-
-	return foundID, nil // Return the found ID and no error
 }
 
 // GetFileUserGroupId mounts the NFS export, stats the given file‐path
@@ -488,28 +433,28 @@ func GetFileUserGroupId(export, fileName string) (uid, gid int, err error) {
 	return u, g, nil
 }
 
-func GetFileServerDetails(configId string, headers map[string]string) (FileServerDetails, error) {
+func GetFileServerDetails(configId string, headers map[string]string) (FileServerDetailsItems, error) {
 	fullURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configId)
 
 	fmt.Printf("GetConfigById Full URL: %s\n", fullURL)
 	resp, err := SendAPIRequest(http.MethodGet, fullURL, nil, headers)
 	if err != nil {
-		return FileServerDetails{}, fmt.Errorf("error sending API request: %w", err)
+		return FileServerDetailsItems{}, fmt.Errorf("error sending API request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return FileServerDetails{}, fmt.Errorf("error reading response body: %w", err)
+		return FileServerDetailsItems{}, fmt.Errorf("error reading response body: %w", err)
 	}
 
 	var response FileServerDetails
 	err = json.Unmarshal(bodyBytes, &response)
 	if err != nil {
-		return FileServerDetails{}, fmt.Errorf("error unmarshalling response: %w", err)
+		return FileServerDetailsItems{}, fmt.Errorf("error unmarshalling response: %w", err)
 	}
 
-	return response, nil
+	return response.Data.Items, nil
 }
 
 func GetVolumeDetailsFromFileServer(Volumes []Volume, volumePath string) (Volume, error) {

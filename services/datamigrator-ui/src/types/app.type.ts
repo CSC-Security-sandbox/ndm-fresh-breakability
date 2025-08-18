@@ -803,3 +803,26 @@ export type isBundleReadyApiType = {
   };
   createdAt?: string;
 };
+
+// About NDM API Response Types
+export interface AboutNDMApiRespType {
+  product: {
+    name: string;
+    version: string;
+  };
+  build: {
+    worker_version: {
+      version: string;
+      time: string | null;
+    };
+    controlPlane_version: {
+      version: string;
+      time: string | null;
+    };
+  };
+  contact: {
+    email: string;
+    phone: string | null;
+    website: string | null;
+  };
+}
