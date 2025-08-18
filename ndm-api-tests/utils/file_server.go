@@ -114,39 +114,9 @@ func GetExportPathID(
 	configID string,
 	headers map[string]string,
 ) (string, error) {
-	// Calling this API because the export path is sometimes not retrieved without first hitting the refresh URL.
-	refreshURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILE_SERVER_REFRESH_URL, configID)
-
-	var getSourceResp FileServerDetailsItems
-
-	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
-		resp, err := SendAPIRequest(http.MethodGet, refreshURL, nil, headers)
-		if err != nil {
-			return "", fmt.Errorf("error refreshing file server: %w", err)
-		}
-		defer resp.Body.Close()
-
-		getSourceResp, err = GetFileServerDetails(configID, headers)
-		if err != nil {
-			return "", err
-		}
-
-		// Check if volumes exist
-		if len(getSourceResp.FileServers) > 0 && len(getSourceResp.FileServers[0].Volumes) > 0 {
-			break // Volumes found, proceed
-		}
-
-		if attempt < MaxPollRetries {
-			Wait(DefaultPollInterval) // Wait before retrying
-		}
-	}
-
-	// After retries, check again
-	if len(getSourceResp.FileServers) == 0 {
-		return "", fmt.Errorf("no fileServers found in source response after %d attempts", MaxPollRetries)
-	}
-	if len(getSourceResp.FileServers[0].Volumes) == 0 {
-		return "", fmt.Errorf("no volumes found for source file server after %d attempts", MaxPollRetries)
+	getSourceResp, err := GetFileServerDetails(configID, headers)
+	if err != nil {
+		return "", fmt.Errorf("error getting fileserver details for config ID : %s, error = %w", configID, err)
 	}
 
 	// Now fetch the volume ID
@@ -434,26 +404,51 @@ func GetFileUserGroupId(export, fileName string) (uid, gid int, err error) {
 }
 
 func GetFileServerDetails(configId string, headers map[string]string) (FileServerDetailsItems, error) {
-	fullURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configId)
-
-	fmt.Printf("GetConfigById Full URL: %s\n", fullURL)
-	resp, err := SendAPIRequest(http.MethodGet, fullURL, nil, headers)
-	if err != nil {
-		return FileServerDetailsItems{}, fmt.Errorf("error sending API request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return FileServerDetailsItems{}, fmt.Errorf("error reading response body: %w", err)
-	}
+	refreshURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILE_SERVER_REFRESH_URL, configId)
+	getSourceURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configId)
 
 	var response FileServerDetails
-	err = json.Unmarshal(bodyBytes, &response)
-	if err != nil {
-		return FileServerDetailsItems{}, fmt.Errorf("error unmarshalling response: %w", err)
+
+	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
+		resp, err := SendAPIRequest(http.MethodGet, refreshURL, nil, headers)
+		if err != nil {
+			return FileServerDetailsItems{}, fmt.Errorf("error refreshing file server: %w", err)
+		}
+		defer resp.Body.Close()
+
+		resp, err = SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
+		if err != nil {
+			return FileServerDetailsItems{}, fmt.Errorf("error sending API request: %w", err)
+		}
+		defer resp.Body.Close()
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return FileServerDetailsItems{}, fmt.Errorf("error reading response body: %w", err)
+		}
+
+		err = json.Unmarshal(bodyBytes, &response)
+		if err != nil {
+			return FileServerDetailsItems{}, fmt.Errorf("error unmarshalling response: %w", err)
+		}
+
+		// Check if volumes exist
+		if len(response.Data.Items.FileServers) > 0 && len(response.Data.Items.FileServers[0].Volumes) > 0 {
+			break
+		}
+
+		if attempt < MaxPollRetries {
+			Wait(DefaultPollInterval) // Wait before retrying
+		}
 	}
 
+	// After retries, check again
+	if len(response.Data.Items.FileServers) == 0 {
+		return FileServerDetailsItems{}, fmt.Errorf("no fileServers found in source response after %d attempts", MaxPollRetries)
+	}
+	if len(response.Data.Items.FileServers[0].Volumes) == 0 {
+		return FileServerDetailsItems{}, fmt.Errorf("no volumes found for source file server after %d attempts", MaxPollRetries)
+	}
 	return response.Data.Items, nil
 }
 
