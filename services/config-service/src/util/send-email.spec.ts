@@ -31,7 +31,7 @@ describe("SendMailService", () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks(); 
+    jest.clearAllMocks();
   });
 
   it("should send email successfully", async () => {
@@ -40,6 +40,8 @@ describe("SendMailService", () => {
 
     const emailBody = {
       successEmailType: SuccessEmailType.WORKER_USAGE,
+      projectId: "test-project-id",
+      traceId: "test-trace-id",
       workerUsage: {
         id: "test-worker",
         ip: "127.0.0.1",
@@ -51,7 +53,13 @@ describe("SendMailService", () => {
     expect(mockPost).toHaveBeenCalledWith(
       'http://mock-email-service/api/v1/email/internal',
       emailBody,
-      { timeout: 30000 },
+      {
+        timeout: 30000,
+        headers: {
+          'trackId': 'test-trace-id',
+          'projectId': 'test-project-id'
+        }
+      },
     );
     expect(result).toEqual(mockResponse.data);
   });
@@ -61,6 +69,8 @@ describe("SendMailService", () => {
 
     const emailBody = {
       successEmailType: SuccessEmailType.WORKER_USAGE,
+      projectId: "test-project-id",
+      traceId: "test-trace-id",
       workerUsage: {
         id: "test-worker",
         ip: "127.0.0.1",
@@ -72,7 +82,13 @@ describe("SendMailService", () => {
     expect(mockPost).toHaveBeenCalledWith(
       'http://mock-email-service/api/v1/email/internal',
       emailBody,
-      { timeout: 30000 },
+      {
+        timeout: 30000,
+        headers: {
+          'trackId': 'test-trace-id',
+          'projectId': 'test-project-id'
+        }
+      },
     );
     expect(result).toBeUndefined();
   });
@@ -82,6 +98,8 @@ describe("SendMailService", () => {
 
     const emailBody = {
       successEmailType: SuccessEmailType.WORKER_USAGE,
+      projectId: "test-project-id",
+      traceId: "test-trace-id",
       workerUsage: {
         id: "test-worker",
         ip: "127.0.0.1",
@@ -93,7 +111,13 @@ describe("SendMailService", () => {
     expect(mockPost).toHaveBeenCalledWith(
       'http://mock-email-service/api/v1/email/internal',
       emailBody,
-      { timeout: 30000 },
+      {
+        timeout: 30000,
+        headers: {
+          'trackId': 'test-trace-id',
+          'projectId': 'test-project-id'
+        }
+      },
     );
     expect(result).toBeUndefined();
   });
