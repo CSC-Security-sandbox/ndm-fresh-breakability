@@ -681,7 +681,6 @@ export class ConfigurationService {
     createConfig: ConfigDTO,
     userId: string,
     traceId: string,
-    projectId?: string,
   ) {
     this.logger.debug('Config creation started');
 
@@ -811,7 +810,6 @@ export class ConfigurationService {
     updateConfig: ConfigDTO,
     userId: string,
     traceId: string,
-    projectId?: string
   ) {
     try {
       if (!isUUID(id)) throw new BadRequestException('Invalid configId');

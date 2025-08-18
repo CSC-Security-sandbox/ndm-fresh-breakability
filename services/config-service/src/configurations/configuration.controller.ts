@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, HttpCode, HttpStatus, Param, Post, Put, Query, Request, ValidationPipe } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, Request, ValidationPipe } from "@nestjs/common";
 import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Auth, Permission } from "@netapp-cloud-datamigrate/auth-lib";
 import { ConfigurationService } from "./configuration.service";
@@ -24,10 +24,9 @@ export class ConfigurationController{
     @ApiBody({ description: 'Configuration data', type: ConfigDTO })
     async createConfiguration(
         @Body() createConfigurationDto: ConfigDTO,
-        @Request() userDetails: UserDetails,
-        @Headers('projectId') projectId?: string,
+        @Request() userDetails: UserDetails
     ) {
-        return await this.configurationService.createConfiguration(createConfigurationDto, userDetails.user.id, userDetails?.trackId, projectId)
+        return await this.configurationService.createConfiguration(createConfigurationDto, userDetails.user.id, userDetails?.trackId)
     }
 
 
@@ -108,10 +107,9 @@ export class ConfigurationController{
     async update(
         @Param('id') id: string,
         @Body() updateConfig: ConfigDTO,
-        @Request() userDetails: UserDetails,
-        @Headers('projectId') projectId?: string,
+        @Request() userDetails: UserDetails
     ) {
-        return await this.configurationService.updateConfiguration(id, updateConfig, userDetails.user.id, userDetails?.trackId, projectId);
+        return await this.configurationService.updateConfiguration(id, updateConfig, userDetails.user.id, userDetails?.trackId);
     }
 
     @ApiOperation({ summary: 'Delete Configuration by ID' , description: ConfigApiDoc.DELETE_CONFIG_ID})
