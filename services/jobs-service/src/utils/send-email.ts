@@ -6,6 +6,7 @@ import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { createAxiosHeaders } from "./axios-headers.util";
 
 @Injectable()
 export class SendMailService {
@@ -19,10 +20,12 @@ export class SendMailService {
     this.sendEmailUrl = this.configService.get("app.email.sendMail");
   }
 
-  async sendMail(body: SuccessEventEmailDto) {
+  async sendMail(body: SuccessEventEmailDto, projectId?: string) {
     try {
       const sendEmailFullUrl = `${this.sendEmailUrl}/api/v1/email/internal`;
-      const response = await axios.post(sendEmailFullUrl, body);
+      const headers = createAxiosHeaders(projectId);
+      
+      const response = await axios.post(sendEmailFullUrl, body, { headers });
       if (response.status !== 200)
         throw new Error(
           `Failed to post the send mail request, ${response.data}`

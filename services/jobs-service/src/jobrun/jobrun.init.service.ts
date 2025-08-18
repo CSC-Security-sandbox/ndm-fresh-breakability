@@ -41,6 +41,7 @@ import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { MigrationConflictService } from "src/migration-conflict/migration-conflict.service";
 import { RedisService } from "src/redis/redis.service";
 import { filterUnhealthyWorkers } from "src/utils/worker-filter";
+import { createAxiosHeaders } from "src/utils/axios-headers.util";
 import { WorkflowService } from "src/workflow/workflow.service";
 import { StartWorkFlowPayload } from "src/workflow/workflow.types";
 import { Readable } from "stream";
@@ -119,7 +120,7 @@ export class JobRunInitService {
   }
 
   // ------------------ Create job run  -------------------- //
-  async createJobRun(jobConfigId: string, currentTime: Date) {
+  async createJobRun(jobConfigId: string, currentTime: Date, projectId?: string) {
     // TODO: job config is fetched from here
     const details: JobRunConfig = await this.getJobConfig(jobConfigId);
 
@@ -171,7 +172,7 @@ export class JobRunInitService {
         options: options,
       });
       await this.buildJobContext(jobRun.id, details);
-      await this.initiateWorkflow(jobRun.id, details);
+      await this.initiateWorkflow(jobRun.id, details, projectId);
       jobRun.workFlowId = getWorkflowId(jobRun.id, details.jobType);
       return await this.jobRunRepo.save(jobRun);
     } catch (error) {
@@ -354,7 +355,7 @@ export class JobRunInitService {
     return mergedResults;
   }
   // ------------------ InitiateWorkflow -------------------- //
-  async initiateWorkflow(jobRunId: string, jobRunConfig: JobRunConfig) {
+  async initiateWorkflow(jobRunId: string, jobRunConfig: JobRunConfig, projectId?: string) {
 
     const options = new Options();
     options.workflowExecutionTimeout = "120s";
@@ -439,7 +440,7 @@ export class JobRunInitService {
         break;
       }
     }
-    await this.startStreamConsumer(jobRunId);
+    await this.startStreamConsumer(jobRunId, projectId);
   }
   // TODO deprecated, remove later
   // ------------------ BuildJobContext for SpeedTest -------------------- //
@@ -594,15 +595,19 @@ export class JobRunInitService {
 
 
   // ------------------ StartStreamConsumer -------------------- //
-  async startStreamConsumer(jobRunId: string) {
+  async startStreamConsumer(jobRunId: string, projectId?: string) {
     this.logger.log("Starting Stream Consumer for jobRunId:", jobRunId);
     try {
       const START_CONSUMER_URL = this.configService.get<string>(
         "app.paths.startConsumer",
       );
+      
+      const headers = createAxiosHeaders(projectId);
+      
       let response = await axios.post(
         `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
         { jobRunId },
+        { headers }
       );
 
       let count = 0;
@@ -611,6 +616,7 @@ export class JobRunInitService {
         response = await axios.post(
           `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
           { jobRunId },
+          { headers }
         );
 
         this.logger.log(`Retry attempt ${count + 1} for ${jobRunId}:`, {

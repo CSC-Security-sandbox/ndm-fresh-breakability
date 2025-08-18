@@ -569,7 +569,8 @@ export class JobConfigService {
   }
 
   async createBulkMigrate(
-    bulkMigrate: BulkMigrateJobConfig
+    bulkMigrate: BulkMigrateJobConfig,
+    projectId?: string
   ): Promise<JobConfigBulkMigrateFinalResponse> {
     const firstRunAt = bulkMigrate?.firstRunAt ?? new Date();
     const jobConfigs: Partial<JobConfigEntity>[] = [];
@@ -770,7 +771,7 @@ export class JobConfigService {
             jobType: jobConfig.jobType,
           })),
         }
-      });
+      }, projectId);
       savedJobConfigsmapData =  savedJobConfigs.map(
         ({ id, jobType, sourcePathId, targetPathId }) => ({
           id,
