@@ -40,7 +40,7 @@ export class CsvService {
 
             while (true) {
                 const result = await this.getInventoryData(jobRunId, batchSize, offset);
-                if (!result || result.length === 0) break;
+                if (result.length === 0) break;
                 for (const row of result) {
                      csvStream.write(row);
                 }
@@ -63,10 +63,10 @@ export class CsvService {
             }
         } finally {
             if (csvStream) {
-                csvStream.end();
+              csvStream.end();
             }
             if (fileStream) {
-                fileStream.end();
+              fileStream.end();
             }
             if (queryRunner) {
                 await queryRunner.release();

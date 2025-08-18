@@ -200,11 +200,7 @@ export class ErrorLogService {
         }
         csvStream.end();
         writeStream.on("finish", () => {
-          try {
-            if (processingFilePath) fs.unlinkSync(processingFilePath);
-          } catch (e) {
-            this.logger.error(`Error deleting processing file: ${processingFilePath}`, e);
-          }
+          fs.unlinkSync(processingFilePath);
           resolve();
         });
         writeStream.on("error", reject);
@@ -219,6 +215,18 @@ export class ErrorLogService {
             "Something went wrong while writing errors on the file.",
           message: error.message,
         });
+      } finally {
+        // Force close streams for proper resource cleanup
+        try {
+          if(csvStream){
+            csvStream.end();
+          }
+          if (writeStream) {
+            writeStream.end();
+          }
+        } catch (e) {
+          this.logger.error('Error cleaning up streams:', e);
+        }
       }
     });
   }
@@ -258,7 +266,7 @@ export class ErrorLogService {
         };
       });
     } catch (error) {
-      throw new BadRequestException("Something went wrong while writing errors on the file.");
+      throw new BadRequestException("Something went wrong while formatting setup error data.");
     }
   }
 
