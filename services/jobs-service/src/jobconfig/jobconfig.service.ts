@@ -82,6 +82,7 @@ import { IncidentStatus, SyncEmailEntity } from "src/entities/sync-email.entity"
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { SuccessEmailType } from "src/utils/send-email.type";
 import { WorkFlowFailureReason } from "src/jobrun/jobrun.types";
+import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 
 @Injectable()
 export class JobConfigService {
@@ -131,6 +132,8 @@ export class JobConfigService {
     @InjectRepository(WorkerJobRunMap)
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    @InjectRepository(JobStatsSummaryMvEntity)
+    private jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>
   ) {
     this.logger = loggerFactory.create(JobConfigService.name);
   }
@@ -1706,19 +1709,24 @@ export class JobConfigService {
     });
     if (!jobRun)
       throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
-    const inventorySummary = await this.inventoryRepo
-      .createQueryBuilder("inventory")
-      .select([
-        "COUNT(CASE WHEN inventory.isDirectory = false THEN 1 END) AS fileCount",
-        "COUNT(CASE WHEN inventory.isDirectory = true THEN 1 END) AS directoryCount",
-        "COALESCE(SUM(CASE WHEN inventory.isDirectory = false THEN inventory.fileSize ELSE 0 END), 0) AS totalFileSize",
-      ])
-      .where("inventory.jobRunId = :jobRunId", { jobRunId: jobRunId })
-      .getRawOne();
+    const inventorySummary = await this.jobStatsSummaryMvRepo.findOne({
+      where: { jobRunId },
+    });
+    if (!inventorySummary) {
+      this.logger.warn(
+        `No inventory summary found for job run ID ${jobRunId}. Returning default values.`
+      );
+      return {
+        fileCount: "0",
+        directories: "0",
+        totalSize: "0",
+       errors: await this.getErrorCounts(jobRunId),
+      };
+    }
     const jobRunStatus = {
-      fileCount: inventorySummary.filecount || "0",
-      directories: inventorySummary.directorycount || "0",
-      totalSize: inventorySummary.totalfilesize || "0",
+      fileCount: inventorySummary.fileCount || "0",
+      directories: inventorySummary.directoryCount || "0",
+      totalSize: inventorySummary.totalSize || "0",
     };
 
     this.logger.log("inventorySummary", JSON.stringify(inventorySummary));

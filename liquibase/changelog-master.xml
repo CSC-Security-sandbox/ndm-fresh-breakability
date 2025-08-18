@@ -452,4 +452,14 @@
       </rollback>
    </changeSet>
 
+    <changeSet id="20250816_01_job_stats_summary_mv.sql"
+              author="avadoot">
+      <sqlFile
+              path="liquibase/20250816_01_job_stats_summary_mv.sql"
+              splitStatements="false"/>
+      <rollback>
+         <sqlFile path="liquibase/20250816_01_job_stats_summary_mv_rollback.sql"/>
+      </rollback>
+   </changeSet>
+
 </databaseChangeLog>
