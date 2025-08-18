@@ -35,23 +35,17 @@ const WorkerInstallationContent = ({
               <Layout.GridItem lg={12}>
                 <NumberedList includeTitles={true}>
                   <>
-                    <Text bold>Download Image</Text>
+                    <Text bold>Download Worker Image/Binary</Text>
                     <Text>
-                      Download worker virtual machine image from{" "}
-                      <a href="#">here</a>
+                      Download the worker VM (Image for NFS or executable binary for SMB) by following the instructions
+                      specific to your environment (GCP, Azure, or OVA) as outlined in the NSS installation documentation.
                     </Text>
                   </>
                   <>
-                    <Text bold>Setup VM</Text>
+                    <Text bold>Setup VM and Register Worker</Text>
                     <Text>
-                      Create a new virtual machine following{" "}
-                      <a href="#">these pre-requisites</a>
-                    </Text>
-                  </>
-                  <>
-                    <Text bold>Register</Text>
-                    <Text>
-                      Login to the VM as root and run command mentioned below
+                      Create a VM (Linux for NFS and Windows for SMB), following the instructions
+                      specific to your environment to set up and register the worker to the control plane.
                     </Text>
                   </>
                 </NumberedList>
