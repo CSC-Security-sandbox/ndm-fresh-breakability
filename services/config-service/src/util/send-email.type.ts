@@ -79,15 +79,13 @@ export class SuccessEventEmailDto {
   successEmailType: SuccessEmailType;
 
   @ApiProperty({
-    description: 'Project ID associated with the email event',
-    required: true,
+    description: 'Project ID associated with the email event'
   })
   @IsString({ message: 'projectId must be a string' })
   projectId?: string;
 
   @ApiProperty({
-    description: 'Trace ID for request tracking',
-    required: true,
+    description: 'Trace ID for request tracking'
   })
   @IsString({ message: 'traceId must be a string' })
   traceId?: string;
