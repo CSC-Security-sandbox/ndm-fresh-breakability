@@ -214,8 +214,6 @@ export class ErrorCsvGenerationActivity {
           { id: 'errorCode', title: 'Error Code' },
           { id: 'errorMessage', title: 'Error Message' },
           { id: 'createdAt', title: 'Created At' },
-          { id: 'fileName', title: 'File Name' },
-          { id: 'filePath', title: 'File Path' },
           { id: 'errorType', title: 'Error Type' },
           { id: 'operationType', title: 'Operation Type' },
           { id: 'origin', title: 'Origin' },
