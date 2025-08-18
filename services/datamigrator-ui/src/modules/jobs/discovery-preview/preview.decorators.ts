@@ -520,7 +520,7 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
   /* This function smartly convert bytes to KiB, MiB, GiB, TiB, PiB, EiB, ZiB or YiB */
 }
 
-export function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number, decimals: number = 2): string {
   if (bytes === 0) return "0 B";
 
   const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
@@ -530,7 +530,7 @@ export function formatBytes(bytes: number): string {
 
   return size === Math.floor(size)
     ? `${size.toFixed(0)} ${units[i]}`
-    : `${size.toFixed(2)} ${units[i]}`;
+    : `${size.toFixed(decimals)} ${units[i]}`;
 }
 
 
