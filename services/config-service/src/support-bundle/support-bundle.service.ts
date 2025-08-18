@@ -100,6 +100,7 @@ export class SupportBundleService {
   }
 
   async updateSupportBundleStatus(updateStatusDto: UpdateStatusDto) {
+    this.logger.log(`Updating the support bundle status for traceId - ${updateStatusDto.traceId}`);
     const result = await this.supportBundleRepo.update(
       { requestId: updateStatusDto.traceId },
       {

@@ -110,6 +110,11 @@ describe('NotifyConfigActivity', () => {
           status: mockStatus,
           errorMessage: mockErrorMessage,
         },
+        {
+          headers: {
+            trackId: mockTraceId
+          }
+        }
       );
       expect(mockLogger.log).toHaveBeenCalledWith(
         `[${mockTraceId}] Notification sent to Config Service for workflow completion`,
@@ -135,6 +140,11 @@ describe('NotifyConfigActivity', () => {
           status: failedStatus,
           errorMessage: errorMessage,
         },
+        {
+          headers: {
+            trackId: mockTraceId
+          }
+        }
       );
       expect(mockLogger.log).toHaveBeenCalledWith(
         `[${mockTraceId}] Notification sent to Config Service for workflow completion`,
