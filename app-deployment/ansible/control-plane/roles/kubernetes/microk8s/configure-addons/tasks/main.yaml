@@ -18,23 +18,23 @@
   command: "{{ microk8s_bin_path }}microk8s.disable dns"
   register: dns_disable_result
   ignore_errors: yes
- # when: local_cluster is defined
+  when: local_cluster is defined
 
 - name: 6.4.1. Debug DNS disable result
   debug:
     msg: "DNS disable result: {{ dns_disable_result }}"
-#  when: local_cluster is defined
+  when: local_cluster is defined
 
 - name: 6.5. Enable DNS addon with 8.8.8.8,8.8.4.4
   become: yes
   command: "{{ microk8s_bin_path }}microk8s.enable dns:8.8.8.8,8.8.4.4"
   register: dns_addon_result
- # when: local_cluster is defined
+  when: local_cluster is defined
 
 - name: 6.5.1. Debug DNS addon result
   debug:
     msg: "DNS addon result: {{ dns_addon_result }}"
- # when: local_cluster is defined
+  when: local_cluster is defined
 
 - name: 6.6. Enable addons (excluding DNS)
   become: yes
