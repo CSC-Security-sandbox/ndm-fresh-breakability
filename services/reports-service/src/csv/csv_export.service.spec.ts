@@ -135,23 +135,37 @@ describe("CsvService", () => {
         },
       ];
 
-      mockDataSource.query.mockResolvedValueOnce(mockData);
+      // Set up all necessary mocks
+      jest.spyOn(service, "getInventoryData").mockResolvedValueOnce(mockData).mockResolvedValueOnce([]);
 
       const mockWriteStream = {
         pipe: jest.fn(),
         write: jest.fn(),
         end: jest.fn(),
+        destroy: jest.fn(),
+        on: jest.fn(),
+        emit: jest.fn(),
+      };
+
+      const mockCsvStream = {
+        pipe: jest.fn().mockReturnValue(mockWriteStream),
+        write: jest.fn(),
+        end: jest.fn(),
+        destroy: jest.fn(),
+        on: jest.fn(),
+        emit: jest.fn(),
       };
 
       jest
         .spyOn(fs, "createWriteStream")
         .mockReturnValue(mockWriteStream as any);
 
-      jest.spyOn(fastCsv, "format").mockReturnValue(mockWriteStream as any);
+      jest.spyOn(fastCsv, "format").mockReturnValue(mockCsvStream as any);
 
       await service.generateCsv(filePath, jobRunId);
 
-      expect(mockWriteStream.write).toHaveBeenCalledTimes(mockData.length);
+      expect(mockCsvStream.write).toHaveBeenCalledTimes(mockData.length);
+      expect(mockCsvStream.pipe).toHaveBeenCalledWith(mockWriteStream);
     });
 
     it("should handle BadRequestException and re-throw it", async () => {
@@ -356,18 +370,31 @@ describe("CsvService", () => {
       const jobRunId = "12345";
       const mockData = [{ "source path": "path1", "target path": "path2" }];
 
-      mockDataSource.query.mockResolvedValueOnce(mockData);
+      // Set up all necessary mocks  
+      jest.spyOn(service, "getInventoryData").mockResolvedValueOnce(mockData).mockResolvedValueOnce([]);
 
       const mockWriteStream = {
         pipe: jest.fn(),
         write: jest.fn(),
         end: jest.fn(),
+        destroy: jest.fn(),
+        on: jest.fn(),
+        emit: jest.fn(),
+      };
+
+      const mockCsvStream = {
+        pipe: jest.fn().mockReturnValue(mockWriteStream),
+        write: jest.fn(),
+        end: jest.fn(),
+        destroy: jest.fn(),
+        on: jest.fn(),
+        emit: jest.fn(),
       };
 
       jest
         .spyOn(fs, "createWriteStream")
         .mockReturnValue(mockWriteStream as any);
-      jest.spyOn(fastCsv, "format").mockReturnValue(mockWriteStream as any);
+      jest.spyOn(fastCsv, "format").mockReturnValue(mockCsvStream as any);
 
       await service.generateCsv(filePath, jobRunId);
 

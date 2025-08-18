@@ -58,6 +58,9 @@ export const reportApi = createApi({
     getReportData: builder.query({
       query: (payload) =>
         `job-run/job-report?jobRunId=${payload.jobRunId}&reportType=${payload.reportType}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      }
     }),
 
     downloadErrorLogsCSV: builder.query({
@@ -73,10 +76,16 @@ export const reportApi = createApi({
 
     generateErrorLogs: builder.query({
       query: ({ type, id }) => `job-run/generate-error-csv/${type}/${id}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      }
     }),
 
     isErrorLogsCsvReady: builder.query({
       query: ({ type, id }) => `job-run/is-error-csv-ready/${type}/${id}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      }
     }),
   }),
 });
