@@ -171,6 +171,10 @@ export const configApi = createApi({
         return response?.data?.items || response?.data || response || [];
       },
     }),
+
+    fetchProjectWithWorker: builder.query<Array<Record<string, string>>, void>({
+      query: () => "support-bundle",
+    }),
   }),
 });
 
@@ -193,4 +197,5 @@ export const {
   useGenerateSupportBundleMutation,
   useLazyIsBundleReadyQuery,
   useLazyDownloadSupportBundleQuery,
+  useFetchProjectWithWorkerQuery,
 } = configApi;
