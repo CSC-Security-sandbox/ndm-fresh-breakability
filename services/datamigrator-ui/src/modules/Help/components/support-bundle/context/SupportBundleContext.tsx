@@ -1,6 +1,7 @@
 import { BlueXpFormType, isBundleReadyApiType } from "@/types/app.type";
 import { formatDateToYMD } from "@/utils/dateFormatter";
 import {
+  useFetchProjectWithWorkerQuery,
   useGenerateSupportBundleMutation,
   useLazyDownloadSupportBundleQuery,
   useLazyIsBundleReadyQuery,
@@ -21,6 +22,8 @@ import { useForm } from "@netapp/bxp-design-system-react";
 import { RootStateType } from "@store/store";
 import React, { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
+import { useTreeSelect } from "@modules/Help/components/support-bundle/hooks/useTreeSelect";
+import { buildProjectWorkerMap } from "@modules/Help/components/support-bundle/utils/support-bundle.utils";
 
 export const SupportBundleProvider = ({
   children,
@@ -41,20 +44,18 @@ export const SupportBundleProvider = ({
   const [downloadBundle, { isFetching: isDownloading }] =
     useLazyDownloadSupportBundleQuery();
   const [isBundleReady] = useLazyIsBundleReadyQuery();
+  const { data: projectWorkerData } = useFetchProjectWithWorkerQuery();
 
   const permissionData = useSelector(
     (state: RootStateType) => state?.permissionSlice?.userPermissions
   );
 
-  // Helper function to check if bundle was created after last form change
-  const isBundleNewerThanFormChange = (
-    bundleResponse: isBundleReadyApiType
-  ) => {
-    if (!bundleResponse?.createdAt) return false;
-
-    const bundleCreatedAt = new Date(bundleResponse.createdAt);
-    return bundleCreatedAt > lastFormChangeTime;
-  };
+  const {
+    selectedItems,
+    treeSelectStyles,
+    handleSelectionChange,
+    wrapperClass,
+  } = useTreeSelect();
 
   // IS BUNDLE READY POLLING API
   useEffect(() => {
@@ -114,7 +115,7 @@ export const SupportBundleProvider = ({
       createAndDownloadBlob(
         response,
         mimeType,
-        `ndm_log-${permissionData?.id}.zip`
+        `ndm_log_${permissionData?.id}.zip`
       );
     } catch (error) {
       console.error("Failed to download Error Report:", error?.data?.message);
@@ -144,14 +145,20 @@ export const SupportBundleProvider = ({
   };
 
   const handleGenerateBundle = async () => {
+    supportBundleForm.formState.projectWorker = selectedItems;
     if (!supportBundleForm?.isValid) return;
 
     const { formState } = supportBundleForm;
-    const otherMetrics = formState?.otherMetrics?.label
-      ? [formState?.otherMetrics?.label]
-      : [];
+    const otherMetrics =
+      (formState?.otherMetrics &&
+        formState?.otherMetrics?.map((metric: any) => metric?.label)) ||
+      [];
 
     const payload: SupportBundlePayloadType = {
+      projectWorkerMap: buildProjectWorkerMap(
+        formState,
+        projectWorkerData?.data?.items || []
+      ),
       startDate: formatDateToYMD(formState?.startDate),
       endDate: formatDateToYMD(formState?.endDate),
       otherMetrics,
@@ -184,6 +191,11 @@ export const SupportBundleProvider = ({
     handleDownloadReport,
     handleGenerateBundle,
     bundleStatus,
+    selectedItems,
+    treeSelectStyles,
+    handleSelectionChange,
+    wrapperClass,
+    projectWorkerData,
     isDownloading,
   };
 

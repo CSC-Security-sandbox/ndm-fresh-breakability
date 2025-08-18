@@ -42,7 +42,7 @@ const SupportBundleContent = () => {
 
       <SupportBundleForm />
 
-      <Box className="flex justify-center">
+      <Box className="flex justify-center mt-2">
         <Show>
           <Show.When isTrue={bundleStatus.isProcessing}>
             <ReportsGeneratingLoader label={GENERATING_SUPPORT_BUNDLE_LABEL} />
