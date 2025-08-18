@@ -18,6 +18,7 @@ export class DiscoveryReportService {
 
     private readonly logger = new Logger(DiscoveryReportService.name);
     private basePath: string;
+    private readonly schemaName: string;
 
     constructor(
         private dataSource: DataSource,
@@ -29,10 +30,11 @@ export class DiscoveryReportService {
         private readonly jobRunRepo: Repository<JobRunEntity>,
     ) {
         this.basePath = this.configService.get<string>('app.baseDir') ;
+        this.schemaName = this.configService.get<string>('typeorm.scheama') || 'datamigrator';
     }
 
     async getSection({ jobRunId, section }: GetDiscoverySectionInput): Promise<DiscoveryReportSection[]> {
-        const output = await this.dataSource.query(QueryMapper[section].query, [jobRunId]);
+        const output = await this.dataSource.query(QueryMapper[section].query(this.schemaName), [jobRunId]);
         return QueryMapper[section].mapper(output);
     }
 

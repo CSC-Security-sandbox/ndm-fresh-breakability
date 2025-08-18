@@ -1,6 +1,6 @@
 
 
-export const NUMBER_OF_FILES_BY_SIZE = `
+export const NUMBER_OF_FILES_BY_SIZE = (schema: string) => `
     select  
         case 
             when file_size = 0 then 'File Size: 0B'
@@ -15,12 +15,12 @@ export const NUMBER_OF_FILES_BY_SIZE = `
         end as size_group,
         count(1),
         sum(i.file_size) as total_size
-    from datamigrator.inventory i 
+    from ${schema}.inventory i 
     where i.job_run_id = $1 and i.is_directory = false
     group by size_group
 `
 
-export const MODIFIED_TIME_DISTRIBUTION = `
+export const MODIFIED_TIME_DISTRIBUTION = (schema: string) => `
     select
         case
             when modified_time > CURRENT_DATE then 'future'
@@ -43,12 +43,12 @@ export const MODIFIED_TIME_DISTRIBUTION = `
         end as modified_group,
         count(1),
         sum(case when i.is_directory = false then i.file_size else 0 end) as total_size
-    from datamigrator.inventory i
+    from ${schema}.inventory i
     where i.job_run_id = $1
     group by modified_group;
 `
 
-export const CREATED_TIME_DISTRIBUTION = `
+export const CREATED_TIME_DISTRIBUTION = (schema: string) => `
     select
         case
             when birth_time > CURRENT_DATE then 'future'
@@ -71,11 +71,11 @@ export const CREATED_TIME_DISTRIBUTION = `
         end as created_group,
         count(1),
         sum(case when i.is_directory = false then i.file_size else 0 end) as total_size
-    from datamigrator.inventory i
+    from ${schema}.inventory i
     where i.job_run_id = $1
     group by created_group;
 `
-export const ACCESS_TIME_DISTRIBUTION = `
+export const ACCESS_TIME_DISTRIBUTION = (schema: string) => `
     select
         case
             when access_time  > CURRENT_DATE then 'future'
@@ -98,12 +98,12 @@ export const ACCESS_TIME_DISTRIBUTION = `
         end as access_group,
         count(1),
         sum(case when i.is_directory = false then i.file_size else 0 end) as total_size
-    from datamigrator.inventory i
+    from ${schema}.inventory i
     where i.job_run_id = $1
     group by access_group;
 `
 
-export const DEPTH_DISTRIBUTION = `
+export const DEPTH_DISTRIBUTION = (schema: string) => `
     select
         case
             when depth between 0 and 5 then '0-5'
@@ -116,12 +116,12 @@ export const DEPTH_DISTRIBUTION = `
         end as depth_group,
         count(1),
         sum(i.file_size) as size
-    from datamigrator.inventory i
+    from ${schema}.inventory i
     where i.job_run_id = $1
     group by depth_group;
 `
 
-export const FILE_SYSTEM_DISTRIBUTION = `
+export const FILE_SYSTEM_DISTRIBUTION = (schema: string) => `
     select
         count(*) as total_count,
         sum(case when is_directory = false then 1 else 0 end) as regular_files,
@@ -129,56 +129,56 @@ export const FILE_SYSTEM_DISTRIBUTION = `
         sum(case when is_directory = false then file_size else 0 end) as total_space_regular_files,
         sum(case when is_directory = true then file_size else 0 end) as total_space_directories,
         sum(file_size) as total_space_used
-    from datamigrator.inventory i
+    from ${schema}.inventory i
     where i.job_run_id = $1
 `
 
-export const EXTENSION_DISTRIBUTION = `
+export const EXTENSION_DISTRIBUTION = (schema: string) => `
     select
         i."extension",
         count(1),
         sum(i.file_size) as total_size
-    from datamigrator.inventory i
+    from ${schema}.inventory i
     where i.job_run_id = $1 and i.is_directory = false
     group by i."extension"
 `;
 
-export const MAX_VALUES = `
+export const MAX_VALUES = (schema: string) => `
     select
         max(case when is_directory = false then file_size end)::numeric as max_file_size,
         max(case when is_directory = false then length(file_name) end)::numeric as max_name_length,
         sum(case when is_directory = true then 1 else 0 end)::numeric as total_directories
-    from datamigrator.inventory i
+    from ${schema}.inventory i
     where i.job_run_id = $1 
 `
 
 
 /* Top Biggest */
 
-export const TOP_LONGEST_FILE_NAMES = `
+export const TOP_LONGEST_FILE_NAMES = (schema: string) => `
     SELECT i.path,
         LENGTH(SPLIT_PART(i.path, '/', array_length(string_to_array(i.path, '/'), 1))) AS length
-    FROM datamigrator.inventory i
+    FROM ${schema}.inventory i
     where i.job_run_id = $1 and i.is_directory = false
     ORDER BY length DESC
     LIMIT 5;
 `
 
-export const TOP_LONGEST_DIRECTORY_NAMES = `
+export const TOP_LONGEST_DIRECTORY_NAMES = (schema: string) => `
     SELECT i.path,
         LENGTH(SPLIT_PART(i.path, '/', array_length(string_to_array(i.path, '/'), 1))) AS length
-    FROM datamigrator.inventory i
+    FROM ${schema}.inventory i
     where i.job_run_id = $1 and i.is_directory = true
     ORDER BY length DESC
     LIMIT 5;
 `
 
-export const TOP_DIRECTORY_WITH_MAX_SIZE = `
+export const TOP_DIRECTORY_WITH_MAX_SIZE = (schema: string) => `
     WITH cleaned_inventory AS (
         SELECT
             regexp_replace(regexp_replace(i."path", '/+$', ''), '/[^/]+$', '') AS directory,
             i.file_size
-        FROM datamigrator.inventory i
+        FROM ${schema}.inventory i
         WHERE i.job_run_id = $1 AND i.is_directory = false
     )
     SELECT directory, SUM(file_size) AS total_size
@@ -188,11 +188,11 @@ export const TOP_DIRECTORY_WITH_MAX_SIZE = `
     LIMIT 5;
 `
 
-export const TOP_DIRECTORY_WITH_MAX_COUNT_CHILD = `
+export const TOP_DIRECTORY_WITH_MAX_COUNT_CHILD = (schema: string) => `
     WITH cleaned_inventory AS (
         SELECT
             regexp_replace(regexp_replace(i."path", '/+$', ''), '/[^/]+$', '') AS directory
-        FROM datamigrator.inventory i
+        FROM ${schema}.inventory i
         WHERE i.job_run_id = $1 AND i.is_directory = false
     )
     SELECT directory, COUNT(*) AS child
@@ -202,46 +202,46 @@ export const TOP_DIRECTORY_WITH_MAX_COUNT_CHILD = `
     LIMIT 5;
 `
 
-export const TOP_LONGEST_DIRECTORY_PATHS = `
+export const TOP_LONGEST_DIRECTORY_PATHS = (schema: string) => `
     SELECT
         i.path,
         LENGTH(i.path) AS length
-    FROM datamigrator.inventory i
+    FROM ${schema}.inventory i
     WHERE i.job_run_id = $1 AND i.is_directory = true
     ORDER BY length DESC
     LIMIT 5;
 `
 
-export const TOP_LONGEST_FILE_PATHS = `
+export const TOP_LONGEST_FILE_PATHS = (schema: string) => `
     SELECT
         i.path,
         LENGTH(i.path) AS length
-    FROM datamigrator.inventory i
+    FROM ${schema}.inventory i
     WHERE i.job_run_id = $1 AND i.is_directory = false
     ORDER BY length DESC
     LIMIT 5;
 `
-export const TOP_BIGGEST_FILE_NAME = `
+export const TOP_BIGGEST_FILE_NAME = (schema: string) => `
     SELECT
         i.path,
         i.file_size  
-    FROM datamigrator.inventory i
+    FROM ${schema}.inventory i
     WHERE i.job_run_id = $1 AND i.is_directory = false
     ORDER BY file_size DESC
     LIMIT 5;
 `
 
-export const JOB_RUN_DETAILS = `
+export const JOB_RUN_DETAILS = (schema: string) => `
     select 
         COALESCE(EXTRACT(EPOCH FROM (jr.end_time - jr.start_time))::INT, 0)::TEXT AS stat_value,
         v.volume_path,
         jr.status,
         c.config_name,
         fsrv.protocol
-    from datamigrator.jobRun jr
-    inner join datamigrator.jobconfig jc on jc.id = jr.job_config_id
-    inner join datamigrator.volume v on v.id = jc.source_path_id
-    inner join datamigrator.file_server fsrv on fsrv.id = file_server_id
-    inner join datamigrator.config c on c.id = fsrv.config_id
+    from ${schema}.jobRun jr
+    inner join ${schema}.jobconfig jc on jc.id = jr.job_config_id
+    inner join ${schema}.volume v on v.id = jc.source_path_id
+    inner join ${schema}.file_server fsrv on fsrv.id = file_server_id
+    inner join ${schema}.config c on c.id = fsrv.config_id
     where jr.id = $1
 `
