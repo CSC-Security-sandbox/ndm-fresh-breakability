@@ -204,8 +204,7 @@ jobs:
           ./app-deployment/scripts/service_check.sh \
           "${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}" \
           "$VM_USERNAME" \
-          "$VM_PASSWORD" \
-          "azure"
+          "$VM_PASSWORD"
 
           if [ $? -ne 0 ]; then
             echo "Service setup failed or timed out"
