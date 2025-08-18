@@ -13,7 +13,6 @@ export interface ACLEntry {
 export interface ACLData {
     filePath: string;
     timestamp: string;
-    user: string;
     permissions: ACLEntry[];
     inheritance: string | null;
 }
@@ -31,7 +30,6 @@ export interface StampResult {
     source: string;
     target: string;
     timestamp: string;
-    user: string;
     operations: Operation[];
     commands: string[];
     success: boolean;
@@ -41,14 +39,12 @@ export interface StampOptions {
     preserveExisting?: boolean;
     excludePrincipals?: string[];
     includePrincipals?: string[];
-    resolveSIDs?: boolean;
     isIdentityMappingAvailable?: boolean;
     jobID?: string;
     disableInheritance?: boolean;
 }
 
 export interface GetACLOptions {
-    resolveSIDs?: boolean;
     isIdentityMappingAvailable?: boolean;
     jobID?: string;
 }

@@ -139,6 +139,14 @@
       "/test/",
       "src/workflows/speed-test/speed-test-job-workflow.spec.ts"
     ],
+    "globals": {
+      "ts-jest": {
+        "isolatedModules": true
+      }
+    },
+    "setupFiles": [
+      "<rootDir>/jest.setup.js"
+    ],
     "coveragePathIgnorePatterns": [
       "/node_modules/",
       ".*\\.module\\.ts$",

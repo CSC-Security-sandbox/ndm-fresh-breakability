@@ -52,7 +52,7 @@ var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealth
 			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
 			Expect(SourceConfigId).NotTo(BeEmpty(), "sourceConfigID is empty")
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 			By("Getting the source file server by config ID and fetching the volumes")
@@ -78,7 +78,7 @@ var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealth
 			Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
 			Expect(destinationConfigID).NotTo(BeEmpty(), "destinationConfigID is empty")
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 
 			By("Getting the destination file server by configId")
 			destinationVolumeID, err := GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
@@ -101,7 +101,7 @@ var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealth
 			migrationJobConfigID, resp, err := CreateMigrationJob(migrationParams, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
-	
+
 			getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID[0], headers)
 			Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")

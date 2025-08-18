@@ -9,30 +9,6 @@ import (
 	"strings"
 )
 
-type Volume struct {
-	ID             string `json:"id"`
-	VolumePath     string `json:"volumePath"`
-	IsValid        bool   `json:"isValid"`
-	IsDisabled     bool   `json:"isDisabled"`
-	ReachableCount int    `json:"reachableCount"`
-}
-
-type FileServer struct {
-	Id               string           `json:"id"`
-	Volumes          []Volume         `json:"volumes"`
-	ExportPathSource ExportPathSource `json:"exportPathSource"`
-	Protocol         Protocol         `json:"protocol"`
-	ProtocolVersion  ProtocolVersion  `json:"protocolVersion"`
-	ServerType       ServerType       `json:"serverType"`
-	Host             string           `json:"host"`
-}
-
-type FileServerInfo struct {
-	FileServers []FileServer `json:"fileServers"`
-}
-
-type ExportPathSource string
-
 const (
 	AutoDiscover ExportPathSource = "AUTO_DISCOVER"
 	ManualUpload ExportPathSource = "MANUAL_UPLOAD"
@@ -130,17 +106,13 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 		return "", resp, err
 	}
 
-	// Internal struct for unmarshalling response
-	type fileServerID struct {
-		ID string `json:"id"`
-	}
-	var createFileServerResp fileServerID
+	var createFileServerResp CreateFileServerResponse
 	err = json.Unmarshal(bodyBytes, &createFileServerResp)
 	if err != nil {
 		return "", resp, err
 	}
 
-	return createFileServerResp.ID, resp, nil
+	return createFileServerResp.Data.ID, resp, nil
 }
 
 // GetSourcePathID fetches the source file server by Volume Name, validates the response,
@@ -181,7 +153,7 @@ func GetExportPathID(
 		}
 
 		// Check if volumes exist
-		if len(getSourceResp.FileServers) > 0 && len(getSourceResp.FileServers[0].Volumes) > 0 {
+		if len(getSourceResp.Data.Items.FileServers) > 0 && len(getSourceResp.Data.Items.FileServers[0].Volumes) > 0 {
 			break // Volumes found, proceed
 		}
 
@@ -191,10 +163,10 @@ func GetExportPathID(
 	}
 
 	// After retries, check again
-	if len(getSourceResp.FileServers) == 0 {
+	if len(getSourceResp.Data.Items.FileServers) == 0 {
 		return "", fmt.Errorf("no fileServers found in source response after %d attempts", MaxPollRetries)
 	}
-	if len(getSourceResp.FileServers[0].Volumes) == 0 {
+	if len(getSourceResp.Data.Items.FileServers[0].Volumes) == 0 {
 		return "", fmt.Errorf("no volumes found for source file server after %d attempts", MaxPollRetries)
 	}
 	// Now fetch the volume ID
@@ -426,7 +398,7 @@ func RestoreOriginalDataOnVolume(export string) error {
 
 // GetVolumeID retrieves the ID of a volume by its path from the FileServerInfo response.
 func GetVolumeID(response FileServerInfo, volumePath string) (string, error) {
-	for _, fileServer := range response.FileServers {
+	for _, fileServer := range response.Data.Items.FileServers {
 		for _, volume := range fileServer.Volumes {
 			if volume.VolumePath == volumePath {
 				fmt.Printf("ID of the volume with path '%s': %s\n", volumePath, volume.ID)
