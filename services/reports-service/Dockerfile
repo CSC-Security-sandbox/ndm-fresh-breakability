@@ -1,12 +1,11 @@
 FROM public.ecr.aws/docker/library/node:22.18.0-trixie-slim
 
-
-# Install system dependencies required for Chromium and Puppeteer PDF generation
+# Install system dependencies required for Puppeteer and Chromium
 RUN apt-get update \
-    && apt-get install -y \
+    && apt-get install -y --no-install-recommends \
         ca-certificates \
         wget \
-        gnupg \
+        unzip \
         fonts-liberation \
         libnss3 \
         libx11-xcb1 \
@@ -15,17 +14,27 @@ RUN apt-get update \
         libxrandr2 \
         libasound2 \
         libatk-bridge2.0-0 \
-        libatk1.0-0 \
         libcups2 \
         libdrm2 \
         libgbm1 \
         libgtk-3-0 \
         libnspr4 \
-        --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/* \
-    && npm install -g @nestjs/cli pm2@latest puppeteer
+        libxss1 \
+    && rm -rf /var/lib/apt/lists/*
 
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false \
+# Download and install Chromium (latest snapshot build)
+RUN apt-get update && apt-get install -y --no-install-recommends gnupg wget \
+    && wget --quiet --output-document=- https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/google-archive.gpg \
+    && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install global npm packages
+RUN npm install -g @nestjs/cli pm2@latest
+
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable \
     NODE_ENV=production
 
 WORKDIR /app
