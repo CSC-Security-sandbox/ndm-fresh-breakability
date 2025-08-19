@@ -146,12 +146,10 @@ export class SupportBundleService {
       return { ...defaultResponse, isBundleReady: true };
     }
 
-    this.logger.log(user.workflowId, 'user.workflowId');
     try {
       const response = await this.workFlowService.getWorkFlowRes(
         user.workflowId,
       );
-      this.logger.log('Workflow response:', response);
       if (
         response?.status === 'TERMINATED' ||
         response?.status === 'FAILED' ||
