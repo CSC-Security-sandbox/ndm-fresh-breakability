@@ -143,7 +143,7 @@ export class JobRunService {
   }
 
   // ------------------ Ad-hoc Run -------------------- //
-  async addHocRun(jobConfigId: string) {
+  async addHocRun(jobConfigId: string, projectId?: string) {
     const jobConfig = await this.jobConfigRepo.findOne({
       where: { id: jobConfigId },
     });
@@ -182,7 +182,7 @@ export class JobRunService {
         );
       }
     }
-    return await this.jobRunInitService.createJobRun(jobConfig.id, new Date());
+    return await this.jobRunInitService.createJobRun(jobConfig.id, new Date(), projectId);
   }
 
   //  ------------------- get JobRun Details ------------------ //
@@ -487,7 +487,7 @@ export class JobRunService {
     return allJobsRuns;
   }
 
-  async updateJobRunStatus(jobRunId: string, status: JobRunStatus) {
+  async updateJobRunStatus(jobRunId: string, status: JobRunStatus, projectId?: string) {
     const jobRunDetails: JobRunEntity = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
     });
@@ -544,6 +544,7 @@ export class JobRunService {
             targetHost: jobConfig.targetPath?.fileServer?.host,
             jobType: jobConfig.jobType,
             errorCodes,
+            projectId
           });
         } else {
           this.logger.log(
@@ -552,6 +553,7 @@ export class JobRunService {
 
           await this.sendMailService.sendMail({
             successEmailType: SuccessEmailType.JOB_UPDATE,
+            projectId,
             jobStatusUpdate: {
               jobType: jobConfig.jobType,
               jobAction: "completed",
@@ -591,6 +593,7 @@ export class JobRunService {
       ) {
         await this.sendMailService.sendMail({
           successEmailType: SuccessEmailType.JOB_UPDATE,
+          projectId,
           jobStatusUpdate: {
             jobType: jobConfig.jobType,
             jobAction: "started",
@@ -828,6 +831,7 @@ export class JobRunService {
     targetHost,
     jobType,
     errorCodes,
+    projectId,
   }): Promise<void> {
     if (!errorCodes || errorCodes.length === 0) {
       this.logger.log(`No error codes found for job run ${jobRunId}`);
@@ -839,6 +843,7 @@ export class JobRunService {
 
     await this.sendMailService.sendMail({
       successEmailType: SuccessEmailType.ERROR_REMEDY,
+      projectId,
       errorRemedy: {
         jobRunId,
         jobType,

@@ -564,7 +564,8 @@ describe("JobRunService", () => {
       });
       expect(jobRunInitService.createJobRun).toHaveBeenCalledWith(
         mockJobConfig.id,
-        expect.any(Date)
+        expect.any(Date),
+        undefined
       );
     });
 
@@ -724,7 +725,8 @@ describe("JobRunService", () => {
       expect(result).toEqual(mockJobs);
       expect(createJobRunSpy).toHaveBeenCalledWith(
         mockJobs[0].id,
-        expect.any(Date)
+        expect.any(Date),
+        undefined
       );
     });
 
@@ -2666,6 +2668,7 @@ describe("JobRunService", () => {
         targetHost: "",
         targetPath: "",
         jobType: "",
+        projectId: "test-project-id",
       });
       expect(sendMailService.sendMail).toHaveBeenCalled();
     });
@@ -2693,6 +2696,7 @@ describe("JobRunService", () => {
           targetHost: "",
           targetPath: "",
           jobType: "",
+          projectId: "test-project-id",
         })
       ).rejects.toThrow("Email sending failed");
     });
@@ -2709,6 +2713,7 @@ describe("JobRunService", () => {
         targetHost: "",
         targetPath: "",
         jobType: "",
+        projectId: "test-project-id",
       });
       expect(sendMailService.sendMail).not.toHaveBeenCalled();
     });
@@ -3032,6 +3037,7 @@ describe("JobRunService", () => {
           targetHost: '',
           targetPath: '',
           jobType: '',
+          projectId: 'test-project-id',
         });
         expect(spy).not.toHaveBeenCalled();
       });
@@ -3054,6 +3060,7 @@ describe("JobRunService", () => {
           targetHost: '',
           targetPath: '',
           jobType: '',
+          projectId: 'test-project-id',
         });
         expect(spy).toHaveBeenCalled();
       });
@@ -3295,7 +3302,8 @@ describe("JobRunService", () => {
           sourceHost: "source-host",
           targetHost: "target-host",
           jobType: JobType.MIGRATE,
-          errorCodes: [{ errorCode: "ERR001" }]
+          errorCodes: [{ errorCode: "ERR001" }],
+          projectId: "test-project-id",
         };
         const mockErrorRemedies = [{
           errorCode: "ERR001",
@@ -3426,7 +3434,8 @@ describe("JobRunService", () => {
           sourceHost: "source-host",
           targetHost: "target-host",
           jobType: JobType.MIGRATE,
-          errorCodes: [{ errorCode: "ERR001" }, { errorCode: "ERR002" }]
+          errorCodes: [{ errorCode: "ERR001" }, { errorCode: "ERR002" }],
+          projectId: "test-project-id",
         };
 
         const mockErrorRemedies = [
@@ -3474,6 +3483,7 @@ describe("JobRunService", () => {
             targetHost: "target-host",
             targetPath: "/target/path",
           },
+          projectId: "test-project-id",
         });
       });
 
@@ -3485,7 +3495,8 @@ describe("JobRunService", () => {
           sourceHost: "source-host",
           targetHost: "target-host",
           jobType: JobType.MIGRATE,
-          errorCodes: []
+          errorCodes: [],
+          projectId: "test-project-id",
         };
 
         const errorRemedySpy = jest.spyOn(errorRemedyService, "findByErrorCodes");
@@ -3505,7 +3516,8 @@ describe("JobRunService", () => {
           sourceHost: "source-host",
           targetHost: "target-host",
           jobType: JobType.MIGRATE,
-          errorCodes: null
+          errorCodes: null,
+          projectId: "test-project-id",
         };
 
         const errorRemedySpy = jest.spyOn(errorRemedyService, "findByErrorCodes");

@@ -569,7 +569,8 @@ export class JobConfigService {
   }
 
   async createBulkMigrate(
-    bulkMigrate: BulkMigrateJobConfig
+    bulkMigrate: BulkMigrateJobConfig,
+    projectId?: string
   ): Promise<JobConfigBulkMigrateFinalResponse> {
     const firstRunAt = bulkMigrate?.firstRunAt ?? new Date();
     const jobConfigs: Partial<JobConfigEntity>[] = [];
@@ -762,6 +763,7 @@ export class JobConfigService {
 
       await this.sendMailService.sendMail({
         successEmailType: SuccessEmailType.JOB_CREATION,
+        projectId,
         migrateJob: {
           savedJobConfigs: savedJobConfigs.map(jobConfig => ({
             id: jobConfig.id,
