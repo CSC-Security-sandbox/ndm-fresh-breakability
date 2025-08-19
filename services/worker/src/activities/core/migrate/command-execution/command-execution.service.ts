@@ -85,8 +85,8 @@ export class CommandExecService {
                     new Error(`Source path does not exist: ${sourcePath}`), {name: command.fPath, path: sourcePath});
                 await jobContext.publishToErrorStream(dmErr);
             }
-            if(await isPathExists(targetPath))
-                await this.stampMetaService.removeFileAttributeTemporarily(targetPath);
+            // if(await isPathExists(targetPath))
+                // await this.stampMetaService.removeFileAttributeTemporarily(targetPath);
             try {
                 const checksums = await this.workerThreadService.migrateWorkerThread({
                     sourcePath, destinationPath: targetPath, operationId: command.id, size: command.metadata?.size ?? 0
@@ -105,9 +105,9 @@ export class CommandExecService {
                 await jobContext.publishToErrorStream(dmErr);   
                 output.targetErrors.push(error.code);
             }finally{
-                if(await isPathExists(targetPath)) {
-                    await this.stampMetaService.restoreFileAttribute(targetPath);
-                }
+                // if(await isPathExists(targetPath)) {
+                //     await this.stampMetaService.restoreFileAttribute(targetPath);
+                // }
             }
         }
         return output;

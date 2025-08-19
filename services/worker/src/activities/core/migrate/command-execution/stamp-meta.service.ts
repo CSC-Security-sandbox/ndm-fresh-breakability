@@ -34,15 +34,15 @@ export class StampMetaService {
         ) {
 
             if (process.platform === 'win32') {
-                // Stamp SID to object
-                const sidOutput = await this.stampSIDAclToObject(input);
-                output.sourceErrors.push(...sidOutput.sourceErrors);
-                output.targetErrors.push(...sidOutput.targetErrors);
+                // // Stamp SID to object
+                // const sidOutput = await this.stampSIDAclToObject(input);
+                // output.sourceErrors.push(...sidOutput.sourceErrors);
+                // output.targetErrors.push(...sidOutput.targetErrors);
 
-                // Stamp Hidden Metadata
-                const hiddenAttrOutput = await this.stampFileAttributeMeta(input);
-                output.sourceErrors.push(...hiddenAttrOutput.sourceErrors);
-                output.targetErrors.push(...hiddenAttrOutput.targetErrors);
+                // // Stamp Hidden Metadata
+                // const hiddenAttrOutput = await this.stampFileAttributeMeta(input);
+                // output.sourceErrors.push(...hiddenAttrOutput.sourceErrors);
+                // output.targetErrors.push(...hiddenAttrOutput.targetErrors);
 
                 // Preserve access and modified time
                 const preserveTimeOutput = await this.preserveAccessAndModifiedTime(input);
