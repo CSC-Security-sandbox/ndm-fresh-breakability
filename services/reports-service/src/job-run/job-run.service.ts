@@ -167,6 +167,10 @@ export class JobRunService {
       jobRunStatus.totalSize = formatBytes(
           Number(jobStatsSummary.totalSize)
         ).toString();
+    }else{
+      jobRunStatus.fileCount = "0";
+      jobRunStatus.directories = "0";
+      jobRunStatus.totalSize = "0";
     }
 
     if (jobRun?.jobConfig?.jobType === JobType.Discover)
@@ -177,19 +181,20 @@ export class JobRunService {
       response["cutOver"] = jobRunStatus;
 
     response["task"] = new TaskDto();
-
-    response["task"][jobStatsSummary.completed] = Number(
-      jobStatsSummary.completed
-    );
-    response["task"][jobStatsSummary.pending] = Number(
-      jobStatsSummary.pending
-    );
-    response["task"][jobStatsSummary.errored] = Number(
-      jobStatsSummary.errored
-    );
-    response["task"][jobStatsSummary.running] = Number(
-      jobStatsSummary.running
-    );
+    if (jobStatsSummary) {
+      response["task"][jobStatsSummary.completed] = Number(
+        jobStatsSummary.completed
+      );
+      response["task"][jobStatsSummary.pending] = Number(
+        jobStatsSummary.pending
+      );
+      response["task"][jobStatsSummary.errored] = Number(
+        jobStatsSummary.errored
+      );
+      response["task"][jobStatsSummary.running] = Number(
+        jobStatsSummary.running
+      );
+    }
 
     if (response.status === JobRunStatus.Completed) {
       const report = this.reportsRepo.create({

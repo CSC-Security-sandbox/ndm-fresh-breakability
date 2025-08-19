@@ -3,7 +3,6 @@ import { ViewEntity, ViewColumn } from "typeorm";
 
 @ViewEntity({
   name: "job_stats_summary_mv",
-  schema: "datamigrator",
   materialized: true,
 })
 export class JobStatsSummaryMvEntity {

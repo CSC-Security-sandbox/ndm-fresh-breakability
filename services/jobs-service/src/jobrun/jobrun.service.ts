@@ -45,6 +45,7 @@ import {
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { MigrationConflictService } from "src/migration-conflict/migration-conflict.service";
+import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 
 @Injectable()
 export class JobRunService {
@@ -72,7 +73,9 @@ export class JobRunService {
     private errorRemedyService: ErrorRemedyService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly workerService: WorkersService,
-    private readonly migrationConflictService: MigrationConflictService
+    private readonly migrationConflictService: MigrationConflictService,
+    @InjectRepository(JobStatsSummaryMvEntity)
+    private jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>
   ) {
     this.logger = loggerFactory.create(JobRunService.name);
     this.mountBasePath = this.configService.get<string>(
@@ -793,24 +796,17 @@ export class JobRunService {
     if (!jobRun)
       throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
 
-    const inventorySummary = await this.inventoryRepo
-      .createQueryBuilder("inventory")
-      .select([
-        "COUNT(CASE WHEN inventory.isDirectory = false THEN 1 END) AS fileCount",
-        "COUNT(CASE WHEN inventory.isDirectory = true THEN 1 END) AS directoryCount",
-        "COALESCE(SUM(CASE WHEN inventory.isDirectory = false THEN inventory.fileSize ELSE 0 END), 0) AS totalFileSize",
-      ])
-      .where("inventory.jobRunId = :jobRunId", { jobRunId: jobRunId })
-      .getRawOne();
+    const jobStatsSummary: JobStatsSummaryMvEntity = await this.jobStatsSummaryMvRepo.findOne({
+      where: { jobRunId: jobRunId }});
 
     this.logger.debug(
-      `[calculateJobRunStats] Calculating job stats for ${jobRunId}  and query result ${JSON.stringify(inventorySummary)}`
+      `[calculateJobRunStats] Calculating job stats for ${jobRunId}  and query result ${JSON.stringify(jobStatsSummary)}`
     );
 
     const jobRunStatus = {
-      fileCount: inventorySummary.filecount || "0",
-      directories: inventorySummary.directorycount || "0",
-      totalSize: inventorySummary.totalfilesize || "0",
+      fileCount: jobStatsSummary.fileCount || "0",
+      directories: jobStatsSummary.directoryCount || "0",
+      totalSize: jobStatsSummary.totalSize || "0",
     };
 
     const response = {

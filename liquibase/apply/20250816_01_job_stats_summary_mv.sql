@@ -1,5 +1,8 @@
 CREATE MATERIALIZED VIEW IF NOT EXISTS job_stats_summary_mv AS
-WITH inventory_stats AS (
+WITH job_runs as (
+	select id from jobrun
+),
+inventory_stats AS (
     SELECT 
         job_run_id,
         COUNT(*) FILTER (WHERE NOT is_directory) AS file_count,
@@ -24,7 +27,7 @@ task_stats AS (
     GROUP BY job_run_id
 )
 SELECT 
-    COALESCE(i.job_run_id, t.job_run_id) AS job_run_id,
+   COALESCE(j.id,i.job_run_id, t.job_run_id) AS job_run_id,
     
     -- Inventory statistics
     COALESCE(i.file_count, 0) AS file_count,
@@ -48,8 +51,9 @@ SELECT
         COALESCE(t.last_task_update, '1970-01-01'::timestamp)
     ) AS last_data_update,
     NOW() AS last_refreshed
-FROM inventory_stats i
-FULL OUTER JOIN task_stats t ON i.job_run_id = t.job_run_id;
+FROM job_runs j  LEFT JOIN inventory_stats i
+on j.id = i.job_run_id
+LEFT JOIN  task_stats t ON j.id = t.job_run_id;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_job_stats_summary_mv_job_run_id 
 ON job_stats_summary_mv (job_run_id);

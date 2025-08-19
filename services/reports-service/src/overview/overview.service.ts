@@ -6,6 +6,8 @@ import { ProjectEntity } from "src/entities/project.entity";
 import { Repository } from "typeorm";
 import { JobRunStatus, JobType } from "src/constants/enums";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
+import { StorageOverviewSummaryEntity } from "src/entities/storage-summary-mv.entity";
+import { last } from "rxjs";
 
 @Injectable()
 export class OverviewService {
@@ -14,7 +16,9 @@ export class OverviewService {
     @InjectRepository(InventoryEntity)
     private readonly inventoryRepository: Repository<InventoryEntity>,
     @InjectRepository(ProjectEntity)
-    private readonly projectRepository: Repository<ProjectEntity>
+    private readonly projectRepository: Repository<ProjectEntity>,
+    @InjectRepository(StorageOverviewSummaryEntity)
+    private readonly storageOverviewSummaryRepository: Repository<StorageOverviewSummaryEntity>
   ) {}
 
   async getStorageAndJobsOverview(
@@ -68,6 +72,9 @@ export class OverviewService {
 
     const projectQueryEnd = Date.now();
 
+    this.logger.log("prpojectDetails - " + projectDetails.length);
+    this.logger.log("prpojectDetails - " + JSON.stringify(projectDetails));
+
     this.logger.log(
       `projectDetails query took ${projectQueryEnd - projectQueryStart} ms`
     );
@@ -80,136 +87,47 @@ export class OverviewService {
 
     this.logger.log(`totalFileServers - ${totalFileServers}`);
 
-    const scanRunDetailsStart = Date.now();
 
     const {
       totalDiscoverJobs,
       totalMigrationJobs,
       totalCutOverJobs
     } = this.countAllJobTypes(projectDetails);
-
-    const scanRunDetails = projectDetails
-      ?.flatMap((project) =>
-        project.configs.flatMap((config) =>
-          config.fileServers.flatMap((fileServer) =>
-            fileServer.volumes.flatMap((volume) =>
-              volume.sourceConfig
-                .filter((jobConfig) => jobConfig.jobType === JobType.Discover)
-                .flatMap((jobConfig) => jobConfig.jobRuns)
-            )
-          )
-        )
-      )
-      .reduce((acc, jobRun) => {
-        const existing = acc.find((j) => j.jobConfigId === jobRun.jobConfigId);
-        if (
-          !existing ||
-          new Date(jobRun.createdAt) > new Date(existing.createdAt)
-        ) {
-          return [
-            ...acc.filter((j) => j.jobConfigId !== jobRun.jobConfigId),
-            jobRun,
-          ];
-        }
-        return acc;
-      }, []);
-
-    const scanRunDetailsEnd = Date.now();
-
-    this.logger.log(
-      `scanRunDetails query took ${scanRunDetailsEnd - scanRunDetailsStart} ms`
-    );
-    this.logger.log(`scanRunDetails - ${JSON.stringify(scanRunDetails)}`);
-
-    const completedJobRunDetails = scanRunDetails?.filter(
-      (jobRun) => jobRun.status === JobRunStatus.Completed
-    );
-    const completedDiscoveryJobRunIds = completedJobRunDetails?.map(
-      (run) => run.id
-    );
-
-    const migrateRun = projectDetails?.flatMap((project) =>
-      project?.configs?.flatMap((config) =>
-        config?.fileServers?.flatMap((fileServer) =>
-          fileServer?.volumes?.flatMap((volume) =>
-            volume?.sourceConfig
-              ?.filter((jobConfig) => jobConfig.jobType == JobType.Migrate)
-              ?.flatMap((jobConfig) => jobConfig.jobRuns)
-          )
-        )
-      )
-    );
-    const cutOverRun = projectDetails?.flatMap((project) =>
-      project?.configs?.flatMap((config) =>
-        config?.fileServers?.flatMap((fileServer) =>
-          fileServer?.volumes?.flatMap((volume) =>
-            volume?.sourceConfig
-              ?.filter((jobConfig) => jobConfig.jobType == JobType.CutOver)
-              ?.flatMap((jobConfig) => jobConfig.jobRuns)
-          )
-        )
-      )
-    );
-    const discoverySizeQueryBuilderStart = Date.now();
-
-    const jobRunIds = [
-      ...(migrateRun?.length ? migrateRun.map((run) => run.id) : []),
-      ...(cutOverRun?.length ? cutOverRun.map((run) => run.id) : []),
-      ...(completedDiscoveryJobRunIds ?? []),
-    ];
-    if (jobRunIds && jobRunIds.length > 0) {
-      const placeholders = jobRunIds.map((_, idx) => `$${idx + 1}`).join(",");
-      const discoveredSize = await this.inventoryRepository.query(
-        `
-        SELECT COALESCE(SUM(latest_inventory.file_size), 0) as "totalDiscoveredSize"
-        FROM (
-          SELECT DISTINCT ON (i.path) i.file_size
-          FROM  ${schema}.inventory i
-          WHERE i.job_run_id IN (${placeholders})
-          ORDER BY i.path, i.created_at DESC
-        ) as latest_inventory
-        `,
-        jobRunIds
-      );
-
-      const discoverySizeQueryBuilderEnd = Date.now();
-
-      this.logger.log(
-        `inventoryQueryBuilder query took ${discoverySizeQueryBuilderEnd - discoverySizeQueryBuilderStart} ms`
-      );
-
-      totalDiscoveredSize = discoveredSize?.[0]?.totalDiscoveredSize ?? 0;
-
-      this.logger.log(`discoveredSize - ${JSON.stringify(discoveredSize)}`);
-    }
-
-    if (migrateRun?.length > 0 || cutOverRun?.length > 0) {
-      const migrationQueryBuilderStart = Date.now();
-      const jobRunIds = [
-        ...(migrateRun?.length ? migrateRun.map((run) => run.id) : []),
-        ...(cutOverRun?.length ? cutOverRun.map((run) => run.id) : []),
-      ];
-      if (jobRunIds.length === 0) {
-        this.logger.log("No job runs found, skipping migration query");
-        totalMigratedSize = 0;
-        return;
+    let lastRefreshed: Date = new Date();
+    if(projectId){
+      this.logger.log(`Project ID provided: ${projectId}`);
+      const projectStorageOverview = await this.storageOverviewSummaryRepository.find({
+        where: { projectId: projectId },
+      })
+      totalDiscoveredSize = projectStorageOverview?.reduce((acc, item) => {
+        return acc + (Number(item.totalDiscoveredSize) || 0);
+      }, 0) || 0;
+      
+      totalMigratedSize = projectStorageOverview?.reduce((acc, item) => {
+        return acc + (Number(item.totalMigratedSize) || 0);
+      }, 0) || 0;
+      if(projectStorageOverview){
+        lastRefreshed = projectStorageOverview[0]?.lastRefreshed
       }
-      const placeholders = jobRunIds.map((_, idx) => `$${idx + 1}`).join(",");
-      const migratedSize = await this.inventoryRepository.query(
-        `
-        SELECT COALESCE(SUM(latest_inventory.file_size), 0) as "totalMigratedSize"
-        FROM (
-          SELECT DISTINCT ON (i.path) i.file_size
-          FROM  ${schema}.inventory i
-          WHERE i.job_run_id IN (${placeholders})
-          ORDER BY i.path, i.created_at DESC
-        ) as latest_inventory
-        `,
-        jobRunIds
-      );
-      totalMigratedSize = migratedSize?.[0]?.totalMigratedSize ?? 0;
+      this.logger.debug(`Total Discovered Size for ${projectId}: ${totalDiscoveredSize}`);
+      this.logger.debug(`Total Migrated Size for ${projectId}: ${totalMigratedSize}`);
+      this.logger.log(`Project Storage Overview: ${JSON.stringify(projectStorageOverview)}`);
     }
-
+    if(configId){
+      this.logger.log(`Config ID provided: ${configId}`);
+      const configStorageOverview = await this.storageOverviewSummaryRepository.findOne({
+        where: { configId: configId },
+      });
+      if(configStorageOverview) {
+        lastRefreshed= configStorageOverview?.lastRefreshed;
+      }
+      totalDiscoveredSize = configStorageOverview?.totalDiscoveredSize ?? 0;
+      totalMigratedSize = configStorageOverview?.totalMigratedSize ?? 0;
+      this.logger.debug(`Total Discovered Size for ${configId}: ${totalDiscoveredSize}`);
+      this.logger.debug(`Total Migrated Size for ${configId}: ${totalMigratedSize}`);
+      this.logger.log(`Config Storage Overview: ${JSON.stringify(configStorageOverview)}`);
+    }  
+    
     let totalPending = totalDiscoveredSize - totalMigratedSize;
     let totalPendingSize = formatBytes(Number(totalPending));
 
@@ -236,12 +154,13 @@ export class OverviewService {
         totalMigrateJobs: totalMigrationJobs,
         totalCutoverJobs: totalCutOverJobs,
       },
+      lastRefreshed: lastRefreshed
     };
     const getStorageAndJobsOverviewEnd = Date.now();
     this.logger.log(
       `getStorageAndJobsOverview whole logic took time to execute: ${getStorageAndJobsOverviewEnd - getStorageAndJobsOverviewStart} ms`
     );
-    this.logger.log(`OVERVIEW DATA: ${overViewData} ms`);
+    this.logger.debug(`OVERVIEW DATA: ${JSON.stringify(overViewData)}`);
     return overViewData;
   }
 

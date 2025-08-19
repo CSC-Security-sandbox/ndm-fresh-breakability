@@ -12,6 +12,7 @@ import { TaskEntity } from "src/entities/task.entity";
 import { JobRunEntity } from "src/entities/jobrun.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { AuthKeycloakModule } from "@netapp-cloud-datamigrate/auth-lib";
+import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { AuthKeycloakModule } from "@netapp-cloud-datamigrate/auth-lib";
       ReportsEntity,
       OperationErrorEntity,
       WorkerJobRunMap,
+      JobStatsSummaryMvEntity
     ]),
     AuthKeycloakModule,
   ],

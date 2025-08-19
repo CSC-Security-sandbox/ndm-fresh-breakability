@@ -997,12 +997,12 @@ export class JobConfigService {
           );
           return {
             ...partialPayload,
-            scannedFilesCount: BigInt(jobRunStats.fileCount || "0")?.toString(),
+            scannedFilesCount: BigInt(jobRun?.jobStats?.fileCount || "0")?.toString(),
             scannedDirectoriesCount: BigInt(
-              jobRunStats.directories || "0"
+              jobRun?.jobStats?.directories || "0"
             )?.toString(),
-            totalScannedSize: formatBytes(Number(jobRunStats?.totalSize || 0)),
-            totalMigratedSize: formatBytes(Number(jobRunStats?.totalSize || 0)),
+            totalScannedSize: formatBytes(Number(jobRun?.jobStats?.totalSize || 0)),
+            totalMigratedSize: formatBytes(Number(jobRun?.jobStats?.totalSize || 0)),
             errors: jobRunStats.errors || [] ,
           };
         }
