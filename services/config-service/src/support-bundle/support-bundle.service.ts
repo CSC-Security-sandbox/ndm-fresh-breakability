@@ -166,7 +166,10 @@ export class SupportBundleService {
         );
       }
     } catch (error) {
-      this.logger.log(error);
+      this.logger.error(
+        'Failed to check workflow status in isBundleReady:',
+        error,
+      );
     }
 
     if (user.status === SupportBundleStatus.IN_PROGRESS) {
