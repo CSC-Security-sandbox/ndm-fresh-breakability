@@ -185,7 +185,7 @@ jobs:
         if: always()
         run: |
           cd app-deployment/terraform/vsphere/environments/api
-          terraform destroy -auto-approve
+          # terraform destroy -auto-approve
 
       - name: Clean Up Temporary Files
         if: always()
