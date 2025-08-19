@@ -65,8 +65,6 @@ export class SupportBundleService {
       },
     });
 
-    await this.supportBundleRepo.save(log);
-
     this.logger.log(
       `Starting SupportBundleWorkflow with requestId: ${traceId} and userId: ${userDetails.user.id}`,
     );
@@ -97,6 +95,7 @@ export class SupportBundleService {
         WorkFlows.SUPPORT_BUNDLE_WORKFLOW,
         startWorkFlowPayload,
       );
+      await this.supportBundleRepo.save(log);
 
       this.logger.log('Started SupportBundleWorkflow successfully');
     } catch (error) {
@@ -128,7 +127,14 @@ export class SupportBundleService {
     const user = await this.supportBundleRepo.findOne({
       where: { userId },
       order: { createdAt: 'DESC' },
-      select: ['status', 'errorMessage', 'filters', 'createdAt'],
+      select: [
+        'status',
+        'errorMessage',
+        'filters',
+        'createdAt',
+        'workflowId',
+        'requestId',
+      ],
     });
 
     const defaultResponse: BundleStatus = {
@@ -142,20 +148,44 @@ export class SupportBundleService {
       return defaultResponse;
     }
 
-    switch (user.status) {
-      case SupportBundleStatus.COMPLETED:
-        return { ...defaultResponse, isBundleReady: true };
+    if (user.status === SupportBundleStatus.COMPLETED) {
+      return { ...defaultResponse, isBundleReady: true };
+    }
 
-      case SupportBundleStatus.IN_PROGRESS:
-        return { ...defaultResponse, isProcessing: true };
-
-      case SupportBundleStatus.FAILED:
-        throw new InternalServerErrorException(
-          user.errorMessage || 'Support bundle generation failed',
+    try {
+      const response = await this.workFlowService.getWorkFlowRes(
+        user.workflowId,
+      );
+      if (
+        response?.status === 'TERMINATED' ||
+        response?.status === 'FAILED' ||
+        response?.status === 'TIMED_OUT'
+      ) {
+        await this.supportBundleRepo.update(
+          { requestId: user.requestId },
+          {
+            status: SupportBundleStatus.FAILED,
+            errorMessage: `Support bundle generation failed, activity ${response?.status}`,
+          },
         );
+      }
+    } catch (error) {
+      this.logger.error(
+        'Failed to check workflow status in isBundleReady:',
+        error,
+      );
+    }
 
-      default:
-        return defaultResponse;
+    if (user.status === SupportBundleStatus.IN_PROGRESS) {
+      return { ...defaultResponse, isProcessing: true };
+    }
+
+    if (user.status === SupportBundleStatus.FAILED) {
+      throw new InternalServerErrorException(
+        user.errorMessage || 'Support bundle generation failed',
+      );
+    } else {
+      return defaultResponse;
     }
   }
 
