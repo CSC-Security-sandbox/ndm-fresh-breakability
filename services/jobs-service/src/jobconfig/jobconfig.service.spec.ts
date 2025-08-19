@@ -55,6 +55,7 @@ import { HealthStatus } from "src/workers/worker.types";
 import { SyncEmailEntity } from "src/entities/sync-email.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import {formatBytes} from '@netapp-cloud-datamigrate/jobs-lib';
+import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 
 jest.mock('typeorm', () => {
   const actual = jest.requireActual('typeorm');
@@ -335,6 +336,19 @@ describe("JobConfigService", () => {
             find: jest.fn(),
             createQueryBuilder: jest.fn(),
           },
+        },
+        {
+          provide: getRepositoryToken(JobStatsSummaryMvEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            update: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+
         },
       ],
     }).compile();

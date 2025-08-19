@@ -62,6 +62,7 @@ import { SendMailService } from "src/utils/send-email";
 import { HealthStatus } from "src/workers/worker.types";
 import { WorkersService } from "src/workers/workers.service";
 import { SuccessEmailType } from "src/utils/send-email.type";
+import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 
 describe("JobRunService", () => {
   let service: JobRunService;
@@ -398,6 +399,18 @@ describe("JobRunService", () => {
         },
         {
           provide: getRepositoryToken(ErrorRemedyEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            count: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(JobStatsSummaryMvEntity),
           useValue: {
             findOne: jest.fn(),
             create: jest.fn(),

@@ -27,6 +27,7 @@ describe("OverviewController", () => {
       totalMigrateJobs: 8,
       totalCutoverJobs: 2,
     },
+    lastRefreshed: new Date(),
   };
 
   const mockOverviewService = {
@@ -497,6 +498,7 @@ describe("OverviewController", () => {
             totalMigrateJobs: 0,
             totalCutoverJobs: 0,
           },
+          lastRefreshed: new Date(),
         };
 
         overviewService.getStorageAndJobsOverview.mockResolvedValue(
@@ -525,6 +527,7 @@ describe("OverviewController", () => {
             totalMigrateJobs: 800,
             totalCutoverJobs: 200,
           },
+          lastRefreshed: new Date(),
         };
 
         overviewService.getStorageAndJobsOverview.mockResolvedValue(
@@ -553,6 +556,7 @@ describe("OverviewController", () => {
             totalMigrateJobs: 0,
             totalCutoverJobs: 0,
           },
+          lastRefreshed: new Date(),
         };
 
         overviewService.getStorageAndJobsOverview.mockResolvedValue(
@@ -1228,6 +1232,7 @@ describe("OverviewController", () => {
           totalMigrateJobs: 16,
           totalCutoverJobs: 4,
         },
+        lastRefreshed: new Date(),
       };
 
       overviewService.getStorageAndJobsOverview.mockResolvedValue(customData);

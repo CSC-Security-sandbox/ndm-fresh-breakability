@@ -480,7 +480,7 @@ describe("OverviewService", () => {
     let service: OverviewService;
 
     beforeEach(() => {
-      service = new OverviewService({} as any, {} as any);
+      service = new OverviewService({} as any, {} as any,{} as any);
     });
 
     it("should return correct counts for each job type", () => {
