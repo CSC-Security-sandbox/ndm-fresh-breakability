@@ -403,7 +403,12 @@ func GetFileUserGroupId(export, fileName string) (uid, gid int, err error) {
 	return u, g, nil
 }
 
-func GetFileServerDetails(configId string, headers map[string]string) (FileServerDetailsItems, error) {
+func GetFileServerDetails(configId string, headers map[string]string, volumeCheck ...bool) (FileServerDetailsItems, error) {
+	volumeCheckFlag := true
+	if len(volumeCheck) > 0 {
+		volumeCheckFlag = volumeCheck[0]
+	}
+
 	refreshURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILE_SERVER_REFRESH_URL, configId)
 	getSourceURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configId)
 
@@ -432,9 +437,14 @@ func GetFileServerDetails(configId string, headers map[string]string) (FileServe
 			return FileServerDetailsItems{}, fmt.Errorf("error unmarshalling response: %w", err)
 		}
 
-		// Check if volumes exist
-		if len(response.Data.Items.FileServers) > 0 && len(response.Data.Items.FileServers[0].Volumes) > 0 {
-			break
+		// Check if fileserver and volumes exist
+		if len(response.Data.Items.FileServers) > 0 {
+			if !volumeCheckFlag {
+				break
+			}
+			if len(response.Data.Items.FileServers[0].Volumes) > 0 {
+				break
+			}
 		}
 
 		if attempt < MaxPollRetries {
@@ -446,7 +456,8 @@ func GetFileServerDetails(configId string, headers map[string]string) (FileServe
 	if len(response.Data.Items.FileServers) == 0 {
 		return FileServerDetailsItems{}, fmt.Errorf("no fileServers found in source response after %d attempts", MaxPollRetries)
 	}
-	if len(response.Data.Items.FileServers[0].Volumes) == 0 {
+
+	if volumeCheckFlag && len(response.Data.Items.FileServers[0].Volumes) == 0 {
 		return FileServerDetailsItems{}, fmt.Errorf("no volumes found for source file server after %d attempts", MaxPollRetries)
 	}
 	return response.Data.Items, nil

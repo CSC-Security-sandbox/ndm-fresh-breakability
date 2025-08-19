@@ -98,7 +98,7 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 
 		It("Should upload a path file to the file server", func() {
 			By("Fetching the latest created file server")
-			fileServer, err := GetFileServerDetails(SourceConfigID, headers)
+			fileServer, err := GetFileServerDetails(SourceConfigID, headers, false)
 			Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
 			Expect(len(fileServer.FileServers)).To(BeNumerically("==", 1), "Expected exactly one file server to be returned")
 			FileServerId = fileServer.FileServers[0].Id
