@@ -120,7 +120,7 @@ jobs:
           cp ./app-deployment/ansible/worker/roles/configure-worker/templates/worker.env.j2 artifacts/worker.env
 
           if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
-            ARTIFACTORY_PATH="releases/${REF_NAME}/worker/${{ env.RELEASE_TAG }}"
+            ARTIFACTORY_PATH="releases/${REF_NAME}/worker"
           else
             ARTIFACTORY_PATH="builds/worker/${REF_TYPE}/${REF_NAME}/${{ env.RELEASE_TAG }}"
           fi
