@@ -1,14 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import Cookies from 'js-cookie';
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useState} from 'react';
 import {useAuth} from 'react-oidc-context';
 import {useDispatch} from 'react-redux';
 import {setUserPermissions} from '@store/reducer/permissionSlice';
+import {setAuthToken, clearAuth} from '@store/reducer/authSlice';
 import {useLazyGetUserPermissionsQuery} from '@api/permissionApi';
 import useAccountDetails from '@hooks/useAccountDetails';
 import {useLazyGetAllProjectsQuery} from '@api/projectApi';
 import {setAllProjectList, setProject} from '@store/reducer/appSlice';
-import {useRefreshUserTokenMutation} from '@api/userApi';
 import {notify} from '@components/notification/NotificationWrapper';
 import {ProjectApiType} from '@/types/app.type';
 import {useLazyGetAllAccountsQuery} from '@api/accountApi';
@@ -22,73 +21,16 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const [getAllAccounts] = useLazyGetAllAccountsQuery();
   const [getAllProjects] = useLazyGetAllProjectsQuery();
   const [getUserPermissionsApi] = useLazyGetUserPermissionsQuery();
-  const refreshTimeoutRef = useRef<any>(null);
-  const [refreshUserToken] = useRefreshUserTokenMutation({});
   const [showNoProjectsPage, setShowNoProjectsPage] = useState<boolean>(false);
-
-  const refreshToken = async () => {
-    const refresh_token = Cookies.get("refresh_token");
-    if (!refresh_token) {
-      notify.error("Session expired. Please log in again.");
-      auth.signoutRedirect();
-      return;
-    }
-
-    const client_id =
-      window?.env?.VITE_KEYCLOAK_CLIENT_ID ||
-      import.meta.env.VITE_KEYCLOAK_CLIENT_ID;
-    const client_secret =
-      window?.env?.VITE_KEYCLOAK_CLIENT_SECRET ||
-      import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET;
-    const body = {
-      refresh_token,
-      client_id,
-      client_secret,
-      grant_type: "refresh_token",
-    };
-
-    try {
-      const response = await refreshUserToken(body).unwrap();
-      if (!response) throw new Error("Failed to refresh token");
-
-      Cookies.set("access_token", response.access_token);
-      Cookies.set("refresh_token", response.refresh_token);
-
-      const expiresIn = response.expires_in || 120;
-      const refreshDelay = (expiresIn - 60) * 1000;
-
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-      }
-
-      refreshTimeoutRef.current = setTimeout(refreshToken, refreshDelay);
-    } catch (error) {
-      console.error("Token refresh failed:", error);
-      notify.error("Session expired. Please log in again.");
-      auth.signoutRedirect();
-    }
-  };
-
-  useEffect(() => {
-    if (auth.isAuthenticated) {
-      const expiresIn =
-        parseInt(Cookies.get("expires_in") as string, 10) || 120;
-      const refreshDelay = (expiresIn - 60) * 1000;
-      refreshTimeoutRef.current = setTimeout(refreshToken, refreshDelay);
-    }
-
-    return () => {
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-      }
-    };
-  }, [auth.isAuthenticated]);
 
   useEffect(() => {
     if (!auth.isAuthenticated && !auth.isLoading && !auth.activeNavigator) {
+      dispatch(clearAuth());
       auth.signinRedirect();
+    } else if (auth.isAuthenticated && auth.user?.access_token) {
+      dispatch(setAuthToken(auth.user.access_token));
     }
-  }, [auth]);
+  }, [auth, dispatch]);
 
   const getAccounts = async () => {
     if (
@@ -167,8 +109,6 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
       <NoProjects />
     );
   } else if (auth.isAuthenticated && !isPageReady) {
-    Cookies.set("access_token", auth.user?.access_token || "");
-    Cookies.set("refresh_token", auth.user?.refresh_token || "");
     return (
       <div className="h-screen flex justify-center items-center">
         Authenticated, checking permissions, kindly wait...
