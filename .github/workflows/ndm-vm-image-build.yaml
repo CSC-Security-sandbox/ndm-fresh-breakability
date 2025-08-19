@@ -363,6 +363,7 @@ jobs:
             REF_TYPE="releases"
             REF_NAME="${BASH_REMATCH[1]}"
             BASE_PATH="releases"
+            WORKER_TAG="${{ inputs.build }}"
           else
             REF_TYPE="branches"
             REF_NAME="${WORKER_BRANCH:-main}"
@@ -396,6 +397,9 @@ jobs:
             fi
             
             echo "Using latest worker version: $SELECTED_VERSION"
+          elif [[ -n "${{ inputs.build }}" && "$WORKER_TAG" == "${{ inputs.build }}" ]]; then
+            echo "Using release worker tag: $WORKER_TAG"
+            SELECTED_VERSION="${WORKER_TAG}"
           else
             echo "Using specified worker tag: $WORKER_TAG"
             SELECTED_VERSION="${WORKER_TAG::7}"
@@ -405,7 +409,7 @@ jobs:
           
           # artifact path
           if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
-            ARTIFACT_PATH="releases/${REF_NAME}/worker/${SELECTED_VERSION}"
+            ARTIFACT_PATH="releases/${REF_NAME}/worker"
           else
             ARTIFACT_PATH="${BASE_PATH}/${REF_TYPE}/${REF_NAME}/${SELECTED_VERSION}"
           fi
@@ -460,16 +464,16 @@ jobs:
             exit 1
           fi
 
-          # Create combined tarball with both Linux and Windows binaries
-          BINARIES_TARBALL="datamigrator-worker-${BUILD_VERSION}-binaries.tar.gz"
-          tar -czf "$GITHUB_WORKSPACE/worker_bin/pkg/${BINARIES_TARBALL}" -C "$GITHUB_WORKSPACE/worker_bin/pkg" "$LINUX_BINARY_NAME" "$WINDOWS_BINARY_NAME"
-          echo "Created binaries tarball ${BINARIES_TARBALL} with both Linux and Windows binaries"
-
           echo "linux_binary_name=$LINUX_BINARY_NAME" >> $GITHUB_OUTPUT
           echo "windows_binary_name=$WINDOWS_BINARY_NAME" >> $GITHUB_OUTPUT
 
           # Upload assets to Artifactory
-          if [[ ! "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+          if [[ ! "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then 
+            # Create combined tarball with both Linux and Windows binaries
+            BINARIES_TARBALL="datamigrator-worker-${BUILD_VERSION}-binaries.tar.gz"
+            tar -czf "$GITHUB_WORKSPACE/worker_bin/pkg/${BINARIES_TARBALL}" -C "$GITHUB_WORKSPACE/worker_bin/pkg" "$LINUX_BINARY_NAME" "$WINDOWS_BINARY_NAME"
+            echo "Created binaries tarball ${BINARIES_TARBALL} with both Linux and Windows binaries"
+
             ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/worker"
             BINARIES_TARBALL_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/worker/${BINARIES_TARBALL}"
             ENV_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/worker/worker-${BUILD_VERSION}.env"
@@ -662,7 +666,14 @@ jobs:
         run: |
           BUILD_TYPE="${{ needs.package-artifacts.outputs.build_type }}"
           BUILD_VERSION="${{ needs.package-artifacts.outputs.build_version }}"
-          INSTALLER_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/windows-installer/windows-worker-installer-${BUILD_VERSION}.exe"
+
+          if [[ ! "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then 
+            ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/windows-installer"
+          else
+            ARTIFACTORY_PATH="releases/${BUILD_VERSION}/windows-installer"
+          fi
+
+          INSTALLER_PATH="${ARTIFACTORY_PATH}/windows-worker-installer-${BUILD_VERSION}.exe"
           for REPO_PATH in "cicd/ndm" "team/ndm"; do
             TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${INSTALLER_PATH}"
             echo "Uploading Windows worker installer to $TARGET_URL..."
@@ -1004,13 +1015,12 @@ jobs:
           gcp)
             echo "Capturing image details for GCP..."
 
-            # Extract GCP Image ID from the Packer log
-            IMAGE_ID=$(grep 'A disk image was created' $GITHUB_WORKSPACE/packer.log | tail -1 | awk -F': ' '{print $NF}')
-
-            echo "gcp_image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
+            # Extract GCP Image Name from the Packer log
+            IMAGE_NAME=$(grep 'A disk image was created' $GITHUB_WORKSPACE/packer.log | tail -1 | awk -F': ' '{print $NF}')
 
             echo "Captured image info for ${{ matrix.provider }}-${{ matrix.component }}"
-            echo "GCP Image ID: $IMAGE_ID"
+            echo "GCP Image Name: $IMAGE_NAME"
+            echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
             ;;
           esac
 
@@ -1025,7 +1035,7 @@ jobs:
               echo "${{ steps.image-info.outputs.image_name }}" > ${{ matrix.component }}-${{ matrix.provider }}-image.txt
               ;;
             gcp)
-              echo "${{ steps.image-info.outputs.gcp_image_id }}" > ${{ matrix.component }}-${{ matrix.provider }}-image.txt
+              echo "${{ steps.image-info.outputs.image_name }}" > ${{ matrix.component }}-${{ matrix.provider }}-image.txt
               ;;
           esac
 

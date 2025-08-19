@@ -48,6 +48,8 @@ env:
     value: "http://keycloak.keycloak.svc.cluster.local:80/keycloak"
   - name: KEYCLOAK_REALM
     value: "datamigrator"
+  - name: TEMPORAL_ADDRESS
+    value: "temporaltest-frontend.temporal.svc.cluster.local:7233"
   # - name: DB_USER # from secret
   #   value: ""
   # - name: DB_PASSWORD # from secret
