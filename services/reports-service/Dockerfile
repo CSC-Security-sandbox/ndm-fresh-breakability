@@ -1,41 +1,39 @@
 FROM public.ecr.aws/docker/library/node:22.18.0-trixie-slim
 
-# Install system dependencies required for Puppeteer and Chromium
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        wget \
-        unzip \
-        fonts-liberation \
-        libnss3 \
-        libx11-xcb1 \
-        libxcomposite1 \
-        libxdamage1 \
-        libxrandr2 \
-        libasound2 \
-        libatk-bridge2.0-0 \
-        libcups2 \
-        libdrm2 \
-        libgbm1 \
-        libgtk-3-0 \
-        libnspr4 \
-        libxss1 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Download and install Chromium (latest snapshot build)
-RUN apt-get update && apt-get install -y --no-install-recommends gnupg wget \
-    && wget --quiet --output-document=- https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/google-archive.gpg \
-    && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends google-chrome-stable \
+# Install system dependencies required for Puppeteer and Firefox
+RUN apt-get update && apt-get install -y \
+    wget \
+    gnupg \
+    ca-certificates \
+    # fonts-liberation \
+    libappindicator3-1 \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libcairo2 \
+    libcups2 \
+    libdbus-glib-1-2 \
+    libdrm2 \
+    libglib2.0-0 \
+    libgtk-3-0 \
+    libnss3 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxext6 \
+    libxrandr2 \
+    libxrender1 \
+    libxtst6 \
+    firefox-esr \
+    --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install global npm packages
 RUN npm install -g @nestjs/cli pm2@latest
 
+
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable \
-    NODE_ENV=production
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/firefox \
+    NODE_ENV=production \
+    PUPPETEER_PRODUCT=firefox
 
 WORKDIR /app
 

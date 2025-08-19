@@ -20,7 +20,6 @@ export class PdfService {
       private readonly inventoryRepo: Repository<InventoryEntity>,
       @InjectRepository(ReportsEntity)
       private readonly reportsRepo: Repository<ReportsEntity>,
-
       private readonly discoveryService: DiscoveryService
     ) {}
 

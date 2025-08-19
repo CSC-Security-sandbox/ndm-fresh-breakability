@@ -8,7 +8,7 @@ import { GeneratePDFInput, PDF_TEMPLATE_PATHS } from "./pdf-generator.type";
 export class PDFGeneratorService implements OnApplicationShutdown {
   private browser: Browser | null = null;
   private readonly defaultPdfOptions: PDFOptions = {
-    format: "A4",
+    format: "A3",
     printBackground: true,
   };
 
@@ -16,6 +16,7 @@ export class PDFGeneratorService implements OnApplicationShutdown {
   async initBrowser(): Promise<void> {
     if (!this.browser) {
       this.browser = await puppeteer.launch({
+        browser: 'firefox',
         headless: true,
         args: [
           "--no-sandbox",
