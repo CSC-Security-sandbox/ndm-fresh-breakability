@@ -1,4 +1,7 @@
 import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
+import * as fs from 'fs';
+import * as os from 'os';
 import {
   Inject,
   Injectable,
@@ -69,6 +72,13 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     registers: [this.registry],
   });
 
+  private readonly workerInfoGauge = new Gauge({
+    name: 'worker_info',
+    help: 'Worker information including version and platform',
+    labelNames: ['worker_id', 'label_build_version', 'platform'],
+    registers: [this.registry],
+  });
+
   // Worker Thread Metrics
   private readonly workerThreadsGauge = new Gauge({
     name: 'worker_threads_status',
@@ -103,6 +113,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly httpService: HttpService,
+    @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
   ) {
     this.logger = loggerFactory.create(MetricsService.name);
@@ -154,6 +165,64 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private async readWorkerVersion(platform: string): Promise<string> {
+    try {
+      let versionsFilePath: string;
+
+      if (platform === 'windows') {
+        versionsFilePath = this.configService.get<string>('worker.metrics.versionsPathWindows');
+      } else {
+        versionsFilePath = this.configService.get<string>('worker.metrics.versionsPathLinux');
+      }
+
+      try {
+        const content = await fs.promises.readFile(versionsFilePath, 'utf8');
+        const match = content.match(/current_version=(.+)/);
+        if (match && match[1]) {
+          return match[1].trim();
+        }
+      } catch (err) {
+          this.logger.error('Error reading worker version file:', err.message || err);
+        return 'unknown';
+      }
+
+      return 'unknown';
+    } catch (err) {
+      this.logger.error('Error reading worker version:', err.message || err);
+      return 'unknown';
+    }
+  }
+
+  private getPlatform(): string {
+    const platform = os.platform();
+    switch (platform) {
+      case 'win32':
+        return 'windows';
+      case 'linux':
+        return 'linux';
+      default:
+        return platform;
+    }
+  }
+
+  private async setWorkerInfo() {
+    try {
+      const platform = this.getPlatform();
+      const version = await this.readWorkerVersion(platform);
+      
+      this.workerInfoGauge.set(
+        { 
+          worker_id: this.workerId, 
+          label_build_version: version, 
+          platform: platform 
+        }, 
+        1
+      );
+    } catch (err) {
+      this.logger.error('Failed to set worker info:', err.message || err);
+    }
+  }
+
   onModuleInit() {
     if (!this.metricsEnabled) {
       this.logger.warn('Metrics collection is disabled.');
@@ -176,6 +245,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
       () => this.pushMetrics(),
       this.pushIntervalMs,
     );
+    this.setWorkerInfo();
   }
 
   async onModuleDestroy() {

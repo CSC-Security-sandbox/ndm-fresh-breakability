@@ -48,6 +48,12 @@ export default registerAs(
       threadBand: process.env.THREAD_BANDS || '1kb,1500;1mb,1000;10mb,100;100mb,10;1gb,1',
       threadCount: parseInt(process.env.THREAD_COUNT || '5'),
       maxBufferSize: parseInt(process.env.MAX_BUFFER_SIZE) || 1048576,
+    },
+
+    // metrics
+    metrics: {
+      versionsPathWindows: process.env.VERSIONS_PATH_WINDOWS || 'C:\\datamigrator\\conf\\versions.conf',
+      versionsPathLinux: process.env.VERSIONS_PATH_LINUX || '/opt/datamigrator/conf/versions.conf',
     }
   }),
 );

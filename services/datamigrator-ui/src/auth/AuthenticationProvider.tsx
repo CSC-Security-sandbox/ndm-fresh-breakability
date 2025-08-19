@@ -15,6 +15,13 @@ const oidcConfig = {
   postLogoutRedirectUri:
     window?.env?.VITE_KEYCLOAK_POST_LOGOUT_REDIRECT_URI || import.meta.env.VITE_KEYCLOAK_POST_LOGOUT_REDIRECT_URI || "",
   onSigninCallback,
+  
+  // TOKEN REFRESH CONFIGURATION (automatically handled)
+  automaticSilentRenew: true,          // Enable automatic token refresh
+  silentRequestTimeout: 10000,         // 10 seconds timeout for refresh
+  accessTokenExpiringNotificationTime: 60, // Refresh 60 seconds before expiry
+  monitorSession: true,                // Monitor session state
+  checkSessionInterval: 2000,          // Check session every 2 seconds
 };
 
 const AuthenticationProvider = ({
