@@ -1,3 +1,23 @@
+// Checks if a value is a valid date
+export const isValidDate = (value: any): boolean => {
+  if (!value || value === null || value === undefined) return false;
+  return value instanceof Date || !isNaN(Date.parse(value));
+};
+
+// Checks if a date is in the future
+export const isDateInFuture = (value: any): boolean => {
+  if (!isValidDate(value)) return false;
+
+  const selectedDate = new Date(value);
+  const today = new Date();
+
+  // Compare only dates, not time
+  selectedDate.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+
+  return selectedDate > today;
+};
+
 export const buildProjectWorkerMap = (
   formData: Record<string, any>,
   projectWorkerData: Record<string, any>[]
