@@ -31,12 +31,7 @@ export class RedisConsumerController {
     async start(@Body() consumerDto: ConsumerDto, @Headers('projectid') projectId?: string) {
         const { jobRunId } = consumerDto;
 
-        // Log the received projectId
-        if (projectId) {
-            this.logger.log(`Received projectId: ${projectId} for jobRunId: ${jobRunId}`);
-        } else {
-            this.logger.log(`No projectId provided in headers for jobRunId: ${jobRunId}`);
-        }
+        this.logger.log(`projectId: ${projectId} Starting consumer for jobRunId: ${jobRunId}`);
 
         // Fire-and-forget: start the consumer process but don't wait for completion
         (async () => {
