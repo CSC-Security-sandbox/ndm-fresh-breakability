@@ -43,11 +43,11 @@ export class AboutNdmService {
         },
         build: {
           worker_version: {
-            version: workerVersion || 'unknown',
+            version: workerVersion || 'N/A',
             time: null,
           },
           controlPlane_version: {
-            version: controlPlaneVersion || 'unknown',
+            version: controlPlaneVersion || 'N/A',
             time: null,
           },
         },
