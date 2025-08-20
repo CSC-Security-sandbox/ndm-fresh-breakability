@@ -7,7 +7,6 @@ import { Repository } from "typeorm";
 import { JobRunStatus, JobType } from "src/constants/enums";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 import { StorageOverviewSummaryEntity } from "src/entities/storage-summary-mv.entity";
-import { last } from "rxjs";
 
 @Injectable()
 export class OverviewService {
@@ -72,10 +71,10 @@ export class OverviewService {
 
     const projectQueryEnd = Date.now();
 
-    this.logger.log("prpojectDetails - " + projectDetails.length);
-    this.logger.log("prpojectDetails - " + JSON.stringify(projectDetails));
+    this.logger.debug("projectDetails - " + projectDetails.length);
+    this.logger.debug("projectDetails - " + JSON.stringify(projectDetails));
 
-    this.logger.log(
+    this.logger.debug(
       `projectDetails query took ${projectQueryEnd - projectQueryStart} ms`
     );
 

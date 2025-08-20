@@ -804,9 +804,9 @@ export class JobRunService {
     );
 
     const jobRunStatus = {
-      fileCount: jobStatsSummary.fileCount || "0",
-      directories: jobStatsSummary.directoryCount || "0",
-      totalSize: jobStatsSummary.totalSize || "0",
+      fileCount: jobStatsSummary?.fileCount || "0",
+      directories: jobStatsSummary?.directoryCount || "0",
+      totalSize: jobStatsSummary?.totalSize || "0",
     };
 
     const response = {

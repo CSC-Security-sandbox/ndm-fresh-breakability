@@ -20,7 +20,7 @@ import {
 import { InventoryStatusSummary, TaskStatusCount } from "./job-run.type";
 import * as fs from "fs";
 import * as crypto from "crypto";
-import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
+import { formatBytes, TaskStatus } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as path from "path";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 
@@ -182,16 +182,16 @@ export class JobRunService {
 
     response["task"] = new TaskDto();
     if (jobStatsSummary) {
-      response["task"][jobStatsSummary.completed] = Number(
+      response["task"][TaskStatus.COMPLETED] = Number(
         jobStatsSummary.completed
       );
-      response["task"][jobStatsSummary.pending] = Number(
+      response["task"][TaskStatus.PENDING] = Number(
         jobStatsSummary.pending
       );
-      response["task"][jobStatsSummary.errored] = Number(
+      response["task"][TaskStatus.ERRORED] = Number(
         jobStatsSummary.errored
       );
-      response["task"][jobStatsSummary.running] = Number(
+      response["task"][TaskStatus.RUNNING] = Number(
         jobStatsSummary.running
       );
     }
