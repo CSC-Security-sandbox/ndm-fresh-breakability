@@ -9,6 +9,7 @@ const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
 
 const {
     generateCOCReport: generateCOCReportActivity,
+    generateDiscoveryReport: generateDiscoveryReportActivity
   } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '10m' });
 
 
@@ -23,16 +24,6 @@ export  enum  JobReportType {
   CUT_OVER = 'CUT_OVER_REPORTED',
   DISCOVER= 'DISCOVER_REPORTED'
 }
-
-const generateReport = async (jobRunId: string, generator: string) => {
-  await wf.startChild(generator, {
-    args: [ { jobRunId } ],
-    workflowId: `${generator}-${jobRunId}-report`,
-    taskQueue: `reports-TaskQueue`,
-    cancellationType: wf.ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
-    parentClosePolicy: wf.ParentClosePolicy.ABANDON,
-  });
-};
 
 export const handleReporting = async (
     traceId: string,
@@ -66,7 +57,7 @@ export const handleReporting = async (
         }
         case JobReportType.DISCOVER: {
             await updateStatusActivity({jobRunId: traceId, status:jobRunStatus})
-            await generateReport(traceId, 'GenerateDiscoveryReportWorkflow')
+            await generateDiscoveryReportActivity(traceId)
             break
         }
         case JobReportType.MIGRATE: {
@@ -89,10 +80,10 @@ export const handleReporting = async (
   };
 
 
-function getMappedJobRunStatus(status: JobRunStatus, jobType: JobReportType): JobRunStatus {
-  if(status === JobRunStatus.Completed && jobType === JobReportType.CUT_OVER) 
-    return JobRunStatus.BLOCKED;
-  return status ;
-}
+  function getMappedJobRunStatus(status: JobRunStatus, jobType: JobReportType): JobRunStatus {
+      if(status === JobRunStatus.Completed && jobType === JobReportType.CUT_OVER) 
+        return JobRunStatus.BLOCKED;
+      return status ;
+  }
 
 

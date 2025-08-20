@@ -2,7 +2,7 @@ import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 import { JobRunStatus } from "src/activities/common/enums";
-import { cancelWorkflowIfRunning } from './workflow-utils';
+import { cancelWorkflowIfRunning, signalIfRunning } from './workflow-utils';
 
 
 
@@ -61,10 +61,8 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
             output.syncJobStatus = JobRunStatus.Stopped;
             return;
         }
-        if(await isWorkflowRunningActivity(scanWorkflow.workflowId))
-            await scanWorkflow.signal('scanActionSignal', action);    
-        if(await isWorkflowRunningActivity(syncWorkflow.workflowId))
-            await syncWorkflow.signal('syncActionSignal', action);
+        await signalIfRunning(scanWorkflow, 'scanActionSignal', action);    
+        await signalIfRunning(syncWorkflow, 'syncActionSignal', action);
     });
 
     if(output.status !== JobRunStatus.Stopped){
@@ -100,8 +98,7 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
             }
         }
 
-        if(await isWorkflowRunningActivity(syncWorkflow.workflowId))
-            await syncWorkflow.signal('scanResultSignal', output.scanJobStatus);
+        await signalIfRunning(syncWorkflow, 'scanResultSignal', output.scanJobStatus);
 
         try{
             const syncWorkflowOutput = await syncWorkflow.result(); 

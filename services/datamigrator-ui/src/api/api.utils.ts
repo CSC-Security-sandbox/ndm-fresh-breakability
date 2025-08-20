@@ -1,7 +1,6 @@
-import Cookies from "js-cookie";
-
-export const prepareHeaders = (headers: Headers) => {
-  const token = Cookies.get("access_token");
+export const prepareHeaders = (headers: Headers, { getState }: any) => {
+  const state = getState();
+  const token = state.authSlice?.accessToken;
   const projectId = localStorage.getItem("selected_project_id");
 
   if (token) {

@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import Cookies from "js-cookie";
 
-const prepareHeaders = (headers: any) => {
-  const token = Cookies.get("access_token");
+const prepareHeaders = (headers: any, { getState }: any) => {
+  const state = getState();
+  const token = state.authSlice?.accessToken;
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }

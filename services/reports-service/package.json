@@ -32,8 +32,6 @@
     "@netapp-cloud-datamigrate/auth-lib": "0.0.5",
     "@netapp-cloud-datamigrate/jobs-lib": "0.1.2",
     "@netapp-cloud-datamigrate/logger-lib": "0.0.10",
-    "@temporalio/worker": "^1.12.1",
-    "@temporalio/workflow": "^1.12.1",
     "@types/puppeteer": "^7.0.4",
     "amqp-connection-manager": "^4.1.14",
     "amqplib": "^0.10.5",
@@ -94,10 +92,9 @@
       "!**/coverage/**",
       "!**.eslintrc.js",
       "!**/main.ts",
-      "!**/*.types.ts",
-      "!src/temporal/**"
+      "!**/*.types.ts"
     ],
-    "coverageDirectory": "./coverage",
+    "coverageDirectory": "../coverage",
     "testEnvironment": "node",
     "moduleNameMapper": {
       "^src/(.*)$": "<rootDir>/src/$1"

@@ -531,7 +531,6 @@ jobs:
           REPOSITORY="${GITHUB_REPOSITORY}"
           REPOSITORY_OWNER="${GITHUB_REPOSITORY_OWNER}"
           AUTHOR="${{ steps.commit_info.outputs.author }}"
-          COMMIT_MSG="${{ steps.commit_info.outputs.message }}"
           OS_NAME="${{ runner.os }}"
           RUNNER_NAME="${{ runner.name }}"
           BASE_IMAGE="${{ steps.fetch_info.outputs.base_image }}"
@@ -551,7 +550,6 @@ jobs:
             "repository": "$REPOSITORY",
             "repository_owner": "$REPOSITORY_OWNER",
             "commit_author": "$AUTHOR",
-            "commit_message": "$COMMIT_MSG",
             "os": "$OS_NAME",
             "runner_name": "$RUNNER_NAME",
             "base_image": "$BASE_IMAGE"

@@ -9,12 +9,10 @@ import { ReportsEntity } from './entities/reports.entity';
 import { PdfModule } from './pdf/pdf.module';
 import { JobRunModule } from './job-run/job-run.module';
 import { OverviewModule } from './overview/overview.module';
-import { WorkerModule } from './worker/worker.module';
-import { GeneratorModule } from './generator/generator.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, load: [databaseConfig, appConfig] }),
+    ConfigModule.forRoot({ load: [databaseConfig, appConfig] }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) =>
@@ -25,9 +23,7 @@ import { GeneratorModule } from './generator/generator.module';
     OverviewModule,
     TypeOrmModule.forFeature([InventoryEntity,ReportsEntity]),
     PdfModule,
-    JobRunModule,
-    WorkerModule,
-    GeneratorModule
+    JobRunModule 
   ],
   controllers: [],
   providers: [],
