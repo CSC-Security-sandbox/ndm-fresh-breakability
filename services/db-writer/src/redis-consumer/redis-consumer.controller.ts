@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Post, Query, Inject } from '@nestjs/common';
-import { ApiBody, ApiExcludeController, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Post, Query, Inject, Headers } from '@nestjs/common';
+import { ApiBody, ApiExcludeController, ApiQuery, ApiResponse, ApiTags, ApiHeader } from '@nestjs/swagger';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { ConsumerDto } from './redis-consumer.dto';
 import { RedisConsumerService } from './redis-consumer.service';
@@ -24,20 +24,29 @@ export class RedisConsumerController {
      */
     @Post('start')
     @ApiBody({ description: 'Consumer Details', type: ConsumerDto })
+    @ApiHeader({ name: 'projectId', description: 'Project ID for the job', required: false })
     @ApiResponse({ status: 200, description: 'Consumer started successfully.' })
     @ApiResponse({ status: 400, description: 'Invalid input data.' })
     @ApiResponse({ status: 500, description: 'Internal server error.' })
-    async start(@Body() consumerDto: ConsumerDto) {
+    async start(@Body() consumerDto: ConsumerDto, @Headers('projectId') projectId?: string) {
         const { jobRunId } = consumerDto;
+
+        // Log the received projectId
+        if (projectId) {
+            this.logger.debug(`Received projectId: ${projectId} for jobRunId: ${jobRunId}`);
+        } else {
+            this.logger.debug(`No projectId provided in headers for jobRunId: ${jobRunId}`);
+        }
+
         // Fire-and-forget: start the consumer process but don't wait for completion
         (async () => {
             try {
-                await this.redisConsumerService.saveJobConsumersToRedis(jobRunId);
+                await this.redisConsumerService.saveJobConsumersToRedis(jobRunId, projectId);
             } catch (error) {
                 this.logger.error(`Failed to start consumer for job ${jobRunId}:`, error);
             }
         })();
-      
+
         return { success: true, message: 'Consumer started successfully.' };
     }
 
