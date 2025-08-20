@@ -55,6 +55,7 @@ import { HealthStatus } from "src/workers/worker.types";
 import { SyncEmailEntity } from "src/entities/sync-email.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import {formatBytes} from '@netapp-cloud-datamigrate/jobs-lib';
+import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 
 jest.mock('typeorm', () => {
   const actual = jest.requireActual('typeorm');
@@ -89,6 +90,7 @@ describe("JobConfigService", () => {
   let redisService: RedisService;
   let workFlowService: WorkflowService;
   let sendMailService: SendMailService;
+  let jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>;
 
   let workerJobRunMapRepo: Repository<WorkerJobRunMap>;
 
@@ -336,6 +338,19 @@ describe("JobConfigService", () => {
             createQueryBuilder: jest.fn(),
           },
         },
+        {
+          provide: getRepositoryToken(JobStatsSummaryMvEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            update: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+
+        },
       ],
     }).compile();
 
@@ -393,6 +408,9 @@ describe("JobConfigService", () => {
       getRepositoryToken(OperationErrorEntity)
     );
     sendMailService = module.get<SendMailService>(SendMailService);
+    jobStatsSummaryMvRepo = module.get<Repository<JobStatsSummaryMvEntity>>(
+      getRepositoryToken(JobStatsSummaryMvEntity)
+    );
 
     workerJobRunMapRepo = module.get<Repository<WorkerJobRunMap>>(
       getRepositoryToken(WorkerJobRunMap)
@@ -1795,6 +1813,11 @@ describe("JobConfigService", () => {
             subStatus: null,
             startTime,
             endTime,
+            jobStats: {
+              fileCount: "10",
+              directories: "5",
+              totalSize: "5000",
+            },
           },
         ],
         sourcePath: {
@@ -2749,6 +2772,94 @@ describe("JobConfigService", () => {
         "jobconfig"
       );
     });
+
+    it("should handle nextDate calculation errors gracefully", async () => {
+      const mockProjectId = "projectId";
+      const date = new Date();
+      const mockAllJobsDetails = [
+        {
+          jobRunIds: ["jobrunid-1"],
+          jobconfigid: "jobConfigId1",
+          jobtype: "MIGRATE",
+          jobconfigstatus: "ACTIVE",
+          firstrunat: date,
+          sourcepath: "sourcePath1",
+          targetpath: "targetPath1",
+          futureschedule: "invalid-cron",
+          sourceservername: "SourceServer1",
+          targetservername: "TargetServer1",
+          sourceprotocol: "NFS",
+          targetprotocol: "NFS",
+          createdAt: date,
+          totalRuns: 1,
+        },
+      ];
+
+      jest.spyOn(jobConfigRepo, "createQueryBuilder").mockReturnValue({
+        leftJoin: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        orWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        addGroupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue(mockAllJobsDetails),
+      } as any);
+
+      // Clear any existing mocks first
+      jest.restoreAllMocks();
+      
+      // Mock nextDate to throw an error
+      const nextDateSpy = jest
+        .spyOn(require("src/utils/mapper"), "nextDate")
+        .mockImplementation(() => {
+          throw new Error("Invalid cron expression");
+        });
+      
+      jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
+
+      // Spy on logger.error to ensure it's called
+      const loggerErrorSpy = jest.spyOn(service["logger"], "error");
+
+      const result = await service.getAllJobConfig(mockProjectId);
+
+      expect(result).toEqual([
+        {
+          jobConfigId: "jobConfigId1",
+          jobType: "MIGRATE",
+          jobStatus: "ACTIVE",
+          nextScheduleDate: null, // Should be null due to error
+          sourceServer: {
+            serverName: "SourceServer1",
+            path: "sourcePath1",
+            protocol: "NFS",
+          },
+          destinationServer: {
+            serverName: "TargetServer1",
+            path: "targetPath1",
+            protocol: "NFS",
+          },
+          errors: 0,
+          totalRuns: 1,
+          configName: undefined,
+          createdAt: mockAllJobsDetails[0].createdAt,
+        },
+      ]);
+      
+      // Verify that nextDate was actually called
+      expect(nextDateSpy).toHaveBeenCalled();
+      
+      // Verify that logger.error was called with the expected message
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        `Failed to calculate nextScheduleDate for jobConfigId jobConfigId1:`,
+        "Invalid cron expression"
+      );
+      
+      expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledWith(
+        "jobconfig"
+      );
+    });
   });
   it("should throw BadRequestException if projectId is not a valid UUID", async () => {
     const mockProjectId = "invalid-uuid";
@@ -3605,10 +3716,10 @@ describe("JobConfigService", () => {
 
     it("should return values from inventory summary", async () => {
       const jobRunId = "12345";
-      const mockInventoryCounts = {
-        filecount: "10",
-        directorycount: "5",
-        totalfilesize: "1000",
+      const mockJobStatsSummary = {
+        fileCount: "10",
+        directoryCount: "5",
+        totalSize: "1000",
       };
       const mockJobRun = {
         id: jobRunId,
@@ -3616,11 +3727,7 @@ describe("JobConfigService", () => {
       };
 
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(mockJobRun as any);
-      jest.spyOn(inventoryRepo, "createQueryBuilder").mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn().mockResolvedValue(mockInventoryCounts),
-      } as any);
+      jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValue(mockJobStatsSummary as any);
       jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
 
       const result = await service.calculateJobRunStats(jobRunId);

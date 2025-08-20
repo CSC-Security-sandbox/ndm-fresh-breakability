@@ -1,0 +1,1 @@
+DROP MATERIALIZED VIEW IF EXISTS storage_jobs_overview_mv CASCADE;
