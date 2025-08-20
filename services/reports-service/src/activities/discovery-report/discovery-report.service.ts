@@ -30,7 +30,7 @@ export class DiscoveryReportService {
         private readonly jobRunRepo: Repository<JobRunEntity>,
     ) {
         this.basePath = this.configService.get<string>('app.baseDir') ;
-        this.schemaName = this.configService.get<string>('typeorm.scheama') || 'datamigrator';
+        this.schemaName = this.configService.get<string>('typeorm.schema') || 'datamigrator';
     }
 
     async getSection({ jobRunId, section }: GetDiscoverySectionInput): Promise<DiscoveryReportSection[]> {

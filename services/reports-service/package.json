@@ -94,7 +94,8 @@
       "!**/coverage/**",
       "!**.eslintrc.js",
       "!**/main.ts",
-      "!**/*.types.ts"
+      "!**/*.types.ts",
+      "!src/temporal/**"
     ],
     "coverageDirectory": "./coverage",
     "testEnvironment": "node",

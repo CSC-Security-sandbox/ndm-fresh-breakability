@@ -18,7 +18,7 @@ jest.mock("hbs", () => ({
 import { Test, TestingModule } from "@nestjs/testing";
 import { PDFGeneratorService } from "./pdf-generator.service";
 import { GeneratePDFInput, PDF_TEMPLATE_PATHS } from "./pdf-generator.type";
-import * as fs from "fs";
+import * as fs from "fs"; 
 import * as hbs from "hbs";
 
 describe("PDFGeneratorService", () => {
@@ -31,6 +31,7 @@ describe("PDFGeneratorService", () => {
 
     mockPage = {
       setContent: jest.fn(),
+      setViewport: jest.fn(),
       pdf: jest.fn().mockResolvedValue(Buffer.from("pdf-content")),
       close: jest.fn(),
       isClosed: jest.fn().mockReturnValue(false),
@@ -83,11 +84,15 @@ describe("PDFGeneratorService", () => {
       expect(hbs.compile).toHaveBeenCalled();
       expect(mockPage.setContent).toHaveBeenCalledWith(
         "<html>Test Report</html>",
-        { waitUntil: "networkidle0" }
+        { waitUntil: "load" }
       );
       expect(mockPage.pdf).toHaveBeenCalledWith({
         format: "Letter",
         printBackground: true,
+        margin: { top: "3mm", right: "3mm", bottom: "3mm", left: "3mm" },
+        width: "297mm",
+        height: "420mm",
+        scale: 0.6,
       });
       expect(result).toEqual(Buffer.from("pdf-content"));
       expect(mockPage.close).toHaveBeenCalled();
@@ -100,8 +105,12 @@ describe("PDFGeneratorService", () => {
       };
       await service.generatePDF(inputWithoutOptions);
       expect(mockPage.pdf).toHaveBeenCalledWith({
-        format: "A4",
+        format: "A3",
         printBackground: true,
+        margin: { top: "3mm", right: "3mm", bottom: "3mm", left: "3mm" },
+        width: "297mm",
+        height: "420mm",
+        scale: 0.6,
       });
     });
 
@@ -192,6 +201,9 @@ describe("PDFGeneratorService", () => {
         format: "A3",
         printBackground: true,
         margin: { top: "1cm", bottom: "1cm" },
+        width: "297mm",
+        height: "420mm",
+        scale: 0.6,
         landscape: true,
       });
     });
