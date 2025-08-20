@@ -91,6 +91,7 @@ export const SupportBundleProvider = ({
         setBundleStatus(_isBundleReadyResponse);
       } catch (error) {
         console.error("Support Bundle Ready Status", error);
+        notify.error(error?.data?.message || "Failed to check bundle status.");
         setBundleStatus({
           isBundleReady: false,
           isProcessing: false,
@@ -123,16 +124,6 @@ export const SupportBundleProvider = ({
     }
   };
 
-  const updateFormField = (field: string, value: any) => {
-    supportBundleForm.resetForm({
-      ...supportBundleForm.formState,
-      [field]: value,
-    });
-    if (field !== "isProcessing") {
-      setLastFormChangeTime(new Date());
-    }
-  };
-
   const handleDateChange = (value: any) => {
     if (!value) return;
     const { initialDate, endDate } = value;
@@ -145,7 +136,6 @@ export const SupportBundleProvider = ({
   };
 
   const handleGenerateBundle = async () => {
-    supportBundleForm.formState.projectWorker = selectedItems;
     if (!supportBundleForm?.isValid) return;
 
     const { formState } = supportBundleForm;
@@ -177,13 +167,13 @@ export const SupportBundleProvider = ({
   };
 
   useEffect(() => {
-    if (bundleStatus?.error) {
-      updateFormField("isProcessing", false);
-      notify.error(
-        bundleStatus?.error || "Something went while bundle generation."
-      );
+    if (selectedItems) {
+      supportBundleForm.resetForm({
+        ...supportBundleForm.formState,
+        projectWorker: selectedItems,
+      });
     }
-  }, [bundleStatus?.error]);
+  }, [selectedItems]);
 
   const supportBundleContextValue: SupportBundleContextType = {
     supportBundleForm,
