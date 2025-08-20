@@ -1,13 +1,13 @@
+import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import * as fs from 'fs';
 import * as path from "path";
-import { Repository } from 'typeorm';
-import * as puppeteer from 'puppeteer';
-import * as hbs from 'hbs';
-import { InjectRepository } from '@nestjs/typeorm';
-import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { ReportType } from 'src/constants/enums';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { ReportsEntity } from 'src/entities/reports.entity';
-import { ReportType } from 'src/constants/enums';
+import { PDFGeneratorService } from 'src/generator/pdf-generator.service';
+import { PDFTemplate } from 'src/generator/pdf-generator.type';
+import { Repository } from 'typeorm';
 import { DiscoveryService } from '../discovery/discovery.service';
 
 @Injectable()
@@ -20,8 +20,8 @@ export class PdfService {
       private readonly inventoryRepo: Repository<InventoryEntity>,
       @InjectRepository(ReportsEntity)
       private readonly reportsRepo: Repository<ReportsEntity>,
-
-      private readonly discoveryService: DiscoveryService
+      private readonly discoveryService: DiscoveryService,
+      private readonly pdfGeneratorService: PDFGeneratorService
     ) {}
 
     async generatePdf(jobRunId: string, reportType: ReportType): Promise<Buffer> {
@@ -50,9 +50,6 @@ export class PdfService {
 
     async generateJobsReportPdf(jobRunId: string): Promise<Buffer> {
       try {
-        const reportPath = path.join(__dirname, '../../templates/views/jobs_report.hbs');
-        const reportContent = fs.readFileSync(reportPath, 'utf8');
-        const report = hbs.compile(reportContent);
         const schema = process.env.SCHEMA || 'datamigrator';
 
         const projectData = await this.inventoryRepo.query(
@@ -96,29 +93,9 @@ export class PdfService {
           projectName: projectData.length > 0 ? projectData[0].project_name : 'NetApp Data Migrator',
           reportDate: new Date().toLocaleDateString(),
         }
-
-        const html = report(reportData);
-        let browser;
-        try {
-          browser = await puppeteer.launch({
-            headless: true,
-            args: [
-              "--no-sandbox",
-              "--disable-setuid-sandbox",
-              "--disable-gpu",
-              "--disable-dev-shm-usage",
-              "--disable-accelerated-2d-canvas"
-            ],
-            executablePath: "/usr/bin/chromium-browser",
-            protocolTimeout: 60000,
-          });
-          const page = await browser.newPage();
-          await page.setContent(html, { waitUntil: 'networkidle0' });
-          const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true, scale: 0.6, landscape: true });
-          return Buffer.from(pdfBuffer);
-        }finally {
-          if (browser) await browser.close();
-        }
+        return await this.pdfGeneratorService.generatePDF({data: reportData, template: PDFTemplate.JOBS_REPORT, pdfOptions: {
+          format: 'A0', printBackground: true, scale: 0.5, landscape: true, 
+        }});
       } catch (error) {
         this.logger.error(`Failed to generate jobs report for jobRunId: ${jobRunId}, error: ${error}`);
         throw new HttpException("Failed to generate jobs report", HttpStatus.INTERNAL_SERVER_ERROR);

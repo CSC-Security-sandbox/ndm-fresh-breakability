@@ -8,6 +8,18 @@
     thead { display: table-header-group }
     tfoot { display: table-footer-group }
     h1 { color: green }
+    @media print {
+    body, .report-container {
+      background: #fff !important;
+      box-shadow: none !important;
+    }
+    .report-container {
+      padding: 0 !important;
+    }
+    table {
+      max-width: 100%;
+    }
+  }
   </style>
 </head>
 <body style="font-family: Arial, Helvetica, 'Lucida Grande', Geneva, Tahoma, Verdana, sans-serif; font-size: 12px; padding: 20px;">

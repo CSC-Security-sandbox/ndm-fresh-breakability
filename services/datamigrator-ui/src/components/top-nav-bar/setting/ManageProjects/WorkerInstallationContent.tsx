@@ -30,28 +30,22 @@ const WorkerInstallationContent = ({
     <Layout.Grid rowGap="md" style={{ margin: "10px" }}>
       <Layout.GridItem lg={12}>
         <Layout.Content>
-          <Layout.Container>
+          <Layout.Container className="!p-[3.5rem]">
             <Layout.Grid>
               <Layout.GridItem lg={12}>
                 <NumberedList includeTitles={true}>
                   <>
-                    <Text bold>Download Image</Text>
+                    <Text bold>Download and setup Worker Image/Binary</Text>
                     <Text>
-                      Download worker virtual machine image from{" "}
-                      <a href="#">here</a>
+                      Download and setup the worker VM (Linux image for NFS or Windows executable binary for SMB) by following
+                      the NDM installation documentation section for your environment (GCP, Azure, or On-prem deployment).
                     </Text>
                   </>
                   <>
-                    <Text bold>Setup VM</Text>
+                    <Text bold>Register Worker VM</Text>
                     <Text>
-                      Create a new virtual machine following{" "}
-                      <a href="#">these pre-requisites</a>
-                    </Text>
-                  </>
-                  <>
-                    <Text bold>Register</Text>
-                    <Text>
-                      Login to the VM as root and run command mentioned below
+                      For Linux worker, run the provided registration commands directly as instructed in the documentation.
+                      For Windows worker, extract the WORKER_ID, WORKER_SECRET, and PROJECT_ID values from the provided commands and enter them when prompted during installation.
                     </Text>
                   </>
                 </NumberedList>

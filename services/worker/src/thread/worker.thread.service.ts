@@ -36,6 +36,7 @@ export class WorkerThreadService {
 
   private sizes = [];
   private readonly logger: LoggerService;
+  private maxBufferSize: number;
 
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
@@ -52,7 +53,7 @@ export class WorkerThreadService {
     this.totalThreads =
       this.configService.get('worker.thread.threadCount') || 5;
     this.logger = loggerFactory.create(WorkerThreadService.name);
-
+    this.maxBufferSize = this.configService.get<number>('worker.thread.maxBufferSize') || 1048576;
     try {
       const configValue = this.configService.get('worker.thread.threadBand');
       const parsedSizes = configValue.split(';').map((size) => {
@@ -231,10 +232,10 @@ export class WorkerThreadService {
   }: MigrateFile): Promise<any> {
     return new Promise((resolve, reject) => {
       const operationBand = this.getTaskBand(size);
-
+      const maxBufferSize = this.maxBufferSize;
       this.operationBands.get(operationBand).task.push({
         id: operationId,
-        data: { sourcePath, destinationPath, operationId, size },
+        data: { sourcePath, destinationPath, operationId, size , maxBufferSize},
         Operation: ThreadOperation.COPY_FILE,
         resolve,
         reject,

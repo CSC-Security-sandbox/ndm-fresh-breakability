@@ -1,5 +1,35 @@
 package utils
 
+import "time"
+
+// ============Error Structs======================
+
+// ErrorCsvResponse represents the response from generate-error-csv endpoint
+type ErrorCsvResponse struct {
+	Message string `json:"message"`
+}
+
+// ErrorResponse represents error responses from the backend
+type ErrorResponse struct {
+	StatusCode int    `json:"statusCode"`
+	Message    string `json:"message"`
+	Error      string `json:"error"`
+}
+
+// ErrorCsvReadyResponse represents the response from is-error-csv-ready endpoint
+type ErrorCsvReadyResponse struct {
+	Ready      bool `json:"ready"`
+	Processing bool `json:"processing"`
+}
+
+type ErrorCsvConfig struct {
+	BaseURL      string
+	Headers      map[string]string // Authorization and Content-Type headers
+	PollInterval time.Duration     // How often to poll for readiness (default: 3s)
+	Timeout      time.Duration     // Maximum time to wait for CSV generation (default: 5 minutes)
+	DebugMode    bool              // Enable debug logging
+}
+
 // =============File Server Structs=====================
 type CreateFileServerResponse struct {
 	Data struct {
@@ -27,11 +57,19 @@ type FileServer struct {
 	Host             string           `json:"host"`
 }
 
-type FileServerInfo struct {
-	Data struct {
-		Items struct {
-			FileServers []FileServer `json:"fileServers"`
-		} `json:"items"`
+type FileServerDetailsItems struct {
+	ConfigName  string       `json:"configName"`
+	ID          string       `json:"id"`
+	ConfigType  ConfigType   `json:"configType"`
+	ProjectID   string       `json:"projectId"`
+	FileServers []FileServer `json:"fileServers"`
+	Status      string       `json:"status"`
+}
+
+type FileServerDetails struct {
+	error `json:"error"`
+	Data  struct {
+		Items FileServerDetailsItems `json:"items"`
 	} `json:"data"`
 }
 
@@ -62,7 +100,8 @@ type PathFileUploadStatsItems struct {
 }
 
 type PathFileUploadStats struct {
-	Data struct {
+	Error ErrorResponse `json:"error"`
+	Data  struct {
 		Items PathFileUploadStatsItems `json:"items"`
 	} `json:"data"`
 }

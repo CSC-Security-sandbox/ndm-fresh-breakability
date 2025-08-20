@@ -17,6 +17,9 @@ spec:
       {{- end }}
       labels:
         app: {{ .Values.appName  }}
+        {{- if .Values.global.build_version }}
+        build-version: "{{ .Values.global.build_version }}"
+        {{- end }}
     spec:
       # {{- if not .Values.global.local_cluster }}
       # {{- if .Values.imagePullSecrets }}
