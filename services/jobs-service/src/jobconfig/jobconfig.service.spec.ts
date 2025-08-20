@@ -2772,6 +2772,94 @@ describe("JobConfigService", () => {
         "jobconfig"
       );
     });
+
+    it("should handle nextDate calculation errors gracefully", async () => {
+      const mockProjectId = "projectId";
+      const date = new Date();
+      const mockAllJobsDetails = [
+        {
+          jobRunIds: ["jobrunid-1"],
+          jobconfigid: "jobConfigId1",
+          jobtype: "MIGRATE",
+          jobconfigstatus: "ACTIVE",
+          firstrunat: date,
+          sourcepath: "sourcePath1",
+          targetpath: "targetPath1",
+          futureschedule: "invalid-cron",
+          sourceservername: "SourceServer1",
+          targetservername: "TargetServer1",
+          sourceprotocol: "NFS",
+          targetprotocol: "NFS",
+          createdAt: date,
+          totalRuns: 1,
+        },
+      ];
+
+      jest.spyOn(jobConfigRepo, "createQueryBuilder").mockReturnValue({
+        leftJoin: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        orWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        addGroupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue(mockAllJobsDetails),
+      } as any);
+
+      // Clear any existing mocks first
+      jest.restoreAllMocks();
+      
+      // Mock nextDate to throw an error
+      const nextDateSpy = jest
+        .spyOn(require("src/utils/mapper"), "nextDate")
+        .mockImplementation(() => {
+          throw new Error("Invalid cron expression");
+        });
+      
+      jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
+
+      // Spy on logger.error to ensure it's called
+      const loggerErrorSpy = jest.spyOn(service["logger"], "error");
+
+      const result = await service.getAllJobConfig(mockProjectId);
+
+      expect(result).toEqual([
+        {
+          jobConfigId: "jobConfigId1",
+          jobType: "MIGRATE",
+          jobStatus: "ACTIVE",
+          nextScheduleDate: null, // Should be null due to error
+          sourceServer: {
+            serverName: "SourceServer1",
+            path: "sourcePath1",
+            protocol: "NFS",
+          },
+          destinationServer: {
+            serverName: "TargetServer1",
+            path: "targetPath1",
+            protocol: "NFS",
+          },
+          errors: 0,
+          totalRuns: 1,
+          configName: undefined,
+          createdAt: mockAllJobsDetails[0].createdAt,
+        },
+      ]);
+      
+      // Verify that nextDate was actually called
+      expect(nextDateSpy).toHaveBeenCalled();
+      
+      // Verify that logger.error was called with the expected message
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        `Failed to calculate nextScheduleDate for jobConfigId jobConfigId1:`,
+        "Invalid cron expression"
+      );
+      
+      expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledWith(
+        "jobconfig"
+      );
+    });
   });
   it("should throw BadRequestException if projectId is not a valid UUID", async () => {
     const mockProjectId = "invalid-uuid";

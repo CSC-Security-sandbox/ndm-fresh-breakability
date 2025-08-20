@@ -200,9 +200,9 @@ describe("OverviewService", () => {
         null,
         null,
       );
-      expect(result.storageDetails.totalDiscoveredSize).toBe("0 Bytes");
-      expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
-      expect(result.storageDetails.totalPendingSize).toBe("0 Bytes");
+      expect(result.storageDetails.totalDiscoveredSize).toBe("0 B");
+      expect(result.storageDetails.totalMigratedSize).toBe("0 B");
+      expect(result.storageDetails.totalPendingSize).toBe("0 B");
       expect(result.jobDetails.totalDiscoverJobs).toBeDefined();
       expect(result.jobDetails.totalMigrateJobs).toBeDefined();
       expect(result.jobDetails.totalCutoverJobs).toBeDefined();
@@ -256,7 +256,7 @@ describe("OverviewService", () => {
         null,
       );
       expect(result.storageDetails.totalDiscoveredSize).toBeDefined();
-      expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
+      expect(result.storageDetails.totalMigratedSize).toBe("0 B");
     });
 
     it("should handle missing jobRunIds gracefully", async () => {
@@ -295,8 +295,8 @@ describe("OverviewService", () => {
         null,
         null,
       );
-      expect(result.storageDetails.totalDiscoveredSize).toBe("0 Bytes");
-      expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
+      expect(result.storageDetails.totalDiscoveredSize).toBe("0 B");
+      expect(result.storageDetails.totalMigratedSize).toBe("0 B");
     });
 
     it("should handle when migrateRun and cutOverRun are present", async () => {
