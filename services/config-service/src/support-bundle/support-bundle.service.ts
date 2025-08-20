@@ -118,7 +118,7 @@ export class SupportBundleService {
   }
 
   async isBundleReady(userId: string): Promise<BundleStatus> {
-    const user = await this.supportBundleRepo.findOne({
+    const latestBundle = await this.supportBundleRepo.findOne({
       where: { userId },
       order: { createdAt: 'DESC' },
       select: [
@@ -134,21 +134,21 @@ export class SupportBundleService {
     const defaultResponse: BundleStatus = {
       isProcessing: false,
       isBundleReady: false,
-      filters: user?.filters || null,
-      createdAt: user?.createdAt || null,
+      filters: latestBundle?.filters || null,
+      createdAt: latestBundle?.createdAt || null,
     };
 
-    if (!user) {
+    if (!latestBundle) {
       return defaultResponse;
     }
 
-    if (user.status === SupportBundleStatus.COMPLETED) {
+    if (latestBundle.status === SupportBundleStatus.COMPLETED) {
       return { ...defaultResponse, isBundleReady: true };
     }
 
     try {
       const response = await this.workFlowService.getWorkFlowRes(
-        user.workflowId,
+        latestBundle.workflowId,
       );
       if (
         response?.status === 'TERMINATED' ||
@@ -156,7 +156,7 @@ export class SupportBundleService {
         response?.status === 'TIMED_OUT'
       ) {
         await this.supportBundleRepo.update(
-          { requestId: user.requestId },
+          { requestId: latestBundle.requestId },
           {
             status: SupportBundleStatus.FAILED,
             errorMessage: `Support bundle generation failed, activity ${response?.status}`,
@@ -170,13 +170,13 @@ export class SupportBundleService {
       );
     }
 
-    if (user.status === SupportBundleStatus.IN_PROGRESS) {
+    if (latestBundle.status === SupportBundleStatus.IN_PROGRESS) {
       return { ...defaultResponse, isProcessing: true };
     }
 
-    if (user.status === SupportBundleStatus.FAILED) {
+    if (latestBundle.status === SupportBundleStatus.FAILED) {
       throw new InternalServerErrorException(
-        user.errorMessage || 'Support bundle generation failed',
+        latestBundle.errorMessage || 'Support bundle generation failed',
       );
     } else {
       return defaultResponse;
