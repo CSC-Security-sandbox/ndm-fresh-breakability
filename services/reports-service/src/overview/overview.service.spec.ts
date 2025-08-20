@@ -3,12 +3,14 @@ import { OverviewService } from "./overview.service";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { InventoryEntity } from "../entities/inventory.entity";
 import { ProjectEntity } from "../entities/project.entity";
+import { StorageOverviewSummaryEntity } from "../entities/storage-summary-mv.entity";
 import { JobRunStatus, JobType } from "../constants/enums";
 
 describe("OverviewService", () => {
   let service: OverviewService;
   let mockInventoryRepository;
   let mockProjectRepository;
+  let mockStorageOverviewSummaryRepository;
 
   const mockProjectData = {
     id: "project1",
@@ -84,6 +86,12 @@ describe("OverviewService", () => {
       find: jest.fn(),
     };
 
+    mockStorageOverviewSummaryRepository = {
+      findOne: jest.fn(),
+      find: jest.fn(),
+      createQueryBuilder: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OverviewService,
@@ -97,6 +105,10 @@ describe("OverviewService", () => {
         {
           provide: getRepositoryToken(ProjectEntity),
           useValue: mockProjectRepository,
+        },
+        {
+          provide: getRepositoryToken(StorageOverviewSummaryEntity),
+          useValue: mockStorageOverviewSummaryRepository,
         },
       ],
     }).compile();
@@ -132,6 +144,7 @@ describe("OverviewService", () => {
           totalMigrateJobs: 2,
           totalCutoverJobs: 0,
         },
+        lastRefreshed: new Date(),
       };
       jest
         .spyOn(service, "getStorageAndJobsOverview")
@@ -172,14 +185,24 @@ describe("OverviewService", () => {
       mockInventoryRepository.query = jest
         .fn()
         .mockResolvedValue([{ totalDiscoveredSize: 0 }]);
+      
+      // Mock storage overview summary repository for project-level query
+      mockStorageOverviewSummaryRepository.find.mockResolvedValue([
+        {
+          totalDiscoveredSize: 0,
+          totalMigratedSize: 0,
+          lastRefreshed: new Date(),
+        },
+      ]);
+      
       const result = await service.getStorageAndJobsOverview(
         "project1",
         null,
         null,
       );
-      expect(result.storageDetails.totalDiscoveredSize).toBe("0 B");
-      expect(result.storageDetails.totalMigratedSize).toBe("0 B");
-      expect(result.storageDetails.totalPendingSize).toBe("0 B");
+      expect(result.storageDetails.totalDiscoveredSize).toBe("0 Bytes");
+      expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
+      expect(result.storageDetails.totalPendingSize).toBe("0 Bytes");
       expect(result.jobDetails.totalDiscoverJobs).toBeDefined();
       expect(result.jobDetails.totalMigrateJobs).toBeDefined();
       expect(result.jobDetails.totalCutoverJobs).toBeDefined();
@@ -217,13 +240,23 @@ describe("OverviewService", () => {
       mockInventoryRepository.query = jest
         .fn()
         .mockResolvedValue([{ totalDiscoveredSize: 100 }]);
+      
+      // Mock storage overview summary repository for project-level query
+      mockStorageOverviewSummaryRepository.find.mockResolvedValue([
+        {
+          totalDiscoveredSize: 100,
+          totalMigratedSize: 0,
+          lastRefreshed: new Date(),
+        },
+      ]);
+      
       const result = await service.getStorageAndJobsOverview(
         "project1",
         null,
         null,
       );
       expect(result.storageDetails.totalDiscoveredSize).toBeDefined();
-      expect(result.storageDetails.totalMigratedSize).toBe("0 B");
+      expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
     });
 
     it("should handle missing jobRunIds gracefully", async () => {
@@ -247,13 +280,23 @@ describe("OverviewService", () => {
       mockInventoryRepository.query = jest
         .fn()
         .mockResolvedValue([{ totalDiscoveredSize: 0 }]);
+      
+      // Mock storage overview summary repository for project-level query
+      mockStorageOverviewSummaryRepository.find.mockResolvedValue([
+        {
+          totalDiscoveredSize: 0,
+          totalMigratedSize: 0,
+          lastRefreshed: new Date(),
+        },
+      ]);
+      
       const result = await service.getStorageAndJobsOverview(
         "project1",
         null,
         null,
       );
-      expect(result.storageDetails.totalDiscoveredSize).toBe("0 B");
-      expect(result.storageDetails.totalMigratedSize).toBe("0 B");
+      expect(result.storageDetails.totalDiscoveredSize).toBe("0 Bytes");
+      expect(result.storageDetails.totalMigratedSize).toBe("0 Bytes");
     });
 
     it("should handle when migrateRun and cutOverRun are present", async () => {
@@ -299,6 +342,16 @@ describe("OverviewService", () => {
         .fn()
         .mockResolvedValueOnce([{ totalDiscoveredSize: 200 }])
         .mockResolvedValueOnce([{ totalMigratedSize: 150 }]);
+      
+      // Mock storage overview summary repository for project-level query
+      mockStorageOverviewSummaryRepository.find.mockResolvedValue([
+        {
+          totalDiscoveredSize: 200,
+          totalMigratedSize: 150,
+          lastRefreshed: new Date(),
+        },
+      ]);
+      
       const result = await service.getStorageAndJobsOverview(
         "project1",
         null,
@@ -379,6 +432,13 @@ describe("OverviewService", () => {
         },
       ]);
 
+      // Mock storage overview summary repository for config-level query
+      mockStorageOverviewSummaryRepository.findOne.mockResolvedValue({
+        totalDiscoveredSize: 0,
+        totalMigratedSize: 0,
+        lastRefreshed: new Date(),
+      });
+
       await service.getStorageAndJobsOverview(null, "config1", null);
 
       expect(mockProjectRepository.find).toHaveBeenCalledWith({
@@ -403,6 +463,10 @@ describe("OverviewService", () => {
           configs: [],
         },
       ]);
+
+      // Mock storage overview summary repository for default case (no project/config specific data)
+      mockStorageOverviewSummaryRepository.find.mockResolvedValue([]);
+      mockStorageOverviewSummaryRepository.findOne.mockResolvedValue(null);
 
       await service.getStorageAndJobsOverview(null, null, "job1");
 
@@ -438,6 +502,15 @@ describe("OverviewService", () => {
         },
       ]);
 
+      // Mock storage overview summary repository for project-level query
+      mockStorageOverviewSummaryRepository.find.mockResolvedValue([
+        {
+          totalDiscoveredSize: 0,
+          totalMigratedSize: 0,
+          lastRefreshed: new Date(),
+        },
+      ]);
+
       await service.getStorageAndJobsOverview("project1", null, null);
 
       expect(mockProjectRepository.find).toHaveBeenCalledWith({
@@ -461,6 +534,10 @@ describe("OverviewService", () => {
         },
       ]);
 
+      // Mock storage overview summary repository for default case (no project/config specific data)
+      mockStorageOverviewSummaryRepository.find.mockResolvedValue([]);
+      mockStorageOverviewSummaryRepository.findOne.mockResolvedValue(null);
+
       await service.getStorageAndJobsOverview(null, null, null);
 
       expect(mockProjectRepository.find).toHaveBeenCalledWith({
@@ -480,7 +557,7 @@ describe("OverviewService", () => {
     let service: OverviewService;
 
     beforeEach(() => {
-      service = new OverviewService({} as any, {} as any,{} as any);
+      service = new OverviewService({} as any, {} as any, {} as any);
     });
 
     it("should return correct counts for each job type", () => {

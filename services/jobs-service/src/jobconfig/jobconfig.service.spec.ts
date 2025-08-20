@@ -90,6 +90,7 @@ describe("JobConfigService", () => {
   let redisService: RedisService;
   let workFlowService: WorkflowService;
   let sendMailService: SendMailService;
+  let jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>;
 
   let workerJobRunMapRepo: Repository<WorkerJobRunMap>;
 
@@ -407,6 +408,9 @@ describe("JobConfigService", () => {
       getRepositoryToken(OperationErrorEntity)
     );
     sendMailService = module.get<SendMailService>(SendMailService);
+    jobStatsSummaryMvRepo = module.get<Repository<JobStatsSummaryMvEntity>>(
+      getRepositoryToken(JobStatsSummaryMvEntity)
+    );
 
     workerJobRunMapRepo = module.get<Repository<WorkerJobRunMap>>(
       getRepositoryToken(WorkerJobRunMap)
@@ -1809,6 +1813,11 @@ describe("JobConfigService", () => {
             subStatus: null,
             startTime,
             endTime,
+            jobStats: {
+              fileCount: "10",
+              directories: "5",
+              totalSize: "5000",
+            },
           },
         ],
         sourcePath: {
@@ -3619,10 +3628,10 @@ describe("JobConfigService", () => {
 
     it("should return values from inventory summary", async () => {
       const jobRunId = "12345";
-      const mockInventoryCounts = {
-        filecount: "10",
-        directorycount: "5",
-        totalfilesize: "1000",
+      const mockJobStatsSummary = {
+        fileCount: "10",
+        directoryCount: "5",
+        totalSize: "1000",
       };
       const mockJobRun = {
         id: jobRunId,
@@ -3630,11 +3639,7 @@ describe("JobConfigService", () => {
       };
 
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(mockJobRun as any);
-      jest.spyOn(inventoryRepo, "createQueryBuilder").mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn().mockResolvedValue(mockInventoryCounts),
-      } as any);
+      jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValue(mockJobStatsSummary as any);
       jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
 
       const result = await service.calculateJobRunStats(jobRunId);

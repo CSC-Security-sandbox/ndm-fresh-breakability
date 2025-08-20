@@ -215,9 +215,11 @@ describe("JobRunService", () => {
       ];
 
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
-      mockInventoryRepo
-        .createQueryBuilder()
-        .getRawMany.mockResolvedValue(mockInventorySummary);
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({
+        fileCount: 50,
+        directoryCount: 10,
+        totalSize: 1024,
+      });
 
       const result = await service.getJobStatsId(jobId);
 
@@ -253,12 +255,10 @@ describe("JobRunService", () => {
         worker: { workerId: "worker1" },
       };
       const mockGetRawMany = [{ count: "1" }];
-      mockInventoryRepo.createQueryBuilder.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue(mockGetRawMany),
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({
+        fileCount: 25,
+        directoryCount: 5,
+        totalSize: 2048,
       });
 
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
@@ -417,20 +417,10 @@ describe("JobRunService", () => {
       ];
 
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
-      mockInventoryRepo.createQueryBuilder.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue(mockInventorySummary),
-      });
-
-      mockTaskRepo.createQueryBuilder.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([]),
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({
+        fileCount: 50,
+        directoryCount: 10,
+        totalSize: 500000,
       });
 
       const result = await service.getJobStatsId(jobId);
@@ -466,21 +456,7 @@ describe("JobRunService", () => {
       };
 
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
-      mockInventoryRepo.createQueryBuilder.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([]),
-      });
-
-      mockTaskRepo.createQueryBuilder.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([]),
-      });
+      mockJobSummaryMvRepo.findOne.mockResolvedValue(null);
 
       const result = await service.getJobStatsId(jobId);
 

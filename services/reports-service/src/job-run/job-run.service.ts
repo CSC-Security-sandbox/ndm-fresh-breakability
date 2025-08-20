@@ -162,8 +162,8 @@ export class JobRunService {
     const jobStatsSummary: JobStatsSummaryMvEntity = await this.jobStatsSummaryMvRepo.findOne({
       where: { jobRunId: id }});
     if (jobStatsSummary) {
-      jobRunStatus.fileCount = jobStatsSummary.fileCount;
-      jobRunStatus.directories = jobStatsSummary.directoryCount;
+      jobRunStatus.fileCount = jobStatsSummary.fileCount?.toString();
+      jobRunStatus.directories = jobStatsSummary.directoryCount?.toString();
       jobRunStatus.totalSize = formatBytes(
           Number(jobStatsSummary.totalSize)
         ).toString();
