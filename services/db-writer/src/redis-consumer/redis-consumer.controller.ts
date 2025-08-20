@@ -28,7 +28,7 @@ export class RedisConsumerController {
     @ApiResponse({ status: 200, description: 'Consumer started successfully.' })
     @ApiResponse({ status: 400, description: 'Invalid input data.' })
     @ApiResponse({ status: 500, description: 'Internal server error.' })
-    async start(@Body() consumerDto: ConsumerDto, @Headers('projectId') projectId?: string) {
+    async start(@Body() consumerDto: ConsumerDto, @Headers('projectid') projectId?: string) {
         const { jobRunId } = consumerDto;
 
         // Log the received projectId
