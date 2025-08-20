@@ -33,9 +33,9 @@ export class RedisConsumerController {
 
         // Log the received projectId
         if (projectId) {
-            this.logger.debug(`Received projectId: ${projectId} for jobRunId: ${jobRunId}`);
+            this.logger.log(`Received projectId: ${projectId} for jobRunId: ${jobRunId}`);
         } else {
-            this.logger.debug(`No projectId provided in headers for jobRunId: ${jobRunId}`);
+            this.logger.log(`No projectId provided in headers for jobRunId: ${jobRunId}`);
         }
 
         // Fire-and-forget: start the consumer process but don't wait for completion

@@ -197,9 +197,9 @@ export class RedisConsumerService implements OnModuleDestroy {
     getProjectIdFromCache(jobRunId: string): string | null {
         const projectId = jobRunIdToProjectIdMap.get(jobRunId) || null;
         if (projectId) {
-            this.logger.debug(`Retrieved projectId: ${projectId} from cache for jobRunId: ${jobRunId}`);
+            this.logger.log(`Retrieved projectId: ${projectId} from cache for jobRunId: ${jobRunId}`);
         } else {
-            this.logger.debug(`No projectId found in cache for jobRunId: ${jobRunId}`);
+            this.logger.log(`No projectId found in cache for jobRunId: ${jobRunId}. Cache size: ${jobRunIdToProjectIdMap.size}, Cache contents: ${JSON.stringify(Array.from(jobRunIdToProjectIdMap.entries()))}`);
         }
         return projectId;
     }
@@ -252,7 +252,9 @@ export class RedisConsumerService implements OnModuleDestroy {
         // Store projectId in global map if provided
         if (projectId && jobId) {
             jobRunIdToProjectIdMap.set(jobId, projectId);
-            this.logger.debug(`projectId: ${projectId} Cached projectId: ${projectId} for jobRunId: ${jobId}`);
+            this.logger.log(`projectId: ${projectId} Successfully cached projectId: ${projectId} for jobRunId: ${jobId}`);
+        } else {
+            this.logger.log(`projectId: ${projectId || 'null'} No projectId provided to cache for jobRunId: ${jobId}`);
         }
 
         await this.redisClient.hSet(this.buildRedisKey(jobId), consumerType, status);
@@ -370,6 +372,7 @@ export class RedisConsumerService implements OnModuleDestroy {
      * @throws {Error} When Redis operations fail
      */
     async saveJobConsumersToRedis(jobRunId: string, projectId?: string) {
+        this.logger.log(`Saving consumers to Redis for jobRunId: ${jobRunId}, projectId: ${projectId || 'null'}`);
         try {
             await Promise.all(
                 Object.values(ConsumerType).map(async (type) => {
@@ -1024,6 +1027,23 @@ export class RedisConsumerService implements OnModuleDestroy {
         } catch (error) {
             this.logger.error(`projectId: ${projectId} Error stopping all consumers for job ${jobRunId}: ${error.message}`);
         }
+    }
+
+    /**
+     * Manually set projectId in cache - useful for worker threads
+     */
+    setProjectIdInCache(jobRunId: string, projectId: string): void {
+        if (projectId && jobRunId) {
+            jobRunIdToProjectIdMap.set(jobRunId, projectId);
+            this.logger.log(`Manually set projectId: ${projectId} in cache for jobRunId: ${jobRunId}`);
+        }
+    }
+
+    /**
+     * Debug method to inspect cache contents
+     */
+    inspectCache(): void {
+        this.logger.log(`Cache inspection - Size: ${jobRunIdToProjectIdMap.size}, Contents: ${JSON.stringify(Array.from(jobRunIdToProjectIdMap.entries()))}`);
     }
 
 }
