@@ -6,22 +6,21 @@ import { ReportsEntity } from "src/entities/reports.entity";
 import { ReportType } from "src/constants/enums";
 import * as fs from "fs";
 import * as path from "path";
-import * as puppeteer from "puppeteer";
-import { Browser, Page } from "puppeteer";
-import * as hbs from "hbs";
 import { DiscoveryService } from "src/discovery/discovery.service";
-
-jest.mock("puppeteer");
+import { PDFGeneratorService } from "src/generator/pdf-generator.service";
+import { PDFTemplate } from "src/generator/pdf-generator.type";
 
 describe("PdfService", () => {
   let pdfService: PdfService;
   let mockInventoryRepo;
   let mockReportsRepo;
-  let mockBrowser: Partial<Browser>;
-  let mockPage: Partial<Page>;
   let mockDiscoveryService: Partial<DiscoveryService>;
+  let mockPdfGeneratorService: Partial<PDFGeneratorService>;
 
   beforeEach(async () => {
+    // Reset all mocks
+    jest.clearAllMocks();
+    
     mockInventoryRepo = {
       query: jest.fn(),
     };
@@ -35,18 +34,11 @@ describe("PdfService", () => {
       createJobsPDFReportData: jest.fn(),
     };
 
-    mockPage = {
-      setContent: jest.fn().mockResolvedValue(null),
-      pdf: jest.fn().mockResolvedValue(Buffer.from("mockPdfBuffer")),
-      close: jest.fn().mockResolvedValue(null),
+    mockPdfGeneratorService = {
+      generatePDF: jest.fn().mockResolvedValue(Buffer.from("mockPdfGeneratorBuffer")),
+      initBrowser: jest.fn().mockResolvedValue(undefined),
+      onApplicationShutdown: jest.fn().mockResolvedValue(undefined),
     };
-
-    mockBrowser = {
-      newPage: jest.fn().mockResolvedValue(mockPage as Page),
-      close: jest.fn().mockResolvedValue(null),
-    };
-
-    (puppeteer.launch as jest.Mock).mockResolvedValue(mockBrowser as Browser);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -63,6 +55,10 @@ describe("PdfService", () => {
           provide: DiscoveryService,
           useValue: mockDiscoveryService,
         },
+        {
+          provide: PDFGeneratorService,
+          useValue: mockPdfGeneratorService,
+        },
       ],
     }).compile();
 
@@ -73,16 +69,15 @@ describe("PdfService", () => {
     it("should generate and save new PDF if report type is JOBS_RREPORT", async () => {
       const jobRunId = "test-jobRunId";
       const reportType = ReportType.JOBS_RREPORT;
-      const pdfBuffer = Buffer.from("newPdfBuffer");
-      const filePath = "/mock/reports/report.pdf";
+      const pdfBuffer = Buffer.from("newPdfGeneratorBuffer");
+      const filePath = "/mock/reports/test-jobRunId-jobs_rreport-report.pdf";
 
       jest.spyOn(path, "join").mockReturnValue(filePath);
+      jest.spyOn(path, "resolve").mockReturnValue("/mock/reports");
+      jest.spyOn(mockPdfGeneratorService, "generatePDF").mockResolvedValue(pdfBuffer);
       jest
         .spyOn(pdfService, "generateJobsReportPdf")
         .mockResolvedValue(pdfBuffer);
-      jest.spyOn(fs, "existsSync").mockReturnValue(false);
-      jest.spyOn(fs, "writeFileSync").mockImplementation();
-      jest.spyOn(path, "resolve").mockReturnValue("/mock/reports");
 
       const result = await pdfService.generatePdf(jobRunId, reportType);
 
@@ -96,6 +91,7 @@ describe("PdfService", () => {
       const filePath = `/mock/reports/${fileName}`;
 
       jest.spyOn(path, "join").mockReturnValue(filePath);
+      jest.spyOn(path, "resolve").mockReturnValue("/mock/reports");
       jest.spyOn(fs, "existsSync").mockReturnValue(true);
       jest
         .spyOn(fs, "readFileSync")
@@ -110,6 +106,10 @@ describe("PdfService", () => {
     it("should throw an error if report type is invalid", async () => {
       const jobRunId = "test-jobRunId";
       const reportType = "INVALID_REPORT_TYPE" as unknown as ReportType;
+      const filePath = "/mock/reports/test-jobRunId-invalid_report_type-report.pdf";
+
+      jest.spyOn(path, "join").mockReturnValue(filePath);
+      jest.spyOn(path, "resolve").mockReturnValue("/mock/reports");
 
       await expect(
         pdfService.generatePdf(jobRunId, reportType)
@@ -148,7 +148,7 @@ describe("PdfService", () => {
       );
     });
 
-    it("should successfully generate a PDF with proper customerInfo and puppeteer workflow", async () => {
+    it("should successfully generate a PDF with proper customerInfo and pdfGeneratorService workflow", async () => {
       const jobRunId = "test-jobRunId";
       const mockProjectData = [{ project_name: "Test Project" }];
       const mockReportData = {
@@ -163,51 +163,40 @@ describe("PdfService", () => {
       jest.spyOn(mockInventoryRepo, "query").mockResolvedValue(mockProjectData);
       jest.spyOn(mockReportsRepo, "query").mockResolvedValue([mockReportData]);
 
-      // Mock file system and template operations
-      jest.spyOn(path, "join").mockReturnValue("/mock/template/path.hbs");
-      jest
-        .spyOn(fs, "readFileSync")
-        .mockReturnValue("<html>{{customerInfo.projectName}}</html>");
-      jest
-        .spyOn(hbs, "compile")
-        .mockReturnValue(
-          (data) => `<html>${data.customerInfo.projectName}</html>`
-        );
+      // Mock PDF generator service
+      const expectedPdfBuffer = Buffer.from("mockPdfGeneratorBuffer");
+      jest.spyOn(mockPdfGeneratorService, "generatePDF").mockResolvedValue(expectedPdfBuffer);
 
       // Execute the method
       const result = await pdfService.generateJobsReportPdf(jobRunId);
 
       // Verify the result
-      expect(result).toEqual(Buffer.from("mockPdfBuffer"));
+      expect(result).toEqual(expectedPdfBuffer);
 
-      // Verify puppeteer was used correctly
-      expect(puppeteer.launch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          headless: true,
-          args: expect.arrayContaining([
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-gpu",
-            "--disable-dev-shm-usage",
-            "--disable-accelerated-2d-canvas",
-          ]),
-          executablePath: "/usr/bin/chromium-browser",
-          protocolTimeout: 60000,
-        })
-      );
-
-      // Verify page operations
-      expect(mockBrowser.newPage).toHaveBeenCalled();
-      expect(mockPage.setContent).toHaveBeenCalled();
-      expect(mockPage.pdf).toHaveBeenCalledWith({
-        format: "A4",
-        printBackground: true,
-        scale: 0.6,
-        landscape: true,
+      // Verify PDF generator service was called correctly
+      expect(mockPdfGeneratorService.generatePDF).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          summary: expect.arrayContaining([{ source: { job_type: "MIGRATE" } }]),
+          last_iteration: expect.objectContaining({
+            summary: { source: { job_type: "MIGRATE" } }
+          }),
+          last_errors: expect.objectContaining({
+            summary: { source: { job_type: "MIGRATE" } }
+          }),
+          cutovers: [],
+          customerInfo: {
+            projectName: "Test Project",
+            reportDate: expect.any(String),
+          }
+        }),
+        template: PDFTemplate.JOBS_REPORT,
+        pdfOptions: {
+          format: 'A0',
+          printBackground: true,
+          scale: 0.5,
+          landscape: true,
+        }
       });
-
-      // Verify browser was closed
-      expect(mockBrowser.close).toHaveBeenCalled();
     });
 
     it("should throw an error if the report data is invalid", async () => {
@@ -216,9 +205,6 @@ describe("PdfService", () => {
       jest
         .spyOn(mockReportsRepo, "query")
         .mockResolvedValue([{ report_data: "{}" }]);
-      jest.spyOn(path, "join").mockReturnValue("/mock/template/path.hbs");
-      jest.spyOn(fs, "readFileSync").mockReturnValue("<html></html>");
-      jest.spyOn(hbs, "compile").mockReturnValue(() => "<html></html>");
 
       await expect(pdfService.generateJobsReportPdf(jobRunId)).rejects.toThrow(
         "Failed to generate jobs report"
@@ -245,17 +231,15 @@ describe("PdfService", () => {
       const jobRunId = "test-jobRunId";
 
       jest.spyOn(mockReportsRepo, "query").mockResolvedValue([{}]);
-      jest.spyOn(path, "join").mockReturnValue("/mock/template/path.hbs");
-      jest.spyOn(fs, "readFileSync").mockReturnValue("<html></html>");
-      jest.spyOn(hbs, "compile").mockReturnValue(() => "<html></html>");
 
       await expect(pdfService.generateJobsReportPdf(jobRunId)).rejects.toThrow(
         "Failed to generate jobs report"
       );
     });
 
-    it("should throw an error if the HTML template is not found", async () => {
+    it("should throw an error if PDF generation fails", async () => {
       const jobRunId = "test-jobRunId";
+      const mockProjectData = [{ project_name: "Test Project" }];
       const mockReportData = {
         report_data: JSON.stringify({
           summary: [{ sub_category: "SubCat1", value: "100" }],
@@ -266,19 +250,18 @@ describe("PdfService", () => {
 
       process.env.SCHEMA = "datamigrator";
 
+      jest.spyOn(mockInventoryRepo, "query").mockResolvedValue(mockProjectData);
       jest.spyOn(mockReportsRepo, "query").mockResolvedValue([mockReportData]);
-      jest.spyOn(path, "join").mockReturnValue("/mock/template/path.hbs");
-      jest.spyOn(fs, "readFileSync").mockImplementation(() => {
-        throw new Error("File not found");
-      });
+      jest.spyOn(mockPdfGeneratorService, "generatePDF").mockRejectedValue(new Error("PDF generation failed"));
 
       await expect(pdfService.generateJobsReportPdf(jobRunId)).rejects.toThrow(
         "Failed to generate jobs report"
       );
     });
 
-    it("should throw an error if puppeteer fails to launch", async () => {
+    it("should throw an error if PDF generator service fails", async () => {
       const jobRunId = "test-jobRunId";
+      const mockProjectData = [{ project_name: "Test Project" }];
       const mockReportData = {
         report_data: JSON.stringify({
           summary: [{ sub_category: "SubCat1", value: "100" }],
@@ -289,13 +272,11 @@ describe("PdfService", () => {
 
       process.env.SCHEMA = "datamigrator";
 
+      jest.spyOn(mockInventoryRepo, "query").mockResolvedValue(mockProjectData);
       jest.spyOn(mockReportsRepo, "query").mockResolvedValue([mockReportData]);
-      jest.spyOn(path, "join").mockReturnValue("/mock/template/path.hbs");
-      jest.spyOn(fs, "readFileSync").mockReturnValue("<html></html>");
-      jest.spyOn(hbs, "compile").mockReturnValue(() => "<html></html>");
       jest
-        .spyOn(puppeteer, "launch")
-        .mockRejectedValue(new Error("Launch error"));
+        .spyOn(mockPdfGeneratorService, "generatePDF")
+        .mockRejectedValue(new Error("PDF Service error"));
 
       await expect(pdfService.generateJobsReportPdf(jobRunId)).rejects.toThrow(
         "Failed to generate jobs report"
@@ -303,7 +284,3 @@ describe("PdfService", () => {
     });
   });
 });
-
-function normalizeHtml(html: string): string {
-  return html.replace(/\s+/g, " ").trim();
-}
