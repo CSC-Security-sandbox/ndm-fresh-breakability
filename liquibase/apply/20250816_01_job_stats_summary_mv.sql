@@ -1,6 +1,6 @@
 CREATE MATERIALIZED VIEW IF NOT EXISTS job_stats_summary_mv AS
 WITH job_runs as (
-	select id from jobrun
+	select id,status from jobrun
 ),
 inventory_stats AS (
     SELECT 
@@ -28,6 +28,8 @@ task_stats AS (
 )
 SELECT 
    COALESCE(j.id,i.job_run_id, t.job_run_id) AS job_run_id,
+    -- Job run status
+    COALESCE(j.status, 'UNKNOWN') AS job_run_status,
     
     -- Inventory statistics
     COALESCE(i.file_count, 0) AS file_count,

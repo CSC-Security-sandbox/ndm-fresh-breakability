@@ -989,26 +989,6 @@ export class JobConfigService {
             ? jobRun.endTime.getTime() - jobRun.startTime.getTime()
             : Date.now() - jobRun.startTime.getTime(),
         };
-        const jobRunStats = await this.calculateJobRunStats(jobRun.id); 
-      
-        if (jobRun.status === JobRunStatus.Completed) {
-          this.logger.log(
-            `Job Run ${jobRun.id} is completed , thus fetching the stats from the jobRunStats and job stats are  ${JSON.stringify(jobRunStats)}`
-          );
-          return {
-            ...partialPayload,
-            scannedFilesCount: BigInt(jobRun?.jobStats?.fileCount || "0")?.toString(),
-            scannedDirectoriesCount: BigInt(
-              jobRun?.jobStats?.directories || "0"
-            )?.toString(),
-            totalScannedSize: formatBytes(Number(jobRun?.jobStats?.totalSize || 0)),
-            totalMigratedSize: formatBytes(Number(jobRun?.jobStats?.totalSize || 0)),
-            errors: jobRunStats.errors || [] ,
-          };
-        }
-        this.logger.log(
-          `Job Run ${jobRun.id} is not completed , thus fetching the stats from the inventory`
-        );
         const inventoryCounts = await this.calculateJobRunStats(jobRun.id);
         return {
           ...partialPayload,
@@ -1019,7 +999,7 @@ export class JobConfigService {
             inventoryCounts.directories || "0"
           )?.toString(),
           totalScannedSize: formatBytes(Number(inventoryCounts?.totalSize  || 0)),
-          totalMigratedSize: formatBytes(Number(jobRunStats?.totalSize || 0)),
+          totalMigratedSize: formatBytes(Number(inventoryCounts?.totalSize || 0)),
           errors: inventoryCounts.errors,
         };
       })

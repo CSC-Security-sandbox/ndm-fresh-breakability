@@ -433,58 +433,36 @@ export class JobRunService {
             ? jobRun.endtime.getTime() - jobRun.starttime.getTime()
             : Date.now() - jobRun.starttime.getTime(),
         };
-        this.logger.log(`Job Run ${jobRun.jobrunid} status ${jobRun.status}`);
-        if (String(jobRun.status).trim() == JobRunStatus.Completed) {
-          const inventoryStats: JobRunStats = jobRun.jobstats;
-          this.logger.log(
-            `Job Run ${jobRun.jobrunid} inventory stats ${JSON.stringify(inventoryStats)}`
-          );
-          const payload = {
-            scannedFilesCount: BigInt(
-              inventoryStats?.fileCount || "0"
-            )?.toString(),
-            scannedDirectoriesCount: BigInt(
-              inventoryStats?.directories || "0"
-            )?.toString(),
-            totalScannedSize:
-              jobRun.jobtype === JobType.DISCOVER
-                ? formatBytes(Number(inventoryStats?.totalSize || 0))
-                : "0 B",
-            totalMigratedSize:
-              jobRun.jobtype === JobType.MIGRATE || jobRun.jobtype === JobType.CUT_OVER
-                ? formatBytes(Number(inventoryStats?.totalSize || 0))
-                : "0 B",
-            errors: await this.getErrorCounts(jobRun.jobrunid),
-          };
-          const response: JobRunsDTO = {
-            ...partialJobRunStats,
-            ...payload,
-          };
-          return response;
-        } else {
-          const inventoryCounts: JobRunStats = await this.calculateJobRunStats(
+       
+          const jobStats: JobRunStats = await this.calculateJobRunStats(
             jobRun.jobrunid
           );
+          this.logger.log(`Job Run ${jobRun.jobrunid} status ${jobRun.status}`);
+          this.logger.log(
+            `Job Run ${jobRun.jobrunid} inventory stats ${JSON.stringify(
+              jobStats
+            )}`
+          );
           const response: JobRunsDTO = {
             ...partialJobRunStats,
             scannedFilesCount: BigInt(
-              inventoryCounts?.fileCount || "0"
+              jobStats?.fileCount || "0"
             )?.toString(),
             scannedDirectoriesCount: BigInt(
-              inventoryCounts?.directories || "0"
+              jobStats?.directories || "0"
             )?.toString(),
             totalScannedSize:
               jobRun.jobtype === JobType.DISCOVER
-                ? formatBytes(Number(inventoryCounts?.totalSize || "0"))
+                ? formatBytes(Number(jobStats?.totalSize || "0"))
                 : "0 B",
             totalMigratedSize:
               jobRun.jobtype === JobType.MIGRATE
-                ? formatBytes(Number(inventoryCounts?.totalSize || 0))
+                ? formatBytes(Number(jobStats?.totalSize || 0))
                 : "0 B",
-            errors: await this.getErrorCounts(jobRun.jobrunid),
+            errors: jobStats?.errors || [],
           };
           return response;
-        }
+        
       })
     );
     return allJobsRuns;

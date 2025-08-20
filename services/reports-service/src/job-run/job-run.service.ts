@@ -161,6 +161,7 @@ export class JobRunService {
     const jobRunStatus = new JobRunStats();
     const jobStatsSummary: JobStatsSummaryMvEntity = await this.jobStatsSummaryMvRepo.findOne({
       where: { jobRunId: id }});
+    this.logger.log(`Job Stats Summary for Job Run ID ${id}: ${JSON.stringify(jobStatsSummary)}`);
     if (jobStatsSummary) {
       jobRunStatus.fileCount = jobStatsSummary.fileCount?.toString();
       jobRunStatus.directories = jobStatsSummary.directoryCount?.toString();
@@ -182,21 +183,22 @@ export class JobRunService {
 
     response["task"] = new TaskDto();
     if (jobStatsSummary) {
-      response["task"][TaskStatus.COMPLETED] = Number(
+      response["task"]['completed'] = Number(
         jobStatsSummary.completed
       );
-      response["task"][TaskStatus.PENDING] = Number(
+      response["task"]['pending'] = Number(
         jobStatsSummary.pending
       );
-      response["task"][TaskStatus.ERRORED] = Number(
+      response["task"]['errored'] = Number(
         jobStatsSummary.errored
       );
-      response["task"][TaskStatus.RUNNING] = Number(
+      response["task"]['running'] = Number(
         jobStatsSummary.running
       );
     }
-
-    if (response.status === JobRunStatus.Completed) {
+    this.logger.log('Job Run Status: ' + jobStatsSummary?.jobRunStatus);
+    if (jobStatsSummary?.jobRunStatus === JobRunStatus.Completed) {
+      this.logger.log(`Job Run with ID ${id} is completed,and reportData is ready ${JSON.stringify(response)}`);
       const report = this.reportsRepo.create({
         jobRunId: id,
         reportData: JSON.stringify(response),
