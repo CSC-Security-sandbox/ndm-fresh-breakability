@@ -44,6 +44,14 @@ export class DiscoveryReportService {
         const pdfBuffer = await this.pdfGenerator.generatePDF({
           data: categories,
           template: PDFTemplate.DISCOVERY_REPORT,
+          pdfOptions: {
+            format: 'A2',
+            printBackground: true,
+            scale: 0.5,
+            landscape: false,
+            width: '420mm', // A2 width
+            height: '594mm', // A2 height
+          }
         });
         const pdfFilePath = `${this.basePath}/${jobRunId}-discover-report.pdf`;
         await fs.promises.writeFile(pdfFilePath, pdfBuffer);
