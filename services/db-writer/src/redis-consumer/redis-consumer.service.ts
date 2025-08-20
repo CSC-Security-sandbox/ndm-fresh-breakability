@@ -479,7 +479,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             const workerPath = path.join(__dirname, '../../dist/redis-consumer/consumerWorker.js');
 
             const worker = new Worker(workerPath, {
-                workerData: { jobRunId }
+                workerData: { jobRunId, projectId }
             });
 
             worker.on('message', (result) => {
