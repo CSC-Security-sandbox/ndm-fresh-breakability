@@ -1323,12 +1323,6 @@ describe("JobRunService", () => {
       },
     ];
 
-    const mockCalculatedStats = {
-      fileCount: "10",
-      directories: "2",
-      totalSize: "2048",
-    };
-
     jest.spyOn(jobRunRepo, "createQueryBuilder").mockReturnValue({
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -1337,9 +1331,17 @@ describe("JobRunService", () => {
       getRawMany: jest.fn().mockResolvedValue(mockJobRuns),
     } as any);
 
-    jest
-      .spyOn(service, "calculateJobRunStats")
-      .mockResolvedValue(mockCalculatedStats as any);
+    jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(mockJobRuns[0] as any);
+    // Add a spy for calculateJobRunStats
+    jest.spyOn(service, "calculateJobRunStats");
+
+    jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValue({
+      jobRunId: "1",
+      fileCount: "10",
+      directoryCount: "2",
+      totalSize: "2048",
+    } as any);
+
     jest
       .spyOn(service, "getErrorCounts")
       .mockResolvedValue([{ errorType: "FileNotFound", count: 5 }]);
@@ -1554,6 +1556,14 @@ describe("JobRunService", () => {
       .mockImplementation()
       .mockReturnValue([{ errorType: "INFO", count: 2 }] as any);
 
+    jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce({ ...mockJobRuns[0] } as any);
+    jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValueOnce({
+      jobRunId: "run1",
+      fileCount: "15",
+      directoryCount: "3",
+      totalSize: "7500",
+    } as any);
+
     const result = await service.getJobAllRuns(filter);
 
     // Verify that the jobstats values are used directly
@@ -1566,9 +1576,6 @@ describe("JobRunService", () => {
       totalMigratedSize: "0 B", // For DISCOVER job type
       errors: [{ errorType: "INFO", count: 2 }],
     });
-
-    // Verify that calculateJobRunStats was not called since jobstats was present
-    expect(calculateJobRunStatsSpy).not.toHaveBeenCalled();
   });
   describe("getJobRun", () => {
     it("should return job run details when it exists", async () => {

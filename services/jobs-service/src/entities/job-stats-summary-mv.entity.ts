@@ -66,4 +66,8 @@ export class JobStatsSummaryMvEntity {
   @ApiProperty({ description: "Last time the materialized view was refreshed" })
   @ViewColumn({ name: "last_refreshed" })
   lastRefreshed: Date;
+
+  @ApiProperty({ description: "Job run status" })
+  @ViewColumn({ name: "job_run_status" })
+  jobRunStatus: string;
 }
