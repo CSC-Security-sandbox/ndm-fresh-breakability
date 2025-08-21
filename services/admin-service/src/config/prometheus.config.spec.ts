@@ -10,7 +10,10 @@ describe('PrometheusConfig', () => {
 
   afterEach(() => {
     // Restore original environment after each test
-    process.env = originalEnv;
+    process.env = { ...originalEnv };
+    // Explicitly clean up the test environment variables
+    delete process.env.PROMETHEUS_BASE_URL;
+    delete process.env.PROMETHEUS_TIMEOUT;
   });
 
   describe('prometheusConfig factory', () => {
@@ -29,7 +32,9 @@ describe('PrometheusConfig', () => {
       const config: PrometheusConfig = prometheusConfig();
 
       expect(config).toEqual({
-        prometheusBaseIp: 'localhost',
+        prometheusBaseIp:
+          'http://prometheus-server.prometheus.svc.cluster.local:80/api/v1',
+        timeout: 30000,
       });
     });
 
@@ -40,6 +45,7 @@ describe('PrometheusConfig', () => {
 
       expect(config).toEqual({
         prometheusBaseIp: 'http://custom-prometheus:9090/api/v1',
+        timeout: 30000,
       });
     });
 
@@ -48,9 +54,11 @@ describe('PrometheusConfig', () => {
 
       const config: PrometheusConfig = prometheusConfig();
 
-      // Empty string is falsy, so it uses the default 'localhost'
+      // Empty string is falsy, so it uses the default
       expect(config).toEqual({
-        prometheusBaseIp: 'localhost',
+        prometheusBaseIp:
+          'http://prometheus-server.prometheus.svc.cluster.local:80/api/v1',
+        timeout: 30000,
       });
     });
 
@@ -70,6 +78,7 @@ describe('PrometheusConfig', () => {
 
         expect(config).toEqual({
           prometheusBaseIp: baseUrl,
+          timeout: 30000,
         });
       });
     });
@@ -91,7 +100,9 @@ describe('PrometheusConfig', () => {
       const config: PrometheusConfig = prometheusConfig();
 
       expect(config).toEqual({
-        prometheusBaseIp: 'localhost',
+        prometheusBaseIp:
+          'http://prometheus-server.prometheus.svc.cluster.local:80/api/v1',
+        timeout: 30000,
       });
     });
 
@@ -102,6 +113,7 @@ describe('PrometheusConfig', () => {
 
       expect(config).toEqual({
         prometheusBaseIp: 'http://prometheus:9090/api/v1/',
+        timeout: 30000,
       });
     });
 
@@ -114,6 +126,7 @@ describe('PrometheusConfig', () => {
       expect(config).toEqual({
         prometheusBaseIp:
           'http://prometheus-test_env.example-domain.com:9090/api/v1',
+        timeout: 30000,
       });
     });
 
@@ -125,6 +138,68 @@ describe('PrometheusConfig', () => {
 
       expect(config).toEqual({
         prometheusBaseIp: 'http://prometheus:9090/api/v1?timeout=30s',
+        timeout: 30000,
+      });
+    });
+
+    it('should return default timeout when PROMETHEUS_TIMEOUT is not set', () => {
+      // Remove PROMETHEUS_TIMEOUT from environment
+      delete process.env.PROMETHEUS_TIMEOUT;
+
+      const config: PrometheusConfig = prometheusConfig();
+
+      expect(config.timeout).toBe(30000);
+    });
+
+    it('should use PROMETHEUS_TIMEOUT environment variable when set', () => {
+      // Clean environment first
+      delete process.env.PROMETHEUS_BASE_URL;
+      delete process.env.PROMETHEUS_TIMEOUT;
+
+      process.env.PROMETHEUS_TIMEOUT = '60000';
+
+      const config: PrometheusConfig = prometheusConfig();
+
+      expect(config).toEqual({
+        prometheusBaseIp:
+          'http://prometheus-server.prometheus.svc.cluster.local:80/api/v1',
+        timeout: 60000,
+      });
+    });
+
+    it('should handle various PROMETHEUS_TIMEOUT values', () => {
+      const testCases = [
+        { env: '15000', expected: 15000 },
+        { env: '45000', expected: 45000 },
+        { env: '90000', expected: 90000 },
+      ];
+
+      testCases.forEach(({ env, expected }) => {
+        // Clean environment for each test case
+        delete process.env.PROMETHEUS_BASE_URL;
+        delete process.env.PROMETHEUS_TIMEOUT;
+
+        process.env.PROMETHEUS_TIMEOUT = env;
+
+        const config: PrometheusConfig = prometheusConfig();
+
+        expect(config.timeout).toBe(expected);
+      });
+    });
+
+    it('should handle PROMETHEUS_TIMEOUT with both environment variables set', () => {
+      // Clean environment first
+      delete process.env.PROMETHEUS_BASE_URL;
+      delete process.env.PROMETHEUS_TIMEOUT;
+
+      process.env.PROMETHEUS_BASE_URL = 'http://custom-prometheus:9090/api/v1';
+      process.env.PROMETHEUS_TIMEOUT = '120000';
+
+      const config: PrometheusConfig = prometheusConfig();
+
+      expect(config).toEqual({
+        prometheusBaseIp: 'http://custom-prometheus:9090/api/v1',
+        timeout: 120000,
       });
     });
   });
@@ -133,19 +208,24 @@ describe('PrometheusConfig', () => {
     it('should have correct type structure', () => {
       const config: PrometheusConfig = {
         prometheusBaseIp: 'test-value',
+        timeout: 30000,
       };
 
       expect(typeof config.prometheusBaseIp).toBe('string');
+      expect(typeof config.timeout).toBe('number');
       expect(config).toHaveProperty('prometheusBaseIp');
+      expect(config).toHaveProperty('timeout');
     });
 
     it('should enforce string type for prometheusBaseIp', () => {
       // TypeScript compile-time check
       const config: PrometheusConfig = {
         prometheusBaseIp: 'http://prometheus:9090',
+        timeout: 30000,
       };
 
       expect(typeof config.prometheusBaseIp).toBe('string');
+      expect(typeof config.timeout).toBe('number');
     });
   });
 
@@ -166,6 +246,7 @@ describe('PrometheusConfig', () => {
 
       expect(config).toEqual({
         prometheusBaseIp: '192.168.1.100:9090',
+        timeout: 30000,
       });
       expect(typeof config.prometheusBaseIp).toBe('string');
     });
@@ -177,6 +258,7 @@ describe('PrometheusConfig', () => {
 
       expect(config).toEqual({
         prometheusBaseIp: '  http://prometheus:9090  ',
+        timeout: 30000,
       });
     });
   });
@@ -200,6 +282,7 @@ describe('PrometheusConfig', () => {
       results.forEach((result, index) => {
         expect(result).toEqual({
           prometheusBaseIp: 'http://consistent-test:9090',
+          timeout: 30000,
         });
 
         if (index > 0) {

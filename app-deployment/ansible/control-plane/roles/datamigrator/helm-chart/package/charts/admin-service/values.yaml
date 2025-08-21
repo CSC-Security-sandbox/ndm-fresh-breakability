@@ -83,6 +83,8 @@ env:
     value: "/logs"
   - name: CONTROL_PLANE_IP
     value: "$(MY_HOST_IP)"
+  - name: PROMETHEUS_BASE_URL
+    value: "http://prometheus-server.prometheus.svc.cluster.local:80/api/v1"
 
 service:
   type: ClusterIP
@@ -91,7 +93,7 @@ service:
 
 ingress:
   pathPrefix: api/v1/
-  trailingPath: "(health|admin-docs|accounts|user-status|reset-password|create-user|permission|role-permissions|user-roles|user-permissions|inviteUser|roles|users|projects|worker-registration|setting|email)"
+  trailingPath: "(health|admin-docs|accounts|user-status|reset-password|create-user|permission|role-permissions|user-roles|user-permissions|inviteUser|roles|users|projects|worker-registration|setting|email|about-ndm)"
   ingressClassName: public
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"

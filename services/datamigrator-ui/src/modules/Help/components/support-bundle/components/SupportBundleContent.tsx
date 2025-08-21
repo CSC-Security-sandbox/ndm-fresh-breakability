@@ -19,6 +19,7 @@ const SupportBundleContent = () => {
     bundleStatus,
     supportBundleForm,
     isDownloading,
+    isDownloading,
   } = useContext(SupportBundleContext);
 
   const { startDate, endDate } = supportBundleForm?.formState;
@@ -35,6 +36,7 @@ const SupportBundleContent = () => {
         className="ml-auto mr-4"
         disabled={!isDateSame || !bundleStatus.isBundleReady}
         onClick={handleDownloadReport}
+        isSubmitting={isDownloading}
         isSubmitting={isDownloading}
       >
         {DOWNLOAD_REPORT_LABEL}

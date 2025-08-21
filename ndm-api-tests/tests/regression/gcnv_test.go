@@ -71,7 +71,7 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 		It("Should verify the file server creation with manual upload option", func() {
 			By("Fetching the latest created file server")
 			Expect(SourceConfigID).NotTo(BeEmpty(), "SourceConfigID is empty")
-			fileServerDetails, err := GetFileServerDetails(SourceConfigID, headers, false)
+			fileServerDetails, err := GetFileServerDetails(SourceConfigID, headers)
 
 			Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
 			Expect(fileServerDetails.FileServers[0].ExportPathSource).To(Equal(ManualUpload), "Expected export path source to be ManualUpload")

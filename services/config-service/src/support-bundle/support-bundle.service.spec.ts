@@ -145,6 +145,12 @@ describe('SupportBundleService', () => {
       expect(configService.get).toHaveBeenCalledWith(
         'app.bundle.bundleOutputPath',
       );
+      expect(mockLoggerFactory.create).toHaveBeenCalledWith(
+        SupportBundleService.name,
+      );
+      expect(configService.get).toHaveBeenCalledWith(
+        'app.bundle.bundleOutputPath',
+      );
     });
   });
 
@@ -205,6 +211,9 @@ describe('SupportBundleService', () => {
       expect(mockLogger.log).toHaveBeenCalledWith(
         'Started SupportBundleWorkflow successfully',
       );
+      expect(mockLogger.log).toHaveBeenCalledWith(
+        'Started SupportBundleWorkflow successfully',
+      );
     });
 
     it('should create support bundle with empty projectWorkerMap and otherMetrics when not provided', async () => {
@@ -218,6 +227,10 @@ describe('SupportBundleService', () => {
       supportBundleRepo.save.mockResolvedValue(mockEntity as any);
       workflowService.startWorkflow.mockResolvedValue(undefined);
 
+      const result = await service.create(
+        dtoWithoutOptionalFields as CreateSupportBundleDTO,
+        mockUserDetails,
+      );
       const result = await service.create(
         dtoWithoutOptionalFields as CreateSupportBundleDTO,
         mockUserDetails,
@@ -313,8 +326,11 @@ describe('SupportBundleService', () => {
       await expect(
         service.updateSupportBundleStatus(mockUpdateDto),
       ).rejects.toThrow(
-        `Support bundle not found for traceId: ${mockUpdateDto.traceId}`,
-      );
+        await expect(
+          service.updateSupportBundleStatus(mockUpdateDto),
+        ).rejects.toThrow(
+          `Support bundle not found for traceId: ${mockUpdateDto.traceId}`,
+        );
     });
 
     it('should update without error message when not provided', async () => {
@@ -360,6 +376,14 @@ describe('SupportBundleService', () => {
       expect(supportBundleRepo.findOne).toHaveBeenCalledWith({
         where: { userId },
         order: { createdAt: 'DESC' },
+        select: [
+          'status',
+          'errorMessage',
+          'filters',
+          'createdAt',
+          'workflowId',
+          'requestId',
+        ],
         select: [
           'status',
           'errorMessage',
@@ -427,6 +451,14 @@ describe('SupportBundleService', () => {
       expect(supportBundleRepo.findOne).toHaveBeenCalledWith({
         where: { userId },
         order: { createdAt: 'DESC' },
+        select: [
+          'status',
+          'errorMessage',
+          'filters',
+          'createdAt',
+          'workflowId',
+          'requestId',
+        ],
         select: [
           'status',
           'errorMessage',

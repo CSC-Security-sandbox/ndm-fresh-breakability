@@ -114,7 +114,7 @@ func GetExportPathID(
 	configID string,
 	headers map[string]string,
 ) (string, error) {
-	getSourceResp, err := GetFileServerDetails(configID, headers)
+	getSourceResp, err := GetFileServerDetails(configID, headers, true)
 	if err != nil {
 		return "", fmt.Errorf("error getting fileserver details for config ID : %s, error = %w", configID, err)
 	}
@@ -403,11 +403,13 @@ func GetFileUserGroupId(export, fileName string) (uid, gid int, err error) {
 	return u, g, nil
 }
 
-func GetFileServerDetails(configId string, headers map[string]string, volumeCheck ...bool) (FileServerDetailsItems, error) {
-	volumeCheckFlag := true
-	if len(volumeCheck) > 0 {
-		volumeCheckFlag = volumeCheck[0]
+func GetFileServerDetails(configId string, headers map[string]string, refresh ...bool) (FileServerDetailsItems, error) {
+	refreshFlag := false
+	if len(refresh) > 0 {
+		refreshFlag = refresh[0]
 	}
+
+	volumeCheck := false
 
 	refreshURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILE_SERVER_REFRESH_URL, configId)
 	getSourceURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configId)
@@ -415,19 +417,21 @@ func GetFileServerDetails(configId string, headers map[string]string, volumeChec
 	var response FileServerDetails
 
 	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
-		resp, err := SendAPIRequest(http.MethodGet, refreshURL, nil, headers)
-		if err != nil {
-			return FileServerDetailsItems{}, fmt.Errorf("error refreshing file server: %w", err)
+		if refreshFlag {
+			resp, err := SendAPIRequest(http.MethodGet, refreshURL, nil, headers)
+			if err != nil {
+				return FileServerDetailsItems{}, fmt.Errorf("error refreshing file server: %w", err)
+			}
+			defer resp.Body.Close()
 		}
-		defer resp.Body.Close()
 
-		resp, err = SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
+		getFileServerResp, err := SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
 		if err != nil {
 			return FileServerDetailsItems{}, fmt.Errorf("error sending API request: %w", err)
 		}
-		defer resp.Body.Close()
+		defer getFileServerResp.Body.Close()
 
-		bodyBytes, err := io.ReadAll(resp.Body)
+		bodyBytes, err := io.ReadAll(getFileServerResp.Body)
 		if err != nil {
 			return FileServerDetailsItems{}, fmt.Errorf("error reading response body: %w", err)
 		}
@@ -439,9 +443,10 @@ func GetFileServerDetails(configId string, headers map[string]string, volumeChec
 
 		// Check if fileserver and volumes exist
 		if len(response.Data.Items.FileServers) > 0 {
-			if !volumeCheckFlag {
+			if !(response.Data.Items.FileServers[0].ExportPathSource == AutoDiscover) {
 				break
 			}
+			volumeCheck = true
 			if len(response.Data.Items.FileServers[0].Volumes) > 0 {
 				break
 			}
@@ -457,7 +462,7 @@ func GetFileServerDetails(configId string, headers map[string]string, volumeChec
 		return FileServerDetailsItems{}, fmt.Errorf("no fileServers found in source response after %d attempts", MaxPollRetries)
 	}
 
-	if volumeCheckFlag && len(response.Data.Items.FileServers[0].Volumes) == 0 {
+	if volumeCheck && len(response.Data.Items.FileServers[0].Volumes) == 0 {
 		return FileServerDetailsItems{}, fmt.Errorf("no volumes found for source file server after %d attempts", MaxPollRetries)
 	}
 	return response.Data.Items, nil
