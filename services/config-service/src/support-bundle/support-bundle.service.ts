@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -26,7 +30,7 @@ export class SupportBundleService {
   constructor(
     @InjectRepository(SupportBundleEntity)
     private readonly supportBundleRepo: Repository<SupportBundleEntity>,
- 
+
     private loggerFactory: LoggerFactory,
     private readonly workFlowService: WorkflowService,
     private readonly configService: ConfigService,
@@ -57,8 +61,6 @@ export class SupportBundleService {
       },
     });
 
-    await this.supportBundleRepo.save(log);
-
     this.logger.log(
       `Starting SupportBundleWorkflow with requestId: ${traceId} and userId: ${userDetails.user.id}`,
     );
@@ -88,7 +90,7 @@ export class SupportBundleService {
         WorkFlows.SUPPORT_BUNDLE_WORKFLOW,
         startWorkFlowPayload,
       );
-
+      await this.supportBundleRepo.save(log);
       this.logger.log('Started SupportBundleWorkflow successfully');
     } catch (error) {
       this.logger.error(
@@ -116,37 +118,68 @@ export class SupportBundleService {
   }
 
   async isBundleReady(userId: string): Promise<BundleStatus> {
-    const user = await this.supportBundleRepo.findOne({
+    const latestBundle = await this.supportBundleRepo.findOne({
       where: { userId },
       order: { createdAt: 'DESC' },
-      select: ['status', 'errorMessage', 'filters', 'createdAt'],
+      select: [
+        'status',
+        'errorMessage',
+        'filters',
+        'createdAt',
+        'workflowId',
+        'requestId',
+      ],
     });
 
     const defaultResponse: BundleStatus = {
       isProcessing: false,
       isBundleReady: false,
-      filters: user?.filters || null,
-      createdAt: user?.createdAt || null,
+      filters: latestBundle?.filters || null,
+      createdAt: latestBundle?.createdAt || null,
     };
 
-    if (!user) {
+    if (!latestBundle) {
       return defaultResponse;
     }
 
-    switch (user.status) {
-      case SupportBundleStatus.COMPLETED:
-        return { ...defaultResponse, isBundleReady: true };
+    if (latestBundle.status === SupportBundleStatus.COMPLETED) {
+      return { ...defaultResponse, isBundleReady: true };
+    }
 
-      case SupportBundleStatus.IN_PROGRESS:
-        return { ...defaultResponse, isProcessing: true };
-
-      case SupportBundleStatus.FAILED:
-        throw new InternalServerErrorException(
-          user.errorMessage || 'Support bundle generation failed'
+    try {
+      const response = await this.workFlowService.getWorkFlowRes(
+        latestBundle.workflowId,
+      );
+      if (
+        response?.status === 'TERMINATED' ||
+        response?.status === 'FAILED' ||
+        response?.status === 'TIMED_OUT'
+      ) {
+        await this.supportBundleRepo.update(
+          { requestId: latestBundle.requestId },
+          {
+            status: SupportBundleStatus.FAILED,
+            errorMessage: `Support bundle generation failed, activity ${response?.status}`,
+          },
         );
+      }
+    } catch (error) {
+      this.logger.error(
+        'Failed to check workflow status in isBundleReady:',
+        error,
+      );
+    }
 
-      default:
-        return defaultResponse;
+    if (latestBundle.status === SupportBundleStatus.IN_PROGRESS) {
+      return { ...defaultResponse, isProcessing: true };
+    }
+
+    if (latestBundle.status === SupportBundleStatus.FAILED) {
+      throw new InternalServerErrorException(
+        latestBundle.errorMessage || 'Support bundle generation failed',
+      );
+    } else {
+      return defaultResponse;
     }
   }
 
