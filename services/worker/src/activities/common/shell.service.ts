@@ -97,6 +97,9 @@ export class ShellService implements OnModuleInit, OnModuleDestroy {
   private readonly endMarker = 'END_OF_COMMAND_OUTPUT';
   private readonly markerCommand: string;
   private readonly logger: LoggerService;
+  private readonly realTimeProtectionOff: boolean = process.env.REAL_TIME_PROTECTION === 'false';
+  private readonly mountPath: string = process.env.BASE_WORKING_PATH || 'C:\\datamigrator\\mnt';
+  private readonly realTimeProtectionOffCmd: string[] = ["Set-MpPreference -DisableRealtimeMonitoring $true", "Add-MpPreference -ExclusionPath '" + this.mountPath + "'"];
 
   constructor(
     @Inject(LoggerFactory) loggerFactory: LoggerFactory
@@ -115,7 +118,7 @@ export class ShellService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  onModuleInit() {
+  async onModuleInit() {
     this.logger.log(`Starting persistent ${this.shellCommand} processes...`);
     for (let i = 0; i < this.poolSize; i++) {
       const worker = new ShellWorker(
@@ -128,6 +131,18 @@ export class ShellService implements OnModuleInit, OnModuleDestroy {
       );
       this.workers.push(worker);
     }
+
+    // Disable Windows Defender real-time protection for shell commands
+   if (this.isWindows && this.realTimeProtectionOff) {
+     for (const cmd of this.realTimeProtectionOffCmd) {
+       try {
+         await this.runCommand(cmd);
+       } catch (error) {
+         this.logger.error(`Failed to run command "${cmd}": ${error.message}`);
+       }
+     }
+   }
+
   }
 
 
@@ -154,6 +169,11 @@ export class ShellService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleDestroy() {
+    if (this.isWindows && this.realTimeProtectionOff) {
+      this.logger.log('Disabling Windows Defender real-time protection...');
+      this.runCommand("Set-MpPreference -DisableRealtimeMonitoring $false")
+        .catch(err => this.logger.error(`Failed to re-enable real-time protection: ${err.message}`));
+    }
     this.logger.log(`Stopping persistent ${this.shellCommand} processes...`);
     this.workers.forEach((worker) => worker.shutdown());
   }
