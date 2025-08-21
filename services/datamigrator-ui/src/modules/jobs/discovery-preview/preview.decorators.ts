@@ -517,17 +517,23 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
 }
 
 {
-  /* This function smartly convert bytes to KB, MB, GB, TB, PB, EB, ZB or YB */
+  /* This function smartly convert bytes to KiB, MiB, GiB, TiB, PiB, EiB, ZiB or YiB */
 }
 export function formatBytes(bytes: number, decimals = 2): string {
   if (bytes === 0) return "0 B";
 
-  const k = BYTES_IN_KILOBYTE;
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
+  let size = bytes;
+  let i = 0;
 
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${
-    BYTE_UNITS[i] || BYTE_UNITS[0]
-  }`;
+  while (size >= 1024 && i < units.length - 1) {
+    size /= 1024;
+    i++;
+  }
+
+  return size % 1 === 0
+    ? `${size.toFixed(0)} ${units[i]}`
+    : `${size.toFixed(decimals)} ${units[i]}`;
 }
 
 {
