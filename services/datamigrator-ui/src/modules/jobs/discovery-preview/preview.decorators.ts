@@ -523,17 +523,19 @@ export function formatBytes(bytes: number, decimals = 2): string {
   if (bytes === 0) return "0 B";
 
   const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
+  let size = bytes;
   let i = 0;
 
-  while (bytes >= 1024 && i < units.length - 1) {
-    bytes /= 1024;
+  while (size >= 1024 && i < units.length - 1) {
+    size /= 1024;
     i++;
   }
 
-  return bytes === Math.floor(bytes)
-    ? `${bytes.toFixed(0)} ${units[i]}`
-    : `${bytes.toFixed(decimals)} ${units[i]}`;
+  return size % 1 === 0
+    ? `${size.toFixed(0)} ${units[i]}`
+    : `${size.toFixed(decimals)} ${units[i]}`;
 }
+
 
 {
   /* This function smartly convert numbers to K, M, B, T, Q, Quint, Sext, Sept */
