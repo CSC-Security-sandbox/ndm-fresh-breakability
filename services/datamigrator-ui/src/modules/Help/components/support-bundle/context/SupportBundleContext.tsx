@@ -38,7 +38,8 @@ export const SupportBundleProvider = ({
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   const [generateBundle] = useGenerateSupportBundleMutation();
-  const [downloadBundle] = useLazyDownloadSupportBundleQuery();
+  const [downloadBundle, { isFetching: isDownloading }] =
+    useLazyDownloadSupportBundleQuery();
   const [isBundleReady] = useLazyIsBundleReadyQuery();
 
   const permissionData = useSelector(
@@ -183,6 +184,7 @@ export const SupportBundleProvider = ({
     handleDownloadReport,
     handleGenerateBundle,
     bundleStatus,
+    isDownloading,
   };
 
   return (
