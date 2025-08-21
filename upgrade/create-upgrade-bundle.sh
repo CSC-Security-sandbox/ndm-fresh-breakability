@@ -98,8 +98,12 @@ if [ ! -f "$RELEASE_VERSION.zip" ]; then
     exit 1
 fi
 
+
+# Clean up the temporary directory
+log_message "Cleaning up temporary directory..."
+if ! rm -rf "$RELEASE_VERSION"; then
+    log_message "Warning: Failed to remove temporary directory $RELEASE_VERSION"
+fi
+
 log_message "Successfully created upgrade bundle: $RELEASE_VERSION.zip"
 log_message "Upgrade bundle creation completed successfully"
-
-
-
