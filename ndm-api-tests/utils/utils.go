@@ -48,14 +48,13 @@ type KeycloakCredentials struct {
 
 // Generic API response wrapper that handles both single objects and arrays in items
 type ApiResponse[T any] struct {
-	Data    struct {
+	Data struct {
 		Items FlexibleItems[T] `json:"items"`
 	} `json:"data"`
 }
 
 // FlexibleItems can unmarshal either a single object or an array of objects
 type FlexibleItems[T any] []T
-
 
 // getBearerToken retrieves a bearer token using provided credentials or environment variables.
 func GetBearerToken(userN, pass string) (string, string, error) {
@@ -318,6 +317,7 @@ func ResetUserPassword(userID, accessToken, newPassword string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+
 		return fmt.Errorf("unexpected response code: %d", resp.StatusCode)
 	}
 	return nil
@@ -1327,4 +1327,45 @@ func (f *FlexibleItems[T]) UnmarshalJSON(data []byte) error {
 
 	// If both fail, return the array unmarshaling error
 	return json.Unmarshal(data, &items)
+}
+
+func GetCPVersion() string {
+	script := "cat /opt/datamigrator/conf/versions.conf"
+	sshConfig := SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     NDM_VM_HOST,
+		Port:     22,
+		Password: NDM_VM_PASSWORD,
+	}
+	output, err := sshRunScript(sshConfig, script)
+	if err != nil {
+		fmt.Printf("GetCPVersion failed: %v\noutput: %s", err, output)
+	}
+
+	fmt.Println("CP OUTPUT", output)
+
+	return output
+}
+
+func GetWorkerVersion() string {
+	config := GetAttachedWorkerDetails()
+	script := "cat /opt/datamigrator/conf/versions.conf"
+
+	sshConfig = SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	fmt.Printf(" ##### GET WORKER SSH CONFIG %+v", sshConfig)
+
+	output, err := sshRunScript(sshConfig, script)
+	if err != nil {
+		fmt.Printf("GetCPVersion failed: %v\noutput: %s", err, output)
+	}
+
+	fmt.Println("WORKER OUTPUT", output)
+
+	return output
 }
