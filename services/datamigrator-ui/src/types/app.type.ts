@@ -437,6 +437,7 @@ export interface FileServerOverviewApi {
     totalFileServers?: number;
     totalPendingSize: string;
   };
+  lastRefreshed: string;
 }
 
 export enum USER_STATUS_ENUM {
@@ -665,6 +666,7 @@ export interface ChartInfoPropsType {
   children: ReactNode;
   isLoading: boolean;
   isError: boolean;
+  lastRefreshed: string;
 }
 
 export interface ChartErrorPropsType {

@@ -20,7 +20,7 @@ describe("CsvService", () => {
         connect: jest.fn(),
         release: jest.fn(),
       }),
-      query: jest.fn(),
+      query: jest.fn().mockResolvedValue([]), // Default to empty array
     } as any;
 
     const module: TestingModule = await Test.createTestingModule({

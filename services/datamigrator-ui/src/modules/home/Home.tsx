@@ -64,6 +64,7 @@ const Home = () => {
             Icon={WorkspaceIcon}
             isLoading={isLoading}
             isError={isError}
+            lastRefreshed={chartData.lastRefreshed}
           />
           <ChartInfo
             children={
@@ -73,6 +74,7 @@ const Home = () => {
             Icon={GcpStorageIcon}
             isLoading={isLoading}
             isError={isError}
+            lastRefreshed={chartData.lastRefreshed}
           />
         </Box>
         <NoticeBoard />
