@@ -125,6 +125,14 @@ describe("DiscoveryReportService", () => {
             expect(pdfGenerator.generatePDF).toHaveBeenCalledWith({
                 data: { category: [] },
                 template: PDFTemplate.DISCOVERY_REPORT,
+                pdfOptions: {
+                    format: 'A2',
+                    printBackground: true,
+                    scale: 0.5,
+                    landscape: false,
+                    width: '420mm',
+                    height: '594mm',
+                }
             });
             expect(fs.promises.writeFile).toHaveBeenCalledWith("/tmp/42-discover-report.pdf", fakeBuffer);
             expect(result).toEqual({
@@ -335,7 +343,7 @@ describe("DiscoveryReportService", () => {
 
             const customService = module.get<DiscoveryReportService>(DiscoveryReportService);
             await customService.getSection({ jobRunId: 1, section: "section1" } as any);
-            expect(customConfigService.get).toHaveBeenCalledWith("typeorm.scheama");
+            expect(customConfigService.get).toHaveBeenCalledWith("typeorm.schema");
         });
     });
 });

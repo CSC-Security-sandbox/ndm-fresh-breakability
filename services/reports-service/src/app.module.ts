@@ -11,10 +11,11 @@ import { JobRunModule } from './job-run/job-run.module';
 import { OverviewModule } from './overview/overview.module';
 import { WorkerModule } from './worker/worker.module';
 import { GeneratorModule } from './generator/generator.module';
+import temporalConfig from './config/temporal.config';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, load: [databaseConfig, appConfig] }),
+    ConfigModule.forRoot({ isGlobal: true, load: [databaseConfig, appConfig, temporalConfig] }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) =>

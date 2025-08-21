@@ -9,7 +9,7 @@ if [ "$SOURCE_VAULT" = true ]; then
   for env_file in /vault/secrets/*.env; do
     if [ -f "$env_file" ]; then
       echo "Sourcing $env_file"
-      source "$env_file"
+      . "$env_file"
     fi
   done
 fi

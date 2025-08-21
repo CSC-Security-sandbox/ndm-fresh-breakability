@@ -8,15 +8,19 @@ import { GeneratePDFInput, PDF_TEMPLATE_PATHS } from "./pdf-generator.type";
 export class PDFGeneratorService implements OnApplicationShutdown {
   private browser: Browser | null = null;
   private readonly defaultPdfOptions: PDFOptions = {
-    format: "A4",
+    format: "A3", // use only format for natural scaling
     printBackground: true,
+    margin: { top: "3mm", right: "3mm", bottom: "3mm", left: "3mm" }, // optional
+    width: "297mm", // A3 width
+    height: "420mm", // A3 height
+    scale: 0.6, // Adjust scale for better fit
   };
 
-  // Initialize Puppeteer browser if not already started
   async initBrowser(): Promise<void> {
     if (!this.browser) {
       this.browser = await puppeteer.launch({
         headless: true,
+        browser: 'firefox',
         args: [
           "--no-sandbox",
           "--disable-setuid-sandbox",
@@ -29,7 +33,6 @@ export class PDFGeneratorService implements OnApplicationShutdown {
     }
   }
 
-  // Get the Puppeteer browser instance
   private getBrowser(): Browser {
     if (!this.browser) {
       throw new Error("Puppeteer browser is not initialized yet.");
@@ -37,12 +40,10 @@ export class PDFGeneratorService implements OnApplicationShutdown {
     return this.browser;
   }
 
-  // Create a new page in the browser
   private async getNewPage(): Promise<Page> {
     return this.getBrowser().newPage();
   }
 
-  // Compile Handlebars template with provided data
   private async compileTemplate(template: keyof typeof PDF_TEMPLATE_PATHS, data: any): Promise<string> {
     const templatePath = PDF_TEMPLATE_PATHS[template];
     const templateSource = await fs.promises.readFile(templatePath, "utf8");
@@ -50,14 +51,17 @@ export class PDFGeneratorService implements OnApplicationShutdown {
     return compiler(data);
   }
 
-  // Main method to generate PDF buffer
   async generatePDF({ data, template, pdfOptions }: GeneratePDFInput): Promise<Buffer> {
     await this.initBrowser();
     let page: Page | null = null;
     try {
       const html = await this.compileTemplate(template, data);
       page = await this.getNewPage();
-      await page.setContent(html, { waitUntil: "networkidle0" });
+
+      // Set viewport to match A3 at 150 DPI: width = 1754px, height = 2480px
+      await page.setViewport({ width: 0, height: 0, deviceScaleFactor: 1, isMobile: false });
+
+      await page.setContent(html, { waitUntil: 'load' });
       const options = { ...this.defaultPdfOptions, ...pdfOptions };
       const pdfBuffer = await page.pdf(options);
       return Buffer.from(pdfBuffer);
@@ -68,11 +72,10 @@ export class PDFGeneratorService implements OnApplicationShutdown {
     }
   }
 
-  // Gracefully close the browser on application shutdown
   async onApplicationShutdown(): Promise<void> {
     if (this.browser && this.browser.connected) {
       await this.browser.close();
-      this.browser == null;
+      this.browser = null;
     }
   }
 }

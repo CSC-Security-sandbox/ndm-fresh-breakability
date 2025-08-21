@@ -1,13 +1,14 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import Cookies from "js-cookie";
+import { RootStateType } from "src/store/store";
 
 export const permissionApi = createApi({
   reducerPath: "permissionApi",
   tagTypes: ["PERMISSIONS"],
   baseQuery: fetchBaseQuery({
     baseUrl: window?.env?.VITE_ADMIN_SERVICE_URL || import.meta.env.VITE_ADMIN_SERVICE_URL,
-    prepareHeaders: (headers) => {
-      const token = Cookies.get("access_token");
+    prepareHeaders: (headers, { getState }) => {
+      const state = getState() as RootStateType;
+      const token = state.authSlice?.accessToken;
       if (token) {
         headers.set("Authorization", `Bearer ${token}`);
       }

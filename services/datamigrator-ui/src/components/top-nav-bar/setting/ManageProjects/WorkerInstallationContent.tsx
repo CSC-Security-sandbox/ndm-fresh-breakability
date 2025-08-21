@@ -30,22 +30,22 @@ const WorkerInstallationContent = ({
     <Layout.Grid rowGap="md" style={{ margin: "10px" }}>
       <Layout.GridItem lg={12}>
         <Layout.Content>
-          <Layout.Container>
+          <Layout.Container className="!p-[3.5rem]">
             <Layout.Grid>
               <Layout.GridItem lg={12}>
                 <NumberedList includeTitles={true}>
                   <>
-                    <Text bold>Download Worker Image/Binary</Text>
+                    <Text bold>Download and setup Worker Image/Binary</Text>
                     <Text>
-                      Download the worker VM (Image for NFS or executable binary for SMB) by following the instructions
-                      specific to your environment (GCP, Azure, or OVA) as outlined in the NSS installation documentation.
+                      Download and setup the worker VM (Linux image for NFS or Windows executable binary for SMB) by following
+                      the NDM installation documentation section for your environment (GCP, Azure, or On-prem deployment).
                     </Text>
                   </>
                   <>
-                    <Text bold>Setup VM and Register Worker</Text>
+                    <Text bold>Register Worker VM</Text>
                     <Text>
-                      Create a VM (Linux for NFS and Windows for SMB), following the instructions
-                      specific to your environment to set up and register the worker to the control plane.
+                      For Linux worker, run the provided registration commands directly as instructed in the documentation.
+                      For Windows worker, extract the WORKER_ID, WORKER_SECRET, and PROJECT_ID values from the provided commands and enter them when prompted during installation.
                     </Text>
                   </>
                 </NumberedList>

@@ -94,5 +94,3 @@ function getMappedJobRunStatus(status: JobRunStatus, jobType: JobReportType): Jo
     return JobRunStatus.BLOCKED;
   return status ;
 }
-
-
