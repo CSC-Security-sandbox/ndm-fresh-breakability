@@ -33,13 +33,18 @@ export class DiscoveryReportService {
         this.schemaName = this.configService.get<string>('typeorm.schema') || 'datamigrator';
     }
 
-    async getSection({ jobRunId, section }: GetDiscoverySectionInput): Promise<DiscoveryReportSection[]> {
+    async getSection({ jobRunId, section, updateSection }: GetDiscoverySectionInput): Promise<DiscoveryReportSection[]> {
         const output = await this.dataSource.query(QueryMapper[section].query(this.schemaName), [jobRunId]);
-        return QueryMapper[section].mapper(output);
+        const sectionData = QueryMapper[section].mapper(output);
+        if (!updateSection) 
+            return sectionData;
+        await this.updateJsonReport({ jobRunId, data: sectionData, updateType: 'data' });
+        return [];
     }
 
-    async generatePdfReport({data, jobRunId}: GenerateDiscoveryReportInput) {
-        const categories = groupAndOrder(data, ReportType.DISCOVERY);
+    async generatePdfReport({jobRunId}: GenerateDiscoveryReportInput) {
+        const report = await this.reportsRepo.findOne({ where: { jobRunId, reportType: ReportType.DISCOVERY } });
+        const categories = groupAndOrder(JSON.parse(report.reportData), ReportType.DISCOVERY);
         // Generate PDF using the PDF generator service
         const pdfBuffer = await this.pdfGenerator.generatePDF({
           data: categories,
@@ -59,9 +64,10 @@ export class DiscoveryReportService {
         return { message: 'PDF report generated successfully', path: pdfFilePath };
     }
 
-    async generateCsvReport({data, jobRunId}: GenerateDiscoveryReportInput) {
-        const reportData = Object.values(groupAndOrder(data, ReportType.DISCOVERY)).flat()
-        
+    async generateCsvReport({jobRunId}: GenerateDiscoveryReportInput) {
+        const report = await this.reportsRepo.findOne({ where: { jobRunId, reportType: ReportType.DISCOVERY } });
+        const reportData = Object.values(groupAndOrder(JSON.parse(report.reportData), ReportType.DISCOVERY)).flat();
+
         // Dynamically determine headers based on sub_category
         const dynamicHeaders = new Set<string>();  
         reportData?.forEach(entry => {
@@ -92,18 +98,25 @@ export class DiscoveryReportService {
         return { message: 'CSV report generated successfully', path: csvFilePath };
     }
 
-    async updateJsonReport(input: UpdateDiscoveryReportInput) {
-        let report = await this.reportsRepo.findOne({ where: { jobRunId: input.jobRunId, reportType: ReportType.DISCOVERY } });
+    async updateJsonReport({jobRunId, updateType, data}: UpdateDiscoveryReportInput) {
+        if(updateType === 'status') {
+            const update = await this.jobRunRepo.update({ id: jobRunId }, { isReportReady: true });
+            this.logger.log(`Discovery report updated for jobRunId: ${jobRunId}`);
+            return "Updated The report status Successfully";
+        }
+
+        let report = await this.reportsRepo.findOne({ where: { jobRunId, reportType: ReportType.DISCOVERY } });
         if (!report) {
             report = this.reportsRepo.create({
-                jobRunId: input.jobRunId,
-                reportType: ReportType.DISCOVERY,
-                reportData: JSON.stringify(input.data),
+                jobRunId,
+            reportType: ReportType.DISCOVERY,
             });
         }
-        const updatedReport = await this.reportsRepo.save(report);
-        await this.jobRunRepo.update({ id: input.jobRunId }, { isReportReady: true });
-        this.logger.log(`Discovery report updated for jobRunId: ${input.jobRunId}`);
-        return updatedReport;
+
+        const currentData = report.reportData ? JSON.parse(report.reportData) : [];
+        const updatedData = [...currentData, ...data];
+        report.reportData = JSON.stringify(updatedData);
+        await this.reportsRepo.save(report);
+        return "Updated The report Data Successfully";
     }
 }
