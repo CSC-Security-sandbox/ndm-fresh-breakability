@@ -114,6 +114,8 @@ export class LogGeneratorActivity {
         `[${traceId}] Processing date folders: ${dateFolders.join(', ')}`,
       );
 
+      this.logger.log(`payload.projectWorkerMap - ${JSON.stringify(payload.projectWorkerMap)}`);
+
       // Verify base log path exists
       if (!(await this.pathExists(this.baseLogPath))) {
         throw new Error(`Base log path does not exist: ${this.baseLogPath}`);
@@ -123,10 +125,13 @@ export class LogGeneratorActivity {
       const existingDateFolders: string[] = [];
       for (const date of dateFolders) {
         const datePath = path.join(this.baseLogPath, date);
+        this.logger.log(`[${traceId}] Checking date folder: ${datePath}`);
         if (await this.pathExists(datePath)) {
           existingDateFolders.push(date);
         }
       }
+
+      this.logger.log(`[${traceId}] existingDateFolders: ${JSON.stringify(existingDateFolders)}`);
 
       if (existingDateFolders.length === 0) {
         throw new Error(
@@ -144,6 +149,8 @@ export class LogGeneratorActivity {
           `No matching log files found for the specified criteria (${payload.startDate} to ${payload.endDate}) with provided project-worker mapping`,
         );
       }
+
+      this.logger.log(`filteredPaths - ${JSON.stringify(filteredPaths)}`);
 
       this.logger.log(`[${traceId}] Found ${filteredPaths.length} filtered paths to process`);
 
@@ -206,6 +213,11 @@ export class LogGeneratorActivity {
         // Check both control_plane and worker folders
         const controlPlanePath = path.join(projectPath, 'control_plane');
         const workerParentPath = path.join(projectPath, 'worker');
+
+
+        this.logger.log(`projectPath - ${projectPath}`);
+        this.logger.log(`controlPlanePath - ${controlPlanePath}`);
+        this.logger.log(`workerParentPath - ${workerParentPath}`);
 
         // Add control_plane files if they exist
         if (await this.pathExists(controlPlanePath)) {
