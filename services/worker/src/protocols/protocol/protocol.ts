@@ -85,6 +85,8 @@ export abstract class Protocol {
           this.logger.error(
             `[${traceId}] command: ${sanitizedCommand}, error: ${error}`
           );
+          const sanitizedErrorMsg = sanitize(error.message, fieldsToSanitize);
+          error.message = sanitizedErrorMsg;                              
           throw error;
         }
       }
