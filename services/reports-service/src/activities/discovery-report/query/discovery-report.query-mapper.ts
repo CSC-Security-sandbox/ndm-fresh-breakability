@@ -153,6 +153,18 @@ export const MAX_VALUES_MAPPER = (input: MaxValuesInput[]) : DiscoveryReportSect
             valueType: 'count',
             sub_category: 'total_directories'
         });
+        output.push({
+            value: parseInt(item.max_depth, 0),
+            category: 'Maximum Values',
+            valueType: 'depth',
+            sub_category: 'max_depth'
+        });
+        output.push({
+            value: parseFloat(item.average_depth),
+            category: 'Maximum Values',
+            valueType: 'average_depth',
+            sub_category: 'average_depth'
+        });
     });
     return output;
 }

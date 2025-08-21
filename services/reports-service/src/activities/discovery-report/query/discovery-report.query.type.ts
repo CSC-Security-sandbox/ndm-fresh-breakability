@@ -42,6 +42,8 @@ export interface MaxValuesInput {
     max_file_size: string;
     max_name_length: string;
     total_directories: string;
+    max_depth: string;
+    average_depth: string;
 }
 export interface TopLongestFileNamesInput {
     path: string;

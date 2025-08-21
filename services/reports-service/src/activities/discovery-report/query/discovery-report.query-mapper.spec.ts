@@ -150,12 +150,20 @@ it('EXTENSION_DISTRIBUTION_MAPPER maps input correctly', () => {
 });
 
 it('MAX_VALUES_MAPPER maps input correctly', () => {
-    const input = [{ max_file_size: '1000', max_name_length: '255', total_directories: '5' }];
+    const input = [{ 
+        max_file_size: '1000', 
+        max_name_length: '255', 
+        total_directories: '5',
+        max_depth: '4',
+        average_depth: '2.50'
+    }];
     const result = MAX_VALUES_MAPPER(input as any);
     expect(result).toEqual([
         { value: 1000, category: 'Maximum Values', valueType: 'size', sub_category: 'max_file_size' },
         { value: 255, category: 'Maximum Values', valueType: 'length', sub_category: 'max_name_length' },
-        { value: 5, category: 'Maximum Values', valueType: 'count', sub_category: 'total_directories' }
+        { value: 5, category: 'Maximum Values', valueType: 'count', sub_category: 'total_directories' },
+        { value: 4, category: 'Maximum Values', valueType: 'depth', sub_category: 'max_depth' },
+        { value: 2.50, category: 'Maximum Values', valueType: 'average_depth', sub_category: 'average_depth' }
     ]);
 });
 

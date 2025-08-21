@@ -115,7 +115,7 @@ export const DEPTH_DISTRIBUTION = (schema: string) => `
             else 'unknown'
         end as depth_group,
         count(1),
-        sum(i.file_size) as size
+        sum(i.file_size) as total_size
     from ${schema}.inventory i
     where i.job_run_id = $1
     group by depth_group;
@@ -147,7 +147,9 @@ export const MAX_VALUES = (schema: string) => `
     select
         max(case when is_directory = false then file_size end)::numeric as max_file_size,
         max(case when is_directory = false then length(file_name) end)::numeric as max_name_length,
-        sum(case when is_directory = true then 1 else 0 end)::numeric as total_directories
+        sum(case when is_directory = true then 1 else 0 end)::numeric as total_directories,
+        max(i.depth)::numeric as max_depth,
+        round(avg(i.depth), 2)::numeric as average_depth
     from ${schema}.inventory i
     where i.job_run_id = $1 
 `
