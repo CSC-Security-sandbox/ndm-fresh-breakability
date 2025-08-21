@@ -530,7 +530,14 @@ export function formatBytes(bytes: number, decimals = 2): string {
   }
   return bytes === Math.floor(bytes)
     ? `${bytes.toFixed(0)} ${units[i]}`
-    : `${bytes.toFixed(decimals)} ${units[i]}`;
+  let value = bytes;
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024;
+    i++;
+  }
+  return value === Math.floor(value)
+    ? `${value.toFixed(0)} ${units[i]}`
+    : `${value.toFixed(decimals)} ${units[i]}`;
 }
 
 
