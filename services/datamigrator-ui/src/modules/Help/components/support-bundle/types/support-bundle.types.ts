@@ -6,6 +6,7 @@ export type SupportBundleContextType = {
   handleDownloadReport: () => void;
   handleGenerateBundle: () => void;
   bundleStatus: isBundleReadyApiType;
+  isDownloading: boolean;
 };
 
 export type SupportBundlePayloadType = {

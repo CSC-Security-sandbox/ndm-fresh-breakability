@@ -3,17 +3,12 @@
 
 # NDM Side
 
-1. Create the tar file from docker images and helm release by running the `Release Workflow` from the release branch
-
-2. The above step will create the docker(.tar) and helm package(.tgz) here https://generic.repo.eng.netapp.com/artifactory/openlab-generic-local/cicd/ndm/releases/
-
-3. Download the docker and helm locally and zip is along with the upgrade.sh. 
-The `upgrade.sh` file is present in upgrade folder of ndm
+1. Run the `create-upgrade-bundle.sh` with release name as input
 ```
-$ zip -r 2025.08.17184143 upgrade/
+$ ./create-upgrade-bundle.sh 2025.08.17-preview
 ```
 
-4. Give this zip to customers. 
+2. Give this zip to customers. 
 
 
 # User Side 
@@ -24,7 +19,7 @@ Stop all the jobs from the NDM UI
 # Steps to upgrade
 1. SCP the zip to the CP machine
 ```
-scp -P 2226 ~/2025.08.10184143.zip ubuntu@localhost:/tmp
+scp -P 2226 ~/2025.08.19-preview.zip ubuntu@localhost:/tmp
 ```
 
 2. SSH to CP machine and switch to datamigrator user
@@ -32,8 +27,9 @@ scp -P 2226 ~/2025.08.10184143.zip ubuntu@localhost:/tmp
 sudo su - datamigrator
 ```
 
-3. Unzip the upgrade bundle in /tmp folder
+3. Install unzip and unzip the upgrade bundle in /tmp folder
 ```
+sudo apt install unzip
 unzip 2025.08.17184143.zip
 ```
 
@@ -41,8 +37,14 @@ unzip 2025.08.17184143.zip
 ```
 $ cd upgrade
 $ chmod +x upgrade.sh
-$ ./upgrade.sh <path-to-docker-tar-file> <path-to-helm-tgz-file>
+$ ./upgrade.sh  <path-to-check-sum-file> <path-to-docker-tar-file> <path-to-helm-tgz-file>
+
+Example : ./upgrade.sh checksums.sha256 datamigrator-2025.08.19-preview.tar  datamigrator-2025.08.19-preview.tgz
 ```
 
 # Steps to upgrade Worker
-1. Create a new VM out of the release and attach the new worker.
+## LINUX
+1. Create a new VM from the released image and attach the new worker to NMD.
+
+## Windows
+1. Uninstall and Re-install the new exe on the Windows machine. 
