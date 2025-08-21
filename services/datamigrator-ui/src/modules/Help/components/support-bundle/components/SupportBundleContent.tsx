@@ -19,7 +19,6 @@ const SupportBundleContent = () => {
     bundleStatus,
     supportBundleForm,
     isDownloading,
-    isDownloading,
   } = useContext(SupportBundleContext);
 
   const { startDate, endDate } = supportBundleForm?.formState;
