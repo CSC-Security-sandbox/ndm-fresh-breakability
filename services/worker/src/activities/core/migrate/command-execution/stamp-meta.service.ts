@@ -59,30 +59,25 @@ export class StampMetaService {
                 output.sourceErrors.push(...permissionsOutput.sourceErrors);
                 output.targetErrors.push(...permissionsOutput.targetErrors);
             }
-            else {
-                let [gidUidOutput, preserveTimeOutput, timeOutput, permissionsOutput] =
-                    await Promise.all(
-                      [
-                          this.stampGIDandUID(input),
-                          this.preserveAccessAndModifiedTime(input),
-                          this.stampAccessAndModifiedTime(input),
-                          this.stampPermission(input)
-                      ]
-               );
+            else {            
 
                 // Stamp GID and UID
+                const gidUidOutput = await this.stampGIDandUID(input);
                 output.sourceErrors.push(...gidUidOutput.sourceErrors);
                 output.targetErrors.push(...gidUidOutput.targetErrors);
 
                 // Preserve access and modified time
+                const preserveTimeOutput = await this.preserveAccessAndModifiedTime(input);
                 output.sourceErrors.push(...preserveTimeOutput.sourceErrors);
                 output.targetErrors.push(...preserveTimeOutput.targetErrors);
 
                 // Stamp access and modified time
+                const timeOutput = await this.stampAccessAndModifiedTime(input);
                 output.sourceErrors.push(...timeOutput.sourceErrors);
                 output.targetErrors.push(...timeOutput.targetErrors);
 
                 // Stamp permissions
+                const permissionsOutput = await this.stampPermission(input);
                 output.sourceErrors.push(...permissionsOutput.sourceErrors);
                 output.targetErrors.push(...permissionsOutput.targetErrors);
             }

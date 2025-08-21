@@ -132,11 +132,10 @@ export class ScanService {
                     }catch(error) {
                         errors.push(error.code ?? '')
                     }
+                    await jobContext.setTask(activityId, task);
                 })
             )
         }
-        await jobContext.setTask(activityId, task);
-        
         const { batchDirs, subDirs }: BatchSubDirOutput = await this.batchSubDirs({subDirs: output.subDirs, batchSize, jobContext});
         output.subDirs = subDirs;
         output.batchDirs = batchDirs;

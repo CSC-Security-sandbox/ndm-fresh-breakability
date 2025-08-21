@@ -18,6 +18,7 @@ export class SyncService {
     readonly CHUNK_SIZE: number;
     readonly maxRetryCount: number;
     readonly maxConcurrency: number;
+    readonly maxWriteConcurrency: number;
     private readonly logger: LoggerService;
 
     constructor(
@@ -32,6 +33,7 @@ export class SyncService {
         this.logger = loggerFactory.create(SyncService.name);
         this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100;
+        this.maxWriteConcurrency = this.configService.get('worker.maxWriteConcurrency') || 100;
     }
 
 
@@ -73,9 +75,10 @@ export class SyncService {
 
         let offset = 0;
         while (offset < task.commands.length) {
-            let slice = task.commands.slice(offset, offset + this.maxConcurrency)
-            offset += this.maxConcurrency;
-            const results = await Promise.allSettled(slice.filter(command => command.status !== CommandStatus.COMPLETED).map(command => {
+            let slice = task.commands.slice(offset, offset + this.maxWriteConcurrency)
+            offset += this.maxWriteConcurrency;
+            const filteredCommands = slice.filter(command => command.status !== CommandStatus.COMPLETED);
+            const results = await Promise.allSettled(filteredCommands.map(command => {
                 const scanInput: CommandExecInput = {
                   sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
                   targetPath: `${baseTargetPrefixPath}${command.fPath}`,
