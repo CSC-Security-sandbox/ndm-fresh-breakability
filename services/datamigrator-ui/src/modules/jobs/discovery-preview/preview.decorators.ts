@@ -524,12 +524,10 @@ export function formatBytes(bytes: number, decimals = 2): string {
 
   const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
   let i = 0;
-
   while (bytes >= 1024 && i < units.length - 1) {
     bytes /= 1024;
     i++;
   }
-  
   return bytes === Math.floor(bytes)
     ? `${bytes.toFixed(0)} ${units[i]}`
     : `${bytes.toFixed(decimals)} ${units[i]}`;
