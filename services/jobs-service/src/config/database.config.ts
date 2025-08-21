@@ -73,6 +73,7 @@ export default registerAs(
       IdentityMappingEntity, ErrorRemedyEntity,
       WorkerStatsEntity,
       SyncEmailEntity,
+      // This is Materialized View
       JobStatsSummaryMvEntity
     ],
     migrations: [],
