@@ -14,7 +14,8 @@ export default registerAs(
     },
     prometheus: {
       baseUrl:
-        process.env.PROMETHEUS_BASE_URL || 'http://localhost:56825/api/v1',
+        process.env.PROMETHEUS_BASE_URL ||
+        'http://prometheus-server.prometheus.svc.cluster.local:80/api/v1',
       timeout: parseInt(process.env.PROMETHEUS_TIMEOUT || '30000', 10),
     },
   }),
