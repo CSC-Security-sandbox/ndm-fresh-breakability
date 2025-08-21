@@ -153,12 +153,6 @@ export class RedisConsumerService implements OnModuleDestroy {
 
             this.accumulatedRecords.length = 0;
 
-            // Clear the global projectId cache
-            if (jobRunIdToProjectIdMap.size > 0) {
-                this.logger.log(`Clearing ${jobRunIdToProjectIdMap.size} cached projectId mappings`);
-                jobRunIdToProjectIdMap.clear();
-            }
-
             this.logger.log('RedisConsumerService cleanup completed');
         } catch (error) {
             this.logger.error(`Error during cleanup: ${error.message}`, error?.stack || error);
@@ -784,6 +778,13 @@ export class RedisConsumerService implements OnModuleDestroy {
                 });
 
                 this.logger.log(`projectId: ${projectId} Successfully signaled workflow for jobRunId=${jobRunId} on attempt ${attempt}`);
+
+                // Clear the global projectId cache
+                if (jobRunIdToProjectIdMap.size > 0) {
+                    this.logger.log(`Clearing ${jobRunIdToProjectIdMap.size} cached projectId mappings`);
+                    jobRunIdToProjectIdMap.clear();
+                }
+
                 return; // Success, exit the retry loop
 
             } catch (error) {
