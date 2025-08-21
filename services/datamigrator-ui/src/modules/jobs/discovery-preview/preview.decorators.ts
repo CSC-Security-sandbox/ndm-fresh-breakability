@@ -517,7 +517,7 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
 }
 
 {
-  /* This function smartly converts bytes to KiB, MiB, GiB, TiB, PiB, EiB, ZiB or YiB */
+  /* This function smartly convert bytes to KiB, MiB, GiB, TiB, PiB, EiB, ZiB or YiB */
 }
 export function formatBytes(bytes: number, decimals = 2): string {
   if (bytes === 0) return "0 B";
