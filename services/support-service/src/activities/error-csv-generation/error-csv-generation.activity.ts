@@ -18,7 +18,7 @@ import {
 @Injectable()
 export class ErrorCsvGenerationActivity {
   private readonly logger = new Logger(ErrorCsvGenerationActivity.name);
-  constructor(private readonly operationErrorService: OperationErrorService) {}
+  constructor(private readonly operationErrorService: OperationErrorService) { }
 
   /**
    * Main export method that can be called from controller
@@ -282,7 +282,7 @@ export class ErrorCsvGenerationActivity {
 
   /**
    * Add a single CSV file to the zip structure
-   * Structure: ndm_logs_userid/ndm_logs/date/project-id/control_plane/error-report.csv
+   * Structure: ndm_logs_userid/ndm_logs/date/project-id/control-plane/error-report.csv
    */
   private async addCSVToZip(
     zip: AdmZip,
@@ -314,8 +314,8 @@ export class ErrorCsvGenerationActivity {
       // Build all possible target patterns in order of preference
       const patterns = [
         {
-          pattern: `ndm_logs/${date}/${projectId}/control_plane/`,
-          type: 'control_plane',
+          pattern: `ndm_logs/${date}/${projectId}/control-plane/`,
+          type: 'control-plane',
         },
         { pattern: `ndm_logs/${date}/${projectId}/`, type: 'project' },
         { pattern: `ndm_logs/${date}/`, type: 'date' },
@@ -333,13 +333,13 @@ export class ErrorCsvGenerationActivity {
         for (const possiblePath of allPaths) {
           let isMatch = false;
 
-          if (type === 'control_plane') {
+          if (type === 'control-plane') {
             // Original logic: possiblePath.includes(expectedControlPlanePath)
             isMatch = possiblePath.includes(pattern);
             if (isMatch) {
               targetPath = `${possiblePath}error-report.csv`;
               this.logger.log(
-                `[${traceId}] Found exact control_plane match: ${possiblePath}`,
+                `[${traceId}] Found exact control-plane match: ${possiblePath}`,
               );
             }
           } else if (type === 'project') {
@@ -348,9 +348,9 @@ export class ErrorCsvGenerationActivity {
               possiblePath.includes(pattern) &&
               possiblePath.endsWith(`${projectId}/`);
             if (isMatch) {
-              targetPath = `${possiblePath}control_plane/error-report.csv`;
+              targetPath = `${possiblePath}control-plane/error-report.csv`;
               this.logger.log(
-                `[${traceId}] Found project folder, will add control_plane: ${possiblePath}`,
+                `[${traceId}] Found project folder, will add control-plane: ${possiblePath}`,
               );
             }
           } else if (type === 'date') {
@@ -359,7 +359,7 @@ export class ErrorCsvGenerationActivity {
               possiblePath.includes(pattern) &&
               possiblePath.endsWith(`${date}/`);
             if (isMatch) {
-              targetPath = `${possiblePath}${projectId}/control_plane/error-report.csv`;
+              targetPath = `${possiblePath}${projectId}/control-plane/error-report.csv`;
               this.logger.log(
                 `[${traceId}] Found date folder, will create project structure: ${possiblePath}`,
               );
@@ -383,7 +383,7 @@ export class ErrorCsvGenerationActivity {
         );
         this.logger.log(`[${traceId}] We looked for these patterns:`);
         this.logger.log(
-          `[${traceId}]  - ndm_logs/${date}/${projectId}/control_plane/`,
+          `[${traceId}]  - ndm_logs/${date}/${projectId}/control-plane/`,
         );
         this.logger.log(`[${traceId}]  - ndm_logs/${date}/${projectId}/`);
         this.logger.log(`[${traceId}]  - ndm_logs/${date}/`);

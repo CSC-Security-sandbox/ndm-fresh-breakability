@@ -203,11 +203,11 @@ export class LogGeneratorActivity {
 
         this.logger.log(`[${traceId}] Processing project: ${mapping.projectId} with ${mapping.workerIds.length} workers`);
 
-        // Check both control_plane and worker folders
-        const controlPlanePath = path.join(projectPath, 'control_plane');
+        // Check both control-plane and worker folders
+        const controlPlanePath = path.join(projectPath, 'control-plane');
         const workerParentPath = path.join(projectPath, 'worker');
 
-        // Add control_plane files if they exist
+        // Add control-plane files if they exist
         if (await this.pathExists(controlPlanePath)) {
           const controlPlaneFiles = await this.findFilesInDirectory(controlPlanePath, traceId);
           filteredPaths.push(...controlPlaneFiles.map(filePath => ({
