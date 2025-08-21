@@ -58,7 +58,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             if (!this.isValidRedisClient()) {
                 this.redisClient = await RedisUtils.getClient();
 
-                 // Ensure Redis client is connected before proceeding
+                // Ensure Redis client is connected before proceeding
                 if (!this.redisClient.isOpen) await this.redisClient.connect();
                 this.logger.log('Redis client ready');
             }
@@ -196,11 +196,7 @@ export class RedisConsumerService implements OnModuleDestroy {
      */
     getProjectIdFromCache(jobRunId: string): string | null {
         const projectId = jobRunIdToProjectIdMap.get(jobRunId) || null;
-        if (projectId) {
-            this.logger.log(`Retrieved projectId: ${projectId} from cache for jobRunId: ${jobRunId}`);
-        } else {
-            this.logger.log(`No projectId found in cache for jobRunId: ${jobRunId}`);
-        }
+        this.logger.log(`Retrieved projectId: ${projectId} from cache for jobRunId: ${jobRunId}`);
         return projectId;
     }
 
