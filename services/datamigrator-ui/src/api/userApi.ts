@@ -1,6 +1,6 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import Cookies from "js-cookie";
 import { structuredErrorResponse } from "@api/api.utils";
+import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { RootStateType } from "src/store/store";
 
 export const usersApi = createApi({
   reducerPath: "usersApi",
@@ -17,8 +17,9 @@ export const usersApi = createApi({
     baseUrl:
       window?.env?.VITE_ADMIN_SERVICE_URL ||
       import.meta.env.VITE_ADMIN_SERVICE_URL,
-    prepareHeaders: (headers, { endpoint }) => {
-      const token = Cookies.get("access_token");
+    prepareHeaders: (headers, { endpoint, getState }) => {
+      const state = getState() as RootStateType;
+      const token = state.authSlice?.accessToken;
       const projectId = localStorage.getItem("selected_project_id");
       if (token) {
         headers.set("Authorization", `Bearer ${token}`);
@@ -164,38 +165,6 @@ export const usersApi = createApi({
       invalidatesTags: ["USER_ROLES"],
     }),
 
-    logoutUser: builder.mutation({
-      query: (body) => ({
-        url: `${
-          window?.env?.VITE_KEYCLOAK_HOST || import.meta.env.VITE_KEYCLOAK_HOST
-        }/realms/${
-          window?.env?.VITE_KEYCLOAK_REALM ||
-          import.meta.env.VITE_KEYCLOAK_REALM
-        }/protocol/openid-connect/logout`,
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams(body).toString(),
-      }),
-    }),
-
-    refreshUserToken: builder.mutation({
-      query: (body) => ({
-        url: `${
-          window?.env?.VITE_KEYCLOAK_HOST || import.meta.env.VITE_KEYCLOAK_HOST
-        }/realms/${
-          window?.env?.VITE_KEYCLOAK_REALM ||
-          import.meta.env.VITE_KEYCLOAK_REALM
-        }/protocol/openid-connect/token`,
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams(body).toString(),
-      }),
-    }),
-
     generateSecretForWorker: builder.query({
       query: (body) => ({
         url: `/worker-registration`,
@@ -249,12 +218,19 @@ export const usersApi = createApi({
       transformErrorResponse: structuredErrorResponse,
       invalidatesTags: ["GET_SMTP"],
     }),
+
+    aboutNdm: builder.query({
+      query: () => {
+        return `/about-ndm`;
+      },
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || [];
+      },
+    }),
   }),
 });
 
 export const {
-  useRefreshUserTokenMutation,
-  useLogoutUserMutation,
   useGetAllUsersQuery,
   useGetAllUsersWithRolesQuery,
   useGetUserDetailsQuery,
@@ -272,4 +248,5 @@ export const {
   useCreateSmtpMutation,
   useUpdateSmtpDataMutation,
   useGetAllUserByProjectQuery,
+  useLazyAboutNdmQuery,
 } = usersApi;

@@ -9,41 +9,6 @@ import (
 	"time"
 )
 
-// ErrorCsvResponse represents the response from generate-error-csv endpoint
-type ErrorCsvResponse struct {
-	Message string `json:"message"`
-}
-
-// ErrorResponse represents error responses from the backend
-type ErrorResponse struct {
-	StatusCode int    `json:"statusCode"`
-	Message    string `json:"message"`
-	Error      string `json:"error"`
-}
-
-// ErrorCsvReadyResponse represents the response from is-error-csv-ready endpoint
-type ErrorCsvReadyResponse struct {
-	Ready      bool `json:"ready"`
-	Processing bool `json:"processing"`
-}
-
-type ErrorCsvConfig struct {
-	BaseURL      string
-	Headers      map[string]string // Authorization and Content-Type headers
-	PollInterval time.Duration     // How often to poll for readiness (default: 3s)
-	Timeout      time.Duration     // Maximum time to wait for CSV generation (default: 5 minutes)
-	DebugMode    bool              // Enable debug logging
-}
-
-type DiagnosticInfo struct {
-	EndpointURL       string
-	IsHTMLResponse    bool
-	StatusCode        int
-	ResponseBody      string
-	SuggestedFix      string
-	ConfigurationHelp string
-}
-
 func GenerateCsvFile(idType string, id string, headers map[string]string) (string, error) {
 	generateURL := fmt.Sprintf("%s/api/v1/report/job-run/generate-error-csv/%s/%s", REPORT_SERVICE_URL, idType, id)
 	resp, err := SendAPIRequest("GET", generateURL, nil, headers)

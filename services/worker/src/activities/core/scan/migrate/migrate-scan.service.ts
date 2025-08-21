@@ -235,7 +235,7 @@ export class MigrateScanService {
         }
       
 
-        if (isMetaUpdated(sFile, dFile)) {
+        if (isMetaUpdated(sFile, dFile, 5000)) {
             const isDirectory = sFile.isDirectory();
             return new Cmd(
                 uuid4(),
