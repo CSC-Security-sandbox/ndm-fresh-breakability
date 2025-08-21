@@ -4,7 +4,7 @@
 import { proxyActivities, log } from '@temporalio/workflow';
 import { ActivitiesService } from 'src/activities/activities.service';
 import { DiscoveryReportSection } from 'src/activities/discovery-report/discovery-report.type';
-import { QueryList } from 'src/activities/discovery-report/query/discovery-report.query-mapper';
+import { DynamicMaps, QueryList } from 'src/activities/discovery-report/query/discovery-report.query-mapper';
 
 const { generateDiscoveryJsonReport } =
   proxyActivities<ActivitiesService>({
@@ -32,9 +32,10 @@ export const GenerateDiscoveryReportWorkflow = async ({ jobRunId }: GenerateDisc
 
   const output: DiscoveryReportSection[] = [];
 
+  // ----------------- Batch Section Proccess for Fixed size output Start -------------- //
   const results = await Promise.allSettled(
     QueryList.map(async (section) =>
-      await generateDiscoveryJsonReport({ jobRunId, section })
+      await generateDiscoveryJsonReport({ jobRunId, section, updateSection: false })
     )
   );
 
@@ -46,17 +47,32 @@ export const GenerateDiscoveryReportWorkflow = async ({ jobRunId }: GenerateDisc
     }
   });
 
+  await updateDiscoveryReport({
+    jobRunId,
+    data: output,
+    updateType: 'data'
+  });
+  // ----------------- Batch Section Proccess for Fixed size End -------------- //
+
+   // ----------------- Dynamic Section Proccess Start -------------- //
+  for(const section of DynamicMaps) {
+    await generateDiscoveryJsonReport({ jobRunId, section, updateSection: true });
+  }
+  // ----------------- Dynamic Section Proccess End -------------- //
+
   await Promise.allSettled(
     [
-      generateDiscoveryPdfReport({data: output, jobRunId}),
-      generateDiscoveryCsvReport({data: output, jobRunId}),
+      generateDiscoveryPdfReport({ jobRunId }),
+      generateDiscoveryCsvReport({ jobRunId }),
     ]
   );
 
   await updateDiscoveryReport({
     jobRunId,
-    data: output
+    updateType: 'status'
   });
+
+  
 
   return output
 };
