@@ -2,13 +2,21 @@
 
 ## NDM Side
 
-1. Run `create-upgrade-bundle.sh` with the release name as input:
-```bash
-# Example:
-./create-upgrade-bundle.sh 2025.08.17-preview
+# NDM Side
+1. Create a release branch `releases/2025.08.17-preview` from the main branch on GitHub.
+
+2. Run the release workflow on the `releases/2025.08.17-preview` branch to upload the Helm chart and Docker image to Artifactory.
+    Verify the upload by navigating to https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/releases and confirming that 
+    the release branch contains both the Docker tar file and Helm chart (.tgz file).
+ 
+
+3. Run the `create-upgrade-bundle.sh` with release name as input
+```
+$ cd ndm/upgrade
+$ ./create-upgrade-bundle.sh 2025.08.17-preview
 ```
 
-2. The script generates a zip file (e.g., `2025.08.17-preview.zip`). Provide this file to customers.
+4. Give this zip to customers. 
 
 ## Customer Side
 
@@ -22,28 +30,29 @@ Stop all jobs from the NDM UI before proceeding.
 scp -P 2226 ~/2025.08.19-preview.zip ubuntu@localhost:/tmp
 ```
 
-2. SSH into the Control Plane machine and switch to the datamigrator user:
-```bash
-sudo su - datamigrator
+2. SSH to CP machine and switch to datamigrator user
+```
+$ sudo su - datamigrator
 ```
 
-3. Install unzip and extract the upgrade bundle in the `/tmp` folder:
-```bash
-sudo apt install unzip
-unzip 2025.08.17-preview.zip
+3. Install unzip and unzip the upgrade bundle in /tmp folder
+```
+$ cd /tmp
+$ sudo apt install unzip
+$ unzip 2025.08.19-preview.zip
 ```
 
-4. Make the upgrade script executable and run it:
-```bash
-cd upgrade
-chmod +x upgrade.sh
-./upgrade.sh <path-to-checksum-file> <path-to-docker-tar-file> <path-to-helm-tgz-file>
+4. Make the upgrade script executable and run it
+```
+$ cd 2025.08.19-preview
+$ chmod +x upgrade.sh
+$ ./upgrade.sh  <path-to-check-sum-file> <path-to-docker-tar-file> <path-to-helm-tgz-file>
 
 # Example:
 ./upgrade.sh checksums.sha256 datamigrator-2025.08.19-preview.tar datamigrator-2025.08.19-preview.tgz
 ```
 
-## Worker Upgrade Steps
+## Steps to Upgrade Worker
 
 ### Linux
 Create a new VM from the released image and attach it to NDM.
