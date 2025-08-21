@@ -7,14 +7,15 @@ export interface DiscoveryReportSection {
 
 export interface GetDiscoverySectionInput {
     jobRunId: string;
-    section: string
+    section: string;
+    updateSection: Boolean;
 }
 export interface GenerateDiscoveryReportInput {
     jobRunId: string;
-    data: DiscoveryReportSection[];
 }
 
 export interface UpdateDiscoveryReportInput {
     jobRunId: string;
-    data: DiscoveryReportSection[];
+    data?: DiscoveryReportSection[];
+    updateType: 'data' | 'status'
 }

@@ -12,7 +12,7 @@ import ChartError from "@components/chartInfo/ChartError";
 import { Show } from "@components/show/Show";
 
 const ChartInfo = React.memo(
-  ({ title, Icon, children, isLoading, isError }: ChartInfoPropsType) => {
+  ({ title, Icon, children, isLoading, isError,lastRefreshed}: ChartInfoPropsType) => {
     return (
       <Box className="w-full grow">
         <Card className="h-full">

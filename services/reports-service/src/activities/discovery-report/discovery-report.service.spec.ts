@@ -33,8 +33,9 @@ jest.mock("src/generator/pdf-generator.service", () => {
 jest.mock("./query/discovery-report.query-mapper", () => ({
     QueryMapper: {
         section1: {
-            query: jest.fn().mockReturnValue("SELECT * FROM section1"),
+            query: jest.fn((schema) => "SELECT * FROM section1"),
             mapper: jest.fn().mockReturnValue([{ id: 1, name: "test" }]),
+            isDynamic: false
         },
     },
 }));
@@ -64,7 +65,7 @@ describe("DiscoveryReportService", () => {
                     useValue: {
                         get: jest.fn((key: string) => {
                             if (key === "app.baseDir") return "/tmp";
-                            if (key === "typeorm.scheama") return "testschema";
+                            if (key === "typeorm.schema") return "testschema";
                             return undefined;
                         }),
                     },
@@ -99,14 +100,14 @@ describe("DiscoveryReportService", () => {
     describe("getSection", () => {
         it("should query and map the section data", async () => {
             (dataSource.query as jest.Mock).mockResolvedValue([{ id: 1, name: "test" }]);
-            const result = await service.getSection({ jobRunId: 123, section: "section1" } as any);
-            expect(dataSource.query).toHaveBeenCalledWith("SELECT * FROM section1", [123]);
+            const result = await service.getSection({ jobRunId: "123", section: "section1", updateSection: false } as any);
+            expect(dataSource.query).toHaveBeenCalledWith("SELECT * FROM section1", ["123"]);
             expect(result).toEqual([{ id: 1, name: "test" }]);
         });
 
         it("should throw if section does not exist", async () => {
             await expect(
-                service.getSection({ jobRunId: 1, section: "doesnotexist" } as any)
+                service.getSection({ jobRunId: "1", section: "doesnotexist", updateSection: false } as any)
             ).rejects.toThrow();
         });
     });
@@ -114,14 +115,24 @@ describe("DiscoveryReportService", () => {
     describe("generatePdfReport", () => {
         it("should generate PDF and write to file", async () => {
             const fakeBuffer = Buffer.from("pdfdata");
+            const mockReport = {
+                id: 1,
+                jobRunId: "42",
+                reportType: ReportType.DISCOVERY,
+                reportData: JSON.stringify([{ foo: "bar" }])
+            };
+            (reportsRepo.findOne as jest.Mock).mockResolvedValue(mockReport);
             (groupAndOrder as jest.Mock).mockReturnValue({ category: [] });
             (pdfGenerator.generatePDF as jest.Mock).mockResolvedValue(fakeBuffer);
             (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
 
-            const input = { data: [{ foo: "bar" }], jobRunId: 42 };
+            const input = { jobRunId: "42" };
             const result = await service.generatePdfReport(input as any);
 
-            expect(groupAndOrder).toHaveBeenCalledWith(input.data, ReportType.DISCOVERY);
+            expect(reportsRepo.findOne).toHaveBeenCalledWith({
+                where: { jobRunId: "42", reportType: ReportType.DISCOVERY }
+            });
+            expect(groupAndOrder).toHaveBeenCalledWith([{ foo: "bar" }], ReportType.DISCOVERY);
             expect(pdfGenerator.generatePDF).toHaveBeenCalledWith({
                 data: { category: [] },
                 template: PDFTemplate.DISCOVERY_REPORT,
@@ -142,10 +153,17 @@ describe("DiscoveryReportService", () => {
         });
 
         it("should throw if PDF generation fails", async () => {
+            const mockReport = {
+                id: 1,
+                jobRunId: "777",
+                reportType: ReportType.DISCOVERY,
+                reportData: JSON.stringify([])
+            };
+            (reportsRepo.findOne as jest.Mock).mockResolvedValue(mockReport);
             (groupAndOrder as jest.Mock).mockReturnValue({ category: [] });
             (pdfGenerator.generatePDF as jest.Mock).mockRejectedValue(new Error("fail"));
 
-            const input = { data: [], jobRunId: 777 };
+            const input = { jobRunId: "777" };
             await expect(service.generatePdfReport(input as any)).rejects.toThrow("fail");
         });
     });
@@ -156,11 +174,18 @@ describe("DiscoveryReportService", () => {
                 { sub_category: "foo", value: "bar" },
                 { sub_category: "baz", value: "qux" },
             ];
+            const mockReport = {
+                id: 1,
+                jobRunId: "99",
+                reportType: ReportType.DISCOVERY,
+                reportData: JSON.stringify([{ foo: "bar" }])
+            };
+            (reportsRepo.findOne as jest.Mock).mockResolvedValue(mockReport);
             (groupAndOrder as jest.Mock).mockReturnValue({ a: fakeData });
             (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
             (escapeCsvValue as jest.Mock).mockImplementation((v) => v);
 
-            const input = { data: [{ foo: "bar" }], jobRunId: 99 };
+            const input = { jobRunId: "99" };
             const result = await service.generateCsvReport(input as any);
 
             expect(fs.promises.writeFile).toHaveBeenCalledWith(
@@ -175,11 +200,18 @@ describe("DiscoveryReportService", () => {
 
         it("should push value when header exists directly in entry", async () => {
             const fakeData = [{ foo: "bar" }];
+            const mockReport = {
+                id: 1,
+                jobRunId: "555",
+                reportType: ReportType.DISCOVERY,
+                reportData: JSON.stringify([{ foo: "bar" }])
+            };
+            (reportsRepo.findOne as jest.Mock).mockResolvedValue(mockReport);
             (groupAndOrder as jest.Mock).mockReturnValue({ a: fakeData });
             (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
             (escapeCsvValue as jest.Mock).mockImplementation((v) => v);
 
-            const input = { data: [{ foo: "bar" }], jobRunId: 555 };
+            const input = { jobRunId: "555" };
             const result = await service.generateCsvReport(input as any);
             expect(result).toEqual({
                 message: "CSV report generated successfully",
@@ -188,11 +220,18 @@ describe("DiscoveryReportService", () => {
         });
 
         it("should handle empty grouped data", async () => {
+            const mockReport = {
+                id: 1,
+                jobRunId: "888",
+                reportType: ReportType.DISCOVERY,
+                reportData: JSON.stringify([])
+            };
+            (reportsRepo.findOne as jest.Mock).mockResolvedValue(mockReport);
             (groupAndOrder as jest.Mock).mockReturnValue({});
             (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
             (escapeCsvValue as jest.Mock).mockImplementation((v) => v);
 
-            const input = { data: [], jobRunId: 888 };
+            const input = { jobRunId: "888" };
             const result = await service.generateCsvReport(input as any);
 
             expect(fs.promises.writeFile).toHaveBeenCalledWith(
@@ -207,11 +246,18 @@ describe("DiscoveryReportService", () => {
 
         it("should handle undefined values by writing empty string", async () => {
             const fakeData = [{ sub_category: "foo", value: undefined }];
+            const mockReport = {
+                id: 1,
+                jobRunId: "999",
+                reportType: ReportType.DISCOVERY,
+                reportData: JSON.stringify([{ foo: undefined }])
+            };
+            (reportsRepo.findOne as jest.Mock).mockResolvedValue(mockReport);
             (groupAndOrder as jest.Mock).mockReturnValue({ a: fakeData });
             (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
             (escapeCsvValue as jest.Mock).mockImplementation((v) => v);
 
-            const input = { data: [{ foo: undefined }], jobRunId: 999 };
+            const input = { jobRunId: "999" };
             const result = await service.generateCsvReport(input as any);
 
             expect(fs.promises.writeFile).toHaveBeenCalledWith(
@@ -227,51 +273,48 @@ describe("DiscoveryReportService", () => {
 
     describe("updateJsonReport", () => {
         it("should update existing report", async () => {
-            const fakeReport = { id: 1, jobRunId: 1, reportType: ReportType.DISCOVERY, reportData: "{}" };
+            const fakeReport = { 
+                id: 1, 
+                jobRunId: "1", 
+                reportType: ReportType.DISCOVERY, 
+                reportData: JSON.stringify([{ existing: "data" }])
+            };
             (reportsRepo.findOne as jest.Mock).mockResolvedValue(fakeReport);
             (reportsRepo.save as jest.Mock).mockResolvedValue(fakeReport);
             (jobRunRepo.update as jest.Mock).mockResolvedValue(undefined);
 
-            const input = { jobRunId: 1, data: { foo: "bar" } };
+            const input = { jobRunId: "1", data: [{ foo: "bar" }], updateType: 'data' as const };
             const result = await service.updateJsonReport(input as any);
 
             expect(reportsRepo.findOne).toHaveBeenCalledWith({
-                where: { jobRunId: 1, reportType: ReportType.DISCOVERY },
+                where: { jobRunId: "1", reportType: ReportType.DISCOVERY },
             });
             expect(reportsRepo.save).toHaveBeenCalledWith(fakeReport);
-            expect(jobRunRepo.update).toHaveBeenCalledWith({ id: 1 }, { isReportReady: true });
-            expect(result).toBe(fakeReport);
+            expect(result).toBe("Updated The report Data Successfully");
         });
 
         it("should create and save new report if not found", async () => {
             (reportsRepo.findOne as jest.Mock).mockResolvedValue(undefined);
-            (reportsRepo.create as jest.Mock).mockReturnValue({
-                jobRunId: 2,
+            const newReport = {
+                jobRunId: "2",
                 reportType: ReportType.DISCOVERY,
-                reportData: '{"foo":"bar"}',
-            });
+            };
+            (reportsRepo.create as jest.Mock).mockReturnValue(newReport);
             (reportsRepo.save as jest.Mock).mockResolvedValue({
-                jobRunId: 2,
-                reportType: ReportType.DISCOVERY,
-                reportData: '{"foo":"bar"}',
+                ...newReport,
+                reportData: JSON.stringify([{ foo: "bar" }]),
             });
             (jobRunRepo.update as jest.Mock).mockResolvedValue(undefined);
 
-            const input = { jobRunId: 2, data: { foo: "bar" } };
+            const input = { jobRunId: "2", data: [{ foo: "bar" }], updateType: 'data' as const };
             const result = await service.updateJsonReport(input as any);
 
             expect(reportsRepo.create).toHaveBeenCalledWith({
-                jobRunId: 2,
+                jobRunId: "2",
                 reportType: ReportType.DISCOVERY,
-                reportData: '{"foo":"bar"}',
             });
             expect(reportsRepo.save).toHaveBeenCalled();
-            expect(jobRunRepo.update).toHaveBeenCalledWith({ id: 2 }, { isReportReady: true });
-            expect(result).toEqual({
-                jobRunId: 2,
-                reportType: ReportType.DISCOVERY,
-                reportData: '{"foo":"bar"}',
-            });
+            expect(result).toBe("Updated The report Data Successfully");
         });
 
         it("should handle case where header exists directly on entry object", async () => {
@@ -279,11 +322,18 @@ describe("DiscoveryReportService", () => {
                 { foo: "bar" },
                 { sub_category: "baz", value: "qux" },
             ];
+            const mockReport = {
+                id: 1,
+                jobRunId: "101",
+                reportType: ReportType.DISCOVERY,
+                reportData: JSON.stringify([{ foo: "bar" }])
+            };
+            (reportsRepo.findOne as jest.Mock).mockResolvedValue(mockReport);
             (groupAndOrder as jest.Mock).mockReturnValue({ a: fakeData });
             (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
             (escapeCsvValue as jest.Mock).mockImplementation((v) => v);
 
-            const input = { data: [{ foo: "bar" }], jobRunId: 101 };
+            const input = { jobRunId: "101" };
             const result = await service.generateCsvReport(input as any);
 
             expect(fs.promises.writeFile).toHaveBeenCalledWith(
@@ -298,26 +348,31 @@ describe("DiscoveryReportService", () => {
 
         it("should handle empty object as data", async () => {
             (reportsRepo.findOne as jest.Mock).mockResolvedValue(undefined);
-            (reportsRepo.create as jest.Mock).mockReturnValue({
-                jobRunId: 3,
+            const newReport = {
+                jobRunId: "3",
                 reportType: ReportType.DISCOVERY,
-                reportData: "{}",
-            });
+            };
+            (reportsRepo.create as jest.Mock).mockReturnValue(newReport);
             (reportsRepo.save as jest.Mock).mockResolvedValue({
-                jobRunId: 3,
-                reportType: ReportType.DISCOVERY,
-                reportData: "{}",
+                ...newReport,
+                reportData: JSON.stringify([]),
             });
             (jobRunRepo.update as jest.Mock).mockResolvedValue(undefined);
 
-            const input = { jobRunId: 3, data: {} };
+            const input = { jobRunId: "3", data: [], updateType: 'data' as const };
             const result = await service.updateJsonReport(input as any);
 
-            expect(result).toEqual({
-                jobRunId: 3,
-                reportType: ReportType.DISCOVERY,
-                reportData: "{}",
-            });
+            expect(result).toBe("Updated The report Data Successfully");
+        });
+
+        it("should update job run status when updateType is status", async () => {
+            (jobRunRepo.update as jest.Mock).mockResolvedValue(undefined);
+
+            const input = { jobRunId: "4", updateType: 'status' as const };
+            const result = await service.updateJsonReport(input as any);
+
+            expect(jobRunRepo.update).toHaveBeenCalledWith({ id: "4" }, { isReportReady: true });
+            expect(result).toBe("Updated The report status Successfully");
         });
     });
 

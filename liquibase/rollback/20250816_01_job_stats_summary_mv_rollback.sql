@@ -1,0 +1,1 @@
+DROP MATERIALIZED VIEW IF EXISTS job_stats_summary_mv CASCADE;

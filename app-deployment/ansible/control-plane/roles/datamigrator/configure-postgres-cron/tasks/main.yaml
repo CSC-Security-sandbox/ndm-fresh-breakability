@@ -1,0 +1,71 @@
+---
+- name: Create datamigrator directory for CronJob resources
+  become: yes
+  file:
+    path: $HOME/datamigrator
+    state: directory
+
+- name: Render Postgres CronJob ConfigMap template
+  become: yes
+  template: src=./templates/postgres-configmap-cron.j2 dest=$HOME/datamigrator/postgres-configmap-cron.yaml
+
+- name: Render Postgres CronJob Job template
+  become: yes
+  template: src=./templates/postgres-cron.j2 dest=$HOME/datamigrator/postgres-cron.yaml
+
+- name: Delete Postgres CronJob Job and ConfigMap
+  become: yes
+  shell: |
+    kubectl delete -f $HOME/datamigrator/postgres-cron.yaml -n datamigrator || true
+    kubectl delete -f $HOME/datamigrator/postgres-configmap-cron.yaml -n datamigrator || true
+  args:
+    chdir: $HOME
+  when: dm_uninstall is defined
+
+- name: Apply Postgres CronJob ConfigMap and Job
+  become: yes
+  shell: |
+    kubectl apply -f $HOME/datamigrator/postgres-configmap-cron.yaml -n datamigrator
+    kubectl apply -f $HOME/datamigrator/postgres-cron.yaml -n datamigrator
+  args:
+    chdir: $HOME
+
+- name: Trigger CronJob manually
+  shell: |
+    kubectl create job --from=cronjob/ndm-postgres-cronjob postgres-cron-manual-{{ ansible_date_time.epoch }} -n datamigrator
+  register: cronjob_trigger
+
+- name: Wait for manual Job to complete
+  shell: |
+    kubectl wait --for=condition=complete --timeout=300s job/postgres-cron-manual-{{ ansible_date_time.epoch }} -n datamigrator
+  register: job_wait
+
+- name: Check Job status
+  shell: |
+    kubectl get job/postgres-cron-manual-{{ ansible_date_time.epoch }} -n datamigrator -o jsonpath='{.status.succeeded}'
+  register: job_status
+
+- name: Fail if Job did not succeed
+  fail:
+    msg: Manual CronJob execution failed!
+  when: job_status.stdout != "1"
+
+- name: Get pod name spawned by the Job
+  shell: |
+    kubectl get pods -n datamigrator -l job-name=postgres-cron-manual-{{ ansible_date_time.epoch }} -o jsonpath='{.items[0].metadata.name}'
+  register: pod_name
+
+- name: Show Job pod logs
+  shell: |
+    kubectl logs {{ pod_name.stdout }} -n datamigrator
+  register: job_logs
+
+- name: Display Job logs
+  debug:
+    msg: "{{ job_logs.stdout }}"
+
+- name: Cleanup datamigrator directory
+  become: yes
+  file:
+    path: $HOME/datamigrator
+    state: absent

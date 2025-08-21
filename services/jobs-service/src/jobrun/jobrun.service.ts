@@ -45,6 +45,7 @@ import {
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { MigrationConflictService } from "src/migration-conflict/migration-conflict.service";
+import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 
 @Injectable()
 export class JobRunService {
@@ -72,7 +73,9 @@ export class JobRunService {
     private errorRemedyService: ErrorRemedyService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly workerService: WorkersService,
-    private readonly migrationConflictService: MigrationConflictService
+    private readonly migrationConflictService: MigrationConflictService,
+    @InjectRepository(JobStatsSummaryMvEntity)
+    private jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>
   ) {
     this.logger = loggerFactory.create(JobRunService.name);
     this.mountBasePath = this.configService.get<string>(
@@ -430,58 +433,36 @@ export class JobRunService {
             ? jobRun.endtime.getTime() - jobRun.starttime.getTime()
             : Date.now() - jobRun.starttime.getTime(),
         };
-        this.logger.log(`Job Run ${jobRun.jobrunid} status ${jobRun.status}`);
-        if (String(jobRun.status).trim() == JobRunStatus.Completed) {
-          const inventoryStats: JobRunStats = jobRun.jobstats;
-          this.logger.log(
-            `Job Run ${jobRun.jobrunid} inventory stats ${JSON.stringify(inventoryStats)}`
-          );
-          const payload = {
-            scannedFilesCount: BigInt(
-              inventoryStats?.fileCount || "0"
-            )?.toString(),
-            scannedDirectoriesCount: BigInt(
-              inventoryStats?.directories || "0"
-            )?.toString(),
-            totalScannedSize:
-              jobRun.jobtype === JobType.DISCOVER
-                ? formatBytes(Number(inventoryStats?.totalSize || 0))
-                : "0 B",
-            totalMigratedSize:
-              jobRun.jobtype === JobType.MIGRATE || jobRun.jobtype === JobType.CUT_OVER
-                ? formatBytes(Number(inventoryStats?.totalSize || 0))
-                : "0 B",
-            errors: await this.getErrorCounts(jobRun.jobrunid),
-          };
-          const response: JobRunsDTO = {
-            ...partialJobRunStats,
-            ...payload,
-          };
-          return response;
-        } else {
-          const inventoryCounts: JobRunStats = await this.calculateJobRunStats(
+       
+          const jobStats: JobRunStats = await this.calculateJobRunStats(
             jobRun.jobrunid
           );
+          this.logger.log(`Job Run ${jobRun.jobrunid} status ${jobRun.status}`);
+          this.logger.log(
+            `Job Run ${jobRun.jobrunid} inventory stats ${JSON.stringify(
+              jobStats
+            )}`
+          );
           const response: JobRunsDTO = {
             ...partialJobRunStats,
             scannedFilesCount: BigInt(
-              inventoryCounts?.fileCount || "0"
+              jobStats?.fileCount || "0"
             )?.toString(),
             scannedDirectoriesCount: BigInt(
-              inventoryCounts?.directories || "0"
+              jobStats?.directories || "0"
             )?.toString(),
             totalScannedSize:
               jobRun.jobtype === JobType.DISCOVER
-                ? formatBytes(Number(inventoryCounts?.totalSize || "0"))
+                ? formatBytes(Number(jobStats?.totalSize || "0"))
                 : "0 B",
             totalMigratedSize:
               jobRun.jobtype === JobType.MIGRATE
-                ? formatBytes(Number(inventoryCounts?.totalSize || 0))
+                ? formatBytes(Number(jobStats?.totalSize || 0))
                 : "0 B",
-            errors: await this.getErrorCounts(jobRun.jobrunid),
+            errors: jobStats?.errors || [],
           };
           return response;
-        }
+        
       })
     );
     return allJobsRuns;
@@ -793,24 +774,17 @@ export class JobRunService {
     if (!jobRun)
       throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
 
-    const inventorySummary = await this.inventoryRepo
-      .createQueryBuilder("inventory")
-      .select([
-        "COUNT(CASE WHEN inventory.isDirectory = false THEN 1 END) AS fileCount",
-        "COUNT(CASE WHEN inventory.isDirectory = true THEN 1 END) AS directoryCount",
-        "COALESCE(SUM(CASE WHEN inventory.isDirectory = false THEN inventory.fileSize ELSE 0 END), 0) AS totalFileSize",
-      ])
-      .where("inventory.jobRunId = :jobRunId", { jobRunId: jobRunId })
-      .getRawOne();
+    const jobStatsSummary: JobStatsSummaryMvEntity = await this.jobStatsSummaryMvRepo.findOne({
+      where: { jobRunId: jobRunId }});
 
     this.logger.debug(
-      `[calculateJobRunStats] Calculating job stats for ${jobRunId}  and query result ${JSON.stringify(inventorySummary)}`
+      `[calculateJobRunStats] Calculating job stats for ${jobRunId}  and query result ${JSON.stringify(jobStatsSummary)}`
     );
 
     const jobRunStatus = {
-      fileCount: inventorySummary.filecount || "0",
-      directories: inventorySummary.directorycount || "0",
-      totalSize: inventorySummary.totalfilesize || "0",
+      fileCount: jobStatsSummary?.fileCount || "0",
+      directories: jobStatsSummary?.directoryCount || "0",
+      totalSize: jobStatsSummary?.totalSize || "0",
     };
 
     const response = {
