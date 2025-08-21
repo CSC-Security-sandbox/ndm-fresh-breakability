@@ -18,6 +18,7 @@ const SupportBundleContent = () => {
     handleGenerateBundle,
     bundleStatus,
     supportBundleForm,
+    isDownloading,
   } = useContext(SupportBundleContext);
 
   const { startDate, endDate } = supportBundleForm?.formState;
@@ -31,9 +32,10 @@ const SupportBundleContent = () => {
   return (
     <Card className="p-6 flex flex-col m-8">
       <Button
-        className="ml-auto"
+        className="ml-auto w-44"
         disabled={!isDateSame || !bundleStatus.isBundleReady}
         onClick={handleDownloadReport}
+        isSubmitting={isDownloading}
       >
         {DOWNLOAD_REPORT_LABEL}
       </Button>
