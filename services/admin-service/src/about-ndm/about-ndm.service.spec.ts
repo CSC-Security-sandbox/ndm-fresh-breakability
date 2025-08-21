@@ -177,11 +177,11 @@ describe('AboutNdmService', () => {
         },
         build: {
           worker_version: {
-            version: 'unknown',
+            version: 'N/A',
             time: null,
           },
           controlPlane_version: {
-            version: 'unknown',
+            version: 'N/A',
             time: null,
           },
         },
@@ -217,11 +217,11 @@ describe('AboutNdmService', () => {
         },
         build: {
           worker_version: {
-            version: 'unknown',
+            version: 'N/A',
             time: null,
           },
           controlPlane_version: {
-            version: 'unknown',
+            version: 'N/A',
             time: null,
           },
         },
@@ -255,11 +255,11 @@ describe('AboutNdmService', () => {
         },
         build: {
           worker_version: {
-            version: 'unknown',
+            version: 'N/A',
             time: null,
           },
           controlPlane_version: {
-            version: 'unknown',
+            version: 'N/A',
             time: null,
           },
         },
@@ -307,7 +307,7 @@ describe('AboutNdmService', () => {
             time: null,
           },
           controlPlane_version: {
-            version: 'unknown',
+            version: 'N/A',
             time: null,
           },
         },
@@ -414,11 +414,11 @@ describe('AboutNdmService', () => {
         },
         build: {
           worker_version: {
-            version: 'unknown',
+            version: 'N/A',
             time: null,
           },
           controlPlane_version: {
-            version: 'unknown',
+            version: 'N/A',
             time: null,
           },
         },
@@ -455,11 +455,11 @@ describe('AboutNdmService', () => {
         },
         build: {
           worker_version: {
-            version: 'unknown',
+            version: 'N/A',
             time: null,
           },
           controlPlane_version: {
-            version: 'unknown',
+            version: 'N/A',
             time: null,
           },
         },
@@ -517,7 +517,7 @@ describe('AboutNdmService', () => {
             time: null,
           },
           controlPlane_version: {
-            version: 'unknown',
+            version: 'N/A',
             time: null,
           },
         },
@@ -557,7 +557,7 @@ describe('AboutNdmService', () => {
         },
         build: {
           worker_version: {
-            version: 'unknown',
+            version: 'N/A',
             time: null,
           },
           controlPlane_version: {
