@@ -25,24 +25,26 @@ Stop all jobs from the NDM UI before proceeding.
 
 ### Upgrade Steps
 
-1. Copy the zip file to the Control Plane machine:
+1.Stop all jobs from the NDM UI before proceeding
+
+2. Copy the zip file to the Control Plane machine:
 ```bash
 scp -P 2226 ~/2025.08.19-preview.zip ubuntu@localhost:/tmp
 ```
 
-2. SSH to CP machine and switch to datamigrator user
+3. SSH to CP machine and switch to datamigrator user
 ```
 $ sudo su - datamigrator
 ```
 
-3. Install unzip and unzip the upgrade bundle in /tmp folder
+4. Install unzip and unzip the upgrade bundle in /tmp folder
 ```
 $ cd /tmp
 $ sudo apt install unzip
 $ unzip 2025.08.19-preview.zip
 ```
 
-4. Make the upgrade script executable and run it
+5. Make the upgrade script executable and run it
 ```
 $ cd 2025.08.19-preview
 $ chmod +x upgrade.sh
@@ -51,6 +53,8 @@ $ ./upgrade.sh  <path-to-check-sum-file> <path-to-docker-tar-file> <path-to-helm
 # Example:
 ./upgrade.sh checksums.sha256 datamigrator-2025.08.19-preview.tar datamigrator-2025.08.19-preview.tgz
 ```
+
+6. Restart all the stop jobs and the migration must resume .
 
 ## Steps to Upgrade Worker
 
