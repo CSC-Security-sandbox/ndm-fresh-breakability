@@ -216,7 +216,7 @@ describe('ErrorCsvGenerationActivity', () => {
       MockAdmZip.mockImplementation(() => mockZipInstance);
       mockZipInstance.getEntries.mockReturnValue([
         {
-          entryName: 'ndm_logs/2024-07-15/project-123/control_plane/',
+          entryName: 'ndm_logs/2024-07-15/project-123/control-plane/',
           isDirectory: true,
         } as any,
       ]);
@@ -354,7 +354,7 @@ describe('ErrorCsvGenerationActivity', () => {
       MockAdmZip.mockImplementation(() => mockZipInstance);
       mockZipInstance.getEntries.mockReturnValue([
         {
-          entryName: 'ndm_logs/2024-07-15/project-123/control_plane/',
+          entryName: 'ndm_logs/2024-07-15/project-123/control-plane/',
           isDirectory: true,
         } as any,
       ]);
@@ -470,7 +470,7 @@ describe('ErrorCsvGenerationActivity', () => {
       mockFs.access.mockResolvedValue(undefined);
       mockZipInstance.getEntries.mockReturnValue([
         {
-          entryName: 'ndm_logs/2024-07-15/project-123/control_plane/',
+          entryName: 'ndm_logs/2024-07-15/project-123/control-plane/',
           isDirectory: true,
         } as any,
       ]);
@@ -501,12 +501,12 @@ describe('ErrorCsvGenerationActivity', () => {
   describe('addCSVToZip', () => {
     const mockZipEntries = [
       {
-        entryName: 'ndm_logs/2024-07-15/project-123/control_plane/',
+        entryName: 'ndm_logs/2024-07-15/project-123/control-plane/',
         isDirectory: true,
       } as any,
     ];
 
-    it('should find control_plane location and add CSV', async () => {
+    it('should find control-plane location and add CSV', async () => {
       jest
         .spyOn(activity as any, 'generateCSVContent')
         .mockResolvedValue('csv,content\ntest,data');
@@ -522,7 +522,7 @@ describe('ErrorCsvGenerationActivity', () => {
 
       expect(result).toBe(true);
       expect(mockZipInstance.addFile).toHaveBeenCalledWith(
-        'ndm_logs/2024-07-15/project-123/control_plane/error-report.csv',
+        'ndm_logs/2024-07-15/project-123/control-plane/error-report.csv',
         expect.any(Buffer),
       );
     });
@@ -549,7 +549,7 @@ describe('ErrorCsvGenerationActivity', () => {
 
       expect(result).toBe(true);
       expect(mockZipInstance.addFile).toHaveBeenCalledWith(
-        'ndm_logs/2024-07-15/project-123/control_plane/error-report.csv',
+        'ndm_logs/2024-07-15/project-123/control-plane/error-report.csv',
         expect.any(Buffer),
       );
     });
@@ -573,7 +573,7 @@ describe('ErrorCsvGenerationActivity', () => {
 
       expect(result).toBe(true);
       expect(mockZipInstance.addFile).toHaveBeenCalledWith(
-        'ndm_logs/2024-07-15/project-123/control_plane/error-report.csv',
+        'ndm_logs/2024-07-15/project-123/control-plane/error-report.csv',
         expect.any(Buffer),
       );
     });

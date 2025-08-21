@@ -245,7 +245,7 @@ describe('LogGeneratorActivity', () => {
       // Mock findFilesInDirectory calls
       mockExec.mockImplementation((cmd, callback) => {
         setTimeout(() => {
-          callback(null, '/test/logs/2024-01-01/project-1/control_plane/test1.log\n/test/logs/2024-01-01/project-1/worker/worker-1/test2.log\n', '');
+          callback(null, '/test/logs/2024-01-01/project-1/control-plane/test1.log\n/test/logs/2024-01-01/project-1/worker/worker-1/test2.log\n', '');
         }, 0);
         return {} as any;
       });
@@ -280,7 +280,7 @@ describe('LogGeneratorActivity', () => {
       // Mock findFilesInDirectory calls
       mockExec.mockImplementation((cmd, callback) => {
         setTimeout(() => {
-          callback(null, '/test/logs/2024-01-01/project-1/control_plane/test1.log\n', '');
+          callback(null, '/test/logs/2024-01-01/project-1/control-plane/test1.log\n', '');
         }, 0);
         return {} as any;
       });
@@ -321,7 +321,7 @@ describe('LogGeneratorActivity', () => {
 
       // Mock the exec function to return test files
       mockExec.mockImplementation((cmd, callback) => {
-        callback(null, '/test/logs/2024-01-01/project-1/control_plane/test1.log\n', '');
+        callback(null, '/test/logs/2024-01-01/project-1/control-plane/test1.log\n', '');
       });
 
       await activity.fetchAndZipLogs({ traceId, payload: mockPayload });
@@ -486,7 +486,7 @@ describe('LogGeneratorActivity', () => {
 
       // Mock the exec function to return test files
       mockExec.mockImplementation((cmd, callback) => {
-        callback(null, '/test/logs/2024-01-01/project-1/control_plane/test1.log\n', '');
+        callback(null, '/test/logs/2024-01-01/project-1/control-plane/test1.log\n', '');
       });
 
       const result = await activity.fetchAndZipLogs({
@@ -523,7 +523,7 @@ describe('LogGeneratorActivity', () => {
 
       // Mock the exec function to return test files
       mockExec.mockImplementation((cmd, callback) => {
-        callback(null, '/test/logs/2024-01-01/project-1/control_plane/test1.log\n', '');
+        callback(null, '/test/logs/2024-01-01/project-1/control-plane/test1.log\n', '');
       });
 
       const result = await activity.fetchAndZipLogs({
@@ -562,7 +562,7 @@ describe('LogGeneratorActivity', () => {
 
       // Mock the exec function to return test files
       mockExec.mockImplementation((cmd, callback) => {
-        callback(null, '/test/logs/2024-01-01/project-1/control_plane/test1.log\n', '');
+        callback(null, '/test/logs/2024-01-01/project-1/control-plane/test1.log\n', '');
       });
 
       const result = await activity.fetchAndZipLogs({
@@ -601,7 +601,7 @@ describe('LogGeneratorActivity', () => {
         if (pathStr.includes('2024-02') || pathStr.includes('2024-03')) return Promise.resolve(undefined);
         if (pathStr.includes('2024-01') || pathStr.includes('2023-12')) return Promise.resolve(undefined);
         if (pathStr.includes('project-1')) return Promise.resolve(undefined);
-        if (pathStr.includes('control_plane') || pathStr.includes('worker')) return Promise.resolve(undefined);
+        if (pathStr.includes('control-plane') || pathStr.includes('worker')) return Promise.resolve(undefined);
         return Promise.reject(new Error('ENOENT'));
       });
       mockFsPromises.mkdir.mockResolvedValue(undefined);
@@ -629,7 +629,7 @@ describe('LogGeneratorActivity', () => {
         setTimeout(() => {
           callback(
             null,
-            '/test/logs/2024-01-01/project-1/control_plane/test1.log\n',
+            '/test/logs/2024-01-01/project-1/control-plane/test1.log\n',
             '',
           );
         }, 0);
@@ -841,7 +841,7 @@ describe('LogGeneratorActivity', () => {
 
       // Mock the exec function to return test files so execution continues
       mockExec.mockImplementation((cmd, callback) => {
-        callback(null, '/test/logs/2024-01-01/project-1/control_plane/test1.log\n', '');
+        callback(null, '/test/logs/2024-01-01/project-1/control-plane/test1.log\n', '');
       });
 
       const result = await activity.fetchAndZipLogs({ traceId: 'test', payload: mockPayload });
@@ -949,7 +949,7 @@ describe('LogGeneratorActivity', () => {
 
       // Mock the exec function to return test files
       mockExec.mockImplementation((cmd, callback) => {
-        callback(null, '/test/logs/2024-01-01/project-1/control_plane/test1.log\n', '');
+        callback(null, '/test/logs/2024-01-01/project-1/control-plane/test1.log\n', '');
       });
 
       const result = await activity.fetchAndZipLogs({ traceId: 'test', payload: mockPayload });
