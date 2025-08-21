@@ -36,6 +36,7 @@ export interface ScanDirectoryOutput {
     fileCount: number;
     dirCount: number;
     subDirs: string[];
+    batchDirs: string[];
 }
 
 

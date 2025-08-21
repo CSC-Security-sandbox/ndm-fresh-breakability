@@ -2,6 +2,8 @@ import { Cmd, JobManagerContext, TaskInfo, TaskStatus, TaskType } from "@netapp-
 import { uuid4 } from "@temporalio/workflow";
 import { basePrefix } from "src/activities/utils/utils";
 import *  as fs from 'fs';
+import { BatchSubDirInput, BatchSubDirOutput } from "../scan/scan-activity.type";
+import { calculateHash } from "src/activities/utils/checksum-utils";
 
 
 export const buildTask = (taskType: TaskType, jobRunId: string, jobContext:  JobManagerContext, commands: Cmd[]): TaskInfo => new TaskInfo(
@@ -28,3 +30,20 @@ export const isPathExists = async (path: string): Promise<boolean> => {
   }
   return false;
 }
+
+
+export const batchSubDirs = async ({batchSize, subDirs, jobContext}: BatchSubDirInput): Promise<BatchSubDirOutput> => {
+      const batchDirsId: string[] = []
+      while(subDirs.length > batchSize) {
+          const batchDirs: string[] = subDirs.splice(0, batchSize);
+          const batchId: string = calculateHash(batchDirs)
+          batchDirsId.push(batchId);
+          await jobContext.setBatchDir(batchId, batchDirs);
+      }
+      if(subDirs.length > 0) {
+          const batchId: string = calculateHash(subDirs);
+          batchDirsId.push(batchId);
+          await jobContext.setBatchDir(batchId, subDirs);
+      }
+      return { subDirs: [], batchDirs: batchDirsId };
+  }

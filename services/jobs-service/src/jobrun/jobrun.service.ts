@@ -528,45 +528,45 @@ export class JobRunService {
       }
       const jobRunStats: JobRunStats =
         await this.calculateJobRunStats(jobRunId);
-      if (
-        jobConfig &&
-        (jobConfig.jobType === JobType.MIGRATE ||
-          jobConfig.jobType === JobType.CUT_OVER)
-      ) {
-        const errorCodes =
-          await this.errorRemedyService.getDistinctErrorCodes(jobRunId);
-        if (!!errorCodes.length) {
-          await this.sendErrorRemedyEmail({
-            jobRunId,
-            sourcePath: jobConfig.sourcePath?.volumePath,
-            targetPath: jobConfig.targetPath?.volumePath,
-            sourceHost: jobConfig.sourcePath?.fileServer?.host,
-            targetHost: jobConfig.targetPath?.fileServer?.host,
-            jobType: jobConfig.jobType,
-            errorCodes,
-          });
-        } else {
-          this.logger.log(
-            `Job Run ${jobRunId} completed with stats ${JSON.stringify(jobRunStats)}`
-          );
+      // if (
+      //   jobConfig &&
+      //   (jobConfig.jobType === JobType.MIGRATE ||
+      //     jobConfig.jobType === JobType.CUT_OVER)
+      // ) {
+      //   const errorCodes =
+      //     await this.errorRemedyService.getDistinctErrorCodes(jobRunId);
+      //   if (!!errorCodes.length) {
+      //     await this.sendErrorRemedyEmail({
+      //       jobRunId,
+      //       sourcePath: jobConfig.sourcePath?.volumePath,
+      //       targetPath: jobConfig.targetPath?.volumePath,
+      //       sourceHost: jobConfig.sourcePath?.fileServer?.host,
+      //       targetHost: jobConfig.targetPath?.fileServer?.host,
+      //       jobType: jobConfig.jobType,
+      //       errorCodes,
+      //     });
+      //   } else {
+      //     this.logger.log(
+      //       `Job Run ${jobRunId} completed with stats ${JSON.stringify(jobRunStats)}`
+      //     );
 
-          await this.sendMailService.sendMail({
-            successEmailType: SuccessEmailType.JOB_UPDATE,
-            jobStatusUpdate: {
-              jobType: jobConfig.jobType,
-              jobAction: "completed",
-              sourcePath: {
-                volumePath: jobConfig.sourcePath?.volumePath,
-                fileServer: { host: jobConfig.sourcePath?.fileServer?.host },
-              },
-              targetPath: {
-                volumePath: jobConfig.targetPath?.volumePath,
-                fileServer: { host: jobConfig.targetPath?.fileServer?.host },
-              },
-            },
-          });
-        }
-      }
+      //     await this.sendMailService.sendMail({
+      //       successEmailType: SuccessEmailType.JOB_UPDATE,
+      //       jobStatusUpdate: {
+      //         jobType: jobConfig.jobType,
+      //         jobAction: "completed",
+      //         sourcePath: {
+      //           volumePath: jobConfig.sourcePath?.volumePath,
+      //           fileServer: { host: jobConfig.sourcePath?.fileServer?.host },
+      //         },
+      //         targetPath: {
+      //           volumePath: jobConfig.targetPath?.volumePath,
+      //           fileServer: { host: jobConfig.targetPath?.fileServer?.host },
+      //         },
+      //       },
+      //     });
+      //   }
+      // }
       this.logger.log("job Run Stats", JSON.stringify(jobRunStats));
       const terminalStatuses = [
         JobRunStatus.Completed,

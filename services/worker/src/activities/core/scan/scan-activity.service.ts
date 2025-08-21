@@ -10,6 +10,7 @@ import { DiscoveryScanService } from "./discovery/discovery-scan.service";
 import { MigrateScanService } from "./migrate/migrate-scan.service";
 import { BatchSubDirInput, BatchSubDirOutput, ScanActivityInput, ScanActivityOutput, ScanDirectoryInput, ScanDirectoryOutput, ScanDirectorySettings, TaskExecInput, TaskExecOutput, UpdateAndReportTaskInput } from './scan-activity.type';
 import { calculateHash } from "src/activities/utils/checksum-utils";
+import { batchSubDirs } from "../utils/utils";
 
 
 
@@ -125,10 +126,13 @@ export class ScanService {
                         }
                         else {
                             result = await this.discoveryScanService.scanDirectory(scanDirectoryInput);
+                            console.log(`Current subDirs length : ${result.subDirs.length}`);
+                            console.log(`Batched subDirs length : ${result.batchDirs.length}`);
                         }
                         output.fileCount += result.fileCount;
-                        output.dirCount += result.dirCount;
+                        output.dirCount += result.dirCount;   
                         output.subDirs.push(...result.subDirs);
+                        output.batchDirs.push(...result.batchDirs);
                     }catch(error) {
                         errors.push(error.code ?? '')
                     }
@@ -137,7 +141,7 @@ export class ScanService {
             )
         }
         
-        const { batchDirs, subDirs }: BatchSubDirOutput = await this.batchSubDirs({subDirs: output.subDirs, batchSize, jobContext});
+        const { batchDirs, subDirs }: BatchSubDirOutput = await batchSubDirs({subDirs: output.subDirs, batchSize, jobContext});
         output.subDirs = subDirs;
         output.batchDirs = batchDirs;
         return {result:output, errors, retryCount: task.retryCount};
@@ -166,19 +170,4 @@ export class ScanService {
         throw new RetryableError(`Sync Task Update Failed: ${errors.length} source errors with retry count ${retryCount} With Retryable Error`);   
     }
 
-    async batchSubDirs({batchSize, subDirs, jobContext}: BatchSubDirInput): Promise<BatchSubDirOutput> {
-        const batchDirsId: string[] = []
-        while(subDirs.length > batchSize) {
-            const batchDirs: string[] = subDirs.splice(0, batchSize);
-            const batchId: string = calculateHash(batchDirs)
-            batchDirsId.push(batchId);
-            await jobContext.setBatchDir(batchId, batchDirs);
-        }
-        if(subDirs.length > 0) {
-            const batchId: string = calculateHash(subDirs);
-            batchDirsId.push(batchId);
-            await jobContext.setBatchDir(batchId, subDirs);
-        }
-        return { subDirs: [], batchDirs: batchDirsId };
-    }
 }
