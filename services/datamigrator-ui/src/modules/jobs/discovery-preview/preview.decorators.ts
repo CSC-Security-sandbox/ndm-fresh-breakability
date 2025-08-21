@@ -522,13 +522,19 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
 export function formatBytes(bytes: number, decimals = 2): string {
   if (bytes === 0) return "0 B";
 
-  const k = BYTES_IN_KILOBYTE;
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
+  let i = 0;
 
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${
-    BYTE_UNITS[i] || BYTE_UNITS[0]
-  }`;
+  while (bytes >= 1024 && i < units.length - 1) {
+    bytes /= 1024;
+    i++;
+  }
+  
+  return bytes === Math.floor(bytes)
+    ? `${bytes.toFixed(0)} ${units[i]}`
+    : `${bytes.toFixed(decimals)} ${units[i]}`;
 }
+
 
 {
   /* This function smartly convert numbers to K, M, B, T, Q, Quint, Sext, Sept */
