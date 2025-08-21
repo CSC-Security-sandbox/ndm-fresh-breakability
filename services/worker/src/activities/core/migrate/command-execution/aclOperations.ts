@@ -106,21 +106,43 @@ export class AclOperations {
 
             this.logger.debug(`Processing ${allPermissions.length} permissions (${denyPermissions.length} deny, ${grantPermissions.length} allow)`);
 
-            for (const permission of allPermissions) {
-                try {
-                    await this.processPermission(permission, targetPath, result, isIdentityMappingAvailable);
-                } catch (error) {
-                    this.logger.error(`Failed to process permission for principal ${permission.principal}`, error);
-                    result.operations.push({
-                        type: 'skip',
-                        principal: permission.principal,
-                        reason: `Processing error: ${(error as Error).message}`,
-                        status: 'failed',
-                        error: (error as Error).message
-                    });
-                    result.success = false;
-                }
-            }
+            // Process denyPermissions first, in parallel
+            await Promise.all(
+                denyPermissions.map(async (permission) => {
+                    try {
+                        await this.processPermission(permission, targetPath, result, isIdentityMappingAvailable);
+                    } catch (error) {
+                        this.logger.error(`Failed to process deny permission for principal ${permission.principal}`, error);
+                        result.operations.push({
+                            type: 'skip',
+                            principal: permission.principal,
+                            reason: `Processing error: ${(error as Error).message}`,
+                            status: 'failed',
+                            error: (error as Error).message
+                        });
+                        result.success = false;
+                    }
+                })
+            );
+
+            // Then process grantPermissions, in parallel
+            await Promise.all(
+                grantPermissions.map(async (permission) => {
+                    try {
+                        await this.processPermission(permission, targetPath, result, isIdentityMappingAvailable);
+                    } catch (error) {
+                        this.logger.error(`Failed to process grant permission for principal ${permission.principal}`, error);
+                        result.operations.push({
+                            type: 'skip',
+                            principal: permission.principal,
+                            reason: `Processing error: ${(error as Error).message}`,
+                            status: 'failed',
+                            error: (error as Error).message
+                        });
+                        result.success = false;
+                    }
+                })
+            );
 
             this.logger.debug(`ACL stamp completed. Success: ${result.success}, Operations: ${result.operations.length}`);
             return result;
@@ -345,18 +367,19 @@ export class AclOperations {
 
             // Resolve SIDs if needed
             if (shouldResolveSIDs && aclData.permissions) {
-                for (const entry of aclData.permissions) {
-                    try {
-                        const resolved = await this.resolvePrincipal(entry.principal, jobID);
-                        if (resolved !== entry.principal) {
-                            entry.originalPrincipal = entry.principal;
-                            entry.principal = resolved;
+                await Promise.all(
+                    aclData.permissions.map(async (entry) => {
+                        try {
+                            const resolved = await this.resolvePrincipal(entry.principal, jobID);
+                            if (resolved !== entry.principal) {
+                                entry.originalPrincipal = entry.principal;
+                                entry.principal = resolved;
+                            }
+                        } catch (error) {
+                            this.logger.debug(`Failed to resolve principal ${entry.principal}:`, error);
                         }
-                    } catch (error) {
-                        this.logger.debug(`Failed to resolve principal ${entry.principal}:`, error);
-                        // Continue processing other entries
-                    }
-                }
+                    })
+                );
             }
 
             this.logger.debug(`Parsed ACL for ${normalizedPath}: ${aclData.permissions.length} permissions`);
@@ -552,17 +575,19 @@ export class AclOperations {
             const sourcePrincipals = new Map<string, ACLEntry>();
             const targetPrincipals = new Map<string, ACLEntry>();
 
-            for (const p of sourceACL.permissions) {
-                if (isIdentityMappingAvailable) {
-                    const resolved = await this.resolvePrincipal(p.principal, jobID);
-                    if (resolved) {
-                        p.principal = resolved;
-                      }
-                }
-                const keyPrincipal = p.principal; // This will be the resolved name if mapping was applied
-                const key = `${keyPrincipal}:${p.accessType}`;
-                sourcePrincipals.set(key, p);
-            }
+            await Promise.all(
+                sourceACL.permissions.map(async (p) => {
+                    if (isIdentityMappingAvailable) {
+                        const resolved = await this.resolvePrincipal(p.principal, jobID);
+                        if (resolved) {
+                            p.principal = resolved;
+                        }
+                    }
+                    const keyPrincipal = p.principal; // This will be the resolved name if mapping was applied
+                    const key = `${keyPrincipal}:${p.accessType}`;
+                    sourcePrincipals.set(key, p);
+                })
+            );
 
             for (const p of targetACL.permissions) {
                 const key = `${p.principal}:${p.accessType}`;
