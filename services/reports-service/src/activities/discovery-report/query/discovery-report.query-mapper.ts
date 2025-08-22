@@ -122,12 +122,23 @@ export const FILE_SYSTEM_DISTRIBUTION_MAPPER = (input: FileSystemDistributionInp
 export const EXTENSION_DISTRIBUTION_MAPPER = (input: ExtensionDistributionInput[]) : DiscoveryReportSection[] => {
     const output: DiscoveryReportSection[] = [];
     input.forEach(item => {
-        output.push({
-            value: `size(${item.total_size});count(${item.count})`,
-            category: 'Top File Extensions (with file Capacity and Count)',
-            valueType: 'string',
-            sub_category: item.extension
-        });
+        if (item.extension === 'TOTAL_OF_TOP_5') {
+            // Special handling for the total row
+            output.push({
+                value: `Total of Top 5 Extensions - size(${item.total_size});count(${item.count})`,
+                category: 'Top File Extensions Summary',
+                valueType: 'string',
+                sub_category: 'Top 5 Extensions Total'
+            });
+        } else {
+            // Regular extension rows
+            output.push({
+                value: `size(${item.total_size});count(${item.count})`,
+                category: 'Top File Extensions (with file Capacity and Count)',
+                valueType: 'string',
+                sub_category: item.extension
+            });
+        }
     });
     return output;
 }
@@ -135,6 +146,7 @@ export const EXTENSION_DISTRIBUTION_MAPPER = (input: ExtensionDistributionInput[
 export const MAX_VALUES_MAPPER = (input: MaxValuesInput[]) : DiscoveryReportSection[] => {
     const output: DiscoveryReportSection[] = [];
     input.forEach(item => {
+        // Maximum Values
         output.push({
             value: parseInt(item.max_file_size, 0),
             category: 'Maximum Values',
@@ -142,16 +154,50 @@ export const MAX_VALUES_MAPPER = (input: MaxValuesInput[]) : DiscoveryReportSect
             sub_category: 'max_file_size'
         });
         output.push({
+            value: parseInt(item.max_depth, 0),
+            category: 'Maximum Values',
+            valueType: 'count',
+            sub_category: 'max_depth'
+        });
+        output.push({
             value: parseInt(item.max_name_length, 0),
             category: 'Maximum Values',
             valueType: 'length',
             sub_category: 'max_name_length'
         });
+        
+        // Average Values
+        output.push({
+            value: Math.round(parseFloat(item.avg_file_size || '0') * 100) / 100,
+            category: 'Average Values',
+            valueType: 'size',
+            sub_category: 'avg_file_size'
+        });
+        output.push({
+            value: Math.round(parseFloat(item.avg_depth || '0') * 100) / 100,
+            category: 'Average Values',
+            valueType: 'count',
+            sub_category: 'avg_depth'
+        });
+        output.push({
+            value: Math.round(parseFloat(item.avg_name_length || '0') * 100) / 100,
+            category: 'Average Values',
+            valueType: 'length',
+            sub_category: 'avg_name_length'
+        });
+        
+        // Total Counts
         output.push({
             value: parseInt(item.total_directories, 0),
-            category: 'Maximum Values',
+            category: 'Total Counts',
             valueType: 'count',
             sub_category: 'total_directories'
+        });
+        output.push({
+            value: parseInt(item.total_files, 0),
+            category: 'Total Counts',
+            valueType: 'count',
+            sub_category: 'total_files'
         });
     });
     return output;
