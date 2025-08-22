@@ -550,7 +550,7 @@ export function formatBytes(bytes: number, decimals = 2): string {
   /* This function smartly convert numbers to K, M, B, T, Q, Quint, Sext, Sept */
 }
 export function formatLargeNumber(num: number, decimals = 2): string {
-  if (Number(num) === 0) return "0";
+  if (num === 0) return "0";
 
   const i = Math.floor(Math.log10(num) / 3);
 
