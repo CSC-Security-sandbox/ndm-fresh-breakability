@@ -37,6 +37,7 @@ export enum FileSystemCategory {
   MAXIMUM_VALUES = "Maximum Values",
   JOB_RUN_STATS = "Job Run Stats",
   FILE_SERVER_INFO = "File Server Info",
+  AVERAGE_VALUES = "Average Values",
 }
 
 /**
@@ -56,6 +57,12 @@ export enum FileSystemSubCategory {
   MAX_FILE_SIZE = "max_file_size",
   MAX_NAME_LENGTH = "max_name_length",
   TOTAL_DIRECTORIES = "total_directories",
+  MAX_DEPTH = "max_depth",
+
+  //Average Values subcategories
+  AVG_FILE_SIZE = "avg_file_size",
+  AVG_NAME_LENGTH = "avg_name_length",
+  AVG_DEPTH = "avg_depth",
 
   // Job Run Stats subcategories
   TOTAL_TIME = "Total Time",

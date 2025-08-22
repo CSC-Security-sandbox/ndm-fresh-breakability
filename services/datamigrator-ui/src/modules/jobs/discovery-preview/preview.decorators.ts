@@ -329,6 +329,7 @@ export function extractBiggestFiles(
 {
   /* This function extract data directories that are max nested */
 }
+
 export function extractLongestDirectoryPaths(data: DataItemType[]): FileInfo[] {
   const longestDirPaths = data?.find(
     (item: DataItemType) =>
@@ -348,9 +349,11 @@ export function extractLongestDirectoryPaths(data: DataItemType[]): FileInfo[] {
         openParenIndex < closeParenIndex &&
         !isNaN(parseInt(entry.substring(openParenIndex + 1, closeParenIndex), 10))
       ) {
+
+        const num = Number(entry.substring(openParenIndex + 1, closeParenIndex));
         return {
           directoryPath: entry.substring(0, openParenIndex).trim(),
-          length: parseInt(entry.substring(openParenIndex + 1, closeParenIndex), 10),
+          length: Number.isFinite(num) ? num : 0
         };
       }
       return null;
@@ -360,27 +363,32 @@ export function extractLongestDirectoryPaths(data: DataItemType[]): FileInfo[] {
 }
 
 {
+  /* This function extract max and average values for a given type */
+}
+const getMaxAvg = (data: DataItemType[], maxType: FileSystemSubCategory, avgType: FileSystemSubCategory) => {
+  const maxItem = data?.find(
+    (item: DataItemType) =>
+      item.category === FileSystemCategory.MAXIMUM_VALUES &&
+      item.sub_category === maxType
+  );
+  
+  const avgItem = data?.find(
+    (item: DataItemType) =>
+      item.category === FileSystemCategory.AVERAGE_VALUES &&
+      item.sub_category === avgType
+  );
+  const maxValue = maxItem ? (maxItem.value as number) : 0;
+  const avgValue = avgItem ? (avgItem.value as number) : 0;
+  return { maxValue, avgValue };
+}
+
+{
   /* This function extract data files with max and average of depth */
 }
 export function extractAverageMaxDepth(jsonData: DataItemType[]) {
-  const depthData = jsonData?.filter(
-    (item: DataItemType) => item.category === FileSystemCategory.DEPTH
-  );
-  if (depthData?.length === 0) {
-    return { avgDepth: 0, maxDepth: 0 };
-  }
-
-  const maxDepth = Math.max(
-    ...depthData.map((item: DataItemType) => item.value as number)
-  );
-  const total = depthData?.reduce(
-    (sum: number, item: DataItemType) => sum + (item.value as number),
-    0
-  );
-  const avgDepth =
-    total === 0 || depthData.length === 0 ? 0 : parseFloat((total / depthData.length).toFixed(1));
-
-  return { avgDepth, maxDepth };
+  
+  const result = getMaxAvg(jsonData, FileSystemSubCategory.MAX_DEPTH, FileSystemSubCategory.AVG_DEPTH);
+  return { avgDepth: result.avgValue, maxDepth: result.maxValue };
 }
 
 {
@@ -390,56 +398,8 @@ export function extractMaxAvgFilePath(data: DataItemType[]): {
   maxPath: number;
   avgPath: number;
 } {
-   const filePathLengths = data
-    ?.filter((item: DataItemType) => item.sub_category === FileSystemSubCategory.TOP_5_LONGEST_FILE_PATH)
-    ?.map((item: DataItemType) =>
-      (item.value as string)
-        .split(";")
-        .map((path: string) => {
-          const match = path.match(getRegExp(StringComparisonPattern.NUMBER_IN_PARENTHESES));
-         const countOfPath= match ? parseInt(match[1], 10) : null;
-         return countOfPath
-        })
-    );
-  const allLengths = filePathLengths?.flat();
-  if (allLengths?.length === 0) return { maxPath: 0, avgPath: 0 };
-
-  const maxPath = Math.max(...allLengths);
-  const filePathSummary = data?.find((item: DataItemType) =>
-      item.sub_category === FileSystemSubCategory.FILE_PATH_SUMMARY
-  );
-
-// Initialize variables
-  let totalLength = 0;
-  let totalPath = 0;
-
-// Process the value if found
-  if (filePathSummary) {
-    const parts = (filePathSummary.value as string).split(";");
-
-    // Process each part
-    parts.forEach(path => {
-      // Extract Total Length
-      const lengthMatch = path.match(getRegExp(StringComparisonPattern.TOTAL_LENGTH));
-      if (lengthMatch) {
-        totalLength = parseInt(lengthMatch[1], 10);
-      }
-
-      // Extract Total Path
-      const pathMatch = path.match(getRegExp(StringComparisonPattern.TOTAL_PATH));
-      if (pathMatch) {
-        totalPath = parseInt(pathMatch[1], 10);
-      }
-    });
-  }
-
-  const avgPath =
-    totalPath === 0 ? 0 : totalLength / totalPath;
-
-  return {
-    maxPath,
-    avgPath,
-  };
+  const result = getMaxAvg(data, FileSystemSubCategory.MAX_NAME_LENGTH, FileSystemSubCategory.AVG_NAME_LENGTH);
+  return { maxPath: result.maxValue, avgPath: result.avgValue };
 }
 
 {
@@ -449,32 +409,8 @@ export function extractMaxAvgFileSize(data: DataItemType[]): {
   maxFileSize: number;
   avgFileSize: number;
 } {
-  const fileSizeValues = data
-    ?.filter((item: DataItemType) => item.sub_category === FileSystemSubCategory.TOP_5_BIGGEST_FILE_NAMES)
-    ?.map((item: DataItemType) =>
-      (item.value as string).split(";").map((file: string) => {
-        const match = file.trim().match(getRegExp(StringComparisonPattern.NUMBER_IN_PARENTHESES));
-        return match ? parseInt(match[1], 10) : 0;
-      })
-    );
-
-  const allFileSizes = fileSizeValues?.flat();
-
-  if (allFileSizes?.length === 0) return { maxFileSize: 0, avgFileSize: 0 };
-
-  const maxFileSize = Math.max(...allFileSizes);
-    const {totalSpaceUsed,totalCount} = extractSystemFileStatAndDirectories(data);
-
-  const parsedTotalCount = parseInt(totalCount as string, 10);
-  const parsedTotalSpaceUsed = parseInt(totalSpaceUsed as string, 10);
-  const avgFileSize =
-    parsedTotalCount === 0 || parsedTotalSpaceUsed === 0
-      ? 0
-      : parsedTotalSpaceUsed / parsedTotalCount;
-  return {
-    maxFileSize,
-    avgFileSize,
-  };
+  const result = getMaxAvg(data, FileSystemSubCategory.MAX_FILE_SIZE, FileSystemSubCategory.AVG_FILE_SIZE);
+  return { maxFileSize: result.maxValue, avgFileSize: result.avgValue };
 }
 
 {
@@ -550,7 +486,7 @@ export function formatBytes(bytes: number, decimals = 2): string {
   /* This function smartly convert numbers to K, M, B, T, Q, Quint, Sext, Sept */
 }
 export function formatLargeNumber(num: number, decimals = 2): string {
-  if (Number(num) === 0) return "0";
+  if (num === 0) return "0";
 
   const i = Math.floor(Math.log10(num) / 3);
 
