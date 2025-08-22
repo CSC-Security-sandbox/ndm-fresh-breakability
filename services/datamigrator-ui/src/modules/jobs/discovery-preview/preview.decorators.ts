@@ -291,7 +291,7 @@ export function longestFileNames(
 ): { fileName: string }[] {
   const longestFileEntry = jsonData?.find(
     (item) =>
-      item.category === FileSystemCategory.BIGGEST && item.sub_category === FileSystemSubCategory.TOP_5_LONGEST_FILE_NAMES
+      item.category === FileSystemCategory.BIGGEST && item.sub_category === FileSystemSubCategory.TOP_5_LONGEST_FILE_PATH
   );
 
   if (!longestFileEntry || typeof longestFileEntry.value !== ValueType.STRING)
