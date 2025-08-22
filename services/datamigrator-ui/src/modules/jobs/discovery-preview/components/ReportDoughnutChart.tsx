@@ -132,8 +132,8 @@ const ReportDoughnutChart = () => {
       {/* File Extension Doughnut Chart */}
       <Card className="w-full">
         <CardHeader type="small">
-          <CardTitle className="font-bold">Top File Extensions</CardTitle>
-          <Popover>Top File Extensions found during discovery.</Popover>
+          <CardTitle className="font-bold">Top 5 File Extensions</CardTitle>
+          <Popover>Top 5 File Extensions found during discovery.</Popover>
         </CardHeader>
         <CardContent className="flex gap-8">
           <DoughnutChart
