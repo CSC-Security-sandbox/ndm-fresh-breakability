@@ -68,6 +68,7 @@ const (
 	IS_SUPPORT_BUNDLE_READY_URL                     = "/api/v1/support-bundle/is-bundle-ready"
 	GENERATE_SUPPORT_BUNDLE_URL                     = "/api/v1/support-bundle"
 	DOWNLOAD_SUPPORT_BUNDLE_URL                     = "/api/v1/support-bundle/download"
+	ABOUT_NDM_URL                                   = "/api/v1/about-ndm"
 	JobTypeDiscovery                JobType         = "DISCOVER"
 	JobTypeCutover                  JobType         = "CUTOVER"
 	JobTypeMigration                JobType         = "MIGRATE"

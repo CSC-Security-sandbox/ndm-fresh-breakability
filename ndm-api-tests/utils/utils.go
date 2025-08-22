@@ -48,14 +48,13 @@ type KeycloakCredentials struct {
 
 // Generic API response wrapper that handles both single objects and arrays in items
 type ApiResponse[T any] struct {
-	Data    struct {
+	Data struct {
 		Items FlexibleItems[T] `json:"items"`
 	} `json:"data"`
 }
 
 // FlexibleItems can unmarshal either a single object or an array of objects
 type FlexibleItems[T any] []T
-
 
 // getBearerToken retrieves a bearer token using provided credentials or environment variables.
 func GetBearerToken(userN, pass string) (string, string, error) {
@@ -1327,4 +1326,79 @@ func (f *FlexibleItems[T]) UnmarshalJSON(data []byte) error {
 
 	// If both fail, return the array unmarshaling error
 	return json.Unmarshal(data, &items)
+}
+
+func GetCPVersion() (string, error) {
+	script := "grep '^current_version=' /opt/datamigrator/conf/versions.conf | cut -d'=' -f2 | xargs echo -n "
+	port, err := strconv.Atoi(NDM_VM_PORT)
+	if err != nil {
+		LogFatalf("Invalid port number in NDM_VM_PORT: %v", err)
+	}
+	sshConfig := SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     NDM_VM_HOST,
+		Port:     port,
+		Password: NDM_VM_PASSWORD,
+	}
+	output, err := sshRunScript(sshConfig, script)
+	if err != nil {
+		return "", fmt.Errorf("get cp version failed: %v\noutput: %s", err, output)
+	}
+
+	fmt.Println("CP OUTPUT", output)
+
+	return output, nil
+}
+
+func GetWorkerVersion() (string, error) {
+	config := GetAttachedWorkerDetails()
+	script := "grep '^current_version=' /opt/datamigrator/conf/versions.conf | cut -d'=' -f2 | xargs echo -n"
+
+	sshConfig = SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	output, err := sshRunScript(sshConfig, script)
+	if err != nil {
+		return "", fmt.Errorf("get worker version failed: %v\noutput: %s", err, output)
+	}
+
+	fmt.Println("WORKER OUTPUT", output)
+
+	return output, nil
+}
+
+// get versions from NDM app
+func GetVersions(headers map[string]string) (abouNDMResp AboutNDMResponse, err error) {
+	var gotWorkerVersion string
+	aboutNDMURL := CONFIG_SERVICE_URL + ABOUT_NDM_URL
+	for i := 0; i < MaxPollRetries; i++ {
+		Wait(1)
+		resp, err := SendAPIRequest(http.MethodGet, aboutNDMURL, nil, headers)
+		if err != nil {
+			return abouNDMResp, fmt.Errorf("get worker version failed: %v", err)
+		}
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return abouNDMResp, fmt.Errorf("unable to read body %v", err)
+		}
+
+		err = json.Unmarshal(bodyBytes, &abouNDMResp)
+		if err != nil {
+			return abouNDMResp, fmt.Errorf("unable unmarshal resp %v", err)
+		}
+
+		gotWorkerVersion = abouNDMResp.Data.Items.Build.WorkerVersion.Version
+		resp.Body.Close()
+
+		if gotWorkerVersion != "N/A" && gotWorkerVersion != "" {
+			break
+		}
+	}
+
+	return abouNDMResp, nil
 }
