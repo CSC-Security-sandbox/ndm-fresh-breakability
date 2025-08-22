@@ -26,8 +26,8 @@ const ReportTables = () => {
       <Box className="flex gap-4 mt-4">
         <Box className="w-full">
           <ReportTableRenderer
-            title="Longest Path"
-            tooltipContent="Files with longest path."
+            title="Top 5 Directory Path Lengths"
+            tooltipContent="Files with Top 5 Directory Path Lengths."
             columns={LONGEST_PATH_TABLE_COLUMS}
             rows={extractLongestDirectoryPaths(reportData)}
             isSorting={true}
@@ -36,8 +36,8 @@ const ReportTables = () => {
         </Box>
         <Box className="w-full">
           <ReportTableRenderer
-            title="Biggest Size"
-            tooltipContent="Files with highest size."
+            title="Top 5 Biggest File Sizes"
+            tooltipContent="Files with Top 5 Biggest File Sizes."
             columns={BIGGEST_FILE_SIZE_NAME_COLS}
             rows={extractBiggestFiles(reportData)}
             isSorting={true}
@@ -47,8 +47,8 @@ const ReportTables = () => {
       </Box>
       <Box className="mt-4">
         <ReportTableRenderer
-          title="Longest Names"
-          tooltipContent="Files with longest name."
+          title="Top 5 File Path Lengths"
+          tooltipContent="Files with Top 5 File Path Lengths."
           columns={LONGEST_FILE_NAME_COLS}
           rows={longestFileNames(reportData)}
         />
