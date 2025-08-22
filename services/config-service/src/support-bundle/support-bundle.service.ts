@@ -19,6 +19,7 @@ import { WorkflowService } from 'src/workflow/workflow.service';
 import { StartWorkFlowPayload } from 'src/workflow/workflow.types';
 import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
+import { WORKFLOW_TIMEOUTS } from '../constants/constants';
 import { CreateSupportBundleDTO } from './dto/create-support-bundle.dto';
 import { SupportBundleWorkflowPayloadDTO } from './dto/support-bundle-workflow.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
@@ -83,6 +84,8 @@ export class SupportBundleService {
             options: payload.options,
           },
         ],
+        workflowExecutionTimeout: WORKFLOW_TIMEOUTS.PARENT_WORKFLOW_EXECUTION_TIMEOUT, // Allow enough time for all child workflows
+        workflowRunTimeout: WORKFLOW_TIMEOUTS.PARENT_WORKFLOW_RUN_TIMEOUT,
         ...payload.options,
       };
 
