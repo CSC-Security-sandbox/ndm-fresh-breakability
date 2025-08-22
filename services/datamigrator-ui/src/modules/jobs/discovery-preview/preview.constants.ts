@@ -33,7 +33,7 @@ export enum FileSystemCategory {
   CREATED = "Created",
   ACCESS_TIME = "Access Time",
   BIGGEST = "Biggest",
-  TOP_FILE_EXTENSIONS = "Top 5 File Extensions (with file Capacity and Count)",
+  TOP_FILE_EXTENSIONS = "Top File Extensions (with file Capacity and Count)",
   MAXIMUM_VALUES = "Maximum Values",
   JOB_RUN_STATS = "Job Run Stats",
   FILE_SERVER_INFO = "File Server Info",
@@ -162,7 +162,7 @@ export const CHART_MAPER = (jobData: DataItemType[]) => [
     sizeCategories: [],
   },
   {
-    label: "Depth",
+    label: "Files and Directories Depth",
     haveToggle: false,
     toggleOptions: [],
     data: chartDataForFileDepth(jobData).data,
@@ -261,8 +261,8 @@ export const LONGEST_FILE_NAME_COLS = [
 
 export const LONGEST_PATH_TABLE_COLUMS = [
   {
-    header: "File Name",
-    accessor: "fileName",
+    header: "Directory Path",
+    accessor: "directoryPath",
     id: 1,
     width: 225,
     sort: {
@@ -270,8 +270,8 @@ export const LONGEST_PATH_TABLE_COLUMS = [
     },
   },
   {
-    header: "File Size",
-    accessor: "fileSize",
+    header: "Length",
+    accessor: "length",
     id: 2,
     width: 225,
   },
@@ -298,6 +298,7 @@ export const CREATION_TIME_SIZE_PREFIX = "Capacity with Creation Time";
 export const CREATION_TIME_COUNT_PREFIX = "File Count with Creation Time";
 export const ACCESS_TIME_SIZE_PREFIX = "Capacity with Access Time";
 export const ACCESS_TIME_COUNT_PREFIX = "File Count with Access Time";
+export const FILES_AND_DIRECTORIES_DEPTH = "Files and Directory with depth:";
 
 /**
  * Constant for byte conversion (1000 bytes = 1 KB)
