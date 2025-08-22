@@ -534,7 +534,7 @@ jobs:
           OS_NAME="${{ runner.os }}"
           RUNNER_NAME="${{ runner.name }}"
           BASE_IMAGE="${{ steps.fetch_info.outputs.base_image }}"
-          cat <<EOF > metadata.json
+          cat <<'EOF' > metadata.json
           {
             "service": "$SERVICE",
             "commit": "$FULL_SHA",
@@ -562,7 +562,7 @@ jobs:
           SHORT_SHA="${GITHUB_SHA::7}"
           ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           METADATA_PATH="${{ steps.metadata_paths.outputs.metadata_path }}"
-          cat <<EOF > latest.json
+          cat <<'EOF' > latest.json
           {
             "service": "${{ matrix.service }}",
             "commit": "$FULL_SHA",

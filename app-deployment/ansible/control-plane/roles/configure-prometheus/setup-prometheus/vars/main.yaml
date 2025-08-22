@@ -8,6 +8,11 @@ customScrapeConfigs:
       - targets:
           - prometheus-prometheus-pushgateway.prometheus.svc.cluster.local:9091
 
+  - job_name: postgres-dmadmin
+    static_configs:
+      - targets: 
+          - postgres-exporter.postgres.svc.cluster.local:9187
+          
   - job_name: 'redis-metrics'
     kubernetes_sd_configs:
       - role: endpoints

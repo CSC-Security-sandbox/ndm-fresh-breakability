@@ -54,3 +54,6 @@ data:
             GRANT ALL PRIVILEGES ON SEQUENCES TO dmadmin_role;
         ALTER DEFAULT PRIVILEGES FOR ROLE liquibase IN SCHEMA datamigrator
             GRANT ALL PRIVILEGES ON FUNCTIONS TO dmadmin_role;
+
+        GRANT pg_monitor to dmadmin;
+        CREATE EXTENSION pg_stat_statements;
