@@ -13,6 +13,7 @@
     - { path: "/opt/datamigrator/conf" }
     - { path: "/opt/datamigrator/logs" }
     - { path: "/opt/datamigrator/lock" }
+    - { path: "/opt/datamigrator/cronjobs" }
 
 - name: Configure NDM Versions
   become: yes
