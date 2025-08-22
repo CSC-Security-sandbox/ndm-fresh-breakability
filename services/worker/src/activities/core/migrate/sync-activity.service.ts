@@ -18,6 +18,7 @@ export class SyncService {
     readonly CHUNK_SIZE: number;
     readonly maxRetryCount: number;
     readonly maxConcurrency: number;
+    readonly maxWriteConcurrency: number;
     private readonly logger: LoggerService;
 
     constructor(
@@ -32,6 +33,7 @@ export class SyncService {
         this.logger = loggerFactory.create(SyncService.name);
         this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100;
+        this.maxWriteConcurrency = this.configService.get('worker.maxWriteConcurrency') || 100;
     }
 
 
@@ -71,26 +73,43 @@ export class SyncService {
         const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
         const errorType = ++task.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
 
-        for (const command of task.commands) {
-            if (command.status === CommandStatus.COMPLETED) continue;
-
-            const scanInput: CommandExecInput = {
-                sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
-                targetPath: `${baseTargetPrefixPath}${command.fPath}`,
-                command,
-                jobContext,
-                errorType
-            };
-
-            const output: CommandExecOutput = await this.commandExecService.executeCommand(scanInput);
-            syncOutput.errors.source.push(...output.sourceErrors);
-            syncOutput.errors.target.push(...output.targetErrors);
-            await jobContext.setTask(taskHashId, task);
+        let offset = 0;
+        while (offset < task.commands.length) {
+            let slice = task.commands.slice(offset, offset + this.maxWriteConcurrency)
+            offset += this.maxWriteConcurrency;
+            const filteredCommands = slice.filter(command => command.status !== CommandStatus.COMPLETED);
+            const results = await Promise.allSettled(filteredCommands.map(command => {
+                const scanInput: CommandExecInput = {
+                  sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
+                  targetPath: `${baseTargetPrefixPath}${command.fPath}`,
+                  command,
+                  jobContext,
+                  errorType
+                };
+                return this.commandExecService.executeCommand(scanInput);
+            }));
+            results.forEach((result) => {
+                if (result.status === 'fulfilled') {
+                    syncOutput.errors.source.push(...result.value.sourceErrors);
+                    syncOutput.errors.target.push(...result.value.targetErrors);
+                } else {
+                    // Handle rejected promises - treat them as errors (push array of strings)
+                    const messages: string[] = Array.isArray(result.reason)
+                        ? result.reason.map((err: any) =>
+                            typeof err === 'string'
+                              ? err
+                              : err?.message || JSON.stringify(err) || 'Unknown error'
+                        )
+                        : [result.reason?.message || String(result.reason) || 'Unknown error'];
+                    syncOutput.errors.source.push(...messages);
+                    syncOutput.errors.target.push(...messages);
+                }
+            });
         }
+        await jobContext.setTask(taskHashId, task);
         return syncOutput
     }
 
-    
     async updateAndReportTaskStatus({ errors, jobContext, taskHashId, task }: handleSyncTaskUpdateInput): Promise<void> {
         const allCompleted = task.commands.every(cmd => cmd.status === CommandStatus.COMPLETED);
     

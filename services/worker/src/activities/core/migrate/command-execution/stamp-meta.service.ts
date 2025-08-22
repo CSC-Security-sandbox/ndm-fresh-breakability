@@ -59,7 +59,8 @@ export class StampMetaService {
                 output.sourceErrors.push(...permissionsOutput.sourceErrors);
                 output.targetErrors.push(...permissionsOutput.targetErrors);
             }
-            else {
+            else {            
+
                 // Stamp GID and UID
                 const gidUidOutput = await this.stampGIDandUID(input);
                 output.sourceErrors.push(...gidUidOutput.sourceErrors);
@@ -116,8 +117,12 @@ export class StampMetaService {
                 let gid = command.metadata.gid?.toString();
                 let uid = command.metadata.uid?.toString();
                 if (jobContext.jobConfig.options.isIdentityMappingAvailable) {
-                    gid = await this.redisService.getOwnerIdentity(jobContext.jobRunId, command.metadata.gid?.toString(), 'GID')
-                    uid = await this.redisService.getOwnerIdentity(jobContext.jobRunId, command.metadata.uid?.toString(), 'UID')
+                    let [gid_res, uid_res] = await Promise.all([
+                        this.redisService.getOwnerIdentity(jobContext.jobRunId, command.metadata.gid?.toString(), 'GID'),
+                        this.redisService.getOwnerIdentity(jobContext.jobRunId, command.metadata.uid?.toString(), 'UID'),
+                    ]);
+                    gid = gid_res;
+                    uid = uid_res;
                 }
                 if (gid && uid)
                     await fs.promises.chown(targetPath, parseInt(uid), parseInt(gid));
