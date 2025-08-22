@@ -11,7 +11,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = FDescribe("About NDM ", func() {
+var _ = Describe("About NDM ", func() {
 	var (
 		projectId             string
 		headers               map[string]string
