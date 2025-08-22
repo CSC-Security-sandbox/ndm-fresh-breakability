@@ -38,6 +38,7 @@ export interface WorkerThreadInput {
 
 export enum ThreadOperation {
     COPY_FILE = 'COPY_FILE',
+    STAMP_METADATA = 'STAMP_METADATA',
     EXIT = 'EXIT'
 }
 
@@ -46,4 +47,9 @@ export interface MigrateFile{
     destinationPath: string;
     operationId: string;
     size: number;
+}
+
+export interface StampMetadataTask {
+    operationId: string;
+    commandExecInput: any; // Will contain the full CommandExecInput
 }

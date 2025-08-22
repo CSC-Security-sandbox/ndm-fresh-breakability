@@ -52,9 +52,9 @@ export class CommandExecService {
         output.sourceErrors.push(...baseCmdRes.sourceErrors);
         output.targetErrors.push(...baseCmdRes.targetErrors);
 
-       // Stamp Meta if needed
+       // Stamp Meta if needed - using worker threads for performance
         if (baseCmdRes.shouldStampMeta) {
-            const metaResult = await this.stampMetaService.stampMetaData(input);
+            const metaResult = await this.stampMetaDataWithWorkerThread(input);
             baseCmdRes.shouldUpdateItemInfo = metaResult.shouldUpdateItemInfo;
             output.targetErrors.push(...metaResult.targetErrors);
             output.sourceErrors.push(...metaResult.sourceErrors);
@@ -68,6 +68,24 @@ export class CommandExecService {
             input.command.status = CommandStatus.COMPLETED;
 
         return output
+    }
+
+    /**
+     * Executes metadata stamping operations in a worker thread for better performance
+     * and to prevent blocking the main thread during ACL and attribute operations
+     */
+    async stampMetaDataWithWorkerThread(input: CommandExecInput): Promise<CommandOutput> {
+        try {
+            this.logger.log(`[${input.command.id}] Starting metadata stamping in worker thread`);
+            const result = await this.workerThreadService.stampMetaDataWorkerThread(input);
+            this.logger.log(`[${input.command.id}] Metadata stamping completed in worker thread`);
+            return result;
+        } catch (error) {
+            this.logger.error(`[${input.command.id}] Worker thread metadata stamping failed: ${error.message}`, error.stack);
+            // Fallback to synchronous stamping if worker thread fails
+            this.logger.warn(`[${input.command.id}] Falling back to synchronous metadata stamping`);
+            return await this.stampMetaService.stampMetaData(input);
+        }
     }
 
 

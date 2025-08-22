@@ -323,4 +323,87 @@ describe('WorkerThreadService', () => {
     expect(typeof metrics.queueDepths).toBe('object');
   });
 
+  it('should handle stamp metadata operation successfully', async () => {
+    const stampMetadataTask = {
+      operationId: 'op1',
+      commandExecInput: {
+        command: {
+          metadata: {
+            mode: 0o755,
+            atime: new Date('2023-01-01'),
+            mtime: new Date('2023-01-01'),
+            uid: 1000,
+            gid: 1000
+          }
+        },
+        sourcePath: '/source/file.txt',
+        targetPath: '/target/file.txt'
+      }
+    };
+
+    const expectedOutput = {
+      sourceErrors: [],
+      targetErrors: [],
+      shouldStampMeta: false,
+      shouldUpdateItemInfo: true
+    };
+
+    // Mock worker response
+    setTimeout(() => {
+      const workerOutput: WorkerThreadOutput[] = [{
+        isResolved: true,
+        id: 'op1',
+        data: expectedOutput,
+        Operation: ThreadOperation.STAMP_METADATA
+      }];
+      service['workers'][0].emit('message', workerOutput);
+    }, 100);
+
+    const result = await service.stampMetaDataWorkerThread(stampMetadataTask);
+
+    expect(result).toEqual(expectedOutput);
+  });
+
+  it('should handle stamp metadata operation with errors', async () => {
+    const stampMetadataTask = {
+      operationId: 'op2',
+      commandExecInput: {
+        command: {
+          metadata: {
+            mode: 0o755
+          }
+        },
+        sourcePath: '/source/file.txt',
+        targetPath: '/invalid/target/file.txt'
+      }
+    };
+
+    const expectedOutput = {
+      sourceErrors: [],
+      targetErrors: [{
+        code: 'PERMISSION_ERROR',
+        message: 'Failed to set permissions on /invalid/target/file.txt: ENOENT: no such file or directory',
+        path: '/invalid/target/file.txt'
+      }],
+      shouldStampMeta: false,
+      shouldUpdateItemInfo: true
+    };
+
+    // Mock worker response with error
+    setTimeout(() => {
+      const workerOutput: WorkerThreadOutput[] = [{
+        isResolved: true,
+        id: 'op2',
+        data: expectedOutput,
+        Operation: ThreadOperation.STAMP_METADATA
+      }];
+      service['workers'][0].emit('message', workerOutput);
+    }, 100);
+
+    const result = await service.stampMetaDataWorkerThread(stampMetadataTask);
+
+    expect(result).toEqual(expectedOutput);
+    expect(result.targetErrors.length).toBeGreaterThan(0);
+  });
+
 });

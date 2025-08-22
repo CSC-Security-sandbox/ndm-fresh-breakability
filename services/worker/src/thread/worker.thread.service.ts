@@ -5,6 +5,7 @@ import { Worker } from 'worker_threads';
 import {
   MigrateFile,
   OperationBand,
+  StampMetadataTask,
   ThreadOperation,
   ThreadTask,
   ThreadTaskInput,
@@ -237,6 +238,22 @@ export class WorkerThreadService {
         id: operationId,
         data: { sourcePath, destinationPath, operationId, size , maxBufferSize},
         Operation: ThreadOperation.COPY_FILE,
+        resolve,
+        reject,
+      });
+
+      this.processQueue();
+    });
+  }
+
+  async stampMetaDataWorkerThread(commandExecInput: any): Promise<any> {
+    return new Promise((resolve, reject) => {
+      // Use a smaller task band for metadata operations since they're typically lighter
+      const operationBand = this.sizes[0].name; // Use smallest band for metadata operations
+      this.operationBands.get(operationBand).task.push({
+        id: commandExecInput.command.id,
+        data: { commandExecInput },
+        Operation: ThreadOperation.STAMP_METADATA,
         resolve,
         reject,
       });
