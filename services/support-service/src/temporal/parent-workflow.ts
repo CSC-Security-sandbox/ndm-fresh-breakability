@@ -4,6 +4,7 @@ import { ErrorLogsCsvGeneratorWorkflow } from './child-workflows/error-csv-gener
 import { SupportBundleStatus } from 'src/constants/enum';
 import { ActivitiesService } from 'src/activities/activities.service';
 import { ConfigurationDataCsvGeneratorWorkflow } from './child-workflows/configuration-data-csv-workflow';
+import { WORKFLOW_TIMEOUTS } from 'src/constants/constants';
 
 const { notifyWorkflowCompletion } = proxyActivities<ActivitiesService>({
   startToCloseTimeout: '1 minute',
@@ -18,8 +19,8 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
     const logGeneratorWorkflow = await startChild(LogGeneratorWorkflow, {
       args: [{ traceId, payload }],
       workflowId: `LogGeneratorWorkflow-${traceId}`,
-      workflowExecutionTimeout: '5h', // Ensure workflow doesn't timeout before activity
-      workflowRunTimeout: '5h',
+      workflowExecutionTimeout: WORKFLOW_TIMEOUTS.CHILD_WORKFLOW_EXECUTION_TIMEOUT,
+      workflowRunTimeout: WORKFLOW_TIMEOUTS.CHILD_WORKFLOW_RUN_TIMEOUT,
     });
 
     const logGeneratorWorkflowResult = await logGeneratorWorkflow.result();
@@ -36,8 +37,8 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
     const errorLogsCsvGeneratorWorkflow = await startChild(ErrorLogsCsvGeneratorWorkflow, {
       args: [{ traceId, payload }],
       workflowId: `ErrorCsvWorkflow-${traceId}`,
-      workflowExecutionTimeout: '5h',
-      workflowRunTimeout: '5h',
+      workflowExecutionTimeout: WORKFLOW_TIMEOUTS.CHILD_WORKFLOW_EXECUTION_TIMEOUT,
+      workflowRunTimeout: WORKFLOW_TIMEOUTS.CHILD_WORKFLOW_RUN_TIMEOUT,
     });
 
     const errorLogsCsvGeneratorWorkflowResult = await errorLogsCsvGeneratorWorkflow.result();
@@ -54,8 +55,8 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
       {
         args: [{ traceId, payload }],
         workflowId: `ConfigurationDataCsvGeneratorWorkflow-${traceId}`,
-        workflowExecutionTimeout: '5h',
-        workflowRunTimeout: '5h',
+        workflowExecutionTimeout: WORKFLOW_TIMEOUTS.CHILD_WORKFLOW_EXECUTION_TIMEOUT,
+        workflowRunTimeout: WORKFLOW_TIMEOUTS.CHILD_WORKFLOW_RUN_TIMEOUT,
       },
     );
 
