@@ -253,7 +253,7 @@ export const BIGGEST_FILE_SIZE_NAME_COLS = [
 
 export const LONGEST_FILE_NAME_COLS = [
   {
-    header: "File Name",
+    header: "File Path",
     accessor: "fileName",
     id: 1,
   },
