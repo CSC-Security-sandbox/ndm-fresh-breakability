@@ -150,12 +150,26 @@ it('EXTENSION_DISTRIBUTION_MAPPER maps input correctly', () => {
 });
 
 it('MAX_VALUES_MAPPER maps input correctly', () => {
-    const input = [{ max_file_size: '1000', max_name_length: '255', total_directories: '5' }];
+    const input = [{ 
+        max_file_size: '1000', 
+        max_depth: '10',
+        max_name_length: '255', 
+        avg_file_size: '200.5',
+        avg_depth: '5.2',
+        avg_name_length: '150.7',
+        total_directories: '5',
+        total_files: '100'
+    }];
     const result = MAX_VALUES_MAPPER(input as any);
     expect(result).toEqual([
         { value: 1000, category: 'Maximum Values', valueType: 'size', sub_category: 'max_file_size' },
+        { value: 10, category: 'Maximum Values', valueType: 'count', sub_category: 'max_depth' },
         { value: 255, category: 'Maximum Values', valueType: 'length', sub_category: 'max_name_length' },
-        { value: 5, category: 'Maximum Values', valueType: 'count', sub_category: 'total_directories' }
+        { value: 200.5, category: 'Average Values', valueType: 'size', sub_category: 'avg_file_size' },
+        { value: 5.2, category: 'Average Values', valueType: 'count', sub_category: 'avg_depth' },
+        { value: 150.7, category: 'Average Values', valueType: 'length', sub_category: 'avg_name_length' },
+        { value: 5, category: 'Total Counts', valueType: 'count', sub_category: 'total_directories' },
+        { value: 100, category: 'Total Counts', valueType: 'count', sub_category: 'total_files' }
     ]);
 });
 
