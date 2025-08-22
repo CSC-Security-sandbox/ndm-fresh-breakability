@@ -543,6 +543,41 @@ customAlertingRules:
           summary: "Pod {{ '{{ $labels.pod }}' }} in keycloak namespace has high memory usage"
           description: "Pod {{ '{{ $labels.pod }}' }} in the 'keycloak' namespace is using more than 80% of its memory request."
 
+  - name: postgres-alerts
+    rules:
+      - alert: PostgresPodNotRunning
+        expr: sum by (namespace, pod, phase) (kube_pod_status_phase{namespace="postgres", phase=~"Pending|Failed|Unknown"}) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pod {{ '{{ $labels.pod }}' }} in postgres namespace is not running"
+          description: "Pod {{ '{{ $labels.pod }}' }} in the 'postgres' namespace has been in {{ '{{ $labels.phase }}' }} state for at least 5 minutes."
+      - alert: PostgresPodHighCPUUsage
+        expr: 100 * (sum(rate(container_cpu_usage_seconds_total{namespace="postgres", container!="", container!="POD"}[5m])) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="postgres", resource="cpu", container!="", container!="POD"}) by (pod)) > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod {{ '{{ $labels.pod }}' }} in postgres namespace has high CPU usage"
+          description: "Pod {{ '{{ $labels.pod }}' }} in the 'postgres' namespace is using more than 80% of its CPU request."
+      - alert: postgresPodRestartingTooOften
+        expr: sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total{namespace="postgres"}[5m])) > 3
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod {{ '{{ $labels.pod }}' }} in postgres namespace restarting frequently" 
+          description: "Pod {{ '{{ $labels.pod }}' }} in the 'postgres' namespace restarted more than 3 times in the past 5 minutes."
+      - alert: PostgresPodHighMemoryUsage
+        expr: 100 * (sum(container_memory_usage_bytes{namespace="postgres", container!="", container!="POD"}) by (pod)) / (sum(kube_pod_container_resource_requests{namespace="postgres", resource="memory", container!="", container!="POD"}) by (pod)) > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod {{ '{{ $labels.pod }}' }} in postgres namespace has high memory usage"
+          description: "Pod {{ '{{ $labels.pod }}' }} in the 'postgres' namespace is using more than 80% of its memory request."
+
   - name: redis-alerts
     rules:
       - alert: RedisPodNotRunning

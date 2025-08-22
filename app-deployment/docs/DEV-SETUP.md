@@ -236,10 +236,10 @@ NOTE: All credentials are managed from openbao. Replace the `IP_ADDRESS` with yo
 - For example, if you want to deploy the admin service build in the last step:
 
   ```sh
-  ansible-playbook -i ansible/control-plane/config/inventory.yaml ansible/control-plane/playbooks/helm-upgrade.yaml -e local_cluster=true -e "datamigrator_ui_tag=latest config_service_tag=latest db_writer_service_tag=latest jobs_service_tag=latest file_service_tag=latest reports_service_tag=latest admin_service_tag=new_tag keycloak_customizations_tag=latest db_migrations_tag=latest support_service_tag=latest"
+  ansible-playbook -i ansible/control-plane/config/inventory.yaml ansible/control-plane/playbooks/helm-upgrade.yaml -e local_cluster=true -e "admin_service_tag=new_tag support_service_tag=new_tag"
   ```
 
-Notice the tag for `admin_service_tag` is changed.
+Notice the tag for `admin_service_tag` and `support_service_tag` is changed.
 
 <span style="color:red">**NOTE:** Ensure that the tags for other services match their currently deployed versions. If an older tag is used, it may replace the current pod with an older version. Always track the running versions..</span>
 
