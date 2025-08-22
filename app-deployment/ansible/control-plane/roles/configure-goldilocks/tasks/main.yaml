@@ -1,0 +1,76 @@
+---
+- name: Create Goldilocks directory
+  become: yes
+  file:
+    path: $HOME/goldilocks
+    state: directory
+
+- name: Create Goldilocks namespace
+  become: yes
+  template:
+    src: ./templates/goldilocks-namespace.yaml.j2
+    dest: $HOME/goldilocks/goldilocks-namespace.yaml
+
+- name: Create Goldilocks values file for Helm
+  become: yes
+  template:
+    src: ./templates/goldilocks-values.yaml.j2
+    dest: $HOME/goldilocks/goldilocks-values.yaml
+
+- name: Remove Goldilocks installation
+  become: yes
+  shell: |
+    helm uninstall goldilocks --namespace goldilocks
+    kubectl delete -f $HOME/goldilocks/goldilocks-namespace.yaml
+  when: goldilocks_uninstall is defined
+
+- name: Apply Goldilocks configurations
+  become: yes
+  shell: |
+    kubectl apply -f $HOME/goldilocks/goldilocks-namespace.yaml
+  register: SHELL_STDOUT
+
+- name: Deploy Goldilocks using Helm
+  become: yes
+  shell: |
+    helm repo add fairwinds-stable https://charts.fairwinds.com/stable
+    helm repo update
+    helm upgrade --install goldilocks fairwinds-stable/goldilocks -f $HOME/goldilocks/goldilocks-values.yaml --namespace goldilocks --version {{ goldilocks_version }}
+  register: SHELL_STDOUT
+
+- name: debug output
+  ansible.builtin.debug:
+    msg: "Helm Install (goldilocks): stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
+
+- name: Wait for Goldilocks pods to be ready
+  become: yes
+  shell: kubectl wait --namespace="goldilocks" --for=condition=Ready pod --all
+  register: kubectl_get_pods
+  retries: 10
+  delay: 25
+  until: kubectl_get_pods.rc == 0
+
+- name: Check Goldilocks pod status
+  shell: kubectl get pods -n goldilocks
+  register: pod_status
+
+- debug:
+    var: pod_status.stdout
+
+- name: Label namespaces for Goldilocks
+  become: yes
+  shell: |
+    kubectl label namespace {{ item }} goldilocks.fairwinds.com/enabled=true --overwrite
+  loop:
+    - temporal
+    - postgres
+    - redis
+    - keycloak
+    - datamigrator
+    - kube-system
+
+- name: Delete Goldilocks directory
+  become: yes
+  file:
+    path: $HOME/goldilocks
+    state: absent

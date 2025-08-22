@@ -61,6 +61,9 @@
 - name: Configure datamigrator helm chart and resources
   import_playbook: configure-datamigrator.yaml
 
+- name: Configure goldilocks
+  import_playbook: configure-goldilocks.yaml
+
 - name: Configure keycloak realm
   import_playbook: post-install.yaml
 

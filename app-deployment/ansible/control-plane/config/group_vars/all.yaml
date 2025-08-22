@@ -149,3 +149,5 @@ fluentd_version: 0.5.2
 fluentd_data_volume_size: 10Gi
 
 otel_collector_version: 0.125.0
+
+goldilocks_version: 10.1.0
