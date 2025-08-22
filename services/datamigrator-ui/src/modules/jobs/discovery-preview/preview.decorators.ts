@@ -14,7 +14,8 @@ import {
     MODIFICATION_TIME_COUNT_PREFIX,
     MODIFICATION_TIME_SIZE_PREFIX,
     SIMPLIFIED_BYTE_UNITS,
-    ValueType
+    ValueType,
+    FILES_AND_DIRECTORIES_DEPTH
 } from '@modules/jobs/discovery-preview/preview.constants';
 import {getRegExp, StringComparisonPattern} from '@modules/jobs/discovery-preview/string-comparison.enum';
 
@@ -123,7 +124,9 @@ export function chartDataForFileCount(jsonData: DataItemType[]): ProcessedData {
 export function chartDataForFileDepth(jsonData: DataItemType[]): ProcessedData {
   return extractChartData(
       jsonData,
-      {category: FileSystemCategory.DEPTH}
+      {category: FileSystemCategory.DEPTH, valueType: ValueType.COUNT},
+      undefined,
+      FILES_AND_DIRECTORIES_DEPTH
   );
 }
 
@@ -333,17 +336,24 @@ export function extractLongestDirectoryPaths(data: DataItemType[]): FileInfo[] {
       item.sub_category === FileSystemSubCategory.TOP_5_LONGEST_DIRECTORY_PATH
   );
   if (!longestDirPaths) return [];
- let longestPathCounts=  (longestDirPaths?.value as string)
+  let longestPathCounts =  (longestDirPaths?.value as string)
      ?.split(";")
      ?.map((entry: string) => {
-       const match = entry.match(getRegExp(StringComparisonPattern.DIRECTORY_NAME_SIZE));
-       if (match) {
-         return {
-           fileName: match[1],
-           fileSize: parseInt(match[2], 10),
-         };
-       }
-       return null;
+      const openParenIndex = entry.lastIndexOf('(');
+      const closeParenIndex = entry.lastIndexOf(')');
+
+      if (
+        openParenIndex !== -1 &&
+        closeParenIndex !== -1 &&
+        openParenIndex < closeParenIndex &&
+        !isNaN(parseInt(entry.substring(openParenIndex + 1, closeParenIndex), 10))
+      ) {
+        return {
+          directoryPath: entry.substring(0, openParenIndex).trim(),
+          length: parseInt(entry.substring(openParenIndex + 1, closeParenIndex), 10),
+        };
+      }
+      return null;
      })
      .filter(Boolean) as FileInfo[];
   return longestPathCounts;
@@ -540,7 +550,7 @@ export function formatBytes(bytes: number, decimals = 2): string {
   /* This function smartly convert numbers to K, M, B, T, Q, Quint, Sext, Sept */
 }
 export function formatLargeNumber(num: number, decimals = 2): string {
-  if (num === 0) return "0";
+  if (Number(num) === 0) return "0";
 
   const i = Math.floor(Math.log10(num) / 3);
 
