@@ -16,7 +16,7 @@ log_message "Log file: $LOG_FILE"
 if [ $# -ne 3 ]; then
     log_message "Error: Incorrect number of arguments."
     log_message "Usage: $0 <check-sum-file> <docker-tar-file> <helm-tgz-file>"
-    log_message "Example: $0 checksums.sha256 checksum.ndm-docker.tar ndm-helm.tgz"
+    log_message "Example: $0 checksums.sha256 2025.08.17-preview.tar 2025.08.17-preview.tgz"
     exit 1
 fi
 

@@ -3,9 +3,9 @@
 ## NDM Side
 
 # NDM Side
-1. Create a release branch `releases/2025.08.17-preview` from the main branch on GitHub.
+1. Create a release branch `release/2025.08.17-preview` from the main branch on GitHub.
 
-2. Run the release workflow on the `releases/2025.08.17-preview` branch to upload the Helm chart and Docker image to Artifactory.
+2. Run the release workflow on the `release/2025.08.17-preview` branch to upload the Helm chart and Docker image to Artifactory.
     Verify the upload by navigating to https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/releases and confirming that 
     the release branch contains both the Docker tar file and Helm chart (.tgz file).
  
