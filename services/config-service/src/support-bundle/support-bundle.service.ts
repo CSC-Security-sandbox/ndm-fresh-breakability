@@ -83,6 +83,8 @@ export class SupportBundleService {
             options: payload.options,
           },
         ],
+        workflowExecutionTimeout: '6h', // Allow enough time for all child workflows
+        workflowRunTimeout: '6h',
         ...payload.options,
       };
 

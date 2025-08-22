@@ -18,6 +18,8 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
     const logGeneratorWorkflow = await startChild(LogGeneratorWorkflow, {
       args: [{ traceId, payload }],
       workflowId: `LogGeneratorWorkflow-${traceId}`,
+      workflowExecutionTimeout: '5h', // Ensure workflow doesn't timeout before activity
+      workflowRunTimeout: '5h',
     });
 
     const logGeneratorWorkflowResult = await logGeneratorWorkflow.result();
@@ -34,6 +36,8 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
     const errorLogsCsvGeneratorWorkflow = await startChild(ErrorLogsCsvGeneratorWorkflow, {
       args: [{ traceId, payload }],
       workflowId: `ErrorCsvWorkflow-${traceId}`,
+      workflowExecutionTimeout: '5h',
+      workflowRunTimeout: '5h',
     });
 
     const errorLogsCsvGeneratorWorkflowResult = await errorLogsCsvGeneratorWorkflow.result();
@@ -50,6 +54,8 @@ export const SupportBundleWorkflow = async ({ traceId, payload, options }) => {
       {
         args: [{ traceId, payload }],
         workflowId: `ConfigurationDataCsvGeneratorWorkflow-${traceId}`,
+        workflowExecutionTimeout: '5h',
+        workflowRunTimeout: '5h',
       },
     );
 
