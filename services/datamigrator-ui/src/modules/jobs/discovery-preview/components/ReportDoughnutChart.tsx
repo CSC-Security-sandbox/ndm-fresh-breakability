@@ -106,7 +106,7 @@ const ReportDoughnutChart = () => {
 
   const maximumMap = [
     {
-      label: `${formatLargeNumber(maxDepth)}/${formatLargeNumber(avgDepth)}`,
+      label: `${Math.round(maxDepth)}/${Math.round(avgDepth)}`,
       value: "Depth",
     },
     {
@@ -120,11 +120,6 @@ const ReportDoughnutChart = () => {
       label: `${formatBytes(maxFileSize)}/${formatBytes(avgFileSize)}`,
       value: "Size",
     },
-      //as it is already included in the doughnut chart, we can comment this out
-    /*{
-      label: `${formatLargeNumber(directories as number)}`,
-      value: "Directories",
-    },*/
   ];
 
   return (
