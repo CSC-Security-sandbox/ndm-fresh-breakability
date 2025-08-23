@@ -39,13 +39,13 @@ variable "gallery_resource_group" {
 variable "vnet_name" {
   description = "The name of the virtual network."
   type        = string
-  default     = "MigrationAsAService-dev-VNET01"
+  default     = "MigrationAsAService-dev-VNET02"
 }
 
 variable "subnet_name" {
   description = "The name of the subnet."
   type        = string
-  default     = "MigrationAsAService-dev-Subnet01"
+  default     = "MigrationAsAService-dev-VNET02_Subnet01"
 }
 
 variable "gallery_name" {

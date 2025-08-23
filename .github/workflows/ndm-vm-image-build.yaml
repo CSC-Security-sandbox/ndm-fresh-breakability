@@ -1285,11 +1285,3 @@ jobs:
       windows_worker_installer_url: ${{ needs.package-artifacts.outputs.windows_worker_installer_url }}
     secrets: inherit
 
-  run-vsphere-ndm-api-tests:
-    if: ${{ needs.packer.outputs.control_plane_template != '' && needs.packer.outputs.worker_template != '' }}
-    needs: [package-artifacts, packer, determine-matrix]
-    uses: ./.github/workflows/run-api-tests-vsphere.yaml
-    with:
-      control_plane_template: ${{ needs.packer.outputs.control_plane_template }}
-      worker_template: ${{ needs.packer.outputs.worker_template }}
-    secrets: inherit

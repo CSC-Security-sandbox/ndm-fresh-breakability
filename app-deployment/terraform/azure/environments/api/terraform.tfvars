@@ -1,8 +1,8 @@
 # Azure Resource Configuration
 resource_group         = "MigrationAsAService-dev-infra"
 gallery_resource_group = "datamigrate-acr-resource-group"
-vnet_name              = "MigrationAsAService-dev-VNET01"
-subnet_name            = "MigrationAsAService-dev-Subnet01"
+vnet_name              = "MigrationAsAService-dev-VNET02"
+subnet_name            = "MigrationAsAService-dev-VNET02_Subnet01"
 gallery_name           = "datamigrator"
 location               = "East US 2"
 
