@@ -678,7 +678,9 @@ jobs:
           fi
 
           INSTALLER_PATH="${ARTIFACTORY_PATH}/windows-worker-installer-${BUILD_VERSION}.exe"
-          echo "windows_worker_installer_url=$INSTALLER_PATH" >> $GITHUB_OUTPUT
+          INSTALLER_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${INSTALLER_PATH}"
+          echo "windows_worker_installer_url=$INSTALLER_URL" >> $GITHUB_OUTPUT
+          
           for REPO_PATH in "cicd/ndm" "team/ndm"; do
             TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${INSTALLER_PATH}"
             echo "Uploading Windows worker installer to $TARGET_URL..."
