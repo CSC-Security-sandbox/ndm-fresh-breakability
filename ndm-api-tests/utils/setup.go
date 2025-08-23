@@ -50,6 +50,7 @@ func InitTestEnvForSMoke() {
 	if roleIdsErr != nil {
 		LogFatalf("Error getting Role Ids: %v", roleIdsErr)
 	}
+
 	LogDebug(fmt.Sprintf("Project root: %s", projectRoot))
 	scenarioConfigPath := filepath.Join(projectRoot, "smoke/scenarios/scenario_config.yml")
 	LogDebug(fmt.Sprintf("Reading scenario configuration from: %s", scenarioConfigPath))
@@ -113,17 +114,14 @@ func SetupTestEnv(workerCount int) (string, map[string]SSHConfig, error) {
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to create project: %w", err)
 	}
-	LogDebug(fmt.Sprintf("Project created with ID: %s", projectId))
 
 	attachedWorkersConfig, err := AttachWorkers(workerCount, AuthToken, AccountId, projectId)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to attach workers: %w", err)
 	}
-
 	if len(attachedWorkersConfig) == 0 {
 		return "", nil, fmt.Errorf("failed to attach workers: worker may have been already attached")
 	}
-
 	workerIds := GetWorkerIds()
 	for i := 0; i < MaxPollRetries; i++ {
 		workerIdWithStatus, err := GetWorkerStatus(projectId, workerIds)
@@ -148,13 +146,11 @@ func SetupTestEnv(workerCount int) (string, map[string]SSHConfig, error) {
 }
 
 func CleanupTestEnv() error {
-
-	output, err := DetachAllWorkers()
+	err := DetachAllWorkers()
 	if err != nil {
 		return fmt.Errorf("failed to detach workers: %w", err)
 	}
 
-	LogDebug(fmt.Sprintf("Detach workers output: %s", output))
 	LogDebug("Test environment deletion complete.")
 	return nil
 }

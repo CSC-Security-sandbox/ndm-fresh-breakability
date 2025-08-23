@@ -554,8 +554,6 @@ func SendAPIRequest(method, url string, body []byte, headers map[string]string) 
 		return nil, err
 	}
 
-	fmt.Printf("DEBUG: Request method is %s\n", req.Method)
-
 	for key, value := range headers {
 		req.Header.Set(key, value)
 	}
@@ -972,7 +970,7 @@ func DeleteUserRolesByIDs(roleIDs []string) error {
 		url := fmt.Sprintf("%s/api/v1/user-roles/%s", ADMIN_SERVICE_URL, roleID)
 		resp, err := SendAPIRequest("DELETE", url, nil, headers)
 		if err != nil {
-			errors = append(errors, fmt.Sprintf("failed to delete user role %s:", err))
+			errors = append(errors, fmt.Sprintf("failed to delete user role %s: %v", roleID, err))
 			continue
 		}
 		resp.Body.Close()
@@ -1227,6 +1225,25 @@ func GetFutureUTCTimestamp(timeInterval int) string {
 	return time.Now().UTC().
 		Add(time.Duration(timeInterval) * time.Second).
 		Format(TIME_FORMAT)
+}
+
+func GetVolumesFromArgs(volumes string) []string {
+	split := strings.Split(volumes, ",")
+	if len(split) == 0 {
+		return []string{}
+	}
+
+	res := []string{}
+
+	for _, s := range split {
+		if PROTOCOL_TYPE == ProtocolNFS {
+			res = append(res, fmt.Sprintf("/%s", strings.TrimSpace(s)))
+			continue
+		}
+		res = append(res, strings.TrimSpace(s))
+	}
+
+	return res
 }
 
 func CreateNewUser(username string, firstname string, lastname string, headers map[string]string) (map[string]interface{}, error) {

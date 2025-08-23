@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-004: Run discovery with exclude path pattern and batch pause/resume, TC-005 : Run discovery with exclude path pattern and batch stop/start ", func() {
+var _ = FDescribe("TC-004: Run discovery with exclude path pattern and batch pause/resume, TC-005 : Run discovery with exclude path pattern and batch stop/start ", func() {
 	var headers map[string]string
 	var (
 		ProjectId              string
@@ -33,11 +33,11 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 			workerId1 = workerIds[0]
 			workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
-			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME)
-			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME_1)
+			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
+			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[1], DESTINATION_VOLUMES[1])
 
-			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME)
-			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME_1)
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
+			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[1], SOURCE_VOLUMES[1])
 		})
 
 		It("TC-004-005 : Run discovery with exclude path pattern and batch pause/resume, TC-005 : Run discovery with exclude path pattern and batch stop/start", func() {
@@ -56,11 +56,11 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         "Root",
-				Password:         "",
-				Protocol:         ProtocolNFS,
+				UserName:         PROTOCOL_USERNAME,
+				Password:         PROTOCOL_PASSWORD,
+				Protocol:         PROTOCOL_TYPE,
 				ProtocolVersion:  ProtocolVersion3,
-				Host:             SOURCE_HOST_IP,
+				Host:             SOURCE_HOST_IPs[0],
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
@@ -70,10 +70,10 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 			defer resp.Body.Close()
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID1, headers)
+			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID1, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID1, headers)
+			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID1, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating the destination file server")
@@ -82,11 +82,11 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         "Root",
-				Password:         "",
-				Protocol:         ProtocolNFS,
+				UserName:         PROTOCOL_USERNAME,
+				Password:         PROTOCOL_PASSWORD,
+				Protocol:         PROTOCOL_TYPE,
 				ProtocolVersion:  ProtocolVersion3,
-				Host:             DESTINATION_HOST_IP,
+				Host:             DESTINATION_HOST_IPs[0],
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
@@ -96,10 +96,10 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 			defer resp.Body.Close()
 
 			By("Getting the destination file server by configId")
-			destinationPathID1, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
+			destinationPathID1, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			destinationPathID2, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
+			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a new discovery job for the source")
@@ -126,8 +126,8 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 			sourceConfigIDs := []string{sourceConfigID1, sourceConfigID2}
 			sourceDiscoveryJobRunIDs := make([]string, len(sourceConfigIDs))
 			discovery_validators := []string{
-				"nfs_src_vol_discovery.json",
-				"nfs_src_vol2_discovery.json",
+				"src_vol_discovery.json",
+				"src_vol2_discovery.json",
 			}
 			for i, configID := range sourceConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(configID, headers)
@@ -151,7 +151,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 					err = HandleJobRunStateChange(jobRunID, "STOP", list)
 					Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
 
-					err = WaitForJobState(jobRunID, "STOPPED")
+					err = WaitForJobState(jobRunID, "STOPPED", 30)
 					Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
 					_, _, err := TriggerAdHocJobRun(configID)
 					Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
@@ -159,7 +159,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 				}
 				err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
-				result, err := ValidateReport(jobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s", discovery_validators[i]))
+				result, err := ValidateReport(jobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
 				By(fmt.Sprintf("validate report result : %s", result))
 			}
@@ -225,8 +225,8 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
 			migration_validators := []string{
-				"nfs_src_to_dest_vol_migration.json",
-				"nfs_src2_to_dest2_vol_migration.json",
+				"src_to_dest_vol_migration.json",
+				"src2_to_dest2_vol_migration.json",
 			}
 			// Get migration job run IDs and wait for completion
 			flag := false
@@ -252,7 +252,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 					Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
 					flag = true
 
-					err=WaitForJobState(migrationJobRunID, "STOPPED")
+					err = WaitForJobState(migrationJobRunID, "STOPPED", 30)
 					Expect(err).NotTo(HaveOccurred(), "Job did not reach STOPPED state")
 					adHocJobRunId, resp, err := TriggerAdHocJobRun(migrationJobConfigID)
 					Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
@@ -266,7 +266,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s", migration_validators[i]))
+				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
 				By(fmt.Sprintf("validate COC report result : %s", result))
 			}
@@ -307,7 +307,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 					Wait(1)
 					err = HandleJobRunStateChange(jobRunID, "STOP", list)
 					Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
-					err = WaitForJobState(jobRunID, "STOPPED")
+					err = WaitForJobState(jobRunID, "STOPPED", 30)
 					Expect(err).NotTo(HaveOccurred(), "Cutover job did not complete")
 					adHocJobRunId, resp, err := TriggerAdHocJobRun(jobConfigID)
 					Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
@@ -329,7 +329,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 				Expect(getJobsResp.JobRuns[0].Status).To(Equal("BLOCKED"), "Expected jobRuns[0].status to be BLOCKED")
 			}
 
-			// result, err := ValidateReport(cutoverJobRunIDs[1], JobTypeCutover, "../../validator/COCDetails.json")
+			// result, err := ValidateReport(cutoverJobRunIDs[1], JobTypeCutover, fmt.Sprintf("../../validators/%s/COCDetails.json", PROTOCOL_TYPE))
 			// Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
 			// LogDebug(fmt.Sprintf("validate COC report result : %s", result))
 
@@ -345,7 +345,10 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 		})
 
 		AfterEach(func() {
-			err := RemoveDeltaFromVolume(sourceVolumePath1)
+			By("Cleanup started")
+			err := StopAllWorkersAndWait()
+			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
+			err = RemoveDeltaFromVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
 
 			err = RemoveDeltaFromVolume(sourceVolumePath2)
@@ -359,7 +362,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			By("Cleanup complete.")
+			LogDebug("Cleanup complete.")
 		})
 	})
 })
