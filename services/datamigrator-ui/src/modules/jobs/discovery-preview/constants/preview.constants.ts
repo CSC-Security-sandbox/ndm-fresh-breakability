@@ -19,6 +19,7 @@ export enum FileSystemCategory {
   JOB_RUN_STATS = "Job Run Stats",
   FILE_SERVER_INFO = "File Server Info",
   AVERAGE_VALUES = "Average Values",
+  TOP_5_FILE_EXTENSIONS_SUMMERY = "Top File Extensions Summary",
 }
 
 export enum FileSystemSubCategory {
@@ -30,6 +31,9 @@ export enum FileSystemSubCategory {
   TOTAL_SPACE_FOR_REGULAR_FILES = "Total Space for Regular Files",
   TOTAL_SPACE_FOR_DIRECTORIES = "Total Space for Directories",
   TOTAL_SPACE_USED = "Total Space Used",
+
+  //Top 5 File Extensions subcategories
+  TOP_5_FILE_EXTENSIONS_TOTAL = "Top 5 Extensions Total",
 
   // Maximum Values subcategories
   MAX_FILE_SIZE = "max_file_size",

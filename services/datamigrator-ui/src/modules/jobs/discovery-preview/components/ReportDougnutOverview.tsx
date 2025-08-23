@@ -57,7 +57,7 @@ const ReportDougnutOverview = () => {
     totalSpaceUsed,
     directories,
   } = extractSystemFileStatAndDirectories(reportData);
-
+  
   const overviewLegendMap = [
     {
       Icon: FolderIcon,
@@ -93,14 +93,14 @@ const ReportDougnutOverview = () => {
             <DoughnutChart
               unit=""
               label="Total Items"
-              colors={[["chart-4", "chart-9", "chart-3"], ["chart-6"]]}
+              colors={[["chart-6"], ["chart-4", "chart-9", "chart-3"]]}
               data={[
-                [
-                  directories as number,
-                  regularFiles as number,
-                  symbolicLinks as number,
-                ],
                 [totalCount as number],
+                [
+                  isNaN(Number(directories)) ? 0 : Number(directories),
+                  isNaN(Number(regularFiles)) ? 0 : Number(regularFiles),
+                  isNaN(Number(symbolicLinks)) ? 0 : Number(symbolicLinks),
+                ],
               ]}
             />
             <Box className="flex flex-col gap-2 grow">
