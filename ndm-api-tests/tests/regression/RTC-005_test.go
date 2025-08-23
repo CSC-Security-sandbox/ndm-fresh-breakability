@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealthy during migration for NFS", func() {
+var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealthy during migration", func() {
 	var (
 		ProjectId             string
 		workerId1             string
@@ -31,7 +31,7 @@ var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealth
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
 		})
 
-		It("RTC-005: Test migration with 2 workers and make one worker unhealthy during migration for NFS", func() {
+		It("RTC-005: Test migration with 2 workers and make one worker unhealthy during migration", func() {
 			By("########################## RTC-005 start ################################")
 
 			By("Creating the source file server")
@@ -40,11 +40,11 @@ var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealth
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         "Root",
-				Password:         "",
-				Protocol:         ProtocolNFS,
+				UserName:         PROTOCOL_USERNAME,
+				Password:         PROTOCOL_PASSWORD,
+				Protocol:         PROTOCOL_TYPE,
 				ProtocolVersion:  ProtocolVersion3,
-				Host:             SOURCE_HOST_IP,
+				Host:             SOURCE_HOST_IPs[0],
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
@@ -56,7 +56,7 @@ var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealth
 			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 			By("Getting the source file server by config ID and fetching the volumes")
-			sourceVolumeId, err := GetExportPathID("source", NFS_SOURCE_VOLUME, SourceConfigId, headers)
+			sourceVolumeId, err := GetExportPathID("source", SOURCE_VOLUMES[0], SourceConfigId, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating the destination file server")
@@ -65,11 +65,11 @@ var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealth
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         "Root",
-				Password:         "",
-				Protocol:         ProtocolNFS,
+				UserName:         PROTOCOL_USERNAME,
+				Password:         PROTOCOL_PASSWORD,
+				Protocol:         PROTOCOL_TYPE,
 				ProtocolVersion:  ProtocolVersion3,
-				Host:             DESTINATION_HOST_IP,
+				Host:             DESTINATION_HOST_IPs[0],
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
@@ -81,7 +81,7 @@ var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealth
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 
 			By("Getting the destination file server by configId")
-			destinationVolumeID, err := GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
+			destinationVolumeID, err := GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a migration job")
@@ -126,17 +126,20 @@ var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealth
 			Expect(err).NotTo(HaveOccurred(), "Error starting worker service")
 
 			By("Checking if Migration job is completed")
-			err = WaitForJobState(JobRunID, COMPLETED_JOBRUN, 60)
+			err = WaitForJobState(JobRunID, COMPLETED_JOBRUN)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Migration job did not complete successfully, err: %s", err))
 			By("########################## RTC-005 end ################################")
 		})
 
 		AfterEach(func() {
-			err := ClearVolume(fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME))
+			By("Cleanup started")
+			err := StopAllWorkersAndWait()
+			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
+			err = ClearVolume(fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0]))
 			Expect(err).To(BeNil(), "Error during clearing destination volume")
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			By("Cleanup complete.")
+			LogDebug("Cleanup complete.")
 		})
 
 	})

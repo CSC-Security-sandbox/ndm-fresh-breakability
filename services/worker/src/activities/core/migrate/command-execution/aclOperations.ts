@@ -107,19 +107,19 @@ export class AclOperations {
             this.logger.debug(`Processing ${allPermissions.length} permissions (${denyPermissions.length} deny, ${grantPermissions.length} allow)`);
 
             for (const permission of allPermissions) {
-                try {
-                    await this.processPermission(permission, targetPath, result, isIdentityMappingAvailable);
-                } catch (error) {
-                    this.logger.error(`Failed to process permission for principal ${permission.principal}`, error);
-                    result.operations.push({
-                        type: 'skip',
-                        principal: permission.principal,
-                        reason: `Processing error: ${(error as Error).message}`,
-                        status: 'failed',
-                        error: (error as Error).message
-                    });
-                    result.success = false;
-                }
+                    try {
+                        await this.processPermission(permission, targetPath, result, isIdentityMappingAvailable);
+                    } catch (error) {
+                        this.logger.error(`Failed to process permission for principal ${permission.principal}`, error);
+                        result.operations.push({
+                            type: 'skip',
+                            principal: permission.principal,
+                            reason: `Processing error: ${(error as Error).message}`,
+                            status: 'failed',
+                            error: (error as Error).message
+                        });
+                        result.success = false;
+                    }
             }
 
             this.logger.debug(`ACL stamp completed. Success: ${result.success}, Operations: ${result.operations.length}`);
@@ -345,18 +345,19 @@ export class AclOperations {
 
             // Resolve SIDs if needed
             if (shouldResolveSIDs && aclData.permissions) {
-                for (const entry of aclData.permissions) {
-                    try {
-                        const resolved = await this.resolvePrincipal(entry.principal, jobID);
-                        if (resolved !== entry.principal) {
-                            entry.originalPrincipal = entry.principal;
-                            entry.principal = resolved;
+                await Promise.allSettled(
+                    aclData.permissions.map(async (entry) => {
+                        try {
+                            const resolved = await this.resolvePrincipal(entry.principal, jobID);
+                            if (resolved !== entry.principal) {
+                                entry.originalPrincipal = entry.principal;
+                                entry.principal = resolved;
+                            }
+                        } catch (error) {
+                            this.logger.debug(`Failed to resolve principal ${entry.principal}:`, error);
                         }
-                    } catch (error) {
-                        this.logger.debug(`Failed to resolve principal ${entry.principal}:`, error);
-                        // Continue processing other entries
-                    }
-                }
+                    })
+                );
             }
 
             this.logger.debug(`Parsed ACL for ${normalizedPath}: ${aclData.permissions.length} permissions`);
@@ -549,25 +550,20 @@ export class AclOperations {
                 jobID: undefined
             });
 
-            const sourcePrincipals = new Map<string, ACLEntry>();
-            const targetPrincipals = new Map<string, ACLEntry>();
-
+            // Resolve principals in source ACL if mapping is available
             for (const p of sourceACL.permissions) {
                 if (isIdentityMappingAvailable) {
                     const resolved = await this.resolvePrincipal(p.principal, jobID);
-                    if (resolved) {
+                    if (resolved && resolved !== p.principal) {
+                        p.originalPrincipal = p.principal;
                         p.principal = resolved;
-                      }
+                    }
                 }
-                const keyPrincipal = p.principal; // This will be the resolved name if mapping was applied
-                const key = `${keyPrincipal}:${p.accessType}`;
-                sourcePrincipals.set(key, p);
             }
 
-            for (const p of targetACL.permissions) {
-                const key = `${p.principal}:${p.accessType}`;
-                targetPrincipals.set(key, p);
-            }
+            // Group permissions by principal and access type to handle multiple entries
+            const sourceByPrincipal = this.groupPermissionsByPrincipal(sourceACL.permissions);
+            const targetByPrincipal = this.groupPermissionsByPrincipal(targetACL.permissions);
 
             const onlyInSource: ACLEntry[] = [];
             const onlyInTarget: ACLEntry[] = [];
@@ -581,29 +577,37 @@ export class AclOperations {
                 permissions: Permission[];
             }> = [];
 
-            for (const [key, entry] of sourcePrincipals) {
-                if (!targetPrincipals.has(key)) {
-                    onlyInSource.push(entry);
+            // Get all unique principal:accessType combinations
+            const allPrincipalKeys = new Set([
+                ...Object.keys(sourceByPrincipal),
+                ...Object.keys(targetByPrincipal)
+            ]);
+
+            for (const principalKey of allPrincipalKeys) {
+                const sourceEntries = sourceByPrincipal[principalKey] || [];
+                const targetEntries = targetByPrincipal[principalKey] || [];
+
+                if (sourceEntries.length === 0) {
+                    // Only in target
+                    onlyInTarget.push(...targetEntries);
+                } else if (targetEntries.length === 0) {
+                    // Only in source
+                    onlyInSource.push(...sourceEntries);
                 } else {
-                    const targetEntry = targetPrincipals.get(key)!;
-                    if (!this.arePermissionsEqual(entry.permissions, targetEntry.permissions)) {
-                        different.push({
-                            principal: `${entry.principal} (${entry.accessType})`,
-                            sourcePermissions: entry.permissions,
-                            targetPermissions: targetEntry.permissions
+                    // Compare combined permissions for this principal
+                    const result = this.compareEntriesForPrincipal(sourceEntries, targetEntries);
+                    if (result.isEqual) {
+                        identical.push({
+                            principal: principalKey,
+                            permissions: result.combinedSourcePermissions
                         });
                     } else {
-                        identical.push({
-                            principal: `${entry.principal} (${entry.accessType})`,
-                            permissions: entry.permissions
+                        different.push({
+                            principal: principalKey,
+                            sourcePermissions: result.combinedSourcePermissions,
+                            targetPermissions: result.combinedTargetPermissions
                         });
                     }
-                }
-            }
-
-            for (const [key, entry] of targetPrincipals) {
-                if (!sourcePrincipals.has(key)) {
-                    onlyInTarget.push(entry);
                 }
             }
 
@@ -629,15 +633,71 @@ export class AclOperations {
             throw new ACLError(`Failed to compare ACLs`, 'COMPARE_ERROR', { originalError: (error as Error).message });
         }
     }
+
+    private groupPermissionsByPrincipal(permissions: ACLEntry[]): Record<string, ACLEntry[]> {
+        const grouped: Record<string, ACLEntry[]> = {};
+        
+        for (const perm of permissions) {
+            const key = `${perm.principal} (${perm.accessType})`;
+            if (!grouped[key]) {
+                grouped[key] = [];
+            }
+            grouped[key].push(perm);
+        }
+        
+        return grouped;
+    }
+
+    private compareEntriesForPrincipal(
+        sourceEntries: ACLEntry[], 
+        targetEntries: ACLEntry[]
+    ): {
+        isEqual: boolean;
+        combinedSourcePermissions: Permission[];
+        combinedTargetPermissions: Permission[];
+    } {
+        // Combine all permissions from multiple entries for the same principal
+        const sourceCombined = this.combinePermissions(sourceEntries);
+        const targetCombined = this.combinePermissions(targetEntries);
+        
+        const isEqual = this.arePermissionsEqual(sourceCombined, targetCombined);
+        
+        return {
+            isEqual,
+            combinedSourcePermissions: sourceCombined,
+            combinedTargetPermissions: targetCombined
+        };
+    }
+
+    private combinePermissions(entries: ACLEntry[]): Permission[] {
+        const allPermissionCodes = new Set<string>();
+        
+        for (const entry of entries) {
+            for (const perm of entry.permissions) {
+                allPermissionCodes.add(perm.code);
+            }
+        }
+        
+        return Array.from(allPermissionCodes)
+            .sort() // Sort for consistent comparison
+            .map(code => ({
+                code,
+                description: PERMISSION_MAP[code] || code
+            }));
+    }
     private arePermissionsEqual(perms1: Permission[], perms2: Permission[]): boolean {
-        const filterInherited = (perms: Permission[]) =>
+        // Filter out inheritance and non-settable flags for comparison
+        const filterComparablePermissions = (perms: Permission[]) =>
             perms.filter(p => !NON_SETTABLE_FLAGS.includes(p.code) && !INHERITANCE_FLAGS.includes(p.code));
 
-        const filtered1 = filterInherited(perms1);
-        const filtered2 = filterInherited(perms2);
+        const filtered1 = filterComparablePermissions(perms1);
+        const filtered2 = filterComparablePermissions(perms2);
 
-        if (filtered1.length !== filtered2.length) return false;
+        if (filtered1.length !== filtered2.length) {
+            return false;
+        }
 
+        // Sort permission codes for consistent comparison
         const codes1 = filtered1.map(p => p.code).sort();
         const codes2 = filtered2.map(p => p.code).sort();
 

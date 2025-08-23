@@ -12,7 +12,7 @@ import (
 
 var _ = Describe("TC-007: Run migration to multiple destinations with incremental sync schedule", func() {
 	BeforeEach(func() {
-		Skip("TC-007 is skipped in CI/CD due to flakyness")
+		Skip("TC-007 is skipped in CI/CD due to flakiness")
 	})
 	var (
 		ProjectId              string
@@ -38,11 +38,11 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			workerId1 = workerIds[0]
 			workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
-			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME)
-			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME_1)
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
+			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[1], SOURCE_VOLUMES[1])
 
-			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME)
-			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME_1)
+			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
+			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[1], DESTINATION_VOLUMES[1])
 		})
 
 		It("TC-007: Run migration to multiple destinations with incremental sync schedule", func() {
@@ -64,11 +64,11 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         "Root",
-				Password:         "",
-				Protocol:         ProtocolNFS,
+				UserName:         PROTOCOL_USERNAME,
+				Password:         PROTOCOL_PASSWORD,
+				Protocol:         PROTOCOL_TYPE,
 				ProtocolVersion:  ProtocolVersion3,
-				Host:             SOURCE_HOST_IP,
+				Host:             SOURCE_HOST_IPs[0],
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
@@ -78,10 +78,10 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			defer resp.Body.Close()
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID, headers)
+			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID, headers)
+			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating the destination file server")
@@ -90,11 +90,11 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         "Root",
-				Password:         "",
-				Protocol:         ProtocolNFS,
+				UserName:         PROTOCOL_USERNAME,
+				Password:         PROTOCOL_PASSWORD,
+				Protocol:         PROTOCOL_TYPE,
 				ProtocolVersion:  ProtocolVersion3,
-				Host:             DESTINATION_HOST_IP,
+				Host:             DESTINATION_HOST_IPs[0],
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
@@ -104,10 +104,10 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			defer resp.Body.Close()
 
 			By("Getting the destination file server by configId")
-			destinationPathID1, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
+			destinationPathID1, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			destinationPathID2, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
+			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a migration job with Incremental Sync of 3 mins")
@@ -130,8 +130,8 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 
 			// Get migration job run IDs and wait for completion
 			// migration_validators := []string{
-			//     "nfs_src_to_dest_vol_migration.json",
-			//     "nfs_src2_to_dest2_vol_migration.json",
+			//     "src_to_dest_vol_migration.json",
+			//     "src2_to_dest2_vol_migration.json",
 			// }
 			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
@@ -144,7 +144,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				// result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s", migration_validators[i]))
+				// result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
 				// Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 				// By(fmt.Sprintf("validate report result : %s", result))
 			}
@@ -191,7 +191,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
 				// Failing due to NDM-1708, need to uncomment after it's fix
-				// result, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../../validators/cutover_validation.json") // as adding delta data similar to cutover, hence using same validation json for incremental migration and cutover
+				// result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/cutover_validation.json", PROTOCOL_TYPE)) // as adding delta data similar to cutover, hence using same validation json for incremental migration and cutover
 				// Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 				// By(fmt.Sprintf("validate report result : %s", result))
 			}
@@ -210,7 +210,6 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			jobConfigIDs, resp, err = CreateBulkCutoverJob(cutoverParams, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating bulk cutover job: %v", err))
 			defer resp.Body.Close()
-
 
 			By("Getting jobs by job config id")
 			for _, jobConfigID := range jobConfigIDs {
@@ -243,7 +242,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 
 			By("Validating cutover reports")
 			for _, cutoverRunID := range cutoverRunIDs {
-				result, err := ValidateReport(cutoverRunID, JobTypeCutover, ".././validators/cutover_validation.json")
+				result, err := ValidateReport(cutoverRunID, JobTypeCutover, fmt.Sprintf(".././validators/%s/cutover_validation.json", PROTOCOL_TYPE))
 				Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
 				LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
 			}
@@ -251,7 +250,10 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 		})
 
 		AfterEach(func() {
-			err := RemoveDeltaFromVolume(sourceVolumePath1)
+			By("Cleanup started")
+			err := StopAllWorkersAndWait()
+			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
+			err = RemoveDeltaFromVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
 
 			err = RemoveDeltaFromVolume(sourceVolumePath2)
@@ -265,7 +267,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			By("Cleanup complete.")
+			LogDebug("Cleanup complete.")
 		})
 	})
 })

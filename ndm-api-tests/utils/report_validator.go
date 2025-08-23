@@ -50,6 +50,7 @@ func ValidateReport(
 	}
 
 	results := make(map[Format][]error, len(formats))
+
 	for _, fmtType := range formats {
 		// 1) fetch
 		data, err := fetchReport(jobRunID, fmtType, string(jobType))
@@ -164,7 +165,6 @@ func fetchReport(
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		// 4) send POST
 		resp, err := SendAPIRequest(http.MethodPost, url, bodyBytes, headers)
-		fmt.Println("report api response : ", resp)
 		if err != nil {
 			return nil, fmt.Errorf("POST %s: %w", url, err)
 		}

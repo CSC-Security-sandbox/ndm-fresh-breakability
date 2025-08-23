@@ -69,8 +69,8 @@ const ReportDoughnutChart = () => {
 
   // For the chart, use the actual color names directly
   const doughnutColors = [
-    fileExtensionCounts.map((_, index) => `chart-${index + 2}`),
     ["chart-1"],
+    fileExtensionCounts.map((_, index) => `chart-${index + 2}`),
   ];
 
   // For the legend, use the same direct mapping to ensure consistency
@@ -99,6 +99,7 @@ const ReportDoughnutChart = () => {
     () => extractMaxAvgFileSize(reportData),
     [reportData]
   );
+
   const { directories } = useMemo(
     () => extractSystemFileStatAndDirectories(reportData),
     [reportData]
@@ -136,8 +137,8 @@ const ReportDoughnutChart = () => {
             label="File Summary"
             colors={doughnutColors}
             data={[
-              fileExtensionCounts.map(([, value]) => value),
               [totalSizeMB],
+              fileExtensionCounts.map(([, value]) => value),
             ]}
             value={totalSizeMB}
           />

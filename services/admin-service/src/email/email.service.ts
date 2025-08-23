@@ -56,6 +56,9 @@ export class EmailService implements OnModuleDestroy {
   }
   async setupAndSendMail(emailContent: any, notificationType: string) {
     try {
+      if (notificationType === NOTIFICATION_TYPE.FAILURE) {
+        await this.storeEmailData(emailContent, notificationType);
+      }
       await this.setupTransporter(emailContent, notificationType);
     } catch (error) {
       this.logger.error('Error setting up and sending email', error);
@@ -69,7 +72,6 @@ export class EmailService implements OnModuleDestroy {
     try {
       // Close existing transporter if exists to prevent memory leaks
       await this.closeTransporter();
-
       const smtpSettings = await this.getSMTPSettings();
       const smtpConfig: any = {
         host: smtpSettings.find((setting) => setting.settingKey === 'SMTP_HOST')
@@ -170,78 +172,40 @@ export class EmailService implements OnModuleDestroy {
 
   async sendEmailForFailureEvents(emailContent: any, from: string, to: string) {
     try {
-      const { alerts } = emailContent;
-      const status = alerts[0]?.status || 'unknown';
-      const isResolved = status === 'resolved';
-      const severity = alerts[0]?.labels?.severity || 'unknown';
-      const podName = alerts[0]?.labels?.pod || null;
-      const instanceName = alerts[0]?.labels?.instance || null;
-      const alertName = alerts[0]?.labels?.alertname || 'N/A';
-      const description =
-        alerts[0]?.annotations?.description || 'No description available.';
-      const summary = alerts[0]?.annotations?.summary || 'No summary available.';
+      const syncEmail = this.buildSyncEmailEntity(emailContent);
+      const { alertName, alertSource, summary, description } = syncEmail;
+      const severity = emailContent.alerts?.[0]?.labels?.severity || 'unknown';
+      const isResolved = emailContent.alerts?.[0]?.status === 'resolved';
 
       this.logger.log('Sending failure notification email', {
         alertName,
         severity,
-        podName: podName || instanceName
+        podName: alertSource,
       });
 
       const mailOptions = {
-        from: from,
-        to: to,
+        from,
+        to,
         subject: `DataMigrator Alert - Severity: ${severity}`,
         template: 'failure',
         context: {
           isResolved,
           severity,
-          podName,
-          instanceName,
+          podName: syncEmail.alertSource,
+          instanceName: syncEmail.alertSource,
           description,
           summary,
         },
       };
 
-      const syncEmail = new SyncEmail();
-      syncEmail.mailContent = emailContent;
-      syncEmail.incidentStatus = IncidentStatus.OPEN;
-      syncEmail.description = description;
-      syncEmail.summary = summary;
-      syncEmail.alertSource = podName ?? instanceName;
-      syncEmail.alertName = alertName;
-
-      try {
-        await this.transporter.sendMail(mailOptions);
-        this.logger.log('Failure notification email sent successfully', { alertName });
-      } catch (emailError) {
-        this.logger.error('Error sending email', emailError);
-        throw new Error(`Error sending email: ${emailError.message}`);
-      }
-
-      try {
-        if (emailContent.status === EmailContentStatus.FIRING) {
-          await this.syncEmailRepo.save(syncEmail);
-          this.logger.log('Sync email record saved', { alertName });
-        } else {
-          await this.syncEmailRepo.update(
-            {
-              incidentStatus: IncidentStatus.OPEN,
-              alertSource: podName ?? instanceName,
-              alertName: alertName,
-            },
-            { incidentStatus: IncidentStatus.CLOSED },
-          );
-          this.logger.log('Sync email record updated to closed', { alertName });
-        }
-      } catch (dbError) {
-        this.logger.error('Error updating sync email database record', dbError);
-        // Don't throw here as the email was already sent successfully
-      }
+      await this.transporter.sendMail(mailOptions);
+      this.logger.log('Failure notification email sent successfully', { alertName });
     } catch (error) {
       this.logger.error('Error in sendEmailForFailureEvents', error);
       throw error;
     }
   }
+
 
   async getSMTPSettings() {
     try {
@@ -315,6 +279,50 @@ export class EmailService implements OnModuleDestroy {
     } catch (error) {
       this.logger.error('Error sending success email', error);
       throw new Error(`Error sending email: ${error.message}`);
+    }
+  }
+
+  buildSyncEmailEntity(emailContent: any): SyncEmail {
+    const { alerts } = emailContent;
+    const podName = alerts?.[0]?.labels?.pod || null;
+    const instanceName = alerts?.[0]?.labels?.instance || null;
+    const alertName = alerts?.[0]?.labels?.alertname || 'N/A';
+    const description = alerts?.[0]?.annotations?.description || 'No description available.';
+    const summary = alerts?.[0]?.annotations?.summary || 'No summary available.';
+
+    const syncEmail = new SyncEmail();
+    syncEmail.mailContent = emailContent;
+    syncEmail.incidentStatus = IncidentStatus.OPEN;
+    syncEmail.description = description;
+    syncEmail.summary = summary;
+    syncEmail.alertSource = podName ?? instanceName;
+    syncEmail.alertName = alertName;
+
+    return syncEmail;
+  }
+
+  async storeEmailData(emailContent: any, notificationType: string) {
+    try {
+      const syncEmail = this.buildSyncEmailEntity(emailContent);
+      const alertName = syncEmail.alertName;
+      const podName = syncEmail.alertSource;
+
+      if (emailContent.status === EmailContentStatus.FIRING) {
+        await this.syncEmailRepo.save(syncEmail);
+        this.logger.log('Sync email record saved', { alertName, notificationType });
+      } else {
+        await this.syncEmailRepo.update(
+          {
+            incidentStatus: IncidentStatus.OPEN,
+            alertSource: podName,
+            alertName: alertName,
+          },
+          { incidentStatus: IncidentStatus.CLOSED },
+        );
+        this.logger.log('Sync email record updated to closed', { alertName, notificationType });
+      }
+    } catch (dbError) {
+      this.logger.error('Error updating sync email database record', dbError);
     }
   }
 }

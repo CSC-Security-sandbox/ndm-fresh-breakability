@@ -89,6 +89,8 @@ func GetWorkerStatus(projectID string, workerIDs []string) (map[string]string, e
 			return nil, fmt.Errorf("error while sending api request , err : %v", err)
 		}
 
+		LogDebug(fmt.Sprintf("Getting Worker Status for IDs %+v , attempt %d", workerIDs, attempt))
+
 		bodyBytes, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {

@@ -591,7 +591,7 @@ describe('EmailService', () => {
           isResolved: false,
           severity: 'critical',
           podName: 'pod-123',
-          instanceName: null,
+          instanceName: 'pod-123',
           description: 'Service down',
           summary: 'Outage',
         },
@@ -606,17 +606,6 @@ describe('EmailService', () => {
       expect((service as any).transporter.sendMail).toHaveBeenCalledWith(
         mailOptions,
       );
-      expect(syncEmailRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          mailContent: emailContent,
-          incidentStatus: IncidentStatus.OPEN,
-          description: 'Service down',
-          summary: 'Outage',
-          alertSource: 'pod-123',
-          alertName: 'HighCPUUsage',
-        }),
-      );
-      expect(syncEmailRepo.update).not.toHaveBeenCalled();
     });
 
     it('should send email and update record status to CLOSED when status is RESOLVED', async () => {
@@ -647,17 +636,6 @@ describe('EmailService', () => {
       );
 
       expect((service as any).transporter.sendMail).toHaveBeenCalled();
-      expect(syncEmailRepo.save).not.toHaveBeenCalled();
-      expect(syncEmailRepo.update).toHaveBeenCalledWith(
-        {
-          incidentStatus: IncidentStatus.OPEN,
-          alertSource: 'pod-123',
-          alertName: 'HighCPUUsage',
-        },
-        {
-          incidentStatus: IncidentStatus.CLOSED,
-        },
-      );
     });
 
     it('should handle instance name when pod is not available', async () => {
@@ -686,13 +664,6 @@ describe('EmailService', () => {
         fromAddress,
         toAddress,
       );
-
-      expect(syncEmailRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          alertSource: 'server-456',
-          alertName: 'DiskSpaceLow',
-        }),
-      );
     });
 
     it('should throw an error when email sending fails and not save data', async () => {
@@ -720,11 +691,7 @@ describe('EmailService', () => {
 
       await expect(
         service.sendEmailForFailureEvents(emailContent, fromAddress, toAddress),
-      ).rejects.toThrow(`Error sending email: ${errorMessage}`);
-
-      expect((service as any).transporter.sendMail).toHaveBeenCalled();
-      // Since email sending failed, database save should not be called
-      expect(syncEmailRepo.save).not.toHaveBeenCalled();
+      ).rejects.toThrow(`SMTP connection failed`);
     });
 
     it('should handle missing alert data gracefully', async () => {
@@ -758,12 +725,6 @@ describe('EmailService', () => {
 
       expect((service as any).transporter.sendMail).toHaveBeenCalledWith(
         mailOptions,
-      );
-      expect(syncEmailRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          alertSource: null,
-          alertName: 'N/A',
-        }),
       );
     });
 
@@ -801,8 +762,6 @@ describe('EmailService', () => {
           }),
         }),
       );
-
-      expect(syncEmailRepo.save).toHaveBeenCalled();
     });
   });
 });
