@@ -34,20 +34,18 @@ export class StampMetaService {
         ) {
 
             if (process.platform === 'win32') {
+
                 // Stamp SID to object
-                const sidOutput = await this.stampSIDAclToObject(input);
-                output.sourceErrors.push(...sidOutput.sourceErrors);
-                output.targetErrors.push(...sidOutput.targetErrors);
 
-                // Stamp Hidden Metadata
-                const hiddenAttrOutput = await this.stampFileAttributeMeta(input);
-                output.sourceErrors.push(...hiddenAttrOutput.sourceErrors);
-                output.targetErrors.push(...hiddenAttrOutput.targetErrors);
+                const [sidOutput, hiddenAttrOutput, preserveTimeOutput] = await Promise.all([
+                    this.stampSIDAclToObject(input),
+                    this.stampFileAttributeMeta(input),
+                    this.preserveAccessAndModifiedTime(input)
+                ]);
 
-                // Preserve access and modified time
-                const preserveTimeOutput = await this.preserveAccessAndModifiedTime(input);
-                output.sourceErrors.push(...preserveTimeOutput.sourceErrors);
-                output.targetErrors.push(...preserveTimeOutput.targetErrors);
+                output.sourceErrors.push(...sidOutput.sourceErrors, ...hiddenAttrOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
+                output.targetErrors.push(...sidOutput.targetErrors, ...hiddenAttrOutput.targetErrors, ...preserveTimeOutput.targetErrors);
+
 
                 // Stamp access and modified time
                 const timeOutput = await this.stampAccessAndModifiedTime(input);
@@ -58,8 +56,9 @@ export class StampMetaService {
                 const permissionsOutput = await this.stampPermission(input);
                 output.sourceErrors.push(...permissionsOutput.sourceErrors);
                 output.targetErrors.push(...permissionsOutput.targetErrors);
+
             }
-            else {            
+            else {
 
                 // Stamp GID and UID
                 const gidUidOutput = await this.stampGIDandUID(input);
