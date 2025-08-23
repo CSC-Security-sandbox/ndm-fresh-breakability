@@ -1,4 +1,3 @@
-
 /* query-mapper.ts */
 export interface NumberOfFilesBySizeInput {
     size_group: string;
@@ -40,8 +39,13 @@ export interface ExtensionDistributionInput {
 }
 export interface MaxValuesInput {
     max_file_size: string;
+    max_depth: string;
     max_name_length: string;
+    avg_file_size: string;
+    avg_depth: string;
+    avg_name_length: string;
     total_directories: string;
+    total_files: string;
 }
 export interface TopLongestFileNamesInput {
     path: string;
@@ -78,4 +82,3 @@ export interface JobRunDetailsInput {
     config_name: string;
     protocol: string;
 }
-

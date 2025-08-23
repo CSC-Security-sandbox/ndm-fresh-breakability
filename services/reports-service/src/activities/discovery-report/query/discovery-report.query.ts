@@ -18,7 +18,7 @@ export const NUMBER_OF_FILES_BY_SIZE = (schema: string) => `
     from ${schema}.inventory i 
     where i.job_run_id = $1 and i.is_directory = false
     group by size_group
-`
+`;
 
 export const MODIFIED_TIME_DISTRIBUTION = (schema: string) => `
     select
@@ -46,7 +46,7 @@ export const MODIFIED_TIME_DISTRIBUTION = (schema: string) => `
     from ${schema}.inventory i
     where i.job_run_id = $1
     group by modified_group;
-`
+`;
 
 export const CREATED_TIME_DISTRIBUTION = (schema: string) => `
     select
@@ -74,7 +74,7 @@ export const CREATED_TIME_DISTRIBUTION = (schema: string) => `
     from ${schema}.inventory i
     where i.job_run_id = $1
     group by created_group;
-`
+`;
 export const ACCESS_TIME_DISTRIBUTION = (schema: string) => `
     select
         case
@@ -101,7 +101,7 @@ export const ACCESS_TIME_DISTRIBUTION = (schema: string) => `
     from ${schema}.inventory i
     where i.job_run_id = $1
     group by access_group;
-`
+`;
 
 export const DEPTH_DISTRIBUTION = (schema: string) => `
     select
@@ -119,7 +119,7 @@ export const DEPTH_DISTRIBUTION = (schema: string) => `
     from ${schema}.inventory i
     where i.job_run_id = $1
     group by depth_group;
-`
+`;
 
 export const FILE_SYSTEM_DISTRIBUTION = (schema: string) => `
     select
@@ -131,27 +131,55 @@ export const FILE_SYSTEM_DISTRIBUTION = (schema: string) => `
         sum(file_size) as total_space_used
     from ${schema}.inventory i
     where i.job_run_id = $1
-`
+`;
 
 export const EXTENSION_DISTRIBUTION = (schema: string) => `
-    select
-        i."extension",
-        count(1),
-        sum(i.file_size) as total_size
-    from ${schema}.inventory i
-    where i.job_run_id = $1 and i.is_directory = false
-    group by i."extension"
-`;
+WITH extension_stats AS (
+    SELECT
+        i.extension,
+        COUNT(*) AS file_count,
+        SUM(i.file_size) AS total_size
+    FROM ${schema}.inventory i
+    WHERE i.is_directory = false
+      AND i.job_run_id = $1
+    GROUP BY i.extension
+),
+top_extensions AS (
+    SELECT
+        extension,
+        file_count,
+        total_size
+    FROM extension_stats
+    ORDER BY total_size DESC, file_count DESC, extension
+    LIMIT 5
+),
+extension_totals AS (
+    SELECT
+        'TOTAL_OF_TOP_5' AS extension,
+        SUM(file_count) AS file_count,
+        SUM(total_size) AS total_size
+    FROM top_extensions
+)
+SELECT extension, file_count AS count, total_size, 0 AS sort_order
+FROM top_extensions
+UNION ALL
+SELECT extension, file_count AS count, total_size, 1 AS sort_order
+FROM extension_totals
+ORDER BY sort_order, total_size DESC`;
 
 export const MAX_VALUES = (schema: string) => `
     select
         max(case when is_directory = false then file_size end)::numeric as max_file_size,
+        max(depth)::numeric as max_depth,
         max(case when is_directory = false then length(file_name) end)::numeric as max_name_length,
-        sum(case when is_directory = true then 1 else 0 end)::numeric as total_directories
+        avg(case when is_directory = false then file_size end)::numeric as avg_file_size,
+        avg(depth)::numeric as avg_depth,
+        avg(case when is_directory = false then length(file_name) end)::numeric as avg_name_length,
+        sum(case when is_directory = true then 1 else 0 end)::numeric as total_directories,
+        count(case when is_directory = false then 1 end)::numeric as total_files
     from ${schema}.inventory i
     where i.job_run_id = $1 
-`
-
+`;
 
 /* Top Biggest */
 
@@ -162,7 +190,7 @@ export const TOP_LONGEST_FILE_NAMES = (schema: string) => `
     where i.job_run_id = $1 and i.is_directory = false
     ORDER BY length DESC
     LIMIT 5;
-`
+`;
 
 export const TOP_LONGEST_DIRECTORY_NAMES = (schema: string) => `
     SELECT i.path,
@@ -171,7 +199,7 @@ export const TOP_LONGEST_DIRECTORY_NAMES = (schema: string) => `
     where i.job_run_id = $1 and i.is_directory = true
     ORDER BY length DESC
     LIMIT 5;
-`
+`;
 
 export const TOP_DIRECTORY_WITH_MAX_SIZE = (schema: string) => `
     WITH cleaned_inventory AS (
@@ -186,7 +214,7 @@ export const TOP_DIRECTORY_WITH_MAX_SIZE = (schema: string) => `
     GROUP BY directory
     ORDER BY total_size DESC
     LIMIT 5;
-`
+`;
 
 export const TOP_DIRECTORY_WITH_MAX_COUNT_CHILD = (schema: string) => `
     WITH cleaned_inventory AS (
@@ -200,7 +228,7 @@ export const TOP_DIRECTORY_WITH_MAX_COUNT_CHILD = (schema: string) => `
     GROUP BY directory
     ORDER BY child DESC
     LIMIT 5;
-`
+`;
 
 export const TOP_LONGEST_DIRECTORY_PATHS = (schema: string) => `
     SELECT
@@ -210,7 +238,7 @@ export const TOP_LONGEST_DIRECTORY_PATHS = (schema: string) => `
     WHERE i.job_run_id = $1 AND i.is_directory = true
     ORDER BY length DESC
     LIMIT 5;
-`
+`;
 
 export const TOP_LONGEST_FILE_PATHS = (schema: string) => `
     SELECT
@@ -220,7 +248,7 @@ export const TOP_LONGEST_FILE_PATHS = (schema: string) => `
     WHERE i.job_run_id = $1 AND i.is_directory = false
     ORDER BY length DESC
     LIMIT 5;
-`
+`;
 export const TOP_BIGGEST_FILE_NAME = (schema: string) => `
     SELECT
         i.path,
@@ -229,7 +257,7 @@ export const TOP_BIGGEST_FILE_NAME = (schema: string) => `
     WHERE i.job_run_id = $1 AND i.is_directory = false
     ORDER BY file_size DESC
     LIMIT 5;
-`
+`;
 
 export const JOB_RUN_DETAILS = (schema: string) => `
     select 
@@ -244,4 +272,4 @@ export const JOB_RUN_DETAILS = (schema: string) => `
     inner join ${schema}.file_server fsrv on fsrv.id = file_server_id
     inner join ${schema}.config c on c.id = fsrv.config_id
     where jr.id = $1
-`
+`;
