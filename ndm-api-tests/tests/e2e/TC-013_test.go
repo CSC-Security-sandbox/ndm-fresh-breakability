@@ -10,6 +10,11 @@ import (
 )
 
 var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch stop/restart migration jobs.", func() {
+	BeforeEach(func() {
+		if CLOUD_ENVIRONMENT == AzureEnv {
+			Skip("TC-013 is skipped in CI/CD due to different IP of source 3")
+		}
+	})
 	var headers map[string]string
 	var (
 		ProjectId              string
@@ -32,9 +37,9 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 			workerId1 = workerIds[0]
 			workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
-			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME)
-			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME_1)
-			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME)
+			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
+			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[1], DESTINATION_VOLUMES[1])
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
 		})
 
 		It("TC-013 : bulk cutover with concurrent migration jobs and batch stop/restart migration jobs.", func() {
@@ -51,11 +56,11 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         "Root",
-				Password:         "",
-				Protocol:         ProtocolNFS,
+				UserName:         PROTOCOL_USERNAME,
+				Password:         PROTOCOL_PASSWORD,
+				Protocol:         PROTOCOL_TYPE,
 				ProtocolVersion:  ProtocolVersion3,
-				Host:             SOURCE_HOST_IP,
+				Host:             SOURCE_HOST_IPs[0],
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
@@ -65,13 +70,13 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 			defer resp.Body.Close()
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID1, headers)
+			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID1, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID1, headers)
+			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID1, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID3, err = GetExportPathID("source", NFS_SOURCE_VOLUME_2, sourceConfigID1, headers)
+			sourcePathID3, err = GetExportPathID("source", SOURCE_VOLUMES[2], sourceConfigID1, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating the destination file server")
@@ -80,11 +85,11 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         "Root",
-				Password:         "",
-				Protocol:         ProtocolNFS,
+				UserName:         PROTOCOL_USERNAME,
+				Password:         PROTOCOL_PASSWORD,
+				Protocol:         PROTOCOL_TYPE,
 				ProtocolVersion:  ProtocolVersion3,
-				Host:             DESTINATION_HOST_IP,
+				Host:             DESTINATION_HOST_IPs[0],
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
@@ -94,10 +99,10 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 			defer resp.Body.Close()
 
 			By("Getting the destination file server by configId")
-			destinationPathID1, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
+			destinationPathID1, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			destinationPathID2, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
+			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a first migration job")
@@ -177,14 +182,14 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 				err = HandleJobRunStateChange(migrationJobRunID, "STOP", list)
 				Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
 
-				err = WaitForJobState(migrationJobRunID, STOPPED_JOBRUN)
+				err = WaitForJobState(migrationJobRunID, STOPPED_JOBRUN, 30)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not stop or complete")
 			}
 
 			err = WaitForJobState(firstCutoverjobRunID, BLOCKED_JOBRUN)
 			Expect(err).NotTo(HaveOccurred(), "Cutover job did not reach to blocked state")
 
-			result, err := ValidateReport(firstCutoverjobRunID, JobTypeCutover, "../../validators/cutover_validation.json")
+			result, err := ValidateReport(firstCutoverjobRunID, JobTypeCutover, fmt.Sprintf("../../validators/%s/cutover_validation.json", PROTOCOL_TYPE))
 			Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", firstCutoverjobRunID)
 			By(fmt.Sprintf("validation report result %s", result))
 
@@ -202,7 +207,10 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 		})
 
 		AfterEach(func() {
-			err := RemoveDeltaFromVolume(sourceVolumePath1)
+			By("Cleanup started")
+			err := StopAllWorkersAndWait()
+			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
+			err = RemoveDeltaFromVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error while deleting delta data to %s", sourceVolumePath1)
 
 			err = ClearVolume(destinationVolumePath1)
@@ -213,7 +221,7 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			By("Cleanup complete.")
+			LogDebug("Cleanup complete.")
 		})
 	})
 })

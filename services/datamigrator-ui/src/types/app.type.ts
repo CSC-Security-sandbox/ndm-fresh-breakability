@@ -28,8 +28,8 @@ export type ProcessedData = {
 };
 
 export type FileInfo = {
-  fileName: string;
-  fileSize: number;
+  directoryPath: string;
+  length: number;
 };
 
 export interface WorkerApiType {
