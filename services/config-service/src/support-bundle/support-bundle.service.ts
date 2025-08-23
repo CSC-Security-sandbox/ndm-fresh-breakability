@@ -25,7 +25,7 @@ import { SupportBundleWorkflowPayloadDTO } from './dto/support-bundle-workflow.d
 import { UpdateStatusDto } from './dto/update-status.dto';
 
 @Injectable()
-export class SupportBundleService {
+export class SupportBundleService { 
   private logger: LoggerService;
   private bundleOutputPath: string;
   constructor(
