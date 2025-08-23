@@ -183,7 +183,7 @@ jobs:
             
             echo "Copying Windows installer to Windows VM #$VM_INDEX at $WINDOWS_IP"
             if SSHPASS="$VM_PASSWORD" sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-              windows-worker-installer.exe "$VM_USERNAME@$WINDOWS_IP:/C:/temp/"; then
+              windows-worker-installer.exe "$VM_USERNAME@$WINDOWS_IP:/C:/Temp/"; then
               echo "Windows installer copied successfully to Windows VM #$VM_INDEX ($WINDOWS_IP)"
             else
               echo "Failed to copy Windows installer to Windows VM #$VM_INDEX ($WINDOWS_IP)"
@@ -222,17 +222,22 @@ jobs:
       CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      NDM_VM_PORT: 22
-      SMB_NDM_WORKERS_PORT: 22
-      SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
-      SMB_SOURCE_HOST_IP: ${{ secrets.SMB_FILE_SERVER_SOURCE_IP }}
-      SMB_DESTINATION_HOST_IP: ${{ secrets.SMB_FILE_SERVER_DESTINATION_IP }}
+
       NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
       PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
-      SMB_PROTOCOL_USERNAME: ${{ secrets.SMB_FILE_SERVER_USERNAME }}
-      SMB_PROTOCOL_PASSWORD: ${{ secrets.SMB_FILE_SERVER_PASSWORD }}
-      SMB_EXECUTABLE_FILENAME: C:\\Temp\\windows-worker-installer.exe
+
+      NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
+
+      AZURE_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
+      AZURE_SMB_NDM_WORKERS_PORT: ${{ vars.AZURE_SMB_NDM_WORKERS_PORT }}
+      AZURE_SMB_SOURCE_VOLUMES: ${{ vars.AZURE_SMB_SOURCE_VOLUMES }}
+      AZURE_SMB_DESTINATION_VOLUMES: ${{ vars.AZURE_SMB_DESTINATION_VOLUMES }}
+      AZURE_SMB_SOURCE_HOST_IP: ${{ vars.AZURE_SMB_SOURCE_HOST_IP }}
+      AZURE_SMB_DESTINATION_HOST_IP: ${{ vars.AZURE_SMB_DESTINATION_HOST_IP }}
+      AZURE_SMB_PROTOCOL_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
+      AZURE_SMB_PROTOCOL_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
+      SMB_EXECUTABLE_FILENAME: ${{ vars.SMB_EXECUTABLE_FILENAME }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -250,8 +255,8 @@ jobs:
           
           echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "AZURE_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "AZURE_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
 
       - name: Install Ginkgo
         run: |
@@ -264,8 +269,8 @@ jobs:
       - name: Run SMB API Tests
         run: |
           cd ndm-api-tests
-          chmod +x ./run-smb-automation.sh
-          ./run-smb-automation.sh
+          chmod +x ./run-smb-azure-automation.sh
+          ./run-smb-azure-automation.sh
         continue-on-error: true
 
   run-nfs-tests:
@@ -277,15 +282,26 @@ jobs:
       CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+
+      NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
+      PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+      
       NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      NDM_VM_PORT: 22
+      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
+
       NFS_NDM_WORKERS_PORT: 22
-      NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
+      
       NFS_SOURCE_HOST_IP: ${{ secrets.NFS_FILE_SERVER_SOURCE_IP }}
       NFS_DESTINATION_HOST_IP: ${{ secrets.NFS_FILE_SERVER_DESTINATION_IP }}
       NFS_PROTOCOL_USERNAME: "Root"
-      NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
-      PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+
+      AZURE_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
+      AZURE_NFS_NDM_WORKERS_PORT: ${{ vars.AZURE_NFS_NDM_WORKERS_PORT }}
+      AZURE_NFS_SOURCE_VOLUMES: ${{ vars.AZURE_NFS_SOURCE_VOLUMES }}
+      AZURE_NFS_DESTINATION_VOLUMES: ${{ vars.AZURE_NFS_DESTINATION_VOLUMES }}
+      AZURE_NFS_SOURCE_HOST_IP: ${{ vars.AZURE_NFS_SOURCE_HOST_IP }}
+      AZURE_NFS_DESTINATION_HOST_IP: ${{ vars.AZURE_NFS_DESTINATION_HOST_IP }}
+      AZURE_NFS_PROTOCOL_USERNAME: ${{ vars.AZURE_NFS_PROTOCOL_USERNAME }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -316,8 +332,8 @@ jobs:
       - name: Run NFS API Tests
         run: |
           cd ndm-api-tests
-          chmod +x ./run-nfs-automation.sh
-          ./run-nfs-automation.sh
+          chmod +x ./run-nfs-azure-automation.sh
+          ./run-nfs-azure-automation.sh
         continue-on-error: true
 
   cleanup:
