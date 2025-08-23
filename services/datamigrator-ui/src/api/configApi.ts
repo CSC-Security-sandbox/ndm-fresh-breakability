@@ -72,7 +72,11 @@ export const configApi = createApi({
         method: "GET",
       }),
       transformResponse: (response) => {
-        return response?.data?.items || response?.data || response || {};
+        let result = response?.data?.items || response?.data || response || {};
+        if (!!response?.data?.id) {
+          result["id"] = response?.data?.id;
+        }
+        return result;
       },
       providesTags: ["GET_FILE_SERVER_BY_ID"],
     }),
@@ -82,6 +86,9 @@ export const configApi = createApi({
         url: `/servers/refresh/${fileServerId}`,
         method: "GET",
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      },
     }),
 
     getAllCutOverPaths: builder.query({
@@ -125,6 +132,9 @@ export const configApi = createApi({
         method: "POST",
         body,
       }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      },
     }),
 
     submitExportPathSourceFile: builder.mutation<void, { uploadId: string }>({
@@ -157,6 +167,9 @@ export const configApi = createApi({
     isBundleReady: builder.query<isBundleReadyApiType, void>({
       query: () => "support-bundle/is-bundle-ready",
       providesTags: ["IS_BUNDLE_READY"],
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      },
     }),
   }),
 });

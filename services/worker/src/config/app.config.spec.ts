@@ -1,6 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import workerConfigFactory from './app.config'
-import { WorkersConfig } from './app.config'
+import workerConfigFactory, { WorkersConfig } from './app.config';
 
 describe('worker.config factory', () => {
   const ORIGINAL_ENV = process.env;
@@ -56,8 +55,15 @@ describe('worker.config factory', () => {
 
     // thread pool defaults
     expect(cfg.thread).toEqual({
+      maxBufferSize : 1048576,
       threadBand: '1kb,1500;1mb,1000;10mb,100;100mb,10;1gb,1',
       threadCount: 5,
+    });
+
+    // metrics defaults
+    expect(cfg.metrics).toEqual({
+      versionsPathWindows: 'C:\\datamigrator\\conf\\versions.conf',
+      versionsPathLinux: '/opt/datamigrator/conf/versions.conf',
     });
   });
 
@@ -84,6 +90,8 @@ describe('worker.config factory', () => {
       JOB_TASK_ACTIVITY_CONCURRENCY: '9',
       THREAD_BANDS: 'X;Y',
       THREAD_COUNT: '42',
+      VERSIONS_PATH_WINDOWS: 'C:\\my\\path\\versions.conf',
+      VERSIONS_PATH_LINUX: '/your/path/versions.conf',
     });
 
     const cfg = workerConfigFactory();
@@ -109,6 +117,8 @@ describe('worker.config factory', () => {
     expect(cfg.maxActivityConcurrency).toBe(9);
     expect(cfg.thread.threadBand).toBe('X;Y');
     expect(cfg.thread.threadCount).toBe(42);
+    expect(cfg.metrics.versionsPathWindows).toBe('C:\\my\\path\\versions.conf');
+    expect(cfg.metrics.versionsPathLinux).toBe('/your/path/versions.conf');
   });
 });
 
@@ -132,5 +142,12 @@ describe('WorkersConfig helper', () => {
   it('should handle nested keys', () => {
     expect(WorkersConfig.get('connection.workerConfigUrl'))
       .toBe('VAL:worker.connection.workerConfigUrl');
+  });
+
+  it('should handle metrics configuration keys', () => {
+    expect(WorkersConfig.get('metrics.versionsPathWindows'))
+      .toBe('VAL:worker.metrics.versionsPathWindows');
+    expect(WorkersConfig.get('metrics.versionsPathLinux'))
+      .toBe('VAL:worker.metrics.versionsPathLinux');
   });
 });

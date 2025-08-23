@@ -1,0 +1,96 @@
+---
+- name: Create datamigrator directory for CronJob resources
+  become: yes
+  file:
+    path: $HOME/datamigrator
+    state: directory
+  when: local_cluster is defined
+
+- name: Render Postgres CronJob ConfigMap template
+  become: yes
+  template: src=./templates/postgres-configmap-cron.j2 dest=$HOME/datamigrator/postgres-configmap-cron.yaml
+  when: local_cluster is defined
+
+- name: Render Postgres CronJob Job template
+  become: yes
+  template: src=./templates/postgres-cron.j2 dest=$HOME/datamigrator/postgres-cron.yaml
+  when: local_cluster is defined
+
+- name: Delete Postgres CronJob Job and ConfigMap
+  become: yes
+  shell: |
+    kubectl delete -f $HOME/datamigrator/postgres-cron.yaml -n datamigrator || true
+    kubectl delete -f $HOME/datamigrator/postgres-configmap-cron.yaml -n datamigrator || true
+  args:
+    chdir: $HOME
+  when: 
+   - dm_uninstall is defined
+   - local_cluster is defined
+
+- name: Apply Postgres CronJob ConfigMap and Job (local_cluster only)
+  become: yes
+  shell: |
+    kubectl apply -f $HOME/datamigrator/postgres-configmap-cron.yaml -n datamigrator
+    kubectl apply -f $HOME/datamigrator/postgres-cron.yaml -n datamigrator
+  args:
+    chdir: "$HOME"
+  when: local_cluster is defined
+
+- name: Trigger CronJob manually (local_cluster only)
+  shell: |
+    kubectl create job --from=cronjob/ndm-postgres-cronjob postgres-cron-manual-{{ ansible_date_time.epoch }} -n datamigrator
+  register: cronjob_trigger
+  when: local_cluster is defined
+
+- name: Wait for manual Job to complete (local_cluster only)
+  shell: |
+    kubectl wait --for=condition=complete --timeout=300s job/postgres-cron-manual-{{ ansible_date_time.epoch }} -n datamigrator
+  register: job_wait
+  when: local_cluster is defined
+
+- name: Check Job status (local_cluster only)
+  shell: |
+    kubectl get job/postgres-cron-manual-{{ ansible_date_time.epoch }} -n datamigrator -o jsonpath='{.status.succeeded}'
+  register: job_status
+  when: local_cluster is defined
+
+- name: Fail if Job did not succeed (local_cluster only)
+  fail:
+    msg: Manual CronJob execution failed!
+  when: 
+    - local_cluster is defined
+    - job_status.stdout != "1"
+
+- name: Get pod name spawned by the Job (local_cluster only)
+  shell: |
+    kubectl get pods -n datamigrator -l job-name=postgres-cron-manual-{{ ansible_date_time.epoch }} -o jsonpath='{.items[0].metadata.name}'
+  register: pod_name
+  when: local_cluster is defined
+
+- name: Show Job pod logs (local_cluster only)
+  shell: |
+    kubectl logs {{ pod_name.stdout }} -n datamigrator
+  register: job_logs
+  when: local_cluster is defined
+
+- name: Display Job logs (local_cluster only)
+  debug:
+    msg: "{{ job_logs.stdout }}"
+  when: local_cluster is defined
+
+- name: Render Postgres CronJob ConfigMap template (non-local_cluster)
+  become: yes
+  template: src=./templates/postgres-configmap-cron.j2 dest=/opt/datamigrator/cronjobs/postgres-configmap-cron.yaml
+  when: local_cluster is not defined
+
+- name: Render Postgres CronJob Job template (non-local_cluster)
+  become: yes
+  template: src=./templates/postgres-cron.j2 dest=/opt/datamigrator/cronjobs/postgres-cron.yaml
+  when: local_cluster is not defined
+
+- name: Cleanup datamigrator directory
+  become: yes
+  file:
+    path: "$HOME/datamigrator"
+    state: absent
+  when: local_cluster is defined

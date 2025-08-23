@@ -5,9 +5,10 @@ import { InventoryEntity } from 'src/entities/inventory.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProjectEntity } from 'src/entities/project.entity';
 import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
+import { StorageOverviewSummaryEntity } from 'src/entities/storage-summary-mv.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([InventoryEntity,ProjectEntity]), AuthKeycloakModule],
+  imports: [TypeOrmModule.forFeature([InventoryEntity,ProjectEntity,StorageOverviewSummaryEntity]), AuthKeycloakModule],
   controllers: [OverviewController],
   providers: [OverviewService],
 })

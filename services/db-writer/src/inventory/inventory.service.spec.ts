@@ -19,6 +19,7 @@ import {
 import { CreateInventory } from "./inventory.types";
 import { OperationStatus } from "../enum/queues.enum";
 import { SpeedLogEntity, SpeedLogEntryEntity } from '../entities/speed-test.entity';
+import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
 
 describe("InventoryService", () => {
   let service: InventoryService;
@@ -141,6 +142,18 @@ describe("InventoryService", () => {
         {
           provide: DataSource,
           useValue: dataSource,
+        },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue({
+              info: jest.fn(),
+              error: jest.fn(),
+              warn: jest.fn(),
+              debug: jest.fn(),
+              log: jest.fn(),
+            }),
+          },
         },
       ],
     }).compile();
@@ -314,7 +327,8 @@ describe("InventoryService", () => {
       await service.createInventory(data, "jobRunId", "pathId");
 
       expect(loggerSpy).toHaveBeenCalledWith(
-        `Failed to save inventory batch: ${error.message}`
+        `Failed to save inventory batch: ${error.message}`,
+        error?.stack || error
       );
       expect(loggerSpy).toHaveBeenCalledWith(
         `Failed to save 1 inventory records`
@@ -428,7 +442,8 @@ describe("InventoryService", () => {
         "Error while saving operation error records to the database"
       );
       expect(loggerSpy).toHaveBeenCalledWith(
-        `Failed to save operation error: ${error.message}`
+        `Failed to save operation error: ${error.message}`,
+        error?.stack || error
       );
     });
   });
@@ -488,7 +503,8 @@ describe("InventoryService", () => {
         "Error while saving task error records to the database"
       );
       expect(loggerSpy).toHaveBeenCalledWith(
-        `Failed to save task error: ${error.message}`
+        `Failed to save task error: ${error.message}`,
+        error?.stack || error
       );
     });
   });
@@ -601,7 +617,7 @@ describe("InventoryService", () => {
       expect(queryRunner.startTransaction).toHaveBeenCalled();
       expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
       expect(queryRunner.release).toHaveBeenCalled();
-      expect(loggerSpy).toHaveBeenCalledWith("Failed to save task:", error);
+      expect(loggerSpy).toHaveBeenCalledWith("Failed to save task:", error?.stack || error);
     });
 
     it("should log an error if taskId is not found", async () => {
@@ -670,7 +686,8 @@ describe("InventoryService", () => {
         "Error while updating task data"
       );
       expect(loggerSpy).toHaveBeenCalledWith(
-        `Failed to update task (ID: ${taskId}): ${error.message}`
+        `Failed to update task (ID: ${taskId}): ${error.message}`,
+        error?.stack || error
       );
     });
   });
@@ -738,7 +755,7 @@ describe("InventoryService", () => {
       );
       expect(loggerSpy).toHaveBeenCalledWith(
         "Error saving Speed Log records:",
-        error
+        error?.stack || error
       );
     });
 

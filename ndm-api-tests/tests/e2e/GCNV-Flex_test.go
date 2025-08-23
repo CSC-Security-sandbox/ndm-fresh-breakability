@@ -68,7 +68,7 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 			SourceConfigID, resp, err = CreateFileServer(sourceParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
 			Expect(SourceConfigID).NotTo(BeEmpty(), "SourceConfigID is empty")
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			defer resp.Body.Close()
 		})
 
@@ -92,7 +92,7 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 			DestinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
 			Expect(DestinationConfigID).NotTo(BeEmpty(), "DestinationConfigID is empty")
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			defer resp.Body.Close()
 		})
 
@@ -110,18 +110,18 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 				Contents: fmt.Sprintf("path\n%s\n%s", NFS_SOURCE_VOLUME, NFS_SOURCE_VOLUME_1),
 			}
 			resp, uploadStats, err := UploadPathFile(FileServerId, fileContent, headers)
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(err).NotTo(HaveOccurred(), "Error reuploading path file")
 			defer resp.Body.Close()
 			Expect(uploadStats.UploadId).NotTo(BeEmpty(), "Expected non-empty upload ID")
 			Expect(uploadStats.NewPaths).To(BeNumerically("==", 2), "Expected two new paths to be uploaded")
-			Expect(uploadStats.AlreadyExistingPaths).To(BeNumerically("==", 0), "Expected no already existing paths")
+			Expect(uploadStats.AlreadyExitingPaths).To(BeNumerically("==", 0), "Expected no already existing paths")
 			Expect(uploadStats.NoLongerAvailablePaths).To(BeNumerically("==", 0), "Expected no paths to be no longer available")
 			Wait(10)
 
 			confirmResp, confirmStats, err := ConfirmPathFileUpload(uploadStats.UploadId, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error confirming path file upload")
-			Expect(confirmResp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(confirmResp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(confirmStats.WorkflowId).NotTo(BeEmpty(), "Expected non-empty workflow ID")
 			Wait(20)
 

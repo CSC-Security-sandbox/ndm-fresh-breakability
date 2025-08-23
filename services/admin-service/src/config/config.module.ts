@@ -5,6 +5,7 @@ import { config } from 'dotenv';
 import keycloakConfig from './keycloak.config';
 import workerRegisterConfig from './workerregister.config';
 import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
+import prometheusConfig from './prometheus.config';
 
 config(); // Load .env file
 
@@ -12,7 +13,7 @@ config(); // Load .env file
   imports: [
     ConfigModule.forRoot({
       isGlobal: true, // Makes config available throughout the app
-      load: [keycloakConfig, workerRegisterConfig], // Load keycloak config
+      load: [keycloakConfig, workerRegisterConfig, prometheusConfig], // Load keycloak config
     }), // Automatically loads .env
     TypeOrmModule.forRoot({
       type: 'postgres', // Adjust according to your DB type

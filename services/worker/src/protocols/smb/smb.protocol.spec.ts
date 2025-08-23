@@ -62,8 +62,8 @@ describe('SMBProtocol', () => {
   describe('validateConnection', () => {
     it('should establish a connection successfully', async () => {
       jest
-        .spyOn(smbProtocol as any, 'executeCommand')
-        .mockResolvedValue('Connection established');
+        .spyOn(smbProtocol as any, 'listPaths')
+        .mockResolvedValue(['share1', 'share2']);
       const options: ProtocolPayload = {
         hostname: 'localhost',
         username: 'user',
@@ -73,12 +73,7 @@ describe('SMBProtocol', () => {
       const result = await smbProtocol.validateConnection('traceId', options);
 
       expect(result).toBe(undefined);
-      expect(mockLogger.log).toHaveBeenCalledWith(
-        '[traceId] Getting list paths for localhost of type SMB from defaultWorkerId, platform: win32',
-      );
-      expect(mockLogger.log).toHaveBeenCalledWith(
-        '[traceId] Getting list paths for localhost of type SMB from defaultWorkerId, platform: win32',
-      );
+      expect(smbProtocol.listPaths).toHaveBeenCalledWith('traceId', options);
     });
 
     it('should handle connection error', async () => {
@@ -405,10 +400,6 @@ describe('SMBProtocol', () => {
 
         expect((smbProtocol as any).getCommandPattern).toHaveBeenCalledWith(CommandPattern.MOUNTED_FOLDER_SIZE);
 
-        expect(loggerMock.debug).toHaveBeenCalledWith('inside getTotalUsedMemory method for windows');
-        expect(loggerMock.log).toHaveBeenCalledWith(`response of executeCommand in getTotalUsedMemory - ${JSON.stringify(mockResponse)}`);
-        expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] ${mockResponse.message}`);
-
         expect(result).toBe(1048576);
       });
 
@@ -440,14 +431,14 @@ describe('SMBProtocol', () => {
 
     describe('getAvailableDiskSpace', () => {
       it('should successfully return available disk space', async () => {
-        const mockResponse = { message: '1073741824' };
+        const mockResponse = { message: '1073741824', status: 'success' };
         (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
 
         const result = await smbProtocol.getAvailableDiskSpace(mockTraceId, mockPayload);
 
         expect((smbProtocol as any).executeCommand).toHaveBeenCalledWith(
           mockTraceId,
-          ProtocolTypes.NFS,
+          ProtocolTypes.SMB,
           mockPayload,
           'mock-command-pattern',
           'SMB Available Disk Space'
@@ -455,7 +446,6 @@ describe('SMBProtocol', () => {
 
         expect((smbProtocol as any).getCommandPattern).toHaveBeenCalledWith(CommandPattern.AVAILABLE_DISK_SPACE);
 
-        expect(loggerMock.debug).toHaveBeenCalledWith('inside getAvailableDiskSpace method for windows');
         expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] Checking available disk space at path: ${mockPayload.path}`);
         expect(loggerMock.log).toHaveBeenCalledWith(`response of getAvailableDiskSpace in smb.protocol ${JSON.stringify(mockResponse)}`);
         expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] ${mockResponse.message}`);
@@ -499,7 +489,7 @@ describe('SMBProtocol', () => {
         expect(result.size).toBeNaN();
       });
 
-      it('should verify NFS protocol type is used', async () => {
+      it('should verify SMB protocol type is used', async () => {
         const mockResponse = { message: '4294967296' };
         (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
 
@@ -507,7 +497,7 @@ describe('SMBProtocol', () => {
 
         expect((smbProtocol as any).executeCommand).toHaveBeenCalledWith(
           mockTraceId,
-          ProtocolTypes.NFS,
+          ProtocolTypes.SMB,
           mockPayload,
           'mock-command-pattern',
           'SMB Available Disk Space'

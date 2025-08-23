@@ -17,7 +17,7 @@ import {
   extractSystemFileStatAndDirectories,
   formatBytes,
   formatLargeNumber,
-} from "@modules/jobs/discovery-preview/preview.decorators";
+} from "@modules/jobs/discovery-preview/utils/chart-data.utils";
 
 interface ReportOverviewProps {
   Icon: any;

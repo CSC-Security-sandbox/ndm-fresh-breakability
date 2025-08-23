@@ -81,6 +81,8 @@ import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 import { IncidentStatus, SyncEmailEntity } from "src/entities/sync-email.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { SuccessEmailType } from "src/utils/send-email.type";
+import { WorkFlowFailureReason } from "src/jobrun/jobrun.types";
+import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 
 @Injectable()
 export class JobConfigService {
@@ -130,6 +132,8 @@ export class JobConfigService {
     @InjectRepository(WorkerJobRunMap)
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    @InjectRepository(JobStatsSummaryMvEntity)
+    private jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>
   ) {
     this.logger = loggerFactory.create(JobConfigService.name);
   }
@@ -985,26 +989,6 @@ export class JobConfigService {
             ? jobRun.endTime.getTime() - jobRun.startTime.getTime()
             : Date.now() - jobRun.startTime.getTime(),
         };
-        const jobRunStats = await this.calculateJobRunStats(jobRun.id); 
-      
-        if (jobRun.status === JobRunStatus.Completed) {
-          this.logger.log(
-            `Job Run ${jobRun.id} is completed , thus fetching the stats from the jobRunStats and job stats are  ${JSON.stringify(jobRunStats)}`
-          );
-          return {
-            ...partialPayload,
-            scannedFilesCount: BigInt(jobRunStats.fileCount || "0")?.toString(),
-            scannedDirectoriesCount: BigInt(
-              jobRunStats.directories || "0"
-            )?.toString(),
-            totalScannedSize: formatBytes(Number(jobRunStats?.totalSize || 0)),
-            totalMigratedSize: formatBytes(Number(jobRunStats?.totalSize || 0)),
-            errors: jobRunStats.errors || [] ,
-          };
-        }
-        this.logger.log(
-          `Job Run ${jobRun.id} is not completed , thus fetching the stats from the inventory`
-        );
         const inventoryCounts = await this.calculateJobRunStats(jobRun.id);
         return {
           ...partialPayload,
@@ -1015,7 +999,7 @@ export class JobConfigService {
             inventoryCounts.directories || "0"
           )?.toString(),
           totalScannedSize: formatBytes(Number(inventoryCounts?.totalSize  || 0)),
-          totalMigratedSize: formatBytes(Number(jobRunStats?.totalSize || 0)),
+          totalMigratedSize: formatBytes(Number(inventoryCounts?.totalSize || 0)),
           errors: inventoryCounts.errors,
         };
       })
@@ -1705,19 +1689,24 @@ export class JobConfigService {
     });
     if (!jobRun)
       throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
-    const inventorySummary = await this.inventoryRepo
-      .createQueryBuilder("inventory")
-      .select([
-        "COUNT(CASE WHEN inventory.isDirectory = false THEN 1 END) AS fileCount",
-        "COUNT(CASE WHEN inventory.isDirectory = true THEN 1 END) AS directoryCount",
-        "COALESCE(SUM(CASE WHEN inventory.isDirectory = false THEN inventory.fileSize ELSE 0 END), 0) AS totalFileSize",
-      ])
-      .where("inventory.jobRunId = :jobRunId", { jobRunId: jobRunId })
-      .getRawOne();
+    const inventorySummary = await this.jobStatsSummaryMvRepo.findOne({
+      where: { jobRunId },
+    });
+    if (!inventorySummary) {
+      this.logger.warn(
+        `No inventory summary found for job run ID ${jobRunId}. Returning default values.`
+      );
+      return {
+        fileCount: "0",
+        directories: "0",
+        totalSize: "0",
+       errors: await this.getErrorCounts(jobRunId),
+      };
+    }
     const jobRunStatus = {
-      fileCount: inventorySummary.filecount || "0",
-      directories: inventorySummary.directorycount || "0",
-      totalSize: inventorySummary.totalfilesize || "0",
+      fileCount: inventorySummary.fileCount || "0",
+      directories: inventorySummary.directoryCount || "0",
+      totalSize: inventorySummary.totalSize || "0",
     };
 
     this.logger.log("inventorySummary", JSON.stringify(inventorySummary));
@@ -1747,16 +1736,18 @@ export class JobConfigService {
       errorTypeCounts = [];
     }
 
-    const setupFailedErrors = await this.workerJobRunMapRepo.find({
-      where: {
-        jobRunId,
-        workerResponse: Raw(alias => `${alias} IS NOT NULL AND ${alias} ->> 'code' = 'SETUP_WORKER_FAILURE' AND ${alias} ->> 'status' = 'FAILED'`),
-      },
-    });
+    const setupFailedErrors = await this.workerJobRunMapRepo
+      .createQueryBuilder("job")
+      .where("job.jobRunId = :jobRunId", { jobRunId })
+      .andWhere("job.workerResponse IS NOT NULL")
+      .andWhere("job.workerResponse ->> 'code' = ANY(:errorCodes)", {
+        errorCodes: Object.values(WorkFlowFailureReason),
+      })
+      .andWhere("job.workerResponse ->> 'status' = 'FAILED'")
+      .getMany();
+
     if (setupFailedErrors?.length > 0) {
-      const fatalError = errorTypeCounts.find(
-        (error) => error.errorType === "FATAL_ERROR"
-      );
+      const fatalError = errorTypeCounts.find((error) => error.errorType === "FATAL_ERROR");
       if (fatalError) {
         fatalError.count += setupFailedErrors.length;
       } else {

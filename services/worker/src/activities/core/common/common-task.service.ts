@@ -22,6 +22,7 @@ export class CommonTaskService {
   readonly temporalAddress: string; // Default Temporal address, can be overridden in config
   readonly groupSize: number;
   readonly commandsInTask: number;
+  readonly maxCmdStreamLen: number;
 
   constructor(
       @Inject(ConfigService) private readonly configService: ConfigService,
@@ -34,6 +35,7 @@ export class CommonTaskService {
       this.groupSize = this.configService.get<number>('worker.groupSize') || 1000;
       this.commandsInTask = this.configService.get<number>('worker.commandsInTask') || 100;
       this.logger = loggerFactory.create(CommonTaskService.name);
+      this.maxCmdStreamLen = this.configService.get<number>('worker.maxCmdStreamLen') || 5000;
     }
 
     // TO-DO : make this adaptive resource based task creation
@@ -120,6 +122,12 @@ export class CommonTaskService {
     const batchId: string = calculateHash(dirsToScan);
     await jobContext.setBatchDir(batchId, dirsToScan);
     return batchId;
+  }
+
+  async isCmdStreamLenValid(jobRunId:string): Promise<boolean> {
+    const jobContext = await this.redisService.getJobManagerContext(jobRunId);
+    const currStreamLen =  await jobContext.getCmdStreamLen();
+    return this.maxCmdStreamLen >= currStreamLen;
   }
     
 }

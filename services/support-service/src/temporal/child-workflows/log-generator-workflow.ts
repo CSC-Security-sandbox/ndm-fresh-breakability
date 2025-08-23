@@ -1,8 +1,9 @@
 import { proxyActivities, log } from '@temporalio/workflow';
 import { ActivitiesService } from 'src/activities/activities.service';
+import { WORKFLOW_TIMEOUTS } from '../../constants/constants';
 
 const { fetchAndZipLogs } = proxyActivities<ActivitiesService>({
-  startToCloseTimeout: '4h',
+  startToCloseTimeout: WORKFLOW_TIMEOUTS.ACTIVITY_TIMEOUT,
   retry: {
     maximumAttempts: 3,
     maximumInterval: '3s',

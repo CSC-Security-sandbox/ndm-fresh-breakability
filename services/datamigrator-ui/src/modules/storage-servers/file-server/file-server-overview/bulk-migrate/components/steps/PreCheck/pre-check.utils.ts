@@ -1,17 +1,33 @@
 import { PreCheckStatus } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/PreCheck/pre-check.types";
+import { ValidateConnectionStatus } from "@/types/app.type";
 
 export const getPreCheckStatus = (data: any): PreCheckStatus => {
-  if (data?.status !== "COMPLETED") {
+  if (data?.status !== ValidateConnectionStatus.COMPLETED && data?.status !== ValidateConnectionStatus.FAILED) {
     return { success: [], failed: [], errors: [], warnings: [] };
   }
 
-  return data?.completed.reduce(
-    (acc: PreCheckStatus, completedItem: any) => {
-      processCompletedItem(completedItem, acc);
-      return acc;
-    },
-    { success: [], failed: [], errors: [], warnings: [] }
-  );
+  if (data?.status == ValidateConnectionStatus.FAILED) {
+    return {
+      success: [],
+      failed: [],
+      errors: [
+        {
+          sourcePathId: data?.workflow?.sourcePathId,
+          destinationPathId: data?.workflow?.destinationPathIds?.[0] ?? "",
+          errors: data?.workflow?.errors || []
+        }
+      ],
+      warnings: [],
+    };
+  } else {
+    return data?.completed.reduce(
+      (acc: PreCheckStatus, completedItem: any) => {
+        processCompletedItem(completedItem, acc);
+        return acc;
+      },
+      { success: [], failed: [], errors: [], warnings: [] }
+    );
+  }
 };
 
 const processCompletedItem = (completedItem: any, acc: PreCheckStatus) => {

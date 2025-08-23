@@ -45,6 +45,8 @@ const ReportTableRenderer: React.FC<ReportTableProps> = ({
           isLoading={false}
           showLabel={false}
           originalColumns={columns}
+          showSearch={false}
+          showRefresh={false}
         />
       </CardContent>
     </Card>

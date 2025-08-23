@@ -72,7 +72,7 @@ export const executeDiscoveryChildWorkflows = async ( {jobRunId } : DiscoveryWor
                 output.status = JobRunStatus.Failed;
                 await updateWorkerResponse(jobRunId, 'all', {
                     status: output.status,
-                    code: `${error.message}`,
+                    code: 'SCAN_ACTIVITY_FAILURE',
                     operation: 'Scan Workflow Failed',
                     occurrence: 1,
                     origin: 'ChildScanWorkflow',

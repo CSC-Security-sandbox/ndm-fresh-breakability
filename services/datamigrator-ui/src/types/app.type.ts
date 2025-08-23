@@ -28,8 +28,8 @@ export type ProcessedData = {
 };
 
 export type FileInfo = {
-  fileName: string;
-  fileSize: number;
+  directoryPath: string;
+  length: number;
 };
 
 export interface WorkerApiType {
@@ -437,6 +437,7 @@ export interface FileServerOverviewApi {
     totalFileServers?: number;
     totalPendingSize: string;
   };
+  lastRefreshed: string;
 }
 
 export enum USER_STATUS_ENUM {
@@ -646,6 +647,7 @@ export enum ValidateConnectionStatus {
   COMPLETED = "COMPLETED",
   TERMINATED = "TERMINATED",
   TIMED_OUT = "TIMED_OUT",
+  FAILED = "FAILED",
 }
 
 export enum WorkerConnectionStatus {
@@ -664,6 +666,7 @@ export interface ChartInfoPropsType {
   children: ReactNode;
   isLoading: boolean;
   isError: boolean;
+  lastRefreshed: string;
 }
 
 export interface ChartErrorPropsType {
@@ -802,3 +805,26 @@ export type isBundleReadyApiType = {
   };
   createdAt?: string;
 };
+
+// About NDM API Response Types
+export interface AboutNDMApiRespType {
+  product: {
+    name: string;
+    version: string;
+  };
+  build: {
+    worker_version: {
+      version: string;
+      time: string | null;
+    };
+    controlPlane_version: {
+      version: string;
+      time: string | null;
+    };
+  };
+  contact: {
+    email: string;
+    phone: string | null;
+    website: string | null;
+  };
+}

@@ -5,14 +5,16 @@ import {
   Card,
   Text,
 } from "@netapp/bxp-design-system-react";
-import Cookies from "js-cookie";
 import { notify } from "@components/notification/NotificationWrapper";
 import { useAuth } from "react-oidc-context";
 import { Box } from "@components/container/index";
 import EmptyNavBar from "@modules/create-first-project/components/EmptyNavBar";
+import { useDispatch } from "react-redux";
+import { clearAuth } from "@store/reducer/authSlice";
 
 const NoProjects = () => {
   const auth = useAuth();
+  const dispatch = useDispatch();
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const getSessionData = () => {
@@ -33,8 +35,7 @@ const NoProjects = () => {
     setIsLoading(true);
     try {
       await auth.signoutSilent();
-      Cookies.remove("access_token");
-      Cookies.remove("refresh_token");
+      dispatch(clearAuth());
       sessionStorage.clear();
     } catch (error) {
       setIsLoading(false);
@@ -57,7 +58,7 @@ const NoProjects = () => {
               Thank you for your understanding.
             </Text>
         </Card>
-        <WizardFooter>
+        <WizardFooter className="" style={{}}>
           <Button
             onClick={logout}
             isSubmitting={isLoading}

@@ -11,3 +11,4 @@
   roles:
     - { role: ../roles/datamigrator/configure-dm, tags: 'configure-dm' }
     - { role: ../roles/datamigrator/helm-chart/install, tags: 'helm-chart-install' }
+    - { role: ../roles/datamigrator/configure-postgres-cron, tags: 'configure-postgres-cron' }
