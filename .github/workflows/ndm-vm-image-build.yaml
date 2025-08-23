@@ -1306,7 +1306,7 @@ jobs:
               "spacing": "Medium"
             }'
 
-          INSTALLER_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/builds/${BUILD_TYPE}/${BUILD_VERSION}/worker/windows-worker-installer-${BUILD_VERSION}.exe"
+          INSTALLER_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/builds/${BUILD_TYPE}/${BUILD_VERSION}/windows-installer/windows-worker-installer-${BUILD_VERSION}.exe"
           
           for provider in "azure" "vsphere" "gcp"; do
             CONTROL_PLANE_FILE="./image-info/control-plane-${provider}-image.txt"
