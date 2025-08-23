@@ -1,6 +1,5 @@
 import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
-import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 import { JobRunStatus } from "src/activities/common/enums";
 import { cancelWorkflowIfRunning, signalIfRunning } from './workflow-utils';
 
@@ -10,15 +9,6 @@ import { cancelWorkflowIfRunning, signalIfRunning } from './workflow-utils';
 const {
   updateLastEntry: updateLastEntryActivity,
 } = wf.proxyActivities<CommonActivityService>({
-  startToCloseTimeout: '24h',
-  heartbeatTimeout: '2m',
-}); 
-
-
-
-const {
-    isWorkflowRunningActivity: isWorkflowRunningActivity,
-} = wf.proxyActivities<CommonTaskService>({
   startToCloseTimeout: '24h',
   heartbeatTimeout: '2m',
 }); 
@@ -96,10 +86,10 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
             }else {
                 output.scanJobStatus = JobRunStatus.Failed; 
             }
+            syncWorkflow && await cancelWorkflowIfRunning(syncWorkflow.workflowId);
         }
 
         await signalIfRunning(syncWorkflow, 'scanResultSignal', output.scanJobStatus);
-
         try{
             const syncWorkflowOutput = await syncWorkflow.result(); 
             output.syncJobStatus = syncWorkflowOutput.status;    
@@ -119,13 +109,13 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
                 message: `Sync workflow failed with error: ${error.message}`,
                 createdAt: new Date()
             });
+            scanWorkflow && await cancelWorkflowIfRunning(scanWorkflow.workflowId);
         }
     }
 
     output.status = getUnifiedJobStatus(output.scanJobStatus, output.syncJobStatus);
 
     await updateLastEntryActivity(jobRunId);
-
     return output
 }
 
