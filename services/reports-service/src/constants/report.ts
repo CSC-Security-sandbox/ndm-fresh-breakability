@@ -9,14 +9,14 @@ export const PDFReportHeaders = {
     "Depth",
     "Space Used",
     "File System Stats",
-    "Top 5 File Extensions",
+    "Top 5 File Extensions (with file Capacity and Count)",
     "Maximum Values",
     "Job Run Stats",
     "Biggest",
   ],
 };
 export enum formatStringTypeCategories {
-  Top_File_Extension = "Top 5 File Extensions",
+  Top_File_Extension = "Top 5 File Extensions (with file Capacity and Count)",
 }
 export const ReportSubCategoriesHeader = {
   "Number of Files": [

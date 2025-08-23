@@ -134,7 +134,7 @@ export const EXTENSION_DISTRIBUTION_MAPPER = (input: ExtensionDistributionInput[
             // Regular extension rows
             output.push({
                 value: `size(${item.total_size});count(${item.count})`,
-                category: 'Top 5 File Extensions',
+                category: 'Top 5 File Extensions (with file Capacity and Count)',
                 valueType: 'string',
                 sub_category: item.extension
             });
