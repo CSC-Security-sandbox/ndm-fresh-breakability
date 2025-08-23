@@ -94,7 +94,7 @@ service:
 # ==============================
 # Ingress for User-facing APIs
 # ==============================
-ingress:
+ingressThrottle:
   pathPrefix: api/v1/
   trailingPath: "(accounts|user-status|reset-password|create-user|user-roles|user-permissions|roles|users|projects|setting|about-ndm)"
   ingressClassName: public
@@ -111,7 +111,7 @@ ingress:
 # ==============================
 # Ingress for CP and worker
 # ==============================
-ingressInternal:
+ingress:
   pathPrefix: api/v1/
   trailingPath: "(health|admin-docs|inviteUser|email|worker-registration)"
   ingressClassName: public

@@ -74,7 +74,7 @@ service:
 # ==============================
 # Ingress for User-facing APIs
 # ==============================
-ingress:
+ingressThrottle:
   pathPrefix: api/v1/
   trailingPath: "(servers|paths-upload|support-bundle)"
   ingressClassName: public
@@ -91,7 +91,7 @@ ingress:
 # ==============================
 # Ingress for CP and worker
 # ==============================
-ingressInternal:
+ingress:
   pathPrefix: api/v1/
   trailingPath: "(work-manager|config-docs)"
   ingressClassName: public
@@ -101,3 +101,8 @@ ingressInternal:
   tls:
     enabled: false
   host: ""
+
+persistentVolumes:
+  - name: generated-zips
+    mountPath: /generated-zips
+    hostPath: /generated-zips

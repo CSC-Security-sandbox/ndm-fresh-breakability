@@ -102,8 +102,7 @@ service:
 # ==============================
 # Ingress for User-facing APIs
 # ==============================
-ingress:
-  ingress:
+ingressThrottle:
   pathPrefix: api/v1/
   trailingPath: "(workers|jobs|job-run|tasks)"
   ingressClassName: public
@@ -120,7 +119,7 @@ ingress:
 # ==============================
 # Ingress for CP and worker
 # ==============================
-ingressInternal:
+ingress:
   pathPrefix: api/v1/
   trailingPath: "(bulk-discovery|bulk-migrate|bulk-cutover|jobs-docs|statscheck)"
   userDefinedAnnotations:
