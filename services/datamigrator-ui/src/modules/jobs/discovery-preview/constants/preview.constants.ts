@@ -14,7 +14,7 @@ export enum FileSystemCategory {
   CREATED = "Created",
   ACCESS_TIME = "Access Time",
   BIGGEST = "Biggest",
-  TOP_FILE_EXTENSIONS = "Top File Extensions (with file Capacity and Count)",
+  TOP_FILE_EXTENSIONS = "Top 5 File Extensions (with file Capacity and Count)",
   MAXIMUM_VALUES = "Maximum Values",
   JOB_RUN_STATS = "Job Run Stats",
   FILE_SERVER_INFO = "File Server Info",

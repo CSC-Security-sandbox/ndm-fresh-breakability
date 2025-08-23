@@ -142,7 +142,7 @@ it('EXTENSION_DISTRIBUTION_MAPPER maps input correctly', () => {
     expect(result).toEqual([
         {
             value: 'size(123);count(10)',
-            category: 'Top File Extensions (with file Capacity and Count)',
+            category: 'Top 5 File Extensions (with file Capacity and Count)',
             valueType: 'string',
             sub_category: '.txt'
         }
