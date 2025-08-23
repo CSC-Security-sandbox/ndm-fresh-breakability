@@ -24,7 +24,7 @@ module "control-plane" {
 }
 
 module "worker" {
-  count                  = 3
+  count                  = 2
   source                 = "../../modules/linux"
   vm_name                = "${var.worker_ovf_template_name}-api-${count.index + 1}"
   datacenter_name        = var.datacenter_name
