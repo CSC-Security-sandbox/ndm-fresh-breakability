@@ -21,9 +21,9 @@ import {
   extractSystemFileStatAndDirectories,
   formatBytes,
   formatLargeNumber,
-} from "@modules/jobs/discovery-preview/preview.decorators";
-import { availableChartColors } from "@modules/jobs/discovery-preview/preview.constants";
-import Legends from "@/components/chartInfo/Legends";
+} from "@modules/jobs/discovery-preview/utils/chart-data.utils";
+import { availableChartColors } from "@modules/jobs/discovery-preview/constants/preview.constants";
+import Legends from "@components/chartInfo/Legends";
 
 const colorClassMap: Record<string, string> = {
   "chart-1": "bg-blue-900",
@@ -57,23 +57,23 @@ const ReportDoughnutChart = () => {
   same colors in doughnut chart (random colors will be assigned 
   to the file extentions as this data will be dynamic) */
   const shuffledColors = [...availableChartColors]
-      .filter((c) => c !== "chart-1")
-      .sort(() => Math.random() - 0.5);  // Shuffle the colors
+    .filter((c) => c !== "chart-1")
+    .sort(() => Math.random() - 0.5); // Shuffle the colors
 
   const assignedColors: Record<string, string> = {};
   fileExtensionCounts.forEach((_, index) => {
     // Use modulo to cycle through available colors if there are more extensions than colors
     assignedColors[`chart-${index + 2}`] =
-        shuffledColors[index % shuffledColors.length];
+      shuffledColors[index % shuffledColors.length];
   });
 
-// For the chart, use the actual color names directly
+  // For the chart, use the actual color names directly
   const doughnutColors = [
     fileExtensionCounts.map((_, index) => `chart-${index + 2}`),
     ["chart-1"],
   ];
 
-// For the legend, use the same direct mapping to ensure consistency
+  // For the legend, use the same direct mapping to ensure consistency
   const legendsData = [
     ...fileExtensionCounts.map(([key, value], index) => ({
       title: key,

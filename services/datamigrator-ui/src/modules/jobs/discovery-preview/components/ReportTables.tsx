@@ -3,16 +3,16 @@ import { useGetReportDataQuery } from "@api/reportApi";
 import ReportTableRenderer from "@modules/jobs/discovery-preview/components/ReportTableRenderer";
 import { JOBS_TYPE, ReportDataPayloadType } from "@/types/app.type";
 import {
-  BIGGEST_FILE_SIZE_NAME_COLS,
-  LONGEST_FILE_NAME_COLS,
-  LONGEST_PATH_TABLE_COLUMS,
-} from "@modules/jobs/discovery-preview/preview.constants";
-import {
   extractBiggestFiles,
   extractLongestDirectoryPaths,
   longestFileNames,
-} from "@modules/jobs/discovery-preview/preview.decorators";
+} from "@modules/jobs/discovery-preview/utils/chart-data.utils";
 import { useParams } from "react-router-dom";
+import {
+  BIGGEST_FILE_SIZE_NAME_COLS,
+  LONGEST_FILE_NAME_COLS,
+  LONGEST_PATH_TABLE_COLUMS,
+} from "@modules/jobs/discovery-preview/constants/table-mapper.constants";
 
 const ReportTables = () => {
   const { jobRunId } = useParams<{ jobRunId: string }>();

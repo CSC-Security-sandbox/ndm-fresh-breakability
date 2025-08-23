@@ -34,6 +34,8 @@ const TableWrapper = ({
   refetchTableData,
   notReachableExportPaths = [],
   noDataLabel = "No Data",
+  showSearch = true,
+  showRefresh = true,
 }: TableWrapperPropsType) => {
   const [currentFilters, setCurrentFilters] = useState<any>({});
   const [organizedRowsFiltered, setOrganizedRowsFiltered] = useState<any[]>(
@@ -133,15 +135,19 @@ const TableWrapper = ({
           </Box>
         )}
         <Box className="flex gap-5 items-center">
-          <SearchWidget
-            setFilter={updateTextFilter}
-            className="w-[360px] mt-1"
-          />
+          {showSearch && (
+            <SearchWidget
+              setFilter={updateTextFilter}
+              className="w-[360px] mt-1"
+            />
+          )}
 
-          <RefreshButton
-            isLoading={isRefreshing}
-            onRefresh={refetchTableData}
-          />
+          {showRefresh && (
+            <RefreshButton
+              isLoading={isRefreshing}
+              onRefresh={refetchTableData}
+            />
+          )}
 
           {showDownload && (
             <Button variant="icon" className="w-[18px] h-[18px]">
