@@ -1,5 +1,4 @@
-{{ include "datamigrator.ingresstemplate" . }}
-
 {{ include "datamigrator.throttledingresstemplate" . }}
 
+{{ include "datamigrator.ingresstemplate" . }}
 ---

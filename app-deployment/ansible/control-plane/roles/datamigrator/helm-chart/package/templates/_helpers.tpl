@@ -126,13 +126,13 @@ spec:
     app: {{ .Values.appName }}
 {{- end }}
 
-{{/* Template for Regular Ingress (Non-throttled APIs). */}}
-{{- define "datamigrator.ingresstemplate" }}
+{{/* Template for Regular Ingress (Throttled APIs). */}}
+{{- define "datamigrator.throttledingresstemplate" }}
 {{- if .Values.ingress }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ .Values.appName }}-ingress
+  name: {{ .Values.appName }}-throttled-ingress
   {{- if .Values.ingress.userDefinedAnnotations }}
   annotations:
     {{- toYaml .Values.ingress.userDefinedAnnotations | nindent 4 }}
@@ -158,31 +158,31 @@ spec:
   tls:
   - hosts:
     - {{ .Values.ingress.host }}
-    secretName: {{ .Values.ingress.tls.secretName | default (printf "%s-tls" .Values.appName) }}
+    secretName: {{ .Values.ingress.tls.secretName | default (printf "%s-throttled-tls" .Values.appName) }}
   {{- end }}
 {{- end }}
 {{- end }}
 
-{{/* Template for Throttled Ingress (Rate-limited APIs). */}}
-{{- define "datamigrator.throttledingresstemplate" }}
-{{- if .Values.throttledIngress }}
+{{/* Template for Non throttled Ingress (Rate-limited APIs). */}}
+{{- define "datamigrator.ingresstemplate" }}
+{{- if .Values.ingressInternal }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ .Values.appName }}-throttled-ingress
-  {{- if .Values.throttledIngress.userDefinedAnnotations }}
+  name: {{ .Values.appName }}-ingress
+  {{- if .Values.ingressInternal.userDefinedAnnotations }}
   annotations:
-    {{- toYaml .Values.throttledIngress.userDefinedAnnotations | nindent 4 }}
+    {{- toYaml .Values.ingressInternal.userDefinedAnnotations | nindent 4 }}
   {{- end }}
 spec:
-  ingressClassName: {{ .Values.throttledIngress.ingressClassName }}
+  ingressClassName: {{ .Values.ingressInternal.ingressClassName }}
   rules:
-  - host: {{ .Values.throttledIngress.host }}
+  - host: {{ .Values.ingressInternal.host }}
     http:
       paths:
-      {{- if .Values.throttledIngress.pathPrefix }}
-      - path: /{{ .Values.throttledIngress.pathPrefix }}{{ .Values.throttledIngress.trailingPath }}(?:/|$)
+      {{- if .Values.ingressInternal.pathPrefix }}
+      - path: /{{ .Values.ingressInternal.pathPrefix }}{{ .Values.ingressInternal.trailingPath }}(?:/|$)
       {{- else }}
       - path: /
       {{- end }}
@@ -192,11 +192,11 @@ spec:
             name: {{ .Values.appName }}-service
             port:
               number: {{ .Values.service.port }}
-  {{- if .Values.throttledIngress.tls.enabled }}
+  {{- if .Values.ingressInternal.tls.enabled }}
   tls:
   - hosts:
-    - {{ .Values.throttledIngress.host }}
-    secretName: {{ .Values.throttledIngress.tls.secretName | default (printf "%s-throttled-tls" .Values.appName) }}
+    - {{ .Values.ingressInternal.host }}
+    secretName: {{ .Values.ingressInternal.tls.secretName | default (printf "%s-tls" .Values.appName) }}
   {{- end }}
 {{- end }}
 {{- end }}
