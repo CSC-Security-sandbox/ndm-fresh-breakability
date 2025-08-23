@@ -100,6 +100,8 @@ ingress:
   annotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/limit-rps: "15"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "1"
   hostname: ""
   ingressClassName: "public"
   extraRules:
