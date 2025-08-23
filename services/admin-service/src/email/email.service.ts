@@ -281,7 +281,7 @@ export class EmailService implements OnModuleDestroy {
             layoutsDir: path.join(__dirname, '../../templates/views'),
             defaultLayout: templateName,
             helpers: {
-              eq: (a, b) => a === b,
+              eq: (a, b) => a === b, 
               join: (array, separator) => {
                 if (Array.isArray(array)) {
                   const sep = typeof separator === 'string' ? separator : ', ';
