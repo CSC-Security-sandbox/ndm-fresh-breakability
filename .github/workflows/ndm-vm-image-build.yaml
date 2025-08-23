@@ -656,6 +656,8 @@ jobs:
   upload-windows-installer:
     needs: [package-artifacts, build-windows-installer]
     runs-on: openlab
+    outputs:
+      windows_worker_installer_url: ${{ steps.upload-installer.outputs.windows_worker_installer_url }}
     steps:
       - name: Download Windows Installer Artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -664,6 +666,7 @@ jobs:
           path: ./
 
       - name: Upload Windows Installer to Artifactory
+        id: upload-installer
         run: |
           BUILD_TYPE="${{ needs.package-artifacts.outputs.build_type }}"
           BUILD_VERSION="${{ needs.package-artifacts.outputs.build_version }}"
@@ -675,6 +678,7 @@ jobs:
           fi
 
           INSTALLER_PATH="${ARTIFACTORY_PATH}/windows-worker-installer-${BUILD_VERSION}.exe"
+          echo "windows_worker_installer_url=$INSTALLER_PATH" >> $GITHUB_OUTPUT
           for REPO_PATH in "cicd/ndm" "team/ndm"; do
             TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${INSTALLER_PATH}"
             echo "Uploading Windows worker installer to $TARGET_URL..."
@@ -1492,11 +1496,11 @@ jobs:
 
   run-azure-ndm-api-tests:
     if: ${{ needs.packer.outputs.control_plane_image_version != '' && needs.packer.outputs.worker_image_version != '' }}
-    needs: [package-artifacts, packer, determine-matrix]
-    uses: ./.github/workflows/run-api-tests-azure.yaml
+    needs: [package-artifacts, packer, determine-matrix, upload-windows-installer]
+    uses: ./.github/workflows/run-api-tests.yaml
     with:
       control_plane_image_version: ${{ needs.packer.outputs.control_plane_image_version }}
       worker_image_version: ${{ needs.packer.outputs.worker_image_version }}
-      windows_worker_installer_url: ${{ needs.package-artifacts.outputs.windows_worker_installer_url }}
+      windows_worker_installer_url: ${{ needs.upload-windows-installer.outputs.windows_worker_installer_url }}
     secrets: inherit
 

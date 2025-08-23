@@ -112,16 +112,21 @@ variable "deploy_windows_workers" {
 variable "worker_vm_size" {
   description = "The VM size for worker nodes"
   type        = string
-  default     = "Standard_D4ads_v6"
+  default     = "Standard_D4s_v4"
 }
 
 variable "control_plane_vm_size" {
   description = "The VM size for control plane"
   type        = string
-  default     = "Standard_D8ads_v6"
+  default     = "Standard_D8s_v4"
 }
 
 variable "location" {
   description = "The Azure region where resources will be created"
   type        = string
+}
+
+variable "dns_servers" {
+  description = "List of DNS servers to use for the NIC."
+  type        = list(string)
 }

@@ -68,6 +68,7 @@ module "windows_workers" {
   windows_image_sku        = var.windows_image_sku
   windows_image_version    = var.windows_image_version
   location                 = var.location
+  dns_servers              = var.dns_servers
   assign_public_ip         = false
   timezone                 = "UTC"
   enable_automatic_updates = true

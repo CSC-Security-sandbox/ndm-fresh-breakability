@@ -30,7 +30,8 @@ resource "azurerm_network_interface" "nic" {
     public_ip_address_id          = var.assign_public_ip ? azurerm_public_ip.public_ip[0].id : null
   }
 
-  tags = var.tags
+  dns_servers = var.dns_servers
+  tags        = var.tags
 }
 
 # Create Windows Virtual Machine

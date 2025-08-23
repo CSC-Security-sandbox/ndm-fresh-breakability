@@ -28,6 +28,11 @@ variable "subnet_name" {
   type        = string
 }
 
+variable "dns_servers" {
+  description = "List of DNS servers to use for the NIC."
+  type        = list(string)
+}
+
 variable "vm_size" {
   description = "The size of the VM"
   type        = string

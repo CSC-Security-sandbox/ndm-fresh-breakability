@@ -89,6 +89,7 @@ jobs:
           echo "TF_VAR_vm_owner=${{ github.actor }}" >> $GITHUB_ENV
           echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV 
 
       - name: Initialize Terraform
         run: |
@@ -111,6 +112,7 @@ jobs:
           terraform apply -auto-approve tfplan
 
       - name: Upload Terraform State
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: terraform-state
@@ -289,12 +291,6 @@ jobs:
       NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
 
-      NFS_NDM_WORKERS_PORT: 22
-      
-      NFS_SOURCE_HOST_IP: ${{ secrets.NFS_FILE_SERVER_SOURCE_IP }}
-      NFS_DESTINATION_HOST_IP: ${{ secrets.NFS_FILE_SERVER_DESTINATION_IP }}
-      NFS_PROTOCOL_USERNAME: "Root"
-
       AZURE_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
       AZURE_NFS_NDM_WORKERS_PORT: ${{ vars.AZURE_NFS_NDM_WORKERS_PORT }}
       AZURE_NFS_SOURCE_VOLUMES: ${{ vars.AZURE_NFS_SOURCE_VOLUMES }}
@@ -318,8 +314,8 @@ jobs:
           
           echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "AZURE_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "AZURE_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
 
       - name: Install Ginkgo
         run: |
@@ -370,11 +366,12 @@ jobs:
           WORKER_IMAGE="${{ inputs.worker_image_version || github.event.inputs.worker_image_version }}"
 
           # Azure Terraform Variables
-          echo "TF_VAR_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
+          echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
           echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
-          echo "TF_VAR_username=${{ github.actor }}" >> $GITHUB_ENV
+          echo "TF_VAR_vm_owner=${{ github.actor }}" >> $GITHUB_ENV
           echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }} >> $GITHUB_ENV
 
       - name: Download Terraform State
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
