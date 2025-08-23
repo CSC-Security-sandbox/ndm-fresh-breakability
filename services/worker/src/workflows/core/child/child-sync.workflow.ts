@@ -1,12 +1,11 @@
 
 import * as wf from '@temporalio/workflow';
 import { proxyActivities } from '@temporalio/workflow';
-import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 import { JobRunStatus } from "src/activities/common/enums";
+import { CommonTaskService } from 'src/activities/core/common/common-task.service';
+import { SyncService } from 'src/activities/core/migrate/sync-activity.service';
 import { updateJobStatusIfNotRunning } from '../common/workflow-utils';
 import { SyncWorkflowOutput } from './chid-scan.workflow.type';
-import { SyncService } from 'src/activities/core/migrate/sync-activity.service';
-import { RetryExceededError } from 'src/errors/errors.types';
 
 
 interface SyncWorkflowInput {
@@ -21,8 +20,8 @@ const ITERATION_LIMIT = 1000;
 const {
     syncTaskActivity: SyncTaskActivity,
 } = proxyActivities<SyncService>({ 
-    retry: { initialInterval: '10s', backoffCoefficient: 1.2,  maximumInterval: '30s', nonRetryableErrorTypes: ['ActivityFailure','FatalError', 'RetryExceededError'], },
-     startToCloseTimeout: '5h', heartbeatTimeout: '30s', });
+    retry: { initialInterval: '10s', backoffCoefficient: 1,  maximumInterval: '30s', maximumAttempts: 10, nonRetryableErrorTypes: ['FatalError', 'RetryExceededError', 'ApplicationFailure'], },
+     startToCloseTimeout: '5h', heartbeatTimeout: '1m' });
 
 const {
     getGroupOfTasksActivity: getGroupOfTasksActivity,
@@ -87,10 +86,13 @@ export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunSt
                     console.error(`SyncTaskActivity completed for taskId: ${taskId} with output: ${JSON.stringify(output)}`);
                     return output;
                 } catch (error)  {
-                    console.error(`SyncTaskActivity failed for taskId: ${taskId} with error: ${error}`);
-                    if(error instanceof wf.ActivityFailure || error instanceof RetryExceededError)  {
-                        return { taskId, error: error.message };
+                    if(error instanceof wf.ActivityFailure && error.cause instanceof wf.ApplicationFailure){
+                        if (error.cause.type === 'RetryExceededError') {
+                            console.error(`SyncTaskActivity for taskId: ${taskId} has exceeded retry limit.`);
+                            return { taskId, error: error.message };
+                        }
                     }
+                    console.error(`SyncTaskActivity failed for taskId: ${taskId} with error: ${JSON.stringify(error)} retrying...`);
                     throw error
                     // TODO: handle FatalError 
                 }    

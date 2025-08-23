@@ -11,6 +11,7 @@ import { CommandExecInput, CommandExecOutput } from "./command-execution/command
 
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { handleSyncTaskUpdateInput, SyncTaskInput, SyncTaskOutput } from "./sync-activity.type";
+import { validateStale } from "src/activities/utils/stale-validate.utils";
 
 @Injectable()
 export class SyncService {
@@ -36,10 +37,9 @@ export class SyncService {
         this.maxWriteConcurrency = this.configService.get('worker.maxWriteConcurrency') || 100;
     }
 
-
      async syncTaskActivity({ jobRunId, taskId }: SyncTaskInput): Promise<SyncTaskOutput> {
         const syncActivityCtx = Context.current();
-        const heartBeatInterval = setInterval(() => { syncActivityCtx.heartbeat({});}, 2000);
+        let heartBeatInterval = null;
         let syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0};
         const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
         let task = undefined;
@@ -49,28 +49,44 @@ export class SyncService {
             this.logger.warn(`[${jobRunId}] No Task Found for taskId: ${taskId}`);
             return syncOutput;
           }
+          
+          // syncActivityCtx.heartbeat({workerId: this.workerId, taskId: task.id});
+          
           this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | status : ${task?.status} | command : ${task?.commands?.length}`);
           task = await this.commonTaskService.ensureTaskValid({ task, jobContext });
           task.status = TaskStatus.RUNNING;
           task.workerId = this.workerId;
           await jobContext.publishToTaskStream(task);
-          syncOutput = await this.executeSyncTask(taskId, task, jobContext);
+
+          // Calculate base prefix paths
+          const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
+          const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
+
+          heartBeatInterval = setInterval(async() => { 
+            try {
+              await validateStale([baseSourcePrefixPath, baseTargetPrefixPath])
+              syncActivityCtx.heartbeat({workerId: this.workerId, taskId: task.id});
+            } catch (error) {
+              this.logger.error(`[${jobRunId}] Stale path detected during heartbeat check: ${error.message}`, error.stack);
+              heartBeatInterval && clearInterval(heartBeatInterval);
+            }
+          }, 10000);
+          
+          syncOutput = await this.executeSyncTask(taskId, task, jobContext, baseSourcePrefixPath, baseTargetPrefixPath);
           await this.updateAndReportTaskStatus({ taskHashId: taskId, jobContext, errors: syncOutput.errors, task });
           syncOutput.status = TaskStatus.COMPLETED;
         } catch (error) {            
             this.logger.error(`[${jobRunId}] Error in syncTaskActivity: ${error.message}`, error.stack);        
             throw error;
         } finally {
-          clearInterval(heartBeatInterval);
+          heartBeatInterval && clearInterval(heartBeatInterval);
         }
         return syncOutput;
     }
 
 
-    executeSyncTask = async (taskHashId:string, task: TaskInfo, jobContext: JobManagerContext ): Promise<SyncTaskOutput> => {
+    executeSyncTask = async (taskHashId:string, task: TaskInfo, jobContext: JobManagerContext, baseSourcePrefixPath: string, baseTargetPrefixPath: string): Promise<SyncTaskOutput> => {
         const syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0};
-        const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
-        const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
         const errorType = ++task.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
 
         let offset = 0;

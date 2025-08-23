@@ -185,15 +185,46 @@ describe('SyncService', () => {
 
         it('should clear heartbeat interval on completion', async () => {
             const clearIntervalSpy = jest.spyOn(global, 'clearInterval');
-            mockJobContext.getTask.mockResolvedValue(null);
+            const setIntervalSpy = jest.spyOn(global, 'setInterval');
+            
+            const mockTask = new TaskInfo(
+                'task-456',
+                'job-123',
+                TaskType.MIGRATE,
+                TaskStatus.PENDING,
+                '',
+                'source-path',
+                [{ id: 'cmd-1', status: CommandStatus.COMPLETED, fPath: '/file1.txt' } as any],
+                'target-path'
+            );
+
+            mockJobContext.getTask.mockResolvedValue(mockTask);
+            commonTaskService.ensureTaskValid.mockResolvedValue(mockTask);
+            commandExecService.executeCommand.mockResolvedValue({
+                sourceErrors: [],
+                targetErrors: [],
+                cmd: {} as any,
+            });
+
+            // Mock the executeSyncTask to return a successful result
+            jest.spyOn(service, 'executeSyncTask').mockResolvedValue({
+                errors: { source: [], target: [] },
+                status: TaskStatus.COMPLETED,
+                error: 0,
+            });
+
+            const updateSpy = jest.spyOn(service, 'updateAndReportTaskStatus').mockResolvedValue();
             
             await service.syncTaskActivity(mockSyncInput);
 
+            expect(setIntervalSpy).toHaveBeenCalled();
             expect(clearIntervalSpy).toHaveBeenCalled();
         });
 
-        it('should clear heartbeat interval on error', async () => {
+        it('should clear heartbeat interval on error after interval is set', async () => {
             const clearIntervalSpy = jest.spyOn(global, 'clearInterval');
+            const setIntervalSpy = jest.spyOn(global, 'setInterval');
+            
             const mockTask = new TaskInfo(
                 'task-456',
                 'job-123',
@@ -205,10 +236,13 @@ describe('SyncService', () => {
             );
             
             mockJobContext.getTask.mockResolvedValue(mockTask);
-            const error = new Error('Test error');
-            commonTaskService.ensureTaskValid.mockRejectedValue(error);
+            commonTaskService.ensureTaskValid.mockResolvedValue(mockTask);
+            
+            // Mock executeSyncTask to throw an error after interval is set
+            jest.spyOn(service, 'executeSyncTask').mockRejectedValue(new Error('Test error'));
 
-            await expect(service.syncTaskActivity(mockSyncInput)).rejects.toThrow();
+            await expect(service.syncTaskActivity(mockSyncInput)).rejects.toThrow('Test error');
+            expect(setIntervalSpy).toHaveBeenCalled();
             expect(clearIntervalSpy).toHaveBeenCalled();
         });
 
@@ -286,7 +320,13 @@ describe('SyncService', () => {
                 cmd: {} as any,
             });
 
-            const result = await service.executeSyncTask('task-hash-456', mockTask, mockJobContext);
+            const result = await service.executeSyncTask(
+                'task-hash-456', 
+                mockTask, 
+                mockJobContext, 
+                '/base/job-123/source-path/',
+                '/base/job-123/target-path/'
+            );
 
             expect(result.status).toBe(TaskStatus.PENDING);
             expect(result.errors.source).toEqual([]);
@@ -316,7 +356,13 @@ describe('SyncService', () => {
                 cmd: {} as any,
             });
 
-            const result = await service.executeSyncTask('task-hash-456', mockTask, mockJobContext);
+            const result = await service.executeSyncTask(
+                'task-hash-456', 
+                mockTask, 
+                mockJobContext,
+                '/base/job-123/source-path/',
+                '/base/job-123/target-path/'
+            );
 
             expect(result.errors.source).toEqual(['source-error-1']);
             expect(result.errors.target).toEqual(['target-error-1']);
@@ -426,7 +472,13 @@ describe('SyncService', () => {
             );
             taskWithNoCommands.retryCount = 1;
 
-            const result = await service.executeSyncTask('task-hash-456', taskWithNoCommands, mockJobContext);
+            const result = await service.executeSyncTask(
+                'task-hash-456', 
+                taskWithNoCommands, 
+                mockJobContext,
+                '/base/job-123/source-path/',
+                '/base/job-123/target-path/'
+            );
 
             expect(result.status).toBe(TaskStatus.PENDING);
             expect(result.errors.source).toEqual([]);

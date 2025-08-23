@@ -7,6 +7,7 @@ import { MigrateScanService } from './migrate/migrate-scan.service';
 import { FatalError, RetryableError, RetryExceededError } from 'src/errors/errors.types';
 import { Context } from '@temporalio/activity';
 import { TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 jest.mock('@temporalio/activity', () => ({
     Context: {
@@ -47,6 +48,7 @@ const mockScanDirectoryOutput = {
 describe('ScanService', () => {
     let scanService: ScanService;
     let configService: jest.Mocked<ConfigService>;
+    let loggerFactory: jest.Mocked<LoggerFactory>;
     let redisService: jest.Mocked<RedisService>;
     let commonTaskService: jest.Mocked<CommonTaskService>;
     let migrateScanService: jest.Mocked<MigrateScanService>;
@@ -62,6 +64,15 @@ describe('ScanService', () => {
                     case 'worker.maxRetryCount': return 2;
                     default: return undefined;
                 }
+            }),
+        } as any;
+
+        loggerFactory = {
+            create: jest.fn().mockReturnValue({
+                info: jest.fn(),
+                error: jest.fn(),
+                warn: jest.fn(),
+                debug: jest.fn(),
             }),
         } as any;
 
@@ -88,6 +99,7 @@ describe('ScanService', () => {
 
         scanService = new ScanService(
             configService,
+            loggerFactory,
             redisService,
             commonTaskService,
             migrateScanService,
