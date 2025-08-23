@@ -21,7 +21,7 @@ const {
     syncTaskActivity: SyncTaskActivity,
 } = proxyActivities<SyncService>({ 
     retry: { initialInterval: '10s', backoffCoefficient: 1,  maximumInterval: '30s', maximumAttempts: 10, nonRetryableErrorTypes: ['FatalError', 'RetryExceededError', 'ApplicationFailure'], },
-     startToCloseTimeout: '5h', heartbeatTimeout: '1m', });
+     startToCloseTimeout: '5h', heartbeatTimeout: '1m' });
 
 const {
     getGroupOfTasksActivity: getGroupOfTasksActivity,

@@ -10,6 +10,8 @@ import { DiscoveryScanService } from "./discovery/discovery-scan.service";
 import { MigrateScanService } from "./migrate/migrate-scan.service";
 import { BatchSubDirInput, BatchSubDirOutput, ScanActivityInput, ScanActivityOutput, ScanDirectoryInput, ScanDirectoryOutput, ScanDirectorySettings, TaskExecInput, TaskExecOutput, UpdateAndReportTaskInput } from './scan-activity.type';
 import { calculateHash } from "src/activities/utils/checksum-utils";
+import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
+import { validateStale } from "src/activities/utils/stale-validate.utils";
 
 
 
@@ -21,33 +23,35 @@ export class ScanService {
     readonly maxMigrationCommand : number;
     readonly maxConcurrency: number;
     readonly maxRetryCount: number;
+    private readonly logger: LoggerService
 
     constructor(
         @Inject(ConfigService) 
         private readonly configService: ConfigService,
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
         private readonly redisService: RedisService,
         private readonly commonTaskService: CommonTaskService,
         private readonly migrateScanService: MigrateScanService,
         private readonly  discoveryScanService: DiscoveryScanService,
+    
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100; 
         this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;  
+        this.logger = loggerFactory.create(ScanService.name);
     }
 
 
     async scanDirectories ({jobRunId, isMigration, batchSize, batchId}: ScanActivityInput): Promise<ScanActivityOutput>  {
-        const scanActivityContext = Context.current();
-        const heartbeatInterval = setInterval(() => {
-            scanActivityContext.heartbeat({});
-        }, 2000);
-        
+        const scanActivityCtx = Context.current();
+         let heartBeatInterval = null;
+
         try{                           
             const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
             
             let task = await this.commonTaskService.buildOrGetValidScanTask({
-                taskHashId: scanActivityContext.info.activityId,
+                taskHashId: scanActivityCtx.info.activityId,
                 jobContext,
                 jobRunId,
                 batchId
@@ -57,8 +61,21 @@ export class ScanService {
             task.workerId = this.workerId;
             await jobContext.publishToTaskStream(task);
 
+            const baseSourcePrefixPath = basePrefix(jobRunId, task.sPathId);
+            const baseTargetPrefixPath = basePrefix(jobRunId, task.tPathId);
+
+            heartBeatInterval = setInterval(async() => { 
+                try {
+                    await validateStale([baseSourcePrefixPath, baseTargetPrefixPath])
+                    scanActivityCtx.heartbeat({workerId: this.workerId, taskId: task.id});
+                } catch (error) {
+                    this.logger.error(`[${jobRunId}] Stale path detected during heartbeat check: ${error.message}`, error.stack);
+                    heartBeatInterval && clearInterval(heartBeatInterval);
+                }
+            }, 10000);
+
             let result: TaskExecOutput = await this.executeTask({
-                activityId: scanActivityContext.info.activityId,
+                activityId: scanActivityCtx.info.activityId,
                 jobContext,
                 jobRunId,
                 task,
@@ -69,7 +86,7 @@ export class ScanService {
             const updateAndReportTaskInput: UpdateAndReportTaskInput = {
                 errors: result.errors,
                 jobContext,
-                taskHashId: scanActivityContext.info.activityId,
+                taskHashId: scanActivityCtx.info.activityId,
                 task,
                 retryCount: result.retryCount
             }                        
@@ -85,7 +102,7 @@ export class ScanService {
             throw new RetryableError(error.message)
         }        
         finally{
-            clearInterval(heartbeatInterval);
+            heartBeatInterval && clearInterval(heartBeatInterval);
         }        
     }
 
