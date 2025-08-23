@@ -335,7 +335,7 @@ select
     jsonb_agg(
             jsonb_build_object(
                     'category',
-                    'Top 5 File Extensions',
+                    'Top File Extensions (with file Capacity and Count)',
                     'sub_category',
                     '.' || COALESCE(file_extension, 'none'),
                     'valueType',
