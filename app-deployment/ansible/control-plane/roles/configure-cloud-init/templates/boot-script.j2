@@ -205,13 +205,10 @@ restart_datamigrator_deployments() {
 }
 
 apply_postgres_cronjob_and_wait() {
-    log "Checking for Postgres CronJob resources in /opt/datamigrator/cronjobs/ ..."
-    local CRON_CM="/opt/datamigrator/cronjobs/postgres-configmap-cron.yaml"
+    log "Checking for Postgres CronJob resource in /opt/datamigrator/cronjobs/ ..."
     local CRON_JOB="/opt/datamigrator/cronjobs/postgres-cron.yaml"
 
-    if [ -f "$CRON_CM" ] && [ -f "$CRON_JOB" ]; then
-        log "Applying $CRON_CM ..."
-        retry $MAX_RETRIES "kubectl apply -f $CRON_CM -n datamigrator" || handle_failure "Failed to apply $CRON_CM"
+    if [ -f "$CRON_JOB" ]; then
         log "Applying $CRON_JOB ..."
         retry $MAX_RETRIES "kubectl apply -f $CRON_JOB -n datamigrator" || handle_failure "Failed to apply $CRON_JOB"
 
@@ -231,7 +228,7 @@ apply_postgres_cronjob_and_wait() {
         kubectl logs $POD_NAME -n datamigrator || log "Could not fetch logs for pod $POD_NAME"
         log "Postgres CronJob manual execution completed."
     else
-        log "Postgres CronJob resources not found, skipping."
+        log "Postgres CronJob resource not found, skipping."
     fi
 }
 

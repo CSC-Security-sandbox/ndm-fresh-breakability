@@ -122,7 +122,6 @@ jobs:
       linux_binary_name: ${{ steps.worker-binary.outputs.linux_binary_name }}
       windows_binary_name: ${{ steps.worker-binary.outputs.windows_binary_name }}
       binary_path: ${{ steps.worker-binary.outputs.binary_path }}
-      windows_worker_installer_url: ${{ steps.worker-binary.outputs.windows_worker_installer_url }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

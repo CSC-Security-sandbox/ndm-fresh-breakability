@@ -4,7 +4,6 @@
   file:
     path: $HOME/datamigrator
     state: directory
-  when: local_cluster is defined
 
 - name: Render Postgres CronJob ConfigMap template
   become: yes
@@ -16,10 +15,15 @@
   template: src=./templates/postgres-cron.j2 dest=$HOME/datamigrator/postgres-cron.yaml
   when: local_cluster is defined
 
+- name: Render Postgres Vacuum Analyzer CronJob Job template
+  become: yes
+  template: src=./templates/postgres-vacuum-analyze-cron.j2 dest=$HOME/datamigrator/postgres-vacuum-analyze-cron.yaml
+
 - name: Delete Postgres CronJob Job and ConfigMap
   become: yes
   shell: |
     kubectl delete -f $HOME/datamigrator/postgres-cron.yaml -n datamigrator || true
+    kubectl delete -f $HOME/datamigrator/postgres-vacuum-analyze-cron.yaml -n datamigrator || true
     kubectl delete -f $HOME/datamigrator/postgres-configmap-cron.yaml -n datamigrator || true
   args:
     chdir: $HOME
@@ -32,6 +36,7 @@
   shell: |
     kubectl apply -f $HOME/datamigrator/postgres-configmap-cron.yaml -n datamigrator
     kubectl apply -f $HOME/datamigrator/postgres-cron.yaml -n datamigrator
+    kubectl apply -f $HOME/datamigrator/postgres-vacuum-analyze-cron.yaml -n datamigrator
   args:
     chdir: "$HOME"
   when: local_cluster is defined
@@ -80,7 +85,7 @@
 
 - name: Render Postgres CronJob ConfigMap template (non-local_cluster)
   become: yes
-  template: src=./templates/postgres-configmap-cron.j2 dest=/opt/datamigrator/cronjobs/postgres-configmap-cron.yaml
+  template: src=./templates/postgres-configmap-cron.j2 dest=$HOME/datamigrator/postgres-configmap-cron.yaml
   when: local_cluster is not defined
 
 - name: Render Postgres CronJob Job template (non-local_cluster)
@@ -88,9 +93,31 @@
   template: src=./templates/postgres-cron.j2 dest=/opt/datamigrator/cronjobs/postgres-cron.yaml
   when: local_cluster is not defined
 
+- name: Apply Postgres CronJob ConfigMap (non-local_cluster)
+  become: yes
+  shell: |
+    kubectl apply -f $HOME/datamigrator/postgres-configmap-cron.yaml -n datamigrator
+  args:
+    chdir: "$HOME"
+  when: local_cluster is not defined
+
+- name: Apply Postgres Vacuum Analyze CronJob (non-local_cluster)
+  become: yes
+  shell: |
+    kubectl apply -f $HOME/datamigrator/postgres-vacuum-analyze-cron.yaml -n datamigrator
+  args:
+    chdir: "$HOME"
+  when: local_cluster is not defined
+
+- name: Render vacuum-analyze shell script
+  become: yes
+  template:
+    src: ./templates/enable_vacuum_analyzer.j2
+    dest: /opt/datamigrator/bin/enable_vacuum_analyzer.sh
+    mode: '0755'
+
 - name: Cleanup datamigrator directory
   become: yes
   file:
     path: "$HOME/datamigrator"
     state: absent
-  when: local_cluster is defined

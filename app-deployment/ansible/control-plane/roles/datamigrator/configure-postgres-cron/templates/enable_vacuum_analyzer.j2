@@ -1,0 +1,234 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Configuration
+NAMESPACE="datamigrator"
+CRONJOB_NAME="ndm-postgres-vacuum-analyze-cronjob"
+CONFIGMAP_NAME="ndm-postgres-cronjob-script"
+CONFIG_KEY="VACUUM_ANALYZE_ENABLED"
+
+# -------------------------------------------------------------------
+# Logging helpers
+# -------------------------------------------------------------------
+print_info()    { echo "[INFO] $*"; }
+print_success() { echo "[SUCCESS] $*"; }
+print_warning() { echo "[WARNING] $*"; }
+print_error()   { echo "[ERROR] $*"; }
+
+# -------------------------------------------------------------------
+# Validate cron expression
+# -------------------------------------------------------------------
+validate_cron_expression() {
+    local cron_expr="$1"
+
+    # Must have exactly 5 fields
+    local field_count
+    field_count=$(awk '{print NF}' <<< "$cron_expr")
+    if [ "$field_count" -ne 5 ]; then
+        echo "Invalid cron expression: expected 5 fields (minute hour day month weekday)" >&2
+        return 1
+    fi
+
+    # Basic regex check
+    if ! [[ "$cron_expr" =~ ^[0-9\*/,\-]+[[:space:]]+[0-9\*/,\-]+[[:space:]]+[0-9\*/,\-]+[[:space:]]+[0-9\*/,\-]+[[:space:]]+[0-9\*/,\-]+$ ]]; then
+        echo "Invalid cron expression format" >&2
+        return 1
+    fi
+
+    echo "Cron expression validated successfully" >&2
+    return 0
+}
+
+# -------------------------------------------------------------------
+# Ask user for y/n
+# -------------------------------------------------------------------
+get_user_confirmation() {
+    local prompt="$1"
+    local response
+
+    while true; do
+        read -r -p "$prompt (y/n): " response
+        case "$response" in
+            y|Y|yes|YES) return 0 ;;
+            n|N|no|NO)   return 1 ;;
+            *) echo "Please answer yes (y) or no (n)." ;;
+        esac
+    done
+}
+
+# -------------------------------------------------------------------
+# Prompt for cron expression
+# -------------------------------------------------------------------
+get_cron_expression() {
+    local cron_expr
+    while true; do
+        read -r -p "Your cron expression: " cron_expr
+
+        echo "DEBUG: you entered '$cron_expr'" >&2
+
+        if validate_cron_expression "$cron_expr"; then
+            echo "$cron_expr"
+            return 0
+        fi
+
+        if ! get_user_confirmation "Would you like to try again?"; then
+            return 1
+        fi
+    done
+}
+
+# -------------------------------------------------------------------
+# K8s helpers
+# -------------------------------------------------------------------
+check_resources() {
+    if ! kubectl get configmap "$CONFIGMAP_NAME" -n "$NAMESPACE" &>/dev/null; then
+        print_error "ConfigMap '$CONFIGMAP_NAME' does not exist in namespace '$NAMESPACE'"
+        exit 1
+    fi
+
+    if ! kubectl get cronjob "$CRONJOB_NAME" -n "$NAMESPACE" &>/dev/null; then
+        print_error "CronJob '$CRONJOB_NAME' does not exist in namespace '$NAMESPACE'"
+        exit 1
+    fi
+
+    print_success "Required resources exist"
+}
+
+get_config_value() {
+    local value
+    value=$(kubectl get configmap "$CONFIGMAP_NAME" -n "$NAMESPACE" -o jsonpath="{.data.$CONFIG_KEY}" 2>/dev/null || echo "")
+    if [ -z "$value" ]; then
+        print_error "Could not retrieve $CONFIG_KEY from ConfigMap"
+        exit 1
+    fi
+    echo "$value"
+}
+
+update_config_value() {
+    local new_value="$1"
+    print_info "Updating ConfigMap with $CONFIG_KEY=$new_value..."
+    if kubectl patch configmap "$CONFIGMAP_NAME" -n "$NAMESPACE" --patch "{\"data\":{\"$CONFIG_KEY\":\"$new_value\"}}" &>/dev/null; then
+        print_success "ConfigMap updated successfully"
+    else
+        print_error "Failed to update ConfigMap"
+        exit 1
+    fi
+}
+
+get_current_schedule() {
+    local schedule
+    schedule=$(kubectl get cronjob "$CRONJOB_NAME" -n "$NAMESPACE" -o jsonpath="{.spec.schedule}" 2>/dev/null || echo "")
+    if [ -z "$schedule" ]; then
+        print_error "Could not retrieve current cron schedule"
+        exit 1
+    fi
+    echo "$schedule"
+}
+
+update_cron_schedule() {
+    local new_schedule="$1"
+    print_info "Updating CronJob schedule to '$new_schedule'..."
+    if kubectl patch cronjob "$CRONJOB_NAME" -n "$NAMESPACE" --patch "{\"spec\":{\"schedule\":\"$new_schedule\"}}" &>/dev/null; then
+        print_success "CronJob schedule updated successfully"
+    else
+        print_error "Failed to update CronJob schedule"
+        exit 1
+    fi
+}
+
+unsuspend_cronjob() {
+    print_info "Ensuring CronJob is active..."
+    if kubectl patch cronjob "$CRONJOB_NAME" -n "$NAMESPACE" --patch '{"spec":{"suspend":false}}' &>/dev/null; then
+        print_success "CronJob is now active"
+    else
+        print_error "Failed to activate CronJob"
+        exit 1
+    fi
+}
+
+suspend_cronjob() {
+    print_info "Suspending CronJob..."
+    if kubectl patch cronjob "$CRONJOB_NAME" -n "$NAMESPACE" --type=merge --patch '{"spec":{"suspend":true}}' &> /dev/null; then
+        print_success "CronJob suspended successfully"
+    else
+        print_error "Failed to suspend CronJob"
+        exit 1
+    fi
+}
+
+# -------------------------------------------------------------------
+# Main
+# -------------------------------------------------------------------
+main() {
+    print_info "Starting Vacuum Analyze CronJob Management Script"
+    print_info "=================================================="
+
+    # Track if any changes were made
+    local changes_made=false
+
+    # Step 0: Checks
+    check_resources
+
+    # Step 1: Config
+    print_info "Checking current configuration..."
+    current_config=$(get_config_value)
+    print_info "Current $CONFIG_KEY value: $current_config"
+
+    if [ "$current_config" = "FALSE" ]; then
+        print_warning "VACUUM ANALYZE is currently disabled"
+        if get_user_confirmation "Do you wish to enable VACUUM ANALYZE?"; then
+            update_config_value "TRUE"
+            changes_made=true
+        else
+            print_info "VACUUM ANALYZE remains disabled. Exiting."
+            exit 0
+        fi
+    else
+        print_info "VACUUM ANALYZE is currently enabled"
+        if get_user_confirmation "Do you wish to disable VACUUM ANALYZE?"; then
+            update_config_value "FALSE"
+            suspend_cronjob
+            print_info "VACUUM ANALYZE has been disabled and CronJob suspended. Exiting."
+            exit 0
+        fi
+        print_info "VACUUM ANALYZE will remain enabled"
+    fi
+
+    # Step 2: Cron schedule
+    current_schedule=$(get_current_schedule)
+    print_info "Current cron schedule: $current_schedule"
+
+    if get_user_confirmation "Do you wish to change the cron expression?"; then
+        echo ""
+        echo "Enter the new cron expression (minute hour day month weekday)."
+        echo "Examples:"
+        echo "   0 2 * * *    -> Daily at 2:00 AM"
+        echo "   0 */6 * * *  -> Every 6 hours"
+        echo "   0 0 * * 0    -> Weekly on Sunday at midnight"
+        echo ""
+        new_schedule=$(get_cron_expression)
+        if [ -n "$new_schedule" ]; then
+            print_success "Cron expression validated successfully"
+            update_cron_schedule "$new_schedule"
+            changes_made=true
+        else
+            print_error "Failed to get valid cron expression. Exiting."
+            exit 1
+        fi
+    else
+        print_info "Keeping current cron schedule: $current_schedule"
+    fi
+
+    # Step 3: Only unsuspend if changes were made or if we enabled VACUUM ANALYZE
+    if [ "$changes_made" = true ]; then
+        unsuspend_cronjob
+        print_success "Script completed successfully!"
+        print_info "CronJob '$CRONJOB_NAME' is now active with schedule: $(get_current_schedule)"
+    else
+        print_success "No changes were made. Script completed successfully!"
+        print_info "CronJob '$CRONJOB_NAME' remains in its current state with schedule: $current_schedule"
+    fi
+}
+
+main "$@"
