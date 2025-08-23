@@ -8,12 +8,13 @@ import {
   WizardHeader,
   WizardFooter,
 } from "@netapp/bxp-design-system-react";
-// import { useLogoutUserMutation } from "@api/userApi";
-import Cookies from "js-cookie";
 import { notify } from "@components/notification/NotificationWrapper";
 import { useAuth } from "react-oidc-context";
+import { useDispatch } from "react-redux";
+import { clearAuth } from "@store/reducer/authSlice";
 const UserDetailsContent = () => {
   const auth = useAuth();
+  const dispatch = useDispatch();
 
   //TODO: Copy the session data to redux and access from there.
   const sessionData = JSON.parse(
@@ -28,25 +29,9 @@ const UserDetailsContent = () => {
   const logout = async () => {
     setIsLoading(true);
     try {
-      //TODO : check if this is not needed, then delete this and remove the logout api
-      // const refresh_token = Cookies.get("refresh_token");
-      // const client_id = import.meta.env.VITE_KEYCLOAK_CLIENT_ID;
-      // const client_secret = import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET;
 
-      // if (!refresh_token || !client_id || !client_secret) {
-      //   console.error("Required parameters for logout are missing.");
-      // }
-
-      // const body = {
-      //   refresh_token,
-      //   client_id,
-      //   client_secret,
-      // };
-
-      // await logoutUser(body).unwrap();
       await auth.signoutSilent();
-      Cookies.remove("access_token");
-      Cookies.remove("refresh_token");
+      dispatch(clearAuth());
       sessionStorage.clear();
     } catch (error) {
       setIsLoading(false);

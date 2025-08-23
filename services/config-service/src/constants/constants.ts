@@ -1,0 +1,8 @@
+// Temporal Workflow Timeout Constants
+export const WORKFLOW_TIMEOUTS = {
+    PARENT_WORKFLOW_EXECUTION_TIMEOUT: '6h',
+    PARENT_WORKFLOW_RUN_TIMEOUT: '6h',
+    CHILD_WORKFLOW_EXECUTION_TIMEOUT: '5h',
+    CHILD_WORKFLOW_RUN_TIMEOUT: '5h',
+    ACTIVITY_TIMEOUT: '4h',
+} as const;

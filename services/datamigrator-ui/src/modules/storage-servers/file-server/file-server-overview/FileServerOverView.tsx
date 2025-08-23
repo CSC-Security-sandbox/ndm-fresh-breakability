@@ -70,6 +70,7 @@ const FileServerOverView = () => {
           Icon={GcpStorageIcon}
           isLoading={isLoading}
           isError={isError}
+          lastRefreshed={chartData.lastRefreshed}
         />
         <ChartInfo
           children={<JobChart jobDetails={chartData.jobDetails} />}
@@ -77,6 +78,7 @@ const FileServerOverView = () => {
           Icon={WorkspaceIcon}
           isLoading={isLoading}
           isError={isError}
+          lastRefreshed={chartData.lastRefreshed}
         />
       </Box>
       <TableRenderer

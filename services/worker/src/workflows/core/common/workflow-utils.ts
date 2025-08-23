@@ -39,6 +39,15 @@ export const cancelWorkflowIfRunning = async (workflowId: string) =>{
     console.log(`${workflowId} is cancelled sucessfully`);
   }catch(error){
     console.log(`Failed to cancel workflow ${workflowId}`);
+  } 
+}
+
+export const signalIfRunning = async (workflow: any, signalName: string, payload: any) => {
+  try {
+    if (workflow && await isWorkflowRunningActivity(workflow.workflowId)) {
+      await workflow.signal(signalName, payload);
+    }
+  } catch (error) {
+    console.log(`Failed to signal workflow ${workflow?.workflowId} with signal ${signalName}: ${error.message}`);
   }
-    
 }

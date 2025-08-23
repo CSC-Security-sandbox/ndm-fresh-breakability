@@ -140,10 +140,10 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobC
   ''
 )
 
-export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats) => !dFile || (sFile.size !== dFile.size) || (sFile.mtimeMs !== dFile.mtimeMs)
+export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats) => !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString())
 
 // added  1 second tolerance to avoid false positives due to minor time differences
-export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats, toleranceMs = 1000) => !dFile || (sFile.ctimeMs - dFile.ctimeMs > toleranceMs);
+export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats, toleranceMs = 1000) => !dFile || Math.abs(sFile.ctimeMs - dFile.ctimeMs) > toleranceMs;
 
 export const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false,  2048, true, new Date(), new Date(), new Date(), "", "", "", 0, 1001, 1001);
 export const generateDummyItemEntry: ItemInfo = new ItemInfo(

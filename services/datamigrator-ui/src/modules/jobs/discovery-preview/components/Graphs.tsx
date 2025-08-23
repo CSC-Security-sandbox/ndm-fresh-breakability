@@ -12,14 +12,12 @@ import {
 import { useParams } from "react-router-dom";
 import { useGetReportDataQuery } from "@api/reportApi";
 import { JOBS_TYPE, ReportDataPayloadType } from "@/types/app.type";
-import {
-  CHART_MAPER,
-  OPTIONS_FOR_CHART_TOGGLE,
-} from "@modules/jobs/discovery-preview/preview.constants";
+import { OPTIONS_FOR_CHART_TOGGLE } from "@modules/jobs/discovery-preview/constants/preview.constants";
 import {
   formatBytes,
   formatLargeNumber,
-} from "@modules/jobs/discovery-preview/preview.decorators";
+} from "@modules/jobs/discovery-preview/utils/chart-data.utils";
+import { CHART_MAPER } from "@modules/jobs/discovery-preview/constants/table-mapper.constants";
 
 const Graphs = () => {
   const { jobRunId } = useParams<{ jobRunId: string }>();

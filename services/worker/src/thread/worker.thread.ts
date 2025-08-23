@@ -22,15 +22,27 @@ export async function calculateChecksum(filePath) {
   
 }
 
-export async function smartCopy(source, target) {
+function getOptimalBufferSize(fileSize: number, maxBufferSize: number): number {
+  // For very small files, use smaller buffer to avoid memory waste
+  if (fileSize < 65536) return 65536; // 64KB
+  if (fileSize < 512500) return 262144; // 500KB - 256KB  
+  // For small files, use moderate buffer
+  if (fileSize < 1048576) return 1048576; // 1MB  
+  // For medium files, use larger buffer for better throughput
+  if (fileSize < 52428800) return 2097152; //  50MB - buffer 2MB
+  return maxBufferSize;
+}
+
+export async function smartCopy(source:string, target:string, filesize:number, maxBufferSize :number) {
   const destDir = path.dirname(target);  
   await fs.promises.mkdir(destDir, { recursive: true });
   let readStream: fs.ReadStream = null; 
   let writeStream: fs.WriteStream = null; 
-  try{
-    // TODO: make this chunk size configurable or based on the file size
-    readStream = fs.createReadStream(source, { highWaterMark: 1024 * 1024 });
-    writeStream = fs.createWriteStream(target);
+  try{    
+    const bufferSize = getOptimalBufferSize(filesize, maxBufferSize);
+    console.log(` filesize : ${filesize}, selected buffer size: ${bufferSize}`);
+    readStream = fs.createReadStream(source, { highWaterMark: bufferSize });
+    writeStream = fs.createWriteStream(target, { flags: 'w', highWaterMark: bufferSize });
     let hash = crypto.createHash('sha256');
     readStream.on('data', (chunk) => hash.update(chunk));
 
@@ -59,7 +71,7 @@ export async function smartCopy(source, target) {
 parentPort.on('message', async (tasks: WorkerThreadInput[]) => {
   const result:WorkerThreadOutput[] = await Promise.all(tasks.map(async(task)=> {
     try {
-        const result = await smartCopy(task.data.sourcePath, task.data.destinationPath);
+        const result = await smartCopy(task.data.sourcePath, task.data.destinationPath, task.data.size, task.data.maxBufferSize);
         return { isResolved: true, id: task.id, data: result, Operation: task.Operation };
     } catch (error) {
         return {  isRejected: true, id: task.id, data: {code: error?.code, message:error?.message }, Operation: task.Operation };

@@ -64,7 +64,7 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
 			Expect(sourceConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 
 			By("Getting the source file server by config ID")
 			sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID, headers)
@@ -146,7 +146,7 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 			Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
 			Expect(destinationConfigID).NotTo(BeEmpty(), "destinationConfigID is empty")
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusCreated), "Expected HTTP 201 CREATED")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 
 			By("Getting the destination file server by configId")
 			destinationPathID1, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)

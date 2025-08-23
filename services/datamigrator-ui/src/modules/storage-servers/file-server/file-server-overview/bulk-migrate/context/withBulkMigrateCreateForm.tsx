@@ -425,6 +425,14 @@ export function withBulkMigrateCreateForm(
                   handleSubmit(onSuccessfulSubmit);
                 }
               }
+            } else if (data?.status === ValidateConnectionStatus.FAILED) {
+              const precheckState = getPreCheckStatus(data);
+              setPreCheckStatus(precheckState);
+              setIsPrecheckLoading(false);
+              setIsSubmitting(false);
+              if (interval.current) {
+                clearInterval(interval.current);
+              }
             } else if (data?.status === ValidateConnectionStatus.TERMINATED) {
               const error = new Error(
                 `Seems like pre-check got terminated, please try again.`
@@ -445,16 +453,15 @@ export function withBulkMigrateCreateForm(
         })
         .catch((err) => {
           if (
-            err?.data?.errors &&
-            err.data.errors.includes("MIGRATION_CONFLICTS_FOUND")
+            err?.errors &&
+            err.errors.includes("MIGRATION_CONFLICTS_FOUND")
           ) {
-            const conflictError = err.data;
             setPreCheckStatus({
               success: [],
               failed: [],
               errors: [],
               warnings: [],
-              migrationConflicts: conflictError.details || [],
+              migrationConflicts: err.details || [],
             });
             setIsPrecheckLoading(false);
             setIsSubmitting(false);

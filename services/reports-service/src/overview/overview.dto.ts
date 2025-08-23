@@ -1,6 +1,7 @@
 export class OverviewDTO{
     storageDetails:storageDetail
     jobDetails:jobDetail
+    lastRefreshed: Date
 }
 
 export interface storageDetail{ 

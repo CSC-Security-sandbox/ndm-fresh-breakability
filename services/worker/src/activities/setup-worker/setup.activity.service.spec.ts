@@ -111,11 +111,9 @@ describe('SetupActivityService', () => {
                 mountBasePath: '/mnt/worker',
                 pathId: 'pid',
                 jobRunId: 'job-1'
-            }),
-            true
-        );
+            }), true);
+        });
     });
-});
 
     describe('unmountPath', () => {
         it('should call protocol.unmountPath with correct params', async () => {
@@ -128,20 +126,16 @@ describe('SetupActivityService', () => {
                 pathId: 'pid'
             } as any;
             await service.unmountPath(server, mockProtocol as any, 'job-2');
-            expect(mockProtocol.unmountPath).toHaveBeenCalledWith(
-                'job-2',
-                expect.objectContaining({
-                    hostname: 'host',
-                    username: 'user',
-                    password: 'pass',
-                    protocolVersion: 'v1',
-                    path: '/data',
-                    mountBasePath: '/mnt/worker',
-                    pathId: 'pid',
-                    jobRunId: 'job-2'
-                }),
-                true  // Add this third parameter that's being passed
-            );
+            expect(mockProtocol.unmountPath).toHaveBeenCalledWith('job-2', expect.objectContaining({
+                hostname: 'host',
+                username: 'user',
+                password: 'pass',
+                protocolVersion: 'v1',
+                path: '/data',
+                mountBasePath: '/mnt/worker',
+                pathId: 'pid',
+                jobRunId: 'job-2',                      
+            }), true);
         });
     });
 

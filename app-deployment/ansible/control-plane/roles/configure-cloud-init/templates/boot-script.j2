@@ -204,6 +204,37 @@ restart_datamigrator_deployments() {
     fi
 }
 
+apply_postgres_cronjob_and_wait() {
+    log "Checking for Postgres CronJob resources in /opt/datamigrator/cronjobs/ ..."
+    local CRON_CM="/opt/datamigrator/cronjobs/postgres-configmap-cron.yaml"
+    local CRON_JOB="/opt/datamigrator/cronjobs/postgres-cron.yaml"
+
+    if [ -f "$CRON_CM" ] && [ -f "$CRON_JOB" ]; then
+        log "Applying $CRON_CM ..."
+        retry $MAX_RETRIES "kubectl apply -f $CRON_CM -n datamigrator" || handle_failure "Failed to apply $CRON_CM"
+        log "Applying $CRON_JOB ..."
+        retry $MAX_RETRIES "kubectl apply -f $CRON_JOB -n datamigrator" || handle_failure "Failed to apply $CRON_JOB"
+
+        local JOB_EPOCH=$(date +%s)
+        local JOB_NAME="postgres-cron-manual-${JOB_EPOCH}"
+
+        log "Triggering manual run of the Postgres CronJob: $JOB_NAME ..."
+        retry $MAX_RETRIES "kubectl create job --from=cronjob/ndm-postgres-cronjob $JOB_NAME -n datamigrator" || handle_failure "Failed to trigger manual CronJob"
+
+        log "Waiting for manual Job $JOB_NAME to complete..."
+        if ! retry $MAX_RETRIES "kubectl wait --for=condition=complete --timeout=${WAIT_TIMEOUT}s job/$JOB_NAME -n datamigrator"; then
+            handle_failure "Manual CronJob $JOB_NAME did not complete successfully"
+        fi
+
+        local POD_NAME=$(kubectl get pods -n datamigrator -l job-name=$JOB_NAME -o jsonpath='{.items[0].metadata.name}')
+        log "Showing logs for Job pod $POD_NAME..."
+        kubectl logs $POD_NAME -n datamigrator || log "Could not fetch logs for pod $POD_NAME"
+        log "Postgres CronJob manual execution completed."
+    else
+        log "Postgres CronJob resources not found, skipping."
+    fi
+}
+
 setup_metallb() {
     log "Configuring MetalLB..."
     local PRIVATE_IP=$(hostname -I | awk '{print $1}')
@@ -260,6 +291,7 @@ main() {
     load_docker_images
     install_keycloak_chart
     install_helm_chart
+    apply_postgres_cronjob_and_wait
     restart_statefulsets
     apply_admin_configs
     restart_temporal_deployments

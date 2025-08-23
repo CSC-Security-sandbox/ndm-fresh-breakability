@@ -26,9 +26,11 @@ export default registerAs(
     migrationTaskStreamLimit: parseInt(process.env.MIGRATION_TASK_LIMIT || '100'),
     migrationChunkSize: parseInt(process.env.CHUNK_SIZE || '1048576'),
     maxCommandConcurrency: parseInt(process.env.MAX_COMMAND_CONCURRENCY || '100'),
+    maxWriteConcurrency: parseInt(process.env.MAX_WRITE_CONCURRENCY || '100'),
     operationTimeout: parseInt(process.env.OPERATION_TIMEOUT || '5000'),
     groupSize: parseInt(process.env.REDIS_STREAM_GROUP_SIZE || '1000'),
     commandsInTask: parseInt(process.env.COMMANDS_IN_TASK || '100'),
+    maxCmdStreamLen: parseInt(process.env.MAX_CMDS_IN_STREAM || '5000'),
 
     // speed test
     speedTestFileName: process.env.SPEED_TEST_FILE_NAME || '1GB_zero_file.bin',
@@ -46,6 +48,13 @@ export default registerAs(
     thread: {
       threadBand: process.env.THREAD_BANDS || '1kb,1500;1mb,1000;10mb,100;100mb,10;1gb,1',
       threadCount: parseInt(process.env.THREAD_COUNT || '5'),
+      maxBufferSize: parseInt(process.env.MAX_BUFFER_SIZE) || 1048576,
+    },
+
+    // metrics
+    metrics: {
+      versionsPathWindows: process.env.VERSIONS_PATH_WINDOWS || 'C:\\datamigrator\\conf\\versions.conf',
+      versionsPathLinux: process.env.VERSIONS_PATH_LINUX || '/opt/datamigrator/conf/versions.conf',
     }
   }),
 );
