@@ -283,7 +283,10 @@ export class EmailService implements OnModuleDestroy {
             helpers: {
               eq: (a, b) => a === b,
               join: (array, separator) => {
-                if (Array.isArray(array)) return array.join(separator || ', ');
+                if (Array.isArray(array)) {
+                  const sep = typeof separator === 'string' ? separator : ', ';
+                  return array.join(sep);
+                }
                 return '';
               },
             },
