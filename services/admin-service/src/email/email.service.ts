@@ -280,7 +280,13 @@ export class EmailService implements OnModuleDestroy {
             partialsDir: path.join(__dirname, '../../templates/partials'),
             layoutsDir: path.join(__dirname, '../../templates/views'),
             defaultLayout: templateName,
-            helpers: { eq: (a, b) => a === b },
+            helpers: {
+              eq: (a, b) => a === b,
+              join: (array, separator) => {
+                if (Array.isArray(array)) return array.join(separator || ', ');
+                return '';
+              },
+            },
           },
           viewPath: path.join(__dirname, '../../templates/views'),
           extName: '.hbs',
