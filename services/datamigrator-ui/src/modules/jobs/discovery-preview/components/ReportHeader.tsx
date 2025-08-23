@@ -10,7 +10,7 @@ import {
 import { SuccessIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { useParams } from "react-router-dom";
 import { JOBS_TYPE, ReportDataPayloadType } from "@/types/app.type";
-import { extractSystemFileStatAndDirectories } from "@modules/jobs/discovery-preview/preview.decorators";
+import { extractSystemFileStatAndDirectories } from "@modules/jobs/discovery-preview/utils/chart-data.utils";
 
 const ReportHeader = () => {
   const { jobRunId } = useParams<{ jobRunId: string }>();
