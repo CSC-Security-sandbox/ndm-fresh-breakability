@@ -638,7 +638,8 @@ export class AclOperations {
         const grouped: Record<string, ACLEntry[]> = {};
         
         for (const perm of permissions) {
-            const key = `${perm.principal} (${perm.accessType})`;
+            const normalizedPrincipal = perm.principal.replace(/[\r\n]+/g, '').trim();
+            const key = `${normalizedPrincipal} (${perm.accessType})`;
             if (!grouped[key]) {
                 grouped[key] = [];
             }
