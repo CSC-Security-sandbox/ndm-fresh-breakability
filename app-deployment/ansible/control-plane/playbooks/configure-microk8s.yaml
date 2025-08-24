@@ -13,4 +13,4 @@
     - { role:  ../roles/kubernetes/microk8s/configure-microk8s-user, tags: 'configure-microk8s-user' }
     - { role:  ../roles/kubernetes/microk8s/configure-addons, tags: 'configure-addons' }
     - { role:  ../roles/kubernetes/microk8s/patch-configs-role, tags: 'patch-configs-role' }
-    #- { role:  ../roles/kubernetes/microk8s/configure-certs, tags: 'configure-certs' }
+    - { role:  ../roles/kubernetes/microk8s/import-docker-images, tags: 'import-docker-images' }

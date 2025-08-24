@@ -21,7 +21,8 @@ spec:
             name: admin-entry-config  
       containers:
         - name: admin-entry-container
-          image: alpine:latest
+          image: docker.io/library/alpine:3.22.1
+          imagePullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
           command:
             - "sh"
             - "-c"

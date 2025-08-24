@@ -1,0 +1,22 @@
+- name: Copy Docker image tar file to target
+  copy:
+    src: "../../../artifacts/ndm-docker-images.tar"
+    dest: /tmp/ndm-docker-images.tar
+    mode: '0644'
+  when: local_cluster is not defined
+
+- name: Side-load images to microk8s
+  command: microk8s images import /tmp/ndm-docker-images.tar
+  register: microk8s_import_result
+  when: local_cluster is not defined
+
+- name: Display microk8s import result
+  debug:
+    var: microk8s_import_result.stdout
+  when: local_cluster is not defined
+
+- name: Remove tar file from target
+  file:
+    path: /tmp/ndm-docker-images.tar
+    state: absent
+  when: local_cluster is not defined
