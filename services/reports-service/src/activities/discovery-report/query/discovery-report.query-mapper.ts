@@ -3,6 +3,44 @@ import { ACCESS_TIME_DISTRIBUTION, CREATED_TIME_DISTRIBUTION, DEPTH_DISTRIBUTION
 import { AccessTimeDistributionInput, CreatedTimeDistributionInput, DepthDistributionInput, ExtensionDistributionInput, FileSystemDistributionInput, JobRunDetailsInput, MaxValuesInput, ModifiedTimeDistributionInput, NumberOfFilesBySizeInput, TopBiggestFileNameInput, TopDirectoryWithMaxCountChildInput, TopDirectoryWithMaxSizeInput, TopLongestDirectoryNamesInput, TopLongestDirectoryPathsInput, TopLongestFileNamesInput, TopLongestFilePathsInput } from "./discovery-report.query.type";
 
 
+const formatTime = (timeInSeconds: number): string => {
+    const seconds = Math.floor(timeInSeconds);
+    if (seconds < 60) {
+        return `${seconds}s`;
+    }
+
+    if (seconds < 3600) {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return secs > 0 ? `${mins}mins ${secs}sec` : `${mins}mins`;
+    }
+
+    if (seconds < 86400) {
+        const hours = Math.floor(seconds / 3600);
+        const remainingSeconds = seconds % 3600;
+        const mins = Math.floor(remainingSeconds / 60);
+        const secs = remainingSeconds % 60;
+
+        let result = `${hours}hrs`;
+        if (mins > 0) result += ` ${mins}mins`;
+        if (secs > 0) result += ` ${secs}sec`;
+
+        return result;
+    }
+
+    const days = Math.floor(seconds / 86400);
+    const remainingSeconds = seconds % 86400;
+    const hours = Math.floor(remainingSeconds / 3600);
+    const mins = Math.floor((remainingSeconds % 3600) / 60);
+
+    let result = `${days}day${days > 1 ? 's' : ''}`;
+    if (hours > 0) result += ` ${hours}hrs`;
+    if (mins > 0) result += ` ${mins}mins`;
+
+    return result;
+};
+
+
 export const NUMBER_OF_FILES_BY_SIZE_MAPPER = (input:NumberOfFilesBySizeInput[]) : DiscoveryReportSection[]=> {
     const output: DiscoveryReportSection[] = [];
     input.forEach(item => {
@@ -303,9 +341,9 @@ export const JOB_RUN_DETAILS_MAPPER = (input: JobRunDetailsInput[]) : DiscoveryR
             sub_category: 'Status'
         });
         output.push({
-            value: item.stat_value,
+            value: formatTime(parseFloat(item.stat_value) || 0),
             category: 'Job Run Stats',
-            valueType: 'time',
+            valueType: 'string',
             sub_category: 'Total Time'
         });
     }
