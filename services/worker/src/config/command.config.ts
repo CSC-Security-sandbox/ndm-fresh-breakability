@@ -17,7 +17,8 @@ export enum CommandPattern{
     SET_SID_FOR_OBJECT_DIR='setSIDforDirObject',
     MOUNTED_FOLDER_SIZE='mountedFolderSize',
     AVAILABLE_DISK_SPACE='availableDiskSpace',
-    FSTAB_PATH='fstabPath'
+    FSTAB_PATH='fstabPath',
+    SAVE_CREDS='saveCreds'
 }
 
 // @types 
@@ -48,6 +49,7 @@ export interface BaseCommands {
     mountedFolderSize? : string | undefined
     availableDiskSpace? : string | undefined
     fstabPath? : string | undefined
+    saveCreds? : string | undefined
 }
 
 export default registerAs(
@@ -95,9 +97,9 @@ export default registerAs(
                 disconnectSession: process.env.SMB_WIN_DISCONNECT_SESSION_CMD,
                 getSIDforObject: process.env.SMB_WIN_GET_SID_FOR_OBJECT_CMD,
                 setSIDforDirObject: process.env.SMB_WIN_SET_SID_FOR_DIR_OBJECT_CMD,
-                setSIDforObject: process.env.SMB_WIN_SET_SID_FOR_OBJECT_CMD,
                 mountedFolderSize: process.env.WIN_USED_DISK_SPACE,
-                availableDiskSpace: process.env.WIN_AVAILABLE_DISK_SPACE_CMD
+                availableDiskSpace: process.env.WIN_AVAILABLE_DISK_SPACE_CMD,
+                saveCreds: process.env.SMB_WIN_SAVE_CREDS
             },
             linux: {
                 listPath: process.env.SMB_LINUX_LIST_PATH_CMD,
@@ -105,7 +107,7 @@ export default registerAs(
                 versionDetails: process.env.SMB_LINUX_VERSION_DETAIL_CMD,
                 unmountPath:  process.env.SMB_LINUX_UNMOUNT_PATH_CMD,
                 availableDiskSpace: process.env.LINUX_AVAILABLE_DISK_SPACE_CMD,
-                mountedFolderSize: process.env.LINUX_USED_DISK_SPACE
+                mountedFolderSize: process.env.LINUX_USED_DISK_SPACE,saveCreds: process.env.LINUX_SAVE_CREDS_CMD
             },
             darwin: {
                 listPath: process.env.SMB_UNIX_LIST_PATH_CMD,
