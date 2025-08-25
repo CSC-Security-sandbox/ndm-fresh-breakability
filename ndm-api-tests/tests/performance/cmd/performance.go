@@ -36,9 +36,9 @@ func main() {
 	// cpIP := "172.30.203.26"
 	// workerIP := "172.30.203.27"
 	// var err error = nil
-	// if err != nil {
-	// 	log.Fatalf("Failed to create Azure VMs: %v", err)
-	// }
+	if err != nil {
+		log.Fatalf("Failed to create Azure VMs: %v", err)
+	}
 	fmt.Println("Created VM as simulation")
 
 	fmt.Println("\n====================Updating Environment Variables=====================")
