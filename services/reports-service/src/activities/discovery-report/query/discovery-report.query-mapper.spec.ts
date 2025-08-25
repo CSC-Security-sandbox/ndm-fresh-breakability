@@ -208,66 +208,66 @@ it('MAX_VALUES_MAPPER maps input correctly', () => {
     ]);
 });
 
-it('MAX_VALUES_MAPPER handles edge cases for average values', () => {
-    const input = [{
-        max_file_size: '500',
-        max_depth: '5',
-        max_name_length: '100',
-        avg_file_size: '',           // Empty string - should default to 0
-        avg_depth: undefined,        // Undefined - should use fallback '0'
-        avg_name_length: '0.001',    // Very small number - should round to 0
-        total_directories: '10',
-        total_files: '50'
-    }];
-    const result = MAX_VALUES_MAPPER(input as any);
-    expect(result).toEqual([
-        { value: 500, category: 'Maximum Values', valueType: 'size', sub_category: 'max_file_size' },
-        { value: 5, category: 'Maximum Values', valueType: 'count', sub_category: 'max_depth' },
-        { value: 100, category: 'Maximum Values', valueType: 'length', sub_category: 'max_name_length' },
-        { value: 0, category: 'Average Values', valueType: 'size', sub_category: 'avg_file_size' },     // Empty string → 0
-        { value: 0, category: 'Average Values', valueType: 'count', sub_category: 'avg_depth' },       // undefined → 0
-        { value: 0, category: 'Average Values', valueType: 'length', sub_category: 'avg_name_length' }, // 0.001 → 0
-        { value: 10, category: 'Total Counts', valueType: 'count', sub_category: 'total_directories' },
-        { value: 50, category: 'Total Counts', valueType: 'count', sub_category: 'total_files' }
-    ]);
-});
+    it('MAX_VALUES_MAPPER handles edge cases for average values', () => {
+        const input = [{
+            max_file_size: '500',
+            max_depth: '5',
+            max_name_length: '100',
+            avg_file_size: '',           // Empty string - should default to 0
+            avg_depth: undefined,        // Undefined - should use fallback '0'
+            avg_name_length: '0.001',    // Very small number - should round to 0
+            total_directories: '10',
+            total_files: '50'
+        }];
+        const result = MAX_VALUES_MAPPER(input as any);
+        expect(result).toEqual([
+            { value: 500, category: 'Maximum Values', valueType: 'size', sub_category: 'max_file_size' },
+            { value: 5, category: 'Maximum Values', valueType: 'count', sub_category: 'max_depth' },
+            { value: 100, category: 'Maximum Values', valueType: 'length', sub_category: 'max_name_length' },
+            { value: 0, category: 'Average Values', valueType: 'size', sub_category: 'avg_file_size' },     // Empty string → 0
+            { value: 0, category: 'Average Values', valueType: 'count', sub_category: 'avg_depth' },       // undefined → 0
+            { value: 0, category: 'Average Values', valueType: 'length', sub_category: 'avg_name_length' }, // 0.001 → 0
+            { value: 10, category: 'Total Counts', valueType: 'count', sub_category: 'total_directories' },
+            { value: 50, category: 'Total Counts', valueType: 'count', sub_category: 'total_files' }
+        ]);
+    });
 
-it('MAX_VALUES_MAPPER handles integer values correctly', () => {
-    const input = [{
-        max_file_size: '1000',
-        max_depth: '10',
-        max_name_length: '255',
-        avg_file_size: '100',        // Integer - should remain 100
-        avg_depth: '5.0',           // .0 decimal - should remain 5
-        avg_name_length: '50.00',   // .00 decimal - should remain 50
-        total_directories: '3',
-        total_files: '75'
-    }];
-    const result = MAX_VALUES_MAPPER(input as any);
-    expect(result).toEqual([
-        { value: 1000, category: 'Maximum Values', valueType: 'size', sub_category: 'max_file_size' },
-        { value: 10, category: 'Maximum Values', valueType: 'count', sub_category: 'max_depth' },
-        { value: 255, category: 'Maximum Values', valueType: 'length', sub_category: 'max_name_length' },
-        { value: 100, category: 'Average Values', valueType: 'size', sub_category: 'avg_file_size' },   // Integer preserved
-        { value: 5, category: 'Average Values', valueType: 'count', sub_category: 'avg_depth' },        // .0 → 5
-        { value: 50, category: 'Average Values', valueType: 'length', sub_category: 'avg_name_length' }, // .00 → 50
-        { value: 3, category: 'Total Counts', valueType: 'count', sub_category: 'total_directories' },
-        { value: 75, category: 'Total Counts', valueType: 'count', sub_category: 'total_files' }
-    ]);
-});
+    it('MAX_VALUES_MAPPER handles integer values correctly', () => {
+        const input = [{
+            max_file_size: '1000',
+            max_depth: '10',
+            max_name_length: '255',
+            avg_file_size: '100',        // Integer - should remain 100
+            avg_depth: '5.0',           // .0 decimal - should remain 5
+            avg_name_length: '50.00',   // .00 decimal - should remain 50
+            total_directories: '3',
+            total_files: '75'
+        }];
+        const result = MAX_VALUES_MAPPER(input as any);
+        expect(result).toEqual([
+            { value: 1000, category: 'Maximum Values', valueType: 'size', sub_category: 'max_file_size' },
+            { value: 10, category: 'Maximum Values', valueType: 'count', sub_category: 'max_depth' },
+            { value: 255, category: 'Maximum Values', valueType: 'length', sub_category: 'max_name_length' },
+            { value: 100, category: 'Average Values', valueType: 'size', sub_category: 'avg_file_size' },   // Integer preserved
+            { value: 5, category: 'Average Values', valueType: 'count', sub_category: 'avg_depth' },        // .0 → 5
+            { value: 50, category: 'Average Values', valueType: 'length', sub_category: 'avg_name_length' }, // .00 → 50
+            { value: 3, category: 'Total Counts', valueType: 'count', sub_category: 'total_directories' },
+            { value: 75, category: 'Total Counts', valueType: 'count', sub_category: 'total_files' }
+        ]);
+    });
 
-it('TOP_LONGEST_FILE_NAMES_MAPPER maps input correctly', () => {
-    const input = [{ path: '/a/b.txt', length: 6 }, { path: '/c/d.txt', length: 6 }];
-    const result = TOP_LONGEST_FILE_NAMES_MAPPER(input as any);
-    expect(result).toEqual([
-        {
-            value: '/a/b.txt (6); /c/d.txt (6)',
-            category: 'Biggest',
-            valueType: 'string',
-            sub_category: 'Top 5 Longest File Names'
-        }
-    ]);
-});
+    it('TOP_LONGEST_FILE_NAMES_MAPPER maps input correctly', () => {
+        const input = [{ path: '/a/b.txt', length: 6 }, { path: '/c/d.txt', length: 6 }];
+        const result = TOP_LONGEST_FILE_NAMES_MAPPER(input as any);
+        expect(result).toEqual([
+            {
+                value: '/a/b.txt (6); /c/d.txt (6)',
+                category: 'Biggest',
+                valueType: 'string',
+                sub_category: 'Top 5 Longest File Names'
+            }
+        ]);
+    });
 
 it('TOP_LONGEST_DIRECTORY_NAMES_MAPPER maps input correctly', () => {
     const input = [{ path: '/dir1', length: 5 }, { path: '/dir2', length: 5 }];
