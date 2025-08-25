@@ -3,6 +3,7 @@ import { ACCESS_TIME_DISTRIBUTION, CREATED_TIME_DISTRIBUTION, DEPTH_DISTRIBUTION
 import { AccessTimeDistributionInput, CreatedTimeDistributionInput, DepthDistributionInput, ExtensionDistributionInput, FileSystemDistributionInput, JobRunDetailsInput, MaxValuesInput, ModifiedTimeDistributionInput, NumberOfFilesBySizeInput, TopBiggestFileNameInput, TopDirectoryWithMaxCountChildInput, TopDirectoryWithMaxSizeInput, TopLongestDirectoryNamesInput, TopLongestDirectoryPathsInput, TopLongestFileNamesInput, TopLongestFilePathsInput } from "./discovery-report.query.type";
 import { SECONDS_PER_MINUTE, SECONDS_PER_HOUR, SECONDS_PER_DAY, TIME_UNITS } from "../../../constants/report";
 
+
 const buildTimeComponent = (value: number, timeUnit: { singular: string; plural: string }): string => {
     if (value === 0) return '';
     const unitText = value === 1 ? timeUnit.singular : timeUnit.plural;
@@ -27,7 +28,6 @@ const formatTime = (timeInSeconds: number): string => {
     if (totalSeconds < SECONDS_PER_MINUTE) {
         return `${totalSeconds}s`;
     }
-
     const days = Math.floor(totalSeconds / SECONDS_PER_DAY);
     const hours = Math.floor((totalSeconds % SECONDS_PER_DAY) / SECONDS_PER_HOUR);
     const mins = Math.floor((totalSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
