@@ -19,21 +19,51 @@ describe('Command Config', () => {
 
   const clearEnvVars = () => {
     delete process.env.NFS_WIN_LIST_PATH_CMD;
+    delete process.env.NFS_WIN_VERSION_DETAIL_CMD;
+    delete process.env.NFS_WIN_MOUNT_PATH_CMD;
+    delete process.env.NFS_WIN_UNMOUNT_PATH_CMD;
+    delete process.env.WIN_AVAILABLE_DISK_SPACE_CMD;
+    delete process.env.WIN_USED_DISK_SPACE;
+
     delete process.env.NFS_LINUX_LIST_PATH_CMD;
-    delete process.env.NFS_UNIX_LIST_PATH_CMD;
     delete process.env.NFS_LINUX_MOUNT_PATH_CMD;
-    delete process.env.NFS_UNIX_MOUNT_PATH_CMD;
     delete process.env.NFS_LINUX_CHECK_MOUNT_PATH_CMD;
+    delete process.env.NFS_LINUX_VERSION_DETAIL_CMD;
+    delete process.env.NFS_LINUX_UNMOUNT_PATH_CMD;
+    delete process.env.LINUX_AVAILABLE_DISK_SPACE_CMD;
+    delete process.env.LINUX_USED_DISK_SPACE;
+    delete process.env.LINUX_FSTAB_PATH;
+
+    delete process.env.NFS_UNIX_LIST_PATH_CMD;
+    delete process.env.NFS_UNIX_MOUNT_PATH_CMD;
     delete process.env.NFS_UNIX_CHECK_MOUNT_PATH_CMD;
+    delete process.env.NFS_UNIX_VERSION_DETAIL_CMD;
+    delete process.env.NFS_UNIX_UNMOUNT_PATH_CMD;
+    delete process.env.UNIX_AVAILABLE_DISK_SPACE_CMD;
+    delete process.env.UNIX_USED_DISK_SPACE;
+    delete process.env.UNIX_FSTAB_PATH;
 
     delete process.env.SMB_WIN_VALIDATE_CRED_CMD;
     delete process.env.SMB_WIN_LIST_PATH_CMD;
-    delete process.env.SMB_LINUX_LIST_PATH_CMD;
-    delete process.env.SMB_UNIX_LIST_PATH_CMD;
-    delete process.env.SMB_LINUX_MOUNT_PATH_CMD;
-    delete process.env.SMB_UNIX_MOUNT_PATH_CMD;
+    delete process.env.SMB_WIN_MOUNT_PATH_CMD;
+    delete process.env.SMB_WIN_VERSION_DETAIL_CMD;
+    delete process.env.SMB_WIN_UNMOUNT_PATH_CMD;
+    delete process.env.SMB_WIN_CREATE_LINK_PATH_CMD;
+    delete process.env.SMB_WIN_UNLINK_PATH_CMD;
+    delete process.env.SMB_WIN_DISCONNECT_SESSION_CMD;
+    delete process.env.SMB_WIN_GET_SID_FOR_OBJECT_CMD;
+    delete process.env.SMB_WIN_SET_SID_FOR_DIR_OBJECT_CMD;
+    delete process.env.SMB_WIN_SAVE_CREDS;
 
-    delete process.env.WIN_USED_DISK_SPACE;
+    delete process.env.SMB_LINUX_LIST_PATH_CMD;
+    delete process.env.SMB_LINUX_MOUNT_PATH_CMD;
+    delete process.env.SMB_LINUX_VERSION_DETAIL_CMD;
+    delete process.env.SMB_LINUX_UNMOUNT_PATH_CMD;
+    delete process.env.LINUX_SAVE_CREDS_CMD;
+
+    delete process.env.SMB_UNIX_LIST_PATH_CMD;
+    delete process.env.SMB_UNIX_MOUNT_PATH_CMD;
+    delete process.env.SMB_UNIX_UNMOUNT_PATH_CMD;
   };
 
   it('should return default values when no environment variables are set', () => {
@@ -57,6 +87,7 @@ describe('Command Config', () => {
           unmountPath: undefined,
           availableDiskSpace: undefined,
           mountedFolderSize: undefined,
+          fstabPath: undefined,
         },
         darwin: {
           listPath: undefined,
@@ -66,6 +97,7 @@ describe('Command Config', () => {
           unmountPath: undefined,
           availableDiskSpace: undefined,
           mountedFolderSize: undefined,
+          fstabPath: undefined,
         },
       },
       smb: {
@@ -79,9 +111,10 @@ describe('Command Config', () => {
           unlinkPath: undefined,
           disconnectSession: undefined,
           getSIDforObject: undefined,
-          setSIDforObject: undefined,
+          setSIDforDirObject: undefined,
           mountedFolderSize: undefined,
           availableDiskSpace: undefined,
+          saveCreds: undefined,
         },
         linux: {
           listPath: undefined,
@@ -90,6 +123,7 @@ describe('Command Config', () => {
           unmountPath: undefined,
           availableDiskSpace: undefined,
           mountedFolderSize: undefined,
+          saveCreds: undefined,
         },
         darwin: {
           listPath: undefined,
