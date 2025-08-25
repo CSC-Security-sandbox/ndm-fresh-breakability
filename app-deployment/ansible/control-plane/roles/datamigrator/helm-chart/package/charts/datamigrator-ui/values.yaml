@@ -6,6 +6,7 @@ image:
   repository: ndm-datamigrator-ui
 
 annotations:
+  vault.hashicorp.com/agent-json-patch: '[{"op": "replace", "path": "/imagePullPolicy", "value": "Never"}]'
   vault.hashicorp.com/agent-inject: "true"
   vault.hashicorp.com/agent-init-first: "true"
   vault.hashicorp.com/role: "datamigrator-role"

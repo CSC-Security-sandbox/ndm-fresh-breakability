@@ -33,7 +33,7 @@ vm_uid: 1030
 vm_gid: 1030
 
 # Version management
-microk8s_version: "1.32/stable"
+microk8s_version: "1.33/stable"
 microk8s_disable_snap_autoupdate: false
 
 # Cluster CIDR Values
