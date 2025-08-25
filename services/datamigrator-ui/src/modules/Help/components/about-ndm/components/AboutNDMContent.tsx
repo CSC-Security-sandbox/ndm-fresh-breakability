@@ -1,5 +1,5 @@
 import Box from "@/components/container/Box";
-import { Card } from "@netapp/bxp-design-system-react";
+import { Card, InlineLoader } from "@netapp/bxp-design-system-react";
 import { ABOUT_NDM_CONSTANTS } from "@modules/Help/components/about-ndm/constants/about-ndm.constants";
 import { useEffect, useState } from "react";
 import { AboutNDMApiRespType } from "@/types/app.type";
@@ -28,7 +28,13 @@ const AboutNDMContent = () => {
     <Card>
       <Box className="flex flex-col gap-6 p-10 items-center">
         <Show>
-          <Show.When isTrue={!!aboutNdm && !isError}>
+          <Show.When isTrue={isLoading}>
+            <Box className="flex flex-col items-center">
+              <InlineLoader />
+              <span className="text-sm text-gray-500 mt-2">Loading product information...</span>
+            </Box>
+          </Show.When>
+          <Show.When isTrue={!isLoading && !isError && !!aboutNdm}>
             <Box className="flex flex-row items-center">
               <Box className="Box-lg font-semibold mr-2">Product:</Box>
               {aboutNdm?.product?.name} {aboutNdm?.product?.version}
@@ -63,17 +69,6 @@ const AboutNDMContent = () => {
               </Show.When>
             </Show>
           </Show.When>
-        </Show>
-
-        <Show>
-          <Show.When isTrue={isLoading}>
-            <Box className="text-sm text-gray-500">
-              Loading product information...
-            </Box>
-          </Show.When>
-        </Show>
-
-        <Show>
           <Show.When isTrue={isError}>
             <Box className="text-sm text-red-500">
               Unable to fetch product information
