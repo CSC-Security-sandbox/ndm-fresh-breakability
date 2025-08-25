@@ -5,7 +5,7 @@ import { CleanupWorkerWorkflow } from "src/workflows/workflows";
 
 const {
   cleanupJobContext: cleanupJobContextActivity,
-} = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
+} = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '30m', retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 2, maximumInterval: '2m' } });
 
 
 

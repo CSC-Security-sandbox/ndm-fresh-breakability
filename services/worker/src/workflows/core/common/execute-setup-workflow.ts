@@ -5,7 +5,10 @@ import { CommonActivityService } from 'src/activities/common/common.service';
 const {
   updateJobErrorStatus: updateJobErrorActivity,
   updateWorkerResponse: updateWorkerResponse,
-} = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
+} = wf.proxyActivities<CommonActivityService>({ 
+    startToCloseTimeout: '5h' ,
+    retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
+});
 
 
 
