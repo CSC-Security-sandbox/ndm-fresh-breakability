@@ -30,9 +30,9 @@ import (
 func main() {
 
 	fmt.Println("\n====================Creating Azure VMs====================")
-	// cpIP, workerIP, err := createAzureVMs()
-	cpIP, workerIP := "172.30.203.30", "172.30.203.31"
-	var err error = nil
+	cpIP, workerIP, err := createAzureVMs()
+	// cpIP, workerIP := "172.30.203.30", "172.30.203.31"
+	// var err error = nil
 	// cpIP := "172.30.203.26"
 	// workerIP := "172.30.203.27"
 	// var err error = nil
@@ -628,7 +628,6 @@ func waitForControlPlaneReadyWithIP(cpIP string) error {
 	finalElapsed := time.Since(startTime)
 	return fmt.Errorf("control plane UI did not become ready within %d minutes (total elapsed: %v)", maxWaitMinutes, finalElapsed)
 
-	
 }
 
 // // LogNodeMetricsToFile fetches and logs worker metrics every 5 minutes using a ticker
