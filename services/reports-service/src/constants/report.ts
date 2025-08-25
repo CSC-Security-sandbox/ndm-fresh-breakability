@@ -166,3 +166,16 @@ export interface ReportEntry {
   value: number | string;
   valueType: ReportValueType;
 }
+
+export const SECONDS_PER_MINUTE = 60;
+export const SECONDS_PER_HOUR = 3600;
+export const SECONDS_PER_DAY = 86400;
+
+
+export const TIME_UNITS = {
+  SECONDS: { singular: 'sec', plural: 'sec' },
+  MINUTES: { singular: 'mins', plural: 'mins' },
+  HOURS: { singular: 'hrs', plural: 'hrs' },
+  DAYS: { singular: 'day', plural: 'days' }
+} as const;
+
