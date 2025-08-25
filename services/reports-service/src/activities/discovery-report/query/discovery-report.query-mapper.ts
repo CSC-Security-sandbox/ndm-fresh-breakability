@@ -1,49 +1,50 @@
 import { DiscoveryReportSection } from "../discovery-report.type";
 import { ACCESS_TIME_DISTRIBUTION, CREATED_TIME_DISTRIBUTION, DEPTH_DISTRIBUTION, EXTENSION_DISTRIBUTION, FILE_SYSTEM_DISTRIBUTION, JOB_RUN_DETAILS, MAX_VALUES, MODIFIED_TIME_DISTRIBUTION, NUMBER_OF_FILES_BY_SIZE, TOP_BIGGEST_FILE_NAME, TOP_DIRECTORY_WITH_MAX_COUNT_CHILD, TOP_DIRECTORY_WITH_MAX_SIZE, TOP_LONGEST_DIRECTORY_NAMES, TOP_LONGEST_DIRECTORY_PATHS, TOP_LONGEST_FILE_NAMES, TOP_LONGEST_FILE_PATHS } from "./discovery-report.query";
 import { AccessTimeDistributionInput, CreatedTimeDistributionInput, DepthDistributionInput, ExtensionDistributionInput, FileSystemDistributionInput, JobRunDetailsInput, MaxValuesInput, ModifiedTimeDistributionInput, NumberOfFilesBySizeInput, TopBiggestFileNameInput, TopDirectoryWithMaxCountChildInput, TopDirectoryWithMaxSizeInput, TopLongestDirectoryNamesInput, TopLongestDirectoryPathsInput, TopLongestFileNamesInput, TopLongestFilePathsInput } from "./discovery-report.query.type";
+import { SECONDS_PER_MINUTE, SECONDS_PER_HOUR, SECONDS_PER_DAY, TIME_UNITS } from "../../../constants/report";
 
-const buildTimeComponent = (value: number, unit: string, pluralUnit?: string): string => {
+const buildTimeComponent = (value: number, timeUnit: { singular: string; plural: string }): string => {
     if (value === 0) return '';
-    const unitText = pluralUnit && value > 1 ? pluralUnit : unit;
+    const unitText = value === 1 ? timeUnit.singular : timeUnit.plural;
     return `${value}${unitText}`;
 };
 
 const shouldIncludeSeconds = (totalSeconds: number, seconds: number): boolean => {
-    if (totalSeconds < 60) return true;
-    if (totalSeconds < 86400) return seconds > 0;
+    if (totalSeconds < SECONDS_PER_MINUTE) return true;
+    if (totalSeconds < SECONDS_PER_DAY) return seconds > 0;
     return false;
 };
 
-const formatTimeComponents = (components: { value: number; unit: string; pluralUnit?: string }[]): string => {
+const formatTimeComponents = (components: { value: number; timeUnit: { singular: string; plural: string } }[]): string => {
     return components
         .filter(comp => comp.value > 0)
-        .map(comp => buildTimeComponent(comp.value, comp.unit, comp.pluralUnit))
+        .map(comp => buildTimeComponent(comp.value, comp.timeUnit))
         .join(' ');
 };
 
 const formatTime = (timeInSeconds: number): string => {
     const totalSeconds = Math.floor(timeInSeconds);
-    if (totalSeconds < 60) {
+    if (totalSeconds < SECONDS_PER_MINUTE) {
         return `${totalSeconds}s`;
     }
 
-    const days = Math.floor(totalSeconds / 86400);
-    const hours = Math.floor((totalSeconds % 86400) / 3600);
-    const mins = Math.floor((totalSeconds % 3600) / 60);
-    const secs = totalSeconds % 60;
+    const days = Math.floor(totalSeconds / SECONDS_PER_DAY);
+    const hours = Math.floor((totalSeconds % SECONDS_PER_DAY) / SECONDS_PER_HOUR);
+    const mins = Math.floor((totalSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
+    const secs = totalSeconds % SECONDS_PER_MINUTE;
     const components = [];
     
     if (days > 0) {
-        components.push({ value: days, unit: 'day', pluralUnit: 'days' });
+        components.push({ value: days, timeUnit: TIME_UNITS.DAYS });
     }
     if (hours > 0) {
-        components.push({ value: hours, unit: 'hrs' });
+        components.push({ value: hours, timeUnit: TIME_UNITS.HOURS });
     }
     if (mins > 0) {
-        components.push({ value: mins, unit: 'mins' });
+        components.push({ value: mins, timeUnit: TIME_UNITS.MINUTES });
     }
     if (shouldIncludeSeconds(totalSeconds, secs)) {
-        components.push({ value: secs, unit: 'sec' });
+        components.push({ value: secs, timeUnit: TIME_UNITS.SECONDS });
     }
     return formatTimeComponents(components);
 };
