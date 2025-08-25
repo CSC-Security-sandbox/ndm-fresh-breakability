@@ -2,42 +2,50 @@ import { DiscoveryReportSection } from "../discovery-report.type";
 import { ACCESS_TIME_DISTRIBUTION, CREATED_TIME_DISTRIBUTION, DEPTH_DISTRIBUTION, EXTENSION_DISTRIBUTION, FILE_SYSTEM_DISTRIBUTION, JOB_RUN_DETAILS, MAX_VALUES, MODIFIED_TIME_DISTRIBUTION, NUMBER_OF_FILES_BY_SIZE, TOP_BIGGEST_FILE_NAME, TOP_DIRECTORY_WITH_MAX_COUNT_CHILD, TOP_DIRECTORY_WITH_MAX_SIZE, TOP_LONGEST_DIRECTORY_NAMES, TOP_LONGEST_DIRECTORY_PATHS, TOP_LONGEST_FILE_NAMES, TOP_LONGEST_FILE_PATHS } from "./discovery-report.query";
 import { AccessTimeDistributionInput, CreatedTimeDistributionInput, DepthDistributionInput, ExtensionDistributionInput, FileSystemDistributionInput, JobRunDetailsInput, MaxValuesInput, ModifiedTimeDistributionInput, NumberOfFilesBySizeInput, TopBiggestFileNameInput, TopDirectoryWithMaxCountChildInput, TopDirectoryWithMaxSizeInput, TopLongestDirectoryNamesInput, TopLongestDirectoryPathsInput, TopLongestFileNamesInput, TopLongestFilePathsInput } from "./discovery-report.query.type";
 
+const buildTimeComponent = (value: number, unit: string, pluralUnit?: string): string => {
+    if (value === 0) return '';
+    const unitText = pluralUnit && value > 1 ? pluralUnit : unit;
+    return `${value}${unitText}`;
+};
+
+const shouldIncludeSeconds = (totalSeconds: number, seconds: number): boolean => {
+    if (totalSeconds < 60) return true;
+    if (totalSeconds < 86400) return seconds > 0;
+    return false;
+};
+
+const formatTimeComponents = (components: { value: number; unit: string; pluralUnit?: string }[]): string => {
+    return components
+        .filter(comp => comp.value > 0)
+        .map(comp => buildTimeComponent(comp.value, comp.unit, comp.pluralUnit))
+        .join(' ');
+};
 
 const formatTime = (timeInSeconds: number): string => {
-    const seconds = Math.floor(timeInSeconds);
-    if (seconds < 60) {
-        return `${seconds}s`;
+    const totalSeconds = Math.floor(timeInSeconds);
+    if (totalSeconds < 60) {
+        return `${totalSeconds}s`;
     }
 
-    if (seconds < 3600) {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return secs > 0 ? `${mins}mins ${secs}sec` : `${mins}mins`;
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+    const components = [];
+    
+    if (days > 0) {
+        components.push({ value: days, unit: 'day', pluralUnit: 'days' });
     }
-
-    if (seconds < 86400) {
-        const hours = Math.floor(seconds / 3600);
-        const remainingSeconds = seconds % 3600;
-        const mins = Math.floor(remainingSeconds / 60);
-        const secs = remainingSeconds % 60;
-
-        let result = `${hours}hrs`;
-        if (mins > 0) result += ` ${mins}mins`;
-        if (secs > 0) result += ` ${secs}sec`;
-
-        return result;
+    if (hours > 0) {
+        components.push({ value: hours, unit: 'hrs' });
     }
-
-    const days = Math.floor(seconds / 86400);
-    const remainingSeconds = seconds % 86400;
-    const hours = Math.floor(remainingSeconds / 3600);
-    const mins = Math.floor((remainingSeconds % 3600) / 60);
-
-    let result = `${days}day${days > 1 ? 's' : ''}`;
-    if (hours > 0) result += ` ${hours}hrs`;
-    if (mins > 0) result += ` ${mins}mins`;
-
-    return result;
+    if (mins > 0) {
+        components.push({ value: mins, unit: 'mins' });
+    }
+    if (shouldIncludeSeconds(totalSeconds, secs)) {
+        components.push({ value: secs, unit: 'sec' });
+    }
+    return formatTimeComponents(components);
 };
 
 
