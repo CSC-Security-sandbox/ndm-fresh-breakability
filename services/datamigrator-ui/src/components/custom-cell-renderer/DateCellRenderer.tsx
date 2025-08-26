@@ -17,10 +17,17 @@ const DateCellRenderer = React.memo(
       <Show>
         <Show.When isTrue={Boolean(value)}>
           {(() => {
-            const trimmedValue = value.slice(0, -1);
-            const date = format(trimmedValue, "dd MMM yyyy");
-            const time = format(trimmedValue, "hh:mm:ss aa");
-            const timeSmall = format(trimmedValue, "hh:mm aa");
+            const trimmedValue = value ? value.slice(0, -1) : undefined;
+            if (!trimmedValue) {
+              return <Box>-</Box>;
+            }
+            const dateObj = new Date(trimmedValue);
+            if (isNaN(dateObj.getTime())) {
+              return <Box>-</Box>;
+            }
+            const date = format(dateObj, "dd MMM yyyy");
+            const time = format(dateObj, "hh:mm:ss aa");
+            const timeSmall = format(dateObj, "hh:mm aa");
             return (
               <>
                 <Show>
