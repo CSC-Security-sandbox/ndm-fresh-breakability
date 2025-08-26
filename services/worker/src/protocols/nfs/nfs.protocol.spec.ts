@@ -19,6 +19,9 @@ let loggerFactory: LoggerFactory;
 
 jest.mock('net');
 jest.mock('./nfs.utils');
+jest.mock('src/activities/core/utils/utils', () => ({
+  isPathExists: jest.fn(),
+}));
 
 describe('NFSProtocol', () => {
   let nfsProtocol: NFSProtocol;
@@ -173,8 +176,9 @@ describe('NFSProtocol', () => {
       const mockResponse = { message: 'Successfully unmounted', status: 'success' };
       (nfsProtocol as any).executeCommand = jest.fn().mockResolvedValue(mockResponse);
 
-      // Mock fs.promises.access to resolve (directory exists)
-      const mockAccess = jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+      // Mock isPathExists to return true (directory exists)
+      const { isPathExists } = require('src/activities/core/utils/utils');
+      isPathExists.mockResolvedValue(true);
       
       // Mock fs.promises.rmdir
       const mockRmdir = jest.spyOn(fs.promises, 'rmdir').mockResolvedValue(undefined);
@@ -182,12 +186,11 @@ describe('NFSProtocol', () => {
       const result = await nfsProtocol.unmountPath('traceId', payload, false);
       
       expect(mockLogger.log).toHaveBeenCalled();
-      expect(mockAccess).toHaveBeenCalledWith('/mnt/job123/path456', fs.constants.F_OK);
+      expect(isPathExists).toHaveBeenCalledWith('/mnt/job123/path456');
       expect(mockRmdir).toHaveBeenCalledWith('/mnt/job123/path456', { recursive: true });
       expect(result).toBe(mockResponse);
       
       // Restore the mocks
-      mockAccess.mockRestore();
       mockRmdir.mockRestore();
     });
 
@@ -203,8 +206,9 @@ describe('NFSProtocol', () => {
       const mockResponse = { message: 'Successfully unmounted', status: 'success' };
       (nfsProtocol as any).executeCommand = jest.fn().mockResolvedValue(mockResponse);
 
-      // Mock fs.promises.access to reject with ENOENT (directory doesn't exist)
-      const mockAccess = jest.spyOn(fs.promises, 'access').mockRejectedValue({ code: 'ENOENT' });
+      // Mock isPathExists to return false (directory doesn't exist)
+      const { isPathExists } = require('src/activities/core/utils/utils');
+      isPathExists.mockResolvedValue(false);
       
       // Mock fs.promises.rmdir
       const mockRmdir = jest.spyOn(fs.promises, 'rmdir').mockResolvedValue(undefined);
@@ -212,12 +216,11 @@ describe('NFSProtocol', () => {
       const result = await nfsProtocol.unmountPath('traceId', payload, false);
       
       expect(mockLogger.log).toHaveBeenCalled();
-      expect(mockAccess).toHaveBeenCalledWith('/mnt/job123/path456', fs.constants.F_OK);
+      expect(isPathExists).toHaveBeenCalledWith('/mnt/job123/path456');
       expect(mockRmdir).not.toHaveBeenCalled(); // Should not be called when directory doesn't exist
       expect(result).toBe(mockResponse);
       
       // Restore the mocks
-      mockAccess.mockRestore();
       mockRmdir.mockRestore();
     });
   })
@@ -373,4 +376,370 @@ describe('NFSProtocol - getTotalUsedMemory', () => {
     );
   });
 
+  it('should handle linux platform with valid df output', async () => {
+    nfsProtocol['platform'] = 'linux';
+    const response = { message: '/dev/sda1 1000000 500000 400000 56% /mnt/test' };
+
+    (nfsProtocol['executeCommand'] as jest.Mock).mockResolvedValue(response);
+
+    const result = await nfsProtocol.getTotalUsedMemory(traceId, payload);
+    expect(result).toBe(500000);
+  });
+
+  it('should handle darwin platform with valid df output', async () => {
+    nfsProtocol['platform'] = 'darwin';
+    const response = { message: '/dev/disk1s1 1000000 500000 400000 56% /mnt/test' };
+
+    (nfsProtocol['executeCommand'] as jest.Mock).mockResolvedValue(response);
+
+    const result = await nfsProtocol.getTotalUsedMemory(traceId, payload);
+    expect(result).toBe(500000 * 1024); // darwin multiplies by 1024
+  });
+
+  it('should handle executeCommand errors', async () => {
+    nfsProtocol['platform'] = 'linux';
+    const errorMessage = 'Command execution failed';
+
+    (nfsProtocol['executeCommand'] as jest.Mock).mockRejectedValue(new Error(errorMessage));
+
+    await expect(nfsProtocol.getTotalUsedMemory(traceId, payload)).rejects.toThrow(
+      /Command execution failed/
+    );
+  });
+
+});
+
+describe('NFSProtocol - getAvailableDiskSpace error handling', () => {
+  let nfsProtocol: NFSProtocol;
+  const traceId = 'test-trace-id';
+  const payload: ProtocolPayload = {
+    hostname: 'localhost',
+    path: '/mnt/test',
+  } as ProtocolPayload;
+
+  beforeEach(() => {
+    nfsProtocol = new NFSProtocol(loggerFactory);
+    nfsProtocol['executeCommand'] = jest.fn();
+    Object.defineProperty(nfsProtocol, 'logger', {
+      value: {
+        log: jest.fn(),
+        info: jest.fn(),
+        error: jest.fn(),
+      },
+      writable: false,
+    });
+  });
+
+  it('should handle executeCommand errors', async () => {
+    const errorMessage = 'Command execution failed';
+    (nfsProtocol['executeCommand'] as jest.Mock).mockRejectedValue(new Error(errorMessage));
+
+    await expect(nfsProtocol.getAvailableDiskSpace(traceId, payload)).rejects.toThrow(
+      /Command execution failed/
+    );
+  });
+});
+
+describe('NFSProtocol - mountPath', () => {
+  let nfsProtocol: NFSProtocol;
+  const traceId = 'test-trace-id';
+  const payload = {
+    hostname: 'localhost',
+    path: '/export/test',
+    mountBasePath: '/mnt',
+    jobRunId: 'job123',
+    pathId: 'path456'
+  };
+
+  beforeEach(() => {
+    nfsProtocol = new NFSProtocol(loggerFactory);
+    nfsProtocol['executeCommand'] = jest.fn();
+    nfsProtocol['updateBootMounts'] = jest.fn();
+    nfsProtocol['workerId'] = 'test-worker';
+    Object.defineProperty(nfsProtocol, 'logger', {
+      value: {
+        log: jest.fn(),
+        info: jest.fn(),
+        error: jest.fn(),
+      },
+      writable: false,
+    });
+  });
+
+  it('should return error if directory already exists', async () => {
+    const mockAccess = jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+    
+    const result = await nfsProtocol.mountPath(traceId, payload, false);
+    
+    expect(result.status).toBe('error');
+    expect(result.message).toContain('Directory already exists');
+    mockAccess.mockRestore();
+  });
+
+  it('should create directory and mount successfully', async () => {
+    const mockAccess = jest.spyOn(fs.promises, 'access').mockRejectedValue({ code: 'ENOENT' });
+    const mockMkdir = jest.spyOn(fs.promises, 'mkdir').mockResolvedValue(undefined);
+    const mockResponse = { status: 'success', message: 'Mounted successfully' };
+    
+    // Mock setTimeout to avoid 5-second delay
+    const originalSetTimeout = global.setTimeout;
+    global.setTimeout = jest.fn((cb) => cb()) as any;
+    
+    (nfsProtocol['executeCommand'] as jest.Mock).mockResolvedValue(mockResponse);
+
+    const result = await nfsProtocol.mountPath(traceId, payload, false);
+    
+    expect(mockMkdir).toHaveBeenCalledWith('/mnt/job123/path456', { recursive: true });
+    expect(result).toBe(mockResponse);
+    
+    // Restore setTimeout
+    global.setTimeout = originalSetTimeout;
+    mockAccess.mockRestore();
+    mockMkdir.mockRestore();
+  });
+
+  it('should handle mkdir error', async () => {
+    const mockAccess = jest.spyOn(fs.promises, 'access').mockRejectedValue({ code: 'ENOENT' });
+    const mockMkdir = jest.spyOn(fs.promises, 'mkdir').mockRejectedValue(new Error('Permission denied'));
+    
+    const result = await nfsProtocol.mountPath(traceId, payload, false);
+    
+    expect(result.status).toBe('error');
+    expect(result.message).toContain('Error creating directory');
+    
+    mockAccess.mockRestore();
+    mockMkdir.mockRestore();
+  });
+
+  it('should call updateBootMounts when manageMount is true and mount is successful', async () => {
+    const mockAccess = jest.spyOn(fs.promises, 'access').mockRejectedValue({ code: 'ENOENT' });
+    const mockMkdir = jest.spyOn(fs.promises, 'mkdir').mockResolvedValue(undefined);
+    const mockResponse = { status: 'success', message: 'Mounted successfully' };
+    
+    // Mock setTimeout to avoid 5-second delay
+    const originalSetTimeout = global.setTimeout;
+    global.setTimeout = jest.fn((cb) => cb()) as any;
+    
+    (nfsProtocol['executeCommand'] as jest.Mock).mockResolvedValue(mockResponse);
+
+    await nfsProtocol.mountPath(traceId, payload, true);
+    
+    expect(nfsProtocol['updateBootMounts']).toHaveBeenCalledWith(
+      expect.objectContaining({
+        platform: nfsProtocol['platform'],
+        workerId: 'test-worker'
+      }),
+      expect.objectContaining({
+        mountDir: '/mnt/job123/path456'
+      }),
+      'insert',
+      traceId
+    );
+    
+    // Restore setTimeout
+    global.setTimeout = originalSetTimeout;
+    mockAccess.mockRestore();
+    mockMkdir.mockRestore();
+  });
+});
+
+describe('NFSProtocol - updateBootMounts', () => {
+  let nfsProtocol: NFSProtocol;
+  const traceId = 'test-trace-id';
+  const config = {
+    platform: 'linux',
+    fstabPath: '/etc/fstab',
+    workerId: 'test-worker'
+  };
+  const payload = {
+    hostname: 'localhost',
+    path: '/export/test',
+    mountDir: '/mnt/job123/path456'
+  };
+
+  beforeEach(() => {
+    nfsProtocol = new NFSProtocol(loggerFactory);
+    Object.defineProperty(nfsProtocol, 'logger', {
+      value: {
+        log: jest.fn(),
+        info: jest.fn(),
+        error: jest.fn(),
+      },
+      writable: false,
+    });
+  });
+
+  it('should add entry to fstab when action is insert and entry does not exist', () => {
+    const existingContent = '# /etc/fstab\n';
+    const mockReadFileSync = jest.spyOn(fs, 'readFileSync').mockReturnValue(existingContent);
+    const mockAppendFileSync = jest.spyOn(fs, 'appendFileSync').mockImplementation();
+
+    nfsProtocol.updateBootMounts(config, payload, 'insert', traceId);
+
+    expect(mockAppendFileSync).toHaveBeenCalledWith(
+      '/etc/fstab',
+      'localhost:/export/test /mnt/job123/path456 nfs defaults 0 0\n'
+    );
+
+    mockReadFileSync.mockRestore();
+    mockAppendFileSync.mockRestore();
+  });
+
+  it('should not add entry to fstab when action is insert and entry already exists', () => {
+    const existingContent = 'localhost:/export/test /mnt/job123/path456 nfs defaults 0 0\n';
+    const mockReadFileSync = jest.spyOn(fs, 'readFileSync').mockReturnValue(existingContent);
+    const mockAppendFileSync = jest.spyOn(fs, 'appendFileSync').mockImplementation();
+
+    nfsProtocol.updateBootMounts(config, payload, 'insert', traceId);
+
+    expect(mockAppendFileSync).not.toHaveBeenCalled();
+
+    mockReadFileSync.mockRestore();
+    mockAppendFileSync.mockRestore();
+  });
+
+  it('should remove entry from fstab when action is delete and entry exists', () => {
+    // Include the exact entry that will be matched: "localhost:/export/test /mnt/job123/path456 nfs defaults 0 0\n"
+    const existingContent = '# /etc/fstab\nlocalhost:/export/test /mnt/job123/path456 nfs defaults 0 0\nother:/path /mount nfs defaults 0 0\n';
+    const mockReadFileSync = jest.spyOn(fs, 'readFileSync').mockReturnValue(existingContent);
+    const mockWriteFileSync = jest.spyOn(fs, 'writeFileSync').mockImplementation();
+
+    nfsProtocol.updateBootMounts(config, payload, 'delete', traceId);
+
+    // The actual result preserves the original newline structure
+    expect(mockWriteFileSync).toHaveBeenCalledWith(
+      '/etc/fstab', 
+      expect.stringContaining('# /etc/fstab')
+    );
+    expect(mockWriteFileSync).toHaveBeenCalledWith(
+      '/etc/fstab', 
+      expect.stringContaining('other:/path /mount nfs defaults 0 0')
+    );
+    expect(mockWriteFileSync).toHaveBeenCalledWith(
+      '/etc/fstab', 
+      expect.not.stringContaining('localhost:/export/test')
+    );
+
+    mockReadFileSync.mockRestore();
+    mockWriteFileSync.mockRestore();
+  });
+
+  it('should not remove entry from fstab when action is delete and entry does not exist', () => {
+    // Content without any trace of the target entry
+    const existingContent = 'proc /proc proc defaults 0 0\ntmpfs /tmp tmpfs defaults 0 0\n';
+    const mockReadFileSync = jest.spyOn(fs, 'readFileSync').mockReturnValue(existingContent);
+    const mockWriteFileSync = jest.spyOn(fs, 'writeFileSync').mockImplementation();
+
+    nfsProtocol.updateBootMounts(config, payload, 'delete', traceId);
+
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
+
+    mockReadFileSync.mockRestore();
+    mockWriteFileSync.mockRestore();
+  });
+
+  it('should return error for unknown action', () => {
+    const mockReadFileSync = jest.spyOn(fs, 'readFileSync').mockReturnValue('# /etc/fstab\n');
+    
+    const result = nfsProtocol.updateBootMounts(config, payload, 'unknown', traceId);
+
+    expect(result.status).toBe('error');
+    expect(result.message).toContain('Unknown action: unknown');
+    
+    mockReadFileSync.mockRestore();
+  });
+
+  it('should handle file system errors', () => {
+    const mockReadFileSync = jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      throw new Error('Permission denied');
+    });
+
+    const result = nfsProtocol.updateBootMounts(config, payload, 'insert', traceId);
+
+    expect(result.status).toBe('error');
+    expect(result.message).toContain('Error updating /etc/fstab: Permission denied');
+
+    mockReadFileSync.mockRestore();
+  });
+
+  it('should skip processing when platform is not linux', () => {
+    const configNonLinux = { ...config, platform: 'windows' };
+    const mockReadFileSync = jest.spyOn(fs, 'readFileSync').mockImplementation();
+
+    nfsProtocol.updateBootMounts(configNonLinux, payload, 'insert', traceId);
+
+    expect(mockReadFileSync).not.toHaveBeenCalled();
+
+    mockReadFileSync.mockRestore();
+  });
+});
+
+describe('NFSProtocol - disconnectSession', () => {
+  let nfsProtocol: NFSProtocol;
+
+  beforeEach(() => {
+    nfsProtocol = new NFSProtocol(loggerFactory);
+  });
+
+  it('should throw error for unimplemented method', () => {
+    const payload: ProtocolPayload = { hostname: 'localhost', protocolVersion: '' };
+    
+    expect(() => nfsProtocol.disconnectSession('traceId', payload)).toThrow('Method not implemented.');
+  });
+});
+
+describe('NFSProtocol - unmountPath error handling', () => {
+  let nfsProtocol: NFSProtocol;
+  const payload = {
+    hostname: 'localhost',
+    path: '/export/test',
+    mountBasePath: '/mnt',
+    jobRunId: 'job123',
+    pathId: 'path456'
+  };
+
+  beforeEach(() => {
+    nfsProtocol = new NFSProtocol(loggerFactory);
+    nfsProtocol['executeCommand'] = jest.fn();
+    nfsProtocol['updateBootMounts'] = jest.fn();
+    nfsProtocol['workerId'] = 'test-worker';
+    Object.defineProperty(nfsProtocol, 'logger', {
+      value: {
+        log: jest.fn(),
+        info: jest.fn(),
+        error: jest.fn(),
+      },
+      writable: false,
+    });
+  });
+
+  it('should handle non-success response from executeCommand', async () => {
+    const mockResponse = { status: 'error', message: 'Unmount failed' };
+    (nfsProtocol['executeCommand'] as jest.Mock).mockResolvedValue(mockResponse);
+
+    const result = await nfsProtocol.unmountPath('traceId', payload, false);
+
+    expect(result).toBeUndefined(); // Method returns undefined when status is not 'success'
+  });
+
+  it('should call updateBootMounts when manageMount is true', async () => {
+    const mockResponse = { status: 'success', message: 'Unmounted successfully' };
+    (nfsProtocol['executeCommand'] as jest.Mock).mockResolvedValue(mockResponse);
+    
+    // Mock isPathExists to return false (directory doesn't exist)
+    const { isPathExists } = require('src/activities/core/utils/utils');
+    isPathExists.mockResolvedValue(false);
+
+    await nfsProtocol.unmountPath('traceId', payload, true);
+
+    expect(nfsProtocol['updateBootMounts']).toHaveBeenCalledWith(
+      expect.objectContaining({
+        platform: nfsProtocol['platform'],
+        workerId: 'test-worker'
+      }),
+      payload,
+      'delete',
+      'traceId'
+    );
+  });
 });
