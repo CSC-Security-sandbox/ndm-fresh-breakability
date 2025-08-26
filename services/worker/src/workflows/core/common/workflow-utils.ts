@@ -11,6 +11,7 @@ const {
 } = wf.proxyActivities<CommonActivityService>({
   startToCloseTimeout: '24h',
   heartbeatTimeout: '2m',
+  retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
 });
 
 const {
@@ -18,7 +19,8 @@ const {
 } = wf.proxyActivities<CommonTaskService>({
   startToCloseTimeout: '5m',
   heartbeatTimeout: '1m',
-}); 
+  retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
+});
 
 
 export const updateJobStatusIfNotRunning = async (state: JobRunStatus, jobRunId: string) => {

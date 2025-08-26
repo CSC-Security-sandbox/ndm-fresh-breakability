@@ -81790,9 +81790,5 @@
   {
     "Source Path": "/volSrcAuto/sample.mp3",
     "Target Checksum": "c814c2e2a3fd2314ac9010c50d2d56aee679a9b9ea72d4e27dd82a95fc017568"
-  },
-  {
-    "Source Path": "/volSrcAuto/.snapshot",
-    "Target Checksum": ""
   }
 ]

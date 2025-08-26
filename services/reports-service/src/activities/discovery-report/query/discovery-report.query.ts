@@ -142,6 +142,8 @@ WITH extension_stats AS (
     FROM ${schema}.inventory i
     WHERE i.is_directory = false
       AND i.job_run_id = $1
+      AND i.extension IS NOT NULL
+      AND i.extension != ''
     GROUP BY i.extension
 ),
 top_extensions AS (

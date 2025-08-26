@@ -164,6 +164,7 @@ func fetchReport(
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		// 4) send POST
+		LogDebug(fmt.Sprintf("Getting %s reports for %s ID %s, attempt %d", fmtType, reportType, jobRunID, attempt))
 		resp, err := SendAPIRequest(http.MethodPost, url, bodyBytes, headers)
 		if err != nil {
 			return nil, fmt.Errorf("POST %s: %w", url, err)

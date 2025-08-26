@@ -81680,10 +81680,6 @@
     "Target Checksum": "6973233d5cdd58d19a5cf9b087d3d1e4c4b85be467151f5a7b44d634e4a0ad28"
   },
   {
-    "Source Path": "/volSrcAuto/.snapshot",
-    "Target Checksum": ""
-  },
-  {
     "Source Path": "/volSrcAuto/symlink_to_csv",
     "Target Checksum": "81a56595eaa10873888a18bcd4055b18eea488d30afb1cf3b3adb780e910e3a9"
   },
