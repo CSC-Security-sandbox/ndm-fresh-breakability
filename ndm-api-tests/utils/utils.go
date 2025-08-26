@@ -1361,14 +1361,19 @@ func GetCPVersion() (string, error) {
 		return "", fmt.Errorf("get cp version failed: %v\noutput: %s", err, output)
 	}
 
-	fmt.Println("CP OUTPUT", output)
-
 	return output, nil
 }
 
 func GetWorkerVersion() (string, error) {
 	config := GetAttachedWorkerDetails()
-	script := "grep '^current_version=' /opt/datamigrator/conf/versions.conf | cut -d'=' -f2 | xargs echo -n"
+
+	var script string
+	switch PROTOCOL_TYPE {
+	case ProtocolSMB:
+		script = `powershell -Command "(Get-Content 'C:\datamigrator\conf\versions.conf' | Where-Object { $_ -match '^current_version=' }) -replace '^current_version=' | Write-Host -NoNewline"`
+	case ProtocolNFS:
+		script = "grep '^current_version=' /opt/datamigrator/conf/versions.conf | cut -d'=' -f2 | xargs echo -n "
+	}
 
 	sshConfig = SSHConfig{
 		Username: config.Username,
@@ -1381,8 +1386,6 @@ func GetWorkerVersion() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("get worker version failed: %v\noutput: %s", err, output)
 	}
-
-	fmt.Println("WORKER OUTPUT", output)
 
 	return output, nil
 }
