@@ -114,7 +114,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			currentDateTime := GetCurrentUTCTimestamp()
 			migrationParams := MigrationJobParams{
 				FirstRunAt:         currentDateTime,
-				FutureRunSchedule:  "*/3 * * * *", // Cron expression of 3 mins
+				FutureRunSchedule:  "*/10 * * * *", // Cron expression of 10 mins
 				SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
 				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
 				SidMapping:         false,
@@ -152,7 +152,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			// Validating the NextScheduled time from response is within +-1 minutes and is 3 minutes later than 1st run
 			parsedBase, err := time.Parse(TIME_FORMAT, currentDateTime)
 			Expect(err).NotTo(HaveOccurred(), "Error parsing curreent datetimes")
-			sch, err := cron.ParseStandard("*/3 * * * *")
+			sch, err := cron.ParseStandard("*/10 * * * *")
 			Expect(err).NotTo(HaveOccurred(), "invalid cron expression")
 			expectedNext := sch.Next(parsedBase)
 
@@ -165,7 +165,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 					"could not parse NextScheduleDate %q", jobSummary.NextScheduleDate)
 
 				// assert actualNext is within ±1min of expectedNext
-				Expect(actualNext).To(BeTemporally("~", expectedNext, time.Second), "expected NextScheduleDate within 1 minute of %s; got %s",
+				Expect(actualNext).To(BeTemporally("~", expectedNext, time.Second), "expected next schedule exactly at %s; got %s",
 					expectedNext.Format(TIME_FORMAT),
 					jobSummary.NextScheduleDate)
 			}
