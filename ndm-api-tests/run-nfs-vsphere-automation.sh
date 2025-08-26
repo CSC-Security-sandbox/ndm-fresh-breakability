@@ -92,16 +92,14 @@ run_tests() {
 
 # Test runs
 
-#Regression Testing
-run_tests "regression" "./tests/regression" "vSphere" "NFS"
-
+#Smoke Testing
+run_tests "smoke" "./tests/smoke" "vSphere" "NFS"
 
 #End-to-End Testing
 run_tests "end-to-end" "./tests/e2e" "vSphere" "NFS"
 
-
-#Smoke Testing
-run_tests "smoke" "./tests/smoke" "vSphere" "NFS"
+#Regression Testing
+run_tests "regression" "./tests/regression" "vSphere" "NFS"
 
 
 #Download-Error-Report-Regression Testing

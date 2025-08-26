@@ -22,4 +22,5 @@ export type TableWrapperPropsType = {
   noDataLabel?: string;
   showSearch?: boolean;
   showRefresh?: boolean;
+  showPagination?: boolean;
 };

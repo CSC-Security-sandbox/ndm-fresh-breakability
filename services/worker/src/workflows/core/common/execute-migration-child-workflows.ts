@@ -9,11 +9,17 @@ import { cancelWorkflowIfRunning, signalIfRunning } from './workflow-utils';
 const {
   updateLastEntry: updateLastEntryActivity,
 } = wf.proxyActivities<CommonActivityService>({
-  startToCloseTimeout: '24h',
-  heartbeatTimeout: '2m',
-}); 
+  startToCloseTimeout: '30m',
+  retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
+});
 
-const { updateWorkerResponse: updateWorkerResponse } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '10m' });
+
+const { 
+    updateWorkerResponse: updateWorkerResponse 
+} = wf.proxyActivities<CommonActivityService>({ 
+    startToCloseTimeout: '10m' , 
+    retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 } 
+});
 
 
 export const actionSignal = wf.defineSignal<[string]>('action');

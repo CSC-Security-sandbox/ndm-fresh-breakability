@@ -71768,10 +71768,6 @@
     "Target Checksum": "0a289de35c83a651beeaa8541483f6905537860be7ecd1ff53d2fb57ccda67b3"
   },
   {
-    "Source Path": "/vol_src_automation2/.snapshot",
-    "Target Checksum": ""
-  },
-  {
     "Source Path": "/vol_src_automation2/symlink_2_to_csv",
     "Target Checksum": "d48e182b47e8358775074e988bea968f5a018d619a3e00aa0113438f9dd803bd"
   },

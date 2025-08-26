@@ -13,6 +13,7 @@ const {
 } = wf.proxyActivities<CommonActivityService>({
   startToCloseTimeout: '24h',
   heartbeatTimeout: '2m',
+  retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
 });
 
 

@@ -9,13 +9,13 @@ const reportingSignal =  wf.defineSignal<[string]>('reportingSignal');
 
 const {
     generateCOCReport: generateCOCReportActivity,
-  } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '10m' });
+  } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '10m', retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 } });
 
 
 const {
   updateStatus: updateStatusActivity,
   generateJobsReport: generateJobsReportActivity,
-} = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
+} = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '10m', retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 } });
 
 
 export  enum  JobReportType {
@@ -64,13 +64,11 @@ export const handleReporting = async (
             await generateJobsReportActivity(traceId);
             break
         }
-        case JobReportType.DISCOVER: {
-            await updateStatusActivity({jobRunId: traceId, status:jobRunStatus})
+        case JobReportType.DISCOVER: {            
             await generateReport(traceId, 'GenerateDiscoveryReportWorkflow')
             break
         }
-        case JobReportType.MIGRATE: {
-            await updateStatusActivity({jobRunId: traceId, status: jobRunStatus})
+        case JobReportType.MIGRATE: {            
             await generateCOCReportActivity(traceId)
             break
         }

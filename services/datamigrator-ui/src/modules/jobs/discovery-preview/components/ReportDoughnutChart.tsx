@@ -150,7 +150,7 @@ const ReportDoughnutChart = () => {
                 title={legend.title}
                 value={legend.value}
                 color={legend.color}
-                unit=""
+                unit="MiB" //as we are converting the values to MiB added MiB units to show in Tooltip as well
               />
             ))}
           </Box>

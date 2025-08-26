@@ -214,14 +214,26 @@ export class SMBProtocol extends Protocol {
       }
     }
     try{
-        const result = await this.executeCommand(
+
+      const saveCredsResult = await this.executeCommand(
+        traceId,
+        ProtocolTypes.SMB,
+        payload,
+        this.getCommandPattern(CommandPattern.SAVE_CREDS),
+        'SMB Save Credentials',
+      );
+      
+      if(!saveCredsResult?.message?.toLowerCase().includes("successfully."))
+        throw new Error(`Save credentials operation failed: ${saveCredsResult.message}`);
+
+      const result = await this.executeCommand(
         traceId,
         ProtocolTypes.SMB,
         payload,
         this.getCommandPattern(CommandPattern.MOUNT_PATH),
         'SMB Mount',
       );
-    
+      
       if(result?.message?.toLowerCase().includes("successfully.")){
         const response = await this.executeCommand(
           traceId,

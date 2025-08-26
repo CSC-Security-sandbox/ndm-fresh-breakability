@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -186,6 +187,14 @@ func CreateDiscoveryJob(params DiscoveryJobParams, headers map[string]string) ([
 // Returns a slice of jobConfigIDs (even if only one).
 func CreateMigrationJob(params MigrationJobParams, headers map[string]string) ([]string, *http.Response, error) {
 	createMigrationURL := JOB_SERVICE_URL + CREATE_MIGRATION_ENDPOINT
+
+	// Skip .snapshot file for all migrations
+	excludeFilePatterns, ok := params.Options["excludeFilePatterns"].(string)
+	if !ok {
+		return nil, nil, errors.New("excludeFilePatterns must be a string")
+	}
+	excludeFilePatterns += ",*/.snapshot"
+	params.Options["excludeFilePatterns"] = excludeFilePatterns
 
 	// Build migrateConfigs as a slice of maps for all combinations
 	var migrateConfigs []map[string]interface{}

@@ -11,7 +11,10 @@ export  enum  JobReportType {
 
 const {
   updateCutOverStatus: updateCutOverStatusActivity
-} = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '5h' });
+} = wf.proxyActivities<CommonActivityService>({ 
+  startToCloseTimeout: '5h',
+  retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
+});
 
 export const approveSignal =  wf.defineSignal<[string]>('approve');
 export const isBlockedQuery = wf.defineQuery<boolean>('isBlocked');
