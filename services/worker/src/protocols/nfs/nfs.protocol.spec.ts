@@ -403,7 +403,7 @@ describe('NFSProtocol - getTotalUsedMemory', () => {
     (nfsProtocol['executeCommand'] as jest.Mock).mockRejectedValue(new Error(errorMessage));
 
     await expect(nfsProtocol.getTotalUsedMemory(traceId, payload)).rejects.toThrow(
-      /Command execution failed/
+      /Failed to calculate size: Command execution failed/
     );
   });
 
@@ -435,7 +435,7 @@ describe('NFSProtocol - getAvailableDiskSpace error handling', () => {
     (nfsProtocol['executeCommand'] as jest.Mock).mockRejectedValue(new Error(errorMessage));
 
     await expect(nfsProtocol.getAvailableDiskSpace(traceId, payload)).rejects.toThrow(
-      /Command execution failed/
+      /Failed to get available disk space at \/mnt\/test/
     );
   });
 });
