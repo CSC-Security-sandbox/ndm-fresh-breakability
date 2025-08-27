@@ -9,8 +9,9 @@
     ansible_python_interpreter: auto
     ansible_python_interpreter_fallback: ['python3.13', 'python3.12', 'python3.11', 'python3.10', 'python3.9', 'python3.8', '/usr/bin/python3', 'python3']
   roles:
-    - { role:  ../roles/kubernetes/microk8s/install-microk8s, tags: 'install-microk8s' }
-    - { role:  ../roles/kubernetes/microk8s/configure-microk8s-user, tags: 'configure-microk8s-user' }
+    - { role:  ../roles/kubernetes/microk8s/install-microk8s-manual, tags: 'install-microk8s-manual' }
+    #- { role:  ../roles/kubernetes/microk8s/install-microk8s, tags: 'install-microk8s' }
     - { role:  ../roles/kubernetes/microk8s/import-docker-images, tags: 'import-docker-images' }
+    - { role:  ../roles/kubernetes/microk8s/configure-microk8s-user, tags: 'configure-microk8s-user' }
     - { role:  ../roles/kubernetes/microk8s/configure-addons, tags: 'configure-addons' }
     - { role:  ../roles/kubernetes/microk8s/patch-configs-role, tags: 'patch-configs-role' }

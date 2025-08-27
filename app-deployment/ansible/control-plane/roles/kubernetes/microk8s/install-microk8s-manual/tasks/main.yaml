@@ -1,0 +1,100 @@
+---
+# Manual MicroK8s installation using pre-downloaded snap packages
+# This approach avoids external network dependencies during installation
+
+- name: 1.1. Ensure snapd is installed
+  package:
+    name:
+      - snapd
+    state: latest
+  retries: 5
+  delay: 60
+
+- name: 1.2. Create temporary directory for snap packages
+  file:
+    path: /tmp/microk8s-snaps
+    state: directory
+    mode: '0755'
+
+- name: 1.3. Download core20 snap package
+  command: snap download core20
+  args:
+    chdir: /tmp/microk8s-snaps
+  register: core20_download
+  changed_when: core20_download.rc == 0
+
+- name: 1.4. Download microk8s snap package
+  command: "snap download microk8s --channel={{ microk8s_version | default('1.33') }}"
+  args:
+    chdir: /tmp/microk8s-snaps
+  register: microk8s_download
+  changed_when: microk8s_download.rc == 0
+
+- name: 1.5. Rename core20 files
+  shell: |
+    mv core20_*.snap core20.snap
+    mv core20_*.assert core20.assert
+  args:
+    chdir: /tmp/microk8s-snaps
+  changed_when: true
+
+- name: 1.6. Rename microk8s files
+  shell: |
+    mv microk8s_*.snap microk8s.snap
+    mv microk8s_*.assert microk8s.assert
+  args:
+    chdir: /tmp/microk8s-snaps
+  changed_when: true
+
+- name: 1.7. Install core20 snap
+  shell: |
+    snap ack core20.assert && snap install core20.snap
+  args:
+    chdir: /tmp/microk8s-snaps
+  register: core20_install
+  changed_when: core20_install.rc == 0
+
+- name: 1.8. Install microk8s snap
+  shell: |
+    snap ack microk8s.assert && snap install microk8s.snap --classic
+  args:
+    chdir: /tmp/microk8s-snaps
+  register: microk8s_install
+  changed_when: microk8s_install.rc == 0
+
+- name: 1.9. Debug microk8s installation
+  debug:
+    var: microk8s_install
+
+- name: 1.10. Wait for MicroK8s to be ready
+  command: "{{ microk8s_bin_path | default('/snap/bin/') }}microk8s.status --wait-ready"
+  changed_when: false
+  register: mk8sstatusout
+  failed_when:
+    - "'This MicroK8s deployment is acting as a node in a cluster.' not in mk8sstatusout.stdout_lines"
+    - mk8sstatusout.rc > 0
+
+- name: 1.11. Create kubectl alias
+  command: "snap alias microk8s.kubectl kubectl"
+  changed_when: false
+
+- name: 1.12. Create helm3 alias
+  command: "snap alias microk8s.helm3 helm"
+  changed_when: false
+  when:
+    - "'helm3' in microk8s_plugins"
+    - microk8s_plugins.helm3
+
+# Disable snap auto-update to prevent disruptions
+- name: 1.13. Disable snap auto-update
+  blockinfile:
+    dest: /etc/hosts
+    marker: "# {mark} ANSIBLE MANAGED: microk8s Disable snap autoupdate"
+    content: |
+      127.0.0.1 api.snapcraft.io
+  when: microk8s_disable_snap_autoupdate
+
+- name: 1.14. Clean up temporary snap files
+  file:
+    path: /tmp/microk8s-snaps
+    state: absent
