@@ -51,7 +51,7 @@ microk8s_plugins:
   rbac: true # Role-Based Access Control for authorisation
   hostpath-storage: true # Storage class; allocates storage from host directory
   registry: false # Private image registry exposed on localhost:32000
-  dashboard: true # The Kubernetes dashboard
+  dashboard: false # The Kubernetes dashboard
   ambassador: false # Ambassador API Gateway and Ingress
   cilium: false # SDN, fast with full network policy
   fluentd: false # Elasticsearch-Fluentd-Kibana logging and monitoring
