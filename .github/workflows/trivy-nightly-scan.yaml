@@ -1,151 +1,139 @@
-name: Nightly Trivy Scan for NDM Services
+name: Cleanup Azure Infrastructure (Delayed)
 
 on:
   schedule:
-    - cron: '30 18 * * *'
-
-permissions:
-  contents: read
-  security-events: write
-  actions: read
-  id-token: write
+    # Run every hour to check for cleanup tasks
+    - cron: '0 * * * *'
+  push:
+    branches:
+      - main
+      - persistVm     
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Original workflow run ID'
+        required: true
+        type: string
+      actor:
+        description: 'Original workflow actor'
+        required: true
+        type: string
+      force_cleanup:
+        description: 'Force cleanup regardless of age'
+        required: false
+        type: boolean
+        default: false
 
 env:
-  TRIVY_VERSION: v0.63.0
+  NODE_VERSION: '20'
+  TERRAFORM_VERSION: '1.8.4'
 
 jobs:
-  determine-matrix:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
+  find-and-cleanup:
+    name: Find and Cleanup Old Infrastructure
+    runs-on: openlab
     steps:
-      - name: Checkout Code with full history
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          fetch-depth: 0
-
-      - name: Set matrix for all services
-        id: set-matrix
-        run: |
-          services=( "db-writer" "keycloak-customizations" "reports-service" "admin-service" "config-service" "datamigrator-ui" "jobs-service" "support-service" )
-          targets=("${services[@]}")
-          targets+=("db-migrations")
-          targets+=("worker")
-          service_json=$(printf '%s\n' "${targets[@]}" | jq -R . | jq -s . | tr -d '\n')
-          echo "matrix={\"service\":$service_json}" >> $GITHUB_OUTPUT
-
-  trivy-scan:
-    runs-on: ubuntu-latest
-    needs: determine-matrix
-    strategy:
-      matrix:
-        service: ${{ fromJson(needs.determine-matrix.outputs.matrix).service }}
-      fail-fast: false
-    env:
-      IMAGE_NAME: trivy-scan-${{ matrix.service }}
-      IMAGE_TAG: ${{ github.sha }}
-    steps:
-      - name: Checkout Code
+      - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@4574d27a4764455b42196d70a065bc6853246a25
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f7ce87c1d6bead3e36075b2ce75da1f6cc28aaca
-
-      - name: Log in to Azure
-        uses: azure/login@a65d910e8af852a8061c627c456678983e180302
+      - name: Setup Node.js
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Authenticate to ACR
-        uses: azure/docker-login@15c4aadf093404726ab2ff205b2cdd33fa6d054c
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
         with:
-          login-server: ${{ secrets.ACR_NAME }}.azurecr.io
-          username: ${{ secrets.AZURE_SP_USERNAME }}
-          password: ${{ secrets.AZURE_SP_PASSWORD }}
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Set up Trivy
-        uses: aquasecurity/setup-trivy@9ea583eb67910444b1f64abf338bd2e105a0a93d
-        with:
-          version: ${{ env.TRIVY_VERSION }}
-
-      - name: Set build context
-        if: matrix.service != 'worker'
-        id: set-context
+      - name: Find Artifacts to Clean Up
+        id: find-artifacts
         run: |
-          if [ "${{ matrix.service }}" = "db-migrations" ]; then
-            echo "CONTEXT=liquibase" >> $GITHUB_ENV
+          # If manually triggered with specific run_id, use that
+          if [[ -n "${{ github.event.inputs.run_id }}" ]]; then
+            echo "artifact_name=terraform-state-cleanup-${{ github.event.inputs.run_id }}" >> $GITHUB_OUTPUT
+            echo "actor=${{ github.event.inputs.actor }}" >> $GITHUB_OUTPUT
+            echo "force_cleanup=${{ github.event.inputs.force_cleanup }}" >> $GITHUB_OUTPUT
+            echo "Manual cleanup requested for run ID: ${{ github.event.inputs.run_id }}"
+            exit 0
+          fi
+          
+          # For scheduled runs, we would need to implement artifact discovery
+          # This is a placeholder for finding artifacts older than 24 hours
+          echo "Scheduled cleanup - looking for artifacts older than 24 hours"
+          echo "Note: GitHub Actions API would be needed to enumerate and check artifact ages"
+          
+          # For now, exit early if no manual run_id provided
+          echo "No manual run_id provided and automated artifact discovery not implemented"
+          exit 0
+
+      - name: Download Terraform State for Cleanup
+        if: steps.find-artifacts.outputs.artifact_name
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ steps.find-artifacts.outputs.artifact_name }}
+          path: app-deployment/terraform/azure/environments/api
+        continue-on-error: true
+
+      - name: Configure Provider Credentials for Cleanup
+        if: steps.find-artifacts.outputs.artifact_name
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+          
+          # Azure Provider Credentials
+          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+
+          # We'll need to reconstruct these from the original run or store them in artifacts
+          echo "TF_VAR_vm_owner=${{ steps.find-artifacts.outputs.actor }}" >> $GITHUB_ENV
+          echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
+          echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
+
+      - name: Initialize Terraform for Cleanup
+        if: steps.find-artifacts.outputs.artifact_name
+        run: |
+          cd app-deployment/terraform/azure/environments/api
+          if [ -f terraform.tfstate ]; then
+            echo "Found Terraform state file"
+            terraform init
           else
-            echo "CONTEXT=services/${{ matrix.service }}" >> $GITHUB_ENV
+            echo "No Terraform state file found - infrastructure may already be cleaned up"
+            exit 0
           fi
 
-      - name: Run Trivy filesystem (fs) scan for worker
-        if: matrix.service == 'worker'
-        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37
-        with:
-          scan-type: 'fs'
-          scan-ref: 'services/worker'
-          format: 'json'
-          output: 'trivy-results-${{ matrix.service }}.json'
-          severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
-          ignore-unfixed: false
-          exit-code: '0'
-
-      - name: Build Docker Image for ${{ matrix.service }} (for scan only)
-        if: matrix.service != 'worker'
+      - name: Check Infrastructure Age
+        if: steps.find-artifacts.outputs.artifact_name && steps.find-artifacts.outputs.force_cleanup != 'true'
         run: |
-          docker buildx build \
-            --platform linux/amd64 \
-            --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
-            -t "$IMAGE_NAME:$IMAGE_TAG" \
-            --load "$CONTEXT"
-        env:
-          GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
-          DOCKER_BUILDKIT: 1
-          CONTEXT: ${{ env.CONTEXT }}
-
-      - name: Run Trivy vulnerability scanner for ${{ matrix.service }} (JSON format)
-        if: matrix.service != 'worker'
-        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37
-        with:
-          image-ref: '${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}'
-          format: 'json'
-          output: 'trivy-results-${{ matrix.service }}.json'
-          severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
-          ignore-unfixed: false
-          exit-code: '0'
-
-      - name: Convert Trivy JSON to SARIF and Table format
-        run: |
-          FILE="trivy-results-${{ matrix.service }}.json"
-      
-          if [ -f "$FILE" ]; then
-            echo "Converting $FILE to SARIF"
-            trivy convert --format sarif --output trivy-results-${{ matrix.service }}.sarif "$FILE"
-      
-            echo "Converting $FILE to table"
-            trivy convert --format table --output trivy-table-${{ matrix.service }}.txt "$FILE"
-          else
-            echo "No Trivy results file found to convert"
+          # Check if infrastructure is older than 24 hours
+          # This is a simplified check - in practice you might want to check resource creation times
+          ARTIFACT_AGE_HOURS=$(( ($(date +%s) - $(stat -c %Y app-deployment/terraform/azure/environments/api/terraform.tfstate 2>/dev/null || echo 0)) / 3600 ))
+          echo "Infrastructure age: ${ARTIFACT_AGE_HOURS} hours"
+          
+          if [ $ARTIFACT_AGE_HOURS -lt 24 ]; then
+            echo "Infrastructure is less than 24 hours old, skipping cleanup"
+            echo "Use force_cleanup=true to override this check"
+            exit 0
           fi
+          
+          echo "Infrastructure is older than 24 hours, proceeding with cleanup"
+          echo "PROCEED_WITH_CLEANUP=true" >> $GITHUB_ENV
 
-      - name: Brand SARIF with service name
+      - name: Destroy Terraform Resources
+        if: steps.find-artifacts.outputs.artifact_name && (env.PROCEED_WITH_CLEANUP == 'true' || steps.find-artifacts.outputs.force_cleanup == 'true')
         run: |
-          SERVICE="${{ matrix.service }}"
-          jq --arg svc "$SERVICE" \
-            '.runs[0].results |= map(
-                .message.text |= ("[" + $svc + "] " + .)
-              )' \
-            trivy-results-${SERVICE}.sarif > trivy-results-${SERVICE}-branded.sarif
-          mv trivy-results-${SERVICE}-branded.sarif trivy-results-${SERVICE}.sarif
+          cd app-deployment/terraform/azure/environments/api
+          echo "Destroying infrastructure created by run: ${{ steps.find-artifacts.outputs.artifact_name }}"
+          terraform destroy -auto-approve
 
-      - name: Output Trivy scan results in table format
+      - name: Clean Up Artifacts
+        if: steps.find-artifacts.outputs.artifact_name && (env.PROCEED_WITH_CLEANUP == 'true' || steps.find-artifacts.outputs.force_cleanup == 'true')
         run: |
-          cat trivy-table-${{ matrix.service }}.txt
-
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@bc02a25f6449997c5e9d5a368879b28f56ae19a1
-        with:
-          sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
+          echo "Cleanup completed for run: ${{ steps.find-artifacts.outputs.artifact_name }}"
+          echo "Infrastructure has been destroyed"
+          
+          # Note: GitHub Actions doesn't provide an API to delete artifacts from workflows
+          # The artifact will expire based on its retention-days setting (2 days)
