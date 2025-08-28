@@ -30,12 +30,12 @@ import (
 func main() {
 
 	fmt.Println("\n====================Creating Azure VMs====================")
-	cpIP, workerIP, err := createAzureVMs()
-	// cpIP, workerIP := "172.30.203.30", "172.30.203.31"
+	// cpIP, workerIP, err := createAzureVMs()
+	// cpIP, workerIP := "172.30.203.12", "172.30.203.17"
 	// var err error = nil
-	// cpIP := "172.30.203.26"
-	// workerIP := "172.30.203.27"
-	// var err error = nil
+	cpIP := "172.30.203.24"
+	workerIP := "172.30.203.25"
+	var err error = nil
 	if err != nil {
 		log.Fatalf("Failed to create Azure VMs: %v", err)
 	}
@@ -130,6 +130,35 @@ func main() {
 		fmt.Printf("Source file server creation failed with status: %d\n", resp.StatusCode)
 		return
 	}
+
+	// Discovery job for source file server
+	log.Printf("\n==================== CREATING DISCOVERY JOB ====================")
+	sourceExportPath := "/mnt/data/AI" // Use the same path as migration source
+	sourceExportPathID, err := GetExportPathID("source", sourceExportPath, sourceFileServerId, headers)
+	if err != nil {
+		LogFatalf("Error getting source export path ID for discovery job: %v", err)
+	}
+	sourcePathIDs := []string{sourceExportPathID}
+	jobParams := DiscoveryJobParams{
+		SourcePathIDs:            sourcePathIDs,
+		ExcludeOlderThan:         nil,
+		ExcludeFilePatterns:      "",
+		PreserveAccessTime:       false,
+		FirstRunAt:               GetCurrentUTCTimestamp(),
+		CreatedBy:                nil,
+		WorkflowExecutionTimeout: "60s",
+		WorkflowTaskTimeout:      "30s",
+		WorkflowRunTimeout:       "30s",
+		StartDelay:               "10s",
+	}
+	var sourceJobConfigIDs interface{}
+	sourceJobConfigIDs, resp, err = CreateDiscoveryJob(jobParams, headers)
+	if err != nil {
+		LogFatalf("Error creating discovery job: %v", err)
+	}
+	defer resp.Body.Close()
+	log.Printf("Source discovery job created with config IDs: %s", sourceJobConfigIDs)
+
 	fmt.Printf("======>Source file Server ID: %s\n", sourceFileServerId)
 	destinationParams := CreateServereParams{
 		ConfigName:       "Destination-FileServer-Performance-Test",
@@ -152,20 +181,20 @@ func main() {
 	}
 	fmt.Printf("======>Destination file Server ID: %s\n", destinationFileServerId)
 
-	// Create migration job from /mnt/data/AI (source) to /kb-vol-perf-run (destination)
+	// Create migration job from /mnt/data/AI (source) to /KB-NFS-PERF-AUTO-VOL (destination)
 	fmt.Println("\n====================Setting Up Migration Job====================")
-	err = setupMigrationJob(sourceFileServerId, destinationFileServerId, "/mnt/data/AI", "/kb-vol-perf-run", headers)
+	err = setupMigrationJob(sourceFileServerId, destinationFileServerId, "/mnt/data/AI", "/KB-NFS-PERF-AUTO-VOL", headers)
 	if err != nil {
-		fmt.Printf("⚠️  Warning: Failed to setup migration job: %v\n", err)
+		fmt.Printf("Warning: Failed to setup migration job: %v\n", err)
 	}
 
-	fmt.Println("\n🎯 NDM Performance Test Environment is ready for testing!")
-	fmt.Println("📊 Ready for data migration performance tests!")
-	fmt.Printf("🔗 Source Host: %s\n", SOURCE_HOST_IP)
-	fmt.Printf("📁 Source File Server ID: %s\n", sourceFileServerId)
+	fmt.Println("\nNDM Performance Test Environment is ready for testing!")
+	fmt.Println("Ready for data migration performance tests!")
+	fmt.Printf("Source Host: %s\n", SOURCE_HOST_IP)
+	fmt.Printf("Source File Server ID: %s\n", sourceFileServerId)
 	if DESTINATION_HOST_IP != "" {
-		fmt.Printf("🎯 Destination Host: %s\n", DESTINATION_HOST_IP)
-		fmt.Printf("📁 Destination Volume: %s:/kb-vol-perf-run\n", DESTINATION_HOST_IP)
+		fmt.Printf("Destination Host: %s\n", DESTINATION_HOST_IP)
+		fmt.Printf("Destination Volume: %s:/kb-vol-perf-run\n", DESTINATION_HOST_IP)
 	}
 
 	// Wait for interrupt signal to gracefully shutdown
@@ -188,7 +217,7 @@ func main() {
 	fmt.Printf("NDM Password: %s\n", PASSWORD)
 }
 
-// setupMigrationJob creates a migration job from source to destination/mnt/data/AI/kb-vol-perf-run
+// setupMigrationJob creates a migration job from source to destination/mnt/data/AI/KB-NFS-PERF-AUTO-VOL
 func setupMigrationJob(sourceFileServerId, destinationFileServerId, srcpath, destpath string, headers map[string]string) error {
 	// Get source path ID for /mnt/data/AI
 	sourcePathId, err := GetExportPathID("source", srcpath, sourceFileServerId, headers)
@@ -211,7 +240,7 @@ func setupMigrationJob(sourceFileServerId, destinationFileServerId, srcpath, des
 			"skipFile":            "0-M",
 		},
 	}
-	fmt.Println("===================Creating migration job===================")
+	fmt.Println("=====>Triggering migration job")
 	jobIds, resp, err := CreateMigrationJob(migrationParams, headers)
 	if err != nil {
 		return fmt.Errorf("failed to create migration job: %w", err)
@@ -223,7 +252,7 @@ func setupMigrationJob(sourceFileServerId, destinationFileServerId, srcpath, des
 
 	if len(jobIds) > 0 {
 		fmt.Printf("========>Migration job created successfully with ID: %s\n", jobIds[0])
-		fmt.Printf("========>Migration: %s:/mnt/data/AI → %s:/kb-vol-perf-run\n", SOURCE_HOST_IP, DESTINATION_HOST_IP)
+		fmt.Printf("========>Migration: %s:/mnt/data/AI → %s:/KB-NFS-PERF-AUTO-VOL\n", SOURCE_HOST_IP, DESTINATION_HOST_IP)
 
 		// Start direct system metrics logging in background (gopsutil)
 		// go LogSystemMetricsToFile("system_metrics.log")
@@ -267,7 +296,7 @@ func setupMigrationJob(sourceFileServerId, destinationFileServerId, srcpath, des
 
 	if len(jobIds) > 0 {
 		fmt.Printf("========>Migration job created successfully with ID: %s\n", jobIds[0])
-		fmt.Printf("========>Migration: %s:/mnt/data/AI → %s:/kb-vol-perf-run\n", SOURCE_HOST_IP, DESTINATION_HOST_IP)
+		fmt.Printf("========>Migration: %s:/mnt/data/AI → %s:/KB-NFS-PERF-AUTO-VOL\n", SOURCE_HOST_IP, DESTINATION_HOST_IP)
 
 		// Get job run details to verify the job was created properly
 		fmt.Println("   Getting job run details...")
@@ -509,16 +538,16 @@ func updateEnvVariables(cpIP, workerIP string) error {
 	os.Setenv("AZ_NDM_WORKERS_USER_NAME", "ubuntu")
 	os.Setenv("AZ_NDM_WORKERS_PORT", "22")
 	os.Setenv("AZ_NDM_WORKERS_PASSWORD", "Password@123")
-	os.Setenv("AZ_SOURCE_HOST_IP", "10.0.0.169")
-	os.Setenv("AZ_DESTINATION_HOST_IP", "10.0.4.9")
+	os.Setenv("AZ_SOURCE_HOST_IP", "172.30.203.23")
+	os.Setenv("AZ_DESTINATION_HOST_IP", "172.30.202.27")
 	os.Setenv("AZURE_NFS_NDM_WORKERS_HOST", workerIP)
 	os.Setenv("AZURE_NFS_NDM_WORKERS_USER_NAME", "ubuntu")
 	os.Setenv("AZURE_NFS_NDM_WORKERS_PORT", "22")
 	os.Setenv("AZURE_NFS_NDM_WORKERS_PASSWORD", "Password@123")
 	os.Setenv("AZURE_NFS_SOURCE_VOLUMES", "/mnt/data/AI")
-	os.Setenv("AZURE_NFS_DESTINATION_VOLUMES", "/kb-vol-perf-run")
-	os.Setenv("AZURE_NFS_SOURCE_HOST_IP", "10.0.0.169")
-	os.Setenv("AZURE_NFS_DESTINATION_HOST_IP", "10.0.4.9")
+	os.Setenv("AZURE_NFS_DESTINATION_VOLUMES", "/KB-NFS-PERF-AUTO-VOL")
+	os.Setenv("AZURE_NFS_SOURCE_HOST_IP", "172.30.203.23")
+	os.Setenv("AZURE_NFS_DESTINATION_HOST_IP", "172.30.202.27")
 	os.Setenv("AZURE_NFS_PROTOCOL_USERNAME", "ubuntu")
 	os.Setenv("AZURE_NFS_PROTOCOL_PASSWORD", "Password@123")
 
@@ -588,8 +617,8 @@ func waitForControlPlaneReadyWithIP(cpIP string) error {
 				fmt.Printf("===>Control Plane UI is fully ready! (Total time: %v, Since ping: %v)\n",
 					totalElapsed, sincePing)
 				fmt.Printf("===>UI ready at: %s\n", currentTime.Format("15:04:05"))
-				fmt.Println("Waiting 1 minute for services to finish setup...")
-				time.Sleep(60 * time.Second)
+				fmt.Println("Waiting 5 minutes for services to finish setup...")
+				time.Sleep(5 * time.Minute)
 				return nil
 			} else if resp.StatusCode == 404 || resp.StatusCode == 503 {
 				// Only log every 5 minutes to reduce noise
@@ -629,228 +658,3 @@ func waitForControlPlaneReadyWithIP(cpIP string) error {
 	return fmt.Errorf("control plane UI did not become ready within %d minutes (total elapsed: %v)", maxWaitMinutes, finalElapsed)
 
 }
-
-// // LogNodeMetricsToFile fetches and logs worker metrics every 5 minutes using a ticker
-// func LogNodeMetricsToFile(endpoint string, filename string) {
-// 	fmt.Printf("🔄 Starting worker metrics collection from: %s\n", endpoint)
-// 	fmt.Printf("📊 Metrics will be logged to: %s\n", filename)
-// 	fmt.Printf("⏰ Collection interval: every 5 minutes\n")
-
-// 	// Create a ticker for 5-minute intervals
-// 	ticker := time.NewTicker(5 * time.Minute)
-// 	defer ticker.Stop()
-
-// 	// Collect metrics immediately on start
-// 	collectAndLogMetrics(endpoint, filename)
-
-// 	// Then collect every 5 minutes
-// 	for range ticker.C {
-// 		collectAndLogMetrics(endpoint, filename)
-// 	}
-// }
-
-// // collectAndLogMetrics performs a single metrics collection and logging operation
-// func collectAndLogMetrics(endpoint string, filename string) {
-// 	fmt.Printf("📡 Fetching worker metrics at %s...\n", time.Now().Format("15:04:05"))
-
-// 	// Create HTTP client with timeout
-// 	client := &http.Client{
-// 		Timeout: 30 * time.Second,
-// 		Transport: &http.Transport{
-// 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-// 		},
-// 	}
-
-// 	resp, err := client.Get(endpoint)
-// 	if err != nil {
-// 		fmt.Printf("❌ Failed to fetch worker metrics: %v\n", err)
-// 		return
-// 	}
-// 	defer resp.Body.Close()
-
-// 	if resp.StatusCode != http.StatusOK {
-// 		fmt.Printf("❌ Worker metrics endpoint returned status: %d\n", resp.StatusCode)
-// 		return
-// 	}
-
-// 	body, err := io.ReadAll(resp.Body)
-// 	if err != nil {
-// 		fmt.Printf("❌ Failed to read worker metrics response: %v\n", err)
-// 		return
-// 	}
-
-// 	metrics := string(body)
-// 	timestamp := time.Now().Format(time.RFC3339)
-
-// 	// Log with timestamp and separator for easy parsing
-// 	logEntry := fmt.Sprintf("=== WORKER METRICS SNAPSHOT ===\n")
-// 	logEntry += fmt.Sprintf("Timestamp: %s\n", timestamp)
-// 	logEntry += fmt.Sprintf("Endpoint: %s\n", endpoint)
-// 	logEntry += fmt.Sprintf("Status: %d\n", resp.StatusCode)
-// 	logEntry += fmt.Sprintf("Data Size: %d bytes\n", len(body))
-// 	logEntry += fmt.Sprintf("=== METRICS DATA ===\n")
-// 	logEntry += metrics
-// 	logEntry += fmt.Sprintf("\n=== END SNAPSHOT ===\n\n")
-
-// 	// Write to file with proper error handling
-// 	f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-// 	if err != nil {
-// 		fmt.Printf("❌ Failed to open metrics log file: %v\n", err)
-// 		return
-// 	}
-// 	defer f.Close()
-
-// 	_, err = f.WriteString(logEntry)
-// 	if err != nil {
-// 		fmt.Printf("❌ Failed to write metrics to file: %v\n", err)
-// 		return
-// 	}
-
-// 	fmt.Printf("✅ Worker metrics collected successfully (%d bytes)\n", len(body))
-// }
-
-// // SystemMetrics represents system performance metrics
-// type SystemMetrics struct {
-// 	Timestamp string           `json:"timestamp"`
-// 	Source    string           `json:"source"`
-// 	CPU       CPUMetrics       `json:"cpu"`
-// 	Memory    MemoryMetrics    `json:"memory"`
-// 	Disk      DiskMetrics      `json:"disk"`
-// 	Network   []NetworkMetrics `json:"network"`
-// 	GoRuntime GoRuntimeMetrics `json:"go_runtime"`
-// }
-
-// type CPUMetrics struct {
-// 	PerCore   []float64 `json:"per_core"`
-// 	Total     float64   `json:"total"`
-// 	CoreCount int       `json:"core_count"`
-// }
-
-// type MemoryMetrics struct {
-// 	Total       uint64  `json:"total_bytes"`
-// 	Used        uint64  `json:"used_bytes"`
-// 	Free        uint64  `json:"free_bytes"`
-// 	UsedPercent float64 `json:"used_percent"`
-// }
-
-// type DiskMetrics struct {
-// 	Total       uint64  `json:"total_bytes"`
-// 	Used        uint64  `json:"used_bytes"`
-// 	Free        uint64  `json:"free_bytes"`
-// 	UsedPercent float64 `json:"used_percent"`
-// 	Path        string  `json:"path"`
-// }
-
-// type NetworkMetrics struct {
-// 	Interface   string `json:"interface"`
-// 	BytesSent   uint64 `json:"bytes_sent"`
-// 	BytesRecv   uint64 `json:"bytes_recv"`
-// 	PacketsSent uint64 `json:"packets_sent"`
-// 	PacketsRecv uint64 `json:"packets_recv"`
-// }
-
-// type GoRuntimeMetrics struct {
-// 	Goroutines int    `json:"goroutines"`
-// 	HeapAlloc  uint64 `json:"heap_alloc_bytes"`
-// 	HeapSys    uint64 `json:"heap_sys_bytes"`
-// 	HeapInuse  uint64 `json:"heap_inuse_bytes"`
-// 	StackInuse uint64 `json:"stack_inuse_bytes"`
-// 	GCCycles   uint32 `json:"gc_cycles"`
-// 	LastGCTime string `json:"last_gc_time"`
-// }
-
-// // LogSystemMetricsToFile logs CPU, memory, disk, network, and Go runtime metrics in JSON format
-// func LogSystemMetricsToFile(filename string) {
-// 	for {
-// 		metrics := collectSystemMetrics()
-
-// 		// Convert to JSON
-// 		jsonData, err := json.MarshalIndent(metrics, "", "  ")
-// 		if err != nil {
-// 			fmt.Printf("Error marshaling metrics: %v\n", err)
-// 			time.Sleep(5 * time.Minute)
-// 			continue
-// 		}
-
-// 		// Write to file
-// 		f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-// 		if err != nil {
-// 			fmt.Printf("Error opening log file: %v\n", err)
-// 			time.Sleep(5 * time.Minute)
-// 			continue
-// 		}
-
-// 		f.WriteString(string(jsonData) + "\n")
-// 		f.Close()
-
-// 		time.Sleep(5 * time.Minute)
-// 	}
-// }
-
-// // collectSystemMetrics gathers all system and Go runtime metrics
-// func collectSystemMetrics() SystemMetrics {
-// 	var metrics SystemMetrics
-// 	var m runtime.MemStats
-// 	runtime.ReadMemStats(&m)
-
-// 	metrics.Timestamp = time.Now().Format(time.RFC3339)
-// 	metrics.Source = "automation_host_local" // This Go script runs locally, NOT on worker VM
-
-// 	// CPU metrics
-// 	cpuPercents, _ := cpu.Percent(0, true)
-// 	cpuTotal, _ := cpu.Percent(0, false)
-// 	metrics.CPU = CPUMetrics{
-// 		PerCore:   cpuPercents,
-// 		Total:     cpuTotal[0],
-// 		CoreCount: len(cpuPercents),
-// 	}
-
-// 	// Memory metrics
-// 	vmStat, _ := mem.VirtualMemory()
-// 	metrics.Memory = MemoryMetrics{
-// 		Total:       vmStat.Total,
-// 		Used:        vmStat.Used,
-// 		Free:        vmStat.Free,
-// 		UsedPercent: vmStat.UsedPercent,
-// 	}
-
-// 	// Disk metrics
-// 	diskStat, _ := disk.Usage("/")
-// 	metrics.Disk = DiskMetrics{
-// 		Total:       diskStat.Total,
-// 		Used:        diskStat.Used,
-// 		Free:        diskStat.Free,
-// 		UsedPercent: diskStat.UsedPercent,
-// 		Path:        "/",
-// 	}
-
-// 	// Network metrics
-// 	netIOs, _ := net.IOCounters(true)
-// 	for _, ioStat := range netIOs {
-// 		metrics.Network = append(metrics.Network, NetworkMetrics{
-// 			Interface:   ioStat.Name,
-// 			BytesSent:   ioStat.BytesSent,
-// 			BytesRecv:   ioStat.BytesRecv,
-// 			PacketsSent: ioStat.PacketsSent,
-// 			PacketsRecv: ioStat.PacketsRecv,
-// 		})
-// 	}
-
-// 	// Go runtime metrics
-// 	var lastGC string
-// 	if m.LastGC > 0 {
-// 		lastGC = time.Unix(0, int64(m.LastGC)).Format(time.RFC3339)
-// 	}
-
-// 	metrics.GoRuntime = GoRuntimeMetrics{
-// 		Goroutines: runtime.NumGoroutine(),
-// 		HeapAlloc:  m.HeapAlloc,
-// 		HeapSys:    m.HeapSys,
-// 		HeapInuse:  m.HeapInuse,
-// 		StackInuse: m.StackInuse,
-// 		GCCycles:   m.NumGC,
-// 		LastGCTime: lastGC,
-// 	}
-
-// 	return metrics
-// }
