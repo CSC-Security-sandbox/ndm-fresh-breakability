@@ -379,7 +379,7 @@ jobs:
             LATEST_JSON_PATH="${BASE_PATH}/${REF_TYPE}/${REF_NAME}/latest.json"
             
             # Download latest.json from Artifactory
-            curl -s -o "latest.json" \
+            curl -o "latest.json" \
               -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
               "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${LATEST_JSON_PATH}"
             
@@ -418,7 +418,7 @@ jobs:
           BINARY_PATH="${ARTIFACT_PATH}/datamigrator-worker-${SELECTED_VERSION}.zip"
           
           echo "Downloading worker binary from Artifactory..."
-          curl -s -o "worker.zip" \
+          curl -o "worker.zip" \
             -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
             "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${BINARY_PATH}"
           
@@ -429,7 +429,7 @@ jobs:
           echo "Worker binary downloaded successfully."
 
           echo "Downloading worker.env from Artifactory..."
-          curl -s -o "worker.env" \
+          curl -o "worker.env" \
             -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
             "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACT_PATH}/worker-${SELECTED_VERSION}.env"
 
@@ -494,6 +494,15 @@ jobs:
               echo "Worker environment file uploaded successfully to $TARGET_URL."
             done
           fi
+      
+      - name: Download Docker images tar
+        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        run: | 
+          cd app-deployment/artifacts
+          TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/docker-images/ndm-docker-images.tar"
+          curl -o "ndm-docker-images.tar" \
+              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+              $TARGET_URL
 
       - name: Upload Ansible vars.yaml
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
@@ -509,12 +518,12 @@ jobs:
           name: helm-chart
           path: app-deployment/artifacts/datamigrator-*.tgz
 
-      - name: Upload Docker image tar artifact
+      - name: Upload Docker image tar artifacts
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: datamigrator-images
-          path: app-deployment/artifacts/datamigrator-*.tar
+          path: app-deployment/artifacts/*.tar
 
       - name: Upload Worker Binaries as Artifact
         if: ${{ github.event.inputs.component == 'worker' || github.event.inputs.component == 'windows-installer' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}

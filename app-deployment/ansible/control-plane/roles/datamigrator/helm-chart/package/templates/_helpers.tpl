@@ -21,12 +21,6 @@ spec:
         build-version: "{{ .Values.global.build_version }}"
         {{- end }}
     spec:
-      # {{- if not .Values.global.local_cluster }}
-      # {{- if .Values.imagePullSecrets }}
-      # imagePullSecrets:
-      #   - name: {{ .Values.imagePullSecrets }}
-      # {{- end }}
-      # {{- end }}
       {{- if .Values.differentNodes }}
       affinity:
         podAntiAffinity:
@@ -220,12 +214,6 @@ spec:
         {{- toYaml .Values.annotations | nindent 8 }}
     spec:
       serviceAccountName: {{ .Values.serviceAccountName }}
-      # {{- if not .Values.global.local_cluster }}
-      # {{- if .Values.imagePullSecrets }}
-      # imagePullSecrets:
-      #   - name: {{ .Values.imagePullSecrets }}
-      # {{- end }}
-      # {{- end }}
       restartPolicy: OnFailure
       containers:
         - name: db-migrations

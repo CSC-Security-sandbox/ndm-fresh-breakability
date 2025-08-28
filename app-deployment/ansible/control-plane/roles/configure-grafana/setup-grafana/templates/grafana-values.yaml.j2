@@ -1,6 +1,16 @@
+global:
+  security:
+    allowInsecureImages: true
+
 admin:
   user: admin
   password: admin
+
+image:
+  registry: docker.io
+  repository: bitnami/grafana
+  tag: 12.1.1-debian-12-r1
+  pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
 
 grafana:
   replicaCount: 1
@@ -10,7 +20,6 @@ grafana:
     runAsUser: {{ vm_uid }}
     runAsNonRoot: true
     runAsGroup: {{ vm_gid }}
-    fsGroup: {{ vm_gid }}
   extraEnvVars:
     - name: MY_HOST_IP
       valueFrom:
@@ -96,3 +105,8 @@ persistence:
 
 volumePermissions:
   enabled: true
+  image:
+    registry: docker.io
+    repository: bitnami/os-shell
+    tag: 12-debian-12-r50
+    pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"

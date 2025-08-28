@@ -31,7 +31,6 @@
     dest: "../roles/datamigrator/helm-chart/package/Chart.yaml"
   when: local_cluster is defined
 
-
 - name: Package each subchart
   become: no
   local_action:
@@ -82,7 +81,6 @@
     dest: "$HOME/helm-chart.tgz"
   when: local_cluster is defined
 
-#Optional cleanup steps
 - name: Clean up rendered subchart Chart.yaml files
   become: no
   local_action:

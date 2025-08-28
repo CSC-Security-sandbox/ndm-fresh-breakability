@@ -5,7 +5,7 @@ import { HttpService } from '@nestjs/axios';
 import { AuthService } from 'src/auth/auth.service';
 import { RedisService } from 'src/redis/redis.service';
 import axios from 'axios';
-import { JobRunStatus } from './enums';
+import { JobRunStatus, CutOverStatus } from './enums';
 import { JobContext } from '@netapp-cloud-datamigrate/jobs-lib';
 import { CommonActivityService } from './common.service';
 import {
@@ -32,6 +32,9 @@ describe('CommonActivityService', () => {
   beforeEach(async () => {
     mockContext = {
       cleanup: jest.fn(),
+      publishToFileStream: jest.fn(),
+      publishToTaskStream: jest.fn(),
+      publishToErrorStream: jest.fn(),
       appendToFileList: jest.fn().mockResolvedValue('fileId'),
       appendToDirList: jest.fn().mockResolvedValue('dirId'),
       appendToTaskList: jest.fn().mockResolvedValue(1),
@@ -75,7 +78,7 @@ describe('CommonActivityService', () => {
 
     logger = mockLogger;
     redisService = {
-      getJobContext: jest.fn().mockResolvedValue(mockContext),
+      getJobManagerContext: jest.fn().mockResolvedValue(mockContext),
       setJobContext: jest.fn(),
     };
 
@@ -111,15 +114,20 @@ describe('CommonActivityService', () => {
 
     it('should handle missing token', async () => {
       (authService.getAccessToken as jest.Mock).mockResolvedValueOnce('');
-      const res = await service.updateStatus({ jobRunId, status: JobRunStatus.Completed});
-      expect(res.message).toContain('Error while updating the status');
+      
+      await expect(service.updateStatus({ jobRunId, status: JobRunStatus.Completed }))
+        .rejects.toThrow('Error while updating the status of the job id : job123');
+      
+      expect(logger.error).toHaveBeenCalled();
     });
 
     it('should handle error', async () => {
       (axios.patch as jest.Mock).mockRejectedValueOnce(new Error('fail'));  
-      const res = await service.updateStatus({ jobRunId, status: JobRunStatus.Completed});
+      
+      await expect(service.updateStatus({ jobRunId, status: JobRunStatus.Completed }))
+        .rejects.toThrow('Error while updating the status of the job id : job123');
+      
       expect(logger.error).toHaveBeenCalled();
-      expect(res.message).toContain('Error while updating the status');
     });
   });
 
@@ -137,15 +145,20 @@ describe('CommonActivityService', () => {
 
     it('should handle missing token', async () => {
       (authService.getAccessToken as jest.Mock).mockResolvedValueOnce('');
-      const res = await service.generateJobsReport(jobRunId);
-      expect(res.message).toContain('Error while Triggering generateJobsReport');
+      
+      await expect(service.generateJobsReport(jobRunId))
+        .rejects.toThrow('Error while Triggering generateJobsReport for the job id : job123');
+      
+      expect(logger.error).toHaveBeenCalled();
     });
 
     it('should handle error', async () => {
       (axios.post as jest.Mock).mockRejectedValueOnce(new Error('fail'));
-      const res = await service.generateJobsReport(jobRunId);
+      
+      await expect(service.generateJobsReport(jobRunId))
+        .rejects.toThrow('Error while Triggering generateJobsReport for the job id : job123');
+      
       expect(logger.error).toHaveBeenCalled();
-      expect(res.message).toContain('Error while Triggering generateJobsReport');
     });
   });
 
@@ -157,6 +170,154 @@ describe('CommonActivityService', () => {
       await service.updateJobErrorStatus(jobRunId);
       expect(spyStatus).toHaveBeenCalledWith({ jobRunId, status: JobRunStatus.Errored });
       expect(spyLast).toHaveBeenCalledWith(jobRunId);
+    });
+
+    it('should propagate errors from updateStatus', async () => {
+      jest.spyOn(service, 'updateStatus').mockRejectedValue(new Error('Status update failed'));
+      
+      await expect(service.updateJobErrorStatus(jobRunId))
+        .rejects.toThrow('Status update failed');
+    });
+
+    it('should propagate errors from updateLastEntry', async () => {
+      jest.spyOn(service, 'updateStatus').mockResolvedValue({ message: 'ok' });
+      jest.spyOn(service, 'updateLastEntry').mockRejectedValue(new Error('Last entry failed'));
+      
+      await expect(service.updateJobErrorStatus(jobRunId))
+        .rejects.toThrow('Last entry failed');
+    });
+  });
+
+  describe('updateLastEntry', () => {
+    it('should update last entry successfully', async () => {
+      const res = await service.updateLastEntry(traceId);
+      
+      expect(redisService.getJobManagerContext).toHaveBeenCalledWith(traceId);
+      expect(mockContext.publishToFileStream).toHaveBeenCalled();
+      expect(mockContext.publishToTaskStream).toHaveBeenCalled();
+      expect(mockContext.publishToErrorStream).toHaveBeenCalled();
+      expect(res).toEqual({ message: 'Job completed for job id: ' + traceId });
+    });
+
+    it('should throw error when Redis operations fail', async () => {
+      const error = new Error('Redis connection failed');
+      (redisService.getJobManagerContext as jest.Mock).mockRejectedValueOnce(error);
+      
+      await expect(service.updateLastEntry(traceId))
+        .rejects.toThrow('Error while marking the job as completed : test-trace');
+      
+      expect(logger.error).toHaveBeenCalled();
+    });
+  });
+
+  describe('generateCOCReport', () => {
+    it('should trigger COC report successfully', async () => {
+      (axios.get as jest.Mock).mockResolvedValue({});
+      const res = await service.generateCOCReport(jobRunId);
+      
+      expect(axios.get).toHaveBeenCalledWith(
+        `http://report/api/v1/report/job-run/coc-report/${jobRunId}`,
+        { headers: { Authorization: `Bearer token` } },
+      );
+      expect(res).toEqual({ message: 'Triggering generateCOCReport successful for job id: ' + jobRunId });
+    });
+
+    it('should throw error for missing token', async () => {
+      (authService.getAccessToken as jest.Mock).mockResolvedValueOnce('');
+      
+      await expect(service.generateCOCReport(jobRunId))
+        .rejects.toThrow('Error while Triggering generateCOCReport for the job id : job123');
+    });
+
+    it('should throw error for request failure', async () => {
+      (axios.get as jest.Mock).mockRejectedValueOnce(new Error('Request failed'));
+      
+      await expect(service.generateCOCReport(jobRunId))
+        .rejects.toThrow('Error while Triggering generateCOCReport for the job id : job123');
+      
+      expect(logger.error).toHaveBeenCalled();
+    });
+  });
+
+  describe('generateDiscoveryReport', () => {
+    it('should trigger discovery report successfully', async () => {
+      (axios.post as jest.Mock).mockResolvedValue({});
+      const res = await service.generateDiscoveryReport(jobRunId);
+      
+      expect(axios.post).toHaveBeenCalledWith(
+        `http://report/api/v1/report/inventory/generate-report`,
+        { jobRunId: jobRunId, "report-type": "DISCOVER" },
+        { headers: { Authorization: `Bearer token` } },
+      );
+      expect(res).toEqual({ message: 'Trigger generateDiscoveryReport Successful for job id: ' + jobRunId });
+    });
+
+    it('should throw error for missing token', async () => {
+      (authService.getAccessToken as jest.Mock).mockResolvedValueOnce('');
+      
+      await expect(service.generateDiscoveryReport(jobRunId))
+        .rejects.toThrow('Error while Trigger generateDiscoveryReport the status of the job id : job123');
+    });
+
+    it('should throw error for request failure', async () => {
+      (axios.post as jest.Mock).mockRejectedValueOnce(new Error('Service unavailable'));
+      
+      await expect(service.generateDiscoveryReport(jobRunId))
+        .rejects.toThrow('Error while Trigger generateDiscoveryReport the status of the job id : job123');
+      
+      expect(logger.error).toHaveBeenCalled();
+    });
+  });
+
+  describe('cleanupJobContext', () => {
+    it('should cleanup job context successfully', async () => {
+      await service.cleanupJobContext(traceId);
+      
+      expect(redisService.getJobManagerContext).toHaveBeenCalledWith(traceId);
+      expect(mockContext.cleanup).toHaveBeenCalled();
+    });
+
+    it('should throw error when cleanup fails', async () => {
+      const error = new Error('Cleanup failed');
+      mockContext.cleanup.mockRejectedValueOnce(error);
+      
+      await expect(service.cleanupJobContext(traceId))
+        .rejects.toThrow('Error while cleaning up the job context: test-trace');
+      
+      expect(logger.error).toHaveBeenCalled();
+    });
+  });
+
+  describe('updateCutOverStatus', () => {
+    it('should update cutover status successfully', async () => {
+      (axios.put as jest.Mock).mockResolvedValue({});
+      const res = await service.updateCutOverStatus({ jobRunId, status: CutOverStatus.APPROVED});
+      
+      expect(authService.getAccessToken).toHaveBeenCalled();
+      expect(axios.put).toHaveBeenCalledWith(
+        `http://job/api/v1/job-run/cutover/${jobRunId}/APPROVED`,
+        {},
+        { headers: { Authorization: `Bearer token` } },
+      );
+      expect(res).toEqual({ message: 'Job status updated for job id: ' + jobRunId });
+    });
+
+    it('should throw error for missing token', async () => {
+      (authService.getAccessToken as jest.Mock).mockResolvedValueOnce('');
+      
+      await expect(service.updateCutOverStatus({ jobRunId, status: CutOverStatus.APPROVED }))
+        .rejects.toThrow('Error while updating the status of the job id : job123');
+      
+      expect(logger.error).toHaveBeenCalled();
+    });
+
+    it('should throw error for request failure', async () => {
+      (axios.put as jest.Mock).mockRejectedValueOnce(new Error('fail'));
+      
+      await expect(service.updateCutOverStatus({ jobRunId, status: CutOverStatus.REJECTED }))
+        .rejects.toThrow('Error while updating the status of the job id : job123');
+      
+      expect(logger.error).toHaveBeenCalled();
     });
   });
 
@@ -172,14 +333,20 @@ describe('CommonActivityService', () => {
     });
     it('should handle error', async () => {
       (axios.put as jest.Mock).mockRejectedValueOnce(new Error('fail'));
-      const res = await service.updateWorkerResponse(jobRunId, workerId, { data: 1 });
-      expect(res.message).toContain('Error while updating the worker response');
+      
+      await expect(service.updateWorkerResponse(jobRunId, workerId, { data: 1 }))
+        .rejects.toThrow('Error while updating the worker response for the job id : job123');
+      
+      expect(logger.error).toHaveBeenCalled();
     });
 
     it('should handle missing token when updating worker response', async () => {
       (authService.getAccessToken as jest.Mock).mockResolvedValueOnce('');
-      const res = await service.updateWorkerResponse(jobRunId, workerId, { data: 1 });
-      expect(res.message).toContain('Error while updating the worker response');
+      
+      await expect(service.updateWorkerResponse(jobRunId, workerId, { data: 1 }))
+        .rejects.toThrow('Error while updating the worker response for the job id : job123');
+      
+      expect(logger.error).toHaveBeenCalled();
     });
   });
 

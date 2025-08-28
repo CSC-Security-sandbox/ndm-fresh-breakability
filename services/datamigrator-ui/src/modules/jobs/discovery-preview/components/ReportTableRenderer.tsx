@@ -14,6 +14,7 @@ interface ReportTableProps {
   pageSize?: number;
   defaultSortState?: { sortOrder: "asc" | "desc"; column: number };
   tooltipContent: string;
+  showPagination?: boolean;
 }
 
 const ReportTableRenderer: React.FC<ReportTableProps> = ({
@@ -24,6 +25,7 @@ const ReportTableRenderer: React.FC<ReportTableProps> = ({
   pageSize = 5,
   defaultSortState,
   tooltipContent,
+  showPagination = true,
 }) => {
   const tableState = {
     columns,
@@ -47,6 +49,7 @@ const ReportTableRenderer: React.FC<ReportTableProps> = ({
           originalColumns={columns}
           showSearch={false}
           showRefresh={false}
+          showPagination={showPagination}
         />
       </CardContent>
     </Card>

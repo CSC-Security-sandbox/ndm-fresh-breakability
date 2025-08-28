@@ -521,9 +521,8 @@ func GetHeaders(authToken, contentType string) map[string]string {
 func getOpenbaoHeaders(token string) map[string]string {
 
 	return map[string]string{
-		"Content-Type":      ContentTypeForm,
-		"X-Vault-Token":     token,
-		"X-Vault-Namespace": "datamigrator",
+		"Content-Type":  ContentTypeForm,
+		"X-Vault-Token": token,
 	}
 }
 

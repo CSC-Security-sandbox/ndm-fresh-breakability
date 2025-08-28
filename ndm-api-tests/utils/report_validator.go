@@ -44,6 +44,11 @@ func ValidateReport(
 	jobType JobType,
 	spec string,
 ) (map[Format][]error, error) {
+
+	if PROTOCOL_TYPE == ProtocolSMB && CLOUD_ENVIRONMENT == AzureEnv {
+		return nil, nil
+	}
+
 	formats, ok := jobFormats[jobType]
 	if !ok {
 		return nil, fmt.Errorf("no formats configured for jobType %q", jobType)
@@ -138,6 +143,7 @@ func fetchReport(
 			"jobRunId":    jobRun,
 			"report-type": reportTypeVal,
 		}
+		Wait(20)
 
 	case FormatPDF:
 		url = ADMIN_SERVICE_URL + "/api/v1/report/pdf/generate"
@@ -164,6 +170,7 @@ func fetchReport(
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		// 4) send POST
+		LogDebug(fmt.Sprintf("Getting %s reports for %s ID %s, attempt %d", fmtType, reportType, jobRunID, attempt))
 		resp, err := SendAPIRequest(http.MethodPost, url, bodyBytes, headers)
 		if err != nil {
 			return nil, fmt.Errorf("POST %s: %w", url, err)

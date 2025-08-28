@@ -8,6 +8,11 @@ resources:
     cpu: 400m
     memory: 128Mi
 
+image:
+  repository: fluent/fluentd-kubernetes-daemonset
+  pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
+  tag: ""
+
 service:
   ports:
     - name: logs

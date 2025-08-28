@@ -3,8 +3,8 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib
-  tag: 0.126.0
-  pullPolicy: IfNotPresent
+  tag: 0.132.4
+  pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
 
 config:
   receivers:

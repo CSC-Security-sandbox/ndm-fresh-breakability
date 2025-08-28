@@ -1,6 +1,53 @@
 import { DiscoveryReportSection } from "../discovery-report.type";
 import { ACCESS_TIME_DISTRIBUTION, CREATED_TIME_DISTRIBUTION, DEPTH_DISTRIBUTION, EXTENSION_DISTRIBUTION, FILE_SYSTEM_DISTRIBUTION, JOB_RUN_DETAILS, MAX_VALUES, MODIFIED_TIME_DISTRIBUTION, NUMBER_OF_FILES_BY_SIZE, TOP_BIGGEST_FILE_NAME, TOP_DIRECTORY_WITH_MAX_COUNT_CHILD, TOP_DIRECTORY_WITH_MAX_SIZE, TOP_LONGEST_DIRECTORY_NAMES, TOP_LONGEST_DIRECTORY_PATHS, TOP_LONGEST_FILE_NAMES, TOP_LONGEST_FILE_PATHS } from "./discovery-report.query";
 import { AccessTimeDistributionInput, CreatedTimeDistributionInput, DepthDistributionInput, ExtensionDistributionInput, FileSystemDistributionInput, JobRunDetailsInput, MaxValuesInput, ModifiedTimeDistributionInput, NumberOfFilesBySizeInput, TopBiggestFileNameInput, TopDirectoryWithMaxCountChildInput, TopDirectoryWithMaxSizeInput, TopLongestDirectoryNamesInput, TopLongestDirectoryPathsInput, TopLongestFileNamesInput, TopLongestFilePathsInput } from "./discovery-report.query.type";
+import { SECONDS_PER_MINUTE, SECONDS_PER_HOUR, SECONDS_PER_DAY, TIME_UNITS } from "../../../constants/report";
+
+
+const buildTimeComponent = (value: number, timeUnit: { singular: string; plural: string }): string => {
+    if (value === 0) return '';
+    const unitText = value === 1 ? timeUnit.singular : timeUnit.plural;
+    return `${value}${unitText}`;
+};
+
+const shouldIncludeSeconds = (totalSeconds: number, seconds: number): boolean => {
+    if (totalSeconds < SECONDS_PER_MINUTE) return true;
+    if (totalSeconds < SECONDS_PER_DAY) return seconds > 0;
+    return false;
+};
+
+const formatTimeComponents = (components: { value: number; timeUnit: { singular: string; plural: string } }[]): string => {
+    return components
+        .filter(comp => comp.value > 0)
+        .map(comp => buildTimeComponent(comp.value, comp.timeUnit))
+        .join(' ');
+};
+
+const formatTime = (timeInSeconds: number): string => {
+    const totalSeconds = Math.floor(timeInSeconds);
+    if (totalSeconds < SECONDS_PER_MINUTE) {
+        return `${totalSeconds}s`;
+    }
+    const days = Math.floor(totalSeconds / SECONDS_PER_DAY);
+    const hours = Math.floor((totalSeconds % SECONDS_PER_DAY) / SECONDS_PER_HOUR);
+    const mins = Math.floor((totalSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
+    const secs = totalSeconds % SECONDS_PER_MINUTE;
+    const components = [];
+    
+    if (days > 0) {
+        components.push({ value: days, timeUnit: TIME_UNITS.DAYS });
+    }
+    if (hours > 0) {
+        components.push({ value: hours, timeUnit: TIME_UNITS.HOURS });
+    }
+    if (mins > 0) {
+        components.push({ value: mins, timeUnit: TIME_UNITS.MINUTES });
+    }
+    if (shouldIncludeSeconds(totalSeconds, secs)) {
+        components.push({ value: secs, timeUnit: TIME_UNITS.SECONDS });
+    }
+    return formatTimeComponents(components);
+};
 
 
 export const NUMBER_OF_FILES_BY_SIZE_MAPPER = (input:NumberOfFilesBySizeInput[]) : DiscoveryReportSection[]=> {
@@ -303,9 +350,9 @@ export const JOB_RUN_DETAILS_MAPPER = (input: JobRunDetailsInput[]) : DiscoveryR
             sub_category: 'Status'
         });
         output.push({
-            value: item.stat_value,
+            value: formatTime(parseFloat(item.stat_value) || 0),
             category: 'Job Run Stats',
-            valueType: 'time',
+            valueType: 'string',
             sub_category: 'Total Time'
         });
     }

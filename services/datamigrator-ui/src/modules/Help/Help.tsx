@@ -7,9 +7,11 @@ import RenderEach from "@components/render-each/RenderEach.tsx";
 import { HelpProvider, HelpContext } from "@modules/Help/context/HelpContext";
 import { HELP_ITEMS } from "@modules/Help/constants/help.constants";
 import { useHelpContent } from "@modules/Help/hook/useHelpContent";
+import { useDrawerNavigation } from "@hooks/useDrawerNavigation";
 
 const HelpContent = () => {
   const { isHelpListVisible, setGetItemIndex } = useContext(HelpContext);
+  const { handleCloseDrawer } = useDrawerNavigation("HelpContent");
 
   useHelpContent();
 
@@ -21,7 +23,7 @@ const HelpContent = () => {
           Icon={HelpIcon}
           label="Help"
           children={null}
-          onClose={() => {}}
+          onClose={handleCloseDrawer}
           closeLink=""
           Widgets={null}
         />
