@@ -1,0 +1,135 @@
+name: Cleanup Azure Infrastructure (Delayed)
+
+on:
+  schedule:
+    # Run every hour to check for cleanup tasks
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Original workflow run ID'
+        required: true
+        type: string
+      actor:
+        description: 'Original workflow actor'
+        required: true
+        type: string
+      force_cleanup:
+        description: 'Force cleanup regardless of age'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  NODE_VERSION: '20'
+  TERRAFORM_VERSION: '1.8.4'
+
+jobs:
+  find-and-cleanup:
+    name: Find and Cleanup Old Infrastructure
+    runs-on: openlab
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Find Artifacts to Clean Up
+        id: find-artifacts
+        run: |
+          # If manually triggered with specific run_id, use that
+          if [[ -n "${{ github.event.inputs.run_id }}" ]]; then
+            echo "artifact_name=terraform-state-cleanup-${{ github.event.inputs.run_id }}" >> $GITHUB_OUTPUT
+            echo "actor=${{ github.event.inputs.actor }}" >> $GITHUB_OUTPUT
+            echo "force_cleanup=${{ github.event.inputs.force_cleanup }}" >> $GITHUB_OUTPUT
+            echo "Manual cleanup requested for run ID: ${{ github.event.inputs.run_id }}"
+            exit 0
+          fi
+          
+          # For scheduled runs, we would need to implement artifact discovery
+          # This is a placeholder for finding artifacts older than 24 hours
+          echo "Scheduled cleanup - looking for artifacts older than 24 hours"
+          echo "Note: GitHub Actions API would be needed to enumerate and check artifact ages"
+          
+          # For now, exit early if no manual run_id provided
+          echo "No manual run_id provided and automated artifact discovery not implemented"
+          exit 0
+
+      - name: Download Terraform State for Cleanup
+        if: steps.find-artifacts.outputs.artifact_name
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ steps.find-artifacts.outputs.artifact_name }}
+          path: app-deployment/terraform/azure/environments/api
+        continue-on-error: true
+
+      - name: Configure Provider Credentials for Cleanup
+        if: steps.find-artifacts.outputs.artifact_name
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+          
+          # Azure Provider Credentials
+          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+
+          # We'll need to reconstruct these from the original run or store them in artifacts
+          echo "TF_VAR_vm_owner=${{ steps.find-artifacts.outputs.actor }}" >> $GITHUB_ENV
+          echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
+          echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
+
+      - name: Initialize Terraform for Cleanup
+        if: steps.find-artifacts.outputs.artifact_name
+        run: |
+          cd app-deployment/terraform/azure/environments/api
+          if [ -f terraform.tfstate ]; then
+            echo "Found Terraform state file"
+            terraform init
+          else
+            echo "No Terraform state file found - infrastructure may already be cleaned up"
+            exit 0
+          fi
+
+      - name: Check Infrastructure Age
+        if: steps.find-artifacts.outputs.artifact_name && steps.find-artifacts.outputs.force_cleanup != 'true'
+        run: |
+          # Check if infrastructure is older than 24 hours
+          # This is a simplified check - in practice you might want to check resource creation times
+          ARTIFACT_AGE_HOURS=$(( ($(date +%s) - $(stat -c %Y app-deployment/terraform/azure/environments/api/terraform.tfstate 2>/dev/null || echo 0)) / 3600 ))
+          echo "Infrastructure age: ${ARTIFACT_AGE_HOURS} hours"
+          
+          if [ $ARTIFACT_AGE_HOURS -lt 24 ]; then
+            echo "Infrastructure is less than 24 hours old, skipping cleanup"
+            echo "Use force_cleanup=true to override this check"
+            exit 0
+          fi
+          
+          echo "Infrastructure is older than 24 hours, proceeding with cleanup"
+          echo "PROCEED_WITH_CLEANUP=true" >> $GITHUB_ENV
+
+      - name: Destroy Terraform Resources
+        if: steps.find-artifacts.outputs.artifact_name && (env.PROCEED_WITH_CLEANUP == 'true' || steps.find-artifacts.outputs.force_cleanup == 'true')
+        run: |
+          cd app-deployment/terraform/azure/environments/api
+          echo "Destroying infrastructure created by run: ${{ steps.find-artifacts.outputs.artifact_name }}"
+          terraform destroy -auto-approve
+
+      - name: Clean Up Artifacts
+        if: steps.find-artifacts.outputs.artifact_name && (env.PROCEED_WITH_CLEANUP == 'true' || steps.find-artifacts.outputs.force_cleanup == 'true')
+        run: |
+          echo "Cleanup completed for run: ${{ steps.find-artifacts.outputs.artifact_name }}"
+          echo "Infrastructure has been destroyed"
+          
+          # Note: GitHub Actions doesn't provide an API to delete artifacts from workflows
+          # The artifact will expire based on its retention-days setting (2 days)

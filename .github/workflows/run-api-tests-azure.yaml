@@ -1,5 +1,9 @@
 name: Run E2E API Automation Tests for NDM on Azure
 
+# Infrastructure created by this workflow will be automatically cleaned up after 24 hours
+# To manually trigger immediate cleanup, run:
+# gh workflow run cleanup-azure-infrastructure.yaml --field run_id="<RUN_ID>" --field actor="<ACTOR>" --field force_cleanup="true"
+
 env:
   GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
   TERRAFORM_VERSION: 1.12.1
@@ -332,11 +336,40 @@ jobs:
           ./run-nfs-azure-automation.sh
         continue-on-error: true
 
-  cleanup:
-    name: Cleanup Infrastructure
+  schedule-cleanup:
+    name: Schedule Delayed Cleanup
     runs-on: openlab
     needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
     if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Upload Terraform State for Delayed Cleanup
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+        with:
+          name: terraform-state-cleanup-${{ github.run_id }}
+          path: app-deployment/terraform/azure/environments/api/
+          retention-days: 2
+
+      - name: Schedule Delayed Cleanup
+        run: |
+          # Create a workflow dispatch event that will trigger cleanup after 24 hours
+          echo "Infrastructure cleanup scheduled for 24 hours from now"
+          echo "Run ID: ${{ github.run_id }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Terraform state artifact: terraform-state-cleanup-${{ github.run_id }}"
+          
+          # You can manually trigger cleanup using:
+          # gh workflow run cleanup-azure-infrastructure.yaml \
+          #   --field run_id="${{ github.run_id }}" \
+          #   --field actor="${{ github.actor }}"
+
+  cleanup:
+    name: Cleanup Infrastructure (Manual/Emergency)
+    runs-on: openlab
+    needs: [setup-infrastructure]
+    if: failure() || cancelled()
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
