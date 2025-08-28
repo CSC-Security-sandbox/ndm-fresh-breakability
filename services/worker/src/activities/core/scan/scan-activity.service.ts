@@ -39,14 +39,25 @@ export class ScanService {
 
     async scanDirectories ({jobRunId, isMigration, batchSize, batchId}: ScanActivityInput): Promise<ScanActivityOutput>  {
         const scanActivityContext = Context.current();
+        const output: ScanActivityOutput = { dirCount: 0, fileCount: 0, subDirs: [], jobRunId: jobRunId, batchDirs: [] };    
+        let task: any = null; // Initialize task to track progress
+        
         const heartbeatInterval = setInterval(() => {
-            scanActivityContext.heartbeat({});
+            const progressData = {                
+                directoriesScanned: output.dirCount,
+                filesDiscovered: output.fileCount,
+                batchesProcessed: output.batchDirs.length,
+                taskStatus: task?.status || 'initializing',
+                completedCommands: task?.commands?.filter((c: any) => c.status === TaskStatus.COMPLETED).length || 0,
+                timestamp: new Date().toISOString()
+            };
+            scanActivityContext.heartbeat(progressData);
         }, 2000);
         
         try{                           
             const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
             
-            let task = await this.commonTaskService.buildOrGetValidScanTask({
+            task = await this.commonTaskService.buildOrGetValidScanTask({
                 taskHashId: scanActivityContext.info.activityId,
                 jobContext,
                 jobRunId,

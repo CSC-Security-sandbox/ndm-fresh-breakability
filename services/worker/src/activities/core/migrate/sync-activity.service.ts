@@ -39,10 +39,23 @@ export class SyncService {
 
      async syncTaskActivity({ jobRunId, taskId }: SyncTaskInput): Promise<SyncTaskOutput> {
         const syncActivityCtx = Context.current();
-        const heartBeatInterval = setInterval(() => { syncActivityCtx.heartbeat({});}, 2000);
         let syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0};
         const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
         let task = undefined;
+        
+        const heartBeatInterval = setInterval(() => { 
+            const progressData = {                
+                taskId: taskId,
+                taskStatus: task?.status,
+                totalCommands: task?.commands?.length || 0,
+                completedCommands: task?.commands?.filter((c: any) => c.status === 'COMPLETED').length || 0,
+                errorCount: syncOutput.errors.source.length + syncOutput.errors.target.length,
+                retryCount: task?.retryCount || 0,
+                timestamp: new Date().toISOString()
+            };
+            syncActivityCtx.heartbeat(progressData);
+        }, 2000);
+        
         try {
           task = await jobContext.getTask(taskId);
           if (!task) {
