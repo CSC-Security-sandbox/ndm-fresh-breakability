@@ -27,9 +27,9 @@
     kubectl delete -f $HOME/datamigrator/postgres-configmap-cron.yaml -n datamigrator || true
   args:
     chdir: $HOME
-  when: 
-   - dm_uninstall is defined
-   - local_cluster is defined
+  when:
+    - dm_uninstall is defined
+    - local_cluster is defined
 
 - name: Apply Postgres CronJob ConfigMap and Job (local_cluster only)
   become: yes
@@ -62,7 +62,7 @@
 - name: Fail if Job did not succeed (local_cluster only)
   fail:
     msg: Manual CronJob execution failed!
-  when: 
+  when:
     - local_cluster is defined
     - job_status.stdout != "1"
 
@@ -99,6 +99,10 @@
     kubectl apply -f $HOME/datamigrator/postgres-configmap-cron.yaml -n datamigrator
   args:
     chdir: "$HOME"
+  register: apply_configmap
+  until: apply_configmap.rc == 0
+  retries: 10
+  delay: 60
   when: local_cluster is not defined
 
 - name: Apply Postgres Vacuum Analyze CronJob (non-local_cluster)
@@ -107,6 +111,10 @@
     kubectl apply -f $HOME/datamigrator/postgres-vacuum-analyze-cron.yaml -n datamigrator
   args:
     chdir: "$HOME"
+  register: apply_vacuum
+  until: apply_vacuum.rc == 0
+  retries: 10
+  delay: 60
   when: local_cluster is not defined
 
 - name: Render vacuum-analyze shell script
