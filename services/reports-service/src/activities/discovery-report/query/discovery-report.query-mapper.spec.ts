@@ -149,11 +149,46 @@ it('EXTENSION_DISTRIBUTION_MAPPER maps input correctly', () => {
     ]);
 });
 
+it('EXTENSION_DISTRIBUTION_MAPPER handles multiple extensions correctly', () => {
+    const input = [
+        { extension: '.pdf', total_size: '500', count: '5' },
+        { extension: '.jpg', total_size: '300', count: '15' },
+        { extension: 'TOTAL_OF_TOP_5', total_size: '800', count: '20' }
+    ];
+    const result = EXTENSION_DISTRIBUTION_MAPPER(input as any);
+    expect(result).toEqual([
+        {
+            value: 'size(500);count(5)',
+            category: 'Top 5 File Extensions (with file Capacity and Count)',
+            valueType: 'string',
+            sub_category: '.pdf'
+        },
+        {
+            value: 'size(300);count(15)',
+            category: 'Top 5 File Extensions (with file Capacity and Count)',
+            valueType: 'string',
+            sub_category: '.jpg'
+        },
+        {
+            value: 'Total of Top 5 Extensions - size(800);count(20)',
+            category: 'Top File Extensions Summary',
+            valueType: 'string',
+            sub_category: 'Top 5 Extensions Total'
+        }
+    ]);
+});
+
+it('EXTENSION_DISTRIBUTION_MAPPER handles empty input array', () => {
+    const input: any[] = [];
+    const result = EXTENSION_DISTRIBUTION_MAPPER(input);
+    expect(result).toEqual([]);
+});
+
 it('MAX_VALUES_MAPPER maps input correctly', () => {
-    const input = [{ 
-        max_file_size: '1000', 
+    const input = [{
+        max_file_size: '1000',
         max_depth: '10',
-        max_name_length: '255', 
+        max_name_length: '255',
         avg_file_size: '200.5',
         avg_depth: '5.2',
         avg_name_length: '150.7',
@@ -326,12 +361,95 @@ it('JOB_RUN_DETAILS_MAPPER maps input correctly', () => {
         { value: 'config1', category: 'File Server Info', valueType: 'string', sub_category: 'Config Name' },
         { value: 'NFS', category: 'File Server Info', valueType: 'string', sub_category: 'Protocol' },
         { value: 'SUCCESS', category: 'Job Run Stats', valueType: 'status', sub_category: 'Status' },
-        { value: 123, category: 'Job Run Stats', valueType: 'time', sub_category: 'Total Time' }
+        { value: '2mins 3sec', category: 'Job Run Stats', valueType: 'string', sub_category: 'Total Time' }
     ]);
 });
 
 it('JOB_RUN_DETAILS_MAPPER returns empty array for empty input', () => {
     expect(JOB_RUN_DETAILS_MAPPER([])).toEqual([]);
+});
+
+it('JOB_RUN_DETAILS_MAPPER formats time correctly for different ranges', () => {
+    // Test seconds (< 1 minute)
+    const inputSeconds = [{
+        volume_path: '/test',
+        config_name: 'test',
+        protocol: 'NFS',
+        status: 'SUCCESS',
+        stat_value: 45
+    }];
+    const resultSeconds = JOB_RUN_DETAILS_MAPPER(inputSeconds as any);
+    expect(resultSeconds[4]).toEqual({
+        value: '45s',
+        category: 'Job Run Stats',
+        valueType: 'string',
+        sub_category: 'Total Time'
+    });
+
+    // Test minutes (1 min to 1 hour)
+    const inputMinutes = [{
+        volume_path: '/test',
+        config_name: 'test',
+        protocol: 'NFS',
+        status: 'SUCCESS',
+        stat_value: 1950 // 32 mins 30 sec
+    }];
+    const resultMinutes = JOB_RUN_DETAILS_MAPPER(inputMinutes as any);
+    expect(resultMinutes[4]).toEqual({
+        value: '32mins 30sec',
+        category: 'Job Run Stats',
+        valueType: 'string',
+        sub_category: 'Total Time'
+    });
+
+    // Test hours (1 hour to 24 hours)
+    const inputHours = [{
+        volume_path: '/test',
+        config_name: 'test',
+        protocol: 'NFS',
+        status: 'SUCCESS',
+        stat_value: 8430 // 2 hrs 20 mins 30 sec
+    }];
+    const resultHours = JOB_RUN_DETAILS_MAPPER(inputHours as any);
+    expect(resultHours[4]).toEqual({
+        value: '2hrs 20mins 30sec',
+        category: 'Job Run Stats',
+        valueType: 'string',
+        sub_category: 'Total Time'
+    });
+
+    // Test days (> 24 hours)
+    const inputDays = [{
+        volume_path: '/test',
+        config_name: 'test',
+        protocol: 'NFS',
+        status: 'SUCCESS',
+        stat_value: 178200 // 2 days 1 hrs 30 mins
+    }];
+    const resultDays = JOB_RUN_DETAILS_MAPPER(inputDays as any);
+    expect(resultDays[4]).toEqual({
+        value: '2days 1hrs 30mins',
+        category: 'Job Run Stats',
+        valueType: 'string',
+        sub_category: 'Total Time'
+    });
+});
+
+it('JOB_RUN_DETAILS_MAPPER handles invalid stat_value gracefully', () => {
+    const input = [{
+        volume_path: '/test',
+        config_name: 'test',
+        protocol: 'NFS',
+        status: 'SUCCESS',
+        stat_value: 'invalid'
+    }];
+    const result = JOB_RUN_DETAILS_MAPPER(input as any);
+    expect(result[4]).toEqual({
+        value: '0s',
+        category: 'Job Run Stats',
+        valueType: 'string',
+        sub_category: 'Total Time'
+    });
 });
 
 it('QueryMapper and QueryList are defined and consistent', () => {

@@ -36,6 +36,7 @@ const TableWrapper = ({
   noDataLabel = "No Data",
   showSearch = true,
   showRefresh = true,
+  showPagination = true,
 }: TableWrapperPropsType) => {
   const [currentFilters, setCurrentFilters] = useState<any>({});
   const [organizedRowsFiltered, setOrganizedRowsFiltered] = useState<any[]>(
@@ -172,7 +173,7 @@ const TableWrapper = ({
           isTogglingColumns={isTogglingColumns || false}
           noDataLabel={noDataLabel}
         />
-        {!isLoading && pagination?.pageRows && (
+        {showPagination && !isLoading && pagination?.pageRows && (
           <TablePager
             pageRows={pagination?.pageRows}
             pageSize={10}

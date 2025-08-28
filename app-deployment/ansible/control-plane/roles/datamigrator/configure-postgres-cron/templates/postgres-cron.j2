@@ -13,6 +13,7 @@ spec:
       template:
         metadata:
           annotations:
+            vault.hashicorp.com/agent-json-patch: '[{"op": "replace", "path": "/imagePullPolicy", "value": "Never"}]'
             vault.hashicorp.com/agent-inject: "true"
             vault.hashicorp.com/role: "datamigrator-role"
             vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"

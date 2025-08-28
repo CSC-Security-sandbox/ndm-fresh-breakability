@@ -3,6 +3,7 @@ package tests
 import (
 	"fmt"
 	. "ndm-api-tests/utils"
+	"net/http"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -10,7 +11,7 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-var _ = Describe("TC-009: Run migration with 'Exclude file older than' option and hourly incremental sync schedule", func() {
+var _ = Describe("TC-009: Run discovery and migration with 'Exclude file older than' option and hourly incremental sync schedule", func() {
 	var (
 		ProjectId              string
 		workerId1              string
@@ -24,7 +25,7 @@ var _ = Describe("TC-009: Run migration with 'Exclude file older than' option an
 		destinationVolumePath1 string
 		destinationVolumePath2 string
 	)
-	Context("TC-009: Run migration with 'Exclude file older than' option and hourly incremental sync schedule", func() {
+	Context("TC-009: Run discovery and migration with 'Exclude file older than' option and hourly incremental sync schedule", func() {
 
 		BeforeEach(func() {
 			numberOfWorker := 2
@@ -81,6 +82,45 @@ var _ = Describe("TC-009: Run migration with 'Exclude file older than' option an
 
 			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+
+			By("Creating a Bulk Discovery Job for the Source File Server")
+			discoveryJobParams := DiscoveryJobParams{
+				SourcePathIDs:            []string{sourcePathID1, sourcePathID2},
+				ExcludeOlderThan:         "2024-06-30T16:37:00.000Z",
+				ExcludeFilePatterns:      "",
+				PreserveAccessTime:       false,
+				FirstRunAt:               GetCurrentUTCTimestamp(),
+				CreatedBy:                nil,
+				WorkflowExecutionTimeout: "60s",
+				WorkflowTaskTimeout:      "30s",
+				WorkflowRunTimeout:       "30s",
+				StartDelay:               "10s",
+			}
+			sourceDiscoveryJobConfigIDs, resp, err := CreateDiscoveryJob(discoveryJobParams, headers)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating discovery job for source: %v", err))
+			defer resp.Body.Close()
+
+			discovery_validators := []string{
+				"src_vol_discovery.json",
+				"src_vol2_discovery.json",
+			}
+			for i, sourceJobConfigID := range sourceDiscoveryJobConfigIDs {
+				getJobsResp, resp, err := GetJobRunDetails(sourceJobConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
+				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+				defer resp.Body.Close()
+
+				sourceDiscoveryJobRunID := getJobsResp.JobRuns[0].JobRunId
+				Expect(sourceDiscoveryJobRunID).NotTo(BeEmpty(), "Source Discovery JobRun ID should not be empty")
+
+				// Wait for discovery jobs to complete
+				err = WaitForJobState(sourceDiscoveryJobRunID, COMPLETED_JOBRUN)
+				Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", sourceDiscoveryJobRunID)
+
+				result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/TC-009-JSON/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
+				Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", sourceDiscoveryJobRunID)
+				LogDebug(fmt.Sprintf("Validate Report Result for Discovery Job : %s = %s", sourceDiscoveryJobRunID, result))
+			}
 
 			By("Creating the destination file server")
 			destinationParams := CreateServereParams{
@@ -142,7 +182,6 @@ var _ = Describe("TC-009: Run migration with 'Exclude file older than' option an
 				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
-
 				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-009-JSON/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 				By(fmt.Sprintf("validate report result : %s", result))
