@@ -45,7 +45,7 @@ args:
       /opt/bitnami/scripts/keycloak/run.sh
 
 podAnnotations:
-  vault.hashicorp.com/agent-json-patch: '[{"op": "replace", "path": "/imagePullPolicy", "value": "Never"}]'
+  vault.hashicorp.com/agent-json-patch: '[{"op": "replace", "path": "/imagePullPolicy", "value": "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"}]'
   vault.hashicorp.com/agent-inject: "true"
   vault.hashicorp.com/role: "keycloak-role"
   vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
