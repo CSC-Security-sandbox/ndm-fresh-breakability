@@ -45,10 +45,6 @@ func ValidateReport(
 	spec string,
 ) (map[Format][]error, error) {
 
-	if PROTOCOL_TYPE == ProtocolSMB && CLOUD_ENVIRONMENT == AzureEnv {
-		return nil, nil
-	}
-
 	formats, ok := jobFormats[jobType]
 	if !ok {
 		return nil, fmt.Errorf("no formats configured for jobType %q", jobType)
