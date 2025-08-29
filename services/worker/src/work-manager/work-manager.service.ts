@@ -175,7 +175,7 @@ export class WorkManagerService {
 
     if (!force) {
       while (worker.getState() !== WorkerState.STOPPED) {
-        this.logger.debug(
+        this.logger.log(
           `Waiting for ${worker.options.identity} to be STOPPED. Current state: ${worker.getState()}`,
         );
         //sleep

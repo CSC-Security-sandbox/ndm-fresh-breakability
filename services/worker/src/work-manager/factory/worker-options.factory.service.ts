@@ -22,6 +22,7 @@ import { SyncService } from "src/activities/core/migrate/sync-activity.service";
 export class WorkerOptionsService {
   readonly jobTaskActivityConcurrency : number;
   private readonly logger: LoggerService;
+  readonly shutDownForceTime: string;
 
   constructor(
     private readonly listPathActivityService: ListPathActivity,
@@ -37,10 +38,12 @@ export class WorkerOptionsService {
     private readonly syncService: SyncService,
     private readonly validatePathActivity: ValidatePathActivity,
 
+
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
   ) {
     this.jobTaskActivityConcurrency = this.configService.get<number>('worker.maxActivityConcurrency') || 1;
+    this.shutDownForceTime = this.configService.get<string>('worker.shutDownForceTime') || '10s';
     this.logger = loggerFactory.create(WorkerOptionsService.name);
     this.logger.log(`WorkerOptionsService initialized with jobTaskActivityConcurrency: ${this.jobTaskActivityConcurrency}`, WorkerOptionsService.name);
   }
