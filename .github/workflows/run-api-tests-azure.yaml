@@ -100,7 +100,7 @@ jobs:
           # Determine VM owner based on trigger type
           TRIGGER_TYPE="${{ inputs.trigger_type || github.event_name }}"
           if [[ "$TRIGGER_TYPE" == "schedule" ]]; then
-            VM_OWNER="NDM-Nightly-${{ github.actor }}"
+            VM_OWNER="NDM-Nightly"
             echo "🌙 Nightly build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
           else
             VM_OWNER="${{ github.actor }}"
