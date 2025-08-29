@@ -456,7 +456,7 @@ export class JobRunService {
                 ? formatBytes(Number(jobStats?.totalSize || "0"))
                 : "0 B",
             totalMigratedSize:
-              jobRun.jobtype === JobType.MIGRATE
+              (jobRun.jobtype === JobType.MIGRATE || jobRun.jobtype === JobType.CUT_OVER)
                 ? formatBytes(Number(jobStats?.totalSize || 0))
                 : "0 B",
             errors: jobStats?.errors || [],
