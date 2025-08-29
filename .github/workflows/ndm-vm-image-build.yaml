@@ -1512,5 +1512,6 @@ jobs:
       control_plane_image_version: ${{ needs.packer.outputs.control_plane_image_version }}
       worker_image_version: ${{ needs.packer.outputs.worker_image_version }}
       windows_worker_installer_url: ${{ needs.upload-windows-installer.outputs.windows_worker_installer_url }}
+      trigger_type: ${{ github.event_name }}
     secrets: inherit
 
