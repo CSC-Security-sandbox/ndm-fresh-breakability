@@ -174,7 +174,7 @@ export class SetupActivityService {
         // setup users for SMB 
         try {
           if (process.platform === 'win32' && context.jobConfig?.jobType != JobType.DISCOVERY) {
-            await this.smbUserSetup.removePrincipals(context.jobConfig.destinationFileServer, context.jobConfig.destinationFileServer.username);
+            await this.smbUserSetup.setup(context.jobRunId, context);
           }
         } catch (error) {
           this.logger.error(`[${jobRunId}] - SMB file owner setup failed: ${error.message}`);
