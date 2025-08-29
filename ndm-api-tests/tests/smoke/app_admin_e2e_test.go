@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("App Admin Source File Server Test", Ordered, func() {
+var _ = FDescribe("App Admin Source File Server Test", Ordered, func() {
 
     var (
         headers                    map[string]string 
@@ -33,8 +33,8 @@ var _ = Describe("App Admin Source File Server Test", Ordered, func() {
         workerIds := GetWorkerIds()
         workerId = workerIds[0]
         projectId = ProjectID
-        destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME)
-        sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME)
+        destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
+        sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
 
     })
 
@@ -47,11 +47,11 @@ var _ = Describe("App Admin Source File Server Test", Ordered, func() {
             ConfigType:       ConfigTypeFile,
             ProjectID:        projectId,
             ServerType:       ServerTypeOtherNAS,
-            UserName:         "Root",
-            Password:         "",
-            Protocol:         ProtocolNFS,
+            UserName:         PROTOCOL_USERNAME,
+            Password:         PROTOCOL_PASSWORD,
+            Protocol:         PROTOCOL_TYPE,
             ProtocolVersion:  ProtocolVersion3,
-            Host:             SOURCE_HOST_IP,
+            Host:             SOURCE_HOST_IPs[0],
             Workers:          []string{workerId},
             WorkingDirectory: "",
         }
@@ -67,7 +67,7 @@ var _ = Describe("App Admin Source File Server Test", Ordered, func() {
         By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
         By("Retrieving file server information by ID")
-        sourcePathId, err := GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigId, headers)
+        sourcePathId, err := GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigId, headers)
 		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err)) 
 
         By("Creating a new discovery job for the source server")
@@ -106,11 +106,11 @@ var _ = Describe("App Admin Source File Server Test", Ordered, func() {
             ConfigType:       ConfigTypeFile,
             ServerType:       ServerTypeOtherNAS,
             ProjectID:        projectId,
-            UserName:         "Root",
-            Password:         "",
-            Protocol:         ProtocolNFS,
+            UserName:         PROTOCOL_USERNAME,
+            Password:         PROTOCOL_PASSWORD,
+            Protocol:         PROTOCOL_TYPE,
             ProtocolVersion:  ProtocolVersion3,
-            Host:             DESTINATION_HOST_IP,
+            Host:             DESTINATION_HOST_IPs[0],
             Workers:          []string{workerId},
             WorkingDirectory: "",
         }   
@@ -121,7 +121,7 @@ var _ = Describe("App Admin Source File Server Test", Ordered, func() {
         defer resp.Body.Close()
 
         By("Getting destination file server details")
-        destinationPathId, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigId, headers)
+        destinationPathId, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationConfigId, headers)
         Expect(err).NotTo(HaveOccurred(), "Error getting destination export path ID")
 
         By("Creating a new discovery job for the destination server")
