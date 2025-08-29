@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { FileServerDetails, JobStatus } from '@netapp-cloud-datamigrate/jobs-lib';
+import { FileServerDetails, JobStatus, JobType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import axios from 'axios';
 import { KeycloakConfig } from 'src/config/keycloak.config';
@@ -12,6 +12,7 @@ import { WorkersConfig } from 'src/config/app.config';
 import { SetupWorkerParams } from '../types/tasks';
 import { RetryableError } from 'src/errors/errors.types';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { SmbUserSetupService } from '../core/migrate/command-execution/smb-user-setup.service';
 
 @Injectable()
 export class SetupActivityService {
@@ -27,7 +28,8 @@ export class SetupActivityService {
     @Inject(AuthService) private readonly authService: AuthService,
     private readonly redisService: RedisService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
-    private readonly protocols: Protocols
+    private readonly protocols: Protocols,
+    private readonly smbUserSetup: SmbUserSetupService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
@@ -169,6 +171,14 @@ export class SetupActivityService {
           jobRunId,
         );
        
+        // setup users for SMB 
+        try {
+          if (process.platform === 'win32' && context.jobConfig?.jobType != JobType.DISCOVERY) {
+            await this.smbUserSetup.removePrincipals(context.jobConfig.destinationFileServer, context.jobConfig.destinationFileServer.username);
+          }
+        } catch (error) {
+          this.logger.error(`[${jobRunId}] - SMB file owner setup failed: ${error.message}`);
+        }
       const accessToken = await this.authService.getAccessToken();
       if(!accessToken) {
         throw new Error('Failed to get access token');
@@ -180,6 +190,7 @@ export class SetupActivityService {
       );
       
       await this.waitFor(1000);
+      
       return {
         jobRunId,
         status: 'success',

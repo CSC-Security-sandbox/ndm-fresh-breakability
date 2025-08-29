@@ -382,7 +382,7 @@ export class AclOperations {
         }
     }
 
-    private async resolvePrincipal(principal: string, jobID?: string): Promise<string> {
+    async resolvePrincipal(principal: string, jobID?: string): Promise<string> {
         if (!principal || !this.redisService || !jobID || !SID_REGEX.test(principal)) {
             return principal;
         }
@@ -410,7 +410,7 @@ export class AclOperations {
         }
     }
 
-    private parseIcaclsOutput(output: string, givenPath: string): ParsedACL {
+    parseIcaclsOutput(output: string, givenPath: string): ParsedACL {
         if (!output || typeof output !== 'string') {
             throw new ACLError('Invalid icacls output', 'PARSE_ERROR', { output });
         }
