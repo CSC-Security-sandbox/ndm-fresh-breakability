@@ -6,13 +6,14 @@ import { AuthService } from 'src/auth/auth.service';
 import { RedisService } from 'src/redis/redis.service';
 import axios from 'axios';
 import { JobRunStatus, CutOverStatus } from './enums';
-import { JobContext } from '@netapp-cloud-datamigrate/jobs-lib';
+import { JobContext, JobType } from '@netapp-cloud-datamigrate/jobs-lib';
 import { CommonActivityService } from './common.service';
 import {
   LoggerFactory,
   LoggerService
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { mockLogger } from 'src/auth/auth.service.spec';
+import { SmbUserSetupService } from '../core/migrate/command-execution/smb-user-setup.service';
 
 jest.mock('axios');
 
@@ -23,6 +24,7 @@ describe('CommonActivityService', () => {
   let authService: Partial<AuthService>;
   let logger: Partial<LoggerService>;
   let redisService: Partial<RedisService>;
+  let smbUserSetupService: Partial<SmbUserSetupService>;
   let mockContext: any;
 
   const traceId = 'test-trace';
@@ -30,6 +32,9 @@ describe('CommonActivityService', () => {
   const workerId = 'worker1';
 
   beforeEach(async () => {
+    // Reset mocks
+    jest.clearAllMocks();
+    
     mockContext = {
       cleanup: jest.fn(),
       publishToFileStream: jest.fn(),
@@ -56,6 +61,12 @@ describe('CommonActivityService', () => {
       deleteAllScanTasks: jest.fn(),
       deleteAllSyncTasks: jest.fn(),
       jobRunId: traceId,
+      jobConfig: {
+        jobType: JobType.MIGRATION,
+        destinationFileServer: {
+          username: 'testuser'
+        }
+      }
     } as unknown as JobContext;
 
     configService = {
@@ -65,6 +76,7 @@ describe('CommonActivityService', () => {
           'worker.connection.workerJobServiceUrl': 'http://job',
           'worker.connection.workerReportServiceUrl': 'http://report',
           'worker.migrationTaskStreamLimit': 5,
+          'worker.maxRetryCount': 3,
         };
         return map[key];
       }),
@@ -82,6 +94,11 @@ describe('CommonActivityService', () => {
       setJobContext: jest.fn(),
     };
 
+    smbUserSetupService = {
+      removePrincipals: jest.fn().mockResolvedValue(undefined),
+      setup: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CommonActivityService,
@@ -93,10 +110,28 @@ describe('CommonActivityService', () => {
           useValue: mockLoggerFactory,
         },
         { provide: RedisService, useValue: redisService },
+        { provide: SmbUserSetupService, useValue: smbUserSetupService },
       ],
     }).compile();
 
     service = module.get<CommonActivityService>(CommonActivityService);
+  });
+
+  describe('constructor', () => {
+    it('should initialize with correct default values', () => {
+      expect(service.workerId).toBe(workerId);
+      expect(service.workerJobServiceUrl).toBe('http://job');
+      expect(service.reportServiceUrl).toBe('http://report');
+      expect(service.migrationTaskLimit).toBe(5);
+      expect(service.maxRetryCount).toBe(3);
+      expect(service.fetchTaskBatch).toBe(50);
+      expect(service.pushTaskDirSize).toBe(500);
+    });
+
+    it('should use default maxRetryCount when not provided in config', () => {
+      // This tests the || 3 fallback in the constructor
+      expect(service.maxRetryCount).toBe(3);
+    });
   });
 
   describe('updateStatus', () => {
@@ -207,6 +242,127 @@ describe('CommonActivityService', () => {
         .rejects.toThrow('Error while marking the job as completed : test-trace');
       
       expect(logger.error).toHaveBeenCalled();
+    });
+
+    it('should handle Windows platform with SMB user setup removal for non-discovery jobs', async () => {
+      // Mock Windows platform
+      const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+      Object.defineProperty(process, 'platform', {
+        value: 'win32'
+      });
+
+      mockContext.jobConfig = {
+        jobType: JobType.MIGRATION,
+        destinationFileServer: {
+          username: 'testuser'
+        }
+      };
+
+      await service.updateLastEntry(traceId);
+
+      expect(smbUserSetupService.removePrincipals).toHaveBeenCalledWith(
+        mockContext.jobConfig.destinationFileServer,
+        'testuser'
+      );
+      expect(logger.log).toHaveBeenCalledWith(`[${traceId}] - SMB file owner removed successfully`);
+
+      // Restore original platform
+      if (originalPlatform) {
+        Object.defineProperty(process, 'platform', originalPlatform);
+      }
+    });
+
+    it('should skip SMB user setup removal for discovery jobs on Windows', async () => {
+      // Mock Windows platform
+      const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+      Object.defineProperty(process, 'platform', {
+        value: 'win32'
+      });
+
+      mockContext.jobConfig = {
+        jobType: JobType.DISCOVERY,
+        destinationFileServer: {
+          username: 'testuser'
+        }
+      };
+
+      await service.updateLastEntry(traceId);
+
+      expect(smbUserSetupService.removePrincipals).not.toHaveBeenCalled();
+
+      // Restore original platform
+      if (originalPlatform) {
+        Object.defineProperty(process, 'platform', originalPlatform);
+      }
+    });
+
+    it('should skip SMB user setup removal on non-Windows platforms', async () => {
+      // Mock non-Windows platform
+      const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+      Object.defineProperty(process, 'platform', {
+        value: 'linux'
+      });
+
+      await service.updateLastEntry(traceId);
+
+      expect(smbUserSetupService.removePrincipals).not.toHaveBeenCalled();
+
+      // Restore original platform
+      if (originalPlatform) {
+        Object.defineProperty(process, 'platform', originalPlatform);
+      }
+    });
+
+    it('should handle SMB user setup removal errors gracefully', async () => {
+      // Mock Windows platform
+      const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+      Object.defineProperty(process, 'platform', {
+        value: 'win32'
+      });
+
+      mockContext.jobConfig = {
+        jobType: JobType.MIGRATION,
+        destinationFileServer: {
+          username: 'testuser'
+        }
+      };
+
+      const smbError = new Error('SMB removal failed');
+      (smbUserSetupService.removePrincipals as jest.Mock).mockRejectedValueOnce(smbError);
+
+      // Should not throw, but should log error
+      await service.updateLastEntry(traceId);
+
+      expect(logger.error).toHaveBeenCalledWith(`[${traceId}] Error while removing SMB file owner: ${smbError}`);
+      // Should still continue with publishing streams
+      expect(mockContext.publishToFileStream).toHaveBeenCalled();
+      expect(mockContext.publishToTaskStream).toHaveBeenCalled();
+      expect(mockContext.publishToErrorStream).toHaveBeenCalled();
+
+      // Restore original platform
+      if (originalPlatform) {
+        Object.defineProperty(process, 'platform', originalPlatform);
+      }
+    });
+
+    it('should handle missing job config gracefully', async () => {
+      // Mock Windows platform
+      const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+      Object.defineProperty(process, 'platform', {
+        value: 'win32'
+      });
+
+      mockContext.jobConfig = null;
+
+      await service.updateLastEntry(traceId);
+
+      expect(smbUserSetupService.removePrincipals).not.toHaveBeenCalled();
+      expect(mockContext.publishToFileStream).toHaveBeenCalled();
+
+      // Restore original platform
+      if (originalPlatform) {
+        Object.defineProperty(process, 'platform', originalPlatform);
+      }
     });
   });
 
@@ -331,6 +487,7 @@ describe('CommonActivityService', () => {
       const res = await service.updateWorkerResponse(jobRunId, workerId, { data: 1 });
       expect(res).toEqual({ message: 'Worker response updated successfully for job id: ' + jobRunId });
     });
+    
     it('should handle error', async () => {
       (axios.put as jest.Mock).mockRejectedValueOnce(new Error('fail'));
       
@@ -348,8 +505,140 @@ describe('CommonActivityService', () => {
       
       expect(logger.error).toHaveBeenCalled();
     });
+
+    it('should handle null token when updating worker response', async () => {
+      (authService.getAccessToken as jest.Mock).mockResolvedValueOnce(null);
+      
+      await expect(service.updateWorkerResponse(jobRunId, workerId, { data: 1 }))
+        .rejects.toThrow('Error while updating the worker response for the job id : job123');
+      
+      expect(logger.error).toHaveBeenCalled();
+    });
+
+    it('should make correct API call with proper parameters', async () => {
+      (axios.put as jest.Mock).mockResolvedValue({});
+      const workerResponse = { status: 'completed', data: { files: 100 } };
+      
+      await service.updateWorkerResponse(jobRunId, workerId, workerResponse);
+      
+      expect(axios.put).toHaveBeenCalledWith(
+        `http://job/api/v1/job-run/worker-response/${jobRunId}/${workerId}`,
+        workerResponse,
+        { headers: { Authorization: 'Bearer token' } }
+      );
+    });
   });
 
-  
+  describe('Configuration scenarios', () => {
+    it('should handle missing config values gracefully', async () => {
+      // Test with a service that has missing config values
+      const configServiceWithMissing = {
+        get: jest.fn((key: string) => {
+          const map = {
+            'worker.workerId': undefined,
+            'worker.connection.workerJobServiceUrl': undefined,
+            'worker.connection.workerReportServiceUrl': undefined,
+            'worker.migrationTaskStreamLimit': undefined,
+            'worker.maxRetryCount': undefined,
+          };
+          return map[key];
+        }),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          CommonActivityService,
+          { provide: ConfigService, useValue: configServiceWithMissing },
+          { provide: HttpService, useValue: httpService },
+          { provide: AuthService, useValue: authService },
+          { provide: LoggerFactory, useValue: { create: jest.fn().mockReturnValue(mockLogger) } },
+          { provide: RedisService, useValue: redisService },
+          { provide: SmbUserSetupService, useValue: smbUserSetupService },
+        ],
+      }).compile();
+
+      const serviceWithMissingConfig = module.get<CommonActivityService>(CommonActivityService);
+      
+      expect(serviceWithMissingConfig.workerId).toBeUndefined();
+      expect(serviceWithMissingConfig.workerJobServiceUrl).toBeUndefined();
+      expect(serviceWithMissingConfig.reportServiceUrl).toBeUndefined();
+      expect(serviceWithMissingConfig.migrationTaskLimit).toBeUndefined();
+      expect(serviceWithMissingConfig.maxRetryCount).toBe(3); // Should use default fallback
+    });
+  });
+
+  describe('Error handling edge cases', () => {
+    it('should handle axios errors with detailed error messages', async () => {
+      const detailedError = {
+        message: 'Network error',
+        response: {
+          status: 500,
+          data: { error: 'Internal server error' }
+        }
+      };
+      (axios.patch as jest.Mock).mockRejectedValueOnce(detailedError);
+      
+      await expect(service.updateStatus({ jobRunId, status: JobRunStatus.Completed }))
+        .rejects.toThrow('Error while updating the status of the job id : job123');
+      
+      expect(logger.error).toHaveBeenCalledWith(`[${jobRunId}] Failed to update status: ${detailedError}`);
+    });
+
+    it('should handle timeout errors for generateJobsReport', async () => {
+      const timeoutError = new Error('Request timeout');
+      timeoutError.name = 'TIMEOUT';
+      (axios.post as jest.Mock).mockRejectedValueOnce(timeoutError);
+      
+      await expect(service.generateJobsReport(jobRunId))
+        .rejects.toThrow('Error while Triggering generateJobsReport for the job id : job123');
+      
+      expect(logger.error).toHaveBeenCalled();
+    });
+
+    it('should handle network errors for generateCOCReport', async () => {
+      const networkError = new Error('Network unreachable');
+      networkError.name = 'NETWORK_ERROR';
+      (axios.get as jest.Mock).mockRejectedValueOnce(networkError);
+      
+      await expect(service.generateCOCReport(jobRunId))
+        .rejects.toThrow('Error while Triggering generateCOCReport for the job id : job123');
+      
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to Trigger generateCOCReport'));
+    });
+  });
+
+  describe('Integration scenarios', () => {
+    it('should handle complete workflow with updateJobErrorStatus', async () => {
+      const updateStatusSpy = jest.spyOn(service, 'updateStatus').mockResolvedValue({ message: 'ok' });
+      const updateLastEntrySpy = jest.spyOn(service, 'updateLastEntry').mockResolvedValue({ message: 'ok' });
+
+      await service.updateJobErrorStatus(jobRunId);
+      
+      expect(updateStatusSpy).toHaveBeenCalledWith({ jobRunId, status: JobRunStatus.Errored });
+      expect(updateLastEntrySpy).toHaveBeenCalledWith(jobRunId);
+      
+      // Both methods should have been called
+      expect(updateStatusSpy).toHaveBeenCalledTimes(1);
+      expect(updateLastEntrySpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should properly clean up resources in cleanupJobContext', async () => {
+      await service.cleanupJobContext(traceId);
+      
+      expect(redisService.getJobManagerContext).toHaveBeenCalledWith(traceId);
+      expect(mockContext.cleanup).toHaveBeenCalled();
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it('should handle cleanup failures with detailed error logging', async () => {
+      const cleanupError = new Error('Failed to cleanup Redis streams');
+      mockContext.cleanup.mockRejectedValueOnce(cleanupError);
+      
+      await expect(service.cleanupJobContext(traceId))
+        .rejects.toThrow('Error while cleaning up the job context: test-trace');
+      
+      expect(logger.error).toHaveBeenCalledWith(`[${traceId}] Error while cleaning up the job context: ${cleanupError}`);
+    });
+  });
 
 });
