@@ -17,6 +17,10 @@ spec:
       {{- end }}
       labels:
         app: {{ .Values.appName  }}
+        app.kubernetes.io/name: "datamigrator"
+        app.kubernetes.io/service: "{{ .Values.appName }}"
+        app.kubernetes.io/part-of: "datamigrator"
+        app.kubernetes.io/managed-by: "helm"
         {{- if .Values.global.build_version }}
         build-version: "{{ .Values.global.build_version }}"
         {{- end }}
@@ -116,6 +120,10 @@ metadata:
   name: {{ .Values.appName }}-service
   labels:
     app: {{ .Values.appName }}
+    app.kubernetes.io/name: "datamigrator"
+    app.kubernetes.io/service: "{{ .Values.appName }}"
+    app.kubernetes.io/part-of: "datamigrator"
+    app.kubernetes.io/managed-by: "helm"
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -204,12 +212,22 @@ metadata:
   name: {{ .Values.appName }}
   labels:
     app: {{ .Values.appName }}
+    app.kubernetes.io/name: "datamigrator"
+    app.kubernetes.io/service: "{{ .Values.appName }}"
+    app.kubernetes.io/part-of: "datamigrator"
+    app.kubernetes.io/managed-by: "helm"
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade,pre-rollback
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   template:
     metadata:
+      labels:
+        app: {{ .Values.appName }}
+        app.kubernetes.io/name: "datamigrator"
+        app.kubernetes.io/service: "{{ .Values.appName }}"
+        app.kubernetes.io/part-of: "datamigrator"
+        app.kubernetes.io/managed-by: "helm"
       annotations:
         {{- toYaml .Values.annotations | nindent 8 }}
     spec:
