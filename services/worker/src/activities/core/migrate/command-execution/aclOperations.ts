@@ -715,4 +715,95 @@ export class AclOperations {
             })
             .join('|');
     }
+    async stampFileOwner({ sourcePath, targetPath, isIdentityMappingAvailable, jobRunId }: { sourcePath: string, targetPath: string, isIdentityMappingAvailable: boolean, jobRunId: string }): Promise<string | boolean> {
+        // Get owner of source file
+        try {
+            const sourceOwner = await this.getFileOwner(sourcePath, isIdentityMappingAvailable, jobRunId);
+            // Set owner of destination file
+            return await this.setFileOwner(targetPath, sourceOwner);
+        } catch (error) {
+            this.logger.error(`Error stamping file owner from ${sourcePath} to ${targetPath}: ${error.message}`, error.stack);
+            return false;
+        }
+    }
+
+    async getFileOwner(filePath: string, isIdentityMappingAvailable: boolean, jobRunId: string): Promise<{ owner: string, sid: string }> {
+        const normalizedPath = path.resolve(filePath);
+        const command = `
+        powershell -Command "
+        $acl = Get-Acl '${normalizedPath}';
+        $owner = $acl.Owner;
+        $sid = (New-Object System.Security.Principal.NTAccount($owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value;
+        Write-Output $owner;
+        Write-Output $sid;
+        "
+    `;
+
+        let stdout: string, stderr: string;
+
+        try {
+            ({ stdout, stderr } = await this.shellPool.executeCommand(command));
+        } catch (error) {
+            this.logger.error(`Error executing command "${command}" for file ${normalizedPath}: ${error.message}`, error);
+            throw error; // Re-throw the error after logging
+        }
+
+        if (stderr) {
+            this.logger.error(`Error: ${stderr}`);
+            throw new Error(stderr);
+        }
+
+        const output = stdout.trim().split('\n');
+        let owner = output[0].trim();
+        let sid = output[1].trim();
+
+        // Check any mapping for sid and owner
+        if (isIdentityMappingAvailable) {
+            try {
+                const [resolvedOwner, resolvedSid] = await Promise.all([
+                    this.resolvePrincipal(owner, jobRunId),
+                    this.resolvePrincipal(sid, jobRunId)
+                ]);
+                owner = resolvedOwner;
+                sid = resolvedSid;
+            } catch (error) {
+                this.logger.error(`Error resolving principals for job ${jobRunId}: ${error.message}`, error);
+                throw error; // Re-throw the error after logging
+            }
+        }
+
+        return { owner, sid };
+    }
+
+    async setFileOwner(filePath: string, owner: { owner: string, sid: string }): Promise<string | boolean> {
+        const normalizedPath = path.resolve(filePath);
+
+        const command = `icacls ${normalizedPath} /setowner "${owner.owner}"`;
+        const command2 = `icacls ${normalizedPath} /setowner "${owner.sid}"`;
+
+        let stdout: string, stderr: string;
+        try {
+            ({ stdout, stderr } = await this.shellPool.executeCommand(command));
+            if (stderr) {
+                this.logger.warn(`Failed to set owner using name ${owner.owner}, trying SID ${owner.sid}: ${stderr}`);
+                // Try setting owner using SID if name fails
+                ({ stdout, stderr } = await this.shellPool.executeCommand(command2));
+                if (stderr) {
+                    this.logger.error(`Error executing command "${command2}" for file ${normalizedPath}: ${stderr}`);
+                    return "Failed to set owner using SID";
+                }
+            }
+        } catch (error) {
+            this.logger.error(`Error executing command "${command}" for file ${normalizedPath}: ${error.message}`, error);
+            return "Failed to set owner using name";
+        }
+
+        if (this.failedNumGt0(stdout)) {
+            this.logger.error(`Failed to set owner, icacls output: ${stdout}`);
+            return "Failed to set owner, command error";
+        }
+
+        this.logger.log(`Successfully set owner for ${normalizedPath} to ${owner.owner} (${owner.sid})`);
+        return true;
+    }
 }

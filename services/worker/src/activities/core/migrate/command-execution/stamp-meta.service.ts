@@ -37,14 +37,15 @@ export class StampMetaService {
 
                 // Stamp SID to object
 
-                const [sidOutput, hiddenAttrOutput, preserveTimeOutput] = await Promise.all([
+                const [sidOutput, ownerOutput,hiddenAttrOutput, preserveTimeOutput] = await Promise.all([
                     this.stampSIDAclToObject(input),
+                    this.stampFileOwner(input),
                     this.stampFileAttributeMeta(input),
                     this.preserveAccessAndModifiedTime(input)
                 ]);
 
-                output.sourceErrors.push(...sidOutput.sourceErrors, ...hiddenAttrOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
-                output.targetErrors.push(...sidOutput.targetErrors, ...hiddenAttrOutput.targetErrors, ...preserveTimeOutput.targetErrors);
+                output.sourceErrors.push(...sidOutput.sourceErrors, ...ownerOutput.sourceErrors, ...hiddenAttrOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
+                output.targetErrors.push(...sidOutput.targetErrors, ...ownerOutput.targetErrors, ...hiddenAttrOutput.targetErrors, ...preserveTimeOutput.targetErrors);
 
 
                 // Stamp access and modified time
@@ -410,6 +411,41 @@ export class StampMetaService {
             this.logger.error(`Error during restoring attribute for ${path}, Error: ${error.message}`, error.stack);
         }
         return false;
+    }
+    async stampFileOwner({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
+        const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
+
+        try {
+            const owner = await this.aclOperations.stampFileOwner({
+                sourcePath,
+                targetPath,
+                isIdentityMappingAvailable: jobContext.jobConfig.options.isIdentityMappingAvailable,
+                jobRunId: jobContext.jobRunId
+            });
+
+            if (owner !== true) {
+                const errorMessage = typeof owner === 'string' ? owner : 'Unknown error while stamping file owner';
+                const dmErr = dmError(
+                    "OPERATION",
+                    Origin.DESTINATION,
+                    Operation.STAMP_META,
+                    errorType,
+                    command.id,
+                    new Error(errorMessage),
+                    { name: command.fPath, path: targetPath }
+                );
+
+                await jobContext.publishToErrorStream(dmErr);
+                const errorCode = 'UNKNOWN_ERROR';
+                output.targetErrors.push(errorCode);
+            }
+        } catch (error) {
+            this.logger.error(`Error during stamping file owner from ${sourcePath} to ${targetPath}: ${error.message}`, error.stack);
+            const errorCode = 'STAMP_FILE_OWNER_ERROR';
+            output.sourceErrors.push(errorCode);
+        }
+
+        return output;
     }
 }
 
