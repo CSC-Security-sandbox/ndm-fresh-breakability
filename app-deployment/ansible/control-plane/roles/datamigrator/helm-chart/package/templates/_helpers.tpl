@@ -126,8 +126,9 @@ spec:
     app: {{ .Values.appName }}
 {{- end }}
 
-{{/* Default Template for Ingress. All Sub-Charts under this Chart can include the below template. */}}
+{{/* Template for Non throttled Ingress (Rate-limited APIs). */}}
 {{- define "datamigrator.ingresstemplate" }}
+{{- if .Values.ingress }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -159,6 +160,44 @@ spec:
     - {{ .Values.ingress.host }}
     secretName: {{ .Values.ingress.tls.secretName | default (printf "%s-tls" .Values.appName) }}
   {{- end }}
+{{- end }}
+{{- end }}
+
+{{/* Template for Regular Ingress (Throttled APIs). */}}
+{{- define "datamigrator.throttledingresstemplate" }}
+{{- if .Values.ingressThrottle }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.appName }}-throttled-ingress
+  {{- if .Values.ingressThrottle.userDefinedAnnotations }}
+  annotations:
+    {{- toYaml .Values.ingressThrottle.userDefinedAnnotations | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingressThrottle.ingressClassName }}
+  rules:
+  - host: {{ .Values.ingressThrottle.host }}
+    http:
+      paths:
+      {{- if .Values.ingressThrottle.pathPrefix }}
+      - path: /{{ .Values.ingressThrottle.pathPrefix }}{{ .Values.ingressThrottle.trailingPath }}(?:/|$)
+      {{- else }}
+      - path: /
+      {{- end }}
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: {{ .Values.appName }}-service
+            port:
+              number: {{ .Values.service.port }}
+  {{- if .Values.ingressThrottle.tls.enabled }}
+  tls:
+  - hosts:
+    - {{ .Values.ingressThrottle.host }}
+    secretName: {{ .Values.ingressThrottle.tls.secretName | default (printf "%s-throttled-tls" .Values.appName) }}
+  {{- end }}
+{{- end }}
 {{- end }}
 
 {{/* Default Template for HPA. All Sub-Charts under this Chart can include the below template. */}}
