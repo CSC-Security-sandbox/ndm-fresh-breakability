@@ -33,9 +33,9 @@ export class SmbUserSetupService {
     }
 
     // Step 2: Add destination user as ACL entry
-    this.logger.log(`Source ACL: ${JSON.stringify(destinationAcl)}`);
+    this.logger.debug(`Source ACL: ${JSON.stringify(destinationAcl)}`);
     const destAvailablePrincipals = destinationAcl?.permissions?.map(entry => entry.principal.toLowerCase()) || [];
-    this.logger.log(`Available principals on destination: ${JSON.stringify(destAvailablePrincipals)}`);
+    this.logger.debug(`Available principals on destination: ${JSON.stringify(destAvailablePrincipals)}`);
     const stampCurrentUser = destAvailablePrincipals.includes(context.jobConfig.destinationFileServer.username.toLowerCase());
     if (!stampCurrentUser) {
       try {
@@ -51,7 +51,7 @@ export class SmbUserSetupService {
       try {
         for (const user of usersToRemove) {
           await this.removePrincipals(context.jobConfig.destinationFileServer, user);
-          this.logger.log(`Removed principal ${user} from destination ACL`);
+          this.logger.debug(`Removed principal ${user} from destination ACL`);
         }
       } catch (error) {
         this.logger.error(`Error removing principals from ${context.jobConfig.destinationFileServer}`, error);
@@ -83,7 +83,7 @@ export class SmbUserSetupService {
     const command = `icacls "${filePath}" /inheritance:d`;
     try {
       await this.shellPool.executeCommand(command);
-      this.logger.log(`Successfully disabled inheritance on ${destinationPath.path}`);
+      this.logger.debug(`Successfully disabled inheritance on ${destinationPath.path}`);
     } catch (error) {
       this.logger.error(`Error disabling inheritance on ${destinationPath.path}`, error);
       throw error;
@@ -95,7 +95,7 @@ export class SmbUserSetupService {
     const command = `icacls "${filePath}" /remove "${principal}"`;
     try {
       await this.shellPool.executeCommand(command);
-      this.logger.log(`Successfully removed principal ${principal} from ${destinationPath.path}`);
+      this.logger.debug(`Successfully removed principal ${principal} from ${destinationPath.path}`);
     } catch (error) {
       this.logger.error(`Error removing principal ${principal} from ${destinationPath.path}`, error);
       throw error;
@@ -109,9 +109,9 @@ export class SmbUserSetupService {
            principal = await this.aclOperations.resolvePrincipal(principal, jobRunId);
        }
        const command = `icacls "${filePath}" /grant "${principal}:${permission}"`;
-       this.logger.log(`Executing command ->: ${command}`);
+       this.logger.debug(`Executing command ->: ${command}`);
        await this.shellPool.executeCommand(command);
-       this.logger.log(`Successfully added principal ${principal} with permission ${permission} to ${destinationPath.path}`);
+       this.logger.debug(`Successfully added principal ${principal} with permission ${permission} to ${destinationPath.path}`);
     } catch (error) {
       this.logger.error(`Error adding principal ${principal} to ${destinationPath.path}`, error);
       throw error;
@@ -122,16 +122,16 @@ export class SmbUserSetupService {
     const filePath = "\\\\" + path.join( fileServer.hostname, fileServer.path);
     const command = `icacls "${filePath}" /L`;
     try {
-        this.logger.log(`Getting ACL for file ${filePath} using command: ${command}`);
+        this.logger.debug(`Getting ACL for file ${filePath} using command: ${command}`);
       const { stdout, stderr } = await this.shellPool.executeCommand(command);
       if (stderr) {
         this.logger.error(`Error getting ACL for file ${filePath}: ${stderr}`);
         return null;
       }
-      this.logger.log(`ACL for file ${filePath}: ${stdout}`);
+      this.logger.debug(`ACL for file ${filePath}: ${stdout}`);
 
       const parsedAcl: ParsedACL = this.aclOperations.parseIcaclsOutput(stdout, filePath);
-      this.logger.log(`Parsed ACL for file ${filePath}: ${JSON.stringify(parsedAcl)}`);
+      this.logger.debug(`Parsed ACL for file ${filePath}: ${JSON.stringify(parsedAcl)}`);
 
       if (parsedAcl.permissions.length === 0) {
         this.logger.warn(`No ACL permissions found for file ${filePath}`);

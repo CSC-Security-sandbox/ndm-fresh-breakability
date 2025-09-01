@@ -75,7 +75,7 @@ export class AclOperations {
         };
 
         try {
-            this.logger.log(`Starting ACL stamp operation from ${sourcePath} to ${targetPath}`);
+            this.logger.debug(`Starting ACL stamp operation from ${sourcePath} to ${targetPath}`);
 
             if (!this.shellPool) {
                 throw new ACLError('Shell pool executor not initialized', 'SHELL_POOL_ERROR');
@@ -754,8 +754,8 @@ export class AclOperations {
         }
 
         const output = stdout.trim().split('\n');
-        let owner = output[0].trim();
-        let sid = output[1].trim();
+        let owner = output[0].trim() || null;
+        let sid = output[1].trim() || null;
 
         // Check any mapping for sid and owner
         if (isIdentityMappingAvailable) {
@@ -778,32 +778,50 @@ export class AclOperations {
     async setFileOwner(filePath: string, owner: { owner: string, sid: string }): Promise<string | boolean> {
         const normalizedPath = path.resolve(filePath);
 
-        const command = `icacls ${normalizedPath} /setowner "${owner.owner}"`;
-        const command2 = `icacls ${normalizedPath} /setowner "${owner.sid}"`;
+        // First try with owner name if available
+        if (owner.owner) {
+            const command = `icacls "${normalizedPath}" /setowner "${owner.owner}"`;
+            try {
+                const { stdout, stderr } = await this.shellPool.executeCommand(command);
 
-        let stdout: string, stderr: string;
-        try {
-            ({ stdout, stderr } = await this.shellPool.executeCommand(command));
-            if (stderr) {
-                this.logger.warn(`Failed to set owner using name ${owner.owner}, trying SID ${owner.sid}: ${stderr}`);
-                // Try setting owner using SID if name fails
-                ({ stdout, stderr } = await this.shellPool.executeCommand(command2));
+                if (!stderr && !this.failedNumGt0(stdout)) {
+                    this.logger.debug(`Successfully set owner for ${normalizedPath} to ${owner.owner}`);
+                    return true;
+                }
+
+                this.logger.warn(`Failed to set owner using name ${owner.owner}: ${stderr || stdout}`);
+                // Fall through to try SID if name fails
+            } catch (error) {
+                this.logger.error(`Error executing command to set owner by name: ${error.message}`, error);
+                // Fall through to try SID if name fails
+            }
+        }
+
+        // Try with SID if available (either as fallback or as first option)
+        if (owner.sid) {
+            const command = `icacls "${normalizedPath}" /setowner "${owner.sid}"`;
+            try {
+                const { stdout, stderr } = await this.shellPool.executeCommand(command);
+
                 if (stderr) {
-                    this.logger.error(`Error executing command "${command2}" for file ${normalizedPath}: ${stderr}`);
+                    this.logger.error(`Error executing SID command for file ${normalizedPath}: ${stderr}`);
                     return "Failed to set owner using SID";
                 }
+
+                if (this.failedNumGt0(stdout)) {
+                    this.logger.error(`Failed to set owner with SID, icacls output: ${stdout}`);
+                    return "Failed to set owner using SID, command error";
+                }
+
+                this.logger.debug(`Successfully set owner for ${normalizedPath} to SID ${owner.sid}`);
+                return true;
+            } catch (error) {
+                this.logger.error(`Error executing command to set owner by SID: ${error.message}`, error);
+                return "Failed to set owner using SID";
             }
-        } catch (error) {
-            this.logger.error(`Error executing command "${command}" for file ${normalizedPath}: ${error.message}`, error);
-            return "Failed to set owner using name";
         }
 
-        if (this.failedNumGt0(stdout)) {
-            this.logger.error(`Failed to set owner, icacls output: ${stdout}`);
-            return "Failed to set owner, command error";
-        }
-
-        this.logger.log(`Successfully set owner for ${normalizedPath} to ${owner.owner} (${owner.sid})`);
-        return true;
+        this.logger.error(`Cannot set owner: No valid owner name or SID provided`);
+        return "No valid owner information provided";
     }
 }
