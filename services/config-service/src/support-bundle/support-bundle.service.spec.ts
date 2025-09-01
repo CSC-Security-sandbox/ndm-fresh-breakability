@@ -257,7 +257,7 @@ describe('SupportBundleService', () => {
               options: expect.any(Object),
             },
           ],
-        }),
+        }), 
       );
     });
   });
