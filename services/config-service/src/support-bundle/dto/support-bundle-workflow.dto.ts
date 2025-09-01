@@ -11,16 +11,16 @@ import { Type } from 'class-transformer';
 import { Options } from 'src/work-manager/dto/validate-connection.dto';
 
 export class SupportBundleWorkflowPayloadDTO extends CreateSupportBundleDTO {
-  @ApiProperty({
-    type: Options,
-    description: 'Workflow options',
-    required: false,
-  })
-  @IsObject()
-  @ValidateNested()
-  @Type(() => Options)
-  @IsOptional()
-  options: Options = new Options();
+  // @ApiProperty({
+  //   type: Options,
+  //   description: 'Workflow options',
+  //   required: false,
+  // })
+  // @IsObject()
+  // @ValidateNested()
+  // @Type(() => Options)
+  // @IsOptional()
+  // options: Options = new Options();
 
   @ApiProperty({ description: 'User ID', type: String, format: 'uuid' })
   @IsUUID()
