@@ -495,11 +495,11 @@ jobs:
             done
           fi
       
-      - name: Download Docker images tar
+      - name: Download Docker images tarball
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         run: | 
           cd app-deployment/artifacts
-          TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/docker-images/ndm-docker-images.tar"
+          TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/docker-images/ndm-docker-images-v3.tar"
           curl -o "ndm-docker-images.tar" \
               -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
               $TARGET_URL

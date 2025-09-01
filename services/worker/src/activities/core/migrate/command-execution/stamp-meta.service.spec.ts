@@ -15,6 +15,8 @@ import * as fs from 'fs';
 import { CommandExecInput } from './command-execution.type';
 import { AclOperations } from './aclOperations';
 import { ShellPoolExecutorService } from './shell-for-meta-stamping.service';
+import { Origin, Operation } from 'src/activities/utils/utils.types';
+import { FileAccessError } from './aclOperations.errors';
 
 // Mock fs module
 jest.mock('fs', () => ({
@@ -48,6 +50,7 @@ const mockLogger: Partial<LoggerService> = {
   debug: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
+  log: jest.fn(),
 };
 
 describe('StampMetaService', () => {
@@ -82,6 +85,9 @@ describe('StampMetaService', () => {
       stampFileACL: jest.fn(),
       getFileACL: jest.fn(),
       compareACLs: jest.fn(),
+      compareFileACLs: jest.fn(),
+      aclToOneLineString: jest.fn(),
+      stampFileOwner: jest.fn(),
     } as any;
 
     shellPoolExecutorService = {
@@ -663,6 +669,314 @@ describe('StampMetaService', () => {
         const result = await service.restoreFileAttribute('/some/file.txt');
 
         expect(result).toBe(false);
+      });
+    });
+
+    describe('stampSIDAclToObject', () => {
+      it('should successfully stamp SID and ACL to object', async () => {
+        const input = createMockInput();
+        const mockStampData = {
+          source: '/source/test-file.txt',
+          target: '/target/test-file.txt',
+          timestamp: '2023-01-01T10:00:00Z',
+          commands: ['test-command'],
+          success: true,
+          operations: [
+            { status: 'completed' as const, type: 'grant' as const, principal: 'test-user' },
+            { status: 'completed' as const, type: 'deny' as const, principal: 'test-group' }
+          ]
+        };
+        const mockComparisonResult = {
+          isEqual: true,
+          source: {
+            filePath: '/source/test-file.txt',
+            timestamp: '2023-01-01T10:00:00Z',
+            permissions: [{ principal: 'test-user', accessType: 'allow' as const, permissions: [] }],
+            inheritance: null
+          },
+          target: {
+            filePath: '/target/test-file.txt',
+            timestamp: '2023-01-01T10:00:00Z',
+            permissions: [{ principal: 'test-user', accessType: 'allow' as const, permissions: [] }],
+            inheritance: null
+          },
+          differences: { 
+            onlyInSource: [], 
+            onlyInTarget: [], 
+            different: [],
+            identical: []
+          }
+        };
+
+        aclOperations.stampFileACL.mockResolvedValue(mockStampData);
+        aclOperations.compareFileACLs.mockResolvedValue(mockComparisonResult);
+        aclOperations.aclToOneLineString.mockReturnValue('test-acl-string');
+
+        const result = await service.stampSIDAclToObject(input);
+
+        expect(result.sourceErrors).toEqual([]);
+        expect(result.targetErrors).toEqual([]);
+        expect(aclOperations.stampFileACL).toHaveBeenCalledWith(
+          '/source/test-file.txt',
+          '/target/test-file.txt',
+          expect.objectContaining({
+            preserveExisting: false,
+            excludePrincipals: [],
+            includePrincipals: [],
+            isIdentityMappingAvailable: false,
+            jobID: 'job-run-123',
+            disableInheritance: false
+          })
+        );
+        expect(aclOperations.compareFileACLs).toHaveBeenCalled();
+      });
+
+      it('should handle failed ACL operations', async () => {
+        const input = createMockInput();
+        const mockStampData = {
+          source: '/source/test-file.txt',
+          target: '/target/test-file.txt',
+          timestamp: '2023-01-01T10:00:00Z',
+          commands: ['test-command'],
+          success: false,
+          operations: [
+            { 
+              status: 'failed' as const, 
+              type: 'grant' as const, 
+              principal: 'test-user',
+              error: 'Permission denied'
+            },
+            { 
+              status: 'skipped' as const, 
+              type: 'skip' as const,
+              principal: 'test-group',
+              reason: 'unresolved SID'
+            }
+          ]
+        };
+        const mockComparisonResult = {
+          isEqual: false,
+          source: {
+            filePath: '/source/test-file.txt',
+            timestamp: '2023-01-01T10:00:00Z',
+            permissions: [{ principal: 'test-user', accessType: 'allow' as const, permissions: [] }],
+            inheritance: null
+          },
+          target: {
+            filePath: '/target/test-file.txt',
+            timestamp: '2023-01-01T10:00:00Z',
+            permissions: [],
+            inheritance: null
+          },
+          differences: { 
+            onlyInSource: [{ principal: 'test-user', accessType: 'allow' as const, permissions: [] }], 
+            onlyInTarget: [], 
+            different: [],
+            identical: []
+          }
+        };
+
+        aclOperations.stampFileACL.mockResolvedValue(mockStampData);
+        aclOperations.compareFileACLs.mockResolvedValue(mockComparisonResult);
+        aclOperations.aclToOneLineString.mockReturnValue('test-acl-string');
+        dmError.mockReturnValue({});
+
+        const result = await service.stampSIDAclToObject(input);
+
+        expect(result.sourceErrors).toEqual([]);
+        expect(result.targetErrors).toEqual([]);
+        expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+        expect(dmError).toHaveBeenCalled();
+      });
+
+      it('should handle ACL comparison errors', async () => {
+        const input = createMockInput();
+        const mockStampData = {
+          source: '/source/test-file.txt',
+          target: '/target/test-file.txt',
+          timestamp: '2023-01-01T10:00:00Z',
+          commands: ['test-command'],
+          success: true,
+          operations: []
+        };
+
+        aclOperations.stampFileACL.mockResolvedValue(mockStampData);
+        aclOperations.compareFileACLs.mockRejectedValue(new Error('Comparison failed'));
+        dmError.mockReturnValue({});
+
+        const result = await service.stampSIDAclToObject(input);
+
+        expect(result.sourceErrors).toEqual([]);
+        expect(result.targetErrors).toEqual([]);
+        expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+      });
+
+      it('should handle ACL stamp errors and classify as source or destination error', async () => {
+        const input = createMockInput();
+        const sourceError = new FileAccessError('/source/test-file.txt', new Error('Source access denied'));
+        
+        aclOperations.stampFileACL.mockRejectedValue(sourceError);
+        dmError.mockReturnValue({});
+
+        const result = await service.stampSIDAclToObject(input);
+
+        expect(result.sourceErrors).toEqual([]);
+        expect(result.targetErrors).toEqual(['FILE_ACCESS_ERROR']);
+        expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+        expect(dmError).toHaveBeenCalledWith(
+          "OPERATION", 
+          Origin.SOURCE, 
+          Operation.STAMP_META, 
+          ErrorType.RECOVERABLE_ERROR,
+          'cmd-1',
+          sourceError,
+          { name: '/test-file.txt', path: '/source/test-file.txt' }
+        );
+      });
+
+      it('should handle no mapping errors correctly', async () => {
+        const input = createMockInput();
+        const mockStampData = {
+          source: '/source/test-file.txt',
+          target: '/target/test-file.txt',
+          timestamp: '2023-01-01T10:00:00Z',
+          commands: ['test-command'],
+          success: false,
+          operations: [
+            { 
+              status: 'failed' as const, 
+              type: 'grant' as const, 
+              principal: 'test-user',
+              error: 'No mapping available for this user (1332)'
+            }
+          ]
+        };
+
+        aclOperations.stampFileACL.mockResolvedValue(mockStampData);
+        aclOperations.compareFileACLs.mockResolvedValue({
+          isEqual: true,
+          source: {
+            filePath: '/source/test-file.txt',
+            timestamp: '2023-01-01T10:00:00Z',
+            permissions: [],
+            inheritance: null
+          },
+          target: {
+            filePath: '/target/test-file.txt',
+            timestamp: '2023-01-01T10:00:00Z',
+            permissions: [],
+            inheritance: null
+          },
+          differences: { 
+            onlyInSource: [], 
+            onlyInTarget: [], 
+            different: [],
+            identical: []
+          }
+        });
+        aclOperations.aclToOneLineString.mockReturnValue('test-acl-string');
+        dmError.mockReturnValue({});
+
+        const result = await service.stampSIDAclToObject(input);
+
+        expect(result.sourceErrors).toEqual([]);
+        expect(result.targetErrors).toEqual([]);
+        expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+      });
+    });
+
+    describe('stampFileOwner', () => {
+      it('should successfully stamp file owner', async () => {
+        const input = createMockInput();
+        
+        aclOperations.stampFileOwner.mockResolvedValue(true);
+
+        const result = await service.stampFileOwner(input);
+
+        expect(result.sourceErrors).toEqual([]);
+        expect(result.targetErrors).toEqual([]);
+        expect(aclOperations.stampFileOwner).toHaveBeenCalledWith({
+          sourcePath: '/source/test-file.txt',
+          targetPath: '/target/test-file.txt',
+          isIdentityMappingAvailable: false,
+          jobRunId: 'job-run-123'
+        });
+      });
+
+      it('should handle owner stamping failure with string error', async () => {
+        const input = createMockInput();
+        
+        aclOperations.stampFileOwner.mockResolvedValue('Owner mapping failed');
+        dmError.mockReturnValue({});
+
+        const result = await service.stampFileOwner(input);
+
+        expect(result.sourceErrors).toEqual([]);
+        expect(result.targetErrors).toEqual(['UNKNOWN_ERROR']);
+        expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+        expect(dmError).toHaveBeenCalledWith(
+          "OPERATION",
+          Origin.DESTINATION,
+          Operation.STAMP_META,
+          ErrorType.RECOVERABLE_ERROR,
+          'cmd-1',
+          new Error('Owner mapping failed'),
+          { name: '/test-file.txt', path: '/target/test-file.txt' }
+        );
+      });
+
+      it('should handle owner stamping failure with non-boolean return', async () => {
+        const input = createMockInput();
+        
+        aclOperations.stampFileOwner.mockResolvedValue(null);
+        dmError.mockReturnValue({});
+
+        const result = await service.stampFileOwner(input);
+
+        expect(result.sourceErrors).toEqual([]);
+        expect(result.targetErrors).toEqual(['UNKNOWN_ERROR']);
+        expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+        expect(dmError).toHaveBeenCalledWith(
+          "OPERATION",
+          Origin.DESTINATION,
+          Operation.STAMP_META,
+          ErrorType.RECOVERABLE_ERROR,
+          'cmd-1',
+          new Error('Unknown error while stamping file owner'),
+          { name: '/test-file.txt', path: '/target/test-file.txt' }
+        );
+      });
+
+      it('should handle owner stamping exception', async () => {
+        const input = createMockInput();
+        const error = new Error('Access denied');
+        
+        aclOperations.stampFileOwner.mockRejectedValue(error);
+        dmError.mockReturnValue({});
+
+        const result = await service.stampFileOwner(input);
+
+        expect(result.sourceErrors).toEqual(['STAMP_FILE_OWNER_ERROR']);
+        expect(result.targetErrors).toEqual([]);
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          'Error during stamping file owner from /source/test-file.txt to /target/test-file.txt: Access denied',
+          error.stack
+        );
+      });
+
+      it('should use identity mapping when available', async () => {
+        const input = createMockInput({}, { isIdentityMappingAvailable: true });
+        
+        aclOperations.stampFileOwner.mockResolvedValue(true);
+
+        await service.stampFileOwner(input);
+
+        expect(aclOperations.stampFileOwner).toHaveBeenCalledWith({
+          sourcePath: '/source/test-file.txt',
+          targetPath: '/target/test-file.txt',
+          isIdentityMappingAvailable: true,
+          jobRunId: 'job-run-123'
+        });
       });
     });
   });

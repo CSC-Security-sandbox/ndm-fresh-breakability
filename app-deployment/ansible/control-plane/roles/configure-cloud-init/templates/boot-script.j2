@@ -87,7 +87,7 @@ load_docker_images() {
 install_helm_chart() {
     log "Installing Datamigrator Helm chart..."
     retry $MAX_RETRIES "microk8s helm3 upgrade --install datamigrator -n datamigrator $HOME/datamigrator-helmchart-$BUILD_VERSION.tgz" || handle_failure "Failed to install Helm chart"
-    retry $MAX_RETRIES "kubectl wait --namespace datamigrator --for=condition=ready pod --all --timeout=${WAIT_TIMEOUT}s" || handle_failure "Pods are not ready"
+    retry $MAX_RETRIES "kubectl wait --namespace datamigrator --for=condition=ready pod -l app.kubernetes.io/name=datamigrator --timeout=${WAIT_TIMEOUT}s" || handle_failure "Datamigrator pods are not ready"
 }
 
 install_keycloak_chart() {
@@ -268,7 +268,7 @@ post_checks() {
 
     # datamigrator Services
     log "Checking datamigrator microservices..."
-    retry $MAX_RETRIES "kubectl get pods -n datamigrator --no-headers | grep -v Running && false" || log "All datamigrator pods are running"
+    retry $MAX_RETRIES "kubectl get pods -n datamigrator -l app.kubernetes.io/name=datamigrator --no-headers | grep -v Running && false" || log "All datamigrator pods are running"
 
     log "All post-checks passed successfully!"
 }

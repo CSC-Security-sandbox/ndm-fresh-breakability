@@ -45,6 +45,7 @@ args:
       /opt/bitnami/scripts/keycloak/run.sh
 
 podAnnotations:
+  vault.hashicorp.com/agent-json-patch: '[{"op": "replace", "path": "/imagePullPolicy", "value": "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"}]'
   vault.hashicorp.com/agent-inject: "true"
   vault.hashicorp.com/role: "keycloak-role"
   vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
@@ -100,6 +101,9 @@ ingress:
   annotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/limit-rps: "70"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "1"
+    nginx.ingress.kubernetes.io/limit-req-status-code: "429" # status code for rate limiting
   hostname: ""
   ingressClassName: "public"
   extraRules:
