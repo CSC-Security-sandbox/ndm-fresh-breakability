@@ -54,7 +54,7 @@ export class CommonActivityService{
       this.logger.log(`[${traceId}] Publishing last entry for job id: ${traceId}`);
       const jobContext = await this.redisService.getJobManagerContext(traceId);
        try {
-        if(process.platform === 'win32' && jobContext.jobConfig?.jobType != JobType.DISCOVERY){
+        if(process.platform === 'win32' && jobContext.jobConfig?.jobType !== JobType.DISCOVERY){
           await this.smbUserSetup.removePrincipals(jobContext.jobConfig.destinationFileServer, jobContext.jobConfig.destinationFileServer.username);
           this.logger.log(`[${traceId}] - SMB file owner removed successfully`);
         }
