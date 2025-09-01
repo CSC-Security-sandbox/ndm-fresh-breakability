@@ -99,11 +99,12 @@ jobs:
           
           # Determine VM owner based on trigger type
           TRIGGER_TYPE="${{ inputs.trigger_type || github.event_name }}"
+          TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
           if [[ "$TRIGGER_TYPE" == "schedule" ]]; then
-            VM_OWNER="NDM-Nightly"
+            VM_OWNER="NDM-Nightly-$TIMESTAMP"
             echo "🌙 Nightly build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
           else
-            VM_OWNER="${{ github.actor }}"
+            VM_OWNER="NDM-Manual-${{ github.actor }}-$TIMESTAMP"
             echo "👤 Manual/called build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
           fi
           
@@ -357,7 +358,7 @@ jobs:
     name: Cleanup Infrastructure
     runs-on: openlab
     needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
-    if: always()
+    if: always() && (failure() || cancelled())
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

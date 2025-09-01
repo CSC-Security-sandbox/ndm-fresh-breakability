@@ -1,0 +1,273 @@
+name: Cleanup NDM VMs
+
+env:
+  TERRAFORM_VERSION: 1.12.1
+  NODE_VERSION: 22.15.0
+
+on:
+  schedule:
+    # Run every 24 hours to check for VMs that need cleanup
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run - only show what would be deleted without actually deleting'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup-ndm-vms:
+    name: Cleanup NDM VMs
+    runs-on: openlab
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure Azure Credentials
+        run: |
+          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+
+      - name: Install Azure CLI
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          echo "Azure CLI installed successfully"
+
+      - name: Login to Azure
+        run: |
+          az login --service-principal \
+            --username "${{ secrets.AZURE_SP_USERNAME }}" \
+            --password "${{ secrets.AZURE_SP_PASSWORD }}" \
+            --tenant "${{ secrets.AZURE_TENANT_ID }}"
+          
+          az account set --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          echo "Successfully logged into Azure"
+
+      - name: Find and Cleanup NDM VMs
+        run: |
+          set -e
+          
+          RESOURCE_GROUP="MigrationAsAService-dev-infra"
+          CLEANUP_THRESHOLD_MINUTES=1440
+          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
+          
+          echo "🔍 Searching for NDM VMs (NDM-Nightly and NDM-Manual)"
+          echo "📅 Cleanup threshold: $CLEANUP_THRESHOLD_MINUTES minutes (24 hours)"
+          echo "🧪 Dry run: $DRY_RUN"
+          echo "📦 Resource group: $RESOURCE_GROUP"
+          echo "=================================="
+          
+          # Get current time in UTC
+          CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          CURRENT_TIMESTAMP=$(date -u -d "$CURRENT_TIME" +%s)
+          
+          echo "⏰ Current time (UTC): $CURRENT_TIME"
+          echo "=================================="
+          
+          # Find VMs with NDM-Nightly or NDM-Manual prefix
+          VMS_JSON=$(az vm list \
+            --resource-group "$RESOURCE_GROUP" \
+            --query "[?starts_with(name, 'NDM-Nightly') || starts_with(name, 'NDM-Manual')]" \
+            --output json)
+          
+          if [ "$VMS_JSON" = "[]" ]; then
+            echo "✅ No NDM VMs found (NDM-Nightly or NDM-Manual)"
+            exit 0
+          fi
+          
+          echo "📋 Found NDM VMs:"
+          echo "$VMS_JSON" | jq -r '.[].name' | while read vm_name; do
+            echo "  - $vm_name"
+          done
+          echo "=================================="
+          
+          # Create temp file for VMs to delete list
+          > /tmp/vms_to_delete.txt
+          
+          # Check each VM's creation time
+          echo "$VMS_JSON" | jq -c '.[]' | while read -r vm; do
+            VM_NAME=$(echo "$vm" | jq -r '.name')
+            VM_ID=$(echo "$vm" | jq -r '.id')
+            
+            echo "🔍 Checking VM: $VM_NAME"
+            
+            # Get VM creation time from tags or timeCreated property
+            VM_DETAILS=$(az vm show --ids "$VM_ID" --output json)
+            
+            # Try to get creation time from tags first, then fall back to timeCreated
+            CREATION_TIME=$(echo "$VM_DETAILS" | jq -r '.tags.creationTime // .timeCreated // empty')
+            
+            if [ -z "$CREATION_TIME" ] || [ "$CREATION_TIME" = "null" ]; then
+              echo "  ⚠️  Cannot determine creation time for $VM_NAME, checking resource creation time..."
+              
+              # Fall back to resource group activity logs (last resort)
+              CREATION_TIME=$(az monitor activity-log list \
+                --resource-group "$RESOURCE_GROUP" \
+                --caller "Microsoft.Compute" \
+                --query "[?resourceId.resourceName=='$VM_NAME' && operationName.value=='Microsoft.Compute/virtualMachines/write'][0].eventTimestamp" \
+                --output tsv 2>/dev/null || echo "")
+            fi
+            
+            if [ -z "$CREATION_TIME" ] || [ "$CREATION_TIME" = "null" ]; then
+              echo "  ⚠️  Cannot determine creation time for $VM_NAME - skipping"
+              continue
+            fi
+            
+            # Convert creation time to timestamp
+            CREATION_TIMESTAMP=$(date -u -d "$CREATION_TIME" +%s 2>/dev/null || echo "0")
+            
+            if [ "$CREATION_TIMESTAMP" = "0" ]; then
+              echo "  ⚠️  Invalid creation time format for $VM_NAME: $CREATION_TIME"
+              continue
+            fi
+            
+            # Calculate age in minutes
+            AGE_SECONDS=$((CURRENT_TIMESTAMP - CREATION_TIMESTAMP))
+            AGE_MINUTES=$((AGE_SECONDS / 60))
+            
+            echo "  📅 Created: $CREATION_TIME"
+            echo "  ⏱️  Age: $AGE_MINUTES minutes"
+            
+            if [ "$AGE_MINUTES" -ge "$CLEANUP_THRESHOLD_MINUTES" ]; then
+              echo "  🗑️  Marking $VM_NAME for deletion (age: $AGE_MINUTES min, threshold: $CLEANUP_THRESHOLD_MINUTES min)"
+              echo "$VM_NAME" >> /tmp/vms_to_delete.txt
+            else
+              REMAINING_MINUTES=$((CLEANUP_THRESHOLD_MINUTES - AGE_MINUTES))
+              echo "  ⏳ $VM_NAME will be eligible for cleanup in $REMAINING_MINUTES minutes"
+            fi
+            
+            echo "  --------------------------------"
+          done
+          
+          # Check if we have VMs to delete
+          if [ ! -f /tmp/vms_to_delete.txt ] || [ ! -s /tmp/vms_to_delete.txt ]; then
+            echo "✅ No VMs need to be cleaned up at this time"
+            exit 0
+          fi
+          
+          # Count VMs to delete
+          VM_COUNT=$(wc -l < /tmp/vms_to_delete.txt)
+          
+          if [ "$VM_COUNT" -eq 0 ]; then
+            echo "✅ No VMs need to be cleaned up at this time"
+            exit 0
+          fi
+          
+          echo "🗑️  VMs scheduled for deletion:"
+          while read -r vm; do
+            echo "  - $vm"
+          done < /tmp/vms_to_delete.txt
+          echo "=================================="
+          
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "🧪 DRY RUN: Would delete $VM_COUNT VM(s) but not actually deleting"
+            exit 0
+          fi
+          
+          # Delete VMs and associated resources
+          while read -r VM_NAME; do
+            echo "🗑️  Deleting VM: $VM_NAME"
+            
+            # Get VM details to find associated resources
+            VM_DETAILS=$(az vm show --name "$VM_NAME" --resource-group "$RESOURCE_GROUP" --output json 2>/dev/null || echo "{}")
+            
+            if [ "$VM_DETAILS" = "{}" ]; then
+              echo "  ⚠️  VM $VM_NAME not found, may have been already deleted"
+              continue
+            fi
+            
+            # Extract resource IDs
+            NIC_ID=$(echo "$VM_DETAILS" | jq -r '.networkProfile.networkInterfaces[0].id // empty')
+            OS_DISK_ID=$(echo "$VM_DETAILS" | jq -r '.storageProfile.osDisk.managedDisk.id // empty')
+            
+            echo "  🖥️  Deleting VM: $VM_NAME"
+            az vm delete --name "$VM_NAME" --resource-group "$RESOURCE_GROUP" --yes
+            
+            # Wait a moment for the VM deletion to propagate
+            echo "  ⏳ Waiting for VM deletion to complete..."
+            sleep 10
+            
+            # Delete associated NIC
+            if [ -n "$NIC_ID" ]; then
+              NIC_NAME=$(basename "$NIC_ID")
+              echo "  🔌 Deleting NIC: $NIC_NAME"
+              # Wait for NIC to be detached, then delete
+              for i in {1..12}; do
+                if az network nic delete --name "$NIC_NAME" --resource-group "$RESOURCE_GROUP" --no-wait 2>/dev/null; then
+                  echo "    ✅ NIC $NIC_NAME deletion initiated"
+                  break
+                else
+                  echo "    ⏳ Waiting for NIC to be detached (attempt $i/12)..."
+                  sleep 5
+                fi
+              done
+            fi
+            
+            # Delete associated OS disk
+            if [ -n "$OS_DISK_ID" ]; then
+              DISK_NAME=$(basename "$OS_DISK_ID")
+              echo "  💾 Deleting OS Disk: $DISK_NAME"
+              # Wait for disk to be detached, then delete
+              for i in {1..12}; do
+                if az disk delete --name "$DISK_NAME" --resource-group "$RESOURCE_GROUP" --yes --no-wait 2>/dev/null; then
+                  echo "    ✅ OS Disk $DISK_NAME deletion initiated"
+                  break
+                else
+                  echo "    ⏳ Waiting for OS disk to be detached (attempt $i/12)..."
+                  sleep 5
+                fi
+              done
+            fi
+            
+            # Delete any NSGs with the VM name
+            NSG_NAME="${VM_NAME}-nsg"
+            echo "  🛡️  Deleting NSG: $NSG_NAME"
+            az network nsg delete --name "$NSG_NAME" --resource-group "$RESOURCE_GROUP" --no-wait 2>/dev/null || echo "    ⚠️  NSG $NSG_NAME not found or failed to delete"
+            
+            # Delete any public IPs with the VM name
+            PUBLIC_IP_NAME="${VM_NAME}-ip"
+            echo "  🌐 Deleting Public IP: $PUBLIC_IP_NAME"
+            az network public-ip delete --name "$PUBLIC_IP_NAME" --resource-group "$RESOURCE_GROUP" --no-wait 2>/dev/null || echo "    ⚠️  Public IP $PUBLIC_IP_NAME not found or failed to delete"
+            
+            echo "  ✅ Deletion initiated for $VM_NAME and associated resources"
+            echo "  --------------------------------"
+          done < /tmp/vms_to_delete.txt
+          
+          echo "🗑️  Cleanup completed! Deleted $VM_COUNT NDM VM(s)"
+          
+          # Clean up temp file
+          rm -f /tmp/vms_to_delete.txt
+
+      - name: Generate Cleanup Summary
+        if: always()
+        run: |
+          echo "## 🗑️ NDM VM Cleanup Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Time:** $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "**Resource Group:** MigrationAsAService-dev-infra" >> $GITHUB_STEP_SUMMARY
+          echo "**VM Types:** NDM-Nightly and NDM-Manual" >> $GITHUB_STEP_SUMMARY
+          echo "**Cleanup Threshold:** 24 hours (1440 minutes)" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            echo "**Mode:** 🧪 Dry Run (no actual deletion)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the workflow logs for detailed information about what was cleaned up." >> $GITHUB_STEP_SUMMARY
