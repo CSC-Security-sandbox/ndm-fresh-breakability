@@ -15,9 +15,6 @@ var _ = Describe("About NDM - CP, WORKER Versions", func() {
 	)
 
 	BeforeEach(func() {
-		if PROTOCOL_TYPE == ProtocolSMB {
-			Skip("ABOUT-NDM Test case is skipped for SMB. Work is in progress.")
-		}
 		numberOfWorker := 1
 		_, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
 		Expect(err).To(BeNil(), "Error during test environment setup")

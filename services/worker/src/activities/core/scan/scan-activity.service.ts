@@ -42,41 +42,47 @@ export class ScanService {
         const heartbeatInterval = setInterval(() => {
             scanActivityContext.heartbeat({});
         }, 2000);
-        
+        let scanActivityOutput: ScanActivityOutput = {
+            dirCount: 0,
+            fileCount: 0,
+            subDirs: [],
+            jobRunId: jobRunId,
+            batchDirs: []
+        };
         try{                           
-            const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
-            
+            const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);            
             let task = await this.commonTaskService.buildOrGetValidScanTask({
                 taskHashId: scanActivityContext.info.activityId,
                 jobContext,
                 jobRunId,
                 batchId
             });
+            if (task && task.commands.length > 0) {
+                task.status = TaskStatus.RUNNING;
+                task.workerId = this.workerId;
+                await jobContext.publishToTaskStream(task);
 
-            task.status = TaskStatus.RUNNING;
-            task.workerId = this.workerId;
-            await jobContext.publishToTaskStream(task);
+                let result: TaskExecOutput = await this.executeTask({
+                    activityId: scanActivityContext.info.activityId,
+                    jobContext,
+                    jobRunId,
+                    task,
+                    isMigration,
+                    batchSize
+                });
 
-            let result: TaskExecOutput = await this.executeTask({
-                activityId: scanActivityContext.info.activityId,
-                jobContext,
-                jobRunId,
-                task,
-                isMigration,
-                batchSize
-            });
-
-            const updateAndReportTaskInput: UpdateAndReportTaskInput = {
-                errors: result.errors,
-                jobContext,
-                taskHashId: scanActivityContext.info.activityId,
-                task,
-                retryCount: result.retryCount
-            }                        
-            await this.updateAndReportTaskStatus(updateAndReportTaskInput)  
-
-            if(batchId) await jobContext.deleteBatchDir(batchId);
-            return result.result;
+                const updateAndReportTaskInput: UpdateAndReportTaskInput = {
+                    errors: result.errors,
+                    jobContext,
+                    taskHashId: scanActivityContext.info.activityId,
+                    task,
+                    retryCount: result.retryCount
+                }                        
+                await this.updateAndReportTaskStatus(updateAndReportTaskInput)  
+                scanActivityOutput = result.result;
+            }
+            if (batchId) await jobContext.deleteBatchDir(batchId);
+            return scanActivityOutput;
 
         }catch(error){
             if(error instanceof FatalError || error instanceof RetryExceededError) 

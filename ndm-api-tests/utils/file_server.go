@@ -154,6 +154,7 @@ func GetExportPathID(
 		}
 		defer resp.Body.Close()
 
+		LogDebug(fmt.Sprintf("Getting Export Path ID of FileServer Volume = %s, attempt: %d", volumeName, attempt))
 		getFileServerResp, err := SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
 		if err != nil {
 			return "", fmt.Errorf("error sending API request: %w", err)
@@ -394,11 +395,13 @@ sudo mount -t nfs "%s" "%s"
 # Copy delta to the mounted export
 sudo cp -a "%s" "%s/"
 
+sync
+
 # Unmount and cleanup
-sudo umount "%s"
+sudo umount "%s" || sudo umount -l "%s"
 sudo rm -rf "%s"
 sudo rm -rf "%s"
-`, deltaDir, destMount, deltaDir, deltaDir, destMount, export, destMount, deltaDir, destMount, destMount, deltaDir, destMount)
+`, deltaDir, destMount, deltaDir, deltaDir, destMount, export, destMount, deltaDir, destMount, destMount, destMount, deltaDir, destMount)
 
 	return script
 }
