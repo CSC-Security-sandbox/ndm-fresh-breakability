@@ -254,7 +254,6 @@ describe('SupportBundleService', () => {
                 userId: mockUserDetails.user.id,
                 otherMetrics: mockCreateDto.otherMetrics,
               }),
-              // options: expect.any(Object),
             },
           ],
         }),
