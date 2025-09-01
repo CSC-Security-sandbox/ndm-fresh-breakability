@@ -75,7 +75,7 @@ export class AclOperations {
         };
 
         try {
-            this.logger.log(`Starting ACL stamp operation from ${sourcePath} to ${targetPath}`);
+            this.logger.debug(`Starting ACL stamp operation from ${sourcePath} to ${targetPath}`);
 
             if (!this.shellPool) {
                 throw new ACLError('Shell pool executor not initialized', 'SHELL_POOL_ERROR');
@@ -382,7 +382,7 @@ export class AclOperations {
         }
     }
 
-    private async resolvePrincipal(principal: string, jobID?: string): Promise<string> {
+    async resolvePrincipal(principal: string, jobID?: string): Promise<string> {
         if (!principal || !this.redisService || !jobID || !SID_REGEX.test(principal)) {
             return principal;
         }
@@ -410,7 +410,7 @@ export class AclOperations {
         }
     }
 
-    private parseIcaclsOutput(output: string, givenPath: string): ParsedACL {
+    parseIcaclsOutput(output: string, givenPath: string): ParsedACL {
         if (!output || typeof output !== 'string') {
             throw new ACLError('Invalid icacls output', 'PARSE_ERROR', { output });
         }
@@ -714,5 +714,114 @@ export class AclOperations {
                 return `${principal}:${accessType}:${permissionCodes}`;
             })
             .join('|');
+    }
+    async stampFileOwner({ sourcePath, targetPath, isIdentityMappingAvailable, jobRunId }: { sourcePath: string, targetPath: string, isIdentityMappingAvailable: boolean, jobRunId: string }): Promise<string | boolean> {
+        // Get owner of source file
+        try {
+            const sourceOwner = await this.getFileOwner(sourcePath, isIdentityMappingAvailable, jobRunId);
+            // Set owner of destination file
+            return await this.setFileOwner(targetPath, sourceOwner);
+        } catch (error) {
+            this.logger.error(`Error stamping file owner from ${sourcePath} to ${targetPath}: ${error.message}`, error.stack);
+            return false;
+        }
+    }
+
+    async getFileOwner(filePath: string, isIdentityMappingAvailable: boolean, jobRunId: string): Promise<{ owner: string, sid: string }> {
+        const normalizedPath = path.resolve(filePath);
+        const command = `
+        powershell -Command "
+        $acl = Get-Acl '${normalizedPath}';
+        $owner = $acl.Owner;
+        $sid = (New-Object System.Security.Principal.NTAccount($owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value;
+        Write-Output $owner;
+        Write-Output $sid;
+        "
+    `;
+
+        let stdout: string, stderr: string;
+
+        try {
+            ({ stdout, stderr } = await this.shellPool.executeCommand(command));
+        } catch (error) {
+            this.logger.error(`Error executing command "${command}" for file ${normalizedPath}: ${error.message}`, error);
+            throw error; // Re-throw the error after logging
+        }
+
+        if (stderr) {
+            this.logger.error(`Error: ${stderr}`);
+            throw new Error(stderr);
+        }
+
+        const output = stdout.trim().split('\n');
+        let owner = output[0].trim() || null;
+        let sid = output[1].trim() || null;
+
+        // Check any mapping for sid and owner
+        if (isIdentityMappingAvailable) {
+            try {
+                const [resolvedOwner, resolvedSid] = await Promise.all([
+                    this.resolvePrincipal(owner, jobRunId),
+                    this.resolvePrincipal(sid, jobRunId)
+                ]);
+                owner = resolvedOwner;
+                sid = resolvedSid;
+            } catch (error) {
+                this.logger.error(`Error resolving principals for job ${jobRunId}: ${error.message}`, error);
+                throw error; // Re-throw the error after logging
+            }
+        }
+
+        return { owner, sid };
+    }
+
+    async setFileOwner(filePath: string, owner: { owner: string, sid: string }): Promise<string | boolean> {
+        const normalizedPath = path.resolve(filePath);
+
+        // First try with owner name if available
+        if (owner.owner) {
+            const command = `icacls "${normalizedPath}" /setowner "${owner.owner}"`;
+            try {
+                const { stdout, stderr } = await this.shellPool.executeCommand(command);
+
+                if (!stderr && !this.failedNumGt0(stdout)) {
+                    this.logger.debug(`Successfully set owner for ${normalizedPath} to ${owner.owner}`);
+                    return true;
+                }
+
+                this.logger.warn(`Failed to set owner using name ${owner.owner}: ${stderr || stdout}`);
+                // Fall through to try SID if name fails
+            } catch (error) {
+                this.logger.error(`Error executing command to set owner by name: ${error.message}`, error);
+                // Fall through to try SID if name fails
+            }
+        }
+
+        // Try with SID if available (either as fallback or as first option)
+        if (owner.sid) {
+            const command = `icacls "${normalizedPath}" /setowner "${owner.sid}"`;
+            try {
+                const { stdout, stderr } = await this.shellPool.executeCommand(command);
+
+                if (stderr) {
+                    this.logger.error(`Error executing SID command for file ${normalizedPath}: ${stderr}`);
+                    return "Failed to set owner using SID";
+                }
+
+                if (this.failedNumGt0(stdout)) {
+                    this.logger.error(`Failed to set owner with SID, icacls output: ${stdout}`);
+                    return "Failed to set owner using SID, command error";
+                }
+
+                this.logger.debug(`Successfully set owner for ${normalizedPath} to SID ${owner.sid}`);
+                return true;
+            } catch (error) {
+                this.logger.error(`Error executing command to set owner by SID: ${error.message}`, error);
+                return "Failed to set owner using SID";
+            }
+        }
+
+        this.logger.error(`Cannot set owner: No valid owner name or SID provided`);
+        return "No valid owner information provided";
     }
 }
