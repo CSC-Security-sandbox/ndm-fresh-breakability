@@ -27,7 +27,14 @@ loki:
 
 minio:
   enabled: true
-
+  image:
+    repository: quay.io/minio/minio
+    tag: RELEASE.2024-12-18T13-15-44Z
+    pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
+  mcImage:
+    repository: quay.io/minio/mc
+    tag: RELEASE.2024-11-21T17-21-54Z
+    pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
 test:
   enabled: true
   image:

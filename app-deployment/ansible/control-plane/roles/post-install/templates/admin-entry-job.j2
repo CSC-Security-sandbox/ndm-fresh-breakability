@@ -7,6 +7,7 @@ spec:
   template:
     metadata:
       annotations:
+        vault.hashicorp.com/agent-json-patch: '[{"op": "replace", "path": "/imagePullPolicy", "value": "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"}]'
         vault.hashicorp.com/agent-inject: "true"
         vault.hashicorp.com/role: "datamigrator-role"
         vault.hashicorp.com/agent-pre-populate-only: "true"
