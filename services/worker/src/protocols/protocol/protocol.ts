@@ -58,6 +58,8 @@ export abstract class Protocol {
         const fieldsToSanitize: string[] = [];
         const trimmedPassword = payload.password?.trim();
         if (trimmedPassword) fieldsToSanitize.push(trimmedPassword);
+        const trimmedUsername = payload.username?.trim();
+        if (trimmedUsername) fieldsToSanitize.push(trimmedUsername);
         const sanitizedCommand = sanitize(command, fieldsToSanitize);
         this.logger.debug(`command: ${sanitizedCommand}`)
         
@@ -82,11 +84,11 @@ export abstract class Protocol {
           return response;
 
         } catch (error) {                 
+          const sanitizedErrorMsg = sanitize(error.message, fieldsToSanitize);
+          error.message = sanitizedErrorMsg;   
           this.logger.error(
             `[${traceId}] command: ${sanitizedCommand}, error: ${error}`
           );
-          const sanitizedErrorMsg = sanitize(error.message, fieldsToSanitize);
-          error.message = sanitizedErrorMsg;                              
           throw error;
         }
       }

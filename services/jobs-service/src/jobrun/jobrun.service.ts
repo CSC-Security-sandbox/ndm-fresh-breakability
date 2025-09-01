@@ -460,6 +460,7 @@ export class JobRunService {
                 ? formatBytes(Number(jobStats?.totalSize || 0))
                 : "0 B",
             errors: jobStats?.errors || [],
+            lastRefreshed: jobStats?.lastRefreshed || null,
           };
           return response;
         
@@ -785,6 +786,7 @@ export class JobRunService {
       fileCount: jobStatsSummary?.fileCount || "0",
       directories: jobStatsSummary?.directoryCount || "0",
       totalSize: jobStatsSummary?.totalSize || "0",
+    lastRefreshed: jobStatsSummary?.lastRefreshed || null,
     };
 
     const response = {

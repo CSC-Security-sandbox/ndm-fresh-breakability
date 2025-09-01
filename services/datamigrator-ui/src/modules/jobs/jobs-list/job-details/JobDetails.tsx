@@ -1,9 +1,12 @@
 import PermissionAuth from "@/auth/PermissionAuth";
-import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
-import { hasPermission } from "@auth/auth.utils";
-import { Box } from "@components/container/index";
-import { notify } from "@components/notification/NotificationWrapper";
-import TableWrapper from "@components/table-wrapper/TableWrapper";
+import {
+  JOB_ACTION_STATUS_ENUM,
+  JOB_CONFIG_STATUS_ENUM,
+  JOB_STATUS_TYPE_ENUM,
+  JobConfigDetailsApiType,
+  JobRunApiType,
+  JOBS_TYPE,
+} from "@/types/app.type";
 import {
   useGetJobConfigDetailsQuery,
   useUpdateJobRunStatusMutation,
@@ -11,44 +14,40 @@ import {
 import {
   useDownloadReportsMutation,
   useGetPdfReportMutation,
+  useIsErrorLogsCsvReadyQuery,
+  useLazyDownloadErrorLogsCSVQuery,
+  useLazyGenerateErrorLogsQuery,
 } from "@api/reportApi";
-import {
-  JOB_ACTION_STATUS_ENUM,
-  JOB_CONFIG_STATUS_ENUM,
-  JOB_STATUS_TYPE_ENUM,
-  JobRunApiType,
-  JobRunErrorsOverviewApiType,
-  JOBS_TYPE,
-} from "@/types/app.type";
-import { Breadcrumbs, Button, Heading } from "@netapp/bxp-design-system-react";
-import { useNavigate } from "react-router-dom";
-import JobDescription from "@modules/jobs/jobs-list/job-details/components/JobDescription";
-import JobErrors from "@modules/jobs/jobs-list/job-details/components/JobErrors";
-import JobHeader from "@modules/jobs/jobs-list/job-details/components/JobHeader";
-import { JOB_RUN_LIST_COLUMN_DEFS } from "@modules/jobs/jobs-list/job-details/job-details.constants";
-import { useParams } from "react-router-dom";
-import {
-  handleDownloadReport,
-  handleDownloadErrorsLogs,
-  handleDownloadCocReport,
-} from "@modules/jobs/jobs.utils";
+import { hasPermission } from "@auth/auth.utils";
+import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
+import { Box } from "@components/container/index";
+import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
+import { notify } from "@components/notification/NotificationWrapper";
+import TableWrapper from "@components/table-wrapper/TableWrapper";
+import TitleWithLastRefreshedDate from "@components/TitleWithLastRefreshedDate/TitleWithLastRefreshedDate";
+import useAdhocRun from "@hooks/useAdhocRun";
 import {
   getActionMenu,
   getReportActions,
 } from "@modules/jobs/job-run-list/run.utils";
-import { useMemo, useState, useEffect } from "react";
-import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
-import useAdhocRun from "@hooks/useAdhocRun";
-import {
-  useIsErrorLogsCsvReadyQuery,
-  useLazyGenerateErrorLogsQuery,
-  useLazyDownloadErrorLogsCSVQuery,
-} from "@api/reportApi";
 import { ErrorLogActionButton } from "@modules/jobs/job-task-errors/components/ErrorLogActionButton";
 import {
   DOWNLOAD_BULK_ERROR_REPORT,
   GENERATE_BULK_ERROR_REPORT,
 } from "@modules/jobs/job-task-errors/jobTaskErrors.constant";
+import JobDescription from "@modules/jobs/jobs-list/job-details/components/JobDescription";
+import JobErrors from "@modules/jobs/jobs-list/job-details/components/JobErrors";
+import JobHeader from "@modules/jobs/jobs-list/job-details/components/JobHeader";
+import { JOB_RUN_LIST_COLUMN_DEFS } from "@modules/jobs/jobs-list/job-details/job-details.constants";
+import {
+  handleDownloadCocReport,
+  handleDownloadErrorsLogs,
+  handleDownloadReport,
+} from "@modules/jobs/jobs.utils";
+import { Breadcrumbs, Button, Heading } from "@netapp/bxp-design-system-react";
+import { useEffect, useMemo, useState } from "react";
+import { useLatestJobRun } from "@/hooks/useLatestJobRun";
+import { useNavigate, useParams } from "react-router-dom";
 
 const JobDetails = () => {
   const LOWER_TIME_INTERVAL_FOR_IN_PROGRESS = 5000; // 5 seconds
@@ -194,19 +193,9 @@ const JobDetails = () => {
     );
   }, [jobConfigDetails]);
 
-  const latestJobRunId = useMemo(() => {
-    if (!jobConfigDetails?.jobRuns || jobConfigDetails.jobRuns.length === 0) {
-      return undefined;
-    }
-
-    const sortedJobRuns = jobConfigDetails?.jobRuns?.slice().sort((a, b) => {
-      const dateA = new Date(a.startTime).getTime();
-      const dateB = new Date(b.startTime).getTime();
-      return dateB - dateA;
-    });
-
-    return sortedJobRuns[0]?.jobRunId;
-  }, [jobConfigDetails?.jobRuns]);
+  const { latestJobRun, latestJobRunId } = useLatestJobRun(
+    jobConfigDetails?.jobRuns
+  );
 
   useEffect(() => {
     if (data?.ready || data?.processing) {
@@ -263,7 +252,7 @@ const JobDetails = () => {
           closeConfirmationBox={closeConfirmationBox}
         />
       )}
-      <Breadcrumbs className="mb-4">
+      <Breadcrumbs className="mb-4" key={jobId}>
         <Button onClick={() => navigate("/jobs-list")} variant="text">
           Jobs
         </Button>
@@ -271,11 +260,17 @@ const JobDetails = () => {
       </Breadcrumbs>
       <Box className="flex flex-col gap-2">
         <Box className="flex justify-between">
-          <Heading level="16" bold>
-            {jobConfigDetails?.jobType === JOBS_TYPE.DISCOVERY
-              ? "Summary of Last Run"
-              : "Total of All Runs"}
-          </Heading>
+          <TitleWithLastRefreshedDate
+            title={
+              <Heading level="16" bold className="flex">
+                {jobConfigDetails?.jobType === JOBS_TYPE.DISCOVERY
+                  ? "Summary of Last Run"
+                  : "Total of All Runs"}
+              </Heading>
+            }
+            date={latestJobRun?.lastRefreshed}
+          />
+
           <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.ManageJob}>
             <Button
               onClick={() => adhocRun(jobId, true)}

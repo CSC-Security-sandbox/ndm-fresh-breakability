@@ -29,7 +29,6 @@ function getOptimalBufferSize(fileSize: number, maxBufferSize: number): number {
   // For small files, use moderate buffer
   if (fileSize < 1048576) return 1048576; // 1MB  
   // For medium files, use larger buffer for better throughput
-  if (fileSize < 52428800) return 2097152; //  50MB - buffer 2MB
   return maxBufferSize;
 }
 

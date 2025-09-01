@@ -101,7 +101,7 @@ export class WorkerOptionsService {
           scanDirectories: this.scanService.scanDirectories.bind(this.scanService),
           createInitialDirBatch: this.commonTaskService.createInitialDirBatch.bind(this.commonTaskService),
           isCmdStreamLenValid: this.commonTaskService.isCmdStreamLenValid.bind(this.commonTaskService),
-        }, this.jobTaskActivityConcurrency);
+        }, this.jobTaskActivityConcurrency, this.shutDownForceTime);
       default:
         return undefined;
     }

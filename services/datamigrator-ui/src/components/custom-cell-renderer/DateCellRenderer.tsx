@@ -9,7 +9,7 @@ const DateCellRenderer = React.memo(
     showSmallerDateFormat = true,
     oneLineDate,
   }: {
-    value: string;
+    value: any;
     showSmallerDateFormat?: boolean;
     oneLineDate?: boolean;
   }) => {
@@ -38,9 +38,7 @@ const DateCellRenderer = React.memo(
                     </Box>
                   </Show.When>
                   <Show.When isTrue={oneLineDate}>
-                    <Box className="flex">
-                      {` ${date}`} {timeSmall}
-                    </Box>
+                    {` ${date} ${timeSmall} UTC`}
                   </Show.When>
                   <Show.When isTrue={!showSmallerDateFormat && !oneLineDate}>
                     <Box className="flex flex-col">

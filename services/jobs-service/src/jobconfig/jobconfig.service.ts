@@ -17,7 +17,7 @@ import {
   JobStatus,
   JobType,
   SIZE_UNITS,
-  TemplateType
+  TemplateType,
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
 import { Options } from "src/constants/types";
@@ -37,7 +37,7 @@ import {
 import {
   LoggerFactory,
   LoggerService,
-} from '@netapp-cloud-datamigrate/logger-lib';
+} from "@netapp-cloud-datamigrate/logger-lib";
 
 import {
   SpeedLogEntity,
@@ -78,7 +78,10 @@ import { JobRunStats } from "src/jobrun/dto/jobstats";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { SendMailService } from "src/utils/send-email";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
-import { IncidentStatus, SyncEmailEntity } from "src/entities/sync-email.entity";
+import {
+  IncidentStatus,
+  SyncEmailEntity,
+} from "src/entities/sync-email.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { SuccessEmailType } from "src/utils/send-email.type";
 import { WorkFlowFailureReason } from "src/jobrun/jobrun.types";
@@ -622,14 +625,16 @@ export class JobConfigService {
         });
 
         // Check if any existing job is inactive then throw an error
-        if (existingJobConfigs.some(job => job.status === JobStatus.InActive)) {
+        if (
+          existingJobConfigs.some((job) => job.status === JobStatus.InActive)
+        ) {
           for (const jobConfig of existingJobConfigs) {
             if (jobConfig.status == JobStatus.InActive) {
               const sourcePath = await this.volumeRepo.findOne({
                 where: { id: jobConfig.sourcePathId },
                 select: { volumePath: true },
               });
-               console.log("sourcePath", sourcePath);
+              console.log("sourcePath", sourcePath);
               const targetPath = await this.volumeRepo.findOne({
                 where: { id: jobConfig.targetPathId },
                 select: { volumePath: true },
@@ -641,15 +646,15 @@ export class JobConfigService {
                 sourcePath: sourcePath?.volumePath,
                 targetPath: targetPath?.volumePath,
                 status: jobConfig.status,
-                message: "Inactive job found. Please reactivate or remove the existing job.",
-              })
+                message:
+                  "Inactive job found. Please reactivate or remove the existing job.",
+              });
             }
           }
           this.logger.warn(JSON.stringify(inactiveJobWarnings));
-          continue; 
+          continue;
         }
-        
-        
+
         const existingSet = new Set(
           existingJobConfigs.map(
             (jobConfig) =>
@@ -766,15 +771,15 @@ export class JobConfigService {
       await this.sendMailService.sendMail({
         successEmailType: SuccessEmailType.JOB_CREATION,
         migrateJob: {
-          savedJobConfigs: savedJobConfigs.map(jobConfig => ({
+          savedJobConfigs: savedJobConfigs.map((jobConfig) => ({
             id: jobConfig.id,
             sourcePath: jobConfig.sourcePath?.volumePath,
             targetPath: jobConfig.targetPath?.volumePath,
             jobType: jobConfig.jobType,
           })),
-        }
+        },
       });
-      savedJobConfigsmapData =  savedJobConfigs.map(
+      savedJobConfigsmapData = savedJobConfigs.map(
         ({ id, jobType, sourcePathId, targetPathId }) => ({
           id,
           jobType,
@@ -783,20 +788,20 @@ export class JobConfigService {
           targetPathId,
         })
       );
-    } 
+    }
     if (jobConfigIdsToUpdate.length > 0) {
-        await this.updateMappingsWithMap(
-          jobConfigIdsToUpdate,
-          parsedMappings,
-          identityMap,
-          templateType
-        );
-      }
-      return {
-        jobs: savedJobConfigsmapData.length > 0 ? savedJobConfigsmapData : [],
-        warnings: inactiveJobWarnings.length > 0 ? inactiveJobWarnings : undefined,
-      };
-    
+      await this.updateMappingsWithMap(
+        jobConfigIdsToUpdate,
+        parsedMappings,
+        identityMap,
+        templateType
+      );
+    }
+    return {
+      jobs: savedJobConfigsmapData.length > 0 ? savedJobConfigsmapData : [],
+      warnings:
+        inactiveJobWarnings.length > 0 ? inactiveJobWarnings : undefined,
+    };
   }
 
   async createBulkCutover(
@@ -990,6 +995,10 @@ export class JobConfigService {
             : Date.now() - jobRun.startTime.getTime(),
         };
         const inventoryCounts = await this.calculateJobRunStats(jobRun.id);
+        // Fetch lastRefreshed from materialized view
+        const mv = await this.jobStatsSummaryMvRepo.findOne({
+          where: { jobRunId: jobRun.id },
+        });
         return {
           ...partialPayload,
           scannedFilesCount: BigInt(
@@ -998,9 +1007,14 @@ export class JobConfigService {
           scannedDirectoriesCount: BigInt(
             inventoryCounts.directories || "0"
           )?.toString(),
-          totalScannedSize: formatBytes(Number(inventoryCounts?.totalSize  || 0)),
-          totalMigratedSize: formatBytes(Number(inventoryCounts?.totalSize || 0)),
+          totalScannedSize: formatBytes(
+            Number(inventoryCounts?.totalSize || 0)
+          ),
+          totalMigratedSize: formatBytes(
+            Number(inventoryCounts?.totalSize || 0)
+          ),
           errors: inventoryCounts.errors,
+          lastRefreshed: mv?.lastRefreshed,
         };
       })
     );
@@ -1148,15 +1162,19 @@ export class JobConfigService {
       .andWhere("jr.endTime >= NOW() - INTERVAL '1 DAY'")
       .getCount();
 
-    const severityMessages =
-      await this.syncEmailRepo
-        .createQueryBuilder('syncEmail')
-        .select("syncEmail.mailContent")
-        .where('syncEmail.incidentStatus = :status', { status: IncidentStatus.OPEN })
-        .getMany();
+    const severityMessages = await this.syncEmailRepo
+      .createQueryBuilder("syncEmail")
+      .select("syncEmail.mailContent")
+      .where("syncEmail.incidentStatus = :status", {
+        status: IncidentStatus.OPEN,
+      })
+      .getMany();
 
-    const severityMessagesDescriptions = severityMessages?.flatMap(entry =>
-      (entry?.mailContent?.alerts ?? []).map(alert => alert?.annotations?.description).filter(Boolean) || []
+    const severityMessagesDescriptions = severityMessages?.flatMap(
+      (entry) =>
+        (entry?.mailContent?.alerts ?? [])
+          .map((alert) => alert?.annotations?.description)
+          .filter(Boolean) || []
     );
 
     this.logger.debug(
@@ -1184,7 +1202,7 @@ export class JobConfigService {
       countBlockedCutoverJobRuns,
       countRecentJobConfigs,
       countCompletedJobRuns,
-      severityMessages: severityMessagesDescriptions
+      severityMessages: severityMessagesDescriptions,
     };
   }
 
@@ -1236,14 +1254,18 @@ export class JobConfigService {
       .getRawMany();
 
     const payload: JobListingDTO[] = [];
-    for(const job of allJobsDetails) {
-        let nextScheduleDate: Date | null = null;
+    for (const job of allJobsDetails) {
+      let nextScheduleDate: Date | null = null;
 
       if (job.jobconfigstatus === JobStatus.Active) {
         try {
-          nextScheduleDate = nextDate(job.jobtype, job.firstrunat, job.futureschedule);
+          nextScheduleDate = nextDate(
+            job.jobtype,
+            job.firstrunat,
+            job.futureschedule
+          );
         } catch (err) {
-            this.logger.error(
+          this.logger.error(
             `Failed to calculate nextScheduleDate for jobConfigId ${job.jobconfigid}:`,
             (err as Error).message
           );
@@ -1251,8 +1273,14 @@ export class JobConfigService {
         }
       }
 
-      const allErrorCounts = await Promise.all(job.jobRunIds.map(id => this.getErrorCounts(id)));
-      const errorCount = allErrorCounts.flat().map(e => e.count).reduce((a, b) => Number(a) + Number(b), 0) || 0;
+      const allErrorCounts = await Promise.all(
+        job.jobRunIds.map((id) => this.getErrorCounts(id))
+      );
+      const errorCount =
+        allErrorCounts
+          .flat()
+          .map((e) => e.count)
+          .reduce((a, b) => Number(a) + Number(b), 0) || 0;
 
       payload.push({
         jobConfigId: job.jobconfigid,
@@ -1277,9 +1305,9 @@ export class JobConfigService {
         createdAt: job.createdAt,
         updatedAt: job.updated_at,
       });
-    };
+    }
     return payload;
-  };
+  }
 
   private templates = {
     sid: "sid_template.csv",
@@ -1681,7 +1709,6 @@ export class JobConfigService {
     }
   }
 
-
   async calculateJobRunStats(jobRunId: string): Promise<JobRunStats> {
     const jobRun = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
@@ -1700,7 +1727,7 @@ export class JobConfigService {
         fileCount: "0",
         directories: "0",
         totalSize: "0",
-       errors: await this.getErrorCounts(jobRunId),
+        errors: await this.getErrorCounts(jobRunId),
       };
     }
     const jobRunStatus = {
@@ -1747,7 +1774,9 @@ export class JobConfigService {
       .getMany();
 
     if (setupFailedErrors?.length > 0) {
-      const fatalError = errorTypeCounts.find((error) => error.errorType === "FATAL_ERROR");
+      const fatalError = errorTypeCounts.find(
+        (error) => error.errorType === "FATAL_ERROR"
+      );
       if (fatalError) {
         fatalError.count += setupFailedErrors.length;
       } else {

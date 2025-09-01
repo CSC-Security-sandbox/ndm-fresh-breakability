@@ -81,6 +81,7 @@ export class JobRunFilterDto {
 }
 
 export interface JobRunsDTO {
+  lastRefreshed?: Date;
   jobRunId: string;
   status: string;
   startTime: Date;
