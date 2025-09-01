@@ -275,6 +275,14 @@ jobs:
           ./run-smb-azure-automation.sh
         continue-on-error: true
 
+      - name: Upload SMB Test Logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: smb-test-logs-${{ github.run_id }}
+          path: ndm-api-tests/reports/
+          retention-days: 30
+
   run-nfs-tests:
     name: Run NFS API Tests
     runs-on: openlab
@@ -331,6 +339,14 @@ jobs:
           chmod +x ./run-nfs-azure-automation.sh
           ./run-nfs-azure-automation.sh
         continue-on-error: true
+
+      - name: Upload NFS Test Logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: nfs-test-logs-${{ github.run_id }}
+          path: ndm-api-tests/reports/
+          retention-days: 30
 
   cleanup:
     name: Cleanup Infrastructure
