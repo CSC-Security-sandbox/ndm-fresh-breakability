@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = FDescribe("App Admin Source File Server Test", Ordered, func() {
+var _ = Describe("App Admin Source File Server Test", Ordered, func() {
 
     var (
         headers                    map[string]string 
