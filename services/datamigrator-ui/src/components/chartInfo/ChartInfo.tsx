@@ -10,8 +10,8 @@ import {
   CardTitle,
 } from "@netapp/bxp-design-system-react";
 import React from "react";
-import { Form } from "react-router-dom";
 import DateCellRenderer from "../custom-cell-renderer/DateCellRenderer";
+import TitleWithLastRefreshedDate from "../TitleWithLastRefreshedDate/TitleWithLastRefreshedDate";
 
 const ChartInfo = React.memo(
   ({
@@ -26,10 +26,13 @@ const ChartInfo = React.memo(
       <Box className="w-full grow">
         <Card className="h-full">
           <CardHeader type="small">
-            <ChartTitle
-              title={title}
-              Icon={Icon}
-              lastRefreshed={lastRefreshed}
+            <TitleWithLastRefreshedDate
+              title={
+                <Box className="flex items-center gap-2">
+                  <Icon size="30" /> {title}
+                </Box>
+              }
+              date={lastRefreshed as any}
             />
           </CardHeader>
           <CardContent>
@@ -38,6 +41,7 @@ const ChartInfo = React.memo(
                 <Show.When isTrue={isLoading}>
                   <CardContentLoading className="h-40" />
                 </Show.When>
+                ``
                 <Show.When isTrue={isError}>
                   <ChartError>Failed to load data!</ChartError>
                 </Show.When>
@@ -50,38 +54,5 @@ const ChartInfo = React.memo(
     );
   }
 );
-
-const ChartTitle = ({
-  title,
-  Icon,
-  lastRefreshed,
-}: {
-  title: React.ReactNode;
-  Icon: React.ElementType;
-  lastRefreshed: string | undefined;
-}) => {
-  return (
-    <CardTitle className="flex gap-3 items-center">
-      <Icon size="30" />
-      <Show>
-        <Show.When isTrue={Boolean(lastRefreshed)}>
-          <Box className="text-gray-500 flex gap-2">
-            <Box className="text-black">{title}</Box>
-            <Box className="flex">
-              <Box>Last refreshed:</Box>
-              <DateCellRenderer
-                value={lastRefreshed}
-                oneLineDate={true}
-                showSmallerDateFormat={false}
-              />
-            </Box>
-          </Box>
-        </Show.When>
-
-        <Show.Else>{title}</Show.Else>
-      </Show>
-    </CardTitle>
-  );
-};
 
 export default ChartInfo;

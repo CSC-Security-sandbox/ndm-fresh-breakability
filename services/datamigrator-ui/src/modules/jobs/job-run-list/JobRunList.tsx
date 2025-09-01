@@ -23,6 +23,7 @@ import {
 } from "@modules/jobs/jobs.utils";
 import ActionButtons from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/Review/components/ActionButtons";
 import { useState } from "react";
+import { useLatestJobRun } from "@/hooks/useLatestJobRun";
 import { useNavigate } from "react-router-dom";
 import {
   COLUMNS_TO_FILTER_DEFS,
@@ -36,6 +37,7 @@ import {
 } from "@modules/jobs/job-run-list/run.utils";
 import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
 import useAdhocRun from "@hooks/useAdhocRun";
+import TitleWithLastRefreshedDate from "@components/TitleWithLastRefreshedDate/TitleWithLastRefreshedDate";
 
 const JobRunList = () => {
   const navigate = useNavigate();
@@ -49,25 +51,23 @@ const JobRunList = () => {
   } = useGetJobRunsQuery({
     projectId: selectedProjectId,
   });
+  const { latestJobRun } = useLatestJobRun(jobRunList);
+
   const [jobRunListSelectedIds, setJobRunListSelectedIds] = useState<string[]>(
     []
   );
-
   const [filteredJobRunList, setFilteredJobRunList] = useState<JobRunApiType[]>(
     []
   );
 
   const [updateStatus, { isLoading: isUpdating }] =
     useUpdateJobRunStatusMutation();
-
   const [openConfirmation, setOpenConfirmation] = useState(false);
   const [selectedJobRunId, setSelectedJobRunId] = useState("");
   const [downloadReportApi] = useDownloadReportsMutation();
   const [getPdfReportApi] = useGetPdfReportMutation();
   const canDownloadReport = hasPermission(USER_PERMISSION_TYPE_ENUM.Reports);
-
   const canUpdateStatus = hasPermission(USER_PERMISSION_TYPE_ENUM.ManageJob);
-
   const handleUpdateStatus = async (
     jobRunId: JobRunApiType["jobRunId"],
     status: JOB_ACTION_STATUS_ENUM
@@ -80,7 +80,6 @@ const JobRunList = () => {
       console.error(error);
     }
   };
-
   const rowMenu = (row: JobRunApiType) => {
     const reportMenu = canDownloadReport
       ? getReportActions(
@@ -91,7 +90,6 @@ const JobRunList = () => {
           getPdfReportApi
         )
       : [];
-
     const actionMenu = canUpdateStatus
       ? getActionMenu({
           jobRunId: row.jobRunId,
@@ -101,7 +99,6 @@ const JobRunList = () => {
           adhocRun: () => adhocRun(row.jobConfigId),
         })
       : [];
-
     const enableCutOver =
       row?.jobType === JOBS_TYPE.CUT_OVER &&
       row?.status === JOB_STATUS_TYPE_ENUM.BLOCKED
@@ -115,7 +112,6 @@ const JobRunList = () => {
             },
           ]
         : [];
-
     return [
       {
         label: "Details",
@@ -128,12 +124,10 @@ const JobRunList = () => {
       ...enableCutOver,
     ];
   };
-
   const closeConfirmationBox = () => {
     setOpenConfirmation(false);
     setSelectedJobRunId("");
   };
-
   const tableStateProps = {
     columns: JOB_RUN_LIST_COLUMN_DEFS,
     rows: jobRunList && getJobRunListFlaternList(jobRunList),
@@ -161,6 +155,9 @@ const JobRunList = () => {
         />
       )}
       <TableWrapper
+        secondaryLabel={
+          <TitleWithLastRefreshedDate date={latestJobRun?.lastRefreshed} />
+        }
         tableStateProps={tableStateProps}
         isLoading={isLoading}
         rowMenu={rowMenu}

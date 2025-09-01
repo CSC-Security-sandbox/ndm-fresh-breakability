@@ -68,6 +68,11 @@ export class JobRunService {
       where: { jobRunId: id, reportType: ReportType.JOB_RUN_STATS },
       select: { reportData: true },
     });
+    const jobStatsSummary: JobStatsSummaryMvEntity =
+      await this.jobStatsSummaryMvRepo.findOne({
+        where: { jobRunId: id },
+      });
+
     if (saved) {
       const parsedReport = JSON.parse(saved.reportData);
       if (parsedReport.isReportReady !== getLatestReportStatus?.isReportReady) {
@@ -77,6 +82,9 @@ export class JobRunService {
           { jobRunId: id, reportType: ReportType.JOB_RUN_STATS },
           { reportData: JSON.stringify(parsedReport) }
         );
+      }
+      if (jobStatsSummary) {
+        parsedReport.lastRefreshed = jobStatsSummary.lastRefreshed;
       }
       return parsedReport;
     }
@@ -159,16 +167,18 @@ export class JobRunService {
       worker: jobRun?.worker?.length ?? 0,
     };
     const jobRunStatus = new JobRunStats();
-    const jobStatsSummary: JobStatsSummaryMvEntity = await this.jobStatsSummaryMvRepo.findOne({
-      where: { jobRunId: id }});
-    this.logger.log(`Job Stats Summary for Job Run ID ${id}: ${JSON.stringify(jobStatsSummary)}`);
+    this.logger.log(
+      `Job Stats Summary for Job Run ID ${id}: ${JSON.stringify(jobStatsSummary)}`
+    );
+
     if (jobStatsSummary) {
       jobRunStatus.fileCount = jobStatsSummary.fileCount?.toString();
       jobRunStatus.directories = jobStatsSummary.directoryCount?.toString();
       jobRunStatus.totalSize = formatBytes(
-          Number(jobStatsSummary.totalSize)
-        ).toString();
-    }else{
+        Number(jobStatsSummary.totalSize)
+      ).toString();
+      // Assign lastRefreshed to top-level property for DTO compatibility
+    } else {
       jobRunStatus.fileCount = "0";
       jobRunStatus.directories = "0";
       jobRunStatus.totalSize = "0";
@@ -183,22 +193,17 @@ export class JobRunService {
 
     response["task"] = new TaskDto();
     if (jobStatsSummary) {
-      response["task"]['completed'] = Number(
-        jobStatsSummary.completed
-      );
-      response["task"]['pending'] = Number(
-        jobStatsSummary.pending
-      );
-      response["task"]['errored'] = Number(
-        jobStatsSummary.errored
-      );
-      response["task"]['running'] = Number(
-        jobStatsSummary.running
-      );
+      response["task"]["completed"] = Number(jobStatsSummary.completed);
+      response["task"]["pending"] = Number(jobStatsSummary.pending);
+      response["task"]["errored"] = Number(jobStatsSummary.errored);
+      response["task"]["running"] = Number(jobStatsSummary.running);
+      response["lastRefreshed"] = jobStatsSummary.lastRefreshed;
     }
-    this.logger.log('Job Run Status: ' + jobStatsSummary?.jobRunStatus);
+    this.logger.log("Job Run Status: " + jobStatsSummary?.jobRunStatus);
     if (jobStatsSummary?.jobRunStatus === JobRunStatus.Completed) {
-      this.logger.log(`Job Run with ID ${id} is completed,and reportData is ready ${JSON.stringify(response)}`);
+      this.logger.log(
+        `Job Run with ID ${id} is completed,and reportData is ready ${JSON.stringify(response)}`
+      );
       const report = this.reportsRepo.create({
         jobRunId: id,
         reportData: JSON.stringify(response),
@@ -206,6 +211,7 @@ export class JobRunService {
       });
       await this.reportsRepo.save(report);
     }
+
     return response;
   }
 
@@ -264,6 +270,7 @@ export class JobRunService {
       console.log(
         `Error while generating COC report for jobRunId: ${jobRunId} - ERROR: ${error}`
       );
+      throw error;
     }
   }
 

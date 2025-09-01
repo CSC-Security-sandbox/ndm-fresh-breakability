@@ -15,7 +15,7 @@ export type TableWrapperPropsType = {
   showLabel?: boolean;
   preSelectedFilter?: any;
   handleSelection?: (arg: any[], tableRows?: any[]) => void;
-  secondaryLabel?: string;
+  secondaryLabel?: string | ReactNode;
   isRefreshing?: boolean;
   refetchTableData?: () => void;
   notReachableExportPaths?: string[];

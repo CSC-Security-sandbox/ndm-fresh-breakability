@@ -41,6 +41,7 @@ import useAdhocRun from "@hooks/useAdhocRun";
 import { Show } from "@components/show/Show";
 import JobErrors from "@modules/jobs/jobs-list/job-details/components/JobErrors";
 import { GENERATING_REPORT_LABEL } from "@modules/jobs/jobs-list/job-details/job-details.constants";
+import TitleWithLastRefreshedDate from "@components/TitleWithLastRefreshedDate/TitleWithLastRefreshedDate";
 
 const JobRunDetails = () => {
   const navigate = useNavigate();
@@ -148,19 +149,22 @@ const JobRunDetails = () => {
           closeConfirmationBox={() => setOpenConfirmation(false)}
         />
       )}
+
+      <Breadcrumbs className="mb-4">
+        <Button onClick={() => navigate("/jobs-list")} variant="text">
+          Jobs
+        </Button>
+        <Button
+          onClick={() => navigate(`/job-details/${jobId}`)}
+          variant="text"
+        >
+          Job Details
+        </Button>
+        <Box>Job Run Details</Box>
+      </Breadcrumbs>
+
       <Box className="flex justify-between">
-        <Breadcrumbs className="mb-4">
-          <Button onClick={() => navigate("/jobs-list")} variant="text">
-            Jobs
-          </Button>
-          <Button
-            onClick={() => navigate(`/job-details/${jobId}`)}
-            variant="text"
-          >
-            Job Details
-          </Button>
-          <Box>Job Run Details</Box>
-        </Breadcrumbs>
+        <TitleWithLastRefreshedDate date={jobRunDetails?.lastRefreshed} />
         <Box className="flex gap-2 items-center">
           {actionButtons.length > 0 && (
             <ActionMenuButtonStyle

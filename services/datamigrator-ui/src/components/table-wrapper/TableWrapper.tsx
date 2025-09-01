@@ -13,6 +13,7 @@ import React, { useEffect, useState } from "react";
 import Filters from "@components/table-wrapper/Filters";
 import { TableWrapperPropsType } from "@components/table-wrapper/TableWrapper.types";
 import RefreshButton from "@components/refresh-button/RefreshButton";
+import { Show } from "@components/show/Show";
 
 const TableWrapper = ({
   tableStateProps,
@@ -130,9 +131,21 @@ const TableWrapper = ({
               singularLabel={label || "Row"}
               onResetFilter={resetFilters}
             />
-            <Box className="inline-flex items-center text-[#404040] text-[16px] font-[590] leading-[28px]">
-              {secondaryLabel}
-            </Box>
+
+            {/* secondaryLabel  */}
+            <Show>
+              <Show.When isTrue={typeof secondaryLabel === "string"}>
+                <Box className="inline-flex items-center text-[#404040] text-[16px] font-[590] leading-[28px]">
+                  {secondaryLabel}
+                </Box>
+              </Show.When>
+              <Show.When isTrue={typeof secondaryLabel !== "string"}>
+                <Box>{secondaryLabel}</Box>
+              </Show.When>
+              <Show.Else>
+                <Box>{secondaryLabel}</Box>
+              </Show.Else>
+            </Show>
           </Box>
         )}
         <Box className="flex gap-5 items-center">
