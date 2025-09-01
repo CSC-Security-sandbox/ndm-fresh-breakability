@@ -8,7 +8,8 @@ export class WorkFlowOptions {
     taskQueue: string;
     activities: any;
     workflowsPath: any;
-    maxConcurrentActivityTaskExecutions: any
+    maxConcurrentActivityTaskExecutions: any;
+    shutdownForceTime: any;
 
     constructor(
         identity: string,
@@ -17,7 +18,7 @@ export class WorkFlowOptions {
         taskQueue: string,
         config: WorkerConfiguration,
         activities: any = undefined,
-        maxConcurrentActivityTaskExecutions: any = undefined
+        maxConcurrentActivityTaskExecutions: any = undefined        
     ){
         this.identity = identity;
         this.workerId = workerId;
@@ -25,6 +26,7 @@ export class WorkFlowOptions {
         this.taskQueue = !config.dynamicTaskQueue ? taskQueue : `${config.taskQueueId}-${taskQueue}`
         this.activities = activities;
         this.workflowsPath = require.resolve('../../workflows/workflows'),
-        this.maxConcurrentActivityTaskExecutions = maxConcurrentActivityTaskExecutions;
+        this.maxConcurrentActivityTaskExecutions = maxConcurrentActivityTaskExecutions;        
+
     }
 }

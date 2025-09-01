@@ -14,7 +14,7 @@ const LegendWrapper = ({
 }: LegendWrapperPropsType) => {
   return (
     <Legends
-      title={title}
+      title={unit ? `(${unit}) ${title}` : title}
       value={truncateLargeNumber(value)}
       color={color}
       unit={unit}

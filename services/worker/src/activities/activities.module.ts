@@ -25,13 +25,14 @@ import { SyncService } from './core/migrate/sync-activity.service';
 import { StampMetaService } from './core/migrate/command-execution/stamp-meta.service';
 import { AclOperations } from './core/migrate/command-execution/aclOperations';
 import { ShellPoolExecutorService } from './core/migrate/command-execution/shell-for-meta-stamping.service';
+import { SmbUserSetupService } from './core/migrate/command-execution/smb-user-setup.service';
 
 
 
 @Module({
   imports: [LoggerModule.forRoot(), HttpModule, ConfigModule, WorkerThreadModule, AuthModule, ProtocolsModule ],
   controllers: [],
-  providers: [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService, MigrateScanService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities, RedisMemoryCheckActivity,  CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity,AclOperations,ShellPoolExecutorService],
-  exports:  [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService,  MigrateScanService,  ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities,RedisMemoryCheckActivity, CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity,AclOperations,ShellPoolExecutorService],
+  providers: [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService, MigrateScanService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities, RedisMemoryCheckActivity,  CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity,AclOperations,ShellPoolExecutorService,SmbUserSetupService],
+  exports:  [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService,  MigrateScanService,  ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, ShellService , SpeedTestActivities,RedisMemoryCheckActivity, CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity,AclOperations,ShellPoolExecutorService,SmbUserSetupService],
 })
 export class ActivitiesModule {}

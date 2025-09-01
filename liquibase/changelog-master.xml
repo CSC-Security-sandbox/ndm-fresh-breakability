@@ -472,4 +472,14 @@
       </rollback>
    </changeSet>
 
+   <changeSet id="99999999_fail_on_purpose" author="test">
+       <sql>
+           -- This will fail because the table does not exist
+           INSERT INTO table_that_does_not_exist (id) VALUES (1);
+       </sql>
+       <rollback>
+           -- No rollback needed
+       </rollback>
+   </changeSet>
+
 </databaseChangeLog>

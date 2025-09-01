@@ -99,9 +99,29 @@ service:
   port: 3000
   targetPort: 3000
 
+# ==============================
+# Ingress for User-facing APIs
+# ==============================
+ingressThrottle:
+  pathPrefix: api/v1/
+  trailingPath: "(workers|jobs|job-run|tasks)"
+  ingressClassName: public
+  userDefinedAnnotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/limit-rps: "25" # max 25 req/s per client
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "1" # 1 burst request allowed
+    nginx.ingress.kubernetes.io/limit-req-status-code: "429" # status code for rate limiting
+  tls:
+    enabled: false
+  host: ""
+
+# ==============================
+# Ingress for CP and worker
+# ==============================
 ingress:
   pathPrefix: api/v1/
-  trailingPath: "(workers|jobs|job-run|bulk-discovery|tasks|bulk-migrate|bulk-cutover|jobs-docs|statscheck)"
+  trailingPath: "(bulk-discovery|bulk-migrate|bulk-cutover|jobs-docs|statscheck)"
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
