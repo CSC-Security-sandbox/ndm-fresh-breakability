@@ -53,15 +53,7 @@ export class CommonActivityService{
     try {
       this.logger.log(`[${traceId}] Publishing last entry for job id: ${traceId}`);
       const jobContext = await this.redisService.getJobManagerContext(traceId);
-       try {
-        if(process.platform === 'win32' && jobContext.jobConfig?.jobType !== JobType.DISCOVERY){
-          await this.smbUserSetup.removePrincipals(jobContext.jobConfig.destinationFileServer, jobContext.jobConfig.destinationFileServer.username);
-          this.logger.log(`[${traceId}] - SMB file owner removed successfully`);
-        }
-      } catch (error) {
-        this.logger.error(`[${traceId}] Error while removing SMB file owner: ${error}`);
-      }
-      await jobContext.publishToFileStream(generateDummyItemEntry);  
+      await jobContext.publishToFileStream(generateDummyItemEntry);
       await jobContext.publishToTaskStream(generateDummyTaskInfoEntry);
       await jobContext.publishToErrorStream(generateDummyErrorEntry);
       this.logger.log(`[${traceId}] Last entry published for job id: ${traceId}`);

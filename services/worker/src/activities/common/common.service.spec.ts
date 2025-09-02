@@ -244,33 +244,6 @@ describe('CommonActivityService', () => {
       expect(logger.error).toHaveBeenCalled();
     });
 
-    it('should handle Windows platform with SMB user setup removal for non-discovery jobs', async () => {
-      // Mock Windows platform
-      const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-      Object.defineProperty(process, 'platform', {
-        value: 'win32'
-      });
-
-      mockContext.jobConfig = {
-        jobType: JobType.MIGRATION,
-        destinationFileServer: {
-          username: 'testuser'
-        }
-      };
-
-      await service.updateLastEntry(traceId);
-
-      expect(smbUserSetupService.removePrincipals).toHaveBeenCalledWith(
-        mockContext.jobConfig.destinationFileServer,
-        'testuser'
-      );
-      expect(logger.log).toHaveBeenCalledWith(`[${traceId}] - SMB file owner removed successfully`);
-
-      // Restore original platform
-      if (originalPlatform) {
-        Object.defineProperty(process, 'platform', originalPlatform);
-      }
-    });
 
     it('should skip SMB user setup removal for discovery jobs on Windows', async () => {
       // Mock Windows platform
@@ -313,38 +286,7 @@ describe('CommonActivityService', () => {
       }
     });
 
-    it('should handle SMB user setup removal errors gracefully', async () => {
-      // Mock Windows platform
-      const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-      Object.defineProperty(process, 'platform', {
-        value: 'win32'
-      });
-
-      mockContext.jobConfig = {
-        jobType: JobType.MIGRATION,
-        destinationFileServer: {
-          username: 'testuser'
-        }
-      };
-
-      const smbError = new Error('SMB removal failed');
-      (smbUserSetupService.removePrincipals as jest.Mock).mockRejectedValueOnce(smbError);
-
-      // Should not throw, but should log error
-      await service.updateLastEntry(traceId);
-
-      expect(logger.error).toHaveBeenCalledWith(`[${traceId}] Error while removing SMB file owner: ${smbError}`);
-      // Should still continue with publishing streams
-      expect(mockContext.publishToFileStream).toHaveBeenCalled();
-      expect(mockContext.publishToTaskStream).toHaveBeenCalled();
-      expect(mockContext.publishToErrorStream).toHaveBeenCalled();
-
-      // Restore original platform
-      if (originalPlatform) {
-        Object.defineProperty(process, 'platform', originalPlatform);
-      }
-    });
-
+   
     it('should handle missing job config gracefully', async () => {
       // Mock Windows platform
       const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
