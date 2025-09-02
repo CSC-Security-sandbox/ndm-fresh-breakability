@@ -67,14 +67,17 @@ export class SmbUserSetupService {
 
     // Step 5: Add all source users to destination
     for (const entry of sourceAcl.permissions) {
-      const principal = entry.principal.toLowerCase();
+      let principal = entry.principal;
+      if (!entry.principal.startsWith("S-")) {
+        principal = entry.principal.toLowerCase();
+      }
       const permissions = entry.permissions.map(p => `(${p.code})`).join('');
-        try {
-          await this.addPrincipals(context.jobConfig.destinationFileServer, principal, permissions, context.jobRunId);
-        } catch (error) {
-          this.logger.error(`Error adding principal ${principal} to destination ACL`, error);
-        }
-      
+      try {
+        await this.addPrincipals(context.jobConfig.destinationFileServer, principal, permissions, context.jobRunId);
+      } catch (error) {
+        this.logger.error(`Error adding principal ${principal} to destination ACL`, error);
+      }
+
     }
   }
 
