@@ -29,13 +29,6 @@ func TestRegression(t *testing.T) {
 var _ = BeforeSuite(func() {
 	By("Setting before the suite")
 	flag.Parse()
-	if ProtocolType == string(ProtocolSMB) {
-		// Added wait to prevent simultaneous calls to the OpenID Connect token API
-		// from NFS and SMB smoke tests. Concurrent requests were occasionally causing
-		// HTTP 400 errors due to race conditions or token contention. This delay ensures
-		// serialized access to the token endpoint.
-		Wait(10)
-	}
 	InitTestEnvForSMoke()
 	UpdateConfVariables(ProtocolType, Environment)
 })
