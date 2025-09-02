@@ -13,10 +13,6 @@ var _ = Describe("TC-011: Run migration with 'Upload GID/UID Mapping' option", f
 		if PROTOCOL_TYPE == ProtocolSMB {
 			Skip("TC-011: is skipped in CI/CD as it is not supported in SMB")
 		}
-
-		if CLOUD_ENVIRONMENT == AzureEnv {
-			Skip("TC-011: is skipped in CI/CD in Azure. Work in progress")
-		}
 	})
 	var (
 		ProjectId              string
