@@ -1,3 +1,7 @@
+- name: Testing retries
+  fail:
+    msg: "This is an intentional failure to test packer build retries"
+
 - name: Configure user access on VM
   import_playbook: configure-user.yaml
 
