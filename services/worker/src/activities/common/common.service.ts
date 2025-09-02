@@ -53,8 +53,7 @@ export class CommonActivityService{
     try {
       this.logger.log(`[${traceId}] Publishing last entry for job id: ${traceId}`);
       const jobContext = await this.redisService.getJobManagerContext(traceId);
-
-      await jobContext.publishToFileStream(generateDummyItemEntry);  
+      await jobContext.publishToFileStream(generateDummyItemEntry);
       await jobContext.publishToTaskStream(generateDummyTaskInfoEntry);
       await jobContext.publishToErrorStream(generateDummyErrorEntry);
       this.logger.log(`[${traceId}] Last entry published for job id: ${traceId}`);
