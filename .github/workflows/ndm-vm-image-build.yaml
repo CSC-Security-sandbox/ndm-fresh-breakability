@@ -953,7 +953,7 @@ jobs:
 
           echo "Packer validation completed successfully"
 
-      - name: Packer Build
+      - name: Packer Build with Retry
         id: build
         run: |
           cd ${{ steps.packer-path.outputs.path }}
@@ -962,24 +962,35 @@ jobs:
           BUILD_ID=$(date -u +'%Y%m%dT%H%M%SZ')-${{ github.sha }}
           echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
 
-          # Run packer build with appropriate parameters based on component
-          if [ "${{ matrix.component }}" == "worker" ]; then
-            echo "Building worker image with binary path..."
-            packer build \
-              -var "worker_binary_path=${{ steps.worker-binary-path.outputs.worker_binary_path }}" \
-              -var-file="variables.pkrvars.hcl" \
-              linux-ubuntu.pkr.hcl | tee $GITHUB_WORKSPACE/packer.log
-          else
-            echo "Building control-plane image..."
-            packer build \
-              -var-file="variables.pkrvars.hcl" \
-              linux-ubuntu.pkr.hcl | tee $GITHUB_WORKSPACE/packer.log
-          fi
+          for attempt in {1..3}; do 
+            echo "Attempt $attempt: Running Packer build..."
 
-          if [ ${PIPESTATUS[0]} -ne 0 ]; then
-            echo "Packer build failed"
-            exit 1
-          fi
+            if [ "${{ matrix.component }}" == "worker" ]; then
+              echo "Building worker image with binary path..."
+              packer build \
+                -var "worker_binary_path=${{ steps.worker-binary-path.outputs.worker_binary_path }}" \
+                -var-file="variables.pkrvars.hcl" \
+                linux-ubuntu.pkr.hcl | tee $GITHUB_WORKSPACE/packer.log
+            else
+              echo "Building control-plane image..."
+              packer build \
+                -var-file="variables.pkrvars.hcl" \
+                linux-ubuntu.pkr.hcl | tee $GITHUB_WORKSPACE/packer.log
+            fi
+
+            if [ ${PIPESTATUS[0]} -eq 0 ]; then
+              echo "Packer build succeeded on attempt $attempt"
+              break
+            else 
+              echo "Packer build failed on attempt $attempt"
+              if [ $attempt -eq 3 ]; then
+                echo "All retry attempts failed"
+                exit 1
+              fi
+              echo "Retrying in 10 seconds..."
+              sleep 10
+            fi
+          done
 
           echo "Packer build completed successfully"
 
