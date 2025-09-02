@@ -3,6 +3,7 @@ import { StreamCollection } from '../types/stream-collection';
 import { RedisClientType } from 'redis';
 import { encode, decode } from 'msgpack-lite';
 import { GroupReaderType } from '../types/enums';
+import { RedisError } from './errors';
 
 
 export class RedisStreamCollection<T extends Serializable>
@@ -80,7 +81,7 @@ export class RedisStreamCollection<T extends Serializable>
       return id;
     } catch (err) {
       console.error(`Error writing record: ${err}`, err);
-      throw err;
+      throw new RedisError(`Error writing record: ${err.message}, ${err.code}`, `REDIS_${err.code || 'UNKNOWN'}`);
     }
   }
 

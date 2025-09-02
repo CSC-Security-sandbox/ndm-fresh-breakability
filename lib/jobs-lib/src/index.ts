@@ -24,6 +24,6 @@ export * from './types/job-manager-context/job-manager-context';
 export * from './types/job-manager-context/job-manager-provider';
 export * from './types/job-manager-context/job-manager-redis';
 
-
+export * from './redis/errors'
 export * from './types/identity-mappings';
 export * from './datatype/stream-datatypes';
