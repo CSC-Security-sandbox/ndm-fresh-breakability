@@ -174,8 +174,8 @@ export const SECONDS_PER_DAY = 86400;
 
 export const TIME_UNITS = {
   SECONDS: { singular: 'sec', plural: 'sec' },
-  MINUTES: { singular: 'mins', plural: 'mins' },
-  HOURS: { singular: 'hrs', plural: 'hrs' },
+  MINUTES: { singular: 'min', plural: 'mins' },
+  HOURS: { singular: 'hr', plural: 'hrs' },
   DAYS: { singular: 'day', plural: 'days' }
 } as const;
 
