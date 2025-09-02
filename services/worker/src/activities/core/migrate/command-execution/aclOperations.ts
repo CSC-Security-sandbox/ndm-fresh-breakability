@@ -636,16 +636,14 @@ export class AclOperations {
 
     private groupPermissionsByPrincipal(permissions: ACLEntry[]): Record<string, ACLEntry[]> {
         const grouped: Record<string, ACLEntry[]> = {};
-        
         for (const perm of permissions) {
-            const normalizedPrincipal = perm.principal.replace(/[\r\n]+/g, '').trim();
-            const key = `${normalizedPrincipal} (${perm.accessType})`;
+            const normalizedPrincipal = perm.principal.replace(/[\r\n]+/g, '').trim().toLowerCase();
+            const key = `${normalizedPrincipal} (${perm.accessType.toLowerCase()})`;
             if (!grouped[key]) {
                 grouped[key] = [];
             }
             grouped[key].push(perm);
         }
-        
         return grouped;
     }
 
