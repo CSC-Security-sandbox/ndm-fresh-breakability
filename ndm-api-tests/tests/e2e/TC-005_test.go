@@ -148,6 +148,8 @@ var _ = Describe("TC-005: Running migration / cutover with an exclude path patte
 
 					err = WaitForJobState(migrationJobRunID, "STOPPED", 30)
 					Expect(err).NotTo(HaveOccurred(), "Job did not reach STOPPED state")
+					//Adding wait to ensure temporal worker shut down completes after reaching STOPPED state
+					Wait(30)
 					adHocJobRunId, resp, err := TriggerAdHocJobRun(migrationJobConfigID)
 					Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
 					defer resp.Body.Close()
@@ -203,6 +205,8 @@ var _ = Describe("TC-005: Running migration / cutover with an exclude path patte
 					Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
 					err = WaitForJobState(jobRunID, "STOPPED", 30)
 					Expect(err).NotTo(HaveOccurred(), "Cutover job did not complete")
+					//Adding wait to ensure temporal worker shut down completes after reaching STOPPED state
+					Wait(30)
 					adHocJobRunId, resp, err := TriggerAdHocJobRun(jobConfigID)
 					Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
 					defer resp.Body.Close()
