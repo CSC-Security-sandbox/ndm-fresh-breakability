@@ -141,7 +141,7 @@ describe('Protocol', () => {
 
       await expect(
       protocol.executeCommand('trace-123', 'test-protocol', payload, commandPattern, commandDescription)
-      ).rejects.toThrow('Authentication failed: Invalid password *** for user');
+      ).rejects.toThrow('Authentication failed: Invalid password *** for ***');
     });
   });
 });

@@ -71,17 +71,37 @@ service:
   port: 3000
   targetPort: 3000
 
-ingress:
+# ==============================
+# Ingress for User-facing APIs
+# ==============================
+ingressThrottle:
   pathPrefix: api/v1/
-  trailingPath: "(servers|work-manager|config-docs|paths-upload|support-bundle)"
+  trailingPath: "(servers|paths-upload|support-bundle)"
+  ingressClassName: public
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-  ingressClassName: public
+    nginx.ingress.kubernetes.io/limit-rps: "25" # max 25 req/s per client
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "1" # 1 burst request allowed
+    nginx.ingress.kubernetes.io/limit-req-status-code: "429" # status code for rate limiting
   tls:
     enabled: false
   host: ""
-  
+
+# ==============================
+# Ingress for CP and worker
+# ==============================
+ingress:
+  pathPrefix: api/v1/
+  trailingPath: "(work-manager|config-docs)"
+  ingressClassName: public
+  userDefinedAnnotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  tls:
+    enabled: false
+  host: ""
+
 persistentVolumes:
   - name: generated-zips
     mountPath: /generated-zips

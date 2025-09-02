@@ -358,6 +358,7 @@ export type JobRunApiType = {
   sourceServer: FileServerApiPropType;
   destinationServer: FileServerApiPropType;
   isReportReady: boolean;
+  lastRefreshed: string | Date;
 };
 
 export interface JobConfigDetailsApiType {
@@ -370,6 +371,7 @@ export interface JobConfigDetailsApiType {
   jobRuns: JobRunApiType[];
   errors: JobErrors;
   aggregateData: JobRunApiType;
+  lastRefreshed: string | Date;
 }
 
 export interface TasksApiType {
@@ -437,7 +439,7 @@ export interface FileServerOverviewApi {
     totalFileServers?: number;
     totalPendingSize: string;
   };
-  lastRefreshed: string;
+  lastRefreshed: string | Date;
 }
 
 export enum USER_STATUS_ENUM {

@@ -71,7 +71,6 @@ export class SupportBundleService {
         startDate: dto.startDate,
         endDate: dto.endDate,
         userId: userDetails.user.id,
-        options: new Options(),
         otherMetrics: dto.otherMetrics ?? [],
       };
       const startWorkFlowPayload: StartWorkFlowPayload = {
@@ -81,12 +80,10 @@ export class SupportBundleService {
           {
             traceId: traceId,
             payload: { traceId, ...payload },
-            options: payload.options,
           },
         ],
         workflowExecutionTimeout: WORKFLOW_TIMEOUTS.PARENT_WORKFLOW_EXECUTION_TIMEOUT, // Allow enough time for all child workflows
         workflowRunTimeout: WORKFLOW_TIMEOUTS.PARENT_WORKFLOW_RUN_TIMEOUT,
-        ...payload.options,
       };
 
       await this.workFlowService.startWorkflow(

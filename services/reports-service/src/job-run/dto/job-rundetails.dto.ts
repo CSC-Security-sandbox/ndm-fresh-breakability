@@ -89,6 +89,9 @@ export class JobReportResponseDto {
 
 export class JobRunDetailsResponseDto {
   @ApiProperty()
+  @IsOptional()
+  lastRefreshed?: Date;
+  @ApiProperty()
   @IsUUID()
   id: string;
 

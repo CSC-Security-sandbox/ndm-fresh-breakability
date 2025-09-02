@@ -33,7 +33,7 @@ export class SyncService {
         this.logger = loggerFactory.create(SyncService.name);
         this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100;
-        this.maxWriteConcurrency = this.configService.get('worker.maxWriteConcurrency') || 100;
+        this.maxWriteConcurrency = this.configService.get('worker.maxWriteConcurrency') || 1;
     }
 
 
@@ -101,8 +101,7 @@ export class SyncService {
                               : err?.message || JSON.stringify(err) || 'Unknown error'
                         )
                         : [result.reason?.message || String(result.reason) || 'Unknown error'];
-                    syncOutput.errors.source.push(...messages);
-                    syncOutput.errors.target.push(...messages);
+                    syncOutput.errors.source.push(...messages);                    
                 }
             });
         }

@@ -2852,6 +2852,7 @@ describe("JobRunService", () => {
           directories: '2',
           totalSize: '10240',
           errors: mockErrorCounts,
+          lastRefreshed: null,
         });
       });
 
@@ -2874,6 +2875,7 @@ describe("JobRunService", () => {
           directories: '0',
           totalSize: '0',
           errors: mockErrorCounts,
+          lastRefreshed: null,
         });
       });
 
@@ -2898,6 +2900,7 @@ describe("JobRunService", () => {
           directories: '0',
           totalSize: '0',
           errors: mockErrorCounts,
+          lastRefreshed: null,
         });
       });
 
