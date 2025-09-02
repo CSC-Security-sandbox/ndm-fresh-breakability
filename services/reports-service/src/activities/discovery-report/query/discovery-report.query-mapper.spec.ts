@@ -428,7 +428,7 @@ it('JOB_RUN_DETAILS_MAPPER formats time correctly for different ranges', () => {
     }];
     const resultDays = JOB_RUN_DETAILS_MAPPER(inputDays as any);
     expect(resultDays[4]).toEqual({
-        value: '2days 1hrs 30mins',
+        value: '2days 1hr 30mins',
         category: 'Job Run Stats',
         valueType: 'string',
         sub_category: 'Total Time'
