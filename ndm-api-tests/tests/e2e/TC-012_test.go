@@ -10,11 +10,6 @@ import (
 )
 
 var _ = Describe("TC-012:Run bulk cutover with concurrent migration jobs and batch pause/resume.", func() {
-	BeforeEach(func() {
-		if CLOUD_ENVIRONMENT == AzureEnv {
-			Skip("TC-012 is skipped in CI/CD due to different IP of source 3")
-		}
-	})
 	var headers map[string]string
 	var (
 		ProjectId              string

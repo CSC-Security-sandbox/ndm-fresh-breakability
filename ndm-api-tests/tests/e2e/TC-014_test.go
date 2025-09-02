@@ -10,9 +10,6 @@ import (
 )
 
 var _ = Describe("TC-0014: Run incremental sync schedule migration for verifying partial deletion is mirrored", func() {
-	BeforeEach(func() {
-		Skip("TC-014 is skipped in CI/CD due to flakiness")
-	})
 	var (
 		ProjectId              string
 		workerId1              string
