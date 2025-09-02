@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-004: Run discovery with exclude path pattern and batch pause/resume, TC-005 : Run discovery with exclude path pattern and batch stop/start ", func() {
+var _ = Describe("TC-005: Running migration / cutover with an exclude path pattern and batch pause/resume/stop/adhoc-run", func() {
 	var headers map[string]string
 	var (
 		ProjectId              string
@@ -23,7 +23,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 		destinationVolumePath1 string
 		destinationVolumePath2 string
 	)
-	Context("TC-004-005", func() {
+	Context("TC-005", func() {
 		BeforeEach(func() {
 			NumberOfWorker := 2
 			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
@@ -40,12 +40,12 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[1], SOURCE_VOLUMES[1])
 		})
 
-		It("TC-004-005 : Run discovery with exclude path pattern and batch pause/resume, TC-005 : Run discovery with exclude path pattern and batch stop/start", func() {
-			By("########################## TC-004-005 start ################################")
-			var sourceConfigID1, sourceConfigID2, sourcePathID1, sourcePathID2 string
-			var sourceJobConfigIDs, destinationJobConfigIDs, jobConfigIDs, migrationJobConfigIDs []string
+		It("TC-005 : Running migration / cutover with an exclude path pattern and batch pause/resume/stop/adhoc-run", func() {
+			By("########################## TC-005 start ################################")
+			var sourceConfigID1, sourcePathID1, sourcePathID2 string
+			var jobConfigIDs, migrationJobConfigIDs []string
 			var migrationJobRunID string
-			var destinationConfigID, destinationPathID1, destinationPathID2, destinationJobConfigID1, destinationJobConfigID2 string
+			var destinationConfigID, destinationPathID1, destinationPathID2 string
 			var list []string
 
 			By("Creating the source file server")
@@ -101,112 +101,6 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 
 			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
-
-			By("Creating a new discovery job for the source")
-			jobParams := DiscoveryJobParams{
-				SourcePathIDs:            []string{sourcePathID1, sourcePathID2},
-				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
-				PreserveAccessTime:       false,
-				FirstRunAt:               GetCurrentUTCTimestamp(),
-				CreatedBy:                nil,
-				WorkflowExecutionTimeout: "60s",
-				WorkflowTaskTimeout:      "30s",
-				WorkflowRunTimeout:       "30s",
-				StartDelay:               "10s",
-			}
-			sourceJobConfigIDs, resp, err = CreateDiscoveryJob(jobParams, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating discovery job for source: %v", err))
-			defer resp.Body.Close()
-
-			sourceConfigID1 = sourceJobConfigIDs[0]
-			sourceConfigID2 = sourceJobConfigIDs[1]
-
-			By("Getting jobs by jobConfigId for source")
-			sourceConfigIDs := []string{sourceConfigID1, sourceConfigID2}
-			sourceDiscoveryJobRunIDs := make([]string, len(sourceConfigIDs))
-			discovery_validators := []string{
-				"src_vol_discovery.json",
-				"src_vol2_discovery.json",
-			}
-			for i, configID := range sourceConfigIDs {
-				getJobsResp, resp, err := GetJobRunDetails(configID, headers)
-				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-				defer resp.Body.Close()
-				jobRunID := getJobsResp.JobRuns[0].JobRunId
-				sourceDiscoveryJobRunIDs[i] = jobRunID
-				Expect(jobRunID).NotTo(BeEmpty(), fmt.Sprintf("sourceDiscoveryJobRunID%d should not be empty", i+1))
-
-				if i == 0 {
-
-					list = nil
-					list = append(list, jobRunID)
-
-					err = HandleJobRunStateChange(jobRunID, "PAUSE", list)
-					Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
-					Wait(1)
-					err = HandleJobRunStateChange(jobRunID, "RESUME", list)
-					Expect(err).NotTo(HaveOccurred(), "Error while resume job run ID")
-					Wait(1)
-					err = HandleJobRunStateChange(jobRunID, "STOP", list)
-					Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
-
-					err = WaitForJobState(jobRunID, "STOPPED", 30)
-					Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
-					_, _, err := TriggerAdHocJobRun(configID)
-					Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
-					continue
-				}
-				err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
-				Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
-				result, err := ValidateReport(jobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
-				Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
-				By(fmt.Sprintf("validate report result : %s", result))
-			}
-
-			By("Creating a new discovery job for destination")
-			destinationJobParams := DiscoveryJobParams{
-				SourcePathIDs:            []string{destinationPathID1, destinationPathID2},
-				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
-				PreserveAccessTime:       false,
-				FirstRunAt:               GetCurrentUTCTimestamp(),
-				CreatedBy:                nil,
-				WorkflowExecutionTimeout: "60s",
-				WorkflowTaskTimeout:      "30s",
-				WorkflowRunTimeout:       "30s",
-				StartDelay:               "10s",
-			}
-			destinationJobConfigIDs, resp, err = CreateDiscoveryJob(destinationJobParams, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating discovery job for destination: %v", err))
-			defer resp.Body.Close()
-
-			destinationJobConfigID1 = destinationJobConfigIDs[0]
-			destinationJobConfigID2 = destinationJobConfigIDs[1]
-
-			By("Getting jobs by jobConfigId for destination")
-			destinationConfigIDs := []string{destinationJobConfigID1, destinationJobConfigID2}
-			destinationDiscoveryJobRunIDs := make([]string, len(destinationConfigIDs))
-			for i, configID := range destinationConfigIDs {
-				getJobsResp, resp, err := GetJobRunDetails(configID, headers)
-				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-				defer resp.Body.Close()
-				jobRunID := getJobsResp.JobRuns[0].JobRunId
-				destinationDiscoveryJobRunIDs[i] = jobRunID
-				Expect(jobRunID).NotTo(BeEmpty(), fmt.Sprintf("destinationDiscoveryJobRunID%d should not be empty", i+1))
-			}
-
-			// Wait for both discovery jobs to complete
-			for i, jobRunID := range destinationDiscoveryJobRunIDs {
-
-				if i == 0 {
-					err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
-					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Destination discovery job %d did not complete", i+1))
-					continue
-				}
-				err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
-				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Destination discovery job %d did not complete", i+1))
-			}
 
 			By("Creating a migration job")
 			migrationParams := MigrationJobParams{
@@ -341,7 +235,7 @@ var _ = Describe("TC-004: Run discovery with exclude path pattern and batch paus
 				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK for run %s", cutoverJobRunIDs[i])
 				resp.Body.Close()
 			}
-			By("########################## TC-004-005 end ################################")
+			By("########################## TC-005 end ################################")
 		})
 
 		AfterEach(func() {

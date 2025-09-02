@@ -11,9 +11,6 @@ import (
 )
 
 var _ = Describe("TC-007: Run migration to multiple destinations with incremental sync schedule", func() {
-	BeforeEach(func() {
-		Skip("TC-007 is skipped in CI/CD due to flakiness")
-	})
 	var (
 		ProjectId              string
 		workerId1              string

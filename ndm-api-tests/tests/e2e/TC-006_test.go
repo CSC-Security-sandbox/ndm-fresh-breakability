@@ -10,7 +10,7 @@ import (
 
 var _ = Describe("TC-006: Run migration to the same destination", func() {
 	BeforeEach(func() {
-		Skip("TC-006 is skipped in CI/CD due to flakiness")
+		Skip("TC-006 is skipped as we no longer support migration of multiple source volumes to a single destination volume")
 	})
 	var (
 		ProjectId              string
