@@ -50,11 +50,11 @@ const StorageChart = ({
               Storage
             </Box>
           }
-          colors={[["chart-4", "chart-7"], ["chart-6"]]}
+          colors={[["chart-6"], ["chart-4", "chart-7"]]}
           valueFormatter={formattedTotal}
           data={[
-            [+totalMigratedSizeInDigit, +totalPendingSizeInDigit],
             [+totalDiscoveredSizeInDigit],
+            [+totalMigratedSizeInDigit, +totalPendingSizeInDigit],
           ]}
         />
       </Box>
