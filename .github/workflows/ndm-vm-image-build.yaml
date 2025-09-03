@@ -1523,5 +1523,7 @@ jobs:
       control_plane_image_version: ${{ needs.packer.outputs.control_plane_image_version }}
       worker_image_version: ${{ needs.packer.outputs.worker_image_version }}
       windows_worker_installer_url: ${{ needs.upload-windows-installer.outputs.windows_worker_installer_url }}
+      build_version: ${{ needs.package-artifacts.outputs.build_version }}
+      ref_type: ${{ needs.package-artifacts.outputs.ref_type }}
     secrets: inherit
 
