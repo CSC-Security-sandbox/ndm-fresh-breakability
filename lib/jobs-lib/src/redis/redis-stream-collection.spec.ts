@@ -58,9 +58,121 @@ describe('RedisStreamCollection', () => {
       expect(id).toBe('123-0');
     });
 
-    it('should throw error on append failure', async () => {
+    it('should throw error on append failure for non-ECONNRESET errors', async () => {
       mockRedis.xAdd.mockRejectedValueOnce(new Error('fail'));
       await expect(collection.append(mockRecord)).rejects.toThrow('fail');
+      expect(mockRedis.xAdd).toHaveBeenCalledTimes(1);
+    });
+
+    it('should retry on ECONNRESET error and succeed on second attempt', async () => {
+      const connectionResetError = new Error('Connection reset by peer');
+      connectionResetError.message = 'read ECONNRESET';
+      
+      mockRedis.xAdd
+        .mockRejectedValueOnce(connectionResetError)
+        .mockResolvedValueOnce('123-0');
+
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      
+      const id = await collection.append(mockRecord);
+      
+      expect(mockRedis.xAdd).toHaveBeenCalledTimes(2);
+      expect(id).toBe('123-0');
+      expect(consoleSpy).toHaveBeenCalledWith('Connection reset error occurred, retrying... (attempt 1)');
+      
+      consoleSpy.mockRestore();
+    });
+
+    it('should retry on ECONNRESET error code and succeed on third attempt', async () => {
+      const connectionResetError = new Error('Network error');
+      (connectionResetError as any).code = 'ECONNRESET';
+      
+      mockRedis.xAdd
+        .mockRejectedValueOnce(connectionResetError)
+        .mockRejectedValueOnce(connectionResetError)
+        .mockResolvedValueOnce('456-1');
+
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      
+      const id = await collection.append(mockRecord);
+      
+      expect(mockRedis.xAdd).toHaveBeenCalledTimes(3);
+      expect(id).toBe('456-1');
+      expect(consoleSpy).toHaveBeenCalledWith('Connection reset error occurred, retrying... (attempt 1)');
+      expect(consoleSpy).toHaveBeenCalledWith('Connection reset error occurred, retrying... (attempt 2)');
+      
+      consoleSpy.mockRestore();
+    });
+
+    it('should fail after 3 ECONNRESET retry attempts', async () => {
+      const connectionResetError = new Error('read ECONNRESET');
+      
+      mockRedis.xAdd
+        .mockRejectedValue(connectionResetError);
+
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation();
+      
+      await expect(collection.append(mockRecord)).rejects.toThrow('read ECONNRESET');
+      
+      expect(mockRedis.xAdd).toHaveBeenCalledTimes(3);
+      expect(consoleSpy).toHaveBeenCalledTimes(3); // All 3 attempts log retry warnings
+      expect(errorSpy).toHaveBeenCalledWith(`Error writing record: ${connectionResetError}`, connectionResetError);
+      
+      consoleSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('should not retry for non-ECONNRESET errors', async () => {
+      const otherError = new Error('Some other Redis error');
+      mockRedis.xAdd.mockRejectedValueOnce(otherError);
+
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation();
+      
+      await expect(collection.append(mockRecord)).rejects.toThrow('Some other Redis error');
+      
+      expect(mockRedis.xAdd).toHaveBeenCalledTimes(1);
+      expect(consoleSpy).not.toHaveBeenCalled(); // No retry warnings
+      expect(errorSpy).toHaveBeenCalledWith(`Error writing record: ${otherError}`, otherError);
+      
+      consoleSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('should update numMessages and lastId on successful append', async () => {
+      mockRedis.xAdd.mockResolvedValue('789-2');
+      const initialNumMessages = collection.numMessages;
+      
+      const id = await collection.append(mockRecord);
+      
+      expect(collection.numMessages).toBe(initialNumMessages + 1);
+      expect(collection.lastId).toBe('789-2');
+      expect(id).toBe('789-2');
+    });
+
+    it('should wait between retry attempts', async () => {
+      jest.useFakeTimers();
+      
+      const connectionResetError = new Error('read ECONNRESET');
+      mockRedis.xAdd
+        .mockRejectedValueOnce(connectionResetError)
+        .mockResolvedValueOnce('retry-test');
+
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      
+      const appendPromise = collection.append(mockRecord);
+      
+      // Fast forward through the delay
+      jest.advanceTimersByTime(500); // First retry delay is 500ms (attempt * 500)
+      
+      await appendPromise;
+      
+      expect(mockRedis.xAdd).toHaveBeenCalledTimes(2);
+      expect(consoleSpy).toHaveBeenCalledWith('Connection reset error occurred, retrying... (attempt 1)');
+      
+      consoleSpy.mockRestore();
+      jest.useRealTimers();
     });
   });
 
