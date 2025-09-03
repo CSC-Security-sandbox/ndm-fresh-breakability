@@ -28,7 +28,7 @@ const TimeElapsedRenderer = ({ value: milliseconds }: { value: number }) => {
         <>
           {absoluteDays !== 0 && <Box>{d} days</Box>}
           {absoluteHours !== 0 && <Box>{h} hrs</Box>}
-          {absoluteDays === 0 && absoluteMinutes !== 0 && <Box>{m} mins</Box>}
+          {absoluteDays === 0 && absoluteMinutes !== 0 && <Box>{m} {absoluteMinutes === 1 ? 'Min' : 'Mins'}</Box>}
         </>
       )}
     </Box>
