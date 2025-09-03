@@ -53,12 +53,16 @@ func InitFileServer(src_volumes, dest_volumes, source_ips, dest_ips string) {
 	DESTINATION_HOST_IPs = destIpList
 
 	// Ensure we have enough volumes and IPs.
-	if len(SOURCE_HOST_IPs) < len(SOURCE_VOLUMES) {
+	if len(SOURCE_HOST_IPs) != len(SOURCE_VOLUMES) {
 		LogFatalf("Insufficient number of source IPs provided. Got %d IPs for %d volumes", len(SOURCE_HOST_IPs), len(SOURCE_VOLUMES))
 	}
 
-	if len(DESTINATION_HOST_IPs) < len(DESTINATION_VOLUMES) {
+	if len(DESTINATION_HOST_IPs) != len(DESTINATION_VOLUMES) {
 		LogFatalf("Insufficient number of destination IPs provided. Got %d IPs for %d volumes", len(DESTINATION_HOST_IPs), len(DESTINATION_VOLUMES))
+	}
+
+	if len(SOURCE_VOLUMES) < 2 || len(DESTINATION_VOLUMES) < 2 {
+		LogFatalf("Expected atleast 2 source volumes and destination volumes")
 	}
 }
 

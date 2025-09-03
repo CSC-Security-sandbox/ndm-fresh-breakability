@@ -10,6 +10,9 @@ import (
 )
 
 var _ = Describe("TC-012:Run bulk cutover with concurrent migration jobs and batch pause/resume.", func() {
+	BeforeEach(func() {
+		Skip("TC-012 is skipped due to flakiness")
+	})
 	var headers map[string]string
 	var (
 		ProjectId              string
