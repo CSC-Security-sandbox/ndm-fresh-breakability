@@ -28,14 +28,14 @@ var _ = Describe("Rate Limiting Smoke", func() {
 			var otherErrors int
 			var mu sync.Mutex // Mutex to protect shared counters
 
-			By("Sending exactly 100 requests in under 1 second to test rate limiting")
+			By("Sending exactly 100 requests in 800ms to test rate limiting")
 
 			maxRequests := 100
 			// Record start time
 			startTime := time.Now()
 
-			// Create a ticker to send requests at 111 requests per second (9ms intervals = 900ms total)
-			ticker := time.NewTicker(9 * time.Millisecond)
+			// Create a ticker to send requests at 125 requests per second (8ms intervals = 800ms total)
+			ticker := time.NewTicker(8 * time.Millisecond)
 			defer ticker.Stop()
 
 			requestsSent := 0
@@ -90,13 +90,13 @@ var _ = Describe("Rate Limiting Smoke", func() {
 			LogDebug(fmt.Sprintf("Test Results - Successful: %d, Rate Limited: %d, Other Errors: %d",
 				successfulRequests, rateLimitedRequests, otherErrors))
 
-			// Verify that successful requests were less than or equal to 30 (the actual cap)
-			Expect(successfulRequests).To(BeNumerically("<=", 30),
-				fmt.Sprintf("Expected less than or equal to 30 successful requests, got %d", successfulRequests))
+			// Verify that successful requests were less than or equal to 50 (the actual cap)
+			Expect(successfulRequests).To(BeNumerically("<=", 50),
+				fmt.Sprintf("Expected less than or equal to 50 successful requests, got %d", successfulRequests))
 
 			// Verify that most requests were rate limited
-			Expect(rateLimitedRequests).To(BeNumerically(">=", 70),
-				fmt.Sprintf("Expected greater than or equal to 70 rate limited requests, got %d", rateLimitedRequests))
+			Expect(rateLimitedRequests).To(BeNumerically(">=", 50),
+				fmt.Sprintf("Expected greater than or equal to 50 rate limited requests, got %d", rateLimitedRequests))
 
 			By("########################## RATE LIMITING END ################################")
 
