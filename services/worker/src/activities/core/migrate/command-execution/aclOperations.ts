@@ -2,8 +2,6 @@ import { Inject, Injectable, LoggerService } from "@nestjs/common";
 import { ACLData, ACLEntry, ComparisonResult, GetACLOptions, ParsedACL, Permission, StampOptions, StampResult } from "./aclOperations.types";
 import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
 import * as path from 'path';
-import { promisify } from "util";
-import { exec } from "child_process";
 import { ACLError, CommandExecutionError, FileAccessError, TimeoutError } from "./aclOperations.errors";
 import { INHERITANCE_FLAGS, NON_SETTABLE_FLAGS, PERMISSION_MAP, SID_REGEX } from "./aclOperations.constants";
 import { RedisService } from "src/redis/redis.service";
@@ -22,7 +20,7 @@ export class AclOperations {
         this.logger = loggerFactory.create(AclOperations.name);
     }
 
-    failedNumGt0 = (out: string) => Number(out.match(/Failed processing\s*(\d+)\s*files/i)?.[1] || 0) > 0;
+    failedNumGt0 = (out: string): boolean => Number(out.match(/Failed processing\s*(\d+)\s*files/i)?.[1] || 0) > 0;
 
     async stampFileACL(sourceFile: string, targetFile: string, options?: StampOptions): Promise<StampResult> {
         if (!sourceFile || typeof sourceFile !== 'string') {
@@ -107,19 +105,19 @@ export class AclOperations {
             this.logger.debug(`Processing ${allPermissions.length} permissions (${denyPermissions.length} deny, ${grantPermissions.length} allow)`);
 
             for (const permission of allPermissions) {
-                    try {
-                        await this.processPermission(permission, targetPath, result, isIdentityMappingAvailable);
-                    } catch (error) {
-                        this.logger.error(`Failed to process permission for principal ${permission.principal}`, error);
-                        result.operations.push({
-                            type: 'skip',
-                            principal: permission.principal,
-                            reason: `Processing error: ${(error as Error).message}`,
-                            status: 'failed',
-                            error: (error as Error).message
-                        });
-                        result.success = false;
-                    }
+                try {
+                    await this.processPermission(permission, targetPath, result, isIdentityMappingAvailable);
+                } catch (error) {
+                    this.logger.error(`Failed to process permission for principal ${permission.principal}`, error);
+                    result.operations.push({
+                        type: 'skip',
+                        principal: permission.principal,
+                        reason: `Processing error: ${error instanceof Error ? error.message : String(error)}`,
+                        status: 'failed',
+                        error: error instanceof Error ? error.message : String(error)
+                    });
+                    result.success = false;
+                }
             }
 
             this.logger.debug(`ACL stamp completed. Success: ${result.success}, Operations: ${result.operations.length}`);
@@ -135,8 +133,8 @@ export class AclOperations {
             throw new ACLError('Failed to stamp ACL', 'STAMP_ERROR', {
                 sourceFile,
                 targetFile,
-                originalError: (error as Error).message,
-                stack: (error as Error).stack
+                originalError: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined
             });
         }
     }
@@ -152,17 +150,6 @@ export class AclOperations {
         // Validate permission structure
         if (!principal || !Array.isArray(permissions)) {
             throw new Error('Invalid permission structure');
-        }
-
-        // Skip unresolved SIDs when identity mapping is available
-        if (isIdentityMappingAvailable && SID_REGEX.test(principal)) {
-            result.operations.push({
-                type: 'skip',
-                principal,
-                reason: 'unresolved SID with identity mapping enabled',
-                status: 'skipped'
-            });
-            return;
         }
 
         let principalForCommand = (isIdentityMappingAvailable && originalPrincipal) ? principal : (originalPrincipal || principal);
@@ -383,7 +370,7 @@ export class AclOperations {
     }
 
     async resolvePrincipal(principal: string, jobID?: string): Promise<string> {
-        if (!principal || !this.redisService || !jobID || !SID_REGEX.test(principal)) {
+        if (!principal || !this.redisService || !jobID) {
             return principal;
         }
 
@@ -395,17 +382,16 @@ export class AclOperations {
 
         if (jobCache.has(principal)) {
             const cached = jobCache.get(principal);
-            return cached || principal;
+            return cached ?? principal; // Use nullish coalescing instead of ||
         }
 
         try {
             const resolvedName = await this.redisService.getOwnerIdentity(jobID, principal, 'SID');
-            const finalValue = resolvedName || principal;
+            const finalValue = resolvedName ?? principal; // Use nullish coalescing
             jobCache.set(principal, finalValue);
             return finalValue;
         } catch (error) {
             this.logger.error(`Failed to resolve SID ${principal}:`, error);
-            jobCache.set(principal, principal); // Cache the failure to avoid repeated attempts
             return principal;
         }
     }
@@ -726,6 +712,10 @@ export class AclOperations {
     }
 
     async getFileOwner(filePath: string, isIdentityMappingAvailable: boolean, jobRunId: string): Promise<{ owner: string, sid: string }> {
+        if (!filePath) {
+            throw new Error('File path is required');
+        }
+        
         const normalizedPath = path.resolve(filePath);
         const command = `
         powershell -Command "
@@ -742,8 +732,8 @@ export class AclOperations {
         try {
             ({ stdout, stderr } = await this.shellPool.executeCommand(command));
         } catch (error) {
-            this.logger.error(`Error executing command "${command}" for file ${normalizedPath}: ${error.message}`, error);
-            throw error; // Re-throw the error after logging
+            this.logger.error(`Error executing command "${command}" for file ${normalizedPath}: ${error instanceof Error ? error.message : String(error)}`, error);
+            throw error;
         }
 
         if (stderr) {
@@ -752,21 +742,22 @@ export class AclOperations {
         }
 
         const output = stdout.trim().split('\n');
-        let owner = output[0].trim() || null;
-        let sid = output[1].trim() || null;
+        let owner = output[0]?.trim() || '';
+        let sid = output[1]?.trim() || '';
+
+        // Validate that we got valid output
+        if (!owner || !sid) {
+            throw new Error(`Failed to get owner information from command output: ${stdout}`);
+        }
 
         // Check any mapping for sid and owner
-        if (isIdentityMappingAvailable) {
+        if (isIdentityMappingAvailable && jobRunId) {
             try {
-                const [resolvedOwner, resolvedSid] = await Promise.all([
-                    this.resolvePrincipal(owner, jobRunId),
-                    this.resolvePrincipal(sid, jobRunId)
-                ]);
-                owner = resolvedOwner;
-                sid = resolvedSid;
+                owner = owner ? await this.resolvePrincipal(owner, jobRunId) : "";
+                sid = sid ? await this.resolvePrincipal(sid, jobRunId) : "";
             } catch (error) {
-                this.logger.error(`Error resolving principals for job ${jobRunId}: ${error.message}`, error);
-                throw error; // Re-throw the error after logging
+                this.logger.error(`Error resolving principals for job ${jobRunId}: ${error instanceof Error ? error.message : String(error)}`, error);
+                throw error;
             }
         }
 
@@ -774,6 +765,9 @@ export class AclOperations {
     }
 
     async setFileOwner(filePath: string, owner: { owner: string, sid: string }): Promise<string | boolean> {
+        if (!filePath) {
+            throw new Error('File path is required');
+        }
         const normalizedPath = path.resolve(filePath);
 
         // First try with owner name if available
@@ -790,7 +784,7 @@ export class AclOperations {
                 this.logger.warn(`Failed to set owner using name ${owner.owner}: ${stderr || stdout}`);
                 // Fall through to try SID if name fails
             } catch (error) {
-                this.logger.error(`Error executing command to set owner by name: ${error.message}`, error);
+                this.logger.error(`Error executing command to set owner by name: ${error instanceof Error ? error.message : String(error)}`, error);
                 // Fall through to try SID if name fails
             }
         }
@@ -814,7 +808,7 @@ export class AclOperations {
                 this.logger.debug(`Successfully set owner for ${normalizedPath} to SID ${owner.sid}`);
                 return true;
             } catch (error) {
-                this.logger.error(`Error executing command to set owner by SID: ${error.message}`, error);
+                this.logger.error(`Error executing command to set owner by SID: ${error instanceof Error ? error.message : String(error)}`, error);
                 return "Failed to set owner using SID";
             }
         }
