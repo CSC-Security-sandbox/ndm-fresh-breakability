@@ -121,9 +121,10 @@ export class InventoryService {
               return acc;
             }, {} as Record<string, any>)
         );
-        
         await this.inventoryRepo.upsert(mappedData, ['path', 'jobRunId', 'isDirectory']);
+        this.logger.log(`Successfully saved batch of ${mappedData.length} inventory records`);
       } catch (err) {
+        this.logger.error(`[DB-WRITER] Error Details ${err}` )
         this.logger.error(`Failed to save inventory batch: ${err.message}`, err?.stack || err);
         failedRecords.push(...batch);
       }
@@ -272,6 +273,26 @@ export class InventoryService {
     } catch (error) {
       this.logger.error(`Failed to update task (ID: ${taskId}): ${error.message}`, error?.stack || error);
       throw new DatabaseError("Error while updating task data", error);
+    }
+  }
+
+  async createPartitionInventoryTableByJobRunId(jobRunId: string) {
+    if (!jobRunId) {
+      throw new ValidationError("JobRunId is required to create partition table", 'jobRunId');
+    }
+
+    const tableName = `inventory_${jobRunId.replace(/-/g, '_')}`;
+    const createTableQuery = `
+      CREATE TABLE IF NOT EXISTS ${process.env.DB_SCHEMA}.${tableName} PARTITION OF ${process.env.DB_SCHEMA}.inventory
+      FOR VALUES IN ('${jobRunId}');
+    `;
+
+    try {
+      await this.dataSource.query(createTableQuery);
+      this.logger.log(`Partition table ${tableName} created or already exists.`);
+    } catch (error) {
+      this.logger.error(`Failed to create partition table for jobRunId ${jobRunId}: ${error.message}`, error?.stack || error);
+      throw new DatabaseError("Error while creating partition inventory table", error);
     }
   }
 }

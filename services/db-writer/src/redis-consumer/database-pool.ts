@@ -78,13 +78,13 @@ export class DatabasePool {
             migrations: [],
             extra: {
                 // PostgreSQL specific pool settings
-                max: 10, // Maximum connections
-                min: 2,  // Minimum connections
+                max:  parseInt(process.env.DB_POOL_SIZE ?? '50', 10), // Maximum connections
+                min: parseInt(process.env.DB_POOL_SIZE_MIN ?? '2', 10),  // Minimum connections
                 acquireTimeoutMillis: 60000,
                 createTimeoutMillis: 30000,
                 destroyTimeoutMillis: 5000,
                 idleTimeoutMillis: 30000,
-                reapIntervalMillis: 1000,
+                reapIntervalMillis: 10000,
             }
         });
 
