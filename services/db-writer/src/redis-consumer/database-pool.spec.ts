@@ -383,13 +383,13 @@ describe('DatabasePool', () => {
                 poolSize: 10,
                 connectTimeoutMS: 60000,
                 extra: expect.objectContaining({
-                    max: 50,
+                    max: 10,
                     min: 2,
                     acquireTimeoutMillis: 60000,
                     createTimeoutMillis: 30000,
                     destroyTimeoutMillis: 5000,
                     idleTimeoutMillis: 30000,
-                    reapIntervalMillis: 10000,
+                    reapIntervalMillis: 1000,
                 }),
             }));
         });
@@ -513,13 +513,13 @@ describe('DatabasePool', () => {
                 poolSize: 10,
                 connectTimeoutMS: 60000,
                 extra: expect.objectContaining({
-                    max: 50,
+                    max: 10,
                     min: 2,
                     acquireTimeoutMillis: 60000,
                     createTimeoutMillis: 30000,
                     destroyTimeoutMillis: 5000,
                     idleTimeoutMillis: 30000,
-                    reapIntervalMillis: 10000,
+                    reapIntervalMillis: 1000,
                 }),
             }));
         });
