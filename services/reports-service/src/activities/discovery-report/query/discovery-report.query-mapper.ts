@@ -26,7 +26,8 @@ const formatTimeComponents = (components: { value: number; timeUnit: { singular:
 const formatTime = (timeInSeconds: number): string => {
     const totalSeconds = Math.floor(timeInSeconds);
     if (totalSeconds < SECONDS_PER_MINUTE) {
-        return `${totalSeconds}s`;
+        const unitText = totalSeconds === 1 ? TIME_UNITS.SECONDS.singular : TIME_UNITS.SECONDS.plural;
+        return `${totalSeconds}${unitText}`;
     }
     const days = Math.floor(totalSeconds / SECONDS_PER_DAY);
     const hours = Math.floor((totalSeconds % SECONDS_PER_DAY) / SECONDS_PER_HOUR);

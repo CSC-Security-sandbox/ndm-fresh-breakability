@@ -361,7 +361,7 @@ it('JOB_RUN_DETAILS_MAPPER maps input correctly', () => {
         { value: 'config1', category: 'File Server Info', valueType: 'string', sub_category: 'Config Name' },
         { value: 'NFS', category: 'File Server Info', valueType: 'string', sub_category: 'Protocol' },
         { value: 'SUCCESS', category: 'Job Run Stats', valueType: 'status', sub_category: 'Status' },
-        { value: '2mins 3sec', category: 'Job Run Stats', valueType: 'string', sub_category: 'Total Time' }
+        { value: '2mins 3secs', category: 'Job Run Stats', valueType: 'string', sub_category: 'Total Time' }
     ]);
 });
 
@@ -380,7 +380,7 @@ it('JOB_RUN_DETAILS_MAPPER formats time correctly for different ranges', () => {
     }];
     const resultSeconds = JOB_RUN_DETAILS_MAPPER(inputSeconds as any);
     expect(resultSeconds[4]).toEqual({
-        value: '45s',
+        value: '45secs',
         category: 'Job Run Stats',
         valueType: 'string',
         sub_category: 'Total Time'
@@ -445,7 +445,7 @@ it('JOB_RUN_DETAILS_MAPPER handles invalid stat_value gracefully', () => {
     }];
     const result = JOB_RUN_DETAILS_MAPPER(input as any);
     expect(result[4]).toEqual({
-        value: '0s',
+        value: '0secs',
         category: 'Job Run Stats',
         valueType: 'string',
         sub_category: 'Total Time'
