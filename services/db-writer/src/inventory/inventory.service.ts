@@ -280,16 +280,12 @@ export class InventoryService {
     if (!jobRunId) {
       throw new ValidationError("JobRunId is required to create partition table", 'jobRunId');
     }
-
-    const tableName = `inventory_${jobRunId.replace(/-/g, '_')}`;
-    const createTableQuery = `
-      CREATE TABLE IF NOT EXISTS ${process.env.DB_SCHEMA}.${tableName} PARTITION OF ${process.env.DB_SCHEMA}.inventory
-      FOR VALUES IN ('${jobRunId}');
-    `;
-
     try {
-      await this.dataSource.query(createTableQuery);
-      this.logger.log(`Partition table ${tableName} created or already exists.`);
+      await this.inventoryRepo.query(
+        `CALL ${process.env.SCHEMA}.create_inventory_partition($1, $2);`,
+        [jobRunId, process.env.SCHEMA],
+      );
+      this.logger.log(`Partition table  created or already exists for job run ID: ${jobRunId}`);
     } catch (error) {
       this.logger.error(`Failed to create partition table for jobRunId ${jobRunId}: ${error.message}`, error?.stack || error);
       throw new DatabaseError("Error while creating partition inventory table", error);
