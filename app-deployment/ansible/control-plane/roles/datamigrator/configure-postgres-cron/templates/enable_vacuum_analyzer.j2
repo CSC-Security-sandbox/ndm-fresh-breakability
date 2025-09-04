@@ -4,9 +4,25 @@ set -euo pipefail
 
 # Configuration
 NAMESPACE="datamigrator"
-CRONJOB_NAME="ndm-postgres-vacuum-analyze-cronjob"
-CONFIGMAP_NAME="ndm-postgres-cronjob-script"
-CONFIG_KEY="VACUUM_ANALYZE_ENABLED"
+CONFIGMAP_NAME="ndm-postgres-cronjob-cm"
+
+# Cron job configurations
+declare -A CRONJOBS
+CRONJOBS[1]="ndm-postgres-vacuum-analyze-cronjob"
+CRONJOBS[2]="ndm-postgres-mv-cronjob"
+
+declare -A CONFIG_KEYS
+CONFIG_KEYS[1]="VACUUM_ANALYZE_ENABLED"
+CONFIG_KEYS[2]="MATERIALIZED_VIEW_ENABLED"
+
+declare -A CRON_NAMES
+CRON_NAMES[1]="Vacuum Analyze"
+CRON_NAMES[2]="Materialized View"
+
+# Global variables set after selection
+CRONJOB_NAME=""
+CONFIG_KEY=""
+CRON_DISPLAY_NAME=""
 
 # -------------------------------------------------------------------
 # Logging helpers
@@ -15,6 +31,39 @@ print_info()    { echo "[INFO] $*"; }
 print_success() { echo "[SUCCESS] $*"; }
 print_warning() { echo "[WARNING] $*"; }
 print_error()   { echo "[ERROR] $*"; }
+
+# -------------------------------------------------------------------
+# Cron job selection
+# -------------------------------------------------------------------
+select_cronjob() {
+    echo ""
+    echo "Which cron job do you want to perform operations on?"
+    echo "1. Vacuum Analyze cron"
+    echo "2. Materialized View cron"
+    echo "3. Abort execution"
+    echo ""
+    
+    local choice
+    while true; do
+        read -r -p "Enter your choice (1, 2, or 3): " choice
+        case "$choice" in
+            1|2)
+                CRONJOB_NAME="${CRONJOBS[$choice]}"
+                CONFIG_KEY="${CONFIG_KEYS[$choice]}"
+                CRON_DISPLAY_NAME="${CRON_NAMES[$choice]}"
+                print_info "Selected: ${CRON_DISPLAY_NAME} cron job"
+                return 0
+                ;;
+            3)
+                print_info "Exiting script as requested."
+                exit 0
+                ;;
+            *)
+                echo "Please enter 1, 2, or 3."
+                ;;
+        esac
+    done
+}
 
 # -------------------------------------------------------------------
 # Validate cron expression
@@ -161,73 +210,100 @@ suspend_cronjob() {
 # Main
 # -------------------------------------------------------------------
 main() {
-    print_info "Starting Vacuum Analyze CronJob Management Script"
-    print_info "=================================================="
+    print_info "Starting Postgres CronJob Management Script"
+    print_info "=================================="
 
-    # Track if any changes were made
-    local changes_made=false
+    # Step 0: Select which cron job to manage
+    select_cronjob
 
-    # Step 0: Checks
+    # Step 1: Checks
     check_resources
 
-    # Step 1: Config
-    print_info "Checking current configuration..."
+    # Step 2: Gather current state
+    print_info "Checking current configuration for ${CRON_DISPLAY_NAME}..."
     current_config=$(get_config_value)
-    print_info "Current $CONFIG_KEY value: $current_config"
-
-    if [ "$current_config" = "FALSE" ]; then
-        print_warning "VACUUM ANALYZE is currently disabled"
-        if get_user_confirmation "Do you wish to enable VACUUM ANALYZE?"; then
-            update_config_value "TRUE"
-            changes_made=true
-        else
-            print_info "VACUUM ANALYZE remains disabled. Exiting."
-            exit 0
-        fi
-    else
-        print_info "VACUUM ANALYZE is currently enabled"
-        if get_user_confirmation "Do you wish to disable VACUUM ANALYZE?"; then
-            update_config_value "FALSE"
-            suspend_cronjob
-            print_info "VACUUM ANALYZE has been disabled and CronJob suspended. Exiting."
-            exit 0
-        fi
-        print_info "VACUUM ANALYZE will remain enabled"
-    fi
-
-    # Step 2: Cron schedule
     current_schedule=$(get_current_schedule)
+    
+    print_info "Current $CONFIG_KEY value: $current_config"
     print_info "Current cron schedule: $current_schedule"
 
-    if get_user_confirmation "Do you wish to change the cron expression?"; then
-        echo ""
-        echo "Enter the new cron expression (minute hour day month weekday)."
-        echo "Examples:"
-        echo "   0 2 * * *    -> Daily at 2:00 AM"
-        echo "   0 */6 * * *  -> Every 6 hours"
-        echo "   0 0 * * 0    -> Weekly on Sunday at midnight"
-        echo ""
-        new_schedule=$(get_cron_expression)
-        if [ -n "$new_schedule" ]; then
-            print_success "Cron expression validated successfully"
-            update_cron_schedule "$new_schedule"
-            changes_made=true
+    # Step 3: Collect user decisions (no changes applied yet)
+    local new_config="$current_config"
+    local new_schedule="$current_schedule"
+    local changes_needed=false
+    local desired_suspend=false
+
+    # 3a: Enable/disable decision
+    if [ "$current_config" = "FALSE" ]; then
+        print_warning "${CRON_DISPLAY_NAME} is currently disabled"
+        if get_user_confirmation "Do you wish to enable ${CRON_DISPLAY_NAME}?"; then
+            new_config="TRUE"
+            desired_suspend=false
+            changes_needed=true
         else
-            print_error "Failed to get valid cron expression. Exiting."
-            exit 1
+            print_info "${CRON_DISPLAY_NAME} remains disabled. Exiting."
+            exit 0
         fi
     else
-        print_info "Keeping current cron schedule: $current_schedule"
+        print_info "${CRON_DISPLAY_NAME} is currently enabled"
+        if get_user_confirmation "Do you wish to disable ${CRON_DISPLAY_NAME}?"; then
+            new_config="FALSE"
+            desired_suspend=true
+            changes_needed=true
+            # When disabling we skip schedule modification prompt
+        else
+            print_info "${CRON_DISPLAY_NAME} will remain enabled"
+        fi
     fi
 
-    # Step 3: Only unsuspend if changes were made or if we enabled VACUUM ANALYZE
-    if [ "$changes_made" = true ]; then
-        unsuspend_cronjob
-        print_success "Script completed successfully!"
-        print_info "CronJob '$CRONJOB_NAME' is now active with schedule: $(get_current_schedule)"
+    # 3b: Only ask for schedule change if remaining enabled
+    if [ "$desired_suspend" = false ]; then
+        if get_user_confirmation "Do you wish to change the cron expression?"; then
+            echo ""
+            echo "Enter the new cron expression (minute hour day month weekday)."
+            echo "Examples:"
+            echo "   0 2 * * *    -> Daily at 2:00 AM"
+            echo "   0 */6 * * *  -> Every 6 hours"
+            echo "   0 0 * * 0    -> Weekly on Sunday at midnight"
+            echo ""
+            new_schedule=$(get_cron_expression)
+            if [ -z "$new_schedule" ]; then
+                print_error "Failed to get valid cron expression. Exiting without making any changes."
+                exit 1
+            fi
+            print_success "Cron expression validated successfully"
+            # Only mark changes if schedule differs
+            if [ "$new_schedule" != "$current_schedule" ]; then
+                changes_needed=true
+            fi
+        else
+            print_info "Keeping current cron schedule: $current_schedule"
+        fi
+    fi
+
+    # Step 4: Apply changes
+    if [ "$changes_needed" = true ]; then
+        print_info "Applying changes..."
+
+        if [ "$new_config" != "$current_config" ]; then
+            update_config_value "$new_config"
+        fi
+
+        if [ "$new_schedule" != "$current_schedule" ]; then
+            update_cron_schedule "$new_schedule"
+        fi
+
+        if [ "$desired_suspend" = true ]; then
+            suspend_cronjob
+            print_success "${CRON_DISPLAY_NAME} disabled and suspended."
+        else
+            unsuspend_cronjob
+            print_success "${CRON_DISPLAY_NAME} enabled and active."
+        fi
+
+        print_info "Final schedule: $(get_current_schedule)"
     else
-        print_success "No changes were made. Script completed successfully!"
-        print_info "CronJob '$CRONJOB_NAME' remains in its current state with schedule: $current_schedule"
+        print_success "No changes were made. CronJob '$CRONJOB_NAME' remains as-is with schedule: $current_schedule"
     fi
 }
 

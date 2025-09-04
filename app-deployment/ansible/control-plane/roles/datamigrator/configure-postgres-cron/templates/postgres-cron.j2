@@ -1,10 +1,10 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: ndm-postgres-cronjob
+  name: ndm-postgres-mv-cronjob
   namespace: datamigrator
 spec:
-  schedule: "*/5 * * * *"
+  schedule: "*/10 * * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 2
   failedJobsHistoryLimit: 3
@@ -29,7 +29,7 @@ spec:
           serviceAccountName: datamigrator-openbao-sa
           restartPolicy: OnFailure
           containers:
-            - name: ndm-postgres-cronjob
+            - name: ndm-postgres-mv-cronjob
               image: bitnami/postgresql:17.6.0-debian-12-r0
               imagePullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
               env:
@@ -37,6 +37,11 @@ spec:
                   value: "postgresql.postgres.svc.cluster.local"
                 - name: PGDATABASE
                   value: "datamigrator"
+                - name: MATERIALIZED_VIEW_ENABLED
+                  valueFrom:
+                    configMapKeyRef:
+                      name: ndm-postgres-cronjob-cm
+                      key: MATERIALIZED_VIEW_ENABLED
               command:
                 - /bin/bash
                 - -c
@@ -48,4 +53,4 @@ spec:
           volumes:
             - name: script-volume
               configMap:
-                name: ndm-postgres-cronjob-script
+                name: ndm-postgres-cronjob-cm
