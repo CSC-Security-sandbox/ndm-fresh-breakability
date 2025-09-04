@@ -396,7 +396,7 @@ it('JOB_RUN_DETAILS_MAPPER formats time correctly for different ranges', () => {
     }];
     const resultMinutes = JOB_RUN_DETAILS_MAPPER(inputMinutes as any);
     expect(resultMinutes[4]).toEqual({
-        value: '32mins 30sec',
+        value: '32mins 30secs',
         category: 'Job Run Stats',
         valueType: 'string',
         sub_category: 'Total Time'
@@ -412,7 +412,7 @@ it('JOB_RUN_DETAILS_MAPPER formats time correctly for different ranges', () => {
     }];
     const resultHours = JOB_RUN_DETAILS_MAPPER(inputHours as any);
     expect(resultHours[4]).toEqual({
-        value: '2hrs 20mins 30sec',
+        value: '2hrs 20mins 30secs',
         category: 'Job Run Stats',
         valueType: 'string',
         sub_category: 'Total Time'
