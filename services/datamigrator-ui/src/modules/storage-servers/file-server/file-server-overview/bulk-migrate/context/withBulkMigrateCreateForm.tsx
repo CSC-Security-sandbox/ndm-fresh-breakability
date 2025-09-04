@@ -53,7 +53,7 @@ import { ComponentType, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BULK_MIGRATION_MOUNT_PATH_COL_DEFS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import { MAX_RETRY_API_ATTEMPTS } from "@/utils/constants";
-import { getPreCheckStatus } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/PreCheck/pre-check.utils";
+import { getPreCheckStatus, getPrecheckErrors } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/PreCheck/pre-check.utils";
 import { Box } from "@components/container";
 import { useDispatch } from "react-redux";
 import {
@@ -361,6 +361,26 @@ export function withBulkMigrateCreateForm(
       }
     };
 
+    const handlePrecheckErrorState = (data: any, errorMessage: string, interval: React.RefObject<number | null>) => {
+      const precheckState = getPrecheckErrors(data);
+
+      if (
+        precheckState &&
+        precheckState.errors?.length !== 0 &&
+        precheckState.errors[0]?.errors?.length !== 0
+      ) {
+        setPreCheckStatus(precheckState);
+        setIsPrecheckLoading(false);
+        setIsSubmitting(false);
+        if (interval.current) {
+          clearInterval(interval.current);
+        }
+      } else {
+        const error = new Error(errorMessage);
+        showErrorOnFailure(error);
+      }
+    };
+
     const handlePrecheck = (onSuccessfulSubmit?: () => void) => {
       let retryCount = 0;
       setReviewIdsValidated(selectedReviewIds);
@@ -426,23 +446,23 @@ export function withBulkMigrateCreateForm(
                 }
               }
             } else if (data?.status === ValidateConnectionStatus.FAILED) {
-              const precheckState = getPreCheckStatus(data);
-              setPreCheckStatus(precheckState);
-              setIsPrecheckLoading(false);
-              setIsSubmitting(false);
-              if (interval.current) {
-                clearInterval(interval.current);
-              }
+              handlePrecheckErrorState(
+                data,
+                `Seems like pre-check got failed, please try again.`,
+                interval
+              );
             } else if (data?.status === ValidateConnectionStatus.TERMINATED) {
-              const error = new Error(
-                `Seems like pre-check got terminated, please try again.`
+              handlePrecheckErrorState(
+                data,
+                `Seems like pre-check got terminated, please try again.`,
+                interval
               );
-              showErrorOnFailure(error);
             } else if (data?.status === ValidateConnectionStatus.TIMED_OUT) {
-              const error = new Error(
-                `Precheck timed out. This may be due to an unhealthy worker. Please check the worker's status and try again.`
+              handlePrecheckErrorState(
+                data,
+                `Precheck timed out. This may be due to an unhealthy worker. Please check the worker's status and try again.`,
+                interval
               );
-              showErrorOnFailure(error);
             } else if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
               const error = new Error(
                 `Request timed out after ${MAX_RETRY_API_ATTEMPTS} attempts. Possibly due to an unhealthy worker.`
