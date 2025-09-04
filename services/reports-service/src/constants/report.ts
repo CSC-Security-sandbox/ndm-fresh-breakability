@@ -173,7 +173,7 @@ export const SECONDS_PER_DAY = 86400;
 
 
 export const TIME_UNITS = {
-  SECONDS: { singular: 'sec', plural: 'sec' },
+  SECONDS: { singular: 'sec', plural: 'secs' },
   MINUTES: { singular: 'min', plural: 'mins' },
   HOURS: { singular: 'hr', plural: 'hrs' },
   DAYS: { singular: 'day', plural: 'days' }
