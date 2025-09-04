@@ -71,7 +71,11 @@ export class SmbUserSetupService {
       if (!entry.principal.startsWith("S-")) {
         principal = entry.principal.toLowerCase();
       }
-      const permissions = entry.permissions.map(p => `(${p.code})`).join('');
+      const permissions = entry.permissions
+        .filter(p => p.code.toUpperCase() !== 'I')
+        .map(p => `(${p.code})`)
+        .join('');
+
       try {
         await this.addPrincipals(context.jobConfig.destinationFileServer, principal, permissions, context.jobRunId);
       } catch (error) {
