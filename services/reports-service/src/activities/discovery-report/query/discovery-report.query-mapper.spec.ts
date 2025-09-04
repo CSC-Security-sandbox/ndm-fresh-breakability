@@ -386,6 +386,21 @@ it('JOB_RUN_DETAILS_MAPPER formats time correctly for different ranges', () => {
         sub_category: 'Total Time'
     });
 
+    const inputOneSecond = [{
+        volume_path: '/test',
+        config_name: 'test',
+        protocol: 'NFS',
+        status: 'SUCCESS',
+        stat_value: 1
+    }];
+    const resultOneSecond = JOB_RUN_DETAILS_MAPPER(inputOneSecond as any);
+    expect(resultOneSecond[4]).toEqual({
+        value: '1sec',
+        category: 'Job Run Stats',
+        valueType: 'string',
+        sub_category: 'Total Time'
+    });
+
     // Test minutes (1 min to 1 hour)
     const inputMinutes = [{
         volume_path: '/test',
@@ -445,7 +460,7 @@ it('JOB_RUN_DETAILS_MAPPER handles invalid stat_value gracefully', () => {
     }];
     const result = JOB_RUN_DETAILS_MAPPER(input as any);
     expect(result[4]).toEqual({
-        value: '0secs',
+        value: '0sec',
         category: 'Job Run Stats',
         valueType: 'string',
         sub_category: 'Total Time'
