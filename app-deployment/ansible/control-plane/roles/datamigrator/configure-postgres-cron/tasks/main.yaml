@@ -43,7 +43,7 @@
 
 - name: Trigger CronJob manually (local_cluster only)
   shell: |
-    kubectl create job --from=cronjob/ndm-postgres-cronjob postgres-cron-manual-{{ ansible_date_time.epoch }} -n datamigrator
+    kubectl create job --from=cronjob/ndm-postgres-mv-cronjob postgres-cron-manual-{{ ansible_date_time.epoch }} -n datamigrator
   register: cronjob_trigger
   when: local_cluster is defined
 
@@ -121,7 +121,7 @@
   become: yes
   template:
     src: ./templates/enable_vacuum_analyzer.j2
-    dest: /opt/datamigrator/bin/enable_vacuum_analyzer.sh
+    dest: /opt/datamigrator/bin/pg_cron_operations.sh
     mode: '0755'
 
 - name: Cleanup datamigrator directory

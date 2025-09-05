@@ -43,7 +43,7 @@ spec:
                 - name: VACUUM_ANALYZE_ENABLED
                   valueFrom:
                     configMapKeyRef:
-                      name: ndm-postgres-cronjob-script
+                      name: ndm-postgres-cronjob-cm
                       key: VACUUM_ANALYZE_ENABLED
               command:
                 - /bin/bash
@@ -56,6 +56,6 @@ spec:
           volumes:
             - name: script-volume
               configMap:
-                name: ndm-postgres-cronjob-script
+                name: ndm-postgres-cronjob-cm
 
  

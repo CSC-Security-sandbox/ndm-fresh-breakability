@@ -216,7 +216,7 @@ apply_postgres_cronjob_and_wait() {
         local JOB_NAME="postgres-cron-manual-${JOB_EPOCH}"
 
         log "Triggering manual run of the Postgres CronJob: $JOB_NAME ..."
-        retry $MAX_RETRIES "kubectl create job --from=cronjob/ndm-postgres-cronjob $JOB_NAME -n datamigrator" || handle_failure "Failed to trigger manual CronJob"
+        retry $MAX_RETRIES "kubectl create job --from=cronjob/ndm-postgres-mv-cronjob $JOB_NAME -n datamigrator" || handle_failure "Failed to trigger manual CronJob"
 
         log "Waiting for manual Job $JOB_NAME to complete..."
         if ! retry $MAX_RETRIES "kubectl wait --for=condition=complete --timeout=${WAIT_TIMEOUT}s job/$JOB_NAME -n datamigrator"; then

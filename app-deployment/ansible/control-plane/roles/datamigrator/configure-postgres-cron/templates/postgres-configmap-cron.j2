@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: ndm-postgres-cronjob-script
+  name: ndm-postgres-cronjob-cm
   namespace: datamigrator
 data:
   run_ndm_pg_cron.sh: |
@@ -66,3 +66,4 @@ data:
     fi
 
   VACUUM_ANALYZE_ENABLED: "FALSE"
+  MATERIALIZED_VIEW_ENABLED: "TRUE"
