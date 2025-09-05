@@ -281,7 +281,7 @@ export class InventoryService {
       throw new ValidationError("JobRunId is required to create partition table", 'jobRunId');
     }
     try {
-      await this.inventoryRepo.query(
+      await this.dataSource.query(
         `CALL ${process.env.SCHEMA}.create_inventory_partition($1, $2);`,
         [jobRunId, process.env.SCHEMA],
       );
