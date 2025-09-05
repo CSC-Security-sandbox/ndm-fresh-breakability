@@ -121,10 +121,9 @@ export class InventoryService {
               return acc;
             }, {} as Record<string, any>)
         );
+        
         await this.inventoryRepo.upsert(mappedData, ['path', 'jobRunId', 'isDirectory']);
-        this.logger.log(`Successfully saved batch of ${mappedData.length} inventory records`);
       } catch (err) {
-        this.logger.error(`[DB-WRITER] Error Details ${err}` )
         this.logger.error(`Failed to save inventory batch: ${err.message}`, err?.stack || err);
         failedRecords.push(...batch);
       }
