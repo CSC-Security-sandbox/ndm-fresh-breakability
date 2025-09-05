@@ -38,6 +38,10 @@ var (
 	NDM_WORKERS_PASSWORD     string
 	PROTOCOL_USERNAME        string
 	PROTOCOL_PASSWORD        string
+	BUILD_VERSION            string
+	REF_TYPE                 string
+	NDM_NEXUS_USERNAME       string
+	NDM_NEXUS_PASSWORD       string
 
 	ProtocolVersion3 ProtocolVersion
 
@@ -168,6 +172,7 @@ const (
 	vSphereEnv                      CloudEnvironment = "vSphere"
 	GcpEnv                          CloudEnvironment = "GCP"
 	TIME_FORMAT                                      = "2006-01-02T15:04:05.000Z"
+	ARTIFACTORY_URL                                  = "https://generic.repo.eng.netapp.com/artifactory/openlab-generic"
 )
 
 func init() {
@@ -192,6 +197,10 @@ func init() {
 	NDM_VM_HOST = os.Getenv("NDM_VM_HOST")
 	NDM_VM_PORT = os.Getenv("NDM_VM_PORT")
 	NDM_VM_PASSWORD = os.Getenv("NDM_VM_PASSWORD")
+	BUILD_VERSION = os.Getenv("BUILD_VERSION")
+	REF_TYPE = os.Getenv("REF_TYPE")
+	NDM_NEXUS_USERNAME = os.Getenv("NDM_NEXUS_USERNAME")
+	NDM_NEXUS_PASSWORD = os.Getenv("NDM_NEXUS_PASSWORD")
 }
 
 func UpdateConfVariables(protocolType, environment string) {

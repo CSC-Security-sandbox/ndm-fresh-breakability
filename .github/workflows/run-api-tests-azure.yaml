@@ -21,6 +21,14 @@ on:
         description: 'Artifactory URL for windows worker installer'
         required: true
         type: string
+      build_version:
+        description: 'Build version for support bundle uploads'
+        required: true
+        type: string
+      ref_type:
+        description: 'Reference type (releases or branches)'
+        required: true
+        type: string
 
   workflow_call: 
     inputs:
@@ -34,6 +42,14 @@ on:
         type: string
       windows_worker_installer_url:
         description: 'Artifactory URL for windows worker installer'
+        type: string
+      build_version:
+        description: 'Build version for support bundle uploads'
+        required: true
+        type: string
+      ref_type:
+        description: 'Reference type (releases or branches)'
+        required: true
         type: string
 
 permissions: 
@@ -240,6 +256,8 @@ jobs:
       AZURE_SMB_PROTOCOL_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
       AZURE_SMB_PROTOCOL_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
       SMB_EXECUTABLE_FILENAME: ${{ vars.SMB_EXECUTABLE_FILENAME }}
+      BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
+      REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -259,7 +277,8 @@ jobs:
           echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
           echo "AZURE_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "AZURE_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-
+          echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
+          echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
       - name: Install Ginkgo
         run: |
           cd ndm-api-tests
@@ -306,6 +325,8 @@ jobs:
       AZURE_NFS_SOURCE_HOST_IP: ${{ vars.AZURE_NFS_SOURCE_HOST_IP }}
       AZURE_NFS_DESTINATION_HOST_IP: ${{ vars.AZURE_NFS_DESTINATION_HOST_IP }}
       AZURE_NFS_PROTOCOL_USERNAME: ${{ vars.AZURE_NFS_PROTOCOL_USERNAME }}
+      BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
+      REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
     steps:
       - name: Waiting
         run: |
@@ -329,6 +350,8 @@ jobs:
           echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
           echo "AZURE_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "AZURE_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
+          echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
 
       - name: Install Ginkgo
         run: |
@@ -353,10 +376,52 @@ jobs:
           path: ndm-api-tests/reports/
           retention-days: 30
 
+  upload-support-bundle:
+    name: Upload Support Bundles
+    runs-on: openlab
+    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
+    if: always()
+    env:
+      JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
+      BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
+      REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Go for API Tests
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Setup credentials for support bundle
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+          
+          echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
+          echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
+          echo "NDM_USERNAME=${{ secrets.NDM_APP_USERNAME }}" >> $GITHUB_ENV
+          echo "PASSWORD=${{ secrets.NDM_APP_PASSWORD }}" >> $GITHUB_ENV
+      - name: Install Go dependencies
+        run: |
+          cd ndm-api-tests
+          go mod tidy
+          echo "Go dependencies installed successfully"
+          cd support-bundle
+          go run support_bundle.go
+          echo "Support bundle uploaded successfully"
+
   cleanup:
     name: Cleanup Infrastructure
     runs-on: openlab
-    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
+    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests, upload-support-bundle]
     if: always()
     steps:
       - name: Checkout repository
