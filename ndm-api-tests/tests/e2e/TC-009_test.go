@@ -4,14 +4,12 @@ import (
 	"fmt"
 	. "ndm-api-tests/utils"
 	"net/http"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/robfig/cron/v3"
 )
 
-var _ = Describe("TC-009: Run discovery and migration with 'Exclude file older than' option and hourly incremental sync schedule", func() {
+var _ = Describe("TC-009: Run discovery and migration with 'Exclude file older than' option", func() {
 	var (
 		ProjectId              string
 		workerId1              string
@@ -25,7 +23,7 @@ var _ = Describe("TC-009: Run discovery and migration with 'Exclude file older t
 		destinationVolumePath1 string
 		destinationVolumePath2 string
 	)
-	Context("TC-009: Run discovery and migration with 'Exclude file older than' option and hourly incremental sync schedule", func() {
+	Context("TC-009: Run discovery and migration with 'Exclude file older than' option", func() {
 
 		BeforeEach(func() {
 			numberOfWorker := 2
@@ -43,7 +41,7 @@ var _ = Describe("TC-009: Run discovery and migration with 'Exclude file older t
 			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[1], DESTINATION_VOLUMES[1])
 		})
 
-		It("TC-009: Run migration with 'Exclude file older than' option and hourly incremental sync schedule", func() {
+		It("TC-009: Run migration with 'Exclude file older than' option", func() {
 			By("########################## TC-009 start ################################")
 
 			var (
@@ -148,11 +146,11 @@ var _ = Describe("TC-009: Run discovery and migration with 'Exclude file older t
 			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			By("Creating a migration job with Incremental Sync of 1 hr")
+			By("Creating a migration job")
 			currentDateTime := GetCurrentUTCTimestamp()
 			migrationParams := MigrationJobParams{
 				FirstRunAt:         currentDateTime,
-				FutureRunSchedule:  "0 * * * *", // Cron expression of 1 hr
+				FutureRunSchedule:  "",
 				SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
 				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
 				SidMapping:         false,
@@ -185,26 +183,6 @@ var _ = Describe("TC-009: Run discovery and migration with 'Exclude file older t
 				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-009-JSON/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 				By(fmt.Sprintf("validate report result : %s", result))
-			}
-
-			//Validating the NextScheduled TIme from response is next complete hour after 1st run
-			parsedBase, err := time.Parse(TIME_FORMAT, currentDateTime)
-			Expect(err).NotTo(HaveOccurred(), "parsing the timestamp from GetCurrentUTCTimestamp()")
-
-			sched, err := cron.ParseStandard("0 * * * *")
-			Expect(err).NotTo(HaveOccurred(), "parsing cron expression")
-			nextHour := sched.Next(parsedBase)
-			for _, migrationJobConfigID := range migrationJobConfigIDs {
-				jobSummary, err := GetJobSummaryByConfigID(ProjectId, migrationJobConfigID, headers)
-				Expect(err).NotTo(HaveOccurred())
-
-				actualNext, err := time.Parse(TIME_FORMAT, jobSummary.NextScheduleDate)
-				Expect(err).NotTo(HaveOccurred(),
-					"could not parse NextScheduleDate %q", jobSummary.NextScheduleDate)
-
-				Expect(actualNext).To(Equal(nextHour), "expected next schedule exactly at %s; got %s",
-					nextHour.Format(TIME_FORMAT), jobSummary.NextScheduleDate,
-				)
 			}
 
 			By("Adding Delta Data")

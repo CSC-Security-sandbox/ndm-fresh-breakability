@@ -294,31 +294,44 @@ func ResetUserPassword(userID, accessToken, newPassword string) error {
 	url := fmt.Sprintf("https://%s/%s/%s/reset-password", KEYCLOAK_IP, KEYCLOAK_BASE_URL, userID)
 
 	var err error
-	PASSWORD, err = GenerateNewPassword(10)
-	if err != nil {
-		return fmt.Errorf("failed to generate new password: %w", err)
+	isResetPasswdDone := false
+
+	for attempt := 1; attempt <= 10; attempt++ {
+		PASSWORD, err = GenerateNewPassword(10)
+		if err != nil {
+			return fmt.Errorf("failed to generate new password: %w", err)
+		}
+
+		payload := map[string]interface{}{
+			"type":      "password",
+			"value":     PASSWORD,
+			"temporary": false,
+		}
+		bodyBytes, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal payload: %w", err)
+		}
+
+		LogDebug(fmt.Sprintf("Resetting Password, attempt=%d", attempt))
+		headers := GetHeaders(accessToken, ContentTypeJSON)
+		resp, err := SendAPIRequest("PUT", url, bodyBytes, headers)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
+			isResetPasswdDone = true
+			break
+		}
+
+		Wait(DefaultPollInterval)
 	}
 
-	payload := map[string]interface{}{
-		"type":      "password",
-		"value":     PASSWORD,
-		"temporary": false,
-	}
-	bodyBytes, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal payload: %w", err)
+	if !isResetPasswdDone {
+		return errors.New("failed to reset-password even after 10 attempts")
 	}
 
-	headers := GetHeaders(accessToken, ContentTypeJSON)
-	resp, err := SendAPIRequest("PUT", url, bodyBytes, headers)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("unexpected response code: %d", resp.StatusCode)
-	}
 	return nil
 }
 

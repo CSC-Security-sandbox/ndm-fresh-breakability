@@ -2,11 +2,21 @@ import { PreCheckStatus } from "@modules/storage-servers/file-server/file-server
 import { ValidateConnectionStatus } from "@/types/app.type";
 
 export const getPreCheckStatus = (data: any): PreCheckStatus => {
-  if (data?.status !== ValidateConnectionStatus.COMPLETED && data?.status !== ValidateConnectionStatus.FAILED) {
+  if (data?.status !== ValidateConnectionStatus.COMPLETED) {
     return { success: [], failed: [], errors: [], warnings: [] };
   }
 
-  if (data?.status == ValidateConnectionStatus.FAILED) {
+  return data?.completed.reduce(
+    (acc: PreCheckStatus, completedItem: any) => {
+      processCompletedItem(completedItem, acc);
+      return acc;
+    },
+    { success: [], failed: [], errors: [], warnings: [] }
+  );
+};
+
+export const getPrecheckErrors = (data: any): PreCheckStatus => {
+  if (data?.status === ValidateConnectionStatus.FAILED || data?.status === ValidateConnectionStatus.TIMED_OUT || data?.status === ValidateConnectionStatus.TERMINATED) {
     return {
       success: [],
       failed: [],
@@ -19,17 +29,10 @@ export const getPreCheckStatus = (data: any): PreCheckStatus => {
       ],
       warnings: [],
     };
-  } else {
-    return data?.completed.reduce(
-      (acc: PreCheckStatus, completedItem: any) => {
-        processCompletedItem(completedItem, acc);
-        return acc;
-      },
-      { success: [], failed: [], errors: [], warnings: [] }
-    );
   }
-};
 
+  return { success: [], failed: [], errors: [], warnings: [] };
+}
 const processCompletedItem = (completedItem: any, acc: PreCheckStatus) => {
   const allDestinationsSuccess = completedItem?.destination.every(
     (destinationItem: any) => destinationItem?.status === "success"

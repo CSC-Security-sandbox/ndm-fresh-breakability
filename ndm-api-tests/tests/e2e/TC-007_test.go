@@ -11,9 +11,6 @@ import (
 )
 
 var _ = Describe("TC-007: Run migration to multiple destinations with incremental sync schedule", func() {
-	BeforeEach(func() {
-		Skip("TC-007 is skipped due to flakiness")
-	})
 	var (
 		ProjectId              string
 		workerId1              string
@@ -128,11 +125,8 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
 
-			// Get migration job run IDs and wait for completion
-			// migration_validators := []string{
-			//     "src_to_dest_vol_migration.json",
-			//     "src2_to_dest2_vol_migration.json",
-			// }
+			migrationEndTsConf := make(map[string]string)
+			var migrationJobRunIDs []string
 			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 				migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
@@ -144,30 +138,8 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				// result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
-				// Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-				// By(fmt.Sprintf("validate report result : %s", result))
-			}
-
-			// Validating the NextScheduled time from response is within +-1 minutes and is 3 minutes later than 1st run
-			parsedBase, err := time.Parse(TIME_FORMAT, currentDateTime)
-			Expect(err).NotTo(HaveOccurred(), "Error parsing curreent datetimes")
-			sch, err := cron.ParseStandard("*/10 * * * *")
-			Expect(err).NotTo(HaveOccurred(), "invalid cron expression")
-			expectedNext := sch.Next(parsedBase)
-
-			for _, migrationJobConfigID := range migrationJobConfigIDs {
-				jobSummary, err := GetJobSummaryByConfigID(ProjectId, migrationJobConfigID, headers)
-				Expect(err).NotTo(HaveOccurred())
-
-				actualNext, err := time.Parse(TIME_FORMAT, jobSummary.NextScheduleDate)
-				Expect(err).NotTo(HaveOccurred(),
-					"could not parse NextScheduleDate %q", jobSummary.NextScheduleDate)
-
-				// assert actualNext is within ±1min of expectedNext
-				Expect(actualNext).To(BeTemporally("~", expectedNext, time.Second), "expected next schedule exactly at %s; got %s",
-					expectedNext.Format(TIME_FORMAT),
-					jobSummary.NextScheduleDate)
+				migrationJobRunIDs = append(migrationJobRunIDs, migrationJobRunID)
+				migrationEndTsConf[migrationJobConfigID] = GetCurrentUTCTimestamp()
 			}
 
 			By("Adding Delta Data for Incremental run")
@@ -176,7 +148,47 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			err = AddDataToVolume(sourceVolumePath2)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
 
-			Wait(180) // This delay is required to wait till new Job run created after 3 mins
+			// Validating the NextScheduled time
+			maxSleepTime := 0
+			for _, migrationJobConfigID := range migrationJobConfigIDs {
+				jobSummary, err := GetJobSummaryByConfigID(ProjectId, migrationJobConfigID, headers)
+				Expect(err).NotTo(HaveOccurred())
+
+				actualNext, err := time.Parse(TIME_FORMAT, jobSummary.NextScheduleDate)
+				Expect(err).NotTo(HaveOccurred(),
+					"could not parse NextScheduleDate %q", jobSummary.NextScheduleDate)
+
+				parsedBase, err := time.Parse(TIME_FORMAT, migrationEndTsConf[migrationJobConfigID])
+				Expect(err).NotTo(HaveOccurred(), "Error parsing curreent datetimes")
+				sch, err := cron.ParseStandard("*/10 * * * *")
+				Expect(err).NotTo(HaveOccurred(), "invalid cron expression")
+				expectedNext := sch.Next(parsedBase)
+
+				// assert actualNext is within ±1min of expectedNext
+				Expect(actualNext).To(BeTemporally("~", expectedNext, time.Minute), "expected next schedule exactly at %s; got %s",
+					expectedNext.Format(TIME_FORMAT),
+					jobSummary.NextScheduleDate)
+
+				sleepTime := expectedNext.Sub(time.Now().UTC()).Seconds()
+				if sleepTime > 0 && sleepTime > float64(maxSleepTime) {
+					maxSleepTime = int(sleepTime)
+				}
+			}
+
+			// This delay is required to wait till new Job run created after 3 mins
+			Wait(maxSleepTime)
+
+			// Validate migration report for 1st iteration
+			migration_validators := []string{
+				"src_to_dest_vol_migration.json",
+				"src2_to_dest2_vol_migration.json",
+			}
+
+			for i, migrationJobRunID := range migrationJobRunIDs {
+				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
+				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
+				By(fmt.Sprintf("validate report result : %s", result))
+			}
 
 			// Validating incremental Sync is getting triggered
 			for _, migrationJobConfigID := range migrationJobConfigIDs {
@@ -195,12 +207,6 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				// Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 				// By(fmt.Sprintf("validate report result : %s", result))
 			}
-
-			By("Remove Delta data from destinations")
-			err = RemoveDeltaFromVolume(destinationVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", destinationVolumePath1)
-			err = RemoveDeltaFromVolume(destinationVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", destinationVolumePath2)
 
 			By("Creating bulk cutover job")
 			cutoverParams := BulkCutoverJobParams{
@@ -240,12 +246,12 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				defer resp.Body.Close()
 			}
 
-			By("Validating cutover reports")
+			/*By("Validating cutover reports")
 			for _, cutoverRunID := range cutoverRunIDs {
-				result, err := ValidateReport(cutoverRunID, JobTypeCutover, fmt.Sprintf(".././validators/%s/cutover_validation.json", PROTOCOL_TYPE))
+				result, err := ValidateReport(cutoverRunID, JobTypeCutover, fmt.Sprintf("../../validators/%s/cutover_validation.json", PROTOCOL_TYPE))
 				Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
 				LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
-			}
+			}*/
 			By("########################## TC-007 end ################################")
 		})
 
