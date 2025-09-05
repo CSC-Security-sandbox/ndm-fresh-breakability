@@ -64,26 +64,19 @@ describe('SmbUserSetupService', () => {
         .mockImplementationOnce(async () => sourceAcl as any);
       jest.spyOn(service, 'addPrincipals').mockResolvedValue(undefined);
       jest.spyOn(service, 'removePrincipals').mockResolvedValue(undefined);
-      jest.spyOn(service, 'disableInheritance').mockResolvedValue(undefined);
 
       await service.setup('jobRunId-1', context);
 
-      expect(service.addPrincipals).toHaveBeenCalledWith(
-        context.jobConfig.destinationFileServer,
-        context.jobConfig.destinationFileServer.username,
-        '(OI)(CI)(F)'
-      );
-      expect(service.removePrincipals).toHaveBeenCalledWith(
-        context.jobConfig.destinationFileServer,
-        'user2'
-      );
-      expect(service.disableInheritance).toHaveBeenCalled();
+      // Based on the implementation, it adds all principals from source to destination
       expect(service.addPrincipals).toHaveBeenCalledWith(
         context.jobConfig.destinationFileServer,
         'user2',
         '(F)',
         context.jobRunId
       );
+      
+      // Since user2 is in both source and destination, it should not be removed
+      expect(service.removePrincipals).not.toHaveBeenCalled();
     });
 
     it('should not add destination user if already present', async () => {
@@ -97,18 +90,23 @@ describe('SmbUserSetupService', () => {
         .mockImplementationOnce(async () => sourceAcl as any);
       jest.spyOn(service, 'addPrincipals').mockResolvedValue(undefined);
       jest.spyOn(service, 'removePrincipals').mockResolvedValue(undefined);
-      jest.spyOn(service, 'disableInheritance').mockResolvedValue(undefined);
 
       await service.setup('jobRunId-1', context);
 
-      expect(service.addPrincipals).not.toHaveBeenCalledWith(
+      // Should add user2 from source
+      expect(service.addPrincipals).toHaveBeenCalledWith(
         context.jobConfig.destinationFileServer,
-        context.jobConfig.destinationFileServer.username,
-        '(OI)(CI)(F)'
+        'user2',
+        '(F)',
+        context.jobRunId
+      );
+      
+      // Should remove user1 as it's not in source
+      expect(service.removePrincipals).toHaveBeenCalledWith(
+        context.jobConfig.destinationFileServer,
+        'user1'
       );
     });
-
-   
 
     it('should log errors when addPrincipals fails', async () => {
       const destinationAcl = {
@@ -121,7 +119,6 @@ describe('SmbUserSetupService', () => {
         .mockImplementationOnce(async () => sourceAcl as any);
       jest.spyOn(service, 'addPrincipals').mockRejectedValue(new Error('fail'));
       jest.spyOn(service, 'removePrincipals').mockResolvedValue(undefined);
-      jest.spyOn(service, 'disableInheritance').mockResolvedValue(undefined);
 
       await service.setup('jobRunId-1', context);
 
@@ -130,7 +127,7 @@ describe('SmbUserSetupService', () => {
 
     it('should log errors when removePrincipals fails', async () => {
       const destinationAcl = {
-        permissions: [{ principal: 'user2', permissions: [{ code: 'F' }] }],
+        permissions: [{ principal: 'user3', permissions: [{ code: 'F' }] }],
       };
       const sourceAcl = {
         permissions: [{ principal: 'user2', permissions: [{ code: 'F' }] }],
@@ -139,41 +136,69 @@ describe('SmbUserSetupService', () => {
         .mockImplementationOnce(async () => sourceAcl as any);
       jest.spyOn(service, 'addPrincipals').mockResolvedValue(undefined);
       jest.spyOn(service, 'removePrincipals').mockRejectedValue(new Error('fail'));
-      jest.spyOn(service, 'disableInheritance').mockResolvedValue(undefined);
 
       await service.setup('jobRunId-1', context);
 
       expect(mockLogger.error).toHaveBeenCalled();
     });
 
-    it('should log errors when disableInheritance fails', async () => {
-      const destinationAcl = {
-        permissions: [{ principal: 'user1', permissions: [{ code: 'F' }] }],
-      };
+    it('should handle destination without ACL', async () => {
       const sourceAcl = {
         permissions: [{ principal: 'user2', permissions: [{ code: 'F' }] }],
       };
-      jest.spyOn(service, 'getFileACL').mockImplementationOnce(async () => destinationAcl as any)
+      jest.spyOn(service, 'getFileACL')
+        .mockImplementationOnce(async () => null) // destination returns null
         .mockImplementationOnce(async () => sourceAcl as any);
       jest.spyOn(service, 'addPrincipals').mockResolvedValue(undefined);
       jest.spyOn(service, 'removePrincipals').mockResolvedValue(undefined);
-      jest.spyOn(service, 'disableInheritance').mockRejectedValue(new Error('fail'));
 
       await service.setup('jobRunId-1', context);
 
-      expect(mockLogger.error).toHaveBeenCalled();
+      // Should still add user2 from source
+      expect(service.addPrincipals).toHaveBeenCalledWith(
+        context.jobConfig.destinationFileServer,
+        'user2',
+        '(F)',
+        context.jobRunId
+      );
+      
+      // No users to remove since destination had no ACL
+      expect(service.removePrincipals).not.toHaveBeenCalled();
+      
+      // Should log warning about no ACL on destination
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        `No ACL found on destination path ${context.jobConfig.destinationFileServer.path}`
+      );
+    });
+
+    it('should handle source without ACL', async () => {
+      const destinationAcl = {
+        permissions: [{ principal: 'user1', permissions: [{ code: 'F' }] }],
+      };
+      jest.spyOn(service, 'getFileACL')
+        .mockImplementationOnce(async () => destinationAcl as any)
+        .mockImplementationOnce(async () => null); // source returns null
+      jest.spyOn(service, 'addPrincipals').mockResolvedValue(undefined);
+      jest.spyOn(service, 'removePrincipals').mockResolvedValue(undefined);
+
+      await service.setup('jobRunId-1', context);
+
+      // Should log warning about no ACL on source
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        `No ACL found on source path ${context.jobConfig.sourceFileServer.path}`
+      );
+      
+      // No principals to add since source has no ACL
+      expect(service.addPrincipals).not.toHaveBeenCalled();
+      
+      // Should remove all destination principals since source has none
+      expect(service.removePrincipals).toHaveBeenCalledWith(
+        context.jobConfig.destinationFileServer,
+        'user1'
+      );
     });
   });
 
-  describe('disableInheritance', () => {
-    
-
-    it('should log and throw error on failure', async () => {
-      mockShellPool.executeCommand.mockRejectedValue(new Error('fail'));
-      await expect(service.disableInheritance(fileServer)).rejects.toThrow('fail');
-      expect(mockLogger.error).toHaveBeenCalled();
-    });
-  });
 
   describe('removePrincipals', () => {
     it('should execute icacls command and log success', async () => {

@@ -104,6 +104,25 @@ export class AclOperations {
             const grantPermissions = sourceACL.permissions.filter(p => p.accessType === 'allow');
             const allPermissions = [...denyPermissions, ...grantPermissions];
 
+            const enabledInheritance = allPermissions.some(permission => {
+                return permission.permissions.some(perm => {
+                    return perm.code === "I"
+                });
+            });
+
+            try {
+                const cmdForInheritance = `icacls "${targetPath}" /inheritance:${enabledInheritance ? 'e' : 'd'}`;
+                this.logger.debug(`Disabling inheritance on ${targetPath} , ${cmdForInheritance}`);
+                const { stdout, stderr } = await this.shellPool.executeCommand(cmdForInheritance);
+                if (stderr) {
+                    this.logger.error(`Failed to disable inheritance on ${targetPath}`, stderr);
+                } else {
+                    this.logger.debug(`Successfully disabled inheritance on ${targetPath}`, stdout);
+                }
+            } catch (error) {
+                this.logger.error(`Failed to disable inheritance on ${targetPath}`, error);
+            }
+
             this.logger.debug(`Processing ${allPermissions.length} permissions (${denyPermissions.length} deny, ${grantPermissions.length} allow)`);
 
             for (const permission of allPermissions) {

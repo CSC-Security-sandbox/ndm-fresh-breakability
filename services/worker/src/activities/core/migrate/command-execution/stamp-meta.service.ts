@@ -37,15 +37,15 @@ export class StampMetaService {
 
                 // Stamp SID to object
 
-                const [sidOutput, ownerOutput,hiddenAttrOutput, preserveTimeOutput] = await Promise.all([
+                const [sidOutput,hiddenAttrOutput, preserveTimeOutput] = await Promise.all([
                     this.stampSIDAclToObject(input),
-                    this.stampFileOwner(input),
+                  //  this.stampFileOwner(input),
                     this.stampFileAttributeMeta(input),
                     this.preserveAccessAndModifiedTime(input)
                 ]);
 
-                output.sourceErrors.push(...sidOutput.sourceErrors, ...ownerOutput.sourceErrors, ...hiddenAttrOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
-                output.targetErrors.push(...sidOutput.targetErrors, ...ownerOutput.targetErrors, ...hiddenAttrOutput.targetErrors, ...preserveTimeOutput.targetErrors);
+                output.sourceErrors.push(...sidOutput.sourceErrors, ...hiddenAttrOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
+                output.targetErrors.push(...sidOutput.targetErrors, ...hiddenAttrOutput.targetErrors, ...preserveTimeOutput.targetErrors);
 
 
                 // Stamp access and modified time
