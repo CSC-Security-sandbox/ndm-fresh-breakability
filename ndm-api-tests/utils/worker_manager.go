@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
@@ -28,6 +29,11 @@ type DetachWorkerResult struct {
 	workerConfig SSHConfig
 	workerID     string
 	output       string
+	err          error
+}
+
+type StopWorkerResult struct {
+	workerConfig SSHConfig
 	err          error
 }
 
@@ -209,12 +215,21 @@ func GetAttachedWorkersConfig() map[string]SSHConfig {
 
 func GetAttachedWorkerDetails() SSHConfig {
 	WorkerConfigs := GetAttachedWorkersConfig()
-	var firstWorkerConfig SSHConfig
+	/*var firstWorkerConfig SSHConfig
 	for _, cfg := range WorkerConfigs {
 		firstWorkerConfig = cfg
 		break // Take only the first one
 	}
-	return firstWorkerConfig
+	return firstWorkerConfig    UMV*/
+
+	workers := make([]string, 0, len(WorkerConfigs))
+	for w := range WorkerConfigs {
+		workers = append(workers, w)
+	}
+
+	// Pick a random worker
+	w := workers[rand.Intn(len(workers))]
+	return WorkerConfigs[w]
 }
 
 // DetachWorkers detaches all attached workers by running the SSH detach script on each worker.
@@ -438,10 +453,26 @@ func StopAllWorkersAndWait() error {
 		return fmt.Errorf("no workers are attached to stop")
 	}
 
+	stopWorkerRes := make(chan StopWorkerResult, len(AttachedWorkersConfig))
+	var wg sync.WaitGroup
+
 	for _, workerConfig := range AttachedWorkersConfig {
-		_, err := StopWorker(workerConfig)
-		if err != nil {
-			return fmt.Errorf("error stopping worker, %s, err = %s", workerConfig.Host, err.Error())
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := StopWorker(workerConfig)
+			stopWorkerRes <- StopWorkerResult{workerConfig: workerConfig, err: err}
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(stopWorkerRes)
+	}()
+
+	for res := range stopWorkerRes {
+		if res.err != nil {
+			return fmt.Errorf("error stopping worker, %s, err = %s", res.workerConfig.Host, res.err.Error())
 		}
 	}
 

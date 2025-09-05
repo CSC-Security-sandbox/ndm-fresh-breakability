@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
+var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
 	var (
 		ProjectId              string
 		workerId1              string
@@ -22,6 +22,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 		attachedWorkersConfig  map[string]SSHConfig
 		sourceVolumePath1      string
 		sourceVolumePath2      string
+		isSuccessful           bool
 	)
 
 	Context("TC-001", func() {
@@ -215,10 +216,13 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			}
 
 			By("Adding Delta Data to the Source Paths")
-			err = AddDataToVolume(sourceVolumePath1)
+			err = AddDeltaToVolumes([]string{sourceVolumePath1, sourceVolumePath2})
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error adding delta to volumes, err = %v", err))
+
+			/*err = AddDataToVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
-			err = AddDataToVolume(sourceVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
+			err = AddDataToVolume(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2) UMV */
 
 			By("Creating a Bulk Cutover Job")
 			cutoverParams := BulkCutoverJobParams{
@@ -266,14 +270,18 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			// 	Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
 			// 	LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
 			// }
+
+			isSuccessful = true
 			By("########################## TC-001 end ################################")
 		})
 
 		AfterEach(func() {
 			By("Cleanup started")
-			err := StopAllWorkersAndWait()
-			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
-			err = RemoveDeltaFromVolume(sourceVolumePath1)
+			if !isSuccessful {
+				err := StopAllWorkersAndWait()
+				Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
+			}
+			/*err = RemoveDeltaFromVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
 
 			err = RemoveDeltaFromVolume(sourceVolumePath2)
@@ -282,8 +290,16 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			err = ClearVolume(destinationVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
 
-			err = ClearVolume(destinationVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
+			err = ClearVolume(destinationVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2) UMV */
+
+			cleanupVolParams := CleanupVolumesParams{
+				RemoveDeltaVolumes: []string{sourceVolumePath1, sourceVolumePath2},
+				ClearVolumes:       []string{destinationVolumePath1, destinationVolumePath2},
+			}
+
+			err = CleanupVolumes(cleanupVolParams)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error cleaning up volumes, err = %V", err))
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")

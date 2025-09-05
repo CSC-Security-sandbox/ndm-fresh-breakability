@@ -7,12 +7,23 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 const (
 	AutoDiscover ExportPathSource = "AUTO_DISCOVER"
 	ManualUpload ExportPathSource = "MANUAL_UPLOAD"
 )
+
+type CleanupVolumeResults struct {
+	volume string
+	err    error
+}
+
+type CleanupVolumesParams struct {
+	RemoveDeltaVolumes []string
+	ClearVolumes       []string
+}
 
 type CreateServereParams struct {
 	ConfigName       string
@@ -207,11 +218,11 @@ func GetExportPathID(
 	return sourcePathID, nil
 }
 
-func ClearVolumeForSMB(export string) string {
+func ClearVolumeForSMB(export, mappedDrive string) string {
 	split := strings.Split(export, ":")
 	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
 
-	mappedDrive := "Z:"
+	//mappedDrive := "Z:" UMV
 
 	clearVolumeScript := fmt.Sprintf(`cmd /C
 	net use %s /delete /yes &
@@ -229,7 +240,8 @@ func ClearVolumeForSMB(export string) string {
 }
 
 func ClearVolumeForNFS(export string) string {
-	destMount := "/mnt/remove_data"
+	split := strings.Split(export, "/")
+	destMount := "/mnt/clear_data_" + strings.TrimSpace(split[1])
 
 	script := fmt.Sprintf(`
 	set -e
@@ -268,7 +280,11 @@ func ClearVolume(export string) error {
 
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
-		script = ClearVolumeForSMB(export)
+		mappedDrive, err := GetAvailableNetworkDrive()
+		if err != nil {
+			return err
+		}
+		script = ClearVolumeForSMB(export, mappedDrive)
 	case ProtocolNFS:
 		script = ClearVolumeForNFS(export)
 	}
@@ -291,14 +307,12 @@ func ClearVolume(export string) error {
 }
 
 // AddDataToVolumeForSMB creates a delta directory with 100 text files of 100KB each
-func AddDataToVolumeForSMB(export string) string {
-	//fullCmd := `cmd /C "mkdir C:\delta_test_smb && for /L %i in (1,1,100) do fsutil file createnew C:\delta_test_smb\file%i.txt 102400"`
-
+func AddDataToVolumeForSMB(export, mappedDrive string) string {
 	split := strings.Split(export, ":")
 	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
 
-	deltaDir := `C:\` + DeltaFolder
-	mappedDrive := `Z:`
+	deltaDir := `C:\` + DeltaFolder + fmt.Sprintf("_%s", strings.TrimSpace(split[1]))
+	//mappedDrive := `Z:` UMV
 
 	cmd := fmt.Sprintf(`cmd /C
 	if exist %s rmdir /s /q %s &&
@@ -321,13 +335,17 @@ func AddDataToVolumeForSMB(export string) string {
 }
 
 func AddDataToVolumeForNFS(export string) string {
-	destMount := "/mnt/data_add"
-	deltaDir := "/" + DeltaFolder
+	fmt.Println("UMV  AddDataToVolumeForNFS")
+	split := strings.Split(export, "/")
+	destMount := "/mnt/data_add_" + strings.TrimSpace(split[1])
+	deltaDir := "/" + DeltaFolder + fmt.Sprintf("_%s", strings.TrimSpace(split[1]))
 
 	script := fmt.Sprintf(`
 set -e
 
 # Clean up any previous run
+sudo umount -f "%s" 2>/dev/null || true
+
 sudo rm -rf "%s"
 sudo rm -rf "%s"
 
@@ -342,7 +360,7 @@ sudo mkdir -p "%s"
 sudo mount -t nfs "%s" "%s"
 
 # Copy delta to the mounted export
-sudo cp -a "%s" "%s/"
+sudo cp -a "%s" "%s/delta"
 
 sync
 
@@ -350,18 +368,23 @@ sync
 sudo umount "%s" || sudo umount -l "%s"
 sudo rm -rf "%s"
 sudo rm -rf "%s"
-`, deltaDir, destMount, deltaDir, deltaDir, destMount, export, destMount, deltaDir, destMount, destMount, destMount, deltaDir, destMount)
+`, destMount, deltaDir, destMount, deltaDir, deltaDir, destMount, export, destMount, deltaDir, destMount, destMount, destMount, deltaDir, destMount)
 
 	return script
 }
 
 // AddDataToVolume creates a delta directory with 100 text files of 100KB each,
 func AddDataToVolume(export string) error {
+	fmt.Println("UMV  AddDataToVolume")
 	script := ""
 
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
-		script = AddDataToVolumeForSMB(export)
+		mappedDrive, err := GetAvailableNetworkDrive()
+		if err != nil {
+			return err
+		}
+		script = AddDataToVolumeForSMB(export, mappedDrive)
 	case ProtocolNFS:
 		script = AddDataToVolumeForNFS(export)
 	}
@@ -384,18 +407,19 @@ func AddDataToVolume(export string) error {
 }
 
 // RemoveDeltaFromVolumeForSMB removes the delta directory from the SMB export mounted on the VM.
-func RemoveDeltaFromVolumeForSMB(export string) string {
+func RemoveDeltaFromVolumeForSMB(export, mappedDrive string) string {
 	split := strings.Split(export, ":")
 	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
 
-	mappedDrive := "Z:"
+	//mappedDrive := "Z:" UMV
+	deltaDir := DeltaFolder + fmt.Sprintf("_%s", strings.TrimSpace(split[1]))
 
 	removeDeltaScript := fmt.Sprintf(`cmd /C
 	net use %s /delete /yes &
 	net use %s %s /user:%s "%s" &&
 	(if exist %s\%s\ ( rmdir /s /q %s\%s ) else ( echo "delta not found" )) &
 	net use %s /delete /yes
-	`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, smbShare, DeltaFolder, smbShare, DeltaFolder, mappedDrive)
+	`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, smbShare, deltaDir, smbShare, deltaDir, mappedDrive)
 
 	commands := []string{}
 	for _, v := range strings.Split(removeDeltaScript, "\n") {
@@ -406,12 +430,14 @@ func RemoveDeltaFromVolumeForSMB(export string) string {
 }
 
 func RemoveDeltaFromVolumeForNFS(export string) string {
-	destMount := "/mnt/data_remove"
+	split := strings.Split(export, "/")
+	destMount := "/mnt/data_remove_" + strings.TrimSpace(split[1])
 
 	script := fmt.Sprintf(`
 	set -e
 
 	# Clean up any previous run
+	sudo umount -f "%s" 2>/dev/null || true
 	sudo rm -rf "%s"
 
 	# Mount export NFS export
@@ -419,14 +445,14 @@ func RemoveDeltaFromVolumeForNFS(export string) string {
 	sudo mount -t nfs "%s" "%s"
 
 	# Remove delta directory if it exists in the export
-	if [ -d "%s/%s" ]; then
-		sudo rm -rf "%s/%s"
+	if [ -d "%s/delta" ]; then
+		sudo rm -rf "%s/delta"
 	fi
 
 	# Unmount and cleanup
 	sudo umount "%s"
 	sudo rm -rf "%s"
-	`, destMount, destMount, export, destMount, destMount, DeltaFolder, destMount, DeltaFolder, destMount, destMount)
+	`, destMount, destMount, destMount, export, destMount, destMount, destMount, destMount, destMount)
 
 	return script
 }
@@ -437,7 +463,11 @@ func RemoveDeltaFromVolume(export string) error {
 
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
-		script = RemoveDeltaFromVolumeForSMB(export)
+		mappedDrive, err := GetAvailableNetworkDrive()
+		if err != nil {
+			return err
+		}
+		script = RemoveDeltaFromVolumeForSMB(export, mappedDrive)
 	case ProtocolNFS:
 		script = RemoveDeltaFromVolumeForNFS(export)
 	}
@@ -459,13 +489,13 @@ func RemoveDeltaFromVolume(export string) error {
 	return nil
 }
 
-func ModifyDataOnVolumeForSMB(export string) string {
+func ModifyDataOnVolumeForSMB(export, mappedDrive string) string {
 	appendLines := "# MODIFIED 1 # MODIFIED 2"
 
 	split := strings.Split(export, ":")
 	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
 
-	mappedDrive := "Z:"
+	//mappedDrive := "Z:"
 
 	modifyDataScript := fmt.Sprintf(`cmd /C
 	net use %s /delete /yes &
@@ -485,7 +515,8 @@ func ModifyDataOnVolumeForSMB(export string) string {
 }
 
 func ModifyDataOnVolumeForNFS(export string) string {
-	destMount := "/mnt/data_modify"
+	split := strings.Split(export, "/")
+	destMount := "/mnt/modify_data_" + strings.TrimSpace(split[1])
 
 	// Lines to append
 	appendLines := "\n# MODIFIED LINE 1\n# MODIFIED LINE 2\n"
@@ -518,7 +549,11 @@ func ModifyDataOnVolume(export string) error {
 
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
-		script = ModifyDataOnVolumeForSMB(export)
+		mappedDrive, err := GetAvailableNetworkDrive()
+		if err != nil {
+			return err
+		}
+		script = ModifyDataOnVolumeForSMB(export, mappedDrive)
 	case ProtocolNFS:
 		script = ModifyDataOnVolumeForNFS(export)
 	}
@@ -538,11 +573,11 @@ func ModifyDataOnVolume(export string) error {
 	return nil
 }
 
-func RestoreOriginalDataOnVolumeForSMB(export string) string {
+func RestoreOriginalDataOnVolumeForSMB(export, mappedDrive string) string {
 	split := strings.Split(export, ":")
 	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
 
-	mappedDrive := "Z:"
+	//mappedDrive := "Z:"
 
 	restoreScript := fmt.Sprintf(`cmd /C
 	net use %s /delete /yes &
@@ -562,7 +597,8 @@ func RestoreOriginalDataOnVolumeForSMB(export string) string {
 }
 
 func RestoreOriginalDataOnVolumeForNFS(export string) string {
-	destMount := "/mnt/data_restore"
+	split := strings.Split(export, "/")
+	destMount := "/mnt/restore_data_" + strings.TrimSpace(split[1])
 
 	return fmt.Sprintf(`
     set -e
@@ -592,7 +628,11 @@ func RestoreOriginalDataOnVolume(export string) error {
 
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
-		script = RestoreOriginalDataOnVolumeForSMB(export)
+		mappedDrive, err := GetAvailableNetworkDrive()
+		if err != nil {
+			return err
+		}
+		script = RestoreOriginalDataOnVolumeForSMB(export, mappedDrive)
 	case ProtocolNFS:
 		script = RestoreOriginalDataOnVolumeForNFS(export)
 	}
@@ -715,4 +755,159 @@ func GetVolumeDetailsFromFileServer(Volumes []Volume, volumePath string) (Volume
 		}
 	}
 	return Volume{}, fmt.Errorf("no volume found with path '%s'", volumePath)
+}
+
+func CleanupVolumes(params CleanupVolumesParams) error {
+	var wg sync.WaitGroup
+	cleanupVolRes := make(chan CleanupVolumeResults, len(params.RemoveDeltaVolumes)+len(params.ClearVolumes))
+
+	for _, vol := range params.RemoveDeltaVolumes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			LogDebug(fmt.Sprintf("Removing delta data from %s", vol))
+			err := RemoveDeltaFromVolume(vol)
+			cleanupVolRes <- CleanupVolumeResults{volume: vol, err: err}
+		}()
+	}
+
+	for _, vol := range params.ClearVolumes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			LogDebug(fmt.Sprintf("Clearing destination data from %s", vol))
+			err := ClearVolume(vol)
+			cleanupVolRes <- CleanupVolumeResults{volume: vol, err: err}
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(cleanupVolRes)
+	}()
+
+	for res := range cleanupVolRes {
+		if res.err != nil {
+			return fmt.Errorf("cleanup volume failed for volume=%s, err=%s", res.volume, res.err.Error())
+		}
+	}
+	return nil
+}
+
+func AddDeltaToVolumes(volumes []string) error {
+	var wg sync.WaitGroup
+	addVolRes := make(chan CleanupVolumeResults, len(volumes))
+
+	for _, vol := range volumes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := AddDataToVolume(vol)
+			addVolRes <- CleanupVolumeResults{volume: vol, err: err}
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(addVolRes)
+	}()
+
+	for res := range addVolRes {
+		if res.err != nil {
+			return fmt.Errorf("add delta to volume failed for volume=%s, err=%s", res.volume, res.err.Error())
+		}
+	}
+
+	return nil
+}
+
+func ModifyVolumes(volumes []string) error {
+	var wg sync.WaitGroup
+	modifyVolRes := make(chan CleanupVolumeResults, len(volumes))
+
+	for _, vol := range volumes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := ModifyDataOnVolume(vol)
+			modifyVolRes <- CleanupVolumeResults{volume: vol, err: err}
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(modifyVolRes)
+	}()
+
+	for res := range modifyVolRes {
+		if res.err != nil {
+			return fmt.Errorf("modify data on volume failed for volume=%s, err=%s", res.volume, res.err.Error())
+		}
+	}
+
+	return nil
+}
+
+func RestoreVolumes(volumes []string) error {
+	var wg sync.WaitGroup
+	restoreVolRes := make(chan CleanupVolumeResults, len(volumes))
+
+	for _, vol := range volumes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := RestoreOriginalDataOnVolume(vol)
+			restoreVolRes <- CleanupVolumeResults{volume: vol, err: err}
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(restoreVolRes)
+	}()
+
+	for res := range restoreVolRes {
+		if res.err != nil {
+			return fmt.Errorf("restore data on volume failed for volume=%s, err=%s", res.volume, res.err.Error())
+		}
+	}
+
+	return nil
+}
+
+func GetAvailableNetworkDrive() (string, error) {
+	script := "powershell.exe -Command Get-PSDrive -PSProvider 'FileSystem' | Select-Object -ExpandProperty Name"
+
+	config := GetAttachedWorkerDetails()
+
+	sshConfig = SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	output, err := sshRunScript(sshConfig, script)
+	if err != nil {
+		fmt.Println("UMV GET DRIVE ERROR : ", err.Error(), "   ->   ", output)
+		return "", fmt.Errorf("GetAvailableNetworkDrive failed: %w\noutput: %s", err, output)
+	}
+
+	lines := strings.Split(output, "\n")
+	usedDrives := make(map[string]struct{})
+	for _, line := range lines {
+		drive := strings.TrimSpace(line)
+		if len(drive) == 1 {
+			usedDrives[drive] = struct{}{}
+		}
+	}
+
+	for _, drive := range []string{"S", "T", "U", "V", "W", "X", "Y", "Z"} {
+		if _, ok := usedDrives[drive]; !ok {
+			fmt.Println("UMV AVAILABLE DRIVE : ", drive)
+			return fmt.Sprintf("%s:", drive), nil
+		}
+	}
+
+	return "", fmt.Errorf("no network drive available")
 }
