@@ -472,4 +472,9 @@
       </rollback>
    </changeSet>
 
+   <changeSet id="20250904_01_create_inventory_partition_table.sql" author="avadoot">
+      <sqlFile path="liquibase/20250904_01_create_inventory_partition_table.sql" splitStatements="false"/>
+      <rollback>
+      </rollback>
+   </changeSet>
 </databaseChangeLog>
