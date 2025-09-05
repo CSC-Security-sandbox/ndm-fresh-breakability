@@ -735,12 +735,12 @@ export class AclOperations {
             .join('|');
     }
     async stampFileOwner({ sourcePath, targetPath, isIdentityMappingAvailable, jobRunId }: { sourcePath: string, targetPath: string, isIdentityMappingAvailable: boolean, jobRunId: string }): Promise<string | boolean> {
-
         try {
             const sourceOwner = await this.getFileOwner(sourcePath, isIdentityMappingAvailable, jobRunId);
 
             return await this.setFileOwner(targetPath, sourceOwner);
         } catch (error) {
+            this.logger.error(`Failed to stamp owner from ${sourcePath} to ${targetPath}:`, error);
             return `Failed to stamp owner , ${(error as Error).message}`;
         }
     }
@@ -812,6 +812,11 @@ export class AclOperations {
                 if (!effectiveSID && !effectiveUsername) {
                     effectiveSID = resolvedSid;
                 }
+                if(owner !== resolvedOwner && sid !== resolvedSid) {
+                    effectiveUsername = resolvedOwner;
+                    effectiveSID = resolvedSid;
+                }
+
                 this.logger.debug(`Resolved owner: ${owner}, SID: ${sid} for file ${normalizedPath}`);
             } catch (error) {
                 this.logger.error(`Error resolving principals for job ${jobRunId}: ${error.message}`, error);

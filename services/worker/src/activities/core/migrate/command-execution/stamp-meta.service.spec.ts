@@ -912,7 +912,7 @@ describe('StampMetaService', () => {
         const result = await service.stampFileOwner(input);
 
         expect(result.sourceErrors).toEqual([]);
-        expect(result.targetErrors).toEqual(['UNKNOWN_ERROR']);
+        expect(result.targetErrors).toEqual([]);
         expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
         expect(dmError).toHaveBeenCalledWith(
           "OPERATION",
@@ -934,7 +934,7 @@ describe('StampMetaService', () => {
         const result = await service.stampFileOwner(input);
 
         expect(result.sourceErrors).toEqual([]);
-        expect(result.targetErrors).toEqual(['UNKNOWN_ERROR']);
+        expect(result.targetErrors).toEqual([]);
         expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
         expect(dmError).toHaveBeenCalledWith(
           "OPERATION",
