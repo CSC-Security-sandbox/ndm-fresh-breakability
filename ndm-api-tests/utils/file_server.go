@@ -290,61 +290,6 @@ func ClearVolume(export string) error {
 	return nil
 }
 
-// RemovePartialDeltaFromVolume removes number of files equals fileCount
-func RemovePartialDeltaFromVolume(export string, fileCount int) error {
-	if PROTOCOL_TYPE == ProtocolSMB {
-		// To be replaced with SMB code.
-		return fmt.Errorf("SMB-specific logic is not implemented")
-	}
-	config := GetAttachedWorkerDetails()
-
-	sshConfig = SSHConfig{
-		Username: config.Username,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: config.Password,
-	}
-
-	destMount := "/mnt/data_remove"
-
-	script := fmt.Sprintf(`
-	set -e
-
-	# Clean up any previous mount
-	sudo rm -rf "%s"
-
-	# Mount export NFS export
-
-	sudo mkdir -p "%s"
-	sudo mount -t nfs "%s" "%s"
-
-	# Navigate to delta folder inside mounted directory
-	cd "%s/%s"
-
-	# List matching files and remove
-	files=($(ls file*.txt 2>/dev/null))
-	count=${#files[@]}
-	if [ "$count" -le "%d" ]; then
-	    sudo rm -f "${files[@]}"
-	else
-	    for ((i=0; i< "%d"; i++)); do
-		    sudo rm -f "${files[$i]}"
-		done
-	fi
-
-	# Unmount and cleanup
-	cd /
-	sudo umount "%s"
-	sudo rm -rf "%s"
-	`, destMount, destMount, export, destMount, destMount, DeltaFolder, fileCount, fileCount, destMount, destMount)
-
-	output, err := sshRunScript(sshConfig, script)
-	if err != nil {
-		return fmt.Errorf("RemoveDeltaFromFileserver failed: %w\noutput: %s", err, output)
-	}
-	return nil
-}
-
 // AddDataToVolumeForSMB creates a delta directory with 100 text files of 100KB each
 func AddDataToVolumeForSMB(export string) string {
 	//fullCmd := `cmd /C "mkdir C:\delta_test_smb && for /L %i in (1,1,100) do fsutil file createnew C:\delta_test_smb\file%i.txt 102400"`

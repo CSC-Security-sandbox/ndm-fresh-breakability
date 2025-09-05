@@ -107,11 +107,11 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			By("Creating a migration job with Incremental Sync of 3 mins")
+			By("Creating a migration job with Incremental Sync of 5 mins")
 			currentDateTime := GetCurrentUTCTimestamp()
 			migrationParams := MigrationJobParams{
 				FirstRunAt:         currentDateTime,
-				FutureRunSchedule:  "*/10 * * * *", // Cron expression of 10 mins
+				FutureRunSchedule:  "*/5 * * * *", // Cron expression of 5 mins
 				SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
 				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
 				SidMapping:         false,
@@ -148,7 +148,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			err = AddDataToVolume(sourceVolumePath2)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
 
-			// Validating the NextScheduled time
+			By("Validating the NextScheduled time")
 			maxSleepTime := 0
 			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				jobSummary, err := GetJobSummaryByConfigID(ProjectId, migrationJobConfigID, headers)
@@ -159,8 +159,8 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 					"could not parse NextScheduleDate %q", jobSummary.NextScheduleDate)
 
 				parsedBase, err := time.Parse(TIME_FORMAT, migrationEndTsConf[migrationJobConfigID])
-				Expect(err).NotTo(HaveOccurred(), "Error parsing curreent datetimes")
-				sch, err := cron.ParseStandard("*/10 * * * *")
+				Expect(err).NotTo(HaveOccurred(), "Error parsing current datetimes")
+				sch, err := cron.ParseStandard("*/5 * * * *")
 				Expect(err).NotTo(HaveOccurred(), "invalid cron expression")
 				expectedNext := sch.Next(parsedBase)
 
@@ -169,16 +169,18 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 					expectedNext.Format(TIME_FORMAT),
 					jobSummary.NextScheduleDate)
 
+				LogDebug(fmt.Sprintf("Next Migration %s scheduled at %s", migrationJobConfigID, expectedNext.Format("2006-01-02 15:04:05")))
+
 				sleepTime := expectedNext.Sub(time.Now().UTC()).Seconds()
 				if sleepTime > 0 && sleepTime > float64(maxSleepTime) {
 					maxSleepTime = int(sleepTime)
 				}
 			}
 
-			// This delay is required to wait till new Job run created after 3 mins
+			LogDebug("Waiting till new Job run created")
 			Wait(maxSleepTime)
 
-			// Validate migration report for 1st iteration
+			LogDebug("Validate migration report for 1st iteration")
 			migration_validators := []string{
 				"src_to_dest_vol_migration.json",
 				"src2_to_dest2_vol_migration.json",
@@ -190,7 +192,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				By(fmt.Sprintf("validate report result : %s", result))
 			}
 
-			// Validating incremental Sync is getting triggered
+			By("Validating incremental Sync is getting triggered")
 			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 				Expect(len(getJobsResp.JobRuns)).To(BeNumerically("==", 2), "No jobRuns found in response")
