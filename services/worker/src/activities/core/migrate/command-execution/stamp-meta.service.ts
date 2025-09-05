@@ -37,15 +37,15 @@ export class StampMetaService {
 
                 // Stamp SID to object
 
-                const [sidOutput,hiddenAttrOutput, preserveTimeOutput] = await Promise.all([
+                const [sidOutput, stampFileOwnerOutput, hiddenAttrOutput, preserveTimeOutput] = await Promise.all([
                     this.stampSIDAclToObject(input),
-                  //  this.stampFileOwner(input),
+                    this.stampFileOwner(input),
                     this.stampFileAttributeMeta(input),
                     this.preserveAccessAndModifiedTime(input)
                 ]);
 
-                output.sourceErrors.push(...sidOutput.sourceErrors, ...hiddenAttrOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
-                output.targetErrors.push(...sidOutput.targetErrors, ...hiddenAttrOutput.targetErrors, ...preserveTimeOutput.targetErrors);
+                output.sourceErrors.push(...sidOutput.sourceErrors, ...stampFileOwnerOutput.sourceErrors, ...hiddenAttrOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
+                output.targetErrors.push(...sidOutput.targetErrors, ...stampFileOwnerOutput.targetErrors, ...hiddenAttrOutput.targetErrors, ...preserveTimeOutput.targetErrors);
 
 
                 // Stamp access and modified time
@@ -434,15 +434,14 @@ export class StampMetaService {
                     new Error(errorMessage),
                     { name: command.fPath, path: targetPath }
                 );
-
                 await jobContext.publishToErrorStream(dmErr);
-                const errorCode = 'UNKNOWN_ERROR';
-                output.targetErrors.push(errorCode);
+
             }
         } catch (error) {
             this.logger.error(`Error during stamping file owner from ${sourcePath} to ${targetPath}: ${error.message}`, error.stack);
             const errorCode = 'STAMP_FILE_OWNER_ERROR';
             output.sourceErrors.push(errorCode);
+
         }
 
         return output;
