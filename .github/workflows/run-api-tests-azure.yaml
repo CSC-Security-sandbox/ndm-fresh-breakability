@@ -89,6 +89,7 @@ jobs:
 
           # Write to GITHUB_ENV
           echo "VM_USERNAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "::add-mask::$VM_PASSWORD"
           echo "VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
           # Azure Provider Credentials
           echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
@@ -274,6 +275,7 @@ jobs:
           VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
           
           echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "::add-mask::$VM_PASSWORD"
           echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
           echo "AZURE_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "AZURE_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
@@ -347,6 +349,7 @@ jobs:
           VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
           
           echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "::add-mask::$VM_PASSWORD"
           echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
           echo "AZURE_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "AZURE_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV

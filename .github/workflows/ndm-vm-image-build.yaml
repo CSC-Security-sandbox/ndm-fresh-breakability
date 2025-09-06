@@ -875,7 +875,9 @@ jobs:
               echo "PKR_VAR_vsphere_password=$(echo "${{ secrets.VSPHERE_PASSWORD }}" | base64 --decode)" >> $GITHUB_ENV
               echo "PKR_VAR_build_username=$(echo "${{ secrets.VSPHERE_BUILD_USERNAME }}" | base64 --decode)" >> $GITHUB_ENV
               echo "PKR_VAR_build_password=$(echo "${{ secrets.VSPHERE_BUILD_PASSWORD }}" | base64 --decode)" >> $GITHUB_ENV
+              echo "::add-mask::$PKR_VAR_build_password"
               echo "PKR_VAR_build_password_encrypted=$(echo "${{ secrets.VSPHERE_BUILD_PASSWORD_ENCRYPTED }}" | base64 --decode)" >> $GITHUB_ENV
+              echo "::add-mask::$PKR_VAR_build_password_encrypted"
               echo "PKR_VAR_build_key=$(echo "${{ secrets.VSPHERE_BUILD_KEY }}" | base64 --decode)" >> $GITHUB_ENV
               ;;
             gcp)
