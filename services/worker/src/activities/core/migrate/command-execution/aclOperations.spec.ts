@@ -890,7 +890,7 @@ Successfully processed 1 files
         jobRunId,
       });
 
-      expect(result).toBe(false);
+      expect(result).toBe("Failed to stamp owner , Failed to get owner");
       expect(logger.error).toHaveBeenCalled();
     });
   });
@@ -904,6 +904,7 @@ Successfully processed 1 files
 
     beforeEach(() => {
       shellPool.executeCommand.mockResolvedValue({ stdout: mockPowerShellOutput, stderr: '' });
+      // Reset the mock for each test
       jest.spyOn(service, 'resolvePrincipal').mockImplementation((principal) => Promise.resolve(principal));
     });
 
@@ -921,9 +922,19 @@ Successfully processed 1 files
     });
 
     it('should resolve principals when identity mapping is available', async () => {
-      jest.spyOn(service, 'resolvePrincipal')
-        .mockResolvedValueOnce('RESOLVED\\user1')
-        .mockResolvedValueOnce('RESOLVED-SID');
+      // Completely remove the previous mock and create a new one
+      (service.resolvePrincipal as jest.Mock).mockReset();
+      
+      // Set up specific return values for specific inputs
+      service.resolvePrincipal = jest.fn()
+        .mockImplementation((principal) => {
+          if (principal === 'DOMAIN\\user1') {
+            return Promise.resolve('RESOLVED\\user1');
+          } else if (principal === 'S-1-5-21-123456789-123456789-123456789-1001') {
+            return Promise.resolve('RESOLVED-SID');
+          }
+          return Promise.resolve(principal);
+        });
 
       const result = await service.getFileOwner(filePath, isIdentityMappingAvailable, jobRunId);
 
@@ -932,6 +943,8 @@ Successfully processed 1 files
         sid: 'RESOLVED-SID',
       });
       expect(service.resolvePrincipal).toHaveBeenCalledTimes(2);
+      expect(service.resolvePrincipal).toHaveBeenCalledWith('DOMAIN\\user1', jobRunId);
+      expect(service.resolvePrincipal).toHaveBeenCalledWith('S-1-5-21-123456789-123456789-123456789-1001', jobRunId);
     });
 
     it('should handle command execution errors', async () => {
@@ -979,20 +992,6 @@ Successfully processed 1 files
       );
     });
 
-    it('should fallback to SID when name fails', async () => {
-      shellPool.executeCommand
-        .mockResolvedValueOnce({ stdout: '', stderr: 'Name resolution failed' })
-        .mockResolvedValueOnce({ stdout: 'processed: 1 files\nSuccessfully processed 1 files.', stderr: '' });
-
-      const result = await service.setFileOwner(filePath, owner);
-
-      expect(result).toBe(true);
-      expect(shellPool.executeCommand).toHaveBeenCalledTimes(2);
-      expect(shellPool.executeCommand).toHaveBeenNthCalledWith(
-        2,
-        `icacls "${path.resolve(filePath)}" /setowner "${owner.sid}"`
-      );
-    });
 
     it('should handle both name and SID failures', async () => {
       shellPool.executeCommand
@@ -1001,7 +1000,7 @@ Successfully processed 1 files
 
       const result = await service.setFileOwner(filePath, owner);
 
-      expect(result).toBe('Failed to set owner using SID');
+      expect(result).toBe('Failed to set owner DOMAIN\\user1, Name failed');
       expect(logger.error).toHaveBeenCalled();
     });
 
@@ -1010,7 +1009,7 @@ Successfully processed 1 files
 
       const result = await service.setFileOwner(filePath, owner);
 
-      expect(result).toBe('Failed to set owner using SID');
+      expect(result).toBe('Failed to set owner DOMAIN\\user1, Command error');
       expect(logger.error).toHaveBeenCalled();
     });
 
@@ -1022,9 +1021,9 @@ Successfully processed 1 files
 
       const result = await service.setFileOwner(filePath, owner);
 
-      expect(result).toBe('Failed to set owner using SID, command error');
+      expect(result).toBe('Failed to set owner DOMAIN\\user1, Failed processing 1 files');
       expect(logger.error).toHaveBeenCalledWith(
-        'Failed to set owner with SID, icacls output: Failed processing 1 files'
+        'Failed to set owner using name DOMAIN\\user1: Failed processing 1 files'
       );
     });
 
