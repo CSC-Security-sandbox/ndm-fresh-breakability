@@ -16,12 +16,12 @@ fi
 
 
 PROJECT_ID="app-microservices-cm"
-DEFAULT_REGION="us-east1"
+DEFAULT_REGION="us-east4"
 DEFAULT_CP_MACHINE_TYPE="e2-custom-8-32768"
 DEFAULT_CP_COUNT=1
 DEFAULT_CP_IMAGE_FAMILY=""
 DEFAULT_WORKER_MACHINE_TYPE="e2-custom-4-16384"
-DEFAULT_WORKER_COUNT=2
+DEFAULT_WORKER_COUNT=1
 DEFAULT_WORKER_IMAGE_FAMILY=""
 DEFAULT_NAME_PREFIX="daksh"
 NAME_TIMESTAMP=$(date +%Y%m%d%H%M%S)
@@ -29,19 +29,20 @@ NAME_TIMESTAMP=$(date +%Y%m%d%H%M%S)
 
 
 # Get latest images
-DEFAULT_CP_IMAGE=$(gcloud compute images list \
-  --project="${PROJECT_ID}" \
-  --filter="name~'cp|control-plane'" \
-  --sort-by="~creationTimestamp" \
-  --limit=1 \
-  --format="get(selfLink)")
-DEFAULT_WORKER_IMAGE=$(gcloud compute images list \
-  --project="${PROJECT_ID}" \
-  --filter="name~'worker'" \
-  --sort-by="~creationTimestamp" \
-  --limit=1 \
-  --format="get(selfLink)")
-
+# DEFAULT_CP_IMAGE=$(gcloud compute images list \
+#   --project="${PROJECT_ID}" \
+#   --filter="name~'cp|control-plane'" \
+#   --sort-by="~creationTimestamp" \
+#   --limit=1 \
+#   --format="get(selfLink)")
+# DEFAULT_WORKER_IMAGE=$(gcloud compute images list \
+#   --project="${PROJECT_ID}" \
+#   --filter="name~'worker'" \
+#   --sort-by="~creationTimestamp" \
+#   --limit=1 \
+#   --format="get(selfLink)")
+DEFAULT_WORKER_IMAGE=datamigrator-worker-27-08-2025-19-01-45
+DEFAULT_CP_IMAGE=datamigrator-control-plane-27-08-2025-19-14-46
 
 read -p "Enter name prefix for instances [${DEFAULT_NAME_PREFIX}]: " NAME_PREFIX
 NAME_PREFIX=${NAME_PREFIX:-${DEFAULT_NAME_PREFIX:-$NAME_PREFIX}}
@@ -179,6 +180,7 @@ export TF_VAR_images="$IMAGES_JSON"
 export TF_VAR_control_plane_count=$CONTROL_PLANE_COUNT
 export TF_VAR_worker_count=$WORKER_COUNT
 export TF_VAR_instance_names="$NAMES_JSON"
+export TF_VAR_subnetwork="us-e4-sn"
 
 
 echo "Initializing Terraform..."

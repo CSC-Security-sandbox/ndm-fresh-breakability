@@ -9,12 +9,21 @@ data "google_compute_zones" "available" {
   status = "UP"
 }
 
+
+locals {
+  deployment_zone = var.selected_zone != "" ? var.selected_zone : data.google_compute_zones.available.names[0]
+}
+
+locals {
+  deployment_subnetwork = var.subnetwork != "" ? var.subnetwork : "appmicro-vpc-subnet-01"
+}
+
 resource "google_compute_instance" "vm_instance" {
   count        = var.vm_count
   
   name         = var.instance_names[count.index]
   machine_type = var.machine_types[count.index]
-  zone         = data.google_compute_zones.available.names[count.index % length(data.google_compute_zones.available.names)]
+  zone         = local.deployment_zone
 
   boot_disk {
     initialize_params {
@@ -24,11 +33,15 @@ resource "google_compute_instance" "vm_instance" {
 
   network_interface {
     network    = "appmicro-vpc1"
-    subnetwork = "appmicro-vpc-subnet-01"
+    subnetwork = local.deployment_subnetwork
 
   }
 
   tags = ["http-server"]
+
+  labels = {
+    creator = "dk49889"
+  }
 
 
   metadata_startup_script = <<EOT
@@ -40,6 +53,44 @@ EOT
 }
 
 # Your existing outputs
+# Add these outputs to your main.tf file
+output "control_plane_instance_names" {
+  value = slice(
+    google_compute_instance.vm_instance[*].name,
+    0,
+    var.control_plane_count
+  )
+  description = "Names of control plane instances"
+}
+
+output "control_plane_zones" {
+  value = slice(
+    google_compute_instance.vm_instance[*].zone,
+    0,
+    var.control_plane_count
+  )
+  description = "Zones of control plane instances"
+}
+
+output "worker_instance_names" {
+  value = slice(
+    google_compute_instance.vm_instance[*].name,
+    var.control_plane_count,
+    var.control_plane_count + var.worker_count
+  )
+  description = "Names of worker instances"
+}
+
+output "worker_zones" {
+  value = slice(
+    google_compute_instance.vm_instance[*].zone,
+    var.control_plane_count,
+    var.control_plane_count + var.worker_count
+  )
+  description = "Zones of worker instances"
+}
+
+# Your existing outputs remain unchanged
 output "control_plane_internal_ips" {
   value = slice(
     google_compute_instance.vm_instance[*].network_interface[0].network_ip,

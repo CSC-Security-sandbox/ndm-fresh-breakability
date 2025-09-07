@@ -8,6 +8,12 @@ variable "region" {
   type        = string
 }
 
+variable "selected_zone" {
+  description = "Specific zone to deploy all instances (validated by run.sh)"
+  type        = string
+  default     = ""
+}
+
 variable "vm_count" {
   description = "Number of VMs to create"
   type        = number
@@ -40,3 +46,8 @@ variable "instance_names" {
   type = list(string)
 }
 
+variable "subnetwork" {
+  description = "Subnetwork to deploy instances"
+  type        = string
+  default     = ""
+}

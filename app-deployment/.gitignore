@@ -12,3 +12,29 @@ packer-provisioner-*
 .terraform.lock*
 *.tfstate
 *.tfstate.*
+
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/terraform.tfvars
+**/terraform.tfvars.json
+**/*.tfplan
+**/*.tfplan.*
+**/.terraformrc
+**/terraform.rc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+**/logs/
