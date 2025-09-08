@@ -382,7 +382,7 @@ jobs:
   upload-support-bundle:
     name: Upload Support Bundles
     runs-on: openlab
-    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
+    needs: [setup-infrastructure, run-nfs-tests]
     if: always()
     env:
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
@@ -424,7 +424,7 @@ jobs:
   cleanup:
     name: Cleanup Infrastructure
     runs-on: openlab
-    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests, upload-support-bundle]
+    needs: [setup-infrastructure, run-nfs-tests]
     if: always()
     steps:
       - name: Checkout repository
