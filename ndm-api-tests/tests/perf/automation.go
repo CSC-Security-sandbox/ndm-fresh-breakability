@@ -263,7 +263,9 @@ func getKeyCloakAdminCredentials() (KeycloakCredentials, error) {
 }
 
 func resetUserPassword(userID, accessToken, newPassword string) error {
-    if KEYCLOAK_IP == "" {
+    envPath := "../.env"
+	
+	if KEYCLOAK_IP == "" {
         return fmt.Errorf("environment variable KEYCLOAK_IP not set")
     }
     url := fmt.Sprintf("https://%s/%s/%s/reset-password", KEYCLOAK_IP, KEYCLOAK_BASE_URL, userID)
@@ -275,13 +277,27 @@ func resetUserPassword(userID, accessToken, newPassword string) error {
     }
     fmt.Println("PASSWORD:", PASSWORD)
 	LogDebug(fmt.Sprintf("Generated new password: %s", PASSWORD))
-	os.Setenv("PASSWORD", PASSWORD)
+	// os.Setenv("PASSWORD", PASSWORD)
+
+	updates := map[string]string{
+        "PASSWORD": PASSWORD,
+    }
+
+	 if err := updateEnvVars(envPath, updates); err != nil {
+        return fmt.Errorf("failed to update PASSWORD in .env file: %v", err)
+    }
+
+    // Also set in current process
+    os.Setenv("PASSWORD", newPassword)
+
+	fmt.Printf("✅ PASSWORD updated in .env file: %s\n", envPath)
 
     payload := map[string]interface{}{
         "type":      "password",
         "value":     PASSWORD,
         "temporary": false,
     }
+
     bodyBytes, err := json.Marshal(payload)
     if err != nil {
         return fmt.Errorf("failed to marshal payload: %w", err)
@@ -1382,7 +1398,7 @@ func (e *EndToEndMigration) Execute() error {
     fmt.Println("Updated configuration variables for NFS and GCP")
 
 	fmt.Println("Waiting for services to stabilize...")
-	Wait(3*60) // Wait for 3 minutes to ensure services are up
+	// Wait(3*60) // Wait for 3 minutes to ensure services are up
 
 
     initTestEnv()
@@ -1436,36 +1452,36 @@ func (e *EndToEndMigration) Execute() error {
 
 func main() {
     // Creating the cp and worker using Terraform
-    infraMgr := InfrastructureManager{
-     runScript:    "perf-nfs-script.sh",
-     terraformDir: "../../../app-deployment/terraform/gcp",
-    }
+    // infraMgr := InfrastructureManager{
+    //  runScript:    "perf-nfs-script.sh",
+    //  terraformDir: "../../../app-deployment/terraform/gcp",
+    // }
 
-    if err := infraMgr.RunScript(); err != nil {
-     log.Fatalf("Infrastructure deployment failed: %v", err)
-    }
+    // if err := infraMgr.RunScript(); err != nil {
+    //  log.Fatalf("Infrastructure deployment failed: %v", err)
+    // }
 
-    fmt.Println("CP and Worker created successfully")
+    // fmt.Println("CP and Worker created successfully")
 
-    // Getting the CP and Worker IPs
-    outputs, err := infraMgr.GetOutputs()
-    if err != nil {
-     log.Fatalf("Failed to get terraform outputs: %v", err)
-    }
+    // // Getting the CP and Worker IPs
+    // outputs, err := infraMgr.GetOutputs()
+    // if err != nil {
+    //  log.Fatalf("Failed to get terraform outputs: %v", err)
+    // }
 
-    // Print the IPs
-    if cpIPs, ok := outputs["control_plane_internal_ips"]; ok {
-     fmt.Printf("Control Plane Internal IPs: %v\n", cpIPs)
-    }
-    if workerIPs, ok := outputs["worker_internal_ips"]; ok {
-     fmt.Printf("Worker Internal IPs: %v\n", workerIPs)
-    }
+    // // Print the IPs
+    // if cpIPs, ok := outputs["control_plane_internal_ips"]; ok {
+    //  fmt.Printf("Control Plane Internal IPs: %v\n", cpIPs)
+    // }
+    // if workerIPs, ok := outputs["worker_internal_ips"]; ok {
+    //  fmt.Printf("Worker Internal IPs: %v\n", workerIPs)
+    // }
 
-    cpEndpoints := outputs["control_plane_internal_ips"]
-    workerEndpoints := outputs["worker_internal_ips"]
+    // cpEndpoints := outputs["control_plane_internal_ips"]
+    // workerEndpoints := outputs["worker_internal_ips"]
 
-    // cpEndpoints :=[]string{"172.30.121.69"}
-    // workerEndpoints := []string{"172.30.121.67"}
+    cpEndpoints :=[]string{"172.30.121.78"}
+    workerEndpoints := []string{"172.30.121.68"}
 
     if err := setupEnvironment(cpEndpoints, workerEndpoints); err != nil {
         log.Fatalf("Environment setup failed: %v", err)
@@ -1482,7 +1498,7 @@ func main() {
     initWorkers()
 
     // Wait for Control Plane to be ready
-    err = waitForControlPlaneReadyWithIP(cpEndpoints[0])
+    err := waitForControlPlaneReadyWithIP(cpEndpoints[0])
     if err != nil {
         log.Fatalf("Control Plane readiness check failed: %v", err)
     }
