@@ -106,6 +106,13 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
         host: editingFileServerDetails?.fileServers?.[0]?.host,
       });
 
+      // Set the selected protocol based on existing file server data
+      if (nfsCredentialsInitialValues.id) {
+        fileServerForm.setSelectedProtocol('NFS');
+      } else if (smbCredentialsInitialValues.id) {
+        fileServerForm.setSelectedProtocol('SMB');
+      }
+
       extractWorkersAndVolumes(nfsCredentialsInitialValues);
       extractWorkersAndVolumes(smbCredentialsInitialValues);
 
@@ -167,7 +174,8 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
         fileServerForm.smbCredentialsForm,
         fileServerForm.selectedWorkerIds,
         fileServerForm.hostCredentialsForm,
-        fileServerForm.jobConfigForm
+        fileServerForm.jobConfigForm,
+        fileServerForm.selectedProtocol
       );
 
       try {

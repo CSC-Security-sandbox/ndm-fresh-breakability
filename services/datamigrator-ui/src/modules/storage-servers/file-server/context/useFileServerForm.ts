@@ -43,6 +43,8 @@ export const useFileServerForm = () => {
   const { fileServerId } = useParams<{ fileServerId: string }>();
   const [isJobRunning, setIsJobRunning] = useState<boolean>(false);
   const { selectedProjectId } = useSelectedProjectId();
+  // Protocol selection state
+  const [selectedProtocol, setSelectedProtocol] = useState<'NFS' | 'SMB'>('NFS');
   // State management
   const [allWorkersList, setAllWorkersList] = useState<GetAllWorkersApiType[]>(
     []
@@ -175,7 +177,8 @@ export const useFileServerForm = () => {
       selectedWorkerIds,
       nfsCredentialsForm,
       smbCredentialsForm,
-      hostCredentialsForm
+      hostCredentialsForm,
+      selectedProtocol
     );
 
     try {
@@ -306,6 +309,9 @@ export const useFileServerForm = () => {
     setMountPaths,
     isJobRunning,
     setIsJobRunning,
+    // Protocol selection
+    selectedProtocol,
+    setSelectedProtocol,
     // STATE SETTERS
     setWorkerIdWithName,
     setIsEditMode,

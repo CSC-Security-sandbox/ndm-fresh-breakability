@@ -47,6 +47,9 @@ export const SMB_CREDENTIALS_VALIDATION_SCHEMA = Yup.object().shape({
   protocol: Yup.string()
     .oneOf(["SMB"], "Invalid protocol selected")
     .required("Protocol selection is required"),
+  exportPathSource: Yup.string()
+    .oneOf(Object.values(EXPORT_PATH_SOURCE_ENUM), "Invalid selection.")
+    .required("Export Path Source is required."), // Required for type consistency, not used in UI
 });
 
 export const VALIDATE_CONNECTION_COLUMN_DEF: any[] = [
@@ -120,6 +123,7 @@ export const INITIAL_VALUE_SMB_CREDENTIALS_FORM = {
     label: "",
     value: "",
   },
+  exportPathSource: EXPORT_PATH_SOURCE_ENUM.AUTO_DISCOVER, // Not used for SMB but required for type consistency
 };
 
 export const INITIAL_VALUE_NFS_CREDENTIALS_FORM = {

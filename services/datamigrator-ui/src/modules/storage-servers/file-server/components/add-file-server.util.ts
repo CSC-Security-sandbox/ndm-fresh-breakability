@@ -23,11 +23,13 @@ export const createValidateConnectionPayload = (
   workerIds: string[],
   nfsCredentialsForm: BlueXpFormType<CredentialsValidationSchemaType>,
   smbCredentialsForm: BlueXpFormType<CredentialsValidationSchemaType>,
-  hostCredentialsForm: BlueXpFormType<any>
+  hostCredentialsForm: BlueXpFormType<any>,
+  selectedProtocol: 'NFS' | 'SMB'
 ) => {
   const protocols: protocolsType[] = [];
 
-  if (nfsCredentialsForm.isValid) {
+  // Only include the selected protocol
+  if (selectedProtocol === 'NFS' && nfsCredentialsForm.isValid) {
     protocols.push({
       type: nfsCredentialsForm.formState?.protocol,
       username: nfsCredentialsForm.formState?.userName,
@@ -35,7 +37,7 @@ export const createValidateConnectionPayload = (
     });
   }
 
-  if (smbCredentialsForm.isValid) {
+  if (selectedProtocol === 'SMB' && smbCredentialsForm.isValid) {
     protocols.push({
       type: smbCredentialsForm.formState?.protocol,
       username: smbCredentialsForm.formState?.userName,
@@ -58,25 +60,36 @@ export const createConfigPayload = (
   smbCredentialsForm: BlueXpFormType<CredentialsValidationSchemaType>,
   workers: string[],
   hostCredentialsForm: BlueXpFormType<HostFormType>,
-  jobConfigForm: BlueXpFormType<jobConfigFormFormType>
+  jobConfigForm: BlueXpFormType<jobConfigFormFormType>,
+  selectedProtocol: 'NFS' | 'SMB'
 ) => {
   const mountPoints: any = [];
-  const fileServers: FileServerType[] = [
-    getFileServerDetails(
+  const fileServers: FileServerType[] = [];
+
+  // Only create file server for the selected protocol
+  if (selectedProtocol === 'NFS') {
+    const nfsFileServer = getFileServerDetails(
       serverTypeForm,
       nfsCredentialsForm,
       hostCredentialsForm,
       mountPoints,
       workers
-    ),
-    getFileServerDetails(
+    );
+    if (nfsFileServer) {
+      fileServers.push(nfsFileServer);
+    }
+  } else if (selectedProtocol === 'SMB') {
+    const smbFileServer = getFileServerDetails(
       serverTypeForm,
       smbCredentialsForm,
       hostCredentialsForm,
       mountPoints,
       workers
-    ),
-  ].filter(Boolean);
+    );
+    if (smbFileServer) {
+      fileServers.push(smbFileServer);
+    }
+  }
 
   const configPayload: ConfigPayloadType = {
     configName: serverTypeForm.formState?.configName,
