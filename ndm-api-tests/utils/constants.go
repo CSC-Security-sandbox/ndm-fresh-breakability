@@ -261,7 +261,7 @@ func UpdateConfVariables(protocolType, environment string) {
 			SOURCE_VOLUMES_LIST = "ifs/volnfssrc_2, ifs/volnfssrc_3"
 			DESTINATION_VOLUMES_LIST = "shastry-sanity-volume, shastry-sanity-volume2"
 
-			SOURCE_HOST_IP = "10.192.7.60, 10.192.7.60, 10.192.7.60"
+			SOURCE_HOST_IP = "10.192.7.60, 10.192.7.60"
 			DESTINATION_HOST_IP = "172.30.202.23, 172.30.202.23"
 
 			PROTOCOL_USERNAME = "Root"
