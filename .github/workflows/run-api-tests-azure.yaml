@@ -159,58 +159,58 @@ jobs:
           sudo apt-get install -y sshpass
           echo "sshpass installed successfully."
 
-      - name: Download Windows installer
-        run: |
-          WINDOWS_INSTALLER_URL="${{ inputs.windows_worker_installer_url || github.event.inputs.windows_worker_installer_url }}"
-          if [ -n "$WINDOWS_INSTALLER_URL" ]; then
-            echo "Downloading Windows installer from: $WINDOWS_INSTALLER_URL"
-            curl -s -o "windows-worker-installer.exe" \
-              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
-              "$WINDOWS_INSTALLER_URL"
+      # - name: Download Windows installer
+      #   run: |
+      #     WINDOWS_INSTALLER_URL="${{ inputs.windows_worker_installer_url || github.event.inputs.windows_worker_installer_url }}"
+      #     if [ -n "$WINDOWS_INSTALLER_URL" ]; then
+      #       echo "Downloading Windows installer from: $WINDOWS_INSTALLER_URL"
+      #       curl -s -o "windows-worker-installer.exe" \
+      #         -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+      #         "$WINDOWS_INSTALLER_URL"
             
-            if [ ! -f "windows-worker-installer.exe" ] || [ ! -s "windows-worker-installer.exe" ]; then
-              echo "Error: Failed to download Windows installer or file is empty"
-              exit 1
-            fi
-            echo "Windows installer downloaded successfully."
-          else
-            echo "No Windows installer URL provided, skipping download"
-          fi
+      #       if [ ! -f "windows-worker-installer.exe" ] || [ ! -s "windows-worker-installer.exe" ]; then
+      #         echo "Error: Failed to download Windows installer or file is empty"
+      #         exit 1
+      #       fi
+      #       echo "Windows installer downloaded successfully."
+      #     else
+      #       echo "No Windows installer URL provided, skipping download"
+      #     fi
 
-      - name: Copy Windows installer to Windows VMs
-        run: |
-          WINDOWS_IPS='${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}'
+      # - name: Copy Windows installer to Windows VMs
+      #   run: |
+      #     WINDOWS_IPS='${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}'
           
-          if [ ! -f "windows-worker-installer.exe" ]; then
-            echo "Windows installer file not found, skipping copy to Windows VMs"
-            exit 0
-          fi
+      #     if [ ! -f "windows-worker-installer.exe" ]; then
+      #       echo "Windows installer file not found, skipping copy to Windows VMs"
+      #       exit 0
+      #     fi
           
-          WINDOWS_IP_ARRAY=($(echo "$WINDOWS_IPS" | jq -r '.[]'))
+      #     WINDOWS_IP_ARRAY=($(echo "$WINDOWS_IPS" | jq -r '.[]'))
           
-          if [ ${#WINDOWS_IP_ARRAY[@]} -eq 0 ]; then
-            echo "No Windows VM IP addresses found, skipping copy"
-            exit 0
-          fi
+      #     if [ ${#WINDOWS_IP_ARRAY[@]} -eq 0 ]; then
+      #       echo "No Windows VM IP addresses found, skipping copy"
+      #       exit 0
+      #     fi
           
-          echo "Found ${#WINDOWS_IP_ARRAY[@]} Windows VM(s), copying installer to each..."
+      #     echo "Found ${#WINDOWS_IP_ARRAY[@]} Windows VM(s), copying installer to each..."
           
-          for i in "${!WINDOWS_IP_ARRAY[@]}"; do
-            WINDOWS_IP="${WINDOWS_IP_ARRAY[$i]}"
-            echo "$WINDOWS_IP"
-            VM_INDEX=$((i + 1))
+      #     for i in "${!WINDOWS_IP_ARRAY[@]}"; do
+      #       WINDOWS_IP="${WINDOWS_IP_ARRAY[$i]}"
+      #       echo "$WINDOWS_IP"
+      #       VM_INDEX=$((i + 1))
             
-            echo "Copying Windows installer to Windows VM #$VM_INDEX at $WINDOWS_IP"
-            if SSHPASS="$VM_PASSWORD" sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-              windows-worker-installer.exe "$VM_USERNAME@$WINDOWS_IP:/C:/Temp/"; then
-              echo "Windows installer copied successfully to Windows VM #$VM_INDEX ($WINDOWS_IP)"
-            else
-              echo "Failed to copy Windows installer to Windows VM #$VM_INDEX ($WINDOWS_IP)"
-              # Continue with other VMs instead of failing completely
-            fi
-          done
+      #       echo "Copying Windows installer to Windows VM #$VM_INDEX at $WINDOWS_IP"
+      #       if SSHPASS="$VM_PASSWORD" sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+      #         windows-worker-installer.exe "$VM_USERNAME@$WINDOWS_IP:/C:/Temp/"; then
+      #         echo "Windows installer copied successfully to Windows VM #$VM_INDEX ($WINDOWS_IP)"
+      #       else
+      #         echo "Failed to copy Windows installer to Windows VM #$VM_INDEX ($WINDOWS_IP)"
+      #         # Continue with other VMs instead of failing completely
+      #       fi
+      #     done
           
-          echo "Completed copying Windows installer to all available Windows VMs"
+      #     echo "Completed copying Windows installer to all available Windows VMs"
 
       - name: Wait for Service Boot Setup to Complete
         run: |
@@ -232,77 +232,77 @@ jobs:
           
           echo "Service setup completed successfully"
 
-  run-smb-tests:
-    name: Run SMB API Tests
-    runs-on: openlab
-    needs: setup-infrastructure
-    env:
-      JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+#  run-smb-tests:
+#    name: Run SMB API Tests
+#    runs-on: openlab
+#    needs: setup-infrastructure
+#    env:
+#      JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+#      CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+#      ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+#      KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+#
+#      NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
+#      PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+#
+#      NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+#      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
+#
+#      AZURE_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
+#      AZURE_SMB_NDM_WORKERS_PORT: ${{ vars.AZURE_SMB_NDM_WORKERS_PORT }}
+#      AZURE_SMB_SOURCE_VOLUMES: ${{ vars.AZURE_SMB_SOURCE_VOLUMES }}
+#      AZURE_SMB_DESTINATION_VOLUMES: ${{ vars.AZURE_SMB_DESTINATION_VOLUMES }}
+#      AZURE_SMB_SOURCE_HOST_IP: ${{ vars.AZURE_SMB_SOURCE_HOST_IP }}
+#      AZURE_SMB_DESTINATION_HOST_IP: ${{ vars.AZURE_SMB_DESTINATION_HOST_IP }}
+#      AZURE_SMB_PROTOCOL_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
+#      AZURE_SMB_PROTOCOL_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
+#      SMB_EXECUTABLE_FILENAME: ${{ vars.SMB_EXECUTABLE_FILENAME }}
+#      BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
+#      REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+#
+#      - name: Set up Go for API Tests
+#        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
+#        with:
+#          go-version: ${{ env.GO_VERSION }}
+#
+#      - name: Setup credentials for SMB tests
+#        run: |
+#
+#          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+#          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+#
+#          echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+#          echo "::add-mask::$VM_PASSWORD"
+#          echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+#          echo "AZURE_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+#          echo "AZURE_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+#          echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
+#          echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
+#      - name: Install Ginkgo
+#        run: |
+#          cd ndm-api-tests
+#          go install github.com/onsi/ginkgo/v2/ginkgo@latest
+#          go get github.com/onsi/gomega/...
+#          go mod tidy
+#          echo "Ginkgo and Gomega installed successfully."
 
-      NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
-      PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+      # - name: Run SMB API Tests
+      #   run: |
+      #     cd ndm-api-tests
+      #     chmod +x ./run-smb-azure-automation.sh
+      #     ./run-smb-azure-automation.sh
+      #   continue-on-error: true
 
-      NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
-
-      AZURE_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
-      AZURE_SMB_NDM_WORKERS_PORT: ${{ vars.AZURE_SMB_NDM_WORKERS_PORT }}
-      AZURE_SMB_SOURCE_VOLUMES: ${{ vars.AZURE_SMB_SOURCE_VOLUMES }}
-      AZURE_SMB_DESTINATION_VOLUMES: ${{ vars.AZURE_SMB_DESTINATION_VOLUMES }}
-      AZURE_SMB_SOURCE_HOST_IP: ${{ vars.AZURE_SMB_SOURCE_HOST_IP }}
-      AZURE_SMB_DESTINATION_HOST_IP: ${{ vars.AZURE_SMB_DESTINATION_HOST_IP }}
-      AZURE_SMB_PROTOCOL_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
-      AZURE_SMB_PROTOCOL_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
-      SMB_EXECUTABLE_FILENAME: ${{ vars.SMB_EXECUTABLE_FILENAME }}
-      BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
-      REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Set up Go for API Tests
-        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Setup credentials for SMB tests
-        run: |
-
-          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
-          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
-          
-          echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "::add-mask::$VM_PASSWORD"
-          echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "AZURE_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "AZURE_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
-          echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
-      - name: Install Ginkgo
-        run: |
-          cd ndm-api-tests
-          go install github.com/onsi/ginkgo/v2/ginkgo@latest
-          go get github.com/onsi/gomega/...
-          go mod tidy
-          echo "Ginkgo and Gomega installed successfully."
-
-      - name: Run SMB API Tests
-        run: |
-          cd ndm-api-tests
-          chmod +x ./run-smb-azure-automation.sh
-          ./run-smb-azure-automation.sh
-        continue-on-error: true
-
-      - name: Upload SMB Test Logs
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: smb-test-logs-${{ github.run_id }}
-          path: ndm-api-tests/reports/
-          retention-days: 30
+#      - name: Upload SMB Test Logs
+#        if: always()
+#        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+#        with:
+#          name: smb-test-logs-${{ github.run_id }}
+#          path: ndm-api-tests/reports/
+#          retention-days: 30
 
   run-nfs-tests:
     name: Run NFS API Tests

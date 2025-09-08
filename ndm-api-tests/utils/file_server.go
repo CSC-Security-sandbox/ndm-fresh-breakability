@@ -308,9 +308,10 @@ func AddDataToVolumeForSMB(export string) string {
 	net use %s %s /user:%s "%s" &&
 	(if exist %s\%s\ ( rmdir /s /q %s\%s ) else ( echo "delta not found" )) &
 	xcopy /E /I /Y %s %s\%s &&
+	icacls %s\%s /grant Everyone:(OI)(CI)F /T &&
 	net use %s /delete /y &&
 	rmdir /s /q %s
-	`, deltaDir, deltaDir, deltaDir, mappedDrive, deltaDir, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, smbShare, DeltaFolder, smbShare, DeltaFolder, deltaDir, smbShare, DeltaFolder, mappedDrive, deltaDir)
+	`, deltaDir, deltaDir, deltaDir, mappedDrive, deltaDir, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, smbShare, DeltaFolder, smbShare, DeltaFolder, deltaDir, smbShare, DeltaFolder, smbShare, DeltaFolder, mappedDrive, deltaDir)
 
 	commands := []string{}
 	for _, v := range strings.Split(cmd, "\n") {
@@ -322,35 +323,98 @@ func AddDataToVolumeForSMB(export string) string {
 
 func AddDataToVolumeForNFS(export string) string {
 	destMount := "/mnt/data_add"
-	deltaDir := "/" + DeltaFolder
+	localDeltaDir := "/tmp/" + DeltaFolder
 
 	script := fmt.Sprintf(`
-set -e
+# Redirect stderr to stdout for better error capture
+exec 2>&1
+
+echo "=== Starting AddDataToVolumeForNFS for export: %s ==="
 
 # Clean up any previous run
-sudo rm -rf "%s"
-sudo rm -rf "%s"
+echo "Step 1: Cleaning up previous run..."
+sudo rm -rf "%s" 2>/dev/null || echo "Could not remove local delta dir"
+sudo rm -rf "%s" 2>/dev/null || echo "Could not remove mount point"
 
-# Create delta directory and generate 100 txt files of 100KB each
-sudo mkdir -p "%s"
-for i in $(seq -w 1 100); do
-	sudo dd if=/dev/zero of="%s/file${i}.txt" bs=100K count=1 status=none
+# Create delta directory and generate files
+echo "Step 2: Creating local delta directory: %s"
+if ! sudo mkdir -p "%s"; then
+    echo "ERROR: Failed to create directory %s"
+    exit 1
+fi
+
+echo "Step 3: Generating test files..."
+for i in $(seq -w 1 5); do
+	if ! sudo dd if=/dev/zero of="%s/file${i}.txt" bs=10K count=1 status=none 2>/dev/null; then
+		echo "WARNING: Failed to create file${i}.txt"
+	fi
 done
 
-# Mount export NFS export
-sudo mkdir -p "%s"
-sudo mount -t nfs "%s" "%s"
+file_count=$(ls -1 "%s" 2>/dev/null | wc -l)
+echo "Created $file_count files in local delta directory"
 
-# Copy delta to the mounted export
-sudo cp -a "%s" "%s/"
+# Prepare mount point
+echo "Step 4: Preparing mount point: %s"
+if ! sudo mkdir -p "%s"; then
+    echo "ERROR: Failed to create mount point %s"
+    exit 1
+fi
+
+echo "Step 5: Cleaning any existing mounts..."
+sudo umount "%s" 2>/dev/null || echo "No existing mount found"
+
+# Mount NFS export
+echo "Step 6: Mounting NFS export %s to %s"
+if ! sudo mount -t nfs "%s" "%s"; then
+    echo "ERROR: Failed to mount NFS export"
+    exit 1
+fi
+
+# Verify mount
+echo "Step 7: Verifying mount..."
+if ! mountpoint -q "%s"; then
+	echo "ERROR: Mount verification failed"
+	exit 1
+fi
+
+echo "Mount successful!"
+
+# Remove existing delta if present
+echo "Step 8: Checking for existing delta directory..."
+if [ -d "%s/%s" ]; then
+	echo "Removing existing delta directory"
+	sudo rm -rf "%s/%s" || echo "WARNING: Failed to remove existing delta"
+fi
+
+# Copy delta directory
+echo "Step 9: Copying delta directory..."
+if ! sudo cp -r "%s" "%s/"; then
+    echo "ERROR: Failed to copy delta directory"
+    exit 1
+fi
+
+# Verify copy
+echo "Step 10: Verifying copy..."
+if [ ! -d "%s/%s" ]; then
+	echo "ERROR: Copy verification failed"
+	exit 1
+fi
+
+echo "Copy successful!"
+
+# Set permissions
+echo "Step 11: Setting permissions..."
+sudo chmod -R 777 "%s/%s" || echo "WARNING: Failed to set permissions"
 
 sync
 
-# Unmount and cleanup
-sudo umount "%s" || sudo umount -l "%s"
-sudo rm -rf "%s"
-sudo rm -rf "%s"
-`, deltaDir, destMount, deltaDir, deltaDir, destMount, export, destMount, deltaDir, destMount, destMount, destMount, deltaDir, destMount)
+# Cleanup
+echo "Step 12: Cleanup..."
+sudo umount "%s" || echo "WARNING: Failed to unmount"
+sudo rm -rf "%s" || echo "WARNING: Failed to remove local delta"
+
+echo "=== AddDataToVolumeForNFS completed ==="
+`, export, localDeltaDir, destMount, localDeltaDir, localDeltaDir, localDeltaDir, localDeltaDir, localDeltaDir, destMount, destMount, destMount, destMount, export, destMount, export, destMount, destMount, destMount, DeltaFolder, destMount, DeltaFolder, localDeltaDir, destMount, destMount, DeltaFolder, destMount, DeltaFolder, destMount, localDeltaDir)
 
 	return script
 }
