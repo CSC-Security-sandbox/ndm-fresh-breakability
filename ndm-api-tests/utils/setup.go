@@ -92,10 +92,10 @@ func InitTestEnv() {
 	}
 
 	// Update the app admin profile during the first login.
-	// err := UpdateAppAdmin(KeycloakUser, KeycloakPassword)
-	// if err != nil {
-	// 	LogFatalf("Error updating app admin: %v", err)
-	// }
+	err := UpdateAppAdmin(KeycloakUser, KeycloakPassword)
+	if err != nil {
+		LogFatalf("Error updating app admin: %v", err)
+	}
 
 	AuthToken, RefreshToken, tokenErr = GetBearerToken("", "")
 	if tokenErr != nil {
