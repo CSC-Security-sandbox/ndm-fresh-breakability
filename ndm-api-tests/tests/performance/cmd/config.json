@@ -1,0 +1,47 @@
+{
+  "ndm": {
+    "username": "admin@datamigrator.local",
+    "password": "Welcome@123"
+  },
+  "vm": {
+    "username": "ubuntu",
+    "password": "Password@123",
+    "port": "22"
+  },
+  "worker": {
+    "count": "1",
+    "username": "ubuntu",
+    "password": "Password@123",
+    "port": "22"
+  },
+  "azure": {
+    "source_host_ip": "172.30.203.23",
+    "nfs": {
+      "protocol_username": "ubuntu",
+      "protocol_password": "Password@123",
+      "source_volumes": "/mnt/data/AI"
+    }
+  },
+  "fileserver": {
+    "working_directory": "/tmp",
+    "source_export_path": "/mnt/data/AI"
+  },
+  "migration": {
+    "options": {
+      "exclude_file_patterns": "*/snapshots/*,*/logs/*,*/tmp/*",
+      "preserve_access_time": true,
+      "skip_file": "0-M"
+    }
+  },
+  "http": {
+    "content_type": "application/json"
+  },
+  "timeout": {
+    "http_client_seconds": 15,
+    "ping_max_attempts": 60,
+    "ui_max_attempts": 720,
+    "ping_interval_seconds": 5,
+    "ui_interval_seconds": 5,
+    "final_wait_minutes": 5
+  }
+}

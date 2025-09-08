@@ -2,65 +2,156 @@ package main
 
 import (
 	"crypto/tls"
-	// "encoding/json"
+	"encoding/json"
 	"fmt"
-	// "io"
+	"io"
 	"log"
+	. "ndm-api-tests/utils"
 	"net/http"
 	"os"
 	"os/exec"
-
-	// "runtime"
 	"strings"
 	"time"
-
-	. "ndm-api-tests/utils"
-	// "github.com/shirou/gopsutil/cpu"
-	// "github.com/shirou/gopsutil/v3/disk"
-	// "github.com/shirou/gopsutil/disk"
-	// "github.com/shirou/gopsutil/v3/cpu"
-	// "github.com/shirou/gopsutil/cpu"
-	// "github.com/shirou/gopsutil/v3/disk"
-	// // "github.com/shirou/gopsutil/v3/cpu"
-	// // "github.com/shirou/gopsutil/v3/disk"
-	// "github.com/shirou/gopsutil/v3/mem"
-	// "github.com/shirou/gopsutil/v3/net"
 )
 
+// logFileWithConsole writes to both the original writer and the log file
+type logFileWithConsole struct {
+	console io.Writer
+	file    io.Writer
+}
+
+func (w logFileWithConsole) Write(p []byte) (n int, err error) {
+	n, err = w.console.Write(p)
+	w.file.Write(p)
+	return
+}
+
+// Config holds all the configuration values
+type Config struct {
+	NDM struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	} `json:"ndm"`
+	VM struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Port     string `json:"port"`
+	} `json:"vm"`
+	Worker struct {
+		Count    string `json:"count"`
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Port     string `json:"port"`
+	} `json:"worker"`
+	Azure struct {
+		SourceHostIP string `json:"source_host_ip"`
+		NFS          struct {
+			ProtocolUsername string `json:"protocol_username"`
+			ProtocolPassword string `json:"protocol_password"`
+			SourceVolumes    string `json:"source_volumes"`
+		} `json:"nfs"`
+	} `json:"azure"`
+	Fileserver struct {
+		WorkingDirectory string `json:"working_directory"`
+		SourceExportPath string `json:"source_export_path"`
+	} `json:"fileserver"`
+	Migration struct {
+		Options struct {
+			ExcludeFilePatterns string `json:"exclude_file_patterns"`
+			PreserveAccessTime  bool   `json:"preserve_access_time"`
+			SkipFile            string `json:"skip_file"`
+		} `json:"options"`
+	} `json:"migration"`
+	HTTP struct {
+		ContentType string `json:"content_type"`
+	} `json:"http"`
+	Timeout struct {
+		HTTPClientSeconds   int `json:"http_client_seconds"`
+		PingMaxAttempts     int `json:"ping_max_attempts"`
+		UIMaxAttempts       int `json:"ui_max_attempts"`
+		PingIntervalSeconds int `json:"ping_interval_seconds"`
+		UIIntervalSeconds   int `json:"ui_interval_seconds"`
+		FinalWaitMinutes    int `json:"final_wait_minutes"`
+	} `json:"timeout"`
+	VMConfig struct {
+		UsernamePrefix     string `json:"username_prefix"`
+		CPImageVersion     string `json:"cp_image_version"`
+		WorkerImageVersion string `json:"worker_image_version"`
+	} `json:"vm_config"`
+	ANFConfig struct {
+		UsernamePrefix string `json:"anf_username_prefix"`
+		DateSuffix     string `json:"anf_date_suffix"`
+		SequenceNumber string `json:"anf_sequence_number"`
+	} `json:"anf_config"`
+}
+
+// loadConfig loads configuration from config.json file
+func loadConfig() (*Config, error) {
+	file, err := os.Open("config.json")
+	if err != nil {
+		return nil, fmt.Errorf("failed to open config.json: %v", err)
+	}
+	defer file.Close()
+
+	var config Config
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode config.json: %v", err)
+	}
+
+	return &config, nil
+}
+
 func main() {
+	// Setup logging to file with timestamp, and also print to console
+	fmt.Println("\n====================Creating a Log file====================")
+	logFileName := fmt.Sprintf("perf-log-%s.txt", time.Now().Format("20060102-150405"))
+	logFile, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		log.Fatalf("Failed to open log file: %v", err)
+	}
+	defer logFile.Close()
+
+	mw := io.MultiWriter(os.Stdout, logFile)
+	log.SetOutput(mw)
+	// For all exec.Command calls, set cmd.Stdout/cmd.Stderr = mw
+	// Load configuration from config.json
+	config, err := loadConfig()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
 
 	fmt.Println("\n====================Creating Azure VMs====================")
-	// cpIP, workerIP, err := createAzureVMs()
+	cpIP, workerIP, err := createAzureVMsWithTerraform(config)
 	// cpIP, workerIP := "172.30.203.12", "172.30.203.17"
 	// var err error = nil
-	cpIP := "172.30.203.24"
-	workerIP := "172.30.203.25"
-	var err error = nil
 	if err != nil {
 		log.Fatalf("Failed to create Azure VMs: %v", err)
 	}
-	// fmt.Println("Created VM as simulation")
+
+	fmt.Println("\n====================Clearing and Creating Azure NetApp Files Volume====================")
+	destinationIP, exportPath, err := createAzureANFVolumeWithTerraform(config)
+	if err != nil {
+		log.Fatalf("Failed to create Azure ANF volume: %v", err)
+	}
 
 	fmt.Println("\n====================Updating Environment Variables=====================")
-	err = updateEnvVariables(cpIP, workerIP)
+	err = updateEnvVariables(cpIP, workerIP, destinationIP, exportPath, config)
 	if err != nil {
 		log.Printf("Failed to update environment variables: %v", err)
 	}
-
 	fmt.Println("\nEnvironment Variables after loading:")
-	fmt.Printf("===>NDM_VM_HOST: %s\n", NDM_VM_HOST)
-	fmt.Printf("===>NDM_WORKERS_HOST: %s\n", NDM_WORKERS_HOST)
-
-	// Initialize protocol/environment-specific config variables
+	fmt.Printf("===>CP: %s\n", NDM_VM_HOST)
+	fmt.Printf("===>Workers: %s\n", NDM_WORKERS_HOST)
 
 	fmt.Println("\n====================Waiting for Control Plane to be UP====================")
-	err = waitForControlPlaneReadyWithIP(cpIP)
+	err = waitForControlPlaneReadyWithIP(cpIP, config)
 	if err != nil {
 		log.Printf("Control Plane readiness check failed: %v", err)
 	}
 
 	fmt.Println("\n====================Initialising the User====================")
-
 	InitTestEnv()
 	fmt.Printf("NDM Username: %s\n", USERNAME)
 	fmt.Printf("NDM Password: %s\n", PASSWORD)
@@ -80,27 +171,11 @@ func main() {
 	}
 	fmt.Printf("NDM Username: %s\n", USERNAME)
 	fmt.Printf("NDM Password: %s\n", PASSWORD)
-	// fmt.Println("\n====================Starting Metrics Collection====================")
 
-	// // Start collecting LOCAL automation host metrics (where this Go script runs)
-	// // This monitors the machine running the automation, NOT the worker VM
-	// fmt.Println("Starting local automation host metrics collection...")
-	// // go LogSystemMetricsToFile("automation_host_metrics.json")
-
-	// // Start fetching worker VM metrics from Prometheus Pushgateway after workers are attached
-	// // NDM worker pushes metrics to Pushgateway on control plane at port 9091
-	// fmt.Println("Starting worker VM metrics collection from Pushgateway...")
-	// // workerMetricsEndpoint := "http://" + cpIP + ":9091/metrics"
-	// // go LogNodeMetricsToFile(workerMetricsEndpoint, "worker_vm_metrics.log")
-
-	// // Give metrics collection a moment to initialize
-	// time.Sleep(2 * time.Second)
-
-	// Setup source file server
 	fmt.Println("\n====================Setting up File Servers====================")
 	headers := map[string]string{
 		"Authorization": "Bearer " + AuthToken,
-		"Content-Type":  "application/json",
+		"Content-Type":  config.HTTP.ContentType,
 	}
 	workerIds := GetWorkerIds()
 	if len(workerIds) == 0 {
@@ -112,14 +187,14 @@ func main() {
 		ConfigType:       ConfigTypeFile,
 		ProjectID:        projectId,
 		ServerType:       ServerTypeOtherNAS,
-		UserName:         NDM_VM_USER_NAME, // From AZ_NDM_VM_USER_NAME
-		Password:         NDM_VM_PASSWORD,  // From AZ_NDM_VM_PASSWORD
+		UserName:         NDM_VM_USER_NAME,
+		Password:         NDM_VM_PASSWORD,
 		Protocol:         ProtocolNFS,
 		ProtocolVersion:  ProtocolVersion3,
-		Host:             SOURCE_HOST_IP, // From AZ_SOURCE_HOST_IP (10.0.0.169)
+		Host:             SOURCE_HOST_IP,
 		Workers:          workerIds,
-		WorkingDirectory: "/tmp",
-		ExportPathSource: nil, // Will use AutoDiscover default from file_server.go
+		WorkingDirectory: config.Fileserver.WorkingDirectory,
+		ExportPathSource: nil,
 	}
 	sourceFileServerId, resp, err := CreateFileServer(sourceParams, headers)
 	if err != nil {
@@ -133,7 +208,7 @@ func main() {
 
 	// Discovery job for source file server
 	log.Printf("\n==================== CREATING DISCOVERY JOB ====================")
-	sourceExportPath := "/mnt/data/AI" // Use the same path as migration source
+	sourceExportPath := config.Fileserver.SourceExportPath // Use the same path as migration source
 	sourceExportPathID, err := GetExportPathID("source", sourceExportPath, sourceFileServerId, headers)
 	if err != nil {
 		LogFatalf("Error getting source export path ID for discovery job: %v", err)
@@ -171,7 +246,7 @@ func main() {
 		ProtocolVersion:  ProtocolVersion3,
 		Host:             DESTINATION_HOST_IP, // From AZ_DESTINATION_HOST_IP (10.0.4.9)
 		Workers:          workerIds,
-		WorkingDirectory: "/tmp",
+		WorkingDirectory: config.Fileserver.WorkingDirectory,
 		ExportPathSource: nil, // Will use AutoDiscover default
 	}
 	destinationFileServerId, _, err := CreateFileServer(destinationParams, headers)
@@ -181,9 +256,9 @@ func main() {
 	}
 	fmt.Printf("======>Destination file Server ID: %s\n", destinationFileServerId)
 
-	// Create migration job from /mnt/data/AI (source) to /KB-NFS-PERF-AUTO-VOL (destination)
+	// Create migration job from config source path to dynamic export path (destination)
 	fmt.Println("\n====================Setting Up Migration Job====================")
-	err = setupMigrationJob(sourceFileServerId, destinationFileServerId, "/mnt/data/AI", "/KB-NFS-PERF-AUTO-VOL", headers)
+	err = setupMigrationJob(sourceFileServerId, destinationFileServerId, config.Fileserver.SourceExportPath, exportPath, headers, config)
 	if err != nil {
 		fmt.Printf("Warning: Failed to setup migration job: %v\n", err)
 	}
@@ -194,32 +269,16 @@ func main() {
 	fmt.Printf("Source File Server ID: %s\n", sourceFileServerId)
 	if DESTINATION_HOST_IP != "" {
 		fmt.Printf("Destination Host: %s\n", DESTINATION_HOST_IP)
-		fmt.Printf("Destination Volume: %s:/kb-vol-perf-run\n", DESTINATION_HOST_IP)
+		fmt.Printf("Destination Volume: %s:%s\n", DESTINATION_HOST_IP, exportPath)
 	}
-
-	// Wait for interrupt signal to gracefully shutdown
-	// fmt.Println("\n📊 Metrics collection is running in background...")
-	// fmt.Println("💡 Press Ctrl+C to stop metrics collection and exit")
-
-	// // Set up signal channel
-	// sigChan := make(chan os.Signal, 1)
-	// signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	// // Block until signal received
-	// <-sigChan
-	// fmt.Println("\n🛑 Received shutdown signal. Stopping metrics collection...")
-	// fmt.Println("✅ Metrics collection stopped. Files saved:")
-	// fmt.Println("   📄 automation_host_metrics.json")
-	// fmt.Println("   📄 worker_vm_metrics.log")
-	// fmt.Println("👋 Goodbye!")
 
 	fmt.Printf("NDM Username: %s\n", USERNAME)
 	fmt.Printf("NDM Password: %s\n", PASSWORD)
 }
 
-// setupMigrationJob creates a migration job from source to destination/mnt/data/AI/KB-NFS-PERF-AUTO-VOL
-func setupMigrationJob(sourceFileServerId, destinationFileServerId, srcpath, destpath string, headers map[string]string) error {
-	// Get source path ID for /mnt/data/AI
+// setupMigrationJob creates a migration job from source to destination path
+func setupMigrationJob(sourceFileServerId, destinationFileServerId, srcpath, destpath string, headers map[string]string, config *Config) error {
+	// Get source path ID for source export path
 	sourcePathId, err := GetExportPathID("source", srcpath, sourceFileServerId, headers)
 	if err != nil {
 		return fmt.Errorf("failed to get source path ID: %w", err)
@@ -235,9 +294,9 @@ func setupMigrationJob(sourceFileServerId, destinationFileServerId, srcpath, des
 		DestinationPathIDs: []string{destinationPathId},
 		SidMapping:         false,
 		Options: map[string]interface{}{
-			"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
-			"preserveAccessTime":  true,
-			"skipFile":            "0-M",
+			"excludeFilePatterns": config.Migration.Options.ExcludeFilePatterns,
+			"preserveAccessTime":  config.Migration.Options.PreserveAccessTime,
+			"skipFile":            config.Migration.Options.SkipFile,
 		},
 	}
 	fmt.Println("=====>Triggering migration job")
@@ -252,15 +311,8 @@ func setupMigrationJob(sourceFileServerId, destinationFileServerId, srcpath, des
 
 	if len(jobIds) > 0 {
 		fmt.Printf("========>Migration job created successfully with ID: %s\n", jobIds[0])
-		fmt.Printf("========>Migration: %s:/mnt/data/AI → %s:/KB-NFS-PERF-AUTO-VOL\n", SOURCE_HOST_IP, DESTINATION_HOST_IP)
+		fmt.Printf("========>Migration: %s:%s → %s:%s\n", SOURCE_HOST_IP, srcpath, DESTINATION_HOST_IP, destpath)
 
-		// Start direct system metrics logging in background (gopsutil)
-		// go LogSystemMetricsToFile("system_metrics.log")
-		// // Fetch and log worker VM metrics from its Prometheus endpoint
-		// workerMetricsEndpoint := "http://" + NDM_WORKERS_HOST + ":9100/metrics"
-		// go LogNodeMetricsToFile(workerMetricsEndpoint, "worker_metrics.log")
-
-		// Get job run details to verify the job was created properly
 		fmt.Println("   Getting job run details...")
 		getJobsResp, resp, err := GetJobRunDetails(jobIds[0], headers)
 		if err != nil {
@@ -281,44 +333,14 @@ func setupMigrationJob(sourceFileServerId, destinationFileServerId, srcpath, des
 				fmt.Printf("Warning: Job may not have started yet: %v\n", err)
 			} else {
 				fmt.Printf("=============Migration job is now RUNNING=============\n")
-			}
-		}
-	} else {
-		return fmt.Errorf("no job IDs returned from migration job creation")
-	}
-
-	if err != nil {
-		return fmt.Errorf("failed to create migration job: %w", err)
-	}
-	if resp.StatusCode != 200 && resp.StatusCode != 201 {
-		return fmt.Errorf("migration job creation failed with status: %d", resp.StatusCode)
-	}
-
-	if len(jobIds) > 0 {
-		fmt.Printf("========>Migration job created successfully with ID: %s\n", jobIds[0])
-		fmt.Printf("========>Migration: %s:/mnt/data/AI → %s:/KB-NFS-PERF-AUTO-VOL\n", SOURCE_HOST_IP, DESTINATION_HOST_IP)
-
-		// Get job run details to verify the job was created properly
-		fmt.Println("   Getting job run details...")
-		getJobsResp, resp, err := GetJobRunDetails(jobIds[0], headers)
-		if err != nil {
-			return fmt.Errorf("failed to get job run details: %w", err)
-		}
-
-		if resp.StatusCode != 200 {
-			return fmt.Errorf("failed to get job run details, status: %d", resp.StatusCode)
-		}
-
-		if len(getJobsResp.JobRuns) > 0 {
-			jobRunID := getJobsResp.JobRuns[0].JobRunId
-			fmt.Printf("Job Run ID: %s\n", jobRunID)
-			fmt.Printf("Job Status: %s\n", getJobsResp.JobRuns[0].Status)
-			fmt.Println("Waiting for migration job to start...")
-			err = WaitForJobState(jobRunID, RUNNING_JOBRUN)
-			if err != nil {
-				fmt.Printf("Warning: Job may not have started yet: %v\n", err)
-			} else {
-				fmt.Printf("=============Migration job is now RUNNING=============\n")
+				// Wait for job run to complete
+				fmt.Println("Waiting for migration job to complete...")
+				err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
+				if err != nil {
+					fmt.Printf("Warning: Job did not complete successfully: %v\n", err)
+				} else {
+					fmt.Printf("=============Migration job COMPLETED=============\n")
+				}
 			}
 		}
 	} else {
@@ -328,228 +350,201 @@ func setupMigrationJob(sourceFileServerId, destinationFileServerId, srcpath, des
 	return nil
 }
 
-func createAzureVMs() (string, string, error) {
+func createAzureVMsWithTerraform(config *Config) (string, string, error) {
+	// Check if Azure CLI is logged in
 	cmd := exec.Command("az", "account", "show")
 	if err := cmd.Run(); err != nil {
-		return "", "", fmt.Errorf("*********azure CLI not logged in. Please run 'az login' first*********")
+		return "", "", fmt.Errorf("*********Azure CLI not logged in. Please run 'az login' first*********")
 	}
+
+	// Use config values instead of user input
+	// Prompt for values, use config as default if input is empty
 	var username, cpImageVersion, workerImageVersion string
-	fmt.Print(">>>>>>>>>Enter username prefix for VM naming: ")
+	fmt.Printf(">>>>>>>>>Enter username prefix for VM naming [%s]: ", config.VMConfig.UsernamePrefix)
 	fmt.Scanln(&username)
-	fmt.Print(">>>>>>>>>Enter control-plane image version (e.g., 2025.19.08190213) or press Enter for latest: ")
+	if username == "" {
+		username = config.VMConfig.UsernamePrefix
+	}
+	fmt.Printf(">>>>>>>>>Enter control-plane image version (e.g., 2025.19.08190213) or press Enter for latest [%s]: ", config.VMConfig.CPImageVersion)
 	fmt.Scanln(&cpImageVersion)
-	fmt.Print(">>>>>>>>>Enter worker image version (e.g., 2025.19.08185924) or press Enter for latest: ")
+	if cpImageVersion == "" {
+		cpImageVersion = config.VMConfig.CPImageVersion
+	}
+	fmt.Printf(">>>>>>>>>Enter worker image version (e.g., 2025.19.08185924) or press Enter for latest [%s]: ", config.VMConfig.WorkerImageVersion)
 	fmt.Scanln(&workerImageVersion)
-	config := VMConfig{
-		SubscriptionID: "1630c6a9-d99b-498a-aca8-a271f7506bc0",
-		ResourceGroup:  "MigrationAsAService-dev-infra",
-		Location:       "eastus2",
-		VNetName:       "MigrationAsAService-dev-VNET02",
-		SubnetName:     "MigrationAsAService-dev-VNET02_Subnet01",
-		GalleryName:    "datamigrator",
-		AdminUsername:  "ubuntu",
-		AdminPassword:  "Password@123",
-		Username:       username,
+	if workerImageVersion == "" {
+		workerImageVersion = config.VMConfig.WorkerImageVersion
 	}
-	cmd = exec.Command("az", "account", "set", "--subscription", config.SubscriptionID)
+
+	args := []string{"./create_vms.sh", "-u", username}
+	if cpImageVersion != "" {
+		args = append(args, "-c", cpImageVersion)
+	}
+	if workerImageVersion != "" {
+		args = append(args, "-w", workerImageVersion)
+	}
+
+	// Execute the shell script
+	fmt.Println("Executing Terraform VM creation script...")
+	cmd = exec.Command(args[0], args[1:]...)
+	mw := log.Writer() // log.Writer() is set to io.MultiWriter(os.Stdout, logFile)
+	cmd.Stdout = mw
+	cmd.Stderr = mw
+
 	if err := cmd.Run(); err != nil {
-		return "", "", fmt.Errorf("*********failed to set subscription: %v*********", err)
+		return "", "", fmt.Errorf("*********Failed to execute create_vms.sh script: %v*********", err)
 	}
 
-	// Control Plane VM configuration
-	cpConfig := config
-	cpConfig.VMType = "control-plane"
-	cpConfig.VMName = fmt.Sprintf("%s-cp-azure-automated-perf-%s", username, time.Now().Format("20060102-150405"))
-	cpConfig.ImageVersion = cpImageVersion
-	cpIP, err := createSingleVMAndGetIP(cpConfig)
+	// Read the VM IPs from the output file
+	ipFile := "vm_ips.txt"
+	content, err := os.ReadFile(ipFile)
 	if err != nil {
-		return "", "", fmt.Errorf("*********failed to create Control Plane VM: %v*********", err)
+		return "", "", fmt.Errorf("*********Failed to read VM IPs from %s: %v*********", ipFile, err)
 	}
 
-	// Create Worker VM
-	workerConfig := config
-	workerConfig.VMType = "worker"
-	workerConfig.VMName = fmt.Sprintf("%s-worker-azure-automated-perf-%s", username, time.Now().Format("20060102-150405"))
-	workerConfig.ImageVersion = workerImageVersion
-	workerIP, err := createSingleVMAndGetIP(workerConfig)
-	if err != nil {
-		return "", "", fmt.Errorf("*********failed to create Worker VM: %v*********", err)
+	// Parse the IP addresses from the file
+	var cpIP, workerIP string
+	lines := strings.Split(string(content), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "CP_IP=") {
+			cpIP = strings.TrimPrefix(line, "CP_IP=")
+		} else if strings.HasPrefix(line, "WORKER_IP=") {
+			workerIP = strings.TrimPrefix(line, "WORKER_IP=")
+		}
 	}
 
-	fmt.Println("=======>Both VMs created successfully!")
+	if cpIP == "" || workerIP == "" {
+		return "", "", fmt.Errorf("*********Failed to parse VM IPs from %s. CP_IP: %s, WORKER_IP: %s*********", ipFile, cpIP, workerIP)
+	}
+
+	fmt.Println("=======>Both VMs created successfully with Terraform!")
 	fmt.Printf("Control Plane IP: %s\n", cpIP)
 	fmt.Printf("Worker IP: %s\n", workerIP)
+
+	// Clean up the temporary IP file
+	os.Remove(ipFile)
+
 	return cpIP, workerIP, nil
 }
 
-type VMConfig struct {
-	VMName         string
-	VMType         string
-	ImageVersion   string
-	Username       string
-	SubscriptionID string
-	ResourceGroup  string
-	Location       string
-	VNetName       string
-	SubnetName     string
-	GalleryName    string
-	AdminUsername  string
-	AdminPassword  string
-}
+func createAzureANFVolumeWithTerraform(config *Config) (string, string, error) {
+	// Check if Azure CLI is logged in
+	cmd := exec.Command("az", "account", "show")
+	if err := cmd.Run(); err != nil {
+		return "", "", fmt.Errorf("*********Azure CLI not logged in. Please run 'az login' first*********")
+	}
 
-func createSingleVMAndGetIP(config VMConfig) (string, error) {
-	// Get image ID
-	imageID, err := getImageIDForVM(config)
+	fmt.Println("=======>Starting ANF volume cleanup and creation process...")
+	fmt.Println("=======>This will delete ALL existing volumes in KB-NFS-PERF-AUTO/KB-NFS-PERF-AUTO-CP")
+	fmt.Println("=======>and create a new one with 1TB size")
+
+	// Use config values instead of user input
+	// Prompt for values, use config as default if input is empty
+	var username, dateInput, sequenceInput string
+	fmt.Printf(">>>>>>>>>Enter username prefix for ANF volume tagging [%s]: ", config.ANFConfig.UsernamePrefix)
+	fmt.Scanln(&username)
+	if username == "" {
+		username = config.ANFConfig.UsernamePrefix
+	}
+	fmt.Printf(">>>>>>>>>Enter date suffix (YYYYMMDD) or press Enter for today [%s]: ", config.ANFConfig.DateSuffix)
+	fmt.Scanln(&dateInput)
+	if dateInput == "" {
+		dateInput = config.ANFConfig.DateSuffix
+	}
+	fmt.Printf(">>>>>>>>>Enter sequence number or press Enter for default (1) [%s]: ", config.ANFConfig.SequenceNumber)
+	fmt.Scanln(&sequenceInput)
+	if sequenceInput == "" {
+		sequenceInput = config.ANFConfig.SequenceNumber
+	}
+
+	args := []string{"./create_anf_volume.sh", "-u", username}
+
+	if dateInput != "" {
+		args = append(args, "-t", dateInput)
+	}
+	if sequenceInput != "" {
+		args = append(args, "-n", sequenceInput)
+	}
+
+	// Execute the ANF shell script
+	fmt.Println("Executing Terraform ANF volume creation script...")
+	fmt.Println("Creating 1TB volume with naming convention: vol-dst-perf-YYYYMMDD-N")
+	cmd = exec.Command(args[0], args[1:]...)
+	mw := log.Writer()
+	cmd.Stdout = mw
+	cmd.Stderr = mw
+
+	if err := cmd.Run(); err != nil {
+		return "", "", fmt.Errorf("*********Failed to execute create_anf_volume.sh script: %v*********", err)
+	}
+
+	// Read the ANF volume info from the output file
+	infoFile := "anf_volume_info.txt"
+	content, err := os.ReadFile(infoFile)
 	if err != nil {
-		return "", fmt.Errorf("***********failed to get image ID: %v***********", err)
+		return "", "", fmt.Errorf("*********Failed to read ANF volume info from %s: %v*********", infoFile, err)
 	}
 
-	// Get subnet ID
-	subnetID, err := getSubnetIDForVM(config)
-	if err != nil {
-		return "", fmt.Errorf("***********failed to get subnet ID: %v***********", err)
-	}
-
-	// Get VM size
-	vmSize := getVMSizeForVM(config.VMType)
-	cmd := exec.Command("az", "vm", "create",
-		"--resource-group", config.ResourceGroup,
-		"--name", config.VMName,
-		"--image", imageID,
-		"--size", vmSize,
-		"--admin-username", config.AdminUsername,
-		"--admin-password", config.AdminPassword,
-		"--authentication-type", "password",
-		"--subnet", subnetID,
-		"--location", config.Location,
-		"--zone", "1",
-		"--storage-sku", "Premium_LRS",
-		"--os-disk-size-gb", "200",
-		"--security-type", "TrustedLaunch",
-		"--enable-secure-boot", "true",
-		"--enable-vtpm", "true",
-		"--nic-delete-option", "Delete",
-		"--os-disk-delete-option", "Delete",
-		"--public-ip-address", "",
-		"--tags", "environment=dev", "owner="+config.Username,
-		"--output", "json")
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("***********VM creation failed: %v***********\nOutput: %s", err, output)
-	}
-	cmd = exec.Command("az", "vm", "show",
-		"--resource-group", config.ResourceGroup,
-		"--name", config.VMName,
-		"--show-details",
-		"--query", "privateIps",
-		"--output", "tsv")
-	output, err = cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("***********failed to get VM IP: %v***********", err)
-	}
-	ip := strings.TrimSpace(string(output))
-	if ip == "" {
-		return "", fmt.Errorf("no private IP found for VM: %s", config.VMName)
-	}
-	return ip, nil
-}
-func getImageIDForVM(config VMConfig) (string, error) {
-	var imageDefinition string
-	if config.VMType == "control-plane" {
-		imageDefinition = "ndm-control-plane"
-	} else {
-		imageDefinition = "ndm-worker"
-	}
-
-	sourceImageResourceGroup := "datamigrate-acr-resource-group"
-	if config.ImageVersion == "" {
-		// Get latest version from source resource group
-		cmd := exec.Command("az", "sig", "image-version", "list",
-			"--resource-group", sourceImageResourceGroup,
-			"--gallery-name", config.GalleryName,
-			"--gallery-image-definition", imageDefinition,
-			"--query", "[0].id",
-			"--output", "tsv")
-
-		output, err := cmd.Output()
-		if err != nil {
-			return "", fmt.Errorf("failed to get latest image: %v", err)
+	// Parse the volume information from the file
+	var destinationIP, exportPath string
+	lines := strings.Split(string(content), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "DESTINATION_HOST_IP=") {
+			destinationIP = strings.TrimPrefix(line, "DESTINATION_HOST_IP=")
+		} else if strings.HasPrefix(line, "EXPORT_PATH=") {
+			exportPath = strings.TrimPrefix(line, "EXPORT_PATH=")
 		}
-		return strings.TrimSpace(string(output)), nil
-	} else {
-		// Get specific version from source resource group
-		cmd := exec.Command("az", "sig", "image-version", "show",
-			"--resource-group", sourceImageResourceGroup,
-			"--gallery-name", config.GalleryName,
-			"--gallery-image-definition", imageDefinition,
-			"--gallery-image-version", config.ImageVersion,
-			"--query", "id",
-			"--output", "tsv")
-
-		output, err := cmd.Output()
-		if err != nil {
-			return "", fmt.Errorf("failed to get image version %s: %v", config.ImageVersion, err)
-		}
-		return strings.TrimSpace(string(output)), nil
 	}
-}
-func getSubnetIDForVM(config VMConfig) (string, error) {
-	cmd := exec.Command("az", "network", "vnet", "subnet", "show",
-		"--resource-group", config.ResourceGroup,
-		"--vnet-name", config.VNetName,
-		"--name", config.SubnetName,
-		"--query", "id",
-		"--output", "tsv")
 
-	output, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to get subnet ID: %v", err)
+	if destinationIP == "" || exportPath == "" {
+		return "", "", fmt.Errorf("*********Failed to parse ANF volume info from %s. IP: %s, Path: %s*********", infoFile, destinationIP, exportPath)
 	}
-	return strings.TrimSpace(string(output)), nil
-}
-func getVMSizeForVM(vmType string) string {
-	switch vmType {
-	case "control-plane":
-		return "Standard_D8s_v3" // 8 vCPUs, 32 GB RAM
-	case "worker":
-		return "Standard_D4s_v3" // 4 vCPUs, 16 GB RAM
-	default:
-		return "Standard_D4s_v3"
-	}
-}
-func updateEnvVariables(cpIP, workerIP string) error {
 
-	// Set all required environment variables directly
+	fmt.Println("=======>ANF Volume created successfully with Terraform!")
+	fmt.Printf("Volume Name: Dynamic (vol-dst-perf-YYYYMMDD-N format, 1TB)\n")
+	fmt.Printf("Destination IP: %s\n", destinationIP)
+	fmt.Printf("Export Path: %s\n", exportPath)
+
+	// Clean up the temporary info file
+	os.Remove(infoFile)
+
+	return destinationIP, exportPath, nil
+}
+
+func updateEnvVariables(cpIP, workerIP, destinationIP, exportPath string, config *Config) error {
+
+	// Set all required environment variables using config values
 	os.Setenv("JOB_SERVICE_URL", fmt.Sprintf("https://%s", cpIP))
 	os.Setenv("CONFIG_SERVICE_URL", fmt.Sprintf("https://%s", cpIP))
 	os.Setenv("ADMIN_SERVICE_URL", fmt.Sprintf("https://%s", cpIP))
 	os.Setenv("REPORT_SERVICE_URL", fmt.Sprintf("https://%s", cpIP))
 	os.Setenv("KEYCLOAK_IP", cpIP)
-	os.Setenv("NDM_USERNAME", "admin@datamigrator.local")
-	os.Setenv("PASSWORD", "Welcome@123")
-	os.Setenv("NDM_VM_USER_NAME", "ubuntu")
+	os.Setenv("NDM_USERNAME", config.NDM.Username)
+	os.Setenv("PASSWORD", config.NDM.Password)
+	os.Setenv("NDM_VM_USER_NAME", config.VM.Username)
 	os.Setenv("NDM_VM_HOST", cpIP)
-	os.Setenv("NDM_VM_PORT", "22")
-	os.Setenv("NDM_VM_PASSWORD", "Password@123")
+	os.Setenv("NDM_VM_PORT", config.VM.Port)
+	os.Setenv("NDM_VM_PASSWORD", config.VM.Password)
 	os.Setenv("AZ_NDM_VM_HOST", cpIP)
 	os.Setenv("AZ_NDM_WORKERS_HOST", workerIP)
-	os.Setenv("AZ_NDM_WORKER_COUNT", "1")
-	os.Setenv("AZ_NDM_WORKERS_USER_NAME", "ubuntu")
-	os.Setenv("AZ_NDM_WORKERS_PORT", "22")
-	os.Setenv("AZ_NDM_WORKERS_PASSWORD", "Password@123")
-	os.Setenv("AZ_SOURCE_HOST_IP", "172.30.203.23")
-	os.Setenv("AZ_DESTINATION_HOST_IP", "172.30.202.27")
+	os.Setenv("AZ_NDM_WORKER_COUNT", config.Worker.Count)
+	os.Setenv("AZ_NDM_WORKERS_USER_NAME", config.Worker.Username)
+	os.Setenv("AZ_NDM_WORKERS_PORT", config.Worker.Port)
+	os.Setenv("AZ_NDM_WORKERS_PASSWORD", config.Worker.Password)
+	os.Setenv("AZ_SOURCE_HOST_IP", config.Azure.SourceHostIP)
+	os.Setenv("AZ_DESTINATION_HOST_IP", destinationIP)
 	os.Setenv("AZURE_NFS_NDM_WORKERS_HOST", workerIP)
-	os.Setenv("AZURE_NFS_NDM_WORKERS_USER_NAME", "ubuntu")
-	os.Setenv("AZURE_NFS_NDM_WORKERS_PORT", "22")
-	os.Setenv("AZURE_NFS_NDM_WORKERS_PASSWORD", "Password@123")
-	os.Setenv("AZURE_NFS_SOURCE_VOLUMES", "/mnt/data/AI")
-	os.Setenv("AZURE_NFS_DESTINATION_VOLUMES", "/KB-NFS-PERF-AUTO-VOL")
-	os.Setenv("AZURE_NFS_SOURCE_HOST_IP", "172.30.203.23")
-	os.Setenv("AZURE_NFS_DESTINATION_HOST_IP", "172.30.202.27")
-	os.Setenv("AZURE_NFS_PROTOCOL_USERNAME", "ubuntu")
-	os.Setenv("AZURE_NFS_PROTOCOL_PASSWORD", "Password@123")
+	os.Setenv("AZURE_NFS_NDM_WORKERS_USER_NAME", config.Azure.NFS.ProtocolUsername)
+	os.Setenv("AZURE_NFS_NDM_WORKERS_PORT", config.Worker.Port)
+	os.Setenv("AZURE_NFS_NDM_WORKERS_PASSWORD", config.Azure.NFS.ProtocolPassword)
+	os.Setenv("AZURE_NFS_SOURCE_VOLUMES", config.Azure.NFS.SourceVolumes)
+	os.Setenv("AZURE_NFS_DESTINATION_VOLUMES", exportPath)
+	os.Setenv("AZURE_NFS_SOURCE_HOST_IP", config.Azure.SourceHostIP)
+	os.Setenv("AZURE_NFS_DESTINATION_HOST_IP", destinationIP)
+	os.Setenv("AZURE_NFS_PROTOCOL_USERNAME", config.Azure.NFS.ProtocolUsername)
+	os.Setenv("AZURE_NFS_PROTOCOL_PASSWORD", config.Azure.NFS.ProtocolPassword)
 
 	// Set key config variables directly after env setup
 	JOB_SERVICE_URL = os.Getenv("JOB_SERVICE_URL")
@@ -568,93 +563,107 @@ func updateEnvVariables(cpIP, workerIP string) error {
 	return nil
 }
 
-func waitForControlPlaneReadyWithIP(cpIP string) error {
-	fmt.Printf("   🎯 Monitoring Control Plane at: %s\n", cpIP)
+// waitForControlPlaneReadyWithIP waits for the control plane to be fully operational
+// Phase 1: Wait for VM to be network accessible (ping test)
+// Phase 2: Wait for NDM services to be ready (HTTP 200 response)
+func waitForControlPlaneReadyWithIP(cpIP string, config *Config) error {
+	fmt.Printf("==========>Monitoring Control Plane at: %s\n", cpIP)
 	startTime := time.Now()
 	fmt.Printf("====>Starting monitoring at: %s\n", startTime.Format("15:04:05"))
+
+	// Phase 1: Wait for VM to be pingable (5 minutes max)
 	fmt.Println("====>Waiting for VM to be pingable")
 	var firstPingTime time.Time
-	for i := 0; i < 60; i++ { // Wait up to 5 minutes
+	maxPingAttempts := config.Timeout.PingMaxAttempts // 5 minutes with 5-second intervals
+
+	for i := 0; i < maxPingAttempts; i++ {
 		cmd := exec.Command("ping", "-c", "1", cpIP)
+		mw := log.Writer()
+		cmd.Stdout = mw
+		cmd.Stderr = mw
 		if cmd.Run() == nil {
 			firstPingTime = time.Now()
 			pingDuration := firstPingTime.Sub(startTime)
-			fmt.Printf("====>VM is now pingable! (%v)\n", pingDuration)
+			fmt.Printf("VM is now pingable! (Duration: %v)\n", pingDuration)
 			fmt.Printf("First ping successful at: %s\n", firstPingTime.Format("15:04:05"))
 			break
 		}
-		if i == 59 {
-			return fmt.Errorf("VM not pingable trying after 5 minutes")
+
+		if i == maxPingAttempts-1 {
+			return fmt.Errorf("VM not pingable after 5 minutes")
 		}
-		time.Sleep(5 * time.Second)
+
+		time.Sleep(time.Duration(config.Timeout.PingIntervalSeconds) * time.Second)
 		fmt.Print(".")
 	}
 
-	// Step 2: Wait for HTTP response and full UI availability (30-60 minutes)
+	// Phase 2: Wait for NDM UI to be ready (up to 60 minutes)
 	fmt.Println("===>Waiting for Control Plane UI to be fully ready...")
-	fmt.Println("===>This can take 30-60 minutes for first-time boot...")
-	url := fmt.Sprintf("https://%s", cpIP)
+	fmt.Println("===>This can take up to 60 minutes for first-time boot...")
 
+	url := fmt.Sprintf("https://%s", cpIP)
 	client := &http.Client{
-		Timeout: 15 * time.Second,
+		Timeout: time.Duration(config.Timeout.HTTPClientSeconds) * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
 	}
 
-	maxWaitMinutes := 60               // Wait up to 1 hour
-	maxAttempts := maxWaitMinutes * 12 // 5-second intervals = 12 per minute
+	maxUIAttempts := config.Timeout.UIMaxAttempts // 60 minutes with 5-second intervals
+	attemptsPerMinute := 12
 
-	for i := 0; i < maxAttempts; i++ {
+	for i := 0; i < maxUIAttempts; i++ {
 		currentTime := time.Now()
 		totalElapsed := currentTime.Sub(startTime)
 		sincePing := currentTime.Sub(firstPingTime)
 
 		resp, err := client.Get(url)
 		if err == nil {
-			resp.Body.Close()
+			defer resp.Body.Close()
+
 			if resp.StatusCode == 200 {
-				fmt.Printf("===>Control Plane UI is fully ready! (Total time: %v, Since ping: %v)\n",
-					totalElapsed, sincePing)
-				fmt.Printf("===>UI ready at: %s\n", currentTime.Format("15:04:05"))
-				fmt.Println("Waiting 5 minutes for services to finish setup...")
-				time.Sleep(5 * time.Minute)
+				fmt.Printf("Control Plane UI is fully ready! (Total: %v, Since ping: %v)\n", totalElapsed, sincePing)
+				fmt.Printf("UI ready at: %s\n", currentTime.Format("15:04:05"))
+				fmt.Printf("Waiting %d minutes for services to finish setup...\n", config.Timeout.FinalWaitMinutes)
+				time.Sleep(time.Duration(config.Timeout.FinalWaitMinutes) * time.Minute)
+				fmt.Printf("Control Plane is fully operational!\n")
 				return nil
-			} else if resp.StatusCode == 404 || resp.StatusCode == 503 {
-				// Only log every 5 minutes to reduce noise
-				if i%60 == 0 {
-					fmt.Printf("====>Status: %d (services still starting up... %d/%d minutes, total elapsed: %v)\n",
-						resp.StatusCode, i/12+1, maxWaitMinutes, totalElapsed)
-				}
-			} else {
-				fmt.Printf("====>Unexpected status: %d (Total elapsed: %v)\n", resp.StatusCode, totalElapsed)
+			}
+
+			// Handle expected startup statuses - log every 5 minutes
+			if (resp.StatusCode == 404 || resp.StatusCode == 503) && i%(attemptsPerMinute*5) == 0 {
+				currentMinute := i/attemptsPerMinute + 1
+				fmt.Printf("Status: %d (services starting... %d/60 minutes, elapsed: %v)\n",
+					resp.StatusCode, currentMinute, totalElapsed)
+			} else if resp.StatusCode != 404 && resp.StatusCode != 503 {
+				fmt.Printf("Unexpected status: %d (Total elapsed: %v)\n", resp.StatusCode, totalElapsed)
 			}
 		} else {
-			// Only log connection errors every 10 minutes
-			if i%120 == 0 {
-				fmt.Printf("====>Connection attempt %d/%d (total elapsed: %v, still waiting for services...)\n",
-					i/12+1, maxWaitMinutes, totalElapsed)
+			// Log connection errors every 10 minutes
+			if i%(attemptsPerMinute*10) == 0 {
+				currentMinute := i/attemptsPerMinute + 1
+				fmt.Printf("Connection attempt %d/60 (elapsed: %v, waiting for services...)\n",
+					currentMinute, totalElapsed)
 			}
 		}
 
-		time.Sleep(5 * time.Second)
+		time.Sleep(time.Duration(config.Timeout.UIIntervalSeconds) * time.Second)
 
-		// Progress updates every 5 minutes with timing
-		if i%60 == 0 && i > 0 {
-			fmt.Printf("====>Still waiting... (%d/%d minutes, total elapsed: %v, since ping: %v) - NDM services are starting up\n",
-				i/12, maxWaitMinutes, totalElapsed, sincePing)
-		}
-
-		// Helpful message at 15 and 30 minute marks with timing
-		if i == 180 { // 15 minutes
-			fmt.Printf("====>15 minutes elapsed (total: %v). NDM boot process typically takes 20-45 minutes...\n", totalElapsed)
-		}
-		if i == 360 { // 30 minutes
-			fmt.Printf(" ====> 30 minutes elapsed (total: %v). This is normal for first-time boot. Continuing to wait...\n", totalElapsed)
+		// Milestone messages at key intervals
+		switch i {
+		case attemptsPerMinute * 5: // 5 minutes
+			if i > 0 {
+				fmt.Printf("5 minutes elapsed (%v) - NDM services are starting up\n", totalElapsed)
+			}
+		case attemptsPerMinute * 15: // 15 minutes
+			fmt.Printf("15 minutes elapsed (%v) - NDM boot process typically takes 20-45 minutes\n", totalElapsed)
+		case attemptsPerMinute * 30: // 30 minutes
+			fmt.Printf("30 minutes elapsed (%v) - This is normal for first-time boot, continuing...\n", totalElapsed)
+		case attemptsPerMinute * 45: // 45 minutes
+			fmt.Printf("45 minutes elapsed (%v) - Extended boot time, but still within normal range\n", totalElapsed)
 		}
 	}
 
 	finalElapsed := time.Since(startTime)
-	return fmt.Errorf("control plane UI did not become ready within %d minutes (total elapsed: %v)", maxWaitMinutes, finalElapsed)
-
+	return fmt.Errorf("control plane UI did not become ready within 60 minutes (total elapsed: %v)", finalElapsed)
 }

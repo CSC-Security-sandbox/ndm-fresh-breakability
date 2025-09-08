@@ -1,0 +1,21 @@
+
+# Ignore Terraform local state and providers
+.ndm-api-tests/tests/performance/cmd/terraform-anf/.terraform/
+*.tfstate
+*.tfstate.backup
+*.log
+*.bin
+*.exe
+*.dll
+*.so
+*.dylib
+*.zip
+*.tar.gz
+*.tar
+*.gz
+*.7z
+*.rar
+*.bak
+*.swp
+*.tmp
+*.DS_Store
