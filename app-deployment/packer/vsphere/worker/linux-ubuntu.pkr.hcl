@@ -34,6 +34,12 @@ variable "project_name" {
   description = "The name of the project."
 }
 
+variable "image_suffix" {
+  description = "Suffix to append to image names"
+  type        = string
+  default     = ""
+}
+
 variable "component_name" {
   type        = string
   description = "The name of the project."
@@ -590,7 +596,7 @@ locals {
     })
   }
   data_source_command = var.common_data_source == "http" ? "ds=\"nocloud-net;seedfrom=http://{{.HTTPIP}}:{{.HTTPPort}}/\"" : "ds=\"nocloud\""
-  vm_name             = "${var.project_name}-${var.component_name}-${var.vm_guest_os_name}-${var.vm_guest_os_version}-${local.build_version}-${local.formatted_timestamp}"
+  vm_name             = "${var.project_name}-${var.component_name}-${local.formatted_timestamp}${var.image_suffix == "" ? "" : "-${var.image_suffix}"}"
 }
 
 //  BLOCK: source

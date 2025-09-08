@@ -885,6 +885,17 @@ jobs:
               echo "GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/gcp-key.json" >> $GITHUB_ENV
               ;;
           esac
+          # Determine image suffix based on trigger type
+          IMAGE_SUFFIX=""
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            IMAGE_SUFFIX="nightly"
+          elif [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            IMAGE_SUFFIX=""
+          else
+            IMAGE_SUFFIX="adhoc"
+          fi
+
+          echo "PKR_VAR_image_suffix=${IMAGE_SUFFIX}" >> $GITHUB_ENV
       
       - name: Download Ansible vars.yaml
         if: ${{ matrix.component == 'control-plane' }}
