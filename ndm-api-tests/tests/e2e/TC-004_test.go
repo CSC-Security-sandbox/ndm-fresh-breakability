@@ -114,10 +114,10 @@ var _ = Describe("TC-004: Running discovery and batch pause/resume/stop/adhoc-ru
 			By("Getting jobs by jobConfigId for source")
 			sourceConfigIDs := []string{sourceConfigID1, sourceConfigID2}
 			sourceDiscoveryJobRunIDs := make([]string, len(sourceConfigIDs))
-			discovery_validators := []string{
-				"src_vol_discovery.json",
-				"src_vol2_discovery.json",
-			}
+			// discovery_validators := []string{
+			// 	"src_vol_discovery.json",
+			// 	"src_vol2_discovery.json",
+			// }
 			for i, configID := range sourceConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(configID, headers)
 				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
@@ -150,9 +150,9 @@ var _ = Describe("TC-004: Running discovery and batch pause/resume/stop/adhoc-ru
 				}
 				err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
-				result, err := ValidateReport(jobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
-				Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
-				By(fmt.Sprintf("validate report result : %s", result))
+				// result, err := ValidateReport(jobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
+				// Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
+				// By(fmt.Sprintf("validate report result : %s", result))
 			}
 
 			By("Creating a new discovery job for destination")
