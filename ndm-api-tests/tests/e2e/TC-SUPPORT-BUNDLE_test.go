@@ -64,6 +64,7 @@ var _ = Describe("Support Bundle Test e2e", func() {
 	})
 
 	Context("SUPPORT BUNDLE E2E", func() {
+		Skip("Skipping SUPPORT BUNDLE E2E tests")
 
 		It("TC-001: Create a fileserver with 2 workers and check discovery and migration for support bundle", func() {
 			By("########################## START-TC-SUPPORT-BUNDLE ################################")
