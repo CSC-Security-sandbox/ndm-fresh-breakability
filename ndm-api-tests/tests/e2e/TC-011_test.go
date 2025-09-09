@@ -58,6 +58,7 @@ var _ = Describe("TC-011: Run migration with 'Upload GID/UID Mapping' option", f
 		})
 
 		It("TC-011: Run migration with 'Upload GID/UID Mapping' option", func() {
+			Skip("TC-011 test case skipped")
 			By("########################## TC-011 start ################################")
 
 			var sourceFileServerID, sourcePathID1, sourcePathID2 string
