@@ -92,11 +92,11 @@ run_tests() {
 
 # Test runs
 
-#Smoke Testing
-# run_tests "smoke" "./tests/smoke" "Azure" "NFS"
+# Smoke Testing
+#run_tests "smoke" "./tests/smoke" "Azure" "NFS"
 
 #End-to-End Testing
-# run_tests "end-to-end" "./tests/e2e" "Azure" "NFS"
+ run_tests "end-to-end" "./tests/e2e" "Azure" "NFS"
 
 #Regression Testing
 #  
