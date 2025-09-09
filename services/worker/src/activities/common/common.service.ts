@@ -49,6 +49,17 @@ export class CommonActivityService{
     }
   }
 
+  private triggerGC(traceID: string): void {    
+    const startTime = Date.now();
+    if (global.gc) {
+      this.logger.debug(`[${traceID}] Invoking garbage collection`);
+      global.gc();
+      const duration = Date.now() - startTime;
+      this.logger.debug(`[${traceID}] completed garbage collection in ${duration}ms`);
+    }else{
+      this.logger.debug(`[${traceID}] garbage collection is not enabled`);
+    }
+  }
   async updateLastEntry(traceId: string): Promise<any> {
     try {
       this.logger.log(`[${traceId}] Publishing last entry for job id: ${traceId}`);
@@ -57,6 +68,7 @@ export class CommonActivityService{
       await jobContext.publishToTaskStream(generateDummyTaskInfoEntry);
       await jobContext.publishToErrorStream(generateDummyErrorEntry);
       this.logger.log(`[${traceId}] Last entry published for job id: ${traceId}`);
+      this.triggerGC(traceId);
       return { message: 'Job completed for job id: ' + traceId };
     } catch (error) {
       this.logger.error(`[${traceId}] Error while marking the job as completed : ${error}`);
