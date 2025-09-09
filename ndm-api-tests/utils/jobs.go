@@ -580,7 +580,7 @@ func HandleJobRunStateChange(jobRunID, stateType string, jobRunIDs []string) err
 				return ChangeJobRunState(stateType, jobRunIDs)
 			}
 			LogDebug(fmt.Sprintf("JobRun is not in running state. Current state: %s", status))
-			Wait(DefaultPollInterval)
+			Wait(5)
 		}
 		return fmt.Errorf("Job run did not reach RUNNING state after %d retries", MaxPollRetries)
 	default:

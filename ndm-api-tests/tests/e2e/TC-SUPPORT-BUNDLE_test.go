@@ -32,7 +32,7 @@ var _ = Describe("Support Bundle Test e2e", func() {
 	BeforeEach(func() {
 		var err error
 		numberOfWorker := 2
-		ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-SUPPORT-BUNDLE-ABC")
+		ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-SUPPORT-BUNDLE-ABCDE")
 		Expect(err).To(BeNil(), "Error during test environment setup")
 		Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 		workerIds = GetWorkerIds()

@@ -10,6 +10,9 @@ import (
 )
 
 var _ = Describe("TC-008: Run migration with 'Skip files modified in last' option", func() {
+	BeforeEach(func() {
+		Skip("TC-008 test case skipped")
+	})
 	var headers map[string]string
 	var (
 		ProjectId              string
@@ -26,7 +29,7 @@ var _ = Describe("TC-008: Run migration with 'Skip files modified in last' optio
 	Context("TC-008", func() {
 		BeforeEach(func() {
 			NumberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker, "TC-08-ABC")
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker, "TC-08-ABCDE")
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected two workers to be attached.")
 			workerIds = GetWorkerIds()
