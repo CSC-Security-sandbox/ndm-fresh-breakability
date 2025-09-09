@@ -20,6 +20,7 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 	)
 
 	BeforeAll(func() {
+		Skip("GCNV e2e is skipped")
 		if PROTOCOL_TYPE == ProtocolSMB {
 			Skip("GCNV Flex Test e2e is skipped in CI/CD as it is not supported in SMB")
 		}

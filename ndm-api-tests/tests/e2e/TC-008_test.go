@@ -29,7 +29,7 @@ var _ = Describe("TC-008: Run migration with 'Skip files modified in last' optio
 	Context("TC-008", func() {
 		BeforeEach(func() {
 			NumberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker, "TC-008")
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker, "TC-8-A")
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected two workers to be attached.")
 			workerIds = GetWorkerIds()

@@ -25,7 +25,7 @@ var _ = Describe("TC-012:Run bulk cutover with concurrent migration jobs and bat
 	Context("TC-012", func() {
 		BeforeEach(func() {
 			NumberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker, "TC-012")
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker, "TC-12-A")
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically(">", 1), "Expected at least one worker to be attached")
 			workerIds = GetWorkerIds()

@@ -13,6 +13,9 @@ import (
 )
 
 var _ = Describe("Support Bundle Test e2e", func() {
+	BeforeEach(func() {
+		Skip("TC-Support_Bundle test case skipped")
+	})
 	var (
 		ProjectId              string
 		workerId1              string

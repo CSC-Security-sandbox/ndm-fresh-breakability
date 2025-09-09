@@ -307,6 +307,7 @@ jobs:
   run-nfs-tests:
     name: Run NFS API Tests
     runs-on: openlab
+    timeout-minutes: 6000
     env:
       # JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       # CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}

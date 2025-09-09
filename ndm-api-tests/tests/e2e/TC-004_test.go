@@ -21,7 +21,7 @@ var _ = Describe("TC-004: Running discovery and batch pause/resume/stop/adhoc-ru
 	Context("TC-004", func() {
 		BeforeEach(func() {
 			NumberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker, "TC-004")
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker, "TC-4-A")
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically(">", 1), "Expected at least one worker to be attached")
 			workerIds = GetWorkerIds()

@@ -30,7 +30,7 @@ var _ = Describe("TC-009: Run discovery and migration with 'Exclude file older t
 
 		BeforeEach(func() {
 			numberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-009")
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-9-A")
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 			workerIds = GetWorkerIds()
