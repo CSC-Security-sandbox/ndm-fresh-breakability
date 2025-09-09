@@ -29,9 +29,7 @@ var _ = Describe("TC-0014: Run incremental sync schedule migration for verifying
 	Context("TC-0014: Run incremental sync schedule migration for verifying deletion is mirrored", func() {
 		BeforeEach(func() {
 			numberOfWorker := 2
-
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-14-A")
-
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-14-ABC")
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 			workerIds = GetWorkerIds()

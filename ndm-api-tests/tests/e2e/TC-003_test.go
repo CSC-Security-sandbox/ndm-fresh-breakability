@@ -26,7 +26,7 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 	Context("TC-003", func() {
 		BeforeEach(func() {
 			numberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-3-A")
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-03-ABC")
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 			workerIds = GetWorkerIds()

@@ -26,7 +26,7 @@ var _ = Describe("TC-005: Running migration / cutover with an exclude path patte
 	Context("TC-005", func() {
 		BeforeEach(func() {
 			NumberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker, "TC-5-A")
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker, "TC-05-ABC")
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically(">", 1), "Expected at least one worker to be attached")
 			workerIds = GetWorkerIds()
