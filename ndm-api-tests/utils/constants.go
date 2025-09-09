@@ -147,7 +147,7 @@ const (
 	JobTypeMigration                JobType          = "MIGRATE"
 	FormatPDF                       Format           = "pdf"
 	FormatCSV                       Format           = "csv"
-	DefaultPollInterval                              = 200
+	DefaultPollInterval                              = 5
 	MaxPollRetries                                   = 240
 	WORKER_TIMEOUT                                   = 180
 	RUNNING_JOBRUN                                   = "RUNNING"
