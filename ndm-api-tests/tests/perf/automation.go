@@ -62,6 +62,12 @@ type EndToEndMigration struct {
     
 }
 
+type SourceConfig struct {
+    Host       string
+    Volume     string
+    ConfigName string
+}
+
 type TerraformOutputs struct {
     ControlPlaneInstanceNames []string `json:"control_plane_instance_names"`
     ControlPlaneZones         []string `json:"control_plane_zones"`
@@ -991,6 +997,8 @@ func (e *EndToEndMigration) createDestinationFileServer() error {
     }
     defer resp.Body.Close()
 
+    fmt.Println("dest:", resp)
+
     if resp.StatusCode != http.StatusOK {
         return fmt.Errorf("expected HTTP 200, got %d", resp.StatusCode)
     }
@@ -1354,58 +1362,26 @@ func (e *EndToEndMigration) logOperation(message string) {
 func (e *EndToEndMigration) Execute() error {
     e.logOperation("=== Starting End-to-End Migration Execution ===")
 
-    // envPath := "../.env"
-    // updates := map[string]string{
-    //  "JOB_SERVICE_URL":    "https://" + e.cpEndpoints[0],
-    //  "CONFIG_SERVICE_URL": "https://" + e.cpEndpoints[0],
-    //  "ADMIN_SERVICE_URL":  "https://" + e.cpEndpoints[0],
-    //  "KEYCLOAK_IP":        e.cpEndpoints[0],
-    //  "NDM_VM_HOST":        e.cpEndpoints[0],
-    //  "NDM_WORKERS_HOST":   strings.Join(e.workerEndpoints, ","),
-    // }
-
-    // if err := updateEnvVars(envPath, updates); err != nil {
-    //  return fmt.Errorf("failed to update .env file: %v", err)
-    // }
-
-    // // Set environment variables
-    // os.Setenv("JOB_SERVICE_URL", "https://"+e.cpEndpoints[0])
-    // os.Setenv("CONFIG_SERVICE_URL", "https://"+e.cpEndpoints[0])
-    // os.Setenv("ADMIN_SERVICE_URL", "https://"+e.cpEndpoints[0])
-    // os.Setenv("KEYCLOAK_IP", e.cpEndpoints[0])
-    // os.Setenv("NDM_VM_HOST", e.cpEndpoints[0])
-    // os.Setenv("NDM_WORKERS_HOST", strings.Join(e.workerEndpoints, ","))
-
-    // // Update global variables
-    // JOB_SERVICE_URL = os.Getenv("JOB_SERVICE_URL")
-    // CONFIG_SERVICE_URL = os.Getenv("CONFIG_SERVICE_URL")
-    // ADMIN_SERVICE_URL = os.Getenv("ADMIN_SERVICE_URL")
-    // KEYCLOAK_IP = os.Getenv("KEYCLOAK_IP")
-    // NDM_VM_HOST = os.Getenv("NDM_VM_HOST")
-    // NDM_WORKERS_HOST = os.Getenv("NDM_WORKERS_HOST")
-
-    // fmt.Println("Environment Variables Set:")
-    // fmt.Println("  JOB_SERVICE_URL:", JOB_SERVICE_URL)
-    // fmt.Println("  CONFIG_SERVICE_URL:", CONFIG_SERVICE_URL)
-    // fmt.Println("  ADMIN_SERVICE_URL:", ADMIN_SERVICE_URL)
-    // fmt.Println("  KEYCLOAK_IP:", KEYCLOAK_IP)
-    // fmt.Println("  NDM_VM_HOST:", NDM_VM_HOST)
-    // fmt.Println("  NDM_WORKERS_HOST:", NDM_WORKERS_HOST)
-
+    sourceConfigs := []SourceConfig{
+        {"172.30.121.91", "/nfs/LargeAI", "LINUX_SRC_LARGE"},
+        {"172.30.121.91", "/nfs/SWBUILD_ds", "LINUX_SRC_SMALL"},
+    }
+    
     fmt.Println("Received worker registration response")
     PROTOCOL_TYPE = Protocol("NFS")
     CLOUD_ENVIRONMENT = CloudEnvironment("GCP")
     fmt.Println("Updated configuration variables for NFS and GCP")
 
 	fmt.Println("Waiting for services to stabilize...")
-	// Wait(3*60) // Wait for 3 minutes to ensure services are up
+	Wait(3*60) // Wait for 3 minutes to ensure services are up
+
 
 
     initTestEnv()
 
-    fmt.Println("Available Workers:", getAvailableWorkersCount())
+    // fmt.Println("Available Workers:", getAvailableWorkersCount())
 
-    // Execute all migration phases
+    // // Execute all migration phases
     if err := e.setupProjectAndWorker(); err != nil {
         return fmt.Errorf("project and worker setup failed: %v", err)
     }
@@ -1414,33 +1390,63 @@ func (e *EndToEndMigration) Execute() error {
         return fmt.Errorf("source file server creation failed: %v", err)
     }
 
-    if err := e.createDestinationVolume(); err != nil {
+    for i := 0; i < 3; i++ {
+        
+        if err := e.createDestinationVolume(); err != nil {
         return fmt.Errorf("destination volume creation failed: %v", err)
-    }
+        }
 
-    if err := e.createDestinationFileServer(); err != nil {
-        return fmt.Errorf("destination file server creation failed: %v", err)
-    }
+        if err := e.createDestinationFileServer(); err != nil {
+            return fmt.Errorf("destination file server creation failed: %v", err)
+        }
 
-    if err := e.performSourceDiscovery(); err != nil {
-        return fmt.Errorf("source discovery failed: %v", err)
-    }
+        for i, sourceConfig := range sourceConfigs{
+            e.logOperation(fmt.Sprintf("=== Migration Loop %d/%d: %s ===", 
+                i+1, len(sourceConfigs), sourceConfig.ConfigName))
 
-    if err := e.performDestinationDiscovery(); err != nil {
-        return fmt.Errorf("destination discovery failed: %v", err)
-    }
+            sourcePathId, err := GetExportPathID("source", sourceConfig.Volume, e.sourceConfigId, e.headers)
+            if err != nil {
+                return fmt.Errorf("error getting source export path ID: %v", err)
+            }
 
-    if err := e.executeMigration(); err != nil {
-        return fmt.Errorf("migration execution failed: %v", err)
-    }
+            e.sourcePathId = sourcePathId
+            e.logOperation(fmt.Sprintf("✓ Source volume path created: %s", e.sourcePathId))
 
-    if err := e.performCutover(); err != nil {
-        return fmt.Errorf("cutover failed: %v", err)
-    }
+            
 
-    if err := e.approveCutover(); err != nil {
-        return fmt.Errorf("cutover approval failed: %v", err)
+            if err := e.executeMigration(); err != nil {
+                return fmt.Errorf("migration execution failed: %v", err)
+            }
+
+            time.Sleep(10 * time.Minute)
+        }
     }
+    
+
+    
+
+    // if err := e.performSourceDiscovery(); err != nil {
+    //     return fmt.Errorf("source discovery failed: %v", err)
+    // }
+
+    // if err := e.performDestinationDiscovery(); err != nil {
+    //     return fmt.Errorf("destination discovery failed: %v", err)
+    // }
+
+
+
+    // if err := e.executeMigration(); err != nil {
+    //     return fmt.Errorf("migration execution failed: %v", err)
+    // }
+
+
+    // if err := e.performCutover(); err != nil {
+    //     return fmt.Errorf("cutover failed: %v", err)
+    // }
+
+    // if err := e.approveCutover(); err != nil {
+    //     return fmt.Errorf("cutover approval failed: %v", err)
+    // }
 
     if err := e.storeLogs(); err != nil {
         return fmt.Errorf("log storage failed: %v", err)
@@ -1481,7 +1487,7 @@ func main() {
     // workerEndpoints := outputs["worker_internal_ips"]
 
     cpEndpoints :=[]string{"172.30.121.78"}
-    workerEndpoints := []string{"172.30.121.68"}
+    workerEndpoints := []string{"172.30.121.85"}
 
     if err := setupEnvironment(cpEndpoints, workerEndpoints); err != nil {
         log.Fatalf("Environment setup failed: %v", err)

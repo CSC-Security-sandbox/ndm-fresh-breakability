@@ -48,6 +48,8 @@ DEFAULT_SHARE_PREFIX="share"
 DEFAULT_VOLUME_COUNT=1
 DEFAULT_VOLUME_SIZE=4096 # in GiB
 DEFAULT_CLEANUP=false
+DEFAULT_USE_EXISTING=false  # Add this new parameter
+
 # DEFAULT_ENVIRONMENT="dev"
 DEFAULT_NETWORK="appmicro-vpc1"
 DEFAULT_ALLOWED_CLIENTS="0.0.0.0/0"
@@ -108,6 +110,16 @@ if [ $? -eq 0 ] && [ -n "$POOL_BASIC" ]; then
         POOL_ALLOCATED=0
         POOL_VOLUMES=0
     fi
+
+
+    # Add option to use existing volumes
+    echo ""
+    echo "📦 VOLUME CONFIGURATION OPTIONS:"
+    echo "1) Create new volumes"
+    echo "2) Use existing volumes"
+    read -p "Choose option (1/2) [1]: " VOLUME_OPTION
+    VOLUME_OPTION=${VOLUME_OPTION:-1}
+
     
     AVAILABLE_CAPACITY=$((POOL_CAPACITY - POOL_ALLOCATED))
     
@@ -118,7 +130,6 @@ if [ $? -eq 0 ] && [ -n "$POOL_BASIC" ]; then
     echo "   Allocated: ${POOL_ALLOCATED}GiB (calculated from volumes)"
     echo "   Available: ${AVAILABLE_CAPACITY}GiB"
     echo "   Current Volumes: $POOL_VOLUMES"
-    
 else
     echo "❌ Storage pool $STORAGE_POOL_NAME not found or query failed!"
     echo "Let me try to find available storage pools..."
@@ -131,6 +142,133 @@ else
     
     exit 1
 fi
+
+// ...existing code...
+
+if [ "$VOLUME_OPTION" = "2" ]; then
+    echo ""
+    echo "📋 Using existing volumes. Available volumes:"
+    gcloud netapp volumes list \
+        --location=$DEFAULT_REGION \
+        --project=$PROJECT_ID \
+        --filter="storagePool~'$STORAGE_POOL_NAME'" \
+        --format="table(name,shareName,capacityGib,state,mountOptions[].ipAddress,mountOptions[].exportPath)"
+    
+    read -p "Enter volume prefix to use: " VOLUME_PREFIX
+    SHARE_PREFIX=$VOLUME_PREFIX
+    
+    # Validate that volumes with this prefix exist
+    MATCHING_VOLUMES=$(gcloud netapp volumes list \
+        --location=$DEFAULT_REGION \
+        --project=$PROJECT_ID \
+        --filter="storagePool~'$STORAGE_POOL_NAME' AND name~'$VOLUME_PREFIX.*'" \
+        --format="value(name)" 2>/dev/null)
+    
+    if [ -z "$MATCHING_VOLUMES" ]; then
+        echo "❌ No volumes found matching prefix '$VOLUME_PREFIX'"
+        exit 1
+    fi
+    
+    VOLUME_COUNT=$(echo "$MATCHING_VOLUMES" | wc -l)
+    echo "✅ Found $VOLUME_COUNT existing volume(s) matching '$VOLUME_PREFIX'"
+    
+    echo ""
+    echo "✅ Using existing volumes with prefix '$VOLUME_PREFIX'"
+    echo ""
+    echo "📡 NFS Export Addresses:"
+    
+    # Get NFS export addresses properly
+    for volume_name in $MATCHING_VOLUMES; do
+        # Get volume details individually for more reliable results
+        VOLUME_DETAILS=$(gcloud netapp volumes describe "$volume_name" \
+            --location=$DEFAULT_REGION \
+            --project=$PROJECT_ID \
+            --format="value(mountOptions[0].ipAddress,shareName,mountOptions[0].export)" 2>/dev/null)
+        
+        if [ -n "$VOLUME_DETAILS" ]; then
+            IFS=$'\t' read -r ip_address share_name export_path <<< "$VOLUME_DETAILS"
+            
+            # Clean up IP address format (remove brackets and quotes)
+            clean_ip=$(echo "$ip_address" | sed 's/\[//g' | sed 's/\]//g' | sed "s/'//g" | sed 's/"//g')
+            
+            # Use export path if available, otherwise construct from share name
+            if [ -n "$export_path" ] && [ "$export_path" != "" ]; then
+                nfs_path="$clean_ip:$export_path"
+            else
+                # Fallback: construct export path from share name
+                nfs_path="$clean_ip:/$share_name"
+            fi
+            
+            echo "$nfs_path"
+            
+            # Store for potential use in automation script
+            echo "VOLUME_NAME=$volume_name" >> existing_volumes.env
+            echo "NFS_EXPORT=$nfs_path" >> existing_volumes.env
+        else
+            echo "⚠️  Could not get details for volume: $volume_name"
+        fi
+    done
+    
+    echo ""
+    echo "📋 Detailed Volume Information:"
+    gcloud netapp volumes list \
+        --location=$DEFAULT_REGION \
+        --project=$PROJECT_ID \
+        --filter="name~'$VOLUME_PREFIX.*'" \
+        --format="table(
+            name:label='Volume Name',
+            shareName:label='Share Name',
+            capacityGib:label='Size (GiB)',
+            state:label='Status',
+            mountOptions[].ipAddress:label='IP Address',
+            mountOptions[].exportPath:label='Export Path'
+        )"
+    
+    echo ""
+    echo "💾 Export addresses saved to 'existing_volumes.env' for automation use"
+    echo ""
+    
+    # Create a summary file for the automation script
+    cat > nfs_exports.txt << EOF
+# NFS Export Addresses for Migration
+# Generated on $(date)
+# Storage Pool: $STORAGE_POOL_NAME
+# Volume Prefix: $VOLUME_PREFIX
+# Volume Count: $VOLUME_COUNT
+
+EOF
+    
+    # Add each NFS export to the file
+    for volume_name in $MATCHING_VOLUMES; do
+        VOLUME_DETAILS=$(gcloud netapp volumes describe "$volume_name" \
+            --location=$DEFAULT_REGION \
+            --project=$PROJECT_ID \
+            --format="value(mountOptions[0].ipAddress,shareName,mountOptions[0].export)" 2>/dev/null)
+        
+        if [ -n "$VOLUME_DETAILS" ]; then
+            IFS=$'\t' read -r ip_address share_name export_path <<< "$VOLUME_DETAILS"
+            clean_ip=$(echo "$ip_address" | sed 's/\[//g' | sed 's/\]//g' | sed "s/'//g" | sed 's/"//g')
+            
+            if [ -n "$export_path" ] && [ "$export_path" != "" ]; then
+                nfs_path="$clean_ip:$export_path"
+            else
+                nfs_path="$clean_ip:/$share_name"
+            fi
+            
+            echo "NFS_EXPORT_$volume_name=$nfs_path" >> nfs_exports.txt
+        fi
+    done
+    
+    echo "📄 NFS exports saved to 'nfs_exports.txt'"
+    echo ""
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✓ NetApp volume deployment script completed"
+    echo ""
+    echo "🚀 Ready for migration! Use the NFS addresses above in your migration automation."
+    
+    exit 0
+fi
+
+// ...existing code...
 
 
 read -p "Enter volume/share prefix [$DEFAULT_VOLUME_PREFIX]: " VOLUME_PREFIX

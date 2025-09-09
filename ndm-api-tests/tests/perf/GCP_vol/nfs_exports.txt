@@ -1,0 +1,7 @@
+# NFS Export Addresses for Migration
+# Generated on Tue Sep  9 04:23:41 IST 2025
+# Storage Pool: sp-0727
+# Volume Prefix: vol-1
+# Volume Count:        1
+
+NFS_EXPORT_vol-1=10.127.176.21:/vol-1

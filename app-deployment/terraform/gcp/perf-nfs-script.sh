@@ -41,8 +41,8 @@ NAME_TIMESTAMP=$(date +%Y%m%d%H%M%S)
 #   --sort-by="~creationTimestamp" \
 #   --limit=1 \
 #   --format="get(selfLink)")
-DEFAULT_WORKER_IMAGE=datamigrator-worker-27-08-2025-19-01-45
-DEFAULT_CP_IMAGE=datamigrator-control-plane-27-08-2025-19-14-46
+DEFAULT_WORKER_IMAGE=datamigrator-worker-06-09-2025-19-05-14
+DEFAULT_CP_IMAGE=datamigrator-control-plane-06-09-2025-19-10-00
 
 read -p "Enter name prefix for instances [${DEFAULT_NAME_PREFIX}]: " NAME_PREFIX
 NAME_PREFIX=${NAME_PREFIX:-${DEFAULT_NAME_PREFIX:-$NAME_PREFIX}}
