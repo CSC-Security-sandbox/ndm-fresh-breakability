@@ -425,7 +425,7 @@ jobs:
     name: Cleanup Infrastructure
     runs-on: openlab
     needs: [setup-infrastructure, run-nfs-tests]
-    if: always() || cancelled()
+    if: cancelled()
     concurrency:
       group: cleanup-${{ github.run_id }}
       cancel-in-progress: false
