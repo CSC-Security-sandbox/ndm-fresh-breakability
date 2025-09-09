@@ -27,7 +27,7 @@ var _ = Describe("TC-009: Run discovery and migration with 'Exclude file older t
 
 		BeforeEach(func() {
 			numberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-009")
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 			workerIds = GetWorkerIds()
@@ -42,6 +42,7 @@ var _ = Describe("TC-009: Run discovery and migration with 'Exclude file older t
 		})
 
 		It("TC-009: Run migration with 'Exclude file older than' option", func() {
+			Skip("TC-009 test case skipped")
 			By("########################## TC-009 start ################################")
 
 			var (

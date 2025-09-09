@@ -10,11 +10,18 @@ import (
 var ProjectID string
 
 // createProject creates a project using the API and stores the project ID globally.
-func CreateProject(authToken string, accountId string) (string, error) {
+func CreateProject(authToken string, accountId string, testCaseName ...string) (string, error) {
 	fullURL := ADMIN_SERVICE_URL + "/api/v1/projects"
+
+	// Use test case name if provided, otherwise use "test"
+	prefix := "test"
+	if len(testCaseName) > 0 && testCaseName[0] != "" {
+		prefix = testCaseName[0]
+	}
+
 	data := map[string]string{
 		"account_id":          accountId,
-		"project_name":        AutoGenerateProjectName("test"),
+		"project_name":        AutoGenerateProjectName(prefix),
 		"project_description": "Project For Automation testing",
 		"start_date":          time.Now().UTC().Format(time.RFC3339),
 	}

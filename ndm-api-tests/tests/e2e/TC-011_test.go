@@ -36,7 +36,7 @@ var _ = Describe("TC-011: Run migration with 'Upload GID/UID Mapping' option", f
 	Context("TC-011: Run migration with 'Upload GID/UID Mapping' option", func() {
 		BeforeEach(func() {
 			numberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-011")
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 			workerIds = GetWorkerIds()

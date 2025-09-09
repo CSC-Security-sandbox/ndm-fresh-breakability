@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
+var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
 	var (
 		ProjectId              string
 		workerId1              string
@@ -27,7 +27,7 @@ var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discover
 	Context("TC-001", func() {
 		BeforeEach(func() {
 			numberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-001")
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 			workerIds = GetWorkerIds()

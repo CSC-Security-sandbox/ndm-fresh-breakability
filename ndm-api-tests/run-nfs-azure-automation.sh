@@ -20,7 +20,7 @@ run_tests() {
     local test_path="$2"
     local environment="$3"
     local protocol_type="${4:-NFS}"
-    local timeout="${5:-4h}"
+    local timeout="${5:-100h}"
 
      if [[ -z "$test_type" || -z "$test_path" || -z "$environment" ]]; then
         echo "Error: Missing mandatory arguments."

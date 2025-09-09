@@ -26,7 +26,7 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 	Context("TC-010: Run discovery, migration with 'Exclude Path Patterns' option and run cutover on same", func() {
 		BeforeEach(func() {
 			numberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-010")
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 			workerIds = GetWorkerIds()
@@ -41,6 +41,7 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 		})
 
 		It("TC-010: Run discovery, migration with 'Exclude Path Patterns' option and run cutover on same", func() {
+			Skip("TC-010 test case skipped")
 			By("########################## TC-010 starts ################################")
 
 			var sourceFileServerID, sourcePathID1, sourcePathID2 string

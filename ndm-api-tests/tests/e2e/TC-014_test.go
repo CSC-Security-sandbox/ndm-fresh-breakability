@@ -30,7 +30,7 @@ var _ = Describe("TC-0014: Run incremental sync schedule migration for verifying
 		BeforeEach(func() {
 			numberOfWorker := 2
 
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-014")
 
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")

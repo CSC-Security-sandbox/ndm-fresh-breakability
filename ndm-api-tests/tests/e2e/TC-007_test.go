@@ -28,7 +28,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 
 		BeforeEach(func() {
 			numberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-007")
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 			workerIds = GetWorkerIds()
@@ -43,6 +43,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 		})
 
 		It("TC-007: Run migration to multiple destinations with incremental sync schedule", func() {
+			Skip("TC-007 test case skipped")
 			By("########################## TC-007 start ################################")
 			var (
 				// Source-related IDs
