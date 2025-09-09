@@ -497,7 +497,7 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 			LogDebug("Job reached desired state: " + status + ".")
 			return nil
 		}
-		Wait(DefaultPollInterval)
+		Wait(100)
 
 	}
 
