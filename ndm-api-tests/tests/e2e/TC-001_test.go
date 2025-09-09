@@ -279,12 +279,11 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			err = RemoveDeltaFromVolume(sourceVolumePath2)
 			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath2)
 
-			// err = ClearVolume(destinationVolumePath1)
-			// Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
-			LogDebug(destinationVolumePath1)
-			LogDebug(destinationVolumePath2)
-			// err = ClearVolume(destinationVolumePath2)
-			// Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
+			err = ClearVolume(destinationVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
+
+			err = ClearVolume(destinationVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")

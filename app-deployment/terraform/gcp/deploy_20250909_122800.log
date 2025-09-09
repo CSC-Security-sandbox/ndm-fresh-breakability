@@ -1,0 +1,396 @@
+Enter name prefix for instances [ndm-auto]: Enter number of control plane nodes [1]: Enter number of worker nodes [2]: Enter machine type for all control plane nodes [e2-custom-8-32768]: Enter image for control plane [datamigrator-control-plane-06-09-2025-19-10-00]: Enter machine type for all worker nodes [e2-custom-4-16384]: Enter image for worker [datamigrator-worker-06-09-2025-19-05-14]: Enter your GCP region [us-east1]: name prefix: lalit
+name default: ndm-auto
+Extracting date from image: datamigrator-control-plane-06-09-2025-19-10-00
+Extracting date from image: datamigrator-worker-06-09-2025-19-05-14
+name prefix: lalit
+Images JSON: [
+  "datamigrator-control-plane-06-09-2025-19-10-00",
+  "datamigrator-worker-06-09-2025-19-05-14",
+  "datamigrator-worker-06-09-2025-19-05-14"
+]
+Machine Types JSON: [
+  "e2-custom-8-32768",
+  "e2-custom-4-16384",
+  "e2-custom-4-16384"
+]
+Instance Names JSON: [
+  "cp-0609-12281083-lalit",
+  "wk-0609-12281083-lalit-1",
+  "wk-0609-12281083-lalit-2"
+]
+Initializing Terraform...
+[0m[1mInitializing the backend...[0m
+[0m[1mInitializing provider plugins...[0m
+- Reusing previous version of hashicorp/google from the dependency lock file
+- Using previously-installed hashicorp/google v6.48.0
+
+[0m[1m[32mTerraform has been successfully initialized![0m[32m[0m
+[0m[32m
+You may now begin working with Terraform. Try running "terraform plan" to see
+any changes that are required for your infrastructure. All Terraform commands
+should now work.
+
+If you ever set or change modules or backend configuration for Terraform,
+rerun this command to reinitialize your working directory. If you forget, other
+commands will detect it and remind you to do so if necessary.[0m
+Creating Terraform workspace: 122803-401083
+[0m[32m[1mCreated and switched to workspace "122803-401083"![0m[32m
+
+You're now on a new, empty workspace. Workspaces isolate their state,
+so if you run "terraform plan" Terraform will not see any existing state
+for this configuration.[0m
+Creating new Terraform infrastructure in workspace: 122803-401083
+[0m[1mdata.google_compute_zones.available: Reading...[0m[0m
+[0m[1mdata.google_compute_zones.available: Read complete after 1s [id=projects/app-microservices-cm/regions/us-east1][0m
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  [32m+[0m create[0m
+
+Terraform will perform the following actions:
+
+[1m  # google_compute_instance.vm_instance[0][0m will be created
+[0m  [32m+[0m[0m resource "google_compute_instance" "vm_instance" {
+      [32m+[0m[0m can_ip_forward          = false
+      [32m+[0m[0m cpu_platform            = (known after apply)
+      [32m+[0m[0m creation_timestamp      = (known after apply)
+      [32m+[0m[0m current_status          = (known after apply)
+      [32m+[0m[0m deletion_protection     = false
+      [32m+[0m[0m effective_labels        = {
+          [32m+[0m[0m "goog-terraform-provisioned" = "true"
+        }
+      [32m+[0m[0m id                      = (known after apply)
+      [32m+[0m[0m instance_id             = (known after apply)
+      [32m+[0m[0m label_fingerprint       = (known after apply)
+      [32m+[0m[0m machine_type            = "e2-custom-8-32768"
+      [32m+[0m[0m metadata_fingerprint    = (known after apply)
+      [32m+[0m[0m metadata_startup_script = <<-EOT
+            #!/bin/bash
+            # Log everything for debugging
+            exec > /var/log/startup-script.log 2>&1
+        EOT
+      [32m+[0m[0m min_cpu_platform        = (known after apply)
+      [32m+[0m[0m name                    = "cp-0609-12281083-lalit-122803-401083"
+      [32m+[0m[0m project                 = "app-microservices-cm"
+      [32m+[0m[0m self_link               = (known after apply)
+      [32m+[0m[0m tags                    = [
+          [32m+[0m[0m "http-server",
+        ]
+      [32m+[0m[0m tags_fingerprint        = (known after apply)
+      [32m+[0m[0m terraform_labels        = {
+          [32m+[0m[0m "goog-terraform-provisioned" = "true"
+        }
+      [32m+[0m[0m zone                    = "us-east1-b"
+
+      [32m+[0m[0m boot_disk {
+          [32m+[0m[0m auto_delete                = true
+          [32m+[0m[0m device_name                = (known after apply)
+          [32m+[0m[0m disk_encryption_key_sha256 = (known after apply)
+          [32m+[0m[0m guest_os_features          = (known after apply)
+          [32m+[0m[0m kms_key_self_link          = (known after apply)
+          [32m+[0m[0m mode                       = "READ_WRITE"
+          [32m+[0m[0m source                     = (known after apply)
+
+          [32m+[0m[0m initialize_params {
+              [32m+[0m[0m architecture           = (known after apply)
+              [32m+[0m[0m image                  = "datamigrator-control-plane-06-09-2025-19-10-00"
+              [32m+[0m[0m labels                 = (known after apply)
+              [32m+[0m[0m provisioned_iops       = (known after apply)
+              [32m+[0m[0m provisioned_throughput = (known after apply)
+              [32m+[0m[0m resource_policies      = (known after apply)
+              [32m+[0m[0m size                   = (known after apply)
+              [32m+[0m[0m snapshot               = (known after apply)
+              [32m+[0m[0m type                   = (known after apply)
+            }
+        }
+
+      [32m+[0m[0m confidential_instance_config (known after apply)
+
+      [32m+[0m[0m guest_accelerator (known after apply)
+
+      [32m+[0m[0m network_interface {
+          [32m+[0m[0m internal_ipv6_prefix_length = (known after apply)
+          [32m+[0m[0m ipv6_access_type            = (known after apply)
+          [32m+[0m[0m ipv6_address                = (known after apply)
+          [32m+[0m[0m name                        = (known after apply)
+          [32m+[0m[0m network                     = "appmicro-vpc1"
+          [32m+[0m[0m network_attachment          = (known after apply)
+          [32m+[0m[0m network_ip                  = (known after apply)
+          [32m+[0m[0m stack_type                  = (known after apply)
+          [32m+[0m[0m subnetwork                  = "appmicro-vpc-subnet-01"
+          [32m+[0m[0m subnetwork_project          = (known after apply)
+        }
+
+      [32m+[0m[0m reservation_affinity (known after apply)
+
+      [32m+[0m[0m scheduling (known after apply)
+    }
+
+[1m  # google_compute_instance.vm_instance[1][0m will be created
+[0m  [32m+[0m[0m resource "google_compute_instance" "vm_instance" {
+      [32m+[0m[0m can_ip_forward          = false
+      [32m+[0m[0m cpu_platform            = (known after apply)
+      [32m+[0m[0m creation_timestamp      = (known after apply)
+      [32m+[0m[0m current_status          = (known after apply)
+      [32m+[0m[0m deletion_protection     = false
+      [32m+[0m[0m effective_labels        = {
+          [32m+[0m[0m "goog-terraform-provisioned" = "true"
+        }
+      [32m+[0m[0m id                      = (known after apply)
+      [32m+[0m[0m instance_id             = (known after apply)
+      [32m+[0m[0m label_fingerprint       = (known after apply)
+      [32m+[0m[0m machine_type            = "e2-custom-4-16384"
+      [32m+[0m[0m metadata_fingerprint    = (known after apply)
+      [32m+[0m[0m metadata_startup_script = <<-EOT
+            #!/bin/bash
+            # Log everything for debugging
+            exec > /var/log/startup-script.log 2>&1
+        EOT
+      [32m+[0m[0m min_cpu_platform        = (known after apply)
+      [32m+[0m[0m name                    = "wk-0609-12281083-lalit-1-122803-401083"
+      [32m+[0m[0m project                 = "app-microservices-cm"
+      [32m+[0m[0m self_link               = (known after apply)
+      [32m+[0m[0m tags                    = [
+          [32m+[0m[0m "http-server",
+        ]
+      [32m+[0m[0m tags_fingerprint        = (known after apply)
+      [32m+[0m[0m terraform_labels        = {
+          [32m+[0m[0m "goog-terraform-provisioned" = "true"
+        }
+      [32m+[0m[0m zone                    = "us-east1-c"
+
+      [32m+[0m[0m boot_disk {
+          [32m+[0m[0m auto_delete                = true
+          [32m+[0m[0m device_name                = (known after apply)
+          [32m+[0m[0m disk_encryption_key_sha256 = (known after apply)
+          [32m+[0m[0m guest_os_features          = (known after apply)
+          [32m+[0m[0m kms_key_self_link          = (known after apply)
+          [32m+[0m[0m mode                       = "READ_WRITE"
+          [32m+[0m[0m source                     = (known after apply)
+
+          [32m+[0m[0m initialize_params {
+              [32m+[0m[0m architecture           = (known after apply)
+              [32m+[0m[0m image                  = "datamigrator-worker-06-09-2025-19-05-14"
+              [32m+[0m[0m labels                 = (known after apply)
+              [32m+[0m[0m provisioned_iops       = (known after apply)
+              [32m+[0m[0m provisioned_throughput = (known after apply)
+              [32m+[0m[0m resource_policies      = (known after apply)
+              [32m+[0m[0m size                   = (known after apply)
+              [32m+[0m[0m snapshot               = (known after apply)
+              [32m+[0m[0m type                   = (known after apply)
+            }
+        }
+
+      [32m+[0m[0m confidential_instance_config (known after apply)
+
+      [32m+[0m[0m guest_accelerator (known after apply)
+
+      [32m+[0m[0m network_interface {
+          [32m+[0m[0m internal_ipv6_prefix_length = (known after apply)
+          [32m+[0m[0m ipv6_access_type            = (known after apply)
+          [32m+[0m[0m ipv6_address                = (known after apply)
+          [32m+[0m[0m name                        = (known after apply)
+          [32m+[0m[0m network                     = "appmicro-vpc1"
+          [32m+[0m[0m network_attachment          = (known after apply)
+          [32m+[0m[0m network_ip                  = (known after apply)
+          [32m+[0m[0m stack_type                  = (known after apply)
+          [32m+[0m[0m subnetwork                  = "appmicro-vpc-subnet-01"
+          [32m+[0m[0m subnetwork_project          = (known after apply)
+        }
+
+      [32m+[0m[0m reservation_affinity (known after apply)
+
+      [32m+[0m[0m scheduling (known after apply)
+    }
+
+[1m  # google_compute_instance.vm_instance[2][0m will be created
+[0m  [32m+[0m[0m resource "google_compute_instance" "vm_instance" {
+      [32m+[0m[0m can_ip_forward          = false
+      [32m+[0m[0m cpu_platform            = (known after apply)
+      [32m+[0m[0m creation_timestamp      = (known after apply)
+      [32m+[0m[0m current_status          = (known after apply)
+      [32m+[0m[0m deletion_protection     = false
+      [32m+[0m[0m effective_labels        = {
+          [32m+[0m[0m "goog-terraform-provisioned" = "true"
+        }
+      [32m+[0m[0m id                      = (known after apply)
+      [32m+[0m[0m instance_id             = (known after apply)
+      [32m+[0m[0m label_fingerprint       = (known after apply)
+      [32m+[0m[0m machine_type            = "e2-custom-4-16384"
+      [32m+[0m[0m metadata_fingerprint    = (known after apply)
+      [32m+[0m[0m metadata_startup_script = <<-EOT
+            #!/bin/bash
+            # Log everything for debugging
+            exec > /var/log/startup-script.log 2>&1
+        EOT
+      [32m+[0m[0m min_cpu_platform        = (known after apply)
+      [32m+[0m[0m name                    = "wk-0609-12281083-lalit-2-122803-401083"
+      [32m+[0m[0m project                 = "app-microservices-cm"
+      [32m+[0m[0m self_link               = (known after apply)
+      [32m+[0m[0m tags                    = [
+          [32m+[0m[0m "http-server",
+        ]
+      [32m+[0m[0m tags_fingerprint        = (known after apply)
+      [32m+[0m[0m terraform_labels        = {
+          [32m+[0m[0m "goog-terraform-provisioned" = "true"
+        }
+      [32m+[0m[0m zone                    = "us-east1-d"
+
+      [32m+[0m[0m boot_disk {
+          [32m+[0m[0m auto_delete                = true
+          [32m+[0m[0m device_name                = (known after apply)
+          [32m+[0m[0m disk_encryption_key_sha256 = (known after apply)
+          [32m+[0m[0m guest_os_features          = (known after apply)
+          [32m+[0m[0m kms_key_self_link          = (known after apply)
+          [32m+[0m[0m mode                       = "READ_WRITE"
+          [32m+[0m[0m source                     = (known after apply)
+
+          [32m+[0m[0m initialize_params {
+              [32m+[0m[0m architecture           = (known after apply)
+              [32m+[0m[0m image                  = "datamigrator-worker-06-09-2025-19-05-14"
+              [32m+[0m[0m labels                 = (known after apply)
+              [32m+[0m[0m provisioned_iops       = (known after apply)
+              [32m+[0m[0m provisioned_throughput = (known after apply)
+              [32m+[0m[0m resource_policies      = (known after apply)
+              [32m+[0m[0m size                   = (known after apply)
+              [32m+[0m[0m snapshot               = (known after apply)
+              [32m+[0m[0m type                   = (known after apply)
+            }
+        }
+
+      [32m+[0m[0m confidential_instance_config (known after apply)
+
+      [32m+[0m[0m guest_accelerator (known after apply)
+
+      [32m+[0m[0m network_interface {
+          [32m+[0m[0m internal_ipv6_prefix_length = (known after apply)
+          [32m+[0m[0m ipv6_access_type            = (known after apply)
+          [32m+[0m[0m ipv6_address                = (known after apply)
+          [32m+[0m[0m name                        = (known after apply)
+          [32m+[0m[0m network                     = "appmicro-vpc1"
+          [32m+[0m[0m network_attachment          = (known after apply)
+          [32m+[0m[0m network_ip                  = (known after apply)
+          [32m+[0m[0m stack_type                  = (known after apply)
+          [32m+[0m[0m subnetwork                  = "appmicro-vpc-subnet-01"
+          [32m+[0m[0m subnetwork_project          = (known after apply)
+        }
+
+      [32m+[0m[0m reservation_affinity (known after apply)
+
+      [32m+[0m[0m scheduling (known after apply)
+    }
+
+[1mPlan:[0m 3 to add, 0 to change, 0 to destroy.
+[0m
+Changes to Outputs:
+  [32m+[0m[0m control_plane_internal_ips = [
+      [32m+[0m[0m (known after apply),
+    ]
+  [32m+[0m[0m worker_internal_ips        = [
+      [32m+[0m[0m (known after apply),
+      [32m+[0m[0m (known after apply),
+    ]
+[0m[1mgoogle_compute_instance.vm_instance[2]: Creating...[0m[0m
+[0m[1mgoogle_compute_instance.vm_instance[0]: Creating...[0m[0m
+[0m[1mgoogle_compute_instance.vm_instance[1]: Creating...[0m[0m
+[0m[1mgoogle_compute_instance.vm_instance[1]: Still creating... [00m10s elapsed][0m[0m
+[0m[1mgoogle_compute_instance.vm_instance[2]: Still creating... [00m10s elapsed][0m[0m
+[0m[1mgoogle_compute_instance.vm_instance[0]: Still creating... [00m10s elapsed][0m[0m
+[0m[1mgoogle_compute_instance.vm_instance[2]: Still creating... [00m20s elapsed][0m[0m
+[0m[1mgoogle_compute_instance.vm_instance[0]: Still creating... [00m20s elapsed][0m[0m
+[0m[1mgoogle_compute_instance.vm_instance[1]: Still creating... [00m20s elapsed][0m[0m
+[0m[1mgoogle_compute_instance.vm_instance[1]: Creation complete after 24s [id=projects/app-microservices-cm/zones/us-east1-c/instances/wk-0609-12281083-lalit-1-122803-401083][0m
+[0m[1mgoogle_compute_instance.vm_instance[2]: Creation complete after 26s [id=projects/app-microservices-cm/zones/us-east1-d/instances/wk-0609-12281083-lalit-2-122803-401083][0m
+[0m[1mgoogle_compute_instance.vm_instance[0]: Creation complete after 27s [id=projects/app-microservices-cm/zones/us-east1-b/instances/cp-0609-12281083-lalit-122803-401083][0m
+[0m[1m[32m
+Apply complete! Resources: 3 added, 0 changed, 0 destroyed.
+[0m[0m[1m[32m
+Outputs:
+
+[0mcontrol_plane_internal_ips = [
+  "172.30.114.80",
+]
+worker_internal_ips = [
+  "172.30.114.78",
+  "172.30.114.75",
+]
+
+===== DEPLOYMENT SUCCESSFUL =====
+
+Waiting for resources to be fully ready...
+[0m[1mdata.google_compute_zones.available: Reading...[0m[0m
+[0m[1mdata.google_compute_zones.available: Read complete after 1s [id=projects/app-microservices-cm/regions/us-east1][0m
+[0m[1mgoogle_compute_instance.vm_instance[1]: Refreshing state... [id=projects/app-microservices-cm/zones/us-east1-c/instances/wk-0609-12281083-lalit-1-122803-401083][0m
+[0m[1mgoogle_compute_instance.vm_instance[0]: Refreshing state... [id=projects/app-microservices-cm/zones/us-east1-b/instances/cp-0609-12281083-lalit-122803-401083][0m
+[0m[1mgoogle_compute_instance.vm_instance[2]: Refreshing state... [id=projects/app-microservices-cm/zones/us-east1-d/instances/wk-0609-12281083-lalit-2-122803-401083][0m
+[0m[1m[32m
+Outputs:
+
+[0mcontrol_plane_internal_ips = [
+  "172.30.114.80",
+]
+worker_internal_ips = [
+  "172.30.114.78",
+  "172.30.114.75",
+]
+Retrieving deployment information...
+Control Plane IPs retrieved
+Worker IPs retrieved
+VM information retrieved
+
+Setting up SSH access for all VMs...
+Setting up SSH for VM: cp-0609-12281083-lalit-122803-401083 in zone: us-east1-b
+SSH key generated for cp-0609-12281083-lalit-122803-401083
+SSH key generated for cp-0609-12281083-lalit-122803-401083
+Setting SSH key for cp-0609-12281083-lalit-122803-401083:
+Key content: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC1lgSPI+ZoKWUO9GLMujEYUing2bDmk8+2Bxzh7tmX9Nz1/2+ni834ZU+23PJQ55TCWrmSt2tohGCmeWMvl6Yha5LpX3w0DIuOryZgDsBjphex9jpAzBaFO8BwGso3x6sre9/yJGW+tF9lYc6y32/G+TF2p0k9sjogw8uxhsQnFAgQQlkShPF7xuDR91+P1E53KzGG8lQuunI3YEMypNRKlaeOwgu2spq7QZkCiODuPO9AvEM37QnaJIdPzslJWLmW6ai7e4sXZpBy7DPy1FOQ3MD49+iIT0RiDxxhtGNiLIEKOF89yNuz38Ht8JGuLaS4+wI90M7jo6BgU/SjA9vB ndmuser@cp-0609-12281083-lalit-122803-401083
+SSH key added to cp-0609-12281083-lalit-122803-401083
+Verification - SSH keys now set to:
+
+
+Setting up SSH for VM: wk-0609-12281083-lalit-1-122803-401083 in zone: us-east1-c
+SSH key generated for wk-0609-12281083-lalit-1-122803-401083
+SSH key generated for wk-0609-12281083-lalit-1-122803-401083
+Setting SSH key for wk-0609-12281083-lalit-1-122803-401083:
+Key content: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCpDMJnHJNBS6JNwPL8nB0XUyCVufG72UsXknypChMpExBZ21i5lTR7O8Yq+/Xrb4VI8/cnxqp5ERV8gCYe+cYRM2HWHkmwJS9iGk5tgI2M0z/MCF5sotcu7dV0EMZPetF7UzQynkl9ROwCfwIAPoMP/fEnKymJxAfky6m+7LLZ2qui90cC3cOj3bdsTmXb9UBFC8ZlD1PzKBjQcLRc8JhYKzbRn9B8/UkmllhNdNUExEWdhjpnka0AOQLiTSYwWNjrMEEPWQNiIkTVawHT13uPkwEtBxwJosr4/6cedKAWOmtDwy9fpTxYG03LaLDwWT7zz8v6JlbJpJQtA6tQFAAr ndmuser@wk-0609-12281083-lalit-1-122803-401083
+SSH key added to wk-0609-12281083-lalit-1-122803-401083
+Verification - SSH keys now set to:
+
+
+Setting up SSH for VM: wk-0609-12281083-lalit-2-122803-401083 in zone: us-east1-d
+SSH key generated for wk-0609-12281083-lalit-2-122803-401083
+SSH key generated for wk-0609-12281083-lalit-2-122803-401083
+Setting SSH key for wk-0609-12281083-lalit-2-122803-401083:
+Key content: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD0+JbN/5NI1NHV8h/dJ7GUEIVetUawViqoVhupaFHowSjxHQWm7zvr4jNQtkE9aZX5hyyi91NF+9UA0zrvwbVyDUHfej/djiqo9kY/RbmswhUdHZ98R/QWOOsY3h/pOnwD+itc5/opueW++dDSaQQLq7bP3OIp4p4heafc/V4IkXcCwINfKTQGyP8vZWWAzh+pSOY4eLU+m33xjxdKf4eg8AGYNp8JeHdf7AUHHxiKDCPFfH9qBkDFL6ymnyzc0PrWgjq/CGG6uvvOQxwHMZrlGiGZ/x0zYw1cKdvP0Qf+Jfrhr1yEkBHwh3+a4qbtzK+ySZwQxa4Jk14ZQuJXlFJb ndmuser@wk-0609-12281083-lalit-2-122803-401083
+SSH key added to wk-0609-12281083-lalit-2-122803-401083
+Verification - SSH keys now set to:
+
+
+
+Waiting for Control Plane at 172.30.114.80 to be ready...
+This can take up to 30 minutes for initial startup...
+Checking health endpoint: http://172.30.114.80/health
+Still waiting for CP... attempt 6/180 (1 minutes elapsed)
+Still waiting for CP... attempt 12/180 (2 minutes elapsed)
+Still waiting for CP... attempt 18/180 (3 minutes elapsed)
+Still waiting for CP... attempt 24/180 (4 minutes elapsed)
+Still waiting for CP... attempt 30/180 (5 minutes elapsed)
+Still waiting for CP... attempt 36/180 (6 minutes elapsed)
+Still waiting for CP... attempt 42/180 (7 minutes elapsed)
+Still waiting for CP... attempt 48/180 (8 minutes elapsed)
+Still waiting for CP... attempt 54/180 (9 minutes elapsed)
+Still waiting for CP... attempt 60/180 (10 minutes elapsed)
+Control plane is ready after 63 attempts (10 minutes)
+Waiting 5 minutes for control plane to stabilize...
+Control Plane is fully ready and operational!
+
+===== NDM_DEPLOYMENT_RESULTS_START =====
+STATUS:SUCCESS
+CP_IP:172.30.114.80
+WORKER_IPS:172.30.114.78 172.30.114.75,
+VM_INFO:cp-0609-12281083-lalit-122803-401083|us-east1-b,wk-0609-12281083-lalit-1-122803-401083|us-east1-c,wk-0609-12281083-lalit-2-122803-401083|us-east1-d,
+SSH_KEYS_DATA:cp-0609-12281083-lalit-122803-401083:LS0tLS1CRUdJTiBPUEVOU1NIIFBSSVZBVEUgS0VZLS0tLS0KYjNCbGJuTnphQzFyWlhrdGRqRUFBQUFBQkc1dmJtVUFBQUFFYm05dVpRQUFBQUFBQUFBQkFBQUJGd0FBQUFkemMyZ3RjbgpOaEFBQUFBd0VBQVFBQUFRRUF0WllFanlQbWFDbGxEdlJpekxveEdGSXA0Tm13NXBQUHRnY2M0ZTdabC9UYzlmOXZwNHZOCitHVlB0dHp5VU9lVXdscTVrcmRyYUlSZ3BubGpMNWVtSVd1UzZWOThOQXlManE4bVlBN0FZNllYc2ZZNlFNd1doVHZBY0IKcktOOGVySzN2ZjhpUmx2clJmWldIT3N0OXZ4dmt4ZHFkSlBiSTZJTVBMc1liRUp4UUlFRUpaRW9UeGU4YmcwZmRmajlSTwpkeXN4aHZKVUxycHlOMkJETXFUVVNwV25qc0lMdHJLYXUwR1pBb2pnN2p6dlFMeEROKzBKMmlTSFQ4N0pTVmk1bHVtb3UzCnVMRjJhUWN1d3o4dFJUa056QStQZm9pRTlFWWc4Y1liUmpZaXlCQ2poZlBjamJzOS9CN2ZDUnJpMmt1UHNDUGRETzQ2T2cKWUZQMG93UGJ3UUFBQStoU2ZEbitVbnc1L2dBQUFBZHpjMmd0Y25OaEFBQUJBUUMxbGdTUEkrWm9LV1VPOUdMTXVqRVlVaQpuZzJiRG1rOCsyQnh6aDd0bVg5TnoxLzIrbmk4MzRaVSsyM1BKUTU1VENXcm1TdDJ0b2hHQ21lV012bDZZaGE1THBYM3cwCkRJdU9yeVpnRHNCanBoZXg5anBBekJhRk84QndHc28zeDZzcmU5L3lKR1crdEY5bFljNnkzMi9HK1RGMnAwazlzam9ndzgKdXhoc1FuRkFnUVFsa1NoUEY3eHVEUjkxK1AxRTUzS3pHRzhsUXV1bkkzWUVNeXBOUktsYWVPd2d1MnNwcTdRWmtDaU9EdQpQTzlBdkVNMzdRbmFKSWRQenNsSldMbVc2YWk3ZTRzWFpwQnk3RFB5MUZPUTNNRDQ5K2lJVDBSaUR4eGh0R05pTElFS09GCjg5eU51ejM4SHQ4Skd1TGFTNCt3STkwTTdqbzZCZ1UvU2pBOXZCQUFBQUF3RUFBUUFBQVFCRUhsL2RkcUV6aC92U0xWbDIKNVk0UFNwdE5MenpPY3JxajFXMC9VRU91WG53WmlGWlJhdis4WS8wUVl6Zy9vM0JKckpFYStkWEFJcEREUXB3enVWYm9DSgp2WEVpdmN0cXdQdmFMT3ZCbnVCOXV4dGVYS2N3VXJ1K3VING5UamtmS2pZRmYxVlRRWjR6NDZJUVBTVkVGeFNnQUZPK0ljCjArUThjRmJVWlBMbW1Wbkg3L1NXQkZDVDlDUG84MmdBcWxidzRPYWl4cDJyNnNDeExma2NSSG9SVVAvRHFYaEl1a1JHaDkKQjF0L1BDUGhyZ3ZYdVFhcDZrazh1T0U3RGRDMk1LQURQNlI2cU8zYm9YdzAxeU4vTkZVcndVajlqZkRmcHlKZmd1KzVHSQpvK3lVK3V6Vkgwc3VtVXRSd0w4UHIzbEFoRjhaRkVkaUdyeFJGUDBCNDM4eEFBQUFnUURDUCtETG9kWGpydk1ZZndDcHByCmM0Qy94d29VVXYxVmUvRSs5VkdSbDduek5haWM0ZWF5aHJ5N0t3UmFpRXdUY3JMMXdOQ2JhcGhFb0pjZVl4TE1hMEU4aHkKTi9oSWYveXNpYzA0ZlNWQU9NZ2VVYURKN2RMUUFHcElJejU5WVBnMmFWMWdvYzh0ejNsUGIvWUMrWUNvRVFJVUU3YStEVQptKy8yTFVHa2xIRWdBQUFJRUE2cm1MNVdPYlA4eHNOaXd2OEV4cFNYeTFNMEtRcHVjaUVBOC93bHJkc0lrS0hNNjZhZStvCkNkME5qVjI2cnk4WklocDJWOTI2VGJUdG9DblMrQWw4VEF0VDZHb1VKVnZZSHM2TWtYTGw3emRxMy9HMzRZdXRnd280aHoKb3N2SlNKYzJsa3NXenY3R2xGVDM1aldwR0Z6RVpkTFJ4TWgrc1E3b045bGtOUjZGVUFBQUNCQU1ZTGRqV2t6Wks4Tk9FNAphNEtzRXZaSWx4Y2dQdzlVKzFTVzZhMDFwTVlWaTMwMDNyaHNaRU1lQ0gwV0ZTUjlNbGpNUXJyWEErQmhTc1R1M2FtUm5zCk1haDdSYjUxelZvejBpcUJNbXBiU0dpRTNabHlyKzJmSzlpVVl2RDV0WTBoMzA0bkpEb3l1RlBsaWZMZWlLM3NETTI3V3cKbUlhQm1ETGo1T1RHRndHOUFBQUFMRzVrYlhWelpYSkFZM0F0TURZd09TMHhNakk0TVRBNE15MXNZV3hwZEMweE1qSTRNRApNdE5EQXhNRGd6QVFJREJBVUcKLS0tLS1FTkQgT1BFTlNTSCBQUklWQVRFIEtFWS0tLS0tCg==,wk-0609-12281083-lalit-1-122803-401083:LS0tLS1CRUdJTiBPUEVOU1NIIFBSSVZBVEUgS0VZLS0tLS0KYjNCbGJuTnphQzFyWlhrdGRqRUFBQUFBQkc1dmJtVUFBQUFFYm05dVpRQUFBQUFBQUFBQkFBQUJGd0FBQUFkemMyZ3RjbgpOaEFBQUFBd0VBQVFBQUFRRUFxUXpDWnh5VFFVdWlUY0R5L0p3ZEYxTWdsYm54dTlsTEY1SjhxUW9US1JNUVdkdFl1WlUwCmV6dkdLdnYxNjIrRlNQUDNKOGFxZVJFVmZJQW1Idm5HRVROaDFoNUpzQ1V2WWhwT2JZQ05qTk0vekFoZWJLTFhMdTNWZEIKREdUM3JSZTFNME1wNUpmVVRzQW44Q0FENkRELzN4SnlzcGljUUg1TXVwdnV5eTJkcXJvdmRIQXQzRG85MjNiRTVsMi9WQQpSUXZHWlE5VDh5Z1kwSEMwWFBDWVdDczIwWi9RZlAxSkpwWllUWFRWQk1SRm5ZWTZaNUd0QURrQzRrMG1NRmpZNnpCQkQxCmtEWWlKRTFXc0IwOWQ3ajVNQkxRY2NDYUxLK1ArbkhuU2dGanByUThNdlg2VThXQnROeTJpdzhGays4OC9MK2laV3lhU1UKTFFPclVCUUFLd0FBQStoREVZbTZReEdKdWdBQUFBZHpjMmd0Y25OaEFBQUJBUUNwRE1KbkhKTkJTNkpOd1BMOG5CMFhVeQpDVnVmRzcyVXNYa255cENoTXBFeEJaMjFpNWxUUjdPOFlxKy9YcmI0Vkk4L2NueHFwNUVSVjhnQ1llK2NZUk0ySFdIa213CkpTOWlHazV0Z0kyTTB6L01DRjVzb3RjdTdkVjBFTVpQZXRGN1V6UXlua2w5Uk93Q2Z3SUFQb01QL2ZFbkt5bUp4QWZreTYKbSs3TExaMnF1aTkwY0MzY09qM2Jkc1RtWGI5VUJGQzhabEQxUHpLQmpRY0xSYzhKaFlLemJSbjlCOC9Va21sbGhOZE5VRQp4RVdkaGpwbmthMEFPUUxpVFNZd1dOanJNRUVQV1FOaUlrVFZhd0hUMTN1UGt3RXRCeHdKb3NyNC82Y2VkS0FXT210RHd5CjlmcFR4WUcwM0xhTER3V1Q3eno4djZKbGJKcEpRdEE2dFFGQUFyQUFBQUF3RUFBUUFBQVFCdVdncnBQbWtOM2E2VWJSangKTjROeC8yeXM4SlhSVnpaQ3EvZytiSG8zZk45V21PNGhMem4wRy8vdmZVeDZKUEZ2dnZvZTkvdStUaDJsaVEzWmVKa0lEMgorVlUyNHMwd2xNVS9uUVYzT1Bjek1aSUhsckZ4MjYzN3hRS01jYmlRUUlLamRQdDY0blhQOW5YYnRUcDNyc3pJdElVMCtwClE5TVhVcTk3RjQ1azBOOHBlbUFaRmMySnAweE5hWWlGd2UrNXdQeUNraXRGSytzS1d1eThiTnJreTJhY05JY3FtS3RBRlkKN05TSVRJaVlDSlhBci93Vkx0WXhZOUFoOVFoYUplYkxsdGdBamQyOEIrWFFuMDlvNS9zWUQyRHdTUnc1U0VSZ3ZxZ3JCUQpJcHJ5MDVxTGUrSVJwSDhYME15SjdVd2h0SmNUdzJMM21hcEMrb1ZmL3ZRaEFBQUFnUUNRcFdFUk9Yb2svUHVaR0RzR1JnCmVnWGx2T3Q1S3Q3dnFvUFRBMWpjUG1neUNZM29Va2ZDa1dCMHd1eE1EbXlQQWs3d3E5Szd1OFhPVFFJTjdSb2hhbWxkenIKaWtTMzJIalAxZ05pRldlRnp4bTM0MVdodU9yMnh5Q3pGc3M0VmYvK1JqUU5JY21zQW9kbEc5S0FsRzExejhvNUlNamRwZgpQZXZrcWswakMwbkFBQUFJRUExMDBRenI1ODFhR1pxeEwzQnVkT282cVVwOWJoRUs3cGc5U0RWTEozUXMzeFZjY2piQmR4CjVid2ZUUGlkcGw0OEYwZkVrMUtsNVVEdkNuTWdVZHBEcVpwTTl3V2p6N0YxdlAyeVZvYXU0bFBuWlBHOCt0cmVrWktwM1YKY3p0ZFlNdkR0OUJEWUdCQUNSTEVvMFpQYVBXbnJTbDEvc3NkSmZCYWhUbkNpMzRmc0FBQUNCQU1rQmZMeFUrbzd0U1huWQpabGxqaXZ5aXltMHhmYk5xZjdLOW4xWVZYN3VhdzVYcnJmd3NWcmx4WFp6enY3SGNUdUpUMW83NU9henBMcjdpeTQxYlNnCk1OWHNaeS9pK216d1VsYlFxNHdORGUyTm5qRXZjMlk2RWU1U214SlNzZnVNOTJlOFBHOEJXR0sxS1F1N3JQOTdxeTAyV1YKeHJ4bU1WTmtsRDVkT0RPUkFBQUFMbTVrYlhWelpYSkFkMnN0TURZd09TMHhNakk0TVRBNE15MXNZV3hwZEMweExURXlNagpnd015MDBNREV3T0RNQkFnTUUKLS0tLS1FTkQgT1BFTlNTSCBQUklWQVRFIEtFWS0tLS0tCg==,wk-0609-12281083-lalit-2-122803-401083:LS0tLS1CRUdJTiBPUEVOU1NIIFBSSVZBVEUgS0VZLS0tLS0KYjNCbGJuTnphQzFyWlhrdGRqRUFBQUFBQkc1dmJtVUFBQUFFYm05dVpRQUFBQUFBQUFBQkFBQUJGd0FBQUFkemMyZ3RjbgpOaEFBQUFBd0VBQVFBQUFRRUE5UGlXemYrVFNOVFIxZklmM1NleGxCQ0ZYclZHc0ZZcXFGWWJxV2hSNk1FbzhSMEZwdTg3CjYrSXpVTFpCUFdtVitZY3NvdmRUUmZ2VkFOTTY3OEcxY2cxQjMzby8zWTRxcVBaR1AwVzVyTUlWSFIyZmZFZjBGampyR04KNGY2VHA4QS9vclhPZjZLYm5sdnZuUTBta0VDNnUyejl6aUtlS2VJWG1uM1AxZUNKRjNBc0NEWHlrMEJzai9MMlZsZ000ZgpxVWptT0hpMVBwdDk4WThYU24rSG9QQUJtRGFmQ1hoM1grd0ZCeDhZaWd3anhYeC9hZ1pBeFMrc3BwOHMzTkQ2MW9JNnZ3CmhodXJyN3prTWNCekdhNVJvaG1mOGRNMk1OWENuYno5RUgvaVg2NGE5Y2hKQVI4SWQvbXVLbTdjeXZza21jRU1XdUNaTmUKR1VMaVY1UlNXd0FBQStod3ZyZHFjTDYzYWdBQUFBZHpjMmd0Y25OaEFBQUJBUUQwK0piTi81TkkxTkhWOGgvZEo3R1VFSQpWZXRVYXdWaXFvVmh1cGFGSG93U2p4SFFXbTd6dnI0ak5RdGtFOWFaWDVoeXlpOTFORis5VUEwenJ2d2JWeURVSGZlai9kCmppcW85a1kvUmJtc3doVWRIWjk4Ui9RV09Pc1kzaC9wT253RCtpdGM1L29wdWVXKytkRFNhUVFMcTdiUDNPSXA0cDRoZWEKZmMvVjRJa1hjQ3dJTmZLVFFHeVA4dlpXV0F6aCtwU09ZNGVMVSttMzN4anhkS2Y0ZWc4QUdZTnA4SmVIZGY3QVVISHhpSwpEQ1BGZkg5cUJrREZMNnltbnl6YzBQcldnanEvQ0dHNnV2dk9ReHdITVpybEdpR1oveDB6WXcxY0tkdlAwUWYrSmZyaHIxCnlFa0JId2gzK2E0cWJ0eksreVNad1F4YTRKazE0WlF1SlhsRkpiQUFBQUF3RUFBUUFBQVFCS1VoMFdsR0p2NXpsZVNsNEcKYjZOOWcyR2pNU1lvRzR4SGxCQkNYa2J6Y1o3bFArUFdHS0M2V044dXJveXVnQmtqSWpLVm9xbWVBdUJGcHRBcnF6NU1RdAo5b1dLT0ZxVHNpRmMyTUpyQkZUSUN4VzZwbVAwSTdkN3REeVNndlR6SU8xdGhQRUlZaUlLY21RSTV0TjdVbGdVd3VWaG83CmtPaGV5WlQzQTl1Q2gxOTNDZjFKT3duMVdGa0hBSk5MWkJGWHJKT25LSi9BU1ZuWERFYlcvdndFSmlJcjhQaXBFdFVHdmsKVHZnUmt0b3RYODZYWVNFME9maDdYMnB1em1Ba2JwWm1DYzJQNUthdnNndExSeDkwQitqc1JYK3pVNkpucVQrOUllRmRXWApjMDZEcjhDbkVmZ056R0xNVm8vaGh1MkVOdWhSYURXWFFRVnMyd1NKSmZSUkFBQUFnUUNRR0tqVHQvRkdZSWV6S0NMR2E3CmZrbXVESXBUQmZMbGQ1SitNdnVhZ2RvQnRhTmdrT2RLcGJGaDNnNHIyMU54UWpSY0d6aDE1QXk0d3lseTMvVXorRHhXY0IKN3FQWSt0cUNKZ05GRG9HUUM5aStKWmFQdHc0d2o3Z0ZYKzR2cDRGeGtJVERGZm5wdHI3Vk9ucGt6aE1oSHBBK3MyMEg2SQpKeEpvTEllMlowL1FBQUFJRUEvZ05zQ1g4VGZXekk5b1JGNjJTbDVGQjluWUpLc1UzdUMxc1NLQ3RqUm43MVdaTForcUR2CkIyNktUZnM3cmJDbEl2TGc0cGhBMXg2Vk5mNndmamhXaFh1SnhsWXJvUGFqYW0rSDRDV0x2bWNFenBGVU9qVEdaRGpwb0kKUTNGUWh0a1diaGFmK29jOE9NY1ZOelMxUzdVcTdRZnJjQXp4Njl1S3J1U3B3QlNUa0FBQUNCQVBiakVCUUVEZVZCdkdIVApWbk5uQW5XRlYvNkR1dzJGUWVYL1FNVG1XN1F2VkRNM0R3dzcvcXB3NGRkcS9DcjNIbEJoN2g0cnZWUzBqbERTMk9QYlp2CmRaUjdjTXBEYzJzUmxacjdpdnFDeEZQRUsyRUxPNWc0NnNSeDVkblZPWkxJSmVKMGpxTXlTVmpHSjh1S2Q0bGZxRCtlbVoKeDBDekRRQllYMUFVVkp3ekFBQUFMbTVrYlhWelpYSkFkMnN0TURZd09TMHhNakk0TVRBNE15MXNZV3hwZEMweUxURXlNagpnd015MDBNREV3T0RNQkFnTUUKLS0tLS1FTkQgT1BFTlNTSCBQUklWQVRFIEtFWS0tLS0tCg==,
+LOG_FILE:deploy_20250909_122800.log
+===== NDM_DEPLOYMENT_RESULTS_END =====
+Total script time: 17 minutes and 27 seconds.
+Log saved to deploy_20250909_122800.log
