@@ -197,7 +197,7 @@ var _ = Describe("TC-0014: Run incremental sync schedule migration for verifying
 				// By(fmt.Sprintf("validate report result : %s", result))
 				_ = migrationJobRunID
 			}
-
+			Wait(180)
 			By("Validating incremental Sync is getting triggered")
 			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
