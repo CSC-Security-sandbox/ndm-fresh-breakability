@@ -188,18 +188,18 @@ func init() {
 	}
 
 	// Load configuration from environment.
-	JOB_SERVICE_URL = os.Getenv("JOB_SERVICE_URL")
-	CONFIG_SERVICE_URL = os.Getenv("CONFIG_SERVICE_URL")
-	ADMIN_SERVICE_URL = os.Getenv("ADMIN_SERVICE_URL")
-	REPORT_SERVICE_URL = os.Getenv("REPORT_SERVICE_URL")
-	KEYCLOAK_IP = os.Getenv("KEYCLOAK_IP")
-	USERNAME = os.Getenv("NDM_USERNAME")
-	PASSWORD = os.Getenv("PASSWORD")
+	JOB_SERVICE_URL = "https://172.30.114.72"
+	CONFIG_SERVICE_URL = "https://172.30.114.72"
+	ADMIN_SERVICE_URL = "https://172.30.114.72"
+	REPORT_SERVICE_URL = "https://172.30.114.72"
+	KEYCLOAK_IP = "172.30.114.72"
+	USERNAME = "admin@datamigrator.local"
+	PASSWORD = "Welcome@123"
 
-	NDM_VM_USER_NAME = os.Getenv("NDM_VM_USER_NAME")
-	NDM_VM_HOST = os.Getenv("NDM_VM_HOST")
-	NDM_VM_PORT = os.Getenv("NDM_VM_PORT")
-	NDM_VM_PASSWORD = os.Getenv("NDM_VM_PASSWORD")
+	NDM_VM_USER_NAME = "admin"
+	NDM_VM_HOST = "172.30.114.72"
+	NDM_VM_PORT = "22"
+	NDM_VM_PASSWORD = "Welcome@123"
 	BUILD_VERSION = os.Getenv("BUILD_VERSION")
 	REF_TYPE = os.Getenv("REF_TYPE")
 	NDM_NEXUS_USERNAME = os.Getenv("NDM_NEXUS_USERNAME")
