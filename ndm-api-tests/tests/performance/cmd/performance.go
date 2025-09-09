@@ -1,3 +1,4 @@
+// (function definition will be placed after imports, not here)
 package main
 
 import (
@@ -13,6 +14,34 @@ import (
 	"strings"
 	"time"
 )
+
+// callTestMetricsScript executes test-metrics.go with cpIP and workerID
+func callTestMetricsScript(cpIP, workerID string) error {
+	fmt.Printf(" Calling test-metrics.go with CP IP: %s and Worker ID: %s\n", cpIP, workerID)
+
+	// Execute test-metrics.go as a separate Go program with the provided arguments
+	cmd := exec.Command("go", "run", "test-metrics.go", cpIP, workerID)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to execute test-metrics.go: %v\nOutput: %s", err, string(output))
+	}
+
+	// Write output to a new file with timestamp
+	ts := time.Now().Format("20060102-150405")
+	filename := fmt.Sprintf("worker-metrics-%s-%s.txt", workerID, ts)
+	f, ferr := os.Create(filename)
+	if ferr != nil {
+		fmt.Printf("Warning: Could not create metrics output file: %v\n", ferr)
+	} else {
+		defer f.Close()
+		_, _ = f.Write(output)
+		fmt.Printf("test-metrics.go output written to %s\n", filename)
+	}
+
+	fmt.Printf("test-metrics.go Results:\n%s\n", string(output))
+	return nil
+}
 
 // logFileWithConsole writes to both the original writer and the log file
 type logFileWithConsole struct {
@@ -258,7 +287,7 @@ func main() {
 
 	// Create migration job from config source path to dynamic export path (destination)
 	fmt.Println("\n====================Setting Up Migration Job====================")
-	err = setupMigrationJob(sourceFileServerId, destinationFileServerId, config.Fileserver.SourceExportPath, exportPath, headers, config)
+	err = setupMigrationJob(sourceFileServerId, destinationFileServerId, config.Fileserver.SourceExportPath, exportPath, headers, config, cpIP)
 	if err != nil {
 		fmt.Printf("Warning: Failed to setup migration job: %v\n", err)
 	}
@@ -277,7 +306,7 @@ func main() {
 }
 
 // setupMigrationJob creates a migration job from source to destination path
-func setupMigrationJob(sourceFileServerId, destinationFileServerId, srcpath, destpath string, headers map[string]string, config *Config) error {
+func setupMigrationJob(sourceFileServerId, destinationFileServerId, srcpath, destpath string, headers map[string]string, config *Config, cpIP string) error {
 	// Get source path ID for source export path
 	sourcePathId, err := GetExportPathID("source", srcpath, sourceFileServerId, headers)
 	if err != nil {
@@ -328,18 +357,59 @@ func setupMigrationJob(sourceFileServerId, destinationFileServerId, srcpath, des
 			fmt.Printf("Job Run ID: %s\n", jobRunID)
 			fmt.Printf("Job Status: %s\n", getJobsResp.JobRuns[0].Status)
 			fmt.Println("Waiting for migration job to start...")
+
+			// Get worker ID for metrics collection
+			workerID := ""
+			if len(headers["X-Worker-Ids"]) > 0 {
+				workerID = headers["X-Worker-Ids"]
+			}
+
+			// Monitor job status and collect metrics when RUNNING is detected
+			metricsCollected := false
 			err = WaitForJobState(jobRunID, RUNNING_JOBRUN)
 			if err != nil {
 				fmt.Printf("Warning: Job may not have started yet: %v\n", err)
+				// Try to collect metrics anyway if we have a worker ID
+				if workerID != "" && !metricsCollected {
+					fmt.Println("\n=== Worker Metrics Collection (Job Status Unknown) ===")
+					fmt.Printf(" Attempting metrics collection during job execution...\n")
+					err = callTestMetricsScript(cpIP, workerID)
+					if err != nil {
+						fmt.Printf("  Warning: Failed to collect worker metrics: %v\n", err)
+					} else {
+						metricsCollected = true
+					}
+				}
 			} else {
 				fmt.Printf("=============Migration job is now RUNNING=============\n")
-				// Wait for job run to complete
-				fmt.Println("Waiting for migration job to complete...")
-				err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
-				if err != nil {
-					fmt.Printf("Warning: Job did not complete successfully: %v\n", err)
-				} else {
-					fmt.Printf("=============Migration job COMPLETED=============\n")
+				// Collect worker metrics after migration jobs creation
+				if workerID != "" && !metricsCollected {
+					fmt.Println("\n=== Worker Metrics Collection After Migration Jobs Creation ===")
+					fmt.Printf(" Collecting metrics during active migration phase...\n")
+					err = callTestMetricsScript(cpIP, workerID)
+					if err != nil {
+						fmt.Printf("  Warning: Failed to collect worker metrics during migration: %v\n", err)
+					} else {
+						metricsCollected = true
+					}
+				}
+			}
+
+			// Wait for job run to complete
+			fmt.Println("Waiting for migration job to complete...")
+			err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
+			if err != nil {
+				fmt.Printf("Warning: Job did not complete successfully: %v\n", err)
+			} else {
+				fmt.Printf("=============Migration job COMPLETED=============\n")
+				// Collect final metrics if not collected earlier
+				if workerID != "" && !metricsCollected {
+					fmt.Println("\n=== Final Worker Metrics Collection After Migration ===")
+					fmt.Printf(" Collecting metrics after migration completion...\n")
+					err = callTestMetricsScript(cpIP, workerID)
+					if err != nil {
+						fmt.Printf("  Warning: Failed to collect final worker metrics: %v\n", err)
+					}
 				}
 			}
 		}
@@ -441,22 +511,13 @@ func createAzureANFVolumeWithTerraform(config *Config) (string, string, error) {
 
 	// Use config values instead of user input
 	// Prompt for values, use config as default if input is empty
-	var username, dateInput, sequenceInput string
-	fmt.Printf(">>>>>>>>>Enter username prefix for ANF volume tagging [%s]: ", config.ANFConfig.UsernamePrefix)
-	fmt.Scanln(&username)
+	var username string
+	username = config.ANFConfig.UsernamePrefix
 	if username == "" {
-		username = config.ANFConfig.UsernamePrefix
+		username = "perfuser"
 	}
-	fmt.Printf(">>>>>>>>>Enter date suffix (YYYYMMDD) or press Enter for today [%s]: ", config.ANFConfig.DateSuffix)
-	fmt.Scanln(&dateInput)
-	if dateInput == "" {
-		dateInput = config.ANFConfig.DateSuffix
-	}
-	fmt.Printf(">>>>>>>>>Enter sequence number or press Enter for default (1) [%s]: ", config.ANFConfig.SequenceNumber)
-	fmt.Scanln(&sequenceInput)
-	if sequenceInput == "" {
-		sequenceInput = config.ANFConfig.SequenceNumber
-	}
+	dateInput := config.ANFConfig.DateSuffix         // Default value for date suffix
+	sequenceInput := config.ANFConfig.SequenceNumber // Default value for sequence number
 
 	args := []string{"./create_anf_volume.sh", "-u", username}
 
