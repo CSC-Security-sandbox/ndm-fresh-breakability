@@ -113,7 +113,7 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Migration job did not start running successfully, err: %s", err))
 
 			By("Make the worker go down by stopping the worker service")
-			_, err = StopWorker(attachedWorkersConfig[workerId])
+			_, err = StopWorker(attachedWorkersConfig[workerId].Host)
 			Expect(err).NotTo(HaveOccurred(), "Error stopping worker service")
 
 			By("Checking if Migration job is paused")
@@ -121,7 +121,7 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Migration job did not pause successfully, err: %s", err))
 
 			By("Bringing the worker back online by starting the worker service")
-			_, err = StartWorker(attachedWorkersConfig[workerId])
+			_, err = StartWorker(attachedWorkersConfig[workerId].Host)
 			Expect(err).NotTo(HaveOccurred(), "Error starting worker service")
 
 			By("Checking if Migration job is completed")

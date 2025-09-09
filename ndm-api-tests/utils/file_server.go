@@ -282,7 +282,7 @@ func ClearVolume(export string) error {
 	// 	Password: config.Password,
 	// }
 
-	output, err := SshRunScriptWithKeyData("172.30.114.79", "ndmuser", CONFIG_WORKERS["172.30.114.79"], script)
+	output, err := SshRunScriptWithKeyData("172.30.114.81", "ndmuser", CONFIG_WORKERS["172.30.114.81"], script)
 	if err != nil {
 		return fmt.Errorf("RemoveDataFromFileserver failed: %w\noutput: %s", err, output)
 	}
@@ -375,7 +375,7 @@ func AddDataToVolume(export string) error {
 	// 	Password: config.Password,
 	// }
 
-	output, err := SshRunScriptWithKeyData("172.30.114.79", "ndmuser", CONFIG_WORKERS["172.30.114.79"], script)
+	output, err := SshRunScriptWithKeyData("172.30.114.81", "ndmuser", CONFIG_WORKERS["172.30.114.81"], script)
 	if err != nil {
 		return fmt.Errorf("AddDataToFileserver failed: %w\noutput: %s", err, output)
 	}
@@ -451,7 +451,7 @@ func RemoveDeltaFromVolume(export string) error {
 	// 	Password: config.Password,
 	// }
 
-	output, err := SshRunScriptWithKeyData("172.30.114.79", "ndmuser", CONFIG_WORKERS["172.30.114.79"], script)
+	output, err := SshRunScriptWithKeyData("172.30.114.81", "ndmuser", CONFIG_WORKERS["172.30.114.81"], script)
 	if err != nil {
 		return fmt.Errorf("RemoveDeltaFromFileserver failed: %w\noutput: %s", err, output)
 	}
@@ -531,7 +531,7 @@ func ModifyDataOnVolume(export string) error {
 	// 	Password: config.Password,
 	// }
 
-	output, err := SshRunScriptWithKeyData("172.30.114.79", "ndmuser", CONFIG_WORKERS["172.30.114.79"], script)
+	output, err := SshRunScriptWithKeyData("172.30.114.81", "ndmuser", CONFIG_WORKERS["172.30.114.81"], script)
 	if err != nil {
 		return fmt.Errorf("ModifyDataOnVolume failed: %w\noutput: %s", err, output)
 	}
@@ -605,7 +605,7 @@ func RestoreOriginalDataOnVolume(export string) error {
 	// 	Password: config.Password,
 	// }
 
-	output, err := SshRunScriptWithKeyData("172.30.114.79", "ndmuser", CONFIG_WORKERS["172.30.114.79"], script)
+	output, err := SshRunScriptWithKeyData("172.30.114.81", "ndmuser", CONFIG_WORKERS["172.30.114.81"], script)
 	if err != nil {
 		return fmt.Errorf("RestoreOriginalDataOnVolume failed: %w\noutput: %s", err, output)
 	}
@@ -646,7 +646,7 @@ func GetFileUserGroupId(export, fileName string) (uid, gid int, err error) {
 	stat -c "%%u %%g" "$MP/%[2]s"
 	`, export, fileName)
 
-	out, err := SshRunScriptWithKeyData("172.30.114.79", "ndmuser", CONFIG_WORKERS["172.30.114.79"], script)
+	out, err := SshRunScriptWithKeyData("172.30.114.81", "ndmuser", CONFIG_WORKERS["172.30.114.81"], script)
 	if err != nil {
 		return 0, 0, fmt.Errorf("OwnerIDShellStat failed: %w\n%s", err, out)
 	}

@@ -88,7 +88,7 @@ var _ = Describe("RTC-003: Test discovery with single worker and restart the wor
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Discovery job did not start running successfully, err: %s", err))
 
 			By("Make the worker go down by stopping the worker service")
-			_, err = StopWorker(attachedWorkersConfig[workerId])
+			_, err = StopWorker(attachedWorkersConfig[workerId].Host)
 			Expect(err).NotTo(HaveOccurred(), "Error stopping worker service")
 
 			By("Checking if discovery job is paused")
@@ -96,7 +96,7 @@ var _ = Describe("RTC-003: Test discovery with single worker and restart the wor
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Discovery job did not pause successfully, err: %s", err))
 
 			By("Bringing the worker back online by starting the worker service")
-			_, err = StartWorker(attachedWorkersConfig[workerId])
+			_, err = StartWorker(attachedWorkersConfig[workerId].Host)
 			Expect(err).NotTo(HaveOccurred(), "Error starting worker service")
 
 			By("Checking if discovery job is completed")

@@ -16,7 +16,7 @@ var _ = Describe("About NDM - CP, WORKER Versions", func() {
 
 	BeforeEach(func() {
 		numberOfWorker := 1
-		_, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+		_, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-About-NDM")
 		Expect(err).To(BeNil(), "Error during test environment setup")
 		Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 1), "Expected 1 workers to be attached")
 	})

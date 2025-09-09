@@ -99,7 +99,7 @@ var _ = Describe("Download Error Report", Ordered, func() {
 			Expect(sourceDiscoveryJobRunID).NotTo(BeEmpty(), "Source Discovery JobRun ID should not be empty")
 
 			By("Bringing the worker back online by restarting the worker service")
-			_, err = RestartWorker(attachedWorkersConfig[workerId1])
+			_, err = RestartWorker(attachedWorkersConfig[workerId1].Host)
 			Expect(err).NotTo(HaveOccurred(), "Error restarting worker service")
 			Wait(15)
 

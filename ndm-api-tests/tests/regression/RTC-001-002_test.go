@@ -43,7 +43,7 @@ var _ = Describe("RTC-001-002: Check worker status when worker goes down/becomes
 			// Detach the worker to simulate going down
 			By(fmt.Sprintf("Detaching worker: %s", workerId1))
 
-			_, err = StopWorker(attachedWorkersConfig[workerId1])
+			_, err = StopWorker(attachedWorkersConfig[workerId1].Host)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error detaching worker : %s ", workerId1))
 
 			//waiting for worker to go offline
@@ -54,7 +54,7 @@ var _ = Describe("RTC-001-002: Check worker status when worker goes down/becomes
 			Expect(workerIdWithStatus[workerId1]).To(Equal("Offline"),
 				fmt.Sprintf("Worker %s should be offline but is %s", workerId1, workerIdWithStatus[workerId1]))
 
-			_, err = StartWorker(attachedWorkersConfig[workerId1])
+			_, err = StartWorker(attachedWorkersConfig[workerId1].Host)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error detaching worker : %s ", workerId1))
 			workerOnline := false
 			workerIds := GetWorkerIds()

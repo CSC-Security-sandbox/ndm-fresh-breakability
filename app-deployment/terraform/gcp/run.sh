@@ -82,7 +82,8 @@ NAMES=()
 
 
 TODAY_DATE=$(date +%d%m)
-BUILD_TIME=$(date +%H%M%S) 
+BUILD_TIME=$(date +%H%M%S)
+UNIQUE_ID=$(date +%s)  # Unix timestamp for extra uniqueness 
 
 # Function to extract image creation date from image URL/name
 get_image_date() {
@@ -114,17 +115,19 @@ WORKER_IMAGE_DATE=$(get_image_date "$WORKER_IMAGE")
 
 echo name prefix: "$NAME_PREFIX"
 
-# UNIQUE NAMES
+# UNIQUE NAMES - Keep them shorter to avoid 63-char limit
+SHORT_TIMESTAMP="${BUILD_TIME:0:4}${UNIQUE_ID: -4}"  # Combine for shorter unique ID
+
 for i in $(seq 1 $CONTROL_PLANE_COUNT); do
   MACHINE_TYPES+=("$CP_MACHINE_TYPE")
   IMAGES+=("$CP_IMAGE")
-  NAMES+=("cp-${CP_IMAGE_DATE}-build-${TODAY_DATE}-run-${BUILD_TIME}-${NAME_PREFIX}")
+  NAMES+=("cp-${CP_IMAGE_DATE}-${SHORT_TIMESTAMP}-${NAME_PREFIX}")
 done
 
 for i in $(seq 1 $WORKER_COUNT); do
   MACHINE_TYPES+=("$WORKER_MACHINE_TYPE")
   IMAGES+=("$WORKER_IMAGE")
-  NAMES+=("wk-${WORKER_IMAGE_DATE}-build-${TODAY_DATE}-run-${BUILD_TIME}-${NAME_PREFIX}-${i}")
+  NAMES+=("wk-${WORKER_IMAGE_DATE}-${SHORT_TIMESTAMP}-${NAME_PREFIX}-${i}")
 done
 
 MACHINE_TYPES_JSON=$(printf '%s\n' "${MACHINE_TYPES[@]}" | jq -R . | jq -s .)
@@ -150,7 +153,13 @@ export TF_VAR_instance_names="$NAMES_JSON"
 echo "Initializing Terraform..."
 terraform init
 
-echo "Applying new Terraform configuration..."
+# Create a unique workspace for this deployment to avoid conflicts
+# Use shorter workspace name to avoid 63-char limit
+WORKSPACE_NAME="${BUILD_TIME:0:6}-${UNIQUE_ID: -6}"  # Take first 6 chars of time and last 6 of timestamp
+echo "Creating Terraform workspace: $WORKSPACE_NAME"
+terraform workspace new "$WORKSPACE_NAME" || terraform workspace select "$WORKSPACE_NAME"
+
+echo "Creating new Terraform infrastructure in workspace: $WORKSPACE_NAME"
 terraform apply -auto-approve
 
 # Enhanced deployment verification with control plane readiness check and SSH setup

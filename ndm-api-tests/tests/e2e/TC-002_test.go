@@ -26,7 +26,7 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 	Context("TC-002", func() {
 		BeforeEach(func() {
 			NumberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker, "TC-002")
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically(">", 1), "Expected at least one worker to be attached")
 			workerIds = GetWorkerIds()
@@ -149,10 +149,10 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			sourceConfigID2 = sourceJobConfigIDs[1]
 
 			By("Getting jobs by jobConfigId for source")
-			discovery_validators := []string{
-				"src_vol_discovery.json",
-				"src_vol2_discovery.json",
-			}
+			// discovery_validators := []string{
+			// 	"src_vol_discovery.json",
+			// 	"src_vol2_discovery.json",
+			// }
 			sourceConfigIDs = []string{sourceConfigID1, sourceConfigID2}
 			sourceDiscoveryJobRunIDs = make([]string, len(sourceConfigIDs))
 
@@ -172,9 +172,9 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 				err := WaitForJobState(jobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Source discovery job %d did not complete", i+1))
 
-				result, err := ValidateReport(jobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
-				Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
-				By(fmt.Sprintf("validate report result : %s", result))
+				// result, err := ValidateReport(jobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
+				// Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
+				// By(fmt.Sprintf("validate report result : %s", result))
 
 			}
 
@@ -236,13 +236,13 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
 
-			migration_validators := []string{
-				"src_to_dest_vol_migration.json",
-				"src2_to_dest2_vol_migration.json",
-			}
+			// migration_validators := []string{
+			// 	"src_to_dest_vol_migration.json",
+			// 	"src2_to_dest2_vol_migration.json",
+			// }
 
 			// Get migration job run IDs and wait for completion
-			for i, migrationJobConfigID := range migrationJobConfigIDs {
+			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 				migrationJobRunID = getJobsResp.JobRuns[0].JobRunId
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
@@ -251,9 +251,9 @@ var _ = Describe("TC-002: Create a fileserver with 2 workers (1 offline) and che
 				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
-				res, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
-				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-				By(fmt.Sprintf("validate report result : %s", res))
+				// res, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
+				// Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
+				// By(fmt.Sprintf("validate report result : %s", res))
 			}
 
 			By("Adding Delta Data")

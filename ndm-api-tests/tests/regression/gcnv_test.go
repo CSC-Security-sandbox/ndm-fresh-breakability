@@ -29,7 +29,7 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 		}
 		var err error
 		numberOfWorker := 2
-		ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+		ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "GCNV-Flex-Test")
 		Expect(err).To(BeNil(), "Error during test environment setup")
 		Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 		workerIds = GetWorkerIds()

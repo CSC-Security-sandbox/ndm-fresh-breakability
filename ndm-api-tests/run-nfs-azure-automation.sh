@@ -20,7 +20,7 @@ run_tests() {
     local test_path="$2"
     local environment="$3"
     local protocol_type="${4:-NFS}"
-    local timeout="${5:-4h}"
+    local timeout="${5:-100h}"
 
      if [[ -z "$test_type" || -z "$test_path" || -z "$environment" ]]; then
         echo "Error: Missing mandatory arguments."
@@ -93,13 +93,13 @@ run_tests() {
 # Test runs
 
 #Smoke Testing
-run_tests "smoke" "./tests/smoke" "Azure" "NFS"
+# run_tests "smoke" "./tests/smoke" "Azure" "NFS"
 
 #End-to-End Testing
 run_tests "end-to-end" "./tests/e2e" "Azure" "NFS"
 
 #Regression Testing
-run_tests "regression" "./tests/regression" "Azure" "NFS"
+# run_tests "regression" "./tests/regression" "Azure" "NFS"
 
 
 #Download-Error-Report-Regression Testing

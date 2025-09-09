@@ -115,14 +115,14 @@ var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealth
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Migration job did not start running successfully, err: %s", err))
 
 			By("Make one worker go down by stopping the worker service")
-			_, err = StopWorker(attachedWorkersConfig[workerId1])
+			_, err = StopWorker(attachedWorkersConfig[workerId1].Host)
 			Expect(err).NotTo(HaveOccurred(), "Error stopping worker service")
 
 			//let the worker stay down for a while to simulate an unhealthy state
 			Wait(60)
 
 			By("Bringing the worker back online by starting the worker service")
-			_, err = StartWorker(attachedWorkersConfig[workerId1])
+			_, err = StartWorker(attachedWorkersConfig[workerId1].Host)
 			Expect(err).NotTo(HaveOccurred(), "Error starting worker service")
 
 			By("Checking if Migration job is completed")

@@ -12,7 +12,7 @@ data "google_compute_zones" "available" {
 resource "google_compute_instance" "vm_instance" {
   count        = var.vm_count
   
-  name         = var.instance_names[count.index]
+  name         = terraform.workspace == "default" ? var.instance_names[count.index] : "${var.instance_names[count.index]}-${terraform.workspace}"
   machine_type = var.machine_types[count.index]
   zone         = data.google_compute_zones.available.names[count.index % length(data.google_compute_zones.available.names)]
 

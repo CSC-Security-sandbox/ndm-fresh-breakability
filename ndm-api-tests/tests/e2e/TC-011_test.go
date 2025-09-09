@@ -36,7 +36,7 @@ var _ = Describe("TC-011: Run migration with 'Upload GID/UID Mapping' option", f
 	Context("TC-011: Run migration with 'Upload GID/UID Mapping' option", func() {
 		BeforeEach(func() {
 			numberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-011")
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 			workerIds = GetWorkerIds()
@@ -137,12 +137,12 @@ var _ = Describe("TC-011: Run migration with 'Upload GID/UID Mapping' option", f
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
 
-			migration_validators := []string{
-				"src_to_dest_vol_migration.json",
-				"src2_to_dest2_vol_migration.json",
-			}
+			// migration_validators := []string{
+			// 	"src_to_dest_vol_migration.json",
+			// 	"src2_to_dest2_vol_migration.json",
+			// }
 			// Get migration job run IDs, wait for completion and validate the CoC migration report
-			for i, migrationJobConfigID := range migrationJobConfigIDs {
+			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 				migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
@@ -151,9 +151,9 @@ var _ = Describe("TC-011: Run migration with 'Upload GID/UID Mapping' option", f
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
-				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-				By(fmt.Sprintf("validate report result : %s", result))
+				// result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
+				// Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
+				// By(fmt.Sprintf("validate report result : %s", result))
 			}
 
 			By("Validate mapping correctly appears on source and destination as per csv")

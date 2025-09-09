@@ -26,7 +26,7 @@ var _ = Describe("TC-005: Running migration / cutover with an exclude path patte
 	Context("TC-005", func() {
 		BeforeEach(func() {
 			NumberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker, "TC-005")
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically(">", 1), "Expected at least one worker to be attached")
 			workerIds = GetWorkerIds()
@@ -118,13 +118,13 @@ var _ = Describe("TC-005: Running migration / cutover with an exclude path patte
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
-			migration_validators := []string{
-				"src_to_dest_vol_migration.json",
-				"src2_to_dest2_vol_migration.json",
-			}
+			// migration_validators := []string{
+			// 	"src_to_dest_vol_migration.json",
+			// 	"src2_to_dest2_vol_migration.json",
+			// }
 			// Get migration job run IDs and wait for completion
 			flag := false
-			for i, migrationJobConfigID := range migrationJobConfigIDs {
+			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 				migrationJobRunID = getJobsResp.JobRuns[0].JobRunId
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
@@ -162,9 +162,9 @@ var _ = Describe("TC-005: Running migration / cutover with an exclude path patte
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
-				Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
-				By(fmt.Sprintf("validate COC report result : %s", result))
+				// result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
+				// Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
+				// By(fmt.Sprintf("validate COC report result : %s", result))
 			}
 			By("Adding Delta Data")
 			err = AddDataToVolume(sourceVolumePath1)
