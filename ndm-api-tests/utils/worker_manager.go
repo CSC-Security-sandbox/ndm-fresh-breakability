@@ -1,10 +1,12 @@
 package utils
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -25,10 +27,10 @@ type AttachWorkerResult struct {
 }
 
 type DetachWorkerResult struct {
-	workerConfig SSHConfig
-	workerID     string
-	output       string
-	err          error
+	workerIP string
+	workerID string
+	output   string
+	err      error
 }
 
 // InitWorkers parses the comma‑separated strings for IPs, ports, passwords, and usernames,
@@ -230,11 +232,12 @@ func DetachWorkers(workerIdsToDelete []string) error {
 	var wg sync.WaitGroup
 	detachWorkerRes := make(chan DetachWorkerResult, len(workerIdsToDelete))
 
-	for workerId, workerConfig := range AttachedWorkersConfig {
+	// Iterate through AttachedWorkersConfig to find workers to detach
+	for workerID, workerConfig := range AttachedWorkersConfig {
 		for _, workerIdToDelete := range workerIdsToDelete {
-			if workerId == workerIdToDelete {
+			if workerID == workerIdToDelete {
 				wg.Add(1)
-				go DetachWorker(workerConfig, workerId, detachWorkerRes, &wg)
+				go DetachWorker(workerConfig.Host, workerIdToDelete, detachWorkerRes, &wg)
 			}
 		}
 	}
@@ -246,11 +249,11 @@ func DetachWorkers(workerIdsToDelete []string) error {
 
 	for res := range detachWorkerRes {
 		if res.err != nil {
-			msg := fmt.Sprintf("Failed to detach worker %s: %v", res.workerConfig.Host, res.err)
+			msg := fmt.Sprintf("Failed to detach worker %s: %v", res.workerIP, res.err)
 			LogError(msg, res.err)
 			detachErrors = append(detachErrors, msg)
 		} else {
-			msg := fmt.Sprintf("Successfully detached worker %s with output: %s", res.workerConfig.Host, res.output)
+			msg := fmt.Sprintf("Successfully detached worker %s with output: %s", res.workerIP, res.output)
 			// Remove the worker from the AttachedWorkersConfig map.
 			delete(AttachedWorkersConfig, res.workerID)
 			LogDebug(msg)
@@ -345,7 +348,7 @@ func GetDetachWorkerScriptForSMB() string {
 }
 
 // GetDetachWorkerScriptForNFS generates a shell script to stop/disable and remove worker environment variables.
-func GetDetachWorkerScriptForNFS(workerConfig SSHConfig) string {
+func GetDetachWorkerScriptForNFS() string {
 	script := fmt.Sprintf(`#!/bin/bash
 	set -e 
 
@@ -378,57 +381,57 @@ func GetDetachWorkerScriptForNFS(workerConfig SSHConfig) string {
 
 
 	echo "Successfully disabled worker service"
-	`, workerConfig.Password)
+	`, NDM_VM_PASSWORD)
 	return script
 }
 
 // DetachWorker runs the detach script on a given worker via SSH.
-func DetachWorker(workerConfig SSHConfig, workerID string, detachWorkerRes chan DetachWorkerResult, wg *sync.WaitGroup) {
+func DetachWorker(workerIP string, workerID string, detachWorkerRes chan DetachWorkerResult, wg *sync.WaitGroup) {
 	defer wg.Done()
 	script := ""
 
 	switch PROTOCOL_TYPE {
 	case ProtocolNFS:
-		script = GetDetachWorkerScriptForNFS(workerConfig)
+		script = GetDetachWorkerScriptForNFS()
 	case ProtocolSMB:
 		script = GetDetachWorkerScriptForSMB()
 	}
 
-	LogDebug(fmt.Sprintf("Detaching Worker %s and running script: \n%s", workerConfig.Host, script))
-	output, err := sshRunScript(workerConfig, script)
-	detachWorkerRes <- DetachWorkerResult{workerConfig, workerID, output, err}
+	LogDebug(fmt.Sprintf("Detaching Worker %s and running script: \n%s", workerIP, script))
+	output, err := SshRunScriptWithKeyData(workerIP, "ndmuser", CONFIG_WORKERS[workerIP], script)
+	detachWorkerRes <- DetachWorkerResult{workerIP, workerID, output, err}
 }
 
 // StartWorker starts the worker service on a given worker via SSH.
-func StartWorker(config SSHConfig) (string, error) {
+func StartWorker(workerIP string) (string, error) {
 	script := GetStartWorkerScript()
-	output, err := sshRunScript(config, script)
+	output, err := SshRunScriptWithKeyData(workerIP, "ndmuser", CONFIG_WORKERS[workerIP], script)
 	if err != nil {
-		return "", fmt.Errorf("failed to start worker on %s: %w", config.Host, err)
+		return "", fmt.Errorf("failed to start worker on %s: %w", workerIP, err)
 	}
-	LogDebug(fmt.Sprintf("Worker %s started successfully with output: %s", config.Host, output))
+	LogDebug(fmt.Sprintf("Worker %s started successfully with output: %s", workerIP, output))
 	return output, nil
 }
 
 // RestartWorker starts the worker service on a given worker via SSH.
-func RestartWorker(config SSHConfig) (string, error) {
+func RestartWorker(workerIP string) (string, error) {
 	script := GetRestartWorkerScript()
-	output, err := sshRunScript(config, script)
+	output, err := SshRunScriptWithKeyData(workerIP, "ndmuser", CONFIG_WORKERS[workerIP], script)
 	if err != nil {
-		return "", fmt.Errorf("failed to start worker on %s: %w", config.Host, err)
+		return "", fmt.Errorf("failed to start worker on %s: %w", workerIP, err)
 	}
-	LogDebug(fmt.Sprintf("Worker %s restarted successfully with output: %s", config.Host, output))
+	LogDebug(fmt.Sprintf("Worker %s restarted successfully with output: %s", workerIP, output))
 	return output, nil
 }
 
 // StopWorker stops the worker service on a given worker via SSH.
-func StopWorker(config SSHConfig) (string, error) {
+func StopWorker(workerIP string) (string, error) {
 	script := GetStopWorkerScript()
-	output, err := sshRunScript(config, script)
+	output, err := SshRunScriptWithKeyData(workerIP, "ndmuser", CONFIG_WORKERS[workerIP], script)
 	if err != nil {
-		return "", fmt.Errorf("failed to stop worker on %s: %w", config.Host, err)
+		return "", fmt.Errorf("failed to stop worker on %s: %w", workerIP, err)
 	}
-	LogDebug(fmt.Sprintf("Worker %s stopped successfully with output: %s", config.Host, output))
+	LogDebug(fmt.Sprintf("Worker %s stopped successfully with output: %s", workerIP, output))
 	return output, nil
 }
 
@@ -439,7 +442,7 @@ func StopAllWorkersAndWait() error {
 	}
 
 	for _, workerConfig := range AttachedWorkersConfig {
-		_, err := StopWorker(workerConfig)
+		_, err := StopWorker(workerConfig.Host)
 		if err != nil {
 			return fmt.Errorf("error stopping worker, %s, err = %s", workerConfig.Host, err.Error())
 		}
@@ -448,7 +451,45 @@ func StopAllWorkersAndWait() error {
 	Wait(10)
 	return nil
 }
+func attachWorker(authToken string, projectId string, workerIP string, config map[string]string) (string, error) {
+	fullURL := "http://" + KEYCLOAK_IP + "/api/v1/worker-registration"
+	data := map[string]string{
+		"projectId": projectId,
+	}
+	reqBody, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+	headers := GetHeaders(authToken, ContentTypeJSON)
+	resp, err := SendAPIRequest("POST", fullURL, reqBody, headers)
+	if err != nil {
+		return "", err
+	}
+	log.Print(resp)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %v", err)
+	}
 
+	log.Printf("Worker registration response: %s", string(bodyBytes))
+
+	// Reset the body for CreateWorkerScript to use
+	resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+	script, workerId, err := CreateWorkerScript(resp, projectId)
+	if err != nil {
+		return "", err
+	}
+	log.Printf("For worker %s registration script: %s", workerId, script)
+
+	output, err := SshRunScriptWithKeyData(workerIP, "ndmuser", config[workerIP], script)
+	if err != nil {
+		return workerId, err
+	}
+	log.Printf("Worker %s attached successfully with output: %s", workerId, output)
+
+	return workerId, nil
+}
 func attachWorkerForConfig(workerConfig SSHConfig, authToken, accountId, projectId string, attachWorkerRes chan AttachWorkerResult, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -472,9 +513,8 @@ func attachWorkerForConfig(workerConfig SSHConfig, authToken, accountId, project
 		attachWorkerRes <- AttachWorkerResult{workerConfig, workerId, err}
 		return
 	}
-
 	LogDebug(fmt.Sprintf("Attaching Worker %s and running script: \n%s", workerConfig.Host, script))
-	_, err = sshRunScript(workerConfig, script)
+	_, err = SshRunScriptWithKeyData(workerConfig.Host, "ndmuser", CONFIG_WORKERS[workerConfig.Host], script)
 	if err != nil {
 		attachWorkerRes <- AttachWorkerResult{workerConfig, workerId, err}
 		return

@@ -273,16 +273,16 @@ func ClearVolume(export string) error {
 		script = ClearVolumeForNFS(export)
 	}
 
-	config := GetAttachedWorkerDetails()
+	// config := GetAttachedWorkerDetails()
 
-	sshConfig = SSHConfig{
-		Username: config.Username,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: config.Password,
-	}
+	// sshConfig = SSHConfig{
+	// 	Username: config.Username,
+	// 	Host:     config.Host,
+	// 	Port:     config.Port,
+	// 	Password: config.Password,
+	// }
 
-	output, err := sshRunScript(sshConfig, script)
+	output, err := SshRunScriptWithKeyData("172.30.114.79", "ndmuser", CONFIG_WORKERS["172.30.114.79"], script)
 	if err != nil {
 		return fmt.Errorf("RemoveDataFromFileserver failed: %w\noutput: %s", err, output)
 	}
@@ -366,16 +366,16 @@ func AddDataToVolume(export string) error {
 		script = AddDataToVolumeForNFS(export)
 	}
 
-	config := GetAttachedWorkerDetails()
+	// config := GetAttachedWorkerDetails()
 
-	sshConfig = SSHConfig{
-		Username: config.Username,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: config.Password,
-	}
+	// sshConfig = SSHConfig{
+	// 	Username: config.Username,
+	// 	Host:     config.Host,
+	// 	Port:     config.Port,
+	// 	Password: config.Password,
+	// }
 
-	output, err := sshRunScript(sshConfig, script)
+	output, err := SshRunScriptWithKeyData("172.30.114.79", "ndmuser", CONFIG_WORKERS["172.30.114.79"], script)
 	if err != nil {
 		return fmt.Errorf("AddDataToFileserver failed: %w\noutput: %s", err, output)
 	}
@@ -442,16 +442,16 @@ func RemoveDeltaFromVolume(export string) error {
 		script = RemoveDeltaFromVolumeForNFS(export)
 	}
 
-	config := GetAttachedWorkerDetails()
+	// config := GetAttachedWorkerDetails()
 
-	sshConfig = SSHConfig{
-		Username: config.Username,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: config.Password,
-	}
+	// sshConfig = SSHConfig{
+	// 	Username: config.Username,
+	// 	Host:     config.Host,
+	// 	Port:     config.Port,
+	// 	Password: config.Password,
+	// }
 
-	output, err := sshRunScript(sshConfig, script)
+	output, err := SshRunScriptWithKeyData("172.30.114.79", "ndmuser", CONFIG_WORKERS["172.30.114.79"], script)
 	if err != nil {
 		return fmt.Errorf("RemoveDeltaFromFileserver failed: %w\noutput: %s", err, output)
 	}
@@ -523,15 +523,15 @@ func ModifyDataOnVolume(export string) error {
 		script = ModifyDataOnVolumeForNFS(export)
 	}
 
-	config := GetAttachedWorkerDetails()
-	sshConfig = SSHConfig{
-		Username: config.Username,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: config.Password,
-	}
+	// config := GetAttachedWorkerDetails()
+	// sshConfig = SSHConfig{
+	// 	Username: config.Username,
+	// 	Host:     config.Host,
+	// 	Port:     config.Port,
+	// 	Password: config.Password,
+	// }
 
-	output, err := sshRunScript(sshConfig, script)
+	output, err := SshRunScriptWithKeyData("172.30.114.79", "ndmuser", CONFIG_WORKERS["172.30.114.79"], script)
 	if err != nil {
 		return fmt.Errorf("ModifyDataOnVolume failed: %w\noutput: %s", err, output)
 	}
@@ -597,15 +597,15 @@ func RestoreOriginalDataOnVolume(export string) error {
 		script = RestoreOriginalDataOnVolumeForNFS(export)
 	}
 
-	config := GetAttachedWorkerDetails()
-	sshConfig = SSHConfig{
-		Username: config.Username,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: config.Password,
-	}
+	// config := GetAttachedWorkerDetails()
+	// sshConfig = SSHConfig{
+	// 	Username: config.Username,
+	// 	Host:     config.Host,
+	// 	Port:     config.Port,
+	// 	Password: config.Password,
+	// }
 
-	output, err := sshRunScript(sshConfig, script)
+	output, err := SshRunScriptWithKeyData("172.30.114.79", "ndmuser", CONFIG_WORKERS["172.30.114.79"], script)
 	if err != nil {
 		return fmt.Errorf("RestoreOriginalDataOnVolume failed: %w\noutput: %s", err, output)
 	}
@@ -628,13 +628,13 @@ func GetVolumeID(response FileServerDetailsItems, volumePath string) (string, er
 // GetFileUserGroupId mounts the NFS export, stats the given file‐path
 // (relative to that export) and returns its numeric UID and GID.
 func GetFileUserGroupId(export, fileName string) (uid, gid int, err error) {
-	config := GetAttachedWorkerDetails()
-	sshCfg := SSHConfig{
-		Username: config.Username,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: config.Password,
-	}
+	// config := GetAttachedWorkerDetails()
+	// sshCfg := SSHConfig{
+	// 	Username: config.Username,
+	// 	Host:     config.Host,
+	// 	Port:     config.Port,
+	// 	Password: config.Password,
+	// }
 
 	// Build a shell script that mounts + stats with "%u %g"
 	script := fmt.Sprintf(`
@@ -646,7 +646,7 @@ func GetFileUserGroupId(export, fileName string) (uid, gid int, err error) {
 	stat -c "%%u %%g" "$MP/%[2]s"
 	`, export, fileName)
 
-	out, err := sshRunScript(sshCfg, script)
+	out, err := SshRunScriptWithKeyData("172.30.114.79", "ndmuser", CONFIG_WORKERS["172.30.114.79"], script)
 	if err != nil {
 		return 0, 0, fmt.Errorf("OwnerIDShellStat failed: %w\n%s", err, out)
 	}

@@ -472,7 +472,7 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 		retryCount = pollRetries[0]
 	}
 
-	for i := 0; i < retryCount; i++ {
+	for i := 0; ; i++ {
 		status, err := checkJobRunStatus(jobRunID)
 		if err != nil {
 			return err
@@ -482,6 +482,10 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 
 		if status == ERRORED_JOBRUN {
 			return fmt.Errorf("job %s entered ERRORED state", jobRunID)
+		}
+
+		if status == "FAILED" {
+			return fmt.Errorf("job %s entered FAILED state", jobRunID)
 		}
 
 		if status == desiredJobState {

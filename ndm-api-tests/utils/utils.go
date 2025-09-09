@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -331,7 +332,7 @@ func ResetUserPassword(userID, accessToken, newPassword string) error {
 	if !isResetPasswdDone {
 		return errors.New("failed to reset-password even after 10 attempts")
 	}
-
+	LogDebug(PASSWORD)
 	return nil
 }
 
@@ -713,7 +714,7 @@ func getExpectedStatusCode(response []map[string]interface{}) (int, bool) {
 
 // GetKeycloakAdminCredentials returns KEYCLOAK_ADMIN_USER and KEYCLOAK_ADMIN_PASSWORD.
 func GetKeyCloakAdminCredentials() (KeycloakCredentials, error) {
-	token, err := getOpenBaoRootToken()
+	token, err := getOpenBaoRootTokenK()
 	if err != nil {
 		return KeycloakCredentials{}, fmt.Errorf("failed to get OpenBao root token: %w", err)
 	}
@@ -814,7 +815,38 @@ func getOpenBaoRootToken() (string, error) {
 
 	return keys.RootToken, nil
 }
+func getOpenBaoRootTokenK() (string, error) {
+	type ClusterKeys struct {
+		RootToken string `json:"root_token"`
+	}
 
+	log.Printf("Getting OpenBao root token from control plane at %s...", KEYCLOAK_IP)
+
+	// Use the control plane's private key for SSH
+	script := "cat /opt/datamigrator/openbao/cluster-keys.json"
+
+	// Use the dynamic CP VM name from config
+	// if config.CPVMName == "" {
+	// 	return "", fmt.Errorf("control plane VM name not available from Terraform")
+	// }
+
+	output, err := SshRunScriptWithKeyData(KEYCLOAK_IP, "ndmuser", CPSSHKeyData, script)
+	if err != nil {
+		return "", fmt.Errorf("failed to read cluster keys file from CP: %w", err)
+	}
+
+	var keys ClusterKeys
+	if err := json.Unmarshal([]byte(output), &keys); err != nil {
+		return "", fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	if keys.RootToken == "" {
+		return "", fmt.Errorf("root token not found in JSON")
+	}
+
+	log.Printf("OpenBao root token retrieved successfully")
+	return keys.RootToken, nil
+}
 func DeleteAllUsers(token string) error {
 	listURL := fmt.Sprintf("%s/api/v1/users?limit=1000", ADMIN_SERVICE_URL)
 	headers := GetHeaders(token, ContentTypeJSON)
@@ -1194,6 +1226,62 @@ func UpdateAppAdmin(keycloakUser, keycloakPassword string) error {
 	log.Printf("Successfully updated app admin for '%s'", USERNAME)
 	return nil
 }
+func createSSHSignerFromBase64(base64Key string) (ssh.Signer, error) {
+	// Decode the base64 private key
+	keyData, err := base64.StdEncoding.DecodeString(base64Key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode SSH key: %v", err)
+	}
+
+	// Parse the private key
+	signer, err := ssh.ParsePrivateKey(keyData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse private key: %v", err)
+	}
+
+	return signer, nil
+}
+
+// sshRunScriptWithKey runs a script on a remote host using SSH key authentication
+func SshRunScriptWithKeyData(host, username, base64KeyData, script string) (string, error) {
+	// Create SSH signer from base64 key data
+	signer, err := createSSHSignerFromBase64(base64KeyData)
+	if err != nil {
+		return "", fmt.Errorf("failed to create SSH signer: %v", err)
+	}
+
+	// Create SSH client config
+	config := &ssh.ClientConfig{
+		User: username,
+		Auth: []ssh.AuthMethod{
+			ssh.PublicKeys(signer),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         30 * time.Second,
+	}
+
+	// Connect to the remote host
+	client, err := ssh.Dial("tcp", host+":22", config)
+	if err != nil {
+		return "", fmt.Errorf("failed to dial: %v", err)
+	}
+	defer client.Close()
+
+	// Create a session
+	session, err := client.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("failed to create session: %v", err)
+	}
+	defer session.Close()
+
+	// Run the script
+	output, err := session.CombinedOutput(script)
+	if err != nil {
+		return "", fmt.Errorf("failed to run script: %v\nOutput: %s", err, string(output))
+	}
+
+	return string(output), nil
+}
 
 // sshRunScript connects via SSH to a worker and runs the provided script.
 func sshRunScript(config SSHConfig, script string) (string, error) {
@@ -1359,17 +1447,17 @@ func (f *FlexibleItems[T]) UnmarshalJSON(data []byte) error {
 
 func GetCPVersion() (string, error) {
 	script := "grep '^current_version=' /opt/datamigrator/conf/versions.conf | cut -d'=' -f2 | xargs echo -n "
-	port, err := strconv.Atoi(NDM_VM_PORT)
-	if err != nil {
-		LogFatalf("Invalid port number in NDM_VM_PORT: %v", err)
-	}
-	sshConfig := SSHConfig{
-		Username: NDM_VM_USER_NAME,
-		Host:     NDM_VM_HOST,
-		Port:     port,
-		Password: NDM_VM_PASSWORD,
-	}
-	output, err := sshRunScript(sshConfig, script)
+	// port, err := strconv.Atoi(NDM_VM_PORT)
+	// if err != nil {
+	// 	LogFatalf("Invalid port number in NDM_VM_PORT: %v", err)
+	// }
+	// sshConfig := SSHConfig{
+	// 	Username: NDM_VM_USER_NAME,
+	// 	Host:     NDM_VM_HOST,
+	// 	Port:     port,
+	// 	Password: NDM_VM_PASSWORD,
+	// }
+	output, err := SshRunScriptWithKeyData(KEYCLOAK_IP, "ndmuser", CPSSHKeyData, script)
 	if err != nil {
 		return "", fmt.Errorf("get cp version failed: %v\noutput: %s", err, output)
 	}
@@ -1395,7 +1483,7 @@ func GetWorkerVersion() (string, error) {
 		Password: config.Password,
 	}
 
-	output, err := sshRunScript(sshConfig, script)
+	output, err := SshRunScriptWithKeyData("172.30.114.75", "ndmuser", CONFIG_WORKERS["172.30.114.75"], script)
 	if err != nil {
 		return "", fmt.Errorf("get worker version failed: %v\noutput: %s", err, output)
 	}
