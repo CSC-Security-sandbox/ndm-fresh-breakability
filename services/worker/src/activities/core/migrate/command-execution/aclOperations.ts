@@ -679,7 +679,7 @@ export class AclOperations {
         // Combine all permissions from multiple entries for the same principal
         const sourceCombined = this.combinePermissions(sourceEntries);
         const targetCombined = this.combinePermissions(targetEntries);
-        
+
         const isEqual = this.arePermissionsEqual(sourceCombined, targetCombined);
 
         return {
@@ -734,187 +734,241 @@ export class AclOperations {
             })
             .join('|');
     }
+
     async stampFileOwner({ sourcePath, targetPath, isIdentityMappingAvailable, jobRunId }: { sourcePath: string, targetPath: string, isIdentityMappingAvailable: boolean, jobRunId: string }): Promise<string | boolean> {
         try {
             const sourceOwner = await this.getFileOwner(sourcePath, isIdentityMappingAvailable, jobRunId);
-
-            return await this.setFileOwner(targetPath, sourceOwner);
+            return await this.stampFileOwnerByName({ targetPath, ownerName: sourceOwner.owner });
         } catch (error) {
             this.logger.error(`Failed to stamp owner from ${sourcePath} to ${targetPath}:`, error);
             return `Failed to stamp owner , ${(error as Error).message}`;
         }
     }
 
-    async getFileOwner(filePath: string, isIdentityMappingAvailable: boolean, jobRunId: string): Promise<{ owner: string, sid: string }> {
-        const normalizedPath = path.resolve(filePath);
-        const command = `
+
+async getFileOwner(
+    filePath: string,
+    isIdentityMappingAvailable: boolean,
+    jobRunId: string
+): Promise<{ owner: string }> {
+    const normalizedPath = path.resolve(filePath);
+
+    const command = `
         powershell -Command "
         $acl = Get-Acl '${normalizedPath}';
         $owner = $acl.Owner;
-        $sid = (New-Object System.Security.Principal.NTAccount($owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value;
         Write-Output $owner;
-        Write-Output $sid;
         "
     `;
-        let stdout: string, stderr: string;
-        try {
-            ({ stdout, stderr } = await this.shellPool.executeCommand(command));
 
-            if (stdout.includes("Cannot find path") || stdout.includes("FileNotFound")) {
-                throw new Error(`File not found: ${normalizedPath}`);
-            } else if (stdout.includes("Access is denied")) {
-                throw new Error(`Access denied when reading owner information for ${normalizedPath}`);
-            } else if (stdout.includes("The filename, directory name, or volume label syntax is incorrect")) {
-                throw new Error(`Invalid path syntax: ${normalizedPath}`);
-            } else if (stdout.includes("The specified account name is not valid")) {
-                throw new Error(`Invalid account name found for ${normalizedPath}`);
-            } else if (stdout.includes("Some or all identity references could not be translated") || stdout.includes("Exception calling \"Translate\"")) {
-                throw new Error(`Failed to translate identity reference for ${normalizedPath}`);
-            } else if (stdout.includes("Operation timed out")) {
-                throw new Error(`Command timed out when getting owner for ${normalizedPath}`);
-            } else if (stdout.includes("Exception")) {
-                throw new Error(`PowerShell exception occurred: ${stdout.trim()}`);
-            }
-            if (stderr) {
-                this.logger.error(`Error: ${stderr}`);
-                throw new Error(stderr);
-            }
-            if (stderr) {
-                this.logger.error(`Error: ${stderr}`);
-                throw new Error(stderr);
-            }
-        } catch (error) {
-            this.logger.error(`Error executing command "${command}" for file ${normalizedPath}: ${error.message}`, error);
-            throw new Error(`Failed to get file owner for ${normalizedPath}: ${error.message}`);
+    let stdout: string, stderr: string;
+
+    // 1️⃣ Execute PowerShell command to get raw owner
+    try {
+        ({ stdout, stderr } = await this.shellPool.executeCommand(command));
+        stdout = stdout?.trim() || '';
+        stderr = stderr?.trim() || '';
+
+        if (stderr) {
+            this.logger.error(`PowerShell error for "${normalizedPath}": ${stderr}`);
+            throw new Error(`Failed to read owner for "${normalizedPath}": ${stderr}`);
         }
 
-        const output = stdout?.trim().split('\n') || [];
-        let owner = output.length > 0 ? (output[0]?.trim() || null) : null;
-        let sid = output.length > 1 ? (output[1]?.trim() || null) : null;
-        let effectiveUsername = owner;
-        let effectiveSID = sid;
-
-        // Check any mapping for sid and owner
-        if (isIdentityMappingAvailable) {
-            try {
-                const [resolvedOwner, resolvedSid] = await Promise.all([
-                    this.resolvePrincipal(owner, jobRunId),
-                    this.resolvePrincipal(sid, jobRunId)
-                ]);
-                if (owner === resolvedOwner && sid !== resolvedSid) {
-                    effectiveUsername = null;
-                    effectiveSID = resolvedSid;
-                }
-                if (sid === resolvedSid && owner !== resolvedOwner) {
-                    effectiveSID = null;
-                    effectiveUsername = resolvedOwner;
-                }
-                if (!effectiveSID && !effectiveUsername) {
-                    effectiveSID = resolvedSid;
-                }
-                if(owner !== resolvedOwner && sid !== resolvedSid) {
-                    effectiveUsername = resolvedOwner;
-                    effectiveSID = resolvedSid;
-                }
-
-                this.logger.debug(`Resolved owner: ${owner}, SID: ${sid} for file ${normalizedPath}`);
-            } catch (error) {
-                this.logger.error(`Error resolving principals for job ${jobRunId}: ${error.message}`, error);
-                throw new Error(`Failed to resolve principals for owner ${owner}: ${error.message}`);
-            }
-        } else {
-
+        if (!stdout) {
+            throw new Error(`Owner information is empty for "${normalizedPath}"`);
         }
-        this.logger.debug(`Resolved owner: ${owner}, SID: ${sid} for file ${normalizedPath}`);
-        return { owner: effectiveUsername, sid: effectiveSID };
+    } catch (error: any) {
+        this.logger.error(`Failed to get file owner for "${normalizedPath}": ${error.message}`, error);
+        throw new Error(`Error retrieving file owner for "${normalizedPath}": ${error.message}`);
     }
-    async stampFileOwnerByName({ targetPath, ownerName }: { targetPath: string, ownerName: string }): Promise<string | boolean> {
-        const command = `icacls "${targetPath}" /setowner "${ownerName}"`;
+
+    // 2️⃣ Parse stdout
+    const outputLines = stdout.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    const owner = outputLines[0];
+    if (!owner) throw new Error(`Unable to determine owner for "${normalizedPath}"`);
+
+    let resolvedSid: string | null = null;
+    let ownerName: string | null = null;
+    let resolvedOwner: string | null = null;
+
+    // 3️⃣ Owner is a SID
+if (SID_REGEX.test(owner)) {
+    try {
+        resolvedSid = isIdentityMappingAvailable
+            ? await this.resolvePrincipal(owner, jobRunId)
+            : owner;
+
+        if (!resolvedSid || resolvedSid === owner) {
+            throw new Error(`Cannot map SID "${owner}" to a valid username`);
+        }
+
+        if (resolvedSid && SID_REGEX.test(resolvedSid)) {
+            ownerName = await this.getSidToOwner(resolvedSid);
+            if (!ownerName) {
+                throw new Error(`No username found for SID "${resolvedSid}"`);
+            }
+        }
+    } catch (error: any) {
+        this.logger.error(`Failed to resolve SID "${owner}": ${error.message}`, error);
+        throw new Error(`Failed to resolve owner for file: ${error.message}`);
+    }
+}
+
+    // 4️⃣ Owner is a username
+    else {
         try {
-            const { stdout, stderr } = await this.shellPool.executeCommand(command);
+            resolvedOwner = await this.resolvePrincipal(owner, jobRunId);
 
-            // Check for different error conditions in the output
-            if (stdout.includes('No mapping between account names and security IDs was done')) {
-                this.logger.warn(`No mapping found for owner ${ownerName}`);
-                return `Failed to set owner ${ownerName}, No mapping between account names and security IDs was done`;
+            // If mapping did not change owner, try resolving SID
+            if (resolvedOwner === owner) {
+                try {
+                    const commandForSid = `
+                        powershell -Command "
+                        $ntAccount = New-Object System.Security.Principal.NTAccount('${owner}');
+                        $sid = $ntAccount.Translate([System.Security.Principal.SecurityIdentifier]);
+                        Write-Output $sid.Value;
+                        "
+                    `;
+                    const { stdout: sidOutput, stderr: sidError } = await this.shellPool.executeCommand(commandForSid);
+
+                    if (sidError) {
+                        this.logger.warn(`Error retrieving SID for "${owner}": ${sidError}`);
+                    }
+
+                    resolvedSid = sidOutput?.split(/\r?\n/).map(l => l.trim()).find(Boolean) || null;
+
+                    if (resolvedSid && SID_REGEX.test(resolvedSid) && isIdentityMappingAvailable) {
+                        try {
+                            const mappedOwner = await this.resolvePrincipal(resolvedSid, jobRunId);
+                            if (mappedOwner) {
+                                if (SID_REGEX.test(mappedOwner)) {
+                                    try {
+                                        ownerName = await this.getSidToOwner(mappedOwner);
+                                    } catch (sidOwnerError: any) {
+                                        this.logger.warn(
+                                            `Failed to get owner name for mapped SID "${mappedOwner}", continuing with available owner: ${sidOwnerError.message}`
+                                        );
+                                    }
+                                } else {
+                                    ownerName = mappedOwner; // already a username
+                                }
+                            }
+                        } catch (mapSidError: any) {
+                            this.logger.warn(
+                                `Failed to resolve mapped SID "${resolvedSid}", continuing with available owner: ${mapSidError.message}`
+                            );
+                        }
+                    }
+                } catch (sidCommandError: any) {
+                    this.logger.warn(
+                        `Failed to retrieve SID for owner "${owner}", continuing with available owner: ${sidCommandError.message}`
+                    );
+                }
             }
-            if (stdout.includes('Access is denied') ) {
-                this.logger.error(`Access denied when setting owner to ${ownerName} for ${targetPath}`);
-                return `Failed to set owner ${ownerName}, Access is denied`;
-            }
-            if (stdout.includes('The system cannot find the file specified') ) {
-                this.logger.error(`File not found: ${targetPath}`);
-                return `Failed to set owner ${ownerName}, The system cannot find the file specified`;
-            }
-            if (stdout.includes('The security ID structure is invalid') ) {
-                this.logger.error(`Invalid security ID structure for ${ownerName}`);
-                return `Failed to set owner ${ownerName}, The security ID structure is invalid`;
+        } catch (error: any) {
+            this.logger.warn(`Failed to resolve owner "${owner}", continuing with available owner: ${error.message}`);
+            ownerName = owner; // fallback to original owner
+        }
+    }
+
+    // 5️⃣ Determine final effective owner
+    const finalOwner = ownerName || resolvedOwner || owner;
+    if (!finalOwner) {
+        throw new Error(`Unable to determine effective owner for "${normalizedPath}"`);
+    }
+
+    return { owner: finalOwner };
+}
+
+
+    async stampFileOwnerByName({
+        targetPath,
+        ownerName,
+    }: {
+        targetPath: string;
+        ownerName: string;
+    }): Promise<string | boolean> {
+        const command = `icacls "${targetPath}" /setowner "${ownerName}"`;
+
+        try {
+            const { stdout: rawStdout, stderr: rawStderr } = await this.shellPool.executeCommand(command);
+            const stdout = rawStdout?.trim() || '';
+            const stderr = rawStderr?.trim() || '';
+
+            // 1️⃣ Check for known error patterns in stdout
+            const errorPatterns: { pattern: RegExp; message: string }[] = [
+                { pattern: /No mapping between account names and security IDs was done/i, message: `No mapping found for owner ${ownerName}` },
+                { pattern: /Access is denied/i, message: `Access denied when setting owner ${ownerName} for ${targetPath}` },
+                { pattern: /The system cannot find the file specified/i, message: `File not found: ${targetPath}` },
+                { pattern: /The security ID structure is invalid/i, message: `Invalid security ID structure for ${ownerName}` },
+                { pattern: /The handle is invalid/i, message: `Invalid handle for ${targetPath}` },
+                { pattern: /The filename, directory name, or volume label syntax is incorrect/i, message: `Invalid path syntax: ${targetPath}` },
+                { pattern: /The network path was not found/i, message: `Network path not found: ${targetPath}` },
+            ];
+
+            for (const { pattern, message } of errorPatterns) {
+                if (stdout.match(pattern)) {
+                    this.logger.warn(message);
+                    return `Failed to set owner ${ownerName}, ${message}`;
+                }
             }
 
+            // 2️⃣ Check stderr or general failure
             if (stderr || this.failedNumGt0(stdout)) {
-                this.logger.error(`Failed to set owner using name ${ownerName}: ${stderr || stdout}`);
-                return `Failed to set owner ${ownerName}, ${stderr || stdout}`;
+                const msg = stderr || stdout;
+                this.logger.error(`Failed to set owner using name ${ownerName}: ${msg}`);
+                return `Failed to set owner ${ownerName}, ${msg}`;
             }
 
             this.logger.debug(`Successfully set owner for ${targetPath} to ${ownerName}`);
             return true;
-        } catch (error) {
+
+        } catch (error: any) {
             this.logger.error(`Error executing command to set owner by name: ${error.message}`, error);
             return `Failed to set owner ${ownerName}, ${error.message}`;
         }
     }
 
-    async setFileOwner(filePath: string, owner: { owner: string, sid: string }): Promise<string | boolean> {
-        const normalizedPath = path.resolve(filePath);
-        if (owner.owner) {
-            return await this.stampFileOwnerByName({ targetPath: normalizedPath, ownerName: owner.owner });
-        }
-        if (owner.sid) {
-            this.logger.debug(`Attempting to set owner for ${normalizedPath} using SID ${owner.sid}`);
-            let ownerName: string;
-            try {
-                ownerName = await this.getSidToOwner(owner.sid);
-                if (ownerName) {
-                    return await this.stampFileOwnerByName({ targetPath: normalizedPath, ownerName });
-                } else {
-                    this.logger.error(`Cannot resolve owner name for SID ${owner.sid}`);
-                    return `Failed to set owner ${ownerName}, No mapping between account names and security IDs was done`;
-                }
-            } catch (error) {
-                this.logger.error(`Error resolving owner name for SID ${owner.sid}: ${error.message}`, error);
-                return "Failed to set owner using SID - resolution error";
-            }
+
+
+    async getSidToOwner(sid: string): Promise<string> {
+        if (!sid || !SID_REGEX.test(sid)) {
+            throw new Error(`Invalid SID provided: "${sid}"`);
         }
 
-        this.logger.error(`Cannot set owner: No valid owner name or SID provided`);
-        return "No valid owner information provided";
-    }
-    async getSidToOwner(sid: string): Promise<string> {
         const command = `
-        powershell -Command "
-        try {
-            $sid = New-Object System.Security.Principal.SecurityIdentifier('${sid}');
-            $account = $sid.Translate([System.Security.Principal.NTAccount]);
-            Write-Output $account.Value;
-        } catch {
-            Write-Output '';
-        }
-        "`;
+    powershell -NoProfile -Command "
+    try {
+        $sidObj = New-Object System.Security.Principal.SecurityIdentifier('${sid}');
+        $account = $sidObj.Translate([System.Security.Principal.NTAccount]);
+        Write-Output $account.Value;
+    } catch {
+        Write-Error $_.Exception.Message;
+        exit 1;
+    }
+    "`;
+
         try {
             const { stdout, stderr } = await this.shellPool.executeCommand(command);
-            if (stderr) {
-                this.logger.error(`Error: ${stderr}`);
-                throw new Error(stderr);
+
+            // Normalize line endings & trim
+            const owner = stdout?.replace(/\r/g, '').trim();
+
+            if (stderr?.trim()) {
+                this.logger.error(`PowerShell error while resolving SID "${sid}": ${stderr}`);
+                throw new Error(stderr.trim());
             }
-            const owner = stdout.trim();
+
             if (!owner) {
-                this.logger.warn(`No owner found for SID ${sid}`);
+                this.logger.warn(`No username found for SID "${sid}"`);
                 return '';
             }
+
             return owner;
         } catch (error) {
-            this.logger.error(`Error executing command "${command}" for SID ${sid}: ${error.message}`, error);
-            throw new Error(`Failed to get owner for SID ${sid}: ${error.message}`);
+            this.logger.error(`Failed to resolve SID "${sid}": ${error.message}`, error);
+            throw new Error(`Failed to get owner for SID "${sid}": ${error.message}`);
         }
     }
+
 }
