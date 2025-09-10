@@ -679,7 +679,7 @@ export class AclOperations {
         // Combine all permissions from multiple entries for the same principal
         const sourceCombined = this.combinePermissions(sourceEntries);
         const targetCombined = this.combinePermissions(targetEntries);
-
+        
         const isEqual = this.arePermissionsEqual(sourceCombined, targetCombined);
 
         return {
@@ -734,7 +734,6 @@ export class AclOperations {
             })
             .join('|');
     }
-
     async stampFileOwner({ sourcePath, targetPath, isIdentityMappingAvailable, jobRunId }: { sourcePath: string, targetPath: string, isIdentityMappingAvailable: boolean, jobRunId: string }): Promise<string | boolean> {
         try {
             const sourceOwner = await this.getFileOwner(sourcePath, isIdentityMappingAvailable, jobRunId);
