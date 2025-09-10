@@ -24,8 +24,8 @@ CREATE TABLE IF NOT EXISTS inventory (
 	file_permission varchar NOT NULL,
 	job_run_id uuid NOT NULL,
 	birth_time timestamp NULL,
-	CONSTRAINT "PK_82aa5da437c5bbfb80703b08309" PRIMARY KEY (id,job_run_id)
-) partition by list (job_run_id);
+	CONSTRAINT "PK_82aa5da437c5bbfb80703b08309" PRIMARY KEY (id)
+);
 
 CREATE INDEX IF NOT EXISTS idx_file_server_path_id ON inventory USING btree (volume_id);
 CREATE INDEX IF NOT EXISTS idx_id ON inventory USING btree (id);

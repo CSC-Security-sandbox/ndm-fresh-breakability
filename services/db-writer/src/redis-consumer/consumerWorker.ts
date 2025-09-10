@@ -152,10 +152,6 @@ process.on('unhandledRejection', async (reason, promise) => {
         workflowService = new WorkflowService(configService);
         redisConsumerService = new RedisConsumerService(inventoryService, workflowService);
         logger.log('Services initialized successfully');
-        
-        logger.log('started creating the inventory partition by job run id');
-        await inventoryService.createPartitionInventoryTableByJobRunId(jobRunId);
-        logger.log('completed creating the inventory partition by job run id');
 
         // Start consumer
         logger.log(`Starting Redis consumer for job ${jobRunId}`);
