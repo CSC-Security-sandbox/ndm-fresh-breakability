@@ -737,7 +737,10 @@ export class AclOperations {
     async stampFileOwner({ sourcePath, targetPath, isIdentityMappingAvailable, jobRunId }: { sourcePath: string, targetPath: string, isIdentityMappingAvailable: boolean, jobRunId: string }): Promise<string | boolean> {
         try {
             const sourceOwner = await this.getFileOwner(sourcePath, isIdentityMappingAvailable, jobRunId);
-
+            if (!sourceOwner || (!sourceOwner.owner && !sourceOwner.sid)) {
+                this.logger.warn(`No owner information found for source file ${sourcePath}`);
+                return `No owner information found for source file ${sourcePath}`;
+            }
             return await this.setFileOwner(targetPath, sourceOwner);
         } catch (error) {
             this.logger.error(`Failed to stamp owner from ${sourcePath} to ${targetPath}:`, error);
@@ -749,13 +752,27 @@ export class AclOperations {
         const normalizedPath = path.resolve(filePath);
         const command = `
         powershell -Command "
-        $acl = Get-Acl '${normalizedPath}';
-        $owner = $acl.Owner;
-        $sid = (New-Object System.Security.Principal.NTAccount($owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value;
-        Write-Output $owner;
-        Write-Output $sid;
+        try {
+            $acl = Get-Acl '${normalizedPath}';
+            $owner = $acl.Owner;
+            
+            # Check if owner is already a SID
+            if ($owner -match '^S-1-[0-9-]+$') {
+                # Owner is already a SID, just print it
+                Write-Output '';
+                Write-Output $owner;
+            } else {
+                # Owner is not a SID, print owner and translate to SID
+                $sid = (New-Object System.Security.Principal.NTAccount($owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value;
+                Write-Output $owner;
+                Write-Output $sid;
+            }
+        } catch {
+            Write-Error \"Error processing owner: $_\";
+            exit 1;
+        }
         "
-    `;
+        `;
         let stdout: string, stderr: string;
         try {
             ({ stdout, stderr } = await this.shellPool.executeCommand(command));
@@ -789,8 +806,30 @@ export class AclOperations {
         }
 
         const output = stdout?.trim().split('\n') || [];
+        // Extract owner and SID from PowerShell output
         let owner = output.length > 0 ? (output[0]?.trim() || null) : null;
         let sid = output.length > 1 ? (output[1]?.trim() || null) : null;
+        
+        // Handle case where PowerShell returned owner as SID (first line empty, second line SID)
+        if (owner === '' && sid && SID_REGEX.test(sid)) {
+            this.logger.debug(`Owner is a SID for file ${normalizedPath}: ${sid}`);
+            owner = null;
+        }
+        
+        // Verify owner isn't a SID - if it is, correct the assignment
+        if (owner && SID_REGEX.test(owner)) {
+            this.logger.warn(`Owner "${owner}" appears to be a SID for file ${normalizedPath}`);
+            if (!sid) {
+            sid = owner;
+            }
+            owner = null;
+        }
+        
+        // Validate SID format
+        if (sid && !SID_REGEX.test(sid)) {
+            this.logger.warn(`SID "${sid}" does not match expected format for file ${normalizedPath}`);
+            sid = null;
+        }
         let effectiveUsername = owner;
         let effectiveSID = sid;
 
@@ -801,31 +840,36 @@ export class AclOperations {
                     this.resolvePrincipal(owner, jobRunId),
                     this.resolvePrincipal(sid, jobRunId)
                 ]);
-                if (owner === resolvedOwner && sid !== resolvedSid) {
-                    effectiveUsername = null;
-                    effectiveSID = resolvedSid;
-                }
-                if (sid === resolvedSid && owner !== resolvedOwner) {
+                
+                // Check if resolvedSid is not in SID format
+                if (resolvedSid && !SID_REGEX.test(resolvedSid)) {
+                    // If resolvedSid is not a SID, treat it as a username
+                    effectiveUsername = resolvedSid;
                     effectiveSID = null;
-                    effectiveUsername = resolvedOwner;
+                } else {
+                    // Handle normal cases
+                    if (owner === resolvedOwner && sid !== resolvedSid) {
+                        effectiveUsername = null;
+                        effectiveSID = resolvedSid;
+                    }
+                    if (sid === resolvedSid && owner !== resolvedOwner) {
+                        effectiveSID = null;
+                        effectiveUsername = resolvedOwner;
+                    }
+                    if (!effectiveSID && !effectiveUsername) {
+                        effectiveSID = resolvedSid;
+                    }
+                    if(owner !== resolvedOwner && sid !== resolvedSid) {
+                        effectiveUsername = resolvedOwner;
+                        effectiveSID = resolvedSid;
+                    }
                 }
-                if (!effectiveSID && !effectiveUsername) {
-                    effectiveSID = resolvedSid;
-                }
-                if(owner !== resolvedOwner && sid !== resolvedSid) {
-                    effectiveUsername = resolvedOwner;
-                    effectiveSID = resolvedSid;
-                }
-
-                this.logger.debug(`Resolved owner: ${owner}, SID: ${sid} for file ${normalizedPath}`);
             } catch (error) {
                 this.logger.error(`Error resolving principals for job ${jobRunId}: ${error.message}`, error);
                 throw new Error(`Failed to resolve principals for owner ${owner}: ${error.message}`);
             }
-        } else {
-
         }
-        this.logger.debug(`Resolved owner: ${owner}, SID: ${sid} for file ${normalizedPath}`);
+        this.logger.log(`Resolved owner: ${owner}, SID: ${sid} for file ${normalizedPath}`);
         return { owner: effectiveUsername, sid: effectiveSID };
     }
     async stampFileOwnerByName({ targetPath, ownerName }: { targetPath: string, ownerName: string }): Promise<string | boolean> {
