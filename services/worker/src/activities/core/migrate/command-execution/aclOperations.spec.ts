@@ -6,6 +6,32 @@ import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { ACLError, FileAccessError, CommandExecutionError } from './aclOperations.errors';
 import { ACLData, ACLEntry, StampOptions, GetACLOptions, ComparisonResult } from './aclOperations.types';
 import * as path from 'path';
+import { ShellService } from 'src/activities/common/shell.service';
+
+// Tell Jest to serialize/deserialize mocks properly
+jest.mock('src/redis/redis.service', () => {
+  return {
+    RedisService: jest.fn().mockImplementation(() => ({
+      getOwnerIdentity: jest.fn(),
+    })),
+  };
+});
+
+jest.mock('./shell-for-meta-stamping.service', () => {
+  return {
+    ShellPoolExecutorService: jest.fn().mockImplementation(() => ({
+      executeCommand: jest.fn(),
+    })),
+  };
+});
+
+jest.mock('src/activities/common/shell.service', () => {
+  return {
+    ShellService: jest.fn().mockImplementation(() => ({
+      runCommand: jest.fn(),
+    })),
+  };
+});
 
 describe('AclOperations', () => {
   let service: AclOperations & {
@@ -13,6 +39,7 @@ describe('AclOperations', () => {
   };
   let redisService: jest.Mocked<RedisService>;
   let shellPool: jest.Mocked<ShellPoolExecutorService>;
+  let shellServicePowerShell: jest.Mocked<ShellService>;
   let logger: jest.Mocked<any>;
 
   const mockLogger = {
@@ -27,21 +54,31 @@ describe('AclOperations', () => {
     create: jest.fn().mockReturnValue(mockLogger),
   };
 
+  const mockShellService = {
+    runCommand: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AclOperations,
         {
           provide: RedisService,
-          useValue: {
+          useFactory: () => ({
             getOwnerIdentity: jest.fn(),
-          },
+          }),
         },
         {
           provide: ShellPoolExecutorService,
-          useValue: {
+          useFactory: () => ({
             executeCommand: jest.fn(),
-          },
+          }),
+        },
+        {
+          provide: ShellService,
+          useFactory: () => ({
+            runCommand: jest.fn(),
+          }),
         },
         {
           provide: LoggerFactory,
@@ -53,6 +90,7 @@ describe('AclOperations', () => {
     service = module.get<AclOperations>(AclOperations);
     redisService = module.get(RedisService) as jest.Mocked<RedisService>;
     shellPool = module.get(ShellPoolExecutorService) as jest.Mocked<ShellPoolExecutorService>;
+    shellServicePowerShell = module.get(ShellService) as jest.Mocked<ShellService>;
     logger = mockLogger;
 
     // Reset all mocks before each test
@@ -863,7 +901,7 @@ Successfully processed 1 files
     const mockPowerShellOutput = 'DOMAIN\\user1\nS-1-5-21-123456789-123456789-123456789-1001\n';
 
     beforeEach(() => {
-      shellPool.executeCommand.mockResolvedValue({ stdout: mockPowerShellOutput, stderr: '' });
+      shellServicePowerShell.runCommand.mockResolvedValue(mockPowerShellOutput);
       // Reset the mock for each test
       jest.spyOn(service, 'resolvePrincipal').mockImplementation((principal) => Promise.resolve(principal));
     });
@@ -875,9 +913,7 @@ Successfully processed 1 files
         owner: 'DOMAIN\\user1',
       });
 
-      expect(shellPool.executeCommand).toHaveBeenCalledWith(
-        expect.stringContaining('powershell -Command')
-      );
+      expect(shellServicePowerShell.runCommand).toHaveBeenCalled();
     });
 
     it('should resolve principals when identity mapping is available', async () => {
@@ -890,7 +926,6 @@ Successfully processed 1 files
         return Promise.resolve(principal);
       });
 
-      // Create a specific mock for getFileOwner
       const originalGetFileOwner = service.getFileOwner;
       service.getFileOwner = jest.fn().mockImplementation(async () => {
         // Call resolvePrincipal twice to satisfy the test
@@ -914,17 +949,17 @@ Successfully processed 1 files
     });
 
     it('should handle command execution errors', async () => {
-      shellPool.executeCommand.mockRejectedValue(new Error('Command failed'));
+      shellServicePowerShell.runCommand.mockRejectedValue(new Error('Command failed'));
 
       await expect(service.getFileOwner(filePath, isIdentityMappingAvailable, jobRunId))
         .rejects.toThrow('Command failed');
     });
 
     it('should handle stderr errors', async () => {
-      shellPool.executeCommand.mockResolvedValue({ stdout: '', stderr: 'PowerShell error' });
+      shellServicePowerShell.runCommand.mockResolvedValue('');
 
       await expect(service.getFileOwner(filePath, isIdentityMappingAvailable, jobRunId))
-        .rejects.toThrow('PowerShell error');
+        .rejects.toThrow('Owner information is empty');
     });
 
     it('should handle principal resolution errors', async () => {

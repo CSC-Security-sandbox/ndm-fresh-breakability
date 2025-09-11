@@ -6,15 +6,18 @@ import { ACLError, CommandExecutionError, FileAccessError, TimeoutError } from "
 import { INHERITANCE_FLAGS, NON_SETTABLE_FLAGS, PERMISSION_MAP, SID_REGEX } from "./aclOperations.constants";
 import { RedisService } from "src/redis/redis.service";
 import { ShellPoolExecutorService } from "./shell-for-meta-stamping.service";
+import { ShellService } from "src/activities/common/shell.service";
 
 @Injectable()
 export class AclOperations {
     private readonly logger: LoggerService;
     private principalCache = new Map<string, Map<string, string>>();
+    private ownerCache = new Map<string, Map<string, string>>();
 
     constructor(
         private redisService: RedisService,
         private shellPool: ShellPoolExecutorService,
+        private shellServicePowerShell: ShellService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     ) {
         this.logger = loggerFactory.create(AclOperations.name);
@@ -754,20 +757,17 @@ export class AclOperations {
 
         // 1 Get raw owner via PowerShell
         const command = `
-        powershell -Command "
         $acl = Get-Acl '${normalizedPath}';
         $cleanedOwner = $acl.Owner -replace '^O:', '';
-        $acl.Owner
-        "
-    `;
+        $cleanedOwner
+        `;
         let stdout: string, stderr: string;
         try {
-            ({ stdout, stderr } = await this.shellPool.executeCommand(command));
+            stdout = await this.shellServicePowerShell.runCommand(command);
             stdout = stdout?.trim() || '';
-            stderr = stderr?.trim() || '';
-
-            if (stderr) throw new Error(stderr);
             if (!stdout) throw new Error(`Owner information is empty`);
+            // replace with '' if O: in front
+            stdout = stdout.replace(/^O:/, '').trim();
         } catch (error: any) {
             this.logger.error(`Failed to get file owner for "${normalizedPath}": ${error.message}`, error);
             throw new Error(`Failed to get file owner for "${normalizedPath}": ${error.message}`);
@@ -778,6 +778,16 @@ export class AclOperations {
 
         let resolvedOwner: string | null = null;
 
+        let ownerCacheJob = this.ownerCache.get(jobRunId);
+        if (!ownerCacheJob) {
+            ownerCacheJob = new Map<string, string>();
+            this.ownerCache.set(jobRunId, ownerCacheJob);
+        }
+        const resolvedCache = ownerCacheJob.get(owner);
+        if (resolvedCache) {
+            this.logger.debug(`Using cached resolved owner for "${owner}": ${resolvedCache}`);
+            return { owner: resolvedCache };
+         }
         // 2 If owner is a SID
         if (SID_REGEX.test(owner)) {
             try {
@@ -805,20 +815,17 @@ export class AclOperations {
         else {
             try {
                 const mapped = await this.resolvePrincipal(owner, jobRunId);
-
+                let sidOut: string | undefined;
                 // If mapping gave back the same username → try SID lookup
                 if (mapped === owner) {
                     try {
                         const sidCmd = `
-                        powershell -Command "
                         $nt = New-Object System.Security.Principal.NTAccount('${owner}');
                         $sid = $nt.Translate([System.Security.Principal.SecurityIdentifier]);
                         $sid.Value
-                        "
-                    `;
-                        const { stdout: sidOut, stderr: sidErr } = await this.shellPool.executeCommand(sidCmd);
-
-                        if (sidErr) throw new Error(sidErr);
+                        `;
+                       sidOut = await this.shellServicePowerShell.runCommand(sidCmd);
+                        sidOut = sidOut?.trim() || '';
 
                         const sid = sidOut?.split(/\r?\n/).map(l => l.trim()).find(Boolean);
 
@@ -848,10 +855,21 @@ export class AclOperations {
         if (!resolvedOwner) {
             throw new Error(`Unable to determine effective owner for "${normalizedPath}"`);
         }
+        // Cache resolved owner set 
+        let jobCache = this.ownerCache.get(jobRunId);
+        if (!jobCache) {
+            jobCache = new Map();
+            this.ownerCache.set(jobRunId, jobCache);
+        }
+        jobCache.set(owner, resolvedOwner);
         this.logger.debug(`Resolved owner for--> "${normalizedPath}": ${resolvedOwner}`);
         return { owner: resolvedOwner };
     }
 
+    clearMapsForJob(jobRunId: string): void {
+        this.principalCache.delete(jobRunId);
+        this.ownerCache.delete(jobRunId);
+    }
 
 
     async stampFileOwnerByName({
@@ -903,35 +921,26 @@ export class AclOperations {
     }
 
 
-
     async getSidToOwner(sid: string): Promise<string> {
         if (!sid || !SID_REGEX.test(sid)) {
             throw new Error(`Invalid SID provided: "${sid}"`);
         }
 
         const command = `
-    powershell -NoProfile -Command "
-    try {
-        $sidObj = New-Object System.Security.Principal.SecurityIdentifier('${sid}');
-        $account = $sidObj.Translate([System.Security.Principal.NTAccount]);
-        Write-Output $account.Value;
-    } catch {
-        Write-Error $_.Exception.Message;
-        exit 1;
-    }
-    "`;
-
+                        try {
+                            $sidObj = New-Object System.Security.Principal.SecurityIdentifier('${sid}');
+                            $account = $sidObj.Translate([System.Security.Principal.NTAccount]);
+                            Write-Output $account.Value;
+                        } catch {
+                            Write-Error $_.Exception.Message;
+                            exit 1;
+                        }
+                        `;
+        let stdout: string
         try {
-            const { stdout, stderr } = await this.shellPool.executeCommand(command);
-
+           stdout = await this.shellServicePowerShell.runCommand(command);
             // Normalize line endings & trim
             const owner = stdout?.replace(/\r/g, '').trim();
-
-            if (stderr?.trim()) {
-                this.logger.error(`PowerShell error while resolving SID "${sid}": ${stderr}`);
-                throw new Error(stderr.trim());
-            }
-
             if (!owner) {
                 this.logger.warn(`No username found for SID "${sid}"`);
                 return '';
