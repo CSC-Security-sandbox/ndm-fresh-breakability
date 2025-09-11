@@ -460,7 +460,7 @@ jobs:
           # Azure Terraform Variables
           echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
           echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
-          echo "TF_VAR_vm_owner=achyuta-${{ github.actor }}" >> $GITHUB_ENV
+          echo "TF_VAR_vm_owner=ontap-shastry-${{ github.actor }}" >> $GITHUB_ENV
           echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
           echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
