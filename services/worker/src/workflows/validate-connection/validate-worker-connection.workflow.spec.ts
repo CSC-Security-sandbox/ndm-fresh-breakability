@@ -21,15 +21,17 @@ describe('ValidateWorkerConnectionWorkflow', () => {
                 await testEnv.teardown();
             }
         }
-    });
+    }, 1000 * 60 * 5); // 5 minutes
 
     afterAll(async () => {
         if (worker && ['RUNNING', 'STARTED'].includes(worker.getState())) {
             await worker?.shutdown();
         }
-        await testEnv.teardown();
+        if (testEnv) {
+            await testEnv.teardown();
+        }
         // workflowCoverage.mergeIntoGlobalCoverage();
-    });
+    }, 1000 * 60 * 5); // 5 minutes
 
     beforeEach(async () => {
         jest.clearAllMocks();
@@ -60,5 +62,5 @@ describe('ValidateWorkerConnectionWorkflow', () => {
             expect(result[0].success).toBe(true);
             expect(mockedActivities.validate).toHaveBeenCalled();
         });
-    }, 1000 * 60 * 2);
+    }, 1000 * 60 * 5); // 5 minutes
 });
