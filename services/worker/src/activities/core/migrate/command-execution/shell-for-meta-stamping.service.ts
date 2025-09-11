@@ -157,9 +157,9 @@ export class ShellPoolExecutorService implements OnModuleInit, OnModuleDestroy {
     private dropWhenFull: boolean;
 
     constructor() {
-        this.poolSize = 10; // configurable
-        this.maxQueuePerShell = 500;
-        this.dropWhenFull = false;
+        this.poolSize = process.env.CMD_SHELL_POOL_SIZE ? parseInt(process.env.CMD_SHELL_POOL_SIZE, 10) : 10;
+        this.maxQueuePerShell = process.env.CMD_MAX_QUEUE_PER_SHELL ? parseInt(process.env.CMD_MAX_QUEUE_PER_SHELL, 10) : 500;
+        this.dropWhenFull = process.env.CMD_DROP_WHEN_FULL === 'true';
     }
 
     onModuleInit() {
