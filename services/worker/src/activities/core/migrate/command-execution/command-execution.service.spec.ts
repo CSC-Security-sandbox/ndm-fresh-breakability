@@ -1,15 +1,14 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { CommandStatus, OPS_CMD, OPS_STATUS, ErrorType } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Test, TestingModule } from '@nestjs/testing';
+import { CommandStatus, ErrorType, OPS_CMD, OPS_STATUS } from '@netapp-cloud-datamigrate/jobs-lib';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import * as fs from 'fs';
 import * as path from 'path';
-import { CommandExecService } from './command-execution.service';
-import { WorkerThreadService } from 'src/thread/worker.thread.service';
-import { StampMetaService } from './stamp-meta.service';
+import { dmError, getFilePermissions, getFileType, } from 'src/activities/utils/utils';
 import { mockLogger } from 'src/auth/auth.service.spec';
-import { dmError, getFilePermissions, getFileType,  } from 'src/activities/utils/utils';
-import { isPathExists } from '../../utils/utils';
+import { WorkerThreadService } from 'src/thread/worker.thread.service';
+import { CommandExecService } from './command-execution.service';
+import { StampMetaService } from './stamp-meta.service';
 
 // Mock fs module
 jest.mock('fs', () => ({
@@ -36,7 +35,14 @@ jest.mock('src/activities/utils/utils', () => {
         dmError: jest.fn(),
         getFilePermissions: jest.fn(),
         getFileType: jest.fn(),
-        isPathExists: jest.fn(), // This ensures isPathExists is a Jest mock function
+    };
+});
+// Mock isPathExists from the correct module
+jest.mock('src/activities/core/utils/utils', () => {
+    const actualUtils = jest.requireActual('src/activities/core/utils/utils');
+    return {
+        ...actualUtils,
+        isPathExists: jest.fn(),
     };
 });
 
@@ -68,7 +74,8 @@ describe('CommandExecService', () => {
 
         stampMetaService = {
             stampMetaData: jest.fn(),
-            restoreFileAttribute: jest.fn()
+            restoreFileAttribute: jest.fn(),
+            removeFileAttributeTemporarily: jest.fn()
         } as any;
 
         mockJobContext = {
@@ -780,10 +787,11 @@ describe('CommandExecService', () => {
             serialize: jest.fn(),
         });
 
-        const baseInput = {
-            sourcePath: '/source/test.txt',
-            targetPath: '/target/test.txt',
-            jobContext: {
+        it('should skip if already completed', async () => {
+            const input = {
+                sourcePath: '/source/test.txt',
+                targetPath: '/target/test.txt',
+                jobContext: {
                     publishToErrorStream: jest.fn().mockResolvedValue(undefined),
                     jobConfig: {
                         options: {
@@ -791,14 +799,8 @@ describe('CommandExecService', () => {
                         }
                     }
                 },
-            command: createMockCommand(),
-            errorType: ErrorType.RECOVERABLE_ERROR,
-        };
-
-        it('should skip if already completed', async () => {
-            const input = {
-                ...baseInput,
                 command: createMockCommand(OPS_STATUS.COMPLETED),
+                errorType: ErrorType.RECOVERABLE_ERROR,
             };
 
             const result = await service.copyFile(input as any);
@@ -808,6 +810,32 @@ describe('CommandExecService', () => {
             expect(workerThreadService.migrateWorkerThread).not.toHaveBeenCalled();
         });
         it('should successfully copy file and stamp meta', async () => {
+
+            // Mock isPathExists to return true for both source and target
+            const coreUtils = require('src/activities/core/utils/utils');
+            coreUtils.isPathExists.mockImplementation(async (p: string) => true);
+
+            // Mock migrateWorkerThread to return matching checksums
+            workerThreadService.migrateWorkerThread.mockResolvedValue({
+                sourceChecksum: 'abc',
+                targetChecksum: 'abc'
+            });
+
+            const baseInput = {
+                sourcePath: '/source/test.txt',
+                targetPath: '/target/test.txt',
+                jobContext: {
+                    publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+                    jobConfig: {
+                        options: {
+                            preserveAccessTime: true
+                        }
+                    }
+                },
+                command: createMockCommand(),
+                errorType: ErrorType.RECOVERABLE_ERROR,
+            };
+
             const result = await service.copyFile(baseInput as any);
 
             expect(workerThreadService.migrateWorkerThread).toHaveBeenCalledWith({

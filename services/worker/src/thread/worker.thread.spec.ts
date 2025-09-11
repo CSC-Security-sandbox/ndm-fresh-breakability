@@ -26,6 +26,11 @@ describe("smartCopy", () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    // Mock fs.promises.access to always resolve (simulate file exists)
+    (fs as any).promises = {
+      ...(fs as any).promises,
+      access: jest.fn().mockResolvedValue(undefined),
+    };
   });
 
   const mockFsStream = (data: Buffer) => {
@@ -64,12 +69,9 @@ describe("smartCopy", () => {
 
 
   it("should create target directory if it doesn't exist", async () => {
-    // Mock fs.promises object
+    // Mock fs.promises.mkdir
     const mockMakeDir = jest.fn().mockResolvedValue(undefined);
-    
-    (fs as any).promises = {
-      mkdir: mockMakeDir
-    };
+    (fs as any).promises.mkdir = mockMakeDir;
 
     (fs.createReadStream as jest.Mock).mockImplementation(() => mockFsStream(mockData));
     (fs.createWriteStream as jest.Mock).mockImplementation(() => mockWritableStream());
@@ -89,12 +91,9 @@ describe("smartCopy", () => {
   });
 
   it("should make sure directory is always present", async () => {
-    // Mock fs.promises object - mkdir succeeds regardless of directory existence
+    // Mock fs.promises.mkdir
     const mockMakeDir = jest.fn().mockResolvedValue(undefined);
-    
-    (fs as any).promises = {
-      mkdir: mockMakeDir
-    };
+    (fs as any).promises.mkdir = mockMakeDir;
 
     (fs.createReadStream as jest.Mock).mockImplementation(() => mockFsStream(mockData));
     (fs.createWriteStream as jest.Mock).mockImplementation(() => mockWritableStream());
@@ -141,6 +140,9 @@ describe("calculateChecksum", () => {
 
     (crypto.createHash as jest.Mock).mockReturnValue(fakeHash);
     (fs.createReadStream as jest.Mock).mockImplementation(() => mockAsyncReadableStream(Buffer.from("abc")));
+
+    // Reset digest return value for this test
+    fakeHash.digest.mockReturnValue("testChecksum");
 
     const checksum = await calculateChecksum("dummy.txt");
 

@@ -86,6 +86,8 @@ export class CommandExecService {
                 const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.COPY_CONTENT, errorType, command.id, 
                     new Error(`Source path does not exist: ${sourcePath}`), {name: command.fPath, path: sourcePath});
                 await jobContext.publishToErrorStream(dmErr);
+                output.sourceErrors.push('ENOENT');
+                return output
             }
             if(targetPathExists)
                 await this.stampMetaService.removeFileAttributeTemporarily(targetPath);
