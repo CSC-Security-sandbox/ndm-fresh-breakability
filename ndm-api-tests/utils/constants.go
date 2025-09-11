@@ -258,10 +258,10 @@ func UpdateConfVariables(protocolType, environment string) {
 			NDM_WORKERS_PORT = os.Getenv("AZURE_NFS_NDM_WORKERS_PORT")
 			NDM_WORKERS_PASSWORD = os.Getenv("AZURE_NFS_NDM_WORKERS_PASSWORD")
 
-			SOURCE_VOLUMES_LIST = "ifs/volnfssrc_2, ifs/volnfssrc_3"
+			SOURCE_VOLUMES_LIST = "vol_lalit_dest_automation, vol_lalit_dest_automation2"
 			DESTINATION_VOLUMES_LIST = "shastry-nfs-volume, shastry-nfs-volume2"
 
-			SOURCE_HOST_IP = "10.192.7.60, 10.192.7.60"
+			SOURCE_HOST_IP = "10.192.7.112, 10.192.7.112"
 			DESTINATION_HOST_IP = "172.30.202.23, 172.30.202.23"
 
 			PROTOCOL_USERNAME = "Root"
