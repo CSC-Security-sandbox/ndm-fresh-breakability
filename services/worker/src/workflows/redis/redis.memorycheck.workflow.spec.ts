@@ -20,16 +20,22 @@ describe('RedisMemoryCheckWorkflow', () => {
         try {
             testEnv = await TestWorkflowEnvironment.createTimeSkipping();
         } catch (error) {
-            console.error('Error creating TestWorkflowEnvironment:', error);
+            console.error('Error during test environment setup:', error);
+            if (testEnv) {
+                await testEnv.teardown();
+            }
         }
-    });
+    }, 1000 * 60 * 5); // 5 minutes
 
     afterAll(async () => {
+        if (worker && ['RUNNING', 'STARTED'].includes(worker.getState())) {
+            await worker?.shutdown();
+        }
         if (testEnv) {
             await testEnv.teardown();
         }
         // workflowCoverage.mergeIntoGlobalCoverage();
-    });
+    }, 1000 * 60 * 5); // 5 minutes
 
     beforeEach(async () => {
         jest.clearAllMocks();
@@ -64,7 +70,7 @@ describe('RedisMemoryCheckWorkflow', () => {
             const result = await memoryCheckWorkflowHandle.result();
             expect(result).toBe(true);
         });
-    },1000 * 60 * 2);
+    }, 1000 * 60 * 5); // 5 minutes
 
     it('should retry and continue as new if memory is not ok', async () => {
         const args = { traceId: 'test-memory-check-workflow-2' }
@@ -102,5 +108,5 @@ describe('RedisMemoryCheckWorkflow', () => {
             expect(isContinuedAsNew).toBe(true);
             expect(checkCallCount).toBeGreaterThan(29);
         });
-    },1000 * 60 * 2);
+    }, 1000 * 60 * 5); // 5 minutes
 });

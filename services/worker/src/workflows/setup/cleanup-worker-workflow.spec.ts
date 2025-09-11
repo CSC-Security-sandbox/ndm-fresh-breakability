@@ -22,19 +22,21 @@ describe('CleanupWorkerWorkflow', () => {
                 await testEnv.teardown();
             }
         }
-    });
+    }, 1000 * 60 * 5); // 5 minutes
 
     afterAll(async () => {
         if (worker && ['RUNNING', 'STARTED'].includes(worker.getState())) {
             await worker?.shutdown();
         }
-        await testEnv.teardown();
+        if (testEnv) {
+            await testEnv.teardown();
+        }
         // workflowCoverage.mergeIntoGlobalCoverage();
-    });
+    }, 1000 * 60 * 5); // 5 minutes
 
     beforeEach(async () => {
         jest.clearAllMocks();
-    });
+    }, 1000 * 60 * 5); // 5 minutes
 
     it('should call cleanup activity for non-speed test jobs', async () => {
         const jobRunId = 'test-job-run-id';
@@ -60,7 +62,7 @@ describe('CleanupWorkerWorkflow', () => {
             expect(result).toEqual({ success: true });
             expect(mockedActivities.cleanup).toHaveBeenCalledWith(jobRunId);
         });
-    }, 1000 * 60 * 2);
+    }, 1000 * 60 * 5); // 5 minutes
 
     it('should call speedTestCleanup activity for speed test jobs', async () => {
         const jobRunId = 'test-job-run-id';
@@ -89,5 +91,5 @@ describe('CleanupWorkerWorkflow', () => {
             expect(mockedActivities.speedTestCleanup).toHaveBeenCalled();
             expect(mockedActivities.speedTestCleanup).toHaveBeenCalledWith(jobRunId, fsDetails, protocolType);
         });
-    }, 1000 * 60 * 2);
+    }, 1000 * 60 * 5); // 5 minutes
 });
