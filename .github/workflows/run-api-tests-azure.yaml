@@ -8,7 +8,7 @@ env:
 
 on:
   workflow_dispatch:
-    inputs:
+    # inputs:
       # control_plane_image_version:
       #   description: 'Image version for control plane'
       #   required: true
@@ -31,7 +31,7 @@ on:
       #   type: string
 
   workflow_call: 
-    inputs:
+    # inputs:
       # control_plane_image_version:
       #   description: 'Image version for control plane'
       #   required: true
