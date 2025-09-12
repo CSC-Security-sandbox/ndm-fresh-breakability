@@ -236,7 +236,7 @@ jobs:
     name: Run SMB API Tests
     runs-on: openlab
     timeout-minutes: 6000
-    env:
+    # env:
       # JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       # CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       # ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
