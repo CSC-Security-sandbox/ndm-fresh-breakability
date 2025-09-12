@@ -39,22 +39,52 @@ export async function smartCopy(source:string, target:string, filesize:number, m
   let writeStream: fs.WriteStream = null; 
   try{    
     const bufferSize = getOptimalBufferSize(filesize, maxBufferSize);
-    console.log(` filesize : ${filesize}, selected buffer size: ${bufferSize}`);
+
+    try {
+      await fs.promises.access(source, fs.constants.R_OK);
+    } catch {
+      throw new Error(`Source file ${source} does not exist or is not readable`);
+    }
+
     readStream = fs.createReadStream(source, { highWaterMark: bufferSize });
     writeStream = fs.createWriteStream(target, { flags: 'w', highWaterMark: bufferSize });
     let hash = crypto.createHash('sha256');
-    readStream.on('data', (chunk) => hash.update(chunk));
 
     const sourceCheckSum  = await new Promise((resolve, reject) => {
-      readStream.pipe(writeStream)
-        .on('error', reject)
-        .on('finish', () => {
-          resolve( hash?.digest('hex'));
-        });
+      let errored = false;
+
+      readStream.on('data', (chunk) => {
+        hash.update(chunk);
+      });
+
+      readStream.on('error', (err) => {
+        if (!errored) {
+          errored = true;
+          console.error(`Worker Thread - ${workerData?.threadNumber} - Error reading source file:`, err);
+          reject(err);
+        }
+      });
+
+      writeStream.on('error', (err) => {
+        if (!errored) {
+          errored = true;
+          console.error(`Worker Thread - ${workerData?.threadNumber} - Error writing to target file:`, err);
+          reject(err);
+        }
+      });
+
+      writeStream.on('finish', () => {
+        // Ensure all data has been written before resolving
+        resolve(hash.digest('hex'));
+      });
+
+      readStream.pipe(writeStream);
     });
+
     const targetCheckSum = await calculateChecksum(target);
     return {sourceChecksum: sourceCheckSum, targetChecksum: targetCheckSum};
   }catch(error){
+    console.error(`Worker Thread - ${workerData?.threadNumber} - Error during smartCopy from ${source} to ${target}:`, error);
     throw error; 
   }finally{
     if(readStream && !readStream.destroyed){
@@ -73,9 +103,19 @@ parentPort.on('message', async (tasks: WorkerThreadInput[]) => {
         const result = await smartCopy(task.data.sourcePath, task.data.destinationPath, task.data.size, task.data.maxBufferSize);
         return { isResolved: true, id: task.id, data: result, Operation: task.Operation };
     } catch (error) {
+        console.error(`Worker Thread - ${workerData?.threadNumber} - Error processing task ${task.id}:`, error);
         return {  isRejected: true, id: task.id, data: {code: error?.code, message:error?.message }, Operation: task.Operation };
     }
   }))
   parentPort.postMessage(result);
   
+});
+
+parentPort.onMessageerror = (err) => {
+  console.error('There was an error in the parent port message', err);
+}
+
+process.on('uncaughtException', (err) => {
+  console.error('There was an uncaught error', err);
+  process.exit(1); //mandatory (as per the Node.js docs)
 });

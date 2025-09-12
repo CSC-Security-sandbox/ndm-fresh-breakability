@@ -128,9 +128,9 @@ export class SyncService {
     
         if (isFatalErrored) {
           await jobContext.deleteTask(taskHashId);
-          throw new FatalError(
-            `Sync Task Update Failed: ${errors.source.length} source errors and ${errors.target.length} target errors with retry count ${task.retryCount}`
-          );
+            throw new FatalError(
+            `Sync Task Update Failed: ${[...new Set(errors.source)].length} source errors: ${[...new Set(errors.source)].join(", ")} and ${[...new Set(errors.target)].length} target errors: ${[...new Set(errors.target)].join(", ")} with retry count ${task.retryCount} `
+            );
         }
     
         if (task.retryCount >= this.maxRetryCount) {
@@ -141,7 +141,8 @@ export class SyncService {
         }
     
         throw ApplicationFailure.retryable(
-          `Sync Task Update Failed: ${errors.source.length} source errors and ${errors.target.length} target errors with retry count ${task.retryCount}`, 'RetryableError'
+          `Sync Task Update Failed: ${[...new Set(errors.source)].length} source errors: ${[...new Set(errors.source)].join(", ")} and ${[...new Set(errors.target)].length} target errors: ${[...new Set(errors.target)].join(", ")} with retry count ${task.retryCount}`, 
+          'RetryableError'
         );
     }
 
