@@ -225,13 +225,13 @@ func UpdateConfVariables(protocolType, environment string) {
 			NDM_WORKERS_PORT = "22"
 			NDM_WORKERS_PASSWORD = "/7DnO!1rlSsej]Q,yu.V8rv)GFz}UtQ"
 
-			SOURCE_VOLUMES_LIST = "sfsd1, sfsd2"
-			DESTINATION_VOLUMES_LIST = "abcd, abcd"
+			SOURCE_VOLUMES_LIST = "e2e-source-1, e2e-source-2"
+			DESTINATION_VOLUMES_LIST = "ABHINAV-DESTINATION-E2E-1, ABHINAV-DESTINATION-E2E-2"
 
-			SOURCE_HOST_IP = "172.30.114.67,172.30.114.67"
-			DESTINATION_HOST_IP = "1,2"
+			SOURCE_HOST_IP = "172.30.114.73,172.30.114.73"
+			DESTINATION_HOST_IP = "10.127.176.44,10.127.176.44"
 
-			PROTOCOL_USERNAME = "ndmuser"
+			PROTOCOL_USERNAME = "rootdomain\\ndmuser"
 			PROTOCOL_PASSWORD = "test@123"
 
 			SMB_EXECUTABLE_FILENAME = "C:\\Users\\ashishe2e\\Downloads\\windows-worker-installer-2025.09.06183801-nightly.exe"

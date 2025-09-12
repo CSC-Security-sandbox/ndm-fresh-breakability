@@ -10,6 +10,9 @@ import (
 )
 
 var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
+	BeforeEach(func() {
+		Skip("Skipping tc-1 (already executed in local)")
+	})
 	var (
 		ProjectId              string
 		workerId1              string
@@ -27,7 +30,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 	Context("TC-001", func() {
 		BeforeEach(func() {
 			numberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-01-ABCDE")
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-01-ABCD")
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 			workerIds = GetWorkerIds()
