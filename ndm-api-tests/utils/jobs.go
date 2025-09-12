@@ -458,7 +458,6 @@ func GetJobRunDetails(jobConfigID string, headers map[string]string, needRetryAt
 			}
 		}
 
-		Wait(DefaultPollInterval)
 	}
 
 	return GetJobResponse{}, resp, fmt.Errorf("failed to get job run details after %d attempts", MaxPollRetries)
@@ -580,7 +579,7 @@ func HandleJobRunStateChange(jobRunID, stateType string, jobRunIDs []string) err
 				return ChangeJobRunState(stateType, jobRunIDs)
 			}
 			LogDebug(fmt.Sprintf("JobRun is not in running state. Current state: %s", status))
-			Wait(5)
+			Wait(1)
 		}
 		return fmt.Errorf("Job run did not reach RUNNING state after %d retries", MaxPollRetries)
 	default:

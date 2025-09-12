@@ -29,6 +29,26 @@ type CreateServereParams struct {
 	ExportPathSource *ExportPathSource
 }
 
+// getFileServerWorkerConfig gets the SSHConfig for file server operations
+// This function looks for a worker with the specified IP in the attached workers
+func getFileServerWorkerConfig(workerIP string) (SSHConfig, error) {
+	// First try to find in AttachedWorkersConfig
+	for _, config := range AttachedWorkersConfig {
+		if config.Host == workerIP {
+			return config, nil
+		}
+	}
+
+	// If not found in attached workers, try to find in EnvWorkersConfigList
+	for _, config := range EnvWorkersConfigList {
+		if config.Host == workerIP {
+			return config, nil
+		}
+	}
+
+	return SSHConfig{}, fmt.Errorf("worker config not found for IP: %s", workerIP)
+}
+
 func InitFileServer(src_volumes, dest_volumes, source_ips, dest_ips string) {
 	SOURCE_VOLUMES = GetVolumesFromArgs(src_volumes)
 	DESTINATION_VOLUMES = GetVolumesFromArgs(dest_volumes)
@@ -282,7 +302,13 @@ func ClearVolume(export string) error {
 	// 	Password: config.Password,
 	// }
 
-	output, err := SshRunScriptWithKeyData("172.30.114.81", "ndmuser", CONFIG_WORKERS["172.30.114.81"], script)
+	// Use password-based authentication instead of key-based
+	workerConfig, err := getFileServerWorkerConfig("172.30.205.248")
+	if err != nil {
+		return fmt.Errorf("failed to find worker config for file server operations: %w", err)
+	}
+
+	output, err := sshRunScript(workerConfig, script)
 	if err != nil {
 		return fmt.Errorf("RemoveDataFromFileserver failed: %w\noutput: %s", err, output)
 	}
@@ -375,7 +401,13 @@ func AddDataToVolume(export string) error {
 	// 	Password: config.Password,
 	// }
 
-	output, err := SshRunScriptWithKeyData("172.30.114.81", "ndmuser", CONFIG_WORKERS["172.30.114.81"], script)
+	// Use password-based authentication instead of key-based
+	workerConfig, err := getFileServerWorkerConfig("172.30.205.248")
+	if err != nil {
+		return fmt.Errorf("failed to find worker config for file server operations: %w", err)
+	}
+
+	output, err := sshRunScript(workerConfig, script)
 	if err != nil {
 		return fmt.Errorf("AddDataToFileserver failed: %w\noutput: %s", err, output)
 	}
@@ -451,7 +483,13 @@ func RemoveDeltaFromVolume(export string) error {
 	// 	Password: config.Password,
 	// }
 
-	output, err := SshRunScriptWithKeyData("172.30.114.81", "ndmuser", CONFIG_WORKERS["172.30.114.81"], script)
+	// Use password-based authentication instead of key-based
+	workerConfig, err := getFileServerWorkerConfig("172.30.205.248")
+	if err != nil {
+		return fmt.Errorf("failed to find worker config for file server operations: %w", err)
+	}
+
+	output, err := sshRunScript(workerConfig, script)
 	if err != nil {
 		return fmt.Errorf("RemoveDeltaFromFileserver failed: %w\noutput: %s", err, output)
 	}
@@ -531,7 +569,13 @@ func ModifyDataOnVolume(export string) error {
 	// 	Password: config.Password,
 	// }
 
-	output, err := SshRunScriptWithKeyData("172.30.114.81", "ndmuser", CONFIG_WORKERS["172.30.114.81"], script)
+	// Use password-based authentication instead of key-based
+	workerConfig, err := getFileServerWorkerConfig("172.30.205.248")
+	if err != nil {
+		return fmt.Errorf("failed to find worker config for file server operations: %w", err)
+	}
+
+	output, err := sshRunScript(workerConfig, script)
 	if err != nil {
 		return fmt.Errorf("ModifyDataOnVolume failed: %w\noutput: %s", err, output)
 	}
@@ -605,7 +649,13 @@ func RestoreOriginalDataOnVolume(export string) error {
 	// 	Password: config.Password,
 	// }
 
-	output, err := SshRunScriptWithKeyData("172.30.114.81", "ndmuser", CONFIG_WORKERS["172.30.114.81"], script)
+	// Use password-based authentication instead of key-based
+	workerConfig, err := getFileServerWorkerConfig("172.30.205.248")
+	if err != nil {
+		return fmt.Errorf("failed to find worker config for file server operations: %w", err)
+	}
+
+	output, err := sshRunScript(workerConfig, script)
 	if err != nil {
 		return fmt.Errorf("RestoreOriginalDataOnVolume failed: %w\noutput: %s", err, output)
 	}
@@ -646,7 +696,13 @@ func GetFileUserGroupId(export, fileName string) (uid, gid int, err error) {
 	stat -c "%%u %%g" "$MP/%[2]s"
 	`, export, fileName)
 
-	out, err := SshRunScriptWithKeyData("172.30.114.81", "ndmuser", CONFIG_WORKERS["172.30.114.81"], script)
+	// Use password-based authentication instead of key-based
+	workerConfig, err := getFileServerWorkerConfig("172.30.205.248")
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to find worker config for file server operations: %w", err)
+	}
+
+	out, err := sshRunScript(workerConfig, script)
 	if err != nil {
 		return 0, 0, fmt.Errorf("OwnerIDShellStat failed: %w\n%s", err, out)
 	}

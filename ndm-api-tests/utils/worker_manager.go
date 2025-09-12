@@ -1,12 +1,10 @@
 package utils
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -385,6 +383,16 @@ func GetDetachWorkerScriptForNFS() string {
 	return script
 }
 
+// getWorkerConfigByIP finds the SSHConfig for a given IP address from AttachedWorkersConfig
+func getWorkerConfigByIP(workerIP string) (SSHConfig, error) {
+	for _, config := range AttachedWorkersConfig {
+		if config.Host == workerIP {
+			return config, nil
+		}
+	}
+	return SSHConfig{}, fmt.Errorf("worker config not found for IP: %s", workerIP)
+}
+
 // DetachWorker runs the detach script on a given worker via SSH.
 func DetachWorker(workerIP string, workerID string, detachWorkerRes chan DetachWorkerResult, wg *sync.WaitGroup) {
 	defer wg.Done()
@@ -398,14 +406,27 @@ func DetachWorker(workerIP string, workerID string, detachWorkerRes chan DetachW
 	}
 
 	LogDebug(fmt.Sprintf("Detaching Worker %s and running script: \n%s", workerIP, script))
-	output, err := SshRunScriptWithKeyData(workerIP, "ndmuser", CONFIG_WORKERS[workerIP], script)
-	detachWorkerRes <- DetachWorkerResult{workerIP, workerID, output, err}
+
+	// Use password-based authentication instead of key-based
+	if workerConfig, exists := AttachedWorkersConfig[workerID]; exists {
+		output, err := sshRunScript(workerConfig, script)
+		detachWorkerRes <- DetachWorkerResult{workerIP, workerID, output, err}
+	} else {
+		detachWorkerRes <- DetachWorkerResult{workerIP, workerID, "", fmt.Errorf("worker config not found for worker ID: %s", workerID)}
+	}
 }
 
 // StartWorker starts the worker service on a given worker via SSH.
 func StartWorker(workerIP string) (string, error) {
 	script := GetStartWorkerScript()
-	output, err := SshRunScriptWithKeyData(workerIP, "ndmuser", CONFIG_WORKERS[workerIP], script)
+
+	// Use password-based authentication instead of key-based
+	workerConfig, err := getWorkerConfigByIP(workerIP)
+	if err != nil {
+		return "", fmt.Errorf("failed to find worker config for IP %s: %w", workerIP, err)
+	}
+
+	output, err := sshRunScript(workerConfig, script)
 	if err != nil {
 		return "", fmt.Errorf("failed to start worker on %s: %w", workerIP, err)
 	}
@@ -416,7 +437,14 @@ func StartWorker(workerIP string) (string, error) {
 // RestartWorker starts the worker service on a given worker via SSH.
 func RestartWorker(workerIP string) (string, error) {
 	script := GetRestartWorkerScript()
-	output, err := SshRunScriptWithKeyData(workerIP, "ndmuser", CONFIG_WORKERS[workerIP], script)
+
+	// Use password-based authentication instead of key-based
+	workerConfig, err := getWorkerConfigByIP(workerIP)
+	if err != nil {
+		return "", fmt.Errorf("failed to find worker config for IP %s: %w", workerIP, err)
+	}
+
+	output, err := sshRunScript(workerConfig, script)
 	if err != nil {
 		return "", fmt.Errorf("failed to start worker on %s: %w", workerIP, err)
 	}
@@ -427,7 +455,14 @@ func RestartWorker(workerIP string) (string, error) {
 // StopWorker stops the worker service on a given worker via SSH.
 func StopWorker(workerIP string) (string, error) {
 	script := GetStopWorkerScript()
-	output, err := SshRunScriptWithKeyData(workerIP, "ndmuser", CONFIG_WORKERS[workerIP], script)
+
+	// Use password-based authentication instead of key-based
+	workerConfig, err := getWorkerConfigByIP(workerIP)
+	if err != nil {
+		return "", fmt.Errorf("failed to find worker config for IP %s: %w", workerIP, err)
+	}
+
+	output, err := sshRunScript(workerConfig, script)
 	if err != nil {
 		return "", fmt.Errorf("failed to stop worker on %s: %w", workerIP, err)
 	}
@@ -450,45 +485,6 @@ func StopAllWorkersAndWait() error {
 
 	Wait(10)
 	return nil
-}
-func attachWorker(authToken string, projectId string, workerIP string, config map[string]string) (string, error) {
-	fullURL := "http://" + KEYCLOAK_IP + "/api/v1/worker-registration"
-	data := map[string]string{
-		"projectId": projectId,
-	}
-	reqBody, err := json.Marshal(data)
-	if err != nil {
-		return "", err
-	}
-	headers := GetHeaders(authToken, ContentTypeJSON)
-	resp, err := SendAPIRequest("POST", fullURL, reqBody, headers)
-	if err != nil {
-		return "", err
-	}
-	log.Print(resp)
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %v", err)
-	}
-
-	log.Printf("Worker registration response: %s", string(bodyBytes))
-
-	// Reset the body for CreateWorkerScript to use
-	resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-
-	script, workerId, err := CreateWorkerScript(resp, projectId)
-	if err != nil {
-		return "", err
-	}
-	log.Printf("For worker %s registration script: %s", workerId, script)
-
-	output, err := SshRunScriptWithKeyData(workerIP, "ndmuser", config[workerIP], script)
-	if err != nil {
-		return workerId, err
-	}
-	log.Printf("Worker %s attached successfully with output: %s", workerId, output)
-
-	return workerId, nil
 }
 func attachWorkerForConfig(workerConfig SSHConfig, authToken, accountId, projectId string, attachWorkerRes chan AttachWorkerResult, wg *sync.WaitGroup) {
 	defer wg.Done()
@@ -514,7 +510,7 @@ func attachWorkerForConfig(workerConfig SSHConfig, authToken, accountId, project
 		return
 	}
 	LogDebug(fmt.Sprintf("Attaching Worker %s and running script: \n%s", workerConfig.Host, script))
-	_, err = SshRunScriptWithKeyData(workerConfig.Host, "ndmuser", CONFIG_WORKERS[workerConfig.Host], script)
+	_, err = sshRunScript(workerConfig, script)
 	if err != nil {
 		attachWorkerRes <- AttachWorkerResult{workerConfig, workerId, err}
 		return

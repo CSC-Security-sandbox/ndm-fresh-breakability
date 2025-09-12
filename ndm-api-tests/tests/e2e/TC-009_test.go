@@ -87,7 +87,7 @@ var _ = Describe("TC-009: Run discovery and migration with 'Exclude file older t
 			By("Creating a Bulk Discovery Job for the Source File Server")
 			discoveryJobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{sourcePathID1, sourcePathID2},
-				ExcludeOlderThan:         "2024-06-30T16:37:00.000Z",
+				ExcludeOlderThan:         "2025-09-09T16:37:00.000Z",
 				ExcludeFilePatterns:      "",
 				PreserveAccessTime:       false,
 				FirstRunAt:               GetCurrentUTCTimestamp(),
@@ -158,7 +158,7 @@ var _ = Describe("TC-009: Run discovery and migration with 'Exclude file older t
 				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
 				SidMapping:         false,
 				Options: map[string]interface{}{
-					"excludeOlderThan":    "2024-06-30T16:37:00.000Z", // providing the hisotrical date before which some data is modified
+					"excludeOlderThan":    "2025-09-09T16:37:00.000Z", // providing the hisotrical date before which some data is modified
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
 					"skipFile":            "0-M",

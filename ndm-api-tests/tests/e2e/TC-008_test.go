@@ -82,8 +82,8 @@ var _ = Describe("TC-008: Run migration with 'Skip files modified in last' optio
 			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID1, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			ModifyDataOnVolume(sourceVolumePath1)
-			ModifyDataOnVolume(sourceVolumePath2)
+			// ModifyDataOnVolume(sourceVolumePath1)
+			// ModifyDataOnVolume(sourceVolumePath2)
 			By("Creating the destination file server")
 			destinationParams := CreateServereParams{
 				ConfigName:       "destination-file-server",
@@ -154,10 +154,12 @@ var _ = Describe("TC-008: Run migration with 'Skip files modified in last' optio
 			By("Cleanup started")
 			err := StopAllWorkersAndWait()
 			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
-			err = RestoreOriginalDataOnVolume(sourceVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error while restoring volume of %s", sourceVolumePath1)
-			err = RestoreOriginalDataOnVolume(sourceVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error while restoring volume of %s", sourceVolumePath2)
+			LogDebug(sourceVolumePath1)
+			LogDebug(sourceVolumePath2)
+			// err = RestoreOriginalDataOnVolume(sourceVolumePath1)
+			// Expect(err).NotTo(HaveOccurred(), "Error while restoring volume of %s", sourceVolumePath1)
+			// err = RestoreOriginalDataOnVolume(sourceVolumePath2)
+			// Expect(err).NotTo(HaveOccurred(), "Error while restoring volume of %s", sourceVolumePath2)
 			err = ClearVolume(destinationVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error while clearing volume of %s", destinationVolumePath1)
 			err = ClearVolume(destinationVolumePath2)

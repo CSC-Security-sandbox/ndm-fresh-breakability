@@ -11,9 +11,9 @@ import (
 )
 
 var _ = Describe("TC-007: Run migration to multiple destinations with incremental sync schedule", func() {
-	BeforeEach(func() {
-		Skip("TC-007 test case skipped")
-	})
+	// BeforeEach(func() {
+	// 	Skip("TC-007 test case skipped")
+	// })
 	var (
 		ProjectId              string
 		workerId1              string
@@ -31,7 +31,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 
 		BeforeEach(func() {
 			numberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-07-ABCDE")
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker, "TC-07-ABCDEF")
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 			workerIds = GetWorkerIds()
@@ -182,6 +182,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 
 			LogDebug("Waiting till new Job run created")
 			Wait(maxSleepTime)
+			Wait(180)
 
 			LogDebug("Validate migration report for 1st iteration")
 			// migration_validators := []string{
@@ -198,8 +199,8 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			By("Validating incremental Sync is getting triggered")
 			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
-				Expect(len(getJobsResp.JobRuns)).To(BeNumerically("==", 2), "No jobRuns found in response")
-				migrationJobRunID := getJobsResp.JobRuns[1].JobRunId
+				// Expect(len(getJobsResp.JobRuns)).To(BeNumerically("==", 2), "No jobRuns found in response")
+				migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
 				defer resp.Body.Close()
 

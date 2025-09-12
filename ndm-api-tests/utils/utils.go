@@ -1250,15 +1250,45 @@ func SshRunScriptWithKeyData(host, username, base64KeyData, script string) (stri
 		return "", fmt.Errorf("failed to create SSH signer: %v", err)
 	}
 
-	// Create SSH client config
+	// Create SSH client config with enhanced RSA support and multiple auth methods
 	config := &ssh.ClientConfig{
 		User: username,
 		Auth: []ssh.AuthMethod{
+			// Primary: SSH key authentication
 			ssh.PublicKeys(signer),
+			// Fallback: Try RSA key with specific algorithms
+			ssh.PublicKeysCallback(func() ([]ssh.Signer, error) {
+				return []ssh.Signer{signer}, nil
+			}),
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         30 * time.Second,
+		// Enhanced SSH configuration for RSA key compatibility
+		Config: ssh.Config{
+			KeyExchanges: []string{
+				"ecdh-sha2-nistp256", "ecdh-sha2-nistp384", "ecdh-sha2-nistp521",
+				"diffie-hellman-group14-sha256", "diffie-hellman-group16-sha512",
+				"diffie-hellman-group-exchange-sha256",
+			},
+			Ciphers: []string{
+				"aes128-gcm@openssh.com", "aes256-gcm@openssh.com",
+				"aes128-ctr", "aes192-ctr", "aes256-ctr",
+			},
+			MACs: []string{
+				"hmac-sha2-256-etm@openssh.com", "hmac-sha2-256",
+				"hmac-sha2-512-etm@openssh.com", "hmac-sha2-512",
+			},
+		},
 	}
+
+	// Add debug logging
+	log.Printf("SSH Debug: Attempting to connect to %s@%s with RSA key", username, host)
+	log.Printf("SSH Debug: Key type: %s", signer.PublicKey().Type())
+
+	// Extract and log the public key fingerprint for debugging
+	pubKey := signer.PublicKey()
+	fingerprint := ssh.FingerprintSHA256(pubKey)
+	log.Printf("SSH Debug: Public key fingerprint: %s", fingerprint)
 
 	// Connect to the remote host
 	client, err := ssh.Dial("tcp", host+":22", config)
@@ -1266,6 +1296,8 @@ func SshRunScriptWithKeyData(host, username, base64KeyData, script string) (stri
 		return "", fmt.Errorf("failed to dial: %v", err)
 	}
 	defer client.Close()
+
+	log.Printf("SSH Debug: Successfully connected to %s@%s", username, host)
 
 	// Create a session
 	session, err := client.NewSession()
@@ -1280,6 +1312,7 @@ func SshRunScriptWithKeyData(host, username, base64KeyData, script string) (stri
 		return "", fmt.Errorf("failed to run script: %v\nOutput: %s", err, string(output))
 	}
 
+	log.Printf("SSH Debug: Script executed successfully on %s@%s", username, host)
 	return string(output), nil
 }
 
@@ -1483,7 +1516,8 @@ func GetWorkerVersion() (string, error) {
 		Password: config.Password,
 	}
 
-	output, err := SshRunScriptWithKeyData("172.30.114.75", "ndmuser", CONFIG_WORKERS["172.30.114.75"], script)
+	// Use password-based authentication instead of key-based
+	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
 		return "", fmt.Errorf("get worker version failed: %v\noutput: %s", err, output)
 	}
