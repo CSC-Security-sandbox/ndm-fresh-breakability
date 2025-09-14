@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y \
     libxtst6 \
     firefox-esr \
     --no-install-recommends \
+    && apt-get upgrade -y libpcre2-8-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install global npm packages

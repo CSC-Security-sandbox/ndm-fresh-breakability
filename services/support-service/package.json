@@ -68,6 +68,10 @@
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },
+  "overrides": {
+    "form-data" : "^4.0.4",
+    "sha.js": "^2.4.12"
+  },
   "jest": {
     "moduleFileExtensions": [
       "js",
