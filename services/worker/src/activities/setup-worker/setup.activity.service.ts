@@ -12,7 +12,7 @@ import { WorkersConfig } from 'src/config/app.config';
 import { SetupWorkerParams } from '../types/tasks';
 import { RetryableError } from 'src/errors/errors.types';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
-import { SmbUserSetupService } from '../core/migrate/command-execution/smb-user-setup.service';
+// import { SmbUserSetupService } from '../core/migrate/command-execution/smb-user-setup.service';
 
 @Injectable()
 export class SetupActivityService {
@@ -29,7 +29,7 @@ export class SetupActivityService {
     private readonly redisService: RedisService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly protocols: Protocols,
-    private readonly smbUserSetup: SmbUserSetupService,
+    // private readonly smbUserSetup: SmbUserSetupService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
@@ -172,13 +172,13 @@ export class SetupActivityService {
         );
        
         // setup users for SMB 
-        try {
-          if (process.platform === 'win32' && context.jobConfig?.jobType != JobType.DISCOVERY) {
-            await this.smbUserSetup.setup(context.jobRunId, context);
-          }
-        } catch (error) {
-          this.logger.error(`[${jobRunId}] - SMB file owner setup failed: ${error.message}`);
-        }
+        // try {
+        //   if (process.platform === 'win32' && context.jobConfig?.jobType != JobType.DISCOVERY) {
+        //     await this.smbUserSetup.setup(context.jobRunId, context);
+        //   }
+        // } catch (error) {
+        //   this.logger.error(`[${jobRunId}] - SMB file owner setup failed: ${error.message}`);
+        // }
       const accessToken = await this.authService.getAccessToken();
       if(!accessToken) {
         throw new Error('Failed to get access token');
