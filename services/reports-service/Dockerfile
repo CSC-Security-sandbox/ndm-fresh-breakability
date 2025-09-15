@@ -1,4 +1,4 @@
-FROM public.ecr.aws/docker/library/node:22.18.0-trixie-slim
+FROM public.ecr.aws/docker/library/node:22.19.0-trixie
 
 # Install system dependencies required for Puppeteer and Firefox
 RUN apt-get update && apt-get install -y \
@@ -23,7 +23,6 @@ RUN apt-get update && apt-get install -y \
     libxtst6 \
     firefox-esr \
     --no-install-recommends \
-    && apt-get upgrade -y libpcre2-8-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install global npm packages

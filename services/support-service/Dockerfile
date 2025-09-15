@@ -1,9 +1,8 @@
-FROM public.ecr.aws/docker/library/node:22.18.0-trixie-slim
+FROM public.ecr.aws/docker/library/node:22.19.0-trixie
 
 RUN apt-get update \
     && apt update -y \
     && apt-get install -y ca-certificates \
-    && apt-get upgrade -y libpcre2-8-0 \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g @nestjs/cli pm2@latest
 
