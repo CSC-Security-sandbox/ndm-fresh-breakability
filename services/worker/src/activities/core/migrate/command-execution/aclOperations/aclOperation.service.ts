@@ -4,6 +4,7 @@ import { StampMetaOutput } from "../stamp-meta.type";
 import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 import { WinShellService } from "src/activities/common/win-shell.serive";
 import { SrcACLReadError, TgtACLWriteError } from "./aclOperation.error";
+import { psGetAclScript, psSetAclScript } from "./powershell.script";
 
 
 @Injectable()
@@ -19,8 +20,9 @@ export class AclOperationService {
     async getAclOperation(sourcePath: string): Promise<SecurityDescriptor> {
         try {
             const script = `$srcFile = '${sourcePath.replace(/'/g, "''")}'\n${psGetAclScript}`;
-            const rawAcl = await this.winShellService.executeCommand(script);
-            return JSON.parse(rawAcl) as SecurityDescriptor;
+            const output = await this.winShellService.executeCommand(script);
+            if(output.stderr) throw new Error(output.stderr);
+            return JSON.parse(output.stdout) as SecurityDescriptor;
         } catch (error) {
             this.logger.error(`Failed to get ACL for ${sourcePath}: ${error.message}`);
             throw new SrcACLReadError(`Failed to get ACL for ${sourcePath}: ${error.message}`);
@@ -31,7 +33,8 @@ export class AclOperationService {
         try {
             const aclJsonString = JSON.stringify(acl).replace(/'/g, "''");
             const script = `$dstFile = '${targetPath.replace(/'/g, "''")}'\n$aclJson = '${aclJsonString}'\n${psSetAclScript}`;
-            await this.winShellService.executeCommand(script);
+            const output = await this.winShellService.executeCommand(script);
+            if(output.stderr) throw new Error(output.stderr);
         } catch (error) {
             this.logger.error(`Failed to set ACL for ${targetPath}: ${error.message}`);
             throw new TgtACLWriteError(`Failed to set ACL for ${targetPath}: ${error.message}`);

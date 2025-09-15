@@ -1,4 +1,4 @@
-const base = `
+export const psBaseAclDefinition = `
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -171,7 +171,7 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
 }
 `
 
-const psGetAclScript = `
+export const psGetAclScript = `
 try {
     if (!(Test-Path $srcFile)) { throw "File not found: $srcFile" }
     Get-FileSecurityFast $srcFile
@@ -180,7 +180,7 @@ try {
 }
 `;
 
-const psSetAclScript = `
+export const psSetAclScript = `
 try {
     if (!(Test-Path $dstFile)) { throw "File not found: $dstFile" }
     Set-FileSecurityFast $dstFile $aclJson
