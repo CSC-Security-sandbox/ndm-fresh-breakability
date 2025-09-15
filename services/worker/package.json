@@ -101,6 +101,10 @@
     "webpack": "^5.98.0",
     "webpack-cli": "^6.0.1"
   },
+  "overrides": {
+    "form-data" : "^4.0.4",
+    "sha.js": "^2.4.12"
+  },
   "jest-junit": {
     "suiteName": "Unit Tests",
     "outputDirectory": "./test/unit/test-results",
