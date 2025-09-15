@@ -1,4 +1,4 @@
-FROM public.ecr.aws/docker/library/node:22.18.0-trixie-slim
+FROM public.ecr.aws/docker/library/node:22.19.0-trixie-slim
 
 # Install system dependencies required for Puppeteer and Firefox
 RUN apt-get update && apt-get install -y \
