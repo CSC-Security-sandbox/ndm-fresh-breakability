@@ -1,4 +1,4 @@
-FROM public.ecr.aws/docker/library/node:22.18.0-trixie-slim
+FROM public.ecr.aws/docker/library/node:22.19.0-trixie-slim
 
 RUN apt-get update \
     && apt update -y \
