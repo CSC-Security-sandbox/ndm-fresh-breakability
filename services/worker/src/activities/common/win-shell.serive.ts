@@ -2,6 +2,7 @@ import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import { psBaseAclDefinition } from '../core/migrate/command-execution/aclOperations/powershell.script';
+;
 
 interface ShellResult {
     stdout: string;
@@ -19,7 +20,6 @@ interface QueuedCommand {
     endMarker: string;
 }
 
-
 class PersistentShell extends EventEmitter {
     private process!: ChildProcess;
     private isReady = false;
@@ -35,7 +35,11 @@ class PersistentShell extends EventEmitter {
     }
 
     private async init() {
-        if (process.platform === 'win32') {
+        if (process.platform !== 'win32') {
+            this.onReady(false);
+            return;
+        }
+        try {
             this.process = spawn('powershell.exe', ['-NoLogo', '-NoProfile', '-Command', '-'], {
                 windowsHide: true,
                 stdio: ['pipe', 'pipe', 'pipe']
@@ -43,49 +47,60 @@ class PersistentShell extends EventEmitter {
 
             this.process.stdout?.on('data', (data) => {
                 this.outputBuffer += data.toString();
-                this.checkCommandComplete();
+                if (!this.isReady) {
+                    this.checkInitReady();
+                } else {
+                    this.checkCommandComplete();
+                }
             });
             this.process.stderr?.on('data', (data) => {
                 this.outputBuffer += data.toString();
-                this.checkCommandComplete();
+                if (!this.isReady) {
+                    this.checkInitReady();
+                } else {
+                    this.checkCommandComplete();
+                }
             });
-
             this.process.on('exit', (code, signal) => {
                 this.emit('exit', { code, signal });
                 this.rejectAllPending(new Error(`Shell process exited (code=${code}, signal=${signal})`));
             });
 
-            // Inject the script and validate with an echo
-            setTimeout(async () => {
-                try {
-                    // Inject the script
-                    this.process.stdin?.write(psBaseAclDefinition + '\n');
-                    // Validate by echoing a unique string
-                    const marker = `__READY_${Date.now()}_${Math.floor(Math.random() * 1e9)}__`;
-                    const echoCmd = `Write-Host '${marker}'\r\n`;
-                    const result = await this.execute(``, 5000, true, marker); // Only run echo, script already loaded
+            // Inject the script
+            this.process.stdin?.write(psBaseAclDefinition + '\n');
 
-                    if ((result.stdout || '').includes(marker)) {
-                        this.isReady = true;
-                        this.onReady(true);
-                        this.processQueue();
-                    } else {
-                        this.isReady = false;
-                        this.onReady(false);
-                        this.emit('exit', { code: -1, signal: 'init fail' });
-                    }
-                } catch {
-                    this.isReady = false;
+            // Write a unique marker directly, not through the queue
+            this.initMarker = `__READY_${Date.now()}_${Math.floor(Math.random() * 1e9)}__`;
+            this.process.stdin?.write(`Write-Host '${this.initMarker}'\r\n`);
+            // Set a timeout for readiness
+            this.initTimeout = setTimeout(() => {
+                if (!this.isReady) {
                     this.onReady(false);
-                    this.emit('exit', { code: -1, signal: 'init error' });
+                    this.emit('exit', { code: -1, signal: 'init timeout' });
                 }
-            }, 120);
+            }, 7000);
+        } catch (err) {
+            this.onReady(false);
+        }
+    }
+
+    private initMarker: string = '';
+    private initTimeout?: NodeJS.Timeout;
+
+    private checkInitReady() {
+        if (this.initMarker && this.outputBuffer.includes(this.initMarker)) {
+            clearTimeout(this.initTimeout);
+            this.isReady = true;
+            this.onReady(true);
+            // Clean outputBuffer up to marker
+            const markerIdx = this.outputBuffer.indexOf(this.initMarker) + this.initMarker.length;
+            this.outputBuffer = this.outputBuffer.substring(markerIdx);
+            this.processQueue();
         }
     }
 
     private checkCommandComplete() {
         if (!this.currentCommand) return;
-
         const startIdx = this.outputBuffer.indexOf(this.currentCommand.commandMarker);
         const endIdx = this.outputBuffer.indexOf(this.currentCommand.endMarker, startIdx === -1 ? 0 : startIdx);
 
@@ -119,14 +134,8 @@ class PersistentShell extends EventEmitter {
             }
         }, cmd.timeout);
 
-        let wrapped;
-        if (cmd.commandMarker.startsWith('__READY_')) {
-            // For the echo validation, just write the echo wrapped in marker
-            wrapped = `Write-Host '${cmd.commandMarker}'; Write-Host '${cmd.commandMarker}'; Write-Host '${cmd.endMarker}'\r\n`;
-        } else {
-            const safeCmd = cmd.command.replace(/\r?\n/g, ' ');
-            wrapped = `Write-Host '${cmd.commandMarker}'; ${safeCmd}; Write-Host '${cmd.endMarker}'\r\n`;
-        }
+        const safeCmd = cmd.command.replace(/\r?\n/g, ' ');
+        const wrapped = `Write-Host '${cmd.commandMarker}'; ${safeCmd}; Write-Host '${cmd.endMarker}'\r\n`;
         this.process.stdin?.write(wrapped);
     }
 
@@ -141,9 +150,9 @@ class PersistentShell extends EventEmitter {
         }
     }
 
-    execute(command: string, timeout = 15000, internal = false, customMarker?: string): Promise<ShellResult> {
+    execute(command: string, timeout = 15000): Promise<ShellResult> {
         return new Promise((resolve, reject) => {
-            const markerId = customMarker ? customMarker : `${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
+            const markerId = `${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
             const commandMarker = `__CMD_${markerId}__`;
             const endMarker = `__END_${markerId}__`;
 
@@ -155,11 +164,7 @@ class PersistentShell extends EventEmitter {
                 commandMarker,
                 endMarker
             });
-            if (internal) {
-                if (!this.currentCommand) this.processQueue();
-            } else {
-                this.processQueue();
-            }
+            this.processQueue();
         });
     }
 
@@ -199,8 +204,15 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
     }
 
     private async addShellAtIndex(index: number, id: string) {
-        await new Promise<void>((resolve) => {
+        const maxRetries = 5;
+        let attempts = 0;
+        await new Promise<void>((resolve, reject) => {
             const tryCreate = () => {
+                if (attempts++ > maxRetries) {
+                    console.error(`Failed to create shell at ${id} after ${maxRetries} attempts`);
+                    reject(new Error(`Shell creation failed for ${id}`));
+                    return;
+                }
                 const shell = new PersistentShell(id, (success) => {
                     if (success) {
                         shell.on('exit', () => this.replaceShell(index, id));
@@ -208,7 +220,13 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
                         resolve();
                     } else {
                         shell.destroy();
-                        setTimeout(tryCreate, 250); // retry after short delay
+                        setTimeout(tryCreate, 250);
+                    }
+                });
+                shell.once('exit', () => {
+                    if (!shell.isAvailable()) {
+                        shell.destroy();
+                        setTimeout(tryCreate, 250);
                     }
                 });
             };
