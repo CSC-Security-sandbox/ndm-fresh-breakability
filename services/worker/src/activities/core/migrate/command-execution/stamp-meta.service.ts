@@ -10,6 +10,8 @@ import { CommandExecInput, CommandOutput } from "./command-execution.type";
 import { StampMetaOutput } from "./stamp-meta.type";
 import { AclOperations } from "./aclOperations";
 import { FileAccessError } from "./aclOperations.errors";
+import { AclOperationService } from "./aclOperations/aclOperation.service";
+import { SrcACLReadError } from "./aclOperations/aclOperation.error";
 
 
 @Injectable()
@@ -20,6 +22,7 @@ export class StampMetaService {
         private readonly shellService: ShellService,
         private readonly redisService: RedisService,
         private readonly aclOperations: AclOperations,
+        private readonly aclOperationService: AclOperationService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     ) {
         this.logger = loggerFactory.create(StampMetaService.name);
@@ -90,7 +93,6 @@ export class StampMetaService {
             else
                 input.command.ops[OPS_CMD.STAMP_META].status = OPS_STATUS.COMPLETED;
         }
-
         return output;
     }
 
@@ -166,6 +168,20 @@ export class StampMetaService {
                 await jobContext.publishToErrorStream(dmErr);
                 output.sourceErrors.push(error.code);
             }
+        }
+        return output;
+    }
+
+    async stampObjectACL({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
+        const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
+        try {
+            await this.aclOperationService.stampAclOperation({command, jobContext, sourcePath, targetPath, errorType});
+        } catch (error) {
+            const origin = error instanceof SrcACLReadError ? Origin.SOURCE : Origin.DESTINATION;
+            this.logger.error(`Stamping ACL from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
+            const dmErr = dmError("OPERATION", origin, Operation.STAMP_TIME, errorType, command.id, error, { name: command.fPath, path: targetPath });
+            await jobContext.publishToErrorStream(dmErr);
+            output.sourceErrors.push(error.code);
         }
         return output;
     }
