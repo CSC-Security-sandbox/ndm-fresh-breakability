@@ -51,6 +51,7 @@ import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entit
 export class JobRunService {
   private readonly logger: LoggerService;
   private readonly mountBasePath: string;
+  private readonly emailEnabled: boolean;
 
   constructor(
     @InjectRepository(JobRunEntity)
@@ -81,6 +82,7 @@ export class JobRunService {
     this.mountBasePath = this.configService.get<string>(
       "app.paths.mountBasePath"
     );
+    this.emailEnabled = this.configService.get<boolean>('app.email.enabled', true);
   }
 
   async cutOverApproval(jobRunId: string, status: CutOverStatus) {
@@ -518,35 +520,60 @@ export class JobRunService {
         const errorCodes =
           await this.errorRemedyService.getDistinctErrorCodes(jobRunId);
         if (!!errorCodes.length) {
-          await this.sendErrorRemedyEmail({
-            jobRunId,
-            sourcePath: jobConfig.sourcePath?.volumePath,
-            targetPath: jobConfig.targetPath?.volumePath,
-            sourceHost: jobConfig.sourcePath?.fileServer?.host,
-            targetHost: jobConfig.targetPath?.fileServer?.host,
-            jobType: jobConfig.jobType,
-            errorCodes,
-          });
+          // Send error remedy email with error handling
+          if (this.emailEnabled) {
+            try {
+              await this.sendErrorRemedyEmail({
+                jobRunId,
+                sourcePath: jobConfig.sourcePath?.volumePath,
+                targetPath: jobConfig.targetPath?.volumePath,
+                sourceHost: jobConfig.sourcePath?.fileServer?.host,
+                targetHost: jobConfig.targetPath?.fileServer?.host,
+                jobType: jobConfig.jobType,
+                errorCodes,
+              });
+              this.logger.log(`Error remedy email sent successfully for job run ${jobRunId}`);
+            } catch (emailError) {
+              this.logger.error(
+                `Failed to send error remedy email for job run ${jobRunId}: ${emailError.message}`,
+                emailError
+              );
+            }
+          } else {
+            this.logger.log(`Email disabled - skipping error remedy email for job run ${jobRunId}`);
+          }
         } else {
           this.logger.log(
             `Job Run ${jobRunId} completed with stats ${JSON.stringify(jobRunStats)}`
           );
 
-          await this.sendMailService.sendMail({
-            successEmailType: SuccessEmailType.JOB_UPDATE,
-            jobStatusUpdate: {
-              jobType: jobConfig.jobType,
-              jobAction: "completed",
-              sourcePath: {
-                volumePath: jobConfig.sourcePath?.volumePath,
-                fileServer: { host: jobConfig.sourcePath?.fileServer?.host },
-              },
-              targetPath: {
-                volumePath: jobConfig.targetPath?.volumePath,
-                fileServer: { host: jobConfig.targetPath?.fileServer?.host },
-              },
-            },
-          });
+          if (this.emailEnabled) {
+            try {
+              await this.sendMailService.sendMail({
+                successEmailType: SuccessEmailType.JOB_UPDATE,
+                jobStatusUpdate: {
+                  jobType: jobConfig.jobType,
+                  jobAction: "completed",
+                  sourcePath: {
+                    volumePath: jobConfig.sourcePath?.volumePath,
+                    fileServer: { host: jobConfig.sourcePath?.fileServer?.host },
+                  },
+                  targetPath: {
+                    volumePath: jobConfig.targetPath?.volumePath,
+                    fileServer: { host: jobConfig.targetPath?.fileServer?.host },
+                  },
+                },
+              });
+              this.logger.log(`Job completion email sent successfully for job run ${jobRunId}`);
+            } catch (emailError) {
+              this.logger.error(
+                `Failed to send job completion email for job run ${jobRunId}: ${emailError.message}`,
+                emailError
+              );
+            }
+          } else {
+            this.logger.log(`Email disabled - skipping job completion email for job run ${jobRunId}`);
+          }
         }
       }
       this.logger.log("job Run Stats", JSON.stringify(jobRunStats));
@@ -571,21 +598,33 @@ export class JobRunService {
         (jobConfig.jobType === JobType.MIGRATE ||
           jobConfig.jobType === JobType.CUT_OVER)
       ) {
-        await this.sendMailService.sendMail({
-          successEmailType: SuccessEmailType.JOB_UPDATE,
-          jobStatusUpdate: {
-            jobType: jobConfig.jobType,
-            jobAction: "started",
-            sourcePath: {
-              volumePath: jobConfig.sourcePath?.volumePath,
-              fileServer: { host: jobConfig.sourcePath?.fileServer?.host },
-            },
-            targetPath: {
-              volumePath: jobConfig.targetPath?.volumePath,
-              fileServer: { host: jobConfig.targetPath?.fileServer?.host },
-            },
-          },
-        });
+        if (this.emailEnabled) {
+          try {
+            await this.sendMailService.sendMail({
+              successEmailType: SuccessEmailType.JOB_UPDATE,
+              jobStatusUpdate: {
+                jobType: jobConfig.jobType,
+                jobAction: "started",
+                sourcePath: {
+                  volumePath: jobConfig.sourcePath?.volumePath,
+                  fileServer: { host: jobConfig.sourcePath?.fileServer?.host },
+                },
+                targetPath: {
+                  volumePath: jobConfig.targetPath?.volumePath,
+                  fileServer: { host: jobConfig.targetPath?.fileServer?.host },
+                },
+              },
+            });
+            this.logger.log(`Job started email sent successfully for job run ${jobRunId}`);
+          } catch (emailError) {
+            this.logger.error(
+              `Failed to send job started email for job run ${jobRunId}: ${emailError.message}`,
+              emailError
+            );
+          }
+        } else {
+          this.logger.log(`Email disabled - skipping job started email for job run ${jobRunId}`);
+        }
       }
       this.logger.log(`Job Run ${jobRunId} status updated to ${status}`);
       return this.jobRunRepo.update({ id: jobRunId }, { status: status });
@@ -809,27 +848,37 @@ export class JobRunService {
       this.logger.log(`No error codes found for job run ${jobRunId}`);
       return;
     }
-    const errorRemedies = await this.errorRemedyService.findByErrorCodes(
-      errorCodes.map((error) => error.errorCode)
-    );
+    
+    try {
+      const errorRemedies = await this.errorRemedyService.findByErrorCodes(
+        errorCodes.map((error) => error.errorCode)
+      );
 
-    await this.sendMailService.sendMail({
-      successEmailType: SuccessEmailType.ERROR_REMEDY,
-      errorRemedy: {
-        jobRunId,
-        jobType,
-        sourceHost,
-        sourcePath,
-        targetHost,
-        targetPath,
-        errorRemedies: errorCodes.map((error) => ({
-          code: error.errorCode,
-          description: error.description,
-          resolutionSteps: error.resolutionSteps,
-          referenceCommands: error.referenceCommands,
-        })),
-      },
-    });
+      await this.sendMailService.sendMail({
+        successEmailType: SuccessEmailType.ERROR_REMEDY,
+        errorRemedy: {
+          jobRunId,
+          jobType,
+          sourceHost,
+          sourcePath,
+          targetHost,
+          targetPath,
+          errorRemedies: errorCodes.map((error) => ({
+            code: error.errorCode,
+            description: error.description,
+            resolutionSteps: error.resolutionSteps,
+            referenceCommands: error.referenceCommands,
+          })),
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to send error remedy email for job run ${jobRunId}: ${error.message}`,
+        error
+      );
+      // Re-throw to be handled by the caller
+      throw error;
+    }
   }
 
   async checkWorkerHealth() {

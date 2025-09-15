@@ -19,6 +19,7 @@ export default registerAs(
     },
     email: {
       sendMail: process.env.SEND_EMAIL || "http://localhost:3001",
+      enabled: process.env.EMAIL_ENABLED !== "false", // Default to true, set EMAIL_ENABLED=false to disable
     },
     worker: {
       healthCheckStatusTimout:
