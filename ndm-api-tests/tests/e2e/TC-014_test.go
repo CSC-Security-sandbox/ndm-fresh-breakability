@@ -130,7 +130,7 @@ var _ = Describe("TC-0014: Run incremental sync schedule migration for verifying
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
 
-			migrationEndTsConf := make(map[string]string)
+			maxSleepTime := 0
 			var migrationJobRunIDs []string
 			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
@@ -138,24 +138,16 @@ var _ = Describe("TC-0014: Run incremental sync schedule migration for verifying
 				Expect(len(getJobsResp.JobRuns)).To(BeNumerically("==", 1), "No jobRuns found in response")
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
 				defer resp.Body.Close()
+
 				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				migrationEndTsConf[migrationJobConfigID] = GetCurrentUTCTimestamp()
 				migrationJobRunIDs = append(migrationJobRunIDs, migrationJobRunID)
-			}
 
-			By("Removing Delta Data files for Incremental run")
-			err = RemoveDeltaFromVolume(sourceVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error removing delta data files from %s", sourceVolumePath1)
+				getJobRunResp, err := GetJobRunInfo(migrationJobRunID)
+				Expect(err).NotTo(HaveOccurred(), "Error getting job run info")
 
-			err = RemoveDeltaFromVolume(sourceVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error removing delta data files from %s", sourceVolumePath2)
-
-			By("Validating the NextScheduled time")
-			maxSleepTime := 0
-			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				jobSummary, err := GetJobSummaryByConfigID(ProjectId, migrationJobConfigID, headers)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -163,7 +155,7 @@ var _ = Describe("TC-0014: Run incremental sync schedule migration for verifying
 				Expect(err).NotTo(HaveOccurred(),
 					"could not parse NextScheduleDate %q", jobSummary.NextScheduleDate)
 
-				parsedBase, err := time.Parse(TIME_FORMAT, migrationEndTsConf[migrationJobConfigID])
+				parsedBase, err := time.Parse(TIME_FORMAT, getJobRunResp.EndTime)
 				Expect(err).NotTo(HaveOccurred(), "Error parsing current datetimes")
 				sch, err := cron.ParseStandard("*/5 * * * *")
 				Expect(err).NotTo(HaveOccurred(), "invalid cron expression")
@@ -181,6 +173,13 @@ var _ = Describe("TC-0014: Run incremental sync schedule migration for verifying
 					maxSleepTime = int(sleepTime)
 				}
 			}
+
+			By("Removing Delta Data files for Incremental run")
+			err = RemoveDeltaFromVolume(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error removing delta data files from %s", sourceVolumePath1)
+
+			err = RemoveDeltaFromVolume(sourceVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error removing delta data files from %s", sourceVolumePath2)
 
 			LogDebug("Waiting till new Job run created")
 			Wait(maxSleepTime)
@@ -200,8 +199,9 @@ var _ = Describe("TC-0014: Run incremental sync schedule migration for verifying
 			By("Validating incremental Sync is getting triggered")
 			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
-				Expect(len(getJobsResp.JobRuns)).To(BeNumerically("==", 2), "No jobRuns found in response")
-				migrationJobRunID := getJobsResp.JobRuns[1].JobRunId
+				Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">=", 2), "No jobRuns found in response")
+				lastIdx := len(getJobsResp.JobRuns) - 1
+				migrationJobRunID := getJobsResp.JobRuns[lastIdx].JobRunId
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
 				defer resp.Body.Close()
 

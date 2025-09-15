@@ -613,6 +613,30 @@ func checkJobRunStatus(jobRunID string) (string, error) {
 	return status, nil
 }
 
+// GetJobRunInfo returns the details of the job-run API
+func GetJobRunInfo(jobRunID string) (GetJobRunResponseItems, error) {
+	url := fmt.Sprintf("%s%s/%s", JOB_SERVICE_URL, JOB_RUN_ENDPOINT, jobRunID)
+	headers := GetHeaders(AuthToken, ContentTypeJSON)
+	resp, err := SendAPIRequest(http.MethodGet, url, nil, headers)
+	if err != nil {
+		return GetJobRunResponseItems{}, fmt.Errorf("error calling API: %v", err)
+	}
+	defer resp.Body.Close()
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return GetJobRunResponseItems{}, fmt.Errorf("error reading response body: %v", err)
+	}
+
+	var response GetJobRunResponse
+	// Use the flexible wrapper since all responses are now data.items
+	err = json.Unmarshal(bodyBytes, &response)
+	if err != nil {
+		return GetJobRunResponseItems{}, fmt.Errorf("error parsing JSON: %v", err)
+	}
+
+	return response.Data.Items, nil
+}
+
 // ChangeJobRunState sends the actual state change request to the API.
 func ChangeJobRunState(action string, jobRunIDs []string) error {
 

@@ -147,3 +147,32 @@ type AboutNDMResponse struct {
 		} `json:"items"`
 	} `json:"data"`
 }
+
+// ==============JOB Structs=====================
+type GetJobRunResponseItems struct {
+	JobRunID     string `json:"jobRunId"`
+	JobConfigID  string `json:"jobConfigId"`
+	Status       string `json:"status"`
+	StartTime    string `json:"startTime"`
+	EndTime      string `json:"endTime"`
+	JobType      string `json:"jobType"`
+	SourceServer struct {
+		ServerName string `json:"serverName"`
+		Path       string `json:"path"`
+		Protocol   string `json:"protocol"`
+	} `json:"sourceServer"`
+	TimeElapsed             int64    `json:"timeElapsed"`
+	ScannedFilesCount       string   `json:"scannedFilesCount"`
+	ScannedDirectoriesCount string   `json:"scannedDirectoriesCount"`
+	TotalScannedSize        string   `json:"totalScannedSize"`
+	TotalMigratedSize       string   `json:"totalMigratedSize"`
+	Errors                  []string `json:"errors"`
+}
+
+type GetJobRunResponse struct {
+	TrackID string `json:"trackId"`
+	Message string `json:"message"`
+	Data    struct {
+		Items GetJobRunResponseItems `json:"items"`
+	} `json:"data"`
+}

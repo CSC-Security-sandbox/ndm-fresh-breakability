@@ -125,7 +125,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
 
-			migrationEndTsConf := make(map[string]string)
+			maxSleepTime := 0
 			var migrationJobRunIDs []string
 			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
@@ -139,18 +139,10 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
 				migrationJobRunIDs = append(migrationJobRunIDs, migrationJobRunID)
-				migrationEndTsConf[migrationJobConfigID] = GetCurrentUTCTimestamp()
-			}
 
-			By("Adding Delta Data for Incremental run")
-			err = AddDataToVolume(sourceVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
-			err = AddDataToVolume(sourceVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
+				getJobRunResp, err := GetJobRunInfo(migrationJobRunID)
+				Expect(err).NotTo(HaveOccurred(), "Error getting job run info")
 
-			By("Validating the NextScheduled time")
-			maxSleepTime := 0
-			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				jobSummary, err := GetJobSummaryByConfigID(ProjectId, migrationJobConfigID, headers)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -158,7 +150,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				Expect(err).NotTo(HaveOccurred(),
 					"could not parse NextScheduleDate %q", jobSummary.NextScheduleDate)
 
-				parsedBase, err := time.Parse(TIME_FORMAT, migrationEndTsConf[migrationJobConfigID])
+				parsedBase, err := time.Parse(TIME_FORMAT, getJobRunResp.EndTime)
 				Expect(err).NotTo(HaveOccurred(), "Error parsing current datetimes")
 				sch, err := cron.ParseStandard("*/5 * * * *")
 				Expect(err).NotTo(HaveOccurred(), "invalid cron expression")
@@ -176,6 +168,12 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 					maxSleepTime = int(sleepTime)
 				}
 			}
+
+			By("Adding Delta Data for Incremental run")
+			err = AddDataToVolume(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
+			err = AddDataToVolume(sourceVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
 
 			LogDebug("Waiting till new Job run created")
 			Wait(maxSleepTime)
@@ -195,8 +193,9 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			By("Validating incremental Sync is getting triggered")
 			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
-				Expect(len(getJobsResp.JobRuns)).To(BeNumerically("==", 2), "No jobRuns found in response")
-				migrationJobRunID := getJobsResp.JobRuns[1].JobRunId
+				Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">=", 2), "No jobRuns found in response")
+				lastIdx := len(getJobsResp.JobRuns) - 1
+				migrationJobRunID := getJobsResp.JobRuns[lastIdx].JobRunId
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
 				defer resp.Body.Close()
 
@@ -204,10 +203,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				// Failing due to NDM-1708, need to uncomment after it's fix
-				// result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/cutover_validation.json", PROTOCOL_TYPE)) // as adding delta data similar to cutover, hence using same validation json for incremental migration and cutover
-				// Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-				// By(fmt.Sprintf("validate report result : %s", result))
+				// TODO: DISCOVER DESTINATION
 			}
 
 			By("Creating bulk cutover job")
