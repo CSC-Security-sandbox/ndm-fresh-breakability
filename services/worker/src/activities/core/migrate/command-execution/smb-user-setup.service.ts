@@ -15,7 +15,7 @@ export class SmbUserSetupService {
     private shellPool: ShellPoolExecutorService,
     private aclOperations: AclOperations,
   ) {
-    this.logger = loggerFactory.create(SmbUserSetupService.name);
+    // this.logger = loggerFactory.create(SmbUserSetupService.name);
   }
 
   async setup(jobRunId: string, context: any): Promise<void> {
