@@ -24,6 +24,12 @@ variable "project_name" {
   description = "The name of the project."
 }
 
+variable "image_suffix" {
+  description = "Suffix to append to image names"
+  type        = string
+  default     = ""
+}
+
 variable "component_name" {
   type        = string
   description = "The name of the project."
@@ -86,7 +92,7 @@ locals {
 
 locals {
   formatted_timestamp = formatdate("DD-MM-YYYY-hh-mm-ss", timestamp())
-  image_name          = "${var.project_name}-control-plane-${local.formatted_timestamp}"
+  image_name          = "${var.project_name}-control-plane-${local.formatted_timestamp}${var.image_suffix == "" ? "" : "-${var.image_suffix}"}"
 }
 
 # "###################################"
