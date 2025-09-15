@@ -89,8 +89,8 @@ export class CommandExecService {
                 output.sourceErrors.push('ENOENT');
                 return output
             }
-            if(targetPathExists)
-                await this.stampMetaService.removeFileAttributeTemporarily(targetPath);
+            // if(targetPathExists)
+            //     await this.stampMetaService.removeFileAttributeTemporarily(targetPath);
             try {
                 const checksums = await this.workerThreadService.migrateWorkerThread({
                     sourcePath, destinationPath: targetPath, operationId: command.id, size: command.metadata?.size ?? 0
@@ -109,9 +109,9 @@ export class CommandExecService {
                 await jobContext.publishToErrorStream(dmErr);   
                 output.targetErrors.push(error.code);
             }finally{
-                if(await isPathExists(targetPath)) {
-                    await this.stampMetaService.restoreFileAttribute(targetPath);
-                }
+                // if(await isPathExists(targetPath)) {
+                //     await this.stampMetaService.restoreFileAttribute(targetPath);
+                // }
             }
         }
         return output;
