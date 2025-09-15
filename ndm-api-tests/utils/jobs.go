@@ -425,6 +425,7 @@ func ApproveRejectBulkCutoverJob(jobRunID, action string, headers map[string]str
 // GetJobRunDetails fetches GetJobResponse struct and job runs, status from same for a given jobConfigID, this function can be used to validated
 // other details from response by modifying the GetJobResponse struct
 func GetJobRunDetails(jobConfigID string, headers map[string]string, needRetryAttempt ...bool) (GetJobResponse, *http.Response, error) {
+	// Wait(120)
 	jobsURL := fmt.Sprintf("%s/api/v1/jobs/%s", JOB_SERVICE_URL, jobConfigID)
 	var resp *http.Response
 
@@ -496,7 +497,7 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 			LogDebug("Job reached desired state: " + status + ".")
 			return nil
 		}
-		Wait(DefaultPollInterval)
+		Wait(5)
 
 	}
 
@@ -577,6 +578,9 @@ func HandleJobRunStateChange(jobRunID, stateType string, jobRunIDs []string) err
 			if status == RUNNING_JOBRUN {
 				LogDebug("Job is running. Pausing JobRun.")
 				return ChangeJobRunState(stateType, jobRunIDs)
+			}
+			if status == COMPLETED_JOBRUN {
+				return nil
 			}
 			LogDebug(fmt.Sprintf("JobRun is not in running state. Current state: %s", status))
 			Wait(1)
