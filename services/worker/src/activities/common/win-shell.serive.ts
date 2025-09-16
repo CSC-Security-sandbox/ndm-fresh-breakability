@@ -1,7 +1,7 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
-import { psBaseAclDefinition } from '../core/migrate/command-execution/aclOperations/powershell.script';
+import { psBaseAclDefinition } from '../core/migrate/command-execution/win-opeartions/powershell.script';
 
 
 interface ShellResult {
@@ -194,7 +194,8 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
     private totalErrors = 0;
 
     async onModuleInit() {
-        await this.initializePool();
+        if (process.platform === 'win32')
+            await this.initializePool();
     }
 
     private async initializePool() {
@@ -222,8 +223,7 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
                         this.shells[index] = shell;
                         resolve();
                     } else {
-                        shell.destroy();
-                        setTimeout(tryCreate, 250);
+                        shell.destroy(); setTimeout(tryCreate, 250);
                     }
                 });
                 shell.once('exit', () => {

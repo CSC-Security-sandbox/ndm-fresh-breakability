@@ -3,18 +3,18 @@ import { CommandExecInput } from "../command-execution.type";
 import { StampMetaOutput } from "../stamp-meta.type";
 import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 import { WinShellService } from "src/activities/common/win-shell.serive";
-import { SrcACLReadError, TgtACLWriteError } from "./aclOperation.error";
+import { SrcACLReadError, TgtACLWriteError } from "./acl-operation.error";
 import { psGetAclScript, psSetAclScript } from "./powershell.script";
 
 
 @Injectable()
-export class AclOperationService {
+export class WinOperationService {
     private readonly logger: LoggerService;
     constructor(
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
-       private readonly winShellService: WinShellService,
+        private readonly winShellService: WinShellService,
     ) {
-        this.logger = loggerFactory.create(AclOperationService.name);
+        this.logger = loggerFactory.create(WinOperationService.name);
     }
 
     async getAclOperation(sourcePath: string): Promise<SecurityDescriptor> {
@@ -49,5 +49,14 @@ export class AclOperationService {
 
         await this.setAclOperation(targetPath, acl);
         return output;
+    }
+
+    async resetFileAttributes(path: string): Promise<boolean> {
+        try {
+            await this.winShellService.executeCommand(`attrib -H -R "${path}"`);
+            return true;
+        } catch {
+            throw new Error(`Failed to reset file attributes for ${path}`);
+        }
     }
 }
