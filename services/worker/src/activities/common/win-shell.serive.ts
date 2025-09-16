@@ -1,7 +1,8 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
-import { psBaseAclDefinition } from './powershell.script';
+import { psBaseAclDefinition } from '../core/migrate/command-execution/aclOperations/powershell.script';
+
 
 interface ShellResult {
     stdout: string;
