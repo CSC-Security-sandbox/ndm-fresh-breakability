@@ -24,12 +24,12 @@ import { CommandExecService } from './core/migrate/command-execution/command-exe
 import { SyncService } from './core/migrate/sync-activity.service';
 import { StampMetaService } from './core/migrate/command-execution/stamp-meta.service';
 import { WinShellService } from './common/win-shell.serive';
-import { AclOperationService } from './core/migrate/command-execution/aclOperations/aclOperation.service';
+import { WinOperationService } from './core/migrate/command-execution/win-opeartions/win-operation.service';
 
 @Module({
   imports: [LoggerModule.forRoot(), HttpModule, ConfigModule, WorkerThreadModule, AuthModule, ProtocolsModule ],
   controllers: [],
-  providers: [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService, MigrateScanService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, SpeedTestActivities, RedisMemoryCheckActivity,  CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity, WinShellService, AclOperationService],
-  exports:  [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService,  MigrateScanService,  ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, SpeedTestActivities,RedisMemoryCheckActivity, CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity, WinShellService, AclOperationService],
+  providers: [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService, MigrateScanService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, SpeedTestActivities, RedisMemoryCheckActivity,  CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity, WinShellService, WinOperationService],
+  exports:  [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService,  MigrateScanService,  ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, SpeedTestActivities,RedisMemoryCheckActivity, CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity, WinShellService, WinOperationService],
 })
 export class ActivitiesModule {}
