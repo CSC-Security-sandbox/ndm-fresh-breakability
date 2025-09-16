@@ -44,6 +44,7 @@ Follow these steps to create the installer:
   - **Worker ID**
   - **Worker Secret**
   - **Control Plane IP**
+  - **Project ID**
 - Once installed, the Datamigrator Worker service starts automatically.
 - The installation directory is:
   ```
