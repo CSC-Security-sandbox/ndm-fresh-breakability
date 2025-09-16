@@ -42,7 +42,7 @@ $DACL_SECURITY_INFORMATION  = 0x00000004
 $SACL_SECURITY_INFORMATION  = 0x00000008
 $ALL_SECURITY_INFORMATION   = $OWNER_SECURITY_INFORMATION -bor $GROUP_SECURITY_INFORMATION -bor $DACL_SECURITY_INFORMATION 
 
-ffunction Get-FileSecurityFast([string]$path) {
+function Get-FileSecurityFast([string]$path) {
     $pOwnerSid = [IntPtr]::Zero
     $pGroupSid = [IntPtr]::Zero
     $pDacl = [IntPtr]::Zero
