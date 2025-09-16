@@ -1,13 +1,13 @@
-export class SrcACLReadError extends Error {
-    constructor(message: string, public readonly code: string = 'SRC_ACL_READ_ERROR') {
+export class SourceAclError extends Error {
+    constructor(message: string, public readonly code: string = 'SRC_ACL_ERROR') {
         super(message);
-        this.name = 'SRC_ACL_READ_ERROR';
+        this.name = 'SRC_ACL_ERROR';
     }
 }
 
-export class TgtACLWriteError extends Error {
-    constructor(message: string, public readonly code: string = 'TGT_ACL_WRITE_ERROR') {
+export class TargetAclError extends Error {
+    constructor(message: string, public readonly code: string = 'TARGET_ACL_ERROR') {
         super(message);
-        this.name = 'TGT_ACL_WRITE_ERROR';
+        this.name = 'TARGET_ACL_ERROR';
     }   
 }

@@ -5,7 +5,7 @@ import * as fs from "fs";
 import { dmError } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { RedisService } from "src/redis/redis.service";
-import { SrcACLReadError } from "./win-opeartions/acl-operation.error";
+import { SourceAclError } from "./win-opeartions/acl-operation.error";
 import { WinOperationService } from "./win-opeartions/win-operation.service";
 import { CommandExecInput, CommandOutput } from "./command-execution.type";
 import { StampMetaOutput } from "./stamp-meta.type";
@@ -169,9 +169,9 @@ export class StampMetaService {
         try {
             await this.winOperationService.stampAclOperation({command, jobContext, sourcePath, targetPath, errorType});
         } catch (error) {
-            const origin = error instanceof SrcACLReadError ? Origin.SOURCE : Origin.DESTINATION;
+            const origin = error instanceof SourceAclError ? Origin.SOURCE : Origin.DESTINATION;
             this.logger.error(`Stamping ACL from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
-            const dmErr = dmError("OPERATION", origin, Operation.STAMP_TIME, errorType, command.id, error, { name: command.fPath, path: targetPath });
+            const dmErr = dmError("OPERATION", origin, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
             await jobContext.publishToErrorStream(dmErr);
             output.sourceErrors.push(error.code);
         }
