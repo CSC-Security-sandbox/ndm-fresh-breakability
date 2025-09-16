@@ -1,8 +1,7 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
-import { psBaseAclDefinition } from '../core/migrate/command-execution/aclOperations/powershell.script';
-;
+import { psBaseAclDefinition } from './powershell.script';
 
 interface ShellResult {
     stdout: string;
@@ -91,6 +90,7 @@ class PersistentShell extends EventEmitter {
         if (this.initMarker && this.outputBuffer.includes(this.initMarker)) {
             clearTimeout(this.initTimeout);
             this.isReady = true;
+            console.log(`✅ [PersistentShell:${this.id}] Ready`);
             this.onReady(true);
             // Clean outputBuffer up to marker
             const markerIdx = this.outputBuffer.indexOf(this.initMarker) + this.initMarker.length;
@@ -151,6 +151,7 @@ class PersistentShell extends EventEmitter {
     }
 
     execute(command: string, timeout = 15000): Promise<ShellResult> {
+        console.log(`➡️ [PersistentShell:${this.id}] Executing command: ${command}`);
         return new Promise((resolve, reject) => {
             const markerId = `${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
             const commandMarker = `__CMD_${markerId}__`;
@@ -186,7 +187,7 @@ class PersistentShell extends EventEmitter {
 export class WinShellService implements OnModuleInit, OnModuleDestroy {
     private shells: PersistentShell[] = [];
     private poolSize = 10;
-    private maxQueuePerShell = 500;
+    private maxQueuePerShell = 1;
     private dropWhenFull = false;
     private totalExecuted = 0;
     private totalErrors = 0;
@@ -215,7 +216,8 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
                 }
                 const shell = new PersistentShell(id, (success) => {
                     if (success) {
-                        shell.on('exit', () => this.replaceShell(index, id));
+                        console.log(`✅ Created shell at ${id}`);
+                        shell.on('exit', () => { console.log(`❌ [PersistentShell:${id}] Exited`); this.replaceShell(index, id); });
                         this.shells[index] = shell;
                         resolve();
                     } else {
@@ -238,14 +240,13 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
         await this.addShellAtIndex(index, `${id}-restart-${Date.now()}`);
     }
 
+    private rrIndex = 0;
+
     private getOptimalShell(): PersistentShell {
-        let best = this.shells[0];
-        let min = best.getQueueLength();
-        for (const s of this.shells) {
-            const q = s.getQueueLength();
-            if (q < min) { min = q; best = s; }
-        }
-        return best;
+        // Round-robin allocation
+        const shell = this.shells[this.rrIndex % this.shells.length];
+        this.rrIndex = (this.rrIndex + 1) % this.shells.length;
+        return shell;
     }
 
     async executeCommand(command: string, timeout = 10000): Promise<{ stdout: string; stderr: string }> {
