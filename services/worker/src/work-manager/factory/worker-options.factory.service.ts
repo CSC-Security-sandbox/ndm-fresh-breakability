@@ -17,6 +17,7 @@ import { WorkFlowType } from "./worker-options.types";
 import { ValidatePathActivity } from "src/activities/validate-path/validate-path.service";
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { SyncService } from "src/activities/core/migrate/sync-activity.service";
+import { MappingResolverService } from "src/activities/core/initializer/mapping-resolver.service";
 
 @Injectable()
 export class WorkerOptionsService {
@@ -37,7 +38,7 @@ export class WorkerOptionsService {
     private readonly scanService: ScanService,
     private readonly syncService: SyncService,
     private readonly validatePathActivity: ValidatePathActivity,
-
+    private readonly mappingResolverService: MappingResolverService,
 
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
@@ -101,6 +102,7 @@ export class WorkerOptionsService {
           scanDirectories: this.scanService.scanDirectories.bind(this.scanService),
           createInitialDirBatch: this.commonTaskService.createInitialDirBatch.bind(this.commonTaskService),
           isCmdStreamLenValid: this.commonTaskService.isCmdStreamLenValid.bind(this.commonTaskService),
+          resolveUsernamesToSids: this.mappingResolverService.resolveUsernamesToSids.bind(this.mappingResolverService),
         }, this.jobTaskActivityConcurrency, this.shutDownForceTime);
       default:
         return undefined;
