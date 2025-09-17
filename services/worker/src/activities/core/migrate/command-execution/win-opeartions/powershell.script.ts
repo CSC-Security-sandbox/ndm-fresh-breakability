@@ -262,11 +262,12 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     }
         
   $unresolved_sid_values = @()
-    if ($unresolved_sids.Count -gt 0) {
+   if ($unresolved_sids.Count -gt 0) {
         $unresolved_sid_values = $unresolved_sids | ForEach-Object { $_.Value }
+        Write-Output ('{"success":true, "unresolved_sids":' + ($unresolved_sid_values | ConvertTo-Json -Compress) + '}')
+    } else {
+        Write-Output '{"success":true}'
     }
-    Write-Output ('{"success":true, "unresolved_sids":' + ($unresolved_sid_values | ConvertTo-Json -Compress) + '}')
-
 }
 
 function Resolve-UsernamesToSid {
