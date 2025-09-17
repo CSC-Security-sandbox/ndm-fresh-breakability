@@ -45,13 +45,13 @@ export class MappingResolverService {
                     unresolvedSids.push(src), unresolved = true;
                 if(!dst.startsWith('S-')) 
                     unresolvedSids.push(dst), unresolved = true;
-                if(!unresolved)
+                if(unresolved)
                     resolved.set(src, dst);
             }
 
             mapping.clear();
+            if(unresolvedSids.length === 0) continue;
             const mappedSids = await this.winOperationService.resolveUsernamesToSids(unresolvedSids);
-            this.logger.debug(`resolved Mapped SIDs: ${JSON.stringify(mappedSids)}`);
 
             for(const [src, dst] of resolved) {
                 const sourceSid = src && src.startsWith('S-') ? src : mappedSids.get(src);
