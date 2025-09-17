@@ -14,6 +14,16 @@ import {
 
 @Injectable()
 export class JobRunActionService {
+    // Helper for RESUME: filter paused job runs and collect invalid IDs
+    private async getPausedJobRuns(jobRunIds: string[]): Promise<{ paused: JobRunEntity[], invalid: string[] }> {
+        const jobRuns = await this.jobRunRepo.find({ where: {
+            id: In(jobRunIds),
+            status: JobRunStatus.Paused
+        }, select: ["id", "workFlowId"] });
+        const pausedIds = jobRuns.map(jr => jr.id);
+        const invalidIds = jobRunIds.filter(id => !pausedIds.includes(id));
+        return { paused: jobRuns, invalid: invalidIds };
+    }
     private readonly logger: LoggerService;
 
     constructor(
@@ -50,8 +60,24 @@ export class JobRunActionService {
                     signalStatus: JobRunStatus.Stopped
                  });
                 }
-            case JobRunActions.RESUME:
-                return await this.resumeJobRuns(jobRunActions.jobRuns);
+            case JobRunActions.RESUME: {
+                // filter paused job runs and handle errors
+                const { paused, invalid } = await this.getPausedJobRuns(jobRunActions.jobRuns);
+                if (paused.length === 0) {
+                    throw new BadRequestException("No paused job runs found to resume.");
+                }
+                const resumeResults = await this.resumeJobRuns(paused.map(jr => jr.id));
+                if (invalid.length > 0) {
+                    return {
+                        items: resumeResults,
+                        errors: invalid.map(id => ({
+                            jobRunId: id,
+                            error: "Cannot resume job run unless status is Paused."
+                        }))
+                    };
+                }
+                return resumeResults;
+            }
             default:
                 throw new BadRequestException("Invalid Action Type");
         }    
