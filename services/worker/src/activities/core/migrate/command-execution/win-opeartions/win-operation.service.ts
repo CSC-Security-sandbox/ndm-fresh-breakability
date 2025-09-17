@@ -10,6 +10,7 @@ import { LRUCache } from "src/activities/core/utils/lru-cache";
 import { OPS_CMD } from "@netapp-cloud-datamigrate/jobs-lib";
 
 
+
 @Injectable()
 export class WinOperationService {
     private readonly logger: LoggerService;
@@ -128,6 +129,17 @@ export class WinOperationService {
         return output;
     }
 
+    async resolveUsernamesToSids(usernames: string[]): Promise<Map<string, string>> {
+        const usernameToSidMap = new Map<string, string>();
+        const command = `Resolve-UsernamesToSid -Username ${usernames.join(',')}`;
+        const output = await this.winShellService.executeCommand(command);
+        const sidMappings = JSON.parse(output.stdout);
+        
+        sidMappings.forEach(mapping => {
+            usernameToSidMap.set(mapping.username, mapping.sid);
+        });
 
+        return usernameToSidMap;
+    }
     
 }

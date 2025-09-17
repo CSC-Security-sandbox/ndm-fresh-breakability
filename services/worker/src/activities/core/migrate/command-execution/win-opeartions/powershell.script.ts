@@ -182,6 +182,58 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
 
     Write-Output '{"success":true}'
 }
+
+function Resolve-UsernamesToSid {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string[]]$Usernames
+    )
+
+    function Try-Translate([string]$acct) {
+        try {
+            return ([System.Security.Principal.NTAccount]$acct).Translate([System.Security.Principal.SecurityIdentifier]).Value
+        } catch {
+            return $null
+        }
+    }
+
+    $computer   = $env:COMPUTERNAME
+    $userdomain = $env:USERDOMAIN
+    $results    = New-Object System.Collections.Generic.List[object]
+
+    foreach ($u in $Usernames) {
+        if ([string]::IsNullOrWhiteSpace($u)) { continue }
+
+        if ($u -match '^S-1-') {
+            $results.Add([pscustomobject]@{ username = $u; sid = $u }) | Out-Null
+            continue
+        }
+
+        $sid = $null
+
+        # Qualified (DOMAIN\\name) or UPN -> try as-is
+        if ($u -like '*\\*' -or $u -like '*@*') {
+            $sid = Try-Translate $u
+        }
+        # Try local machine qualification
+        if (-not $sid) {
+            $sid = Try-Translate "$computer\\$u"
+        }
+        # Fallback: current USERDOMAIN
+        if (-not $sid -and $userdomain) {
+            $sid = Try-Translate "$userdomain\\$u"
+        }
+
+        if ($sid) {
+            $results.Add([pscustomobject]@{ username = $u; sid = $sid }) | Out-Null
+        } else {
+            $results.Add([pscustomobject]@{ username = $u; sid = 'Invalid' }) | Out-Null
+        }
+    }
+
+    $results | ConvertTo-Json -Compress
+}
 `
 
 export const psGetAclScript = `
