@@ -168,7 +168,11 @@ export class StampMetaService {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         try {
             this.logger.log(`Stamping ACL from ${sourcePath} to ${targetPath}`);
-            await this.winOperationService.stampAclOperation({command, jobContext, sourcePath, targetPath, errorType});
+          const { output, errors } = await this.winOperationService.stampAclOperation({command, jobContext, sourcePath, targetPath, errorType});
+          if(errors && errors.length > 0){
+            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, new Error(errors.join(",\n")), { name: command.fPath, path: targetPath });
+            await jobContext.publishToErrorStream(dmErr);
+          }
         } catch (error) {
             const origin = error instanceof SourceAclError ? Origin.SOURCE : Origin.DESTINATION;
             this.logger.error(`Stamping ACL from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);

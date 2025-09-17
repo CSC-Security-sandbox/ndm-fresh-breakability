@@ -6,6 +6,8 @@ type SecurityDescriptor = {
   DaclPresent: boolean;
   DaclProtected: boolean;
   DaclAutoInherit: boolean;
+  originalOwner: string;
+  originalGroup: string;
 };
 
 type Ace = {
@@ -14,6 +16,7 @@ type Ace = {
   AceType: number;
   AceFlags: number;
   IsInherited: boolean;
+  originalSid: string;
 };
 
 interface ValidatorOutput {
