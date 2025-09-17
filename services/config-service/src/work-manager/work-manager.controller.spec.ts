@@ -68,8 +68,7 @@ describe('WorkManagerController', () => {
       const payload: CreateRequestDto = {
         options: {
           startDelay: '10',
-          workflowExecutionTimeout: '12',
-          workflowRunTimeout: '12',
+          workflowExecutionTimeout: '12',          
           workflowTaskTimeout: '12',
         },
         fileServer: { hostname: 'test', protocols: [] },

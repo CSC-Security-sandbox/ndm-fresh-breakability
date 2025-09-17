@@ -1190,8 +1190,16 @@ export class ConfigurationService {
   }
 
   async updateResult(id: string, configId: string) {
+    const terminalStates = [
+      WorkflowExecutionStatus.COMPLETED,
+      WorkflowExecutionStatus.FAILED,
+      WorkflowExecutionStatus.CANCELLED,
+      WorkflowExecutionStatus.TIMED_OUT,
+      WorkflowExecutionStatus.ERRORED,
+    ];
+    
     try {
-      setTimeout(async () => {
+      const interval = setInterval(async () => {
         try {
           const details: ListPathWorkflowStatus =
             (await this.workFlowService.getWorkFlowRes(
@@ -1203,12 +1211,15 @@ export class ConfigurationService {
             return;
           }
 
-          if (details.status === WorkflowExecutionStatus.COMPLETED) {
-            await this.updatePaths(configId, details);
-          } else {
-            this.logger.warn(
-              `Workflow ${id} did not complete. Status: ${details.status}`,
-            );
+          if (terminalStates.includes(details.status)) {
+            clearInterval(interval);
+            if (details.status === WorkflowExecutionStatus.COMPLETED) {
+              await this.updatePaths(configId, details);
+            } else {
+              this.logger.warn(
+                `Workflow ${id} did not complete successfully. Status: ${details.status}`,
+              );
+            }
           }
         } catch (error) {
           this.logger.error(`Error fetching workflow result: ${error.message}`);
@@ -1227,6 +1238,45 @@ export class ConfigurationService {
       );
     }
   }
+
+  // async updateResult(id: string, configId: string) {
+  //   try {
+  //     setTimeout(async () => {
+  //       try {
+  //         const details: ListPathWorkflowStatus =
+  //           (await this.workFlowService.getWorkFlowRes(
+  //             id,
+  //           )) as ListPathWorkflowStatus;
+
+  //         if (!details) {
+  //           this.logger.warn(`No workflow details found for workflowId: ${id}`);
+  //           return;
+  //         }
+
+  //         if (details.status === WorkflowExecutionStatus.COMPLETED) {
+  //           await this.updatePaths(configId, details);
+  //         } else {
+  //           this.logger.warn(
+  //             `Workflow ${id} did not complete. Status: ${details.status}`,
+  //           );
+  //         }
+  //       } catch (error) {
+  //         this.logger.error(`Error fetching workflow result: ${error.message}`);
+  //       }
+  //     }, 2000);
+  //   } catch (error) {
+  //     this.logger.error(`Unexpected error in updateResult: ${error.message}`);
+  //     if (
+  //       error instanceof BadRequestException ||
+  //       error instanceof NotFoundException
+  //     ) {
+  //       throw error;
+  //     }
+  //     throw new InternalServerErrorException(
+  //       `Failed to update workflow result. ${error.message}`,
+  //     );
+  //   }
+  // }
 
   async updatePaths(id: string, details: ListPathWorkflowStatus) {
     try {
