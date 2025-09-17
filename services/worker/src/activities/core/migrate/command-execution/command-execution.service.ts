@@ -60,7 +60,10 @@ export class CommandExecService {
             output.sourceErrors.push(...metaResult.sourceErrors);
         }
         if( baseCmdRes.shouldUpdateItemInfo ) {
-            await this.publishFileInfo(input);
+            const  publishResult = await this.publishFileInfo(input);
+            if(publishResult.targetErrors.length > 0) {
+                output.targetErrors.push(...publishResult.targetErrors);
+            }
         }
         if (output.sourceErrors.length > 0 || output.targetErrors.length > 0) 
             input.command.status = CommandStatus.ERROR
@@ -178,8 +181,9 @@ export class CommandExecService {
         return output
     }
 
-    async publishFileInfo({command , jobContext, targetPath, sourcePath, errorType  }: CommandExecInput): Promise<void> {
-        // TODO: add sid - uid - gid to meta
+    async publishFileInfo({command , jobContext, targetPath, sourcePath, errorType  }: CommandExecInput): Promise<CommandOutput> {
+        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] , shouldUpdateItemInfo: false };
+
         const [sourceStats, targetStats] = await Promise.all([
             fs.promises.lstat(sourcePath),
             fs.promises.lstat(targetPath),
@@ -221,33 +225,48 @@ export class CommandExecService {
             targetStats.size
         )
 
-        await this.validateCommand({ cmd: command, item: itemInfo, jobContext, errorType});
+        const  validationResult = await this.validateCommand({ cmd: command, item: itemInfo, jobContext, errorType});
+        if(validationResult.targetErrors.length > 0) {
+            output.targetErrors.push(...validationResult.targetErrors);
+        }
         await jobContext.publishToFileStream(itemInfo);
+        return output;
     }
 
-    async validateCommand({ cmd, item, jobContext, errorType}:ValidateCommandInput): Promise<void> {
+    async validateCommand({ cmd, item, jobContext, errorType}:ValidateCommandInput): Promise<CommandOutput> {
+        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] , shouldUpdateItemInfo: false };
         let validateMisMatch : string = ""
+        let shouldRetry: boolean = false;
 
-        if (item.sourceMeta.checksum !== item.targetMeta.checksum) 
+        if (item.sourceMeta.checksum !== item.targetMeta.checksum) {
             validateMisMatch += `CheckSum Mismatch detected, source: ${item.sourceMeta.checksum}, target: ${item.targetMeta.checksum} \n`;
-        
-        if (item.sourceMeta.permission !== item.targetMeta.permission) 
+            shouldRetry = true;
+        }
+
+        if (item.sourceMeta.permission !== item.targetMeta.permission) {
             validateMisMatch += `Permission Mismatch detected, source: ${item.sourceMeta.permission}, target: ${item.targetMeta.permission} \n`;
-        
-        if (jobContext.jobConfig.options.preserveAccessTime &&  item.sourceMeta.accessTime.getTime() !== item.targetMeta.accessTime.getTime())
+            shouldRetry = true;
+        }
+
+        if (jobContext.jobConfig.options.preserveAccessTime &&  item.sourceMeta.accessTime.getTime() !== item.targetMeta.accessTime.getTime()) {
             validateMisMatch += `AccessTime Mismatch detected, source: ${item.sourceMeta.accessTime.toISOString()}, target: ${item.targetMeta.accessTime.toISOString()} \n`;
+            shouldRetry = true;
+        }
 
         if(cmd.ops?.[OPS_CMD.STAMP_META]?.params?.error?.length) 
             validateMisMatch += `Stamping Errors Detected: ${cmd.ops?.[OPS_CMD.STAMP_META]?.params?.error} \n`;
 
         if(validateMisMatch.length > 0) {
+            this.logger.log(`Validation errors for commandId: ${cmd.id}, \n ${validateMisMatch}`);
             const error = new Error(validateMisMatch);
-            const dmErr = dmError( "OPERATION",
-                Origin.DESTINATION, Operation.STAMP_META,
-                errorType, cmd.id, error, {name: cmd.fPath, path: item.fileName});
+            const dmErr = dmError( "OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, cmd.id, error, {name: cmd.fPath, path: item.fileName});
             await jobContext.publishToErrorStream(dmErr);
+            if(shouldRetry) {
+                if(cmd.ops?.[OPS_CMD.STAMP_META].status) cmd.ops[OPS_CMD.STAMP_META].status = OPS_STATUS.ERROR;
+                output.targetErrors.push('VALIDATION_ERROR');
+            }
         }
-        
+        return output;
     }
 
 }

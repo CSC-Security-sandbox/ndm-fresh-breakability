@@ -597,7 +597,7 @@ describe('CommandExecService', () => {
                 targetPath: '/target/test.txt',
                 errorType: ErrorType.RECOVERABLE_ERROR,
             };
-            jest.spyOn(service, 'validateCommand').mockResolvedValue();
+            jest.spyOn(service, 'validateCommand').mockResolvedValue({ targetErrors: [] } as any);
 
             await service.publishFileInfo(input as any);
 
