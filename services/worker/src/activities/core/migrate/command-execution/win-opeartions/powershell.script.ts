@@ -21,7 +21,7 @@ public class FastAcl {
     public static extern uint SetNamedSecurityInfo(
         string pObjectName,
         uint ObjectType,
-        uint SecurityInfo,
+        int SecurityInfo,
         IntPtr psidOwner,
         IntPtr psidGroup,
         IntPtr pDacl,
@@ -101,6 +101,7 @@ function Get-FileSecurityFast([string]$path) {
     # Check individual flags
     $daclPresent   = ($ctrl -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclPresent) -ne 0
     $daclProtected = ($ctrl -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclProtected) -ne 0
+    $daclAutoInherit = ($ctrl -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclAutoInherited) -ne 0
     
     # If we have DACL ACEs but daclPresent is false, there might be a flag detection issue
     # Force daclPresent to true if we actually have ACEs
@@ -134,6 +135,7 @@ function Get-FileSecurityFast([string]$path) {
         DaclAces      = $daclAces
         DaclPresent   = $daclPresent
         DaclProtected = $daclProtected
+        DaclAutoInherit = $daclAutoInherit
         Attributes    = $attributes
     } | ConvertTo-Json -Compress
 }
@@ -185,6 +187,9 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     if ($securityInfo.DaclProtected) {
         $flags = $flags -bor [System.Security.AccessControl.ControlFlags]::DiscretionaryAclProtected
     }
+    if ($securityInfo.DaclAutoInherit) {
+        $flags = $flags -bor [System.Security.AccessControl.ControlFlags]::DiscretionaryAclAutoInherit
+    }
     $sd.SetFlags($flags)
 
     # Marshal and set security
@@ -210,15 +215,18 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     $GROUP_SECURITY_INFORMATION = 0x00000002
     $DACL_SECURITY_INFORMATION  = 0x00000004
     $PROTECTED_DACL_SECURITY_INFORMATION = 0x80000000
+    $UNPROTECTED_DACL_SECURITY_INFORMATION = 0x20000000
 
-    # Include protection flag when DaclProtected is true
+    # Include protection flag to always disable inheritance
     $securityInfoFlags = $OWNER_SECURITY_INFORMATION -bor $GROUP_SECURITY_INFORMATION -bor $DACL_SECURITY_INFORMATION
     if ($securityInfo.DaclProtected) {
-        # Convert to signed int32 to handle the flag properly
+        # Convert to signed int32 to handle the flag properly (matches working set.ps1)
         $securityInfoFlags = [int]($securityInfoFlags -bor $PROTECTED_DACL_SECURITY_INFORMATION)
+    } else {
+        $securityInfoFlags = [int]$securityInfoFlags -bor $UNPROTECTED_DACL_SECURITY_INFORMATION
     }
 
-    $result = [FastAcl2]::SetNamedSecurityInfo(
+    $result = [FastAcl]::SetNamedSecurityInfo(
         $path,
         $SE_FILE_OBJECT,
         $securityInfoFlags,

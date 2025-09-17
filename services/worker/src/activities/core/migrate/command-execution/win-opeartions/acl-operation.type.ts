@@ -5,6 +5,7 @@ type SecurityDescriptor = {
   Attributes: string;
   DaclPresent: boolean;
   DaclProtected: boolean;
+  DaclAutoInherit: boolean;
 };
 
 type Ace = {
