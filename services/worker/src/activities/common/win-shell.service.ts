@@ -32,6 +32,7 @@ class PersistentShell extends EventEmitter {
     private runAsAdmin: boolean;
     private healthCheckFailures = 0;
     public lastHealthCheck = 0;
+    public initializationTimeout = process.env.INIT_TIMEOUT ? parseInt(process.env.INIT_TIMEOUT, 10) : 7000;
 
     constructor(id: string, private onReady: (success: boolean) => void, runAsAdmin: boolean = true) {
         super();

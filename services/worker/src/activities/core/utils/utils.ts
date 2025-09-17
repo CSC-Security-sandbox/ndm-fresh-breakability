@@ -29,10 +29,10 @@ export const isPathExists = async (path: string): Promise<boolean> => {
 }
 
 
-export const isNotWritable = (filePath: string): boolean => {
+export const isNotWritable = async (filePath: string): Promise<boolean> => {
   try {
     // Single syscall: check both existence and write permissions
-    fs.accessSync(filePath, fs.constants.F_OK | fs.constants.W_OK);
+    await fs.promises.access(filePath, fs.constants.F_OK | fs.constants.W_OK);
     return false; // exists & writable
   } catch (err: any) {
     if (err.code === "EACCES" || err.code === "EPERM") {

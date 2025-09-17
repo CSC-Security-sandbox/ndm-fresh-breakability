@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { CommandExecInput } from "../command-execution.type";
 import { StampMetaOutput } from "../stamp-meta.type";
 import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
-import { WinShellService } from "src/activities/common/win-shell.serive";
+import { WinShellService } from "src/activities/common/win-shell.service";
 import { SourceAclError, TargetAclError } from "./acl-operation.error";
 import { psGetAclScript, psSetAclScript } from "./powershell.script";
 import { RedisService } from "src/redis/redis.service";
@@ -38,12 +38,13 @@ export class WinOperationService {
         }
     }
     
-    async setAclOperation(targetPath: string, acl: SecurityDescriptor): Promise<void> {
+    async setAclOperation(targetPath: string, acl: SecurityDescriptor): Promise<any> {
         try {
             const aclJsonString = JSON.stringify(acl).replace(/'/g, "''");
             const script = `$dstFile = '${targetPath.replace(/'/g, "''")}'\n$aclJson = '${aclJsonString}'\n${psSetAclScript}`;
             const output = await this.winShellService.executeCommand(script);
             if(output.stderr) throw new Error(output.stderr);
+            return output;
         } catch (error) {
             this.logger.error(`Failed to set ACL for ${targetPath}: ${error.message}`);
             throw new TargetAclError(`Failed to set ACL for ${targetPath}: ${error.message}`);
@@ -79,7 +80,18 @@ export class WinOperationService {
             });
         }
         this.logger.log(`Mapped ACL---------->: ${JSON.stringify(acl)}`);
-        await this.setAclOperation(targetPath, acl);
+        const result = await this.setAclOperation(targetPath, acl);
+        this.logger.log(`Set ACL Result: ${JSON.stringify(result)}`);
+        this.logger.log(`Set ACL Result--->: ${result}`);
+        if(result?.stdout) {
+            const unresolved_sids= JSON.parse(result.stdout)?.unresolved_sids;
+            this.logger.log(`Unresolved SIDs: ${JSON.stringify(unresolved_sids)}`);
+            if(unresolved_sids && unresolved_sids.length > 0){
+                unresolved_sids.forEach(sid => {
+                    errors.push(`Unresolved SID ${sid} found while setting ACL on target`);
+                });
+            }
+        }
 
         let targetAcl: SecurityDescriptor = await this.getAclOperation(targetPath, false);
         this.logger.log(`Target ACL---------->: ${JSON.stringify(targetAcl)}`);

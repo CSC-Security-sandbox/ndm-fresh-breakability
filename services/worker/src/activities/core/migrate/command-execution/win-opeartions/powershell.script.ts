@@ -142,6 +142,7 @@ function Get-FileSecurityFast([string]$path) {
 
 function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     $securityInfo = $aclJson | ConvertFrom-Json
+    $unresolved_sids = @()
     # Convert owner and group SIDs
     $ownerSid = New-Object System.Security.Principal.SecurityIdentifier($securityInfo.Owner)
     $groupSid = New-Object System.Security.Principal.SecurityIdentifier($securityInfo.Group)
@@ -149,7 +150,15 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     # Build a new RawSecurityDescriptor with exact control flags
     $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor('O:BAG:BAD:')
     $sd.Owner = $ownerSid
+    $is_resolved = Map-Sid $ownerSid
+    if ($is_resolved -eq $false) {
+        $unresolved_sids += $ownerSid
+    }
     $sd.Group = $groupSid
+    $is_resolved = Map-Sid $groupSid
+    if ($is_resolved -eq $false) {
+        $unresolved_sids += $groupSid
+    }
 
     # Create DACL with exact ACEs from source in proper order
     $aces = $securityInfo.DaclAces
@@ -159,6 +168,10 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     for ($i = 0; $i -lt $aces.Count; $i++) {
         $ace = $aces[$i]
         $sid = New-Object System.Security.Principal.SecurityIdentifier($ace.Sid)
+        $is_resolved = Map-Sid $sid
+        if ($is_resolved -eq $false) {
+            $unresolved_sids += $sid
+        }
         $qualifier = if ($ace.AceType -eq 0) {
             [System.Security.AccessControl.AceQualifier]::AccessAllowed
         } elseif ($ace.AceType -eq 1) {
@@ -247,8 +260,13 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
         $attrEnum = [System.Enum]::Parse([System.IO.FileAttributes], $securityInfo.Attributes)
         [System.IO.File]::SetAttributes($path, $attrEnum)
     }
+        
+  $unresolved_sid_values = @()
+    if ($unresolved_sids.Count -gt 0) {
+        $unresolved_sid_values = $unresolved_sids | ForEach-Object { $_.Value }
+    }
+    Write-Output ('{"success":true, "unresolved_sids":' + ($unresolved_sid_values | ConvertTo-Json -Compress) + '}')
 
-    Write-Output '{"success":true}'
 }
 
 function Resolve-UsernamesToSid {
@@ -301,6 +319,16 @@ function Resolve-UsernamesToSid {
     }
 
     $results | ConvertTo-Json -Compress
+}
+function Map-Sid {
+    param($sid)
+
+    try {
+        $null = $sid.Translate([System.Security.Principal.NTAccount]).Value
+        return $true
+    } catch {
+        return $false
+    }
 }
 `
 
