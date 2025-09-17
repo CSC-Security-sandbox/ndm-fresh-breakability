@@ -53,11 +53,17 @@ export class WinOperationService {
     async stampAclOperation({command, jobContext, sourcePath, targetPath, errorType}: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         let acl: SecurityDescriptor = await this.getAclOperation(sourcePath, true);
-        if(jobContext.jobConfig?.options?.isIdentityMappingAvailable)
+        this.logger.log(`Source ACL---------->: ${JSON.stringify(acl)}`);
+        if(jobContext.jobConfig?.options?.isIdentityMappingAvailable){
+            this.logger.log('Mapping SID to target: ' + jobContext.jobConfig?.options?.isIdentityMappingAvailable);
             acl = await this.mapSIDToTarget(acl, jobContext.jobRunId);
+        }
 
+        this.logger.log(`Mapped ACL---------->: ${JSON.stringify(acl)}`);
         await this.setAclOperation(targetPath, acl);
+
         let targetAcl: SecurityDescriptor = await this.getAclOperation(targetPath, false);
+        this.logger.log(`Target ACL---------->: ${JSON.stringify(targetAcl)}`);
         
         const validation = await this.validateAclOperation(acl, targetAcl);
         if(validation.inValid.length > 0) 
@@ -72,6 +78,7 @@ export class WinOperationService {
         const cached = this.sidCache.get(cacheKey);
         if (cached) return cached;
         const queried = await this.redisService.getOwnerIdentity(jobRunId, sourceSid, 'SID');
+        this.logger.log(`Queried SID mapping from Redis: ${sourceSid} -> ${queried}`);
         if (queried) this.sidCache.put(cacheKey, queried);
         return queried;
     }
@@ -85,6 +92,7 @@ export class WinOperationService {
         
         acl.DaclAces = await Promise.all(acl.DaclAces.map(async (ace) => {
             const targetSid = await this.getSIDMapping(ace.Sid, jobRunId);
+            this.logger.log(`Mapping SID ${ace.Sid} to ${targetSid}`);
             if (targetSid) ace.Sid = targetSid;
             return ace;
         }));
