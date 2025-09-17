@@ -2,69 +2,86 @@ name: Release Workflow
 
 on:
   workflow_dispatch:
-    
-permissions: 
-  contents: write
-  actions: read
-  pull-requests: write
-  security-events: write
-  id-token: write
-  
+    inputs:
+      version:
+        description: 'Version/tag to validate (e.g., 2025.9.17, 1.2.3-alpha)'
+        required: true
+        type: string
+
 jobs:
-  check-branch:
+  validate:
     runs-on: ubuntu-latest
-    outputs:
-      build: ${{ steps.extract_build.outputs.build }}
+    permissions:
+      contents: read
     steps:
-      - name: Ensure branch is release/*
-        run: |
-          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
-          if [[ ! "$BRANCH_NAME" =~ ^release/[^/]+$ ]]; then
-            echo "This workflow can only be run on release/* branches."
-            exit 1
-          fi
-          
-          VERSION="${BRANCH_NAME#release/}"
-          
-          VALID_PATTERN="^([0-9]{4}\.[0-9]{2}(\.[0-9]{2})?(-[a-zA-Z0-9_]+)?|[a-zA-Z][a-zA-Z0-9_]*(-[a-zA-Z0-9_]+)?)$"
-          
-          if [[ ! "$VERSION" =~ $VALID_PATTERN ]]; then
-            echo "Error: Invalid release version format: $VERSION"
-            echo "Valid formats are:"
-            echo "  - YYYY.MM (e.g., 2025.08)"
-            echo "  - YYYY.MM-<suffix> (e.g., 2025.08-1, 2025.08-alpha, 2025.08-username)"
-            echo "  - YYYY.MM.DD (e.g., 2025.08.03)"
-            echo "  - YYYY.MM.DD-<suffix> (e.g., 2025.08.03-testing)"
-            echo "  - <name> (e.g., preview, testing)"
-            echo "  - <name>-<suffix> (e.g., preview-1, testing-beta)"
-            exit 1
-          fi
-          
-          echo "Valid release branch: $BRANCH_NAME (version: $VERSION)"
-          
-      - name: Extract build from branch name
-        id: extract_build
-        run: |
-          BRANCH_NAME="${GITHUB_REF#refs/heads/release/}"
-          echo "build=$BRANCH_NAME" >> $GITHUB_OUTPUT
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-  build-docker-images:
-    needs: check-branch
-    uses: ./.github/workflows/build-push-service-images.yaml
-    with:
-      build: ${{ needs.check-branch.outputs.build }}
-    secrets: inherit
+      - name: Show provided version
+        run: |
+          echo "Provided version: ${{ github.event.inputs.version }}"
 
-  build-worker-binary:
-    needs: check-branch
-    uses: ./.github/workflows/build-binary-and-installer-for-worker.yaml
-    with:
-      build: ${{ needs.check-branch.outputs.build }}
-    secrets: inherit
-  
-  build-vm-images:
-    needs: [check-branch, build-worker-binary, build-docker-images]
-    uses: ./.github/workflows/ndm-vm-image-build.yaml
-    with:
-      build: ${{ needs.check-branch.outputs.build }}
-    secrets: inherit
+      - name: Create simple Dockerfile
+        run: |
+          cat > Dockerfile <<'EOF'
+          FROM alpine:3.18
+          LABEL org.opencontainers.image.title="Test Image"
+          LABEL org.opencontainers.image.version="${{ github.event.inputs.version }}"
+          CMD ["/bin/sh","-c","echo Image version: ${{ github.event.inputs.version }}"]
+          EOF
+
+      - name: Build Docker image with provided tag
+        run: |
+          docker build -t testimage:${{ github.event.inputs.version }} .
+
+      - name: Validate Docker tag by running container
+        run: |
+          docker run --rm testimage:${{ github.event.inputs.version }}
+
+      - name: Ensure Chart.yaml exists (dummy if absent)
+        run: |
+          if [ ! -f Chart.yaml ]; then
+          cat > Chart.yaml <<'EOF'
+          apiVersion: v2
+          name: dummy-chart
+          description: A dummy Helm chart for CI version validation
+          version: 0.0.1
+          appVersion: "1.0.0"
+          type: application
+          EOF
+          echo "Resulting Chart.yaml before patch:"
+          cat Chart.yaml
+          fi
+
+      - name: Install yq and Helm
+        run: |
+          sudo curl -L "https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64" -o /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+          curl -L https://get.helm.sh/helm-v3.14.4-linux-amd64.tar.gz | tar xz
+          sudo mv linux-amd64/helm /usr/local/bin/helm
+          helm version
+          yq --version
+
+      - name: Patch Chart.yaml with provided version
+        run: |
+          V='${{ github.event.inputs.version }}'
+          yq -i ".version = \"$V\" | .appVersion = \"$V\"" Chart.yaml
+          echo "Patched Chart.yaml:" && cat Chart.yaml
+
+      - name: Lint Helm chart
+        run: helm lint .
+
+      - name: Package Helm chart with provided version
+        run: |
+          helm package .
+          echo "Packaged charts:" && ls -1 *.tgz
+
+      - name: Summary
+        run: |
+          echo "## Version Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "Version: ${{ github.event.inputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "Docker image built: testimage:${{ github.event.inputs.version }}" >> $GITHUB_STEP_SUMMARY
+          CHART_FILE=$(ls -1 *.tgz | head -1 || true)
+          if [ -n "$CHART_FILE" ]; then
+            echo "Helm chart package: $CHART_FILE" >> $GITHUB_STEP_SUMMARY
+          fi
