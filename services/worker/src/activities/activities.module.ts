@@ -22,7 +22,7 @@ import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 import { CommandExecService } from './core/migrate/command-execution/command-execution.service';
 import { SyncService } from './core/migrate/sync-activity.service';
 import { StampMetaService } from './core/migrate/command-execution/stamp-meta.service';
-import { WinShellService } from './common/win-shell.serive';
+import { WinShellService } from './common/win-shell.service';
 import { WinOperationService } from './core/migrate/command-execution/win-opeartions/win-operation.service';
 import { MappingResolverService } from './core/initializer/mapping-resolver.service';
 
