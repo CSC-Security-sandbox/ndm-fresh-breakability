@@ -21,7 +21,7 @@ public class FastAcl {
     public static extern uint SetNamedSecurityInfo(
         string pObjectName,
         uint ObjectType,
-        uint SecurityInfo,
+        int SecurityInfo,
         IntPtr psidOwner,
         IntPtr psidGroup,
         IntPtr pDacl,
@@ -55,19 +55,23 @@ function Get-FileSecurityFast([string]$path) {
     $DACL_SECURITY_INFORMATION  = 0x00000004
     $ALL_SECURITY_INFORMATION   = $OWNER_SECURITY_INFORMATION -bor $GROUP_SECURITY_INFORMATION -bor $DACL_SECURITY_INFORMATION 
 
-    $result = [FastAcl]::GetNamedSecurityInfo(
-        $path,
-        $SE_FILE_OBJECT,
-        $ALL_SECURITY_INFORMATION,
-        [ref]$pOwnerSid,
-        [ref]$pGroupSid,
-        [ref]$pDacl,
-        [ref]$pSacl,
-        [ref]$pSD
-    )
+    try {
+        $result = [FastAcl]::GetNamedSecurityInfo(
+            $path,
+            $SE_FILE_OBJECT,
+            $ALL_SECURITY_INFORMATION,
+            [ref]$pOwnerSid,
+            [ref]$pGroupSid,
+            [ref]$pDacl,
+            [ref]$pSacl,
+            [ref]$pSD
+        )
+    } catch {
+        throw "Error reading security info: $_"
+    }
+
     if ($result -ne 0) { throw "Error reading security info: $result" }
 
-    # Copy raw security descriptor bytes
     $sdLength = [MarshalHelpers]::GetSecurityDescriptorLength($pSD)
     $sdBytes = New-Object byte[] $sdLength
     [System.Runtime.InteropServices.Marshal]::Copy($pSD, $sdBytes, 0, $sdLength)
@@ -77,46 +81,97 @@ function Get-FileSecurityFast([string]$path) {
     $group = $sd.Group.Value
 
     $daclAces = @()
-    foreach ($ace in $sd.DiscretionaryAcl) {
-        $daclAces += [PSCustomObject]@{
-            Sid         = $ace.SecurityIdentifier.Value
-            AccessMask  = $ace.AccessMask
-            AceType     = [int]$ace.AceType
-            AceFlags    = [int]$ace.AceFlags
-            IsInherited = $ace.IsInherited
+    if ($sd.DiscretionaryAcl) {
+        foreach ($ace in $sd.DiscretionaryAcl) {
+            $daclAces += [PSCustomObject]@{
+                Sid         = $ace.SecurityIdentifier.Value
+                AccessMask  = $ace.AccessMask
+                AceType     = [int]$ace.AceType
+                AceFlags    = [int]$ace.AceFlags
+                IsInherited = $ace.IsInherited
+            }
         }
     }
 
-    # Get file attributes
     $attributes = [System.IO.File]::GetAttributes($path).ToString()
 
-    $obj = [PSCustomObject]@{
-        Owner      = $owner
-        Group      = $group
-        DaclAces   = $daclAces
-        Attributes = $attributes
+    # Check control flags for inheritance status
+    $ctrl = $sd.Control
+    
+    # Check individual flags
+    $daclPresent   = ($ctrl -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclPresent) -ne 0
+    $daclProtected = ($ctrl -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclProtected) -ne 0
+    $daclAutoInherit = ($ctrl -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclAutoInherited) -ne 0
+    
+    # If we have DACL ACEs but daclPresent is false, there might be a flag detection issue
+    # Force daclPresent to true if we actually have ACEs
+    if ($sd.DiscretionaryAcl -and $sd.DiscretionaryAcl.Count -gt 0) {
+        $daclPresent = $true
+    }
+    
+    # Additional check: if file has inheritance disabled, daclProtected should be true
+    # This handles cases where Windows doesn't set the flag correctly
+    $hasInheritedAces = $false
+    if ($sd.DiscretionaryAcl) {
+        foreach ($ace in $sd.DiscretionaryAcl) {
+            if ($ace.IsInherited) {
+                $hasInheritedAces = $true
+                break
+            }
+        }
+    }
+    
+    # If no inherited ACEs are present and we have explicit ACEs, inheritance is likely disabled (protected)
+    if (-not $hasInheritedAces -and $daclPresent -and $sd.DiscretionaryAcl -and $sd.DiscretionaryAcl.Count -gt 0) {
+        $daclProtected = $true
     }
 
-    return ($obj | ConvertTo-Json -Compress)
+    # Optional: free the security descriptor allocated by GetNamedSecurityInfo
+    # [System.Runtime.InteropServices.Marshal]::FreeHGlobal($pSD) # can't use FreeHGlobal; should call LocalFree. Skipping to avoid crash.
+
+    [PSCustomObject]@{
+        Owner         = $owner
+        Group         = $group
+        DaclAces      = $daclAces
+        DaclPresent   = $daclPresent
+        DaclProtected = $daclProtected
+        DaclAutoInherit = $daclAutoInherit
+        Attributes    = $attributes
+    } | ConvertTo-Json -Compress
 }
 
 function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     $securityInfo = $aclJson | ConvertFrom-Json
-
+    $unresolved_sids = @()
     # Convert owner and group SIDs
     $ownerSid = New-Object System.Security.Principal.SecurityIdentifier($securityInfo.Owner)
     $groupSid = New-Object System.Security.Principal.SecurityIdentifier($securityInfo.Group)
 
-    # Build a new RawSecurityDescriptor
+    # Build a new RawSecurityDescriptor with exact control flags
     $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor('O:BAG:BAD:')
     $sd.Owner = $ownerSid
+    $is_resolved = Map-Sid $ownerSid
+    if ($is_resolved -eq $false) {
+        $unresolved_sids += $ownerSid
+    }
     $sd.Group = $groupSid
+    $is_resolved = Map-Sid $groupSid
+    if ($is_resolved -eq $false) {
+        $unresolved_sids += $groupSid
+    }
 
-    # Create DACL
+    # Create DACL with exact ACEs from source in proper order
     $aces = $securityInfo.DaclAces
     $dacl = New-Object System.Security.AccessControl.RawAcl(2, $aces.Count)
-    foreach ($ace in $aces) {
+    
+    # Insert ACEs in exact order from source
+    for ($i = 0; $i -lt $aces.Count; $i++) {
+        $ace = $aces[$i]
         $sid = New-Object System.Security.Principal.SecurityIdentifier($ace.Sid)
+        $is_resolved = Map-Sid $sid
+        if ($is_resolved -eq $false) {
+            $unresolved_sids += $sid
+        }
         $qualifier = if ($ace.AceType -eq 0) {
             [System.Security.AccessControl.AceQualifier]::AccessAllowed
         } elseif ($ace.AceType -eq 1) {
@@ -124,18 +179,31 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
         } else {
             throw "Unsupported ACE type: $($ace.AceType)"
         }
-        $dacl.InsertAce($dacl.Count, (
-            New-Object System.Security.AccessControl.CommonAce (
-                [System.Security.AccessControl.AceFlags]$ace.AceFlags,
-                $qualifier,
-                [int]$ace.AccessMask,
-                $sid,
-                $ace.IsInherited,
-                $null
-            )
-        ))
+        
+        # Create CommonAce with exact flags and properties from source
+        $commonAce = New-Object System.Security.AccessControl.CommonAce (
+            [System.Security.AccessControl.AceFlags]$ace.AceFlags,
+            $qualifier,
+            [int]$ace.AccessMask,
+            $sid,
+            $ace.IsInherited,
+            $null
+        )
+        
+        # Insert at specific position to maintain order
+        $dacl.InsertAce($i, $commonAce)
     }
     $sd.DiscretionaryAcl = $dacl
+    
+    # Set control flags to match source exactly
+    $flags = [System.Security.AccessControl.ControlFlags]::DiscretionaryAclPresent -bor [System.Security.AccessControl.ControlFlags]::SelfRelative
+    if ($securityInfo.DaclProtected) {
+        $flags = $flags -bor [System.Security.AccessControl.ControlFlags]::DiscretionaryAclProtected
+    }
+    if ($securityInfo.DaclAutoInherit) {
+        $flags = $flags -bor [System.Security.AccessControl.ControlFlags]::DiscretionaryAclAutoInherit
+    }
+    $sd.SetFlags($flags)
 
     # Marshal and set security
     $ownerBytes = New-Object byte[] ($sd.Owner.BinaryLength)
@@ -156,12 +224,25 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     $ptrSacl = [IntPtr]::Zero
 
     $SE_FILE_OBJECT = 1
-    $ALL_SECURITY_INFORMATION = 0x07
+    $OWNER_SECURITY_INFORMATION = 0x00000001
+    $GROUP_SECURITY_INFORMATION = 0x00000002
+    $DACL_SECURITY_INFORMATION  = 0x00000004
+    $PROTECTED_DACL_SECURITY_INFORMATION = 0x80000000
+    $UNPROTECTED_DACL_SECURITY_INFORMATION = 0x20000000
+
+    # Include protection flag to always disable inheritance
+    $securityInfoFlags = $OWNER_SECURITY_INFORMATION -bor $GROUP_SECURITY_INFORMATION -bor $DACL_SECURITY_INFORMATION
+    if ($securityInfo.DaclProtected) {
+        # Convert to signed int32 to handle the flag properly (matches working set.ps1)
+        $securityInfoFlags = [int]($securityInfoFlags -bor $PROTECTED_DACL_SECURITY_INFORMATION)
+    } else {
+        $securityInfoFlags = [int]$securityInfoFlags -bor $UNPROTECTED_DACL_SECURITY_INFORMATION
+    }
 
     $result = [FastAcl]::SetNamedSecurityInfo(
         $path,
         $SE_FILE_OBJECT,
-        $ALL_SECURITY_INFORMATION,
+        $securityInfoFlags,
         $ptrOwner,
         $ptrGroup,
         $ptrDacl,
@@ -179,8 +260,13 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
         $attrEnum = [System.Enum]::Parse([System.IO.FileAttributes], $securityInfo.Attributes)
         [System.IO.File]::SetAttributes($path, $attrEnum)
     }
+        
+  $unresolved_sid_values = @()
+    if ($unresolved_sids.Count -gt 0) {
+        $unresolved_sid_values = $unresolved_sids | ForEach-Object { $_.Value }
+    }
+    Write-Output ('{"success":true, "unresolved_sids":' + ($unresolved_sid_values | ConvertTo-Json -Compress) + '}')
 
-    Write-Output '{"success":true}'
 }
 
 function Resolve-UsernamesToSid {
@@ -233,6 +319,16 @@ function Resolve-UsernamesToSid {
     }
 
     $results | ConvertTo-Json -Compress
+}
+function Map-Sid {
+    param($sid)
+
+    try {
+        $null = $sid.Translate([System.Security.Principal.NTAccount]).Value
+        return $true
+    } catch {
+        return $false
+    }
 }
 `
 

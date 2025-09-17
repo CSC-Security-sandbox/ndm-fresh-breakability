@@ -32,6 +32,7 @@ class PersistentShell extends EventEmitter {
     private runAsAdmin: boolean;
     private healthCheckFailures = 0;
     public lastHealthCheck = 0;
+    public initializationTimeout = process.env.INIT_TIMEOUT ? parseInt(process.env.INIT_TIMEOUT, 10) : 7000;
 
     constructor(id: string, private onReady: (success: boolean) => void, runAsAdmin: boolean = true) {
         super();
@@ -422,6 +423,7 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
             }
             
             const res = await target.execute(command, adjustedTimeout);
+            console.log("result------->", res); 
             const executionTime = Date.now() - startTime;
             
             // Track execution time
