@@ -83,7 +83,7 @@ export class WinOperationService {
         const result = await this.setAclOperation(targetPath, acl);
         this.logger.log(`Set ACL Result: ${JSON.stringify(result)}`);
         this.logger.log(`Set ACL Result--->: ${result}`);
-        if(result?.stdout) {
+        if(result?.stdout && result.stdout.includes('unresolved_sids')){
             const unresolved_sids= JSON.parse(result.stdout)?.unresolved_sids;
             this.logger.log(`Unresolved SIDs: ${JSON.stringify(unresolved_sids)}`);
             if(unresolved_sids && unresolved_sids.length > 0){
