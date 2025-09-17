@@ -167,6 +167,7 @@ export class StampMetaService {
     async stampObjectACL({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         try {
+            this.logger.log(`Stamping ACL from ${sourcePath} to ${targetPath}`);
             await this.winOperationService.stampAclOperation({command, jobContext, sourcePath, targetPath, errorType});
         } catch (error) {
             const origin = error instanceof SourceAclError ? Origin.SOURCE : Origin.DESTINATION;

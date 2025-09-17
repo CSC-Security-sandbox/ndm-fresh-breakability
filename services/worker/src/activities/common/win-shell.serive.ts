@@ -422,6 +422,7 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
             }
             
             const res = await target.execute(command, adjustedTimeout);
+            console.log("result------->", res); 
             const executionTime = Date.now() - startTime;
             
             // Track execution time

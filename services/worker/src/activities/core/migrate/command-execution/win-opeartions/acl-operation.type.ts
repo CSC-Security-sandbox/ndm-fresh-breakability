@@ -3,6 +3,8 @@ type SecurityDescriptor = {
   Group: string;
   DaclAces: Ace[];
   Attributes: string;
+  DaclPresent: boolean;
+  DaclProtected: boolean;
 };
 
 type Ace = {

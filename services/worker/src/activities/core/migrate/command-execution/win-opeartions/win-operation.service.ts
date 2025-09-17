@@ -28,6 +28,7 @@ export class WinOperationService {
         try {
             const script = `$srcFile = '${path.replace(/'/g, "''")}'\n${psGetAclScript}`;
             const output = await this.winShellService.executeCommand(script);
+            this.logger.log('acl-------------> ' + JSON.stringify(output));
             if(output.stderr) throw new Error(output.stderr);
             return JSON.parse(output.stdout) as SecurityDescriptor;
         } catch (error) {
@@ -52,7 +53,6 @@ export class WinOperationService {
     async stampAclOperation({command, jobContext, sourcePath, targetPath, errorType}: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         let acl: SecurityDescriptor = await this.getAclOperation(sourcePath, true);
-
         if(jobContext.jobConfig?.options?.isIdentityMappingAvailable)
             acl = await this.mapSIDToTarget(acl, jobContext.jobRunId);
 
