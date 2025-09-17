@@ -50,7 +50,7 @@ export class WinOperationService {
         }
     }
 
-    async stampAclOperation({command, jobContext, sourcePath, targetPath, errorType}: CommandExecInput): Promise<StampMetaOutput> {
+    async stampAclOperation({command, jobContext, sourcePath, targetPath, errorType}: CommandExecInput): Promise<{ output: StampMetaOutput, errors: string[] }> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         let acl: SecurityDescriptor = await this.getAclOperation(sourcePath, true);
         this.logger.log(`Source ACL---------->: ${JSON.stringify(acl)}`);
@@ -58,7 +58,26 @@ export class WinOperationService {
             this.logger.log('Mapping SID to target: ' + jobContext.jobConfig?.options?.isIdentityMappingAvailable);
             acl = await this.mapSIDToTarget(acl, jobContext.jobRunId);
         }
+        const errors: string[] = [];
+        if(acl.Owner === 'Invalid'){
+            errors.push(`Invalid Owner SID for ${acl.originalOwner} found in SID mapping`);
+            acl.Owner= acl.originalOwner;
+            delete acl.originalOwner;
+        }
 
+        if(acl.Group === 'Invalid'){
+            errors.push(`Invalid Group SID for ${acl.originalGroup} found in SID mapping`);
+            acl.Group = acl.originalGroup;
+            delete acl.originalGroup;
+        }
+        if(acl.DaclAces) {
+            acl.DaclAces.forEach((ace,index) => {
+                if(ace.Sid === 'Invalid'){
+                    errors.push(`Invalid ACL SID for ${ace.originalSid} found in SID mapping`);
+                    acl.DaclAces.splice(index,1);
+                }
+            });
+        }
         this.logger.log(`Mapped ACL---------->: ${JSON.stringify(acl)}`);
         await this.setAclOperation(targetPath, acl);
 
@@ -70,7 +89,7 @@ export class WinOperationService {
            command.ops[OPS_CMD.STAMP_META].params.error = validation.inValid;
         command.ops[OPS_CMD.STAMP_META].params.sidMap = { targetAcl: validation.targetSID, sourceAcl: validation.sourceSID, validationError: validation.inValid };
         
-        return output;
+        return {output, errors};
     }
 
     async getSIDMapping(sourceSid: string, jobRunId): Promise<string | null> {
@@ -84,6 +103,8 @@ export class WinOperationService {
     }
 
     async mapSIDToTarget(acl : SecurityDescriptor, jobRunId: string): Promise<SecurityDescriptor> {
+        acl.originalOwner = acl.Owner;
+        acl.originalGroup = acl.Group;
         const owner = await this.getSIDMapping(acl.Owner, jobRunId);
         if (owner) acl.Owner = owner;
 
@@ -91,6 +112,7 @@ export class WinOperationService {
         if (group) acl.Group = group;
         
         acl.DaclAces = await Promise.all(acl.DaclAces.map(async (ace) => {
+            ace.originalSid = ace.Sid;
             const targetSid = await this.getSIDMapping(ace.Sid, jobRunId);
             this.logger.log(`Mapping SID ${ace.Sid} to ${targetSid}`);
             if (targetSid) ace.Sid = targetSid;
@@ -142,7 +164,11 @@ export class WinOperationService {
         const command = `Resolve-UsernamesToSid -Username ${usernames.join(',')}`;
         const output = await this.winShellService.executeCommand(command);
         const sidMappings = JSON.parse(output.stdout);
-        
+        this.logger.log(`Resolved SID mappings: ${JSON.stringify(sidMappings)}`);
+        if(!Array.isArray(sidMappings) || sidMappings.length === 0) {
+            usernameToSidMap.set(sidMappings?.username, sidMappings?.sid);
+            return usernameToSidMap;
+        }
         sidMappings.forEach(mapping => {
             usernameToSidMap.set(mapping.username, mapping.sid);
         });
