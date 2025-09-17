@@ -558,6 +558,10 @@ func HandleJobRunStateChange(jobRunID, stateType string, jobRunIDs []string) err
 		if err != nil {
 			return err
 		}
+		if stateType == COMPLETED_JOBRUN {
+			LogDebug("Job is Completed")
+			return nil
+		}
 		if stateType == RESUME_JOBRUN && status == PAUSE_JOBRUN {
 			LogDebug("Job is paused. Resuming operation.")
 			return ChangeJobRunState(stateType, jobRunIDs)
@@ -570,6 +574,10 @@ func HandleJobRunStateChange(jobRunID, stateType string, jobRunIDs []string) err
 			status, err := checkJobRunStatus(jobRunID)
 			if err != nil {
 				return err
+			}
+			if stateType == COMPLETED_JOBRUN {
+				LogDebug("Job is Completed")
+				return nil
 			}
 			if status == RUNNING_JOBRUN {
 				LogDebug("Job is running. Pausing JobRun.")
