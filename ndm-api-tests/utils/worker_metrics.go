@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -28,16 +29,33 @@ type WorkerMetrics struct {
 	DataSize     int                `json:"dataSize"`
 }
 
-// CollectWorkerMetrics fetches worker metrics from Pushgateway
+type ConsolidatedWorkerLog struct {
+	WorkerID      string                  `json:"workerId"`
+	ControlIP     string                  `json:"controlIp"`
+	FirstSeen     time.Time               `json:"firstSeen"`
+	LastUpdated   time.Time               `json:"lastUpdated"`
+	TotalEntries  int                     `json:"totalEntries"`
+	LogEntries    []WorkerMetricsSnapshot `json:"logEntries"`
+	LatestMetrics *WorkerMetrics          `json:"latestMetrics"`
+}
+
+type WorkerMetricsSnapshot struct {
+	Timestamp       time.Time         `json:"timestamp"`
+	Label           string            `json:"label"`
+	Metrics         *WorkerMetrics    `json:"metrics"`
+	Summary         string            `json:"summary"`
+	FormattedOutput string            `json:"formattedOutput"`
+	ReadableMetrics map[string]string `json:"readableMetrics"`
+}
+
+// Fetches worker metrics from Pushgateway
 func CollectWorkerMetrics(cpIP, workerID string) (*WorkerMetrics, error) {
 	pushgatewayURL := fmt.Sprintf("http://%s:9091", cpIP)
 
-	// Create HTTP client with timeout
 	client := &http.Client{
 		Timeout: 15 * time.Second,
 	}
 
-	// Query Pushgateway
 	resp, err := client.Get(pushgatewayURL + "/metrics")
 	if err != nil {
 		return nil, fmt.Errorf("failed to query Pushgateway at %s: %v", pushgatewayURL, err)
@@ -48,13 +66,11 @@ func CollectWorkerMetrics(cpIP, workerID string) (*WorkerMetrics, error) {
 		return nil, fmt.Errorf("Pushgateway returned status %d", resp.StatusCode)
 	}
 
-	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read Pushgateway response: %v", err)
 	}
 
-	// Parse metrics
 	metrics := parseWorkerMetrics(string(body), workerID)
 	metrics.WorkerID = workerID
 	metrics.ControlIP = cpIP
@@ -65,7 +81,7 @@ func CollectWorkerMetrics(cpIP, workerID string) (*WorkerMetrics, error) {
 	return metrics, nil
 }
 
-// parseWorkerMetrics extracts worker-specific metrics from Prometheus text format
+// Extracts worker-specific metrics from Prometheus text format
 func parseWorkerMetrics(prometheusData, workerID string) *WorkerMetrics {
 	lines := strings.Split(prometheusData, "\n")
 	metrics := &WorkerMetrics{
@@ -78,7 +94,6 @@ func parseWorkerMetrics(prometheusData, workerID string) *WorkerMetrics {
 		HTTPRequests: make(map[string]float64),
 	}
 
-	// Regex to parse Prometheus metrics: metric_name{labels} value
 	metricRegex := regexp.MustCompile(`^([a-zA-Z_:][a-zA-Z0-9_:]*)\{([^}]*)\}\s+([0-9.eE+-]+)`)
 
 	for _, line := range lines {
@@ -96,7 +111,6 @@ func parseWorkerMetrics(prometheusData, workerID string) *WorkerMetrics {
 		labels := matches[2]
 		valueStr := matches[3]
 
-		// Only process metrics for our specific worker
 		if !strings.Contains(labels, fmt.Sprintf(`worker_id="%s"`, workerID)) {
 			continue
 		}
@@ -106,19 +120,18 @@ func parseWorkerMetrics(prometheusData, workerID string) *WorkerMetrics {
 			continue
 		}
 
-		// Parse different metric types
 		parseMetricByType(metricName, labels, value, metrics)
 	}
 
 	return metrics
 }
 
-// parseMetricByType categorizes and parses metrics by type
+// Categorizes and parses metrics by type
 func parseMetricByType(metricName, labels string, value float64, metrics *WorkerMetrics) {
 	switch {
 	case strings.Contains(metricName, "worker_system_cpu_usage"):
 		if coreMatch := regexp.MustCompile(`core="([^"]+)"`).FindStringSubmatch(labels); coreMatch != nil {
-			metrics.CPU[coreMatch[1]] = value * 100 // Convert to percentage
+			metrics.CPU[coreMatch[1]] = value
 		}
 	case strings.Contains(metricName, "worker_system_memory"):
 		if typeMatch := regexp.MustCompile(`type="([^"]+)"`).FindStringSubmatch(labels); typeMatch != nil {
@@ -144,208 +157,360 @@ func parseMetricByType(metricName, labels string, value float64, metrics *Worker
 	}
 }
 
-// DisplayWorkerMetrics formats and displays metrics in the exact format you want
-func DisplayWorkerMetrics(metrics *WorkerMetrics, label string) {
+func LogWorkerMetrics(cpIP, workerID, label string) (string, error) {
+	// Create logs directory if it doesn't exist
+	logsDir := "logs/worker_metrics"
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create logs directory: %v", err)
+	}
+
+	metrics, err := CollectWorkerMetrics(cpIP, workerID)
+	if err != nil {
+		return "", fmt.Errorf("failed to collect worker metrics: %v", err)
+	}
+
+	// Use worker ID for consistent filename
+	workerShortID := strings.Split(workerID, "-")[0]
+	filename := fmt.Sprintf("worker_metrics_%s_consolidated.json", workerShortID)
+	filepath := filepath.Join(logsDir, filename)
+
+	// Generate formatted output and readable metrics
+	formattedOutput := generateMetricsOutput(metrics, label)
+	summary := generateMetricsSummary(metrics)
+	readableMetrics := extractReadableMetrics(metrics)
+
+	// Create new snapshot
+	newSnapshot := WorkerMetricsSnapshot{
+		Timestamp:       time.Now(),
+		Label:           label,
+		Metrics:         metrics,
+		Summary:         summary,
+		FormattedOutput: formattedOutput,
+		ReadableMetrics: readableMetrics,
+	}
+
+	var consolidatedLog ConsolidatedWorkerLog
+
+	// Check if file exists and read existing data
+	if _, err := os.Stat(filepath); err == nil {
+		// File exists, read it
+		existingData, err := os.ReadFile(filepath)
+		if err != nil {
+			return "", fmt.Errorf("failed to read existing consolidated file: %v", err)
+		}
+
+		if err := json.Unmarshal(existingData, &consolidatedLog); err != nil {
+			return "", fmt.Errorf("failed to parse existing consolidated file: %v", err)
+		}
+	} else {
+		// If file doesn't exist, create new structure
+		consolidatedLog = ConsolidatedWorkerLog{
+			WorkerID:   workerID,
+			ControlIP:  cpIP,
+			FirstSeen:  time.Now(),
+			LogEntries: []WorkerMetricsSnapshot{},
+		}
+	}
+
+	// Append new snapshot
+	consolidatedLog.LogEntries = append(consolidatedLog.LogEntries, newSnapshot)
+	consolidatedLog.LastUpdated = time.Now()
+	consolidatedLog.TotalEntries = len(consolidatedLog.LogEntries)
+	consolidatedLog.LatestMetrics = metrics
+
+	// Write consolidated log back to file
+	jsonData, err := json.MarshalIndent(consolidatedLog, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal consolidated log to JSON: %v", err)
+	}
+
+	if err := os.WriteFile(filepath, jsonData, 0644); err != nil {
+		return "", fmt.Errorf("failed to write consolidated file: %v", err)
+	}
+
+	// Also create/update readable text log
+	textFilepath := strings.Replace(filepath, ".json", ".txt", 1)
+	appendToTextLog(textFilepath, newSnapshot)
+
+	return filepath, nil
+}
+
+// DisplayWorkerMetrics - for console display when needed
+func DisplayWorkerMetrics(cpIP, workerID, label string) error {
+	metrics, err := CollectWorkerMetrics(cpIP, workerID)
+	if err != nil {
+		return fmt.Errorf("failed to collect worker metrics: %v", err)
+	}
+
+	output := generateMetricsOutput(metrics, label)
+	fmt.Print(output)
+	return nil
+}
+
+// Helper functions
+func generateMetricsOutput(metrics *WorkerMetrics, label string) string {
+	var output strings.Builder
 	pushgatewayURL := fmt.Sprintf("http://%s:9091", metrics.ControlIP)
 
-	fmt.Printf(" Worker Metrics Output:\n")
-	fmt.Printf(" NDM Worker Metrics Query Tool\n")
-	fmt.Printf("=====================================\n")
-	fmt.Printf(" Control Plane: %s\n", metrics.ControlIP)
-	fmt.Printf(" Worker ID: %s\n", metrics.WorkerID)
-	fmt.Printf(" Pushgateway URL: %s\n", pushgatewayURL)
-	fmt.Printf(" Query Time: %s\n", metrics.QueryTime.Format("2006-01-02T15:04:05.000Z"))
-	fmt.Printf("\n")
+	output.WriteString("Worker Metrics Output:\n")
+	output.WriteString("NDM Worker Metrics Query Tool\n")
+	output.WriteString("=====================================\n")
+	output.WriteString(fmt.Sprintf("Control Plane: %s\n", metrics.ControlIP))
+	output.WriteString(fmt.Sprintf("Worker ID: %s\n", metrics.WorkerID))
+	output.WriteString(fmt.Sprintf("Pushgateway URL: %s\n", pushgatewayURL))
+	output.WriteString(fmt.Sprintf("Query Time: %s\n", metrics.QueryTime.Format("2006-01-02T15:04:05.000Z")))
+	output.WriteString("\n")
 
-	fmt.Printf(" Testing Pushgateway connectivity...\n")
-	fmt.Printf(" Pushgateway accessible\n")
-	fmt.Printf(" Response size: %d bytes\n", metrics.DataSize)
-	fmt.Printf("\n")
+	output.WriteString("Testing Pushgateway connectivity...\n")
+	output.WriteString("Pushgateway accessible\n")
+	output.WriteString(fmt.Sprintf("Response size: %d bytes\n", metrics.DataSize))
+	output.WriteString("\n")
 
-	fmt.Printf(" Parsing worker metrics...\n")
-	fmt.Printf(" WORKER METRICS SUMMARY\n")
-	fmt.Printf("=========================\n")
+	output.WriteString("Parsing worker metrics...\n")
+	output.WriteString("WORKER METRICS SUMMARY\n")
+	output.WriteString("=========================\n")
 
 	// Worker Information
 	if len(metrics.Info) > 0 {
-		fmt.Printf("  Worker Information:\n")
+		output.WriteString("  Worker Information:\n")
 		if version, ok := metrics.Info["version"]; ok {
-			fmt.Printf("    Version: %s\n", version)
+			output.WriteString(fmt.Sprintf("    Version: %s\n", version))
 		}
 		if platform, ok := metrics.Info["platform"]; ok {
-			fmt.Printf("    Platform: %s\n", platform)
+			output.WriteString(fmt.Sprintf("    Platform: %s\n", platform))
 		}
-		fmt.Printf("\n")
+		output.WriteString("\n")
 	}
 
 	// Memory Usage
-	fmt.Printf(" Memory Usage:\n")
+	output.WriteString(" Memory Usage:\n")
 	if total, ok := metrics.Memory["system_total"]; ok {
-		fmt.Printf("    System Total: %s\n", formatBytes(int64(total)))
+		output.WriteString(fmt.Sprintf("    System Total: %s\n", formatBytes(int64(total))))
 	}
 	if used, ok := metrics.Memory["system_used"]; ok {
-		fmt.Printf("    System Used: %s\n", formatBytes(int64(used)))
+		output.WriteString(fmt.Sprintf("    System Used: %s\n", formatBytes(int64(used))))
 	}
 	if free, ok := metrics.Memory["system_free"]; ok {
-		fmt.Printf("    System Free: %s\n", formatBytes(int64(free)))
+		output.WriteString(fmt.Sprintf("    System Free: %s\n", formatBytes(int64(free))))
 	}
 
 	// Calculate system memory usage percentage
 	if total, totalOk := metrics.Memory["system_total"]; totalOk {
 		if used, usedOk := metrics.Memory["system_used"]; usedOk && total > 0 {
 			percentage := (used / total) * 100
-			fmt.Printf("    System Usage: %.2f%%\n", percentage)
+			output.WriteString(fmt.Sprintf("    System Usage: %.2f%%\n", percentage))
 		}
 	}
 
 	if heapUsed, ok := metrics.Memory["nodejs_heap_used"]; ok {
-		fmt.Printf("    Node.js Heap Used: %s\n", formatBytes(int64(heapUsed)))
+		output.WriteString(fmt.Sprintf("    Node.js Heap Used: %s\n", formatBytes(int64(heapUsed))))
 	}
 	if heapTotal, ok := metrics.Memory["nodejs_heap_total"]; ok {
-		fmt.Printf("    Node.js Heap Total: %s\n", formatBytes(int64(heapTotal)))
+		output.WriteString(fmt.Sprintf("    Node.js Heap Total: %s\n", formatBytes(int64(heapTotal))))
 	}
 
 	// Calculate Node.js heap usage percentage
 	if heapUsed, usedOk := metrics.Memory["nodejs_heap_used"]; usedOk {
 		if heapTotal, totalOk := metrics.Memory["nodejs_heap_total"]; totalOk && heapTotal > 0 {
 			heapPercentage := (heapUsed / heapTotal) * 100
-			fmt.Printf("    Node.js Heap Usage: %.2f%%\n", heapPercentage)
+			output.WriteString(fmt.Sprintf("    Node.js Heap Usage: %.2f%%\n", heapPercentage))
+		}
+	}
+	output.WriteString("\n")
+
+	// CPU Usage
+	output.WriteString(" CPU Usage:\n")
+
+	if avgUsage, hasAverage := metrics.CPU["average"]; hasAverage {
+		output.WriteString(fmt.Sprintf("    average: %.2f%%\n", avgUsage))
+	}
+
+	cpuCores := []string{"cpu0", "cpu1", "cpu2", "cpu3"}
+	var cpuSum float64
+	var cpuCount int
+
+	for _, core := range cpuCores {
+		if usage, exists := metrics.CPU[core]; exists {
+			output.WriteString(fmt.Sprintf("    %s: %.2f%%\n", core, usage))
+			cpuSum += usage
+			cpuCount++
+		}
+	}
+
+	if _, hasAverage := metrics.CPU["average"]; !hasAverage && cpuCount > 0 {
+		calculated_average := cpuSum / float64(cpuCount)
+		output.WriteString(fmt.Sprintf("    Average: %.2f%%\n", calculated_average))
+	}
+
+	for core, usage := range metrics.CPU {
+		if core != "average" && !contains(cpuCores, core) {
+			output.WriteString(fmt.Sprintf("    %s: %.2f%%\n", core, usage))
+		}
+	}
+
+	output.WriteString("\n")
+
+	// Worker Threads
+	output.WriteString(" Worker Threads:\n")
+	if total, ok := metrics.Threads["threads_total"]; ok {
+		output.WriteString(fmt.Sprintf("    Total Threads: %.0f\n", total))
+	}
+	if available, ok := metrics.Threads["threads_available"]; ok {
+		output.WriteString(fmt.Sprintf("    Available: %.0f\n", available))
+	}
+	if busy, ok := metrics.Threads["threads_busy"]; ok {
+		output.WriteString(fmt.Sprintf("    Busy: %.0f\n", busy))
+	}
+	if active, ok := metrics.Threads["active_tasks"]; ok {
+		output.WriteString(fmt.Sprintf("    Active Tasks: %.0f\n", active))
+	}
+	output.WriteString("\n")
+
+	output.WriteString(" Metrics query completed successfully!\n")
+	output.WriteString("\n")
+	output.WriteString(" Test passed: Worker metrics integration works!\n")
+
+	return output.String()
+}
+
+func generateMetricsSummary(metrics *WorkerMetrics) string {
+	var summary strings.Builder
+
+	summary.WriteString(fmt.Sprintf("Worker: %s | ", metrics.WorkerID))
+	summary.WriteString(fmt.Sprintf("Time: %s | ", metrics.QueryTime.Format("15:04:05")))
+
+	if total, totalOk := metrics.Memory["system_total"]; totalOk {
+		if used, usedOk := metrics.Memory["system_used"]; usedOk && total > 0 {
+			percentage := (used / total) * 100
+			summary.WriteString(fmt.Sprintf("RAM: %.1f%% | ", percentage))
+		}
+	}
+
+	if avgUsage, hasAverage := metrics.CPU["average"]; hasAverage {
+		summary.WriteString(fmt.Sprintf("CPU: %.1f%% | ", avgUsage))
+	}
+
+	if heapUsed, usedOk := metrics.Memory["nodejs_heap_used"]; usedOk {
+		if heapTotal, totalOk := metrics.Memory["nodejs_heap_total"]; totalOk && heapTotal > 0 {
+			heapPercentage := (heapUsed / heapTotal) * 100
+			summary.WriteString(fmt.Sprintf("Heap: %.1f%%", heapPercentage))
 			if heapPercentage > 85 {
-				fmt.Printf("      HIGH NODE.JS HEAP USAGE!\n")
+				summary.WriteString(" (HIGH!)")
 			}
 		}
 	}
-	fmt.Printf("\n")
 
-	// CPU Usage
-	fmt.Printf("  CPU Usage:\n")
-	var cpuSum float64
-	var cpuCount int
-
-	for core, usage := range metrics.CPU {
-		fmt.Printf("    %s: %.2f%%\n", core, usage)
-		cpuSum += usage
-		cpuCount++
-	}
-
-	if cpuCount > 0 {
-		average := cpuSum / float64(cpuCount)
-		fmt.Printf("    Average: %.2f%%\n", average)
-	}
-	fmt.Printf("\n")
-
-	// Worker Threads
-	fmt.Printf(" Worker Threads:\n")
-	if total, ok := metrics.Threads["threads_total"]; ok {
-		fmt.Printf("    Total Threads: %.0f\n", total)
-	}
-	if available, ok := metrics.Threads["threads_available"]; ok {
-		fmt.Printf("    Available: %.0f\n", available)
-	}
-	if busy, ok := metrics.Threads["threads_busy"]; ok {
-		fmt.Printf("    Busy: %.0f\n", busy)
-	}
-	if active, ok := metrics.Threads["active_tasks"]; ok {
-		fmt.Printf("    Active Tasks: %.0f\n", active)
-	}
-	fmt.Printf("\n")
-
-	fmt.Printf(" Metrics query completed successfully!\n")
-	fmt.Printf("\n")
-	fmt.Printf(" Test passed: Worker metrics integration works!\n")
+	return summary.String()
 }
 
-// WriteMetricsToFile saves worker metrics to a timestamped file
-func WriteMetricsToFile(metrics *WorkerMetrics, workerID string) error {
-	// Create filename with timestamp
-	timestamp := time.Now().Format("20060102-150405")
-	filename := fmt.Sprintf("worker-metrics-%s-%s.txt", workerID, timestamp)
+func extractReadableMetrics(metrics *WorkerMetrics) map[string]string {
+	readable := make(map[string]string)
 
-	// Create file
-	file, err := os.Create(filename)
-	if err != nil {
-		return fmt.Errorf("failed to create metrics file: %v", err)
+	if total, ok := metrics.Memory["system_total"]; ok {
+		readable["system_memory_total"] = formatBytes(int64(total))
+	}
+	if used, ok := metrics.Memory["system_used"]; ok {
+		readable["system_memory_used"] = formatBytes(int64(used))
+	}
+	if free, ok := metrics.Memory["system_free"]; ok {
+		readable["system_memory_free"] = formatBytes(int64(free))
+	}
+
+	if total, totalOk := metrics.Memory["system_total"]; totalOk {
+		if used, usedOk := metrics.Memory["system_used"]; usedOk && total > 0 {
+			percentage := (used / total) * 100
+			readable["system_memory_usage"] = fmt.Sprintf("%.2f%%", percentage)
+		}
+	}
+
+	if heapUsed, ok := metrics.Memory["nodejs_heap_used"]; ok {
+		readable["nodejs_heap_used"] = formatBytes(int64(heapUsed))
+	}
+	if heapTotal, ok := metrics.Memory["nodejs_heap_total"]; ok {
+		readable["nodejs_heap_total"] = formatBytes(int64(heapTotal))
+	}
+
+	if heapUsed, usedOk := metrics.Memory["nodejs_heap_used"]; usedOk {
+		if heapTotal, totalOk := metrics.Memory["nodejs_heap_total"]; totalOk && heapTotal > 0 {
+			heapPercentage := (heapUsed / heapTotal) * 100
+			readable["nodejs_heap_usage"] = fmt.Sprintf("%.2f%%", heapPercentage)
+			if heapPercentage > 85 {
+				readable["heap_alert"] = "HIGH NODE.JS HEAP USAGE!"
+			} else {
+				readable["heap_alert"] = "Normal"
+			}
+		}
+	}
+
+	if avgUsage, ok := metrics.CPU["average"]; ok {
+		readable["cpu_average"] = fmt.Sprintf("%.2f%%", avgUsage)
+	}
+
+	for core, usage := range metrics.CPU {
+		if core != "average" {
+			readable[fmt.Sprintf("cpu_%s", core)] = fmt.Sprintf("%.2f%%", usage)
+		}
+	}
+
+	if total, ok := metrics.Threads["threads_total"]; ok {
+		readable["worker_threads_total"] = fmt.Sprintf("%.0f", total)
+	}
+	if available, ok := metrics.Threads["threads_available"]; ok {
+		readable["worker_threads_available"] = fmt.Sprintf("%.0f", available)
+	}
+	if busy, ok := metrics.Threads["threads_busy"]; ok {
+		readable["worker_threads_busy"] = fmt.Sprintf("%.0f", busy)
+	}
+	if active, ok := metrics.Threads["active_tasks"]; ok {
+		readable["active_tasks"] = fmt.Sprintf("%.0f", active)
+	}
+
+	if version, ok := metrics.Info["version"]; ok {
+		readable["worker_version"] = version
+	}
+	if platform, ok := metrics.Info["platform"]; ok {
+		readable["worker_platform"] = platform
+	}
+
+	readable["data_size"] = formatBytes(int64(metrics.DataSize))
+
+	return readable
+}
+
+func appendToTextLog(textFilepath string, snapshot WorkerMetricsSnapshot) error {
+	logEntry := fmt.Sprintf("\n%s\n=== METRICS ENTRY #%s ===\nTimestamp: %s\nLabel: %s\n%s\n%s\n",
+		strings.Repeat("=", 80),
+		snapshot.Label,
+		snapshot.Timestamp.Format("2006-01-02 15:04:05"),
+		snapshot.Label,
+		snapshot.FormattedOutput,
+		strings.Repeat("=", 80))
+
+	var file *os.File
+	var err error
+
+	if _, err := os.Stat(textFilepath); err == nil {
+		file, err = os.OpenFile(textFilepath, os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			return err
+		}
+	} else {
+		file, err = os.Create(textFilepath)
+		if err != nil {
+			return err
+		}
+		header := fmt.Sprintf("CONSOLIDATED WORKER METRICS LOG\nWorker ID: %s\nStarted: %s\n%s\n",
+			snapshot.Metrics.WorkerID,
+			snapshot.Timestamp.Format("2006-01-02 15:04:05"),
+			strings.Repeat("=", 80))
+		file.WriteString(header)
 	}
 	defer file.Close()
 
-	// Write metrics to file
-	file.WriteString(fmt.Sprintf("Worker Metrics for %s\n", workerID))
-	file.WriteString(fmt.Sprintf("Collected at: %s\n", metrics.QueryTime.Format("2006-01-02 15:04:05")))
-	file.WriteString(fmt.Sprintf("Control Plane: %s\n\n", metrics.ControlIP))
-
-	// Memory information
-	file.WriteString("Memory Usage:\n")
-	if sysTotal, ok := metrics.Memory["system_total"]; ok {
-		file.WriteString(fmt.Sprintf("  System Total: %s\n", formatBytes(int64(sysTotal))))
-	}
-	if sysUsed, ok := metrics.Memory["system_used"]; ok {
-		file.WriteString(fmt.Sprintf("  System Used: %s\n", formatBytes(int64(sysUsed))))
-	}
-	if heapUsed, ok := metrics.Memory["nodejs_heap_used"]; ok {
-		file.WriteString(fmt.Sprintf("  Node.js Heap Used: %s\n", formatBytes(int64(heapUsed))))
-	}
-	if heapTotal, ok := metrics.Memory["nodejs_heap_total"]; ok {
-		file.WriteString(fmt.Sprintf("  Node.js Heap Total: %s\n", formatBytes(int64(heapTotal))))
-	}
-
-	// CPU information
-	file.WriteString("\nCPU Usage:\n")
-	var cpuSum float64
-	var cpuCount int
-	for core, usage := range metrics.CPU {
-		file.WriteString(fmt.Sprintf("  %s: %.2f%%\n", core, usage))
-		cpuSum += usage
-		cpuCount++
-	}
-	if cpuCount > 0 {
-		average := cpuSum / float64(cpuCount)
-		file.WriteString(fmt.Sprintf("  Average: %.2f%%\n", average))
-	}
-
-	// Thread information
-	file.WriteString("\nWorker Threads:\n")
-	if total, ok := metrics.Threads["threads_total"]; ok {
-		file.WriteString(fmt.Sprintf("  Total Threads: %.0f\n", total))
-	}
-	if available, ok := metrics.Threads["threads_available"]; ok {
-		file.WriteString(fmt.Sprintf("  Available: %.0f\n", available))
-	}
-	if busy, ok := metrics.Threads["threads_busy"]; ok {
-		file.WriteString(fmt.Sprintf("  Busy: %.0f\n", busy))
-	}
-	if active, ok := metrics.Threads["active_tasks"]; ok {
-		file.WriteString(fmt.Sprintf("  Active Tasks: %.0f\n", active))
-	}
-
-	// Raw data
-	file.WriteString(fmt.Sprintf("\nRaw Metrics Data (%d bytes):\n", metrics.DataSize))
-	file.WriteString(metrics.RawData)
-
-	fmt.Printf(" Metrics saved to: %s\n", filename)
-	return nil
+	_, err = file.WriteString(logEntry)
+	return err
 }
 
-// CollectAndDisplayWorkerMetrics is a convenience function that collects and displays metrics
-func CollectAndDisplayWorkerMetrics(cpIP, workerID, label string) error {
-	fmt.Printf(" Collecting worker metrics for %s...\n", workerID)
-
-	metrics, err := CollectWorkerMetrics(cpIP, workerID)
-	if err != nil {
-		return fmt.Errorf("failed to collect worker metrics: %v", err)
-	}
-
-	DisplayWorkerMetrics(metrics, label)
-
-	// Write metrics to file as well
-	err = WriteMetricsToFile(metrics, workerID)
-	if err != nil {
-		fmt.Printf("Warning: Failed to write metrics to file: %v\n", err)
-	}
-
-	return nil
-}
-
-// formatBytes helper function for readable byte formatting
 func formatBytes(bytes int64) string {
 	if bytes == 0 {
 		return "0 B"
@@ -364,12 +529,11 @@ func formatBytes(bytes int64) string {
 	return fmt.Sprintf("%.2f %s", fBytes, sizes[i])
 }
 
-// GetWorkerMetricsAsJSON returns worker metrics as JSON for API responses
-func GetWorkerMetricsAsJSON(cpIP, workerID string) ([]byte, error) {
-	metrics, err := CollectWorkerMetrics(cpIP, workerID)
-	if err != nil {
-		return nil, err
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
 	}
-
-	return json.Marshal(metrics)
+	return false
 }

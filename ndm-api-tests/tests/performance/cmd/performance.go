@@ -16,46 +16,378 @@ import (
 )
 
 // callTestMetricsScript executes test-metrics.go with cpIP and workerID
-func callTestMetricsScript(cpIP, workerID string) error {
-	fmt.Printf(" Calling test-metrics.go with CP IP: %s and Worker ID: %s\n", cpIP, workerID)
-
-	// Execute test-metrics.go as a separate Go program with the provided arguments
-	cmd := exec.Command("go", "run", "test-metrics.go", cpIP, workerID)
-
-	output, err := cmd.CombinedOutput()
+func main() {
+	// Setup logging to file with timestamp, and also print to console
+	fmt.Println("\n====================Creating a Log file====================")
+	logFileName := fmt.Sprintf("perf-log-%s.txt", time.Now().Format("20060102-150405"))
+	logFile, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
-		return fmt.Errorf("failed to execute test-metrics.go: %v\nOutput: %s", err, string(output))
+		log.Fatalf("Failed to open log file: %v", err)
+	}
+	defer logFile.Close()
+
+	mw := io.MultiWriter(os.Stdout, logFile)
+	log.SetOutput(mw)
+	// For all exec.Command calls, set cmd.Stdout/cmd.Stderr = mw
+	// Load configuration from config.json
+	config, err := loadConfig()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+	fmt.Printf("Created a ")
+
+	fmt.Println("\n====================Creating Azure VMs====================")
+	cpIP, workerIP, err := createAzureVMsWithTerraform(config)
+	// cpIP, workerIP := "172.30.203.12", "172.30.203.17"
+	// var err error = nil
+	if err != nil {
+		log.Fatalf("Failed to create Azure VMs: %v", err)
 	}
 
-	// Write output to a new file with timestamp
-	ts := time.Now().Format("20060102-150405")
-	filename := fmt.Sprintf("worker-metrics-%s-%s.txt", workerID, ts)
-	f, ferr := os.Create(filename)
-	if ferr != nil {
-		fmt.Printf("Warning: Could not create metrics output file: %v\n", ferr)
-	} else {
-		defer f.Close()
-		_, _ = f.Write(output)
-		fmt.Printf("test-metrics.go output written to %s\n", filename)
+	fmt.Println("\n====================Clearing and Creating Azure NetApp Files Volume====================")
+	destinationIP, exportPath, err := createAzureANFVolumeWithTerraform(config)
+	if err != nil {
+		log.Fatalf("Failed to create Azure ANF volume: %v", err)
 	}
 
-	fmt.Printf("test-metrics.go Results:\n%s\n", string(output))
+	fmt.Println("\n====================Updating Environment Variables=====================")
+	err = updateEnvVariables(cpIP, workerIP, destinationIP, exportPath, config)
+	if err != nil {
+		log.Printf("Failed to update environment variables: %v", err)
+	}
+	fmt.Println("\nEnvironment Variables after loading:")
+	fmt.Printf("===>CP: %s\n", NDM_VM_HOST)
+	fmt.Printf("===>Workers: %s\n", NDM_WORKERS_HOST)
+
+	fmt.Println("\n====================Waiting for Control Plane to be UP====================")
+	err = waitForControlPlaneReadyWithIP(cpIP, config)
+	if err != nil {
+		log.Printf("Control Plane readiness check failed: %v", err)
+	}
+
+	fmt.Println("\n====================Initialising the User====================")
+	InitTestEnv()
+	fmt.Printf("NDM Username: %s\n", USERNAME)
+	fmt.Printf("NDM Password: %s\n", PASSWORD)
+
+	fmt.Println("\n====================Create Project and Attaching the worker(s)====================")
+	workerCount := len(os.Getenv("AZ_NDM_WORKER_COUNT"))
+	projectId, workersConfig, err := SetupTestEnv(workerCount)
+	if err != nil {
+		fmt.Printf("Failed to setup test environment: %v\n", err)
+		return
+	}
+	fmt.Printf("======>Project ID: %s\n", projectId)
+	fmt.Printf("======>Workers attached: %d\n", len(workersConfig))
+
+	for workerName, config := range workersConfig {
+		fmt.Printf("   Worker: %s (Host: %s:%d)\n", workerName, config.Host, config.Port)
+	}
+	fmt.Printf("NDM Username: %s\n", USERNAME)
+	fmt.Printf("NDM Password: %s\n", PASSWORD)
+
+	fmt.Println("\n====================Setting up Source File Server====================")
+	headers := map[string]string{
+		"Authorization": "Bearer " + AuthToken,
+		"Content-Type":  config.HTTP.ContentType,
+	}
+	workerIds := GetWorkerIds()
+	if len(workerIds) == 0 {
+		fmt.Printf("******No worker IDs available for project %s******\n", projectId)
+		return
+	}
+	sourceParams := CreateServereParams{
+		ConfigName:       "Source-FileServer-Performance-Test",
+		ConfigType:       ConfigTypeFile,
+		ProjectID:        projectId,
+		ServerType:       ServerTypeOtherNAS,
+		UserName:         NDM_VM_USER_NAME,
+		Password:         NDM_VM_PASSWORD,
+		Protocol:         ProtocolNFS,
+		ProtocolVersion:  ProtocolVersion3,
+		Host:             SOURCE_HOST_IP,
+		Workers:          workerIds,
+		WorkingDirectory: config.Fileserver.WorkingDirectory,
+		ExportPathSource: nil,
+	}
+	sourceFileServerId, resp, err := CreateFileServer(sourceParams, headers)
+	if err != nil {
+		fmt.Printf("Failed to create source file server: %v\n", err)
+		return
+	}
+	if resp.StatusCode != 200 && resp.StatusCode != 201 {
+		fmt.Printf("Source file server creation failed with status: %d\n", resp.StatusCode)
+		return
+	}
+
+	// Discovery job for source file server
+	log.Printf("\n====================Creating Discovery Job on Source====================")
+	sourceExportPath := config.Fileserver.SourceExportPath // Use the same path as migration source
+	sourceExportPathID, err := GetExportPathID("source", sourceExportPath, sourceFileServerId, headers)
+	if err != nil {
+		LogFatalf("Error getting source export path ID for discovery job: %v", err)
+	}
+	sourcePathIDs := []string{sourceExportPathID}
+	jobParams := DiscoveryJobParams{
+		SourcePathIDs:            sourcePathIDs,
+		ExcludeOlderThan:         nil,
+		ExcludeFilePatterns:      "",
+		PreserveAccessTime:       false,
+		FirstRunAt:               GetCurrentUTCTimestamp(),
+		CreatedBy:                nil,
+		WorkflowExecutionTimeout: "60s",
+		WorkflowTaskTimeout:      "30s",
+		WorkflowRunTimeout:       "30s",
+		StartDelay:               "10s",
+	}
+	var sourceJobConfigIDs interface{}
+	sourceJobConfigIDs, resp, err = CreateDiscoveryJob(jobParams, headers)
+	if err != nil {
+		LogFatalf("Error creating discovery job: %v", err)
+	}
+	defer resp.Body.Close()
+	log.Printf("Source discovery job created with config IDs: %s", sourceJobConfigIDs)
+
+	fmt.Printf("======>Source file Server ID: %s\n", sourceFileServerId)
+
+	fmt.Println("\n====================Setting up Destination File Server====================")
+	destinationParams := CreateServereParams{
+		ConfigName:       "Destination-FileServer-Performance-Test",
+		ConfigType:       ConfigTypeFile,
+		ProjectID:        projectId,
+		ServerType:       ServerTypeOtherNAS,
+		UserName:         NDM_VM_USER_NAME, // From AZ_NDM_VM_USER_NAME
+		Password:         NDM_VM_PASSWORD,  // From AZ_NDM_VM_PASSWORD
+		Protocol:         ProtocolNFS,
+		ProtocolVersion:  ProtocolVersion3,
+		Host:             DESTINATION_HOST_IP, // From AZ_DESTINATION_HOST_IP (10.0.4.9)
+		Workers:          workerIds,
+		WorkingDirectory: config.Fileserver.WorkingDirectory,
+		ExportPathSource: nil, // Will use AutoDiscover default
+	}
+	destinationFileServerId, _, err := CreateFileServer(destinationParams, headers)
+	if err != nil {
+		fmt.Printf("Failed to create destination file server: %v\n", err)
+		return
+	}
+	fmt.Printf("======>Destination file Server ID: %s\n", destinationFileServerId)
+
+	fmt.Printf("CP IP : %s\n", cpIP)
+	fmt.Printf("Worker IP : %s\n", workerIP)
+	fmt.Printf("NDM Username: %s\n", USERNAME)
+	fmt.Printf("NDM Password: %s\n", PASSWORD)
+
+	// Create migration job from config source path to dynamic export path (destination)
+	fmt.Println("\n====================Setting Up Migration Job====================")
+	jobRunID, sourcePathID, destinationPathID, err := setupMigrationJob(sourceFileServerId, destinationFileServerId, config.Fileserver.SourceExportPath, exportPath, headers, config, cpIP)
+	if err != nil {
+		fmt.Printf("Warning: Failed to setup migration job: %v\n", err)
+	}
+
+	// Monitor migration job progress and handle metrics collection
+	fmt.Println("\n====================Migration Job Monitoring====================")
+	err = MigrationPolling(jobRunID, cpIP)
+	if err != nil {
+		fmt.Printf("Warning: Migration polling encountered issues: %v\n", err)
+	}
+
+	fmt.Println("\n====================Setting up Cutover Job====================")
+	err = setupAndExecuteCutoverJob(sourcePathID, destinationPathID, headers, cpIP)
+	if err != nil {
+		fmt.Printf("Warning: Cutover job setup and execution failed: %v\n", err)
+
+	}
+	fmt.Printf("CP IP : %s\n", cpIP)
+	fmt.Printf("Worker IP : %s\n", workerIP)
+	fmt.Printf("NDM Username: %s\n", USERNAME)
+	fmt.Printf("NDM Password: %s\n", PASSWORD)
+	fmt.Printf("Migration completion details: %s→%s\n", SOURCE_HOST_IP, DESTINATION_HOST_IP)
+}
+
+// collectWorkerMetricsWithLabel collects metrics with a specific label
+func collectWorkerMetricsWithLabel(cpIP, workerID, label string) error {
+	timestamp := time.Now().Format("15:04:05")
+	fmt.Printf(" [%s - %s] Collecting Worker Metrics...\n", label, timestamp)
+
+	_, err := LogWorkerMetrics(cpIP, workerID, label)
+	if err != nil {
+		fmt.Printf("  [%s] Failed to collect worker metrics: %v\n", label, err)
+		return err
+	}
+
+	fmt.Printf(" [%s] Worker metrics collection completed\n", label)
 	return nil
 }
 
-// logFileWithConsole writes to both the original writer and the log file
-type logFileWithConsole struct {
-	console io.Writer
-	file    io.Writer
+// MigrationPolling monitors migration job states and handles metrics collection
+func MigrationPolling(jobRunID, cpIP string) error {
+	fmt.Printf("Job Run ID: %s\n", jobRunID)
+	fmt.Println("Waiting for migration job to start...")
+
+	// Get worker ID for metrics collection
+	workerIds := GetWorkerIds()
+	var workerID string
+	var stopMetricsChan chan bool
+
+	if len(workerIds) == 0 {
+		fmt.Printf("Warning: No worker IDs available for migration metrics\n")
+		fmt.Printf(" Proceeding with migration monitoring without worker metrics...\n")
+	} else {
+		workerID = workerIds[0] // Use first available worker ID
+		fmt.Printf(" Starting migration metrics collection with Worker ID: %s\n", workerID)
+	}
+
+	// Wait for job to reach RUNNING state
+	err := WaitForJobState(jobRunID, RUNNING_JOBRUN)
+	if err != nil {
+		fmt.Printf("Warning: Job may not have started yet: %v\n", err)
+	} else {
+		fmt.Printf("=============Migration job is now RUNNING=============\n")
+
+		// Collect metrics at START of migration
+		if workerID != "" {
+			fmt.Printf(" [MIGRATION_START] Collecting worker metrics...\n")
+			err = collectWorkerMetricsWithLabel(cpIP, workerID, "MIGRATION_START")
+			if err != nil {
+				fmt.Printf("Warning: Failed to collect start migration metrics: %v\n", err)
+			}
+
+			// Start 5-minute interval metrics collection in background
+			fmt.Printf(" Starting 5-minute interval metrics collection during migration...\n")
+			stopMetricsChan = make(chan bool, 1)
+			go func() {
+				ticker := time.NewTicker(5 * time.Minute)
+				defer ticker.Stop()
+				intervalCount := 1
+
+				for {
+					select {
+					case <-ticker.C:
+						fmt.Printf("[MIGRATION_INTERVAL_%d] Collecting worker metrics...\n", intervalCount)
+						err := collectWorkerMetricsWithLabel(cpIP, workerID, fmt.Sprintf("MIGRATION_INTERVAL_%d", intervalCount))
+						if err != nil {
+							fmt.Printf("Warning: Failed to collect interval %d migration metrics: %v\n", intervalCount, err)
+						}
+						intervalCount++
+					case <-stopMetricsChan:
+						fmt.Printf(" Stopping interval metrics collection\n")
+						return
+					}
+				}
+			}()
+		}
+	}
+
+	// Wait for job run to complete with extended timeout (2000 retries = ~2.8 hours)
+	fmt.Println("Waiting for migration job to complete...")
+	err = WaitForJobState(jobRunID, COMPLETED_JOBRUN, 2000)
+	if err != nil {
+		fmt.Printf("Warning: Job did not complete successfully: %v\n", err)
+	} else {
+		fmt.Printf("=============Migration job COMPLETED=============\n")
+
+		// Stop metrics collection after migration is COMPLETED and collect final metrics
+		if workerID != "" {
+			if stopMetricsChan != nil {
+				stopMetricsChan <- true
+			}
+			fmt.Printf(" [MIGRATION_END] Collecting final worker metrics after migration completion...\n")
+			err = collectWorkerMetricsWithLabel(cpIP, workerID, "MIGRATION_END")
+			if err != nil {
+				fmt.Printf("Warning: Failed to collect end migration metrics: %v\n", err)
+			}
+		}
+	}
+
+	return nil
 }
 
-func (w logFileWithConsole) Write(p []byte) (n int, err error) {
-	n, err = w.console.Write(p)
-	w.file.Write(p)
-	return
+// setupAndExecuteCutoverJob creates, waits for approval, and executes cutover jobs
+func setupAndExecuteCutoverJob(sourcePathID, destinationPathID string, headers map[string]string, cpIP string) error {
+	// Create cutover job using the same source and destination path IDs from migration
+	fmt.Println("Creating bulk cutover job...")
+	cutoverParams := BulkCutoverJobParams{
+		SourcePathIDs:      []string{sourcePathID},
+		DestinationPathIDs: []string{destinationPathID},
+	}
+
+	jobConfigIDs, resp, err := CreateBulkCutoverJob(cutoverParams, headers)
+	if err != nil {
+		return fmt.Errorf("error creating bulk cutover job: %w", err)
+	}
+	defer resp.Body.Close()
+	fmt.Printf("======>Cutover job created with config IDs: %v\n", jobConfigIDs)
+
+	// Get job run details for each cutover job and collect run IDs
+	var cutoverRunIDs []string
+	fmt.Println("Getting cutover job run details...")
+	for _, jobConfigID := range jobConfigIDs {
+		getJobsResp, resp, err := GetJobRunDetails(jobConfigID, headers)
+		if err != nil {
+			fmt.Printf("Error getting cutover job run details for config %s: %v\n", jobConfigID, err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		if len(getJobsResp.JobRuns) > 0 {
+			cutoverRunID := getJobsResp.JobRuns[0].JobRunId
+			fmt.Printf("   Cutover Run ID: %s (Config: %s)\n", cutoverRunID, jobConfigID)
+
+			// Wait for cutover job to reach BLOCKED state (requires approval)
+			fmt.Printf("   Waiting for cutover job %s to reach BLOCKED state...\n", cutoverRunID)
+			err = WaitForJobState(cutoverRunID, BLOCKED_JOBRUN)
+			if err != nil {
+				fmt.Printf("   Warning: Cutover job %s did not reach BLOCKED state: %v\n", cutoverRunID, err)
+				continue
+			}
+
+			// Verify job status after waiting
+			getJobsResp, resp, err = GetJobRunDetails(jobConfigID, headers)
+			if err != nil {
+				fmt.Printf("   Error re-fetching job status for %s: %v\n", jobConfigID, err)
+				continue
+			}
+			defer resp.Body.Close()
+
+			if len(getJobsResp.JobRuns) > 0 && getJobsResp.JobRuns[0].Status == "BLOCKED" {
+				fmt.Printf("   ✓ Cutover job %s is now BLOCKED and ready for approval\n", cutoverRunID)
+				cutoverRunIDs = append(cutoverRunIDs, cutoverRunID)
+			} else {
+				fmt.Printf("   Warning: Cutover job %s status is %s (expected BLOCKED)\n", cutoverRunID, getJobsResp.JobRuns[0].Status)
+			}
+		}
+	}
+
+	// Approve all cutover jobs
+	fmt.Println("Approving bulk cutover jobs...")
+	for _, cutoverRunID := range cutoverRunIDs {
+		fmt.Printf("   Approving cutover job: %s\n", cutoverRunID)
+		resp, err := ApproveRejectBulkCutoverJob(cutoverRunID, "APPROVED", headers)
+		if err != nil {
+			fmt.Printf("   Error approving cutover job %s: %v\n", cutoverRunID, err)
+			continue
+		}
+		defer resp.Body.Close()
+		fmt.Printf("   ✓ Cutover job %s approved successfully\n", cutoverRunID)
+
+		// Wait for cutover job to complete
+		fmt.Printf("   Waiting for cutover job %s to complete...\n", cutoverRunID)
+		err = WaitForJobState(cutoverRunID, COMPLETED_JOBRUN)
+		if err != nil {
+			fmt.Printf("   Warning: Cutover job %s completion check failed: %v\n", cutoverRunID, err)
+		} else {
+			fmt.Printf("   ✓ Cutover job %s completed successfully\n", cutoverRunID)
+		}
+	}
+
+	fmt.Printf("======>Cutover process completed!\n")
+	fmt.Printf("CP IP : %s\n", cpIP)
+	fmt.Printf("NDM Username: %s\n", USERNAME)
+	fmt.Printf("NDM Password: %s\n", PASSWORD)
+
+	return nil
 }
 
-// Config holds all the configuration values
 type Config struct {
 	NDM struct {
 		Username string `json:"username"`
@@ -132,189 +464,16 @@ func loadConfig() (*Config, error) {
 	return &config, nil
 }
 
-func main() {
-	// Setup logging to file with timestamp, and also print to console
-	fmt.Println("\n====================Creating a Log file====================")
-	logFileName := fmt.Sprintf("perf-log-%s.txt", time.Now().Format("20060102-150405"))
-	logFile, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		log.Fatalf("Failed to open log file: %v", err)
-	}
-	defer logFile.Close()
-
-	mw := io.MultiWriter(os.Stdout, logFile)
-	log.SetOutput(mw)
-	// For all exec.Command calls, set cmd.Stdout/cmd.Stderr = mw
-	// Load configuration from config.json
-	config, err := loadConfig()
-	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
-	}
-
-	fmt.Println("\n====================Creating Azure VMs====================")
-	cpIP, workerIP, err := createAzureVMsWithTerraform(config)
-	// cpIP, workerIP := "172.30.203.12", "172.30.203.17"
-	// var err error = nil
-	if err != nil {
-		log.Fatalf("Failed to create Azure VMs: %v", err)
-	}
-
-	fmt.Println("\n====================Clearing and Creating Azure NetApp Files Volume====================")
-	destinationIP, exportPath, err := createAzureANFVolumeWithTerraform(config)
-	if err != nil {
-		log.Fatalf("Failed to create Azure ANF volume: %v", err)
-	}
-
-	fmt.Println("\n====================Updating Environment Variables=====================")
-	err = updateEnvVariables(cpIP, workerIP, destinationIP, exportPath, config)
-	if err != nil {
-		log.Printf("Failed to update environment variables: %v", err)
-	}
-	fmt.Println("\nEnvironment Variables after loading:")
-	fmt.Printf("===>CP: %s\n", NDM_VM_HOST)
-	fmt.Printf("===>Workers: %s\n", NDM_WORKERS_HOST)
-
-	fmt.Println("\n====================Waiting for Control Plane to be UP====================")
-	err = waitForControlPlaneReadyWithIP(cpIP, config)
-	if err != nil {
-		log.Printf("Control Plane readiness check failed: %v", err)
-	}
-
-	fmt.Println("\n====================Initialising the User====================")
-	InitTestEnv()
-	fmt.Printf("NDM Username: %s\n", USERNAME)
-	fmt.Printf("NDM Password: %s\n", PASSWORD)
-
-	fmt.Println("\n====================Create Project and Attaching the worker(s)====================")
-	workerCount := len(os.Getenv("AZ_NDM_WORKER_COUNT"))
-	projectId, workersConfig, err := SetupTestEnv(workerCount)
-	if err != nil {
-		fmt.Printf("Failed to setup test environment: %v\n", err)
-		return
-	}
-	fmt.Printf("======>Project ID: %s\n", projectId)
-	fmt.Printf("======>Workers attached: %d\n", len(workersConfig))
-
-	for workerName, config := range workersConfig {
-		fmt.Printf("   Worker: %s (Host: %s:%d)\n", workerName, config.Host, config.Port)
-	}
-	fmt.Printf("NDM Username: %s\n", USERNAME)
-	fmt.Printf("NDM Password: %s\n", PASSWORD)
-
-	fmt.Println("\n====================Setting up File Servers====================")
-	headers := map[string]string{
-		"Authorization": "Bearer " + AuthToken,
-		"Content-Type":  config.HTTP.ContentType,
-	}
-	workerIds := GetWorkerIds()
-	if len(workerIds) == 0 {
-		fmt.Printf("******No worker IDs available for project %s******\n", projectId)
-		return
-	}
-	sourceParams := CreateServereParams{
-		ConfigName:       "Source-FileServer-Performance-Test",
-		ConfigType:       ConfigTypeFile,
-		ProjectID:        projectId,
-		ServerType:       ServerTypeOtherNAS,
-		UserName:         NDM_VM_USER_NAME,
-		Password:         NDM_VM_PASSWORD,
-		Protocol:         ProtocolNFS,
-		ProtocolVersion:  ProtocolVersion3,
-		Host:             SOURCE_HOST_IP,
-		Workers:          workerIds,
-		WorkingDirectory: config.Fileserver.WorkingDirectory,
-		ExportPathSource: nil,
-	}
-	sourceFileServerId, resp, err := CreateFileServer(sourceParams, headers)
-	if err != nil {
-		fmt.Printf("Failed to create source file server: %v\n", err)
-		return
-	}
-	if resp.StatusCode != 200 && resp.StatusCode != 201 {
-		fmt.Printf("Source file server creation failed with status: %d\n", resp.StatusCode)
-		return
-	}
-
-	// Discovery job for source file server
-	log.Printf("\n==================== CREATING DISCOVERY JOB ====================")
-	sourceExportPath := config.Fileserver.SourceExportPath // Use the same path as migration source
-	sourceExportPathID, err := GetExportPathID("source", sourceExportPath, sourceFileServerId, headers)
-	if err != nil {
-		LogFatalf("Error getting source export path ID for discovery job: %v", err)
-	}
-	sourcePathIDs := []string{sourceExportPathID}
-	jobParams := DiscoveryJobParams{
-		SourcePathIDs:            sourcePathIDs,
-		ExcludeOlderThan:         nil,
-		ExcludeFilePatterns:      "",
-		PreserveAccessTime:       false,
-		FirstRunAt:               GetCurrentUTCTimestamp(),
-		CreatedBy:                nil,
-		WorkflowExecutionTimeout: "60s",
-		WorkflowTaskTimeout:      "30s",
-		WorkflowRunTimeout:       "30s",
-		StartDelay:               "10s",
-	}
-	var sourceJobConfigIDs interface{}
-	sourceJobConfigIDs, resp, err = CreateDiscoveryJob(jobParams, headers)
-	if err != nil {
-		LogFatalf("Error creating discovery job: %v", err)
-	}
-	defer resp.Body.Close()
-	log.Printf("Source discovery job created with config IDs: %s", sourceJobConfigIDs)
-
-	fmt.Printf("======>Source file Server ID: %s\n", sourceFileServerId)
-	destinationParams := CreateServereParams{
-		ConfigName:       "Destination-FileServer-Performance-Test",
-		ConfigType:       ConfigTypeFile,
-		ProjectID:        projectId,
-		ServerType:       ServerTypeOtherNAS,
-		UserName:         NDM_VM_USER_NAME, // From AZ_NDM_VM_USER_NAME
-		Password:         NDM_VM_PASSWORD,  // From AZ_NDM_VM_PASSWORD
-		Protocol:         ProtocolNFS,
-		ProtocolVersion:  ProtocolVersion3,
-		Host:             DESTINATION_HOST_IP, // From AZ_DESTINATION_HOST_IP (10.0.4.9)
-		Workers:          workerIds,
-		WorkingDirectory: config.Fileserver.WorkingDirectory,
-		ExportPathSource: nil, // Will use AutoDiscover default
-	}
-	destinationFileServerId, _, err := CreateFileServer(destinationParams, headers)
-	if err != nil {
-		fmt.Printf("Failed to create destination file server: %v\n", err)
-		return
-	}
-	fmt.Printf("======>Destination file Server ID: %s\n", destinationFileServerId)
-
-	// Create migration job from config source path to dynamic export path (destination)
-	fmt.Println("\n====================Setting Up Migration Job====================")
-	err = setupMigrationJob(sourceFileServerId, destinationFileServerId, config.Fileserver.SourceExportPath, exportPath, headers, config, cpIP)
-	if err != nil {
-		fmt.Printf("Warning: Failed to setup migration job: %v\n", err)
-	}
-
-	fmt.Println("\nNDM Performance Test Environment is ready for testing!")
-	fmt.Println("Ready for data migration performance tests!")
-	fmt.Printf("Source Host: %s\n", SOURCE_HOST_IP)
-	fmt.Printf("Source File Server ID: %s\n", sourceFileServerId)
-	if DESTINATION_HOST_IP != "" {
-		fmt.Printf("Destination Host: %s\n", DESTINATION_HOST_IP)
-		fmt.Printf("Destination Volume: %s:%s\n", DESTINATION_HOST_IP, exportPath)
-	}
-
-	fmt.Printf("NDM Username: %s\n", USERNAME)
-	fmt.Printf("NDM Password: %s\n", PASSWORD)
-}
-
 // setupMigrationJob creates a migration job from source to destination path
-func setupMigrationJob(sourceFileServerId, destinationFileServerId, srcpath, destpath string, headers map[string]string, config *Config, cpIP string) error {
+func setupMigrationJob(sourceFileServerId, destinationFileServerId, srcpath, destpath string, headers map[string]string, config *Config, cpIP string) (string, string, string, error) {
 	// Get source path ID for source export path
 	sourcePathId, err := GetExportPathID("source", srcpath, sourceFileServerId, headers)
 	if err != nil {
-		return fmt.Errorf("failed to get source path ID: %w", err)
+		return "", "", "", fmt.Errorf("failed to get source path ID: %w", err)
 	}
 	destinationPathId, err := GetExportPathID("destination", destpath, destinationFileServerId, headers)
 	if err != nil {
-		return fmt.Errorf("failed to get destination path ID: %w", err)
+		return "", "", "", fmt.Errorf("failed to get destination path ID: %w", err)
 	}
 	migrationParams := MigrationJobParams{
 		FirstRunAt:         GetCurrentUTCTimestamp(),
@@ -331,11 +490,11 @@ func setupMigrationJob(sourceFileServerId, destinationFileServerId, srcpath, des
 	fmt.Println("=====>Triggering migration job")
 	jobIds, resp, err := CreateMigrationJob(migrationParams, headers)
 	if err != nil {
-		return fmt.Errorf("failed to create migration job: %w", err)
+		return "", "", "", fmt.Errorf("failed to create migration job: %w", err)
 	}
 
 	if resp.StatusCode != 200 && resp.StatusCode != 201 {
-		return fmt.Errorf("migration job creation failed with status: %d", resp.StatusCode)
+		return "", "", "", fmt.Errorf("migration job creation failed with status: %d", resp.StatusCode)
 	}
 
 	if len(jobIds) > 0 {
@@ -345,79 +504,22 @@ func setupMigrationJob(sourceFileServerId, destinationFileServerId, srcpath, des
 		fmt.Println("   Getting job run details...")
 		getJobsResp, resp, err := GetJobRunDetails(jobIds[0], headers)
 		if err != nil {
-			return fmt.Errorf("failed to get job run details: %w", err)
+			return "", "", "", fmt.Errorf("failed to get job run details: %w", err)
 		}
 
 		if resp.StatusCode != 200 {
-			return fmt.Errorf("failed to get job run details, status: %d", resp.StatusCode)
+			return "", "", "", fmt.Errorf("failed to get job run details, status: %d", resp.StatusCode)
 		}
 
 		if len(getJobsResp.JobRuns) > 0 {
-			jobRunID := getJobsResp.JobRuns[0].JobRunId
-			fmt.Printf("Job Run ID: %s\n", jobRunID)
 			fmt.Printf("Job Status: %s\n", getJobsResp.JobRuns[0].Status)
-			fmt.Println("Waiting for migration job to start...")
-
-			// Get worker ID for metrics collection
-			workerID := ""
-			if len(headers["X-Worker-Ids"]) > 0 {
-				workerID = headers["X-Worker-Ids"]
-			}
-
-			// Monitor job status and collect metrics when RUNNING is detected
-			metricsCollected := false
-			err = WaitForJobState(jobRunID, RUNNING_JOBRUN)
-			if err != nil {
-				fmt.Printf("Warning: Job may not have started yet: %v\n", err)
-				// Try to collect metrics anyway if we have a worker ID
-				if workerID != "" && !metricsCollected {
-					fmt.Println("\n=== Worker Metrics Collection (Job Status Unknown) ===")
-					fmt.Printf(" Attempting metrics collection during job execution...\n")
-					err = callTestMetricsScript(cpIP, workerID)
-					if err != nil {
-						fmt.Printf("  Warning: Failed to collect worker metrics: %v\n", err)
-					} else {
-						metricsCollected = true
-					}
-				}
-			} else {
-				fmt.Printf("=============Migration job is now RUNNING=============\n")
-				// Collect worker metrics after migration jobs creation
-				if workerID != "" && !metricsCollected {
-					fmt.Println("\n=== Worker Metrics Collection After Migration Jobs Creation ===")
-					fmt.Printf(" Collecting metrics during active migration phase...\n")
-					err = callTestMetricsScript(cpIP, workerID)
-					if err != nil {
-						fmt.Printf("  Warning: Failed to collect worker metrics during migration: %v\n", err)
-					} else {
-						metricsCollected = true
-					}
-				}
-			}
-
-			// Wait for job run to complete
-			fmt.Println("Waiting for migration job to complete...")
-			err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
-			if err != nil {
-				fmt.Printf("Warning: Job did not complete successfully: %v\n", err)
-			} else {
-				fmt.Printf("=============Migration job COMPLETED=============\n")
-				// Collect final metrics if not collected earlier
-				if workerID != "" && !metricsCollected {
-					fmt.Println("\n=== Final Worker Metrics Collection After Migration ===")
-					fmt.Printf(" Collecting metrics after migration completion...\n")
-					err = callTestMetricsScript(cpIP, workerID)
-					if err != nil {
-						fmt.Printf("  Warning: Failed to collect final worker metrics: %v\n", err)
-					}
-				}
-			}
+			return getJobsResp.JobRuns[0].JobRunId, sourcePathId, destinationPathId, nil
 		}
 	} else {
-		return fmt.Errorf("no job IDs returned from migration job creation")
+		return "", "", "", fmt.Errorf("no job IDs returned from migration job creation")
 	}
 
-	return nil
+	return "", "", "", nil
 }
 
 func createAzureVMsWithTerraform(config *Config) (string, string, error) {
@@ -624,9 +726,6 @@ func updateEnvVariables(cpIP, workerIP, destinationIP, exportPath string, config
 	return nil
 }
 
-// waitForControlPlaneReadyWithIP waits for the control plane to be fully operational
-// Phase 1: Wait for VM to be network accessible (ping test)
-// Phase 2: Wait for NDM services to be ready (HTTP 200 response)
 func waitForControlPlaneReadyWithIP(cpIP string, config *Config) error {
 	fmt.Printf("==========>Monitoring Control Plane at: %s\n", cpIP)
 	startTime := time.Now()
