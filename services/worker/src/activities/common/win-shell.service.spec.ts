@@ -279,6 +279,52 @@ describe('WinShellService Comprehensive Tests', () => {
       try {
         await service.onModuleDestroy();
       } catch (error) {
+        // Ignore cleanup errors
+      }
+    }
+  });
+
+  it('should manage admin mode state', () => {
+    expect(service.isAdminModeEnabled()).toBe(false);
+
+    service.setAdminMode(true);
+    expect(service.isAdminModeEnabled()).toBe(true);
+
+    service.setAdminMode(false);
+    expect(service.isAdminModeEnabled()).toBe(false);
+  });
+});
+
+// Tests for comprehensive coverage of WinShellService
+describe('WinShellService Comprehensive Tests', () => {
+  let service: WinShellService;
+  let mockSpawn: jest.MockedFunction<typeof spawn>;
+  let mockProcess: any;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
+
+    mockProcess = new EventEmitter();
+    mockProcess.stdin = { write: jest.fn() };
+    mockProcess.stdout = new EventEmitter();
+    mockProcess.stderr = new EventEmitter();
+    mockProcess.kill = jest.fn();
+
+    mockSpawn.mockReturnValue(mockProcess);
+
+    service = new WinShellService(
+      mockConfigService as any,
+      mockLoggerFactory as any,
+    );
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+  });
+
+  afterEach(async () => {
+    if (service) {
+      try {
+        await service.onModuleDestroy();
+      } catch (error) {
         // Ignore cleanup errors in tests
       }
     }
