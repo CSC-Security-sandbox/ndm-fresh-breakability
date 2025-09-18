@@ -6,6 +6,7 @@ import { JobRunStatus } from "src/activities/common/enums";
 import { updateJobStatusIfNotRunning } from '../common/workflow-utils';
 import { ChildScanWorkflowInput, ChildScanWorkflowOutput, ExecuteBatchScanInput, ExecuteBatchScansOutput } from './chid-scan.workflow.type';
 import { MappingResolverService } from 'src/activities/core/initializer/mapping-resolver.service';
+import { SetupExportsPathPermissionService } from 'src/activities/core/initializer/setup-exports-path-permission.service';
 
 
 
@@ -57,6 +58,14 @@ const {
 });
 
 
+const {
+  setupExportPathPermission: setupExportPathPermissionActivity,
+} = wf.proxyActivities<SetupExportsPathPermissionService>({
+  startToCloseTimeout: '10m',
+  retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
+});
+
+
 const actionSignal = wf.defineSignal<[JobRunStatus]>('scanActionSignal');
 
 
@@ -69,6 +78,7 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
 
   if(isMigration){
     await resolveUsernamesToSidsActivity(jobRunId);
+    await setupExportPathPermissionActivity(jobRunId);
   }
 
   if(isInitialScan)  {
