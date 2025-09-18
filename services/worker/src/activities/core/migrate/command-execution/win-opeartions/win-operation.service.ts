@@ -70,11 +70,12 @@ export class WinOperationService {
             delete acl.originalGroup;
         }
         if(acl.DaclAces) {
-            acl.DaclAces.forEach((ace,index) => {
-                if(ace.Sid === 'Invalid'){
+             acl.DaclAces = acl.DaclAces.filter((ace) => {
+                if (ace.Sid === 'Invalid') {
                     errors.push(`Invalid ACL SID for ${ace.originalSid} found in SID mapping`);
-                    acl.DaclAces.splice(index,1);
+                    return false;
                 }
+                return true;
             });
         }
         const result = await this.setAclOperation(targetPath, acl);
@@ -103,7 +104,6 @@ export class WinOperationService {
         const cached = this.sidCache.get(cacheKey);
         if (cached) return cached;
         const queried = await this.redisService.getOwnerIdentity(jobRunId, sourceSid, 'SID');
-        this.logger.debug(`Queried SID mapping from Redis: ${sourceSid} -> ${queried}`);
         if (queried) this.sidCache.put(cacheKey, queried);
         return queried;
     }
@@ -142,11 +142,6 @@ export class WinOperationService {
         output.targetSID = `Owner: ${acl2.Owner}, Group: ${acl2.Group}, `;
         if(acl1.Owner !== acl2.Owner) output.inValid += `Owner mismatch: Expected(${acl1.Owner}) Target(${acl2.Owner}). `;
         if(acl1.Group !== acl2.Group) output.inValid += `Group mismatch: Expected(${acl1.Group}) Target(${acl2.Group}). `;
-
-        // Normalize ACEs: only compare SID, AccessMask, AceType
-        function aceKey(ace: Ace) {
-            return `${ace.Sid}++${ace.AccessMask}++${ace.AceType}`;
-        }
 
         // Only consider AccessAllowed (0) and AccessDenied (1) ACEs in comparison.
         // This ignores audit/object ACEs (e.g., AceType 3, 5) which are not stamped or relevant for access control.
