@@ -26,7 +26,7 @@ jobs:
           
           VERSION="${BRANCH_NAME#release/}"
           
-          VALID_PATTERN="^[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9][a-zA-Z0-9\._-]*)?$"
+          VALID_PATTERN="^[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9][a-zA-Z0-9._-]*)?$"
           
           if [[ ! "$VERSION" =~ $VALID_PATTERN ]]; then
             echo "Error: Invalid release version format: $VERSION"
