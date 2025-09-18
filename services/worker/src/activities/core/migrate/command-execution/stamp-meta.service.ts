@@ -2,24 +2,21 @@ import { Inject, Injectable } from "@nestjs/common";
 import { OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import * as fs from "fs";
-import { ShellService } from "src/activities/common/shell.service";
 import { dmError } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { RedisService } from "src/redis/redis.service";
+import { SourceAclError } from "./win-opeartions/acl-operation.error";
+import { WinOperationService } from "./win-opeartions/win-operation.service";
 import { CommandExecInput, CommandOutput } from "./command-execution.type";
 import { StampMetaOutput } from "./stamp-meta.type";
-import { AclOperations } from "./aclOperations";
-import { FileAccessError } from "./aclOperations.errors";
 
 
 @Injectable()
 export class StampMetaService {
     private readonly logger: LoggerService;
-    private readonly attributeRegex = /^([A-Za-z]:[\\/]|[\\/])/;
     constructor(
-        private readonly shellService: ShellService,
         private readonly redisService: RedisService,
-        private readonly aclOperations: AclOperations,
+        private readonly winOperationService: WinOperationService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     ) {
         this.logger = loggerFactory.create(StampMetaService.name);
@@ -37,15 +34,13 @@ export class StampMetaService {
 
                 // Stamp SID to object
 
-                const [sidOutput, stampFileOwnerOutput, hiddenAttrOutput, preserveTimeOutput] = await Promise.all([
-                    this.stampSIDAclToObject(input),
-                    this.stampFileOwner(input),
-                    this.stampFileAttributeMeta(input),
+                const [aclStampOutput, preserveTimeOutput] = await Promise.all([
+                    this.stampObjectACL(input),
                     this.preserveAccessAndModifiedTime(input)
                 ]);
 
-                output.sourceErrors.push(...sidOutput.sourceErrors, ...stampFileOwnerOutput.sourceErrors, ...hiddenAttrOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
-                output.targetErrors.push(...sidOutput.targetErrors, ...stampFileOwnerOutput.targetErrors, ...hiddenAttrOutput.targetErrors, ...preserveTimeOutput.targetErrors);
+                output.sourceErrors.push(...aclStampOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
+                output.targetErrors.push(...aclStampOutput.targetErrors, ...preserveTimeOutput.targetErrors);
 
 
                 // Stamp access and modified time
@@ -90,7 +85,6 @@ export class StampMetaService {
             else
                 input.command.ops[OPS_CMD.STAMP_META].status = OPS_STATUS.COMPLETED;
         }
-
         return output;
     }
 
@@ -170,281 +164,28 @@ export class StampMetaService {
         return output;
     }
 
-
-    async stampSIDAclToObject({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
+    async stampObjectACL({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         try {
-            this.logger.log(`[${command.id}] Starting ACL stamp from ${sourcePath} to ${targetPath}`);
-            // calculate time taken for acl stamping
-            const startTime = Date.now();
-            const stampData = await this.aclOperations.stampFileACL(
-                sourcePath,
-                targetPath,
-                {
-                    preserveExisting: false,
-                    excludePrincipals: [],
-                    includePrincipals: [],
-                    isIdentityMappingAvailable: jobContext.jobConfig.options.isIdentityMappingAvailable,
-                    jobID: jobContext.jobRunId,
-                    disableInheritance: false
-                })
-            const endTime = Date.now();
-            this.logger.log(`[${command.id}] ACL stamp completed in ${endTime - startTime}ms. Success: ${stampData.success}, Operations: ${stampData.operations.length}`);
-            let grantCount = 0;
-            let denyCount = 0;
-            let skipCount = 0;
-            let failCount = 0;
-            const criticalErrors: string[] = [];
-            const noMappingErrors: string[] = [];
-            for (const op of stampData.operations) {
-                switch (op.status) {
-                    case 'completed':
-                        if (op.type === 'grant') grantCount++;
-                        else if (op.type === 'deny') denyCount++;
-                        break;
-                    case 'failed':
-                        failCount++;
-                        if (op.error?.includes('No mapping') || op.error?.includes('1332')) {
-                            noMappingErrors.push(`SKIP : ${op.type.toUpperCase()} ${op.principal}: ${op.error}`);
-                        } else {
-                            criticalErrors.push(`failed : ${op.type.toUpperCase()} ${op.principal}: ${op.error}`);
-                        }
-                        break;
-                    case 'skipped':
-                        skipCount++;
-                        if (op.reason?.includes('unresolved SID')) {
-                            noMappingErrors.push(`SKIP : ${op.principal}: ${op.reason}`);
-                        } else {
-                            criticalErrors.push(`SKIP : ${op.principal}: ${op.reason}`);
-                        }
-                        break;
-                }
-            }
-
-            try {
-                const comparisonResult = await this.aclOperations.compareFileACLs(sourcePath, targetPath, {
-                    isIdentityMappingAvailable: jobContext.jobConfig.options.isIdentityMappingAvailable,
-                    jobID: jobContext.jobRunId
-                });
-                if (!comparisonResult.isEqual) {
-                    if (comparisonResult.differences.onlyInSource.length > 0) {
-                        noMappingErrors.push(`Missing in target (${comparisonResult.differences.onlyInSource.length} entries):`);
-                        let index = 1;
-                        for (const entry of comparisonResult.differences.onlyInSource) {
-                            const prefix = entry.accessType === 'deny' ? 'DENY -' : '-';
-                            noMappingErrors.push(`${index++}: ${prefix} ${entry.principal} (${entry.accessType})`);
-                        }
-                    }
-
-                    if (comparisonResult.differences.different.length > 0) {
-                        noMappingErrors.push(`Different permissions (${comparisonResult.differences.different.length} entries):`);
-                        let index = 1;
-                        for (const diff of comparisonResult.differences.different) {
-                            noMappingErrors.push(`{${index++}: ${diff.principal}: source=[${diff.sourcePermissions.map(p => p.code).join(',')}] vs target=[${diff.targetPermissions.map(p => p.code).join(',')}]}`);
-                        }
-                    }
-                }
-                command.ops[OPS_CMD.STAMP_META].params.sidMap = {
-                    targetAcl: this.aclOperations.aclToOneLineString(comparisonResult.target),
-                    sourceAcl: this.aclOperations.aclToOneLineString(comparisonResult.source),
-                };
-            } catch (error) {
-                criticalErrors.push(`Error comparing ACLs: ${error.message}`);
-            }
-
-            if (stampData.success || failCount < stampData.operations.length) {
-                this.logger.log(`[${command.id}] ACL stamp completed with warnings: ${failCount} failed operations`);
-                if (criticalErrors.length > 0 || noMappingErrors.length > 0) {
-                    const combinedLogSet = new Set([...noMappingErrors, ...criticalErrors]);
-                    this.logger.log(`[${command.id}] ACL stamping log for ${targetPath}:\n${[...combinedLogSet].join('\n')}`);
-
-                    const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, new Error([...combinedLogSet].join('\n')),
-                        { name: command.fPath, path: sourcePath });
-                    await jobContext.publishToErrorStream(dmErr);
-                }
-            } else {
-                if (criticalErrors.length > 0 || noMappingErrors.length > 0) {
-                    const combinedLogSet = new Set([...noMappingErrors, ...criticalErrors]);
-                    this.logger.log(`[${command.id}] ACL stamping log for ${targetPath}:\n${[...combinedLogSet].join('\n')}`);
-
-                    const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, new Error([...combinedLogSet].join('\n')),
-                        { name: command.fPath, path: sourcePath });
-                    await jobContext.publishToErrorStream(dmErr);
-                }
-            }
-
-
-
-        } catch (error) {
-            this.logger.error(`[${command.id}] Error occurred while starting ACL stamp: ${error.message}`, error.stack);
-            const origin = error instanceof FileAccessError ? Origin.SOURCE : Origin.DESTINATION;
-            const dmErr = dmError("OPERATION", origin, Operation.STAMP_META, errorType, command.id, error,
-                { name: command.fPath, path: origin === Origin.SOURCE ? sourcePath : targetPath });
+            this.logger.debug(`Stamping ACL from ${sourcePath} to ${targetPath}`);
+          const { output, errors } = await this.winOperationService.stampAclOperation({command, jobContext, sourcePath, targetPath, errorType});
+          if(errors && errors.length > 0){
+            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, new Error(errors.join(",\n")), { name: command.fPath, path: targetPath });
             await jobContext.publishToErrorStream(dmErr);
-            const errorCode = error.code || 'UNKNOWN_ERROR';
-            output.targetErrors.push(errorCode);
-        }
-        return output;
-    }
-
-
-
-    async stampFileAttributeMeta({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
-        const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
-        if (process.platform !== 'win32') return output;
-        let sourceAttributes = '';
-        let targetAttributes = '';
-        try {
-            const fileAttr = await this.shellService.runCommand(`attrib "${sourcePath}"`);
-            sourceAttributes = fileAttr?.trim().split(/\s+/).filter(token => !this.attributeRegex.test(token)).join('');
-            command.ops[OPS_CMD.STAMP_META].params.fileAttr = sourceAttributes;
-            this.logger.log(`Source file attributes for ${sourcePath}: ${sourceAttributes}`);
+          }
         } catch (error) {
-            this.logger.error(`Getting source attributes for ${sourcePath}, Error: ${error.message}`, error.stack);
-            const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
+            const origin = error instanceof SourceAclError ? Origin.SOURCE : Origin.DESTINATION;
+            this.logger.error(`Stamping ACL from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
+            const dmErr = dmError("OPERATION", origin, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
             await jobContext.publishToErrorStream(dmErr);
             output.sourceErrors.push(error.code);
-            return output;
         }
-
-        try {
-            const targetAttr = await this.shellService.runCommand(`attrib "${targetPath}"`);
-            targetAttributes = targetAttr?.trim().split(/\s+/).filter(token => !this.attributeRegex.test(token)).join('');
-            this.logger.log(`Target file attributes for ${targetPath}: ${targetAttributes}`);
-        } catch (error) {
-            this.logger.warn(`Could not get target attributes for ${targetPath}, assuming no attributes: ${error.message}`);
-            targetAttributes = '';
-        }
-
-        try {
-            const attributesToAdd = [];
-            const attributesToRemove = [];
-            const allAttributes = ['H', 'S', 'R', 'A'];
-
-            for (const attr of allAttributes) {
-                const sourceHasAttr = sourceAttributes.includes(attr);
-                const targetHasAttr = targetAttributes.includes(attr);
-
-                if (sourceHasAttr && !targetHasAttr) {
-                    attributesToAdd.push(`+${attr}`);
-                } else if (!sourceHasAttr && targetHasAttr) {
-                    attributesToRemove.push(`-${attr}`);
-                }
-            }
-            const allAttributeChanges = [...attributesToAdd, ...attributesToRemove];
-
-            this.logger.log(`Attribute changes needed for ${targetPath}: ${allAttributeChanges.join(' ')}`);
-
-            if (allAttributeChanges.length > 0) {
-                const attributeCommand = `attrib ${allAttributeChanges.join(' ')} "${targetPath}"`;
-                this.logger.log(`Executing attribute command: ${attributeCommand}`);
-                await this.shellService.runCommand(attributeCommand);
-                try {
-                    const verifyAttr = await this.shellService.runCommand(`attrib "${targetPath}"`);
-                    const finalAttributes = verifyAttr?.trim().split(/\s+/).filter(token => !this.attributeRegex.test(token)).join('');
-
-                    if (finalAttributes === sourceAttributes) {
-                        this.logger.log(`Attributes successfully synchronized for ${targetPath}: ${finalAttributes}`);
-                    } else {
-                        this.logger.warn(`Attribute mismatch after sync - Expected: ${sourceAttributes}, Actual: ${finalAttributes}`);
-                    }
-                } catch (verifyError) {
-                    this.logger.warn(`Could not verify attribute changes: ${verifyError.message}`);
-                }
-            } else {
-                this.logger.log(`No attribute changes needed for ${targetPath} - already synchronized`);
-            }
-
-        } catch (error) {
-            this.logger.error(`Setting/removing attributes for ${targetPath} failed, Error: ${error.message}`, error.stack);
-            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
-            await jobContext.publishToErrorStream(dmErr);
-            output.targetErrors.push(error.code);
-        }
-
         return output;
     }
 
-
-    async removeFileAttributeTemporarily(path: string): Promise<boolean> {
-        if (process.platform !== 'win32') return false;
-        try {
-            const fileAttr = await this.shellService.runCommand(`attrib "${path}"`);
-            const attributes = fileAttr?.trim().split(/\s+/).filter(token => !this.attributeRegex.test(token)).join('');
-            let attributesToRemove = '';
-            if (attributes.includes('H')) {
-                attributesToRemove = '-H';
-            }
-            if (attributes.includes('R')) {
-                attributesToRemove += ' -R';
-            }
-            if (attributesToRemove) {
-                this.logger.log(`Removing  attribute for ${path}: ${attributesToRemove}`);
-                await this.shellService.runCommand(`attrib ${attributesToRemove} "${path}"`);
-                this.logger.log(`Successfully removed ${attributesToRemove} attribute for ${path}`);
-                return true;
-            }
-        } catch (error) {
-            this.logger.error(`Error during Removing attribute for ${path}, Error: ${error.message}`, error.stack);
-        }
-        return false;
+    async resetFileAttributes(path: string): Promise<boolean> {
+        return this.winOperationService.resetFileAttributes(path);
     }
-    async restoreFileAttribute(path: string): Promise<boolean> {
-        if (process.platform !== 'win32') return false;
-        try {
-            const fileAttr = await this.shellService.runCommand(`attrib "${path}"`);
-            const attributes = fileAttr?.trim().split(/\s+/).filter(token => !this.attributeRegex.test(token)).join('');
-            let attributesToAdd = '';
-            if (!attributes.includes('H')) {
-                attributesToAdd = '+H';
-            }
-            if (!attributes.includes('R')) {
-                attributesToAdd += ' +R';
-            }
-            if (attributesToAdd) {
-                this.logger.log(`Restoring attribute for ${path}: ${attributesToAdd}`);
-                await this.shellService.runCommand(`attrib ${attributesToAdd} "${path}"`);
-                this.logger.log(`Successfully restored ${attributesToAdd} attribute for ${path}`);
-                return true;
-            }
-        } catch (error) {
-            this.logger.error(`Error during restoring attribute for ${path}, Error: ${error.message}`, error.stack);
-        }
-        return false;
-    }
-    async stampFileOwner({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
-        const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
 
-        try {
-            const owner = await this.aclOperations.stampFileOwner({
-                sourcePath,
-                targetPath,
-                isIdentityMappingAvailable: jobContext.jobConfig.options.isIdentityMappingAvailable,
-                jobRunId: jobContext.jobRunId
-            });
-
-            if (owner !== true) {
-                const errorMessage = typeof owner === 'string' ? owner : 'Unknown error while stamping file owner';
-                const dmErr = dmError(
-                    "OPERATION",
-                    Origin.DESTINATION,
-                    Operation.STAMP_META,
-                    errorType,
-                    command.id,
-                    new Error(errorMessage),
-                    { name: command.fPath, path: targetPath }
-                );
-                await jobContext.publishToErrorStream(dmErr);
-
-            }
-        } catch (error) {
-            this.logger.error(`Error during stamping file owner from ${sourcePath} to ${targetPath}: ${error.message}`, error.stack);
-            const errorCode = 'STAMP_FILE_OWNER_ERROR';
-            output.sourceErrors.push(errorCode);
-
-        }
-
-        return output;
-    }
 }
 

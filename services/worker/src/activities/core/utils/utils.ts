@@ -1,7 +1,6 @@
 import { Cmd, JobManagerContext, TaskInfo, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { uuid4 } from "@temporalio/workflow";
-import { basePrefix } from "src/activities/utils/utils";
-import *  as fs from 'fs';
+import * as fs from 'fs';
 
 
 export const buildTask = (taskType: TaskType, jobRunId: string, jobContext:  JobManagerContext, commands: Cmd[]): TaskInfo => new TaskInfo(
@@ -28,3 +27,17 @@ export const isPathExists = async (path: string): Promise<boolean> => {
   }
   return false;
 }
+
+
+export const isNotWritable = async (filePath: string): Promise<boolean> => {
+  try {
+    // Single syscall: check both existence and write permissions
+    await fs.promises.access(filePath, fs.constants.F_OK | fs.constants.W_OK);
+    return false; // exists & writable
+  } catch (err: any) {
+    if (err.code === "EACCES" || err.code === "EPERM") {
+      return true; // exists but not writable
+    }
+    return false; // doesn't exist or other reason → let caller decide
+  }
+};

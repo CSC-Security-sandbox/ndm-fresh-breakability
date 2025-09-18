@@ -10,7 +10,7 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { generateDummyErrorEntry, generateDummyItemEntry, generateDummyTaskInfoEntry } from '../utils/utils';
 import { JobType } from "@netapp-cloud-datamigrate/jobs-lib";
-import { SmbUserSetupService } from "../core/migrate/command-execution/smb-user-setup.service";
+// import { SmbUserSetupService } from "../core/migrate/command-execution/smb-user-setup.service";
 
 @Injectable()
 export class CommonActivityService{
@@ -28,7 +28,7 @@ export class CommonActivityService{
     private readonly authService: AuthService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly redisService: RedisService,
-    private readonly smbUserSetup: SmbUserSetupService,
+    // private readonly smbUserSetup: SmbUserSetupService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;

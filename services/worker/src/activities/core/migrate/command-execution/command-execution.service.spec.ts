@@ -37,12 +37,13 @@ jest.mock('src/activities/utils/utils', () => {
         getFileType: jest.fn(),
     };
 });
-// Mock isPathExists from the correct module
+// Mock isPathExists and isNotWritable from the correct module
 jest.mock('src/activities/core/utils/utils', () => {
     const actualUtils = jest.requireActual('src/activities/core/utils/utils');
     return {
         ...actualUtils,
         isPathExists: jest.fn(),
+        isNotWritable: jest.fn(),
     };
 });
 
@@ -75,7 +76,8 @@ describe('CommandExecService', () => {
         stampMetaService = {
             stampMetaData: jest.fn(),
             restoreFileAttribute: jest.fn(),
-            removeFileAttributeTemporarily: jest.fn()
+            removeFileAttributeTemporarily: jest.fn(),
+            resetFileAttributes: jest.fn(),
         } as any;
 
         mockJobContext = {
@@ -787,6 +789,16 @@ describe('CommandExecService', () => {
             serialize: jest.fn(),
         });
 
+        const coreUtils = require('src/activities/core/utils/utils');
+
+        beforeEach(() => {
+            // Reset all mocks before each test
+            coreUtils.isPathExists.mockReset();
+            coreUtils.isNotWritable.mockReset();
+            stampMetaService.resetFileAttributes.mockReset();
+            workerThreadService.migrateWorkerThread.mockReset();
+        });
+
         it('should skip if already completed', async () => {
             const input = {
                 sourcePath: '/source/test.txt',
@@ -809,35 +821,53 @@ describe('CommandExecService', () => {
             expect(result.shouldUpdateItemInfo).toBe(false);
             expect(workerThreadService.migrateWorkerThread).not.toHaveBeenCalled();
         });
-        it('should successfully copy file and stamp meta', async () => {
 
-            // Mock isPathExists to return true for both source and target
-            const coreUtils = require('src/activities/core/utils/utils');
-            coreUtils.isPathExists.mockImplementation(async (p: string) => true);
+        it('should return error when source path does not exist (line 83)', async () => {
+            // Test for line 83: isNotWritable(targetPath) call and source path validation
+            coreUtils.isPathExists.mockResolvedValue(false);  // Source path doesn't exist
+            coreUtils.isNotWritable.mockResolvedValue(false); // Target path is writable
 
-            // Mock migrateWorkerThread to return matching checksums
-            workerThreadService.migrateWorkerThread.mockResolvedValue({
-                sourceChecksum: 'abc',
-                targetChecksum: 'abc'
-            });
-
-            const baseInput = {
-                sourcePath: '/source/test.txt',
+            const input = {
+                sourcePath: '/source/nonexistent.txt',
                 targetPath: '/target/test.txt',
                 jobContext: {
                     publishToErrorStream: jest.fn().mockResolvedValue(undefined),
-                    jobConfig: {
-                        options: {
-                            preserveAccessTime: true
-                        }
-                    }
                 },
                 command: createMockCommand(),
                 errorType: ErrorType.RECOVERABLE_ERROR,
             };
 
-            const result = await service.copyFile(baseInput as any);
+            const result = await service.copyFile(input as any);
 
+            expect(coreUtils.isPathExists).toHaveBeenCalledWith('/source/nonexistent.txt');
+            expect(coreUtils.isNotWritable).toHaveBeenCalledWith('/target/test.txt');
+            expect(result.sourceErrors).toEqual(['ENOENT']);
+            expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+            expect(workerThreadService.migrateWorkerThread).not.toHaveBeenCalled();
+        });
+
+        it('should reset file attributes when target path exists (lines 92-93)', async () => {
+            // Test for lines 92-93: resetFileAttributes call when targetPathExists is true
+            coreUtils.isPathExists.mockResolvedValue(true);   // Source path exists
+            coreUtils.isNotWritable.mockResolvedValue(true);  // Target path exists (not writable)
+            workerThreadService.migrateWorkerThread.mockResolvedValue({
+                sourceChecksum: 'abc123',
+                targetChecksum: 'abc123'
+            });
+
+            const input = {
+                sourcePath: '/source/test.txt',
+                targetPath: '/target/test.txt',
+                jobContext: {
+                    publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+                },
+                command: createMockCommand(),
+                errorType: ErrorType.RECOVERABLE_ERROR,
+            };
+
+            const result = await service.copyFile(input as any);
+
+            expect(stampMetaService.resetFileAttributes).toHaveBeenCalledWith('/target/test.txt');
             expect(workerThreadService.migrateWorkerThread).toHaveBeenCalledWith({
                 sourcePath: '/source/test.txt',
                 destinationPath: '/target/test.txt',
@@ -846,7 +876,95 @@ describe('CommandExecService', () => {
             });
             expect(result.shouldStampMeta).toBe(true);
             expect(result.shouldUpdateItemInfo).toBe(true);
-            expect(baseInput.command.ops[OPS_CMD.COPY_FILE].status).toBe(OPS_STATUS.COMPLETED);
+        });
+
+        it('should handle checksum mismatch error (lines 95-96)', async () => {
+            // Test for lines 95-96: checksum mismatch detection and error handling
+            coreUtils.isPathExists.mockResolvedValue(true);
+            coreUtils.isNotWritable.mockResolvedValue(false);
+            workerThreadService.migrateWorkerThread.mockResolvedValue({
+                sourceChecksum: 'abc123',
+                targetChecksum: 'def456'  // Different checksum to trigger mismatch
+            });
+
+            const input = {
+                sourcePath: '/source/test.txt',
+                targetPath: '/target/test.txt',
+                jobContext: {
+                    publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+                },
+                command: createMockCommand(),
+                errorType: ErrorType.RECOVERABLE_ERROR,
+            };
+
+            const result = await service.copyFile(input as any);
+
+            expect(input.command.ops[OPS_CMD.COPY_FILE].status).toBe(OPS_STATUS.ERROR);
+            expect((input.command.ops[OPS_CMD.COPY_FILE].params as any).checksums).toEqual({
+                sourceChecksum: 'abc123',
+                targetChecksum: 'def456'
+            });
+            expect(result.targetErrors).toContain(undefined); // error.code will be undefined in this test
+            expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+        });
+
+        it('should handle general copy errors (lines 111-114)', async () => {
+            // Test for lines 111-114: catch block error handling
+            coreUtils.isPathExists.mockResolvedValue(true);
+            coreUtils.isNotWritable.mockResolvedValue(false);
+            
+            const copyError = new Error('Disk full') as any;
+            copyError.code = 'ENOSPC';
+            workerThreadService.migrateWorkerThread.mockRejectedValue(copyError);
+
+            const input = {
+                sourcePath: '/source/test.txt',
+                targetPath: '/target/test.txt',
+                jobContext: {
+                    publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+                },
+                command: createMockCommand(),
+                errorType: ErrorType.RECOVERABLE_ERROR,
+            };
+
+            const result = await service.copyFile(input as any);
+
+            expect(input.command.ops[OPS_CMD.COPY_FILE].status).toBe(OPS_STATUS.ERROR);
+            expect(mockLogger.error).toHaveBeenCalledWith(
+                'Copying FILE from /source/test.txt to /target/test.txt, Error: Disk full',
+                copyError.stack
+            );
+            expect(result.targetErrors).toEqual(['ENOSPC']);
+            expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+        });
+
+        it('should successfully copy file when all conditions are met', async () => {
+            // Test successful copy flow
+            coreUtils.isPathExists.mockResolvedValue(true);
+            coreUtils.isNotWritable.mockResolvedValue(false); // Target path is writable
+            workerThreadService.migrateWorkerThread.mockResolvedValue({
+                sourceChecksum: 'abc123',
+                targetChecksum: 'abc123'
+            });
+
+            const input = {
+                sourcePath: '/source/test.txt',
+                targetPath: '/target/test.txt',
+                jobContext: {
+                    publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+                },
+                command: createMockCommand(),
+                errorType: ErrorType.RECOVERABLE_ERROR,
+            };
+
+            const result = await service.copyFile(input as any);
+
+            expect(result.shouldStampMeta).toBe(true);
+            expect(result.shouldUpdateItemInfo).toBe(true);
+            expect(result.sourceErrors).toEqual([]);
+            expect(result.targetErrors).toEqual([]);
+            expect(input.command.ops[OPS_CMD.COPY_FILE].status).toBe(OPS_STATUS.COMPLETED);
+            expect(stampMetaService.resetFileAttributes).not.toHaveBeenCalled(); // Target not writable
         });
     });
 });

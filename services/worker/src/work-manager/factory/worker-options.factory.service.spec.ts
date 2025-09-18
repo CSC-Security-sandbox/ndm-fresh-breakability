@@ -19,36 +19,36 @@ import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { mockLogger } from 'src/auth/auth.service.spec';
 import { ValidatePathActivity } from 'src/activities/validate-path/validate-path.service';
 import { SyncService } from 'src/activities/core/migrate/sync-activity.service';
-
+import { MappingResolverService } from 'src/activities/core/initializer/mapping-resolver.service';
+import { SetupExportsPathPermissionService } from 'src/activities/core/initializer/setup-exports-path-permission.service';
 
 const bindMock = jest.fn().mockReturnValue({
   bind: jest.fn(),
-})
+});
 
 const listPathActivityServiceMock = {
   listPath: bindMock,
-}
+};
 const validateConnectionServiceMock = {
-  validate: bindMock
-}
+  validate: bindMock,
+};
 
 const setupActivityServiceMock = {
   setup: bindMock,
   cleanup: bindMock,
   speedTestSetup: bindMock,
   speedTestCleanup: bindMock,
-}
-
+};
 
 const validateWorkingDirectoryActivityMock = {
-  validateWorkingDirectory:  bindMock,
+  validateWorkingDirectory: bindMock,
   isValidDirectory: bindMock,
   updateConfigStatus: bindMock,
-}
+};
 
 const precheckActivityMock = {
   preCheckPath: bindMock,
-}
+};
 
 const commonActivityServiceMock = {
   getJobState: bindMock,
@@ -62,15 +62,15 @@ const commonActivityServiceMock = {
   generateCOCReport: bindMock,
   updateCutOverStatus: bindMock,
   generateDiscoveryReport: bindMock,
-}
+};
 
 const speedTestReadActivityMock = {
   readActivity: bindMock,
   networkPerformanceActivity: bindMock,
   writeActivity: bindMock,
   postResultsActivity: bindMock,
-  speedTestSetup: bindMock
-}
+  speedTestSetup: bindMock,
+};
 
 const mockConfigService = {
   get: jest.fn().mockReturnValue(5),
@@ -78,8 +78,7 @@ const mockConfigService = {
 
 const redismeorycheckactivityMock = {
   checkMemoryUsage: bindMock,
-}
-
+};
 
 const CommonTaskServiceMock = {
   getGroupOfTasksActivity: jest.fn(),
@@ -88,13 +87,12 @@ const CommonTaskServiceMock = {
   generateDiscoveryReport: jest.fn(),
   updateCutOverStatus: jest.fn(),
   generateCOCReport: jest.fn(),
-  isCmdStreamLenValid: jest.fn()
+  isCmdStreamLenValid: jest.fn(),
 };
 
 const ScanServiceMock = {
-  scanDirectories: bindMock, 
-}
-
+  scanDirectories: bindMock,
+};
 
 const validatePathActivityMock = {
   validatePath: jest.fn(),
@@ -103,7 +101,7 @@ const validatePathActivityMock = {
 
 const SyncServiceMock = {
   syncTaskActivity: bindMock,
-}
+};
 
 describe('WorkerOptionsService', () => {
   let service: WorkerOptionsService;
@@ -117,20 +115,37 @@ describe('WorkerOptionsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WorkerOptionsService,
-        { provide: ListPathActivity, useValue: listPathActivityServiceMock},
-        { provide: ValidateConnectionActivity, useValue: validateConnectionServiceMock },
+        { provide: ListPathActivity, useValue: listPathActivityServiceMock },
+        {
+          provide: ValidateConnectionActivity,
+          useValue: validateConnectionServiceMock,
+        },
         { provide: SetupActivityService, useValue: setupActivityServiceMock },
-        { provide: ValidateWorkingDirectoryActivity, useValue: validateWorkingDirectoryActivityMock },
+        {
+          provide: ValidateWorkingDirectoryActivity,
+          useValue: validateWorkingDirectoryActivityMock,
+        },
         { provide: PrecheckActivity, useValue: precheckActivityMock },
         { provide: CommonActivityService, useValue: commonActivityServiceMock },
         { provide: SpeedTestActivities, useValue: speedTestReadActivityMock },
-        { provide: RedisMemoryCheckActivity, useValue: redismeorycheckactivityMock },
+        {
+          provide: RedisMemoryCheckActivity,
+          useValue: redismeorycheckactivityMock,
+        },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: ScanService, useValue: ScanServiceMock },
         { provide: CommonTaskService, useValue: CommonTaskServiceMock },
         { provide: LoggerFactory, useValue: mockLoggerFactory },
         { provide: ValidatePathActivity, useValue: validatePathActivityMock },
-        { provide: SyncService, useValue: SyncServiceMock }
+        { provide: SyncService, useValue: SyncServiceMock },
+        {
+          provide: MappingResolverService,
+          useValue: { resolveUsernamesToSids: bindMock },
+        },
+        {
+          provide: SetupExportsPathPermissionService,
+          useValue: { setupExportPathPermission: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -143,31 +158,64 @@ describe('WorkerOptionsService', () => {
   });
 
   it('should return options for PARENT_WORKFLOW', () => {
-    const config:WorkerConfiguration = { configName: WorkFlowType.PARENT_WORKFLOW, dynamicTaskQueue: false, taskQueueId: '-TaskQueue', workerId: 'worker1' };
-    const options = service.createWorkerOptions('id1', config, 'worker1', mockConnection);
+    const config: WorkerConfiguration = {
+      configName: WorkFlowType.PARENT_WORKFLOW,
+      dynamicTaskQueue: false,
+      taskQueueId: '-TaskQueue',
+      workerId: 'worker1',
+    };
+    const options = service.createWorkerOptions(
+      'id1',
+      config,
+      'worker1',
+      mockConnection,
+    );
     expect(options).toBeInstanceOf(WorkFlowOptions);
     expect((options as any).taskQueue).toBe('ParentWorkflow-TaskQueue');
   });
 
   it('should return options for WORKER_SPECIFIC_WORKFLOW', () => {
-    const config = { configName: WorkFlowType.WORKER_SPECIFIC_WORKFLOW, dynamicTaskQueue: false, taskQueueId: '-TaskQueue', workerId: 'worker1' };
-    const options = service.createWorkerOptions('id2', config, 'worker2', mockConnection);
+    const config = {
+      configName: WorkFlowType.WORKER_SPECIFIC_WORKFLOW,
+      dynamicTaskQueue: false,
+      taskQueueId: '-TaskQueue',
+      workerId: 'worker1',
+    };
+    const options = service.createWorkerOptions(
+      'id2',
+      config,
+      'worker2',
+      mockConnection,
+    );
     expect(options).toBeInstanceOf(WorkFlowOptions);
     expect((options as any).taskQueue).toBe('TaskQueue');
   });
 
   it('should return options for JOB_SPECIFIC_WORKFLOW', () => {
-    const config = { configName: WorkFlowType.JOB_SPECIFIC_WORKFLOW, dynamicTaskQueue: false, taskQueueId: '-TaskQueue', workerId: 'worker1'};
-    const options = service.createWorkerOptions('id3', config, 'worker3', mockConnection);
+    const config = {
+      configName: WorkFlowType.JOB_SPECIFIC_WORKFLOW,
+      dynamicTaskQueue: false,
+      taskQueueId: '-TaskQueue',
+      workerId: 'worker1',
+    };
+    const options = service.createWorkerOptions(
+      'id3',
+      config,
+      'worker3',
+      mockConnection,
+    );
     expect(options).toBeInstanceOf(WorkFlowOptions);
     expect((options as any).taskQueue).toBe('TaskQueue');
   });
 
   it('should return undefined for unknown workflow type', () => {
     const config = { configName: 'UNKNOWN_WORKFLOW' };
-    const options = service.createWorkerOptions('id4', config as any, 'worker4', mockConnection);
+    const options = service.createWorkerOptions(
+      'id4',
+      config as any,
+      'worker4',
+      mockConnection,
+    );
     expect(options).toBeUndefined();
   });
-
-
 });
