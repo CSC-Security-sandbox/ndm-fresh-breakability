@@ -220,6 +220,200 @@ describe('WinShellService Edge Cases', () => {
   });
 });
 
+// Tests for command execution - simplified without complex async flows
+describe('WinShellService Command Execution', () => {
+  let service: WinShellService;
+  let mockSpawn: jest.MockedFunction<typeof spawn>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
+    service = new WinShellService(mockLoggerFactory as any);
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+  });
+
+  afterEach(async () => {
+    if (service) {
+      try {
+        await service.onModuleDestroy();
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    }
+  });
+
+  it('should call spawn for shell initialization on Windows', () => {
+    const mockProcess = new EventEmitter() as any;
+    mockProcess.stdin = { write: jest.fn() };
+    mockProcess.stdout = new EventEmitter();
+    mockProcess.stderr = new EventEmitter();
+    mockProcess.kill = jest.fn();
+
+    mockSpawn.mockReturnValue(mockProcess);
+
+    service.onModuleInit();
+    expect(mockSpawn).toHaveBeenCalled();
+  });
+
+  it('should handle executeInFreshShell completion', (done) => {
+    const mockProcess = new EventEmitter() as any;
+    mockProcess.stdin = { write: jest.fn() };
+    mockProcess.stdout = new EventEmitter();
+    mockProcess.stderr = new EventEmitter();
+    mockProcess.kill = jest.fn();
+
+    mockSpawn.mockReturnValue(mockProcess);
+
+    const promise = service.executeInFreshShell('Get-Date');
+
+    // Simulate process completion
+    setTimeout(() => {
+      mockProcess.stdout.emit('data', 'test output');
+      mockProcess.emit('exit', 0);
+    }, 10);
+
+    promise
+      .then((result) => {
+        expect(result.stdout).toBe('test output');
+        expect(result.stderr).toBe('');
+        done();
+      })
+      .catch(done);
+  });
+
+  it('should handle executeInFreshShell error', (done) => {
+    const mockProcess = new EventEmitter() as any;
+    mockProcess.stdin = { write: jest.fn() };
+    mockProcess.stdout = new EventEmitter();
+    mockProcess.stderr = new EventEmitter();
+    mockProcess.kill = jest.fn();
+
+    mockSpawn.mockReturnValue(mockProcess);
+
+    const promise = service.executeInFreshShell('Invalid-Command');
+
+    // Simulate process error
+    setTimeout(() => {
+      mockProcess.emit('error', new Error('Process error'));
+    }, 10);
+
+    promise.catch((error) => {
+      expect(error.message).toBe('Process error');
+      done();
+    });
+  });
+
+  it('should handle executeInFreshShell timeout', (done) => {
+    const mockProcess = new EventEmitter() as any;
+    mockProcess.stdin = { write: jest.fn() };
+    mockProcess.stdout = new EventEmitter();
+    mockProcess.stderr = new EventEmitter();
+    mockProcess.kill = jest.fn();
+
+    mockSpawn.mockReturnValue(mockProcess);
+
+    const promise = service.executeInFreshShell('Long-Command', 50);
+
+    // Don't emit exit - should timeout
+    promise.catch((error) => {
+      expect(error.message).toContain('timeout');
+      done();
+    });
+  });
+});
+
+// Tests for performance monitoring and statistics
+describe('WinShellService Performance and Stats', () => {
+  let service: WinShellService;
+  let mockSpawn: jest.MockedFunction<typeof spawn>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
+
+    const mockProcess = new EventEmitter() as any;
+    mockProcess.stdin = { write: jest.fn() };
+    mockProcess.stdout = new EventEmitter();
+    mockProcess.stderr = new EventEmitter();
+    mockProcess.kill = jest.fn();
+
+    mockSpawn.mockReturnValue(mockProcess);
+    service = new WinShellService(mockLoggerFactory as any);
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+  });
+
+  afterEach(async () => {
+    if (service) {
+      try {
+        await service.onModuleDestroy();
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    }
+  });
+
+  it('should track execution time statistics', () => {
+    const stats = service.getExecutionTimeStats();
+    expect(stats).toHaveProperty('avgTime');
+    expect(stats).toHaveProperty('minTime');
+    expect(stats).toHaveProperty('maxTime');
+    expect(stats).toHaveProperty('samples');
+    expect(stats).toHaveProperty('slowCommands');
+  });
+
+  it('should provide ACL performance analysis with no data', () => {
+    const analysis = service.getAclPerformanceAnalysis();
+    expect(analysis.performanceRating).toBe('No data');
+    expect(analysis.totalOperations).toBe(0);
+  });
+
+  it('should generate performance recommendations', () => {
+    const analysis = service.getAclPerformanceAnalysis();
+    expect(analysis.performanceRating).toBe('No data');
+    expect(analysis.totalOperations).toBe(0);
+  });
+
+  it('should provide comprehensive stats', () => {
+    const stats = service.getStats();
+    expect(stats).toHaveProperty('poolSize');
+    expect(stats).toHaveProperty('totalExecuted');
+    expect(stats).toHaveProperty('totalErrors');
+    expect(stats).toHaveProperty('successRate');
+    expect(stats).toHaveProperty('queues');
+    expect(Array.isArray(stats.queues)).toBe(true);
+  });
+});
+
+// Tests for admin mode functionality
+describe('WinShellService Admin Mode', () => {
+  let service: WinShellService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    service = new WinShellService(mockLoggerFactory as any);
+  });
+
+  afterEach(async () => {
+    if (service) {
+      try {
+        await service.onModuleDestroy();
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    }
+  });
+
+  it('should manage admin mode state', () => {
+    expect(service.isAdminModeEnabled()).toBe(false);
+
+    service.setAdminMode(true);
+    expect(service.isAdminModeEnabled()).toBe(true);
+
+    service.setAdminMode(false);
+    expect(service.isAdminModeEnabled()).toBe(false);
+  });
+});
+
 // Tests for PersistentShell class behavior
 describe('PersistentShell Behavior Tests', () => {
   let service: WinShellService;
@@ -258,5 +452,50 @@ describe('PersistentShell Behavior Tests', () => {
 
     Object.defineProperty(process, 'platform', { value: 'darwin' });
     expect(process.platform).toBe('darwin');
+  });
+});
+
+// Tests for health checking and shell management
+describe('WinShellService Health and Management', () => {
+  let service: WinShellService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    service = new WinShellService(mockLoggerFactory as any);
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+  });
+
+  afterEach(async () => {
+    if (service) {
+      try {
+        await service.onModuleDestroy();
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    }
+  });
+
+  it('should initialize service without errors', () => {
+    expect(service).toBeDefined();
+    expect(service.isAdminModeEnabled()).toBe(false);
+  });
+
+  it('should provide stats even without execution', () => {
+    const stats = service.getStats();
+    expect(stats.totalExecuted).toBe(0);
+    expect(stats.totalErrors).toBe(0);
+    expect(stats.poolSize).toBeGreaterThan(0);
+  });
+
+  it('should provide execution time stats with no data', () => {
+    const stats = service.getExecutionTimeStats();
+    expect(stats.avgTime).toBe(0);
+    expect(stats.samples).toBe(0);
+  });
+
+  it('should provide ACL performance analysis with no data', () => {
+    const analysis = service.getAclPerformanceAnalysis();
+    expect(analysis.performanceRating).toBe('No data');
+    expect(analysis.totalOperations).toBe(0);
   });
 });

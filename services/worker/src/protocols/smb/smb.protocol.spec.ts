@@ -17,6 +17,9 @@ import { mockLogger } from 'src/auth/auth.service.spec';
 let loggerFactory: LoggerFactory;
 
 jest.mock('./smb.utils');
+jest.mock('src/activities/core/utils/utils', () => ({
+  isPathExists: jest.fn(),
+}));
 
 describe('SMBProtocol', () => {
   let smbProtocol: SMBProtocol;
@@ -25,7 +28,7 @@ describe('SMBProtocol', () => {
     hostname: 'test-host',
     username: 'test-user',
     protocolVersion: '3.0',
-    path: '/test/path'
+    path: '/test/path',
   };
   let loggerMock: any;
 
@@ -46,6 +49,9 @@ describe('SMBProtocol', () => {
     });
     WorkersConfig.configService = configService;
     CommandConfig.configService = configService;
+
+    // Initialize loggerMock with the mockLogger from auth service
+    loggerMock = mockLogger;
 
     const mockLoggerFactory = {
       create: jest.fn().mockReturnValue(mockLogger),
@@ -86,15 +92,27 @@ describe('SMBProtocol', () => {
         return 'Unhandled error';
       });
 
-      const options: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass', protocolVersion: 'SMB2' };
+      const options: ProtocolPayload = {
+        hostname: 'localhost',
+        username: 'user',
+        password: 'pass',
+        protocolVersion: 'SMB2',
+      };
 
-      await expect(smbProtocol.validateConnection('traceId', options)).rejects.toThrow('');
+      await expect(
+        smbProtocol.validateConnection('traceId', options),
+      ).rejects.toThrow('');
       // expect(mockLogger.error).toHaveBeenCalledWith('Error during connection: Connection error');
     });
 
     it('should handle connection timeout', async () => {
       jest.useFakeTimers();
-      const options: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass', protocolVersion: 'SMB2' };
+      const options: ProtocolPayload = {
+        hostname: 'localhost',
+        username: 'user',
+        password: 'pass',
+        protocolVersion: 'SMB2',
+      };
 
       const promise = smbProtocol.validateConnection('traceId', options);
       jest.advanceTimersByTime(2000);
@@ -102,11 +120,9 @@ describe('SMBProtocol', () => {
       await expect(promise).rejects.toThrow('');
       jest.useRealTimers();
     });
-
   });
 
-  describe('listShares', () => {
-  });
+  describe('listShares', () => {});
 
   describe('listSharesforLinMac', () => {
     it('should list shares successfully for linux and mac', async () => {
@@ -333,8 +349,7 @@ describe('SMBProtocol', () => {
     });
 
     // Test the executeCommand method directly for full coverage
-    describe('executeCommand', () => {
-    });
+    describe('executeCommand', () => {});
 
     // Test constructor and initialization
     describe('constructor', () => {
@@ -345,7 +360,6 @@ describe('SMBProtocol', () => {
     });
   });
 
-
   describe('SMBProtocol', () => {
     let smbProtocol: SMBProtocol;
     let loggerMock: any;
@@ -355,7 +369,7 @@ describe('SMBProtocol', () => {
       hostname: 'test-host',
       username: 'test-user',
       protocolVersion: '3.0',
-      path: '/test/path'
+      path: '/test/path',
     };
 
     beforeEach(() => {
@@ -365,7 +379,7 @@ describe('SMBProtocol', () => {
         info: jest.fn(),
         debug: jest.fn(),
         warn: jest.fn(),
-        verbose: jest.fn()
+        verbose: jest.fn(),
       };
       smbProtocol = new SMBProtocol(loggerFactory);
 
@@ -374,7 +388,9 @@ describe('SMBProtocol', () => {
       (smbProtocol as any).workerId = 'test-worker-id';
 
       jest.spyOn(smbProtocol as any, 'executeCommand').mockImplementation();
-      jest.spyOn(smbProtocol as any, 'getCommandPattern').mockReturnValue('mock-command-pattern');
+      jest
+        .spyOn(smbProtocol as any, 'getCommandPattern')
+        .mockReturnValue('mock-command-pattern');
 
       jest.spyOn(console, 'log').mockImplementation();
     });
@@ -388,17 +404,22 @@ describe('SMBProtocol', () => {
         const mockResponse = { message: '1048576' };
         (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
 
-        const result = await smbProtocol.getTotalUsedMemory(mockTraceId, mockPayload);
+        const result = await smbProtocol.getTotalUsedMemory(
+          mockTraceId,
+          mockPayload,
+        );
 
         expect((smbProtocol as any).executeCommand).toHaveBeenCalledWith(
           mockTraceId,
           ProtocolTypes.SMB,
           mockPayload,
           'mock-command-pattern',
-          'SMB Mounted Folder size'
+          'SMB Mounted Folder size',
         );
 
-        expect((smbProtocol as any).getCommandPattern).toHaveBeenCalledWith(CommandPattern.MOUNTED_FOLDER_SIZE);
+        expect((smbProtocol as any).getCommandPattern).toHaveBeenCalledWith(
+          CommandPattern.MOUNTED_FOLDER_SIZE,
+        );
 
         expect(result).toBe(1048576);
       });
@@ -407,7 +428,10 @@ describe('SMBProtocol', () => {
         const mockResponse = { message: '  2097152  ' };
         (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
 
-        const result = await smbProtocol.getTotalUsedMemory(mockTraceId, mockPayload);
+        const result = await smbProtocol.getTotalUsedMemory(
+          mockTraceId,
+          mockPayload,
+        );
 
         expect(result).toBe(2097152);
       });
@@ -416,7 +440,10 @@ describe('SMBProtocol', () => {
         const mockResponse = { message: 'not a number' };
         (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
 
-        const result = await smbProtocol.getTotalUsedMemory(mockTraceId, mockPayload);
+        const result = await smbProtocol.getTotalUsedMemory(
+          mockTraceId,
+          mockPayload,
+        );
         expect(result).toBe(0);
       });
 
@@ -424,7 +451,10 @@ describe('SMBProtocol', () => {
         const mockResponse = { message: '' };
         (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
 
-        const result = await smbProtocol.getTotalUsedMemory(mockTraceId, mockPayload);
+        const result = await smbProtocol.getTotalUsedMemory(
+          mockTraceId,
+          mockPayload,
+        );
         expect(result).toBe(0);
       });
     });
@@ -434,22 +464,35 @@ describe('SMBProtocol', () => {
         const mockResponse = { message: '1073741824', status: 'success' };
         (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
 
-        const result = await smbProtocol.getAvailableDiskSpace(mockTraceId, mockPayload);
+        const result = await smbProtocol.getAvailableDiskSpace(
+          mockTraceId,
+          mockPayload,
+        );
 
         expect((smbProtocol as any).executeCommand).toHaveBeenCalledWith(
           mockTraceId,
           ProtocolTypes.SMB,
           mockPayload,
           'mock-command-pattern',
-          'SMB Available Disk Space'
+          'SMB Available Disk Space',
         );
 
-        expect((smbProtocol as any).getCommandPattern).toHaveBeenCalledWith(CommandPattern.AVAILABLE_DISK_SPACE);
+        expect((smbProtocol as any).getCommandPattern).toHaveBeenCalledWith(
+          CommandPattern.AVAILABLE_DISK_SPACE,
+        );
 
-        expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] Checking available disk space at path: ${mockPayload.path}`);
-        expect(loggerMock.log).toHaveBeenCalledWith(`response of getAvailableDiskSpace in smb.protocol ${JSON.stringify(mockResponse)}`);
-        expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] ${mockResponse.message}`);
-        expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] Available space at ${mockPayload.path}: 1073741824 bytes`);
+        expect(loggerMock.log).toHaveBeenCalledWith(
+          `[${mockTraceId}] Checking available disk space at path: ${mockPayload.path}`,
+        );
+        expect(loggerMock.log).toHaveBeenCalledWith(
+          `response of getAvailableDiskSpace in smb.protocol ${JSON.stringify(mockResponse)}`,
+        );
+        expect(loggerMock.log).toHaveBeenCalledWith(
+          `[${mockTraceId}] ${mockResponse.message}`,
+        );
+        expect(loggerMock.log).toHaveBeenCalledWith(
+          `[${mockTraceId}] Available space at ${mockPayload.path}: 1073741824 bytes`,
+        );
 
         expect(result).toEqual({ size: 1073741824 });
       });
@@ -458,7 +501,10 @@ describe('SMBProtocol', () => {
         const mockResponse = { message: '  2147483648  ' };
         (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
 
-        const result = await smbProtocol.getAvailableDiskSpace(mockTraceId, mockPayload);
+        const result = await smbProtocol.getAvailableDiskSpace(
+          mockTraceId,
+          mockPayload,
+        );
 
         expect(result).toEqual({ size: 2147483648 });
       });
@@ -467,16 +513,23 @@ describe('SMBProtocol', () => {
         const payloadWithoutPath: ProtocolPayload = {
           hostname: 'test-host',
           username: 'test-user',
-          protocolVersion: '3.0'
+          protocolVersion: '3.0',
         };
 
         const mockResponse = { message: '3221225472' };
         (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
 
-        const result = await smbProtocol.getAvailableDiskSpace(mockTraceId, payloadWithoutPath);
+        const result = await smbProtocol.getAvailableDiskSpace(
+          mockTraceId,
+          payloadWithoutPath,
+        );
 
-        expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] Checking available disk space at path: undefined`);
-        expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] Available space at undefined: 3221225472 bytes`);
+        expect(loggerMock.log).toHaveBeenCalledWith(
+          `[${mockTraceId}] Checking available disk space at path: undefined`,
+        );
+        expect(loggerMock.log).toHaveBeenCalledWith(
+          `[${mockTraceId}] Available space at undefined: 3221225472 bytes`,
+        );
 
         expect(result).toEqual({ size: 3221225472 });
       });
@@ -485,7 +538,10 @@ describe('SMBProtocol', () => {
         const mockResponse = { message: 'not a number' };
         (smbProtocol as any).executeCommand.mockResolvedValue(mockResponse);
 
-        const result = await smbProtocol.getAvailableDiskSpace(mockTraceId, mockPayload);
+        const result = await smbProtocol.getAvailableDiskSpace(
+          mockTraceId,
+          mockPayload,
+        );
         expect(result.size).toBeNaN();
       });
 
@@ -500,7 +556,7 @@ describe('SMBProtocol', () => {
           ProtocolTypes.SMB,
           mockPayload,
           'mock-command-pattern',
-          'SMB Available Disk Space'
+          'SMB Available Disk Space',
         );
       });
 
@@ -515,7 +571,7 @@ describe('SMBProtocol', () => {
           password: 'pass',
           protocolVersion: 'SMB2',
           mountBasePath: '/mnt',
-          jobRunId: 'job123'
+          jobRunId: 'job123',
         };
 
         beforeEach(() => {
@@ -525,15 +581,19 @@ describe('SMBProtocol', () => {
             info: jest.fn(),
             debug: jest.fn(),
             warn: jest.fn(),
-            verbose: jest.fn()
+            verbose: jest.fn(),
           };
           smbProtocol = new SMBProtocol(loggerFactory);
           (smbProtocol as any).logger = loggerMock;
           (smbProtocol as any).platform = 'win32';
           (smbProtocol as any).workerId = 'test-worker-id';
 
-          jest.spyOn(smbProtocol as any, 'executeCommand').mockResolvedValue({ message: 'mounted successfully.' });
-          jest.spyOn(smbProtocol as any, 'getCommandPattern').mockImplementation((key: string) => key);
+          jest
+            .spyOn(smbProtocol as any, 'executeCommand')
+            .mockResolvedValue({ message: 'mounted successfully.' });
+          jest
+            .spyOn(smbProtocol as any, 'getCommandPattern')
+            .mockImplementation((key: string) => key);
         });
 
         afterEach(() => {
@@ -543,63 +603,83 @@ describe('SMBProtocol', () => {
         describe('mountPath', () => {
           it('should create directory and mount path successfully', async () => {
             // Mock isPathExists to return false (directory doesn't exist)
-            jest.spyOn(require('src/activities/core/utils/utils'), 'isPathExists').mockResolvedValue(false);
-            
+            jest
+              .spyOn(require('src/activities/core/utils/utils'), 'isPathExists')
+              .mockResolvedValue(false);
+
             // Mock fs.promises.mkdir
-            const mockMkdir = jest.spyOn(fs.promises, 'mkdir').mockResolvedValue(undefined);
+            const mockMkdir = jest
+              .spyOn(fs.promises, 'mkdir')
+              .mockResolvedValue(undefined);
 
             // Simulate executeCommand for save creds, mount, and create path link
             (smbProtocol as any).executeCommand
-              .mockResolvedValueOnce({ message: 'credentials saved successfully.' }) // save creds
+              .mockResolvedValueOnce({
+                message: 'credentials saved successfully.',
+              }) // save creds
               .mockResolvedValueOnce({ message: 'mounted successfully.' }) // mount
               .mockResolvedValueOnce({ message: 'link created successfully.' }); // create path link
 
             const payload = { ...mockPayload };
             const result = await smbProtocol.mountPath(mockTraceId, payload);
 
-            expect(mockMkdir).toHaveBeenCalledWith('/mnt/job123', { recursive: true });
-            expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] Directory created: /mnt/job123`);
+            expect(mockMkdir).toHaveBeenCalledWith('/mnt/job123', {
+              recursive: true,
+            });
+            expect(loggerMock.log).toHaveBeenCalledWith(
+              `[${mockTraceId}] Directory created: /mnt/job123`,
+            );
             expect((smbProtocol as any).executeCommand).toHaveBeenCalledWith(
               mockTraceId,
               ProtocolTypes.SMB,
               payload,
               CommandPattern.SAVE_CREDS,
-              'SMB Save Credentials'
+              'SMB Save Credentials',
             );
             expect((smbProtocol as any).executeCommand).toHaveBeenCalledWith(
               mockTraceId,
               ProtocolTypes.SMB,
               payload,
               CommandPattern.MOUNT_PATH,
-              'SMB Mount'
+              'SMB Mount',
             );
             expect((smbProtocol as any).executeCommand).toHaveBeenCalledWith(
               mockTraceId,
               ProtocolTypes.SMB,
               payload,
               CommandPattern.CREATE_PATH_LINK,
-              'SMB Show Shares'
+              'SMB Show Shares',
             );
-            expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] link created successfully.`);
+            expect(loggerMock.log).toHaveBeenCalledWith(
+              `[${mockTraceId}] link created successfully.`,
+            );
             expect(result).toEqual({ message: 'link created successfully.' });
-            
+
             // Restore mocks
             mockMkdir.mockRestore();
           });
 
           it('should handle error during directory creation', async () => {
             // Mock isPathExists to return false (directory doesn't exist)
-            jest.spyOn(require('src/activities/core/utils/utils'), 'isPathExists').mockResolvedValue(false);
-            
+            jest
+              .spyOn(require('src/activities/core/utils/utils'), 'isPathExists')
+              .mockResolvedValue(false);
+
             // Mock fs.promises.mkdir to throw error
             const error = new Error('mkdir failed');
-            const mockMkdir = jest.spyOn(fs.promises, 'mkdir').mockRejectedValue(error);
+            const mockMkdir = jest
+              .spyOn(fs.promises, 'mkdir')
+              .mockRejectedValue(error);
 
             const payload = { ...mockPayload };
             const result = await smbProtocol.mountPath(mockTraceId, payload);
 
-            expect(mockMkdir).toHaveBeenCalledWith('/mnt/job123', { recursive: true });
-            expect(loggerMock.error).toHaveBeenCalledWith(`[${mockTraceId}] Error creating directory------?: ${error.message}`);
+            expect(mockMkdir).toHaveBeenCalledWith('/mnt/job123', {
+              recursive: true,
+            });
+            expect(loggerMock.error).toHaveBeenCalledWith(
+              `[${mockTraceId}] Error creating directory------?: ${error.message}`,
+            );
             expect(result).toEqual({
               traceId: mockTraceId,
               status: 'error',
@@ -608,21 +688,27 @@ describe('SMBProtocol', () => {
               workerId: (smbProtocol as any).workerId,
               message: `[${mockTraceId}] Error creating directory: ${error.message}`,
             });
-            
+
             // Restore mocks
             mockMkdir.mockRestore();
           });
 
           it('should skip directory creation when directory already exists', async () => {
             // Mock isPathExists to return true (directory exists)
-            jest.spyOn(require('src/activities/core/utils/utils'), 'isPathExists').mockResolvedValue(true);
-            
+            jest
+              .spyOn(require('src/activities/core/utils/utils'), 'isPathExists')
+              .mockResolvedValue(true);
+
             // Mock fs.promises.mkdir (should not be called)
-            const mockMkdir = jest.spyOn(fs.promises, 'mkdir').mockResolvedValue(undefined);
+            const mockMkdir = jest
+              .spyOn(fs.promises, 'mkdir')
+              .mockResolvedValue(undefined);
 
             // Simulate executeCommand for save creds, mount and create path link
             (smbProtocol as any).executeCommand
-              .mockResolvedValueOnce({ message: 'credentials saved successfully.' }) // save creds
+              .mockResolvedValueOnce({
+                message: 'credentials saved successfully.',
+              }) // save creds
               .mockResolvedValueOnce({ message: 'mounted successfully.' }) // mount
               .mockResolvedValueOnce({ message: 'link created successfully.' }); // create path link
 
@@ -630,13 +716,320 @@ describe('SMBProtocol', () => {
             const result = await smbProtocol.mountPath(mockTraceId, payload);
 
             expect(mockMkdir).not.toHaveBeenCalled(); // Should not create directory if it exists
-            expect(loggerMock.log).toHaveBeenCalledWith(`[${mockTraceId}] link created successfully.`);
+            expect(loggerMock.log).toHaveBeenCalledWith(
+              `[${mockTraceId}] link created successfully.`,
+            );
             expect(result).toEqual({ message: 'link created successfully.' });
-            
+
             // Restore mocks
             mockMkdir.mockRestore();
           });
         });
+      });
+    });
+  });
+
+  // Additional tests for uncovered lines
+  describe('SMBProtocol - Additional Coverage Tests', () => {
+    beforeEach(() => {
+      // Reset all mock function calls
+      jest.clearAllMocks();
+    });
+
+    describe('getTotalUsedMemory error handling', () => {
+      it('should handle error in getTotalUsedMemory', async () => {
+        const errorMessage = 'Command execution failed';
+        jest
+          .spyOn(smbProtocol as any, 'executeCommand')
+          .mockRejectedValue(new Error(errorMessage));
+
+        await expect(
+          smbProtocol.getTotalUsedMemory(mockTraceId, mockPayload),
+        ).rejects.toThrow(`Failed to calculate size: ${errorMessage}`);
+        expect(loggerMock.error).toHaveBeenCalledWith(
+          `[${mockTraceId}] Error checking total data size : ${errorMessage}`,
+        );
+      });
+    });
+
+    describe('getAvailableDiskSpace error handling', () => {
+      it('should handle error in getAvailableDiskSpace', async () => {
+        const errorMessage = 'Command execution failed';
+        jest
+          .spyOn(smbProtocol as any, 'executeCommand')
+          .mockRejectedValue(new Error(errorMessage));
+
+        await expect(
+          smbProtocol.getAvailableDiskSpace(mockTraceId, mockPayload),
+        ).rejects.toThrow(
+          `Failed to get available disk space at ${mockPayload.path}`,
+        );
+        expect(loggerMock.error).toHaveBeenCalledWith(
+          `[${mockTraceId}] Error checking disk space for path ${mockPayload.path}: ${errorMessage}`,
+        );
+      });
+
+      it('should handle successful response with status success', async () => {
+        const mockResponse = { status: 'success', message: '1024000' };
+        jest
+          .spyOn(smbProtocol as any, 'executeCommand')
+          .mockResolvedValue(mockResponse);
+
+        const result = await smbProtocol.getAvailableDiskSpace(
+          mockTraceId,
+          mockPayload,
+        );
+
+        expect(result).toEqual({ size: 1024000 });
+        expect(loggerMock.log).toHaveBeenCalledWith(
+          `[${mockTraceId}] Checking available disk space at path: ${mockPayload.path}`,
+        );
+        expect(loggerMock.log).toHaveBeenCalledWith(
+          `[${mockTraceId}] Available space at ${mockPayload.path}: 1024000 bytes`,
+        );
+      });
+    });
+
+    describe('unmountPath', () => {
+      it('should unmount successfully and unlink', async () => {
+        const payload = { hostname: 'test-host', path: '/test/path' };
+        const mockResponse1 = {
+          message: 'unmounted successfully.',
+          status: 'success',
+        };
+        const mockResponse2 = {
+          message: 'unlinked successfully.',
+          status: 'success',
+        };
+
+        jest
+          .spyOn(smbProtocol as any, 'executeCommand')
+          .mockResolvedValueOnce(mockResponse1)
+          .mockResolvedValueOnce(mockResponse2);
+
+        const result = await smbProtocol.unmountPath(mockTraceId, payload);
+
+        expect(loggerMock.log).toHaveBeenCalledWith(
+          `[${mockTraceId}] Unmounting path for ${payload.hostname} of type SMB from defaultWorkerId`,
+        );
+        expect(loggerMock.log).toHaveBeenCalledWith(
+          `[${mockTraceId}] ${mockResponse2.message}`,
+        );
+        expect(result).toBe(mockResponse1);
+      });
+
+      it('should handle unmount error', async () => {
+        const payload = { hostname: 'test-host', path: '/test/path' };
+        const errorMessage = 'Unmount failed';
+
+        jest
+          .spyOn(smbProtocol as any, 'executeCommand')
+          .mockRejectedValue(new Error(errorMessage));
+
+        await expect(
+          smbProtocol.unmountPath(mockTraceId, payload),
+        ).rejects.toThrow(errorMessage);
+        expect(loggerMock.log).toHaveBeenCalledWith(
+          `[${mockTraceId}] Error Unmounting path for ${payload.hostname} of type SMB from defaultWorkerId: ${errorMessage}`,
+        );
+      });
+    });
+
+    describe('mountPath error scenarios', () => {
+      beforeEach(() => {
+        // Mock isPathExists
+        const { isPathExists } = require('src/activities/core/utils/utils');
+        jest.mocked(isPathExists).mockClear();
+      });
+
+      it('should handle save credentials failure', async () => {
+        const { isPathExists } = require('src/activities/core/utils/utils');
+        jest.mocked(isPathExists).mockResolvedValue(true); // Directory exists
+
+        const payload = {
+          hostname: 'test-host',
+          mountBasePath: '/mnt',
+          jobRunId: 'job123',
+        };
+        jest
+          .spyOn(smbProtocol as any, 'executeCommand')
+          .mockResolvedValueOnce({ message: 'credentials save failed.' }); // save creds fails
+
+        await expect(
+          smbProtocol.mountPath(mockTraceId, payload),
+        ).rejects.toThrow(
+          'Save credentials operation failed: credentials save failed.',
+        );
+      });
+
+      it('should handle mount operation failure after successful credentials save', async () => {
+        const { isPathExists } = require('src/activities/core/utils/utils');
+        jest.mocked(isPathExists).mockResolvedValue(true); // Directory exists
+
+        const payload = {
+          hostname: 'test-host',
+          mountBasePath: '/mnt',
+          jobRunId: 'job123',
+        };
+        const errorMessage = 'Mount operation failed';
+
+        jest
+          .spyOn(smbProtocol as any, 'executeCommand')
+          .mockResolvedValueOnce({ message: 'credentials saved successfully.' }) // save creds succeeds
+          .mockRejectedValueOnce(new Error(errorMessage)); // mount fails
+
+        await expect(
+          smbProtocol.mountPath(mockTraceId, payload),
+        ).rejects.toThrow(
+          `Failed to mount path at ${payload.hostname}, reason: ${errorMessage}`,
+        );
+        expect(loggerMock.error).toHaveBeenCalledWith(
+          `[${mockTraceId}] Error mounting path for ${payload.hostname} of type SMB from defaultWorkerId: ${errorMessage}`,
+        );
+      });
+    });
+
+    describe('disconnectSession', () => {
+      it('should disconnect session successfully', async () => {
+        const mockResponse = {
+          message: 'Session disconnected successfully',
+          status: 'success',
+        };
+        jest
+          .spyOn(smbProtocol as any, 'executeCommand')
+          .mockResolvedValue(mockResponse);
+
+        const result = await smbProtocol.disconnectSession(
+          mockTraceId,
+          mockPayload,
+        );
+
+        expect(loggerMock.log).toHaveBeenCalledWith(
+          `[${mockTraceId}] disconnecting session  ${mockPayload.hostname} of type SMB from defaultWorkerId`,
+        );
+        expect(result).toBe(mockResponse);
+      });
+
+      it('should handle disconnect session error', async () => {
+        const errorMessage = 'Disconnect failed';
+        jest
+          .spyOn(smbProtocol as any, 'executeCommand')
+          .mockRejectedValue(new Error(errorMessage));
+
+        await expect(
+          smbProtocol.disconnectSession(mockTraceId, mockPayload),
+        ).rejects.toThrow(errorMessage);
+        expect(loggerMock.log).toHaveBeenCalledWith(
+          `[${mockTraceId}] error disconnecting session  ${mockPayload.hostname} of type SMB from defaultWorkerId: ${errorMessage}`,
+        );
+      });
+    });
+
+    describe('getTotalSizeLinux', () => {
+      it('should throw "Method not implemented" error', () => {
+        expect(() =>
+          smbProtocol.getTotalSizeLinux(mockTraceId, mockPayload),
+        ).toThrow('Method not implemented.');
+      });
+    });
+
+    describe('updateBootMounts', () => {
+      it('should throw "Method not implemented" error and log message', () => {
+        const context = {
+          platform: 'linux',
+          fstabPath: '/etc/fstab',
+          workerId: 'test-worker',
+        };
+        const payload = { hostname: 'test-host' };
+
+        expect(() =>
+          smbProtocol.updateBootMounts(context, payload, 'insert', mockTraceId),
+        ).toThrow('Method not implemented.');
+        expect(loggerMock.log).toHaveBeenCalledWith(
+          `[${mockTraceId}] updateBootMount not implemented for SMB protocol`,
+        );
+      });
+    });
+
+    describe('listPathLinMac error handling', () => {
+      it('should handle connection error with NT_STATUS code', async () => {
+        const errorMessage = 'NT_STATUS_LOGON_FAILURE: Authentication failed';
+        jest
+          .spyOn(smbProtocol as any, 'executeCommand')
+          .mockRejectedValue(new Error(errorMessage));
+        (handleConnectionError as jest.Mock).mockReturnValue(
+          'Authentication failed - handled',
+        );
+
+        await expect(
+          smbProtocol.listPathLinMac(mockTraceId, mockPayload),
+        ).rejects.toThrow('Authentication failed - handled');
+        expect(loggerMock.error).toHaveBeenCalledWith(
+          'Error during SMB connection: NT_STATUS_LOGON_FAILURE: Authentication failed',
+        );
+      });
+
+      it('should handle generic connection error without NT_STATUS code', async () => {
+        const errorMessage = 'Generic connection error';
+        jest
+          .spyOn(smbProtocol as any, 'executeCommand')
+          .mockRejectedValue(new Error(errorMessage));
+        (handleConnectionError as jest.Mock).mockReturnValue(
+          'Generic error - handled',
+        );
+
+        await expect(
+          smbProtocol.listPathLinMac(mockTraceId, mockPayload),
+        ).rejects.toThrow('Generic error - handled');
+        expect(loggerMock.error).toHaveBeenCalledWith(
+          'Error during SMB connection: Generic connection error',
+        );
+      });
+    });
+
+    describe('listPathWindows error scenarios', () => {
+      it('should handle credential validation failure', async () => {
+        const mockFailureResponse = { message: 'Credential validation failed' };
+        jest
+          .spyOn(smbProtocol as any, 'executeCommand')
+          .mockResolvedValueOnce(mockFailureResponse);
+
+        await expect(
+          smbProtocol.listPathWindows(mockTraceId, mockPayload),
+        ).rejects.toThrow(
+          'Mount operation failed: Credential validation failed',
+        );
+        expect(loggerMock.log).toHaveBeenCalledWith(
+          JSON.stringify(mockFailureResponse),
+        );
+      });
+
+      it('should handle error during credential validation with multi-line message cleanup', async () => {
+        const errorMessage =
+          'Error header\nActual error message\nAdditional info';
+        jest
+          .spyOn(smbProtocol as any, 'executeCommand')
+          .mockRejectedValue(new Error(errorMessage));
+
+        await expect(
+          smbProtocol.listPathWindows(mockTraceId, mockPayload),
+        ).rejects.toThrow('Actual error message\nAdditional info');
+        expect(loggerMock.log).toHaveBeenCalledWith(
+          `error: Error: ${errorMessage}`,
+        );
+        expect(loggerMock.error).toHaveBeenCalledWith(`error: ${errorMessage}`);
+      });
+
+      it('should handle single line error message', async () => {
+        const errorMessage = 'Single line error';
+        jest
+          .spyOn(smbProtocol as any, 'executeCommand')
+          .mockRejectedValue(new Error(errorMessage));
+
+        await expect(
+          smbProtocol.listPathWindows(mockTraceId, mockPayload),
+        ).rejects.toThrow(errorMessage);
+        expect(loggerMock.error).toHaveBeenCalledWith(`error: ${errorMessage}`);
       });
     });
   });
