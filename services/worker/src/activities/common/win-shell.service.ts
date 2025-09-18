@@ -3,6 +3,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import { psBaseAclDefinition } from '../core/migrate/command-execution/win-opeartions/powershell.script';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { ConfigService } from '@nestjs/config';
 
 interface ShellResult {
     stdout: string;
@@ -318,27 +319,38 @@ Write-Host '${cmd.endMarker}'
 @Injectable()
 export class WinShellService implements OnModuleInit, OnModuleDestroy {
     private shells: PersistentShell[] = [];
-    private poolSize = 10;
-    private maxQueuePerShell = 1;
+    private shellMonitoringInterval: number;
+    private enableShellMonitoring: boolean;
+    private poolSize: number;
+    private maxQueuePerShell: number;
     private dropWhenFull = false;
     private totalExecuted = 0;
     private totalErrors = 0;
     private monitoringInterval?: NodeJS.Timeout;
     private executionTimes: number[] = [];
-    private slowCommandThreshold = 5000; // 5 seconds
-    private runAsAdmin = false; // Set to true if you need admin privileges
+    private slowCommandThreshold: number;
+    private runAsAdmin: boolean; // Set to true if you need admin privileges
     private readonly logger: LoggerService;
 
     constructor(
+        @Inject(ConfigService) private readonly configService: ConfigService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory
-      ) {
+    ) {
+        this.shellMonitoringInterval = this.configService.get('shellMonitoring.shellMonitoringInterval');
+        this.enableShellMonitoring = this.configService.get('shellMonitoring.enableShellMonitoring');
+        this.poolSize = this.configService.get('shellMonitoring.poolSize');
+        this.maxQueuePerShell = this.configService.get('shellMonitoring.maxQueuePerShell');
+        this.slowCommandThreshold = this.configService.get('shellMonitoring.slowCommandThreshold');
+        this.runAsAdmin = this.configService.get('shellMonitoring.runAsAdmin');
         this.logger = loggerFactory.create(WinShellService.name);
       }
 
     async onModuleInit() {
         if(process.platform === 'win32') {
             await this.initializePool();
-            this.startShellMonitoring();
+            if (this.enableShellMonitoring) {
+                this.startShellMonitoring();
+            }
         }
     }
 
@@ -566,7 +578,7 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
             this.logger.debug(`[Shell Stats] Total executed: ${this.totalExecuted} | Errors: ${this.totalErrors} | Queued commands: ${queuedCommands}`);
             this.logger.debug(`[Timing Stats] Avg: ${avgTime}ms | Min: ${minTime}ms | Max: ${maxTime}ms | Samples: ${this.executionTimes.length}`);
             this.logger.debug(`[ACL Stats] Estimated ACL ops: ${aclOperations} | Slow ACL ops (>30s): ${slowAclOperations}`);
-        }, 3000); // Every 3 seconds
+        }, this.shellMonitoringInterval); // Every 3 seconds
     }
 
     // Performance analysis method
