@@ -26,17 +26,15 @@ jobs:
           
           VERSION="${BRANCH_NAME#release/}"
           
-          VALID_PATTERN="^([0-9]{4}\.[0-9]{2}(\.[0-9]{2})?(-[a-zA-Z0-9_]+)?|[a-zA-Z][a-zA-Z0-9_]*(-[a-zA-Z0-9_]+)?)$"
+          VALID_PATTERN="^[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9][a-zA-Z0-9\._-]*)?$"
           
           if [[ ! "$VERSION" =~ $VALID_PATTERN ]]; then
             echo "Error: Invalid release version format: $VERSION"
-            echo "Valid formats are:"
-            echo "  - YYYY.MM (e.g., 2025.08)"
-            echo "  - YYYY.MM-<suffix> (e.g., 2025.08-1, 2025.08-alpha, 2025.08-username)"
-            echo "  - YYYY.MM.DD (e.g., 2025.08.03)"
-            echo "  - YYYY.MM.DD-<suffix> (e.g., 2025.08.03-testing)"
-            echo "  - <name> (e.g., preview, testing)"
-            echo "  - <name>-<suffix> (e.g., preview-1, testing-beta)"
+            echo "Valid formats (compatible with Docker and Helm):"
+            echo "  - X.Y (e.g., 1.0, 2025.08)"
+            echo "  - X.Y.Z (e.g., 1.0.0, 2025.08.03)"
+            echo "  - X.Y-suffix (e.g., 1.0-alpha, 2025.08-rc.1)"
+            echo "  - X.Y.Z-suffix (e.g., 1.0.0-beta, 2025.08.03-testing, 1.2.3-alpha.beta.gamma-final)"
             exit 1
           fi
           

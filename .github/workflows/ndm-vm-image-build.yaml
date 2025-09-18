@@ -966,7 +966,7 @@ jobs:
 
           echo "Packer validation completed successfully"
 
-      - name: Packer Build with Retry
+      - name: Packer Build
         id: build
         run: |
           cd ${{ steps.packer-path.outputs.path }}
