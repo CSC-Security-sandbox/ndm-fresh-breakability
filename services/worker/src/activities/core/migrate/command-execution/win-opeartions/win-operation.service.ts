@@ -149,23 +149,38 @@ export class WinOperationService {
         if(acl1.Owner !== acl2.Owner) output.inValid += `Owner mismatch: Expected(${acl1.Owner}) Target(${acl2.Owner}). `;
         if(acl1.Group !== acl2.Group) output.inValid += `Group mismatch: Expected(${acl1.Group}) Target(${acl2.Group}). `;
 
-        const aceMap1 = new Map<string, Ace>();
-        acl1.DaclAces.forEach(ace => {
-            const key = `${ace.Sid}-${ace.AccessMask}-${ace.AceType}-${ace.AceFlags}`;
-            aceMap1.set(key, ace);
-            output.sourceSID += `ACE in source: SID(${ace.Sid}), AccessMask(${ace.AccessMask}), AceType(${ace.AceType}), AceFlags(${ace.AceFlags}). `;
+        // Normalize ACEs: only compare SID, AccessMask, AceType
+        function aceKey(ace: Ace) {
+            return `${ace.Sid}++${ace.AccessMask}++${ace.AceType}`;
+        }
+
+        // Only consider AccessAllowed (0) and AccessDenied (1) ACEs in comparison.
+        // This ignores audit/object ACEs (e.g., AceType 3, 5) which are not stamped or relevant for access control.
+        // This prevents false errors for ACEs that cannot be set or are not part of DACL.
+        const sourceAcls = (acl1.DaclAces || []).filter(ace => ace.AceType === 0 || ace.AceType === 1);
+        sourceAcls.forEach(ace => {
+            output.sourceSID += `ACE in source: SID(${ace.Sid}), AccessMask(${ace.AccessMask}), AceType(${ace.AceType}). `;
         });
 
-        const aceMap2 = new Map<string, Ace>();
-        acl2.DaclAces.forEach(ace => {
-            const key = `${ace.Sid}-${ace.AccessMask}-${ace.AceType}-${ace.AceFlags}`;
-            aceMap2.set(key, ace);
-            output.targetSID += `ACE in target: SID(${ace.Sid}), AccessMask(${ace.AccessMask}), AceType(${ace.AceType}), AceFlags(${ace.AceFlags}). `;
+        const targetAcls = (acl2.DaclAces || []).filter(ace => ace.AceType === 0 || ace.AceType === 1);
+        targetAcls.forEach(ace => {
+            output.targetSID += `ACE in target: SID(${ace.Sid}), AccessMask(${ace.AccessMask}), AceType(${ace.AceType}). `;
         });
 
-        for (const [key, ace] of aceMap1) {
-            if (!aceMap2.has(key)) {
-                output.inValid += `Missing ACE in target: SID(${ace.Sid}), AccessMask(${ace.AccessMask}), AceType(${ace.AceType}), AceFlags(${ace.AceFlags}). `;
+        // For each source ACE, check if any target ACE with same SID and AceType has all required AccessMask bits
+        // For S-1-3-0 (Creator Owner), only require SID and AceType match, ignore AccessMask
+        for (const srcAce of sourceAcls) {
+            if (srcAce.Sid === "S-1-3-0") {
+                const found = targetAcls.some(tgtAce => tgtAce.Sid === srcAce.Sid && tgtAce.AceType === srcAce.AceType);
+                if (!found) {
+                    output.inValid += `Missing ACE in target: SID(${srcAce.Sid}), AceType(${srcAce.AceType}). `;
+                }
+            } else {
+                const matchingTargetAces = targetAcls.filter(tgtAce => tgtAce.Sid === srcAce.Sid && tgtAce.AceType === srcAce.AceType);
+                const found = matchingTargetAces.some(tgtAce => (tgtAce.AccessMask & srcAce.AccessMask) === srcAce.AccessMask);
+                if (!found) {
+                    output.inValid += `Missing ACE in target: SID(${srcAce.Sid}), AccessMask(${srcAce.AccessMask}), AceType(${srcAce.AceType}). `;
+                }
             }
         }
         return output;
