@@ -328,7 +328,7 @@ Write-Host '${cmd.endMarker}'
 @Injectable()
 export class WinShellService implements OnModuleInit, OnModuleDestroy {
     private shells: PersistentShell[] = [];
-    private poolSize = 10;
+    private poolSize = 15;
     private maxQueuePerShell = 1;
     private dropWhenFull = false;
     private totalExecuted = 0;
