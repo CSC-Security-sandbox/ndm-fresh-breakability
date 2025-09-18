@@ -52,8 +52,7 @@ const {
 const {
   resolveUsernamesToSids: resolveUsernamesToSidsActivity,
 } = wf.proxyActivities<MappingResolverService>({
-  startToCloseTimeout: '24h',
-  heartbeatTimeout: '10m',
+  startToCloseTimeout: '10m',
   retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
 });
 
