@@ -261,12 +261,14 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
         [System.IO.File]::SetAttributes($path, $attrEnum)
     }
         
-  $unresolved_sid_values = @()
-   if ($unresolved_sids.Count -gt 0) {
+    $unresolved_sid_values = @()
+    if ($unresolved_sids.Count -gt 0) {
         $unresolved_sid_values = @($unresolved_sids | ForEach-Object { $_.Value })
-        Write-Output ('{"success":true, "unresolved_sids":' + ($unresolved_sid_values | ConvertTo-Json -Compress) + '}')
+        # Manually build JSON array
+        $json_array = '[' + (($unresolved_sid_values | ForEach-Object { '"' + $_ + '"' }) -join ',') + ']'
+        Write-Output ('{"success":true, "unresolved_sids":' + $json_array + '}')
     } else {
-        Write-Output '{"success":true}'
+        Write-Output '{"success":true, "unresolved_sids":[]}'
     }
 }
 
