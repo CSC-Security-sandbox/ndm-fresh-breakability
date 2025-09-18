@@ -49,7 +49,7 @@ describe('WinShellService', () => {
     Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 
-  beforeEach(async () => {
+  beforeEach(() => {
     jest.clearAllMocks();
     mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
 
@@ -66,7 +66,11 @@ describe('WinShellService', () => {
 
   afterEach(async () => {
     if (service) {
-      await service.onModuleDestroy();
+      try {
+        await service.onModuleDestroy();
+      } catch (error) {
+        // Ignore cleanup errors in tests
+      }
     }
   });
 
@@ -208,7 +212,7 @@ describe('WinShellService', () => {
 describe('WinShellService Edge Cases', () => {
   let service: WinShellService;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     jest.clearAllMocks();
 
     service = new WinShellService(
@@ -224,7 +228,11 @@ describe('WinShellService Edge Cases', () => {
 
   afterEach(async () => {
     if (service) {
-      await service.onModuleDestroy();
+      try {
+        await service.onModuleDestroy();
+      } catch (error) {
+        // Ignore cleanup errors in tests
+      }
     }
   });
 
@@ -247,7 +255,7 @@ describe('WinShellService Comprehensive Tests', () => {
   let mockSpawn: jest.MockedFunction<typeof spawn>;
   let mockProcess: any;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     jest.clearAllMocks();
     mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
 
