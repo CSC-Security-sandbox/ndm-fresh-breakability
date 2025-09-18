@@ -115,10 +115,12 @@ export class SetupExportsPathPermissionService {
 
     async setupExportPathPermission(jobRunId: string) {
         const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
-        if (!jobContext.jobConfig?.destinationFileServer?.protocols[0]?.type.includes(ProtocolTypes.SMB) || !jobContext.jobConfig?.options?.isIdentityMappingAvailable) {
+        if (!jobContext.jobConfig?.destinationFileServer?.protocols[0]?.type.includes(ProtocolTypes.SMB)) {
             this.logger.debug(`Identity mapping not available for jobRunId: ${jobRunId}`);
             return;
         }
+
+        this.logger.error(`Starting ACL setup for jobRunId: ${jobRunId}`);
         await this.setup(jobRunId, jobContext);
     }
 
@@ -132,18 +134,20 @@ export class SetupExportsPathPermissionService {
 
         // Step 1: Get ACLs from both source and destination
         const destinationAcl = await this.getFileACL(context.jobConfig.destinationFileServer, jobRunId);
+        this.logger.debug(`Destination ACL: ${JSON.stringify(destinationAcl)}`);
         if (!destinationAcl) {
             this.logger.warn(`No ACL found on destination path ${context.jobConfig.destinationFileServer.path}`);
         }
 
         const sourceAcl = await this.getFileACL(context.jobConfig.sourceFileServer, jobRunId);
+        this.logger.debug(`Source ACL: ${JSON.stringify(sourceAcl)}`);
         if (!sourceAcl) {
             this.logger.warn(`No ACL found on source path ${context.jobConfig.sourceFileServer.path}`);
         }
 
         // Step 2: Add source principals to destination
         if (sourceAcl?.permissions && sourceAcl.permissions.length > 0) {
-            this.logger.log(`Processing ${sourceAcl.permissions.length} principals from source`);
+            this.logger.debug(`Processing ${sourceAcl.permissions.length} principals from source`);
 
             for (const entry of sourceAcl.permissions) {
                 const principal = this.normalizePrincipal(entry.principal);
@@ -162,7 +166,7 @@ export class SetupExportsPathPermissionService {
                 }
             }
         } else {
-            this.logger.log('No principals found in source ACL to add');
+            this.logger.debug('No principals found in source ACL to add');
         }
 
         // Step 3: Remove principals from destination that are not in source
@@ -173,7 +177,7 @@ export class SetupExportsPathPermissionService {
         const usersToRemove = Array.from(usersToRemoveSet);
 
         if (usersToRemove.length > 0) {
-            this.logger.log(`Removing ${usersToRemove.length} principals from destination: ${usersToRemove.join(', ')}`);
+            this.logger.debug(`Removing ${usersToRemove.length} principals from destination: ${usersToRemove.join(', ')}`);
 
             for (const user of usersToRemove) {
                 try {
@@ -186,7 +190,7 @@ export class SetupExportsPathPermissionService {
             this.logger.debug('No principals to remove from destination');
         }
 
-        this.logger.log(`ACL setup completed for job ${jobRunId}`);
+        this.logger.debug(`ACL setup completed for job ${jobRunId}`);
     }
 
     private normalizePrincipal(principal: string): string {
@@ -220,7 +224,8 @@ export class SetupExportsPathPermissionService {
             let resolvedPrincipal = principal;
             if (jobRunId) {
                 this.logger.debug(`Resolving principal ${principal} for job ${jobRunId}`);
-                resolvedPrincipal = await this.redisService.getOwnerIdentity(jobRunId,  principal, 'SID') ;
+                const ownerIdentity = await this.redisService.getOwnerIdentity(jobRunId, principal, 'SID');
+                resolvedPrincipal = ownerIdentity ? ownerIdentity : principal;
             }
 
             const command = `icacls "${filePath}" /grant "${resolvedPrincipal}:${permission}"`;
@@ -232,7 +237,7 @@ export class SetupExportsPathPermissionService {
                 throw new Error(stderr);
             }
 
-            this.logger.log(`Successfully added principal ${resolvedPrincipal} with permission ${permission} to ${destinationPath.path}`);
+            this.logger.debug(`Successfully added principal ${resolvedPrincipal} with permission ${permission} to ${destinationPath.path}`);
             this.logger.debug(`Command output: ${stdout}`);
         } catch (error) {
             this.logger.error(`Failed to add principal ${principal} to ${destinationPath.path}: ${error.message}`, error.stack);
@@ -416,7 +421,7 @@ export class SetupExportsPathPermissionService {
                 this.logger.error(`Error removing principal ${principal} from ${destinationPath.path}: ${stderr}`);
                 throw new Error(stderr);
             }
-            this.logger.log(`Successfully removed principal ${principal} from ${destinationPath.path}`);
+            this.logger.debug(`Successfully removed principal ${principal} from ${destinationPath.path}`);
             this.logger.debug(`Command output: ${stdout}`);
         } catch (error) {
             this.logger.error(`Failed to remove principal ${principal} from ${destinationPath.path}: ${error.message}`, error.stack);
