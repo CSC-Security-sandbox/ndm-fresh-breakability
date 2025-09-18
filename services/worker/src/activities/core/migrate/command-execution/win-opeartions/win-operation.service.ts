@@ -28,7 +28,6 @@ export class WinOperationService {
         try {
             const script = `$srcFile = '${path.replace(/'/g, "''")}'\n${psGetAclScript}`;
             const output = await this.winShellService.executeCommand(script);
-            this.logger.log('acl-------------> ' + JSON.stringify(output));
             if(output.stderr) throw new Error(output.stderr);
             return JSON.parse(output.stdout) as SecurityDescriptor;
         } catch (error) {
@@ -54,7 +53,6 @@ export class WinOperationService {
     async stampAclOperation({command, jobContext, sourcePath, targetPath, errorType}: CommandExecInput): Promise<{ output: StampMetaOutput, errors: string[] }> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         let acl: SecurityDescriptor = await this.getAclOperation(sourcePath, true);
-        this.logger.log(`Source ACL---------->: ${JSON.stringify(acl)}`);
         if(jobContext.jobConfig?.options?.isIdentityMappingAvailable){
             this.logger.log('Mapping SID to target: ' + jobContext.jobConfig?.options?.isIdentityMappingAvailable);
             acl = await this.mapSIDToTarget(acl, jobContext.jobRunId);
@@ -79,13 +77,10 @@ export class WinOperationService {
                 }
             });
         }
-        this.logger.log(`Mapped ACL---------->: ${JSON.stringify(acl)}`);
         const result = await this.setAclOperation(targetPath, acl);
-        this.logger.log(`Set ACL Result: ${JSON.stringify(result)}`);
-        this.logger.log(`Set ACL Result--->: ${result}`);
+
         if(result?.stdout && result.stdout.includes('unresolved_sids')){
             const unresolved_sids= JSON.parse(result.stdout)?.unresolved_sids;
-            this.logger.log(`Unresolved SIDs: ${JSON.stringify(unresolved_sids)}`);
             if(unresolved_sids && unresolved_sids.length > 0){
                 unresolved_sids.forEach(sid => {
                     errors.push(`Unresolved SID ${sid} found while setting ACL on target`);
@@ -94,7 +89,6 @@ export class WinOperationService {
         }
 
         let targetAcl: SecurityDescriptor = await this.getAclOperation(targetPath, false);
-        this.logger.log(`Target ACL---------->: ${JSON.stringify(targetAcl)}`);
         
         const validation = await this.validateAclOperation(acl, targetAcl);
         if(validation.inValid.length > 0) 
@@ -109,7 +103,7 @@ export class WinOperationService {
         const cached = this.sidCache.get(cacheKey);
         if (cached) return cached;
         const queried = await this.redisService.getOwnerIdentity(jobRunId, sourceSid, 'SID');
-        this.logger.log(`Queried SID mapping from Redis: ${sourceSid} -> ${queried}`);
+        this.logger.debug(`Queried SID mapping from Redis: ${sourceSid} -> ${queried}`);
         if (queried) this.sidCache.put(cacheKey, queried);
         return queried;
     }
@@ -126,7 +120,7 @@ export class WinOperationService {
         acl.DaclAces = await Promise.all(acl.DaclAces.map(async (ace) => {
             ace.originalSid = ace.Sid;
             const targetSid = await this.getSIDMapping(ace.Sid, jobRunId);
-            this.logger.log(`Mapping SID ${ace.Sid} to ${targetSid}`);
+            this.logger.debug(`Mapping SID ${ace.Sid} to ${targetSid}`);
             if (targetSid) ace.Sid = targetSid;
             return ace;
         }));
@@ -191,7 +185,6 @@ export class WinOperationService {
         const command = `Resolve-UsernamesToSid -Username ${usernames.join(',')}`;
         const output = await this.winShellService.executeCommand(command);
         const sidMappings = JSON.parse(output.stdout);
-        this.logger.log(`Resolved SID mappings: ${JSON.stringify(sidMappings)}`);
         if(!Array.isArray(sidMappings) || sidMappings.length === 0) {
             usernameToSidMap.set(sidMappings?.username, sidMappings?.sid);
             return usernameToSidMap;

@@ -167,7 +167,7 @@ export class StampMetaService {
     async stampObjectACL({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         try {
-            this.logger.log(`Stamping ACL from ${sourcePath} to ${targetPath}`);
+            this.logger.debug(`Stamping ACL from ${sourcePath} to ${targetPath}`);
           const { output, errors } = await this.winOperationService.stampAclOperation({command, jobContext, sourcePath, targetPath, errorType});
           if(errors && errors.length > 0){
             const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, new Error(errors.join(",\n")), { name: command.fPath, path: targetPath });
