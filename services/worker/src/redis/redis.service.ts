@@ -113,6 +113,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return await this.client.hGet(`${jobRunId}:mapping`, `${type}:${id}`)
   }
 
+  async setOwnerIdentity(jobRunId: string, id: string, type: 'SID' | 'UID' | 'GID', owner: string) {
+    return await this.client.hSet(`${jobRunId}:mapping`, `${type}:${id}`, owner);
+  }
+
   async getMemoryInfo(): Promise<{ used_memory: number; total_system_memory: number }> {
     await this.ensureClient();
     const memoryInfo = await this.client.info('memory');
@@ -135,4 +139,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       total_system_memory: totalSystemMemory,
     };
   }
+
+
+  async getMappingKeys(jobRunId: string, type: 'SID' | 'UID' | 'GID'): Promise<string[]> {
+    await this.ensureClient();
+    const fields = await this.client.hKeys(`${jobRunId}:mapping`);
+    return fields.filter(f => f.startsWith(`${type}:`)).map(f => f.split(':')[1]);
+  }
+    
 }

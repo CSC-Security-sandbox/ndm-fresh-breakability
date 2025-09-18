@@ -10,7 +10,7 @@ import { Operation, Origin } from "src/activities/utils/utils.types";
 import { WorkerThreadService } from "src/thread/worker.thread.service";
 import { CommandExecInput, CommandExecOutput, CommandOutput, ValidateCommandInput } from "./command-execution.type";
 import { StampMetaService } from "./stamp-meta.service";
-import { isPathExists } from "../../utils/utils";
+import { isNotWritable, isPathExists } from "../../utils/utils";
 
 @Injectable()
 export class CommandExecService {
@@ -80,7 +80,7 @@ export class CommandExecService {
         if( command.ops[OPS_CMD.COPY_FILE].status !== OPS_STATUS.COMPLETED) {
             let [srcPathExists, targetPathExists] = await Promise.all([
                   isPathExists(sourcePath),
-                  isPathExists(targetPath),
+                  isNotWritable(targetPath),
             ])
             if(!srcPathExists) {
                 const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.COPY_CONTENT, errorType, command.id, 
@@ -89,11 +89,10 @@ export class CommandExecService {
                 output.sourceErrors.push('ENOENT');
                 return output
             }
-            if(targetPathExists)
-                await this.stampMetaService.removeFileAttributeTemporarily(targetPath);
             try {
-                const checksums = await this.workerThreadService.migrateWorkerThread({
-                    sourcePath, destinationPath: targetPath, operationId: command.id, size: command.metadata?.size ?? 0
+                if(targetPathExists)
+                    await this.stampMetaService.resetFileAttributes(targetPath);
+                const checksums = await this.workerThreadService.migrateWorkerThread({ sourcePath, destinationPath: targetPath, operationId: command.id, size: command.metadata?.size ?? 0
                 });
                 output.shouldUpdateItemInfo = true;
                 if(checksums?.targetChecksum !== checksums?.sourceChecksum) {
@@ -108,10 +107,6 @@ export class CommandExecService {
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
                 await jobContext.publishToErrorStream(dmErr);   
                 output.targetErrors.push(error.code);
-            }finally{
-                if(await isPathExists(targetPath)) {
-                    await this.stampMetaService.restoreFileAttribute(targetPath);
-                }
             }
         }
         return output;

@@ -5,6 +5,7 @@ import { ScanService } from 'src/activities/core/scan/scan-activity.service';
 import { JobRunStatus } from "src/activities/common/enums";
 import { updateJobStatusIfNotRunning } from '../common/workflow-utils';
 import { ChildScanWorkflowInput, ChildScanWorkflowOutput, ExecuteBatchScanInput, ExecuteBatchScansOutput } from './chid-scan.workflow.type';
+import { MappingResolverService } from 'src/activities/core/initializer/mapping-resolver.service';
 
 
 
@@ -48,6 +49,13 @@ const {
     heartbeatTimeout: '2m',
 });
 
+const {
+  resolveUsernamesToSids: resolveUsernamesToSidsActivity,
+} = wf.proxyActivities<MappingResolverService>({
+  startToCloseTimeout: '24h',
+  heartbeatTimeout: '10m',
+  retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
+});
 
 
 const actionSignal = wf.defineSignal<[JobRunStatus]>('scanActionSignal');
@@ -59,6 +67,10 @@ const ITERATIONS_LIMIT = 1000;
 export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatchIds = [], batchSize = 100, dirCount = 0, fileCount = 0, isMigration = false, actionState = JobRunStatus.Running, isInitialScan = true, workerConcurrency = 20}: ChildScanWorkflowInput): Promise<ChildScanWorkflowOutput> => {
 
   await updateJobStatusActivity({jobRunId, status :JobRunStatus.Running});
+
+  if(isMigration){
+    await resolveUsernamesToSidsActivity(jobRunId);
+  }
 
   if(isInitialScan)  {
     const id = await createInitialDirBatchActivity({dirsToScan, jobRunId});
