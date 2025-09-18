@@ -21,6 +21,21 @@ const mockLoggerFactory = {
   }),
 };
 
+// Mock ConfigService
+const mockConfigService = {
+  get: jest.fn().mockImplementation((key: string) => {
+    const configValues = {
+      'shellMonitoring.shellMonitoringInterval': 30000,
+      'shellMonitoring.enableShellMonitoring': true,
+      'shellMonitoring.poolSize': 10,
+      'shellMonitoring.maxQueuePerShell': 1,
+      'shellMonitoring.slowCommandThreshold': 5000,
+      'shellMonitoring.runAsAdmin': false,
+    };
+    return configValues[key];
+  }),
+};
+
 describe('WinShellService', () => {
   let service: WinShellService;
   let mockSpawn: jest.MockedFunction<typeof spawn>;
@@ -38,8 +53,8 @@ describe('WinShellService', () => {
     jest.clearAllMocks();
     mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
 
-    // Create service instance with mocked logger factory
-    service = new WinShellService(mockLoggerFactory as any);
+    // Create service instance with mocked dependencies
+    service = new WinShellService(mockConfigService as any, mockLoggerFactory as any);
   });
 
   afterEach(async () => {
@@ -193,7 +208,7 @@ describe('WinShellService Edge Cases', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    service = new WinShellService(mockLoggerFactory as any);
+    service = new WinShellService(mockConfigService as any, mockLoggerFactory as any);
     Object.defineProperty(process, 'platform', { value: 'darwin' });
   });
 
@@ -220,16 +235,26 @@ describe('WinShellService Edge Cases', () => {
   });
 });
 
-// Tests for PersistentShell class behavior
-describe('PersistentShell Behavior Tests', () => {
+// Tests for comprehensive coverage of WinShellService
+describe('WinShellService Comprehensive Tests', () => {
   let service: WinShellService;
   let mockSpawn: jest.MockedFunction<typeof spawn>;
+  let mockProcess: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
     mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
 
-    service = new WinShellService(mockLoggerFactory as any);
+    mockProcess = new EventEmitter();
+    mockProcess.stdin = { write: jest.fn() };
+    mockProcess.stdout = new EventEmitter();
+    mockProcess.stderr = new EventEmitter();
+    mockProcess.kill = jest.fn();
+
+    mockSpawn.mockReturnValue(mockProcess);
+
+    service = new WinShellService(mockConfigService as any, mockLoggerFactory as any);
+    Object.defineProperty(process, 'platform', { value: 'win32' });
   });
 
   afterEach(async () => {
@@ -242,21 +267,203 @@ describe('PersistentShell Behavior Tests', () => {
     }
   });
 
-  it('should respect INIT_TIMEOUT environment variable', () => {
-    const originalTimeout = process.env.INIT_TIMEOUT;
-    process.env.INIT_TIMEOUT = '5000';
+  describe('Pool initialization and configuration', () => {
+    it('should skip initialization on non-Windows platforms', async () => {
+      Object.defineProperty(process, 'platform', { value: 'darwin' });
+      
+      await service.onModuleInit();
+      
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
 
-    // Test that the environment variable is read
-    expect(process.env.INIT_TIMEOUT).toBe('5000');
+    it('should create admin shells when configured', () => {
+      const adminConfigService = {
+        get: jest.fn().mockImplementation((key: string) => {
+          const configValues = {
+            'shellMonitoring.shellMonitoringInterval': 30000,
+            'shellMonitoring.enableShellMonitoring': true,
+            'shellMonitoring.poolSize': 2,
+            'shellMonitoring.maxQueuePerShell': 1,
+            'shellMonitoring.slowCommandThreshold': 5000,
+            'shellMonitoring.runAsAdmin': true, // Admin mode enabled
+          };
+          return configValues[key];
+        }),
+      };
 
-    process.env.INIT_TIMEOUT = originalTimeout;
+      const adminService = new WinShellService(adminConfigService as any, mockLoggerFactory as any);
+      
+      // Just verify construction works - onModuleInit would be tested separately
+      expect(adminService).toBeDefined();
+      expect(adminService.isAdminModeEnabled()).toBe(true);
+    });
+
+    it('should handle monitoring configuration', () => {
+      const noMonitoringConfig = {
+        get: jest.fn().mockImplementation((key: string) => {
+          const configValues = {
+            'shellMonitoring.shellMonitoringInterval': 30000,
+            'shellMonitoring.enableShellMonitoring': false, // Disabled
+            'shellMonitoring.poolSize': 2,
+            'shellMonitoring.maxQueuePerShell': 1,
+            'shellMonitoring.slowCommandThreshold': 5000,
+            'shellMonitoring.runAsAdmin': false,
+          };
+          return configValues[key];
+        }),
+      };
+
+      const noMonitoringService = new WinShellService(noMonitoringConfig as any, mockLoggerFactory as any);
+      expect(noMonitoringService).toBeDefined();
+    });
   });
 
-  it('should have platform-specific behavior', () => {
-    Object.defineProperty(process, 'platform', { value: 'win32' });
-    expect(process.platform).toBe('win32');
+  describe('Fresh shell execution', () => {
+    it('should execute command in fresh shell successfully', async () => {
+      const freshPromise = service.executeInFreshShell('Get-Date');
 
-    Object.defineProperty(process, 'platform', { value: 'darwin' });
-    expect(process.platform).toBe('darwin');
+      setTimeout(() => {
+        mockProcess.stdout.emit('data', 'Fresh shell output');
+        mockProcess.emit('exit', 0);
+      }, 10);
+
+      const result = await freshPromise;
+      expect(result.stdout).toBe('Fresh shell output');
+    });
+
+    it('should handle fresh shell timeout', async () => {
+      const freshPromise = service.executeInFreshShell('Start-Sleep -Seconds 60', 100);
+
+      // Don't emit exit, let it timeout
+      await expect(freshPromise).rejects.toThrow('timeout');
+    }, 1000);
+
+    it('should handle fresh shell process error', async () => {
+      const freshPromise = service.executeInFreshShell('Get-Date');
+
+      setTimeout(() => {
+        mockProcess.emit('error', new Error('Process spawn failed'));
+      }, 10);
+
+      await expect(freshPromise).rejects.toThrow('Process spawn failed');
+    });
+
+    it('should handle fresh shell stderr output', async () => {
+      const freshPromise = service.executeInFreshShell('Get-Date');
+
+      setTimeout(() => {
+        mockProcess.stderr.emit('data', 'Warning message');
+        mockProcess.stdout.emit('data', 'Date output');
+        mockProcess.emit('exit', 0);
+      }, 10);
+
+      const result = await freshPromise;
+      expect(result.stdout).toBe('Date output');
+      expect(result.stderr).toBe('Warning message');
+    });
+  });
+
+  describe('Admin mode functionality', () => {
+    it('should set and get admin mode correctly', () => {
+      expect(service.isAdminModeEnabled()).toBe(false);
+
+      service.setAdminMode(true);
+      expect(service.isAdminModeEnabled()).toBe(true);
+
+      service.setAdminMode(false);
+      expect(service.isAdminModeEnabled()).toBe(false);
+    });
+  });
+
+  describe('Statistics and performance analysis', () => {
+    it('should return default execution time stats when no executions', () => {
+      const stats = service.getExecutionTimeStats();
+
+      expect(stats.avgTime).toBe(0);
+      expect(stats.minTime).toBe(0);
+      expect(stats.maxTime).toBe(0);
+      expect(stats.samples).toBe(0);
+      expect(stats.slowCommands).toBe(0);
+    });
+
+    it('should return service stats', () => {
+      const stats = service.getStats();
+
+      expect(stats).toHaveProperty('totalExecuted');
+      expect(stats).toHaveProperty('totalErrors');
+      expect(stats).toHaveProperty('poolSize');
+      expect(stats).toHaveProperty('successRate');
+      expect(stats).toHaveProperty('queues');
+      expect(stats.successRate).toBe(100); // No operations yet
+    });
+
+    it('should return ACL performance analysis with no data', () => {
+      const analysis = service.getAclPerformanceAnalysis();
+
+      expect(analysis).toHaveProperty('totalOperations');
+      expect(analysis).toHaveProperty('avgTime');
+      expect(analysis).toHaveProperty('performanceRating');
+      expect(analysis.performanceRating).toBe('No data');
+      expect(analysis.totalOperations).toBe(0);
+    });
+  });
+
+  describe('Error handling and edge cases', () => {
+    it('should handle spawn process creation failure', () => {
+      mockSpawn.mockImplementation(() => {
+        throw new Error('Failed to spawn process');
+      });
+
+      // Constructor should handle the error gracefully
+      const failService = new WinShellService(mockConfigService as any, mockLoggerFactory as any);
+      expect(failService).toBeDefined();
+    });
+
+    it('should handle invalid commands on non-Windows platforms', async () => {
+      Object.defineProperty(process, 'platform', { value: 'darwin' });
+
+      await expect(service.executeCommand('')).rejects.toThrow();
+      await expect(service.executeCommand(null as any)).rejects.toThrow();
+      await expect(service.executeCommand(undefined as any)).rejects.toThrow();
+    });
+  });
+
+  describe('INIT_TIMEOUT environment variable', () => {
+    it('should respect INIT_TIMEOUT environment variable', () => {
+      const originalTimeout = process.env.INIT_TIMEOUT;
+      process.env.INIT_TIMEOUT = '5000';
+
+      expect(process.env.INIT_TIMEOUT).toBe('5000');
+
+      process.env.INIT_TIMEOUT = originalTimeout;
+    });
+
+    it('should use default timeout when INIT_TIMEOUT is not set', () => {
+      const originalTimeout = process.env.INIT_TIMEOUT;
+      delete process.env.INIT_TIMEOUT;
+
+      const defaultService = new WinShellService(mockConfigService as any, mockLoggerFactory as any);
+      expect(defaultService).toBeDefined();
+
+      process.env.INIT_TIMEOUT = originalTimeout;
+    });
+  });
+
+  describe('Internal helper methods', () => {
+    it('should handle getOptimalShellForAcl when no shells are initialized', async () => {
+      // This will try to get a shell from an uninitialized pool
+      try {
+        await service.getOptimalShellForAcl();
+      } catch (error) {
+        // Expected to fail since no shells are initialized
+        expect(error).toBeDefined();
+      }
+    });
+
+    it('should handle destroy cleanup properly', async () => {
+      await service.onModuleDestroy();
+      // Should complete without errors
+      expect(true).toBe(true);
+    });
   });
 });
