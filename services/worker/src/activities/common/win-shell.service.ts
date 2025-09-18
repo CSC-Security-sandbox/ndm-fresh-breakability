@@ -1,8 +1,8 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import { psBaseAclDefinition } from '../core/migrate/command-execution/win-opeartions/powershell.script';
-
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 interface ShellResult {
     stdout: string;
@@ -48,7 +48,6 @@ class PersistentShell extends EventEmitter {
         }
         try {
             if (this.runAsAdmin) {
-                console.log("Running admin")
                 // For admin mode, we need to use a different approach
                 // Note: This will require the parent process to already be running as admin
                 // or will prompt for UAC elevation
@@ -118,7 +117,7 @@ class PersistentShell extends EventEmitter {
         if (this.initMarker && this.outputBuffer.includes(this.initMarker)) {
             clearTimeout(this.initTimeout);
             this.isReady = true;
-            console.log(`✅ [PersistentShell:${this.id}] Ready`);
+            console.log(`[PersistentShell:${this.id}] Ready`);
             this.onReady(true);
             // Clean outputBuffer up to marker
             const markerIdx = this.outputBuffer.indexOf(this.initMarker) + this.initMarker.length;
@@ -144,7 +143,7 @@ class PersistentShell extends EventEmitter {
         let stdout = cleaned.trim();
 
         if (hasError) {
-            console.log(`⚠️ [PersistentShell:${this.id}] Command had errors: ${this.currentCommand.command.substring(0, 50)}...`);
+            console.error(`[PersistentShell:${this.id}] Command had errors: ${this.currentCommand.command.substring(0, 50)}...`);
             exitCode = 1;
             
             // Extract error message
@@ -180,10 +179,10 @@ class PersistentShell extends EventEmitter {
         const totalTime = completionTime - cmd.queuedTime;
 
         if (hasError) {
-            console.log(`❌ [PersistentShell:${this.id}] Command failed in ${executionTime}ms (waited: ${waitTime}ms, total: ${totalTime}ms): ${cmd.command.substring(0, 50)}...`);
-            console.log(`🔍 [PersistentShell:${this.id}] Error details: ${stderr}`);
+            console.debug(`[PersistentShell:${this.id}] Command failed in ${executionTime}ms (waited: ${waitTime}ms, total: ${totalTime}ms): ${cmd.command.substring(0, 50)}...`);
+            console.error(`[PersistentShell:${this.id}] Error details: ${stderr}`);
         } else {
-            console.log(`✅ [PersistentShell:${this.id}] Command completed in ${executionTime}ms (waited: ${waitTime}ms, total: ${totalTime}ms): ${cmd.command.substring(0, 50)}...`);
+            console.debug(`[PersistentShell:${this.id}] Command completed in ${executionTime}ms (waited: ${waitTime}ms, total: ${totalTime}ms): ${cmd.command.substring(0, 50)}...`);
         }
 
         cmd.resolve(result);
@@ -200,24 +199,18 @@ class PersistentShell extends EventEmitter {
         const waitTime = cmd.startTime - cmd.queuedTime;
         const isAclOperation = cmd.command.includes('Set-FileSecurityFast') || cmd.command.includes('$aclJson');
         
-        console.log(`⏳ [PersistentShell:${this.id}] Starting ${isAclOperation ? 'ACL operation' : 'command'} after ${waitTime}ms wait: ${cmd.command.substring(0, 50)}...`);
+        console.debug(`[PersistentShell:${this.id}] Starting ${isAclOperation ? 'ACL operation' : 'command'} after ${waitTime}ms wait: ${cmd.command.substring(0, 50)}...`);
         
-        console.log("===================")
-        console.log(`${JSON.stringify(cmd)}`)
-        const current = new Date()
-        console.log("current:", current)
+        const current = new Date();
         cmd.timeoutId = setTimeout(() => {
             if (this.currentCommand === cmd) {
                 const executionTime = Date.now() - (cmd.startTime || cmd.queuedTime);
-                console.log(`⏰ [PersistentShell:${this.id}] ${isAclOperation ? 'ACL operation' : 'Command'} TIMEOUT after ${executionTime}ms: ${cmd.command.substring(0, 50)}...`);
+                console.debug(`[PersistentShell:${this.id}] ${isAclOperation ? 'ACL operation' : 'Command'} TIMEOUT after ${executionTime}ms: ${cmd.command.substring(0, 50)}...`);
                 this.currentCommand = null;
-                console.log("error time", new Date())
                 cmd.reject(new Error(`Command timeout: ${cmd.command}`));
                 this.processQueue();
             }
         }, cmd.timeout);
-
-        console.log("end or after  timeout ", new Date())
         
         // Clear any potential state contamination and reset PowerShell variables
         const stateResetCmd = `
@@ -260,10 +253,7 @@ Write-Host '${cmd.endMarker}'
         const isAclOperation = command.includes('Set-FileSecurityFast') || command.includes('$aclJson') || command.includes('Get-Acl') || command.includes('Set-Acl');
         const adjustedTimeout = isAclOperation ? Math.max(timeout, 60000) : timeout; // Minimum 60s for ACL operations
         
-        console.log(`➡️ [PersistentShell:${this.id}] Executing command${isAclOperation ? ' (ACL Operation)' : ''}: ${command}`);
-        if (isAclOperation) {
-            console.log(`🔐 [PersistentShell:${this.id}] ACL operation detected, using extended timeout: ${adjustedTimeout}ms`);
-        }
+        console.debug(`[PersistentShell:${this.id}] Executing command${isAclOperation ? ' (ACL Operation)' : ''}: ${command}, extended timeout: ${adjustedTimeout}ms`);
         
         return new Promise((resolve, reject) => {
             const markerId = `${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
@@ -297,12 +287,12 @@ Write-Host '${cmd.endMarker}'
                 return true;
             } else {
                 this.healthCheckFailures++;
-                console.log(`⚠️ [PersistentShell:${this.id}] Health check failed (${this.healthCheckFailures}/3)`);
+                console.error(`[PersistentShell:${this.id}] Health check failed (${this.healthCheckFailures}/3)`);
                 return false;
             }
         } catch (error) {
             this.healthCheckFailures++;
-            console.log(`⚠️ [PersistentShell:${this.id}] Health check exception (${this.healthCheckFailures}/3): ${error}`);
+            console.error(`[PersistentShell:${this.id}] Health check exception (${this.healthCheckFailures}/3): ${error}`);
             return false;
         }
     }
@@ -337,6 +327,13 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
     private executionTimes: number[] = [];
     private slowCommandThreshold = 5000; // 5 seconds
     private runAsAdmin = false; // Set to true if you need admin privileges
+    private readonly logger: LoggerService;
+
+    constructor(
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory
+      ) {
+        this.logger = loggerFactory.create(WinShellService.name);
+      }
 
     async onModuleInit() {
         if(process.platform === 'win32') {
@@ -359,14 +356,14 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
         await new Promise<void>((resolve, reject) => {
             const tryCreate = () => {
                 if (attempts++ > maxRetries) {
-                    console.error(`Failed to create shell at ${id} after ${maxRetries} attempts`);
+                    this.logger.error(`Failed to create shell at ${id} after ${maxRetries} attempts`);
                     reject(new Error(`Shell creation failed for ${id}`));
                     return;
                 }
                 const shell = new PersistentShell(id, (success) => {
                     if (success) {
-                        console.log(`✅ Created shell at ${id}${this.runAsAdmin ? ' (Admin Mode)' : ''}`);
-                        shell.on('exit', () => { console.log(`❌ [PersistentShell:${id}] Exited`); this.replaceShell(index, id); });
+                        this.logger.debug(`Created shell at ${id}${this.runAsAdmin ? ' (Admin Mode)' : ''}`);
+                        shell.on('exit', () => { this.logger.debug(`[PersistentShell:${id}] Exited`); this.replaceShell(index, id); });
                         this.shells[index] = shell;
                         resolve();
                     } else {
@@ -416,14 +413,10 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
         }
 
         try {
-            if (isAclOperation) {
-                console.log(`🚀 [WinShellService] Starting ACL operation (timeout: ${adjustedTimeout}ms): ${command.substring(0, 100)}...`);
-            } else {
-                console.log(`🚀 [WinShellService] Starting command execution: ${command.substring(0, 100)}...`);
-            }
-            
+            if (isAclOperation)
+                this.logger.debug(`[WinShellService] Starting ACL operation (timeout: ${adjustedTimeout}ms): ${command.substring(0, 100)}...`);
+
             const res = await target.execute(command, adjustedTimeout);
-            console.log("result------->", res); 
             const executionTime = Date.now() - startTime;
             
             // Track execution time
@@ -436,12 +429,12 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
             // Check for errors in the result
             if (res.exitCode !== 0 || res.stderr) {
                 this.totalErrors++;
-                console.log(`❌ [WinShellService] ${isAclOperation ? 'ACL operation' : 'Command'} failed after ${executionTime}ms: ${command.substring(0, 50)}...`);
-                console.log(`🔍 [WinShellService] Error: ${res.stderr || 'Exit code: ' + res.exitCode}`);
-                
+                this.logger.error(`[WinShellService] ${isAclOperation ? 'ACL operation' : 'Command'} failed after ${executionTime}ms: ${command.substring(0, 50)}...`);
+                this.logger.error(`[WinShellService] Error: ${res.stderr || 'Exit code: ' + res.exitCode}`);
+
                 // If it's a shell-related error, mark shell for health check
                 if (res.stderr.includes('pipeline') || res.stderr.includes('session') || res.stderr.includes('terminated')) {
-                    console.log(`🏥 [WinShellService] Scheduling health check for shell due to error`);
+                    this.logger.debug(`[WinShellService] Scheduling health check for shell due to error`);
                     this.scheduleHealthCheck(target);
                 }
                 
@@ -452,16 +445,16 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
                 // Log slow commands with different thresholds for ACL operations
                 const slowThreshold = isAclOperation ? 30000 : this.slowCommandThreshold; // 30s for ACL operations
                 if (executionTime > slowThreshold) {
-                    console.log(`🐌 [WinShellService] SLOW ${isAclOperation ? 'ACL' : 'COMMAND'} detected (${executionTime}ms): ${command.substring(0, 100)}...`);
+                    this.logger.debug(`[WinShellService] SLOW ${isAclOperation ? 'ACL' : 'COMMAND'} detected (${executionTime}ms): ${command.substring(0, 100)}...`);
                 } else {
-                    console.log(`⚡ [WinShellService] ${isAclOperation ? 'ACL operation' : 'Command'} completed in ${executionTime}ms: ${command.substring(0, 50)}...`);
+                    this.logger.debug(`[WinShellService] ${isAclOperation ? 'ACL operation' : 'Command'} completed in ${executionTime}ms: ${command.substring(0, 50)}...`);
                 }
             }
             
             return { stdout: res.stdout, stderr: res.stderr };
         } catch (err) {
             const executionTime = Date.now() - startTime;
-            console.log(`❌ [WinShellService] ${isAclOperation ? 'ACL operation' : 'Command'} failed after ${executionTime}ms: ${command.substring(0, 50)}...`);
+            this.logger.error(`[WinShellService] ${isAclOperation ? 'ACL operation' : 'Command'} failed after ${executionTime}ms: ${command.substring(0, 50)}...`);
             this.totalErrors++;
             throw err;
         }
@@ -476,7 +469,7 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
         if (now - target.lastHealthCheck > 300000) { // 5 minutes
             const isHealthy = await target.performHealthCheck();
             if (!isHealthy && target.needsRecreation()) {
-                console.log(`🏥 [WinShellService] Recreating unhealthy shell: ${target.id}`);
+                this.logger.debug(`[WinShellService] Recreating unhealthy shell: ${target.id}`);
                 const shellIndex = this.shells.findIndex(s => s === target);
                 if (shellIndex !== -1) {
                     target.destroy();
@@ -497,7 +490,7 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
                 if (shell.needsRecreation()) {
                     const shellIndex = this.shells.findIndex(s => s === shell);
                     if (shellIndex !== -1) {
-                        console.log(`🏥 [WinShellService] Recreating shell due to health check failure`);
+                        this.logger.debug(`[WinShellService] Recreating shell due to health check failure`);
                         shell.destroy();
                         await this.addShellAtIndex(shellIndex, `shell-${shellIndex}-scheduled-${Date.now()}`);
                     }
@@ -523,7 +516,7 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
         
         // If all shells are busy, wait for one to become available
         if (!optimalShell.isAvailable()) {
-            console.log(`⏳ [WinShellService] All shells busy, waiting for ACL operation...`);
+            this.logger.debug(`[WinShellService] All shells busy, waiting for ACL operation...`);
             return new Promise((resolve) => {
                 const checkInterval = setInterval(() => {
                     for (const shell of this.shells) {
@@ -547,7 +540,7 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
             const totalShells = this.shells.length;
             const busyShells = totalShells - readyShells;
             
-            console.log(`🔍 [Shell Monitor] Ready for execution: ${readyShells}/${totalShells} shells | Busy: ${busyShells} shells`);
+            this.logger.debug(`[Shell Monitor] Ready for execution: ${readyShells}/${totalShells} shells | Busy: ${busyShells} shells`);
             
             // Additional detailed stats
             const stats = this.getStats();
@@ -570,9 +563,9 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
                 slowAclOperations = this.executionTimes.filter(time => time > 30000).length; // > 30s very slow ACL ops
             }
             
-            console.log(`📊 [Shell Stats] Total executed: ${this.totalExecuted} | Errors: ${this.totalErrors} | Queued commands: ${queuedCommands}`);
-            console.log(`⏱️ [Timing Stats] Avg: ${avgTime}ms | Min: ${minTime}ms | Max: ${maxTime}ms | Samples: ${this.executionTimes.length}`);
-            console.log(`🔐 [ACL Stats] Estimated ACL ops: ${aclOperations} | Slow ACL ops (>30s): ${slowAclOperations}`);
+            this.logger.debug(`[Shell Stats] Total executed: ${this.totalExecuted} | Errors: ${this.totalErrors} | Queued commands: ${queuedCommands}`);
+            this.logger.debug(`[Timing Stats] Avg: ${avgTime}ms | Min: ${minTime}ms | Max: ${maxTime}ms | Samples: ${this.executionTimes.length}`);
+            this.logger.debug(`[ACL Stats] Estimated ACL ops: ${aclOperations} | Slow ACL ops (>30s): ${slowAclOperations}`);
         }, 3000); // Every 3 seconds
     }
 
@@ -668,7 +661,7 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
 
     // Method to execute command in a fresh shell (for comparison/debugging)
     async executeInFreshShell(command: string, timeout = 20000): Promise<{ stdout: string; stderr: string }> {
-        console.log(`🆕 [WinShellService] Executing in fresh shell: ${command.substring(0, 100)}...`);
+        this.logger.debug(`[WinShellService] Executing in fresh shell: ${command.substring(0, 100)}...`);
         
         return new Promise((resolve, reject) => {
             const startTime = Date.now();
@@ -698,19 +691,19 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
 
             process.on('exit', (code) => {
                 const executionTime = Date.now() - startTime;
-                console.log(`🆕 [WinShellService] Fresh shell completed in ${executionTime}ms with exit code: ${code}`);
+                this.logger.debug(`[WinShellService] Fresh shell completed in ${executionTime}ms with exit code: ${code}`);
                 resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
             });
 
             process.on('error', (error) => {
                 const executionTime = Date.now() - startTime;
-                console.log(`❌ [WinShellService] Fresh shell error after ${executionTime}ms: ${error.message}`);
+                this.logger.error(`[WinShellService] Fresh shell error after ${executionTime}ms: ${error.message}`);
                 reject(error);
             });
 
             // Set timeout
             const timeoutId = setTimeout(() => {
-                console.log(`⏰ [WinShellService] Fresh shell timeout after ${timeout}ms`);
+                this.logger.error(`[WinShellService] Fresh shell timeout after ${timeout}ms`);
                 process.kill();
                 reject(new Error(`Fresh shell timeout: ${command}`));
             }, timeout);
@@ -723,7 +716,7 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
 
     setAdminMode(enabled: boolean) {
         this.runAsAdmin = enabled;
-        console.log(`🔐 [WinShellService] Admin mode ${enabled ? 'ENABLED' : 'DISABLED'}`);
+        this.logger.log(`[WinShellService] Admin mode ${enabled ? 'ENABLED' : 'DISABLED'}`);
     }
 
     isAdminModeEnabled(): boolean {
