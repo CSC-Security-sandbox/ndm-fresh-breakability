@@ -2,6 +2,7 @@ import { ConfigModule } from '@nestjs/config';
 import appConfig, { WorkersConfig } from './config/app.config';
 import commandConfig, { CommandConfig } from './config/command.config';
 import temporalConfig from './config/temporal.config';
+import shellMonitoringConfig from './config/shell-monitoring.config';
 import { ActivitiesModule } from './activities/activities.module';
 import { HealthcheckModule } from './healthcheck/healthcheck.module';
 import { AuthModule } from './auth/auth.module';
@@ -25,7 +26,7 @@ import { WorkManagerModule } from './work-manager/work-manager.module';
 @Module({
   imports: [
     LoggerModule.forRoot(),
-    ConfigModule.forRoot({ load: [appConfig, commandConfig, temporalConfig] }),
+    ConfigModule.forRoot({ load: [appConfig, commandConfig, temporalConfig, shellMonitoringConfig] }),
     ActivitiesModule,
     HealthcheckModule,
     ScheduleModule.forRoot(),
