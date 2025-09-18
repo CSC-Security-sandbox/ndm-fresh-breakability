@@ -20,6 +20,7 @@ import { mockLogger } from 'src/auth/auth.service.spec';
 import { ValidatePathActivity } from 'src/activities/validate-path/validate-path.service';
 import { SyncService } from 'src/activities/core/migrate/sync-activity.service';
 import { MappingResolverService } from 'src/activities/core/initializer/mapping-resolver.service';
+import { SetupExportsPathPermissionService } from 'src/activities/core/initializer/setup-exports-path-permission.service';
 
 const bindMock = jest.fn().mockReturnValue({
   bind: jest.fn(),
@@ -140,6 +141,10 @@ describe('WorkerOptionsService', () => {
         {
           provide: MappingResolverService,
           useValue: { resolveUsernamesToSids: bindMock },
+        },
+        {
+          provide: SetupExportsPathPermissionService,
+          useValue: { setupExportPathPermission: jest.fn() },
         },
       ],
     }).compile();

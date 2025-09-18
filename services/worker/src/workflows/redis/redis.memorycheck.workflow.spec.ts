@@ -22,7 +22,7 @@ describe('RedisMemoryCheckWorkflow', () => {
         } catch (error) {
             console.error('Error creating TestWorkflowEnvironment:', error);
         }
-    });
+    }, 15000); // 15 second timeout
 
     afterAll(async () => {
         if (testEnv) {
