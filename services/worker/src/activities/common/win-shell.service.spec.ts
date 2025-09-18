@@ -1,4 +1,3 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { WinShellService } from './win-shell.service';
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
@@ -10,6 +9,17 @@ jest.mock(
     psBaseAclDefinition: 'mock-powershell-script',
   }),
 );
+
+// Mock logger factory
+const mockLoggerFactory = {
+  create: jest.fn().mockReturnValue({
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    log: jest.fn(),
+  }),
+};
 
 describe('WinShellService', () => {
   let service: WinShellService;
@@ -24,20 +34,21 @@ describe('WinShellService', () => {
     Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 
-  beforeEach(async () => {
+  beforeEach(() => {
     jest.clearAllMocks();
     mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
 
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [WinShellService],
-    }).compile();
-
-    service = module.get<WinShellService>(WinShellService);
+    // Create service instance with mocked logger factory
+    service = new WinShellService(mockLoggerFactory as any);
   });
 
   afterEach(async () => {
     if (service) {
-      await service.onModuleDestroy();
+      try {
+        await service.onModuleDestroy();
+      } catch (error) {
+        // Ignore cleanup errors in tests
+      }
     }
   });
 
@@ -179,20 +190,20 @@ describe('WinShellService', () => {
 describe('WinShellService Edge Cases', () => {
   let service: WinShellService;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     jest.clearAllMocks();
 
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [WinShellService],
-    }).compile();
-
-    service = module.get<WinShellService>(WinShellService);
+    service = new WinShellService(mockLoggerFactory as any);
     Object.defineProperty(process, 'platform', { value: 'darwin' });
   });
 
   afterEach(async () => {
     if (service) {
-      await service.onModuleDestroy();
+      try {
+        await service.onModuleDestroy();
+      } catch (error) {
+        // Ignore cleanup errors in tests
+      }
     }
   });
 
@@ -214,20 +225,20 @@ describe('PersistentShell Behavior Tests', () => {
   let service: WinShellService;
   let mockSpawn: jest.MockedFunction<typeof spawn>;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     jest.clearAllMocks();
     mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
 
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [WinShellService],
-    }).compile();
-
-    service = module.get<WinShellService>(WinShellService);
+    service = new WinShellService(mockLoggerFactory as any);
   });
 
   afterEach(async () => {
     if (service) {
-      await service.onModuleDestroy();
+      try {
+        await service.onModuleDestroy();
+      } catch (error) {
+        // Ignore cleanup errors in tests
+      }
     }
   });
 
