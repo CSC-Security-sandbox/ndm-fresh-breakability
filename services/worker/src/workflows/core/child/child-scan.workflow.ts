@@ -71,6 +71,7 @@ const actionSignal = wf.defineSignal<[JobRunStatus]>('scanActionSignal');
 
 const MAX_CONCURRENT_BATCHES = 20;
 const ITERATIONS_LIMIT = 1000;
+const CMD_LENGTH_VALIDATION_ITERATIONS = 10;
 
 export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatchIds = [], batchSize = 100, dirCount = 0, fileCount = 0, isMigration = false, actionState = JobRunStatus.Running, isInitialScan = true, workerConcurrency = 20}: ChildScanWorkflowInput): Promise<ChildScanWorkflowOutput> => {
 
@@ -117,7 +118,7 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
     await updateJobStatusIfNotRunning(actionState, jobRunId);
     await wf.condition(() => actionState !== JobRunStatus.Paused);
 
-    iterations+= dirBatchIds.length
+    iterations+= dirBatchIds.length + CMD_LENGTH_VALIDATION_ITERATIONS;
 
     const batchExecResults: ExecuteBatchScansOutput = await executeBatchScan({ batches: dirBatchIds, batchSize, isMigration, jobRunId});
     scanWorkflowOutput.fileCount += batchExecResults.fileCount;

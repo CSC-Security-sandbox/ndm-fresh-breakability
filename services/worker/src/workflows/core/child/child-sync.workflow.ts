@@ -16,6 +16,7 @@ interface SyncWorkflowInput {
 }
 
 const ITERATION_LIMIT = 1000;
+const TASK_PROCESSING_ITERATIONS = 1; 
 
 const {
     syncTaskActivity: SyncTaskActivity,
@@ -72,7 +73,7 @@ export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunSt
         }
 
         const taskIds: string[] = await getGroupOfTasksActivity(jobRunId);
-        iterations+= taskIds.length;
+        iterations+= taskIds.length + TASK_PROCESSING_ITERATIONS;
         if(taskIds.length === 0 && isScanFinished(scanWorkflowStatus)) {
             console.log(`No more tasks to process in SyncWorkflow ${jobRunId}.`);
             continueSync = false;

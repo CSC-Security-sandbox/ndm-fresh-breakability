@@ -57,7 +57,7 @@ export class ScanService {
                 jobRunId,
                 batchId
             });
-            if (task && task.commands.length > 0) {
+            if (task && task?.commands.length > 0) {
                 task.status = TaskStatus.RUNNING;
                 task.workerId = this.workerId;
                 await jobContext.publishToTaskStream(task);
