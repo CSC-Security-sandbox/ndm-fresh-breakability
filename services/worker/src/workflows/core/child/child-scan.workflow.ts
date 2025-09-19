@@ -117,7 +117,7 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
     await updateJobStatusIfNotRunning(actionState, jobRunId);
     await wf.condition(() => actionState !== JobRunStatus.Paused);
 
-    iterations+= dirBatchIds.length
+    iterations+= dirBatchIds.length +10; // adding 10 to account for isCmdLengthValidActivity 
 
     const batchExecResults: ExecuteBatchScansOutput = await executeBatchScan({ batches: dirBatchIds, batchSize, isMigration, jobRunId});
     scanWorkflowOutput.fileCount += batchExecResults.fileCount;
