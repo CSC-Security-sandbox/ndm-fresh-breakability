@@ -180,9 +180,13 @@ var _ = Describe("TC-012:Run bulk cutover with concurrent migration jobs and bat
 
 			err = WaitForJobState(firstCutoverjobRunID, BLOCKED_JOBRUN)
 			Expect(err).NotTo(HaveOccurred(), "Cutover job did not reach to blocked state")
+
 			for _, jubrunid := range migrationJobRunIds {
+				err = WaitForJobState(jubrunid, "PAUSED", 30)
+                Expect(err).NotTo(HaveOccurred(), "Job did not reach PAUSED state")
+                Wait(5) // wait for 5 seconds before resuming
 				err = HandleJobRunStateChange(jubrunid, "RESUME", []string{jubrunid})
-				Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
+				Expect(err).NotTo(HaveOccurred(), "Error while resuming job run ID")
 			}
 
 			// result, err := ValidateReport(firstCutoverjobRunID, JobTypeCutover, fmt.Sprintf("../../validators/%s/cutover_validation.json", PROTOCOL_TYPE))
