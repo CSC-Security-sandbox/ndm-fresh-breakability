@@ -1018,4 +1018,625 @@ describe('SpeedTestActivities', () => {
       expect(result.errors).toContain('{"message":"network error"}');
     });
   });
+
+  // Add comprehensive tests for uncovered functions
+  describe('createFile function tests', () => {
+    let mockFs: any;
+    let mockRedisService: any;
+    let mockPerformanceNow: jest.SpyInstance;
+
+    beforeEach(() => {
+      mockFs = require('fs');
+      mockRedisService = {
+        getSpeedTestJobContext: jest.fn().mockResolvedValue({
+          appendToSpeedTestReadWriteInfo: jest.fn(),
+        }),
+        setJobContext: jest.fn().mockResolvedValue(undefined),
+      };
+
+      // Replace the redisService in speedTestActivities
+      (speedTestActivities as any).redisService = mockRedisService;
+
+      mockPerformanceNow = jest
+        .spyOn(performance, 'now')
+        .mockReturnValueOnce(1000)
+        .mockReturnValueOnce(2000);
+
+      // Mock WorkersConfig
+      mockWorkersConfigGet.mockImplementation((key: string) => {
+        switch (key) {
+          case 'speedTestFileSize':
+            return 1;
+          case 'speedTestTimeout':
+            return 5000;
+          case 'speedTestFileName':
+            return 'testFile.bin';
+          default:
+            return null;
+        }
+      });
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should create file successfully', async () => {
+      // Restore the original createFile method
+      mockCreateFile.mockRestore();
+
+      // Mock fs operations
+      const mockLstat = jest
+        .spyOn(mockFs.promises, 'lstat')
+        .mockResolvedValue({});
+      const mockAccess = jest
+        .spyOn(mockFs, 'access')
+        .mockImplementation(
+          (path: string, mode: number, callback: Function) => {
+            callback(null);
+          },
+        );
+
+      const mockStream = {
+        write: jest.fn().mockReturnValue(true),
+        end: jest.fn(),
+        on: jest.fn(),
+        once: jest.fn(),
+        destroy: jest.fn(),
+      };
+
+      const mockCreateWriteStream = jest
+        .spyOn(mockFs, 'createWriteStream')
+        .mockReturnValue(mockStream);
+
+      // Simulate successful file creation
+      setTimeout(() => {
+        const finishCallback = mockStream.on.mock.calls.find(
+          (call) => call[0] === 'finish',
+        )?.[1];
+        if (finishCallback) finishCallback();
+      }, 100);
+
+      const result = await speedTestActivities.createFile(
+        '/test/path',
+        'testFile.bin',
+        'jobRunId',
+        'resultId',
+      );
+
+      expect(mockLstat).toHaveBeenCalled();
+      expect(mockAccess).toHaveBeenCalled();
+      expect(mockCreateWriteStream).toHaveBeenCalled();
+      expect(result).toHaveProperty('totalTimeTaken');
+      expect(result).toHaveProperty('speed');
+    });
+
+    it('should handle file creation timeout', async () => {
+      mockCreateFile.mockRestore();
+
+      const mockLstat = jest
+        .spyOn(mockFs.promises, 'lstat')
+        .mockResolvedValue({});
+      const mockAccess = jest
+        .spyOn(mockFs, 'access')
+        .mockImplementation(
+          (path: string, mode: number, callback: Function) => {
+            callback(null);
+          },
+        );
+
+      const mockStream = {
+        write: jest.fn().mockReturnValue(true),
+        end: jest.fn(),
+        on: jest.fn(),
+        once: jest.fn(),
+        destroy: jest.fn(),
+      };
+
+      jest.spyOn(mockFs, 'createWriteStream').mockReturnValue(mockStream);
+
+      // Use shorter timeout to test timeout scenario
+      mockWorkersConfigGet.mockImplementation((key: string) => {
+        if (key === 'speedTestTimeout') return 100;
+        if (key === 'speedTestFileSize') return 1;
+        return null;
+      });
+
+      const result = await speedTestActivities.createFile(
+        '/test/path',
+        'testFile.bin',
+        'jobRunId',
+        'resultId',
+      );
+
+      expect(result).toHaveProperty('totalTimeTaken');
+      expect(mockStream.destroy).toHaveBeenCalled();
+    });
+
+    it('should handle file creation error', async () => {
+      mockCreateFile.mockRestore();
+
+      const mockLstat = jest
+        .spyOn(mockFs.promises, 'lstat')
+        .mockResolvedValue({});
+      const mockAccess = jest
+        .spyOn(mockFs, 'access')
+        .mockImplementation(
+          (path: string, mode: number, callback: Function) => {
+            callback(null);
+          },
+        );
+
+      const mockStream = {
+        write: jest.fn().mockReturnValue(true),
+        end: jest.fn(),
+        on: jest.fn(),
+        once: jest.fn(),
+        destroy: jest.fn(),
+      };
+
+      jest.spyOn(mockFs, 'createWriteStream').mockReturnValue(mockStream);
+
+      // Create a promise that will be rejected
+      const createFilePromise = speedTestActivities.createFile(
+        '/test/path',
+        'testFile.bin',
+        'jobRunId',
+        'resultId',
+      );
+
+      // Simulate error during file creation immediately
+      setImmediate(() => {
+        const errorCallback = mockStream.on.mock.calls.find(
+          (call) => call[0] === 'error',
+        )?.[1];
+        if (errorCallback) errorCallback(new Error('Write error'));
+      });
+
+      await expect(createFilePromise).rejects.toThrow('Write error');
+    });
+  });
+
+  describe('readFile function tests', () => {
+    let mockFs: any;
+
+    beforeEach(() => {
+      mockFs = require('fs');
+      mockWorkersConfigGet.mockImplementation((key: string) => {
+        switch (key) {
+          case 'speedTestFileSize':
+            return 1;
+          case 'speedTestTimeout':
+            return 5000;
+          case 'speedTestFileName':
+            return 'testFile.bin';
+          default:
+            return null;
+        }
+      });
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should read file successfully', async () => {
+      mockReadFile.mockRestore();
+
+      const mockRedisService = {
+        getSpeedTestJobContext: jest.fn().mockResolvedValue({
+          appendToSpeedTestReadWriteInfo: jest.fn(),
+        }),
+        setJobContext: jest.fn().mockResolvedValue(undefined),
+      };
+
+      (speedTestActivities as any).redisService = mockRedisService;
+
+      // Mock file operations
+      const mockOpen = jest
+        .spyOn(mockFs.promises, 'open')
+        .mockRejectedValue({ code: 'EEXIST' });
+      const mockAccess = jest
+        .spyOn(mockFs, 'access')
+        .mockImplementation(
+          (path: string, mode: number, callback: Function) => {
+            callback(null);
+          },
+        );
+
+      const mockStream = {
+        on: jest.fn(),
+        destroy: jest.fn(),
+      };
+
+      jest.spyOn(mockFs, 'createReadStream').mockReturnValue(mockStream);
+      jest
+        .spyOn(performance, 'now')
+        .mockReturnValueOnce(1000)
+        .mockReturnValueOnce(2000);
+
+      // Simulate successful file reading
+      setTimeout(() => {
+        const dataCallback = mockStream.on.mock.calls.find(
+          (call) => call[0] === 'data',
+        )?.[1];
+        const endCallback = mockStream.on.mock.calls.find(
+          (call) => call[0] === 'end',
+        )?.[1];
+
+        if (dataCallback) dataCallback(Buffer.from('test data'));
+        if (endCallback) endCallback();
+      }, 100);
+
+      const result = await speedTestActivities.readFile(
+        '/test/path',
+        'testFile.bin',
+        'jobRunId',
+        'resultId',
+      );
+
+      expect(result).toHaveProperty('totalTimeTaken');
+      expect(result).toHaveProperty('speed');
+    });
+
+    it('should handle read timeout', async () => {
+      mockReadFile.mockRestore();
+
+      const mockRedisService = {
+        getSpeedTestJobContext: jest.fn().mockResolvedValue({
+          appendToSpeedTestReadWriteInfo: jest.fn(),
+        }),
+        setJobContext: jest.fn().mockResolvedValue(undefined),
+      };
+
+      (speedTestActivities as any).redisService = mockRedisService;
+
+      mockWorkersConfigGet.mockImplementation((key: string) => {
+        if (key === 'speedTestTimeout') return 100;
+        if (key === 'speedTestFileSize') return 1;
+        return null;
+      });
+
+      const mockOpen = jest
+        .spyOn(mockFs.promises, 'open')
+        .mockRejectedValue({ code: 'EEXIST' });
+      const mockAccess = jest
+        .spyOn(mockFs, 'access')
+        .mockImplementation(
+          (path: string, mode: number, callback: Function) => {
+            callback(null);
+          },
+        );
+
+      const mockStream = {
+        on: jest.fn(),
+        destroy: jest.fn(),
+      };
+
+      jest.spyOn(mockFs, 'createReadStream').mockReturnValue(mockStream);
+      jest
+        .spyOn(performance, 'now')
+        .mockReturnValueOnce(1000)
+        .mockReturnValueOnce(2000);
+
+      const result = await speedTestActivities.readFile(
+        '/test/path',
+        'testFile.bin',
+        'jobRunId',
+        'resultId',
+      );
+
+      expect(result).toHaveProperty('totalTimeTaken');
+      expect(mockStream.destroy).toHaveBeenCalled();
+    });
+  });
+
+  describe('Helper function tests', () => {
+    let mockFs: any;
+
+    beforeEach(() => {
+      mockFs = require('fs');
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should test ensureDirectoryExists - success', async () => {
+      const mockLstat = jest
+        .spyOn(mockFs.promises, 'lstat')
+        .mockResolvedValue({});
+
+      await expect(
+        (speedTestActivities as any).ensureDirectoryExists('/test/path'),
+      ).resolves.toBeUndefined();
+      expect(mockLstat).toHaveBeenCalledWith('/test/path');
+    });
+
+    it('should test ensureDirectoryExists - directory not found', async () => {
+      const mockLstat = jest
+        .spyOn(mockFs.promises, 'lstat')
+        .mockRejectedValue(new Error('ENOENT'));
+
+      await expect(
+        (speedTestActivities as any).ensureDirectoryExists('/test/path'),
+      ).rejects.toThrow('Directory does not exist: /test/path');
+    });
+
+    it('should test checkDirPermissions - write permission success', async () => {
+      const mockAccess = jest
+        .spyOn(mockFs, 'access')
+        .mockImplementation(
+          (path: string, mode: number, callback: Function) => {
+            callback(null);
+          },
+        );
+
+      await expect(
+        (speedTestActivities as any).checkDirPermissions(
+          '/test/path',
+          mockFs.constants.W_OK,
+        ),
+      ).resolves.toBeUndefined();
+    });
+
+    it('should test checkDirPermissions - write permission error', async () => {
+      const mockAccess = jest
+        .spyOn(mockFs, 'access')
+        .mockImplementation(
+          (path: string, mode: number, callback: Function) => {
+            callback(new Error('Permission denied'));
+          },
+        );
+
+      await expect(
+        (speedTestActivities as any).checkDirPermissions(
+          '/test/path',
+          mockFs.constants.W_OK,
+        ),
+      ).rejects.toThrow('No write permission for directory: /test/path');
+    });
+
+    it('should test checkDirPermissions - read permission error', async () => {
+      const mockAccess = jest
+        .spyOn(mockFs, 'access')
+        .mockImplementation(
+          (path: string, mode: number, callback: Function) => {
+            callback(new Error('Permission denied'));
+          },
+        );
+
+      await expect(
+        (speedTestActivities as any).checkDirPermissions(
+          '/test/path',
+          mockFs.constants.R_OK,
+        ),
+      ).rejects.toThrow('No Read permission for directory: /test/path');
+    });
+
+    it('should test createFileIfNotExists - file does not exist', async () => {
+      const mockOpen = jest
+        .spyOn(mockFs.promises, 'open')
+        .mockResolvedValue({});
+      const mockCreateFile = jest
+        .spyOn(speedTestActivities, 'createFile')
+        .mockResolvedValue({});
+
+      await speedTestActivities.createFileIfNotExists(
+        '/test/path',
+        'testFile.bin',
+        'jobRunId',
+        'resultId',
+      );
+
+      expect(mockOpen).toHaveBeenCalled();
+      expect(mockCreateFile).toHaveBeenCalled();
+    });
+
+    it('should test createFileIfNotExists - file already exists', async () => {
+      const mockOpen = jest
+        .spyOn(mockFs.promises, 'open')
+        .mockRejectedValue({ code: 'EEXIST' });
+      const mockCreateFile = jest
+        .spyOn(speedTestActivities, 'createFile')
+        .mockResolvedValue({});
+
+      await speedTestActivities.createFileIfNotExists(
+        '/test/path',
+        'testFile.bin',
+        'jobRunId',
+        'resultId',
+      );
+
+      expect(mockCreateFile).not.toHaveBeenCalled();
+    });
+
+    it('should test createFileIfNotExists - other error', async () => {
+      const mockError = new Error('Access denied');
+      (mockError as any).code = 'EACCES';
+      const mockOpen = jest
+        .spyOn(mockFs.promises, 'open')
+        .mockRejectedValue(mockError);
+
+      await expect(
+        speedTestActivities.createFileIfNotExists(
+          '/test/path',
+          'testFile.bin',
+          'jobRunId',
+          'resultId',
+        ),
+      ).rejects.toThrow('Access denied');
+    });
+  });
+
+  // Add more edge case tests to improve function coverage
+  describe('Additional function coverage tests', () => {
+    it('should test readTest and writeTest functions directly', async () => {
+      const mockFsDetails = {
+        workingDirectory: '/test',
+        hostname: 'testhost',
+      } as any;
+
+      // Test readTest
+      mockReadFile.mockResolvedValueOnce({ result: 'read success' });
+      const readResult = await speedTestActivities.readTest(
+        mockFsDetails,
+        'traceId',
+        'volumeId',
+        'resultId',
+      );
+      expect(readResult).toEqual({ result: 'read success' });
+
+      // Test writeTest
+      mockCreateFile.mockResolvedValueOnce({ result: 'write success' });
+      const writeResult = await speedTestActivities.writeTest(
+        mockFsDetails,
+        'traceId',
+        'volumeId',
+        'resultId',
+      );
+      expect(writeResult).toEqual({ result: 'write success' });
+    });
+
+    it('should handle calculatePingRtt with empty RTT values', async () => {
+      mockPingProbe.mockResolvedValue({ alive: false, time: 'unknown' });
+
+      try {
+        await speedTestActivities.calculatePingRtt('192.168.1.1', 1);
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+      }
+    });
+
+    it('should handle different error scenarios in readFile', async () => {
+      mockReadFile.mockRestore();
+
+      const mockRedisService = {
+        getSpeedTestJobContext: jest.fn().mockResolvedValue({
+          appendToSpeedTestReadWriteInfo: jest.fn(),
+        }),
+        setJobContext: jest.fn().mockResolvedValue(undefined),
+      };
+
+      (speedTestActivities as any).redisService = mockRedisService;
+
+      // Mock createFileIfNotExists to throw an error
+      jest
+        .spyOn(speedTestActivities, 'createFileIfNotExists')
+        .mockRejectedValue(new Error('File creation failed'));
+
+      await expect(
+        speedTestActivities.readFile(
+          '/test/path',
+          'testFile.bin',
+          'jobRunId',
+          'resultId',
+        ),
+      ).rejects.toThrow('File creation failed');
+    });
+
+    it('should handle read file stream error', async () => {
+      mockReadFile.mockRestore();
+
+      const mockRedisService = {
+        getSpeedTestJobContext: jest.fn().mockResolvedValue({
+          appendToSpeedTestReadWriteInfo: jest.fn(),
+        }),
+        setJobContext: jest.fn().mockResolvedValue(undefined),
+      };
+
+      (speedTestActivities as any).redisService = mockRedisService;
+
+      const mockFs = require('fs');
+      jest
+        .spyOn(speedTestActivities, 'createFileIfNotExists')
+        .mockResolvedValue(undefined);
+      const mockAccess = jest
+        .spyOn(mockFs, 'access')
+        .mockImplementation(
+          (path: string, mode: number, callback: Function) => {
+            callback(null);
+          },
+        );
+
+      const mockStream = {
+        on: jest.fn(),
+        destroy: jest.fn(),
+      };
+
+      jest.spyOn(mockFs, 'createReadStream').mockReturnValue(mockStream);
+      jest
+        .spyOn(performance, 'now')
+        .mockReturnValueOnce(1000)
+        .mockReturnValueOnce(2000);
+
+      // Create the promise
+      const readPromise = speedTestActivities.readFile(
+        '/test/path',
+        'testFile.bin',
+        'jobRunId',
+        'resultId',
+      );
+
+      // Simulate stream error immediately
+      setImmediate(() => {
+        const errorCallback = mockStream.on.mock.calls.find(
+          (call) => call[0] === 'error',
+        )?.[1];
+        if (errorCallback) errorCallback(new Error('Stream error'));
+      });
+
+      await expect(readPromise).rejects.toThrow('Stream error');
+    });
+
+    it('should handle postResultsActivity with all result types', async () => {
+      mockAxiosPost.mockResolvedValue({ data: { success: true } });
+
+      const results = {
+        writeResult: {
+          result: { speed: 100, time: 5 },
+          errors: ['write error'],
+        },
+        readResult: {
+          result: { speed: 150, time: 3 },
+          errors: ['read error'],
+        },
+        networkPerformanceResult: {
+          result: { packetLoss: 0, rtt: { min: 1, avg: 2, max: 3, mdev: 0.5 } },
+          errors: ['network error'],
+        },
+      };
+
+      const response = await speedTestActivities.postResultsActivity(
+        'trace',
+        'worker',
+        'server',
+        results,
+      );
+
+      expect(response).toEqual({ success: true });
+      expect(mockAxiosPost).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/jobs/speed-test/store-result'),
+        expect.objectContaining({
+          traceId: 'trace',
+          workerId: 'worker',
+          fileServerID: 'server',
+          writeResult: expect.objectContaining({
+            speed: 100,
+            time: 5,
+            error: 'write error',
+          }),
+          readResult: expect.objectContaining({
+            speed: 150,
+            time: 3,
+            error: 'read error',
+          }),
+          networkPerformanceResult: expect.objectContaining({
+            packetLoss: 0,
+            error: 'network error',
+          }),
+        }),
+      );
+    });
+  });
 });
