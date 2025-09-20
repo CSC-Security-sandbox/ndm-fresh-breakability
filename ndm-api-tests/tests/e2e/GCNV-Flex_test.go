@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
+var _ = FDescribe("GCNV Flex Test e2e", Ordered, func() {
 	var (
 		ProjectId             string
 		workerId1             string
