@@ -48,10 +48,10 @@ export class StampMetaService {
                 output.sourceErrors.push(...timeOutput.sourceErrors);
                 output.targetErrors.push(...timeOutput.targetErrors);
 
-                // Stamp permissions
-                const permissionsOutput = await this.stampPermission(input);
-                output.sourceErrors.push(...permissionsOutput.sourceErrors);
-                output.targetErrors.push(...permissionsOutput.targetErrors);
+                // // Stamp permissions
+                // const permissionsOutput = await this.stampPermission(input);
+                // output.sourceErrors.push(...permissionsOutput.sourceErrors);
+                // output.targetErrors.push(...permissionsOutput.targetErrors);
 
             }
             else {
@@ -134,6 +134,10 @@ export class StampMetaService {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         if (command.metadata.mtime && command.metadata.atime) {
             try {
+                let [isTargetPathExistsAndWritable] = await Promise.all([
+                   await this.resetFileAttributes(targetPath),
+                ]);
+
                 await fs.promises.utimes(targetPath, new Date(command.metadata.atime), new Date(command.metadata.mtime));
             } catch (error) {
                 this.logger.error(`Stamping Access and Modified Time  to ${targetPath}, Error: ${error.message}`, error.stack);

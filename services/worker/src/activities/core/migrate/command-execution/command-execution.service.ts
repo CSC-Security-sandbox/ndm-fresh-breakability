@@ -119,12 +119,20 @@ export class CommandExecService {
             return output;  // skip if already completed
         }
         if( command.ops[OPS_CMD.COPY_DIR].status !== OPS_STATUS.COMPLETED) {
-            try {                
-                await fs.promises.mkdir(targetPath, {recursive: true});                
+            let [isTargetPathExistsAndWritable] = await Promise.all([
+                isNotWritable(targetPath),
+            ])
+            try {
+                if(isTargetPathExistsAndWritable)
+                    await this.stampMetaService.resetFileAttributes(targetPath);
+                await fs.promises.mkdir(targetPath, {recursive: true});
                 command.ops[OPS_CMD.COPY_DIR].status = OPS_STATUS.COMPLETED;
                 output.shouldStampMeta = true;
                 output.shouldUpdateItemInfo = true;
             } catch (error) {
+                if(error.code === 'EPERM' || error.code === 'EACCES') {
+                   this.logger.error(`Permission denied while creating directory at ${targetPath}, Error: ${error.message}`, error.stack);
+                }
                 command.ops[OPS_CMD.COPY_DIR].status = OPS_STATUS.ERROR;
                 this.logger.error(`Copying DIR from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
