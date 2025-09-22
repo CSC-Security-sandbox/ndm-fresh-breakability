@@ -94,16 +94,6 @@ run_tests() {
 
 #Performance Testing
 run_tests "perf-testing" "./tests/performance-testing" "Azure" "NFS"
- 
-#Download-Error-Report-Regression Testing
-#run_tests "download-error-report-regression" "./tests/download-error-report-regression" "./tests/download-error-report-e2e" "Azure" "NFS"
-
-
-#Download-Error-Report-End-to-End Testing
-#run_tests "download-error-report-e2e" "./tests/download-error-report-e2e" "Azure" "NFS"
-
-
-#read -p "Test execution complete. Press [Enter] key to exit..."
 
 
 

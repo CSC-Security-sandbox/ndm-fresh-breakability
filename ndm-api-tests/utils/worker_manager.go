@@ -594,19 +594,7 @@ func getRestartWorkerScriptForNFS() string {
 	return script
 }
 
-func UpdateWorkerConfig(maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize int) (string, error) {
-	port, err := strconv.Atoi(PERF_NDM_WORKERS_PORT)
-	if err != nil {
-		LogFatalf("Invalid port number in PERF_NDM_WORKERS_PORT: %v", err)
-	}
-
-	sshConfig := SSHConfig{
-		Username: PERF_NDM_WORKERS_USER_NAME,
-		Host:     PERF_NDM_WORKERS_HOST,
-		Port:     port,
-		Password: PERF_NDM_WORKERS_PASSWORD,
-	}
-
+func UpdateWorkerConfig(maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize int) error {
 	var script string
 	switch PROTOCOL_TYPE {
 	case ProtocolNFS:
@@ -615,19 +603,27 @@ func UpdateWorkerConfig(maxWriteConcurrency, jobTaskActivityConcurrency, maxBuff
 		script = WorkerEnvVarsScriptForSMB(maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize)
 	}
 
+	config := GetAttachedWorkerDetails()
+	sshConfig := SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
-		return "", fmt.Errorf("failed to update worker config on %s: %w", sshConfig.Host, err)
+		return fmt.Errorf("failed to update worker config on %s: %w", sshConfig.Host, err)
 	}
 
 	LogDebug(fmt.Sprintf("Worker %s config successfully updated with output: %s, err:%v", sshConfig.Host, output, err))
-	return output, nil
-
+	return nil
 }
 
 // WorkerEnvVarsScriptForNFS generates a shell script to update specific env vars in worker.env.
 func WorkerEnvVarsScriptForNFS(workerConfig SSHConfig, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize int) string {
-	script := fmt.Sprintf(`#!/bin/bash
+	script := fmt.Sprintf(`
+	#!/bin/bash
 	set -e
 
 	SUDO_PASS="%s"
@@ -646,4 +642,36 @@ func WorkerEnvVarsScriptForNFS(workerConfig SSHConfig, maxWriteConcurrency, jobT
 func WorkerEnvVarsScriptForSMB(maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize int) string {
 	script := fmt.Sprintf(`powershell.exe -Command "(Get-Content %s) -replace 'MAX_BUFFER_SIZE=\d+', 'MAX_BUFFER_SIZE=%d' -replace 'MAX_WRITE_CONCURRENCY=\d+', 'MAX_WRITE_CONCURRENCY=%d' -replace 'JOB_TASK_ACTIVITY_CONCURRENCY=\d+', 'JOB_TASK_ACTIVITY_CONCURRENCY=%d' | Set-Content %s"`, SMBWorkerEnvPath, maxBufferSize, maxWriteConcurrency, jobTaskActivityConcurrency, SMBWorkerEnvPath)
 	return script
+}
+
+func IsWorkerRunning() (bool, error) {
+	script := ""
+
+	switch PROTOCOL_TYPE {
+	case ProtocolNFS:
+		script = `systemctl status datamigrator-worker.service | grep 'Active'`
+	case ProtocolSMB:
+		script = `sc query "DatamigratorWorker" | find "STATE"`
+	}
+
+	config := GetAttachedWorkerDetails()
+	sshConfig := SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	output, err := sshRunScript(sshConfig, script)
+	if err != nil {
+		return false, fmt.Errorf("GetWorkerStatus failed: %w\noutput: %s", err, output)
+	}
+
+	if strings.Contains(strings.ToLower(string(output)), "running") {
+		LogDebug("Datamigrator Worker service is running.")
+		return true, nil
+	}
+
+	LogDebug("Datamigrator Worker service is NOT running.")
+	return false, nil
 }

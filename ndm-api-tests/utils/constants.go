@@ -135,6 +135,7 @@ const (
 	CUTOVER_APPROVE_REJECT_ENDPOINT                  = "/api/v1/job-run/cutover/approve"
 	JOB_RUN_ACTION_ENDPOINT                          = "/api/v1/job-run/action"
 	JOB_RUN_ENDPOINT                                 = "/api/v1/job-run"
+	JOB_RUN_REPORT_ENDPOINT                          = "/api/v1/report/job-run"
 	JOBS_ENDPOINT                                    = "/api/v1/jobs"
 	FILE_SERVER_REFRESH_URL                          = "/api/v1/servers/refresh"
 	ADHOC_JOBRUN_URL                                 = "/api/v1/job-run/ad-hoc"
@@ -294,5 +295,5 @@ func UpdateConfVariables(protocolType, environment string) {
 	}
 
 	InitWorkers(NDM_WORKERS_HOST, NDM_WORKERS_PORT, NDM_WORKERS_PASSWORD, NDM_WORKERS_USER_NAME)
-	InitFileServer(SOURCE_VOLUMES_LIST, DESTINATION_VOLUMES_LIST, SOURCE_HOST_IP, DESTINATION_HOST_IP)
+	InitFileServer(SOURCE_VOLUMES_LIST, DESTINATION_VOLUMES_LIST, SOURCE_HOST_IP, DESTINATION_HOST_IP, 2)
 }

@@ -25,5 +25,5 @@ var _ = BeforeSuite(func() {
 	By("Setting before the suite")
 	flag.Parse()
 	InitTestEnv()
-	UpdateConfVariables("NFS", "Azure")
+	UpdatePerfConfVariables(ProtocolType)
 })
