@@ -594,7 +594,7 @@ func getRestartWorkerScriptForNFS() string {
 	return script
 }
 
-func UpdateWorkerConfig(maxWriteConcurrency, jobTaskActivityConcurrency int, maxBufferSize int) (string, error) {
+func UpdateWorkerConfig(maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize int) (string, error) {
 	port, err := strconv.Atoi(PERF_NDM_WORKERS_PORT)
 	if err != nil {
 		LogFatalf("Invalid port number in PERF_NDM_WORKERS_PORT: %v", err)
@@ -612,7 +612,7 @@ func UpdateWorkerConfig(maxWriteConcurrency, jobTaskActivityConcurrency int, max
 	case ProtocolNFS:
 		script = WorkerEnvVarsScriptForNFS(sshConfig, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize)
 	case ProtocolSMB:
-		script = WorkerEnvVarsScriptForSMB(sshConfig, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize)
+		script = WorkerEnvVarsScriptForSMB(maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize)
 	}
 
 	output, err := sshRunScript(sshConfig, script)
@@ -620,7 +620,7 @@ func UpdateWorkerConfig(maxWriteConcurrency, jobTaskActivityConcurrency int, max
 		return "", fmt.Errorf("failed to update worker config on %s: %w", sshConfig.Host, err)
 	}
 
-	LogDebug(fmt.Sprintf("Worker %s config successfully updated with output: %s", sshConfig.Host, output))
+	LogDebug(fmt.Sprintf("Worker %s config successfully updated with output: %s, err:%v", sshConfig.Host, output, err))
 	return output, nil
 
 }
@@ -631,19 +631,19 @@ func WorkerEnvVarsScriptForNFS(workerConfig SSHConfig, maxWriteConcurrency, jobT
 	set -e
 
 	SUDO_PASS="%s"
-	ENV_FILE="/opt/datamigrator/conf/worker.env"
+	ENV_FILE="%s"
 
 	echo "$SUDO_PASS" | sudo -S sed -i 's/^MAX_WRITE_CONCURRENCY=.*/MAX_WRITE_CONCURRENCY=%d/' "$ENV_FILE"
 	echo "$SUDO_PASS" | sudo -S sed -i 's/^JOB_TASK_ACTIVITY_CONCURRENCY=.*/JOB_TASK_ACTIVITY_CONCURRENCY=%d/' "$ENV_FILE"
 	echo "$SUDO_PASS" | sudo -S sed -i 's/^MAX_BUFFER_SIZE=.*/MAX_BUFFER_SIZE=%d/' "$ENV_FILE"
 
 	echo "Updated MAX_WRITE_CONCURRENCY, JOB_TASK_ACTIVITY_CONCURRENCY, and MAX_BUFFER_SIZE in $ENV_FILE"
-	`, workerConfig.Password, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize)
+	`, workerConfig.Password, NFSWorkerEnvPath, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize)
 	return script
 }
 
 // WorkerEnvVarsScriptForSMB generates a PowerShell script to update specific env vars in worker.env for SMB workers.
-func WorkerEnvVarsScriptForSMB(workerConfig SSHConfig, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize int) string {
-	// TODO: implement for SMB workers
-	return ""
+func WorkerEnvVarsScriptForSMB(maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize int) string {
+	script := fmt.Sprintf(`powershell.exe -Command "(Get-Content %s) -replace 'MAX_BUFFER_SIZE=\d+', 'MAX_BUFFER_SIZE=%d' -replace 'MAX_WRITE_CONCURRENCY=\d+', 'MAX_WRITE_CONCURRENCY=%d' -replace 'JOB_TASK_ACTIVITY_CONCURRENCY=\d+', 'JOB_TASK_ACTIVITY_CONCURRENCY=%d' | Set-Content %s"`, SMBWorkerEnvPath, maxBufferSize, maxWriteConcurrency, jobTaskActivityConcurrency, SMBWorkerEnvPath)
+	return script
 }

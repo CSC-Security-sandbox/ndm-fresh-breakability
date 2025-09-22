@@ -26,6 +26,11 @@ const (
 	FiveMB  = 5 * 1024 * 1024  // 5,242,880 bytes
 	SevenMB = 7 * 1024 * 1024  // 7,340,032 bytes
 	TenMB   = 10 * 1024 * 1024 // 10,485,760 bytes
+
+	// SMB worker env path
+	SMBWorkerEnvPath = `C:\datamigrator\binary\.env`
+	// NFS worker env path
+	NFSWorkerEnvPath = "/opt/datamigrator/conf/worker.env"
 )
 
 // UpdatePerfConfVariables updates the global variables used for performance testing based on the provided protocol type.
@@ -70,5 +75,4 @@ func UpdatePerfConfVariables(protocolType string) {
 	}
 
 	InitWorkers(PERF_NDM_WORKERS_HOST, PERF_NDM_WORKERS_PORT, PERF_NDM_WORKERS_PASSWORD, PERF_NDM_WORKERS_USER_NAME)
-	InitFileServer(PERF_SOURCE_VOLUMES_LIST, PERF_DESTINATION_VOLUMES_LIST, PERF_SOURCE_HOST_IP, PERF_DESTINATION_HOST_IP)
 }
