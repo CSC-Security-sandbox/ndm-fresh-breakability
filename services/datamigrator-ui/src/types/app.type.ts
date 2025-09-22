@@ -466,6 +466,7 @@ export interface UserApiType {
   last_name: string;
   user_status: USER_STATUS_ENUM;
   isAppAdmin: boolean;
+  user_role: string;
 }
 
 export enum USER_ROLES_ENUM {

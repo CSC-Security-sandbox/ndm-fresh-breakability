@@ -174,15 +174,43 @@ export class UserService {
     const userRoleMap = new Map<string, boolean>();
     userRoles.forEach(role => userRoleMap.set(role.userId, true));
 
+    //new code start
+
+    this.logger.log("printing userRoles", userRoles);
+    const roleIds = [...new Set(userRoles.map(ur => ur.roleId))];
+    this.logger.log('Fetching roleIds', roleIds);
+
+    const roles = await this.roleRepository.find({
+      where: { id: In(roleIds) },
+      select: ['id', 'role_name'],
+    });
+    this.logger.log('Fetching roles', roles);
+
+    const roleMap = new Map<string, string>();
+    roles.forEach(role => roleMap.set(role.id, role.role_name));
+    this.logger.log('Fetching roleMap', roleMap);
+
+    // Map userId to their roleId (for the relevant project or app admin)
+    const userIdToRoleId = new Map<string, string>();
+    userRoles.forEach(ur => userIdToRoleId.set(ur.userId, ur.roleId));
+    this.logger.log('Fetching projectId', projectId);
+
+    //new code end
+  
     // Transform users with the fetched data
-    const transformedUsers = users.map(user => ({
-      ...user,
-      // When filtering by projectId, show if user has role in that project
-      // When no projectId, show if user is app admin (has role with null projectId)
-      isAppAdmin: userRoleMap.has(user.id),
-      created_by: createdByMap.get(user.created_by) || null,
-      updated_by: updatedByMap.get(user.updated_by) || null,
-    })) as any[];
+    const transformedUsers = users.map(user => {
+      const roleId = userIdToRoleId.get(user.id);
+      console.log("roleMap.get(roleId)", roleMap.get(roleId));
+      return {
+        ...user,
+        // When filtering by projectId, show if user has role in that project (App Admin will not have a role in that project)
+        // When no projectId, show if user is app admin (has role with null projectId)
+        isAppAdmin: projectId ? !userRoleMap.has(user.id) : userRoleMap.has(user.id),
+        user_role: roleId ? roleMap.get(roleId) || null : null,
+        created_by: createdByMap.get(user.created_by) || null,
+        updated_by: updatedByMap.get(user.updated_by) || null,
+      }
+    }) as any[];
 
     this.logger.log('Successfully retrieved users', {
       count: transformedUsers.length,
