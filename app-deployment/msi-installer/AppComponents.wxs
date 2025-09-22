@@ -1,0 +1,33 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+	<Fragment>
+		<ComponentGroup Id="AppComponents">
+			<Component Id="ServiceConfig" Directory="INSTALLFOLDER" Guid="*">
+				<File Id="ServiceConfigFile" Source="service.xml" Name="DatamigratorWorker.xml" KeyPath="yes" />
+			</Component>
+
+			<Component Id="WinSWWrapper" Directory="INSTALLFOLDER" Guid="*">
+				<File Id="WinSWWrapperFile" Source="winsw.exe" Name="DatamigratorWorker.exe" KeyPath="yes" />
+				<ServiceInstall Id="DatamigratorWorkerInstall"
+					 Name="DatamigratorWorker"
+					 DisplayName="Datamigrator Worker"
+					 Type="ownProcess"
+					 Start="auto"
+					 ErrorControl="normal"
+					 Description="Datamigrator Worker Service" />
+				<ServiceControl Id="DatamigratorWorkerControl"
+					 Name="DatamigratorWorker"
+					 Start="install"
+					 Stop="both"
+					 Remove="uninstall"
+					 Wait="yes" />
+			</Component>
+
+			<Component Id="WorkerExe" Directory="BinFolder" Guid="*">
+				<File Id="WorkerExeFile" Source="worker.exe" KeyPath="yes" />
+			</Component>
+			<Component Id="WorkerEnv" Directory="BinFolder" Guid="*">
+				<File Id="EnvFile" Source=".env" KeyPath="yes" />
+			</Component>
+		</ComponentGroup>
+	</Fragment>
+</Wix>

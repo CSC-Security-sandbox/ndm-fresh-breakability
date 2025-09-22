@@ -1,0 +1,13 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+	<Fragment>
+		<StandardDirectory Id="ProgramFiles6432Folder">
+			<Directory Id="INSTALLFOLDER" Name="Datamigrator" />
+		</StandardDirectory>
+	</Fragment>
+	<Fragment>
+		<DirectoryRef Id="INSTALLFOLDER">
+			<Directory Id="BinFolder" Name="bin" />
+			<Directory Id="LogsFolder" Name="logs" />
+		</DirectoryRef>
+	</Fragment>
+</Wix>

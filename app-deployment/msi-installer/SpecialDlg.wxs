@@ -1,0 +1,27 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Fragment>
+    <UI>
+      <Dialog Id="SpecialDlg" Width="370" Height="270" Title="[ProductName] Setup">
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="15" Transparent="yes" NoPrefix="yes" Text="Enter Details" />
+        
+        <Control Id="WorkerIdLabel" Type="Text" X="20" Y="30" Width="120" Height="15" Text="Worker ID:" />
+        <Control Id="WorkerIdEdit" Type="Edit" X="150" Y="30" Width="180" Height="18" Property="WORKER_ID" />
+
+        <Control Id="WorkerSecretLabel" Type="Text" X="20" Y="60" Width="120" Height="15" Text="Worker Secret:" />
+        <Control Id="WorkerSecretEdit" Type="Edit" X="150" Y="60" Width="180" Height="18" Property="WORKER_SECRET" Password="yes" />
+
+        <Control Id="ControlPlaneIpLabel" Type="Text" X="20" Y="90" Width="120" Height="15" Text="Control Plane IP:" />
+        <Control Id="ControlPlaneIpEdit" Type="Edit" X="150" Y="90" Width="180" Height="18" Property="CONTROL_PLANE_IP" />
+
+        <Control Id="ProjectIdLabel" Type="Text" X="20" Y="120" Width="120" Height="15" Text="Project ID:" />
+        <Control Id="ProjectIdEdit" Type="Edit" X="150" Y="120" Width="180" Height="18" Property="PROJECT_ID" />
+
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Default="no" Cancel="no" Text="Back" />
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Cancel="no" Text="Next" />
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel">
+          <Publish Event="SpawnDialog" Value="CancelDlg"/>
+        </Control>
+      </Dialog>
+    </UI>
+  </Fragment>
+</Wix>
