@@ -593,3 +593,57 @@ func getRestartWorkerScriptForNFS() string {
 	`, NDM_VM_PASSWORD)
 	return script
 }
+
+func UpdateWorkerConfig(maxWriteConcurrency, jobTaskActivityConcurrency int, maxBufferSize int) (string, error) {
+	port, err := strconv.Atoi(PERF_NDM_WORKERS_PORT)
+	if err != nil {
+		LogFatalf("Invalid port number in PERF_NDM_WORKERS_PORT: %v", err)
+	}
+
+	sshConfig := SSHConfig{
+		Username: PERF_NDM_WORKERS_USER_NAME,
+		Host:     PERF_NDM_WORKERS_HOST,
+		Port:     port,
+		Password: PERF_NDM_WORKERS_PASSWORD,
+	}
+
+	var script string
+	switch PROTOCOL_TYPE {
+	case ProtocolNFS:
+		script = WorkerEnvVarsScriptForNFS(sshConfig, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize)
+	case ProtocolSMB:
+		script = WorkerEnvVarsScriptForSMB(sshConfig, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize)
+	}
+
+	output, err := sshRunScript(sshConfig, script)
+	if err != nil {
+		return "", fmt.Errorf("failed to update worker config on %s: %w", sshConfig.Host, err)
+	}
+
+	LogDebug(fmt.Sprintf("Worker %s config successfully updated with output: %s", sshConfig.Host, output))
+	return output, nil
+
+}
+
+// WorkerEnvVarsScriptForNFS generates a shell script to update specific env vars in worker.env.
+func WorkerEnvVarsScriptForNFS(workerConfig SSHConfig, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize int) string {
+	script := fmt.Sprintf(`#!/bin/bash
+	set -e
+
+	SUDO_PASS="%s"
+	ENV_FILE="/opt/datamigrator/conf/worker.env"
+
+	echo "$SUDO_PASS" | sudo -S sed -i 's/^MAX_WRITE_CONCURRENCY=.*/MAX_WRITE_CONCURRENCY=%d/' "$ENV_FILE"
+	echo "$SUDO_PASS" | sudo -S sed -i 's/^JOB_TASK_ACTIVITY_CONCURRENCY=.*/JOB_TASK_ACTIVITY_CONCURRENCY=%d/' "$ENV_FILE"
+	echo "$SUDO_PASS" | sudo -S sed -i 's/^MAX_BUFFER_SIZE=.*/MAX_BUFFER_SIZE=%d/' "$ENV_FILE"
+
+	echo "Updated MAX_WRITE_CONCURRENCY, JOB_TASK_ACTIVITY_CONCURRENCY, and MAX_BUFFER_SIZE in $ENV_FILE"
+	`, workerConfig.Password, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize)
+	return script
+}
+
+// WorkerEnvVarsScriptForSMB generates a PowerShell script to update specific env vars in worker.env for SMB workers.
+func WorkerEnvVarsScriptForSMB(workerConfig SSHConfig, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize int) string {
+	// TODO: implement for SMB workers
+	return ""
+}
