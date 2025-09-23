@@ -61,6 +61,7 @@ export interface VolumeType {
   jobConfig: JobConfig[];
   protocol: string;
   isValid?: boolean;
+  isDisabled?: boolean;
 }
 
 interface DataType {
