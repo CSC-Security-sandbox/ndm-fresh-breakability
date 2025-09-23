@@ -200,19 +200,6 @@ export class SetupExportsPathPermissionService {
         return principal.startsWith("S-") ? principal : principal.toLowerCase();
     }
 
-    private formatPermissions(permissions: any[]): string {
-        if (!permissions || permissions.length === 0) {
-            return '';
-        }
-
-        const filtered = permissions
-            .filter(p => p?.code && p.code.toUpperCase() !== 'I')
-            .map(p => `(${p.code})`)
-            .join('');
-
-        return filtered || '';
-    }
-
     async addPrincipals(destinationPath: FileServerDetails, principal: string, permission: string, jobRunId?: string): Promise<void> {
         if (!destinationPath || !principal || !permission) {
             throw new Error('Invalid parameters: destinationPath, principal, and permission are required');
@@ -429,5 +416,28 @@ export class SetupExportsPathPermissionService {
         }
     }
 
+    private formatPermissions(permissions: any[]): string {
+        if (!permissions || permissions.length === 0) {
+            return '';
+        }
+    
+        const inheritanceFlags = [];
+        const permissionCodes = [];
+    
+        permissions.forEach(p => {
+            if (!p?.code || p.code.toUpperCase() === 'I') return;
+            if (INHERITANCE_FLAGS.includes(p.code.toUpperCase())) {
+                inheritanceFlags.push(p.code.toUpperCase());
+            } else {
+                permissionCodes.push(p.code.toUpperCase());
+            }
+        });
+    
+        // Each inheritance flag in its own (), other permissions grouped
+        const inheritancePart = inheritanceFlags.map(flag => `(${flag})`).join('');
+        const permissionPart = permissionCodes.length > 0 ? `(${permissionCodes.join(',')})` : '';
+    
+        return `${inheritancePart}${permissionPart}`;
+    }
 
 }
