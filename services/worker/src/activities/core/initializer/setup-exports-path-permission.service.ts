@@ -105,6 +105,7 @@ class ACLError extends Error {
 @Injectable()
 export class SetupExportsPathPermissionService {
     private readonly logger: LoggerService;
+    private mappingCache: Map<string, Map<string, string>> = new Map();
     constructor(
         @Inject(LoggerFactory) private readonly loggerFactory: LoggerFactory,
         private readonly winShellService: WinShellService,
@@ -173,7 +174,7 @@ export class SetupExportsPathPermissionService {
         const destAvailablePrincipals = destinationAcl?.permissions?.map(entry => this.normalizePrincipal(entry.principal)) || [];
         const sourceAvailablePrincipals = sourceAcl?.permissions?.map(entry => this.normalizePrincipal(entry.principal)) || [];
 
-        const usersToRemoveSet = new Set(destAvailablePrincipals.filter(principal => !sourceAvailablePrincipals.includes(principal)));
+        const usersToRemoveSet = new Set(destAvailablePrincipals.filter(principal => !sourceAvailablePrincipals.includes(principal) ));
         const usersToRemove = Array.from(usersToRemoveSet);
 
         if (usersToRemove.length > 0) {
@@ -181,6 +182,11 @@ export class SetupExportsPathPermissionService {
 
             for (const user of usersToRemove) {
                 try {
+                    const mappedPrincipal = this.mappingCache.get(jobRunId)?.get(user);
+                    if (mappedPrincipal) {
+                        this.logger.debug(`Using mapped principal ${mappedPrincipal} for removal instead of ${user}`);
+                        continue
+                    }
                     await this.removePrincipals(context.jobConfig.destinationFileServer, user);
                 } catch (error) {
                     this.logger.error(`Error removing principal ${user} from destination: ${error.message}`, error.stack);
@@ -226,6 +232,8 @@ export class SetupExportsPathPermissionService {
                             throw new Error(`SID ${ownerIdentity} could not be resolved to a name.`);
                         } else {
                             this.logger.debug(`Resolved principal ${ownerIdentity} to ${output}`);
+                            this.mappingCache.set(jobRunId, this.mappingCache.get(jobRunId) || new Map());
+                            this.mappingCache.get(jobRunId).set(output, principal);
                             resolvedPrincipal = output;
                         }
                     }
