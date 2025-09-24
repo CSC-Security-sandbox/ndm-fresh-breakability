@@ -212,7 +212,26 @@ export class SetupExportsPathPermissionService {
             if (jobRunId) {
                 this.logger.debug(`Resolving principal ${principal} for job ${jobRunId}`);
                 const ownerIdentity = await this.redisService.getOwnerIdentity(jobRunId, principal, 'SID');
-                resolvedPrincipal = ownerIdentity ? ownerIdentity : principal;
+                if (ownerIdentity && ownerIdentity.startsWith('S-')) {
+                    this.logger.debug(`Resolved principal ${principal} to ${ownerIdentity}`);
+                    const command = `SidToName  ${ownerIdentity}`;
+                    const getIdentity = await this.winShellService.executeCommand(command);
+                    if (getIdentity.stderr) {
+                        this.logger.error(`Error resolving SID ${ownerIdentity} to name: ${getIdentity.stderr}`);
+                        throw new Error(getIdentity.stderr);
+                    } else {
+                        const output = getIdentity.stdout.trim();
+                        if (!output || output.toLowerCase() === "false") {
+                            this.logger.error(`SID ${ownerIdentity} could not be resolved to a name.`);
+                            throw new Error(`SID ${ownerIdentity} could not be resolved to a name.`);
+                        } else {
+                            this.logger.debug(`Resolved principal ${ownerIdentity} to ${output}`);
+                            resolvedPrincipal = output;
+                        }
+                    }
+                } else {
+                    resolvedPrincipal = ownerIdentity ? ownerIdentity : principal;
+                }
             }
 
             const command = `icacls "${filePath}" /grant "${resolvedPrincipal}:${permission}"`;
@@ -420,10 +439,10 @@ export class SetupExportsPathPermissionService {
         if (!permissions || permissions.length === 0) {
             return '';
         }
-    
+
         const inheritanceFlags = [];
         const permissionCodes = [];
-    
+
         permissions.forEach(p => {
             if (!p?.code || p.code.toUpperCase() === 'I') return;
             if (INHERITANCE_FLAGS.includes(p.code.toUpperCase())) {
@@ -432,11 +451,11 @@ export class SetupExportsPathPermissionService {
                 permissionCodes.push(p.code.toUpperCase());
             }
         });
-    
-        // Each inheritance flag in its own (), other permissions grouped
+
+        // Each inheritance flag in its own (), each permission code in its own ()
         const inheritancePart = inheritanceFlags.map(flag => `(${flag})`).join('');
-        const permissionPart = permissionCodes.length > 0 ? `(${permissionCodes.join(',')})` : '';
-    
+        const permissionPart = permissionCodes.map(code => `(${code})`).join('');
+
         return `${inheritancePart}${permissionPart}`;
     }
 

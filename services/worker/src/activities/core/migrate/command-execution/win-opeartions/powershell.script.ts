@@ -333,6 +333,17 @@ function Map-Sid {
         return $false
     }
 }
+function SidToName {
+    param(
+        [string]$sidStr
+    )
+    try {
+        $sidObj = New-Object System.Security.Principal.SecurityIdentifier($sidStr)
+        return $sidObj.Translate([System.Security.Principal.NTAccount]).Value
+    } catch {
+        return $false
+    }
+}
 `
 
 export const psGetAclScript = `
