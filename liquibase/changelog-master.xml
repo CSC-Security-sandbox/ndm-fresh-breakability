@@ -477,4 +477,11 @@
       <rollback>
       </rollback>
    </changeSet>
+
+   <changeSet id="20250922_01_add_savesmtp_permission_to_project_admin.sql" author="mshubha1">
+      <sqlFile path="liquibase/20250922_01_add_savesmtp_permission_to_project_admin.sql"/>
+      <rollback>
+      </rollback>
+   </changeSet>
+
 </databaseChangeLog>
