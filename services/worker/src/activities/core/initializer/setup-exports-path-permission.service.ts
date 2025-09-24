@@ -452,9 +452,9 @@ export class SetupExportsPathPermissionService {
             }
         });
 
-        // Each inheritance flag in its own (), each permission code in its own ()
+        // Each inheritance flag in its own (), other permissions grouped
         const inheritancePart = inheritanceFlags.map(flag => `(${flag})`).join('');
-        const permissionPart = permissionCodes.map(code => `(${code})`).join('');
+        const permissionPart = permissionCodes.length > 0 ? `(${permissionCodes.join(',')})` : '';
 
         return `${inheritancePart}${permissionPart}`;
     }

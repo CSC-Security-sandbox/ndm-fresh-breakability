@@ -429,7 +429,8 @@ describe('SetupExportsPathPermissionService', () => {
       
       const result = (service as any).formatPermissions(permissions);
       
-      expect(result).toBe('(F)(RX)');
+      // Expect the actual implementation format: non-inheritance permissions grouped together
+      expect(result).toBe('(F,RX)');
     });
   });
 
