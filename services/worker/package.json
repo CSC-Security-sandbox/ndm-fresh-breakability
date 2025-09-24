@@ -98,8 +98,7 @@
     "tsconfig-paths": "^4.2.0",
     "typescript": "5.7.3",
     "webpack": "^5.98.0",
-    "webpack-cli": "^6.0.1",
-    "clinic": "^13.0.0"
+    "webpack-cli": "^6.0.1"
   },
   "overrides": {
     "form-data": "^4.0.4",
