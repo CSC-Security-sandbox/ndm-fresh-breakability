@@ -32,6 +32,11 @@ export class StampMetaService {
 
             if (process.platform === 'win32') {
 
+                // Stamp permissions
+                const permissionsOutput = await this.stampPermission(input);
+                output.sourceErrors.push(...permissionsOutput.sourceErrors);
+                output.targetErrors.push(...permissionsOutput.targetErrors);
+
                 // Stamp SID to object
 
                 const [aclStampOutput, preserveTimeOutput] = await Promise.all([
@@ -47,11 +52,6 @@ export class StampMetaService {
                 const timeOutput = await this.stampAccessAndModifiedTime(input);
                 output.sourceErrors.push(...timeOutput.sourceErrors);
                 output.targetErrors.push(...timeOutput.targetErrors);
-
-                // Stamp permissions
-                const permissionsOutput = await this.stampPermission(input);
-                output.sourceErrors.push(...permissionsOutput.sourceErrors);
-                output.targetErrors.push(...permissionsOutput.targetErrors);
 
             }
             else {
