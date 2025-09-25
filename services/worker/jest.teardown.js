@@ -18,10 +18,10 @@ afterAll(async () => {
   });
   
   // Only use this in CI environments or when --forceExit isn't available
-  if (process.env.CI || process.argv.includes('--detectOpenHandles')) {
-    console.log('Gracefully exiting Jest after tests complete');
-    setTimeout(() => {
-      process.exit(0);
-    }, 1000);
-  }
+//   if (process.env.CI || process.argv.includes('--detectOpenHandles')) {
+//     console.log('Gracefully exiting Jest after tests complete');
+//     setTimeout(() => {
+//       process.exit(0);
+//     }, 1000);
+//   }
 }, 5000);
