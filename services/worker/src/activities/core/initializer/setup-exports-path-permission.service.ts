@@ -185,7 +185,7 @@ export class SetupExportsPathPermissionService {
                     const mappedPrincipal = this.mappingCache.get(jobRunId)?.get(user);
                     if (mappedPrincipal) {
                         this.logger.debug(`Using mapped principal ${mappedPrincipal} for removal instead of ${user}`);
-                        continue
+                        continue;
                     }
                     await this.removePrincipals(context.jobConfig.destinationFileServer, user);
                 } catch (error) {
@@ -220,7 +220,7 @@ export class SetupExportsPathPermissionService {
                 const ownerIdentity = await this.redisService.getOwnerIdentity(jobRunId, principal, 'SID');
                 if (ownerIdentity && ownerIdentity.startsWith('S-')) {
                     this.logger.debug(`Resolved principal ${principal} to ${ownerIdentity}`);
-                    const command = `SidToName  ${ownerIdentity}`;
+                    const command = `SidToName ${ownerIdentity}`;
                     const getIdentity = await this.winShellService.executeCommand(command);
                     if (getIdentity.stderr) {
                         this.logger.error(`Error resolving SID ${ownerIdentity} to name: ${getIdentity.stderr}`);
@@ -232,8 +232,12 @@ export class SetupExportsPathPermissionService {
                             throw new Error(`SID ${ownerIdentity} could not be resolved to a name.`);
                         } else {
                             this.logger.debug(`Resolved principal ${ownerIdentity} to ${output}`);
-                            this.mappingCache.set(jobRunId, this.mappingCache.get(jobRunId) || new Map());
-                            this.mappingCache.get(jobRunId).set(output, principal);
+                         let cacheMap = this.mappingCache.get(jobRunId);
+                            if (!cacheMap) {
+                                cacheMap = new Map();
+                                this.mappingCache.set(jobRunId, cacheMap);
+                            }
+                            cacheMap.set(output, principal);
                             resolvedPrincipal = output;
                         }
                     }
