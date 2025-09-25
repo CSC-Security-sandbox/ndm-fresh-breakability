@@ -4,6 +4,7 @@ import (
 	"fmt"
 	. "ndm-api-tests/utils"
 	"net/http"
+	"sync"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -130,49 +131,60 @@ var _ = Describe("TC-0014: Run incremental sync schedule migration for verifying
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
 
-			maxSleepTime := 0
-			var migrationJobRunIDs []string
-			for _, migrationJobConfigID := range migrationJobConfigIDs {
-				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
-				migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
-				Expect(len(getJobsResp.JobRuns)).To(BeNumerically("==", 1), "No jobRuns found in response")
-				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
-				defer resp.Body.Close()
-
-				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
-				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
-				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
-
-				migrationJobRunIDs = append(migrationJobRunIDs, migrationJobRunID)
-
-				getJobRunResp, err := GetJobRunInfo(migrationJobRunID)
-				Expect(err).NotTo(HaveOccurred(), "Error getting job run info")
-
-				jobSummary, err := GetJobSummaryByConfigID(ProjectId, migrationJobConfigID, headers)
-				Expect(err).NotTo(HaveOccurred())
-
-				actualNext, err := time.Parse(TIME_FORMAT, jobSummary.NextScheduleDate)
-				Expect(err).NotTo(HaveOccurred(),
-					"could not parse NextScheduleDate %q", jobSummary.NextScheduleDate)
-
-				parsedBase, err := time.Parse(TIME_FORMAT, getJobRunResp.EndTime)
-				Expect(err).NotTo(HaveOccurred(), "Error parsing current datetimes")
-				sch, err := cron.ParseStandard("*/5 * * * *")
-				Expect(err).NotTo(HaveOccurred(), "invalid cron expression")
-				expectedNext := sch.Next(parsedBase)
-
-				// assert actualNext is within ±1min of expectedNext
-				Expect(actualNext).To(BeTemporally("~", expectedNext, time.Minute), "expected next schedule exactly at %s; got %s",
-					expectedNext.Format(TIME_FORMAT),
-					jobSummary.NextScheduleDate)
-
-				LogDebug(fmt.Sprintf("Next Migration %s scheduled at %s", migrationJobConfigID, expectedNext.Format("2006-01-02 15:04:05")))
-
-				sleepTime := expectedNext.Sub(time.Now().UTC()).Seconds()
-				if sleepTime > 0 && sleepTime > float64(maxSleepTime) {
-					maxSleepTime = int(sleepTime)
-				}
+			var wg sync.WaitGroup
+			migration_validators := []string{
+				"src_to_dest_vol_migration.json",
+				"src2_to_dest2_vol_migration.json",
 			}
+
+			for i, migrationJobConfigID := range migrationJobConfigIDs {
+				wg.Add(1)
+				go func(i int, migrationJobConfigID string) {
+					defer GinkgoRecover()
+					defer wg.Done()
+					getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
+					migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
+					Expect(len(getJobsResp.JobRuns)).To(BeNumerically("==", 1), "No jobRuns found in response")
+					Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
+					defer resp.Body.Close()
+
+					Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
+					err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
+					Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
+
+					getJobRunResp, err := GetJobRunInfo(migrationJobRunID)
+					Expect(err).NotTo(HaveOccurred(), "Error getting job run info")
+
+					jobSummary, err := GetJobSummaryByConfigID(ProjectId, migrationJobConfigID, headers)
+					Expect(err).NotTo(HaveOccurred())
+
+					LogDebug(fmt.Sprintf("Migration %s got completed at %s, Next schedule at : %s", migrationJobRunID, getJobRunResp.EndTime, jobSummary.NextScheduleDate))
+
+					actualNext, err := time.Parse(TIME_FORMAT, jobSummary.NextScheduleDate)
+					Expect(err).NotTo(HaveOccurred(),
+						"could not parse NextScheduleDate %q", jobSummary.NextScheduleDate)
+
+					parsedBase, err := time.Parse(TIME_FORMAT, getJobRunResp.EndTime)
+					Expect(err).NotTo(HaveOccurred(), "Error parsing current datetimes")
+					sch, err := cron.ParseStandard("*/5 * * * *")
+					Expect(err).NotTo(HaveOccurred(), "invalid cron expression")
+					expectedNext := sch.Next(parsedBase)
+
+					// assert actualNext is within ±1min of expectedNext
+					Expect(actualNext).To(BeTemporally("~", expectedNext, time.Minute), "expected next schedule exactly at %s; got %s",
+						expectedNext.Format(TIME_FORMAT),
+						jobSummary.NextScheduleDate)
+
+					LogDebug(fmt.Sprintf("Next Migration %s expected at %s", migrationJobConfigID, expectedNext.Format("2006-01-02 15:04:05")))
+
+					LogDebug("Validate migration report for 1st iteration")
+					result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-014-JSON/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
+					Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
+					By(fmt.Sprintf("validate report result : %s", result))
+				}(i, migrationJobConfigID)
+			}
+
+			wg.Wait()
 
 			By("Removing Delta Data files for Incremental run")
 			err = RemoveDeltaFromVolume(sourceVolumePath1)
@@ -181,20 +193,8 @@ var _ = Describe("TC-0014: Run incremental sync schedule migration for verifying
 			err = RemoveDeltaFromVolume(sourceVolumePath2)
 			Expect(err).NotTo(HaveOccurred(), "Error removing delta data files from %s", sourceVolumePath2)
 
-			LogDebug("Waiting till new Job run created")
-			Wait(maxSleepTime)
-
-			LogDebug("Validate migration report for 1st iteration")
-			migration_validators := []string{
-				"src_to_dest_vol_migration.json",
-				"src2_to_dest2_vol_migration.json",
-			}
-
-			for i, migrationJobRunID := range migrationJobRunIDs {
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-014-JSON/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
-				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-				By(fmt.Sprintf("validate report result : %s", result))
-			}
+			LogDebug("Waiting till new Jobs run created")
+			Wait(300)
 
 			By("Validating incremental Sync is getting triggered")
 			for _, migrationJobConfigID := range migrationJobConfigIDs {
