@@ -52,6 +52,7 @@ export class MigrateScanService {
         }catch(error){
             if(error instanceof FatalError) 
                 errorType = ErrorType.FATAL_ERROR;
+            this.logger.error(`[${jobContext.jobRunId}] Error reading directory ${origin} ${path}: ${error}`);
             const ndmError = dmError("OPERATION", origin, Operation.READ_DIR, errorType, command.id, error, {name: command.fPath, path: path});
             await jobContext.publishToErrorStream(ndmError);
             throw error; 
