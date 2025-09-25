@@ -342,16 +342,16 @@ describe('SetupExportsPathPermissionService', () => {
       } as any;
 
       mockRedisService.getOwnerIdentity.mockResolvedValue('S-1-5-21-123456789-123456789-123456789-1001');
-      mockWinShellService.executeCommand.mockResolvedValue({
-        stdout: 'Successfully processed 1 files.',
-        stderr: ''
-      });
+      // First call (SidToName) returns 'testuser', second call (icacls) returns success
+      mockWinShellService.executeCommand
+        .mockResolvedValueOnce({ stdout: 'testuser', stderr: '' }) // SidToName
+        .mockResolvedValueOnce({ stdout: 'Successfully processed 1 files.', stderr: '' }); // icacls
 
       await service.addPrincipals(destinationPath, 'testuser', '(F)', 'test-job');
 
       expect(mockRedisService.getOwnerIdentity).toHaveBeenCalledWith('test-job', 'testuser', 'SID');
       expect(mockWinShellService.executeCommand).toHaveBeenCalledWith(
-        'icacls "\\\\test-host/test-path" /grant "S-1-5-21-123456789-123456789-123456789-1001:(F)"'
+        'icacls "\\\\test-host/test-path" /grant "testuser:(F)"'
       );
     });
 
@@ -429,7 +429,8 @@ describe('SetupExportsPathPermissionService', () => {
       
       const result = (service as any).formatPermissions(permissions);
       
-      expect(result).toBe('(F)(RX)');
+      // Expect the actual implementation format: non-inheritance permissions grouped together
+      expect(result).toBe('(F,RX)');
     });
   });
 

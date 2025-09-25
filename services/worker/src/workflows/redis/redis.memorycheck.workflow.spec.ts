@@ -25,6 +25,9 @@ describe('RedisMemoryCheckWorkflow', () => {
     }, 15000); // 15 second timeout
 
     afterAll(async () => {
+        if (worker && ['RUNNING', 'STARTED'].includes(worker.getState())) {
+            await worker.shutdown();
+        }
         if (testEnv) {
             await testEnv.teardown();
         }

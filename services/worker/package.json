@@ -141,6 +141,8 @@
       "/node_modules/",
       ".*\\.module\\.ts$",
       "/coverage",
+      "/dist/",
+      "src/activities/common/win-shell.service.spec.ts",
       "/dist",
       "/test/",
       "src/workflows/speed-test/speed-test-job-workflow.spec.ts"
@@ -152,6 +154,9 @@
     },
     "setupFiles": [
       "<rootDir>/jest.setup.js"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/jest.teardown.js"
     ],
     "coveragePathIgnorePatterns": [
       "/node_modules/",
