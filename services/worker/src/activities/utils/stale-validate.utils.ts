@@ -8,7 +8,14 @@ export const validateStale = async (paths: string[]) => {
         try {
             await Promise.race([
                 fs.promises.access(path, fs.constants.R_OK),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1000))
+                new Promise((_, reject) => {
+                    const timeoutId = setTimeout(() => reject(new Error('Timeout')), 1000);
+                    // Unref the timeout to allow Node.js to exit
+                    if (timeoutId.unref) {
+                        timeoutId.unref();
+                    }
+                    return () => clearTimeout(timeoutId);
+                })
             ]);
             console.log(`Path ${path} is valid.`);
         } catch (err) {
