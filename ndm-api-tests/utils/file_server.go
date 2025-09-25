@@ -239,7 +239,7 @@ func ClearVolumeForNFS(export string) string {
 	sudo rm -rf "%s"
 
 	sudo mkdir -p "%s"
-	sudo mount -t nfs "%s" "%s"
+	sudo mount -t nfs -o vers=3 "%s" "%s"
 
 	# Remove all files, directories, and hidden files
 	sudo find "%s" -mindepth 1 -maxdepth 1 ! -name ".snapshot" -exec rm -rf {} +

@@ -169,6 +169,9 @@ fi
 
 echo "🎯 Selected Zone: $SELECTED_ZONE"
 
+# Add workspace creation before terraform commands
+WORKSPACE_NAME="${NAME_PREFIX}-${NAME_TIMESTAMP}"
+
 
 export TF_VAR_project_id=$PROJECT_ID
 export TF_VAR_region=$REGION
@@ -185,6 +188,11 @@ export TF_VAR_subnetwork="us-e4-sn"
 
 echo "Initializing Terraform..."
 terraform init
+
+# Create isolated workspace
+echo "📁 Creating workspace: $WORKSPACE_NAME"
+terraform workspace select "$WORKSPACE_NAME" 2>/dev/null || terraform workspace new "$WORKSPACE_NAME"
+
 
 echo "Applying new Terraform configuration..."
 terraform apply -auto-approve

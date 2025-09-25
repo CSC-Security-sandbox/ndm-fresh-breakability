@@ -40,7 +40,7 @@ resource "google_compute_instance" "vm_instance" {
   tags = ["http-server"]
 
   labels = {
-    creator = "dk49889"
+    creator = var.name_prefix
   }
 
 

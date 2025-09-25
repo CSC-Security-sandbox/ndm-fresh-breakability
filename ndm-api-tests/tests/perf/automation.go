@@ -38,7 +38,7 @@ type EndToEndMigration struct {
 
     // Migration components
     projectId             string
-    workerId              string
+    workerId              []string
     sourceConfigId        string
     destinationConfigId   string
     sourcePathId          string
@@ -178,8 +178,23 @@ func getOpenBaoRootToken() (string, error) {
         return "", fmt.Errorf("no control plane instances found")
     }
 
+    // for perf run
     cpName := instanceNames[0]
     zone := zones[0]
+
+    // for abhishek test
+    // cpName:="cp-0809-build-0909-run-090949-abhi-valida-dk"
+    // zone:="us-east1-b"
+
+    // for shefali test
+    // cpName:="cp-abhi-adhoc-shefa-dk"
+    // zone:="us-east4-c"
+
+    // performed with 10con to validate
+    // cpName:="cp-0609-build-1709-run-121350-shef-con10"
+    // zone:="us-east4-c"
+
+
 
     if cpName == "" {
         return "", fmt.Errorf("no control plane instance name found")
@@ -235,7 +250,7 @@ func getKeyCloakAdminCredentials() (KeycloakCredentials, error) {
         return KeycloakCredentials{}, fmt.Errorf("failed to execute HTTP request: %w", err)
     }
     defer resp.Body.Close()
-
+    fmt.Println(resp)
     bodyBytes, err := io.ReadAll(resp.Body)
     if err != nil {
         return KeycloakCredentials{}, fmt.Errorf("failed to read response body: %w", err)
@@ -856,7 +871,7 @@ func (e *EndToEndMigration) setupProjectAndWorker() error {
     }
 
     e.projectId = projectId
-    e.workerId = workerIds[0]
+    e.workerId = workerIds
     e.attachedWorkersConfig = attachedWorkersConfig
     e.headers = GetHeaders(AuthToken, ContentTypeJSON)
 
@@ -880,7 +895,7 @@ func (e *EndToEndMigration) createSourceFileServer() error {
         Protocol:         ProtocolNFS,
         ProtocolVersion:  ProtocolVersionNFS_V3,
         Host:             "172.30.121.91",
-        Workers:          []string{e.workerId},
+        Workers:          e.workerId,
         WorkingDirectory: "",
     }
 
@@ -912,7 +927,7 @@ func (e *EndToEndMigration) createSourceFileServer() error {
     return nil
 }
 
-func (e *EndToEndMigration) createDestinationVolume() error {
+func (e *EndToEndMigration)  createDestinationVolume() error {
     e.logOperation("Phase 2.1: Setting up destination volume")
 
     scriptPath := "run.sh"
@@ -987,7 +1002,7 @@ func (e *EndToEndMigration) createDestinationFileServer() error {
         Protocol:         ProtocolNFS,
         ProtocolVersion:  ProtocolVersionNFS_V3,
         Host:             e.DestinationIP,
-        Workers:          []string{e.workerId},
+        Workers:          e.workerId,
         WorkingDirectory: "",
     }
 
@@ -1141,6 +1156,55 @@ func (e *EndToEndMigration) performDestinationDiscovery() error {
     return nil
 }
 
+func findJobConfigByRun(status string) ([]string, error) {
+    // Build URL with status filter
+    url := fmt.Sprintf("%s/api/v1/jobs/runs?status=%s", JOB_SERVICE_URL, status)
+    
+    headers := GetHeaders(AuthToken, ContentTypeJSON)
+    resp, err := SendAPIRequest(http.MethodGet, url, nil, headers)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+    
+    bodyBytes, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, err
+    }
+    
+    // Parse response
+    type JobRunsResponse struct {
+        Data struct {
+            Items []struct {
+                JobConfigId string `json:"jobConfigId"`
+                ID          string `json:"id"`
+                ConfigId    string `json:"configId"`
+            } `json:"items"`
+        } `json:"data"`
+    }
+    
+    var response JobRunsResponse
+    if err := json.Unmarshal(bodyBytes, &response); err != nil {
+        return nil, err
+    }
+
+    var jobConfigIds []string
+    for _, item := range response.Data.Items {
+        configId := item.JobConfigId
+        if configId == "" {
+            configId = item.ID
+        }
+        if configId == "" {
+            configId = item.ConfigId
+        }
+        if configId != "" {
+            jobConfigIds = append(jobConfigIds, configId)
+        }
+    }
+    
+    return jobConfigIds, nil
+}
+
 func (e *EndToEndMigration) executeMigration() error {
 
     migrationStartTime := time.Now()
@@ -1160,13 +1224,22 @@ func (e *EndToEndMigration) executeMigration() error {
     }
 
     migrationJobConfigIds, resp, err := CreateMigrationJob(migrationParams, e.headers)
+    fmt.Println("response for job creation :", resp)
     if err != nil {
         return fmt.Errorf("error creating migration job: %v", err)
-    }
+    } 
+    
     defer resp.Body.Close()
 
     if len(migrationJobConfigIds) == 0 {
-        return fmt.Errorf("no migration job config IDs returned")
+        time.Sleep(30 * time.Second)
+        migrationJobConfigIds, err = findJobConfigByRun("READY")
+        if err != nil || len(migrationJobConfigIds) == 0 {
+            migrationJobConfigIds, err = findJobConfigByRun("RUNNING")
+        }
+        if err != nil || len(migrationJobConfigIds) == 0 {
+            return fmt.Errorf("no migration job config IDs found")
+        }
     }
 
     e.migrationJobConfigIds = migrationJobConfigIds
@@ -1325,6 +1398,39 @@ func (e *EndToEndMigration) approveCutover() error {
     return nil
 }
 
+func clearVolume(export string) error {
+	script := ""
+
+	switch PROTOCOL_TYPE {
+	case ProtocolSMB:
+		script = ClearVolumeForSMB(export)
+	case ProtocolNFS:
+		script = ClearVolumeForNFS(export)
+	}
+
+	// config := GetAttachedWorkerDetails()
+
+	// sshConfig = SSHConfig{
+	// 	Username: config.Username,
+	// 	Host:     config.Host,
+	// 	Port:     config.Port,
+	// 	Password: config.Password,
+	// }
+
+    fmt.Println("Script to clear volume:\n", script)
+    for _, workerConfig := range availableWorkers {
+        output, err := sshRunScript(workerConfig, script)
+        if err != nil {
+            return fmt.Errorf("RemoveDataFromFileserver failed: %w\noutput: %s", err, output)
+        }
+
+        fmt.Println("Output from clearing volume on worker", workerConfig.Host, ":\n", output)
+        break // Clear on the first available worker and exit
+    }
+    return nil
+	
+}
+
 func (e *EndToEndMigration) storeLogs() error {
     e.logOperation("Phase 8: Storing migration logs")
 
@@ -1363,8 +1469,9 @@ func (e *EndToEndMigration) Execute() error {
     e.logOperation("=== Starting End-to-End Migration Execution ===")
 
     sourceConfigs := []SourceConfig{
-        {"172.30.121.91", "/nfs/LargeAI", "LINUX_SRC_LARGE"},
-        {"172.30.121.91", "/nfs/SWBUILD_ds", "LINUX_SRC_SMALL"},
+        // {"172.30.121.91", "/nfs/LargeAI", "LINUX_SRC_LARGE"},
+        {"172.30.121.91", "/nfs/swbuild20g", "LINUX_SRC_SMALL"},
+        // {"172.30.121.91", "/nfs/SWBUILD_ds", "LINUX_SRC_SMALL"},
     }
     
     fmt.Println("Received worker registration response")
@@ -1373,32 +1480,80 @@ func (e *EndToEndMigration) Execute() error {
     fmt.Println("Updated configuration variables for NFS and GCP")
 
 	fmt.Println("Waiting for services to stabilize...")
-	Wait(3*60) // Wait for 3 minutes to ensure services are up
-
-
+	Wait(6 * 60) // Wait for 5 minutes to ensure services are up
+    fmt.Println("Services should be stabilized now.")
 
     initTestEnv()
 
-    // fmt.Println("Available Workers:", getAvailableWorkersCount())
+    fmt.Println("Available Workers:", getAvailableWorkersCount())
 
     // // Execute all migration phases
     if err := e.setupProjectAndWorker(); err != nil {
         return fmt.Errorf("project and worker setup failed: %v", err)
     }
-
+    // ########
     if err := e.createSourceFileServer(); err != nil {
         return fmt.Errorf("source file server creation failed: %v", err)
     }
+    // ########
 
-    for i := 0; i < 3; i++ {
-        
-        if err := e.createDestinationVolume(); err != nil {
+    // for perf run
+    // e.projectId = "9e594934-9bc5-4425-97b9-5686dcb92d36"
+    // e.workerId = []string{"8508a2f2-040d-48d8-81e1-f28c89d0e7e6"}
+    // e.attachedWorkersConfig = attachedWorkersConfig
+    // e.headers = GetHeaders(AuthToken, ContentTypeJSON)
+    // e.sourceConfigId = "12884630-e9d1-45fb-be92-2001deebeda8"
+
+    // for abhishek test
+    // e.projectId = "d0c80520-7f54-4300-85a1-92add5871b38"
+    // e.workerId = "e5366a3b-d648-4178-9241-cc06d66177e1"
+    // e.attachedWorkersConfig = attachedWorkersConfig
+    // e.headers = GetHeaders(AuthToken, ContentTypeJSON)
+    // e.sourceConfigId = "577a7ff5-b670-465d-96b1-92accc5fdf51"
+
+    // ############
+    if err := e.createDestinationVolume(); err != nil {
         return fmt.Errorf("destination volume creation failed: %v", err)
+    }
+    
+    if err := e.createDestinationFileServer(); err != nil {
+        return fmt.Errorf("destination file server creation failed: %v", err)
+    }
+    // ###########
+    
+    // e.destinationConfigId = "91236cb7-e742-4835-82e3-dcbd2ca56a10"
+    // destinationPathId, err := GetExportPathID("source",  e.destmountPath, e.destinationConfigId, e.headers)
+    // if err != nil {
+    //     return fmt.Errorf("error getting source export path ID: %v", err)
+    // }
+
+    for i := 0; i < 1; i++ {
+        
+        // if err := e.createDestinationVolume(); err != nil {
+        // return fmt.Errorf("destination volume creation failed: %v", err)
+        // }
+
+        // if err := e.createDestinationFileServer(); err != nil {
+        //     return fmt.Errorf("destination file server creation failed: %v", err)
+        // }
+        // for perf run
+        // e.destmountPath = "/perf-run-final"
+        // e.destinationConfigId = "91236cb7-e742-4835-82e3-dcbd2ca56a10"
+        // e.DestinationIP = "10.127.176.21"
+
+        
+        // // for abhishek test
+        // e.destmountPath = "/abhi-test-dk-1"
+        // e.destinationConfigId = "8e00f318-0f1a-4869-8a30-f1616ce4ad52"
+        // e.DestinationIP = "10.127.176.21"
+
+        destinationPathId, err := GetExportPathID("destination",  e.destmountPath, e.destinationConfigId, e.headers)
+        if err != nil {
+            return fmt.Errorf("error getting destination export path ID: %v", err)
         }
 
-        if err := e.createDestinationFileServer(); err != nil {
-            return fmt.Errorf("destination file server creation failed: %v", err)
-        }
+        e.destinationPathId = destinationPathId
+        e.logOperation(fmt.Sprintf("✓ Destination volume path created: %s", e.destinationPathId))
 
         for i, sourceConfig := range sourceConfigs{
             e.logOperation(fmt.Sprintf("=== Migration Loop %d/%d: %s ===", 
@@ -1413,12 +1568,25 @@ func (e *EndToEndMigration) Execute() error {
             e.logOperation(fmt.Sprintf("✓ Source volume path created: %s", e.sourcePathId))
 
             
-
             if err := e.executeMigration(); err != nil {
                 return fmt.Errorf("migration execution failed: %v", err)
             }
 
-            time.Sleep(10 * time.Minute)
+            destinationVolumePath1 := fmt.Sprintf("%s:%s", e.DestinationIP, e.destmountPath)
+
+            fmt.Println(time.Now().Format("2006-01-02 15:04:05"), " - Clearing destination volume for next migration...")
+            err = clearVolume(destinationVolumePath1)
+            if err != nil {
+                return fmt.Errorf("failed to clear destination volume: %v", err)
+            }
+            e.logOperation("✓ Cleared destination volume for next migration")
+            fmt.Println(time.Now().Format("2006-01-02 15:04:05"), " - Destination volume cleared successfully.")
+
+            fmt.Println("Waiting 30 minutes before next migration...")
+            e.logOperation("Waiting 30 minutes before next migration...")
+            time.Sleep(30 * time.Minute)
+            e.logOperation("Proceeding after wait period.")
+
         }
     }
     
@@ -1458,36 +1626,59 @@ func (e *EndToEndMigration) Execute() error {
 
 func main() {
     // Creating the cp and worker using Terraform
-    // infraMgr := InfrastructureManager{
-    //  runScript:    "perf-nfs-script.sh",
-    //  terraformDir: "../../../app-deployment/terraform/gcp",
-    // }
+    infraMgr := InfrastructureManager{
+     runScript:    "perf-nfs-script.sh",
+     terraformDir: "../../../app-deployment/terraform/gcp",
+    }
 
-    // if err := infraMgr.RunScript(); err != nil {
-    //  log.Fatalf("Infrastructure deployment failed: %v", err)
-    // }
+    if err := infraMgr.RunScript(); err != nil {
+     log.Fatalf("Infrastructure deployment failed: %v", err)
+    }
 
-    // fmt.Println("CP and Worker created successfully")
+    fmt.Println("CP and Worker created successfully")
 
-    // // Getting the CP and Worker IPs
-    // outputs, err := infraMgr.GetOutputs()
-    // if err != nil {
-    //  log.Fatalf("Failed to get terraform outputs: %v", err)
-    // }
+    // Getting the CP and Worker IPs
+    outputs, err := infraMgr.GetOutputs()
+    if err != nil {
+     log.Fatalf("Failed to get terraform outputs: %v", err)
+    }
 
-    // // Print the IPs
-    // if cpIPs, ok := outputs["control_plane_internal_ips"]; ok {
-    //  fmt.Printf("Control Plane Internal IPs: %v\n", cpIPs)
-    // }
-    // if workerIPs, ok := outputs["worker_internal_ips"]; ok {
-    //  fmt.Printf("Worker Internal IPs: %v\n", workerIPs)
-    // }
+    // Print the IPs
+    if cpIPs, ok := outputs["control_plane_internal_ips"]; ok {
+     fmt.Printf("Control Plane Internal IPs: %v\n", cpIPs)
+    }
+    if workerIPs, ok := outputs["worker_internal_ips"]; ok {
+     fmt.Printf("Worker Internal IPs: %v\n", workerIPs)
+    }
 
-    // cpEndpoints := outputs["control_plane_internal_ips"]
-    // workerEndpoints := outputs["worker_internal_ips"]
+    cpEndpoints := outputs["control_plane_internal_ips"]
+    workerEndpoints := outputs["worker_internal_ips"]
 
-    cpEndpoints :=[]string{"172.30.121.78"}
-    workerEndpoints := []string{"172.30.121.85"}
+    // // for perf run  for abhishek deleted worker
+    // cpEndpoints :=[]string{"172.30.121.82"}
+    // workerEndpoints := []string{"172.30.121.90"}
+
+    // // for perf run  for abhishek deleted worker now no worker attached
+    // cpEndpoints :=[]string{"172.30.121.68"}
+    // workerEndpoints := []string{"172.30.121.83"}
+
+
+    // for perf run final
+    // cpEndpoints :=[]string{"172.30.121.88"}
+    // workerEndpoints := []string{"172.30.121.73"}
+
+    // ship stopper doing back to back migration for SWbuild data as shefa asked 
+    // cpEndpoints :=[]string{"172.30.121.67"}
+    // workerEndpoints := []string{"172.30.121.86", "172.30.121.84"}
+
+    // // performed with 10con to validate
+    // cpEndpoints :=[]string{"172.30.121.81"}
+    // workerEndpoints := []string{"172.30.121.83", "172.30.121.85"}
+
+    // // for testing with concurrency 10 with 4 worker for eda
+    // cpEndpoints :=[]string{"172.30.121.86"}
+    // workerEndpoints := []string{"172.30.121.88", "172.30.121.82", "172.30.121.84", "172.30.121.79"}
+
 
     if err := setupEnvironment(cpEndpoints, workerEndpoints); err != nil {
         log.Fatalf("Environment setup failed: %v", err)
@@ -1504,7 +1695,7 @@ func main() {
     initWorkers()
 
     // Wait for Control Plane to be ready
-    err := waitForControlPlaneReadyWithIP(cpEndpoints[0])
+    err = waitForControlPlaneReadyWithIP(cpEndpoints[0])
     if err != nil {
         log.Fatalf("Control Plane readiness check failed: %v", err)
     }
@@ -1520,6 +1711,20 @@ func main() {
         migration.logOperation(fmt.Sprintf("Migration failed: %v", err))
         log.Fatalf("Migration failed: %v", err)
     }
+
+    // PROTOCOL_TYPE = Protocol("NFS")
+    // CLOUD_ENVIRONMENT = CloudEnvironment("GCP")
+
+    // destinationVolumePath1 := fmt.Sprintf("%s:%s", "10.127.176.21", "/con10-shef-1")
+
+    // fmt.Println(time.Now().Format("2006-01-02 15:04:05"), " - Clearing destination volume for next migration...")
+    // err = clearVolume(destinationVolumePath1)
+    // if err != nil {
+    //     log.Fatalf("failed to clear destination volume: %v", err)
+    // }
+    // // e.logOperation("✓ Cleared destination volume for next migration")
+    // fmt.Println(time.Now().Format("2006-01-02 15:04:05"), " - Destination volume cleared successfully.")
+
 
     log.Println("End-to-End Migration Program completed successfully!")
 }

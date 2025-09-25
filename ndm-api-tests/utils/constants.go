@@ -148,7 +148,7 @@ const (
 	FormatPDF                       Format           = "pdf"
 	FormatCSV                       Format           = "csv"
 	DefaultPollInterval                              = 5
-	MaxPollRetries                                   = 1000
+	MaxPollRetries                                   = 10000
 	WORKER_TIMEOUT                                   = 180
 	RUNNING_JOBRUN                                   = "RUNNING"
 	PAUSE_JOBRUN                                     = "PAUSE"
