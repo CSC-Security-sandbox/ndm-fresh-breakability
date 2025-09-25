@@ -139,7 +139,6 @@ func fetchReport(
 			"jobRunId":    jobRun,
 			"report-type": reportTypeVal,
 		}
-		Wait(20)
 
 	case FormatPDF:
 		url = ADMIN_SERVICE_URL + "/api/v1/report/pdf/generate"
@@ -151,6 +150,7 @@ func fetchReport(
 	default:
 		return nil, fmt.Errorf("unsupported format %q", fmtType)
 	}
+	Wait(20)
 
 	// 2) marshal JSON body
 	bodyBytes, err := json.Marshal(payload)
