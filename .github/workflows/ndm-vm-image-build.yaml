@@ -503,6 +503,16 @@ jobs:
           curl -o "ndm-docker-images.tar" \
               -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
               $TARGET_URL
+          
+          TARGET_URL2="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/docker-images/ndm-admin-entry-alpine.tar"
+          curl -o "ndm-admin-entry-alpine.tar" \
+              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+              $TARGET_URL2
+
+          TARGET_URL3="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/docker-images/ndm-fluentd-loki-v1.17-1.tar"
+          curl -o "ndm-fluentd-loki-v1.17-1.tar" \
+              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+              $TARGET_URL3
 
       - name: Upload Ansible vars.yaml
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}

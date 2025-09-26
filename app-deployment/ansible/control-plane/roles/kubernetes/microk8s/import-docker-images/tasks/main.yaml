@@ -1,22 +1,35 @@
-- name: Copy Docker image tar file to target
+
+- name: Copy Docker image tar files to target
   copy:
-    src: "../../../artifacts/ndm-docker-images.tar"
-    dest: /tmp/ndm-docker-images.tar
+    src: "../../../artifacts/{{ item }}"
+    dest: "/tmp/{{ item }}"
     mode: '0644'
+  with_items:
+    - ndm-docker-images.tar
+    - ndm-admin-entry-alpine.tar
+    - ndm-fluentd-loki-v1.17-1.tar
   when: local_cluster is not defined
 
 - name: Side-load images to microk8s
-  command: microk8s images import /tmp/ndm-docker-images.tar
+  command: microk8s images import /tmp/{{ item }}
   register: microk8s_import_result
+  with_items:
+    - ndm-docker-images.tar
+    - ndm-admin-entry-alpine.tar
+    - ndm-fluentd-loki-v1.17-1.tar
   when: local_cluster is not defined
 
 - name: Display microk8s import result
   debug:
-    var: microk8s_import_result.stdout
+    var: microk8s_import_result.results
   when: local_cluster is not defined
 
-- name: Remove tar file from target
+- name: Remove tar files from target
   file:
-    path: /tmp/ndm-docker-images.tar
+    path: "/tmp/{{ item }}"
     state: absent
+  with_items:
+    - ndm-docker-images.tar
+    - ndm-admin-entry-alpine.tar
+    - ndm-fluentd-loki-v1.17-1.tar
   when: local_cluster is not defined
