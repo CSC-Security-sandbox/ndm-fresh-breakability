@@ -35,10 +35,15 @@ const ToggleWorkerCellRenderer = ({
     (smbCredentialsForm.isValid && workerName.startsWith("smb-"));
 
   const isDisabled = (() => {
-    if (!isWorkerTypeValid) return true;
-    if (validateConnectionLoader) return true;
-    if (isJobRunning && isOnline) return true;
-    if (!isSelected && !isOnline && !isJobRunning) return true;
+    if (!isWorkerTypeValid) return true; //if worker type is not valid disable it
+    if (validateConnectionLoader) return true; //if connection is being validated disable it
+    // if (isJobRunning && isOnline) return true;
+    if (isJobRunning) {
+      if (!isOnline || (isOnline && isSelected)) return true;
+    } //if job is running and worker is offline or online and selected disable it
+    // if (isJobRunning && !isOnline) return true; //if job is running and worker is offline disable it
+    // if (isJobRunning && isOnline && isSelected) return true; //if worker is selected,online and job is running disable it
+    if (!isSelected && !isOnline && !isJobRunning) return true; //if worker is not selected,offline and job is not running disable it
 
     return false;
   })();
