@@ -681,3 +681,66 @@ func IsWorkerRunning() (bool, error) {
 	LogDebug("Datamigrator Worker service is NOT running.")
 	return false, nil
 }
+
+func GetMaxCPUUsageReport(jobid string) (string, error) {
+	script := ""
+
+	switch PROTOCOL_TYPE {
+	case ProtocolSMB:
+		script = ""
+	case ProtocolNFS:
+		script = "cat /home/ubuntu/" + jobid + "_max_cpu_usage.txt"
+	}
+
+	port, err := strconv.Atoi(NDM_WORKERS_PORT)
+	if err != nil {
+		LogFatalf("Invalid port number in NDM_WORKERS_PORT: %v", err)
+	}
+
+	// SSH config
+	config := SSHConfig{
+		Username: NDM_WORKERS_USER_NAME,
+		Host:     NDM_WORKERS_HOST,
+		Port:     port,
+		Password: NDM_WORKERS_PASSWORD,
+	}
+
+	output, err := sshRunScript(config, script)
+	if err != nil {
+		return "", fmt.Errorf("GetMaxCPUUsageReport failed: %w\noutput: %s", err, output)
+	}
+
+	cpuUsageInfo := strings.Split(string(output), "|") // Expecting format: timestamp | jobid | cpu_usage% ref *_cpu_usage.sh
+	return cpuUsageInfo[2], nil
+}
+
+func StopCPUMonitoring() error {
+	var script string
+
+	switch PROTOCOL_TYPE {
+	case ProtocolSMB:
+		script = ""
+	case ProtocolNFS:
+		script = "pkill -f nfs_cpu_usage.sh && rm nfs_cpu_usage.sh"
+	}
+
+	port, err := strconv.Atoi(NDM_WORKERS_PORT)
+	if err != nil {
+		LogFatalf("Invalid port number in NDM_WORKERS_PORT: %v", err)
+	}
+
+	// SSH config
+	config := SSHConfig{
+		Username: NDM_WORKERS_USER_NAME,
+		Host:     NDM_WORKERS_HOST,
+		Port:     port,
+		Password: NDM_WORKERS_PASSWORD,
+	}
+
+	output, err := sshRunScript(config, script)
+	if err != nil {
+		return fmt.Errorf("StopCPUMonitoring failed: %w\noutput: %s", err, output)
+	}
+
+	return nil
+}

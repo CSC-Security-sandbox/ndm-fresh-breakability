@@ -13,6 +13,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/sftp"
+	"golang.org/x/crypto/ssh"
 )
 
 const (
@@ -24,7 +26,7 @@ const (
 var CSV_REPORT_HEADERS = []string{"Pack", "Worker-Host", "Protocol", "Source-FileServer", "Destination-FileServer",
 	"Source-Path", "Destination-Path", "Job-Run-ID", "Dataset-Size",
 	"MAX_WRITE_CONCURRENCY", "JOB_TASK_ACTIVITY_CONCURRENCY", "MAX_BUFFER_SIZE (MiB)",
-	"Migration-Duration", "Line-Rate", "Worker-Downtime"}
+	"Migration-Duration", "Line-Rate", "Worker-Downtime", "Worker-Max-CPU-Usage"}
 
 var PERF_PACK_CONFIG = map[int]map[string]int{
 	1: {
@@ -342,4 +344,127 @@ func getWorkerDowntime(stop chan struct{}, workerDownTimeSec *int) {
 			return
 		}
 	}
+}
+
+func SCPCPUMonitoringScript(jobID string) error {
+
+	var localScriptPath, remoteScriptPath string
+
+	switch PROTOCOL_TYPE {
+	case ProtocolSMB:
+		localScriptPath = "./smb_cpu_usage.ps1"
+		remoteScriptPath = ""
+	case ProtocolNFS:
+		localScriptPath = "./nfs_cpu_usage.sh"
+		remoteScriptPath = "/home/ubuntu/nfs_cpu_usage.sh"
+	}
+
+	port, err := strconv.Atoi(NDM_WORKERS_PORT)
+	if err != nil {
+		LogFatalf("Invalid port number in NDM_WORKERS_PORT: %v", err)
+	}
+
+	// SSH config
+	config := SSHConfig{
+		Username: NDM_WORKERS_USER_NAME,
+		Host:     NDM_WORKERS_HOST,
+		Port:     port,
+		Password: NDM_WORKERS_PASSWORD,
+	}
+
+	client, err := getSSHClient(config)
+	if err != nil {
+		return err // or handle error
+	}
+	defer client.Close()
+
+	// Start SFTP session
+	sftpClient, err := sftp.NewClient(client)
+	if err != nil {
+		return fmt.Errorf("failed to start SFTP: %v", err)
+	}
+	defer sftpClient.Close()
+
+	// Read local script
+	scriptBytes, err := os.ReadFile(localScriptPath)
+	if err != nil {
+		return fmt.Errorf("failed to read local script: %v", err)
+	}
+
+	// Copy script to remote
+	remoteFile, err := sftpClient.Create(remoteScriptPath)
+	if err != nil {
+		return fmt.Errorf("failed to create remote script: %v", err)
+	}
+	_, err = remoteFile.Write(scriptBytes)
+	if err != nil {
+		return fmt.Errorf("failed to write remote script: %v", err)
+	}
+	remoteFile.Close()
+
+	// Make script executable
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("failed to create SSH session: %v", err)
+	}
+	defer session.Close()
+	chmodCmd := fmt.Sprintf("chmod +x %s", remoteScriptPath)
+	if err := session.Run(chmodCmd); err != nil {
+		return fmt.Errorf("failed to chmod script: %v", err)
+	}
+
+	return nil
+}
+
+func StartCPUMonitoring(remoteScriptPath, jobID string) error {
+
+	port, err := strconv.Atoi(NDM_WORKERS_PORT)
+	if err != nil {
+		LogFatalf("Invalid port number in NDM_WORKERS_PORT: %v", err)
+	}
+
+	// SSH config
+	config := SSHConfig{
+		Username: NDM_WORKERS_USER_NAME,
+		Host:     NDM_WORKERS_HOST,
+		Port:     port,
+		Password: NDM_WORKERS_PASSWORD,
+	}
+
+	client, err := getSSHClient(config)
+	if err != nil {
+		return err // or handle error
+	}
+	defer client.Close()
+
+	// Run script in background
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("failed to create SSH session for running script: %v", err)
+	}
+	defer session.Close()
+	runCmd := fmt.Sprintf("nohup %s %s > /dev/null 2>&1 &", remoteScriptPath, jobID)
+	if err := session.Run(runCmd); err != nil {
+		return fmt.Errorf("failed to run script: %v", err)
+	}
+
+	return nil
+}
+
+// getSSHClient returns an SSH client connected to the VM.
+func getSSHClient(sshConfig SSHConfig) (*ssh.Client, error) {
+	config := &ssh.ClientConfig{
+		User: sshConfig.Username,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(sshConfig.Password),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
+
+	address := fmt.Sprintf("%s:%d", sshConfig.Host, sshConfig.Port)
+	client, err := ssh.Dial("tcp", address, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to SSH server: %w", err)
+	}
+	return client, nil
 }
