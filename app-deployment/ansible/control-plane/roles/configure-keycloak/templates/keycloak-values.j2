@@ -7,7 +7,7 @@ postgresql:
 
 image:
   registry: docker.io
-  repository: bitnami/keycloak
+  repository: bitnamilegacy/keycloak
   tag: 26.3.3-debian-12-r0
   pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
 
@@ -25,7 +25,7 @@ auth:
   passwordSecretKey: "keycloak-admin-password"
 
 command:
-  - "/opt/bitnami/scripts/keycloak/entrypoint.sh"
+  - "/opt/bitnamilegacy/scripts/keycloak/entrypoint.sh"
 
 args:
   - 'bash'
@@ -42,7 +42,7 @@ args:
       done
 
       # Execute the entrypoint script
-      /opt/bitnami/scripts/keycloak/run.sh
+      /opt/bitnamilegacy/scripts/keycloak/run.sh
 
 podAnnotations:
   vault.hashicorp.com/agent-json-patch: '[{"op": "replace", "path": "/imagePullPolicy", "value": "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"}]'
@@ -91,9 +91,9 @@ initdbScripts:
     load_custom_provider_script.sh: |
       #!/bin/bash
       echo "Loading custom providers from /custom/providers..."
-      cp -R /custom/providers/* /opt/bitnami/keycloak/providers
+      cp -R /custom/providers/* /opt/bitnamilegacy/keycloak/providers
       echo "Loading custom themes from /custom/themes..."
-      cp -R /custom/themes/* /opt/bitnami/keycloak/themes
+      cp -R /custom/themes/* /opt/bitnamilegacy/keycloak/themes
       echo "Successfully loaded custom themes and providers"
     
 ingress:
