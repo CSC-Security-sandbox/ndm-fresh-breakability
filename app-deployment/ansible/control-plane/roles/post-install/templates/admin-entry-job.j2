@@ -22,13 +22,12 @@ spec:
             name: admin-entry-config  
       containers:
         - name: admin-entry-container
-          image: docker.io/library/alpine:3.22.1
+          image: ndm-admin-entry:alpine
           imagePullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
           command:
             - "sh"
             - "-c"
             - |
-              apk add --no-cache bash
               bash /scripts/admin_entry.sh
           volumeMounts:
             - name: admin-entry-volume
