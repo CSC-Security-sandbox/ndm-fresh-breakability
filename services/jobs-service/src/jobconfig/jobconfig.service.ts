@@ -580,6 +580,8 @@ export class JobConfigService {
     bulkMigrate: BulkMigrateJobConfig,
     projectId?: string
   ): Promise<JobConfigBulkMigrateFinalResponse> {
+    // validation for the path names
+    await this.validatePathNames(bulkMigrate.migrateConfigs);
     const firstRunAt = bulkMigrate?.firstRunAt ?? new Date();
     const jobConfigs: Partial<JobConfigEntity>[] = [];
     let parsedMappings: ParsedMapping[] = [];
@@ -1459,6 +1461,46 @@ export class JobConfigService {
     });
     return await queryBuilder.getMany();
   }
+
+    async validatePathNames(migrateConfigs: MigrateConfig[]) {
+        // Collect all path IDs from CSV
+
+        if (!migrateConfigs || migrateConfigs.length === 0) {
+          return; 
+        }
+
+        const pathIds: string[] = [];
+        migrateConfigs.forEach(config => {
+            pathIds.push(config.sourcePathId);
+            pathIds.push(...config.destinationPathId);
+        });
+
+        // Get actual volumes from database
+        const volumes = await this.volumeRepo.find({
+            where: { id: In(pathIds) },
+            select: { id: true, volumePath: true }
+        });
+
+        const volumeMap = new Map(volumes.map(v => [v.id, v.volumePath]));
+
+        // Validate all volume IDs exist
+        for (const config of migrateConfigs) {
+            if (!volumeMap.has(config.sourcePathId)) {
+                throw new BadRequestException(
+                    `Source volume not found`
+                );
+            }
+
+            for (const destPathId of config.destinationPathId) {
+                if (!volumeMap.has(destPathId)) {
+                    throw new BadRequestException(
+                        `Destination volume not found`
+                    );
+                }
+            }
+        }
+
+    }
 
   async precheckValidation(precheckData: MigrateConfig[]) {
     this.logger.log("precheckData", JSON.stringify(precheckData));

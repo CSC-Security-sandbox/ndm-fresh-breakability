@@ -415,6 +415,22 @@ describe("JobConfigService", () => {
     workerJobRunMapRepo = module.get<Repository<WorkerJobRunMap>>(
       getRepositoryToken(WorkerJobRunMap)
     );
+
+    jest.spyOn(volumeRepo, "find").mockResolvedValue([
+      { id: "src1", volumePath: "/source/path1" },
+      { id: "dest1", volumePath: "/dest/path1" },
+      { id: "sourcePath1", volumePath: "/source/path" },
+      { id: "destinationPath1", volumePath: "/dest1/path" },
+      { id: "destinationPath2", volumePath: "/dest2/path" },
+      { id: "source1", volumePath: "/source-1/path" },
+    ] as any);
+
+    // Mock other required repositories
+    jest.spyOn(volumeRepo, "findOne").mockResolvedValue(undefined);
+    jest.spyOn(jobConfigRepo, "find").mockResolvedValue([]);
+    jest.spyOn(jobConfigRepo, "save").mockImplementation((entity) => Promise.resolve(entity as any));
+    jest.spyOn(identityCrossMappingRepo, "exists").mockResolvedValue(false);
+    jest.spyOn(identityMappingRepo, "save").mockImplementation((entity) => Promise.resolve(entity as any));
   });
 
   it("should create a speed test job successfully", async () => {
@@ -3719,6 +3735,24 @@ describe("JobConfigService", () => {
   });
 
   describe("createBulkMigrate", () => {
+    beforeEach(() => {
+      // Add default mock for volumeRepo.find to prevent undefined errors
+      // Mock with sample volume data that tests can use
+      jest.spyOn(volumeRepo, "find").mockResolvedValue([
+        { id: "src1", volumePath: "/source/path1" },
+        { id: "dest1", volumePath: "/destination/path1" },
+        { id: "source-1", volumePath: "/source/path" },
+        { id: "sourcePath1", volumePath: "/source/path1" },
+        { id: "destinationPath1", volumePath: "/destination/path1" },
+      ] as any);
+
+      jest.spyOn(volumeRepo, "findOne").mockResolvedValue(undefined);
+      jest.spyOn(jobConfigRepo, "find").mockResolvedValue([]);
+      jest.spyOn(jobConfigRepo, "save").mockImplementation((entity) => Promise.resolve(entity as any));
+      jest.spyOn(identityCrossMappingRepo, "exists").mockResolvedValue(false);
+      jest.spyOn(identityMappingRepo, "save").mockImplementation((entity) => Promise.resolve(entity as any));
+    });
+
 //     it("should return warnings for inactive job configs", async () => {
 //   const bulkMigrate: BulkMigrateJobConfig = {
 //     migrateConfigs: [
@@ -3850,7 +3884,7 @@ describe("JobConfigService", () => {
     });
 
     it("should continue when destinationPathId is missing", async () => {
-      const bulkMigrate = { migrateConfigs: [{ sourcePathId: "source-1" }] };
+      const bulkMigrate = { migrateConfigs: [{ sourcePathId: "source-1" , destinationPathId: [] }] };
       const result = await service.createBulkMigrate(bulkMigrate as any);
       expect(result).toEqual({"jobs": [], "warnings": undefined});
     });
