@@ -185,6 +185,27 @@ export const generateDummyTaskInfoEntry: TaskInfo = new TaskInfo(
 export const generateDummyErrorEntry: DMError = new DMError({ taskId: '8840625a-b818-42a8-98c8-5c05aaa19106', errorCode: '', errorMessage: '', errorType: ErrorType.FATAL_ERROR, taskType: '' });
 
 export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string =>{
+  // Handle errno numbers when error.code is not available or is "Unknown system error"
+  if (error.errno) {
+    switch (error.errno) {
+      case -116:
+        // ESTALE - Stale file handle (error code 116)
+        return context === 'TASK' ? 'TASK_STALE_FILE_HANDLE' : 'OP_STALE_FILE_HANDLE';
+      case -96:
+        // EADDRNOTAVAIL - Address not available (error code 96)
+        return context === 'TASK' ? 'TASK_ADDRESS_NOT_AVAILABLE' : 'OP_ADDRESS_NOT_AVAILABLE';
+      case -5:
+        // EIO - I/O error (error code 5)
+        return context === 'TASK' ? 'TASK_SERVER_DISCONNECTED' : 'OP_SERVER_DISCONNECTED';
+      case -110:
+        // ETIMEDOUT - Operation timed out (error code 110)
+        return context === 'TASK' ? 'TASK_OPERATION_TIMED_OUT' : 'OP_OPERATION_TIMED_OUT';
+      case -104:
+        // ECONNRESET - Connection reset by peer (error code 104)
+        return context === 'TASK' ? 'TASK_CONNECTION_RESET' : 'OP_CONNECTION_RESET';
+    }
+  }
+
   if (error.code) {
     switch (error.code) {
       case 'ENOENT':
@@ -255,9 +276,17 @@ export const formatDate = (date: Date): string => {
 };
 
 export const dmError = (type: 'TASK' | 'OPERATION', origin :Origin, operationName: Operation , errorType: ErrorType, correlationId: string, error?: any, file? : {name:  string, path: string}, customError ?: {errorCode: string[], message: string}) => {
-  if(error && error?.code ) {
-    if(origin === Origin.SOURCE && isSourceFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
-    if(origin === Origin.DESTINATION && isFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
+  if(error) {
+    // Check errno numbers for fatal errors (when error.code might be "Unknown system error")
+    if(error.errno && isFatalErrno(error.errno)) {
+      errorType = ErrorType.FATAL_ERROR;
+    }
+    
+    // Also check error.code for standard error codes
+    if(error.code) {
+      if(origin === Origin.SOURCE && isSourceFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
+      if(origin === Origin.DESTINATION && isFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
+    }
   }
 
   switch (type) {
@@ -284,8 +313,12 @@ export const basePrefix = (jobRunId: string, pathId: string): string => {
 const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO', 'ESTALE', 'EADDRNOTAVAIL'])
 const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO', 'ESTALE', 'EADDRNOTAVAIL']);
 
+// Fatal errno numbers (negative values as reported by Node.js)
+const FATAL_ERRNO = new Set<number>([-116, -96]); // ESTALE, EADDRNOTAVAIL
+
 export const isSourceFatalError = (code :string) => code && SOURCE_FATAL_CODE.has(code)
 export const isFatalError = (code :string) => code && FATAL_CODE.has(code)
+export const isFatalErrno = (errno: number) => errno && FATAL_ERRNO.has(errno)
 
 export const getServerInfoFromPath = (sourcePath: string, jobContext: JobContext): { protocol: Protocol[], server: string } => {
   try {
