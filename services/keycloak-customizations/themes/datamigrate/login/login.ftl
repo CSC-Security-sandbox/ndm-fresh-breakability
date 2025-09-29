@@ -1,6 +1,6 @@
 <head>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss/dist/tailwind.min.css" rel="stylesheet">
+    <link href="${url.resourcesPath}/css/all.min.css" rel="stylesheet">
     <style>
         .emailInputLable {
         margin-bottom: 0.8rem;
