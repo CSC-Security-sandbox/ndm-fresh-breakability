@@ -90,21 +90,49 @@ export class SyncService {
             }));
             results.forEach((result) => {
                 if (result.status === 'fulfilled') {
+                    console.log(`[SYNC DEBUG] Command fulfilled - sourceErrors: ${result.value.sourceErrors}, targetErrors: ${result.value.targetErrors}`);
+                    console.log(`[SYNC DEBUG] Command fulfilled - sourceErrorNumbers: ${JSON.stringify(result.value.sourceErrorNumbers)}, targetErrorNumbers: ${JSON.stringify(result.value.targetErrorNumbers)}`);
+                    
                     syncOutput.errors.source.push(...result.value.sourceErrors);
                     syncOutput.errors.target.push(...result.value.targetErrors);
+                    
+                    // Add error numbers directly from command execution
+                    if (result.value.sourceErrorNumbers && result.value.sourceErrorNumbers.length > 0) {
+                        syncOutput.errorNumbers.source.push(...result.value.sourceErrorNumbers);
+                        console.log(`[SYNC DEBUG] added sourceErrorNumbers: ${JSON.stringify(result.value.sourceErrorNumbers)}`);
+                    }
+                    
+                    if (result.value.targetErrorNumbers && result.value.targetErrorNumbers.length > 0) {
+                        syncOutput.errorNumbers.target.push(...result.value.targetErrorNumbers);
+                        console.log(`[SYNC DEBUG] added targetErrorNumbers: ${JSON.stringify(result.value.targetErrorNumbers)}`);
+                    }
                 } else {
                     // Handle rejected promises - treat them as errors (push array of strings)
                     const errors = Array.isArray(result.reason) ? result.reason : [result.reason];
                     errors.forEach((err: any) => {
+                        // DEBUG: Log caught error details
+                        console.log(`[DEBUG] executeSyncTask - caught error: ${JSON.stringify(err)}`);
+                        console.log(`[DEBUG] executeSyncTask - error.code: ${err?.code}`);
+                        console.log(`[DEBUG] executeSyncTask - error.errno: ${err?.errno}`);
+                        console.log(`[DEBUG] executeSyncTask - error type: ${typeof err}`);
+                        
                         if (typeof err === 'object' && err !== null) {
                             // Add error code
-                            syncOutput.errors.source.push(err?.code || err?.message || JSON.stringify(err) || 'Unknown error');
+                            const errorCode = err?.code || err?.message || JSON.stringify(err) || 'Unknown error';
+                            syncOutput.errors.source.push(errorCode);
+                            console.log(`[DEBUG] executeSyncTask - added error code: ${errorCode}`);
+                            
                             // Add errno if available
                             if (err.errno) {
                                 syncOutput.errorNumbers.source.push(err.errno);
+                                console.log(`[DEBUG] executeSyncTask - added errno: ${err.errno} (type: ${typeof err.errno})`);
+                            } else {
+                                console.log(`[DEBUG] executeSyncTask - no errno found in error`);
                             }
                         } else {
-                            syncOutput.errors.source.push(typeof err === 'string' ? err : String(err) || 'Unknown error');
+                            const errorString = typeof err === 'string' ? err : String(err) || 'Unknown error';
+                            syncOutput.errors.source.push(errorString);
+                            console.log(`[DEBUG] executeSyncTask - added string error: ${errorString}`);
                         }
                     });
                 }
@@ -124,7 +152,18 @@ export class SyncService {
           return;
         }
     
-        const hasFatalSourceError = errors.source.some(isSourceFatalError) || (errorNumbers?.source && errorNumbers.source.some(isFatalErrno));
+        // DEBUG: Log error information to diagnose errno -96 issue
+        console.log(`[DEBUG] updateAndReportTaskStatus - errors.source: ${JSON.stringify(errors.source)}`);
+        console.log(`[DEBUG] updateAndReportTaskStatus - errorNumbers: ${JSON.stringify(errorNumbers)}`);
+        console.log(`[DEBUG] updateAndReportTaskStatus - errorNumbers?.source: ${JSON.stringify(errorNumbers?.source)}`);
+        
+        const codeBasedFatal = errors.source.some(isSourceFatalError);
+        const errnoBasedFatal = errorNumbers?.source && errorNumbers.source.some(isFatalErrno);
+        
+        console.log(`[DEBUG] updateAndReportTaskStatus - codeBasedFatal: ${codeBasedFatal}`);
+        console.log(`[DEBUG] updateAndReportTaskStatus - errnoBasedFatal: ${errnoBasedFatal}`);
+        
+        const hasFatalSourceError = codeBasedFatal || errnoBasedFatal;
         const hasFatalTargetError = errors.target.some(isFatalError);
         const isFatalErrored = hasFatalSourceError || hasFatalTargetError;
     

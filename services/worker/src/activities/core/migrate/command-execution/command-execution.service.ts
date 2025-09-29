@@ -28,7 +28,7 @@ export class CommandExecService {
     }
     async executeCommand(input: CommandExecInput): Promise<CommandExecOutput> {
 
-        const output: CommandExecOutput = { sourceErrors: [], targetErrors: [], cmd: input.command };
+        const output: CommandExecOutput = { sourceErrors: [], targetErrors: [], sourceErrorNumbers: [], targetErrorNumbers: [], cmd: input.command };
         let baseCmdRes: CommandOutput = { shouldStampMeta: false, shouldUpdateItemInfo: false, sourceErrors: [], targetErrors: [] };
 
         // Copy File
@@ -58,6 +58,17 @@ export class CommandExecService {
             baseCmdRes.shouldUpdateItemInfo = metaResult.shouldUpdateItemInfo;
             output.targetErrors.push(...metaResult.targetErrors);
             output.sourceErrors.push(...metaResult.sourceErrors);
+            console.log(`[COMMAND EXEC DEBUG] metaResult targetErrorNumbers: ${JSON.stringify(metaResult.targetErrorNumbers)}`);
+            // Merge errorNumbers if they exist
+            if (metaResult.targetErrorNumbers && metaResult.targetErrorNumbers.length > 0) {
+                if (!output.targetErrorNumbers) output.targetErrorNumbers = [];
+                output.targetErrorNumbers.push(...metaResult.targetErrorNumbers);
+                console.log(`[COMMAND EXEC DEBUG] merged targetErrorNumbers: ${JSON.stringify(output.targetErrorNumbers)}`);
+            }
+            if (metaResult.sourceErrorNumbers && metaResult.sourceErrorNumbers.length > 0) {
+                if (!output.sourceErrorNumbers) output.sourceErrorNumbers = [];
+                output.sourceErrorNumbers.push(...metaResult.sourceErrorNumbers);
+            }
         }
         if( baseCmdRes.shouldUpdateItemInfo ) {
             await this.publishFileInfo(input);

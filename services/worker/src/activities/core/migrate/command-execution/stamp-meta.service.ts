@@ -89,15 +89,20 @@ export class StampMetaService {
     }
 
     async stampPermission({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
-        const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
+        const output: StampMetaOutput = { sourceErrors: [], targetErrors: [], sourceErrorNumbers: [], targetErrorNumbers: [] };
         if (command.metadata?.mode) {
             try {
                 await fs.promises.chmod(targetPath, command.metadata.mode);
             } catch (error) {
                 this.logger.error(`Stamping Permission from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
+                console.log(`[STAMP META DEBUG] chmod error - code: ${error.code}, errno: ${error.errno}, message: ${error.message}`);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
                 await jobContext.publishToErrorStream(dmErr);
                 output.targetErrors.push(error.code);
+                if (error.errno) {
+                    output.targetErrorNumbers.push(error.errno);
+                    console.log(`[STAMP META DEBUG] added errno ${error.errno} to targetErrorNumbers`);
+                }
             }
         }
         return output;

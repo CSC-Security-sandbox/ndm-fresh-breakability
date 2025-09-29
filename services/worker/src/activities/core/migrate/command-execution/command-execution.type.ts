@@ -13,6 +13,8 @@ export interface CommandExecInput {
 export interface CommandExecOutput {
     sourceErrors: string[];
     targetErrors: string[];
+    sourceErrorNumbers?: number[];
+    targetErrorNumbers?: number[];
     cmd: Cmd;
 }
 
@@ -20,6 +22,8 @@ export interface CommandOutput {
     shouldStampMeta: boolean;
     sourceErrors: string[];
     targetErrors: string[];
+    sourceErrorNumbers?: number[];
+    targetErrorNumbers?: number[];
     shouldUpdateItemInfo: boolean;
 }
 
