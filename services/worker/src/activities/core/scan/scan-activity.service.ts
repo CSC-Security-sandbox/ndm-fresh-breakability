@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { ErrorType, JobManagerContext, TaskStatus } from "@netapp-cloud-datamigrate/jobs-lib";
 import { Context } from '@temporalio/activity';
-import { basePrefix, isSourceFatalError } from "src/activities/utils/utils";
+import { basePrefix, isFatalErrno, isSourceFatalError } from "src/activities/utils/utils";
 import { FatalError, RetryableError, RetryExceededError } from "src/errors/errors.types";
 import { RedisService } from "src/redis/redis.service";
 import { CommonTaskService } from "../common/common-task.service";
@@ -112,7 +112,7 @@ export class ScanService {
         const settings = this.getScanSettings(jobContext);
         for (let i = 0; i < task.commands.length; i += this.maxConcurrency) {
             const batch = task.commands.slice(i, i + this.maxConcurrency);
-            await Promise.allSettled(
+            const results = await Promise.allSettled(
                 batch.map(async (command) => {
                     const scanDirectoryInput : ScanDirectoryInput = {
                         settings,
@@ -159,7 +159,7 @@ export class ScanService {
         task.status = TaskStatus.ERRORED
         await jobContext.publishToTaskStream(task);
        
-        if (errors.some(isSourceFatalError)) {
+        if (errors.some(isSourceFatalError) || errors.some(code => isFatalErrno(code as unknown as number))) {
             await jobContext.deleteTask(taskHashId);
             throw new FatalError(`Sync Task Update Failed: ${errors.length} source errors with retry count ${retryCount} With Fatal Error`);
         }
