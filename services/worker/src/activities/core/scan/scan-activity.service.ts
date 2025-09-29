@@ -10,6 +10,7 @@ import { DiscoveryScanService } from "./discovery/discovery-scan.service";
 import { MigrateScanService } from "./migrate/migrate-scan.service";
 import { BatchSubDirInput, BatchSubDirOutput, ScanActivityInput, ScanActivityOutput, ScanDirectoryInput, ScanDirectoryOutput, ScanDirectorySettings, TaskExecInput, TaskExecOutput, UpdateAndReportTaskInput } from './scan-activity.type';
 import { calculateHash } from "src/activities/utils/checksum-utils";
+import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 
 
 
@@ -21,6 +22,7 @@ export class ScanService {
     readonly maxMigrationCommand : number;
     readonly maxConcurrency: number;
     readonly maxRetryCount: number;
+    private readonly logger: LoggerService;
 
     constructor(
         @Inject(ConfigService) 
@@ -29,11 +31,13 @@ export class ScanService {
         private readonly commonTaskService: CommonTaskService,
         private readonly migrateScanService: MigrateScanService,
         private readonly  discoveryScanService: DiscoveryScanService,
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100; 
-        this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;  
+        this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3; 
+        this.logger = loggerFactory.create(ScanService.name);
     }
 
 
@@ -136,6 +140,7 @@ export class ScanService {
                         output.dirCount += result.dirCount;
                         output.subDirs.push(...result.subDirs);
                     }catch(error) {
+                        this.logger.error(`[${jobContext.jobRunId}] Error scanning directory ${scanDirectoryInput.sourcePath}: ${error}`);
                         errors.push(error.code ?? '')
                     }
                     await jobContext.setTask(activityId, task);
@@ -161,14 +166,14 @@ export class ScanService {
        
         if (errors.some(isSourceFatalError)) {
             await jobContext.deleteTask(taskHashId);
-            throw new FatalError(`Sync Task Update Failed: ${errors.length} source errors with retry count ${retryCount} With Fatal Error`);
+            throw new FatalError(`Sync Task Update Failed: Error code ${[...new Set(errors)].join(", ")} ${errors.length} source errors with retry count ${retryCount} With Fatal Error`);
         }
 
         if (retryCount >= this.maxRetryCount) {
             await jobContext.deleteTask(taskHashId);
             throw new RetryExceededError(`Task ${task.id} has exceeded maximum retry count of ${this.maxRetryCount}`);
         }
-        throw new RetryableError(`Sync Task Update Failed: ${errors.length} source errors with retry count ${retryCount} With Retryable Error`);   
+        throw new RetryableError(`Sync Task Update Failed: Error code ${[...new Set(errors)].join(", ")} ${errors.length} source errors with retry count ${retryCount} With Retryable Error`);   
     }
 
     async batchSubDirs({batchSize, subDirs, jobContext}: BatchSubDirInput): Promise<BatchSubDirOutput> {

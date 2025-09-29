@@ -90,7 +90,7 @@ export class CommandExecService {
                 return output
             }
             try {
-                if(targetPathExists)
+                if(command.ops[OPS_CMD.COPY_FILE]?.params?.isHidden || targetPathExists)
                     await this.stampMetaService.resetFileAttributes(targetPath);
                 const checksums = await this.workerThreadService.migrateWorkerThread({ sourcePath, destinationPath: targetPath, operationId: command.id, size: command.metadata?.size ?? 0
                 });
@@ -102,6 +102,10 @@ export class CommandExecService {
                 command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.COMPLETED, params : { checksums } };
                 output.shouldStampMeta = true;
             }catch(error){
+                if(error.code === 'EPERM' || error.code === 'EACCES') {
+                    this.logger.debug(`Hidden file or permission issue at target: ${targetPath}`);
+                    command.ops[OPS_CMD.COPY_FILE].params = { isHidden: true };
+                }
                 command.ops[OPS_CMD.COPY_FILE] = {  ... command.ops[OPS_CMD.COPY_FILE], status: OPS_STATUS.ERROR }; 
                 this.logger.error(`Copying FILE from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
@@ -119,12 +123,19 @@ export class CommandExecService {
             return output;  // skip if already completed
         }
         if( command.ops[OPS_CMD.COPY_DIR].status !== OPS_STATUS.COMPLETED) {
+            const isTargetExists = await isNotWritable(targetPath);
             try {                
+                if(command.ops[OPS_CMD.COPY_DIR]?.params?.isHidden || isTargetExists)
+                    await this.stampMetaService.resetFileAttributes(targetPath);
                 await fs.promises.mkdir(targetPath, {recursive: true});                
                 command.ops[OPS_CMD.COPY_DIR].status = OPS_STATUS.COMPLETED;
                 output.shouldStampMeta = true;
                 output.shouldUpdateItemInfo = true;
             } catch (error) {
+                if(error.code === 'EPERM' || error.code === 'EACCES') {
+                    this.logger.debug(`Hidden folder or permission issue at target: ${targetPath}`);
+                    command.ops[OPS_CMD.COPY_DIR].params = { isHidden: true };
+                }
                 command.ops[OPS_CMD.COPY_DIR].status = OPS_STATUS.ERROR;
                 this.logger.error(`Copying DIR from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
