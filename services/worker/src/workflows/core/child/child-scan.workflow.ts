@@ -120,13 +120,26 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
 
     iterations+= dirBatchIds.length + CMD_LENGTH_VALIDATION_ITERATIONS;
 
-    const batchExecResults: ExecuteBatchScansOutput = await executeBatchScan({ batches: dirBatchIds, batchSize, isMigration, jobRunId});
-    scanWorkflowOutput.fileCount += batchExecResults.fileCount;
-    scanWorkflowOutput.dirCount += batchExecResults.dirCount;
-    dirBatchIds = batchExecResults.batchDirs;
+    try {
+      const batchExecResults: ExecuteBatchScansOutput = await executeBatchScan({ batches: dirBatchIds, batchSize, isMigration, jobRunId});
+      scanWorkflowOutput.fileCount += batchExecResults.fileCount;
+      scanWorkflowOutput.dirCount += batchExecResults.dirCount;
+      dirBatchIds = batchExecResults.batchDirs;
 
-    if(batchExecResults.error){
-      errors.push(batchExecResults.error);
+      if(batchExecResults.error){
+        errors.push(batchExecResults.error);
+      }
+    } catch (error) {
+      console.log(`[ERROR] executeBatchScan failed for jobRunId ${jobRunId}: ${error.message}`);
+      
+      // For fatal errors, throw immediately to fail the workflow
+      if (error.name === 'FatalError') {
+        console.log(`[FATAL] Fatal error detected, stopping scan workflow: ${error.message}`);
+        throw error;
+      } else {
+        // For other errors, add to errors array and continue
+        errors.push(error.message);
+      }
     }
 
     if(iterations > ITERATIONS_LIMIT ){
