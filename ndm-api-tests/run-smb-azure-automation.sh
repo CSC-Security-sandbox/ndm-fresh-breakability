@@ -99,7 +99,7 @@ run_tests() {
 # run_tests "end-to-end" "./tests/e2e" "Azure" "SMB"
 
 #Regression Testing
-# run_tests "regression" "./tests/regression" "Azure" "SMB"
+run_tests "regression" "./tests/regression" "Azure" "SMB"
 
 
 

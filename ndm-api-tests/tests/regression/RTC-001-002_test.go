@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("RTC-001-002: Check worker status when worker goes down/becomes unhealthy", func() {
+var _ = FDescribe("RTC-001-002: Check worker status when worker goes down/becomes unhealthy", func() {
 	// Removed unused variable headers
 	var (
 		ProjectId             string
