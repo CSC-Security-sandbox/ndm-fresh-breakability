@@ -238,6 +238,9 @@ export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string 
       case 'ESTALE':
           // Stale file handle (error code 116)
           return context === 'TASK' ? 'TASK_STALE_FILE_HANDLE' : 'OP_STALE_FILE_HANDLE';
+      case 'EADDRNOTAVAIL':
+          // Address not available (error code 96)
+          return context === 'TASK' ? 'TASK_ADDRESS_NOT_AVAILABLE' : 'OP_ADDRESS_NOT_AVAILABLE';
       default:
         // Unknown error
         return context === 'TASK' ? 'TASK_UNKNOWN_ERROR' : 'OP_UNKNOWN_ERROR';
@@ -278,8 +281,8 @@ export const basePrefix = (jobRunId: string, pathId: string): string => {
   return `${process.env.BASE_WORKING_PATH}/${jobRunId}/${pathId}`;
 }
 
-const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO', 'ESTALE'])
-const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO', 'ESTALE']);
+const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO', 'ESTALE', 'EADDRNOTAVAIL'])
+const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO', 'ESTALE', 'EADDRNOTAVAIL']);
 
 export const isSourceFatalError = (code :string) => code && SOURCE_FATAL_CODE.has(code)
 export const isFatalError = (code :string) => code && FATAL_CODE.has(code)
