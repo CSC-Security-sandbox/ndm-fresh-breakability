@@ -346,30 +346,33 @@ func getWorkerDowntime(stop chan struct{}, workerDownTimeSec *int) {
 	}
 }
 
-func SCPCPUMonitoringScript(jobID string) error {
+func SCPCPUMonitoringScript() error {
 
 	var localScriptPath, remoteScriptPath string
 
+	fmt.Println(" PROTOCOL_TYPE..", PROTOCOL_TYPE)
+
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
+		fmt.Printf("SMB path..")
 		localScriptPath = "./smb_cpu_usage.ps1"
-		remoteScriptPath = ""
+		remoteScriptPath = `c:\Users\datamigrator\smb_cpu_usage.ps1`
 	case ProtocolNFS:
 		localScriptPath = "./nfs_cpu_usage.sh"
 		remoteScriptPath = "/home/ubuntu/nfs_cpu_usage.sh"
 	}
 
-	port, err := strconv.Atoi(NDM_WORKERS_PORT)
-	if err != nil {
-		LogFatalf("Invalid port number in NDM_WORKERS_PORT: %v", err)
-	}
+	// port, err := strconv.Atoi(NDM_WORKERS_PORT)
+	// if err != nil {
+	// 	LogFatalf("Invalid port number in NDM_WORKERS_PORT: %v", err)
+	// }
 
 	// SSH config
 	config := SSHConfig{
-		Username: NDM_WORKERS_USER_NAME,
-		Host:     NDM_WORKERS_HOST,
-		Port:     port,
-		Password: NDM_WORKERS_PASSWORD,
+		Username: "datamigrator",   //NDM_WORKERS_USER_NAME,
+		Host:     "172.30.202.7",   //NDM_WORKERS_HOST,
+		Port:     22,               //port,
+		Password: "Dm@admin123456", //NDM_WORKERS_PASSWORD,
 	}
 
 	client, err := getSSHClient(config)
@@ -402,50 +405,65 @@ func SCPCPUMonitoringScript(jobID string) error {
 	}
 	remoteFile.Close()
 
-	// Make script executable
-	session, err := client.NewSession()
-	if err != nil {
-		return fmt.Errorf("failed to create SSH session: %v", err)
-	}
-	defer session.Close()
-	chmodCmd := fmt.Sprintf("chmod +x %s", remoteScriptPath)
-	if err := session.Run(chmodCmd); err != nil {
-		return fmt.Errorf("failed to chmod script: %v", err)
+	if PROTOCOL_TYPE == ProtocolNFS {
+		// Make script executable
+		session, err := client.NewSession()
+		if err != nil {
+			return fmt.Errorf("failed to create SSH session: %v", err)
+		}
+		defer session.Close()
+		chmodCmd := fmt.Sprintf("chmod +x %s", remoteScriptPath)
+		if err := session.Run(chmodCmd); err != nil {
+			return fmt.Errorf("failed to chmod script: %v", err)
+		}
 	}
 
 	return nil
 }
 
-func StartCPUMonitoring(remoteScriptPath, jobID string) error {
+func StartCPUMonitoring(jobID string) error {
+	// errCh := make(chan error, 1)
 
-	port, err := strconv.Atoi(NDM_WORKERS_PORT)
-	if err != nil {
-		LogFatalf("Invalid port number in NDM_WORKERS_PORT: %v", err)
+	var remoteScriptPath, runScript string
+
+	switch PROTOCOL_TYPE {
+	case ProtocolSMB:
+		//Start-Process powershell -WindowStyle Hidden -ArgumentList "-File .\smb_cpu_usage.ps1 job11123"
+
+		// pth := `C:\Users\datamigrator\smb_cpu_usage.ps1`
+		// cmd := fmt.Sprintf(`Start-Process powershell -WindowStyle Hidden -ArgumentList "-File %s %s"`, pth, jobID)
+		// runScript = "powershell.exe -Command " + cmd + ""
+
+		runScript = `powershell.exe -Command 'Start-Process powershell -WindowStyle Hidden -ArgumentList '-File C:\Users\datamigrator\smb_cpu_usage.ps1 OmI23''`
+		fmt.Println("TEST ----", runScript)
+		// runScript = fmt.Sprintf(`powershell.exe -Command "Start-Process powershell.exe -ArgumentList \"-File \"C:\\Users\\datamigrator\\smb_cpu_usage.ps1\" %s\""`, jobID)
+	case ProtocolNFS:
+		remoteScriptPath = "/home/ubuntu/nfs_cpu_usage.sh"
+		runScript = fmt.Sprintf("nohup %s %s > /dev/null 2>&1 &", remoteScriptPath, jobID)
 	}
 
-	// SSH config
 	config := SSHConfig{
-		Username: NDM_WORKERS_USER_NAME,
-		Host:     NDM_WORKERS_HOST,
-		Port:     port,
-		Password: NDM_WORKERS_PASSWORD,
+		Username: "datamigrator",
+		Host:     "172.30.202.7",
+		Port:     22,
+		Password: "Dm@admin123456",
 	}
 
 	client, err := getSSHClient(config)
 	if err != nil {
-		return err // or handle error
+		return fmt.Errorf("jobID %s: failed to get SSH client: %v", jobID, err)
 	}
 	defer client.Close()
 
-	// Run script in background
 	session, err := client.NewSession()
 	if err != nil {
-		return fmt.Errorf("failed to create SSH session for running script: %v", err)
+		fmt.Errorf("jobID %s: failed to create SSH session: %v", jobID, err)
 	}
+	time.Sleep(2)
 	defer session.Close()
-	runCmd := fmt.Sprintf("nohup %s %s > /dev/null 2>&1 &", remoteScriptPath, jobID)
-	if err := session.Run(runCmd); err != nil {
-		return fmt.Errorf("failed to run script: %v", err)
+
+	if err := session.Run(runScript); err != nil {
+		fmt.Errorf("jobID %s: failed to run script: %v", jobID, err)
 	}
 
 	return nil
