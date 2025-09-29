@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CommandStatus, ErrorType, JobManagerContext, TaskInfo, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { ApplicationFailure, Context } from '@temporalio/activity';
-import { basePrefix, isFatalError, isSourceFatalError } from "src/activities/utils/utils";
+import {basePrefix, isFatalErrno, isFatalError, isSourceFatalError} from "src/activities/utils/utils";
 import { FatalError, RetryExceededError } from "src/errors/errors.types";
 import { RedisService } from "src/redis/redis.service";
 import { CommonTaskService } from "../common/common-task.service";
@@ -55,7 +55,7 @@ export class SyncService {
           task.workerId = this.workerId;
           await jobContext.publishToTaskStream(task);
           syncOutput = await this.executeSyncTask(taskId, task, jobContext);
-          await this.updateAndReportTaskStatus({ taskHashId: taskId, jobContext, errors: syncOutput.errors, task });
+          await this.updateAndReportTaskStatus({ taskHashId: taskId, jobContext, errors: syncOutput.errors, errorNumbers: syncOutput.errorNumbers, task });
           syncOutput.status = TaskStatus.COMPLETED;
         } catch (error) {            
             this.logger.error(`[${jobRunId}] Error in syncTaskActivity: ${error.message}`, error.stack);        
@@ -68,7 +68,7 @@ export class SyncService {
 
 
     executeSyncTask = async (taskHashId:string, task: TaskInfo, jobContext: JobManagerContext ): Promise<SyncTaskOutput> => {
-        const syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0};
+        const syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, errorNumbers: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0};
         const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
         const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
         const errorType = ++task.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
@@ -94,14 +94,19 @@ export class SyncService {
                     syncOutput.errors.target.push(...result.value.targetErrors);
                 } else {
                     // Handle rejected promises - treat them as errors (push array of strings)
-                    const messages: string[] = Array.isArray(result.reason)
-                        ? result.reason.map((err: any) =>
-                            typeof err === 'string'
-                              ? err
-                              : err?.message || JSON.stringify(err) || 'Unknown error'
-                        )
-                        : [result.reason?.message || String(result.reason) || 'Unknown error'];
-                    syncOutput.errors.source.push(...messages);                    
+                    const errors = Array.isArray(result.reason) ? result.reason : [result.reason];
+                    errors.forEach((err: any) => {
+                        if (typeof err === 'object' && err !== null) {
+                            // Add error code
+                            syncOutput.errors.source.push(err?.code || err?.message || JSON.stringify(err) || 'Unknown error');
+                            // Add errno if available
+                            if (err.errno) {
+                                syncOutput.errorNumbers.source.push(err.errno);
+                            }
+                        } else {
+                            syncOutput.errors.source.push(typeof err === 'string' ? err : String(err) || 'Unknown error');
+                        }
+                    });
                 }
             });
         }
@@ -109,7 +114,7 @@ export class SyncService {
         return syncOutput
     }
 
-    async updateAndReportTaskStatus({ errors, jobContext, taskHashId, task }: handleSyncTaskUpdateInput): Promise<void> {
+    async updateAndReportTaskStatus({ errors, errorNumbers, jobContext, taskHashId, task }: handleSyncTaskUpdateInput): Promise<void> {
         const allCompleted = task.commands.every(cmd => cmd.status === CommandStatus.COMPLETED);
     
         if (allCompleted) {
@@ -119,7 +124,7 @@ export class SyncService {
           return;
         }
     
-        const hasFatalSourceError = errors.source.some(isSourceFatalError);
+        const hasFatalSourceError = errors.source.some(isSourceFatalError) || (errorNumbers?.source && errorNumbers.source.some(isFatalErrno));
         const hasFatalTargetError = errors.target.some(isFatalError);
         const isFatalErrored = hasFatalSourceError || hasFatalTargetError;
     

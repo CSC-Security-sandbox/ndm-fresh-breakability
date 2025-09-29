@@ -76,7 +76,8 @@ export class ScanService {
                     jobContext,
                     taskHashId: scanActivityContext.info.activityId,
                     task,
-                    retryCount: result.retryCount
+                    retryCount: result.retryCount,
+                    errorNumbers: result.errorNumbers
                 }                        
                 await this.updateAndReportTaskStatus(updateAndReportTaskInput)  
                 scanActivityOutput = result.result;
@@ -107,7 +108,7 @@ export class ScanService {
         const baseSourcePrefixPath = basePrefix(jobRunId, task.sPathId);
         const baseTargetPrefixPath = basePrefix(jobRunId, task.tPathId);
         const output: ScanActivityOutput = { dirCount: 0, fileCount: 0, subDirs: [], jobRunId: jobRunId, batchDirs: [] };    
-        let errors: string[] = [], errorType: ErrorType = task.retryCount + 1 >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
+        let errors: string[] = [], errorNumbers: number[] = [], errorType: ErrorType = task.retryCount + 1 >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
         task.retryCount++;
         const settings = this.getScanSettings(jobContext);
         for (let i = 0; i < task.commands.length; i += this.maxConcurrency) {
@@ -137,6 +138,8 @@ export class ScanService {
                         output.subDirs.push(...result.subDirs);
                     }catch(error) {
                         errors.push(error.code ?? '')
+                        errorNumbers.push(error.errno ?? '');
+                        
                     }
                     await jobContext.setTask(activityId, task);
                 })
@@ -145,10 +148,10 @@ export class ScanService {
         const { batchDirs, subDirs }: BatchSubDirOutput = await this.batchSubDirs({subDirs: output.subDirs, batchSize, jobContext});
         output.subDirs = subDirs;
         output.batchDirs = batchDirs;
-        return {result:output, errors, retryCount: task.retryCount};
+        return {result:output, errors, retryCount: task.retryCount, errorNumbers};
     }
 
-    async updateAndReportTaskStatus({ errors, jobContext, taskHashId, task, retryCount }: UpdateAndReportTaskInput) {
+    async updateAndReportTaskStatus({ errors, jobContext, taskHashId, task, retryCount, errorNumbers }: UpdateAndReportTaskInput) {
         if(errors.length == 0) {
             task.status = TaskStatus.COMPLETED
             await jobContext.publishToTaskStream(task);
@@ -159,7 +162,7 @@ export class ScanService {
         task.status = TaskStatus.ERRORED
         await jobContext.publishToTaskStream(task);
        
-        if (errors.some(isSourceFatalError) || errors.some(code => isFatalErrno(code as unknown as number))) {
+        if (errors.some(isSourceFatalError) || (errorNumbers && errorNumbers.some(isFatalErrno))) {
             await jobContext.deleteTask(taskHashId);
             throw new FatalError(`Sync Task Update Failed: ${errors.length} source errors with retry count ${retryCount} With Fatal Error`);
         }

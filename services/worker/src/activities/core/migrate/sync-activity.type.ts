@@ -12,6 +12,10 @@ export interface SyncTaskOutput {
         source: string[]
         target: string[]
     };
+    errorNumbers?: {
+        source: number[]
+        target: number[]
+    };
     status: TaskStatus;
     error: number,
 }
@@ -23,6 +27,10 @@ export interface handleSyncTaskUpdateInput {
     errors: {
         source: string[];
         target: string[];
+    }
+    errorNumbers?: {
+        source: number[];
+        target: number[];
     }
     task: TaskInfo,
 }

@@ -46,12 +46,14 @@ export interface UpdateAndReportTaskInput {
     errors:string[];
     task: TaskInfo,
     retryCount: number;
+    errorNumbers?: number[];
 }
 
 export interface TaskExecOutput {
     result: ScanActivityOutput; 
     errors: string[];
     retryCount: number;
+    errorNumbers?: number[];
 }
 
 export interface TaskExecInput {
