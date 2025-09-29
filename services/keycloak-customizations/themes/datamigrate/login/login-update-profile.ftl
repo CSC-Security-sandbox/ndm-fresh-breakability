@@ -1,5 +1,5 @@
 <head>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss/dist/tailwind.min.css" rel="stylesheet">
+    <link href="${url.resourcesPath}/css/vendor/tailwind.min.css" rel="stylesheet">
 </head>
 <#import "template.ftl" as layout>
     <@layout.registrationLayout displayMessage=false; section>
