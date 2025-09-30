@@ -5,18 +5,15 @@ on:
     - cron: "30 18 * * *"
   pull_request:
     branches:
-      #- main
-      - release/2025.10-preview
-  workflow_dispatch:
-
+      - main
 
 permissions:
   contents: read
 
 env:
   BLACKDUCK_URL: https://blackduck.eng.netapp.com
-  PROJECT_NAME: ${{ secrets.BLACKDUCK_PROJECT_NAME }}
-  VERSION_NAME: ${{ secrets.BLACKDUCK_VERSION_NAME }}
+  PROJECT_NAME: NetApp Data Migrator
+  VERSION_NAME: 25.08_preview
   BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
   GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
   NODE_VERSION: 22.15.0
@@ -57,44 +54,34 @@ jobs:
 
           declare -a matrix_items=()
 
-          echo "=================================================="
-          echo "Adhoc scan for release brnach - including all services"
-          echo "=================================================="
-          # For nightly scans, include all services
-          for service in "${ALL_SERVICES[@]}"; do
-            name="${service%%:*}"
-            path="${service##*:}"
-            matrix_items+=("{\"name\":\"$name\",\"path\":\"$path\"}")
-          done
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "=================================================="
+            echo "Nightly scan - including all services"
+            echo "=================================================="
+            # For nightly scans, include all services
+            for service in "${ALL_SERVICES[@]}"; do
+              name="${service%%:*}"
+              path="${service##*:}"
+              matrix_items+=("{\"name\":\"$name\",\"path\":\"$path\"}")
+            done
+          else
+            echo "=================================================="
+            echo "PR scan - detecting changed files..."
+            echo "=================================================="
+            CHANGED_FILES=$(git diff --name-only origin/main...HEAD)
+            echo "$CHANGED_FILES"
 
-          # if [ "${{ github.event_name }}" = "schedule" ]; then
-          #   echo "=================================================="
-          #   echo "Nightly scan - including all services"
-          #   echo "=================================================="
-          #   # For nightly scans, include all services
-          #   for service in "${ALL_SERVICES[@]}"; do
-          #     name="${service%%:*}"
-          #     path="${service##*:}"
-          #     matrix_items+=("{\"name\":\"$name\",\"path\":\"$path\"}")
-          #   done
-          # else
-          #   echo "=================================================="
-          #   echo "PR scan - detecting changed files..."
-          #   echo "=================================================="
-          #   CHANGED_FILES=$(git diff --name-only origin/main...HEAD)
-          #   echo "$CHANGED_FILES"
-
-          #   # For PR scans, only include changed services
-          #   for service in "${ALL_SERVICES[@]}"; do
-          #     name="${service%%:*}"
-          #     path="${service##*:}"
+            # For PR scans, only include changed services
+            for service in "${ALL_SERVICES[@]}"; do
+              name="${service%%:*}"
+              path="${service##*:}"
               
-          #     if echo "$CHANGED_FILES" | grep -q "^$path/"; then
-          #       echo "Found changes in: $name ($path)"
-          #       matrix_items+=("{\"name\":\"$name\",\"path\":\"$path\"}")
-          #     fi
-          #   done
-          # fi
+              if echo "$CHANGED_FILES" | grep -q "^$path/"; then
+                echo "Found changes in: $name ($path)"
+                matrix_items+=("{\"name\":\"$name\",\"path\":\"$path\"}")
+              fi
+            done
+          fi
 
           if [ ${#matrix_items[@]} -eq 0 ]; then
             echo "matrix={\"include\":[]}" >> $GITHUB_OUTPUT
