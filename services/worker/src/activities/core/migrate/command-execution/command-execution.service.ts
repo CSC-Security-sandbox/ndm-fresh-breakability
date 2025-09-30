@@ -80,7 +80,7 @@ export class CommandExecService {
         if( command.ops[OPS_CMD.COPY_FILE].status !== OPS_STATUS.COMPLETED) {
             let [srcPathExists, targetPathExists] = await Promise.all([
                   isPathExists(sourcePath),
-                  isNotWritable(targetPath),
+                  isPathExists(targetPath),
             ])
             if(!srcPathExists) {
                 const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.COPY_CONTENT, errorType, command.id, 
