@@ -558,7 +558,7 @@ func HandleJobRunStateChange(jobRunID, stateType string, jobRunIDs []string) err
 		if err != nil {
 			return err
 		}
-		if stateType == COMPLETED_JOBRUN {
+		if status == COMPLETED_JOBRUN {
 			LogDebug("Job is Completed")
 			return nil
 		}
@@ -575,7 +575,7 @@ func HandleJobRunStateChange(jobRunID, stateType string, jobRunIDs []string) err
 			if err != nil {
 				return err
 			}
-			if stateType == COMPLETED_JOBRUN {
+			if status == COMPLETED_JOBRUN {
 				LogDebug("Job is Completed")
 				return nil
 			}
