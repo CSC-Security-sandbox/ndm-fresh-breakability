@@ -131,6 +131,7 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to update worker env, pack=%d, err = %v", packNumb, err))
 
 				for run := 1; run <= MIGRATIONS_PER_PACK; run++ {
+					var maxCPUUsageInPercentage string
 					if migrationConfigID == "" {
 						migrationJobConfigIDs, resp, err := CreateMigrationJob(migrationParams, headers)
 						Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to create migration job, pack=%d, iteration=%d", packNumb, run))
@@ -158,14 +159,16 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 
 					isMigrationCompleted := make(chan struct{})
 					workerDownTimeSec := 0
-					go getWorkerDowntime(isMigrationCompleted, &workerDownTimeSec)
+					go getWorkerDowntime(isMigrationCompleted, &workerDownTimeSec, &maxCPUUsageInPercentage)
 
 					err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("migration job did not complete, pack=%d, iteration=%d", packNumb, run))
 
 					// capture final CPU usage spikes
-					maxUsageInPercntage, err := GetMaxCPUUsageReport(jobRunID)
-					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to get max CPU usage report, pack=%d, iteration=%d, err = %v", packNumb, run, err))
+					if PROTOCOL_TYPE == ProtocolNFS {
+						maxCPUUsageInPercentage, err = GetMaxCPUUsageReport(jobRunID)
+						Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to get max CPU usage report, pack=%d, iteration=%d, err = %v", packNumb, run, err))
+					}
 
 					isMigrationCompleted <- struct{}{}
 
@@ -180,7 +183,7 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 
 					workerDownTimeMin := float64(workerDownTimeSec) / float64(60)
 
-					err = appendRowsToPerfCSV(packNumb, jobRunID, migrationDuration, lineRate, maxUsageInPercntage, workerDownTimeMin)
+					err = appendRowsToPerfCSV(packNumb, jobRunID, migrationDuration, lineRate, maxCPUUsageInPercentage, workerDownTimeMin)
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to write report to perf csv, pack=%d, iteration=%d, err = %v", packNumb, run, err))
 
 					// Stop CPU monitoring after getting the report
@@ -345,7 +348,7 @@ func appendRowsToPerfCSV(packNumb int, jobRunID, migrationDuration, lineRate, ma
 	return nil
 }
 
-func getWorkerDowntime(stop chan struct{}, workerDownTimeSec *int) {
+func getWorkerDowntime(stop chan struct{}, workerDownTimeSec *int, maxCPUUsageInPercentage *string) {
 	ticker := time.NewTicker(5 * time.Second)
 
 	for {
@@ -354,6 +357,12 @@ func getWorkerDowntime(stop chan struct{}, workerDownTimeSec *int) {
 			isRunning, err := IsWorkerRunning()
 			if !isRunning || err != nil {
 				*workerDownTimeSec = *workerDownTimeSec + 5
+			}
+
+			// CPU monitoring for SMB
+			currentPercentage, err := GetMaxCPUUsageReport("")
+			if err == nil && currentPercentage > *maxCPUUsageInPercentage {
+				*maxCPUUsageInPercentage = currentPercentage
 			}
 
 		case <-stop:

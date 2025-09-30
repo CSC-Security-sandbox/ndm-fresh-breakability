@@ -682,15 +682,12 @@ func IsWorkerRunning() (bool, error) {
 	return false, nil
 }
 
-// GetMaxCPUUsageReport
 func GetMaxCPUUsageReport(jobid string) (string, error) {
 	script := ""
 
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
-		// TODO - implement for SMB workers
-		// script = "powershell.exe -Command cat c:\Users\datamigrator\" + jobid + "_max_cpu_usage.txt"
-		return "", nil
+		script = `powershell.exe -Command '{0:N2}' -f (Get-Counter '\Processor(_Total)\% Processor Time' -SampleInterval 1 -MaxSamples 1).CounterSamples[0].CookedValue`
 	case ProtocolNFS:
 		script = "cat /home/ubuntu/" + jobid + "_max_cpu_usage.txt"
 	}
@@ -711,6 +708,10 @@ func GetMaxCPUUsageReport(jobid string) (string, error) {
 	output, err := sshRunScript(config, script)
 	if err != nil {
 		return "", fmt.Errorf("GetMaxCPUUsageReport failed: %w\noutput: %s", err, output)
+	}
+
+	if PROTOCOL_TYPE == ProtocolSMB {
+		return string(output), nil
 	}
 
 	cpuUsageInfo := strings.Split(string(output), "|") // Expecting format: timestamp | jobid | cpu_usage% ref *_cpu_usage.sh
