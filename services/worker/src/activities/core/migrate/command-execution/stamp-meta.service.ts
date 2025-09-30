@@ -42,10 +42,10 @@ export class StampMetaService {
                 output.sourceErrors.push(...timeOutput.sourceErrors);
                 output.targetErrors.push(...timeOutput.targetErrors);
 
-                // // Stamp SID to object
-                // const aclStampOutput = await this.stampObjectACL(input);
-                // output.sourceErrors.push(...aclStampOutput.sourceErrors);
-                // output.targetErrors.push(...aclStampOutput.targetErrors);
+                // Stamp SID to object
+                const aclStampOutput = await this.stampObjectACL(input);
+                output.sourceErrors.push(...aclStampOutput.sourceErrors);
+                output.targetErrors.push(...aclStampOutput.targetErrors);
 
             }
             else {
