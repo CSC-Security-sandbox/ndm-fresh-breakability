@@ -123,7 +123,7 @@ export class CommandExecService {
             return output;  // skip if already completed
         }
         if( command.ops[OPS_CMD.COPY_DIR].status !== OPS_STATUS.COMPLETED) {
-            const isTargetExists = await isNotWritable(targetPath);
+            const isTargetExists = await isPathExists(targetPath);
             try {                
                 if(command.ops[OPS_CMD.COPY_DIR]?.params?.isHidden || isTargetExists)
                     await this.stampMetaService.resetFileAttributes(targetPath);
