@@ -185,6 +185,16 @@ export const generateDummyTaskInfoEntry: TaskInfo = new TaskInfo(
 export const generateDummyErrorEntry: DMError = new DMError({ taskId: '8840625a-b818-42a8-98c8-5c05aaa19106', errorCode: '', errorMessage: '', errorType: ErrorType.FATAL_ERROR, taskType: '' });
 
 export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string =>{
+  // Handle errno numbers when error.code is not available or is "Unknown system error"
+  if (error.errno) {
+    switch (error.errno) {
+      case -116:
+      case -96:
+        // FileServer down (ESTALE, EADDRNOTAVAIL)
+        return context === 'TASK' ? 'TASK_FILE_SERVER_DOWN' : 'OP_FILE_SERVER_DOWN';
+    }
+  }
+
   if (error.code) {
     switch (error.code) {
       case 'ENOENT':
@@ -249,9 +259,17 @@ export const formatDate = (date: Date): string => {
 };
 
 export const dmError = (type: 'TASK' | 'OPERATION', origin :Origin, operationName: Operation , errorType: ErrorType, correlationId: string, error?: any, file? : {name:  string, path: string}, customError ?: {errorCode: string[], message: string}) => {
-  if(error && error?.code ) {
-    if(origin === Origin.SOURCE && isSourceFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
-    if(origin === Origin.DESTINATION && isFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
+  if(error) {
+    // Check errno numbers when error.code might be "Unknown system error"
+    if(error.errno && hasFileServerDownErrorNo(error.errno)) {
+      error.code = "EIO"; // Standardize code for known fatal errno
+    }
+    
+    // Also check error.code for standard error codes
+    if(error.code) {
+      if(origin === Origin.SOURCE && isSourceFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
+      if(origin === Origin.DESTINATION && isFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
+    }
   }
 
   switch (type) {
@@ -275,11 +293,15 @@ export const basePrefix = (jobRunId: string, pathId: string): string => {
   return `${process.env.BASE_WORKING_PATH}/${jobRunId}/${pathId}`;
 }
 
-const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO'])
-const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO']);
+const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO', 'ESTALE', 'EADDRNOTAVAIL'])
+const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO', 'ESTALE', 'EADDRNOTAVAIL']);
+
+// File server down errno numbers (negative values as reported by Node.js)
+const FileServerDownErrorNo = new Set<number>([-116, -96]); // ESTALE, EADDRNOTAVAIL
 
 export const isSourceFatalError = (code :string) => code && SOURCE_FATAL_CODE.has(code)
 export const isFatalError = (code :string) => code && FATAL_CODE.has(code)
+export const hasFileServerDownErrorNo = (errno: number) => errno && FileServerDownErrorNo.has(errno)
 
 export const getServerInfoFromPath = (sourcePath: string, jobContext: JobContext): { protocol: Protocol[], server: string } => {
   try {
