@@ -79,6 +79,10 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 			Expect(err).To(BeNil(), "error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(Equal(1), "expected 1 worker to be attached")
 
+			// Send  CPU monitoring script to worker
+			err = scpCPUMonitoringScript()
+			Expect(err).To(BeNil(), "error during sending CPU monitoring script to worker")
+
 			workerIds := GetWorkerIds()
 			workerId1 = workerIds[0]
 
@@ -146,8 +150,11 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 						jobRunID, resp, err = TriggerAdHocJobRun(migrationConfigID)
 						Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to trigger ad-hoc job run, pack=%d, iteration=%d", packNumb, run))
 						_ = resp.Body.Close()
-
 					}
+
+					// Start CPU monitoring before waiting for job to complete
+					err = startCPUMonitoring(jobRunID)
+					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to start CPU monitoring, pack=%d, iteration=%d", packNumb, run))
 
 					isMigrationCompleted := make(chan struct{})
 					workerDownTimeSec := 0
@@ -155,6 +162,10 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 
 					err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("migration job did not complete, pack=%d, iteration=%d", packNumb, run))
+
+					// capture final CPU usage spikes
+					maxUsageInPercntage, err := GetMaxCPUUsageReport(jobRunID)
+					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to get max CPU usage report, pack=%d, iteration=%d, err = %v", packNumb, run, err))
 
 					isMigrationCompleted <- struct{}{}
 
@@ -169,11 +180,15 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 
 					workerDownTimeMin := float64(workerDownTimeSec) / float64(60)
 
-					err = appendRowsToPerfCSV(packNumb, jobRunID, migrationDuration, lineRate, workerDownTimeMin)
+					err = appendRowsToPerfCSV(packNumb, jobRunID, migrationDuration, lineRate, maxUsageInPercntage, workerDownTimeMin)
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to write report to perf csv, pack=%d, iteration=%d, err = %v", packNumb, run, err))
+
+					// Stop CPU monitoring after getting the report
+					err = StopCPUMonitoring()
+					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to stop CPU monitoring, pack=%d, iteration=%d", packNumb, run))
 				}
 				// empty rows
-				appendRowsToPerfCSV(0, "", "", "", 0.0, 2)
+				appendRowsToPerfCSV(0, "", "", "", "", 0.0, 2)
 			}
 			By("########################## TC-001 end ################################")
 		})
@@ -277,7 +292,7 @@ func getMigrationDurationAndLineRate(startTime, endTime string, workerDownTimeSe
 	return fmt.Sprintf("%dh%02dmin", hours, minutes), fmt.Sprintf("%.4f %s/sec", lineRate, unit), nil
 }
 
-func appendRowsToPerfCSV(packNumb int, jobRunID, migrationDuration, lineRate string, workerDownTimeMin float64, emptyRowsNumb ...int) error {
+func appendRowsToPerfCSV(packNumb int, jobRunID, migrationDuration, lineRate, maxCPUUsage string, workerDownTimeMin float64, emptyRowsNumb ...int) error {
 	var perf_report_file = fmt.Sprintf("../../%s_perf_report_%d.csv", PROTOCOL_TYPE, time.Now().Unix())
 
 	_, err := os.Stat(perf_report_file)
@@ -317,6 +332,7 @@ func appendRowsToPerfCSV(packNumb int, jobRunID, migrationDuration, lineRate str
 			strconv.Itoa(PERF_PACK_CONFIG[packNumb]["JOB_TASK_ACTIVITY_CONCURRENCY"]),
 			strconv.Itoa(PERF_PACK_CONFIG[packNumb]["MAX_BUFFER_SIZE"]),
 			migrationDuration, lineRate, fmt.Sprintf("%.4f mins", workerDownTimeMin),
+			maxCPUUsage,
 		},
 	}
 
@@ -346,33 +362,25 @@ func getWorkerDowntime(stop chan struct{}, workerDownTimeSec *int) {
 	}
 }
 
-func SCPCPUMonitoringScript() error {
+func scpCPUMonitoringScript() error {
 
 	var localScriptPath, remoteScriptPath string
 
-	fmt.Println(" PROTOCOL_TYPE..", PROTOCOL_TYPE)
-
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
-		fmt.Printf("SMB path..")
-		localScriptPath = "./smb_cpu_usage.ps1"
-		remoteScriptPath = `c:\Users\datamigrator\smb_cpu_usage.ps1`
+		// TODO - implement for SMB
+		// SCP script is done, but running it remotely has quoting issues ref - StartCPUMonitoring()
+		return nil
+		// localScriptPath = "./smb_cpu_usage.ps1"
+		// remoteScriptPath = `c:\Users\datamigrator\smb_cpu_usage.ps1`
 	case ProtocolNFS:
 		localScriptPath = "./nfs_cpu_usage.sh"
 		remoteScriptPath = "/home/ubuntu/nfs_cpu_usage.sh"
 	}
 
-	// port, err := strconv.Atoi(NDM_WORKERS_PORT)
-	// if err != nil {
-	// 	LogFatalf("Invalid port number in NDM_WORKERS_PORT: %v", err)
-	// }
-
-	// SSH config
-	config := SSHConfig{
-		Username: "datamigrator",   //NDM_WORKERS_USER_NAME,
-		Host:     "172.30.202.7",   //NDM_WORKERS_HOST,
-		Port:     22,               //port,
-		Password: "Dm@admin123456", //NDM_WORKERS_PASSWORD,
+	config, err := getWorkerSSHConfig()
+	if err != nil {
+		return fmt.Errorf("failed to get SSH config: %v", err)
 	}
 
 	client, err := getSSHClient(config)
@@ -421,32 +429,22 @@ func SCPCPUMonitoringScript() error {
 	return nil
 }
 
-func StartCPUMonitoring(jobID string) error {
-	// errCh := make(chan error, 1)
-
+func startCPUMonitoring(jobID string) error {
 	var remoteScriptPath, runScript string
 
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
-		//Start-Process powershell -WindowStyle Hidden -ArgumentList "-File .\smb_cpu_usage.ps1 job11123"
-
-		// pth := `C:\Users\datamigrator\smb_cpu_usage.ps1`
-		// cmd := fmt.Sprintf(`Start-Process powershell -WindowStyle Hidden -ArgumentList "-File %s %s"`, pth, jobID)
-		// runScript = "powershell.exe -Command " + cmd + ""
-
-		runScript = `powershell.exe -Command 'Start-Process powershell -WindowStyle Hidden -ArgumentList '-File C:\Users\datamigrator\smb_cpu_usage.ps1 OmI23''`
-		fmt.Println("TEST ----", runScript)
-		// runScript = fmt.Sprintf(`powershell.exe -Command "Start-Process powershell.exe -ArgumentList \"-File \"C:\\Users\\datamigrator\\smb_cpu_usage.ps1\" %s\""`, jobID)
+		// TODO - fix the quoting issue
+		//runScript = `powershell.exe -Command 'Start-Process powershell -WindowStyle Hidden -ArgumentList '-File C:\Users\datamigrator\smb_cpu_usage.ps1 OmI23''`
+		return nil
 	case ProtocolNFS:
 		remoteScriptPath = "/home/ubuntu/nfs_cpu_usage.sh"
 		runScript = fmt.Sprintf("nohup %s %s > /dev/null 2>&1 &", remoteScriptPath, jobID)
 	}
 
-	config := SSHConfig{
-		Username: "datamigrator",
-		Host:     "172.30.202.7",
-		Port:     22,
-		Password: "Dm@admin123456",
+	config, err := getWorkerSSHConfig()
+	if err != nil {
+		return fmt.Errorf("jobID %s: failed to get SSH config: %v", jobID, err)
 	}
 
 	client, err := getSSHClient(config)
@@ -457,16 +455,28 @@ func StartCPUMonitoring(jobID string) error {
 
 	session, err := client.NewSession()
 	if err != nil {
-		fmt.Errorf("jobID %s: failed to create SSH session: %v", jobID, err)
+		return fmt.Errorf("jobID %s: failed to create SSH session: %v", jobID, err)
 	}
-	time.Sleep(2)
 	defer session.Close()
 
 	if err := session.Run(runScript); err != nil {
-		fmt.Errorf("jobID %s: failed to run script: %v", jobID, err)
+		return fmt.Errorf("jobID %s: failed to run script: %v", jobID, err)
 	}
 
 	return nil
+}
+
+func getWorkerSSHConfig() (SSHConfig, error) {
+	port, err := strconv.Atoi(NDM_WORKERS_PORT)
+	if err != nil {
+		return SSHConfig{}, fmt.Errorf("invalid port number in NDM_WORKERS_PORT: %v", err)
+	}
+	return SSHConfig{
+		Username: NDM_WORKERS_USER_NAME,
+		Host:     NDM_WORKERS_HOST,
+		Port:     port,
+		Password: NDM_WORKERS_PASSWORD,
+	}, nil
 }
 
 // getSSHClient returns an SSH client connected to the VM.

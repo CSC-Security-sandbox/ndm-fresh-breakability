@@ -682,12 +682,15 @@ func IsWorkerRunning() (bool, error) {
 	return false, nil
 }
 
+// GetMaxCPUUsageReport
 func GetMaxCPUUsageReport(jobid string) (string, error) {
 	script := ""
 
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
-		script = ""
+		// TODO - implement for SMB workers
+		// script = "powershell.exe -Command cat c:\Users\datamigrator\" + jobid + "_max_cpu_usage.txt"
+		return "", nil
 	case ProtocolNFS:
 		script = "cat /home/ubuntu/" + jobid + "_max_cpu_usage.txt"
 	}
@@ -719,7 +722,9 @@ func StopCPUMonitoring() error {
 
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
-		script = ""
+		// TODO - implement for SMB workers
+		// script = `"powershell.exe -Command  "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match "smb_cpu_usage.ps1" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"`
+		return nil
 	case ProtocolNFS:
 		script = "pkill -f nfs_cpu_usage.sh && rm nfs_cpu_usage.sh"
 	}
