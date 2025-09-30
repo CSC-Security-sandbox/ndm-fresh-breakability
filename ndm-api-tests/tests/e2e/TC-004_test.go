@@ -134,7 +134,7 @@ var _ = Describe("TC-004: Running discovery and batch pause/resume/stop/adhoc-ru
 					err = HandleJobRunStateChange(jobRunID, "PAUSE", list)
 					Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
 					Wait(5)
-					err = WaitForJobState(jobRunID, "PAUSED", 15)
+					err = WaitForJobState(jobRunID, "PAUSED")
 					Expect(err).NotTo(HaveOccurred(), "Job did not reach PAUSED state")
 					Wait(5)
 					err = HandleJobRunStateChange(jobRunID, "RESUME", list)
@@ -143,7 +143,7 @@ var _ = Describe("TC-004: Running discovery and batch pause/resume/stop/adhoc-ru
 					err = HandleJobRunStateChange(jobRunID, "STOP", list)
 					Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
 
-					err = WaitForJobState(jobRunID, "STOPPED", 30)
+					err = WaitForJobState(jobRunID, "STOPPED")
 					Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
 					//Adding wait to ensure temporal worker shut down completes after reaching STOPPED state
 					Wait(60)
