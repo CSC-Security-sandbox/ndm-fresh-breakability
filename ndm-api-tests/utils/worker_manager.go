@@ -727,7 +727,7 @@ func StopCPUMonitoring() error {
 		// script = `"powershell.exe -Command  "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match "smb_cpu_usage.ps1" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"`
 		return nil
 	case ProtocolNFS:
-		script = "pkill -f nfs_cpu_usage.sh && rm nfs_cpu_usage.sh"
+		script = "sudo pkill -f nfs_cpu_usage.sh"
 	}
 
 	port, err := strconv.Atoi(NDM_WORKERS_PORT)

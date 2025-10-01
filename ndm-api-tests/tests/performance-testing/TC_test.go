@@ -448,7 +448,7 @@ func startCPUMonitoring(jobID string) error {
 		return nil
 	case ProtocolNFS:
 		remoteScriptPath = "/home/ubuntu/nfs_cpu_usage.sh"
-		runScript = fmt.Sprintf("nohup %s %s > /dev/null 2>&1 &", remoteScriptPath, jobID)
+		runScript = fmt.Sprintf("sudo nohup %s %s > /dev/null 2>&1 &", remoteScriptPath, jobID)
 	}
 
 	config, err := getWorkerSSHConfig()
