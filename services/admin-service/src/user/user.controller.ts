@@ -28,7 +28,7 @@ import { NonEmptyStringPipe } from '../utils/pipes/non-empty-string';
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
-  @Auth(Permission.InviteUser, Permission.CreateUser)
+  @Auth(Permission.CreateUser)
   @ApiBearerAuth()
   @Post()
   @ApiOperation({
@@ -128,7 +128,6 @@ export class UserController {
     return this.userService.findOne(id);
   }
 
-  @Auth(Permission.UpdateUser)
   @ApiBearerAuth()
   @Patch(':id')
   @ApiOperation({
@@ -143,7 +142,6 @@ export class UserController {
     return this.userService.update(id, updateUserDto, userPermissions);
   }
 
-  @Auth(Permission.DeleteUser)
   @ApiBearerAuth()
   @Delete(':id')
   @ApiOperation({
@@ -154,7 +152,6 @@ export class UserController {
     return this.userService.delete(id);
   }
 
-  @Auth(Permission.UpdateUser)
   @ApiBearerAuth()
   @Patch(':id/inactivate')
   @ApiOperation({

@@ -49,7 +49,7 @@ const SettingsContent = () => {
             </PermissionAuth>
 
             <PermissionAuth
-              permissionName={USER_PERMISSION_TYPE_ENUM.ViewProject}
+              permissionName={USER_PERMISSION_TYPE_ENUM.ListProjects}
             >
               <InnerTab.Button
                 isActive={currentTab === 2}

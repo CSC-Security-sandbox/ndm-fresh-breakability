@@ -15,7 +15,6 @@ export class TasksController {
         description: 'Invalid pagination parameters.'
     })
     @ApiBearerAuth()
-    @Auth(Permission.ViewJob)
     @Get('/')
     async getTaskList(@Query(new ValidationPipe({ transform: false, whitelist: true })) taskQuery: TaskQueryParamsDto) {
         return await this.taskService.getTaskList(taskQuery)

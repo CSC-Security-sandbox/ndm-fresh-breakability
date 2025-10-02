@@ -34,7 +34,6 @@ import { allowedParamsForUserRolesGetAll } from '../constants/allowed-params';
 export class UserRoleController {
   constructor(private readonly userRoleService: UserRoleService) {}
 
-  @Auth(Permission.InviteUser)
   @ApiBearerAuth()
   @Post()
   @ApiOperation({
@@ -52,7 +51,6 @@ export class UserRoleController {
     );
   }
 
-  @Auth(Permission.ManageProject)
   @ApiBearerAuth()
   @Post('/batch')
   @ApiOperation({
@@ -66,7 +64,6 @@ export class UserRoleController {
     return this.userRoleService.batchCreate(userRoleRelationDto);
   }
 
-  @Auth(Permission.InviteUser)
   @ApiBearerAuth()
   @Patch(':id')
   @ApiOperation({
@@ -85,7 +82,6 @@ export class UserRoleController {
     );
   }
 
-  @Auth(Permission.InviteUser)
   @ApiBearerAuth()
   @Delete(':id')
   @ApiOperation({
@@ -152,7 +148,6 @@ export class UserRoleController {
     );
   }
 
-  @Auth(Permission.InviteUser)
   @ApiBearerAuth()
   @Get(':id')
   @ApiOperation({

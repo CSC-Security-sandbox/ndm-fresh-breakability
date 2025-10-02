@@ -17,7 +17,6 @@ export class WorkersController {
         description: 'Invalid pagination parameters.'
     })
     @ApiBearerAuth()
-    @Auth(Permission.ViewAgentsList)
     @Get('/')
     async getWorkers(@Query(new ValidationPipe({ transform: false, whitelist: true }))  workerStatusPageDto: WorkersStatusPageDto) {
         return await this.workersService.findAllWorkers(workerStatusPageDto);

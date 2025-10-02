@@ -69,7 +69,6 @@ export class JobRunController {
     description: "Invalid pagination parameters.",
   })
   @ApiBearerAuth()
-  @Auth(Permission.ViewJob)
   @Get("/")
   async getJobRuns(
     @Query(new ValidationPipe({ transform: false, whitelist: true }))
@@ -84,7 +83,6 @@ export class JobRunController {
     description: "The job run errors retrieved successfully .",
   })
   @ApiBearerAuth()
-  @Auth(Permission.ViewJob)
   @Get("/errors")
   async getJobRunErrors(
     @Query(new ValidationPipe({ transform: false, whitelist: true }))
@@ -97,7 +95,6 @@ export class JobRunController {
   @ApiResponse({ status: 200, description: "Returns a job run by its ID." })
   @ApiResponse({ status: 404, description: "Job run not found." })
   @ApiBearerAuth()
-  @Auth(Permission.ViewJob)
   @Get(":id")
   async getJobById(@Param("id") id: string): Promise<JobRunDetailsDTO> {
     return await this.jobRunService.getJobRun(id);

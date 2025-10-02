@@ -37,7 +37,6 @@ export class RoleController {
     return this.roleService.create(createRoleDto, userPermissionResponse);
   }
 
-  @Auth(Permission.ManageProject)
   @ApiBearerAuth()
   @Get()
   @ApiOperation({

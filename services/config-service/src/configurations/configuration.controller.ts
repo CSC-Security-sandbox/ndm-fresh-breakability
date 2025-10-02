@@ -36,7 +36,6 @@ export class ConfigurationController{
         description: 'Invalid pagination parameters.'
     })
     @ApiBearerAuth()
-    @Auth(Permission.ViewConfig)
     @Get('/')
     async getAllConfiguration(@Query(new ValidationPipe({ transform: false, whitelist: true }))  findAllConfigPageDto: FindAllConfigPageDto) {
         return await this.configurationService.getAllConfig(findAllConfigPageDto);
@@ -48,7 +47,6 @@ export class ConfigurationController{
         description: 'Invalid pagination parameters.'
     })
     @ApiBearerAuth()
-    @Auth(Permission.ViewConfig)
     @Get('/file-servers')
     async getFileServers() {
         return await this.configurationService.getAllFileServers();
@@ -58,7 +56,6 @@ export class ConfigurationController{
     @ApiResponse({ status: 200, description: 'Cutover details Found' })
     @ApiNotFoundResponse({ status: 404, description: 'Cutover details Not Found' })
     @ApiBearerAuth()
-    @Auth(Permission.ViewConfig)
     @Get('cutover/:configId')
     async getCutoverDetailsByConfigId(@Param('configId') configId: string) {
         return await this.configurationService.getCutoverDetailsByConfigId(configId);
@@ -91,7 +88,6 @@ export class ConfigurationController{
     @ApiOkResponse({ description: 'Configuration Found' ,  type: ConfigDTO})
     @ApiNotFoundResponse({ description: 'Configuration Not Found' })
     @ApiBearerAuth()
-    @Auth(Permission.ViewConfig)
     @Get(':id')
     async getConfiguration(@Param('id') id: string) {
         return await this.configurationService.getConfigById(id)

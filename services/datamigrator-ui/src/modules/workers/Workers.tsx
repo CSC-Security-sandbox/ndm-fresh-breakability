@@ -28,7 +28,7 @@ const Workers = () => {
       tableStateProps={tableStateProps}
       content={
         <PermissionAuth
-          permissionName={USER_PERMISSION_TYPE_ENUM.AgentDeployment}
+          permissionName={USER_PERMISSION_TYPE_ENUM.WorkerDeployment}
         >
           <WorkerInstallation
             label="View Instruction To Setup Worker"

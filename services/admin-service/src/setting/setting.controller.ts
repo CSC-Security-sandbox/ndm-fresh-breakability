@@ -10,7 +10,6 @@ export class SettingController {
   constructor(private readonly settingService: SettingService) {}
 
   @Post()
-  @Auth(Permission.ManageProject)
   @ApiBearerAuth()
   @ApiBody({ type: CreateSettingDto, isArray: true })
   @ApiOperation({
@@ -22,7 +21,6 @@ export class SettingController {
   }
 
   @Get()
-  @Auth(Permission.ManageProject)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get All Global Settings',
@@ -33,7 +31,6 @@ export class SettingController {
   }
 
   @Get(':settingType')
-  @Auth(Permission.ManageProject)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get Global Setting',
@@ -44,7 +41,6 @@ export class SettingController {
   }
 
   @Patch()
-  @Auth(Permission.ManageProject)
   @ApiBearerAuth()
   @ApiBody({ type: CreateSettingDto, isArray: true })
   @ApiOperation({

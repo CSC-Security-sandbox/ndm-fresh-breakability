@@ -30,7 +30,7 @@ export class AuthController {
     return req.user;
   }
 
-  @Auth(Permission.InviteUser, Permission.CreateUser)
+  @Auth(Permission.CreateUser)
   @ApiBearerAuth()
   @Post('create-user')
   @ApiOperation({
@@ -63,7 +63,7 @@ export class AuthController {
     );
   }
 
-  @Auth(Permission.InviteUser, Permission.CreateUser)
+  @Auth(Permission.CreateUser)
   @ApiBearerAuth()
   @Post('reset-password')
   @ApiOperation({
@@ -85,7 +85,7 @@ export class AuthController {
     return { email, newPassword };
   }
 
-  @Auth(Permission.InviteUser, Permission.CreateUser)
+  @Auth(Permission.CreateUser)
   @ApiBearerAuth()
   @Post('user-status')
   @ApiOperation({

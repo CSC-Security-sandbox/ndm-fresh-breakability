@@ -30,24 +30,14 @@ BEGIN
     -- Insert permissions
     INSERT INTO "permission" (id, permission_name, permission_status, created_at, created_by, updated_at, updated_by) 
     VALUES
-        (uuid_generate_v4(), 'ManageProject', 'active', now(), user_id, now(), user_id),
-        (uuid_generate_v4(), 'DeleteProject', 'active', now(), user_id, now(), user_id),
         (uuid_generate_v4(), 'UpdateProject', 'active', now(), user_id, now(), user_id),
-        (uuid_generate_v4(), 'InviteUser', 'active', now(), user_id, now(), user_id),
         (uuid_generate_v4(), 'CreateUser', 'active', now(), user_id, now(), user_id),
-        (uuid_generate_v4(), 'DeleteUser', 'active', now(), user_id, now(), user_id),
-        (uuid_generate_v4(), 'UpdateUser', 'active', now(), user_id, now(), user_id),
-        (uuid_generate_v4(), 'AgentDeployment', 'active', now(), user_id, now(), user_id),
+        (uuid_generate_v4(), 'WorkerDeployment', 'active', now(), user_id, now(), user_id),
         (uuid_generate_v4(), 'ManageConfig', 'active', now(), user_id, now(), user_id),
         (uuid_generate_v4(), 'ManageJob', 'active', now(), user_id, now(), user_id),
-        (uuid_generate_v4(), 'RollbackJob', 'active', now(), user_id, now(), user_id),
-        (uuid_generate_v4(), 'ViewLogs', 'active', now(), user_id, now(), user_id),
-        (uuid_generate_v4(), 'ViewJob', 'active', now(), user_id, now(), user_id),
         (uuid_generate_v4(), 'Reports', 'active', now(), user_id, now(), user_id),
         (uuid_generate_v4(), 'ListUsers', 'active', now(), user_id, now(), user_id),
-        (uuid_generate_v4(), 'ViewProject', 'active', now(), user_id, now(), user_id),
-        (uuid_generate_v4(), 'ViewConfig', 'active', now(), user_id, now(), user_id),
-        (uuid_generate_v4(), 'ViewAgentsList', 'active', now(), user_id, now(), user_id);
+        (uuid_generate_v4(), 'ListProjects', 'active', now(), user_id, now(), user_id);
 
     -- Create roles
     INSERT INTO "role" (id, role_name, role_status, created_at, created_by, updated_at, updated_by)
@@ -69,9 +59,9 @@ BEGIN
     FROM "role" r, "permission" p
     WHERE r.role_name = 'Project Admin'
       AND p.permission_name IN (
-          'ManageProject', 'UpdateProject', 'AgentDeployment', 'ManageConfig', 
-          'ManageJob', 'RollbackJob', 'ViewLogs', 'ViewJob', 'Reports', 
-          'ListUsers', 'ViewProject', 'ViewConfig', 'ViewAgentsList'
+          'UpdateProject', 'WorkerDeployment', 'ManageConfig', 
+          'ManageJob', 'Reports', 
+          'ListUsers', 'ListProjects'
       );
 
     -- Viewer gets only view-related permissions
@@ -80,8 +70,8 @@ BEGIN
     FROM "role" r, "permission" p
     WHERE r.role_name = 'Project Viewer'
       AND p.permission_name IN (
-          'ViewLogs', 'ViewJob', 'Reports', 'ListUsers', 
-          'ViewProject', 'ViewConfig', 'ViewAgentsList'
+          'Reports', 'ListUsers', 
+          'ListProjects'
       );
 
     -- Insert accounts

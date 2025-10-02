@@ -20,7 +20,7 @@ export class WorkerRegistrationController {
     private readonly workerRegistrationService: WorkerRegistrationService,
   ) {}
 
-  @Auth(Permission.AgentDeployment)
+  @Auth(Permission.WorkerDeployment)
   @ApiBearerAuth()
   @Post()
   @ApiOperation({

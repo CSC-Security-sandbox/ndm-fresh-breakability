@@ -60,7 +60,6 @@ export class JobConfigController {
 
   @ApiOperation({ summary: 'Get all Speed test jobs' })
   @ApiResponse({ status: 200, description: 'Returns a list of all Speed jobs Runs.' })
-  @Auth(Permission.ViewJob)
   @ApiBearerAuth()
   @Get('/speed-test')
   async getAllSpeedTestJobConfig(): Promise<SpeedTestJobRun[]> {
@@ -79,7 +78,6 @@ export class JobConfigController {
   @ApiOperation({ summary: 'Get speedtest by ID' })
   @ApiResponse({ status: 200, description: 'Returns a job by its ID.' })
   @ApiResponse({ status: 404, description: 'Job not found.' })
-  @Auth(Permission.ViewJob)
   @ApiBearerAuth()
   @Get('/speed-test/:id')
   async getSpeedTestById(@Param('id') id: string): Promise<SpeedTestEntry> {
@@ -123,7 +121,6 @@ export class JobConfigController {
   @ApiResponse({ status: 200, description: 'Returns a list of all jobs.' })
   @ApiQuery({name:'projectId',required:true,description:'Project Id',type:String})
   @ApiBearerAuth()
-  @Auth(Permission.ViewJob)
   @Get()
   async getAllJobConfig(@Query('projectId')projectId:string): Promise<JobListingDTO[]> {
     if(!projectId){
@@ -136,7 +133,6 @@ export class JobConfigController {
   @ApiResponse({ status: 200, description: 'Returns a job by its ID.' })
   @ApiResponse({ status: 404, description: 'Job not found.' })
   @Get(':id')
-  @Auth(Permission.ViewJob)
   @ApiBearerAuth()
   async getJobConfigById(@Param('id') id: string): Promise<any> {
     return await this.jobConfigService.getJobConfigById(id);
@@ -167,7 +163,6 @@ export class JobConfigController {
   @ApiResponse({ status: 200, description: 'Configuration Found' })
   @ApiResponse({ status: 404, description: 'Configuration Not Found' })
   @ApiBearerAuth()
-  @Auth(Permission.ViewJob)
   @Get('project/:projectId')
   async getConfigurationsByProjectId(@Param('projectId') projectId: string) {
       return await this.jobConfigService.getConfigsByProjectId(projectId);

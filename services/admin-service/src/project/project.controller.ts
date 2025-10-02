@@ -159,7 +159,6 @@ export class ProjectController {
     );
   }
 
-  @Auth(Permission.ManageProject)
   @ApiBearerAuth()
   @Get(':id')
   @ApiOperation({
@@ -189,7 +188,6 @@ export class ProjectController {
     );
   }
 
-  @Auth(Permission.DeleteProject)
   @ApiBearerAuth()
   @Delete(':id')
   @ApiOperation({
