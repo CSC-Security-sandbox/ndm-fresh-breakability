@@ -1379,7 +1379,7 @@ export class ConfigurationService {
       // check if any job config has schedule as SCHEDULING if yes then return false
       if (jobConfigs.some((jc) => jc.scheduler === 'SCHEDULING')) {
         this.logger.warn(
-          `Refresh is not possible for configuration ${configId} as there are jobs with SCHEDULING status`,
+          `Refresh is not possible for configuration ${configId} as there are jobs with SCHEDULING status jobs : ${JSON.stringify(jobConfigs.filter((jc) => jc.scheduler === 'SCHEDULING'))}`,
         );
         return false;
       }
@@ -1387,7 +1387,7 @@ export class ConfigurationService {
       // check if futureScheduleAt is not null for any job config, if yes then return false
       if (jobConfigs.some((jc) => !!jc.futureScheduleAt)) {
         this.logger.warn(
-          `Refresh is not possible for configuration ${configId} as there are jobs with futureScheduleAt set`,
+          `Refresh is not possible for configuration ${configId} as there are jobs with futureScheduleAt set: ${JSON.stringify(jobConfigs.filter((jc) => !!jc.futureScheduleAt))}`,
         );
         return false;
       }
