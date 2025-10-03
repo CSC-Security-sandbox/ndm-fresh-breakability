@@ -1367,15 +1367,15 @@ export class ConfigurationService {
         fetch all the job configurations that has any of the volumeIds in
         their sourcePathId or targetPathId and status is ACTIVE
       */
-      const jobConfigs = await this.jobConfigRepo
-        .createQueryBuilder('jobConfig')
-        .where(
-          'jobConfig.source_path_id IN (:...volumeIds) OR jobConfig.target_path_id IN (:...volumeIds)',
-          { volumeIds },
-        )
-        .andWhere('jobConfig.status = :status', { status: 'ACTIVE' })
-        .getMany();
-
+      const jobConfigs = await this.jobConfigRepo.find({
+          where: [{
+              status: JobStatus.Active,
+              sourcePathId: In(volumeIds),
+            }, {
+              status: JobStatus.Active,
+              targetPathId: In(volumeIds),
+          }]
+      })
       // check if any job config has schedule as SCHEDULING if yes then return false
       if (jobConfigs.some((jc) => jc.scheduler === 'SCHEDULING')) {
         this.logger.warn(
