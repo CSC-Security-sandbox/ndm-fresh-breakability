@@ -656,7 +656,7 @@ export class JobRunService {
       FROM datamigrator.operation_errors oe
       LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
       WHERE o.job_run_id = $1 AND oe.error_type = $2
-      GROUP BY oe.file_path
+      GROUP BY oe.file_path, oe.origin
       ORDER BY MIN($3) ${order.toUpperCase() === "DESC" ? "DESC" : "ASC"}
       LIMIT $4 OFFSET $5
       `,
