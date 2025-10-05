@@ -584,7 +584,7 @@ jobs:
   cleanup:
     name: Cleanup Infrastructure
     runs-on: openlab
-    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests, upload-support-bundle]
+    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests, upload-support-bundle, parse-and-notify-results]
     if: always()
     steps:
       - name: Checkout repository
