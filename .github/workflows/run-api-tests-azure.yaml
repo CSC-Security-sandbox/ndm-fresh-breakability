@@ -379,6 +379,166 @@ jobs:
           path: ndm-api-tests/reports/
           retention-days: 30
 
+  parse-and-notify-results:
+    name: Parse Test Results and Send Notification
+    runs-on: openlab
+    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
+    if: always() 
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Go for Parser
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build Parser
+        run: |
+          cd ndm-api-tests/parser
+          go build -o parser parser.go
+          chmod +x parser
+          echo "Parser built successfully"
+
+      - name: Parse Test Results and Send Notification
+        if: always()
+        run: |
+          cd ndm-api-tests
+          
+          # Run autonomous parser
+          ./parser/parser > parser_output.txt 2>&1
+          
+          echo "Parser output:"
+          cat parser_output.txt
+          
+          # Extract values from parser output for GitHub Actions variables
+          TOTAL_PASSED=$(grep "TOTAL_PASSED=" parser_output.txt | cut -d'=' -f2 || echo "0")
+          TOTAL_FAILED=$(grep "TOTAL_FAILED=" parser_output.txt | cut -d'=' -f2 || echo "0")
+          TOTAL_SKIPPED=$(grep "TOTAL_SKIPPED=" parser_output.txt | cut -d'=' -f2 || echo "0")
+          TOTAL_TESTS=$(grep "TOTAL_TESTS=" parser_output.txt | cut -d'=' -f2 || echo "0")
+          
+          # Extract test summary (everything between TEST_SUMMARY<<EOF and EOF)
+          TEST_SUMMARY=$(sed -n '/TEST_SUMMARY<<EOF/,/^EOF$/p' parser_output.txt | sed '1d;$d' || echo "No test summary available")
+          
+          echo "Parser completed successfully"
+          echo "Total Tests: $TOTAL_TESTS"
+          echo "Passed: $TOTAL_PASSED"
+          echo "Failed: $TOTAL_FAILED"
+          echo "Skipped: $TOTAL_SKIPPED"
+          
+          # Get run details
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          BUILD_VERSION="${{ inputs.build_version || github.event.inputs.build_version }}"
+          REF_TYPE="${{ inputs.ref_type || github.event.inputs.ref_type }}"
+          TRIGGER="${{ github.event_name == 'workflow_dispatch' && 'Manual Trigger' || github.event_name == 'workflow_call' && 'Automated Call' || github.event_name }}"
+          
+          # Determine overall status
+          if [[ "$TOTAL_FAILED" -eq "0" && "$TOTAL_TESTS" -gt "0" ]]; then
+            OVERALL_STATUS="All Tests Passed"
+            STATUS_COLOR="Good"
+          elif [[ "$TOTAL_FAILED" -gt "0" ]]; then
+            OVERALL_STATUS="Some Tests Failed"
+            STATUS_COLOR="Attention"
+          else
+            OVERALL_STATUS="No Test Results"
+            STATUS_COLOR="Warning"
+          fi
+          
+          # Escape test summary for JSON
+          TEST_SUMMARY_ESCAPED=$(echo "$TEST_SUMMARY" | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+          
+          # Build the Adaptive Card
+          ADAPTIVE_CARD='{
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": [
+              {
+                "type": "TextBlock",
+                "text": "NDM API Test Results",
+                "size": "Large",
+                "weight": "Bolder"
+              },
+              {
+                "type": "TextBlock",
+                "text": "'"$OVERALL_STATUS"'",
+                "size": "Medium",
+                "weight": "Bolder",
+                "color": "'"$STATUS_COLOR"'"
+              },
+              {
+                "type": "FactSet",
+                "facts": [
+                  {
+                    "title": "Build Version:",
+                    "value": "'"${BUILD_VERSION}"'"
+                  },
+                  {
+                    "title": "Trigger:",
+                    "value": "'"${TRIGGER}"'"
+                  },
+                  {
+                    "title": "Total Tests:",
+                    "value": "'"$TOTAL_TESTS"'"
+                  },
+                  {
+                    "title": "Passed:",
+                    "value": "'"$TOTAL_PASSED"'"
+                  },
+                  {
+                    "title": "Failed:",
+                    "value": "'"$TOTAL_FAILED"'"
+                  },
+                  {
+                    "title": "Skipped:",
+                    "value": "'"$TOTAL_SKIPPED"'"
+                  }
+                ]
+              }'
+          
+          # Add test summary if available and not default
+          if [[ -n "$TEST_SUMMARY_ESCAPED" && "$TEST_SUMMARY_ESCAPED" != "No test results found" ]]; then
+            ADAPTIVE_CARD+=',
+              {
+                "type": "TextBlock",
+                "text": "**Test Summary:**",
+                "weight": "Bolder",
+                "spacing": "Medium"
+              },
+              {
+                "type": "TextBlock",
+                "text": "'"$TEST_SUMMARY_ESCAPED"'",
+                "wrap": true,
+                "fontType": "Monospace",
+                "size": "Small"
+              }'
+          fi
+          
+          # Add action buttons
+          ADAPTIVE_CARD+=',
+              {
+                "type": "ActionSet",
+                "actions": [
+                  {
+                    "type": "Action.OpenUrl",
+                    "title": "View Full Results",
+                    "url": "'"$RUN_URL"'"
+                  }
+                ]
+              }
+            ]
+          }'
+          
+          echo "Sending notification with Adaptive Card..."
+          echo "Card payload: $ADAPTIVE_CARD"
+          
+          # Send the notification
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -d "$ADAPTIVE_CARD" \
+            '${{ secrets.POWER_AUTOMATE_URL }}'
+          
+          echo "Test results notification sent successfully"
+
   upload-support-bundle:
     name: Upload Support Bundles
     runs-on: openlab
