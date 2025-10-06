@@ -252,8 +252,8 @@ export const formatDate = (date: Date): string => {
 export const dmError = (type: 'TASK' | 'OPERATION', origin :Origin, operationName: Operation , errorType: ErrorType, correlationId: string, error?: any, file? : {name:  string, path: string}, customError ?: {errorCode: string[], message: string}) => {
   if(error) {
     // Check errno numbers when error.code might be "Unknown system error"
-    if(error.errno && hasFileServerDownErrorNo(error.errno)) {
-      error.code = "EIO"; // Standardize code for known fatal errno
+    if (hasFileServerDownErrorNo(error.errno)) {
+      error.code = 'EIO'; // Standardize code for known error
     }
     
     // Also check error.code for standard error codes
@@ -284,8 +284,8 @@ export const basePrefix = (jobRunId: string, pathId: string): string => {
   return `${process.env.BASE_WORKING_PATH}/${jobRunId}/${pathId}`;
 }
 
-const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO', 'ESTALE', 'EADDRNOTAVAIL'])
-const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO', 'ESTALE', 'EADDRNOTAVAIL']);
+const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED'])
+const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED']);
 
 // File server down errno numbers (negative values as reported by Node.js)
 const FileServerDownErrorNo = new Set<number>([-116, -96]); // ESTALE, EADDRNOTAVAIL
