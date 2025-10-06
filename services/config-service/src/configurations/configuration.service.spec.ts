@@ -3811,27 +3811,23 @@ describe('ConfigurationService', () => {
       jest
         .spyOn(mockConfigRepository, 'find')
         .mockResolvedValue(mockConfig as any);
-      jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        getMany: jest
-          .fn()
-          .mockResolvedValue([
-            { scheduler: 'SCHEDULING', fileServerId } as any,
-          ]),
-      } as any);
+      jest
+        .spyOn(jobConfigRepo, 'find')
+        .mockResolvedValue([
+          { scheduler: 'SCHEDULING', id: 'job-config-id' } as any,
+        ]);
       const result = await service.isRefreshPossible(configId);
       expect(result).toBe(false);
     });
 
     it('SHould return false if any job config has job scheduled for future', async () => {
-      const fileServerId = 'file-server-id';
+      const configId = 'config-id';
       const mockConfig = [
         {
           id: 'config-id',
           fileServers: [
             {
-              id: fileServerId,
+              id: 'file-server-id',
               volumes: [{ id: 'volume-id', volumePath: '/path/to/volume' }],
             },
           ],
@@ -3840,28 +3836,26 @@ describe('ConfigurationService', () => {
       jest
         .spyOn(mockConfigRepository, 'find')
         .mockResolvedValue(mockConfig as any);
-      jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([
+      jest
+        .spyOn(jobConfigRepo, 'find')
+        .mockResolvedValue([
           {
-            fileServerId: fileServerId,
+            id: 'job-config-id',
             futureScheduleAt: '*/5 * * * *',
           } as any,
-        ]),
-      } as any);
-      const result = await service.isRefreshPossible(fileServerId);
+        ]);
+      const result = await service.isRefreshPossible(configId);
       expect(result).toBe(false);
     });
 
     it('Should return true if file server has no volumes', async () => {
-      const fileServerId = 'file-server-id';
+      const configId = 'config-id';
       const mockConfig = [
         {
           id: 'config-id',
           fileServers: [
             {
-              id: fileServerId,
+              id: 'file-server-id',
               volumes: [],
             },
           ],
@@ -3870,23 +3864,18 @@ describe('ConfigurationService', () => {
       jest
         .spyOn(mockConfigRepository, 'find')
         .mockResolvedValue(mockConfig as any);
-      jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([]),
-      } as any);
-      const result = await service.isRefreshPossible(fileServerId);
+      const result = await service.isRefreshPossible(configId);
       expect(result).toBe(true);
     });
 
     it('Should return false if any job is running for the file server', async () => {
-      const fileServerId = 'file-server-id';
+      const configId = 'config-id';
       const mockConfig = [
         {
           id: 'config-id',
           fileServers: [
             {
-              id: fileServerId,
+              id: 'file-server-id',
               volumes: [{ id: 'volume-id', volumePath: '/path/to/volume' }],
             },
           ],
@@ -3895,28 +3884,24 @@ describe('ConfigurationService', () => {
       jest
         .spyOn(mockConfigRepository, 'find')
         .mockResolvedValue(mockConfig as any);
-      jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        getMany: jest
-          .fn()
-          .mockResolvedValue([
-            { fileServerId: fileServerId, futureScheduleAt: null } as any,
-          ]),
-      } as any);
+      jest
+        .spyOn(jobConfigRepo, 'find')
+        .mockResolvedValue([
+          { id: 'job-config-id', futureScheduleAt: null } as any,
+        ]);
       jest.spyOn(jobRunRepo, 'count').mockResolvedValue(1);
-      const result = await service.isRefreshPossible(fileServerId);
+      const result = await service.isRefreshPossible(configId);
       expect(result).toBe(false);
     });
 
     it('Should return true if file server is valid for refresh', async () => {
-      const fileServerId = 'file-server-id';
+      const configId = 'config-id';
       const mockConfig = [
         {
           id: 'config-id',
           fileServers: [
             {
-              id: fileServerId,
+              id: 'file-server-id',
               volumes: [{ id: 'volume-id', volumePath: '/path/to/volume' }],
             },
           ],
@@ -3925,17 +3910,13 @@ describe('ConfigurationService', () => {
       jest
         .spyOn(mockConfigRepository, 'find')
         .mockResolvedValue(mockConfig as any);
-      jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        getMany: jest
-          .fn()
-          .mockResolvedValue([
-            { fileServerId: fileServerId, futureScheduleAt: null } as any,
-          ]),
-      } as any);
+      jest
+        .spyOn(jobConfigRepo, 'find')
+        .mockResolvedValue([
+          { id: 'job-config-id', futureScheduleAt: null } as any,
+        ]);
       jest.spyOn(jobRunRepo, 'count').mockResolvedValue(0);
-      const result = await service.isRefreshPossible(fileServerId);
+      const result = await service.isRefreshPossible(configId);
       expect(result).toBe(true);
     });
   });
