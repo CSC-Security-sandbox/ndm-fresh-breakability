@@ -99,3 +99,4 @@ run_tests "perf-testing" "./tests/performance-testing" "Azure" "NFS"
 
 
 
+read -p "Press Enter to continue..."

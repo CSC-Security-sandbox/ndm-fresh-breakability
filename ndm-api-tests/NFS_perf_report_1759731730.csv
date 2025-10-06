@@ -1,0 +1,13 @@
+Pack,Worker-Host,Protocol,Source-FileServer,Destination-FileServer,Source-Path,Destination-Path,Job-Run-ID,Dataset-Size,MAX_WRITE_CONCURRENCY,JOB_TASK_ACTIVITY_CONCURRENCY,MAX_BUFFER_SIZE (MiB),Migration-Duration,Line-Rate,Worker-Downtime,Worker-Max-CPU-Usage
+1,172.30.203.53,NFS,172.30.202.21,172.30.202.25,/vol_src_automation2,/vol_dnd_dest_automation_2,402b62c8-736b-45d1-94f4-627465fe249d,188.13 MiB,10,20,1048576,0h06min,0.4936 MiB/sec,0.0000 mins," 100%
+"
+1,172.30.203.53,NFS,172.30.202.21,172.30.202.25,/vol_src_automation2,/vol_dnd_dest_automation_2,52e00f65-18b0-4a64-9ec1-2514d2e9dcac,188.13 MiB,10,20,1048576,0h05min,0.5711 MiB/sec,0.0000 mins," 100%
+"
+1,172.30.203.53,NFS,172.30.202.21,172.30.202.25,/vol_src_automation2,/vol_dnd_dest_automation_2,5bce0248-c047-4391-9cbf-a2f64a8cd407,188.13 MiB,10,20,1048576,0h05min,0.5495 MiB/sec,0.0000 mins," 100%
+"
+1,172.30.203.53,NFS,172.30.202.21,172.30.202.25,/vol_src_automation2,/vol_dnd_dest_automation_2,c0a4fe2e-4417-4192-bce3-b501c2ac6107,188.13 MiB,10,20,1048576,0h05min,0.5445 MiB/sec,0.0000 mins," 100%
+"
+1,172.30.203.53,NFS,172.30.202.21,172.30.202.25,/vol_src_automation2,/vol_dnd_dest_automation_2,08420862-19e8-4fd0-9186-64644f7ab880,188.13 MiB,10,20,1048576,0h05min,0.5911 MiB/sec,0.0000 mins," 100%
+"
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,

@@ -110,4 +110,4 @@ run_tests "regression" "./tests/regression" "Azure" "NFS"
 #run_tests "download-error-report-e2e" "./tests/download-error-report-e2e" "Azure" "NFS"
 
 
-#read -p "Test execution complete. Press [Enter] key to exit..."
+read -p "Test execution complete. Press [Enter] key to exit..."

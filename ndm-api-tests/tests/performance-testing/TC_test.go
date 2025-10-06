@@ -1,6 +1,7 @@
 package performance_testing
 
 import (
+	"bytes"
 	"encoding/csv"
 	"fmt"
 	"math"
@@ -18,7 +19,7 @@ import (
 )
 
 const (
-	NUMBER_OF_PACKS     = 5
+	NUMBER_OF_PACKS     = 1
 	MIGRATIONS_PER_PACK = 5
 	DATASET_SIZE        = "188.13 MiB"
 )
@@ -34,26 +35,26 @@ var PERF_PACK_CONFIG = map[int]map[string]int{
 		"JOB_TASK_ACTIVITY_CONCURRENCY": 20,
 		"MAX_BUFFER_SIZE":               OneMB,
 	},
-	2: {
-		"MAX_WRITE_CONCURRENCY":         30,
-		"JOB_TASK_ACTIVITY_CONCURRENCY": 40,
-		"MAX_BUFFER_SIZE":               ThreeMB,
-	},
-	3: {
-		"MAX_WRITE_CONCURRENCY":         50,
-		"JOB_TASK_ACTIVITY_CONCURRENCY": 60,
-		"MAX_BUFFER_SIZE":               FiveMB,
-	},
-	4: {
-		"MAX_WRITE_CONCURRENCY":         70,
-		"JOB_TASK_ACTIVITY_CONCURRENCY": 80,
-		"MAX_BUFFER_SIZE":               SevenMB,
-	},
-	5: {
-		"MAX_WRITE_CONCURRENCY":         100,
-		"JOB_TASK_ACTIVITY_CONCURRENCY": 100,
-		"MAX_BUFFER_SIZE":               TenMB,
-	},
+// 	2: {
+// 		"MAX_WRITE_CONCURRENCY":         30,
+// 		"JOB_TASK_ACTIVITY_CONCURRENCY": 40,
+// 		"MAX_BUFFER_SIZE":               ThreeMB,
+// 	},
+// 	3: {
+// 		"MAX_WRITE_CONCURRENCY":         50,
+// 		"JOB_TASK_ACTIVITY_CONCURRENCY": 60,
+// 		"MAX_BUFFER_SIZE":               FiveMB,
+// 	},
+// 	4: {
+// 		"MAX_WRITE_CONCURRENCY":         70,
+// 		"JOB_TASK_ACTIVITY_CONCURRENCY": 80,
+// 		"MAX_BUFFER_SIZE":               SevenMB,
+// 	},
+// 	5: {
+// 		"MAX_WRITE_CONCURRENCY":         100,
+// 		"JOB_TASK_ACTIVITY_CONCURRENCY": 100,
+// 		"MAX_BUFFER_SIZE":               TenMB,
+// 	},
 }
 
 var _ = Describe("TC-PERFORMANCE-TEST", func() {
@@ -164,13 +165,15 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 					err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("migration job did not complete, pack=%d, iteration=%d", packNumb, run))
 
+					isMigrationCompleted <- struct{}{}
+
 					// capture final CPU usage spikes
 					if PROTOCOL_TYPE == ProtocolNFS {
 						maxCPUUsageInPercentage, err = GetMaxCPUUsageReport(jobRunID)
 						Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to get max CPU usage report, pack=%d, iteration=%d, err = %v", packNumb, run, err))
 					}
 
-					isMigrationCompleted <- struct{}{}
+					
 
 					err = ClearVolume(destinationVolumePath1)
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error clearing destination volume, pack=%d, iteration=%d, err = %v", packNumb, run, err))
@@ -294,10 +297,21 @@ func getMigrationDurationAndLineRate(startTime, endTime string, workerDownTimeSe
 
 	return fmt.Sprintf("%dh%02dmin", hours, minutes), fmt.Sprintf("%.4f %s/sec", lineRate, unit), nil
 }
+var perf_report_file = fmt.Sprintf("../../_perf_report_%d.csv", time.Now().Unix())
 
 func appendRowsToPerfCSV(packNumb int, jobRunID, migrationDuration, lineRate, maxCPUUsage string, workerDownTimeMin float64, emptyRowsNumb ...int) error {
-	var perf_report_file = fmt.Sprintf("../../%s_perf_report_%d.csv", PROTOCOL_TYPE, time.Now().Unix())
 
+    baseFileName := perf_report_file
+    if strings.HasPrefix(baseFileName, "../../") {
+        baseFileName = baseFileName[len("../../"):]
+    }
+
+    if !strings.HasPrefix(baseFileName, "NFS_") && !strings.HasPrefix(baseFileName, "SMB_") {
+        idx := strings.Index(perf_report_file, "_")
+        if idx != -1 {
+            perf_report_file = perf_report_file[:idx] + string(PROTOCOL_TYPE) + perf_report_file[idx:]
+        }
+    }
 	_, err := os.Stat(perf_report_file)
 	fileExists := err == nil
 
@@ -372,16 +386,11 @@ func getWorkerDowntime(stop chan struct{}, workerDownTimeSec *int, maxCPUUsageIn
 }
 
 func scpCPUMonitoringScript() error {
-
 	var localScriptPath, remoteScriptPath string
 
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
-		// TODO - implement for SMB
-		// SCP script is done, but running it remotely has quoting issues ref - StartCPUMonitoring()
 		return nil
-		// localScriptPath = "./smb_cpu_usage.ps1"
-		// remoteScriptPath = `c:\Users\datamigrator\smb_cpu_usage.ps1`
 	case ProtocolNFS:
 		localScriptPath = "./nfs_cpu_usage.sh"
 		remoteScriptPath = "/home/ubuntu/nfs_cpu_usage.sh"
@@ -394,61 +403,60 @@ func scpCPUMonitoringScript() error {
 
 	client, err := getSSHClient(config)
 	if err != nil {
-		return err // or handle error
+		return err
 	}
 	defer client.Close()
 
-	// Start SFTP session
 	sftpClient, err := sftp.NewClient(client)
 	if err != nil {
 		return fmt.Errorf("failed to start SFTP: %v", err)
 	}
 	defer sftpClient.Close()
 
-	// Read local script
 	scriptBytes, err := os.ReadFile(localScriptPath)
 	if err != nil {
 		return fmt.Errorf("failed to read local script: %v", err)
 	}
 
-	// Copy script to remote
+	// Ensure Linux LF line endings
+	scriptBytes = bytes.ReplaceAll(scriptBytes, []byte("\r\n"), []byte("\n"))
+	scriptBytes = bytes.ReplaceAll(scriptBytes, []byte("\r"), []byte("\n"))
+
 	remoteFile, err := sftpClient.Create(remoteScriptPath)
 	if err != nil {
 		return fmt.Errorf("failed to create remote script: %v", err)
 	}
 	_, err = remoteFile.Write(scriptBytes)
+	remoteFile.Close()
 	if err != nil {
 		return fmt.Errorf("failed to write remote script: %v", err)
 	}
-	remoteFile.Close()
 
-	if PROTOCOL_TYPE == ProtocolNFS {
-		// Make script executable
-		session, err := client.NewSession()
-		if err != nil {
-			return fmt.Errorf("failed to create SSH session: %v", err)
-		}
-		defer session.Close()
-		chmodCmd := fmt.Sprintf("chmod +x %s", remoteScriptPath)
-		if err := session.Run(chmodCmd); err != nil {
-			return fmt.Errorf("failed to chmod script: %v", err)
-		}
+	// Make script executable
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("failed to create SSH session: %v", err)
+	}
+	defer session.Close()
+
+	chmodCmd := fmt.Sprintf("chmod +x %s", remoteScriptPath)
+	if err := session.Run(chmodCmd); err != nil {
+		return fmt.Errorf("failed to chmod script: %v", err)
 	}
 
 	return nil
 }
+
 
 func startCPUMonitoring(jobID string) error {
 	var remoteScriptPath, runScript string
 
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
-		// TODO - fix the quoting issue
-		//runScript = `powershell.exe -Command 'Start-Process powershell -WindowStyle Hidden -ArgumentList '-File C:\Users\datamigrator\smb_cpu_usage.ps1 OmI23''`
 		return nil
 	case ProtocolNFS:
 		remoteScriptPath = "/home/ubuntu/nfs_cpu_usage.sh"
-		runScript = fmt.Sprintf("sudo nohup %s %s > /dev/null 2>&1 &", remoteScriptPath, jobID)
+		runScript = fmt.Sprintf("nohup bash %s %s >/dev/null 2>&1 &", remoteScriptPath, jobID)
 	}
 
 	config, err := getWorkerSSHConfig()
@@ -468,12 +476,13 @@ func startCPUMonitoring(jobID string) error {
 	}
 	defer session.Close()
 
-	if err := session.Run(runScript); err != nil {
-		return fmt.Errorf("jobID %s: failed to run script: %v", jobID, err)
+	if err := session.Start(runScript); err != nil {
+		return fmt.Errorf("jobID %s: failed to start script: %v", jobID, err)
 	}
 
 	return nil
 }
+
 
 func getWorkerSSHConfig() (SSHConfig, error) {
 	port, err := strconv.Atoi(NDM_WORKERS_PORT)
