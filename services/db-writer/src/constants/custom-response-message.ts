@@ -26,6 +26,19 @@ export const customSuccessDTOList: CustomSuccessDTO[] = [
   },
 ];
 
+// SQL Queries
+export const SQL_QUERIES = {
+  GET_PROJECT_ID_FROM_JOBRUN: `
+    SELECT c.project_id
+    FROM datamigrator.jobrun jr
+    JOIN datamigrator.jobconfig jc ON jr.job_config_id = jc.id
+    JOIN datamigrator.volume v ON jc.source_path_id = v.id
+    JOIN datamigrator.file_server fs ON v.file_server_id = fs.id
+    JOIN datamigrator.config c ON fs.config_id = c.id
+    WHERE jr.id = $1
+  `,
+};
+
 export const customErrorDTOList: CustomErrorDTO[] = [
   {
     apiEndPointKey: 'redis-consumer/start',

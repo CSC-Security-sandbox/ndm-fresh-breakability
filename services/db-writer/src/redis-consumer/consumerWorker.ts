@@ -154,7 +154,7 @@ process.on('unhandledRejection', async (reason, promise) => {
 
         const configService = new ConfigService();
         workflowService = new WorkflowService(configService);
-        redisConsumerService = new RedisConsumerService(inventoryService, workflowService);
+        redisConsumerService = new RedisConsumerService(inventoryService, dataSource, workflowService);
         
         // Set projectId in the worker's cache if available
         if (projectId && jobRunId) {

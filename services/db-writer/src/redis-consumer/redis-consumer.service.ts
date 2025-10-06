@@ -1,6 +1,7 @@
 import { Injectable, OnModuleDestroy, Inject, Logger, Optional } from '@nestjs/common';
 import { GroupReaderType, JobContextFactory, JobManagerContext } from '@netapp-cloud-datamigrate/jobs-lib';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { DataSource } from 'typeorm';
 import * as path from 'path';
 import { Worker } from 'worker_threads';
 import { ConsumerType } from '../enum/redis-consumer.enum';
@@ -11,6 +12,7 @@ import { FileConsumerContext, getWorkflowId, ReaderStatus } from './utils';
 import { defaultDataConverter } from '@temporalio/common';
 import { RedisError, ValidationError, WorkerError, ConfigurationError } from '../errors/custom-errors';
 import { RedisUtils } from '@netapp-cloud-datamigrate/jobs-lib/dist/redis/redis-utils';
+import { SQL_QUERIES } from '../constants/custom-response-message';
 
 // Global map to cache jobRunId to projectId mapping
 const jobRunIdToProjectIdMap: Map<string, string> = new Map();
@@ -32,6 +34,7 @@ export class RedisConsumerService implements OnModuleDestroy {
 
     constructor(
         private readonly inventoryService: InventoryService,
+        private readonly dataSource: DataSource,
         private readonly workflowService: WorkflowService,
         @Optional() @Inject(LoggerFactory) private readonly loggerFactory?: LoggerFactory,
     ) {
@@ -107,7 +110,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                 this.logger.log(`Found ${this.jobConsumerMap.size} job contexts with potential unsaved records`);
 
                 for (const [jobRunId, context] of this.jobConsumerMap.entries()) {
-                    const projectId = this.getProjectIdFromCache(jobRunId);
+                    const projectId = await this.getProjectIdFromCache(jobRunId);
                     // Save remaining records to database if any exist
                     if (context.records.length > 0) {
                         this.logger.warn(`projectId: ${projectId} Saving ${context.records.length} unsaved records for job ${jobRunId} during cleanup`);
@@ -184,13 +187,24 @@ export class RedisConsumerService implements OnModuleDestroy {
 
     /**
      * Retrieves projectId from the cache for a given jobRunId
+     * If not found in cache, attempts to fetch from database (handles service restart scenarios)
      * 
      * @param {string} jobRunId - The job run identifier
-     * @returns {string | null} - The cached projectId or null if not found
+     * @returns {Promise<string | null>} - The cached projectId or null if not found
      */
-    getProjectIdFromCache(jobRunId: string): string | null {
-        const projectId = jobRunIdToProjectIdMap.get(jobRunId) || null;
-        this.logger.log(`Retrieved projectId: ${projectId} from cache for jobRunId: ${jobRunId}`);
+    async getProjectIdFromCache(jobRunId: string): Promise<string | null> {
+        // First try to get from cache
+        let projectId = jobRunIdToProjectIdMap.get(jobRunId) || null;
+
+        if (projectId) {
+            this.logger.log(`Retrieved projectId: ${projectId} from cache for jobRunId: ${jobRunId}`);
+            return projectId;
+        }
+
+        // If not in cache, try database lookup (handles service restart scenarios)
+        this.logger.log(`ProjectId not found in cache for jobRunId: ${jobRunId}, attempting database lookup`);
+        projectId = await this.getProjectIdFromDatabase(jobRunId);
+
         return projectId;
     }
 
@@ -231,7 +245,7 @@ export class RedisConsumerService implements OnModuleDestroy {
      */
     async updateConsumerStatus(jobId: string, consumerType: string, status: ReaderStatus, projectId?: string): Promise<void> {
         if (!this.isValidRedisClient()) {
-            const cachedProjectId = this.getProjectIdFromCache(jobId);
+            const cachedProjectId = await this.getProjectIdFromCache(jobId);
             this.logger.warn(`projectId: ${cachedProjectId} Redis client not available for updateConsumerStatus, attempting to reinitialize`);
             await this.initializeRedisConnection();
             if (!this.isValidRedisClient()) {
@@ -261,7 +275,7 @@ export class RedisConsumerService implements OnModuleDestroy {
      */
     async getConsumerStatus(jobId: string, consumerType: string): Promise<ReaderStatus | null> {
         if (!this.isValidRedisClient()) {
-            const projectId = this.getProjectIdFromCache(jobId);
+            const projectId = await this.getProjectIdFromCache(jobId);
             this.logger.warn(`projectId: ${projectId} Redis client not available for getConsumerStatus, attempting to reinitialize`);
             await this.initializeRedisConnection();
             if (!this.isValidRedisClient()) {
@@ -1023,7 +1037,33 @@ export class RedisConsumerService implements OnModuleDestroy {
         }
     }
 
+    /**
+     * Retrieves projectId from database when not found in cache
+     * This method handles service restart scenarios where the cache is lost
+     * 
+     * @param {string} jobRunId - The job run identifier
+     * @returns {Promise<string | null>} - The projectId from database or null if not found
+     */
+    private async getProjectIdFromDatabase(jobRunId: string): Promise<string | null> {
+        try {
 
+            const result = await this.dataSource.query(SQL_QUERIES.GET_PROJECT_ID_FROM_JOBRUN, [jobRunId]);
+
+            if (result && result.length > 0 && result[0].project_id) {
+                const projectId = result[0].project_id;
+                this.logger.log(`Retrieved projectId ${projectId} from database for jobRunId ${jobRunId}`);
+                // Cache it for future use
+                this.setProjectIdInCache(jobRunId, projectId);
+                return projectId;
+            }
+
+            this.logger.warn(`No projectId found in database for jobRunId ${jobRunId}`);
+            return null;
+        } catch (error) {
+            this.logger.error(`Error getting projectId from database for jobRunId ${jobRunId}: `, error);
+            return null;
+        }
+    }
 
     /**
      * Manually set projectId in cache - useful for worker threads

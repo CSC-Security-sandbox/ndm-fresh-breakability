@@ -4,6 +4,8 @@ import {
   HTTPMethod,
 } from './custom-response-message';
 
+import { SQL_QUERIES } from './custom-response-message';
+
 describe('Custom Response Message', () => {
   describe('HTTPMethod enum', () => {
     it('should define all HTTP methods', () => {
@@ -88,6 +90,25 @@ describe('Custom Response Message', () => {
       const successKeys = customSuccessDTOList.map(dto => dto.apiEndPointKey);
       expectedKeys.forEach(key => {
         expect(successKeys).toContain(key);
+      });
+    });
+
+    describe('SQL_QUERIES', () => {
+      it('should be defined and have GET_PROJECT_ID_FROM_JOBRUN property', () => {
+      expect(SQL_QUERIES).toBeDefined();
+      expect(SQL_QUERIES).toHaveProperty('GET_PROJECT_ID_FROM_JOBRUN');
+      expect(typeof SQL_QUERIES.GET_PROJECT_ID_FROM_JOBRUN).toBe('string');
+      });
+
+      it('GET_PROJECT_ID_FROM_JOBRUN should contain correct SQL structure', () => {
+      const query = SQL_QUERIES.GET_PROJECT_ID_FROM_JOBRUN;
+      expect(query).toContain('SELECT c.project_id');
+      expect(query).toContain('FROM datamigrator.jobrun jr');
+      expect(query).toContain('JOIN datamigrator.jobconfig jc ON jr.job_config_id = jc.id');
+      expect(query).toContain('JOIN datamigrator.volume v ON jc.source_path_id = v.id');
+      expect(query).toContain('JOIN datamigrator.file_server fs ON v.file_server_id = fs.id');
+      expect(query).toContain('JOIN datamigrator.config c ON fs.config_id = c.id');
+      expect(query).toContain('WHERE jr.id = $1');
       });
     });
   });
