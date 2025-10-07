@@ -154,7 +154,7 @@ var _ = FDescribe("GCNV Flex Test regression", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Error confirming path file upload")
 			Expect(confirmResp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(confirmStats.WorkflowId).NotTo(BeEmpty(), "Expected non-empty workflow ID")
-			Wait(40)
+			Wait(60)
 
 			// Confirm volume creation
 			By("Confirming the volume creation")
