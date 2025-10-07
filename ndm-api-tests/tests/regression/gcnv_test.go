@@ -332,6 +332,7 @@ var _ = FDescribe("GCNV Flex Test regression", Ordered, func() {
 
 			// GetVolumeDetailsFromFileServer for the invalid path
 			By("Getting volume details for the valid path")
+			fmt.Println("fileServerDetails.FileServers[0].Volumes:", fileServerDetails.FileServers[0].Volumes, "expected is : ", SOURCE_VOLUMES[1])
 			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, SOURCE_VOLUMES[1])
 			Expect(err).NotTo(HaveOccurred(), "Expected to find volume path")
 			Expect(validVolume.IsValid).To(BeTrue(), "Expected volume to be valid")
