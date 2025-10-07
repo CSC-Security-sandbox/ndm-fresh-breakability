@@ -670,17 +670,10 @@ func GetFileUserGroupId(export, fileName string) (uid, gid int, err error) {
 
 func GetFileServerDetails(configId string, headers map[string]string) (FileServerDetailsItems, error) {
 	getSourceURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configId)
-	refreshURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILE_SERVER_REFRESH_URL, configId)
+
 	var response FileServerDetails
 
 	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
-
-		resp, err := SendAPIRequest(http.MethodGet, refreshURL, nil, headers)
-		if err != nil {
-			return FileServerDetailsItems{}, fmt.Errorf("error refreshing file server: %w", err)
-		}
-		defer resp.Body.Close()
-
 		getFileServerResp, err := SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
 		if err != nil {
 			return FileServerDetailsItems{}, fmt.Errorf("error sending API request: %w", err)
