@@ -132,12 +132,12 @@ export const FILE_SYSTEM_DISTRIBUTION = (schema: string) => `
         COALESCE((
             SELECT SUM(link_count) 
             FROM (
-                SELECT COUNT(*) as link_count
+                SELECT COUNT(1) as link_count
                 FROM ${schema}.inventory i2
                 WHERE i2.job_run_id = $1 
                     AND i2.inode IS NOT NULL 
                 GROUP BY i2.inode
-                HAVING COUNT(*) > 1
+                HAVING COUNT(1) > 1
             ) AS hard_links
         ), 0) as total_hard_link_files
     from ${schema}.inventory i
