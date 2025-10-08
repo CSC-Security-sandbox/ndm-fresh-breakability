@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { Cmd, Command, ErrorType, CommandStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
-import { getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip } from 'src/activities/utils/utils';
+import { getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip, shouldExcludeForDelete } from 'src/activities/utils/utils';
 import { Origin } from 'src/activities/utils/utils.types';
 import { FatalError } from 'src/errors/errors.types';
 import { MigrateScanService } from './migrate-scan.service';
@@ -38,8 +38,8 @@ jest.mock('src/activities/utils/utils', () => ({
     removePrefix: jest.fn(),
     shouldExcludeOrSkip: jest.fn(),
     isContentUpdate: jest.fn(),
-    isMetaUpdated: jest.fn(), 
-
+    isMetaUpdated: jest.fn(),
+    shouldExcludeForDelete: jest.fn(),
 }));
 
 describe('MigrateScanService', () => {
@@ -520,6 +520,8 @@ describe('MigrateScanService', () => {
                 return new Set();
             });
             
+            (shouldExcludeForDelete as jest.Mock).mockReturnValue(false);
+            
             await service.scanDirectory(commandInput);
             expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
         });
@@ -549,6 +551,7 @@ describe('MigrateScanService', () => {
                 birthtime: new Date(),
             });
             (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+            (shouldExcludeForDelete as jest.Mock).mockReturnValue(false);
 
             commandInput.targetPrefix = '/dst';
             await service.scanDirectory(commandInput);
