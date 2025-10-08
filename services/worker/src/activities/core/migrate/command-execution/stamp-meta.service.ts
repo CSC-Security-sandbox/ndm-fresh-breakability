@@ -118,8 +118,13 @@ export class StampMetaService {
                     gid = gid_res;
                     uid = uid_res;
                 }
-                if (gid && uid)
-                    await fs.promises.chown(targetPath, parseInt(uid), parseInt(gid));
+                if (gid && uid){
+                    if(command?.metadata?.isSymLink){
+                        await fs.promises.lchown(targetPath, parseInt(uid), parseInt(gid));
+                    }else{
+                        await fs.promises.chown(targetPath, parseInt(uid), parseInt(gid));
+                    }   
+                }                 
             } catch (error) {
                 this.logger.error(`Stamping GID and UID from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
