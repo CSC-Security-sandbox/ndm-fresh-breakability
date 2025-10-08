@@ -73,7 +73,7 @@ export class MigrateScanService {
                 const sourceContentPath = path.join(sourcePath, item);
                 const sourceContentExists = await isPathExists(sourceContentPath);
                 if (!sourceContentExists) continue;                
-                const sourceStat = await fs.promises.lstat(sourceContentPath);
+                const sourceStat = await fs.promises.lstat(sourceContentPath);                
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
                 
                 if (shouldExcludeOrSkip({
@@ -86,8 +86,7 @@ export class MigrateScanService {
                 })) continue;
 
                 const fileInfo: FileInfo = await getFileInfo({name: item, fullFilePath: sourceContentPath, relativePath: relativeSourcePath});
-
-                if (sourceStat.isDirectory() && !sourceStat.isSymbolicLink()) {
+                if (sourceStat.isDirectory() && !sourceStat.isSymbolicLink()) {   // only resolving to dir 
                     output.dirCount++;
                     output.subDirs.push(relativeSourcePath);
                     this.logger.debug(`Scan Path ${relativeSourcePath} | parent ${sourcePath}`)
@@ -96,17 +95,19 @@ export class MigrateScanService {
                         if (command) commands.push(command);
                     }
                 } 
-                 else if (sourceStat.isSymbolicLink()) {
+                 else if (sourceStat.isSymbolicLink()) {                      // not a directory but a sym link 
+                    //TODO: assumption is always file 
+                    const isSymLinkToDir = await this.isSymlinkPointingToDirectory(sourceContentPath);                    
                     if (!targetContent.has(item)) {
                         const command = this.buildCommand(sourceStat, fileInfo.path);
                         if (command) commands.push(command);
                     }
                 }
-                else if (!targetContent.has(item)) {
+                else if (!targetContent.has(item)) {                       // not directory and not symlink and target dont exist 
                     output.fileCount++;
                     const command = this.buildCommand(sourceStat, fileInfo.path);
                     if (command) commands.push(command);
-                } else {
+                } else {                                                   // not directory and not symlink and target exist                           
                     const targetFilePath = path.join(targetPath, item);
                     const targetFileExists = await isPathExists(targetFilePath);
                     if (targetFileExists) {
@@ -156,6 +157,18 @@ export class MigrateScanService {
         return output
     }
 
+    // Add this method to MigrateScanService class
+    private async isSymlinkPointingToDirectory(symlinkPath: string): Promise<boolean> {
+        try {
+            // Read the link target
+            const symLinkTarget = await fs.promises.stat(symlinkPath);
+            return symLinkTarget.isDirectory();
+        } catch (error) {
+            // If we can't resolve the target (broken symlink), treat as file
+            this.logger.warn(`Cannot resolve symlink target for ${symlinkPath}: ${error.message}`);
+            return false;
+        }
+    }
 
     async processDeletedItems({ sourceContent, targetContent, targetPath, targetPrefix, jobContext, errorType, command, commands ,settings}: {
         sourceContent: Set<string>,
@@ -201,7 +214,7 @@ export class MigrateScanService {
         }
     }
 
-    buildCommand = (sFile: fs.Stats | undefined, fPath: string, dFile?: fs.Stats): Cmd | undefined => {
+    buildCommand = (sFile: fs.Stats | undefined, fPath: string, dFile?: fs.Stats, symLinkToDir?: boolean): Cmd | undefined => {
 
         if (!sFile) {
             const isDirectory = dFile ? dFile.isDirectory() : false;
@@ -238,7 +251,7 @@ export class MigrateScanService {
                 CommandStatus.READY,
                 isDirectory,
                 {
-                    [isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE]: { status: OPS_STATUS.READY, params: {} },
+                    [this.getOpsCommand(isDirectory, metadata.isSymLink)]: { status: OPS_STATUS.READY, params: {} },
                     [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: {} }
                 },
                 metadata,
@@ -254,12 +267,21 @@ export class MigrateScanService {
                 CommandStatus.READY,
                 isDirectory,
                 {
-                    [isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE]: { status: OPS_STATUS.COMPLETED , params: {} },
+                    [this.getOpsCommand(isDirectory, metadata.isSymLink)]: { status: OPS_STATUS.COMPLETED , params: {} },
                     [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: {} }
                 },
                 metadata,
             )
         }
         return undefined;
+    }
+
+
+    getOpsCommand(isDirectory: boolean, isSymLink: boolean): OPS_CMD{        
+        if(isSymLink){
+            return OPS_CMD.COPY_SYMLINK;
+        }else{
+            return isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE;
+        }
     }
 }

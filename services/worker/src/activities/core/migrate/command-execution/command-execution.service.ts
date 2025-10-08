@@ -31,6 +31,10 @@ export class CommandExecService {
         const output: CommandExecOutput = { sourceErrors: [], targetErrors: [], cmd: input.command };
         let baseCmdRes: CommandOutput = { shouldStampMeta: false, shouldUpdateItemInfo: false, sourceErrors: [], targetErrors: [] };
 
+        if(input.command.ops && input.command.ops[OPS_CMD.COPY_SYMLINK]) {
+            // Copy Symlink
+            baseCmdRes = await this.copySymlink(input);
+        }
         // Copy File
         if(input.command.ops && input.command.ops[OPS_CMD.COPY_FILE]) 
             baseCmdRes = await this.copyFile(input);
@@ -70,6 +74,27 @@ export class CommandExecService {
         return output
     }
 
+    async copySymlink({command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
+        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: false };
+        
+        try {
+            const linkTarget = await fs.promises.readlink(sourcePath);
+            
+            // Create the symbolic link
+            await fs.promises.symlink(linkTarget, targetPath);
+            
+            output.shouldStampMeta = true;
+            output.shouldUpdateItemInfo = true;
+            
+            this.logger.debug(`Created symbolic link: ${targetPath} -> ${linkTarget}`);
+        } catch (error) {
+            this.logger.error(`Copying SYMLINK from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
+            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
+            await jobContext.publishToErrorStream(dmErr);
+            output.targetErrors.push(error.code);
+        }        
+    return output;
+}
 
     async copyFile({command , jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
         const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] , shouldUpdateItemInfo: false };
@@ -92,8 +117,12 @@ export class CommandExecService {
             try {
                 if(targetPathExists)
                     await this.stampMetaService.resetFileAttributes(targetPath);
+
+                // TODO: 
                 const checksums = await this.workerThreadService.migrateWorkerThread({ sourcePath, destinationPath: targetPath, operationId: command.id, size: command.metadata?.size ?? 0
                 });
+
+
                 output.shouldUpdateItemInfo = true;
                 if(checksums?.targetChecksum !== checksums?.sourceChecksum) {
                     command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.ERROR, params : { checksums } };
@@ -119,6 +148,8 @@ export class CommandExecService {
             return output;  // skip if already completed
         }
         if( command.ops[OPS_CMD.COPY_DIR].status !== OPS_STATUS.COMPLETED) {
+            //TODO: add handling for the symlink to the directory. 
+
             try {                
                 await fs.promises.mkdir(targetPath, {recursive: true});                
                 command.ops[OPS_CMD.COPY_DIR].status = OPS_STATUS.COMPLETED;
