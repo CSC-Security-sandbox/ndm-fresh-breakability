@@ -31,8 +31,9 @@ const toMB = (value: number): number => {
 };
 
 const covertBytes = (bytes: number): string => {
-  if (bytes === 0) return "0 B";
-  let size = bytes;
+  const numBytes = Number(bytes);
+  if (isNaN(numBytes) || numBytes === 0) return "0 B";
+  let size = numBytes;
   let unitIndex = 0;
   while (
     size >= BYTES_IN_KILOBYTE &&
@@ -500,10 +501,12 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
   /* This function smartly convert bytes to KiB, MiB, GiB, TiB, PiB, EiB, ZiB or YiB */
 }
 export function formatBytes(bytes: number, decimals = 2): string {
-  if (bytes === 0) return "0 B";
+
+const numBytes = Number(bytes);
+  if (isNaN(numBytes) || numBytes === 0) return "0 B";
 
   const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
-  let size = bytes;
+  let size = numBytes;
   let i = 0;
 
   while (size >= 1024 && i < units.length - 1) {
@@ -512,8 +515,8 @@ export function formatBytes(bytes: number, decimals = 2): string {
   }
 
   return size % 1 === 0
-    ? `${size.toFixed(0)} ${units[i]}`
-    : `${size.toFixed(decimals)} ${units[i]}`;
+    ? `${size?.toFixed(0)} ${units[i]}`
+    : `${size?.toFixed(decimals)} ${units[i]}`;
 }
 
 {
