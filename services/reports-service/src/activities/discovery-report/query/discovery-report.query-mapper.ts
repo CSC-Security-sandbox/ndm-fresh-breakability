@@ -1,5 +1,5 @@
 import { DiscoveryReportSection } from "../discovery-report.type";
-import { ACCESS_TIME_DISTRIBUTION, CREATED_TIME_DISTRIBUTION, DEPTH_DISTRIBUTION, EXTENSION_DISTRIBUTION, FILE_SYSTEM_DISTRIBUTION, JOB_RUN_DETAILS, MAX_VALUES, MODIFIED_TIME_DISTRIBUTION, NUMBER_OF_FILES_BY_SIZE, TOP_BIGGEST_FILE_NAME, TOP_DIRECTORY_WITH_MAX_COUNT_CHILD, TOP_DIRECTORY_WITH_MAX_SIZE, TOP_LONGEST_DIRECTORY_NAMES, TOP_LONGEST_DIRECTORY_PATHS, TOP_LONGEST_FILE_NAMES, TOP_LONGEST_FILE_PATHS } from "./discovery-report.query";
+import { ACCESS_TIME_DISTRIBUTION, CREATED_TIME_DISTRIBUTION, DEPTH_DISTRIBUTION, EXTENSION_DISTRIBUTION, FILE_SYSTEM_DISTRIBUTION, JOB_RUN_DETAILS, MAX_VALUES, MODIFIED_TIME_DISTRIBUTION, NUMBER_OF_FILES_BY_SIZE, TOP_BIGGEST_FILE_NAME, TOP_DIRECTORY_WITH_MAX_COUNT_CHILD, TOP_DIRECTORY_WITH_MAX_SIZE, TOP_LONGEST_DIRECTORY_NAMES, TOP_LONGEST_DIRECTORY_PATHS, TOP_LONGEST_FILE_NAMES, TOP_LONGEST_FILE_PATHS } from './discovery-report.query';
 import { AccessTimeDistributionInput, CreatedTimeDistributionInput, DepthDistributionInput, ExtensionDistributionInput, FileSystemDistributionInput, JobRunDetailsInput, MaxValuesInput, ModifiedTimeDistributionInput, NumberOfFilesBySizeInput, TopBiggestFileNameInput, TopDirectoryWithMaxCountChildInput, TopDirectoryWithMaxSizeInput, TopLongestDirectoryNamesInput, TopLongestDirectoryPathsInput, TopLongestFileNamesInput, TopLongestFilePathsInput } from "./discovery-report.query.type";
 import { SECONDS_PER_MINUTE, SECONDS_PER_HOUR, SECONDS_PER_DAY, TIME_UNITS } from "../../../constants/report";
 
@@ -154,6 +154,7 @@ export const FILE_SYSTEM_DISTRIBUTION_MAPPER = (input: FileSystemDistributionInp
         { value: input[0].total_space_regular_files, valueType: 'size', sub_category: 'Total Space for Regular Files' },
         { value: input[0].total_space_directories, valueType: 'size', sub_category: 'Total Space for Directories' },
         { value: input[0].total_space_used, valueType: 'size', sub_category: 'Total Space Used' },
+        { value: input[0].total_hard_link_files, valueType: 'count', sub_category: 'Hard Links' }
     ];
     mappings.forEach(({ value, valueType, sub_category }) => {
         output.push({
@@ -376,6 +377,7 @@ export const QueryMapper = {
     ['TOP_LONGEST_FILE_PATHS']: {query: TOP_LONGEST_FILE_PATHS, mapper: TOP_LONGEST_FILE_PATHS_MAPPER, isDynamic: true},
     ['TOP_BIGGEST_FILE_NAME']: {query: TOP_BIGGEST_FILE_NAME, mapper: TOP_BIGGEST_FILE_NAME_MAPPER, isDynamic: true},
     ['JOB_RUN_DETAILS']: {query : JOB_RUN_DETAILS, mapper: JOB_RUN_DETAILS_MAPPER, isDynamic: false}
+    
 }
 
 export const DynamicMaps: string[] = Object.entries(QueryMapper)

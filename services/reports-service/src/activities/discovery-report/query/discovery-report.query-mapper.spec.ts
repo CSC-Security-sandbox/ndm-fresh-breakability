@@ -123,7 +123,8 @@ it('FILE_SYSTEM_DISTRIBUTION_MAPPER maps input correctly', () => {
         symbolic_links: 2,
         total_space_regular_files: 500,
         total_space_directories: 100,
-        total_space_used: 600
+        total_space_used: 600,
+        total_hard_link_files: 3
     }];
     const result = FILE_SYSTEM_DISTRIBUTION_MAPPER(input as any);
     expect(result).toEqual([
@@ -132,7 +133,8 @@ it('FILE_SYSTEM_DISTRIBUTION_MAPPER maps input correctly', () => {
         { value: 2, category: 'File System Stats', valueType: 'count', sub_category: 'Symbolic Links' },
         { value: 500, category: 'File System Stats', valueType: 'size', sub_category: 'Total Space for Regular Files' },
         { value: 100, category: 'File System Stats', valueType: 'size', sub_category: 'Total Space for Directories' },
-        { value: 600, category: 'File System Stats', valueType: 'size', sub_category: 'Total Space Used' }
+        { value: 600, category: 'File System Stats', valueType: 'size', sub_category: 'Total Space Used' },
+        { value: 3, category: 'File System Stats', valueType: 'count', sub_category: 'Hard Links' }
     ]);
 });
 

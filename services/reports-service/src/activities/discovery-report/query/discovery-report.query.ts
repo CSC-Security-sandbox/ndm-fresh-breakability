@@ -128,7 +128,18 @@ export const FILE_SYSTEM_DISTRIBUTION = (schema: string) => `
         sum(case when upper(file_type) = 'SYMBOLIC_LINK' then 1 else 0 end) as symbolic_links,
         sum(case when is_directory = false then file_size else 0 end) as total_space_regular_files,
         sum(case when is_directory = true then file_size else 0 end) as total_space_directories,
-        sum(file_size) as total_space_used
+        sum(file_size) as total_space_used,
+        COALESCE((
+            SELECT SUM(link_count) 
+            FROM (
+                SELECT COUNT(*) as link_count
+                FROM ${schema}.inventory i2
+                WHERE i2.job_run_id = $1 
+                    AND i2.inode IS NOT NULL 
+                GROUP BY i2.inode
+                HAVING COUNT(*) > 1
+            ) AS hard_links
+        ), 0) as total_hard_link_files
     from ${schema}.inventory i
     where i.job_run_id = $1
 `;
