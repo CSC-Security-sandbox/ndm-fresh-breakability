@@ -255,10 +255,10 @@ export class CommandExecService {
     async validateCommand({ cmd, item, jobContext, errorType}:ValidateCommandInput): Promise<void> {
         let validateMisMatch : string = ""
 
-        if (item.sourceMeta.checksum !== item.targetMeta.checksum) 
+        if (!cmd.metadata?.isSymLink && item.sourceMeta.checksum !== item.targetMeta.checksum) 
             validateMisMatch += `CheckSum Mismatch detected, source: ${item.sourceMeta.checksum}, target: ${item.targetMeta.checksum} \n`;
         
-        if (item.sourceMeta.permission !== item.targetMeta.permission) 
+        if (!cmd.metadata?.isSymLink && item.sourceMeta.permission !== item.targetMeta.permission) 
             validateMisMatch += `Permission Mismatch detected, source: ${item.sourceMeta.permission}, target: ${item.targetMeta.permission} \n`;
         
         if (jobContext.jobConfig.options.preserveAccessTime &&  item.sourceMeta.accessTime.getTime() !== item.targetMeta.accessTime.getTime())
