@@ -76,7 +76,10 @@ export class CommandExecService {
 
     async copySymlink({command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
         const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: false };
-        
+        if(command.ops["cs"].status === OPS_STATUS.COMPLETED) {
+            output.shouldStampMeta = true;
+            return output;
+        }
         try {
             const linkTarget = await fs.promises.readlink(sourcePath);
             

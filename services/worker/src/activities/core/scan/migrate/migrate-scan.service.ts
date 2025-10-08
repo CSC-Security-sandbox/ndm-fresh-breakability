@@ -71,17 +71,8 @@ export class MigrateScanService {
         for (const item of sourceContent) {
             try {
                 const sourceContentPath = path.join(sourcePath, item);
-                const sourceContentExists = await isPathExists(sourceContentPath);
-                            
-                this.logger.log(`Processing item: ${sourceContentPath} - exists ${sourceContentExists}`);
-                if (!sourceContentExists){
-                    try{
-                         const lstat = await fs.promises.lstat(sourceContentPath);
-                        if (!lstat.isSymbolicLink()) continue;                                            
-                    }catch(error){
-                        continue;
-                    }                   
-                }                 
+                const sourceContentExists = await isExists(sourceContentPath);
+                if(!sourceContentExists) continue;                      
                 const sourceStat = await fs.promises.lstat(sourceContentPath);                
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
                 
@@ -95,6 +86,8 @@ export class MigrateScanService {
                 })) continue;
 
                 const fileInfo: FileInfo = await getFileInfo({name: item, fullFilePath: sourceContentPath, relativePath: relativeSourcePath});
+
+                // TODO: change the if/else logic. it is difficult to read and understand.
                 if (sourceStat.isDirectory() && !sourceStat.isSymbolicLink()) {   // only resolving to dir 
                     output.dirCount++;
                     output.subDirs.push(relativeSourcePath);
@@ -104,10 +97,17 @@ export class MigrateScanService {
                         if (command) commands.push(command);
                     }
                 } 
-                //  else if (sourceStat.isSymbolicLink()) {                      // not a directory but a sym link                                                                             
-                //     const command = this.buildCommand(sourceStat, fileInfo.path);
-                //     if (command) commands.push(command);                    
-                // }
+                 else if (sourceStat.isSymbolicLink()) {   // not a directory but a sym link                                                                             
+                    if(!targetContent.has(item)) {               
+                        const command = this.buildCommand(sourceStat, fileInfo.path);                        
+                        if (command) commands.push(command);                    
+                    }else{
+                        const targetFilePath = path.join(targetPath, item);
+                        const targetStatLstat = await fs.promises.lstat(targetFilePath);
+                        const command = this.buildCommand(sourceStat, fileInfo.path, targetStatLstat);
+                        if (command) commands.push(command);
+                    }
+                }
                 else if (!targetContent.has(item)) {                       // not directory and not symlink and target dont exist 
                     output.fileCount++;
                     const command = this.buildCommand(sourceStat, fileInfo.path);
@@ -263,7 +263,7 @@ export class MigrateScanService {
 
     getOpsCommand(isDirectory: boolean, isSymLink: boolean): string {        
         if(isSymLink){
-            return "cs";
+            return "cs";  // TODO: use OPS_CMD.COPY_SYMLINK after fixing the enum issue.
         }else{
             return isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE;
         }
