@@ -66,8 +66,7 @@ export class MigrateScanService {
         let commands: Cmd[] = [];
 
         const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command});
-        const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});
-        this.logger.log(`Scanning Source: ${Array.from(sourceContent).join(", ")}`);
+        const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});        
         for (const item of sourceContent) {
             try {
                 const sourceContentPath = path.join(sourcePath, item);
@@ -90,8 +89,7 @@ export class MigrateScanService {
                 // TODO: change the if/else logic. it is difficult to read and understand.
                 if (sourceStat.isDirectory() && !sourceStat.isSymbolicLink()) {   // only resolving to dir 
                     output.dirCount++;
-                    output.subDirs.push(relativeSourcePath);
-                    this.logger.debug(`Scan Path ${relativeSourcePath} | parent ${sourcePath}`)
+                    output.subDirs.push(relativeSourcePath);                    
                     if(!targetContent.has(item)) {
                         const command = this.buildCommand(sourceStat, fileInfo.path);
                         if (command) commands.push(command);
@@ -124,7 +122,6 @@ export class MigrateScanService {
                             targetStat = await fs.promises.stat(targetFilePath);
                         }
                         const command = this.buildCommand(sourceStat, fileInfo.path, targetStat);
-                        this.logger.log(`Command for Source: ${sourceContentPath} and Target: ${targetFilePath} is ${JSON.stringify(command)}`);
                         if (command) commands.push(command);
                     }
                 }
@@ -272,7 +269,7 @@ export class MigrateScanService {
 
     getOpsCommand(isDirectory: boolean, isSymLink: boolean): string {        
         if(isSymLink){
-            return "cs";  // TODO: use OPS_CMD.COPY_SYMLINK after fixing the enum issue.
+            return OPS_CMD.COPY_SYMLINK;
         }else{
             return isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE;
         }
