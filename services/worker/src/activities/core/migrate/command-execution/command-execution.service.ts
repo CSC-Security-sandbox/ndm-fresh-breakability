@@ -31,7 +31,7 @@ export class CommandExecService {
         const output: CommandExecOutput = { sourceErrors: [], targetErrors: [], cmd: input.command };
         let baseCmdRes: CommandOutput = { shouldStampMeta: false, shouldUpdateItemInfo: false, sourceErrors: [], targetErrors: [] };
 
-        if(input.command.ops && input.command.ops["cs"]) {
+        if(input.command.ops && input.command.ops[OPS_CMD.COPY_SYMLINK]) {
             // Copy Symlink
             baseCmdRes = await this.copySymlink(input);
         }
