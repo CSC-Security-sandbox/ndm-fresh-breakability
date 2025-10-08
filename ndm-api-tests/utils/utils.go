@@ -298,6 +298,7 @@ func ResetUserPassword(userID, accessToken, newPassword string) error {
 
 	for attempt := 1; attempt <= 10; attempt++ {
 		PASSWORD, err = GenerateNewPassword(10)
+		fmt.Println("new password ", PASSWORD )
 		if err != nil {
 			return fmt.Errorf("failed to generate new password: %w", err)
 		}

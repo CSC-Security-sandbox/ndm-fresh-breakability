@@ -100,7 +100,15 @@ run_tests() {
 
 #Regression Testing
 run_tests "regression" "./tests/regression" "Azure" "NFS"
-
+run_tests "regression" "./tests/regression" "Azure" "NFS"
+run_tests "regression" "./tests/regression" "Azure" "NFS"
+run_tests "regression" "./tests/regression" "Azure" "NFS"
+run_tests "regression" "./tests/regression" "Azure" "NFS"
+run_tests "regression" "./tests/regression" "Azure" "NFS"
+run_tests "regression" "./tests/regression" "Azure" "NFS"
+run_tests "regression" "./tests/regression" "Azure" "NFS"
+run_tests "regression" "./tests/regression" "Azure" "NFS"
+run_tests "regression" "./tests/regression" "Azure" "NFS"
 
 #Download-Error-Report-Regression Testing
 #run_tests "download-error-report-regression" "./tests/download-error-report-regression" "./tests/download-error-report-e2e" "Azure" "NFS"
