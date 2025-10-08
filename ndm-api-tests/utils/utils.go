@@ -558,6 +558,20 @@ func GetExtraHeaders(authToken string, extraHeaders map[string]string, sharedVar
 
 	return headers
 }
+func GetProjectIdHeader(authToken string, projectId string) map[string]string {
+	headers := make(map[string]string)
+
+	headers["Content-Type"] = ContentTypeJSON
+
+	if authToken != "" {
+		headers[AuthHeader] = BearerPrefix + authToken
+	}
+
+	headers["projectid"] = projectId 
+
+
+	return headers
+}
 
 // sendAPIRequest sends an HTTP request with the JSON payload.
 func SendAPIRequest(method, url string, body []byte, headers map[string]string) (*http.Response, error) {

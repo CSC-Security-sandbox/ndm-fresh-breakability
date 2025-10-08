@@ -9,7 +9,8 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Project Admin Discovery Migration Cutover Test daksh", Ordered, func() {
+//why is ordered required here?
+var _ = Describe("Project Admin Discovery Migration Cutover Test daksh", func() {
     var (
         projectId             string
         workerId              string
@@ -35,8 +36,9 @@ var _ = Describe("Project Admin Discovery Migration Cutover Test daksh", Ordered
         resp                   *http.Response
     )
 
-    BeforeAll(func() {
+    BeforeEach(func() {
 		headers = GetHeaders(AuthToken, ContentTypeJSON)
+        //remove this
         fmt.Println("Headers initialized for test execution.")
         numberOfWorker := 1
         ProjectID, attachedWorkersConfig, err := SetupTestEnv(numberOfWorker)
@@ -49,7 +51,7 @@ var _ = Describe("Project Admin Discovery Migration Cutover Test daksh", Ordered
         sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
 	})
 
-    AfterAll(func() {
+    AfterEach(func() {
         // Cleanup user roles
         var roleIDs []string
         for _, roleID := range userRoleIDs {
@@ -105,12 +107,16 @@ var _ = Describe("Project Admin Discovery Migration Cutover Test daksh", Ordered
         userIDs[0] = responseData["id"]
         Expect(responseData["first_name"]).To(Equal("test1"))
         Expect(userIDs[0]).ToNot(BeNil())
+
         
+
         By("Assigning project admin role to user")
         roleData, err := CreateUserRole(projectId, AccountId, userIDs[0].(string), ProjectAdminId, headers)
         Expect(err).To(BeNil())
         userRoleIDs[0] = fmt.Sprintf("%v", roleData["id"])
         Expect(userRoleIDs[0]).ToNot(BeEmpty())
+
+        
 
         By("Resetting user password in Keycloak")
         password = "Root@123"
@@ -127,6 +133,10 @@ var _ = Describe("Project Admin Discovery Migration Cutover Test daksh", Ordered
         Expect(err).To(BeNil())
         Expect(authToken).ToNot(BeEmpty())
         Expect(refreshToken).ToNot(BeEmpty())
+
+        headers = GetProjectIdHeader(authToken, projectId)
+
+
 
         By("Creating the source file server")
         sourceParams := CreateServereParams{
@@ -285,6 +295,7 @@ var _ = Describe("Project Admin Discovery Migration Cutover Test daksh", Ordered
         Expect(err).NotTo(HaveOccurred(), "Error rejecting bulk cutover job")
         Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
         defer resp.Body.Close()
+
     })
    
 })

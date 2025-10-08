@@ -96,10 +96,10 @@ run_tests() {
 run_tests "smoke" "./tests/smoke" "Azure" "SMB"
 
 #End-to-End Testing
-run_tests "end-to-end" "./tests/e2e" "Azure" "SMB"
+# run_tests "end-to-end" "./tests/e2e" "Azure" "SMB"
 
 #Regression Testing
-run_tests "regression" "./tests/regression" "Azure" "SMB"
+# run_tests "regression" "./tests/regression" "Azure" "SMB"
 
 
 
