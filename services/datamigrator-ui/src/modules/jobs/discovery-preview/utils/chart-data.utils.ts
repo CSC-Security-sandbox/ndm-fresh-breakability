@@ -515,8 +515,8 @@ const numBytes = Number(bytes);
   }
 
   return size % 1 === 0
-    ? `${size?.toFixed(0)} ${units[i]}`
-    : `${size?.toFixed(decimals)} ${units[i]}`;
+    ? `${size.toFixed(0)} ${units[i]}`
+    : `${size.toFixed(decimals)} ${units[i]}`;
 }
 
 {
