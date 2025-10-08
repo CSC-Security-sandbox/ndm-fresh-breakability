@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import StatusCellRenderer from "@/components/custom-cell-renderer/StatusCellRenderer";
 import NameCellRenderer from "@/components/custom-cell-renderer/NameCellRenderer";
 
-export const INITIAL_VALUE_EXCLUDE_PATH_PATTERN = `*/snapshot/*,*/logs/*,*/tmp/*`;
+export const INITIAL_VALUE_EXCLUDE_PATH_PATTERN = `*/~snapshot/*,*/.snapshot/*`;
 
 export const COL_DEF_FOR_USER = [
   {
