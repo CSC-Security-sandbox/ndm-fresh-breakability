@@ -106,6 +106,7 @@ export interface CmdMeta {
     uid: number;
     gid: number;
     sid: string;
+    inode: number;
     isSymLink?: boolean;
 }
 
