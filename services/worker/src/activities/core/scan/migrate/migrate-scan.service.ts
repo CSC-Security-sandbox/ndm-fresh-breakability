@@ -10,7 +10,7 @@ import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishCommandInput } from "./migrate-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput, ScanDirectorySettings } from "../scan-activity.type";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
-import { isPathExists } from "../../utils/utils";
+import { isExists, isPathExists } from "../../utils/utils";
 
 @Injectable()
 export class MigrateScanService {
@@ -67,12 +67,21 @@ export class MigrateScanService {
 
         const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command});
         const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});
-
+        this.logger.log(`Scanning Source: ${Array.from(sourceContent).join(", ")}`);
         for (const item of sourceContent) {
             try {
                 const sourceContentPath = path.join(sourcePath, item);
                 const sourceContentExists = await isPathExists(sourceContentPath);
-                if (!sourceContentExists) continue;                
+                            
+                this.logger.log(`Processing item: ${sourceContentPath} - exists ${sourceContentExists}`);
+                if (!sourceContentExists){
+                    try{
+                         const lstat = await fs.promises.lstat(sourceContentPath);
+                        if (!lstat.isSymbolicLink()) continue;                                            
+                    }catch(error){
+                        continue;
+                    }                   
+                }                 
                 const sourceStat = await fs.promises.lstat(sourceContentPath);                
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
                 
@@ -95,21 +104,17 @@ export class MigrateScanService {
                         if (command) commands.push(command);
                     }
                 } 
-                 else if (sourceStat.isSymbolicLink()) {                      // not a directory but a sym link 
-                    //TODO: assumption is always file 
-                    const isSymLinkToDir = await this.isSymlinkPointingToDirectory(sourceContentPath);                    
-                    if (!targetContent.has(item)) {
-                        const command = this.buildCommand(sourceStat, fileInfo.path);
-                        if (command) commands.push(command);
-                    }
-                }
+                //  else if (sourceStat.isSymbolicLink()) {                      // not a directory but a sym link                                                                             
+                //     const command = this.buildCommand(sourceStat, fileInfo.path);
+                //     if (command) commands.push(command);                    
+                // }
                 else if (!targetContent.has(item)) {                       // not directory and not symlink and target dont exist 
                     output.fileCount++;
                     const command = this.buildCommand(sourceStat, fileInfo.path);
                     if (command) commands.push(command);
                 } else {                                                   // not directory and not symlink and target exist                           
                     const targetFilePath = path.join(targetPath, item);
-                    const targetFileExists = await isPathExists(targetFilePath);
+                    const targetFileExists = await isExists(targetFilePath);
                     if (targetFileExists) {
                        const targetStatLstat = await fs.promises.lstat(targetFilePath);
                         let targetStat: fs.Stats;
@@ -119,6 +124,7 @@ export class MigrateScanService {
                             targetStat = await fs.promises.stat(targetFilePath);
                         }
                         const command = this.buildCommand(sourceStat, fileInfo.path, targetStat);
+                        this.logger.log(`Command for Source: ${sourceContentPath} and Target: ${targetFilePath} is ${JSON.stringify(command)}`);
                         if (command) commands.push(command);
                     }
                 }
@@ -155,19 +161,6 @@ export class MigrateScanService {
             commands = [];
         }
         return output
-    }
-
-    // Add this method to MigrateScanService class
-    private async isSymlinkPointingToDirectory(symlinkPath: string): Promise<boolean> {
-        try {
-            // Read the link target
-            const symLinkTarget = await fs.promises.stat(symlinkPath);
-            return symLinkTarget.isDirectory();
-        } catch (error) {
-            // If we can't resolve the target (broken symlink), treat as file
-            this.logger.warn(`Cannot resolve symlink target for ${symlinkPath}: ${error.message}`);
-            return false;
-        }
     }
 
     async processDeletedItems({ sourceContent, targetContent, targetPath, targetPrefix, jobContext, errorType, command, commands ,settings}: {
@@ -214,7 +207,7 @@ export class MigrateScanService {
         }
     }
 
-    buildCommand = (sFile: fs.Stats | undefined, fPath: string, dFile?: fs.Stats, symLinkToDir?: boolean): Cmd | undefined => {
+    buildCommand = (sFile: fs.Stats | undefined, fPath: string, dFile?: fs.Stats): Cmd | undefined => {
 
         if (!sFile) {
             const isDirectory = dFile ? dFile.isDirectory() : false;
@@ -277,9 +270,9 @@ export class MigrateScanService {
     }
 
 
-    getOpsCommand(isDirectory: boolean, isSymLink: boolean): OPS_CMD{        
+    getOpsCommand(isDirectory: boolean, isSymLink: boolean): string {        
         if(isSymLink){
-            return OPS_CMD.COPY_SYMLINK;
+            return "cs";
         }else{
             return isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE;
         }
