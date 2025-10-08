@@ -385,7 +385,8 @@ func scpCPUMonitoringScript() error {
 		// remoteScriptPath = `c:\Users\datamigrator\smb_cpu_usage.ps1`
 	case ProtocolNFS:
 		localScriptPath = "./nfs_cpu_usage.sh"
-		remoteScriptPath = "/home/ubuntu/nfs_cpu_usage.sh"
+		// Use /tmp which is always writable instead of /home/ubuntu
+		remoteScriptPath = "/tmp/nfs_cpu_usage.sh"
 	}
 
 	config, err := getWorkerSSHConfig()
@@ -415,7 +416,7 @@ func scpCPUMonitoringScript() error {
 	// Copy script to remote
 	remoteFile, err := sftpClient.Create(remoteScriptPath)
 	if err != nil {
-		return fmt.Errorf("failed to create remote script: %v", err)
+		return fmt.Errorf("failed to create remote script at %s (parent directory may not exist): %v", remoteScriptPath, err)
 	}
 	_, err = remoteFile.Write(scriptBytes)
 	if err != nil {
@@ -448,7 +449,7 @@ func startCPUMonitoring(jobID string) error {
 		//runScript = `powershell.exe -Command 'Start-Process powershell -WindowStyle Hidden -ArgumentList '-File C:\Users\datamigrator\smb_cpu_usage.ps1 OmI23''`
 		return nil
 	case ProtocolNFS:
-		remoteScriptPath = "/home/ubuntu/nfs_cpu_usage.sh"
+		remoteScriptPath = "/tmp/nfs_cpu_usage.sh"
 		runScript = fmt.Sprintf("sudo nohup %s %s > /dev/null 2>&1 &", remoteScriptPath, jobID)
 	}
 

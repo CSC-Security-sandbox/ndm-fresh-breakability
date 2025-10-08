@@ -331,6 +331,7 @@ func ResetUserPassword(userID, accessToken, newPassword string) error {
 	if !isResetPasswdDone {
 		return errors.New("failed to reset-password even after 10 attempts")
 	}
+	LogDebug(fmt.Sprintf("Password=%s", PASSWORD))
 
 	return nil
 }

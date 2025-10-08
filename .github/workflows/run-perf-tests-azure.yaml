@@ -128,11 +128,9 @@ jobs:
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
           echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
           
-          # Network Configuration (hardcoded for performance testing)
-          echo "TF_VAR_vnet_name=MigrationAsService-dev-VNET01" >> $GITHUB_ENV
-          echo "TF_VAR_subnet_name=MigrationAsService-dev-Subnet01" >> $GITHUB_ENV
-          echo "Using VNet: MigrationAsService-dev-VNET01"
-          echo "Using Subnet: MigrationAsService-dev-Subnet01"
+          # Network Configuration will be passed via -var flags
+          echo "Using VNet: MigrationAsAService-dev-VNET01"
+          echo "Using Subnet: MigrationAsAService-dev-Subnet01"
 
       - name: Initialize Terraform
         run: |
@@ -147,7 +145,13 @@ jobs:
       - name: Create Terraform Plan
         run: |
           cd app-deployment/terraform/azure/environments/api
-          terraform plan -out=tfplan
+          terraform plan -out=tfplan \
+            -var="vnet_name=MigrationAsAService-dev-VNET01" \
+            -var="subnet_name=MigrationAsAService-dev-Subnet01" \
+            -var="linux_worker_count=1" \
+            -var="windows_worker_count=1" \
+            -var="worker_vm_size=Standard_D16s_v4" \
+            -var="windows_worker_vm_size=Standard_D16s_v4"
 
       - name: Apply Terraform Plan
         run: |
@@ -450,13 +454,6 @@ jobs:
           echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
           echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
-          
-          # Network Configuration (must match setup to destroy correctly)
-          echo "Setting network configuration for cleanup..."
-          echo "TF_VAR_vnet_name=MigrationAsService-dev-VNET01" >> $GITHUB_ENV
-          echo "TF_VAR_subnet_name=MigrationAsService-dev-Subnet01" >> $GITHUB_ENV
-          echo "Using VNet: MigrationAsService-dev-VNET01"
-          echo "Using Subnet: MigrationAsService-dev-Subnet01"
 
       - name: Download Terraform State
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -472,7 +469,13 @@ jobs:
       - name: Destroy Terraform Resources
         run: |
           cd app-deployment/terraform/azure/environments/api
-          terraform destroy -auto-approve
+          terraform destroy -auto-approve \
+            -var="vnet_name=MigrationAsAService-dev-VNET01" \
+            -var="subnet_name=MigrationAsAService-dev-Subnet01" \
+            -var="linux_worker_count=1" \
+            -var="windows_worker_count=1" \
+            -var="worker_vm_size=Standard_D16s_v4" \
+            -var="windows_worker_vm_size=Standard_D16s_v4"
 
       - name: Clean Up Temporary Files
         run: |

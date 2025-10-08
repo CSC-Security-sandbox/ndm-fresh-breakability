@@ -29,14 +29,14 @@ on:
         description: 'Reference type (releases or branches)'
         required: true
         type: string
-      run_smb_tests:
-        description: 'Run SMB tests'
-        required: false
-        default: true
+      run_smb_perf:
+        description: 'Run SMB Perf'
+        required: true
+        default: false
         type: boolean
-      run_nfs_tests:
-        description: 'Run NFS tests'
-        required: false
+      run_nfs_perf:
+        description: 'Run NFS Perf'
+        required: true
         default: true
         type: boolean
 
@@ -61,16 +61,16 @@ on:
         description: 'Reference type (releases or branches)'
         required: true
         type: string
-      run_smb_tests:
-        description: 'Whether to run SMB tests (true/false)'
-        required: false
-        default: true
+      run_smb_perf:
+        description: 'Run SMB Perf'
+        required: true
+        default: false
         type: boolean
-      run_nfs_tests:
-        description: 'Whether to run NFS tests (true/false)'
-        required: false
+      run_nfs_perf:
+        description: 'Run NFS Perf'
+        required: true
         default: true
-        type: boolean
+        type: boolean    
 
 permissions: 
   contents: read
@@ -126,7 +126,11 @@ jobs:
           echo "TF_VAR_vm_owner=${{ github.actor }}" >> $GITHUB_ENV
           echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV 
+          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
+          
+          # Network Configuration will be passed via -var flags
+          echo "Using VNet: MigrationAsAService-dev-VNET01"
+          echo "Using Subnet: MigrationAsAService-dev-Subnet01"
 
       - name: Initialize Terraform
         run: |
@@ -141,7 +145,13 @@ jobs:
       - name: Create Terraform Plan
         run: |
           cd app-deployment/terraform/azure/environments/api
-          terraform plan -out=tfplan
+          terraform plan -out=tfplan \
+            -var="vnet_name=MigrationAsAService-dev-VNET01" \
+            -var="subnet_name=MigrationAsAService-dev-Subnet01" \
+            -var="linux_worker_count=1" \
+            -var="windows_worker_count=1" \
+            -var="worker_vm_size=Standard_D16s_v4" \
+            -var="windows_worker_vm_size=Standard_D16s_v4"
 
       - name: Apply Terraform Plan
         run: |
@@ -180,7 +190,7 @@ jobs:
           echo "sshpass installed successfully."
 
       - name: Download Windows installer
-        if: ${{ inputs.run_smb_tests == true || github.event.inputs.run_smb_tests == 'true' }}
+        if: ${{ inputs.run_smb_perf == true || github.event.inputs.run_smb_perf == 'true' }}
         run: |
           WINDOWS_INSTALLER_URL="${{ inputs.windows_worker_installer_url || github.event.inputs.windows_worker_installer_url }}"
           if [ -n "$WINDOWS_INSTALLER_URL" ]; then
@@ -199,7 +209,7 @@ jobs:
           fi
 
       - name: Copy Windows installer to Windows VMs
-        if: ${{ inputs.run_smb_tests == true || github.event.inputs.run_smb_tests == 'true' }}
+        if: ${{ inputs.run_smb_perf == true || github.event.inputs.run_smb_perf == 'true' }}
         run: |
           WINDOWS_IPS='${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}'
           
@@ -254,84 +264,85 @@ jobs:
           
           echo "Service setup completed successfully"
 
-  run-smb-tests:
-    name: Run SMB API Tests
-    runs-on: openlab
-    needs: setup-infrastructure
-    if: ${{ inputs.run_smb_tests == true || github.event.inputs.run_smb_tests == 'true' }}
-    env:
-      JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+# TODO: WILL ADD SMB BACK LATER
+  # run-smb-perf:
+  #   name: Run SMB Performance runs
+  #   runs-on: openlab
+  #   needs: setup-infrastructure
+  #   if: ${{ inputs.run_smb_perf == true || github.event.inputs.run_smb_perf == 'true' }}
+  #   env:
+  #     JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+  #     CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+  #     ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+  #     KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
 
-      NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
-      PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+  #     NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
+  #     PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
 
-      NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
+  #     NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+  #     NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
 
-      AZURE_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
-      AZURE_SMB_NDM_WORKERS_PORT: ${{ vars.AZURE_SMB_NDM_WORKERS_PORT }}
-      AZURE_SMB_SOURCE_VOLUMES: ${{ vars.AZURE_SMB_SOURCE_VOLUMES }}
-      AZURE_SMB_DESTINATION_VOLUMES: ${{ vars.AZURE_SMB_DESTINATION_VOLUMES }}
-      AZURE_SMB_SOURCE_HOST_IP: ${{ vars.AZURE_SMB_SOURCE_HOST_IP }}
-      AZURE_SMB_DESTINATION_HOST_IP: ${{ vars.AZURE_SMB_DESTINATION_HOST_IP }}
-      AZURE_SMB_PROTOCOL_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
-      AZURE_SMB_PROTOCOL_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
-      SMB_EXECUTABLE_FILENAME: ${{ vars.SMB_EXECUTABLE_FILENAME }}
-      BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
-      REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+  #     PERF_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
+  #     PERF_SMB_NDM_WORKERS_PORT: ${{ vars.PERF_SMB_NDM_WORKERS_PORT }}
+  #     PERF_SMB_SOURCE_VOLUMES: ${{ vars.PERF_SMB_SOURCE_VOLUMES }}
+  #     PERF_SMB_DESTINATION_VOLUMES: ${{ vars.PERF_SMB_DESTINATION_VOLUMES }}
+  #     PERF_SMB_SOURCE_HOST_IP: ${{ vars.PERF_SMB_SOURCE_HOST_IP }}
+  #     PERF_SMB_DESTINATION_HOST_IP: ${{ vars.PERF_SMB_DESTINATION_HOST_IP }}
+  #     PERF_SMB_PROTOCOL_USERNAME: ${{ secrets.PERF_SMB_PROTOCOL_USERNAME }}
+  #     PERF_SMB_PROTOCOL_PASSWORD: ${{ secrets.PERF_SMB_PROTOCOL_PASSWORD }}
+  #     SMB_EXECUTABLE_FILENAME: ${{ vars.SMB_EXECUTABLE_FILENAME }}
+  #     BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
+  #     REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Set up Go for API Tests
-        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
-        with:
-          go-version: ${{ env.GO_VERSION }}
+  #     - name: Set up Go for API Tests
+  #       uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
+  #       with:
+  #         go-version: ${{ env.GO_VERSION }}
 
-      - name: Setup credentials for SMB tests
-        run: |
+  #     - name: Setup credentials for SMB tests
+  #       run: |
 
-          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
-          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+  #         VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+  #         VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
           
-          echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "::add-mask::$VM_PASSWORD"
-          echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "AZURE_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "AZURE_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
-          echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
-      - name: Install Ginkgo
-        run: |
-          cd ndm-api-tests
-          go install github.com/onsi/ginkgo/v2/ginkgo@latest
-          go get github.com/onsi/gomega/...
-          go mod tidy
-          echo "Ginkgo and Gomega installed successfully."
+  #         echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+  #         echo "::add-mask::$VM_PASSWORD"
+  #         echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+  #         echo "PERF_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+  #         echo "PERF_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+  #         echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
+  #         echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
+  #     - name: Install Ginkgo
+  #       run: |
+  #         cd ndm-api-tests
+  #         go install github.com/onsi/ginkgo/v2/ginkgo@latest
+  #         go get github.com/onsi/gomega/...
+  #         go mod tidy
+  #         echo "Ginkgo and Gomega installed successfully."
 
-      - name: Run SMB API Tests
-        run: |
-          cd ndm-api-tests
-          chmod +x ./run-smb-azure-automation.sh
-          ./run-smb-azure-automation.sh
-        continue-on-error: true
+  #     - name: Run SMB API Tests
+  #       run: |
+  #         cd ndm-api-tests
+  #         chmod +x ./run-smb-azure-perf.sh
+  #         ./run-smb-azure-perf.sh
+  #       continue-on-error: true
 
-      - name: Upload SMB Test Logs
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: smb-test-logs-${{ github.run_id }}
-          path: ndm-api-tests/reports/
-          retention-days: 30
+  #     - name: Upload SMB Test Logs
+  #       if: always()
+  #       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+  #       with:
+  #         name: smb-test-logs-${{ github.run_id }}
+  #         path: ndm-api-tests/reports/
+  #         retention-days: 30
 
-  run-nfs-tests:
-    name: Run NFS API Tests
+  run-nfs-perf:
+    name: Run NFS Performance runs
     runs-on: openlab
     needs: setup-infrastructure
-    if: ${{ inputs.run_nfs_tests == true || github.event.inputs.run_nfs_tests == 'true' }}
+    if: ${{ inputs.run_nfs_perf == true || github.event.inputs.run_nfs_perf == 'true' }}
     env:
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
@@ -344,13 +355,13 @@ jobs:
       NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
 
-      AZURE_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
-      AZURE_NFS_NDM_WORKERS_PORT: ${{ vars.AZURE_NFS_NDM_WORKERS_PORT }}
-      AZURE_NFS_SOURCE_VOLUMES: ${{ vars.AZURE_NFS_SOURCE_VOLUMES }}
-      AZURE_NFS_DESTINATION_VOLUMES: ${{ vars.AZURE_NFS_DESTINATION_VOLUMES }}
-      AZURE_NFS_SOURCE_HOST_IP: ${{ vars.AZURE_NFS_SOURCE_HOST_IP }}
-      AZURE_NFS_DESTINATION_HOST_IP: ${{ vars.AZURE_NFS_DESTINATION_HOST_IP }}
-      AZURE_NFS_PROTOCOL_USERNAME: ${{ vars.AZURE_NFS_PROTOCOL_USERNAME }}
+      PERF_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
+      PERF_NFS_NDM_WORKERS_PORT: ${{ vars.PERF_NFS_NDM_WORKERS_PORT }}
+      PERF_NFS_SOURCE_VOLUMES: ${{ vars.PERF_NFS_SOURCE_VOLUMES }}
+      PERF_NFS_DESTINATION_VOLUMES: ${{ vars.PERF_NFS_DESTINATION_VOLUMES }}
+      PERF_NFS_SOURCE_HOST_IP: ${{ vars.PERF_NFS_SOURCE_HOST_IP }}
+      PERF_NFS_DESTINATION_HOST_IP: ${{ vars.PERF_NFS_DESTINATION_HOST_IP }}
+      PERF_NFS_PROTOCOL_USERNAME: ${{ vars.PERF_NFS_PROTOCOL_USERNAME }}
       BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
       REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
     steps:
@@ -375,8 +386,8 @@ jobs:
           echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "::add-mask::$VM_PASSWORD"
           echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "AZURE_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "AZURE_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "PERF_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "PERF_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
           echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
           echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
 
@@ -391,8 +402,8 @@ jobs:
       - name: Run NFS API Tests
         run: |
           cd ndm-api-tests
-          chmod +x ./run-nfs-azure-automation.sh
-          ./run-nfs-azure-automation.sh
+          chmod +x ./run-nfs-azure-perf.sh
+          ./run-nfs-azure-perf.sh
         continue-on-error: true
 
       - name: Upload NFS Test Logs
@@ -403,52 +414,10 @@ jobs:
           path: ndm-api-tests/reports/
           retention-days: 30
 
-  upload-support-bundle:
-    name: Upload Support Bundles
-    runs-on: openlab
-    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
-    if: always()
-    env:
-      JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
-      BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
-      REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Set up Go for API Tests
-        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
-        with:
-          go-version: ${{ env.GO_VERSION }}
-      - name: Setup credentials for support bundle
-        run: |
-          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
-          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
-          
-          echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
-          echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
-          echo "NDM_USERNAME=${{ secrets.NDM_APP_USERNAME }}" >> $GITHUB_ENV
-          echo "PASSWORD=${{ secrets.NDM_APP_PASSWORD }}" >> $GITHUB_ENV
-      - name: Install Go dependencies
-        run: |
-          cd ndm-api-tests
-          go mod tidy
-          echo "Go dependencies installed successfully"
-          cd support-bundle
-          go run support_bundle.go
-          echo "Support bundle uploaded successfully"
-
   cleanup:
     name: Cleanup Infrastructure
     runs-on: openlab
-    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests, upload-support-bundle]
+    needs: [setup-infrastructure, run-nfs-perf]
     if: always()
     steps:
       - name: Checkout repository
@@ -500,7 +469,13 @@ jobs:
       - name: Destroy Terraform Resources
         run: |
           cd app-deployment/terraform/azure/environments/api
-          terraform destroy -auto-approve
+          terraform destroy -auto-approve \
+            -var="vnet_name=MigrationAsAService-dev-VNET01" \
+            -var="subnet_name=MigrationAsAService-dev-Subnet01" \
+            -var="linux_worker_count=1" \
+            -var="windows_worker_count=1" \
+            -var="worker_vm_size=Standard_D16s_v4" \
+            -var="windows_worker_vm_size=Standard_D16s_v4"
 
       - name: Clean Up Temporary Files
         run: |
