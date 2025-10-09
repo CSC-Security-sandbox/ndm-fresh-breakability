@@ -130,12 +130,12 @@ export const FILE_SYSTEM_DISTRIBUTION = (schema: string) => `
         sum(case when is_directory = true then file_size else 0 end) as total_space_directories,
         sum(file_size) as total_space_used,
         COALESCE((
-            SELECT SUM(link_count) 
+            SELECT SUM(link_count - 1)
             FROM (
                 SELECT COUNT(1) as link_count
                 FROM ${schema}.inventory i2
-                WHERE i2.job_run_id = $1 
-                    AND i2.inode IS NOT NULL 
+                WHERE i2.job_run_id = $1
+                    AND i2.inode IS NOT NULL
                 GROUP BY i2.inode
                 HAVING COUNT(1) > 1
             ) AS hard_links
