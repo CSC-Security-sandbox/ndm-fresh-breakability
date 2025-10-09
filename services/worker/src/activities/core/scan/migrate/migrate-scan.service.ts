@@ -4,11 +4,11 @@ import { Cmd, CmdMeta, Command, CommandStatus, ErrorType, FileInfo, ItemMeta, Jo
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
 import * as path from "path";
-import { dmError, getFileInfo, isContentUpdate, isMetaUpdated, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
+import { dmError, getFileInfo, isContentUpdate, isMetaUpdated, removePrefix, shouldExcludeForDelete, shouldExcludeOrSkip } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishCommandInput } from "./migrate-scan.type";
-import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
+import { ScanDirectoryInput, ScanDirectoryOutput, ScanDirectorySettings } from "../scan-activity.type";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { isExists, isPathExists } from "../../utils/utils";
 
@@ -152,7 +152,8 @@ export class MigrateScanService {
                 jobContext,
                 errorType,
                 command,
-                commands
+                commands,
+                settings
             });
         }
         if (commands.length > 0) {
@@ -162,7 +163,8 @@ export class MigrateScanService {
         return output
     }
 
-    async processDeletedItems({ sourceContent, targetContent, targetPath, targetPrefix, jobContext, errorType, command, commands }: {
+
+    async processDeletedItems({ sourceContent, targetContent, targetPath, targetPrefix, jobContext, errorType, command, commands ,settings}: {
         sourceContent: Set<string>,
         targetContent: Set<string>,
         targetPath: string,
@@ -170,7 +172,8 @@ export class MigrateScanService {
         jobContext: JobManagerContext,
         errorType: ErrorType,
         command: Cmd,
-        commands: Cmd[]
+        commands: Cmd[],
+        settings: ScanDirectorySettings
     }) {
         for (const targetItem of targetContent) {
             if (!sourceContent.has(targetItem)) {
@@ -178,7 +181,13 @@ export class MigrateScanService {
                 try {
                     const targetContentExists = await isPathExists(targetContentPath);
                     if (targetContentExists) {
-                        const targetStat = await fs.promises.lstat(targetContentPath);
+                        const targetStat = await fs.promises.lstat(targetContentPath);  
+
+                        if (shouldExcludeForDelete({
+                            fullPath: targetContentPath,
+                            excludePatterns: settings.excludePatterns,
+                        })) continue;
+
                         const relativeSourcePath = removePrefix(targetContentPath, targetPrefix);
                         const deleteCommand = this.buildCommand(null, relativeSourcePath, targetStat);
                         if (deleteCommand) {
@@ -224,6 +233,7 @@ export class MigrateScanService {
             ctime: sFile.ctime,
             birthtime: sFile.birthtime,
             sid: undefined,
+            inode: sFile.ino,
             isSymLink: sFile.isSymbolicLink() ? true : false
         }
 

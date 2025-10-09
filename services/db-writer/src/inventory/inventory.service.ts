@@ -83,6 +83,7 @@ export class InventoryService {
       pathId: pathId,
       sourceMeta: file?.sourceMeta ?? null,
       targetMeta: file?.targetMeta ?? null,
+      inode: file?.inode ?? null,
     };
   }
 

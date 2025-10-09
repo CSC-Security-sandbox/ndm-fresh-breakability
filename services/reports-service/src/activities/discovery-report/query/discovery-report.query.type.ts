@@ -31,6 +31,7 @@ export interface FileSystemDistributionInput {
     total_space_regular_files: string;
     total_space_directories: string;
     total_space_used: string;
+    total_hard_link_files: string;
 }
 export interface ExtensionDistributionInput {
     extension: string;
