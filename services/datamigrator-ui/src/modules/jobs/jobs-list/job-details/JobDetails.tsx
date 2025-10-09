@@ -48,8 +48,20 @@ import { Breadcrumbs, Button, Heading } from "@netapp/bxp-design-system-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLatestJobRun } from "@/hooks/useLatestJobRun";
 import { useNavigate, useParams } from "react-router-dom";
+import { useDispatch } from "react-redux";
+import {
+  setModalClose,
+  setModalProps,
+} from "@store/reducer/commonComponentSlice";
+import {
+  Layout,
+  Text,
+  NumberedList,
+} from "@netapp/bxp-design-system-react";
+import { Show } from "@components/show/Show";
 
 const JobDetails = () => {
+  const dispatch = useDispatch();
   const LOWER_TIME_INTERVAL_FOR_IN_PROGRESS = 5000; // 5 seconds
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
@@ -244,6 +256,66 @@ const JobDetails = () => {
     );
   }, [jobId, downloadErrorLogs, generateErrorReport]);
 
+  const showJobConfigDetails = async () => {
+    const configurationsSetToJob = jobConfigDetails?.configurationsSetToJob;
+    dispatch(
+      setModalProps({
+        isOpen: true,
+        modalHeader: "Job Configuration Details",
+        modalContent: (
+          <div className="flex flex-col gap-4 p-4">
+            <Layout.Content>
+              <Layout.Grid rowGap="md" className="m-[10px]">
+                <Layout.GridItem lg={12}>
+                  <Layout.Content>
+                    <Layout.Container className="!p-[3.5rem]">
+                      <Layout.Grid>
+                        <Layout.GridItem lg={12}>
+                          <NumberedList includeTitles>
+                              {configurationsSetToJob &&
+                                Object.entries(configurationsSetToJob).map(([config, value], idx) => (
+                                  <Box key={config + idx}>
+                                    <Text bold>{config}</Text>
+                                    <Show>
+                                      <Show.When isTrue={typeof value === "object"}>
+                                        {(Array.isArray(value) && value.length > 0 ?
+                                          (value.map((exportPath, index) => (
+                                            <Text key={exportPath ?? index}>
+                                              {exportPath ?? "-"}
+                                            </Text>
+                                          )))
+                                          :
+                                          <Text>-</Text>
+                                        )}
+                                      </Show.When>
+                                      <Show.Else>
+                                        <Text>
+                                          {value !== "" && value !== undefined && value !== null
+                                            ? String(value)
+                                            : "-"}
+                                        </Text>
+                                      </Show.Else>
+                                    </Show>
+                                  </Box>
+                                ))
+                              }
+                          </NumberedList>
+                        </Layout.GridItem>
+                      </Layout.Grid>
+                    </Layout.Container>
+                  </Layout.Content>
+                </Layout.GridItem>
+              </Layout.Grid>
+            </Layout.Content>
+          </div>
+        ),
+        modalFooter: (
+          <Button onClick={() => dispatch(setModalClose())}>Close</Button>
+        ),
+      })
+    );
+  };
+
   return (
     <Box className="flex flex-col gap-4">
       {openConfirmation && (
@@ -272,15 +344,23 @@ const JobDetails = () => {
           />
 
           <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.ManageJob}>
-            <Button
-              onClick={() => adhocRun(jobId, true)}
-              disabled={
-                !jobId ||
-                jobConfigDetails?.status === JOB_CONFIG_STATUS_ENUM.INACTIVE
-              }
-            >
-              Adhoc Run
-            </Button>
+            <Box className="flex flex-row gap-6 justify-end">
+              <Button
+                onClick={showJobConfigDetails}
+                disabled={!jobId}
+              >
+                View Configurations 
+              </Button>
+              <Button
+                onClick={() => adhocRun(jobId, true)}
+                disabled={
+                  !jobId ||
+                  jobConfigDetails?.status === JOB_CONFIG_STATUS_ENUM.INACTIVE
+                }
+              >
+                Adhoc Run
+              </Button>
+            </Box>
           </PermissionAuth>
         </Box>
         <JobHeader jobConfigDetails={jobConfigDetails} />
