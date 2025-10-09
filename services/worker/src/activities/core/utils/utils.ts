@@ -33,11 +33,9 @@ export const isExists = async (path: string): Promise<boolean> => {
     await fs.promises.lstat(path);
     return true;
   } catch (error) {
-     return false
+     return false;
     }  
 }
-
-
 
 
 export const isNotWritable = async (filePath: string): Promise<boolean> => {
