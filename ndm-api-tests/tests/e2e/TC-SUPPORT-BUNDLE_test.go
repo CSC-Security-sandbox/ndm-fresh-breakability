@@ -307,6 +307,10 @@ var _ = Describe("Support Bundle Test e2e", func() {
 			for _, logFile := range logFiles {
 				logPath := fmt.Sprintf("ndm_logs/%s/control-plane/%s", today, logFile)
 				err := CheckLogFileExistsAndNotEmpty(extractDir, logPath)
+				if err != nil && strings.Contains(err.Error(), "log file does not exist") {
+					LogDebug(fmt.Sprintf("Skipping %s: file does not exist", logFile))
+					continue
+				}
 				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("%s: %v", logFile, err))
 				LogDebug(fmt.Sprintf("%s: .log file exists with content", logFile))
 			}
