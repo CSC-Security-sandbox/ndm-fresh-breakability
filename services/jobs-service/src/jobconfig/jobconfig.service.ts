@@ -18,6 +18,7 @@ import {
   JobType,
   SIZE_UNITS,
   TemplateType,
+  JobConfigurationEnum,
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
 import { Options } from "src/constants/types";
@@ -1059,6 +1060,7 @@ export class JobConfigService {
             .reduce((a, b) => (a ?? 0) + (b ?? 0), 0)
         ),
       },
+      configurationsSetToJob: this.getConfigurationsSetToJob(jobConfig),
       errors: [],
     };
 
@@ -1077,6 +1079,44 @@ export class JobConfigService {
     const unit = match[2] as keyof typeof units;
 
     return value * units[unit];
+  }
+
+  getConfigurationsSetToJob(jobConfig: JobConfigEntity) {
+    const excludeFilePatternsArray = jobConfig.excludeFilePatterns ?
+                                      ( jobConfig.excludeFilePatterns
+                                      .split(",")
+                                      .map(pattern => pattern.trim())
+                                      .filter(pattern => pattern !== "") ) : [];
+
+    if (jobConfig.jobType === JobType.MIGRATE) {
+      return {
+        [JobConfigurationEnum.skipFile]: jobConfig.skipFile
+          ? jobConfig.skipFile
+              .split("-")
+              .map((part) => {
+                if (part.endsWith("M")) return `${part.replace("M", "")}-Mins`;
+                if (part.endsWith("H")) return `${part.replace("H", "")}-Hrs`;
+                if (part.endsWith("D")) return `${part.replace("D", "")}-Days`;
+                return part;
+              })
+              .join("")
+          : "-",
+        [JobConfigurationEnum.preserveAccessTime]: jobConfig.preserveAccessTime ? "Enabled" : "Disabled",
+        [JobConfigurationEnum.excludeFilePatterns]: excludeFilePatternsArray,
+        [JobConfigurationEnum.excludeOlderThan]: jobConfig.excludeOlderThan,
+        [JobConfigurationEnum.futureScheduleAt]: jobConfig.futureScheduleAt,
+      }
+    } else if (jobConfig.jobType === JobType.CUT_OVER) {
+      return {
+        [JobConfigurationEnum.preserveAccessTime]: jobConfig.preserveAccessTime ? "Enabled" : "Disabled",
+        [JobConfigurationEnum.excludeFilePatterns]: excludeFilePatternsArray,
+        [JobConfigurationEnum.excludeOlderThan]: jobConfig.excludeOlderThan,
+      }
+    } else {
+      return {
+        [JobConfigurationEnum.excludeFilePatterns]: excludeFilePatternsArray,
+      }
+    }
   }
 
   async getConfigsByProjectId(projectId: string) {
