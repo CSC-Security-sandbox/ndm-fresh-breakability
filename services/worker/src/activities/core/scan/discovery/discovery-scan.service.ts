@@ -97,7 +97,8 @@ export class DiscoveryScanService {
                 getFileType(stats, isDirectory),
                 sourceMeta,
                 sourceMeta,
-                stats.size
+                stats.size,
+                stats.ino
             )
             await jobContext.publishToFileStream(itemInfo);
         }

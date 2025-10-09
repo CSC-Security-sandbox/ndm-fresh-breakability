@@ -213,7 +213,8 @@ export class CommandExecService {
             getFileType(targetStats, isDirectory),
             sourceMeta,
             targetMeta,
-            targetStats.size
+            targetStats.size,
+            command.metadata.inode
         )
 
         await this.validateCommand({ cmd: command, item: itemInfo, jobContext, errorType});
