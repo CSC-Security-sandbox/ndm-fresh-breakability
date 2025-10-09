@@ -533,6 +533,20 @@ func GetHeaders(authToken, contentType string) map[string]string {
 	return headers
 }
 
+func GetProjectIdHeader(authToken string, projectId string) map[string]string {
+	headers := make(map[string]string)
+
+	headers["Content-Type"] = ContentTypeJSON
+
+	if authToken != "" {
+		headers[AuthHeader] = BearerPrefix + authToken
+	}
+
+	headers["projectid"] = projectId 
+
+	return headers
+}
+
 func getOpenbaoHeaders(token string) map[string]string {
 
 	return map[string]string{

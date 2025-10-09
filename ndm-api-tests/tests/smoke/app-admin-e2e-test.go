@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("App Admin Source File Server Test", Ordered, func() {
+var _ = Describe("App Admin Source File Server Test", func() {
 
     var (
         headers                    map[string]string 
@@ -214,7 +214,7 @@ var _ = Describe("App Admin Source File Server Test", Ordered, func() {
         
     })
 
-    AfterAll(func() {
+    AfterEach(func() {
 
         err := RemoveDeltaFromVolume(sourceVolumePath1)
         Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
