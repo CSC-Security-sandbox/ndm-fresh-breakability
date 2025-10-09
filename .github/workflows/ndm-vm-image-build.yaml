@@ -1529,7 +1529,7 @@ jobs:
           echo "Build notification sent successfully"
 
   run-azure-ndm-api-tests:
-    if: ${{ needs.packer.outputs.control_plane_image_version != '' && needs.packer.outputs.worker_image_version != '' }}
+    if: ${{ needs.packer.outputs.control_plane_image_version != '' && needs.packer.outputs.worker_image_version != '' && github.event_name != 'schedule' }}
     needs: [package-artifacts, packer, determine-matrix, upload-windows-installer]
     uses: ./.github/workflows/run-api-tests-azure.yaml
     with:
