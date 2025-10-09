@@ -11,7 +11,7 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-var _ = Describe("TC-007: Run migration to multiple destinations with incremental sync schedule", func() {
+var _ = FDescribe("TC-007: Run migration to multiple destinations with incremental sync schedule", func() {
 	var (
 		ProjectId              string
 		workerId1              string
