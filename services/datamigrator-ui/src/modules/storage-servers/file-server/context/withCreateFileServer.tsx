@@ -30,12 +30,12 @@ export function withCreateFileServer(WrappedComponent: ComponentType<any>) {
         const resp = await createConfigurationApi(payload);
 
         if (resp.error) {
-          throw new Error("Error creating file server");
+            throw new Error(`${resp.error.data.error.message}`);
         }
         notify.success("Configuration Successfully saved...");
         navigate("/file-server");
       } catch (err) {
-        notify.error("Error creating file server.");
+        notify.error(`Error creating file server: ${err.message?.trim() || err.message || 'Unknown error'}.`);
 
         console.error({ error: err, level: "Creating Config" });
       }

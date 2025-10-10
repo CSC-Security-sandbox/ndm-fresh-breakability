@@ -697,6 +697,24 @@ export class ConfigurationService {
         sanitizedConfigName,
       );
 
+      const configIds = await this.configEntity.find({
+          select: ['id'],
+          where: { projectId: createConfig.projectId },
+      });
+
+      const ids = configIds.map(config => config.id);
+
+      for(const fs of createConfig.fileServers) {
+          const fsExist = await this.fileServerEntity.findOne({
+              where: {host: fs.host.trim(), protocol: fs.protocol, configId: In(ids)},
+          })
+
+          if (fsExist) {
+              throw new BadRequestException(
+                  `File server ${fs.host.trim()} with protocol ${fs.protocol} already exists in this project`
+              );
+          }
+      }
       const fileServerPromises = createConfig.fileServers.map(
         async (fileServer) => {
           const workers = await this.WorkerEntity.find({
