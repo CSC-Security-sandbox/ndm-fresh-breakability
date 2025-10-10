@@ -3,6 +3,8 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  Optional,
+  Inject,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import * as path from "path";
@@ -21,16 +23,28 @@ import {
   validateFilePath,
 } from "src/utils/utils";
 import { ReportType } from "../constants/enums";
+import {
+  LoggerService,
+  LoggerFactory,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class DiscoveryService {
-  private logger: Logger = new Logger(DiscoveryService.name);
+  private readonly logger: LoggerService | Logger;
   constructor(
     @InjectRepository(InventoryEntity)
     private readonly inventoryRepo: Repository<InventoryEntity>,
     @InjectRepository(ReportsEntity)
     private readonly reportsRepo: Repository<ReportsEntity>,
-  ) {}
+    @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory,
+  ) {
+    if (loggerFactory) {
+      this.logger = loggerFactory.create(DiscoveryService.name);
+    } else {
+      // Fallback to basic NestJS Logger
+      this.logger = new Logger(DiscoveryService.name);
+    }
+  }
 
   get getReportsDirectory(): string {
     return process.env.REPORT_DOWNLOAD_LOCATION || "./reports";

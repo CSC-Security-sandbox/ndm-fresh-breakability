@@ -6,9 +6,25 @@ import { NestExpressApplication } from "@nestjs/platform-express";
 import { ConfigService } from "@nestjs/config";
 import * as hbs from "hbs";
 import { join } from "path";
+import { CustomResponseInterceptor } from './interceptors/custom-response.interceptor';
+import {
+  customErrorDTOList,
+  customSuccessDTOList,
+} from './constants/custom-response-message';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { Reflector } from '@nestjs/core';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  
+  app.useGlobalInterceptors(
+    new CustomResponseInterceptor(
+      customSuccessDTOList,
+      customErrorDTOList,
+      app.get(Reflector),
+      await app.resolve(LoggerFactory),
+    ),
+  );
 
   const configService = app.get(ConfigService);
   const host: string = configService.get<string>("app.http.host");
@@ -19,7 +35,6 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   app.setGlobalPrefix("api/v1/report");
-  app.useGlobalInterceptors();
 
   app.useGlobalPipes(new ValidationPipe());
 

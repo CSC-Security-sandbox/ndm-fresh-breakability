@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional, Inject } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { OverviewDTO } from "src/overview/overview.dto";
 import { InventoryEntity } from "src/entities/inventory.entity";
@@ -6,19 +6,31 @@ import { ProjectEntity } from "src/entities/project.entity";
 import { Repository } from "typeorm";
 import { JobRunStatus, JobType } from "src/constants/enums";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
+import {
+  LoggerService,
+  LoggerFactory,
+} from '@netapp-cloud-datamigrate/logger-lib';
 import { StorageOverviewSummaryEntity } from "src/entities/storage-summary-mv.entity";
 
 @Injectable()
 export class OverviewService {
-  private logger: Logger = new Logger(OverviewService.name);
+  private readonly logger : LoggerService;
   constructor(
     @InjectRepository(InventoryEntity)
     private readonly inventoryRepository: Repository<InventoryEntity>,
     @InjectRepository(ProjectEntity)
     private readonly projectRepository: Repository<ProjectEntity>,
     @InjectRepository(StorageOverviewSummaryEntity)
-    private readonly storageOverviewSummaryRepository: Repository<StorageOverviewSummaryEntity>
-  ) {}
+    private readonly storageOverviewSummaryRepository: Repository<StorageOverviewSummaryEntity>,
+    @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory
+  ) {
+    if (loggerFactory) {
+      this.logger = loggerFactory.create(OverviewService.name);
+    } else {
+      // Fallback to basic NestJS Logger for worker threads
+      this.logger = new Logger(OverviewService.name) as any;
+    }
+  }
 
   async getStorageAndJobsOverview(
     projectId: string,

@@ -13,6 +13,8 @@ import { JobRunEntity } from "src/entities/jobrun.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { AuthKeycloakModule } from "@netapp-cloud-datamigrate/auth-lib";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
+import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
+import { ProjectIdCacheService } from '../utils/project-id-cache.service';
 
 @Module({
   imports: [
@@ -26,8 +28,9 @@ import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entit
       JobStatsSummaryMvEntity
     ]),
     AuthKeycloakModule,
+    LoggerModule.forRoot(),
   ],
   controllers: [JobRunController],
-  providers: [JobRunService, CsvService, Logger, ErrorLogService],
+  providers: [JobRunService, CsvService, Logger, ErrorLogService, ProjectIdCacheService],
 })
 export class JobRunModule {}

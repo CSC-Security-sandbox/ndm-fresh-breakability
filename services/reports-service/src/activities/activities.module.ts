@@ -5,15 +5,19 @@ import { DiscoveryReportService } from './discovery-report/discovery-report.serv
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ReportsEntity } from 'src/entities/reports.entity';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
+import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
+import { ProjectIdCacheService } from '../utils/project-id-cache.service';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([ReportsEntity, JobRunEntity]),
-    GeneratorModule
+    GeneratorModule,
+    LoggerModule.forRoot()
   ],
   providers: [
     ActivitiesService,
     DiscoveryReportService,
+    ProjectIdCacheService,
   ],
   exports: [
     ActivitiesService
