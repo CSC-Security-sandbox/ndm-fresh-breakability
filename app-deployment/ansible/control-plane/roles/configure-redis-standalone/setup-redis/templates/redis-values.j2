@@ -12,7 +12,7 @@ existingConfigmap: "redis-config"
 
 image:
   registry: docker.io
-  repository: bitnami/redis
+  repository: bitnamilegacy/redis
   tag: 8.2.1-debian-12-r0
   pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
 
@@ -58,7 +58,7 @@ volumePermissions:
   enabled: true
   image:
     registry: docker.io
-    repository: bitnami/os-shell
+    repository: bitnamilegacy/os-shell
     tag: 12-debian-12-r50
     pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
 
@@ -79,13 +79,13 @@ metrics:
       drop: ["ALL"]
   image:
     registry: docker.io
-    repository: bitnami/redis-exporter
+    repository: bitnamilegacy/redis-exporter
     tag: 1.75.0-debian-12-r1
     pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
 
 kubectl:
   image:
     registry: docker.io
-    repository: bitnami/kubectl
+    repository: bitnamilegacy/kubectl
     tag: 1.33.4-debian-12-r0
     pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
