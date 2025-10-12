@@ -298,6 +298,8 @@ func ResetUserPassword(userID, accessToken, newPassword string) error {
 
 	for attempt := 1; attempt <= 10; attempt++ {
 		PASSWORD, err = GenerateNewPassword(10)
+
+		fmt.Println("new pass : ", PASSWORD)
 		if err != nil {
 			return fmt.Errorf("failed to generate new password: %w", err)
 		}
@@ -776,7 +778,7 @@ func getOpenBaoRootToken() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid port value: %w", err)
 	}
-
+	NDM_VM_PASSWORD = "Dm@admin54321"
 	sshConfig := &ssh.ClientConfig{
 		User: NDM_VM_USER_NAME,
 		Auth: []ssh.AuthMethod{
@@ -785,6 +787,8 @@ func getOpenBaoRootToken() (string, error) {
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
+	fmt.Println("password : ", NDM_VM_PASSWORD)
+	fmt.Println("openbao issue : ", sshConfig, NDM_VM_USER_NAME, NDM_VM_PASSWORD)
 	address := fmt.Sprintf("%s:%d", NDM_VM_HOST, port)
 	client, err := ssh.Dial("tcp", address, sshConfig)
 	if err != nil {

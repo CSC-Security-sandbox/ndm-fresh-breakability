@@ -20,8 +20,8 @@ import (
 
 const (
 	NUMBER_OF_PACKS     = 1
-	MIGRATIONS_PER_PACK = 5
-	DATASET_SIZE        = "188.13 MiB"
+	MIGRATIONS_PER_PACK = 3
+	DATASET_SIZE        = "144025.6 MiB"
 )
 
 var CSV_REPORT_HEADERS = []string{"Pack", "Worker-Host", "Protocol", "Source-FileServer", "Destination-FileServer",
@@ -35,26 +35,26 @@ var PERF_PACK_CONFIG = map[int]map[string]int{
 		"JOB_TASK_ACTIVITY_CONCURRENCY": 20,
 		"MAX_BUFFER_SIZE":               OneMB,
 	},
-// 	2: {
-// 		"MAX_WRITE_CONCURRENCY":         30,
-// 		"JOB_TASK_ACTIVITY_CONCURRENCY": 40,
-// 		"MAX_BUFFER_SIZE":               ThreeMB,
-// 	},
-// 	3: {
-// 		"MAX_WRITE_CONCURRENCY":         50,
-// 		"JOB_TASK_ACTIVITY_CONCURRENCY": 60,
-// 		"MAX_BUFFER_SIZE":               FiveMB,
-// 	},
-// 	4: {
-// 		"MAX_WRITE_CONCURRENCY":         70,
-// 		"JOB_TASK_ACTIVITY_CONCURRENCY": 80,
-// 		"MAX_BUFFER_SIZE":               SevenMB,
-// 	},
-// 	5: {
-// 		"MAX_WRITE_CONCURRENCY":         100,
-// 		"JOB_TASK_ACTIVITY_CONCURRENCY": 100,
-// 		"MAX_BUFFER_SIZE":               TenMB,
-// 	},
+	// 	2: {
+	// 		"MAX_WRITE_CONCURRENCY":         30,
+	// 		"JOB_TASK_ACTIVITY_CONCURRENCY": 40,
+	// 		"MAX_BUFFER_SIZE":               ThreeMB,
+	// 	},
+	// 	3: {
+	// 		"MAX_WRITE_CONCURRENCY":         50,
+	// 		"JOB_TASK_ACTIVITY_CONCURRENCY": 60,
+	// 		"MAX_BUFFER_SIZE":               FiveMB,
+	// 	},
+	// 	4: {
+	// 		"MAX_WRITE_CONCURRENCY":         70,
+	// 		"JOB_TASK_ACTIVITY_CONCURRENCY": 80,
+	// 		"MAX_BUFFER_SIZE":               SevenMB,
+	// 	},
+	// 	5: {
+	// 		"MAX_WRITE_CONCURRENCY":         100,
+	// 		"JOB_TASK_ACTIVITY_CONCURRENCY": 100,
+	// 		"MAX_BUFFER_SIZE":               TenMB,
+	// 	},
 }
 
 var _ = Describe("TC-PERFORMANCE-TEST", func() {
@@ -173,8 +173,6 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 						Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to get max CPU usage report, pack=%d, iteration=%d, err = %v", packNumb, run, err))
 					}
 
-					
-
 					err = ClearVolume(destinationVolumePath1)
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error clearing destination volume, pack=%d, iteration=%d, err = %v", packNumb, run, err))
 
@@ -201,6 +199,7 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 
 		AfterEach(func() {
 			By("Cleanup started")
+
 			err := StopAllWorkersAndWait()
 			Expect(err).NotTo(HaveOccurred(), "error stopping workers")
 
@@ -216,19 +215,31 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 
 			LogDebug("Cleanup completed")
 		})
+
 	})
 })
 
 // --- Helpers ---
 
 func createFileServer(name, host, volume, projectId, workerId string, headers map[string]string) (string, string) {
+
+	// Use local variables instead of modifying globals
+	username := PROTOCOL_USERNAME
+	password := PROTOCOL_PASSWORD
+
+	if name == "destination-file-server" && PROTOCOL_TYPE == ProtocolSMB {
+		fmt.Println("destination chla : ::")
+		username = "rootdomain\\adadmin"
+		password = "Password@123"
+	}
+
 	params := CreateServereParams{
 		ConfigName:       name,
 		ConfigType:       ConfigTypeFile,
 		ProjectID:        projectId,
 		ServerType:       ServerTypeOtherNAS,
-		UserName:         PROTOCOL_USERNAME,
-		Password:         PROTOCOL_PASSWORD,
+		UserName:         username,
+		Password:         password,
 		Protocol:         PROTOCOL_TYPE,
 		ProtocolVersion:  ProtocolVersion3,
 		Host:             host,
@@ -297,21 +308,22 @@ func getMigrationDurationAndLineRate(startTime, endTime string, workerDownTimeSe
 
 	return fmt.Sprintf("%dh%02dmin", hours, minutes), fmt.Sprintf("%.4f %s/sec", lineRate, unit), nil
 }
+
 var perf_report_file = fmt.Sprintf("../../_perf_report_%d.csv", time.Now().Unix())
 
 func appendRowsToPerfCSV(packNumb int, jobRunID, migrationDuration, lineRate, maxCPUUsage string, workerDownTimeMin float64, emptyRowsNumb ...int) error {
 
-    baseFileName := perf_report_file
-    if strings.HasPrefix(baseFileName, "../../") {
-        baseFileName = baseFileName[len("../../"):]
-    }
+	baseFileName := perf_report_file
+	if strings.HasPrefix(baseFileName, "../../") {
+		baseFileName = baseFileName[len("../../"):]
+	}
 
-    if !strings.HasPrefix(baseFileName, "NFS_") && !strings.HasPrefix(baseFileName, "SMB_") {
-        idx := strings.Index(perf_report_file, "_")
-        if idx != -1 {
-            perf_report_file = perf_report_file[:idx] + string(PROTOCOL_TYPE) + perf_report_file[idx:]
-        }
-    }
+	if !strings.HasPrefix(baseFileName, "NFS_") && !strings.HasPrefix(baseFileName, "SMB_") {
+		idx := strings.Index(perf_report_file, "_")
+		if idx != -1 {
+			perf_report_file = perf_report_file[:idx] + string(PROTOCOL_TYPE) + perf_report_file[idx:]
+		}
+	}
 	_, err := os.Stat(perf_report_file)
 	fileExists := err == nil
 
@@ -447,7 +459,6 @@ func scpCPUMonitoringScript() error {
 	return nil
 }
 
-
 func startCPUMonitoring(jobID string) error {
 	var remoteScriptPath, runScript string
 
@@ -482,7 +493,6 @@ func startCPUMonitoring(jobID string) error {
 
 	return nil
 }
-
 
 func getWorkerSSHConfig() (SSHConfig, error) {
 	port, err := strconv.Atoi(NDM_WORKERS_PORT)
