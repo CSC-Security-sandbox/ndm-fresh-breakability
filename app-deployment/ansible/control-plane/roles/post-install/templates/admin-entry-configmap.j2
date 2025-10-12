@@ -9,6 +9,9 @@ data:
     
     set -e
     
+{% if local_cluster is defined %}
+    apk add --no-cache bash curl nodejs jq
+{% endif %}
     cat /vault/secrets/keycloak.env
 
     KEYCLOAK_USER=$(grep 'KEYCLOAK_ADMIN_USER' /vault/secrets/keycloak.env | cut -d':' -f2 | xargs)

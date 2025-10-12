@@ -6,9 +6,9 @@ resources:
     memory: 128Mi
 
 image:
-  repository: ndm-fluentd-loki
+  repository: "{% if local_cluster is defined %}fluent/fluentd-kubernetes-daemonset{% else %}ndm-fluentd-loki{% endif %}"
   pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
-  tag: v1.17-1
+  tag: "{% if local_cluster is defined %}{% else %}v1.17-1{% endif %}"
 
 service:
   ports:
@@ -25,6 +25,11 @@ volumes:
 volumeMounts:
   - name: ndm-logs
     mountPath: /ndm-logs
+
+{% if local_cluster is defined %}
+plugins:
+  - fluent-plugin-grafana-loki
+{% endif %}
 
 fileConfigs:
   01_sources.conf: |-
