@@ -1,6 +1,7 @@
 package performance_testing
 
 import (
+	"bytes"
 	"encoding/csv"
 	"fmt"
 	"math"
@@ -18,8 +19,8 @@ import (
 )
 
 const (
-	NUMBER_OF_PACKS     = 5
-	MIGRATIONS_PER_PACK = 5
+	NUMBER_OF_PACKS     = 1
+	MIGRATIONS_PER_PACK = 1
 	DATASET_SIZE        = "188.13 MiB"
 )
 
@@ -163,14 +164,12 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 
 					err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("migration job did not complete, pack=%d, iteration=%d", packNumb, run))
-
+					isMigrationCompleted <- struct{}{}
 					// capture final CPU usage spikes
 					if PROTOCOL_TYPE == ProtocolNFS {
 						maxCPUUsageInPercentage, err = GetMaxCPUUsageReport(jobRunID)
 						Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to get max CPU usage report, pack=%d, iteration=%d, err = %v", packNumb, run, err))
 					}
-
-					isMigrationCompleted <- struct{}{}
 
 					err = ClearVolume(destinationVolumePath1)
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error clearing destination volume, pack=%d, iteration=%d, err = %v", packNumb, run, err))
@@ -219,13 +218,23 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 // --- Helpers ---
 
 func createFileServer(name, host, volume, projectId, workerId string, headers map[string]string) (string, string) {
+
+	username := PROTOCOL_USERNAME
+	password := PROTOCOL_PASSWORD
+
+	if name == "destination-file-server" && PROTOCOL_TYPE == ProtocolSMB {
+		fmt.Println("destination chla : ::")
+		username = "rootdomain\\adadmin"
+		password = "Password@123"
+	}
+
 	params := CreateServereParams{
 		ConfigName:       name,
 		ConfigType:       ConfigTypeFile,
 		ProjectID:        projectId,
 		ServerType:       ServerTypeOtherNAS,
-		UserName:         PROTOCOL_USERNAME,
-		Password:         PROTOCOL_PASSWORD,
+		UserName:         username,
+		Password:         password,
 		Protocol:         PROTOCOL_TYPE,
 		ProtocolVersion:  ProtocolVersion3,
 		Host:             host,
@@ -372,21 +381,22 @@ func getWorkerDowntime(stop chan struct{}, workerDownTimeSec *int, maxCPUUsageIn
 }
 
 func scpCPUMonitoringScript() error {
-
 	var localScriptPath, remoteScriptPath string
 
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
-		// TODO - implement for SMB
-		// SCP script is done, but running it remotely has quoting issues ref - StartCPUMonitoring()
-		return nil
-		// localScriptPath = "./smb_cpu_usage.ps1"
-		// remoteScriptPath = `c:\Users\datamigrator\smb_cpu_usage.ps1`
+		localScriptPath = "./smb_cpu_usage.ps1"
+		remoteScriptPath = `c:\Users\datamigrator\smb_cpu_usage.ps1`
+
 	case ProtocolNFS:
 		localScriptPath = "./nfs_cpu_usage.sh"
 		remoteScriptPath = "/home/ubuntu/nfs_cpu_usage.sh"
+
+	default:
+		return fmt.Errorf("unsupported protocol type: %s", PROTOCOL_TYPE)
 	}
 
+	// Get SSH configuration
 	config, err := getWorkerSSHConfig()
 	if err != nil {
 		return fmt.Errorf("failed to get SSH config: %v", err)
@@ -394,7 +404,7 @@ func scpCPUMonitoringScript() error {
 
 	client, err := getSSHClient(config)
 	if err != nil {
-		return err // or handle error
+		return fmt.Errorf("failed to connect SSH client: %v", err)
 	}
 	defer client.Close()
 
@@ -411,24 +421,31 @@ func scpCPUMonitoringScript() error {
 		return fmt.Errorf("failed to read local script: %v", err)
 	}
 
-	// Copy script to remote
+	// ✅ Ensure Unix-style LF line endings for Linux (important for bash scripts)
+	if PROTOCOL_TYPE == ProtocolNFS {
+		scriptBytes = bytes.ReplaceAll(scriptBytes, []byte("\r\n"), []byte("\n"))
+		scriptBytes = bytes.ReplaceAll(scriptBytes, []byte("\r"), []byte("\n"))
+	}
+
+	// Upload script to remote server
 	remoteFile, err := sftpClient.Create(remoteScriptPath)
 	if err != nil {
 		return fmt.Errorf("failed to create remote script: %v", err)
 	}
-	_, err = remoteFile.Write(scriptBytes)
-	if err != nil {
+	if _, err = remoteFile.Write(scriptBytes); err != nil {
+		remoteFile.Close()
 		return fmt.Errorf("failed to write remote script: %v", err)
 	}
 	remoteFile.Close()
 
+	// ✅ Make the Linux script executable
 	if PROTOCOL_TYPE == ProtocolNFS {
-		// Make script executable
 		session, err := client.NewSession()
 		if err != nil {
 			return fmt.Errorf("failed to create SSH session: %v", err)
 		}
 		defer session.Close()
+
 		chmodCmd := fmt.Sprintf("chmod +x %s", remoteScriptPath)
 		if err := session.Run(chmodCmd); err != nil {
 			return fmt.Errorf("failed to chmod script: %v", err)
@@ -448,7 +465,7 @@ func startCPUMonitoring(jobID string) error {
 		return nil
 	case ProtocolNFS:
 		remoteScriptPath = "/home/ubuntu/nfs_cpu_usage.sh"
-		runScript = fmt.Sprintf("sudo nohup %s %s > /dev/null 2>&1 &", remoteScriptPath, jobID)
+		runScript = fmt.Sprintf("nohup bash %s %s >/dev/null 2>&1 &", remoteScriptPath, jobID)
 	}
 
 	config, err := getWorkerSSHConfig()

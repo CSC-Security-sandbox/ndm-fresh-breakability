@@ -95,7 +95,7 @@ run_tests() {
 #Performance Testing
 run_tests "perf-testing" "./tests/performance-testing" "Azure" "SMB"
 
-
+read -p "Press Enter to continue..."
 
 
 

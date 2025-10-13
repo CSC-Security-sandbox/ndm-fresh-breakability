@@ -689,6 +689,7 @@ func GetMaxCPUUsageReport(jobid string) (string, error) {
 	case ProtocolSMB:
 		script = `powershell.exe -Command '{0:N2}' -f (Get-Counter '\Processor(_Total)\% Processor Time' -SampleInterval 1 -MaxSamples 1).CounterSamples[0].CookedValue`
 	case ProtocolNFS:
+		// script = "cat /home/ubuntu/" + jobid + "_max_cpu_usage.txt"
 		script = "cat /home/ubuntu/" + jobid + "_max_cpu_usage.txt"
 	}
 
