@@ -23,16 +23,16 @@ const dbPool = DatabasePool.getInstance();
 /**
  * Performs cleanup actions like releasing DB connections and running garbage collection.
  */
-async function performCleanup() {
-    logger.log('Starting worker cleanup');
+async function performCleanup(projectId?: string | null) {
+    logger.log(`projectId: ${projectId} Starting worker cleanup`);
     try {
         // Clean up RedisConsumerService
         if (redisConsumerService) {
-            logger.log('Cleaning up RedisConsumerService');
+            logger.log(`projectId: ${projectId} Cleaning up RedisConsumerService`);
             try {
                 await redisConsumerService.cleanupResources();
             } catch (error) {
-                logger.error('Error during RedisConsumerService cleanup:', error);
+                logger.error(`projectId: ${projectId} Error during RedisConsumerService cleanup:`, error);
             }
             redisConsumerService = null;
         }
@@ -48,13 +48,13 @@ async function performCleanup() {
 
         // Release database connection
         if (dataSource) {
-            logger.log('Releasing database connection');
+            logger.log(`projectId: ${projectId} Releasing database connection`);
             await dbPool.releaseConnection();
             dataSource = null;
         }
-        logger.log('Worker cleanup completed');
+        logger.log(`projectId: ${projectId} Worker cleanup completed`);
     } catch (error) {
-        logger.error('Error during cleanup:', error);
+        logger.error(`projectId: ${projectId} Error during cleanup:`, error);
     }
 }
 
@@ -62,13 +62,14 @@ async function performCleanup() {
  * Gracefully handles exit signals and performs cleanup.
  */
 async function handleGracefulShutdown(signal: string) {
-    logger.warn(`Received ${signal}, shutting down worker gracefully`);
+    const projectId = workerData?.projectId || null;
+    logger.warn(`projectId: ${projectId} Received ${signal}, shutting down worker gracefully`);
     
     try {
-        await performCleanup();
+        await performCleanup(projectId);
         process.exit(0);
     } catch (error) {
-        logger.error('Error during graceful shutdown:', error);
+        logger.error(`projectId: ${projectId} Error during graceful shutdown:`, error);
         process.exit(1);
     }
 }
@@ -77,25 +78,27 @@ process.on('SIGTERM', () => handleGracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => handleGracefulShutdown('SIGINT'));
 
 process.on('uncaughtException', async (error) => {
-    logger.error('Uncaught exception:', error);
-    logger.error('Stack trace:', error.stack);
+    const projectId = workerData?.projectId || null;
+    logger.error(`projectId: ${projectId} Uncaught exception:`, error);
+    logger.error(`projectId: ${projectId} Stack trace:`, error.stack);
     
     try {
-        await performCleanup();
+        await performCleanup(projectId);
     } catch (cleanupError) {
-        logger.error('Error during exception cleanup:', cleanupError);
+        logger.error(`projectId: ${projectId} Error during exception cleanup:`, cleanupError);
     }
     
     process.exit(1);
 });
 
 process.on('unhandledRejection', async (reason, promise) => {
-    logger.error('Unhandled rejection at:', promise, 'reason:', reason);
+    const projectId = workerData?.projectId || null;
+    logger.error(`projectId: ${projectId} Unhandled rejection at:`, promise, 'reason:', reason);
     
     try {
-        await performCleanup();
+        await performCleanup(projectId);
     } catch (cleanupError) {
-        logger.error('Error during rejection cleanup:', cleanupError);
+        logger.error(`projectId: ${projectId} Error during rejection cleanup:`, cleanupError);
     }
     
     process.exit(1);
@@ -107,7 +110,8 @@ process.on('unhandledRejection', async (reason, promise) => {
  * Main execution logic for the worker.
  */
 (async function runConsumerWorker() {
-    logger.log(`Worker thread starting for jobRunId=${workerData?.jobRunId}`);
+    const projectId = workerData?.projectId || null;
+    logger.log(`projectId: ${projectId} Worker thread starting for jobRunId=${workerData?.jobRunId}`);
 
     
 
@@ -118,15 +122,15 @@ process.on('unhandledRejection', async (reason, promise) => {
         }
 
         const jobRunId = workerData.jobRunId;
-        logger.log(`Processing job: ${jobRunId}`);
+        logger.log(`projectId: ${projectId} Processing job: ${jobRunId}`);
 
         // Acquire database connection
-        logger.log('Acquiring database connection');
+        logger.log(`projectId: ${projectId} Acquiring database connection`);
         dataSource = await dbPool.getConnection();
-        logger.log('Database connection acquired');
+        logger.log(`projectId: ${projectId} Database connection acquired`);
 
         // Initialize repositories
-        logger.log('Initializing repositories');
+        logger.log(`projectId: ${projectId} Initializing repositories`);
         const inventoryRepo = dataSource.getRepository(InventoryEntity);
         const taskRepo = dataSource.getRepository(TaskEntity);
         const operationRepo = dataSource.getRepository(OperationsEntity);
@@ -136,7 +140,7 @@ process.on('unhandledRejection', async (reason, promise) => {
         const speedLogEntryRepo = dataSource.getRepository(SpeedLogEntryEntity);
 
         // Initialize services
-        logger.log('Initializing services');
+        logger.log(`projectId: ${projectId} Initializing services`);
         inventoryService = new InventoryService(
             dataSource,
             inventoryRepo,
@@ -150,24 +154,30 @@ process.on('unhandledRejection', async (reason, promise) => {
 
         const configService = new ConfigService();
         workflowService = new WorkflowService(configService);
-        redisConsumerService = new RedisConsumerService(inventoryService, workflowService);
-        logger.log('Services initialized successfully');
+        redisConsumerService = new RedisConsumerService(inventoryService, dataSource, workflowService);
+        
+        // Set projectId in the worker's cache if available
+        if (projectId && jobRunId) {
+            redisConsumerService.setProjectIdInCache(jobRunId, projectId);
+        }
+        
+        logger.log(`projectId: ${projectId} Services initialized successfully`);
 
         // Start consumer
-        logger.log(`Starting Redis consumer for job ${jobRunId}`);
+        logger.log(`projectId: ${projectId} Starting Redis consumer for job ${jobRunId}`);
         await redisConsumerService.executeConsumersInParallel(jobRunId);
-        logger.log(`Redis consumer completed for job ${jobRunId}`);
+        logger.log(`projectId: ${projectId} Redis consumer completed for job ${jobRunId}`);
 
         // Clean up RedisConsumerService resources
         await redisConsumerService.cleanupResources();
 
         // Clear timeout since we completed successfully
 
-        logger.log(`Worker completed successfully for job ${jobRunId}`);
+        logger.log(`projectId: ${projectId} Worker completed successfully for job ${jobRunId}`);
         parentPort?.postMessage({ success: true });
     } catch (error) {
-        logger.error('Worker error:', error);
-        logger.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+        logger.error(`projectId: ${projectId} Worker error:`, error);
+        logger.error(`projectId: ${projectId} Error stack:`, error instanceof Error ? error.stack : 'No stack trace');
         
         // Clear timeout on error
         
@@ -176,8 +186,8 @@ process.on('unhandledRejection', async (reason, promise) => {
             error: error instanceof Error ? error.message : String(error),
         });
     } finally {
-        await performCleanup();
-        logger.log('Worker thread exiting');
+        await performCleanup(projectId);
+        logger.log(`projectId: ${projectId} Worker thread exiting`);
         process.exit(0);
     }
 })();

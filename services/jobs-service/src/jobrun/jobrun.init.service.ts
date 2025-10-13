@@ -622,7 +622,12 @@ export class JobRunInitService {
       let response = await axios.post(
         `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
         { jobRunId },
-        { headers: { projectId, trackId: jobRunId } }
+        { 
+          headers: { 
+            'projectId': projectId,
+            'trackId': jobRunId,
+          } 
+        }
       );
 
       let count = 0;
@@ -631,7 +636,12 @@ export class JobRunInitService {
         response = await axios.post(
           `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
           { jobRunId },
-          { headers: { projectId, trackId: jobRunId } }
+          { 
+            headers: { 
+              'projectId': projectId,
+              'trackId': jobRunId,
+            } 
+          }
         );
 
         this.logger.log(`Retry attempt ${count + 1} for ${jobRunId}:`, {
