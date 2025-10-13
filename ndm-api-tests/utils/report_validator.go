@@ -44,12 +44,14 @@ func ValidateReport(
 	jobType JobType,
 	spec string,
 ) (map[Format][]error, error) {
+
 	formats, ok := jobFormats[jobType]
 	if !ok {
 		return nil, fmt.Errorf("no formats configured for jobType %q", jobType)
 	}
 
 	results := make(map[Format][]error, len(formats))
+
 	for _, fmtType := range formats {
 		// 1) fetch
 		data, err := fetchReport(jobRunID, fmtType, string(jobType))
@@ -148,6 +150,7 @@ func fetchReport(
 	default:
 		return nil, fmt.Errorf("unsupported format %q", fmtType)
 	}
+	Wait(20)
 
 	// 2) marshal JSON body
 	bodyBytes, err := json.Marshal(payload)
@@ -163,8 +166,8 @@ func fetchReport(
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		// 4) send POST
+		LogDebug(fmt.Sprintf("Getting %s reports for %s ID %s, attempt %d", fmtType, reportType, jobRunID, attempt))
 		resp, err := SendAPIRequest(http.MethodPost, url, bodyBytes, headers)
-		fmt.Println("report api response : ", resp)
 		if err != nil {
 			return nil, fmt.Errorf("POST %s: %w", url, err)
 		}

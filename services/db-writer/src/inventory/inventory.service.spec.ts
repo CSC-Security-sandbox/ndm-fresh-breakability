@@ -20,6 +20,7 @@ import { CreateInventory } from "./inventory.types";
 import { OperationStatus } from "../enum/queues.enum";
 import { SpeedLogEntity, SpeedLogEntryEntity } from '../entities/speed-test.entity';
 import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
+import { DatabaseError, ValidationError } from '../errors/custom-errors';
 
 describe("InventoryService", () => {
   let service: InventoryService;
@@ -208,7 +209,8 @@ describe("InventoryService", () => {
       overrides.fileType || 'text',
       overrides.sourceMeta || defaultSourceMeta,
       overrides.targetMeta || defaultTargetMeta,
-      overrides.size || 1024
+      overrides.size || 1024,
+      overrides.inode || 0
     );
   };
 
@@ -242,6 +244,7 @@ describe("InventoryService", () => {
             pathId: 'test-path-456',
             sourceMeta: expect.any(Object),
             targetMeta: expect.any(Object),
+            inode: 0
         });
     });
 
@@ -256,7 +259,8 @@ describe("InventoryService", () => {
           'text',
           null, // sourceMeta is null
           null, // targetMeta is null
-          1024
+          1024,
+          0
         );
 
         const result = service.mapSourceToTarget(file, jobRunId, pathId);
@@ -795,6 +799,101 @@ describe("InventoryService", () => {
         timeStamp: data.timeStamp,
         speed: NaN
       });
+    });
+  });
+
+  describe("createPartitionInventoryTableByJobRunId", () => {
+    const validJobRunId = "12345678-1234-4123-8123-123456789012";
+    
+    beforeEach(() => {
+      dataSource.query = jest.fn();
+      process.env.SCHEMA = 'datamigrator';
+    });
+
+    afterEach(() => {
+      delete process.env.SCHEMA;
+    });
+
+    it("should create partition using stored procedure successfully", async () => {
+      (dataSource.query as jest.Mock).mockResolvedValue(undefined);
+
+      await service.createPartitionInventoryTableByJobRunId(validJobRunId);
+
+      expect(dataSource.query).toHaveBeenCalledWith(
+        'CALL datamigrator.create_inventory_partition($1, $2);',
+        [validJobRunId, 'datamigrator']
+      );
+    });
+
+    it("should throw ValidationError for null jobRunId", async () => {
+      await expect(
+        service.createPartitionInventoryTableByJobRunId(null as any)
+      ).rejects.toThrow(ValidationError);
+      
+      await expect(
+        service.createPartitionInventoryTableByJobRunId(null as any)
+      ).rejects.toThrow("JobRunId is required to create partition table");
+    });
+
+    it("should throw ValidationError for empty jobRunId", async () => {
+      await expect(
+        service.createPartitionInventoryTableByJobRunId("")
+      ).rejects.toThrow(ValidationError);
+      
+      await expect(
+        service.createPartitionInventoryTableByJobRunId("")
+      ).rejects.toThrow("JobRunId is required to create partition table");
+    });
+
+    it("should throw DatabaseError when stored procedure fails", async () => {
+      const procedureError = new Error("Stored procedure failed");
+      (dataSource.query as jest.Mock).mockRejectedValue(procedureError);
+
+      await expect(
+        service.createPartitionInventoryTableByJobRunId(validJobRunId)
+      ).rejects.toThrow(DatabaseError);
+      
+      await expect(
+        service.createPartitionInventoryTableByJobRunId(validJobRunId)
+      ).rejects.toThrow("Error while creating partition inventory table");
+    });
+
+    it("should handle undefined SCHEMA environment variable", async () => {
+      delete process.env.SCHEMA;
+      (dataSource.query as jest.Mock).mockResolvedValue(undefined);
+
+      await service.createPartitionInventoryTableByJobRunId(validJobRunId);
+
+      expect(dataSource.query).toHaveBeenCalledWith(
+        'CALL undefined.create_inventory_partition($1, $2);',
+        [validJobRunId, undefined]
+      );
+    });
+
+    it("should log success message when partition creation succeeds", async () => {
+      (dataSource.query as jest.Mock).mockResolvedValue(undefined);
+      const logSpy = jest.spyOn(service['logger'], 'log');
+
+      await service.createPartitionInventoryTableByJobRunId(validJobRunId);
+
+      expect(logSpy).toHaveBeenCalledWith(
+        `Partition table  created or already exists for job run ID: ${validJobRunId}`
+      );
+    });
+
+    it("should log error message when partition creation fails", async () => {
+      const procedureError = new Error("Database connection failed");
+      (dataSource.query as jest.Mock).mockRejectedValue(procedureError);
+      const errorSpy = jest.spyOn(service['logger'], 'error');
+
+      await expect(
+        service.createPartitionInventoryTableByJobRunId(validJobRunId)
+      ).rejects.toThrow(DatabaseError);
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        `Failed to create partition table for jobRunId ${validJobRunId}: Database connection failed`,
+        procedureError?.stack || procedureError
+      );
     });
   });
 });

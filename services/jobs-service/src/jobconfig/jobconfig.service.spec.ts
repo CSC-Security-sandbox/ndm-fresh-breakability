@@ -55,6 +55,7 @@ import { HealthStatus } from "src/workers/worker.types";
 import { SyncEmailEntity } from "src/entities/sync-email.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import {formatBytes} from '@netapp-cloud-datamigrate/jobs-lib';
+import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 
 jest.mock('typeorm', () => {
   const actual = jest.requireActual('typeorm');
@@ -89,6 +90,7 @@ describe("JobConfigService", () => {
   let redisService: RedisService;
   let workFlowService: WorkflowService;
   let sendMailService: SendMailService;
+  let jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>;
 
   let workerJobRunMapRepo: Repository<WorkerJobRunMap>;
 
@@ -336,6 +338,19 @@ describe("JobConfigService", () => {
             createQueryBuilder: jest.fn(),
           },
         },
+        {
+          provide: getRepositoryToken(JobStatsSummaryMvEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            update: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+
+        },
       ],
     }).compile();
 
@@ -393,6 +408,9 @@ describe("JobConfigService", () => {
       getRepositoryToken(OperationErrorEntity)
     );
     sendMailService = module.get<SendMailService>(SendMailService);
+    jobStatsSummaryMvRepo = module.get<Repository<JobStatsSummaryMvEntity>>(
+      getRepositoryToken(JobStatsSummaryMvEntity)
+    );
 
     workerJobRunMapRepo = module.get<Repository<WorkerJobRunMap>>(
       getRepositoryToken(WorkerJobRunMap)
@@ -1795,6 +1813,11 @@ describe("JobConfigService", () => {
             subStatus: null,
             startTime,
             endTime,
+            jobStats: {
+              fileCount: "10",
+              directories: "5",
+              totalSize: "5000",
+            },
           },
         ],
         sourcePath: {
@@ -1885,6 +1908,7 @@ describe("JobConfigService", () => {
             totalScannedSize: "4.88 KiB",
             totalMigratedSize: "4.88 KiB",
             errors: [],
+            lastRefreshed: undefined,
           },
         ],
         aggregateData: {
@@ -1892,6 +1916,13 @@ describe("JobConfigService", () => {
           scannedFilesCount: "10",
           scannedDirectoriesCount: "5",
           totalScannedSize: "0 B",
+        },
+        configurationsSetToJob: {
+          "Skip Files modified in last": "-",
+          "Preserve a-time": "Disabled",
+          "Excluded Path Patterns": [],
+          "Exclude file older than (UTC)": undefined,
+          "Incremental sync schedule": undefined,
         },
         errors: [],
       });
@@ -2095,6 +2126,76 @@ describe("JobConfigService", () => {
       });
     });
     
+    it("should format skipFile value for MIGRATE job (minutes)", () => {
+      const jobConfig = {
+        jobType: JobType.MIGRATE,
+        skipFile: "35-M",
+        preserveAccessTime: false,
+        excludeFilePatterns: "*/logs/*,*/tmp/*",
+        excludeOlderThan: null,
+        futureScheduleAt: null,
+      };
+      const result = service.getConfigurationsSetToJob(jobConfig as any);
+      expect(result["Skip Files modified in last"]).toBe("35-Mins");
+      expect(result["Preserve a-time"]).toBe("Disabled");
+      expect(result["Excluded Path Patterns"]).toEqual(["*/logs/*", "*/tmp/*"]);
+    });
+
+    it("should handle CUT_OVER job type", () => {
+      const jobConfig = {
+        jobType: JobType.CUT_OVER,
+        preserveAccessTime: true,
+        excludeFilePatterns: "*/snapshot/*",
+        excludeOlderThan: "2025-01-01",
+      };
+      const result = service.getConfigurationsSetToJob(jobConfig as any);
+      expect(result["Preserve a-time"]).toBe("Enabled");
+      expect(result["Excluded Path Patterns"]).toEqual(["*/snapshot/*"]);
+      expect(result["Exclude file older than (UTC)"]).toBe("2025-01-01");
+    });
+
+    it("should handle other job types", () => {
+      const jobConfig = {
+        jobType: "DISCOVER",
+        excludeFilePatterns: "",
+      };
+      const result = service.getConfigurationsSetToJob(jobConfig as any);
+      expect(result["Excluded Path Patterns"]).toEqual([]);
+    });
+    it("should format skipFile value for MIGRATE job (hours and days)", () => {
+      const jobConfig = {
+        jobType: JobType.MIGRATE,
+        skipFile: "2-H",
+        preserveAccessTime: false,
+        excludeFilePatterns: "",
+        excludeOlderThan: null,
+        futureScheduleAt: null,
+      };
+      const result = service.getConfigurationsSetToJob(jobConfig as any);
+      expect(result["Skip Files modified in last"]).toBe("2-Hrs");
+    });
+    
+    it("should format skipFile value for MIGRATE job (days)", () => {
+      const jobConfig = {
+        jobType: JobType.MIGRATE,
+        skipFile: "5-D",
+        preserveAccessTime: false,
+        excludeFilePatterns: "",
+        excludeOlderThan: null,
+        futureScheduleAt: null,
+      };
+      const result = service.getConfigurationsSetToJob(jobConfig as any);
+      expect(result["Skip Files modified in last"]).toBe("5-Days");
+    });
+
+    it("should handle excludeFilePatterns with empty values", () => {
+      const jobConfig = {
+        jobType: JobType.MIGRATE,
+        excludeFilePatterns: ",,,",
+      };
+      const result = service.getConfigurationsSetToJob(jobConfig as any);
+      expect(result["Excluded Path Patterns"]).toEqual([]);
+    });
   });
 
   describe("parseSize", () => {
@@ -2745,6 +2846,94 @@ describe("JobConfigService", () => {
       const result = await service.getAllJobConfig(mockProjectId);
 
       expect(result).toEqual([]);
+      expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledWith(
+        "jobconfig"
+      );
+    });
+
+    it("should handle nextDate calculation errors gracefully", async () => {
+      const mockProjectId = "projectId";
+      const date = new Date();
+      const mockAllJobsDetails = [
+        {
+          jobRunIds: ["jobrunid-1"],
+          jobconfigid: "jobConfigId1",
+          jobtype: "MIGRATE",
+          jobconfigstatus: "ACTIVE",
+          firstrunat: date,
+          sourcepath: "sourcePath1",
+          targetpath: "targetPath1",
+          futureschedule: "invalid-cron",
+          sourceservername: "SourceServer1",
+          targetservername: "TargetServer1",
+          sourceprotocol: "NFS",
+          targetprotocol: "NFS",
+          createdAt: date,
+          totalRuns: 1,
+        },
+      ];
+
+      jest.spyOn(jobConfigRepo, "createQueryBuilder").mockReturnValue({
+        leftJoin: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        orWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        addGroupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue(mockAllJobsDetails),
+      } as any);
+
+      // Clear any existing mocks first
+      jest.restoreAllMocks();
+      
+      // Mock nextDate to throw an error
+      const nextDateSpy = jest
+        .spyOn(require("src/utils/mapper"), "nextDate")
+        .mockImplementation(() => {
+          throw new Error("Invalid cron expression");
+        });
+      
+      jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
+
+      // Spy on logger.error to ensure it's called
+      const loggerErrorSpy = jest.spyOn(service["logger"], "error");
+
+      const result = await service.getAllJobConfig(mockProjectId);
+
+      expect(result).toEqual([
+        {
+          jobConfigId: "jobConfigId1",
+          jobType: "MIGRATE",
+          jobStatus: "ACTIVE",
+          nextScheduleDate: null, // Should be null due to error
+          sourceServer: {
+            serverName: "SourceServer1",
+            path: "sourcePath1",
+            protocol: "NFS",
+          },
+          destinationServer: {
+            serverName: "TargetServer1",
+            path: "targetPath1",
+            protocol: "NFS",
+          },
+          errors: 0,
+          totalRuns: 1,
+          configName: undefined,
+          createdAt: mockAllJobsDetails[0].createdAt,
+        },
+      ]);
+      
+      // Verify that nextDate was actually called
+      expect(nextDateSpy).toHaveBeenCalled();
+      
+      // Verify that logger.error was called with the expected message
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        `Failed to calculate nextScheduleDate for jobConfigId jobConfigId1:`,
+        "Invalid cron expression"
+      );
+      
       expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledWith(
         "jobconfig"
       );
@@ -3605,10 +3794,10 @@ describe("JobConfigService", () => {
 
     it("should return values from inventory summary", async () => {
       const jobRunId = "12345";
-      const mockInventoryCounts = {
-        filecount: "10",
-        directorycount: "5",
-        totalfilesize: "1000",
+      const mockJobStatsSummary = {
+        fileCount: "10",
+        directoryCount: "5",
+        totalSize: "1000",
       };
       const mockJobRun = {
         id: jobRunId,
@@ -3616,11 +3805,7 @@ describe("JobConfigService", () => {
       };
 
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(mockJobRun as any);
-      jest.spyOn(inventoryRepo, "createQueryBuilder").mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn().mockResolvedValue(mockInventoryCounts),
-      } as any);
+      jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValue(mockJobStatsSummary as any);
       jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
 
       const result = await service.calculateJobRunStats(jobRunId);

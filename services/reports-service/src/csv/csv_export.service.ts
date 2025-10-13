@@ -26,7 +26,7 @@ export class CsvService {
 
             while (true) {
                 const result = await this.getInventoryData(jobRunId, batchSize, offset);
-                if (result.length === 0) break;
+                if (!result || result.length === 0) break;
                 for (const row of result) {
                     csvStream.write(row);
                 }

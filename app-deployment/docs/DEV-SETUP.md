@@ -85,6 +85,7 @@ Ensure the following tools are installed on your macOS system:
     jobs-service
     reports-service
     db-migrations
+    support-service
    ```
 
 3. Run the build script:
@@ -114,7 +115,9 @@ Ensure the following tools are installed on your macOS system:
 
 #### Before running the script download the binary from github
 
-1. Download the binary from the [worker](https://github.com/NetApp-Cloud-DataMigrate/ndm/tags) repository, extract the zip file and take the path of `worker-linux-arm64` binary (MacOS).
+1. Download the binary from the [artifactory](https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/builds/worker/branches/) for your branch, or use the binary from the latest commit on the main branch.
+   **Note:** Access to this artifactory requires VPN.
+   After downloading, extract the zip file and take the path of the `worker-linux-arm64` binary (MacOS).
 2. Note the path of the binary and copy it.
 3. Run the script and when prompted, provide the full path to the binary on your local Mac:
 
@@ -205,6 +208,49 @@ NOTE: All credentials are managed from openbao. Replace the `IP_ADDRESS` with yo
    ```
 
 9. Navigate to DM UI to see if the worker is registered or not.
+
+## Quick Reference: Recovering from Failed Ansible Steps
+
+If Control Plane Ansible playbook step fails (e.g., `configure-postgres.yaml`), you can use the corresponding uninstall variable to clean up any partial state and safely retry from that step.
+
+
+### How to Recover from a Failed Step
+
+If your control plane setup fails partway through, follow these steps to continue from the point of failure:
+
+1. **Edit your master playbook:**  
+   Open `app-deployment/ansible/control-plane/playbooks/master-playbook.yaml` and comment out all steps above the failed playbook step.  
+   _For example, if the failure happened at `configure-postgres.yaml`, comment out all previous steps but **leave** `configure-postgres.yaml` and all steps after it uncommented._
+
+2. **Run the uninstall for the failed step:**  
+   From `app-deployment/local-deployment/bin`, run the following command to clean up any partial setup for the failed component and restart the execution:
+
+   ```sh
+   ansible-playbook -i ../../ansible/control-plane/config/inventory.yaml ../../ansible/control-plane/playbooks/master-playbook.yaml -e local_cluster=true -e <uninstall_variable>=true
+   ```
+   _Example for Postgres:_
+   ```sh
+   ansible-playbook -i ../../ansible/control-plane/config/inventory.yaml ../../ansible/control-plane/playbooks/master-playbook.yaml -e local_cluster=true -e postgres_uninstall=true
+   ```
+
+
+### Uninstall Variables Table
+
+You can use the following uninstall variables for each component, substituting `<uninstall_variable>` in the above command as needed:
+
+| Component            | Playbook                        | Uninstall Variable     |
+|----------------------|---------------------------------|------------------------|
+| OpenBao              | configure-openbao.yaml          | openbao_uninstall      |
+| Postgres             | configure-postgres.yaml         | postgres_uninstall     |
+| Prometheus           | configure-prometheus.yaml       | prometheus_uninstall   |
+| Fluentd              | configure-fluentd.yaml          | fluentd_uninstall      |
+| OpenTelemetry (OTel) | configure-otel.yaml             | otel_uninstall         |
+| Grafana              | configure-grafana.yaml          | grafana_uninstall      |
+| Redis                | configure-redis-standalone.yaml | redis_uninstall        |
+| Temporal             | configure-temporal.yaml         | temporal_uninstall     |
+| Keycloak             | configure-keycloak.yaml         | keycloak_uninstall     |
+| Datamigrator         | configure-datamigrator.yaml     | dm_uninstall           |
+
 
 ## Application Upgrades
 

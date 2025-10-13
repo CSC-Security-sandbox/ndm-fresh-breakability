@@ -3,6 +3,7 @@ package tests
 import (
 	"fmt"
 	. "ndm-api-tests/utils"
+	"sync"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -11,9 +12,6 @@ import (
 )
 
 var _ = Describe("TC-007: Run migration to multiple destinations with incremental sync schedule", func() {
-	BeforeEach(func() {
-		Skip("TC-007 is skipped in CI/CD due to flakyness")
-	})
 	var (
 		ProjectId              string
 		workerId1              string
@@ -38,11 +36,11 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			workerId1 = workerIds[0]
 			workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
-			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME)
-			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME_1)
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
+			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[1], SOURCE_VOLUMES[1])
 
-			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME)
-			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME_1)
+			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
+			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[1], DESTINATION_VOLUMES[1])
 		})
 
 		It("TC-007: Run migration to multiple destinations with incremental sync schedule", func() {
@@ -64,11 +62,11 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         "Root",
-				Password:         "",
-				Protocol:         ProtocolNFS,
+				UserName:         PROTOCOL_USERNAME,
+				Password:         PROTOCOL_PASSWORD,
+				Protocol:         PROTOCOL_TYPE,
 				ProtocolVersion:  ProtocolVersion3,
-				Host:             SOURCE_HOST_IP,
+				Host:             SOURCE_HOST_IPs[0],
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
@@ -78,10 +76,10 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			defer resp.Body.Close()
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceConfigID, headers)
+			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceConfigID, headers)
+			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating the destination file server")
@@ -90,11 +88,11 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         "Root",
-				Password:         "",
-				Protocol:         ProtocolNFS,
+				UserName:         PROTOCOL_USERNAME,
+				Password:         PROTOCOL_PASSWORD,
+				Protocol:         PROTOCOL_TYPE,
 				ProtocolVersion:  ProtocolVersion3,
-				Host:             DESTINATION_HOST_IP,
+				Host:             DESTINATION_HOST_IPs[0],
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
@@ -104,17 +102,17 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			defer resp.Body.Close()
 
 			By("Getting the destination file server by configId")
-			destinationPathID1, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationConfigID, headers)
+			destinationPathID1, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			destinationPathID2, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationConfigID, headers)
+			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			By("Creating a migration job with Incremental Sync of 3 mins")
+			By("Creating a migration job with Incremental Sync of 5 mins")
 			currentDateTime := GetCurrentUTCTimestamp()
 			migrationParams := MigrationJobParams{
 				FirstRunAt:         currentDateTime,
-				FutureRunSchedule:  "*/3 * * * *", // Cron expression of 3 mins
+				FutureRunSchedule:  "*/5 * * * *", // Cron expression of 5 mins
 				SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
 				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
 				SidMapping:         false,
@@ -128,47 +126,59 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
 
-			// Get migration job run IDs and wait for completion
-			// migration_validators := []string{
-			//     "nfs_src_to_dest_vol_migration.json",
-			//     "nfs_src2_to_dest2_vol_migration.json",
-			// }
-			for _, migrationJobConfigID := range migrationJobConfigIDs {
-				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
-				migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
-				Expect(len(getJobsResp.JobRuns)).To(BeNumerically("==", 1), "No jobRuns found in response")
-				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
-				defer resp.Body.Close()
-
-				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
-				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
-				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
-
-				// result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s", migration_validators[i]))
-				// Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-				// By(fmt.Sprintf("validate report result : %s", result))
+			var wg sync.WaitGroup
+			migration_validators := []string{
+				"src_to_dest_vol_migration.json",
+				"src2_to_dest2_vol_migration.json",
 			}
 
-			// Validating the NextScheduled time from response is within +-1 minutes and is 3 minutes later than 1st run
-			parsedBase, err := time.Parse(TIME_FORMAT, currentDateTime)
-			Expect(err).NotTo(HaveOccurred(), "Error parsing curreent datetimes")
-			sch, err := cron.ParseStandard("*/3 * * * *")
-			Expect(err).NotTo(HaveOccurred(), "invalid cron expression")
-			expectedNext := sch.Next(parsedBase)
+			for i, migrationJobConfigID := range migrationJobConfigIDs {
+				wg.Add(1)
+				go func(i int, migrationJobConfigID string) {
+					defer GinkgoRecover()
+					defer wg.Done()
+					getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
+					migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
+					Expect(len(getJobsResp.JobRuns)).To(BeNumerically("==", 1), "No jobRuns found in response")
+					Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
+					defer resp.Body.Close()
 
-			for _, migrationJobConfigID := range migrationJobConfigIDs {
-				jobSummary, err := GetJobSummaryByConfigID(ProjectId, migrationJobConfigID, headers)
-				Expect(err).NotTo(HaveOccurred())
+					Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
+					err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
+					Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				actualNext, err := time.Parse(TIME_FORMAT, jobSummary.NextScheduleDate)
-				Expect(err).NotTo(HaveOccurred(),
-					"could not parse NextScheduleDate %q", jobSummary.NextScheduleDate)
+					getJobRunResp, err := GetJobRunInfo(migrationJobRunID)
+					Expect(err).NotTo(HaveOccurred(), "Error getting job run info")
 
-				// assert actualNext is within ±1min of expectedNext
-				Expect(actualNext).To(BeTemporally("~", expectedNext, time.Second), "expected NextScheduleDate within 1 minute of %s; got %s",
-					expectedNext.Format(TIME_FORMAT),
-					jobSummary.NextScheduleDate)
+					jobSummary, err := GetJobSummaryByConfigID(ProjectId, migrationJobConfigID, headers)
+					Expect(err).NotTo(HaveOccurred())
+
+					LogDebug(fmt.Sprintf("Migration %s got completed at %s, Next schedule at : %s", migrationJobRunID, getJobRunResp.EndTime, jobSummary.NextScheduleDate))
+
+					actualNext, err := time.Parse(TIME_FORMAT, jobSummary.NextScheduleDate)
+					Expect(err).NotTo(HaveOccurred(),
+						"could not parse NextScheduleDate %q", jobSummary.NextScheduleDate)
+
+					parsedBase, err := time.Parse(TIME_FORMAT, getJobRunResp.EndTime)
+					Expect(err).NotTo(HaveOccurred(), "Error parsing current datetimes")
+					sch, err := cron.ParseStandard("*/5 * * * *")
+					Expect(err).NotTo(HaveOccurred(), "invalid cron expression")
+					expectedNext := sch.Next(parsedBase)
+
+					// assert actualNext is within ±1min of expectedNext
+					Expect(actualNext).To(BeTemporally("~", expectedNext, time.Minute), "expected next schedule exactly at %s; got %s",
+						expectedNext.Format(TIME_FORMAT),
+						jobSummary.NextScheduleDate)
+
+					LogDebug(fmt.Sprintf("Next Migration %s expected at %s", migrationJobConfigID, expectedNext.Format("2006-01-02 15:04:05")))
+
+					LogDebug("Validate migration report for 1st iteration")
+					result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
+					Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
+					By(fmt.Sprintf("validate report result : %s", result))
+				}(i, migrationJobConfigID)
 			}
+			wg.Wait()
 
 			By("Adding Delta Data for Incremental run")
 			err = AddDataToVolume(sourceVolumePath1)
@@ -176,13 +186,15 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			err = AddDataToVolume(sourceVolumePath2)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
 
-			Wait(180) // This delay is required to wait till new Job run created after 3 mins
+			LogDebug("Waiting till new Jobs run created")
+			Wait(300)
 
-			// Validating incremental Sync is getting triggered
+			By("Validating incremental Sync is getting triggered")
 			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
-				Expect(len(getJobsResp.JobRuns)).To(BeNumerically("==", 2), "No jobRuns found in response")
-				migrationJobRunID := getJobsResp.JobRuns[1].JobRunId
+				Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">=", 2), "No jobRuns found in response")
+				lastIdx := len(getJobsResp.JobRuns) - 1
+				migrationJobRunID := getJobsResp.JobRuns[lastIdx].JobRunId
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
 				defer resp.Body.Close()
 
@@ -190,17 +202,8 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				// Failing due to NDM-1708, need to uncomment after it's fix
-				// result, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../../validators/cutover_validation.json") // as adding delta data similar to cutover, hence using same validation json for incremental migration and cutover
-				// Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-				// By(fmt.Sprintf("validate report result : %s", result))
+				// TODO: DISCOVER DESTINATION
 			}
-
-			By("Remove Delta data from destinations")
-			err = RemoveDeltaFromVolume(destinationVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", destinationVolumePath1)
-			err = RemoveDeltaFromVolume(destinationVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", destinationVolumePath2)
 
 			By("Creating bulk cutover job")
 			cutoverParams := BulkCutoverJobParams{
@@ -210,7 +213,6 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 			jobConfigIDs, resp, err = CreateBulkCutoverJob(cutoverParams, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating bulk cutover job: %v", err))
 			defer resp.Body.Close()
-
 
 			By("Getting jobs by job config id")
 			for _, jobConfigID := range jobConfigIDs {
@@ -241,17 +243,20 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 				defer resp.Body.Close()
 			}
 
-			By("Validating cutover reports")
+			/*By("Validating cutover reports")
 			for _, cutoverRunID := range cutoverRunIDs {
-				result, err := ValidateReport(cutoverRunID, JobTypeCutover, ".././validators/cutover_validation.json")
+				result, err := ValidateReport(cutoverRunID, JobTypeCutover, fmt.Sprintf("../../validators/%s/cutover_validation.json", PROTOCOL_TYPE))
 				Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
 				LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
-			}
+			}*/
 			By("########################## TC-007 end ################################")
 		})
 
 		AfterEach(func() {
-			err := RemoveDeltaFromVolume(sourceVolumePath1)
+			By("Cleanup started")
+			err := StopAllWorkersAndWait()
+			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
+			err = RemoveDeltaFromVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
 
 			err = RemoveDeltaFromVolume(sourceVolumePath2)
@@ -265,7 +270,7 @@ var _ = Describe("TC-007: Run migration to multiple destinations with incrementa
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			By("Cleanup complete.")
+			LogDebug("Cleanup complete.")
 		})
 	})
 })

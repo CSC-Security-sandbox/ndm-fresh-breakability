@@ -14,31 +14,47 @@ global:
 admin-service:
   image:
     tag: {{ admin_service_tag | default(common_tag) | default("latest") }}
+  annotations:
+    vault.hashicorp.com/agent-json-patch: '[{"op": "replace", "path": "/imagePullPolicy", "value": "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"}]'
 
 config-service:
   image:
     tag: {{ config_service_tag | default(common_tag) | default("latest") }}
+  annotations:
+    vault.hashicorp.com/agent-json-patch: '[{"op": "replace", "path": "/imagePullPolicy", "value": "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"}]'
 
 db-writer:
   image:
     tag: {{ db_writer_service_tag | default(common_tag) | default("latest") }}
+  annotations:
+    vault.hashicorp.com/agent-json-patch: '[{"op": "replace", "path": "/imagePullPolicy", "value": "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"}]'
 
 jobs-service:
   image:
     tag: {{ jobs_service_tag | default(common_tag) | default("latest") }}
+  annotations:
+    vault.hashicorp.com/agent-json-patch: '[{"op": "replace", "path": "/imagePullPolicy", "value": "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"}]'
 
 reports-service:
   image:
     tag: {{ reports_service_tag | default(common_tag) | default("latest") }}
+  annotations:
+    vault.hashicorp.com/agent-json-patch: '[{"op": "replace", "path": "/imagePullPolicy", "value": "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"}]'
 
 datamigrator-ui:
   image:
     tag: {{ datamigrator_ui_tag | default(common_tag) | default("latest") }}
+  annotations:
+    vault.hashicorp.com/agent-json-patch: '[{"op": "replace", "path": "/imagePullPolicy", "value": "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"}]'
 
 db-migrations:
   image:
     tag: {{ db_migrations_tag | default(common_tag) | default("latest") }}
+  annotations:
+    vault.hashicorp.com/agent-json-patch: '[{"op": "replace", "path": "/imagePullPolicy", "value": "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"}]'
 
 support-service:
   image:
     tag: {{ support_service_tag | default(common_tag) | default("latest") }}
+  annotations:
+    vault.hashicorp.com/agent-json-patch: '[{"op": "replace", "path": "/imagePullPolicy", "value": "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"}]'

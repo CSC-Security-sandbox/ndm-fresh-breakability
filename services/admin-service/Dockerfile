@@ -1,4 +1,4 @@
-FROM public.ecr.aws/docker/library/alpine:3.22.0
+FROM public.ecr.aws/docker/library/alpine:3.21.4
 
 RUN apk update && \
     apk upgrade --no-cache --purge && \
@@ -21,7 +21,7 @@ COPY tsconfig.build.json .
 COPY nest-cli.json .
 COPY entrypoint.sh .
 COPY ./templates ./templates
-        
+
 RUN npm run build 
 
 EXPOSE 3000

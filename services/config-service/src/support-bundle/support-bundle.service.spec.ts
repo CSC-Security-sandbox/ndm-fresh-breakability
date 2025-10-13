@@ -1,6 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SupportBundleService } from './support-bundle.service';
-import { NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import {
+  NotFoundException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -105,9 +108,15 @@ describe('SupportBundleService', () => {
     }).compile();
 
     service = module.get<SupportBundleService>(SupportBundleService);
-    supportBundleRepo = module.get(getRepositoryToken(SupportBundleEntity)) as jest.Mocked<Repository<SupportBundleEntity>>;
-    workflowService = module.get<WorkflowService>(WorkflowService) as jest.Mocked<WorkflowService>;
-    configService = module.get<ConfigService>(ConfigService) as jest.Mocked<ConfigService>;
+    supportBundleRepo = module.get(
+      getRepositoryToken(SupportBundleEntity),
+    ) as jest.Mocked<Repository<SupportBundleEntity>>;
+    workflowService = module.get<WorkflowService>(
+      WorkflowService,
+    ) as jest.Mocked<WorkflowService>;
+    configService = module.get<ConfigService>(
+      ConfigService,
+    ) as jest.Mocked<ConfigService>;
   });
 
   it('should be defined', () => {
@@ -116,8 +125,12 @@ describe('SupportBundleService', () => {
 
   describe('constructor', () => {
     it('should initialize logger and bundle output path', () => {
-      expect(mockLoggerFactory.create).toHaveBeenCalledWith(SupportBundleService.name);
-      expect(configService.get).toHaveBeenCalledWith('app.bundle.bundleOutputPath');
+      expect(mockLoggerFactory.create).toHaveBeenCalledWith(
+        SupportBundleService.name,
+      );
+      expect(configService.get).toHaveBeenCalledWith(
+        'app.bundle.bundleOutputPath',
+      );
     });
   });
 
@@ -168,7 +181,9 @@ describe('SupportBundleService', () => {
       expect(mockLogger.log).toHaveBeenCalledWith(
         `Starting SupportBundleWorkflow with requestId: ${mockUuid} and userId: ${mockUserDetails.user.id}`,
       );
-      expect(mockLogger.log).toHaveBeenCalledWith('Started SupportBundleWorkflow successfully');
+      expect(mockLogger.log).toHaveBeenCalledWith(
+        'Started SupportBundleWorkflow successfully',
+      );
     });
 
     it('should create support bundle with empty projectWorkerMap and otherMetrics when not provided', async () => {
@@ -181,7 +196,10 @@ describe('SupportBundleService', () => {
       supportBundleRepo.save.mockResolvedValue(mockEntity as any);
       workflowService.startWorkflow.mockResolvedValue(undefined);
 
-      const result = await service.create(dtoWithoutOptionalFields as CreateSupportBundleDTO, mockUserDetails);
+      const result = await service.create(
+        dtoWithoutOptionalFields as CreateSupportBundleDTO,
+        mockUserDetails,
+      );
 
       expect(result).toEqual({ traceId: mockUuid });
       expect(supportBundleRepo.create).toHaveBeenCalledWith({
@@ -236,7 +254,6 @@ describe('SupportBundleService', () => {
                 userId: mockUserDetails.user.id,
                 otherMetrics: mockCreateDto.otherMetrics,
               }),
-              options: expect.any(Object),
             },
           ],
         }),
@@ -268,7 +285,9 @@ describe('SupportBundleService', () => {
     it('should throw error when support bundle not found', async () => {
       supportBundleRepo.update.mockResolvedValue({ affected: 0 } as any);
 
-      await expect(service.updateSupportBundleStatus(mockUpdateDto)).rejects.toThrow(
+      await expect(
+        service.updateSupportBundleStatus(mockUpdateDto),
+      ).rejects.toThrow(
         `Support bundle not found for traceId: ${mockUpdateDto.traceId}`,
       );
     });
@@ -296,7 +315,11 @@ describe('SupportBundleService', () => {
     const userId = 'user-123';
 
     it('should return bundle ready status for completed bundle', async () => {
-      const mockFilters = { startDate: '2023-01-01', endDate: '2023-01-31', otherMetrics: [] };
+      const mockFilters = {
+        startDate: '2023-01-01',
+        endDate: '2023-01-31',
+        otherMetrics: [],
+      };
       const mockCreatedAt = new Date('2023-01-01T10:00:00Z');
       const mockBundle = {
         status: SupportBundleStatus.COMPLETED,
@@ -311,7 +334,14 @@ describe('SupportBundleService', () => {
       expect(supportBundleRepo.findOne).toHaveBeenCalledWith({
         where: { userId },
         order: { createdAt: 'DESC' },
-        select: ['status', 'errorMessage', 'filters', 'createdAt'],
+        select: [
+          'status',
+          'errorMessage',
+          'filters',
+          'createdAt',
+          'workflowId',
+          'requestId',
+        ],
       });
       expect(result).toEqual({
         isProcessing: false,
@@ -322,7 +352,11 @@ describe('SupportBundleService', () => {
     });
 
     it('should return processing status for in-progress bundle', async () => {
-      const mockFilters = { startDate: '2023-01-01', endDate: '2023-01-31', otherMetrics: ['metric1'] };
+      const mockFilters = {
+        startDate: '2023-01-01',
+        endDate: '2023-01-31',
+        otherMetrics: ['metric1'],
+      };
       const mockCreatedAt = new Date('2023-01-01T10:00:00Z');
       const mockBundle = {
         status: SupportBundleStatus.IN_PROGRESS,
@@ -344,7 +378,11 @@ describe('SupportBundleService', () => {
 
     it('should throw InternalServerErrorException for failed bundle', async () => {
       const errorMessage = 'Bundle generation failed';
-      const mockFilters = { startDate: '2023-01-01', endDate: '2023-01-31', otherMetrics: [] };
+      const mockFilters = {
+        startDate: '2023-01-01',
+        endDate: '2023-01-31',
+        otherMetrics: [],
+      };
       const mockCreatedAt = new Date('2023-01-01T10:00:00Z');
       const mockBundle = {
         status: SupportBundleStatus.FAILED,
@@ -355,18 +393,29 @@ describe('SupportBundleService', () => {
       supportBundleRepo.findOne.mockResolvedValue(mockBundle as any);
 
       await expect(service.isBundleReady(userId)).rejects.toThrow(
-        new InternalServerErrorException(errorMessage)
+        new InternalServerErrorException(errorMessage),
       );
 
       expect(supportBundleRepo.findOne).toHaveBeenCalledWith({
         where: { userId },
         order: { createdAt: 'DESC' },
-        select: ['status', 'errorMessage', 'filters', 'createdAt'],
+        select: [
+          'status',
+          'errorMessage',
+          'filters',
+          'createdAt',
+          'workflowId',
+          'requestId',
+        ],
       });
     });
 
     it('should throw InternalServerErrorException with default message when no error message provided', async () => {
-      const mockFilters = { startDate: '2023-01-01', endDate: '2023-01-31', otherMetrics: [] };
+      const mockFilters = {
+        startDate: '2023-01-01',
+        endDate: '2023-01-31',
+        otherMetrics: [],
+      };
       const mockCreatedAt = new Date('2023-01-01T10:00:00Z');
       const mockBundle = {
         status: SupportBundleStatus.FAILED,
@@ -377,12 +426,16 @@ describe('SupportBundleService', () => {
       supportBundleRepo.findOne.mockResolvedValue(mockBundle as any);
 
       await expect(service.isBundleReady(userId)).rejects.toThrow(
-        new InternalServerErrorException('Support bundle generation failed')
+        new InternalServerErrorException('Support bundle generation failed'),
       );
     });
 
     it('should return default status for unknown status', async () => {
-      const mockFilters = { startDate: '2023-01-01', endDate: '2023-01-31', otherMetrics: [] };
+      const mockFilters = {
+        startDate: '2023-01-01',
+        endDate: '2023-01-31',
+        otherMetrics: [],
+      };
       const mockCreatedAt = new Date('2023-01-01T10:00:00Z');
       const mockBundle = {
         status: 'UNKNOWN_STATUS',
@@ -437,8 +490,12 @@ describe('SupportBundleService', () => {
     it('should throw NotFoundException when file does not exist', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
 
-      expect(() => service.downloadSupportBundle(fileName)).toThrow(NotFoundException);
-      expect(() => service.downloadSupportBundle(fileName)).toThrow('Support bundle file not found.');
+      expect(() => service.downloadSupportBundle(fileName)).toThrow(
+        NotFoundException,
+      );
+      expect(() => service.downloadSupportBundle(fileName)).toThrow(
+        'Support bundle file not found.',
+      );
       expect(path.join).toHaveBeenCalledWith(mockBundlePath, fileName);
       expect(fs.existsSync).toHaveBeenCalledWith(fullPath);
     });

@@ -99,4 +99,8 @@ export class InventoryEntity {
     @ApiProperty({ description: 'Target Metadata', nullable: true })
     @Column({ name: 'target_meta', type: 'jsonb', nullable: true })
     targetMeta: Record<string, any>;    
+
+    @ApiProperty({ description: 'Inode number', nullable: true })
+    @Column({ name: 'inode', type: 'bigint', nullable: true })
+    inode: number;  
 }

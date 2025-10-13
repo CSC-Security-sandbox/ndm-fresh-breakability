@@ -33,11 +33,11 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 			workerId1 = workerIds[0]
 			workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
-			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME)
-			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IP, NFS_DESTINATION_VOLUME_1)
+			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
+			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[1])
 
-			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME)
-			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IP, NFS_SOURCE_VOLUME_1)
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
+			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[1], SOURCE_VOLUMES[1])
 		})
 
 		It("TC-010: Run discovery, migration with 'Exclude Path Patterns' option and run cutover on same", func() {
@@ -53,11 +53,11 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         "Root",
-				Password:         "",
-				Protocol:         ProtocolNFS,
+				UserName:         PROTOCOL_USERNAME,
+				Password:         PROTOCOL_PASSWORD,
+				Protocol:         PROTOCOL_TYPE,
 				ProtocolVersion:  ProtocolVersion3,
-				Host:             SOURCE_HOST_IP,
+				Host:             SOURCE_HOST_IPs[0],
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
@@ -68,10 +68,10 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", NFS_SOURCE_VOLUME, sourceFileServerID, headers)
+			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceFileServerID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", NFS_SOURCE_VOLUME_1, sourceFileServerID, headers)
+			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceFileServerID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a new discovery job for the source by providing exclude files type and file patterns")
@@ -93,8 +93,8 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 
 			By("Getting jobs by jobConfigId for source and validating the total count and files count")
 			discovery_validators := []string{
-				"nfs_src_vol_discovery.json",
-				"nfs_src_vol2_discovery.json",
+				"src_vol_discovery.json",
+				"src_vol2_discovery.json",
 			}
 			for i, sourceJobConfigID := range sourceJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(sourceJobConfigID, headers)
@@ -108,7 +108,7 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 				err = WaitForJobState(sourceDiscoveryJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", sourceDiscoveryJobRunID)
 
-				result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/TC-010-JSON/%s", discovery_validators[i]))
+				result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/TC-010-JSON/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", sourceDiscoveryJobRunID)
 				By(fmt.Sprintf("validate report result for %s: %s", sourceDiscoveryJobRunID, result))
 			}
@@ -119,11 +119,11 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
-				UserName:         "Root",
-				Password:         "",
-				Protocol:         ProtocolNFS,
+				UserName:         PROTOCOL_USERNAME,
+				Password:         PROTOCOL_PASSWORD,
+				Protocol:         PROTOCOL_TYPE,
 				ProtocolVersion:  ProtocolVersion3,
-				Host:             DESTINATION_HOST_IP,
+				Host:             DESTINATION_HOST_IPs[0],
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
@@ -133,10 +133,10 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 			defer resp.Body.Close()
 
 			By("Getting the destination file server by configId")
-			destinationPathID1, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME, destinationFileServerID, headers)
+			destinationPathID1, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationFileServerID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			destinationPathID2, err = GetExportPathID("destination", NFS_DESTINATION_VOLUME_1, destinationFileServerID, headers)
+			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationFileServerID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a migration job by providing exclude files type and file patterns")
@@ -157,8 +157,8 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 			defer resp.Body.Close()
 
 			migration_validators := []string{
-				"nfs_src_to_dest_vol_migration.json",
-				"nfs_src2_to_dest2_vol_migration.json",
+				"src_to_dest_vol_migration.json",
+				"src2_to_dest2_vol_migration.json",
 			}
 			// Get migration job run IDs, wait for completion and validate CoC reports
 			for i, migrationJobConfigID := range migrationJobConfigIDs {
@@ -170,7 +170,7 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-010-JSON/%s", migration_validators[i]))
+				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-010-JSON/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 				By(fmt.Sprintf("validate report result : %s", result))
 			}
@@ -189,7 +189,6 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 			jobConfigIDs, resp, err = CreateBulkCutoverJob(cutoverParams, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating bulk cutover job: %v", err))
 			defer resp.Body.Close()
-
 
 			By("Getting jobs by job config id")
 			for _, jobConfigID := range jobConfigIDs {
@@ -223,11 +222,11 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 			// Failing due to NDM-1708, need to uncomment once it is fixed
 			// By("Validating cutover reports")
 			// cutover_validators := []string{
-			// 	"nfs_src_to_dest_vol_cutover.json",
-			// 	"nfs_src2_to_dest2_vol_cutover.json",
+			// 	"src_to_dest_vol_cutover.json",
+			// 	"src2_to_dest2_vol_cutover.json",
 			// }
 			// for i, cutoverRunID := range cutoverRunIDs {
-			// 	result, err := ValidateReport(cutoverRunID, JobTypeCutover, fmt.Sprintf("../../validators/TC-010-JSON/%s", cutover_validators[i]))
+			// 	result, err := ValidateReport(cutoverRunID, JobTypeCutover, fmt.Sprintf("../../validators/TC-010-JSON/%s/%s", PROTOCOL_TYPE, cutover_validators[i]))
 			// 	Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
 			// 	By(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
 			// }
@@ -235,7 +234,10 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 		})
 
 		AfterEach(func() {
-			err := RemoveDeltaFromVolume(sourceVolumePath1)
+			By("Cleanup started")
+			err := StopAllWorkersAndWait()
+			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
+			err = RemoveDeltaFromVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
 
 			err = RemoveDeltaFromVolume(sourceVolumePath2)
@@ -249,7 +251,7 @@ var _ = Describe("TC-010: Run discovery, migration with 'Exclude Path Patterns' 
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			By("Cleanup complete.")
+			LogDebug("Cleanup complete.")
 		})
 	})
 })

@@ -162,6 +162,10 @@ process.on('unhandledRejection', async (reason, promise) => {
         }
         
         logger.log(`projectId: ${projectId} Services initialized successfully`);
+        
+        logger.log('started creating the inventory partition by job run id');
+        await inventoryService.createPartitionInventoryTableByJobRunId(jobRunId);
+        logger.log('completed creating the inventory partition by job run id');
 
         // Start consumer
         logger.log(`projectId: ${projectId} Starting Redis consumer for job ${jobRunId}`);

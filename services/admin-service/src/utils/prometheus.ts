@@ -1,18 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
+import { PrometheusConfig } from 'src/config/prometheus.config';
 
 @Injectable()
 export class PrometheusService {
   private httpClient: AxiosInstance;
+  private prometheusConfig: PrometheusConfig;
 
   constructor(private readonly configService: ConfigService) {
+    this.prometheusConfig =
+      this.configService.get<PrometheusConfig>('prometheusConfig');
+
     this.httpClient = axios.create({
-      baseURL: this.configService.get<string>(
-        'prometheusBaseIp',
-        'http://localhost:52061/api/v1',
-      ),
-      timeout: this.configService.get<number>('PROMETHEUS_TIMEOUT', 30000),
+      baseURL: this.prometheusConfig.prometheusBaseIp,
+      timeout: this.prometheusConfig.timeout,
     });
   }
 

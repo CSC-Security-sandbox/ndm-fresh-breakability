@@ -20,8 +20,9 @@ import {
 import { InventoryStatusSummary, TaskStatusCount } from "./job-run.type";
 import * as fs from "fs";
 import * as crypto from "crypto";
-import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
+import { formatBytes, TaskStatus } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as path from "path";
+import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 
 @Injectable()
 export class JobRunService {
@@ -35,7 +36,9 @@ export class JobRunService {
     private taskRepo: Repository<TaskEntity>,
     @InjectRepository(ReportsEntity)
     private reportsRepo: Repository<ReportsEntity>,
-    private csvService: CsvService
+    private csvService: CsvService,
+    @InjectRepository(JobStatsSummaryMvEntity)
+    private jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>
   ) {}
 
   async jobRunReportByJobRunId(jobRunId: string, reportType: string) {
@@ -65,6 +68,11 @@ export class JobRunService {
       where: { jobRunId: id, reportType: ReportType.JOB_RUN_STATS },
       select: { reportData: true },
     });
+    const jobStatsSummary: JobStatsSummaryMvEntity =
+      await this.jobStatsSummaryMvRepo.findOne({
+        where: { jobRunId: id },
+      });
+
     if (saved) {
       const parsedReport = JSON.parse(saved.reportData);
       if (parsedReport.isReportReady !== getLatestReportStatus?.isReportReady) {
@@ -74,6 +82,9 @@ export class JobRunService {
           { jobRunId: id, reportType: ReportType.JOB_RUN_STATS },
           { reportData: JSON.stringify(parsedReport) }
         );
+      }
+      if (jobStatsSummary) {
+        parsedReport.lastRefreshed = jobStatsSummary.lastRefreshed;
       }
       return parsedReport;
     }
@@ -155,26 +166,22 @@ export class JobRunService {
       },
       worker: jobRun?.worker?.length ?? 0,
     };
-
-    const inventorySummary: InventoryStatusSummary[] = await this.inventoryRepo
-      .createQueryBuilder("i")
-      .select("i.is_directory", "isDirectory")
-      .addSelect("COUNT(i.is_directory)", "counts")
-      .addSelect("SUM(i.file_size)", "totalFileSize")
-      .where("i.job_run_id = :jobRunId", { jobRunId: id })
-      .groupBy("i.is_directory")
-      .getRawMany();
-
     const jobRunStatus = new JobRunStats();
-    for (let i = 0; i < inventorySummary.length; i++) {
-      if (inventorySummary[i].isDirectory)
-        jobRunStatus.directories = inventorySummary[i].counts?.toString();
-      else {
-        jobRunStatus.fileCount = inventorySummary[i].counts?.toString();
-        jobRunStatus.totalSize = formatBytes(
-          Number(inventorySummary[i].totalFileSize)
-        ).toString();
-      }
+    this.logger.log(
+      `Job Stats Summary for Job Run ID ${id}: ${JSON.stringify(jobStatsSummary)}`
+    );
+
+    if (jobStatsSummary) {
+      jobRunStatus.fileCount = jobStatsSummary.fileCount?.toString();
+      jobRunStatus.directories = jobStatsSummary.directoryCount?.toString();
+      jobRunStatus.totalSize = formatBytes(
+        Number(jobStatsSummary.totalSize)
+      ).toString();
+      // Assign lastRefreshed to top-level property for DTO compatibility
+    } else {
+      jobRunStatus.fileCount = "0";
+      jobRunStatus.directories = "0";
+      jobRunStatus.totalSize = "0";
     }
 
     if (jobRun?.jobConfig?.jobType === JobType.Discover)
@@ -184,21 +191,19 @@ export class JobRunService {
     if (jobRun?.jobConfig?.jobType === JobType.CutOver)
       response["cutOver"] = jobRunStatus;
 
-    const taskStatusCounts: TaskStatusCount[] = await this.taskRepo
-      .createQueryBuilder("t")
-      .select("t.status", "status")
-      .addSelect("COUNT(1)", "count")
-      .where("t.job_run_id = :jobRunId", { jobRunId: id })
-      .groupBy("t.status")
-      .getRawMany();
-
     response["task"] = new TaskDto();
-    for (let i = 0; i < taskStatusCounts.length; i++)
-      response["task"][taskStatusCounts[i].status?.toLowerCase()] = Number(
-        taskStatusCounts[i].count
+    if (jobStatsSummary) {
+      response["task"]["completed"] = Number(jobStatsSummary.completed);
+      response["task"]["pending"] = Number(jobStatsSummary.pending);
+      response["task"]["errored"] = Number(jobStatsSummary.errored);
+      response["task"]["running"] = Number(jobStatsSummary.running);
+      response["lastRefreshed"] = jobStatsSummary.lastRefreshed;
+    }
+    this.logger.log("Job Run Status: " + jobStatsSummary?.jobRunStatus);
+    if (jobStatsSummary?.jobRunStatus === JobRunStatus.Completed) {
+      this.logger.log(
+        `Job Run with ID ${id} is completed,and reportData is ready ${JSON.stringify(response)}`
       );
-
-    if (response.status === JobRunStatus.Completed) {
       const report = this.reportsRepo.create({
         jobRunId: id,
         reportData: JSON.stringify(response),
@@ -206,6 +211,7 @@ export class JobRunService {
       });
       await this.reportsRepo.save(report);
     }
+
     return response;
   }
 
@@ -264,6 +270,7 @@ export class JobRunService {
       console.log(
         `Error while generating COC report for jobRunId: ${jobRunId} - ERROR: ${error}`
       );
+      throw error;
     }
   }
 

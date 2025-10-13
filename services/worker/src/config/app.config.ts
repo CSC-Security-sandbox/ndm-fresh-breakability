@@ -26,10 +26,12 @@ export default registerAs(
     migrationTaskStreamLimit: parseInt(process.env.MIGRATION_TASK_LIMIT || '100'),
     migrationChunkSize: parseInt(process.env.CHUNK_SIZE || '1048576'),
     maxCommandConcurrency: parseInt(process.env.MAX_COMMAND_CONCURRENCY || '100'),
+    maxWriteConcurrency: parseInt(process.env.MAX_WRITE_CONCURRENCY || '100'),
     operationTimeout: parseInt(process.env.OPERATION_TIMEOUT || '5000'),
     groupSize: parseInt(process.env.REDIS_STREAM_GROUP_SIZE || '1000'),
     commandsInTask: parseInt(process.env.COMMANDS_IN_TASK || '100'),
     maxCmdStreamLen: parseInt(process.env.MAX_CMDS_IN_STREAM || '5000'),
+    metaUpdatedToleranceMs: parseInt(process.env.META_UPDATED_TOLERANCE_MS || '30000'),
 
     // speed test
     speedTestFileName: process.env.SPEED_TEST_FILE_NAME || '1GB_zero_file.bin',
@@ -39,6 +41,7 @@ export default registerAs(
     // redis and temporal 
     redisMemoryUsageThreshold: parseInt(process.env.REDIS_MEM_USAGE_THRESHOLD || '90'),
     maxActivityConcurrency: parseInt(process.env.JOB_TASK_ACTIVITY_CONCURRENCY || '1'),
+    shutDownForceTime: process.env.WORKER_SHUTDOWN_FORCE_TIME || '10s',
 
     // project id
     projectId: process.env.PROJECT_ID || 'no-project-id-found',

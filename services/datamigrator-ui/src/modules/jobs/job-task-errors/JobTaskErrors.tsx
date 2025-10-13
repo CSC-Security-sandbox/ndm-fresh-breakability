@@ -118,7 +118,10 @@ const JobTaskErrors = () => {
         setCurrentErrorType={setCurrentErrorType}
       />
       <JobTaskDetails jobConfigDetails={jobConfigDetails} />
-      <ErrorsListTable currentErrorType={currentErrorType} />
+      <ErrorsListTable
+        key={currentErrorType}
+        currentErrorType={currentErrorType}
+      />
     </Box>
   );
 };

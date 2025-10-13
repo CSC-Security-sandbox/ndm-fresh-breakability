@@ -8,6 +8,11 @@ server:
     annotations: {}
     labels: 
       role: openbao-data
+  image:
+    registry: "quay.io"
+    repository: "openbao/openbao"
+    tag: "2.3.2"
+    pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
     
   affinity: {}
 
@@ -50,3 +55,16 @@ server:
     failureThreshold: 5
 ui:
   enabled: true
+
+injector:
+  image:
+    registry: "docker.io"
+    repository: "hashicorp/vault-k8s"
+    tag: "1.4.2"
+    pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
+
+  agentImage:
+    registry: "quay.io"
+    repository: "openbao/openbao"
+    tag: "2.3.2"
+    pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"

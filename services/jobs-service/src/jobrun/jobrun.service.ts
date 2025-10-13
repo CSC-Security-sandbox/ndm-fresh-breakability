@@ -45,11 +45,13 @@ import {
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { MigrationConflictService } from "src/migration-conflict/migration-conflict.service";
+import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 
 @Injectable()
 export class JobRunService {
   private readonly logger: LoggerService;
   private readonly mountBasePath: string;
+  private readonly emailEnabled: boolean;
 
   constructor(
     @InjectRepository(JobRunEntity)
@@ -72,12 +74,15 @@ export class JobRunService {
     private errorRemedyService: ErrorRemedyService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly workerService: WorkersService,
-    private readonly migrationConflictService: MigrationConflictService
+    private readonly migrationConflictService: MigrationConflictService,
+    @InjectRepository(JobStatsSummaryMvEntity)
+    private jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>
   ) {
     this.logger = loggerFactory.create(JobRunService.name);
     this.mountBasePath = this.configService.get<string>(
       "app.paths.mountBasePath"
     );
+    this.emailEnabled = this.configService.get<boolean>('app.email.enabled', true);
   }
 
   async cutOverApproval(jobRunId: string, status: CutOverStatus) {
@@ -430,58 +435,37 @@ export class JobRunService {
             ? jobRun.endtime.getTime() - jobRun.starttime.getTime()
             : Date.now() - jobRun.starttime.getTime(),
         };
-        this.logger.log(`Job Run ${jobRun.jobrunid} status ${jobRun.status}`);
-        if (String(jobRun.status).trim() == JobRunStatus.Completed) {
-          const inventoryStats: JobRunStats = jobRun.jobstats;
-          this.logger.log(
-            `Job Run ${jobRun.jobrunid} inventory stats ${JSON.stringify(inventoryStats)}`
-          );
-          const payload = {
-            scannedFilesCount: BigInt(
-              inventoryStats?.fileCount || "0"
-            )?.toString(),
-            scannedDirectoriesCount: BigInt(
-              inventoryStats?.directories || "0"
-            )?.toString(),
-            totalScannedSize:
-              jobRun.jobtype === JobType.DISCOVER
-                ? formatBytes(Number(inventoryStats?.totalSize || 0))
-                : "0 B",
-            totalMigratedSize:
-              jobRun.jobtype === JobType.MIGRATE || jobRun.jobtype === JobType.CUT_OVER
-                ? formatBytes(Number(inventoryStats?.totalSize || 0))
-                : "0 B",
-            errors: await this.getErrorCounts(jobRun.jobrunid),
-          };
-          const response: JobRunsDTO = {
-            ...partialJobRunStats,
-            ...payload,
-          };
-          return response;
-        } else {
-          const inventoryCounts: JobRunStats = await this.calculateJobRunStats(
+       
+          const jobStats: JobRunStats = await this.calculateJobRunStats(
             jobRun.jobrunid
           );
+          this.logger.log(`Job Run ${jobRun.jobrunid} status ${jobRun.status}`);
+          this.logger.log(
+            `Job Run ${jobRun.jobrunid} inventory stats ${JSON.stringify(
+              jobStats
+            )}`
+          );
           const response: JobRunsDTO = {
             ...partialJobRunStats,
             scannedFilesCount: BigInt(
-              inventoryCounts?.fileCount || "0"
+              jobStats?.fileCount || "0"
             )?.toString(),
             scannedDirectoriesCount: BigInt(
-              inventoryCounts?.directories || "0"
+              jobStats?.directories || "0"
             )?.toString(),
             totalScannedSize:
               jobRun.jobtype === JobType.DISCOVER
-                ? formatBytes(Number(inventoryCounts?.totalSize || "0"))
+                ? formatBytes(Number(jobStats?.totalSize || "0"))
                 : "0 B",
             totalMigratedSize:
-              jobRun.jobtype === JobType.MIGRATE
-                ? formatBytes(Number(inventoryCounts?.totalSize || 0))
+              (jobRun.jobtype === JobType.MIGRATE || jobRun.jobtype === JobType.CUT_OVER)
+                ? formatBytes(Number(jobStats?.totalSize || 0))
                 : "0 B",
-            errors: await this.getErrorCounts(jobRun.jobrunid),
+            errors: jobStats?.errors || [],
+            lastRefreshed: jobStats?.lastRefreshed || null,
           };
           return response;
-        }
+        
       })
     );
     return allJobsRuns;
@@ -536,37 +520,62 @@ export class JobRunService {
         const errorCodes =
           await this.errorRemedyService.getDistinctErrorCodes(jobRunId);
         if (!!errorCodes.length) {
-          await this.sendErrorRemedyEmail({
-            jobRunId,
-            sourcePath: jobConfig.sourcePath?.volumePath,
-            targetPath: jobConfig.targetPath?.volumePath,
-            sourceHost: jobConfig.sourcePath?.fileServer?.host,
-            targetHost: jobConfig.targetPath?.fileServer?.host,
-            jobType: jobConfig.jobType,
-            errorCodes,
-            projectId
-          });
+          // Send error remedy email with error handling
+          if (this.emailEnabled) {
+            try {
+              await this.sendErrorRemedyEmail({
+                jobRunId,
+                sourcePath: jobConfig.sourcePath?.volumePath,
+                targetPath: jobConfig.targetPath?.volumePath,
+                sourceHost: jobConfig.sourcePath?.fileServer?.host,
+                targetHost: jobConfig.targetPath?.fileServer?.host,
+                jobType: jobConfig.jobType,
+                errorCodes,
+                projectId
+              });
+              this.logger.log(`Error remedy email sent successfully for job run ${jobRunId}`);
+            } catch (emailError) {
+              this.logger.error(
+                `Failed to send error remedy email for job run ${jobRunId}: ${emailError.message}`,
+                emailError
+              );
+            }
+          } else {
+            this.logger.log(`Email disabled - skipping error remedy email for job run ${jobRunId}`);
+          }
         } else {
           this.logger.log(
             `Job Run ${jobRunId} completed with stats ${JSON.stringify(jobRunStats)}`
           );
 
-          await this.sendMailService.sendMail({
-            successEmailType: SuccessEmailType.JOB_UPDATE,
-            projectId,
-            jobStatusUpdate: {
-              jobType: jobConfig.jobType,
-              jobAction: "completed",
-              sourcePath: {
-                volumePath: jobConfig.sourcePath?.volumePath,
-                fileServer: { host: jobConfig.sourcePath?.fileServer?.host },
-              },
-              targetPath: {
-                volumePath: jobConfig.targetPath?.volumePath,
-                fileServer: { host: jobConfig.targetPath?.fileServer?.host },
-              },
-            },
-          });
+          if (this.emailEnabled) {
+            try {
+              await this.sendMailService.sendMail({
+                successEmailType: SuccessEmailType.JOB_UPDATE,
+                projectId,
+                jobStatusUpdate: {
+                  jobType: jobConfig.jobType,
+                  jobAction: "completed",
+                  sourcePath: {
+                    volumePath: jobConfig.sourcePath?.volumePath,
+                    fileServer: { host: jobConfig.sourcePath?.fileServer?.host },
+                  },
+                  targetPath: {
+                    volumePath: jobConfig.targetPath?.volumePath,
+                    fileServer: { host: jobConfig.targetPath?.fileServer?.host },
+                  },
+                },
+              });
+              this.logger.log(`Job completion email sent successfully for job run ${jobRunId}`);
+            } catch (emailError) {
+              this.logger.error(
+                `Failed to send job completion email for job run ${jobRunId}: ${emailError.message}`,
+                emailError
+              );
+            }
+          } else {
+            this.logger.log(`Email disabled - skipping job completion email for job run ${jobRunId}`);
+          }
         }
       }
       this.logger.log("job Run Stats", JSON.stringify(jobRunStats));
@@ -591,22 +600,34 @@ export class JobRunService {
         (jobConfig.jobType === JobType.MIGRATE ||
           jobConfig.jobType === JobType.CUT_OVER)
       ) {
-        await this.sendMailService.sendMail({
-          successEmailType: SuccessEmailType.JOB_UPDATE,
-          projectId,
-          jobStatusUpdate: {
-            jobType: jobConfig.jobType,
-            jobAction: "started",
-            sourcePath: {
-              volumePath: jobConfig.sourcePath?.volumePath,
-              fileServer: { host: jobConfig.sourcePath?.fileServer?.host },
-            },
-            targetPath: {
-              volumePath: jobConfig.targetPath?.volumePath,
-              fileServer: { host: jobConfig.targetPath?.fileServer?.host },
-            },
-          },
-        });
+        if (this.emailEnabled) {
+          try {
+            await this.sendMailService.sendMail({
+              successEmailType: SuccessEmailType.JOB_UPDATE,
+              projectId,
+              jobStatusUpdate: {
+                jobType: jobConfig.jobType,
+                jobAction: "started",
+                sourcePath: {
+                  volumePath: jobConfig.sourcePath?.volumePath,
+                  fileServer: { host: jobConfig.sourcePath?.fileServer?.host },
+                },
+                targetPath: {
+                  volumePath: jobConfig.targetPath?.volumePath,
+                  fileServer: { host: jobConfig.targetPath?.fileServer?.host },
+                },
+              },
+            });
+            this.logger.log(`Job started email sent successfully for job run ${jobRunId}`);
+          } catch (emailError) {
+            this.logger.error(
+              `Failed to send job started email for job run ${jobRunId}: ${emailError.message}`,
+              emailError
+            );
+          }
+        } else {
+          this.logger.log(`Email disabled - skipping job started email for job run ${jobRunId}`);
+        }
       }
       this.logger.log(`Job Run ${jobRunId} status updated to ${status}`);
       return this.jobRunRepo.update({ id: jobRunId }, { status: status });
@@ -638,7 +659,7 @@ export class JobRunService {
       FROM datamigrator.operation_errors oe
       LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
       WHERE o.job_run_id = $1 AND oe.error_type = $2
-      GROUP BY oe.file_path
+      GROUP BY oe.file_path, oe.origin
       ORDER BY MIN($3) ${order.toUpperCase() === "DESC" ? "DESC" : "ASC"}
       LIMIT $4 OFFSET $5
       `,
@@ -796,24 +817,18 @@ export class JobRunService {
     if (!jobRun)
       throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
 
-    const inventorySummary = await this.inventoryRepo
-      .createQueryBuilder("inventory")
-      .select([
-        "COUNT(CASE WHEN inventory.isDirectory = false THEN 1 END) AS fileCount",
-        "COUNT(CASE WHEN inventory.isDirectory = true THEN 1 END) AS directoryCount",
-        "COALESCE(SUM(CASE WHEN inventory.isDirectory = false THEN inventory.fileSize ELSE 0 END), 0) AS totalFileSize",
-      ])
-      .where("inventory.jobRunId = :jobRunId", { jobRunId: jobRunId })
-      .getRawOne();
+    const jobStatsSummary: JobStatsSummaryMvEntity = await this.jobStatsSummaryMvRepo.findOne({
+      where: { jobRunId: jobRunId }});
 
     this.logger.debug(
-      `[calculateJobRunStats] Calculating job stats for ${jobRunId}  and query result ${JSON.stringify(inventorySummary)}`
+      `[calculateJobRunStats] Calculating job stats for ${jobRunId}  and query result ${JSON.stringify(jobStatsSummary)}`
     );
 
     const jobRunStatus = {
-      fileCount: inventorySummary.filecount || "0",
-      directories: inventorySummary.directorycount || "0",
-      totalSize: inventorySummary.totalfilesize || "0",
+      fileCount: jobStatsSummary?.fileCount || "0",
+      directories: jobStatsSummary?.directoryCount || "0",
+      totalSize: jobStatsSummary?.totalSize || "0",
+    lastRefreshed: jobStatsSummary?.lastRefreshed || null,
     };
 
     const response = {
@@ -837,28 +852,38 @@ export class JobRunService {
       this.logger.log(`No error codes found for job run ${jobRunId}`);
       return;
     }
-    const errorRemedies = await this.errorRemedyService.findByErrorCodes(
-      errorCodes.map((error) => error.errorCode)
-    );
+    
+    try {
+      const errorRemedies = await this.errorRemedyService.findByErrorCodes(
+        errorCodes.map((error) => error.errorCode)
+      );
 
-    await this.sendMailService.sendMail({
-      successEmailType: SuccessEmailType.ERROR_REMEDY,
-      projectId,
-      errorRemedy: {
-        jobRunId,
-        jobType,
-        sourceHost,
-        sourcePath,
-        targetHost,
-        targetPath,
-        errorRemedies: errorCodes.map((error) => ({
-          code: error.errorCode,
-          description: error.description,
-          resolutionSteps: error.resolutionSteps,
-          referenceCommands: error.referenceCommands,
-        })),
-      },
-    });
+      await this.sendMailService.sendMail({
+        successEmailType: SuccessEmailType.ERROR_REMEDY,
+        projectId,
+        errorRemedy: {
+          jobRunId,
+          jobType,
+          sourceHost,
+          sourcePath,
+          targetHost,
+          targetPath,
+          errorRemedies: errorCodes.map((error) => ({
+            code: error.errorCode,
+            description: error.description,
+            resolutionSteps: error.resolutionSteps,
+            referenceCommands: error.referenceCommands,
+          })),
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to send error remedy email for job run ${jobRunId}: ${error.message}`,
+        error
+      );
+      // Re-throw to be handled by the caller
+      throw error;
+    }
   }
 
   async checkWorkerHealth() {

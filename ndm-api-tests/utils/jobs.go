@@ -2,9 +2,11 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 // =============================================================================
@@ -185,6 +187,14 @@ func CreateDiscoveryJob(params DiscoveryJobParams, headers map[string]string) ([
 // Returns a slice of jobConfigIDs (even if only one).
 func CreateMigrationJob(params MigrationJobParams, headers map[string]string) ([]string, *http.Response, error) {
 	createMigrationURL := JOB_SERVICE_URL + CREATE_MIGRATION_ENDPOINT
+
+	// Skip .snapshot file for all migrations
+	excludeFilePatterns, ok := params.Options["excludeFilePatterns"].(string)
+	if !ok {
+		return nil, nil, errors.New("excludeFilePatterns must be a string")
+	}
+	excludeFilePatterns += ",*/.snapshot"
+	params.Options["excludeFilePatterns"] = excludeFilePatterns
 
 	// Build migrateConfigs as a slice of maps for all combinations
 	var migrateConfigs []map[string]interface{}
@@ -384,7 +394,6 @@ func TriggerAdHocJobRun(jobConfigId string) (string, *http.Response, error) {
 	return jobRunResp.Data.ID, resp, nil
 }
 
-
 // =============================================================================
 // JOB MANAGEMENT FUNCTIONS
 // =============================================================================
@@ -439,6 +448,7 @@ func GetJobRunDetails(jobConfigID string, headers map[string]string, needRetryAt
 		if len(apiResp.Data.Items) > 0 {
 			getJobsResp := apiResp.Data.Items[0]
 
+			LogDebug(fmt.Sprintf("Getting job run details for ID %s, jobType %s, attempt %d", jobConfigID, getJobsResp.JobType, attempt))
 			if len(needRetryAttempt) > 0 {
 				return getJobsResp, resp, nil
 			}
@@ -464,13 +474,11 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 
 	for i := 0; i < retryCount; i++ {
 		status, err := checkJobRunStatus(jobRunID)
-
-		LogDebug(fmt.Sprintf("Checking job run status for ID %s, attempt %d", jobRunID, i+1))
 		if err != nil {
 			return err
 		}
 
-		LogDebug(fmt.Sprintf("Current job run status: %s", status))
+		LogDebug(fmt.Sprintf("Current job run status for ID %s = %s, attempt %d", jobRunID, status, i+1))
 
 		if status == ERRORED_JOBRUN {
 			return fmt.Errorf("job %s entered ERRORED state", jobRunID)
@@ -550,11 +558,15 @@ func HandleJobRunStateChange(jobRunID, stateType string, jobRunIDs []string) err
 		if err != nil {
 			return err
 		}
+		if status == COMPLETED_JOBRUN {
+			LogDebug("Job is Completed")
+			return nil
+		}
 		if stateType == RESUME_JOBRUN && status == PAUSE_JOBRUN {
 			LogDebug("Job is paused. Resuming operation.")
 			return ChangeJobRunState(stateType, jobRunIDs)
 		}
-		LogDebug("No paused job run found or not RESUME. Sending state change.")
+		LogDebug("No paused job run found or not RESUME. Sending state change")
 		return ChangeJobRunState(stateType, jobRunIDs)
 
 	case PAUSE_JOBRUN:
@@ -563,14 +575,18 @@ func HandleJobRunStateChange(jobRunID, stateType string, jobRunIDs []string) err
 			if err != nil {
 				return err
 			}
+			if status == COMPLETED_JOBRUN {
+				LogDebug("Job is Completed")
+				return nil
+			}
 			if status == RUNNING_JOBRUN {
 				LogDebug("Job is running. Pausing JobRun.")
 				return ChangeJobRunState(stateType, jobRunIDs)
 			}
-			LogError(fmt.Sprintf("JobRun is not in running state. Current state: %s", status))
+			LogDebug(fmt.Sprintf("JobRun is not in running state. Current state: %s", status))
 			Wait(DefaultPollInterval)
 		}
-		return fmt.Errorf("job run did not reach RUNNING state after %d retries", MaxPollRetries)
+		return fmt.Errorf("Job run did not reach RUNNING state after %d retries", MaxPollRetries)
 	default:
 		return fmt.Errorf("unsupported job run state: %s", stateType)
 	}
@@ -605,6 +621,30 @@ func checkJobRunStatus(jobRunID string) (string, error) {
 	return status, nil
 }
 
+// GetJobRunInfo returns the details of the job-run API
+func GetJobRunInfo(jobRunID string) (GetJobRunResponseItems, error) {
+	url := fmt.Sprintf("%s%s/%s", JOB_SERVICE_URL, JOB_RUN_ENDPOINT, jobRunID)
+	headers := GetHeaders(AuthToken, ContentTypeJSON)
+	resp, err := SendAPIRequest(http.MethodGet, url, nil, headers)
+	if err != nil {
+		return GetJobRunResponseItems{}, fmt.Errorf("error calling API: %v", err)
+	}
+	defer resp.Body.Close()
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return GetJobRunResponseItems{}, fmt.Errorf("error reading response body: %v", err)
+	}
+
+	var response GetJobRunResponse
+	// Use the flexible wrapper since all responses are now data.items
+	err = json.Unmarshal(bodyBytes, &response)
+	if err != nil {
+		return GetJobRunResponseItems{}, fmt.Errorf("error parsing JSON: %v", err)
+	}
+
+	return response.Data.Items, nil
+}
+
 // ChangeJobRunState sends the actual state change request to the API.
 func ChangeJobRunState(action string, jobRunIDs []string) error {
 
@@ -614,7 +654,6 @@ func ChangeJobRunState(action string, jobRunIDs []string) error {
 		"jobRuns": jobRunIDs,
 	}
 
-	LogDebug(fmt.Sprintf("change job run status payload: %v", payload))
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("error marshaling JSON: %v", err)
@@ -625,10 +664,10 @@ func ChangeJobRunState(action string, jobRunIDs []string) error {
 		return fmt.Errorf("error calling API: %v", err)
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	_, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("error reading response body: %v", err)
 	}
-	LogDebug(fmt.Sprintf("ChangeJobRunStateAPI response body: %s", body))
+	LogDebug(fmt.Sprintf("State of Job Run IDs [%s] is changed to %s", strings.Join(jobRunIDs, ","), action))
 	return nil
 }

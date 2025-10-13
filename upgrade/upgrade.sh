@@ -13,15 +13,17 @@ log_message "Starting upgrade script..."
 log_message "Log file: $LOG_FILE"
 
 # Get input files from command line arguments
-if [ $# -ne 2 ]; then
+if [ $# -ne 3 ]; then
     log_message "Error: Incorrect number of arguments."
-    log_message "Usage: $0 <docker-tar-file> <helm-tgz-file>"
-    log_message "Example: $0 ndm-docker.tar ndm-helm.tgz"
+    log_message "Usage: $0 <check-sum-file> <docker-tar-file> <helm-tgz-file>"
+    log_message "Example: $0 checksums.sha256 2025.08.17-preview.tar 2025.08.17-preview.tgz"
     exit 1
 fi
 
-DOCKER_TAR_FILE="$1"
-HELM_TGZ_FILE="$2"
+# Update argument parsing
+CHECKSUM_FILE="$1"
+DOCKER_TAR_FILE="$2"
+HELM_TGZ_FILE="$3"
 
 # Validate input files exist
 if [ ! -f "$DOCKER_TAR_FILE" ]; then
@@ -47,6 +49,69 @@ fi
 
 log_message "Using Docker tar file: $DOCKER_TAR_FILE"
 log_message "Using Helm tgz file: $HELM_TGZ_FILE"
+
+# Function to validate checksums
+validate_checksums() {
+    log_message "Validating checksums..."
+    
+    # Check if checksum file exists
+    if [ ! -f "$CHECKSUM_FILE" ]; then
+        log_message "Error: Checksum file '$CHECKSUM_FILE' not found."
+        exit 1
+    fi
+    
+    # Create temporary checksum file with current file paths
+    temp_checksum_file=$(mktemp)
+    if [ -z "$temp_checksum_file" ] || [ ! -f "$temp_checksum_file" ]; then
+        log_message "Error: Failed to create temporary checksum file."
+        exit 1
+    fi
+    
+    # Extract expected checksums and map to current file names
+    while read -r line; do
+        # Skip empty lines and comments
+        [[ -z "$line" || "$line" =~ ^# ]] && continue
+        
+        # Parse checksum and filename (handle multiple spaces)
+        expected_hash=$(echo "$line" | awk '{print $1}')
+        original_file=$(echo "$line" | awk '{print $2}')
+        
+        # Skip if parsing failed
+        [[ -z "$expected_hash" || -z "$original_file" ]] && continue
+        
+        # Determine which file this checksum is for based on extension
+        if [[ "$original_file" == *.tar ]]; then
+            echo "$expected_hash  $DOCKER_TAR_FILE" >> "$temp_checksum_file"
+        elif [[ "$original_file" == *.tgz ]]; then
+            echo "$expected_hash  $HELM_TGZ_FILE" >> "$temp_checksum_file"
+        elif [[ "$original_file" == "upgrade.sh" ]]; then
+            echo "$expected_hash  $0" >> "$temp_checksum_file"
+        fi
+    done < "$CHECKSUM_FILE"
+    
+    # Validate checksums
+    if ! sha256sum -c "$temp_checksum_file"; then
+        log_message "Error: Checksum validation failed!"
+        rm -f "$temp_checksum_file"
+        exit 1
+    fi
+    
+    log_message "All checksums validated successfully."
+    rm -f "$temp_checksum_file"
+}
+
+
+
+# Validate checksum file exists
+if [ ! -f "$CHECKSUM_FILE" ]; then
+    log_message "Error: Checksum file '$CHECKSUM_FILE' not found."
+    exit 1
+fi
+
+log_message "Using checksum file: $CHECKSUM_FILE"
+
+# Validate checksums before proceeding
+validate_checksums
 
 # Function to get image versions of datamigrator services
 get_service_image_versions() {

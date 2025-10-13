@@ -21,6 +21,11 @@ export default registerAs(
     dropSchema: false,
     ssl: false,
     logging: false,
+    extra:{
+      max: parseInt(process.env.DB_MAX_CONNECTIONS ?? '5', 10),
+      connectTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT ?? '50000', 10),
+      idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT ?? '30000', 10),
+    },
      entities: [
       InventoryEntity,
       TaskEntity,

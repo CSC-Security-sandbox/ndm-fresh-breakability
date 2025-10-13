@@ -1,15 +1,32 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8" />
   <style>
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 14px; /* Slightly bigger for PDF readability */
+      margin: 0;
+      padding: 10mm; /* match PDF margin if possible */
+    }
+    h1 {
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+    h2 {
+      font-size: 16px;
+      margin: 12px 0 6px 0;
+    }
     table {
       border-collapse: collapse;
       width: 100%;
+      margin-bottom: 20px;
     }
     th, td {
       border: 1px solid #ddd;
       padding: 8px;
       text-align: left;
+      font-size: 14px;
     }
     th {
       background-color: #f2f2f2;
@@ -24,7 +41,6 @@
 </head>
 <body>
   <h1>Data Summary</h1>
-
   {{#each this}}
     <h2>{{@key}}</h2>
     <table>
@@ -32,7 +48,6 @@
         <th>Sub Category</th>
         <th></th>
       </tr>
-
       {{#each this}}
         {{#if sub_category}}
           <tr>
@@ -43,6 +58,5 @@
       {{/each}}
     </table>
   {{/each}}
-
 </body>
 </html>

@@ -8,10 +8,18 @@ const UserWarning = ({
 }: UserWarningPropsType) => {
   return (
     <Card className="mt-3">
-      <CardContent className="flex gap-4 flex-col">
-        <Checkbox form={form} name={controlName} key="user-conformation">
+      <CardContent className="flex items-center gap-3">
+        <div className="flex-shrink-0">
+          <Checkbox
+            form={form}
+            name={controlName}
+            key="user-conformation"
+            className="!w-5 !h-5"
+          />
+        </div>
+        <div className="flex-1">
           {warningMessage}
-        </Checkbox>
+        </div>
       </CardContent>
     </Card>
   );

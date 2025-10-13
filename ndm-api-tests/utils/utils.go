@@ -48,14 +48,13 @@ type KeycloakCredentials struct {
 
 // Generic API response wrapper that handles both single objects and arrays in items
 type ApiResponse[T any] struct {
-	Data    struct {
+	Data struct {
 		Items FlexibleItems[T] `json:"items"`
 	} `json:"data"`
 }
 
 // FlexibleItems can unmarshal either a single object or an array of objects
 type FlexibleItems[T any] []T
-
 
 // getBearerToken retrieves a bearer token using provided credentials or environment variables.
 func GetBearerToken(userN, pass string) (string, string, error) {
@@ -295,31 +294,44 @@ func ResetUserPassword(userID, accessToken, newPassword string) error {
 	url := fmt.Sprintf("https://%s/%s/%s/reset-password", KEYCLOAK_IP, KEYCLOAK_BASE_URL, userID)
 
 	var err error
-	PASSWORD, err = GenerateNewPassword(10)
-	if err != nil {
-		return fmt.Errorf("failed to generate new password: %w", err)
+	isResetPasswdDone := false
+
+	for attempt := 1; attempt <= 10; attempt++ {
+		PASSWORD, err = GenerateNewPassword(10)
+		if err != nil {
+			return fmt.Errorf("failed to generate new password: %w", err)
+		}
+
+		payload := map[string]interface{}{
+			"type":      "password",
+			"value":     PASSWORD,
+			"temporary": false,
+		}
+		bodyBytes, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal payload: %w", err)
+		}
+
+		LogDebug(fmt.Sprintf("Resetting Password, attempt=%d", attempt))
+		headers := GetHeaders(accessToken, ContentTypeJSON)
+		resp, err := SendAPIRequest("PUT", url, bodyBytes, headers)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
+			isResetPasswdDone = true
+			break
+		}
+
+		Wait(DefaultPollInterval)
 	}
 
-	payload := map[string]interface{}{
-		"type":      "password",
-		"value":     PASSWORD,
-		"temporary": false,
-	}
-	bodyBytes, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal payload: %w", err)
+	if !isResetPasswdDone {
+		return errors.New("failed to reset-password even after 10 attempts")
 	}
 
-	headers := GetHeaders(accessToken, ContentTypeJSON)
-	resp, err := SendAPIRequest("PUT", url, bodyBytes, headers)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("unexpected response code: %d", resp.StatusCode)
-	}
 	return nil
 }
 
@@ -522,9 +534,8 @@ func GetHeaders(authToken, contentType string) map[string]string {
 func getOpenbaoHeaders(token string) map[string]string {
 
 	return map[string]string{
-		"Content-Type":      ContentTypeForm,
-		"X-Vault-Token":     token,
-		"X-Vault-Namespace": "datamigrator",
+		"Content-Type":  ContentTypeForm,
+		"X-Vault-Token": token,
 	}
 }
 
@@ -554,8 +565,6 @@ func SendAPIRequest(method, url string, body []byte, headers map[string]string) 
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Printf("DEBUG: Request method is %s\n", req.Method)
 
 	for key, value := range headers {
 		req.Header.Set(key, value)
@@ -973,7 +982,7 @@ func DeleteUserRolesByIDs(roleIDs []string) error {
 		url := fmt.Sprintf("%s/api/v1/user-roles/%s", ADMIN_SERVICE_URL, roleID)
 		resp, err := SendAPIRequest("DELETE", url, nil, headers)
 		if err != nil {
-			errors = append(errors, fmt.Sprintf("failed to delete user role %s:", err))
+			errors = append(errors, fmt.Sprintf("failed to delete user role %s: %v", roleID, err))
 			continue
 		}
 		resp.Body.Close()
@@ -1230,6 +1239,25 @@ func GetFutureUTCTimestamp(timeInterval int) string {
 		Format(TIME_FORMAT)
 }
 
+func GetVolumesFromArgs(volumes string) []string {
+	split := strings.Split(volumes, ",")
+	if len(split) == 0 {
+		return []string{}
+	}
+
+	res := []string{}
+
+	for _, s := range split {
+		if PROTOCOL_TYPE == ProtocolNFS {
+			res = append(res, fmt.Sprintf("/%s", strings.TrimSpace(s)))
+			continue
+		}
+		res = append(res, strings.TrimSpace(s))
+	}
+
+	return res
+}
+
 func CreateNewUser(username string, firstname string, lastname string, headers map[string]string) (map[string]interface{}, error) {
 	// Prepare user creation payload
 	createUserPayload := map[string]interface{}{
@@ -1327,4 +1355,82 @@ func (f *FlexibleItems[T]) UnmarshalJSON(data []byte) error {
 
 	// If both fail, return the array unmarshaling error
 	return json.Unmarshal(data, &items)
+}
+
+func GetCPVersion() (string, error) {
+	script := "grep '^current_version=' /opt/datamigrator/conf/versions.conf | cut -d'=' -f2 | xargs echo -n "
+	port, err := strconv.Atoi(NDM_VM_PORT)
+	if err != nil {
+		LogFatalf("Invalid port number in NDM_VM_PORT: %v", err)
+	}
+	sshConfig := SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     NDM_VM_HOST,
+		Port:     port,
+		Password: NDM_VM_PASSWORD,
+	}
+	output, err := sshRunScript(sshConfig, script)
+	if err != nil {
+		return "", fmt.Errorf("get cp version failed: %v\noutput: %s", err, output)
+	}
+
+	return output, nil
+}
+
+func GetWorkerVersion() (string, error) {
+	config := GetAttachedWorkerDetails()
+
+	var script string
+	switch PROTOCOL_TYPE {
+	case ProtocolSMB:
+		script = `powershell -Command "(Get-Content 'C:\datamigrator\conf\versions.conf' | Where-Object { $_ -match '^current_version=' }) -replace '^current_version=' | Write-Host -NoNewline"`
+	case ProtocolNFS:
+		script = "grep '^current_version=' /opt/datamigrator/conf/versions.conf | cut -d'=' -f2 | xargs echo -n "
+	}
+
+	sshConfig = SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	output, err := sshRunScript(sshConfig, script)
+	if err != nil {
+		return "", fmt.Errorf("get worker version failed: %v\noutput: %s", err, output)
+	}
+
+	return output, nil
+}
+
+// get versions from NDM app
+func GetVersions(headers map[string]string) (abouNDMResp AboutNDMResponse, err error) {
+	var gotWorkerVersion string
+	aboutNDMURL := CONFIG_SERVICE_URL + ABOUT_NDM_URL
+	for i := 0; i < MaxPollRetries; i++ {
+		Wait(1)
+		resp, err := SendAPIRequest(http.MethodGet, aboutNDMURL, nil, headers)
+		if err != nil {
+			return abouNDMResp, fmt.Errorf("get worker version failed: %v", err)
+		}
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return abouNDMResp, fmt.Errorf("unable to read body %v", err)
+		}
+
+		err = json.Unmarshal(bodyBytes, &abouNDMResp)
+		if err != nil {
+			return abouNDMResp, fmt.Errorf("unable unmarshal resp %v", err)
+		}
+
+		gotWorkerVersion = abouNDMResp.Data.Items.Build.WorkerVersion.Version
+		resp.Body.Close()
+
+		if gotWorkerVersion != "N/A" && gotWorkerVersion != "" {
+			break
+		}
+	}
+
+	return abouNDMResp, nil
 }

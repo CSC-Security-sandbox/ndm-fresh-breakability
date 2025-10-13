@@ -28,8 +28,8 @@ export type ProcessedData = {
 };
 
 export type FileInfo = {
-  fileName: string;
-  fileSize: number;
+  directoryPath: string;
+  length: number;
 };
 
 export interface WorkerApiType {
@@ -358,6 +358,7 @@ export type JobRunApiType = {
   sourceServer: FileServerApiPropType;
   destinationServer: FileServerApiPropType;
   isReportReady: boolean;
+  lastRefreshed: string | Date;
 };
 
 export interface JobConfigDetailsApiType {
@@ -370,6 +371,7 @@ export interface JobConfigDetailsApiType {
   jobRuns: JobRunApiType[];
   errors: JobErrors;
   aggregateData: JobRunApiType;
+  lastRefreshed: string | Date;
 }
 
 export interface TasksApiType {
@@ -437,6 +439,7 @@ export interface FileServerOverviewApi {
     totalFileServers?: number;
     totalPendingSize: string;
   };
+  lastRefreshed: string | Date;
 }
 
 export enum USER_STATUS_ENUM {
@@ -665,6 +668,7 @@ export interface ChartInfoPropsType {
   children: ReactNode;
   isLoading: boolean;
   isError: boolean;
+  lastRefreshed: string;
 }
 
 export interface ChartErrorPropsType {

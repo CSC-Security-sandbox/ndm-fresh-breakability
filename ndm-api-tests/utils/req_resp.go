@@ -121,3 +121,45 @@ type FileContent struct {
 	Contents string `json:"contents"`
 	FileSize int    `json:"fileSize"`
 }
+
+type AboutNDMResponse struct {
+	Data struct {
+		Items struct {
+			Product struct {
+				Name    string `json:"name"`
+				Version string `json:"version"`
+			} `json:"product"`
+			Build struct {
+				WorkerVersion struct {
+					Version string      `json:"version"`
+					Time    interface{} `json:"time"` // Use interface{} to allow null
+				} `json:"worker_version"`
+				ControlPlaneVersion struct {
+					Version string      `json:"version"`
+					Time    interface{} `json:"time"` // Use interface{} to allow null
+				} `json:"controlPlane_version"`
+			} `json:"build"`
+			Contact struct {
+				Email   string      `json:"email"`
+				Phone   interface{} `json:"phone"`   // Use interface{} to allow null
+				Website interface{} `json:"website"` // Use interface{} to allow null
+			} `json:"contact"`
+		} `json:"items"`
+	} `json:"data"`
+}
+
+// ==============JOB Structs=====================
+type GetJobRunResponseItems struct {
+	JobRunID  string `json:"jobRunId"`
+	Status    string `json:"status"`
+	StartTime string `json:"startTime"`
+	EndTime   string `json:"endTime"`
+}
+
+type GetJobRunResponse struct {
+	TrackID string `json:"trackId"`
+	Message string `json:"message"`
+	Data    struct {
+		Items GetJobRunResponseItems `json:"items"`
+	} `json:"data"`
+}

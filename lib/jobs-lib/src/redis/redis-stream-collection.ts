@@ -70,18 +70,29 @@ export class RedisStreamCollection<T extends Serializable>
   }
 
   async append(record: T): Promise<string> {
-    try {
-      const buffer = encode(record);
-      const id = await this.redisClient.xAdd(this.streamKey, '*', {
-        obj: buffer.toString('base64'),
-      });
-      this.numMessages++;
-      this.lastId = id;
-      return id;
-    } catch (err) {
-      console.error(`Error writing record: ${err}`, err);
-      throw err;
+    const MAX_RETRIES = 3;
+    let lastErr: any;
+    for(let attempt=1; attempt <=3; attempt++){
+      try {
+        const buffer = encode(record);
+        const id = await this.redisClient.xAdd(this.streamKey, '*', {
+          obj: buffer.toString('base64'),
+        });
+        this.numMessages++;
+        this.lastId = id;
+        return id;
+      } catch (err) {
+        lastErr = err;
+        console.error(`Error writing record: ${err}`, err);
+        const isConnReset = err?.message?.includes('ECONNRESET') || err?.code === 'ECONNRESET';
+        if (isConnReset && attempt <= MAX_RETRIES) {
+          console.warn(`Connection reset error occurred, retrying... (attempt ${attempt})`);
+          continue;
+        }
+        break; // for non-connection reset errors or max attempts reached.
+      }
     }
+    throw lastErr;
   }
 
   async appendBulk(records: T[]): Promise<string[]> {

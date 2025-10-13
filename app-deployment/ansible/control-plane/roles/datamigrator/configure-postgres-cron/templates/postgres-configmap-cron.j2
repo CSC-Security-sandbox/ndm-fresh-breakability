@@ -1,0 +1,69 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ndm-postgres-cronjob-cm
+  namespace: datamigrator
+data:
+  run_ndm_pg_cron.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    echo "Sourcing environment variables from Vault..."
+    if [ -f /vault/secrets/postgres.env ]; then 
+      source /vault/secrets/postgres.env
+    else
+      echo "No env file from vault present. Exiting."
+      exit 1
+    fi
+
+    refresh_mv() {
+      local mv_name="$1"
+      echo "Refreshing materialized view ${mv_name} concurrently..."
+      local start_time=$(date +%s)
+      psql -v ON_ERROR_STOP=1 -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" \
+        -c "REFRESH MATERIALIZED VIEW CONCURRENTLY datamigrator.${mv_name};"
+      local end_time=$(date +%s)
+      local elapsed=$((end_time - start_time))
+      echo "Refreshing materialized view ${mv_name} completed successfully in ${elapsed} seconds."
+      echo "------------------------------------------------------------"
+    }
+
+    refresh_mv "job_stats_summary_mv"
+    refresh_mv "storage_jobs_overview_mv"
+
+  run_vacuum_analyze.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    if [ "$VACUUM_ANALYZE_ENABLED" = "TRUE" ]; then
+      echo "Running VACUUM ANALYZE on database: $PGDATABASE ..."
+
+      if [ -f /vault/secrets/postgres.env ]; then
+        source /vault/secrets/postgres.env
+      else
+        echo "No env file from vault present. Exiting."
+        exit 1
+      fi
+
+      PGSCHEMA=$PGSCHEMA
+      echo "Setting search path to schema: $PGSCHEMA"
+
+      start_time=$(date +%s)
+      
+      # Use psql with autocommit and execute commands via stdin
+      if echo -e "SET search_path TO $PGSCHEMA;\nSET vacuum_cost_delay = '20ms';\nVACUUM ANALYZE;" | \
+        psql -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" --set AUTOCOMMIT=on; then
+        end_time=$(date +%s)
+        elapsed=$((end_time - start_time))
+        echo "VACUUM ANALYZE completed successfully in ${elapsed} seconds with search path set to: $PGSCHEMA"
+      else
+        echo "VACUUM ANALYZE failed with search path set to: $PGSCHEMA"
+        echo "Check the error output above for details."
+        exit 1
+      fi
+    else
+      echo "VACUUM ANALYZE is disabled. Skipping."
+    fi
+
+  VACUUM_ANALYZE_ENABLED: "FALSE"
+  MATERIALIZED_VIEW_ENABLED: "TRUE"

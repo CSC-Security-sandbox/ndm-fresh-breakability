@@ -91,12 +91,16 @@ export class CommonTaskService {
 
   async ensureTaskValid({task, jobContext}: InitTaskInput) : Promise<TaskInfo> {
 
-      for (let i = 0; i < task.commands.length; i++) {
-        if (task.commands[i].status !== CommandStatus.COMPLETED)
+      if(!task) {
+          this.logger.warn('ensureTaskValid called with null/undefined task');
+          return null;
+      }
+      for (let i = 0; i < task?.commands.length; i++) {
+        if (task?.commands[i].status !== CommandStatus.COMPLETED)
           task.commands[i].status = CommandStatus.IN_PROCESS
       }
   
-      if (task.retryCount >= this.maxRetryCount) {
+      if (task?.retryCount >= this.maxRetryCount) {
         task.status = TaskStatus.ERRORED;
         await jobContext.publishToTaskStream(task);
         throw new RetryExceededError(`Task ${task.id} has exceeded maximum retry count of ${this.maxRetryCount}`);

@@ -9,14 +9,14 @@ export const PDFReportHeaders = {
     "Depth",
     "Space Used",
     "File System Stats",
-    "Top File Extensions (with file Capacity and Count)",
+    "Top 5 File Extensions (with file Capacity and Count)",
     "Maximum Values",
     "Job Run Stats",
     "Biggest",
   ],
 };
 export enum formatStringTypeCategories {
-  Top_File_Extension = "Top File Extensions (with file Capacity and Count)",
+  Top_File_Extension = "Top 5 File Extensions (with file Capacity and Count)",
 }
 export const ReportSubCategoriesHeader = {
   "Number of Files": [
@@ -166,3 +166,16 @@ export interface ReportEntry {
   value: number | string;
   valueType: ReportValueType;
 }
+
+export const SECONDS_PER_MINUTE = 60;
+export const SECONDS_PER_HOUR = 3600;
+export const SECONDS_PER_DAY = 86400;
+
+
+export const TIME_UNITS = {
+  SECONDS: { singular: 'sec', plural: 'sec' },
+  MINUTES: { singular: 'min', plural: 'mins' },
+  HOURS: { singular: 'hr', plural: 'hrs' },
+  DAYS: { singular: 'day', plural: 'days' }
+} as const;
+

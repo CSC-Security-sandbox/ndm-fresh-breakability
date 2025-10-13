@@ -13,6 +13,7 @@ import React, { useEffect, useState } from "react";
 import Filters from "@components/table-wrapper/Filters";
 import { TableWrapperPropsType } from "@components/table-wrapper/TableWrapper.types";
 import RefreshButton from "@components/refresh-button/RefreshButton";
+import { Show } from "@components/show/Show";
 
 const TableWrapper = ({
   tableStateProps,
@@ -34,6 +35,9 @@ const TableWrapper = ({
   refetchTableData,
   notReachableExportPaths = [],
   noDataLabel = "No Data",
+  showSearch = true,
+  showRefresh = true,
+  showPagination = true,
 }: TableWrapperPropsType) => {
   const [currentFilters, setCurrentFilters] = useState<any>({});
   const [organizedRowsFiltered, setOrganizedRowsFiltered] = useState<any[]>(
@@ -127,21 +131,37 @@ const TableWrapper = ({
               singularLabel={label || "Row"}
               onResetFilter={resetFilters}
             />
-            <Box className="inline-flex items-center text-[#404040] text-[16px] font-[590] leading-[28px]">
-              {secondaryLabel}
-            </Box>
+
+            {/* secondaryLabel  */}
+            <Show>
+              <Show.When isTrue={typeof secondaryLabel === "string"}>
+                <Box className="inline-flex items-center text-[#404040] text-[16px] font-[590] leading-[28px]">
+                  {secondaryLabel}
+                </Box>
+              </Show.When>
+              <Show.When isTrue={typeof secondaryLabel !== "string"}>
+                <Box>{secondaryLabel}</Box>
+              </Show.When>
+              <Show.Else>
+                <Box>{secondaryLabel}</Box>
+              </Show.Else>
+            </Show>
           </Box>
         )}
         <Box className="flex gap-5 items-center">
-          <SearchWidget
-            setFilter={updateTextFilter}
-            className="w-[360px] mt-1"
-          />
+          {showSearch && (
+            <SearchWidget
+              setFilter={updateTextFilter}
+              className="w-[360px] mt-1"
+            />
+          )}
 
-          <RefreshButton
-            isLoading={isRefreshing}
-            onRefresh={refetchTableData}
-          />
+          {showRefresh && (
+            <RefreshButton
+              isLoading={isRefreshing}
+              onRefresh={refetchTableData}
+            />
+          )}
 
           {showDownload && (
             <Button variant="icon" className="w-[18px] h-[18px]">
@@ -166,7 +186,7 @@ const TableWrapper = ({
           isTogglingColumns={isTogglingColumns || false}
           noDataLabel={noDataLabel}
         />
-        {!isLoading && pagination?.pageRows && (
+        {showPagination && !isLoading && pagination?.pageRows && (
           <TablePager
             pageRows={pagination?.pageRows}
             pageSize={10}

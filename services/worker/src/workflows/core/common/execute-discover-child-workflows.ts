@@ -19,11 +19,16 @@ interface DiscoveryWorkflowExecutorOutput {
 const {
   updateLastEntry: updateLastEntryActivity,
 } = wf.proxyActivities<CommonActivityService>({
-  startToCloseTimeout: '24h',
-  heartbeatTimeout: '2m',
+  startToCloseTimeout: '10m',  
+  retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
 });
 
-const { updateWorkerResponse: updateWorkerResponse } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '10m' });
+const { 
+    updateWorkerResponse: updateWorkerResponse 
+} = wf.proxyActivities<CommonActivityService>({ 
+    startToCloseTimeout: '10m',
+    retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
+});
 
 const actionSignal = wf.defineSignal<[string]>('action');
 

@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { StampMetaService } from './stamp-meta.service';
-import { ShellService } from 'src/activities/common/shell.service';
 import { RedisService } from 'src/redis/redis.service';
 import {
   LoggerFactory,
@@ -13,8 +12,7 @@ import {
 } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
 import { CommandExecInput } from './command-execution.type';
-import { AclOperations } from './aclOperations';
-import { ShellPoolExecutorService } from './shell-for-meta-stamping.service';
+import { WinOperationService } from './win-opeartions/win-operation.service';
 
 // Mock fs module
 jest.mock('fs', () => ({
@@ -22,6 +20,7 @@ jest.mock('fs', () => ({
     chmod: jest.fn(),
     chown: jest.fn(),
     utimes: jest.fn(),
+    lutimes: jest.fn(),
   },
 }));
 
@@ -48,28 +47,19 @@ const mockLogger: Partial<LoggerService> = {
   debug: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
+  log: jest.fn(),
 };
 
 describe('StampMetaService', () => {
   let service: StampMetaService;
-  let shellService: jest.Mocked<ShellService>;
   let redisService: jest.Mocked<RedisService>;
   let loggerFactory: jest.Mocked<LoggerFactory>;
-  let aclOperations: jest.Mocked<AclOperations>;
-  let shellPoolExecutorService: jest.Mocked<ShellPoolExecutorService>;
+  let winOperationService: jest.Mocked<WinOperationService>;
 
   const mockFs = fs as jest.Mocked<typeof fs>;
-  const {
-    dmError,
-    formatDate,
-    getUserACLs,
-  } = require('src/activities/utils/utils');
+  const { dmError } = require('src/activities/utils/utils');
 
   beforeEach(async () => {
-    shellService = {
-      runCommand: jest.fn(),
-    } as any;
-
     redisService = {
       getOwnerIdentity: jest.fn(),
     } as any;
@@ -78,32 +68,23 @@ describe('StampMetaService', () => {
       create: jest.fn().mockReturnValue(mockLogger),
     } as any;
 
-    aclOperations = {
-      stampFileACL: jest.fn(),
-      getFileACL: jest.fn(),
-      compareACLs: jest.fn(),
-    } as any;
-
-    shellPoolExecutorService = {
-      execute: jest.fn(),
+    winOperationService = {
+      stampAclOperation: jest.fn(),
+      resetFileAttributes: jest.fn(),
     } as any;
 
     // Setup fs.promises mocks
     (mockFs.promises.chmod as jest.Mock).mockResolvedValue(undefined);
     (mockFs.promises.chown as jest.Mock).mockResolvedValue(undefined);
     (mockFs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
+    (mockFs.promises.lutimes as jest.Mock).mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StampMetaService,
-        { provide: ShellService, useValue: shellService },
         { provide: RedisService, useValue: redisService },
         { provide: LoggerFactory, useValue: loggerFactory },
-        { provide: AclOperations, useValue: aclOperations },
-        {
-          provide: ShellPoolExecutorService,
-          useValue: shellPoolExecutorService,
-        },
+        { provide: WinOperationService, useValue: winOperationService },
       ],
     }).compile();
 
@@ -158,15 +139,42 @@ describe('StampMetaService', () => {
   });
 
   describe('stampMetaData', () => {
-    it('should successfully stamp all metadata when STAMP_META operation is ready', async () => {
+    it('should successfully stamp all metadata on Windows when STAMP_META operation is ready', async () => {
+      Object.defineProperty(process, 'platform', {
+        value: 'win32',
+        writable: true,
+      });
+      const input = createMockInput();
+
+      // Mock successful operations
+      (mockFs.promises.chmod as jest.Mock).mockResolvedValue(undefined);
+      (mockFs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
+      winOperationService.stampAclOperation.mockResolvedValue({
+        output: null,
+        errors: [],
+      });
+
+      const result = await service.stampMetaData(input);
+
+      expect(result.shouldStampMeta).toBe(false);
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(input.command.ops[OPS_CMD.STAMP_META].status).toBe(
+        OPS_STATUS.COMPLETED,
+      );
+    });
+
+    it('should successfully stamp all metadata on Linux when STAMP_META operation is ready', async () => {
+      Object.defineProperty(process, 'platform', {
+        value: 'linux',
+        writable: true,
+      });
       const input = createMockInput();
 
       // Mock successful operations
       (mockFs.promises.chmod as jest.Mock).mockResolvedValue(undefined);
       (mockFs.promises.chown as jest.Mock).mockResolvedValue(undefined);
       (mockFs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
-      shellService.runCommand.mockResolvedValue('success');
-      formatDate.mockReturnValue('202301011000.00');
 
       const result = await service.stampMetaData(input);
 
@@ -447,6 +455,29 @@ describe('StampMetaService', () => {
       );
     });
 
+    it('should use lutimes for symlinks when preserving access time', async () => {
+      const input = createMockInput(
+        {
+          mtime: new Date('2023-01-02T12:00:00Z'),
+          atime: new Date('2023-01-02T14:00:00Z'),
+          isSymLink: true,
+        },
+        { preserveAccessTime: true },
+      );
+      (mockFs.promises.lutimes as jest.Mock).mockResolvedValue(undefined);
+
+      const result = await service.preserveAccessAndModifiedTime(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(mockFs.promises.lutimes).toHaveBeenCalledWith(
+        '/source/test-file.txt',
+        new Date('2023-01-02T14:00:00Z'),
+        new Date('2023-01-02T12:00:00Z'),
+      );
+      expect(mockFs.promises.utimes).not.toHaveBeenCalled();
+    });
+
     it('should skip when preserveAccessTime is disabled', async () => {
       const input = createMockInput(
         {
@@ -499,171 +530,94 @@ describe('StampMetaService', () => {
       );
       expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
     });
+  });
 
-    describe('stampFileAttributeMeta', () => {
-      beforeEach(() => {
-        Object.defineProperty(process, 'platform', {
-          value: 'win32',
-          writable: true,
-        });
+  describe('stampObjectACL', () => {
+    it('should successfully stamp ACL', async () => {
+      const input = createMockInput();
+
+      winOperationService.stampAclOperation.mockResolvedValue({
+        output: null,
+        errors: [],
       });
 
-      it('should successfully synchronize file attributes', async () => {
-        const input = createMockInput();
-        shellService.runCommand
-          .mockResolvedValueOnce('A H') // source attributes
-          .mockResolvedValueOnce('A') // target attributes
-          .mockResolvedValueOnce('A H'); // verify after change
+      const result = await service.stampObjectACL(input);
 
-        const result = await service.stampFileAttributeMeta(input);
-
-        expect(result.sourceErrors).toEqual([]);
-        expect(result.targetErrors).toEqual([]);
-      });
-
-      it('should skip when platform is not win32', async () => {
-        Object.defineProperty(process, 'platform', { value: 'linux' });
-        const input = createMockInput();
-
-        const result = await service.stampFileAttributeMeta(input);
-
-        expect(result.sourceErrors).toEqual([]);
-        expect(result.targetErrors).toEqual([]);
-      });
-
-      it('should handle error when getting source attributes', async () => {
-        const input = createMockInput();
-        const error = new Error('Source not found') as any;
-        error.code = 'ENOENT';
-        shellService.runCommand.mockRejectedValueOnce(error);
-
-        dmError.mockReturnValue({});
-
-        const result = await service.stampFileAttributeMeta(input);
-
-        expect(result.sourceErrors).toEqual(['ENOENT']);
-        expect(result.targetErrors).toEqual([]);
-      });
-
-      it('should handle error when setting/removing attributes', async () => {
-        const input = createMockInput();
-        shellService.runCommand
-          .mockResolvedValueOnce('A H') // source attributes
-          .mockResolvedValueOnce('A') // target attributes
-          .mockRejectedValueOnce(new Error('Failed to set attributes'));
-        dmError.mockReturnValue({});
-
-        const result = await service.stampFileAttributeMeta(input);
-
-        expect(result.sourceErrors).toEqual([]);
-      });
-
-      it('should log warning if verifying attribute changes fails', async () => {
-        const input = createMockInput();
-        shellService.runCommand
-          .mockResolvedValueOnce('A H') // source attributes
-          .mockResolvedValueOnce('A') // target attributes
-          .mockResolvedValueOnce(undefined) // attrib command
-          .mockRejectedValueOnce(new Error('Verify failed')); // verify
-
-        const result = await service.stampFileAttributeMeta(input);
-
-        expect(result.sourceErrors).toEqual([]);
-        expect(result.targetErrors).toEqual([]);
-      });
-
-      it('should log when no attribute changes are needed', async () => {
-        const input = createMockInput();
-        shellService.runCommand
-          .mockResolvedValueOnce('A H') // source attributes
-          .mockResolvedValueOnce('A H'); // target attributes
-
-        const result = await service.stampFileAttributeMeta(input);
-
-        expect(result.sourceErrors).toEqual([]);
-        expect(result.targetErrors).toEqual([]);
-      });
-
-      it('should handle error when getting target attributes', async () => {
-        const input = createMockInput();
-        shellService.runCommand
-          .mockResolvedValueOnce('A H') // source attributes
-          .mockRejectedValueOnce(new Error('Target not found'));
-
-        const result = await service.stampFileAttributeMeta(input);
-
-        expect(result.sourceErrors).toEqual([]);
-        expect(result.targetErrors).toEqual([]);
-      });
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(winOperationService.stampAclOperation).toHaveBeenCalledWith(input);
     });
 
-    describe('removeFileAttributeTemporarily', () => {
-      beforeEach(() => {
-        Object.defineProperty(process, 'platform', {
-          value: 'win32',
-          writable: true,
-        });
+    it('should handle ACL stamping errors', async () => {
+      const input = createMockInput();
+
+      winOperationService.stampAclOperation.mockResolvedValue({
+        output: null,
+        errors: ['ACL operation failed'],
       });
+      dmError.mockReturnValue({});
 
-      it('should return false if no attributes to remove', async () => {
-        shellService.runCommand.mockResolvedValueOnce('A');
+      const result = await service.stampObjectACL(input);
 
-        const result =
-          await service.removeFileAttributeTemporarily('/some/file.txt');
-
-        expect(result).toBe(false);
-      });
-
-      it('should handle errors gracefully', async () => {
-        shellService.runCommand.mockRejectedValueOnce(new Error('Failed'));
-
-        const result =
-          await service.removeFileAttributeTemporarily('/some/file.txt');
-
-        expect(result).toBe(false);
-      });
-
-      it('should skip on non-win32 platforms', async () => {
-        Object.defineProperty(process, 'platform', { value: 'linux' });
-
-        const result =
-          await service.removeFileAttributeTemporarily('/some/file.txt');
-
-        expect(result).toBe(false);
-      });
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
     });
 
-    describe('restoreFileAttribute', () => {
-      beforeEach(() => {
-        Object.defineProperty(process, 'platform', {
-          value: 'win32',
-          writable: true,
-        });
-      });
+    it('should handle ACL stamping exceptions', async () => {
+      const input = createMockInput();
+      const error = new Error('ACL operation failed') as any;
+      error.code = 'ACCESS_DENIED';
 
-      it('should return false if no attributes to add', async () => {
-        shellService.runCommand.mockResolvedValueOnce('A H R');
+      winOperationService.stampAclOperation.mockRejectedValue(error);
+      dmError.mockReturnValue({});
 
-        const result = await service.restoreFileAttribute('/some/file.txt');
+      const result = await service.stampObjectACL(input);
 
-        expect(result).toBe(false);
-      });
+      expect(result.sourceErrors).toEqual(['ACCESS_DENIED']);
+      expect(result.targetErrors).toEqual([]);
+      expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Stamping ACL from /source/test-file.txt to /target/test-file.txt, Error: ACL operation failed',
+        error.stack,
+      );
+    });
+  });
 
-      it('should handle errors gracefully', async () => {
-        shellService.runCommand.mockRejectedValueOnce(new Error('Failed'));
+  describe('resetFileAttributes', () => {
+    it('should successfully reset file attributes', async () => {
+      winOperationService.resetFileAttributes.mockResolvedValue(true);
 
-        const result = await service.restoreFileAttribute('/some/file.txt');
+      const result = await service.resetFileAttributes('/test/path.txt');
 
-        expect(result).toBe(false);
-      });
+      expect(result).toBe(true);
+      expect(winOperationService.resetFileAttributes).toHaveBeenCalledWith(
+        '/test/path.txt',
+      );
+    });
 
-      it('should skip on non-win32 platforms', async () => {
-        Object.defineProperty(process, 'platform', { value: 'linux' });
+    it('should return false when reset fails', async () => {
+      winOperationService.resetFileAttributes.mockResolvedValue(false);
 
-        const result = await service.restoreFileAttribute('/some/file.txt');
+      const result = await service.resetFileAttributes('/test/path.txt');
 
-        expect(result).toBe(false);
-      });
+      expect(result).toBe(false);
+      expect(winOperationService.resetFileAttributes).toHaveBeenCalledWith(
+        '/test/path.txt',
+      );
+    });
+
+    it('should propagate errors from winOperationService', async () => {
+      winOperationService.resetFileAttributes.mockRejectedValue(
+        new Error('Access denied'),
+      );
+
+      await expect(
+        service.resetFileAttributes('/test/path.txt'),
+      ).rejects.toThrow('Access denied');
+      expect(winOperationService.resetFileAttributes).toHaveBeenCalledWith(
+        '/test/path.txt',
+      );
     });
   });
 });

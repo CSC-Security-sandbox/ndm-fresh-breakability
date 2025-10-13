@@ -37,6 +37,7 @@ import { SyncEmailEntity } from "src/entities/sync-email.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { PreCheckService } from "./precheck.service";
 import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
+import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 
 
 @Module({
@@ -62,7 +63,8 @@ import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
       IdentityConfigCrossMappingEntity,
       OperationErrorEntity,
       SyncEmailEntity,
-      WorkerJobRunMap
+      WorkerJobRunMap,
+      JobStatsSummaryMvEntity
     ]),
     RedisModule,
     AuthKeycloakModule,

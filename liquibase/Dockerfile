@@ -6,6 +6,9 @@ RUN apk update && \
     apk upgrade --no-cache && \
     rm -vrf /var/cache/apk/*
 
+# Remove vulnerable Go binary (lpm) to fix CVE-2025-47906
+RUN rm -f /liquibase/bin/lpm
+
 USER liquibase
 
 ENV LIQUIBASE_COMMAND_DRIVER=org.postgresql.Driver \

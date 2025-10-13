@@ -10,7 +10,7 @@ import { Operation, Origin } from "src/activities/utils/utils.types";
 import { WorkerThreadService } from "src/thread/worker.thread.service";
 import { CommandExecInput, CommandExecOutput, CommandOutput, ValidateCommandInput } from "./command-execution.type";
 import { StampMetaService } from "./stamp-meta.service";
-import { isPathExists } from "../../utils/utils";
+import { isNotWritable, isPathExists } from "../../utils/utils";
 
 @Injectable()
 export class CommandExecService {
@@ -31,6 +31,10 @@ export class CommandExecService {
         const output: CommandExecOutput = { sourceErrors: [], targetErrors: [], cmd: input.command };
         let baseCmdRes: CommandOutput = { shouldStampMeta: false, shouldUpdateItemInfo: false, sourceErrors: [], targetErrors: [] };
 
+        if(input.command.ops && input.command.ops[OPS_CMD.COPY_SYMLINK]) {
+            // Copy Symlink
+            baseCmdRes = await this.copySymlink(input);
+        }
         // Copy File
         if(input.command.ops && input.command.ops[OPS_CMD.COPY_FILE]) 
             baseCmdRes = await this.copyFile(input);
@@ -70,6 +74,30 @@ export class CommandExecService {
         return output
     }
 
+    async copySymlink({command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
+        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: false };
+        if(command.ops[OPS_CMD.COPY_SYMLINK].status === OPS_STATUS.COMPLETED) {
+            output.shouldStampMeta = true;
+            return output;
+        }
+        try {
+            const linkTarget = await fs.promises.readlink(sourcePath);
+            
+            // Create the symbolic link
+            await fs.promises.symlink(linkTarget, targetPath);
+            
+            output.shouldStampMeta = true;
+            output.shouldUpdateItemInfo = true;
+            
+            this.logger.debug(`Created symbolic link: ${targetPath} -> ${linkTarget}`);
+        } catch (error) {
+            this.logger.error(`Copying SYMLINK from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
+            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
+            await jobContext.publishToErrorStream(dmErr);
+            output.targetErrors.push(error.code);
+        }        
+    return output;
+}
 
     async copyFile({command , jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
         const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] , shouldUpdateItemInfo: false };
@@ -78,19 +106,26 @@ export class CommandExecService {
             return output;  // skip if already completed
         }
         if( command.ops[OPS_CMD.COPY_FILE].status !== OPS_STATUS.COMPLETED) {
-            //TODO: convert this to async and non-blocking 
-            const pathExists = await isPathExists(sourcePath);
-            if(!pathExists) {
+            let [srcPathExists, targetPathExists] = await Promise.all([
+                  isPathExists(sourcePath),
+                  isNotWritable(targetPath),
+            ])
+            if(!srcPathExists) {
                 const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.COPY_CONTENT, errorType, command.id, 
                     new Error(`Source path does not exist: ${sourcePath}`), {name: command.fPath, path: sourcePath});
                 await jobContext.publishToErrorStream(dmErr);
+                output.sourceErrors.push('ENOENT');
+                return output
             }
-            if(await isPathExists(targetPath))
-                await this.stampMetaService.removeFileAttributeTemporarily(targetPath);
             try {
-                const checksums = await this.workerThreadService.migrateWorkerThread({
-                    sourcePath, destinationPath: targetPath, operationId: command.id, size: command.metadata?.size ?? 0
+                if(targetPathExists)
+                    await this.stampMetaService.resetFileAttributes(targetPath);
+
+                // TODO: 
+                const checksums = await this.workerThreadService.migrateWorkerThread({ sourcePath, destinationPath: targetPath, operationId: command.id, size: command.metadata?.size ?? 0
                 });
+
+
                 output.shouldUpdateItemInfo = true;
                 if(checksums?.targetChecksum !== checksums?.sourceChecksum) {
                     command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.ERROR, params : { checksums } };
@@ -104,10 +139,6 @@ export class CommandExecService {
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
                 await jobContext.publishToErrorStream(dmErr);   
                 output.targetErrors.push(error.code);
-            }finally{
-                if(await isPathExists(targetPath)) {
-                    await this.stampMetaService.restoreFileAttribute(targetPath);
-                }
             }
         }
         return output;
@@ -120,6 +151,8 @@ export class CommandExecService {
             return output;  // skip if already completed
         }
         if( command.ops[OPS_CMD.COPY_DIR].status !== OPS_STATUS.COMPLETED) {
+            //TODO: add handling for the symlink to the directory. 
+
             try {                
                 await fs.promises.mkdir(targetPath, {recursive: true});                
                 command.ops[OPS_CMD.COPY_DIR].status = OPS_STATUS.COMPLETED;
@@ -176,7 +209,10 @@ export class CommandExecService {
 
     async publishFileInfo({command , jobContext, targetPath, sourcePath, errorType  }: CommandExecInput): Promise<void> {
         // TODO: add sid - uid - gid to meta
-        const sourceStats = await fs.promises.lstat(sourcePath);
+        const [sourceStats, targetStats] = await Promise.all([
+            fs.promises.lstat(sourcePath),
+            fs.promises.lstat(targetPath),
+        ]);
 
         const sourceMeta: ItemMeta = {
             accessTime: sourceStats.atime,
@@ -189,7 +225,6 @@ export class CommandExecService {
             sid: command.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.sourceAcl ?? ''
         }
 
-        const targetStats = await fs.promises.lstat(targetPath);
         const isDirectory = targetStats.isDirectory();
         const targetMeta: ItemMeta = {
             accessTime: targetStats.atime,
@@ -212,7 +247,8 @@ export class CommandExecService {
             getFileType(targetStats, isDirectory),
             sourceMeta,
             targetMeta,
-            targetStats.size
+            targetStats.size,
+            command.metadata.inode
         )
 
         await this.validateCommand({ cmd: command, item: itemInfo, jobContext, errorType});
@@ -222,10 +258,10 @@ export class CommandExecService {
     async validateCommand({ cmd, item, jobContext, errorType}:ValidateCommandInput): Promise<void> {
         let validateMisMatch : string = ""
 
-        if (item.sourceMeta.checksum !== item.targetMeta.checksum) 
+        if (!cmd.metadata?.isSymLink && item.sourceMeta.checksum !== item.targetMeta.checksum) 
             validateMisMatch += `CheckSum Mismatch detected, source: ${item.sourceMeta.checksum}, target: ${item.targetMeta.checksum} \n`;
         
-        if (item.sourceMeta.permission !== item.targetMeta.permission) 
+        if (!cmd.metadata?.isSymLink && item.sourceMeta.permission !== item.targetMeta.permission) 
             validateMisMatch += `Permission Mismatch detected, source: ${item.sourceMeta.permission}, target: ${item.targetMeta.permission} \n`;
         
         if (jobContext.jobConfig.options.preserveAccessTime &&  item.sourceMeta.accessTime.getTime() !== item.targetMeta.accessTime.getTime())

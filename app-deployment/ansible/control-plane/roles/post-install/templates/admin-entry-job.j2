@@ -7,6 +7,7 @@ spec:
   template:
     metadata:
       annotations:
+        vault.hashicorp.com/agent-json-patch: '[{"op": "replace", "path": "/imagePullPolicy", "value": "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"}]'
         vault.hashicorp.com/agent-inject: "true"
         vault.hashicorp.com/role: "datamigrator-role"
         vault.hashicorp.com/agent-pre-populate-only: "true"
@@ -21,12 +22,12 @@ spec:
             name: admin-entry-config  
       containers:
         - name: admin-entry-container
-          image: alpine:latest
+          image: ndm-admin-entry:alpine
+          imagePullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
           command:
             - "sh"
             - "-c"
             - |
-              apk add --no-cache bash
               bash /scripts/admin_entry.sh
           volumeMounts:
             - name: admin-entry-volume

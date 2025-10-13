@@ -1,6 +1,8 @@
 import { Box } from "@components/container/index";
 import { MetricItemAdvance } from "@netapp/bxp-design-system-react";
-
+import {
+  legendWrapperTooltipFormatter,
+} from "@components/chartInfo/legends.utils";
 interface LegendsPropsType {
   title: string;
   value: string | number;
@@ -42,7 +44,6 @@ const Legends = ({
   value,
   color,
   unit,
-  valueTooltip,
 }: LegendsPropsType) => {
   return (
     <Box className="w-5/12 h-1/3 flex items-baseline">
@@ -52,8 +53,7 @@ const Legends = ({
       <MetricItemAdvance
         label={title}
         value={value || 0}
-        unit={unit || ""}
-        valueTooltip={valueTooltip}
+        valueTooltip={legendWrapperTooltipFormatter(isNaN(Number(value)) ? 0 : Number(value) , unit)}
       />
     </Box>
   );

@@ -3,6 +3,8 @@ import { Worker } from '@temporalio/worker';
 import { SetupWorkerWorkflow } from './setup-worker-workflow';
 import { JobServiceJobType } from 'src/activities/common/enums';
 
+// Mock WinShellService to prevent actual shell creation
+jest.mock('src/activities/common/win-shell.service');
 
 const mockedActivities = {
     setup: jest.fn(),
@@ -34,6 +36,10 @@ describe('SetupWorkerWorkflow', () => {
 
     beforeEach(async () => {
         jest.clearAllMocks();
+        
+        // Reset mocks for each test
+        mockedActivities.setup.mockReset();
+        mockedActivities.speedTestSetup.mockReset();
     });
 
     it('should call setup activity for non-speed test jobs', async () => {

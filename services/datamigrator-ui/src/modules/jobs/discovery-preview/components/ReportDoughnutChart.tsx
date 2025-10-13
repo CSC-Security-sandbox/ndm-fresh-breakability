@@ -21,9 +21,9 @@ import {
   extractSystemFileStatAndDirectories,
   formatBytes,
   formatLargeNumber,
-} from "@modules/jobs/discovery-preview/preview.decorators";
-import { availableChartColors } from "@modules/jobs/discovery-preview/preview.constants";
-import Legends from "@/components/chartInfo/Legends";
+} from "@modules/jobs/discovery-preview/utils/chart-data.utils";
+import { availableChartColors } from "@modules/jobs/discovery-preview/constants/preview.constants";
+import Legends from "@components/chartInfo/Legends";
 
 const colorClassMap: Record<string, string> = {
   "chart-1": "bg-blue-900",
@@ -57,23 +57,23 @@ const ReportDoughnutChart = () => {
   same colors in doughnut chart (random colors will be assigned 
   to the file extentions as this data will be dynamic) */
   const shuffledColors = [...availableChartColors]
-      .filter((c) => c !== "chart-1")
-      .sort(() => Math.random() - 0.5);  // Shuffle the colors
+    .filter((c) => c !== "chart-1")
+    .sort(() => Math.random() - 0.5); // Shuffle the colors
 
   const assignedColors: Record<string, string> = {};
   fileExtensionCounts.forEach((_, index) => {
     // Use modulo to cycle through available colors if there are more extensions than colors
     assignedColors[`chart-${index + 2}`] =
-        shuffledColors[index % shuffledColors.length];
+      shuffledColors[index % shuffledColors.length];
   });
 
-// For the chart, use the actual color names directly
+  // For the chart, use the actual color names directly
   const doughnutColors = [
-    fileExtensionCounts.map((_, index) => `chart-${index + 2}`),
     ["chart-1"],
+    fileExtensionCounts.map((_, index) => `chart-${index + 2}`),
   ];
 
-// For the legend, use the same direct mapping to ensure consistency
+  // For the legend, use the same direct mapping to ensure consistency
   const legendsData = [
     ...fileExtensionCounts.map(([key, value], index) => ({
       title: key,
@@ -99,6 +99,7 @@ const ReportDoughnutChart = () => {
     () => extractMaxAvgFileSize(reportData),
     [reportData]
   );
+
   const { directories } = useMemo(
     () => extractSystemFileStatAndDirectories(reportData),
     [reportData]
@@ -106,7 +107,7 @@ const ReportDoughnutChart = () => {
 
   const maximumMap = [
     {
-      label: `${formatLargeNumber(maxDepth)}/${formatLargeNumber(avgDepth)}`,
+      label: `${Math.round(maxDepth)}/${Math.round(avgDepth)}`,
       value: "Depth",
     },
     {
@@ -120,11 +121,6 @@ const ReportDoughnutChart = () => {
       label: `${formatBytes(maxFileSize)}/${formatBytes(avgFileSize)}`,
       value: "Size",
     },
-      //as it is already included in the doughnut chart, we can comment this out
-    /*{
-      label: `${formatLargeNumber(directories as number)}`,
-      value: "Directories",
-    },*/
   ];
 
   return (
@@ -132,8 +128,8 @@ const ReportDoughnutChart = () => {
       {/* File Extension Doughnut Chart */}
       <Card className="w-full">
         <CardHeader type="small">
-          <CardTitle className="font-bold">Top File Extensions</CardTitle>
-          <Popover>Top File Extensions found during discovery.</Popover>
+          <CardTitle className="font-bold">Top 5 File Extensions</CardTitle>
+          <Popover>Top 5 File Extensions found during discovery.</Popover>
         </CardHeader>
         <CardContent className="flex gap-8">
           <DoughnutChart
@@ -141,8 +137,8 @@ const ReportDoughnutChart = () => {
             label="File Summary"
             colors={doughnutColors}
             data={[
-              fileExtensionCounts.map(([, value]) => value),
               [totalSizeMB],
+              fileExtensionCounts.map(([, value]) => value),
             ]}
             value={totalSizeMB}
           />
@@ -154,7 +150,7 @@ const ReportDoughnutChart = () => {
                 title={legend.title}
                 value={legend.value}
                 color={legend.color}
-                unit=""
+                unit="MiB" //as we are converting the values to MiB added MiB units to show in Tooltip as well
               />
             ))}
           </Box>

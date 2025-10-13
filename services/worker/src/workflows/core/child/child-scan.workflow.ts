@@ -5,6 +5,8 @@ import { ScanService } from 'src/activities/core/scan/scan-activity.service';
 import { JobRunStatus } from "src/activities/common/enums";
 import { updateJobStatusIfNotRunning } from '../common/workflow-utils';
 import { ChildScanWorkflowInput, ChildScanWorkflowOutput, ExecuteBatchScanInput, ExecuteBatchScansOutput } from './chid-scan.workflow.type';
+import { MappingResolverService } from 'src/activities/core/initializer/mapping-resolver.service';
+import { SetupExportsPathPermissionService } from 'src/activities/core/initializer/setup-exports-path-permission.service';
 
 
 
@@ -13,6 +15,7 @@ const {
 } = wf.proxyActivities<CommonActivityService>({
   startToCloseTimeout: '24h',
   heartbeatTimeout: '2m',
+  retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
 });
 
 
@@ -47,6 +50,20 @@ const {
     heartbeatTimeout: '2m',
 });
 
+const {
+  resolveUsernamesToSids: resolveUsernamesToSidsActivity,
+} = wf.proxyActivities<MappingResolverService>({
+  startToCloseTimeout: '10m',
+  retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
+});
+
+
+const {
+  setupExportPathPermission: setupExportPathPermissionActivity,
+} = wf.proxyActivities<SetupExportsPathPermissionService>({
+  startToCloseTimeout: '10m',
+  retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
+});
 
 
 const actionSignal = wf.defineSignal<[JobRunStatus]>('scanActionSignal');
@@ -54,10 +71,16 @@ const actionSignal = wf.defineSignal<[JobRunStatus]>('scanActionSignal');
 
 const MAX_CONCURRENT_BATCHES = 20;
 const ITERATIONS_LIMIT = 1000;
+const CMD_LENGTH_VALIDATION_ITERATIONS = 10;
 
 export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatchIds = [], batchSize = 100, dirCount = 0, fileCount = 0, isMigration = false, actionState = JobRunStatus.Running, isInitialScan = true, workerConcurrency = 20}: ChildScanWorkflowInput): Promise<ChildScanWorkflowOutput> => {
 
   await updateJobStatusActivity({jobRunId, status :JobRunStatus.Running});
+
+  if(isMigration){
+    await resolveUsernamesToSidsActivity(jobRunId);
+    await setupExportPathPermissionActivity(jobRunId);
+  }
 
   if(isInitialScan)  {
     const id = await createInitialDirBatchActivity({dirsToScan, jobRunId});
@@ -95,7 +118,7 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
     await updateJobStatusIfNotRunning(actionState, jobRunId);
     await wf.condition(() => actionState !== JobRunStatus.Paused);
 
-    iterations+= dirBatchIds.length
+    iterations+= dirBatchIds.length + CMD_LENGTH_VALIDATION_ITERATIONS;
 
     const batchExecResults: ExecuteBatchScansOutput = await executeBatchScan({ batches: dirBatchIds, batchSize, isMigration, jobRunId});
     scanWorkflowOutput.fileCount += batchExecResults.fileCount;

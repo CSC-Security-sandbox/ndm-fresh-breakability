@@ -33,7 +33,7 @@ vm_uid: 1030
 vm_gid: 1030
 
 # Version management
-microk8s_version: "1.32/stable"
+microk8s_version: "1.33/stable"
 microk8s_disable_snap_autoupdate: false
 
 # Cluster CIDR Values
@@ -51,7 +51,7 @@ microk8s_plugins:
   rbac: true # Role-Based Access Control for authorisation
   hostpath-storage: true # Storage class; allocates storage from host directory
   registry: false # Private image registry exposed on localhost:32000
-  dashboard: true # The Kubernetes dashboard
+  dashboard: false # The Kubernetes dashboard
   ambassador: false # Ambassador API Gateway and Ingress
   cilium: false # SDN, fast with full network policy
   fluentd: false # Elasticsearch-Fluentd-Kibana logging and monitoring
@@ -119,33 +119,29 @@ ports_to_open:
   - tcp 16443
   - tcp 9091
 
-postgres_version: 16.2.5
+postgres_version: 16.7.26
 postgres_data_volume_size: 30Gi
 
-openbao_version: 0.9.0
+openbao_version: 0.16.3
 openbao_data_volume_size: 8Gi
 
-keycloak_version: 24.6.7
+keycloak_version: 25.2.0
 
-#redis_version: 11.4.1
-redis_version: 20.8.0
+redis_version: 22.0.4
 redis_data_volume_size: 30Gi
 
-temporal_version: 0.57.0
+temporal_version: 0.65.0
 
-grafana_version: 11.4.7
+grafana_version: 12.1.8
 grafana_data_volume_size: 10Gi
-lokistack_version: 6.27.0
+loki_version: 6.37.0
 loki_data_volume_size: 10Gi
 
-prometheus_version: 27.5.1
+prometheus_version: 27.32.0
 prometheus_alertmanager_data_volume_size: 10Gi
 prometheus_data_volume_size: 10Gi
 
-fluentbit_version: 0.48.8
-fluentbit_data_volume_size: 10Gi
-
-fluentd_version: 0.5.2
+fluentd_version: 0.5.3
 fluentd_data_volume_size: 10Gi
 
-otel_collector_version: 0.125.0
+otel_collector_version: 0.131.0

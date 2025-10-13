@@ -24,6 +24,12 @@ variable "project_name" {
   description = "The name of the project for which the resources are being created"
 }
 
+variable "image_suffix" {
+  description = "Suffix to append to image names"
+  type        = string
+  default     = ""
+}
+
 # Azure Variables
 variable "azure_client_id" {
   description = "Azure Client ID used for authentication"
@@ -183,7 +189,7 @@ locals {
 locals {
   formatted_timestamp = formatdate("DD-MM-YYYY-hh-mm-ss", timestamp())
   version             = formatdate("YYYY.DD.MMhhmmss", timestamp())
-  image_name          = "${var.project_name}-control-plane-${local.formatted_timestamp}"
+  image_name          = "${var.project_name}-control-plane-${local.formatted_timestamp}${var.image_suffix == "" ? "" : "-${var.image_suffix}"}"
 }
 
 # "###################################"

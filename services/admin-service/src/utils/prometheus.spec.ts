@@ -23,6 +23,16 @@ describe('PrometheusService', () => {
 
     mockConfigService = {
       get: jest.fn().mockImplementation((key: string, defaultValue?: any) => {
+        if (key === 'prometheusConfig') {
+          return {
+            prometheusBaseIp:
+              process.env.prometheusBaseIp ||
+              'http://prometheus-server.prometheus.svc.cluster.local:80/api/v1',
+            timeout: process.env.PROMETHEUS_TIMEOUT
+              ? parseInt(process.env.PROMETHEUS_TIMEOUT, 10)
+              : 30000,
+          };
+        }
         const envValue = process.env[key];
         if (envValue !== undefined) {
           // Handle numeric values
@@ -76,7 +86,8 @@ describe('PrometheusService', () => {
       new PrometheusService(mockConfigService);
 
       expect(mockedAxios.create).toHaveBeenCalledWith({
-        baseURL: 'http://localhost:52061/api/v1',
+        baseURL:
+          'http://prometheus-server.prometheus.svc.cluster.local:80/api/v1',
         timeout: 30000,
       });
     });
@@ -87,15 +98,8 @@ describe('PrometheusService', () => {
       // Create a new service instance to test constructor with env var
       new PrometheusService(mockConfigService);
 
-      // Verify the mock was called with the right parameters
-      expect(mockConfigService.get).toHaveBeenCalledWith(
-        'prometheusBaseIp',
-        'http://localhost:52061/api/v1',
-      );
-      expect(mockConfigService.get).toHaveBeenCalledWith(
-        'PROMETHEUS_TIMEOUT',
-        30000,
-      );
+      // Verify the mock was called with the prometheusConfig key
+      expect(mockConfigService.get).toHaveBeenCalledWith('prometheusConfig');
 
       expect(mockedAxios.create).toHaveBeenCalledWith({
         baseURL: 'http://custom-prometheus:9090/api/v1',
@@ -110,7 +114,8 @@ describe('PrometheusService', () => {
       new PrometheusService(mockConfigService);
 
       expect(mockedAxios.create).toHaveBeenCalledWith({
-        baseURL: 'http://localhost:52061/api/v1',
+        baseURL:
+          'http://prometheus-server.prometheus.svc.cluster.local:80/api/v1',
         timeout: 60000,
       });
     });
@@ -135,7 +140,8 @@ describe('PrometheusService', () => {
       new PrometheusService(mockConfigService);
 
       expect(mockedAxios.create).toHaveBeenCalledWith({
-        baseURL: 'http://localhost:52061/api/v1',
+        baseURL:
+          'http://prometheus-server.prometheus.svc.cluster.local:80/api/v1',
         timeout: NaN, // parseInt returns NaN for invalid strings
       });
     });

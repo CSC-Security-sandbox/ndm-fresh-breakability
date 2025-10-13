@@ -9,6 +9,8 @@ import {
   LoggerService
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { generateDummyErrorEntry, generateDummyItemEntry, generateDummyTaskInfoEntry } from '../utils/utils';
+import { JobType } from "@netapp-cloud-datamigrate/jobs-lib";
+// import { SmbUserSetupService } from "../core/migrate/command-execution/smb-user-setup.service";
 
 @Injectable()
 export class CommonActivityService{
@@ -27,6 +29,7 @@ export class CommonActivityService{
     private readonly authService: AuthService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly redisService: RedisService,
+    // private readonly smbUserSetup: SmbUserSetupService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
@@ -44,7 +47,7 @@ export class CommonActivityService{
       await jobContext.cleanup();
     }catch(error){
       this.logger.error(`[${traceId}] Error while cleaning up the job context: ${error}`);
-      return { message: 'Error while cleaning up the job context: ' + traceId };
+      throw new Error(`Error while cleaning up the job context: ${traceId}`);
     }
   }
 
@@ -52,14 +55,14 @@ export class CommonActivityService{
     try {
       this.logger.log(`[${traceId}] Publishing last entry for job id: ${traceId}`);
       const jobContext = await this.redisService.getJobManagerContext(traceId);
-      await jobContext.publishToFileStream(generateDummyItemEntry);  
+      await jobContext.publishToFileStream(generateDummyItemEntry);
       await jobContext.publishToTaskStream(generateDummyTaskInfoEntry);
       await jobContext.publishToErrorStream(generateDummyErrorEntry);
       this.logger.log(`[${traceId}] Last entry published for job id: ${traceId}`);
       return { message: 'Job completed for job id: ' + traceId };
     } catch (error) {
       this.logger.error(`[${traceId}] Error while marking the job as completed : ${error}`);
-      return { message: 'Error while marking the job as completed : ' + traceId };
+      throw new Error(`Error while marking the job as completed : ${traceId}`);
     }
   }
 
@@ -82,7 +85,7 @@ export class CommonActivityService{
       return { message: 'Job status updated for job id: ' + jobRunId };
     } catch (error) {
       this.logger.error(`[${jobRunId}] Failed to update status: ${error}`);
-      return { message: 'Error while updating the status of the job id : ' + jobRunId };
+      throw new Error(`Error while updating the status of the job id : ${jobRunId}`);
     }
   }
 
@@ -109,7 +112,7 @@ export class CommonActivityService{
       return { message: 'Triggering generateJobsReport successful for job id: ' + jobRunId };
     } catch (error) {
       this.logger.error(`[${jobRunId}] Failed to Trigger generateJobsReport: ${error} | for url : ${this.reportServiceUrl}/api/v1/report/inventory/generate-jobs-report`);
-      return { message: 'Error while Triggering generateJobsReport for the job id : ' + jobRunId };
+      throw new Error(`Error while Triggering generateJobsReport for the job id : ${jobRunId}`);
     }
   }
   
@@ -134,7 +137,7 @@ export class CommonActivityService{
       return { message: 'Worker response updated successfully for job id: ' + jobRunId };
     } catch (error) {
       this.logger.error(`[${jobRunId}] Failed to update worker response: ${error}`);
-      return { message: 'Error while updating the worker response for the job id : ' + jobRunId };
+      throw new Error(`Error while updating the worker response for the job id : ${jobRunId}`);
     }
   }
 
@@ -161,7 +164,7 @@ export class CommonActivityService{
       return { message: 'Trigger generateDiscoveryReport Successful for job id: ' + jobRunId };
     } catch (error) {
       this.logger.error(`[${jobRunId}] Failed to Trigger generateDiscoveryReport: ${error}`);
-      return { message: 'Error while Trigger generateDiscoveryReport the status of the job id : ' + jobRunId };
+      throw new Error(`Error while Trigger generateDiscoveryReport the status of the job id : ${jobRunId}`);
     }
   }
 
@@ -182,7 +185,7 @@ export class CommonActivityService{
       return { message: 'Triggering generateCOCReport successful for job id: ' + jobRunId };
     } catch (error) {
       this.logger.error(`[${jobRunId}] Failed to Trigger generateCOCReport: ${error} | for url : ${this.reportServiceUrl}/api/v1/report/job-run/coc-report/${jobRunId}`);
-      return { message: 'Error while Triggering generateCOCReport for the job id : ' + jobRunId };
+      throw new Error(`Error while Triggering generateCOCReport for the job id : ${jobRunId}`);
     }
   }
 
@@ -204,7 +207,7 @@ export class CommonActivityService{
       return { message: 'Job status updated for job id: ' + jobRunId };
     } catch (error) {
       this.logger.error(`[${jobRunId}] Failed to update status: ${error}`);
-      return { message: 'Error while updating the status of the job id : ' + jobRunId };
+      throw new Error(`Error while updating the status of the job id : ${jobRunId}`);
     }
   } 
 }

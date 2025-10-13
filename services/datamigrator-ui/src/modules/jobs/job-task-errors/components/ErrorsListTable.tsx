@@ -8,17 +8,20 @@ import { useParams } from "react-router-dom";
 import { JobErrorType } from "@/types/app.type";
 import RefreshButton from "@components/refresh-button/RefreshButton";
 
-const pageSize = 10;
 const ErrorsListTable = ({ currentErrorType }: ErrorsListTablePropsType) => {
+  const pageSize = 100;
   const { jobRunId } = useParams<{ jobRunId: string; jobId: string }>();
   const [tableRows, setTableRows] = useState<JobErrorType[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const pageCount = Math.ceil(totalCount / pageSize);
-  const rowsCountArray = Array(totalCount);
+  const rowsCountArray = useMemo(
+    () => Array.from({ length: totalCount }, (_, index) => ({ id: index })),
+    [totalCount]
+  );
 
   const { rowState, pagination, toggleSort, sortState, gotoPage } = useTable({
     columns: ERROR_COLUMN_DEF,
-    pageSize: 1,
+    pageSize: pageSize,
     externalSort: true,
     rows: tableRows,
     isSorting: true,

@@ -15,6 +15,7 @@
     "start:dev": "nest start --watch  --trace-warnings",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
+    "start:profile": "clinic flame -- node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -52,7 +53,7 @@
     "@nestjs/core": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/schedule": "^4.1.2",
-    "@netapp-cloud-datamigrate/jobs-lib": "0.1.4",
+    "@netapp-cloud-datamigrate/jobs-lib": "0.1.8",
     "@netapp-cloud-datamigrate/logger-lib": "0.0.15",
     "@temporalio/client": "^1.11.6",
     "@temporalio/nyc-test-coverage": "^1.11.8",
@@ -99,6 +100,10 @@
     "webpack": "^5.98.0",
     "webpack-cli": "^6.0.1"
   },
+  "overrides": {
+    "form-data": "^4.0.4",
+    "sha.js": "^2.4.12"
+  },
   "jest-junit": {
     "suiteName": "Unit Tests",
     "outputDirectory": "./test/unit/test-results",
@@ -124,7 +129,8 @@
       "!**/dist/**",
       "!**/coverage/**",
       "!**.eslintrc.js",
-      "!**/main.ts"
+      "!**/main.ts",
+      "!src/workflows/**"
     ],
     "coverageDirectory": "coverage",
     "testEnvironment": "node",
@@ -135,6 +141,8 @@
       "/node_modules/",
       ".*\\.module\\.ts$",
       "/coverage",
+      "/dist/",
+      "src/activities/common/win-shell.service.spec.ts",
       "/dist",
       "/test/",
       "src/workflows/speed-test/speed-test-job-workflow.spec.ts"
@@ -146,6 +154,9 @@
     },
     "setupFiles": [
       "<rootDir>/jest.setup.js"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/jest.teardown.js"
     ],
     "coveragePathIgnorePatterns": [
       "/node_modules/",

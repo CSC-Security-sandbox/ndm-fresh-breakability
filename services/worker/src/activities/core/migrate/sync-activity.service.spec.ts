@@ -1,14 +1,13 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { CommandStatus, ErrorType, TaskStatus, TaskType, TaskInfo } from '@netapp-cloud-datamigrate/jobs-lib';
-import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
-import { Context } from '@temporalio/activity';
-import { SyncService } from './sync-activity.service';
+import { Test, TestingModule } from '@nestjs/testing';
+import { CommandStatus, TaskInfo, TaskStatus, TaskType } from '@netapp-cloud-datamigrate/jobs-lib';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { mockLogger } from 'src/auth/auth.service.spec';
+import { FatalError, RetryExceededError } from 'src/errors/errors.types';
+import { RedisService } from 'src/redis/redis.service';
 import { CommonTaskService } from '../common/common-task.service';
 import { CommandExecService } from './command-execution/command-execution.service';
-import { RedisService } from 'src/redis/redis.service';
-import { FatalError, RetryableError, RetryExceededError } from 'src/errors/errors.types';
-import { mockLogger } from 'src/auth/auth.service.spec';
+import { SyncService } from './sync-activity.service';
 
 // Mock the @temporalio/activity Context
 jest.mock('@temporalio/activity', () => ({

@@ -425,6 +425,7 @@ jobs:
         echo "VSPHERE_SERVER=$(echo "${{ secrets.VSPHERE_SERVER }}" | base64 --decode)" >> $GITHUB_ENV
         echo "VSPHERE_USER=$(echo "${{ secrets.VSPHERE_USERNAME }}" | base64 --decode)" >> $GITHUB_ENV
         echo "VSPHERE_PASSWORD=$(echo "${{ secrets.VSPHERE_PASSWORD }}" | base64 --decode)" >> $GITHUB_ENV
+        echo "::add-mask::$VSPHERE_PASSWORD"
 
     - name: Set vSphere Variables
       run: |
@@ -453,6 +454,7 @@ jobs:
         elif [ -z "$SSH_PASSWORD" ]; then
           SSH_PASSWORD="Welcome@123"
         fi
+        echo "::add-mask::$SSH_PASSWORD"
         echo "SSH_PASSWORD=$SSH_PASSWORD" >> $GITHUB_ENV
 
     - name: Setup Node.js

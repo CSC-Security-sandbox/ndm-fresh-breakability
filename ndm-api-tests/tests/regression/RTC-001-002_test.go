@@ -21,7 +21,6 @@ var _ = Describe("RTC-001-002: Check worker status when worker goes down/becomes
 		BeforeEach(func() {
 			NumberOfWorker := 1
 			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
-			fmt.Println("attachedWorkersConfig:", attachedWorkersConfig)
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).To(Equal(1), "Expected two worker to be attached")
 			workerIds = GetWorkerIds()
@@ -82,9 +81,10 @@ var _ = Describe("RTC-001-002: Check worker status when worker goes down/becomes
 		})
 
 		AfterEach(func() {
-			err := CleanupTestEnv()
+			By("Cleanup started")
+			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			By("Cleanup complete.")
+			LogDebug("Cleanup complete.")
 		})
 
 	})

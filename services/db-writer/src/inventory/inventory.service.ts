@@ -83,6 +83,7 @@ export class InventoryService {
       pathId: pathId,
       sourceMeta: file?.sourceMeta ?? null,
       targetMeta: file?.targetMeta ?? null,
+      inode: file?.inode ?? null,
     };
   }
 
@@ -272,6 +273,22 @@ export class InventoryService {
     } catch (error) {
       this.logger.error(`Failed to update task (ID: ${taskId}): ${error.message}`, error?.stack || error);
       throw new DatabaseError("Error while updating task data", error);
+    }
+  }
+
+  async createPartitionInventoryTableByJobRunId(jobRunId: string) {
+    if (!jobRunId) {
+      throw new ValidationError("JobRunId is required to create partition table", 'jobRunId');
+    }
+    try {
+      await this.dataSource.query(
+        `CALL ${process.env.SCHEMA}.create_inventory_partition($1, $2);`,
+        [jobRunId, process.env.SCHEMA],
+      );
+      this.logger.log(`Partition table  created or already exists for job run ID: ${jobRunId}`);
+    } catch (error) {
+      this.logger.error(`Failed to create partition table for jobRunId ${jobRunId}: ${error.message}`, error?.stack || error);
+      throw new DatabaseError("Error while creating partition inventory table", error);
     }
   }
 }
