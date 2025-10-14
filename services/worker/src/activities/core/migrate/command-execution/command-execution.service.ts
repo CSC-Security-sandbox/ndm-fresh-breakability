@@ -103,33 +103,40 @@ export class CommandExecService {
             }
             
             // Check if something already exists at targetPath and remove it if necessary
+            this.logger.log(`Checking if anything exists at target: ${targetPath}`);
             try {
                 const targetStats = await fs.promises.lstat(targetPath);
+                this.logger.log(`Found existing item at ${targetPath}: isDirectory=${targetStats.isDirectory()}, isFile=${targetStats.isFile()}, isSymlink=${targetStats.isSymbolicLink()}`);
+                
                 if (targetStats.isSymbolicLink()) {
                     // Already a symlink - check if it's correct
                     const existingTarget = await fs.promises.readlink(targetPath);
                     if (existingTarget === linkTarget) {
-                        this.logger.debug(`Symlink already exists with correct target: ${targetPath} -> ${linkTarget}`);
+                        this.logger.log(`Symlink already exists with correct target: ${targetPath} -> ${linkTarget}`);
                         command.ops[OPS_CMD.COPY_SYMLINK] = { status: OPS_STATUS.COMPLETED, params: { linkTarget } };
                         output.shouldStampMeta = true;
                         output.shouldUpdateItemInfo = true;
                         return output;
                     } else {
-                        this.logger.warn(`Symlink exists but points to wrong target. Existing: ${existingTarget}, Expected: ${linkTarget}. Removing...`);
+                        this.logger.log(`Symlink exists but points to wrong target. Existing: ${existingTarget}, Expected: ${linkTarget}. Removing...`);
                         await fs.promises.unlink(targetPath);
+                        this.logger.log(`Removed incorrect symlink at: ${targetPath}`);
                     }
                 } else if (targetStats.isDirectory()) {
-                    this.logger.warn(`Directory exists at symlink location: ${targetPath}. Removing to create symlink...`);
+                    this.logger.log(`Directory exists at symlink location: ${targetPath}. Removing to create symlink...`);
                     await fs.promises.rm(targetPath, { recursive: true, force: true });
+                    this.logger.log(`Removed directory at: ${targetPath}`);
                 } else {
-                    this.logger.warn(`File exists at symlink location: ${targetPath}. Removing to create symlink...`);
+                    this.logger.log(`File exists at symlink location: ${targetPath}. Removing to create symlink...`);
                     await fs.promises.unlink(targetPath);
+                    this.logger.log(`Removed file at: ${targetPath}`);
                 }
             } catch (checkErr) {
-                if (checkErr.code !== 'ENOENT') {
-                    this.logger.debug(`Could not check/remove existing item at ${targetPath}: ${checkErr.message}`);
+                if (checkErr.code === 'ENOENT') {
+                    this.logger.log(`Nothing exists at ${targetPath} - good, ready to create symlink`);
+                } else {
+                    this.logger.log(`Could not check/remove existing item at ${targetPath}: ${checkErr.code} - ${checkErr.message}`);
                 }
-                // ENOENT is expected - nothing exists yet, which is good
             }
             
             // Create the symbolic link
