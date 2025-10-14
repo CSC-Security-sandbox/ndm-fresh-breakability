@@ -86,17 +86,28 @@ export class CommandExecService {
             // Create the symbolic link
             // On Windows, we need to specify the type parameter
             if (process.platform === 'win32') {
-                // Determine if the target is a directory or file
-                // We need to check the actual target, not the symlink itself
+                // Determine if the symlink points to a directory or file
+                // We check the source symlink using lstat to see if it was created as a directory symlink
                 let symlinkType: 'file' | 'dir' | 'junction' = 'file';
                 try {
-                    // Resolve the full path of the link target relative to the source directory
-                    const targetFullPath = path.resolve(path.dirname(sourcePath), linkTarget);
-                    const targetStats = await fs.promises.stat(targetFullPath);
-                    symlinkType = targetStats.isDirectory() ? 'dir' : 'file';
+                    // First, check the source symlink itself to understand what type it is
+                    const sourceLstat = await fs.promises.lstat(sourcePath);
+                    
+                    // If the source is a symlink that appears as a directory (directory symlink)
+                    // we should create it as a directory symlink on the destination
+                    if (sourceLstat.isDirectory()) {
+                        symlinkType = 'dir';
+                    } else {
+                        // Otherwise, check what the target actually is
+                        const targetFullPath = path.resolve(path.dirname(sourcePath), linkTarget);
+                        const targetStats = await fs.promises.stat(targetFullPath);
+                        symlinkType = targetStats.isDirectory() ? 'dir' : 'file';
+                    }
+                    
+                    this.logger.debug(`Symlink ${sourcePath} determined as type: ${symlinkType}`);
                 } catch (err) {
                     // If we can't stat the target (broken link or permission issues), default to 'file'
-                    this.logger.warn(`Could not stat symlink target ${linkTarget}, defaulting to 'file' type: ${err.message}`);
+                    this.logger.warn(`Could not determine symlink type for ${linkTarget}, defaulting to 'file' type: ${err.message}`);
                 }
                 await fs.promises.symlink(linkTarget, targetPath, symlinkType);
                 this.logger.debug(`Created Windows symbolic link (${symlinkType}): ${targetPath} -> ${linkTarget}`);
