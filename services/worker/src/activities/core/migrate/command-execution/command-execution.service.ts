@@ -84,13 +84,35 @@ export class CommandExecService {
             const linkTarget = await fs.promises.readlink(sourcePath);
             
             // Create the symbolic link
-            await fs.promises.symlink(linkTarget, targetPath);
+            // On Windows, we need to specify the type parameter
+            if (process.platform === 'win32') {
+                // Determine if the target is a directory or file
+                // We need to check the actual target, not the symlink itself
+                let symlinkType: 'file' | 'dir' | 'junction' = 'file';
+                try {
+                    // Resolve the full path of the link target relative to the source directory
+                    const targetFullPath = path.resolve(path.dirname(sourcePath), linkTarget);
+                    const targetStats = await fs.promises.stat(targetFullPath);
+                    symlinkType = targetStats.isDirectory() ? 'dir' : 'file';
+                } catch (err) {
+                    // If we can't stat the target (broken link or permission issues), default to 'file'
+                    this.logger.warn(`Could not stat symlink target ${linkTarget}, defaulting to 'file' type: ${err.message}`);
+                }
+                await fs.promises.symlink(linkTarget, targetPath, symlinkType);
+                this.logger.debug(`Created Windows symbolic link (${symlinkType}): ${targetPath} -> ${linkTarget}`);
+            } else {
+                // Unix/Linux doesn't require the type parameter
+                await fs.promises.symlink(linkTarget, targetPath);
+                this.logger.debug(`Created symbolic link: ${targetPath} -> ${linkTarget}`);
+            }
+            
+            // Mark operation as completed
+            command.ops[OPS_CMD.COPY_SYMLINK] = { status: OPS_STATUS.COMPLETED, params: { linkTarget } };
             
             output.shouldStampMeta = true;
             output.shouldUpdateItemInfo = true;
-            
-            this.logger.debug(`Created symbolic link: ${targetPath} -> ${linkTarget}`);
         } catch (error) {
+            command.ops[OPS_CMD.COPY_SYMLINK] = { ...command.ops[OPS_CMD.COPY_SYMLINK], status: OPS_STATUS.ERROR };
             this.logger.error(`Copying SYMLINK from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
             const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
             await jobContext.publishToErrorStream(dmErr);
