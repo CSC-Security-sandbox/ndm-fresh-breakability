@@ -220,7 +220,7 @@ jobs:
           password: ${{ secrets.AZURE_SP_PASSWORD }}
 
       - name: Set up Trivy
-        uses: aquasecurity/setup-trivy@9ea583eb67910444b1f64abf338bd2e105a0a93d
+        uses: aquasecurity/setup-trivy@53ef279df5d7cd0583411f1448f8ded592f5edf2
         with:
           version: ${{ env.TRIVY_VERSION }}
 
@@ -247,7 +247,7 @@ jobs:
 
       - name: Scan image with Trivy (JSON, fail on CRITICAL/HIGH)
         id: trivy-scan
-        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
         continue-on-error: true
         with:
           image-ref: '${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}'
