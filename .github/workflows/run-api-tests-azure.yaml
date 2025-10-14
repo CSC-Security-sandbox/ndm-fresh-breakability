@@ -402,11 +402,318 @@ jobs:
           name: nfs-test-logs-${{ github.run_id }}
           path: ndm-api-tests/reports/
           retention-days: 30
+  send-workflow-card:
+    if: ${{ github.event_name == 'schedule' }}
+    name: Parse Test Results & Send Notifications
+    runs-on: openlab
+    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
+    outputs:
+      test_status: ${{ steps.workflow_outputs.outputs.test_status }}
+      total_tests: ${{ steps.workflow_outputs.outputs.total_tests }}
+      total_failed: ${{ steps.workflow_outputs.outputs.total_failed }}
+      pipeline_url: ${{ steps.workflow_outputs.outputs.pipeline_url }}
+      badge_color: ${{ steps.workflow_outputs.outputs.badge_color }}
+      badge_message: ${{ steps.workflow_outputs.outputs.badge_message }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+    - name: Set up Go for Parser
+      uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Setup GitHub Token
+      run: |
+        echo "GITHUB_TOKEN=${{ secrets.GITOPS_USER_GITHUB_TOKEN }}" >> $GITHUB_ENV
+
+    - name: Run Nightly Parser and Capture Output
+      id: parser
+      run: |
+        cd ndm-api-tests/parser
+        echo "Installing Go dependencies..."
+        go mod tidy
+        echo "Go dependencies installed successfully"
+        echo ""
+        echo "Running nightly parser..."
+        echo "=========================="
+        
+        OUTPUT=$(go run nightly-parser.go 2>&1)
+        echo "$OUTPUT"
+        
+        SUMMARY=$(echo "$OUTPUT" | sed -n '/TEST_SUMMARY_START/,/TEST_SUMMARY_END/p' | sed '1d;$d')
+        
+        JSON_RESULTS=$(echo "$OUTPUT" | sed -n '/JSON_RESULTS_START/,/JSON_RESULTS_END/p' | sed '1d;$d')
+        
+        TOTAL_TESTS=$(echo "$OUTPUT" | grep "TOTAL_TESTS=" | cut -d'=' -f2)
+        TOTAL_PASSED=$(echo "$OUTPUT" | grep "TOTAL_PASSED=" | cut -d'=' -f2)
+        TOTAL_FAILED=$(echo "$OUTPUT" | grep "TOTAL_FAILED=" | cut -d'=' -f2)
+        TOTAL_SKIPPED=$(echo "$OUTPUT" | grep "TOTAL_SKIPPED=" | cut -d'=' -f2)
+        PIPELINE_URL=$(echo "$OUTPUT" | grep "PIPELINE_URL=" | cut -d'=' -f2-)
+        TEST_STATUS=$(echo "$OUTPUT" | grep "TEST_STATUS=" | cut -d'=' -f2)
+        
+        echo "summary<<EOF" >> $GITHUB_OUTPUT
+        echo "$SUMMARY" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        echo "json_results<<EOF" >> $GITHUB_OUTPUT
+        echo "$JSON_RESULTS" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        echo "total_tests=$TOTAL_TESTS" >> $GITHUB_OUTPUT
+        echo "total_passed=$TOTAL_PASSED" >> $GITHUB_OUTPUT
+        echo "total_failed=$TOTAL_FAILED" >> $GITHUB_OUTPUT
+        echo "total_skipped=$TOTAL_SKIPPED" >> $GITHUB_OUTPUT
+        echo "pipeline_url=$PIPELINE_URL" >> $GITHUB_OUTPUT
+        echo "test_status=$TEST_STATUS" >> $GITHUB_OUTPUT
+        
+        echo "=========================="
+        echo "Parser execution completed."
+
+    - name: Display Captured Results
+      run: |
+        echo "=== CAPTURED TEST SUMMARY ==="
+        echo "${{ steps.parser.outputs.summary }}"
+        echo ""
+        echo "=== TEST METRICS ==="
+        echo "Total Tests: ${{ steps.parser.outputs.total_tests }}"
+        echo "Passed: ${{ steps.parser.outputs.total_passed }}"
+        echo "Failed: ${{ steps.parser.outputs.total_failed }}"
+        echo "Skipped: ${{ steps.parser.outputs.total_skipped }}"
+        echo "Status: ${{ steps.parser.outputs.test_status }}"
+        echo "Pipeline: ${{ steps.parser.outputs.pipeline_url }}"
+        echo ""
+        echo "=== JSON RESULTS ==="
+        echo "${{ steps.parser.outputs.json_results }}"
+
+    - name: Send Teams Notification Card
+      if: always()
+      run: |
+        # Determine test status for title and color
+        TOTAL_FAILED="${{ steps.parser.outputs.total_failed }}"
+        TOTAL_TESTS="${{ steps.parser.outputs.total_tests }}"
+        TOTAL_PASSED="${{ steps.parser.outputs.total_passed }}"
+        TOTAL_SKIPPED="${{ steps.parser.outputs.total_skipped }}"
+        TEST_STATUS="${{ steps.parser.outputs.test_status }}"
+        
+        if [ "$TOTAL_FAILED" -gt 0 ]; then
+          CARD_TITLE="Nightly Test Results - FAILURES DETECTED"
+          TITLE_COLOR='"color": "Attention",'
+        else
+          CARD_TITLE="Nightly Test Results"
+          TITLE_COLOR=""
+        fi
+        
+        # Build the Adaptive Card body using cat with heredoc for cleaner quote handling
+        if [ "$TOTAL_FAILED" -gt 0 ]; then
+          # Enhanced card with failure details
+          cat > teams_card.json << EOF
+        {
+          "type": "AdaptiveCard",
+          "version": "1.5",
+          "body": [
+            {
+              "type": "TextBlock",
+              "text": "${CARD_TITLE}",
+              "size": "Medium",
+              "weight": "Bolder",
+              "color": "Attention"
+            },
+            {
+              "type": "FactSet",
+              "facts": [
+                {
+                  "title": "Total Tests:",
+                  "value": "${TOTAL_TESTS}"
+                },
+                {
+                  "title": "Passed:",
+                  "value": "${TOTAL_PASSED}"
+                },
+                {
+                  "title": "Failed:",
+                  "value": "${TOTAL_FAILED}"
+                },
+                {
+                  "title": "Skipped:",
+                  "value": "${TOTAL_SKIPPED}"
+                },
+                {
+                  "title": "Status:",
+                  "value": "${TEST_STATUS}"
+                }
+              ]
+            },
+            {
+              "type": "TextBlock",
+              "text": "**Test Summary:**",
+              "weight": "Bolder",
+              "spacing": "Medium"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${{ steps.parser.outputs.summary }}",
+              "wrap": true,
+              "spacing": "Small"
+            },
+            {
+              "type": "TextBlock",
+              "text": "**Detailed Results:**",
+              "weight": "Bolder",
+              "spacing": "Medium"
+            },
+            {
+              "type": "TextBlock",
+              "text": "\`\`\`json\n${{ steps.parser.outputs.json_results }}\n\`\`\`",
+              "wrap": true,
+              "spacing": "Small"
+            }
+          ],
+          "actions": [
+            {
+              "type": "Action.OpenUrl",
+              "title": "View Failed Pipeline",
+              "url": "${{ steps.parser.outputs.pipeline_url }}"
+            },
+            {
+              "type": "Action.OpenUrl",
+              "title": "Debug Workflow",
+              "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+          ]
+        }
+        EOF
+        else
+          # Standard success card
+          cat > teams_card.json << EOF
+        {
+          "type": "AdaptiveCard",
+          "version": "1.5",
+          "body": [
+            {
+              "type": "TextBlock",
+              "text": "${CARD_TITLE}",
+              "size": "Medium",
+              "weight": "Bolder"
+            },
+            {
+              "type": "FactSet",
+              "facts": [
+                {
+                  "title": "Total Tests:",
+                  "value": "${TOTAL_TESTS}"
+                },
+                {
+                  "title": "Passed:",
+                  "value": "${TOTAL_PASSED}"
+                },
+                {
+                  "title": "Failed:",
+                  "value": "${TOTAL_FAILED}"
+                },
+                {
+                  "title": "Skipped:",
+                  "value": "${TOTAL_SKIPPED}"
+                },
+                {
+                  "title": "Status:",
+                  "value": "${TEST_STATUS}"
+                }
+              ]
+            },
+            {
+              "type": "TextBlock",
+              "text": "**Test Summary:**",
+              "weight": "Bolder",
+              "spacing": "Medium"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${{ steps.parser.outputs.summary }}",
+              "wrap": true,
+              "spacing": "Small"
+            }
+          ],
+          "actions": [
+            {
+              "type": "Action.OpenUrl",
+              "title": "View Pipeline",
+              "url": "${{ steps.parser.outputs.pipeline_url }}"
+            },
+            {
+              "type": "Action.OpenUrl",
+              "title": "View Workflow",
+              "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+          ]
+        }
+        EOF
+        fi
+        
+        echo "=== TEAMS CARD PAYLOAD ==="
+        cat teams_card.json | jq . 2>/dev/null || cat teams_card.json
+        echo ""
+        echo "=========================="
+        
+        if [ -n "${{ secrets.POWER_AUTOMATE_URL }}" ]; then
+          echo "Sending Teams notification..."
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -d @teams_card.json \
+            "${{ secrets.POWER_AUTOMATE_URL }}"
+          
+          if [ $? -eq 0 ]; then
+            echo "Teams notification sent successfully!"
+          else
+            echo "Failed to send Teams notification"
+          fi
+        else
+          echo "POWER_AUTOMATE_URL not configured, skipping Teams notification"
+        fi
+
+    - name: Create Test Summary for GitHub Actions
+      if: always()
+      run: |
+        # Create GitHub Actions Job Summary
+        cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+        ## Nightly Test Results Summary
+        
+        ### Test Metrics
+        | Metric | Count |
+        |--------|-------|
+        | Total Tests | ${{ steps.parser.outputs.total_tests }} |
+        | Passed | ${{ steps.parser.outputs.total_passed }} |
+        | Failed | ${{ steps.parser.outputs.total_failed }} |
+        | Skipped | ${{ steps.parser.outputs.total_skipped }} |
+        | Status | ${{ steps.parser.outputs.test_status }} |
+        
+        ### Detailed Results
+        ```
+        ${{ steps.parser.outputs.summary }}
+        ```
+        
+        ### Links
+        - [View Source Pipeline](${{ steps.parser.outputs.pipeline_url }})
+        - [View This Workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+        
+        ### Raw JSON Data
+        <details>
+        <summary>Click to view JSON results</summary>
+        
+        ```json
+        ${{ steps.parser.outputs.json_results }}
+        ```
+        </details>
+        EOF
+        
+        echo " GitHub Actions Job Summary created!"
+
 
   upload-support-bundle:
     name: Upload Support Bundles
     runs-on: openlab
-    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
+    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests, send-workflow-card]
     if: always()
     env:
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
