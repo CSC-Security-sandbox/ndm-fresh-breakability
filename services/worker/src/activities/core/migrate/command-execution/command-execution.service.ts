@@ -81,36 +81,49 @@ export class CommandExecService {
             return output;
         }
         try {
-            const linkTarget = await fs.promises.readlink(sourcePath);
+            let linkTarget = await fs.promises.readlink(sourcePath);
+            this.logger.debug(`Read symlink: ${sourcePath} -> ${linkTarget}`);
+            
+            // If linkTarget is absolute, we need to convert it to relative or adjust it for destination
+            // This handles the case where Windows symlinks have absolute paths like D:\Shares\...
+            if (path.isAbsolute(linkTarget)) {
+                this.logger.debug(`Symlink target is absolute: ${linkTarget}, converting to relative path`);
+                // Convert absolute source path to relative from the symlink location
+                linkTarget = path.relative(path.dirname(sourcePath), linkTarget);
+                this.logger.debug(`Converted to relative path: ${linkTarget}`);
+            }
             
             // Create the symbolic link
             // On Windows, we need to specify the type parameter
             if (process.platform === 'win32') {
                 // Determine if the symlink points to a directory or file
-                // We check the source symlink using lstat to see if it was created as a directory symlink
                 let symlinkType: 'file' | 'dir' | 'junction' = 'file';
+                
+                // Check what the target will be - resolve it relative to the source symlink location
+                const sourceTargetPath = path.resolve(path.dirname(sourcePath), linkTarget);
+                this.logger.debug(`Resolved source target path: ${sourceTargetPath}`);
+                
                 try {
-                    // First, check the source symlink itself to understand what type it is
-                    const sourceLstat = await fs.promises.lstat(sourcePath);
-                    
-                    // If the source is a symlink that appears as a directory (directory symlink)
-                    // we should create it as a directory symlink on the destination
-                    if (sourceLstat.isDirectory()) {
-                        symlinkType = 'dir';
-                    } else {
-                        // Otherwise, check what the target actually is
-                        const targetFullPath = path.resolve(path.dirname(sourcePath), linkTarget);
-                        const targetStats = await fs.promises.stat(targetFullPath);
-                        symlinkType = targetStats.isDirectory() ? 'dir' : 'file';
+                    const sourceTargetStats = await fs.promises.stat(sourceTargetPath);
+                    symlinkType = sourceTargetStats.isDirectory() ? 'dir' : 'file';
+                    this.logger.debug(`Source target is ${sourceTargetStats.isDirectory() ? 'directory' : 'file'}, using symlink type: ${symlinkType}`);
+                } catch (srcErr) {
+                    // Can't stat the source target, try destination
+                    this.logger.debug(`Could not stat source target (${srcErr.message}), checking destination`);
+                    try {
+                        const destinationTargetPath = path.resolve(path.dirname(targetPath), linkTarget);
+                        const destTargetStats = await fs.promises.stat(destinationTargetPath);
+                        symlinkType = destTargetStats.isDirectory() ? 'dir' : 'file';
+                        this.logger.debug(`Destination target is ${destTargetStats.isDirectory() ? 'directory' : 'file'}, using symlink type: ${symlinkType}`);
+                    } catch (destErr) {
+                        // Can't determine type from either, default to 'file'
+                        this.logger.warn(`Could not stat symlink target anywhere (src: ${srcErr.message}, dest: ${destErr.message}), defaulting to 'file' type`);
                     }
-                    
-                    this.logger.debug(`Symlink ${sourcePath} determined as type: ${symlinkType}`);
-                } catch (err) {
-                    // If we can't stat the target (broken link or permission issues), default to 'file'
-                    this.logger.warn(`Could not determine symlink type for ${linkTarget}, defaulting to 'file' type: ${err.message}`);
                 }
+                
+                this.logger.debug(`Creating Windows symlink: ${targetPath} -> ${linkTarget} with type=${symlinkType}`);
                 await fs.promises.symlink(linkTarget, targetPath, symlinkType);
-                this.logger.debug(`Created Windows symbolic link (${symlinkType}): ${targetPath} -> ${linkTarget}`);
+                this.logger.debug(`Successfully created Windows symbolic link (${symlinkType}): ${targetPath} -> ${linkTarget}`);
             } else {
                 // Unix/Linux doesn't require the type parameter
                 await fs.promises.symlink(linkTarget, targetPath);
