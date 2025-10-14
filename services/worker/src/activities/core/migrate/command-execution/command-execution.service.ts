@@ -99,26 +99,20 @@ export class CommandExecService {
                 // Determine if the symlink points to a directory or file
                 let symlinkType: 'file' | 'dir' | 'junction' = 'file';
                 
-                // Check what the target will be - resolve it relative to the source symlink location
+                // Check what the target points to by resolving relative to the source symlink location
+                // Use lstat (not stat) to avoid following the target if it's also a symlink
                 const sourceTargetPath = path.resolve(path.dirname(sourcePath), linkTarget);
-                this.logger.debug(`Resolved source target path: ${sourceTargetPath}`);
+                this.logger.debug(`Checking source symlink target: ${sourceTargetPath}`);
                 
                 try {
-                    const sourceTargetStats = await fs.promises.stat(sourceTargetPath);
+                    // Use lstat instead of stat so if the target is also a symlink,
+                    // we check the symlink's type, not what it ultimately points to
+                    const sourceTargetStats = await fs.promises.lstat(sourceTargetPath);
                     symlinkType = sourceTargetStats.isDirectory() ? 'dir' : 'file';
-                    this.logger.debug(`Source target is ${sourceTargetStats.isDirectory() ? 'directory' : 'file'}, using symlink type: ${symlinkType}`);
+                    this.logger.debug(`Source target is ${sourceTargetStats.isDirectory() ? 'directory' : 'file'} (isSymbolicLink=${sourceTargetStats.isSymbolicLink()}), using symlink type: ${symlinkType}`);
                 } catch (srcErr) {
-                    // Can't stat the source target, try destination
-                    this.logger.debug(`Could not stat source target (${srcErr.message}), checking destination`);
-                    try {
-                        const destinationTargetPath = path.resolve(path.dirname(targetPath), linkTarget);
-                        const destTargetStats = await fs.promises.stat(destinationTargetPath);
-                        symlinkType = destTargetStats.isDirectory() ? 'dir' : 'file';
-                        this.logger.debug(`Destination target is ${destTargetStats.isDirectory() ? 'directory' : 'file'}, using symlink type: ${symlinkType}`);
-                    } catch (destErr) {
-                        // Can't determine type from either, default to 'file'
-                        this.logger.warn(`Could not stat symlink target anywhere (src: ${srcErr.message}, dest: ${destErr.message}), defaulting to 'file' type`);
-                    }
+                    // Source target doesn't exist or can't be accessed
+                    this.logger.debug(`Could not lstat source target (${srcErr.message}), defaulting to 'file' type`);
                 }
                 
                 this.logger.debug(`Creating Windows symlink: ${targetPath} -> ${linkTarget} with type=${symlinkType}`);
