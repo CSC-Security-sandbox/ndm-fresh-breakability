@@ -21,7 +21,7 @@ import { LoggerOptions } from "./logger.type";
  */
 export default registerAs('loggerOptions', (): LoggerOptions => ({
     logsDir: process.env.LOG_DIR?.toLowerCase() || './logs',
-    logLevel: process.env.LOG_LEVEL?.toLowerCase() || 'info',
+    logLevel: process.env.LOG_LEVEL?.toLowerCase() || 'debug',  // Changed from 'info' to 'debug'
     enableFileLogging: process.env.ENABLE_FILE_LOGGING?.toLowerCase() !== 'false',
     enableConsoleLogging: process.env.ENABLE_CONSOLE_LOGGING?.toLowerCase() !== 'false',
     maxFiles: process.env.LOG_MAX_FILES || '30d',

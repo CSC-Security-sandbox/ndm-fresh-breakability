@@ -156,29 +156,9 @@ export class CommandExecService {
                 
                 this.logger.debug(`Creating Windows symlink: ${targetPath} -> ${linkTarget} with type=${symlinkType}`);
                 
-                try {
-                    await fs.promises.symlink(linkTarget, targetPath, symlinkType);
-                    this.logger.debug(`Successfully created Windows symbolic link (${symlinkType}): ${targetPath} -> ${linkTarget}`);
-                } catch (symlinkErr) {
-                    // Check if this is an EISDIR error - likely means target doesn't exist on destination yet
-                    if (symlinkErr.code === 'EISDIR') {
-                        this.logger.warn(`EISDIR error creating symlink, target may not exist on destination yet. Will retry: ${targetPath} -> ${linkTarget}`);
-                        // Check if target exists on destination
-                        const destinationTargetPath = path.resolve(path.dirname(targetPath), linkTarget);
-                        try {
-                            await fs.promises.access(destinationTargetPath);
-                            // Target exists on destination but still failed, this is a real error
-                            throw symlinkErr;
-                        } catch (accessErr) {
-                            // Target doesn't exist on destination yet - don't mark as completed, will retry later
-                            this.logger.log(`Symlink target doesn't exist on destination yet: ${destinationTargetPath}. Marking for retry.`);
-                            command.ops[OPS_CMD.COPY_SYMLINK].status = OPS_STATUS.PENDING;
-                            output.shouldStampMeta = false;
-                            return output;
-                        }
-                    }
-                    throw symlinkErr;
-                }
+                // Create the symlink (conflicts already handled above)
+                await fs.promises.symlink(linkTarget, targetPath, symlinkType);
+                this.logger.debug(`Successfully created Windows symbolic link (${symlinkType}): ${targetPath} -> ${linkTarget}`);
             } else {
                 // Unix/Linux doesn't require the type parameter
                 await fs.promises.symlink(linkTarget, targetPath);
