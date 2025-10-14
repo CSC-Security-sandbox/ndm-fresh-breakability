@@ -97,7 +97,7 @@ export class CommandExecService {
             const parentDir = path.dirname(targetPath);
             try {
                 await fs.promises.mkdir(parentDir, { recursive: true });
-                this.logger.debug(`Ensured parent directory exists: ${parentDir}`);
+                this.logger.log(`Ensured parent directory exists: ${parentDir}`);
             } catch (mkdirErr) {
                 this.logger.warn(`Could not create parent directory ${parentDir}: ${mkdirErr.message}`);
             }
@@ -138,23 +138,22 @@ export class CommandExecService {
                 // Determine if the symlink points to a directory or file
                 let symlinkType: 'file' | 'dir' | 'junction' = 'file';
                 
-                // Check what the target points to by resolving relative to the source symlink location
-                // Use lstat (not stat) to avoid following the target if it's also a symlink
-                const sourceTargetPath = path.resolve(path.dirname(sourcePath), linkTarget);
-                this.logger.debug(`Checking source symlink target: ${sourceTargetPath}`);
+                // Check what the source symlink actually points to
+                // Use stat() on the source symlink itself (not its target path) to follow it
+                this.logger.log(`Checking source symlink target by following: ${sourcePath}`);
                 
                 try {
-                    // Use lstat instead of stat so if the target is also a symlink,
-                    // we check the symlink's type, not what it ultimately points to
-                    const sourceTargetStats = await fs.promises.lstat(sourceTargetPath);
+                    // Use stat (not lstat) on the SOURCE SYMLINK to follow it and see what type it ultimately points to
+                    // This works because sourcePath is already the symlink we're copying
+                    const sourceTargetStats = await fs.promises.stat(sourcePath);
                     symlinkType = sourceTargetStats.isDirectory() ? 'dir' : 'file';
-                    this.logger.debug(`Source target is ${sourceTargetStats.isDirectory() ? 'directory' : 'file'} (isSymbolicLink=${sourceTargetStats.isSymbolicLink()}), using symlink type: ${symlinkType}`);
+                    this.logger.log(`Source symlink points to ${sourceTargetStats.isDirectory() ? 'directory' : 'file'}, using symlink type: ${symlinkType}`);
                 } catch (srcErr) {
                     // Source target doesn't exist or can't be accessed
-                    this.logger.debug(`Could not lstat source target (${srcErr.message}), defaulting to 'file' type`);
+                    this.logger.log(`Could not stat source symlink target (${srcErr.message}), defaulting to 'file' type`);
                 }
                 
-                this.logger.debug(`Creating Windows symlink: ${targetPath} -> ${linkTarget} with type=${symlinkType}`);
+                this.logger.log(`Creating Windows symlink: ${targetPath} -> ${linkTarget} with type=${symlinkType}`);
                 
                 // Create the symlink (conflicts already handled above)
                 await fs.promises.symlink(linkTarget, targetPath, symlinkType);
