@@ -93,6 +93,45 @@ export class CommandExecService {
                 this.logger.debug(`Converted to relative path: ${linkTarget}`);
             }
             
+            // Ensure parent directory exists before creating symlink
+            const parentDir = path.dirname(targetPath);
+            try {
+                await fs.promises.mkdir(parentDir, { recursive: true });
+                this.logger.debug(`Ensured parent directory exists: ${parentDir}`);
+            } catch (mkdirErr) {
+                this.logger.warn(`Could not create parent directory ${parentDir}: ${mkdirErr.message}`);
+            }
+            
+            // Check if something already exists at targetPath and remove it if necessary
+            try {
+                const targetStats = await fs.promises.lstat(targetPath);
+                if (targetStats.isSymbolicLink()) {
+                    // Already a symlink - check if it's correct
+                    const existingTarget = await fs.promises.readlink(targetPath);
+                    if (existingTarget === linkTarget) {
+                        this.logger.debug(`Symlink already exists with correct target: ${targetPath} -> ${linkTarget}`);
+                        command.ops[OPS_CMD.COPY_SYMLINK] = { status: OPS_STATUS.COMPLETED, params: { linkTarget } };
+                        output.shouldStampMeta = true;
+                        output.shouldUpdateItemInfo = true;
+                        return output;
+                    } else {
+                        this.logger.warn(`Symlink exists but points to wrong target. Existing: ${existingTarget}, Expected: ${linkTarget}. Removing...`);
+                        await fs.promises.unlink(targetPath);
+                    }
+                } else if (targetStats.isDirectory()) {
+                    this.logger.warn(`Directory exists at symlink location: ${targetPath}. Removing to create symlink...`);
+                    await fs.promises.rm(targetPath, { recursive: true, force: true });
+                } else {
+                    this.logger.warn(`File exists at symlink location: ${targetPath}. Removing to create symlink...`);
+                    await fs.promises.unlink(targetPath);
+                }
+            } catch (checkErr) {
+                if (checkErr.code !== 'ENOENT') {
+                    this.logger.debug(`Could not check/remove existing item at ${targetPath}: ${checkErr.message}`);
+                }
+                // ENOENT is expected - nothing exists yet, which is good
+            }
+            
             // Create the symbolic link
             // On Windows, we need to specify the type parameter
             if (process.platform === 'win32') {
@@ -116,8 +155,30 @@ export class CommandExecService {
                 }
                 
                 this.logger.debug(`Creating Windows symlink: ${targetPath} -> ${linkTarget} with type=${symlinkType}`);
-                await fs.promises.symlink(linkTarget, targetPath, symlinkType);
-                this.logger.debug(`Successfully created Windows symbolic link (${symlinkType}): ${targetPath} -> ${linkTarget}`);
+                
+                try {
+                    await fs.promises.symlink(linkTarget, targetPath, symlinkType);
+                    this.logger.debug(`Successfully created Windows symbolic link (${symlinkType}): ${targetPath} -> ${linkTarget}`);
+                } catch (symlinkErr) {
+                    // Check if this is an EISDIR error - likely means target doesn't exist on destination yet
+                    if (symlinkErr.code === 'EISDIR') {
+                        this.logger.warn(`EISDIR error creating symlink, target may not exist on destination yet. Will retry: ${targetPath} -> ${linkTarget}`);
+                        // Check if target exists on destination
+                        const destinationTargetPath = path.resolve(path.dirname(targetPath), linkTarget);
+                        try {
+                            await fs.promises.access(destinationTargetPath);
+                            // Target exists on destination but still failed, this is a real error
+                            throw symlinkErr;
+                        } catch (accessErr) {
+                            // Target doesn't exist on destination yet - don't mark as completed, will retry later
+                            this.logger.log(`Symlink target doesn't exist on destination yet: ${destinationTargetPath}. Marking for retry.`);
+                            command.ops[OPS_CMD.COPY_SYMLINK].status = OPS_STATUS.PENDING;
+                            output.shouldStampMeta = false;
+                            return output;
+                        }
+                    }
+                    throw symlinkErr;
+                }
             } else {
                 // Unix/Linux doesn't require the type parameter
                 await fs.promises.symlink(linkTarget, targetPath);
