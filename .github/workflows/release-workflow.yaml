@@ -57,7 +57,7 @@ jobs:
 
   build-worker-binary:
     needs: check-branch
-    uses: ./.github/workflows/build-binary-and-installer-for-worker.yaml
+    uses: ./.github/workflows/build-worker-binary.yaml
     with:
       build: ${{ needs.check-branch.outputs.build }}
     secrets: inherit
