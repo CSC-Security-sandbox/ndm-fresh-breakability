@@ -289,7 +289,7 @@ export class RedisConsumerService implements OnModuleDestroy {
 
     async removeConsumer(jobId: string, consumerType: string): Promise<void> {
         if (!this.isValidRedisClient()) {
-            const projectId = this.getProjectIdFromCache(jobId);
+            const projectId = await this.getProjectIdFromCache(jobId);
             this.logger.warn(`projectId: ${projectId} Redis client not available for removeConsumer, skipping`);
             return;
         }
@@ -298,7 +298,7 @@ export class RedisConsumerService implements OnModuleDestroy {
 
     async removeJobFromRedis(jobId: string): Promise<void> {
         if (!this.isValidRedisClient()) {
-            const projectId = this.getProjectIdFromCache(jobId);
+            const projectId = await this.getProjectIdFromCache(jobId);
             this.logger.warn(`projectId: ${projectId} Redis client not available for removeJobFromRedis, skipping Redis operations`);
         } else {
             await this.redisClient.del(this.buildRedisKey(jobId));
@@ -307,7 +307,7 @@ export class RedisConsumerService implements OnModuleDestroy {
     async getAllConsumerStatuses(jobId: string): Promise<Record<string, ReaderStatus>> {
         try {
             if (!this.isValidRedisClient()) {
-                const projectId = this.getProjectIdFromCache(jobId);
+                const projectId = await this.getProjectIdFromCache(jobId);
                 this.logger.warn(`projectId: ${projectId} Redis client not available, attempting to reinitialize`);
                 await this.initializeRedisConnection();
 
@@ -320,7 +320,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             const result = await this.redisClient.hGetAll(this.buildRedisKey(jobId)) as Record<string, ReaderStatus>;
             return result || {};
         } catch (error) {
-            const projectId = this.getProjectIdFromCache(jobId);
+            const projectId = await this.getProjectIdFromCache(jobId);
             this.logger.error(`projectId: ${projectId} Error getting consumer statuses for jobRunId=${jobId}: ${error.message}`, error?.stack || error);
             return {};
         }
@@ -352,7 +352,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             const redisStatus = await this.getConsumerStatus(jobId, consumerType);
             isRunning = redisStatus === 'active';
         } catch (error) {
-            const projectId = this.getProjectIdFromCache(jobId);
+            const projectId = await this.getProjectIdFromCache(jobId);
             this.logger.error(`projectId: ${projectId} Error checking Redis for jobId=${jobId}, consumerType=${consumerType}: ${error.message}`, error?.stack || error);
         }
 
@@ -382,7 +382,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             );
             return true;
         } catch (error) {
-            const cachedProjectId = this.getProjectIdFromCache(jobRunId);
+            const cachedProjectId = await this.getProjectIdFromCache(jobRunId);
             this.logger.error(`projectId: ${cachedProjectId} Error saving consumers to Redis: ${error.message}`, error?.stack || error);
             throw error;
         }
@@ -422,7 +422,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                 const match = key.match(/^db-writer:(.+):$/);
                 if (!match) continue;
                 const jobId = match[1];
-                const projectId = this.getProjectIdFromCache(jobId);
+                const projectId = await this.getProjectIdFromCache(jobId);
 
                 const consumerStatuses: Record<string, ReaderStatus> = await this.getAllConsumerStatuses(jobId);
 
@@ -477,7 +477,7 @@ export class RedisConsumerService implements OnModuleDestroy {
      * @throws {Error} When worker fails or times out
      */
     async createConsumerWorkerThread(jobRunId: string): Promise<void> {
-        const projectId = this.getProjectIdFromCache(jobRunId);
+        const projectId = await this.getProjectIdFromCache(jobRunId);
         this.logger.log(`projectId: ${projectId} Creating worker thread for job ${jobRunId}`);
         return new Promise((resolve, reject) => {
             const workerPath = path.join(__dirname, '../../dist/redis-consumer/consumerWorker.js');
@@ -531,7 +531,7 @@ export class RedisConsumerService implements OnModuleDestroy {
      * @throws {Error} When one or more consumers fail
      */
     async executeConsumersInParallel(jobRunId: string): Promise<void> {
-        const projectId = this.getProjectIdFromCache(jobRunId);
+        const projectId = await this.getProjectIdFromCache(jobRunId);
         this.logger.log(`projectId: ${projectId} Starting parallel consumers for job ${jobRunId}`);
         const readers: Record<string, ReaderStatus> = await this.getAllConsumerStatuses(jobRunId);
         const consumerPromises: Promise<void>[] = [];
@@ -574,7 +574,7 @@ export class RedisConsumerService implements OnModuleDestroy {
      * @throws {Error} When consumer fails or context is unavailable
      */
     async executeConsumerLoop(jobRunId: string, consumerType: string): Promise<void> {
-        const projectId = this.getProjectIdFromCache(jobRunId);
+        const projectId = await this.getProjectIdFromCache(jobRunId);
         this.logger.log(`projectId: ${projectId} Starting consumer loop for ${consumerType} in job ${jobRunId}`);
         let jobContext: JobManagerContext | null = null;
 
@@ -694,7 +694,7 @@ export class RedisConsumerService implements OnModuleDestroy {
      * @returns {Promise<void>}
      */
     private async processStreamData(stream: any, consumerType: string, jobRunId: string, jobContext: JobManagerContext) {
-        const projectId = this.getProjectIdFromCache(jobRunId);
+        const projectId = await this.getProjectIdFromCache(jobRunId);
         try {
             switch (consumerType) {
                 case ConsumerType.errors:
@@ -774,7 +774,7 @@ export class RedisConsumerService implements OnModuleDestroy {
     }
 
     private async signalWorkflowKill(jobContext: JobManagerContext, jobRunId: string) {
-        const projectId = this.getProjectIdFromCache(jobRunId);
+        const projectId = await this.getProjectIdFromCache(jobRunId);
         const retryDelay = 1000; // 1 second delay between retries
 
         for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
@@ -843,7 +843,7 @@ export class RedisConsumerService implements OnModuleDestroy {
         pathId: string,
         jobContext: JobManagerContext
     ): Promise<void> {
-        const projectId = this.getProjectIdFromCache(jobRunId);
+        const projectId = await this.getProjectIdFromCache(jobRunId);
         if (!data) {
             this.logger.error(`projectId: ${projectId} No data provided for streamId: ${fileId} in job ${jobRunId}`);
             return;
@@ -918,7 +918,7 @@ export class RedisConsumerService implements OnModuleDestroy {
      * @returns 
      */
     private async flushInventory(jobRunId: string, jobContext: JobManagerContext) {
-        const projectId = this.getProjectIdFromCache(jobRunId);
+        const projectId = await this.getProjectIdFromCache(jobRunId);
         const context = this.jobConsumerMap.get(jobRunId);
         if (!context) {
             this.logger.warn(`projectId: ${projectId} No context found for flush operation in job ${jobRunId}`);
@@ -971,7 +971,7 @@ export class RedisConsumerService implements OnModuleDestroy {
      * Stop a specific consumer and clean up resources
      */
     async stopConsumer(jobRunId: string, consumerType: string): Promise<void> {
-        const projectId = this.getProjectIdFromCache(jobRunId);
+        const projectId = await this.getProjectIdFromCache(jobRunId);
         this.logger.log(`projectId: ${projectId} Stopping consumer ${consumerType} for job ${jobRunId}`);
         try {
             await this.updateConsumerStatus(jobRunId, consumerType, 'inactive');
@@ -985,7 +985,7 @@ export class RedisConsumerService implements OnModuleDestroy {
      * Stop all consumers for a job and clean up resources
      */
     async stopAllConsumers(jobRunId: string): Promise<void> {
-        const projectId = this.getProjectIdFromCache(jobRunId);
+        const projectId = await this.getProjectIdFromCache(jobRunId);
         this.logger.log(`projectId: ${projectId} Stopping all consumers for job ${jobRunId}`);
         try {
             const consumerStatuses = await this.getAllConsumerStatuses(jobRunId);
