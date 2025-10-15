@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Request } from '@nestjs/common';
+import { Body, Controller, Get, Post, Request, ForbiddenException } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
@@ -107,4 +107,25 @@ export class AuthController {
     const { email, enable } = userStatusDto;
     return await this.authService.setUserStatus(email, enable);
   }
+
+  @Get('secrets/redis')
+  @Auth()
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get Redis credentials for authenticated workers',
+  })
+  async getRedisCredentials(@Request() req) {
+    const roles = req.user?.realm_access?.roles || [];
+
+    if (!roles.includes('redis-secret-reader')) {
+      throw new ForbiddenException('Missing redis-secret-reader role');
+    }
+
+    return {
+      host: process.env.REDIS_HOST || 'redis-master.redis.svc.cluster.local',
+      username: process.env.REDIS_USERNAME || 'default',
+      password: process.env.REDIS_PASSWORD || 'welcome'
+    };
+  }
+
 }

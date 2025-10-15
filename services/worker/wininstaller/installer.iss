@@ -40,6 +40,102 @@ var
   ConfigWorkerID: String;
   ConfigWorkerSecret: String;
   ConfigProjectID: String;
+  RedisHost: String;
+  RedisUsername: String;
+  RedisPassword: String;
+
+  // ✅ ADD THIS FUNCTION AFTER THE VARIABLES
+function FetchRedisCredentials(): Boolean;
+var
+  TokenCmd, RedisCmd: String;
+  ResultCode: Integer;
+  TempFile: String;
+  Response: String;
+  StartPos, EndPos: Integer;
+begin
+  Result := False;
+  TempFile := ExpandConstant('{tmp}\api_response.txt');
+  
+  try
+    // Get JWT token
+    TokenCmd := 'curl.exe -s -d "grant_type=client_credentials" -d "client_id=' + ConfigWorkerID + 
+               '" -d "client_secret=' + ConfigWorkerSecret + '" "https://' + ConfigControlPlaneIP + 
+               '/keycloak/realms/datamigrator/protocol/openid-connect/token"';
+    
+    if Exec('cmd.exe', '/c ' + TokenCmd + ' > "' + TempFile + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    begin
+      if (ResultCode = 0) and LoadStringFromFile(TempFile, Response) then
+      begin
+        // Simple token extraction
+        StartPos := Pos('"access_token":"', String(Response));
+        if StartPos > 0 then
+        begin
+          StartPos := StartPos + 16;
+          EndPos := Pos('"', Copy(String(Response), StartPos, 1000));
+          if EndPos > 0 then
+          begin
+            // Get Redis credentials
+            RedisCmd := 'curl.exe -s -H "Authorization: Bearer ' + Copy(String(Response), StartPos, EndPos-1) + 
+                       '" "https://' + ConfigControlPlaneIP + '/api/v1/secrets/redis"';
+            
+            if Exec('cmd.exe', '/c ' + RedisCmd + ' > "' + TempFile + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+            begin
+              if (ResultCode = 0) and LoadStringFromFile(TempFile, Response) then
+              begin
+                // Parse Redis credentials (simple JSON parsing)
+                StartPos := Pos('"host":"', String(Response));
+                if StartPos > 0 then
+                begin
+                  StartPos := StartPos + 8;
+                  EndPos := Pos('"', Copy(String(Response), StartPos, 100));
+                  if EndPos > 0 then
+                    RedisHost := Copy(String(Response), StartPos, EndPos-1);
+                end;
+                
+                StartPos := Pos('"username":"', String(Response));
+                if StartPos > 0 then
+                begin
+                  StartPos := StartPos + 12;
+                  EndPos := Pos('"', Copy(String(Response), StartPos, 100));
+                  if EndPos > 0 then
+                    RedisUsername := Copy(String(Response), StartPos, EndPos-1);
+                end;
+                
+                StartPos := Pos('"password":"', String(Response));
+                if StartPos > 0 then
+                begin
+                  StartPos := StartPos + 12;
+                  EndPos := Pos('"', Copy(String(Response), StartPos, 100));
+                  if EndPos > 0 then
+                    RedisPassword := Copy(String(Response), StartPos, EndPos-1);
+                end;
+                
+                if (RedisHost <> '') and (RedisUsername <> '') and (RedisPassword <> '') then
+                begin
+                  Log('Redis credentials fetched successfully');
+                  Result := True;
+                end;
+              end;
+            end;
+          end;
+        end;
+      end;
+    end;
+  finally
+    if FileExists(TempFile) then
+      DeleteFile(TempFile);
+  end;
+  
+  // Fallback values
+  if not Result then
+  begin
+    Log('⚠️ Using fallback Redis credentials');
+    RedisHost := ConfigControlPlaneIP;
+    RedisUsername := 'default';
+    RedisPassword := 'welcome';
+    Result := True;
+  end;
+end;
 
 function InitializeSetup(): Boolean;
 begin
@@ -322,6 +418,9 @@ begin
       exit;
     end;
 
+    // For redis Creds
+    FetchRedisCredentials();
+
     EnvContent := 
       TempContent + #13#10 + #13#10 +
       'WORKER_CONFIG_URL=https://' + ConfigControlPlaneIP + #13#10 +
@@ -333,8 +432,8 @@ begin
       'WORKER_SECRET=' + ConfigWorkerSecret + #13#10 +
       'CONTROL_PLANE_IP=' + ConfigControlPlaneIP + #13#10 +
       'REDIS_HOST=' + ConfigControlPlaneIP + #13#10 +
-      'REDIS_USERNAME=default' + #13#10 +
-      'REDIS_PASSWORD=welcome' + #13#10 +
+      'REDIS_USERNAME=' + RedisUsername + #13#10 + 
+      'REDIS_PASSWORD=' + RedisPassword + #13#10 + 
       'BASE_WORKING_PATH=''C:\datamigrator\mnt''' + #13#10 +
       'PROJECT_ID=' + ConfigProjectID + #13#10 +
       'OTEL_COLLECTOR_ENDPOINT=' + ConfigControlPlaneIP + ':4318';
