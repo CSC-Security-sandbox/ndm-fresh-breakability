@@ -94,6 +94,8 @@ for service in "${services[@]}"; do
     image_tag="${repo_url}/ndm-${service_name}:${service_version}"
     
     echo -e "\nBuilding service image: $image_tag"
+
+
     docker build --platform $PLATFORM --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
         -t "$image_tag" \
         -f "$docker_file_path" "$build_context"

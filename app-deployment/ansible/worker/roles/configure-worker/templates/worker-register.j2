@@ -89,6 +89,7 @@ if [ -f "$ENV_FILE" ]; then
     fi
 fi
 
+
 # Create and write to worker.env
 log_message "Creating $ENV_FILE with necessary environment variables."
 {
@@ -102,8 +103,9 @@ log_message "Creating $ENV_FILE with necessary environment variables."
     echo "WORKER_SECRET=${WORKER_SECRET}"
     echo "CONTROL_PLANE_IP=${CONTROL_PLANE_IP}"
     echo "REDIS_HOST=${CONTROL_PLANE_IP}"
-    echo "REDIS_USERNAME=default"
-    echo "REDIS_PASSWORD=welcome"
+    # echo "REDIS_USERNAME=${REDIS_USERNAME}"
+    # echo "REDIS_PASSWORD=${REDIS_PASSWORD}"
+    echo "# Redis credentials will be fetched dynamically by the worker service"
     echo "PROJECT_ID=${PROJECT_ID}"
     echo "OTEL_COLLECTOR_ENDPOINT=${CONTROL_PLANE_IP}:4318"
 } >> "$ENV_FILE"

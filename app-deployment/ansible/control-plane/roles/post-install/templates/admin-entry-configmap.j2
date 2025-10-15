@@ -269,5 +269,14 @@ data:
     --header "Authorization: Bearer ${token}" \
     --data-raw "[{\"id\":\"${ROLE_ID}\",\"name\":\"manage-users\"}]"
 
+    echo "Creating redis-secret-reader role..."
+    
+    curl -k --silent --show-error --request POST \
+    --url "${KEYCLOAK_BASEURL}/admin/realms/${REALM_NAME}/roles" \
+    --header "Content-Type: application/json" \
+    --header "Authorization: Bearer ${token}" \
+    --data-raw '{"name":"redis-secret-reader","description":"Can access Redis credentials via Admin Service API"}'
+
+
 
     echo "Keycloak setup completed successfully"

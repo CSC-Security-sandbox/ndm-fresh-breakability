@@ -41,6 +41,7 @@ var
   ConfigWorkerSecret: String;
   ConfigProjectID: String;
 
+
 function InitializeSetup(): Boolean;
 begin
   Result := True;
@@ -364,6 +365,8 @@ begin
       exit;
     end;
 
+
+
     EnvContent := 
       TempContent + #13#10 + #13#10 +
       'WORKER_CONFIG_URL=https://' + ConfigControlPlaneIP + #13#10 +
@@ -375,8 +378,6 @@ begin
       'WORKER_SECRET=' + ConfigWorkerSecret + #13#10 +
       'CONTROL_PLANE_IP=' + ConfigControlPlaneIP + #13#10 +
       'REDIS_HOST=' + ConfigControlPlaneIP + #13#10 +
-      'REDIS_USERNAME=default' + #13#10 +
-      'REDIS_PASSWORD=welcome' + #13#10 +
       'BASE_WORKING_PATH=''C:\datamigrator\mnt''' + #13#10 +
       'PROJECT_ID=' + ConfigProjectID + #13#10 +
       'OTEL_COLLECTOR_ENDPOINT=' + ConfigControlPlaneIP + ':4318';

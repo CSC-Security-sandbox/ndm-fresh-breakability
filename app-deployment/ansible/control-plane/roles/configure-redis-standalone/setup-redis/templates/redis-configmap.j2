@@ -6,7 +6,8 @@ metadata:
 data:
     master.conf: |
         bind 0.0.0.0
-        requirepass welcome
+        # Remove hardcoded password - Redis will use auth from secret
+        # requirepass welcome
         dir /data
         rename-command FLUSHDB ""
         rename-command FLUSHALL ""
