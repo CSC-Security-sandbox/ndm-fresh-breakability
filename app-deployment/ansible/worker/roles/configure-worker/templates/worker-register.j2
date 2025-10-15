@@ -80,6 +80,46 @@ if [ -z "$CONTROL_PLANE_IP" ] || [ -z "$WORKER_ID" ] || [ -z "$WORKER_SECRET" ] 
 fi
 log_message "Required environment variables are set."
 
+# Add this function to fetch Redis credentials using JWT
+fetch_redis_credentials_via_jwt() {
+    log_message "Fetching Redis credentials from Admin Service API..."
+    
+    local jwt_token
+    local api_response
+    
+    # Get JWT token using worker credentials
+    jwt_token=$(curl -s -d "grant_type=client_credentials" \
+        -d "client_id=${WORKER_ID}" \
+        -d "client_secret=${WORKER_SECRET}" \
+        "https://${CONTROL_PLANE_IP}/keycloak/realms/datamigrator/protocol/openid-connect/token" | jq -r '.access_token')
+    
+    if [ "$jwt_token" != "null" ] && [ -n "$jwt_token" ]; then
+        log_message "✅ JWT token obtained successfully"
+        
+        # Call Admin Service API to get Redis credentials
+        api_response=$(curl -s -H "Authorization: Bearer ${jwt_token}" \
+            "https://${CONTROL_PLANE_IP}/api/v1/secrets/redis")
+        
+        if [ $? -eq 0 ] && [ -n "$api_response" ]; then
+            # Parse Redis credentials from API response
+            REDIS_HOST=$(echo "$api_response" | jq -r '.host // "'"${CONTROL_PLANE_IP}"'"')
+            REDIS_USERNAME=$(echo "$api_response" | jq -r '.username // "default"')
+            REDIS_PASSWORD=$(echo "$api_response" | jq -r '.password // "welcome"')
+            
+            log_message "✅ Redis credentials fetched successfully"
+            log_message "Redis Host: ${REDIS_HOST}"
+            return 0
+        else
+            log_message "❌ Failed to fetch Redis credentials from API"
+            return 1
+        fi
+    else
+        log_message "❌ Failed to obtain JWT token"
+        return 1
+    fi
+}
+
+
 # Check for existing environment variables in the worker.env file
 log_message "Checking for existing variables in $ENV_FILE."
 if [ -f "$ENV_FILE" ]; then
@@ -87,6 +127,16 @@ if [ -f "$ENV_FILE" ]; then
         log_message "WARNING: Some environment variables already exist in $ENV_FILE."
         handle_failure "Existing variables detected in $ENV_FILE. Manual intervention required."
     fi
+fi
+
+
+if fetch_redis_credentials_via_jwt; then
+        log_message "✅ Using secure Redis credentials from Admin Service"
+    else
+        log_message "⚠️ API failed, using fallback Redis credentials"
+        REDIS_HOST="${CONTROL_PLANE_IP}"
+        REDIS_USERNAME="default"
+        REDIS_PASSWORD="welcome"
 fi
 
 # Create and write to worker.env
@@ -102,8 +152,8 @@ log_message "Creating $ENV_FILE with necessary environment variables."
     echo "WORKER_SECRET=${WORKER_SECRET}"
     echo "CONTROL_PLANE_IP=${CONTROL_PLANE_IP}"
     echo "REDIS_HOST=${CONTROL_PLANE_IP}"
-    echo "REDIS_USERNAME=default"
-    echo "REDIS_PASSWORD=welcome"
+    echo "REDIS_USERNAME=${REDIS_USERNAME}"
+    echo "REDIS_PASSWORD=${REDIS_PASSWORD}"
     echo "PROJECT_ID=${PROJECT_ID}"
     echo "OTEL_COLLECTOR_ENDPOINT=${CONTROL_PLANE_IP}:4318"
 } >> "$ENV_FILE"

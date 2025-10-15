@@ -107,3 +107,46 @@
         path: $HOME/keycloak
         state: absent
   when: local_cluster is defined
+
+- name: Wait for Keycloak to be ready
+  uri:
+    url: "https://{{ control_plane_ip }}/keycloak/admin/realms/master"
+    method: GET
+    validate_certs: false
+  register: keycloak_ready
+  retries: 10
+  delay: 300
+  until: keycloak_ready.status == 200
+  ignore_errors: yes
+
+- name: Get Keycloak admin token
+  uri:
+    url: "https://{{ control_plane_ip }}/keycloak/realms/master/protocol/openid-connect/token"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      client_id: admin-cli
+      username: admin
+      password: "{{ (keycloak_passwords.stdout_lines | select('match', 'KEYCLOAK_ADMIN_PASSWORD:.*') | map('regex_replace', 'KEYCLOAK_ADMIN_PASSWORD:(.*)', '\\1') | list | first) }}"
+      grant_type: password
+    validate_certs: false
+  register: admin_token_result
+  retries: 5
+  delay: 10
+  until: admin_token_result.status == 200
+
+- name: Create redis-secret-reader role in Keycloak
+  uri:
+    url: "https://{{ control_plane_ip }}/keycloak/admin/realms/datamigrator/roles"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ admin_token_result.json.access_token }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      name: "redis-secret-reader"
+      description: "Can access Redis credentials via Admin Service API"
+    status_code: [201, 409]  # 201 = created, 409 = already exists
+    validate_certs: false
+  ignore_errors: yes
+  when: admin_token_result.status == 200
