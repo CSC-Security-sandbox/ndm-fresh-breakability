@@ -14,11 +14,10 @@ import { RedisError, ValidationError, WorkerError, ConfigurationError } from '..
 import { RedisUtils } from '@netapp-cloud-datamigrate/jobs-lib/dist/redis/redis-utils';
 import { SQL_QUERIES } from '../constants/custom-response-message';
 
-// Global map to cache jobRunId to projectId mapping
-const jobRunIdToProjectIdMap: Map<string, string> = new Map();
-
 @Injectable()
 export class RedisConsumerService implements OnModuleDestroy {
+    // Service-scoped cache for jobRunId to projectId mapping
+    private jobRunIdToProjectIdMap: Map<string, string> = new Map();
     private readonly logger: LoggerService;
     private redisClient: any
     private readonly REDIS_KEY_PREFIX = process.env.REDIS_KEY_PREFIX || 'db-writer';
@@ -194,7 +193,7 @@ export class RedisConsumerService implements OnModuleDestroy {
      */
     async getProjectIdFromCache(jobRunId: string): Promise<string | null> {
         // First try to get from cache
-        let projectId = jobRunIdToProjectIdMap.get(jobRunId) || null;
+        let projectId = this.jobRunIdToProjectIdMap.get(jobRunId) || null;
 
         if (projectId) {
             this.logger.log(`Retrieved projectId: ${projectId} from cache for jobRunId: ${jobRunId}`);
@@ -216,13 +215,13 @@ export class RedisConsumerService implements OnModuleDestroy {
      */
     clearProjectIdCache(jobRunId?: string): void {
         if (jobRunId) {
-            if (jobRunIdToProjectIdMap.has(jobRunId)) {
-                jobRunIdToProjectIdMap.delete(jobRunId);
+            if (this.jobRunIdToProjectIdMap.has(jobRunId)) {
+                this.jobRunIdToProjectIdMap.delete(jobRunId);
                 this.logger.debug(`Cleared projectId cache for jobRunId: ${jobRunId}`);
             }
         } else {
-            const cacheSize = jobRunIdToProjectIdMap.size;
-            jobRunIdToProjectIdMap.clear();
+            const cacheSize = this.jobRunIdToProjectIdMap.size;
+            this.jobRunIdToProjectIdMap.clear();
             this.logger.debug(`Cleared all projectId cache entries: ${cacheSize} items`);
         }
     }
@@ -255,7 +254,7 @@ export class RedisConsumerService implements OnModuleDestroy {
 
         // Store projectId in global map if provided
         if (projectId && jobId) {
-            jobRunIdToProjectIdMap.set(jobId, projectId);
+            this.jobRunIdToProjectIdMap.set(jobId, projectId);
             this.logger.log(`projectId: ${projectId} Cached projectId for jobRunId: ${jobId}`);
         }
 
@@ -794,9 +793,9 @@ export class RedisConsumerService implements OnModuleDestroy {
                 this.logger.log(`projectId: ${projectId} Successfully signaled workflow for jobRunId=${jobRunId} on attempt ${attempt}`);
 
                 // Clear the global projectId cache
-                if (jobRunIdToProjectIdMap.size > 0) {
-                    this.logger.log(`Clearing ${jobRunIdToProjectIdMap.size} cached projectId mappings`);
-                    jobRunIdToProjectIdMap.clear();
+                if (this.jobRunIdToProjectIdMap.size > 0) {
+                    this.logger.log(`Clearing ${this.jobRunIdToProjectIdMap.size} cached projectId mappings`);
+                    this.jobRunIdToProjectIdMap.clear();
                 }
 
                 return; // Success, exit the retry loop
@@ -1070,7 +1069,7 @@ export class RedisConsumerService implements OnModuleDestroy {
      */
     setProjectIdInCache(jobRunId: string, projectId: string): void {
         if (projectId && jobRunId) {
-            jobRunIdToProjectIdMap.set(jobRunId, projectId);
+            this.jobRunIdToProjectIdMap.set(jobRunId, projectId);
             this.logger.log(`Manually set projectId: ${projectId} in cache for jobRunId: ${jobRunId}`);
         }
     }
