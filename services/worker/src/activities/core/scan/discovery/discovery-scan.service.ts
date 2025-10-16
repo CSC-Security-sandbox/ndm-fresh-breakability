@@ -11,6 +11,7 @@ import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
 import { isPathExists } from "../../utils/utils";
 
 
+
 export class DiscoveryScanService {
     readonly workerId: string;
     readonly maxConcurrency: number;
@@ -70,6 +71,10 @@ export class DiscoveryScanService {
                     output.dirCount++;
                     output.subDirs.push(relativeSourcePath);
                 } else output.fileCount++;
+                // junction - directories 
+                // symlink - file/dir 
+
+                
             }
         }catch(error) {
             const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.id, error, {name: command.fPath, path: sourcePath});
@@ -101,6 +106,5 @@ export class DiscoveryScanService {
                 stats.ino
             )
             await jobContext.publishToFileStream(itemInfo);
-        }
-
+        }   
 }

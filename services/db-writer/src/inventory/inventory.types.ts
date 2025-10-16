@@ -11,7 +11,9 @@ export enum FileType {
     FIFO = "FIFO",
     CHARACTER_DEVICE = "CHARACTER_DEVICE",
     BLOCK_DEVICE = "BLOCK_DEVICE",
-    UNKNOWN = "UNKNOWN"
+    UNKNOWN = "UNKNOWN",
+    JUNCTION = "JUNCTION"
+
 }
 
 export interface CreateInventory {
