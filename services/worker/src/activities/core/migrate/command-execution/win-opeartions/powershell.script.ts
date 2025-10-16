@@ -40,7 +40,7 @@ $OWNER_SECURITY_INFORMATION = 0x00000001
 $GROUP_SECURITY_INFORMATION = 0x00000002
 $DACL_SECURITY_INFORMATION  = 0x00000004
 $SACL_SECURITY_INFORMATION  = 0x00000008
-$ALL_SECURITY_INFORMATION   = $OWNER_SECURITY_INFORMATION -bor $GROUP_SECURITY_INFORMATION -bor $DACL_SECURITY_INFORMATION 
+$ALL_SECURITY_INFORMATION   = $OWNER_SECURITY_INFORMATION -bor $GROUP_SECURITY_INFORMATION -bor $DACL_SECURITY_INFORMATION -bor $SACL_SECURITY_INFORMATION 
 
 function Get-FileSecurityFast([string]$path) {
     $pOwnerSid = [IntPtr]::Zero
@@ -53,7 +53,8 @@ function Get-FileSecurityFast([string]$path) {
     $OWNER_SECURITY_INFORMATION = 0x00000001
     $GROUP_SECURITY_INFORMATION = 0x00000002
     $DACL_SECURITY_INFORMATION  = 0x00000004
-    $ALL_SECURITY_INFORMATION   = $OWNER_SECURITY_INFORMATION -bor $GROUP_SECURITY_INFORMATION -bor $DACL_SECURITY_INFORMATION 
+    $SACL_SECURITY_INFORMATION  = 0x00000008
+    $ALL_SECURITY_INFORMATION   = $OWNER_SECURITY_INFORMATION -bor $GROUP_SECURITY_INFORMATION -bor $DACL_SECURITY_INFORMATION -bor $SACL_SECURITY_INFORMATION 
 
     try {
         $result = [FastAcl]::GetNamedSecurityInfo(
@@ -81,9 +82,21 @@ function Get-FileSecurityFast([string]$path) {
     $group = $sd.Group.Value
 
     $daclAces = @()
+    $saclAces = @()
     if ($sd.DiscretionaryAcl) {
         foreach ($ace in $sd.DiscretionaryAcl) {
             $daclAces += [PSCustomObject]@{
+                Sid         = $ace.SecurityIdentifier.Value
+                AccessMask  = $ace.AccessMask
+                AceType     = [int]$ace.AceType
+                AceFlags    = [int]$ace.AceFlags
+                IsInherited = $ace.IsInherited
+            }
+        }
+    }
+    if ($sd.SystemAcl) {
+        foreach ($ace in $sd.SystemAcl) {
+            $saclAces += [PSCustomObject]@{
                 Sid         = $ace.SecurityIdentifier.Value
                 AccessMask  = $ace.AccessMask
                 AceType     = [int]$ace.AceType
@@ -100,6 +113,7 @@ function Get-FileSecurityFast([string]$path) {
     
     # Check individual flags
     $daclPresent   = ($ctrl -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclPresent) -ne 0
+    $saclPresent   = ($ctrl -band [System.Security.AccessControl.ControlFlags]::SystemAclPresent) -ne 0
     $daclProtected = ($ctrl -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclProtected) -ne 0
     $daclAutoInherit = ($ctrl -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclAutoInherited) -ne 0
     
@@ -133,7 +147,9 @@ function Get-FileSecurityFast([string]$path) {
         Owner         = $owner
         Group         = $group
         DaclAces      = $daclAces
+        SaclAces      = $saclAces
         DaclPresent   = $daclPresent
+        SaclPresent   = $saclPresent
         DaclProtected = $daclProtected
         DaclAutoInherit = $daclAutoInherit
         Attributes    = $attributes
@@ -222,6 +238,37 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     [System.Runtime.InteropServices.Marshal]::Copy($daclBytes, 0, $ptrDacl, $daclBytes.Length)
 
     $ptrSacl = [IntPtr]::Zero
+    # Build SACL if provided
+    if ($securityInfo.SaclAces -and $securityInfo.SaclAces.Count -gt 0) {
+        try {
+            $saclInput = $securityInfo.SaclAces
+            $sacl = New-Object System.Security.AccessControl.RawAcl(2, $saclInput.Count)
+            for ($j = 0; $j -lt $saclInput.Count; $j++) {
+                $sace = $saclInput[$j]
+                $sid = New-Object System.Security.Principal.SecurityIdentifier($sace.Sid)
+                $is_resolved = Map-Sid $sid
+                if ($is_resolved -eq $false) { $unresolved_sids += $sid }
+                if ($sace.AceType -eq 2 -or $sace.AceType -eq 3) { # SystemAudit/SystemAlarm
+                    $qual = [System.Security.AccessControl.AceQualifier]::SystemAudit
+                    $auditAce = New-Object System.Security.AccessControl.CommonAce(
+                        [System.Security.AccessControl.AceFlags]$sace.AceFlags,
+                        $qual,
+                        [int]$sace.AccessMask,
+                        $sid,
+                        $false,
+                        $null
+                    )
+                    $sacl.InsertAce($j, $auditAce)
+                }
+            }
+            if ($sacl.Count -gt 0) {
+                $sd.SystemAcl = $sacl
+                $sd.SetFlags($sd.Control -bor [System.Security.AccessControl.ControlFlags]::SystemAclPresent)
+            }
+        } catch {
+            # ignore SACL build errors to avoid breaking DACL stamping
+        }
+    }
 
     $SE_FILE_OBJECT = 1
     $OWNER_SECURITY_INFORMATION = 0x00000001
@@ -232,11 +279,22 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
 
     # Include protection flag to always disable inheritance
     $securityInfoFlags = $OWNER_SECURITY_INFORMATION -bor $GROUP_SECURITY_INFORMATION -bor $DACL_SECURITY_INFORMATION
+    if ($sd.SystemAcl) { $securityInfoFlags = $securityInfoFlags -bor 0x00000008 }
     if ($securityInfo.DaclProtected) {
         # Convert to signed int32 to handle the flag properly (matches working set.ps1)
         $securityInfoFlags = [int]($securityInfoFlags -bor $PROTECTED_DACL_SECURITY_INFORMATION)
     } else {
         $securityInfoFlags = [int]$securityInfoFlags -bor $UNPROTECTED_DACL_SECURITY_INFORMATION
+    }
+
+    # Marshal SACL if present
+    if ($sd.SystemAcl) {
+        try {
+            $saclBytes = New-Object byte[] ($sd.SystemAcl.BinaryLength)
+            $sd.SystemAcl.GetBinaryForm($saclBytes, 0)
+            $ptrSacl = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($saclBytes.Length)
+            [System.Runtime.InteropServices.Marshal]::Copy($saclBytes, 0, $ptrSacl, $saclBytes.Length)
+        } catch {}
     }
 
     $result = [FastAcl]::SetNamedSecurityInfo(
@@ -252,6 +310,7 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrOwner)
     [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrGroup)
     [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrDacl)
+    if ($ptrSacl -ne [IntPtr]::Zero) { [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrSacl) }
 
     if ($result -ne 0) { throw "Error writing security info: $result" }
 

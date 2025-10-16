@@ -177,6 +177,17 @@ export class WinOperationService {
         return ace;
       }),
     );
+    if (acl.SaclAces && Array.isArray(acl.SaclAces)) {
+      acl.SaclAces = await Promise.all(
+        acl.SaclAces.map(async (ace: any) => {
+          ace.originalSid = ace.Sid;
+          const targetSid = await this.getSIDMapping(ace.Sid, jobRunId);
+            this.logger.debug(`Mapping SACL SID ${ace.Sid} to ${targetSid}`);
+          if (targetSid) ace.Sid = targetSid;
+          return ace;
+        }),
+      );
+    }
     return acl;
   }
 
