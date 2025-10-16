@@ -25,6 +25,11 @@ export class NotifyConfigActivity {
           status,
           errorMessage
         },
+        {
+          headers: {
+            trackId: traceId
+          }
+        }
       );
       this.logger.log(`[${traceId}] Notification sent to Config Service for workflow completion`);
     } catch (error) {

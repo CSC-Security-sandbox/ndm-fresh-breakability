@@ -16,6 +16,7 @@ export class ValidateWorkingDirectoryActivity {
   readonly workerId: string;
   readonly baseWorkingPath: string;
   readonly workerConfigUrl: string;
+  readonly projectId: string;
   private readonly logger: LoggerService;
 
   constructor(
@@ -27,6 +28,7 @@ export class ValidateWorkingDirectoryActivity {
     this.workerId = this.configService.get('worker.workerId');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
     this.workerConfigUrl = this.configService.get('worker.connection.workerConfigUrl');
+    this.projectId = this.configService.get('worker.projectId');
     this.logger = loggerFactory.create(ValidateWorkingDirectoryActivity.name);
   }
 
@@ -159,6 +161,7 @@ export class ValidateWorkingDirectoryActivity {
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${accessToken}`,
+          "projectId": this.projectId
         }
       });
     } catch (error) {

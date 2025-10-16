@@ -125,6 +125,7 @@ export class WorkManagerService {
       const result = await this.workerEntity.save(newWorker);
       await this.sendMailService.sendMail({
         successEmailType: SuccessEmailType.WORKER_USAGE,
+        projectId,
         workerUsage: { id, ip },
       });
       await this.workerEntity.update(

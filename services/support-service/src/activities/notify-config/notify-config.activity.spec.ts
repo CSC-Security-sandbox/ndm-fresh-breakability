@@ -110,6 +110,11 @@ describe('NotifyConfigActivity', () => {
           status: mockStatus,
           errorMessage: mockErrorMessage,
         },
+        {
+          headers: {
+            trackId: mockTraceId
+          }
+        }
       );
       expect(mockLogger.log).toHaveBeenCalledWith(
         `[${mockTraceId}] Notification sent to Config Service for workflow completion`,
@@ -135,6 +140,11 @@ describe('NotifyConfigActivity', () => {
           status: failedStatus,
           errorMessage: errorMessage,
         },
+        {
+          headers: {
+            trackId: mockTraceId
+          }
+        }
       );
       expect(mockLogger.log).toHaveBeenCalledWith(
         `[${mockTraceId}] Notification sent to Config Service for workflow completion`,
@@ -223,6 +233,11 @@ describe('NotifyConfigActivity', () => {
             status: status,
             errorMessage: mockErrorMessage,
           },
+          {
+            headers: {
+              trackId: mockTraceId
+            }
+          }
         );
       }
 
@@ -246,6 +261,11 @@ describe('NotifyConfigActivity', () => {
           status: mockStatus,
           errorMessage: undefined,
         },
+        {
+          headers: {
+            trackId: mockTraceId
+          }
+        }
       );
     });
 
@@ -266,6 +286,11 @@ describe('NotifyConfigActivity', () => {
           status: mockStatus,
           errorMessage: mockErrorMessage,
         },
+        {
+          headers: {
+            trackId: ''
+          }
+        }
       );
       expect(mockLogger.log).toHaveBeenCalledWith(
         '[] Notification sent to Config Service for workflow completion',
@@ -290,6 +315,11 @@ describe('NotifyConfigActivity', () => {
           status: mockStatus,
           errorMessage: mockErrorMessage,
         },
+        {
+          headers: {
+            trackId: specialTraceId
+          }
+        }
       );
       expect(mockLogger.log).toHaveBeenCalledWith(
         `[${specialTraceId}] Notification sent to Config Service for workflow completion`,
@@ -314,6 +344,11 @@ describe('NotifyConfigActivity', () => {
           status: 'FAILED',
           errorMessage: longErrorMessage,
         },
+        {
+          headers: {
+            trackId: mockTraceId
+          }
+        }
       );
     });
 
@@ -358,6 +393,11 @@ describe('NotifyConfigActivity', () => {
           status: mockStatus,
           errorMessage: mockErrorMessage,
         },
+        {
+          headers: {
+            trackId: mockTraceId
+          }
+        }
       );
     });
 
@@ -407,6 +447,11 @@ describe('NotifyConfigActivity', () => {
           index + 1,
           `${mockConfigUrl}/support-bundle/workflow-status-update`,
           notification,
+          {
+            headers: {
+              trackId: notification.traceId
+            }
+          }
         );
       });
     });

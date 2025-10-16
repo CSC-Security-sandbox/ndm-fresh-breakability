@@ -205,6 +205,7 @@ describe('WorkManagerService', () => {
       );
       expect(result).toEqual(savedWorker.metaConfig);
       expect(sendMailService.sendMail).toHaveBeenCalledWith({
+        projectId: 'project-123',
         successEmailType: 'worker_usage',
         workerUsage: {
           id: 'test-worker',

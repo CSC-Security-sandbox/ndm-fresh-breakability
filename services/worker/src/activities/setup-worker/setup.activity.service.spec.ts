@@ -134,7 +134,7 @@ describe('SetupActivityService', () => {
                 path: '/data',
                 mountBasePath: '/mnt/worker',
                 pathId: 'pid',
-                jobRunId: 'job-2',                      
+                jobRunId: 'job-2',
             }), true);
         });
     });
@@ -166,7 +166,8 @@ describe('SetupActivityService', () => {
             expect(mockProtocol.mountPath).toHaveBeenCalled();
             expect(axios.post).toHaveBeenCalledWith(
                 'http://worker-config/api/v1/work-manager/update/configs',
-                { jobRunId: 'job-3', workerId: 'worker-123' }
+                { jobRunId: 'job-3', workerId: 'worker-123' },
+                { headers: { projectId: undefined } }
             );
         });
 
