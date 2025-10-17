@@ -34,7 +34,9 @@
     "redis": "^4.7.0",
     "uuid": "^11.0.5",
     "winston": "^3.17.0",
-    "winston-daily-rotate-file": "^5.0.0"
+    "winston-daily-rotate-file": "^5.0.0",
+    "@temporalio/common": "^1.13.0",
+    "@temporalio/proto": "^1.13.0"
   },
   "devDependencies": {
     "@babel/helpers": "^7.27.6",
