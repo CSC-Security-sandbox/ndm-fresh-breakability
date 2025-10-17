@@ -9,6 +9,7 @@ import {
 import { notify } from "@components/notification/NotificationWrapper";
 import {
   INITIAL_FORM_STATE,
+  METRICS_OPTIONS,
   SUPPORT_BUNDLE_FORM_VALIDATION_SCHEMA,
 } from "@modules/Help/components/support-bundle/constants/support-bundle.constant";
 import { SupportBundleContext } from "@modules/Help/components/support-bundle/context/context";
@@ -23,7 +24,11 @@ import { RootStateType } from "@store/store";
 import React, { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { useTreeSelect } from "@modules/Help/components/support-bundle/hooks/useTreeSelect";
-import { buildProjectWorkerMap } from "@modules/Help/components/support-bundle/utils/support-bundle.utils";
+import {
+  buildProjectWorkerMap,
+  createSupportBundleInfoMessage,
+  extractProjectAndWorkerNames,
+} from "@modules/Help/components/support-bundle/utils/support-bundle.utils";
 
 export const SupportBundleProvider = ({
   children,
@@ -35,6 +40,8 @@ export const SupportBundleProvider = ({
   const [bundleStatus, setBundleStatus] = useState<isBundleReadyApiType>(
     {} as isBundleReadyApiType
   );
+
+  const [infoMessage, setInfoMessage] = useState<Record<string, string>>({});
   const [lastFormChangeTime, setLastFormChangeTime] = useState<Date>(
     new Date()
   );
@@ -75,6 +82,31 @@ export const SupportBundleProvider = ({
           const endDate = _isBundleReadyResponse.filters.endDate
             ? new Date(_isBundleReadyResponse.filters.endDate)
             : null;
+
+          const transformedMetrics =
+            _isBundleReadyResponse?.filters?.otherMetrics?.map(
+              (item: string) => {
+                const foundOption = METRICS_OPTIONS.find(
+                  (option) => option.label === item
+                );
+                return foundOption || { label: item, value: 0 };
+              }
+            );
+
+          const { projectNames, workerNames } = extractProjectAndWorkerNames(
+            _isBundleReadyResponse?.filters?.projectWorkerMap,
+            projectWorkerData?.data?.items || []
+          );
+
+          const infoMessage = createSupportBundleInfoMessage(
+            startDate,
+            endDate,
+            projectNames,
+            workerNames,
+            transformedMetrics || []
+          );
+
+          setInfoMessage(infoMessage);
 
           if (startDate && endDate) {
             supportBundleForm.resetForm({
@@ -187,6 +219,7 @@ export const SupportBundleProvider = ({
     wrapperClass,
     projectWorkerData,
     isDownloading,
+    infoMessage,
   };
 
   return (

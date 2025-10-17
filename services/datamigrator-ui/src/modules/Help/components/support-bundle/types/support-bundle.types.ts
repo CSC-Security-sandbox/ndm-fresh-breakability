@@ -12,6 +12,7 @@ export type SupportBundleContextType = {
   wrapperClass: string;
   projectWorkerData: ProjectWorkerMap;
   isDownloading: boolean;
+  infoMessage: Record<string, string>;
 };
 
 export type SupportBundlePayloadType = {

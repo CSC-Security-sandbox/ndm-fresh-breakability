@@ -804,6 +804,7 @@ export type isBundleReadyApiType = {
     startDate: string;
     endDate: string;
     otherMetrics: string[];
+    projectWorkerMap: any[];
   };
   createdAt?: string;
 };
