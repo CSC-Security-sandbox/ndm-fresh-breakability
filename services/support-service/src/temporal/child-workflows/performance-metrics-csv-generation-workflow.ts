@@ -27,7 +27,7 @@ export async function PerformanceMetricsCsvGeneratorWorkflow({
     return {
       success: true,
       message:
-        'Successfully generated system inventory CSV files for workers and jobs',
+        'Successfully generated performance metrics CSV file',
     };
   } catch (error) {
     log.error(
