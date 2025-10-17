@@ -77,7 +77,7 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            'Saturday, 1 January 2022 at 1:30 pm', // ISO timestamp
+            'Saturday, 1 January 2022 at 8:00 am', // ISO timestamp
             ,
             'test-namespace',
             'test-pod',
@@ -99,13 +99,13 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            'Saturday, 1 January 2022 at 1:30 pm',
+            'Saturday, 1 January 2022 at 8:00 am',
             'test-namespace',
             'test-pod',
             50.5,
           ]),
           expect.arrayContaining([
-            'Saturday, 1 January 2022 at 2:30 pm',
+            'Saturday, 1 January 2022 at 9:00 am',
             'test-namespace',
             'test-pod',
             60.2,
@@ -126,7 +126,7 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            'Saturday, 1 January 2022 at 1:30 pm',
+            'Saturday, 1 January 2022 at 8:00 am',
             ,
             'test-namespace',
             'test-pod',
@@ -148,7 +148,7 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            'Saturday, 1 January 2022 at 1:30 pm',
+            'Saturday, 1 January 2022 at 8:00 am',
             ,
             'test-namespace',
             'test-pod',
@@ -198,7 +198,7 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            'Saturday, 1 January 2022 at 1:30 pm',
+            'Saturday, 1 January 2022 at 8:00 am',
             ,
             'redis-master:6379',
             25, // Math.floor(25.7)
@@ -234,7 +234,7 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            'Saturday, 1 January 2022 at 1:30 pm',
+            'Saturday, 1 January 2022 at 8:00 am',
             ,
             'redis-slave:6379',
             85.12, // (0.85123 * 100).toFixed(2) = 85.12
@@ -270,7 +270,7 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            'Saturday, 1 January 2022 at 1:30 pm',
+            'Saturday, 1 January 2022 at 8:00 am',
             ,
             'redis:6379',
             2048.79, // toFixed(2)
@@ -306,7 +306,7 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            'Saturday, 1 January 2022 at 1:30 pm',
+            'Saturday, 1 January 2022 at 8:00 am',
             ,
             'redis:6379',
             86400, // Math.floor(86400.9)
@@ -346,7 +346,7 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            'Saturday, 1 January 2022 at 1:30 pm',
+            'Saturday, 1 January 2022 at 8:00 am',
             ,
             'GET /api',
             'api-service',
@@ -384,7 +384,7 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            'Saturday, 1 January 2022 at 1:30 pm',
+            'Saturday, 1 January 2022 at 8:00 am',
             ,
             'POST /data',
             'data-service',
@@ -424,7 +424,7 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            'Saturday, 1 January 2022 at 1:30 pm',
+            'Saturday, 1 January 2022 at 8:00 am',
             ,
             'auth-service',
             'backend',
@@ -469,7 +469,7 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            'Saturday, 1 January 2022 at 1:30 pm',
+            'Saturday, 1 January 2022 at 8:00 am',
             ,
             'api-service',
             '500_internal_error',
@@ -516,7 +516,7 @@ describe('PerformanceMetricsProcessorService', () => {
       expect(fastCsv.writeToString).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.arrayContaining([
-            'Saturday, 1 January 2022 at 1:30 pm',
+            'Saturday, 1 January 2022 at 8:00 am',
             ,
             'worker-1',
             '10.0.0.1',
@@ -524,7 +524,7 @@ describe('PerformanceMetricsProcessorService', () => {
             12.35, // rounded to 2 decimal places
           ]),
           expect.arrayContaining([
-            'Saturday, 1 January 2022 at 1:30 pm',
+            'Saturday, 1 January 2022 at 8:00 am',
             ,
             'worker-2',
             '10.0.0.1',

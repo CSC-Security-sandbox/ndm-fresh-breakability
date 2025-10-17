@@ -167,13 +167,13 @@ describe('PrometheusDataProcessorService', () => {
             Namespace: 'test-namespace',
             Pod: 'test-pod-1',
             Status: 'Running',
-            Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
+            Timestamp: 'Saturday, 1 January 2022 at 8:00 am',
           },
           {
             Namespace: 'test-namespace-2',
             Pod: 'test-pod-2',
             Status: 'Running',
-            Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
+            Timestamp: 'Saturday, 1 January 2022 at 8:00 am',
           },
         ],
         allMetrics: expect.any(Array),
@@ -181,13 +181,13 @@ describe('PrometheusDataProcessorService', () => {
           {
             'Build Version': 'v1.0.0',
             Pod: 'control-plane-pod',
-            Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
+            Timestamp: 'Saturday, 1 January 2022 at 8:00 am',
           },
           {
             'Build Version': 'v1.0.0',
             Platform: 'linux',
             Pod: 'worker-job',
-            Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
+            Timestamp: 'Saturday, 1 January 2022 at 8:00 am',
             'Worker Id': 'worker-1',
           },
         ],
@@ -342,7 +342,7 @@ describe('PrometheusDataProcessorService', () => {
         Namespace: 'test-ns',
         Pod: 'pod-1',
         Status: 'Running',
-        Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
+        Timestamp: 'Saturday, 1 January 2022 at 8:00 am',
       });
     });
 
@@ -508,12 +508,12 @@ describe('PrometheusDataProcessorService', () => {
       expect(result).toHaveLength(4); // 2 CPU CP + 1 Memory CP + 1 System Uptime
       expect(result[0]).toEqual({
         Name: 'CPU Usage of CP',
-        Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
+        Timestamp: 'Saturday, 1 January 2022 at 8:00 am',
         Usage: '50.500',
       });
       expect(result[1]).toEqual({
         Name: 'CPU Usage of CP',
-        Timestamp: 'Saturday, 1 January 2022 at 2:30 pm',
+        Timestamp: 'Saturday, 1 January 2022 at 9:00 am',
         Usage: '60.200',
       });
     });
@@ -615,14 +615,14 @@ describe('PrometheusDataProcessorService', () => {
       expect(result[0]).toEqual({
         Pod: 'cp-pod-1',
         'Build Version': 'v1.0.0',
-        Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
+        Timestamp: 'Saturday, 1 January 2022 at 8:00 am',
       });
       expect(result[1]).toEqual({
         Pod: 'worker-job-1',
         'Build Version': 'v1.1.0',
         Platform: 'linux',
         'Worker Id': 'worker-1',
-        Timestamp: 'Saturday, 1 January 2022 at 1:30 pm',
+        Timestamp: 'Saturday, 1 January 2022 at 8:00 am',
       });
     });
 

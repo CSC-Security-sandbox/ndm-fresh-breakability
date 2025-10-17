@@ -11,6 +11,7 @@ export function formatUnixTimestamp(timestamp: string | number): string {
     return new Intl.DateTimeFormat('en-IN', {
       dateStyle: 'full',
       timeStyle: 'short',
+      timeZone: 'UTC',
     }).format(date);
   } catch (error: any) {
     console.warn(`Failed to convert timestamp ${timestamp}: ${error.message}`);
