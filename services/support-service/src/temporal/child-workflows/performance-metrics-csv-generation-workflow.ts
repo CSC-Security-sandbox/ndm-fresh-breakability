@@ -31,7 +31,7 @@ export async function PerformanceMetricsCsvGeneratorWorkflow({
     };
   } catch (error) {
     log.error(
-      `[${traceId}] Error in SystemInventoryCsvGeneratorWorkflow: ${error.message}`,
+      `[${traceId}] Error in PerformanceMetricsCsvGeneratorWorkflow: ${error.message}`,
     );
     return {
       success: false,
