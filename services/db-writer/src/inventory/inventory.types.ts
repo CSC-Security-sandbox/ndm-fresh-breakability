@@ -11,6 +11,7 @@ export enum FileType {
     FIFO = "FIFO",
     CHARACTER_DEVICE = "CHARACTER_DEVICE",
     BLOCK_DEVICE = "BLOCK_DEVICE",
+    JUNCTION = "JUNCTION",
     UNKNOWN = "UNKNOWN"
 }
 

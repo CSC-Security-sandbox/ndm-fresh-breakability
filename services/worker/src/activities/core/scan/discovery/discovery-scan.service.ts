@@ -9,20 +9,30 @@ import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishItemInfoInput } from "./discovery-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
 import { isPathExists } from "../../utils/utils";
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { WinOperationService } from "../../../core/migrate/command-execution/win-opeartions/win-operation.service"
+import { FileType } from "src/activities/types/tasks";
+
 
 
 export class DiscoveryScanService {
     readonly workerId: string;
     readonly maxConcurrency: number;
     readonly maxRetryCount: number;
+    private readonly logger: LoggerService;
+    
 
+    DiscoveryScanService
      constructor(
         @Inject(ConfigService) 
         private readonly configService: ConfigService,
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+        private readonly winOperationService: WinOperationService,
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100; 
-        this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;  
+        this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
+        this.logger = loggerFactory.create(DiscoveryScanService.name); 
     }
 
 
@@ -78,29 +88,36 @@ export class DiscoveryScanService {
         }
         return output;
     }
+
     
     
     async publishFileInfo({jobContext, stats, fPath, relativeSourcePath}: PublishItemInfoInput): Promise<void> {
-            const isDirectory = stats.isDirectory();
-            const sourceMeta: ItemMeta = {
-                accessTime: stats.atime,
-                birthTime: stats.birthtime,
-                modifiedTime: stats.mtime,
-                permission: getFilePermissions(stats, isDirectory),
-            }
-            const itemInfo = new ItemInfo(
-                relativeSourcePath,
-                isDirectory,
-                stats.isSymbolicLink(),
-                relativeSourcePath.split('/').length - 2,
-                path.extname(fPath),
-                getFileType(stats, isDirectory),
-                sourceMeta,
-                sourceMeta,
-                stats.size,
-                stats.ino
-            )
-            await jobContext.publishToFileStream(itemInfo);
+        const symlinkType = await this.winOperationService.detectSymbolicLinkType(fPath);
+        this.logger.debug(" The symlink parth is "+ symlinkType);
+        const isDirectory = stats.isDirectory();
+        const sourceMeta: ItemMeta = {
+            accessTime: stats.atime,
+            birthTime: stats.birthtime,
+            modifiedTime: stats.mtime,
+            permission: getFilePermissions(stats, isDirectory),
         }
+        // Only call getFileType if symlinkType is NOT JUNCTION
+        const fileType = (symlinkType !== FileType.JUNCTION) 
+            ? getFileType(stats, isDirectory) 
+            : FileType.JUNCTION;
 
+        const itemInfo = new ItemInfo(
+            relativeSourcePath,
+            isDirectory,
+            stats.isSymbolicLink(),
+            relativeSourcePath.split('/').length - 2,
+            path.extname(fPath),
+            fileType,
+            sourceMeta,
+            sourceMeta,
+            stats.size,
+            stats.ino
+        )
+        await jobContext.publishToFileStream(itemInfo);
+    }
 }

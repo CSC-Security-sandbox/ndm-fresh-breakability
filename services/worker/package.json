@@ -56,6 +56,7 @@
     "@netapp-cloud-datamigrate/jobs-lib": "0.1.8",
     "@netapp-cloud-datamigrate/logger-lib": "0.0.15",
     "@temporalio/client": "^1.11.6",
+    "@temporalio/core-bridge": "^1.13.1",
     "@temporalio/nyc-test-coverage": "^1.11.8",
     "@temporalio/workflow": "^1.11.6",
     "@types/redis": "^4.0.11",

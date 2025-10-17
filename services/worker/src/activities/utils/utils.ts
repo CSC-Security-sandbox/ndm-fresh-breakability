@@ -82,6 +82,8 @@ export function getFileType(stats: fs.Stats, isDirectory:boolean): FileType {
     switch (true) {
       case isDirectory:
         return FileType.DIRECTORY;
+      case stats.nlink > 1:
+        return FileType.HARD_LINK;
       case stats.isSymbolicLink():
         return FileType.SYMBOLIC_LINK;
       case stats.isFile():
