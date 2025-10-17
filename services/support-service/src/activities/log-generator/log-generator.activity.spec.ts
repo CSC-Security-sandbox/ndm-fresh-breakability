@@ -202,6 +202,7 @@ describe('LogGeneratorActivity', () => {
         }),
         pipe: jest.fn(),
         file: jest.fn(),
+        directory: jest.fn(),
         finalize: jest.fn().mockResolvedValue(undefined),
         pointer: jest.fn().mockReturnValue(12345),
       };
@@ -235,6 +236,7 @@ describe('LogGeneratorActivity', () => {
         on: jest.fn(),
         pipe: jest.fn(),
         file: jest.fn(),
+        directory: jest.fn(),
         finalize: jest.fn().mockResolvedValue(undefined),
         pointer: jest.fn().mockReturnValue(12345),
       };
@@ -312,6 +314,7 @@ describe('LogGeneratorActivity', () => {
         on: jest.fn(),
         pipe: jest.fn(),
         file: jest.fn(),
+        directory: jest.fn(),
         finalize: jest.fn().mockResolvedValue(undefined),
         pointer: jest.fn().mockReturnValue(1024),
       };
@@ -403,6 +406,16 @@ describe('LogGeneratorActivity', () => {
         projectWorkerMap: [],
       };
 
+      // Mock no-project folder does NOT exist
+      mockFsPromises.access.mockImplementation((path) => {
+        const pathStr = path.toString();
+        if (pathStr.includes('no-project')) return Promise.reject(new Error('ENOENT'));
+        if (pathStr === baseLogPath) return Promise.resolve(undefined);
+        if (pathStr === outputZipPath) return Promise.resolve(undefined);
+        if (pathStr.includes('2024-01-01') || pathStr.includes('2024-01-02') || pathStr.includes('2024-01-03')) return Promise.resolve(undefined);
+        return Promise.reject(new Error('ENOENT'));
+      });
+
       const result = await activity.fetchAndZipLogs({ traceId, payload: emptyMapPayload });
       expect(result).toStrictEqual({
         success: false,
@@ -433,13 +446,36 @@ describe('LogGeneratorActivity', () => {
     });
 
     it('should return error when no matching log files found', async () => {
-      // Mock paths exist but no project folders
+      // Mock paths exist but no project folders and no no-project folders
       mockFsPromises.access.mockImplementation((path) => {
         const pathStr = path.toString();
+        // Allow base paths to exist
         if (pathStr === baseLogPath) return Promise.resolve(undefined);
         if (pathStr === outputZipPath) return Promise.resolve(undefined);
-        if (pathStr.includes('2024-01-01') || pathStr.includes('2024-01-02') || pathStr.includes('2024-01-03')) return Promise.resolve(undefined);
-        // No project folders exist - this will cause no files to be found
+        
+        // Allow date folders to exist
+        if (pathStr === '/test/logs/2024-01-01' || 
+            pathStr === '/test/logs/2024-01-02' || 
+            pathStr === '/test/logs/2024-01-03') {
+          return Promise.resolve(undefined);
+        }
+        
+        // Explicitly reject no-project folders - they don't exist
+        if (pathStr === '/test/logs/2024-01-01/no-project' ||
+            pathStr === '/test/logs/2024-01-02/no-project' ||
+            pathStr === '/test/logs/2024-01-03/no-project') {
+          return Promise.reject(new Error('ENOENT'));
+        }
+        
+        // Reject all project-specific paths - no project folders exist
+        if (pathStr.includes('project-1') || pathStr.includes('project-2')) {
+          return Promise.reject(new Error('ENOENT'));
+        }
+        if (pathStr.includes('control-plane') || pathStr.includes('worker')) {
+          return Promise.reject(new Error('ENOENT'));
+        }
+        
+        // Reject everything else
         return Promise.reject(new Error('ENOENT'));
       });
 
@@ -475,6 +511,7 @@ describe('LogGeneratorActivity', () => {
         }),
         pipe: jest.fn(),
         file: jest.fn(),
+        directory: jest.fn(),
         finalize: jest.fn().mockReturnValue({
           catch: jest.fn(),
         }),
@@ -579,6 +616,117 @@ describe('LogGeneratorActivity', () => {
         'General processing error',
       );
     });
+
+    describe('no-project folder handling', () => {
+      it('should include no-project folder as directory when it exists', async () => {
+        mockFsPromises.access.mockImplementation((path) => {
+          const pathStr = path.toString();
+          // Mock no-project folder exists
+          if (pathStr.includes('no-project')) return Promise.resolve(undefined);
+          // Mock other required paths exist
+          if (pathStr === baseLogPath) return Promise.resolve(undefined);
+          if (pathStr === outputZipPath) return Promise.resolve(undefined);
+          if (pathStr.includes('2024-01-01') || pathStr.includes('2024-01-02') || pathStr.includes('2024-01-03')) return Promise.resolve(undefined);
+          if (pathStr.includes('project-1') || pathStr.includes('project-2')) return Promise.resolve(undefined);
+          if (pathStr.includes('control-plane') || pathStr.includes('worker')) return Promise.resolve(undefined);
+          return Promise.resolve(undefined);
+        });
+
+        const mockOutput = {
+          on: jest.fn((event, callback) => {
+            if (event === 'close') {
+              setTimeout(callback, 0);
+            }
+          }),
+        };
+        const mockArchive = {
+          on: jest.fn(),
+          pipe: jest.fn(),
+          file: jest.fn(),
+          directory: jest.fn(),
+          finalize: jest.fn().mockResolvedValue(undefined),
+          pointer: jest.fn().mockReturnValue(1024),
+        };
+
+        mockFs.createWriteStream.mockReturnValue(mockOutput as any);
+        mockArchiver.mockReturnValue(mockArchive as any);
+
+        // Mock exec to return files from project directories
+        mockExec.mockImplementation((cmd, callback) => {
+          callback(null, '/test/logs/2024-01-01/project-1/control-plane/test1.log\n', '');
+        });
+
+        const result = await activity.fetchAndZipLogs({
+          traceId,
+          payload: mockPayload,
+        });
+
+        expect(result.success).toBe(true);
+        // Verify that directory method was called for no-project folders
+        expect(mockArchive.directory).toHaveBeenCalledWith(
+          '/test/logs/2024-01-01/no-project',
+          'ndm_logs_test-user-123/ndm_logs/2024-01-01/no-project'
+        );
+        expect(mockArchive.directory).toHaveBeenCalledWith(
+          '/test/logs/2024-01-02/no-project',
+          'ndm_logs_test-user-123/ndm_logs/2024-01-02/no-project'
+        );
+        expect(mockArchive.directory).toHaveBeenCalledWith(
+          '/test/logs/2024-01-03/no-project',
+          'ndm_logs_test-user-123/ndm_logs/2024-01-03/no-project'
+        );
+      });
+
+      it('should skip no-project folder when it does not exist', async () => {
+        mockFsPromises.access.mockImplementation((path) => {
+          const pathStr = path.toString();
+          // Mock no-project folder does NOT exist
+          if (pathStr.includes('no-project')) return Promise.reject(new Error('ENOENT'));
+          // Mock other required paths exist
+          if (pathStr === baseLogPath) return Promise.resolve(undefined);
+          if (pathStr === outputZipPath) return Promise.resolve(undefined);
+          if (pathStr.includes('2024-01-01') || pathStr.includes('2024-01-02') || pathStr.includes('2024-01-03')) return Promise.resolve(undefined);
+          if (pathStr.includes('project-1') || pathStr.includes('project-2')) return Promise.resolve(undefined);
+          if (pathStr.includes('control-plane') || pathStr.includes('worker')) return Promise.resolve(undefined);
+          return Promise.resolve(undefined);
+        });
+
+        const mockOutput = {
+          on: jest.fn((event, callback) => {
+            if (event === 'close') {
+              setTimeout(callback, 0);
+            }
+          }),
+        };
+        const mockArchive = {
+          on: jest.fn(),
+          pipe: jest.fn(),
+          file: jest.fn(),
+          directory: jest.fn(),
+          finalize: jest.fn().mockResolvedValue(undefined),
+          pointer: jest.fn().mockReturnValue(1024),
+        };
+
+        mockFs.createWriteStream.mockReturnValue(mockOutput as any);
+        mockArchiver.mockReturnValue(mockArchive as any);
+
+        // Mock exec to return files from project directories
+        mockExec.mockImplementation((cmd, callback) => {
+          callback(null, '/test/logs/2024-01-01/project-1/control-plane/test1.log\n', '');
+        });
+
+        const result = await activity.fetchAndZipLogs({
+          traceId,
+          payload: mockPayload,
+        });
+
+        expect(result.success).toBe(true);
+        // Verify that directory method was NOT called for no-project folders
+        expect(mockArchive.directory).not.toHaveBeenCalled();
+        // Verify that file method was still called for project files
+        expect(mockArchive.file).toHaveBeenCalled();
+      });
+    });
   });
 
   describe('Date range generation', () => {
@@ -619,6 +767,7 @@ describe('LogGeneratorActivity', () => {
         on: jest.fn(),
         pipe: jest.fn(),
         file: jest.fn(),
+        directory: jest.fn(),
         finalize: jest.fn().mockResolvedValue(undefined),
         pointer: jest.fn().mockReturnValue(1024),
       };
@@ -832,6 +981,7 @@ describe('LogGeneratorActivity', () => {
         on: jest.fn(),
         pipe: jest.fn(),
         file: jest.fn(),
+        directory: jest.fn(),
         finalize: jest.fn().mockResolvedValue(undefined),
         pointer: jest.fn().mockReturnValue(1024),
       };
@@ -897,7 +1047,12 @@ describe('LogGeneratorActivity', () => {
         ],
       };
 
-      mockFsPromises.access.mockResolvedValue(undefined);
+      // Mock no-project folder does NOT exist and other paths appropriately
+      mockFsPromises.access.mockImplementation((path) => {
+        const pathStr = path.toString();
+        if (pathStr.includes('no-project')) return Promise.reject(new Error('ENOENT'));
+        return Promise.resolve(undefined);
+      });
 
       // Mock exec to fail with error
       mockExec.mockImplementation((cmd, callback) => {
@@ -940,6 +1095,7 @@ describe('LogGeneratorActivity', () => {
         on: jest.fn(),
         pipe: jest.fn(),
         file: jest.fn(),
+        directory: jest.fn(),
         finalize: jest.fn().mockRejectedValue(new Error('Finalize failed')),
         pointer: jest.fn().mockReturnValue(1024),
       };

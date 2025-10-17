@@ -178,8 +178,8 @@ export class LogGeneratorActivity {
     dateFolders: string[],
     projectWorkerMap: Array<{ projectId: string, workerIds: string[] }>,
     traceId: string
-  ): Promise<Array<{ sourcePath: string, relativePath: string }>> {
-    const filteredPaths: Array<{ sourcePath: string, relativePath: string }> = [];
+  ): Promise<Array<{ sourcePath: string, relativePath: string, isDirectory?: boolean }>> {
+    const filteredPaths: Array<{ sourcePath: string, relativePath: string, isDirectory?: boolean }> = [];
 
     for (const date of dateFolders) {
       const datePath = path.join(this.baseLogPath, date);
@@ -191,6 +191,21 @@ export class LogGeneratorActivity {
       }
 
       this.logger.log(`[${traceId}] Processing date folder: ${datePath}`);
+
+      // Check for no-project folder and include it if present
+      const noProjectPath = path.join(datePath, 'no-project');
+      if (await this.pathExists(noProjectPath)) {
+        this.logger.log(`[${traceId}] Found no-project folder, including entire folder in the zip: ${noProjectPath}`);
+        
+        // Add the entire no-project folder directly
+        filteredPaths.push({
+          sourcePath: noProjectPath,
+          relativePath: path.relative(this.baseLogPath, noProjectPath),
+          isDirectory: true
+        });
+        
+        this.logger.log(`[${traceId}] Added entire no-project folder for ${date}`);
+      }
 
       // For each project-worker mapping
       for (const mapping of projectWorkerMap) {
@@ -277,7 +292,7 @@ export class LogGeneratorActivity {
    * Create zip file with filtered content maintaining directory structure
    */
   private async createFilteredZip(
-    filteredPaths: Array<{ sourcePath: string, relativePath: string }>,
+    filteredPaths: Array<{ sourcePath: string, relativePath: string, isDirectory?: boolean }>,
     zipPath: string,
     zipRoot: string,
     traceId: string
@@ -314,11 +329,19 @@ export class LogGeneratorActivity {
 
       archive.pipe(output);
 
-      // Add each filtered file to the zip maintaining structure
+      // Add each filtered file/folder to the zip maintaining structure
       for (const fileInfo of filteredPaths) {
         try {
           const zipEntryPath = `${zipRoot}/ndm_logs/${fileInfo.relativePath}`;
-          archive.file(fileInfo.sourcePath, { name: zipEntryPath });
+          
+          if (fileInfo.isDirectory) {
+            // Add entire directory to zip
+            archive.directory(fileInfo.sourcePath, zipEntryPath);
+            this.logger.log(`[${traceId}] Added directory: ${fileInfo.sourcePath} as ${zipEntryPath}`);
+          } else {
+            // Add individual file to zip
+            archive.file(fileInfo.sourcePath, { name: zipEntryPath });
+          }
           totalFilesAdded++;
 
           if (totalFilesAdded % 100 === 0) {
