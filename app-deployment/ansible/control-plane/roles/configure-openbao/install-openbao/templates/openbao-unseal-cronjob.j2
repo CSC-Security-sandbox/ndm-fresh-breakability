@@ -15,7 +15,7 @@ spec:
           serviceAccountName: openbao-unsealer
           containers:
           - name: openbao-unseal
-            image: bitnami/kubectl:1.33.4-debian-12-r0
+            image: "{% if local_cluster is defined %}bitnamilegacy/kubectl:1.33.4-debian-12-r0{% else %}bitnami/kubectl:1.33.4-debian-12-r0{% endif %}"
             imagePullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
             command:
             - /bin/bash
