@@ -16,6 +16,18 @@ import { OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
 export class WinOperationService {
   private readonly logger: LoggerService;
   private sidCache: LRUCache = new LRUCache(1000);
+  
+  // ADS Configuration with sensible defaults
+  private adsConfig: AdsConfiguration = {
+    enabled: true,
+    maxStreamSize: 10485760, // 10MB
+    enableChecksum: true,
+    enableCompression: false, // Disabled by default for compatibility
+    retryAttempts: 3,
+    chunkSize: 1048576, // 1MB chunks
+    supportedFileTypes: ['.doc', '.docx', '.xls', '.xlsx', '.pdf', '.txt', '.exe', '.dll'], // Common types with ADS
+    excludeStreams: ['Zone.Identifier', 'com.apple.quarantine'] // System streams to exclude
+  };
 
   constructor(
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
@@ -267,35 +279,44 @@ export class WinOperationService {
       }
     }
 
-    // ADS validation - validate alternate data streams
-    const sourceAds = acl1.AdsStreams || [];
-    sourceAds.forEach((ads) => {
-      output.sourceSID += `ADS in source: Stream(${ads.StreamName}), Size(${ads.Size}). `;
-    });
+  // ADS validation - validate alternate data streams
+  const sourceAds = acl1.AdsStreams || [];
+  sourceAds.forEach((ads) => {
+    const encoding = ads.IsBinary ? 'binary' : 'text';
+    output.sourceSID += `ADS in source: Stream(${ads.StreamName}), Size(${ads.Size}), Type(${encoding}), Checksum(${ads.Checksum || 'none'}). `;
+  });
 
-    const targetAds = acl2.AdsStreams || [];
-    targetAds.forEach((ads) => {
-      output.targetSID += `ADS in target: Stream(${ads.StreamName}), Size(${ads.Size}). `;
-    });
+  const targetAds = acl2.AdsStreams || [];
+  targetAds.forEach((ads) => {
+    const encoding = ads.IsBinary ? 'binary' : 'text';
+    output.targetSID += `ADS in target: Stream(${ads.StreamName}), Size(${ads.Size}), Type(${encoding}), Checksum(${ads.Checksum || 'none'}). `;
+  });
 
-    // Validate each source ADS exists in target with matching stream name and content
-    for (const srcAds of sourceAds) {
-      const found = targetAds.some(
-        (tgtAds) =>
-          tgtAds.StreamName === srcAds.StreamName &&
-          tgtAds.Content === srcAds.Content,
-      );
-      if (!found) {
-        const targetStream = targetAds.find(ads => ads.StreamName === srcAds.StreamName);
-        if (!targetStream) {
-          output.inValid += `Missing ADS in target: Stream(${srcAds.StreamName}), Size(${srcAds.Size}). `;
-        } else {
+  // Validate each source ADS exists in target with matching stream name and content
+  for (const srcAds of sourceAds) {
+    const found = targetAds.some(
+      (tgtAds) =>
+        tgtAds.StreamName === srcAds.StreamName &&
+        tgtAds.Content === srcAds.Content &&
+        tgtAds.IsBinary === srcAds.IsBinary &&
+        tgtAds.Encoding === srcAds.Encoding,
+    );
+    if (!found) {
+      const targetStream = targetAds.find(ads => ads.StreamName === srcAds.StreamName);
+      if (!targetStream) {
+        output.inValid += `Missing ADS in target: Stream(${srcAds.StreamName}), Size(${srcAds.Size}), Type(${srcAds.IsBinary ? 'binary' : 'text'}). `;
+      } else {
+        // Check for different types of mismatches
+        if (targetStream.IsBinary !== srcAds.IsBinary) {
+          output.inValid += `ADS encoding mismatch in target: Stream(${srcAds.StreamName}), Expected(${srcAds.IsBinary ? 'binary' : 'text'}), Actual(${targetStream.IsBinary ? 'binary' : 'text'}). `;
+        } else if (srcAds.Checksum && targetStream.Checksum && srcAds.Checksum !== targetStream.Checksum) {
+          output.inValid += `ADS checksum mismatch in target: Stream(${srcAds.StreamName}), Expected(${srcAds.Checksum}), Actual(${targetStream.Checksum}). `;
+        } else if (targetStream.Content !== srcAds.Content) {
           output.inValid += `ADS content mismatch in target: Stream(${srcAds.StreamName}), Expected size(${srcAds.Size}), Actual size(${targetStream.Size}). `;
         }
       }
     }
-
-    return output;
+  }    return output;
   }
 
   async resolveUsernamesToSids(
@@ -314,5 +335,30 @@ export class WinOperationService {
     });
 
     return usernameToSidMap;
+  }
+
+  // ADS Configuration Management
+  updateAdsConfiguration(config: Partial<AdsConfiguration>): void {
+    this.adsConfig = { ...this.adsConfig, ...config };
+    this.logger.log(`ADS configuration updated: ${JSON.stringify(this.adsConfig)}`);
+  }
+
+  getAdsConfiguration(): AdsConfiguration {
+    return { ...this.adsConfig };
+  }
+
+  // Enhanced ADS validation with configuration support
+  private shouldProcessAdsForFile(filePath: string): boolean {
+    if (!this.adsConfig.enabled) {
+      return false;
+    }
+
+    const fileExtension = filePath.toLowerCase().substring(filePath.lastIndexOf('.'));
+    return this.adsConfig.supportedFileTypes.length === 0 || 
+           this.adsConfig.supportedFileTypes.includes(fileExtension);
+  }
+
+  private shouldProcessStream(streamName: string): boolean {
+    return !this.adsConfig.excludeStreams.includes(streamName);
   }
 }
