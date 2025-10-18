@@ -110,6 +110,19 @@ export class WinOperationService {
         return true;
       });
     }
+    
+    if (acl.SaclAces) {
+      acl.SaclAces = acl.SaclAces.filter((ace) => {
+        if (ace.Sid === 'Invalid') {
+          errors.push(
+            `Invalid SACL SID for ${ace.originalSid} found in SID mapping`,
+          );
+          return false;
+        }
+        return true;
+      });
+    }
+    
     const result = await this.setAclOperation(targetPath, acl);
 
     if (result?.stdout && result.stdout.includes('unresolved_sids')) {
@@ -258,6 +271,35 @@ export class WinOperationService {
         }
       }
     }
+
+    // SACL validation - validate audit ACEs (AceType 2 = SystemAudit)
+    const sourceSacls = (acl1.SaclAces || []).filter(
+      (ace) => ace.AceType === 2,
+    );
+    sourceSacls.forEach((ace) => {
+      output.sourceSID += `SACL ACE in source: SID(${ace.Sid}), AccessMask(${ace.AccessMask}), AceType(${ace.AceType}). `;
+    });
+
+    const targetSacls = (acl2.SaclAces || []).filter(
+      (ace) => ace.AceType === 2,
+    );
+    targetSacls.forEach((ace) => {
+      output.targetSID += `SACL ACE in target: SID(${ace.Sid}), AccessMask(${ace.AccessMask}), AceType(${ace.AceType}). `;
+    });
+
+    // Validate each source SACL ACE exists in target with matching SID, AccessMask, and AceType
+    for (const srcSaclAce of sourceSacls) {
+      const found = targetSacls.some(
+        (tgtSaclAce) =>
+          tgtSaclAce.Sid === srcSaclAce.Sid &&
+          tgtSaclAce.AccessMask === srcSaclAce.AccessMask &&
+          tgtSaclAce.AceType === srcSaclAce.AceType,
+      );
+      if (!found) {
+        output.inValid += `Missing SACL ACE in target: SID(${srcSaclAce.Sid}), AccessMask(${srcSaclAce.AccessMask}), AceType(${srcSaclAce.AceType}). `;
+      }
+    }
+
     return output;
   }
 
