@@ -110,6 +110,7 @@ export class WinOperationService {
         return true;
       });
     }
+    
     const result = await this.setAclOperation(targetPath, acl);
 
     if (result?.stdout && result.stdout.includes('unresolved_sids')) {
@@ -120,6 +121,24 @@ export class WinOperationService {
             `Unresolved SID ${sid} found while setting ACL on target`,
           );
         });
+      }
+    }
+
+    // Log ADS operation results
+    if (result?.stdout && result.stdout.includes('ads_copied')) {
+      try {
+        const resultData = JSON.parse(result.stdout);
+        const adsCopied = resultData.ads_copied || 0;
+        const sourceAdsCount = acl.AdsStreams?.length || 0;
+        
+        if (sourceAdsCount > 0) {
+          this.logger.log(`ADS Migration: ${adsCopied}/${sourceAdsCount} alternate data streams copied to ${targetPath}`);
+          if (adsCopied < sourceAdsCount) {
+            errors.push(`Warning: Only ${adsCopied}/${sourceAdsCount} ADS streams copied to target`);
+          }
+        }
+      } catch {
+        // JSON parsing failed, continue without ADS logging
       }
     }
 
@@ -247,6 +266,35 @@ export class WinOperationService {
         }
       }
     }
+
+    // ADS validation - validate alternate data streams
+    const sourceAds = acl1.AdsStreams || [];
+    sourceAds.forEach((ads) => {
+      output.sourceSID += `ADS in source: Stream(${ads.StreamName}), Size(${ads.Size}). `;
+    });
+
+    const targetAds = acl2.AdsStreams || [];
+    targetAds.forEach((ads) => {
+      output.targetSID += `ADS in target: Stream(${ads.StreamName}), Size(${ads.Size}). `;
+    });
+
+    // Validate each source ADS exists in target with matching stream name and content
+    for (const srcAds of sourceAds) {
+      const found = targetAds.some(
+        (tgtAds) =>
+          tgtAds.StreamName === srcAds.StreamName &&
+          tgtAds.Content === srcAds.Content,
+      );
+      if (!found) {
+        const targetStream = targetAds.find(ads => ads.StreamName === srcAds.StreamName);
+        if (!targetStream) {
+          output.inValid += `Missing ADS in target: Stream(${srcAds.StreamName}), Size(${srcAds.Size}). `;
+        } else {
+          output.inValid += `ADS content mismatch in target: Stream(${srcAds.StreamName}), Expected size(${srcAds.Size}), Actual size(${targetStream.Size}). `;
+        }
+      }
+    }
+
     return output;
   }
 

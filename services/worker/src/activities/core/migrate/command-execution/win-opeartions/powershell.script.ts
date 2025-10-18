@@ -40,7 +40,7 @@ $OWNER_SECURITY_INFORMATION = 0x00000001
 $GROUP_SECURITY_INFORMATION = 0x00000002
 $DACL_SECURITY_INFORMATION  = 0x00000004
 $SACL_SECURITY_INFORMATION  = 0x00000008
-$ALL_SECURITY_INFORMATION   = $OWNER_SECURITY_INFORMATION -bor $GROUP_SECURITY_INFORMATION -bor $DACL_SECURITY_INFORMATION 
+$ALL_SECURITY_INFORMATION   = $OWNER_SECURITY_INFORMATION -bor $GROUP_SECURITY_INFORMATION -bor $DACL_SECURITY_INFORMATION -bor $SACL_SECURITY_INFORMATION 
 
 function Get-FileSecurityFast([string]$path) {
     $pOwnerSid = [IntPtr]::Zero
@@ -53,7 +53,8 @@ function Get-FileSecurityFast([string]$path) {
     $OWNER_SECURITY_INFORMATION = 0x00000001
     $GROUP_SECURITY_INFORMATION = 0x00000002
     $DACL_SECURITY_INFORMATION  = 0x00000004
-    $ALL_SECURITY_INFORMATION   = $OWNER_SECURITY_INFORMATION -bor $GROUP_SECURITY_INFORMATION -bor $DACL_SECURITY_INFORMATION 
+    $SACL_SECURITY_INFORMATION  = 0x00000008
+    $ALL_SECURITY_INFORMATION   = $OWNER_SECURITY_INFORMATION -bor $GROUP_SECURITY_INFORMATION -bor $DACL_SECURITY_INFORMATION -bor $SACL_SECURITY_INFORMATION 
 
     try {
         $result = [FastAcl]::GetNamedSecurityInfo(
@@ -81,9 +82,21 @@ function Get-FileSecurityFast([string]$path) {
     $group = $sd.Group.Value
 
     $daclAces = @()
+    $saclAces = @()
     if ($sd.DiscretionaryAcl) {
         foreach ($ace in $sd.DiscretionaryAcl) {
             $daclAces += [PSCustomObject]@{
+                Sid         = $ace.SecurityIdentifier.Value
+                AccessMask  = $ace.AccessMask
+                AceType     = [int]$ace.AceType
+                AceFlags    = [int]$ace.AceFlags
+                IsInherited = $ace.IsInherited
+            }
+        }
+    }
+    if ($sd.SystemAcl) {
+        foreach ($ace in $sd.SystemAcl) {
+            $saclAces += [PSCustomObject]@{
                 Sid         = $ace.SecurityIdentifier.Value
                 AccessMask  = $ace.AccessMask
                 AceType     = [int]$ace.AceType
@@ -100,6 +113,7 @@ function Get-FileSecurityFast([string]$path) {
     
     # Check individual flags
     $daclPresent   = ($ctrl -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclPresent) -ne 0
+    $saclPresent   = ($ctrl -band [System.Security.AccessControl.ControlFlags]::SystemAclPresent) -ne 0
     $daclProtected = ($ctrl -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclProtected) -ne 0
     $daclAutoInherit = ($ctrl -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclAutoInherited) -ne 0
     
@@ -129,10 +143,21 @@ function Get-FileSecurityFast([string]$path) {
     # Optional: free the security descriptor allocated by GetNamedSecurityInfo
     # [System.Runtime.InteropServices.Marshal]::FreeHGlobal($pSD) # can't use FreeHGlobal; should call LocalFree. Skipping to avoid crash.
 
+    # Get Alternate Data Streams if it's a file (not directory)
+    $adsStreams = @()
+    if (-not (Test-Path -LiteralPath $path -PathType Container)) {
+        try {
+            $adsStreams = Get-FileADS -path $path
+        } catch {
+            # ADS enumeration failed, continue without ADS
+        }
+    }
+
     [PSCustomObject]@{
         Owner         = $owner
         Group         = $group
         DaclAces      = $daclAces
+        AdsStreams    = $adsStreams
         DaclPresent   = $daclPresent
         DaclProtected = $daclProtected
         DaclAutoInherit = $daclAutoInherit
@@ -222,6 +247,37 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     [System.Runtime.InteropServices.Marshal]::Copy($daclBytes, 0, $ptrDacl, $daclBytes.Length)
 
     $ptrSacl = [IntPtr]::Zero
+    # Build SACL if provided
+    if ($securityInfo.SaclAces -and $securityInfo.SaclAces.Count -gt 0) {
+        try {
+            $saclInput = $securityInfo.SaclAces
+            $sacl = New-Object System.Security.AccessControl.RawAcl(2, $saclInput.Count)
+            for ($j = 0; $j -lt $saclInput.Count; $j++) {
+                $sace = $saclInput[$j]
+                $sid = New-Object System.Security.Principal.SecurityIdentifier($sace.Sid)
+                $is_resolved = Map-Sid $sid
+                if ($is_resolved -eq $false) { $unresolved_sids += $sid }
+                if ($sace.AceType -eq 2 -or $sace.AceType -eq 3) { # SystemAudit/SystemAlarm
+                    $qual = [System.Security.AccessControl.AceQualifier]::SystemAudit
+                    $auditAce = New-Object System.Security.AccessControl.CommonAce(
+                        [System.Security.AccessControl.AceFlags]$sace.AceFlags,
+                        $qual,
+                        [int]$sace.AccessMask,
+                        $sid,
+                        $false,
+                        $null
+                    )
+                    $sacl.InsertAce($j, $auditAce)
+                }
+            }
+            if ($sacl.Count -gt 0) {
+                $sd.SystemAcl = $sacl
+                $sd.SetFlags($sd.Control -bor [System.Security.AccessControl.ControlFlags]::SystemAclPresent)
+            }
+        } catch {
+            # ignore SACL build errors to avoid breaking DACL stamping
+        }
+    }
 
     $SE_FILE_OBJECT = 1
     $OWNER_SECURITY_INFORMATION = 0x00000001
@@ -232,6 +288,7 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
 
     # Include protection flag to always disable inheritance
     $securityInfoFlags = $OWNER_SECURITY_INFORMATION -bor $GROUP_SECURITY_INFORMATION -bor $DACL_SECURITY_INFORMATION
+    if ($sd.SystemAcl) { $securityInfoFlags = $securityInfoFlags -bor 0x00000008 }
     if ($securityInfo.DaclProtected) {
         # Convert to signed int32 to handle the flag properly (matches working set.ps1)
         $securityInfoFlags = [int]($securityInfoFlags -bor $PROTECTED_DACL_SECURITY_INFORMATION)
@@ -260,16 +317,80 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
         $attrEnum = [System.Enum]::Parse([System.IO.FileAttributes], $securityInfo.Attributes)
         [System.IO.File]::SetAttributes($path, $attrEnum)
     }
+
+    # Set Alternate Data Streams if provided and target is a file (not directory)
+    $adsCopiedCount = 0
+    if ($securityInfo.AdsStreams -and $securityInfo.AdsStreams.Count -gt 0 -and -not (Test-Path -LiteralPath $path -PathType Container)) {
+        try {
+            $adsCopiedCount = Set-FileADS -path $path -adsStreams $securityInfo.AdsStreams
+        } catch {
+            # ADS writing failed, continue without error to not break ACL stamping
+        }
+    }
         
     $unresolved_sid_values = @()
     if ($unresolved_sids.Count -gt 0) {
         $unresolved_sid_values = @($unresolved_sids | ForEach-Object { $_.Value })
         # Manually build JSON array
         $json_array = '[' + (($unresolved_sid_values | ForEach-Object { '"' + $_ + '"' }) -join ',') + ']'
-        Write-Output ('{"success":true, "unresolved_sids":' + $json_array + '}')
+        Write-Output ('{"success":true, "unresolved_sids":' + $json_array + ', "ads_copied":' + $adsCopiedCount + '}')
     } else {
-        Write-Output '{"success":true, "unresolved_sids":[]}'
+        Write-Output ('{"success":true, "unresolved_sids":[], "ads_copied":' + $adsCopiedCount + '}')
     }
+}
+
+function Get-FileADS([string]$path) {
+    $adsStreams = @()
+    
+    try {
+        # Get all streams for the file, excluding the main data stream
+        $streams = Get-Item -LiteralPath $path -Stream * -ErrorAction SilentlyContinue | Where-Object { $_.Stream -ne ':$DATA' -and $_.Stream -ne '' }
+        
+        foreach ($stream in $streams) {
+            $streamPath = $path + ':' + $stream.Stream
+            try {
+                # Read stream content as string, handling binary data gracefully
+                $content = Get-Content -LiteralPath $streamPath -Raw -ErrorAction SilentlyContinue
+                if ($content -eq $null) { $content = '' }
+                # Ensure content is treated as string, not PowerShell object
+                $contentString = $content.ToString()
+                
+                $adsStreams += [PSCustomObject]@{
+                    StreamName = $stream.Stream
+                    Size = $stream.Length
+                    Content = $contentString
+                }
+            } catch {
+                # If we can't read the stream content, include it with empty content
+                $adsStreams += [PSCustomObject]@{
+                    StreamName = $stream.Stream
+                    Size = $stream.Length
+                    Content = ''
+                }
+            }
+        }
+    } catch {
+        # ADS enumeration failed, return empty array
+    }
+    
+    return $adsStreams
+}
+
+function Set-FileADS([string]$path, [array]$adsStreams) {
+    $copiedCount = 0
+    
+    foreach ($ads in $adsStreams) {
+        try {
+            $streamPath = $path + ':' + $ads.StreamName
+            # Write content as string without additional newlines
+            $ads.Content | Out-File -LiteralPath $streamPath -Encoding UTF8 -NoNewline -Force
+            $copiedCount++
+        } catch {
+            # Failed to write this stream, continue with others
+        }
+    }
+    
+    return $copiedCount
 }
 
 function Resolve-UsernamesToSid {
@@ -333,6 +454,57 @@ function Map-Sid {
         return $false
     }
 }
+
+function Get-FileADS([string]$path) {
+    try {
+        $adsStreams = @()
+        $streams = Get-Item -LiteralPath $path -Stream * -ErrorAction SilentlyContinue | Where-Object { $_.Stream -ne "::$DATA" }
+        foreach ($stream in $streams) {
+            try {
+                # Use -Raw to get content as single string, not array of objects
+                $content = Get-Content -LiteralPath $path -Stream $stream.Stream -Raw -ErrorAction SilentlyContinue
+                # Ensure content is a string, not a PowerShell object
+                if ($content -ne $null) {
+                    $content = $content.ToString().TrimEnd([char[]]@(13,10))
+                }
+                $adsStreams += [PSCustomObject]@{
+                    StreamName = $stream.Stream
+                    Size = $stream.Length
+                    Content = $content
+                }
+            } catch {
+                # Skip streams that can't be read
+            }
+        }
+        return $adsStreams
+    } catch {
+        return @()
+    }
+}
+
+function Set-FileADS([string]$path, [array]$adsStreams) {
+    try {
+        $copiedCount = 0
+        foreach ($ads in $adsStreams) {
+            try {
+                # Ensure we're writing string content, not PowerShell objects
+                $contentToWrite = $ads.Content
+                if ($contentToWrite -ne $null -and $contentToWrite -ne '') {
+                    # Convert to string if it's not already
+                    $contentString = $contentToWrite.ToString()
+                    Set-Content -LiteralPath $path -Stream $ads.StreamName -Value $contentString -NoNewline -ErrorAction SilentlyContinue
+                    $copiedCount++
+                }
+            } catch {
+                # Skip streams that can't be written
+            }
+        }
+        return $copiedCount
+    } catch {
+        return 0
+    }
+}
+
 function SidToName {
     param(
         [string]$sidStr
