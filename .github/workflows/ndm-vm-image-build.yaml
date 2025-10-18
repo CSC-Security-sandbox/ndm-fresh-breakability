@@ -137,7 +137,6 @@ jobs:
           echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
           echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
           echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
-
       - name: Parse and set service configurations
         id: parse-config
         run: |
@@ -171,7 +170,6 @@ jobs:
           REPORTS_SERVICE_TAG=$(echo "$SERVICES_CONFIG" | jq -r '."reports-service".tag // "latest"')
           DB_MIGRATIONS_TAG=$(echo "$SERVICES_CONFIG" | jq -r '."db-migrations".tag // "latest"')
           SUPPORT_SERVICE_TAG=$(echo "$SERVICES_CONFIG" | jq -r '."support-service".tag // "latest"')
-
           # Extract branches for each service
           WORKER_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '.worker.branch // "main"' | sed 's#/#-#g')
           ADMIN_SERVICE_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '."admin-service".branch // "main"' | sed 's#/#-#g')
@@ -184,7 +182,6 @@ jobs:
           DB_MIGRATIONS_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '."db-migrations".branch // "main"' | sed 's#/#-#g')
           SUPPORT_SERVICE_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '."support-service".branch // "main"' | sed 's#/#-#g')
           
-
           # Set as step outputs for other jobs
           echo "worker_tag=$WORKER_TAG" >> $GITHUB_OUTPUT
           echo "admin_service_tag=$ADMIN_SERVICE_TAG" >> $GITHUB_OUTPUT
@@ -196,7 +193,6 @@ jobs:
           echo "reports_service_tag=$REPORTS_SERVICE_TAG" >> $GITHUB_OUTPUT
           echo "db_migrations_tag=$DB_MIGRATIONS_TAG" >> $GITHUB_OUTPUT
           echo "support_service_tag=$SUPPORT_SERVICE_TAG" >> $GITHUB_OUTPUT
-
           echo "worker_branch=$WORKER_BRANCH" >> $GITHUB_OUTPUT
           echo "admin_service_branch=$ADMIN_SERVICE_BRANCH" >> $GITHUB_OUTPUT
           echo "config_service_branch=$CONFIG_SERVICE_BRANCH" >> $GITHUB_OUTPUT
@@ -207,7 +203,6 @@ jobs:
           echo "reports_service_branch=$REPORTS_SERVICE_BRANCH" >> $GITHUB_OUTPUT
           echo "db_migrations_branch=$DB_MIGRATIONS_BRANCH" >> $GITHUB_OUTPUT
           echo "support_service_branch=$SUPPORT_SERVICE_BRANCH" >> $GITHUB_OUTPUT
-
       - name: Determine build and ref
         id: build_version
         run: |
@@ -226,7 +221,6 @@ jobs:
           fi
           echo "build_version=$BUILD_VERSION" >> $GITHUB_OUTPUT
           echo "build_type=${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}" >> $GITHUB_OUTPUT
-
           REF="${GITHUB_REF}"
           if [[ "$REF" == "refs/heads/main" ]]; then
             REF_TYPE="branches"
@@ -273,7 +267,6 @@ jobs:
           echo "| support-service | \`${{ steps.parse-config.outputs.support_service_tag }}\` | \`${{ steps.parse-config.outputs.support_service_branch }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**build version**: \`${{ steps.build_version.outputs.build_version }}\`" >> $GITHUB_STEP_SUMMARY
-
       - name: Fetch and Replace tags and bundle docker images
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         env:
@@ -300,18 +293,15 @@ jobs:
         run: |
           chmod +x ./app-deployment/scripts/get_tags.sh
           ./app-deployment/scripts/get_tags.sh ${{steps.build_version.outputs.build_version}} "${{ steps.build_version.outputs.ref_type }}" "${{ steps.build_version.outputs.ref_name }}"
-
       - name: Run helm package ansible playbook
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         run: |
           ansible-playbook ./app-deployment/ansible/control-plane/playbooks/package-helm-chart.yaml -i ./app-deployment/ansible/control-plane/config/local-inventory.yaml --extra-vars "build_version=${{ steps.build_version.outputs.build_version }}" --extra-vars "@./app-deployment/ansible/control-plane/config/group_vars/vars.yaml"
-
       - name: Upload Docker tar and Helm chart tgz to artifactory
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         run: |
           BUILD_TYPE="${{ steps.build_version.outputs.build_type }}"
           BUILD_VERSION="${{ steps.build_version.outputs.build_version }}"
-
           # Upload Docker image tar
           if [ -f app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tar ]; then
             if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
@@ -330,7 +320,6 @@ jobs:
           else
             echo "Docker tar not found, skipping upload."
           fi
-
           # Upload Helm chart tgz
           if [ -f app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tgz ]; then
             if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
@@ -349,7 +338,6 @@ jobs:
           else
             echo "Helm chart tgz not found, skipping upload."
           fi
-
       - name: Download Worker Binary from Artifactory
         if: ${{ github.event.inputs.component == 'worker' || github.event.inputs.component == 'windows-installer' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         id: worker-binary
@@ -379,7 +367,7 @@ jobs:
             LATEST_JSON_PATH="${BASE_PATH}/${REF_TYPE}/${REF_NAME}/latest.json"
             
             # Download latest.json from Artifactory
-            curl -s -o "latest.json" \
+            curl -o "latest.json" \
               -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
               "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${LATEST_JSON_PATH}"
             
@@ -418,7 +406,7 @@ jobs:
           BINARY_PATH="${ARTIFACT_PATH}/datamigrator-worker-${SELECTED_VERSION}.zip"
           
           echo "Downloading worker binary from Artifactory..."
-          curl -s -o "worker.zip" \
+          curl -o "worker.zip" \
             -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
             "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${BINARY_PATH}"
           
@@ -427,12 +415,10 @@ jobs:
             exit 1
           fi
           echo "Worker binary downloaded successfully."
-
           echo "Downloading worker.env from Artifactory..."
-          curl -s -o "worker.env" \
+          curl -o "worker.env" \
             -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
             "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACT_PATH}/worker-${SELECTED_VERSION}.env"
-
           if [ ! -f "worker.env" ] || [ ! -s "worker.env" ]; then
             echo "Error: Failed to download worker.env or file is empty"
             exit 1
@@ -452,7 +438,6 @@ jobs:
             ls -la $GITHUB_WORKSPACE/worker_bin/pkg/
             exit 1
           fi
-
           if [[ -f "$GITHUB_WORKSPACE/worker_bin/pkg/worker-win-x64.exe" ]]; then
             echo "Windows binary exists at $GITHUB_WORKSPACE/worker_bin/pkg/worker-win-x64.exe"
             WINDOWS_BINARY_NAME="datamigrator-worker-${BUILD_VERSION}.exe"
@@ -463,17 +448,14 @@ jobs:
             ls -la $GITHUB_WORKSPACE/worker_bin/pkg/
             exit 1
           fi
-
           echo "linux_binary_name=$LINUX_BINARY_NAME" >> $GITHUB_OUTPUT
           echo "windows_binary_name=$WINDOWS_BINARY_NAME" >> $GITHUB_OUTPUT
-
           # Upload assets to Artifactory
           if [[ ! "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then 
             # Create combined tarball with both Linux and Windows binaries
             BINARIES_TARBALL="datamigrator-worker-${BUILD_VERSION}-binaries.tar.gz"
             tar -czf "$GITHUB_WORKSPACE/worker_bin/pkg/${BINARIES_TARBALL}" -C "$GITHUB_WORKSPACE/worker_bin/pkg" "$LINUX_BINARY_NAME" "$WINDOWS_BINARY_NAME"
             echo "Created binaries tarball ${BINARIES_TARBALL} with both Linux and Windows binaries"
-
             ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/worker"
             BINARIES_TARBALL_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/worker/${BINARIES_TARBALL}"
             ENV_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/worker/worker-${BUILD_VERSION}.env"
@@ -485,7 +467,6 @@ jobs:
                 "$TARGET_URL" \
                 -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
               echo "Worker binaries tarball uploaded successfully to $TARGET_URL."
-
               TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ENV_PATH}"
               echo "Uploading worker environment file to $TARGET_URL..."
               curl --silent --show-error --fail --request PUT --upload-file "worker.env" \
@@ -494,7 +475,15 @@ jobs:
               echo "Worker environment file uploaded successfully to $TARGET_URL."
             done
           fi
-
+      
+      - name: Download Docker images tarball
+        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        run: | 
+          cd app-deployment/artifacts
+          TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/docker-images/ndm-docker-images.tar"
+          curl -o "ndm-docker-images.tar" \
+              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+              $TARGET_URL
       - name: Upload Ansible vars.yaml
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -509,12 +498,12 @@ jobs:
           name: helm-chart
           path: app-deployment/artifacts/datamigrator-*.tgz
 
-      - name: Upload Docker image tar artifact
+      - name: Upload Docker image tar artifacts
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: datamigrator-images
-          path: app-deployment/artifacts/datamigrator-*.tar
+          path: app-deployment/artifacts/*.tar
 
       - name: Upload Worker Binaries as Artifact
         if: ${{ github.event.inputs.component == 'worker' || github.event.inputs.component == 'windows-installer' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
@@ -536,17 +525,14 @@ jobs:
           else
             COMPONENTS='["${{ github.event.inputs.component }}"]'
           fi
-
           # Set providers based on input
           if [[ "${{ github.event.inputs.provider }}" == "all" || "${{ github.event.inputs.provider }}" == "" ]]; then
             PROVIDERS='["azure", "vsphere", "gcp"]'
           else
             PROVIDERS='["${{ github.event.inputs.provider }}"]'
           fi
-
           # Create the matrix JSON
           echo "matrix={\"component\":${COMPONENTS},\"provider\":${PROVIDERS}}" >> $GITHUB_OUTPUT
-
   build-windows-installer:
     if: ${{ github.event.inputs.component == 'windows-installer' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
     runs-on: windows-latest
@@ -557,10 +543,10 @@ jobs:
       BUILD_VERSION: ${{ needs.package-artifacts.outputs.build_version }}
     steps:
         - name: Checkout code
-          uses: actions/checkout@v4
+          uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
         - name: Download Binary Artifact
-          uses: actions/download-artifact@v4
+          uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
           with:
             name: worker-binary
             path: .
@@ -572,7 +558,6 @@ jobs:
             New-Item -ItemType Directory -Force -Path wininstaller\redist
             New-Item -ItemType Directory -Force -Path wininstaller\fluentd
             Move-Item -Path "${{ needs.package-artifacts.outputs.windows_binary_name }}" -Destination "wininstaller\worker.exe" -Force
-
         - name: Download Redistributables
           shell: pwsh
           run: |
@@ -583,7 +568,6 @@ jobs:
             # Download fluent-package MSI
             Write-Host "Downloading fluent-package..."
             Invoke-WebRequest -Uri "https://s3.amazonaws.com/packages.treasuredata.com/5/windows/fluent-package-5.2.0-x64.msi" -OutFile "wininstaller\fluentd\fluent-package-5.2.0-x64.msi"
-
             # Verify downloads
             Write-Host "Verifying downloads..."
             if (Test-Path "wininstaller\redist\vc_redist.x64.exe") {
@@ -592,14 +576,12 @@ jobs:
             } else {
                 throw "VC++ Redistributable download failed"
             }
-
             if (Test-Path "wininstaller\fluentd\fluent-package-5.2.0-x64.msi") {
                 $fluentSize = (Get-Item "wininstaller\fluentd\fluent-package-5.2.0-x64.msi").Length
                 Write-Host "fluent-package downloaded: $fluentSize bytes"
             } else {
                 throw "fluent-package download failed"
             }
-
         - name: Copy environment file and installer files
           shell: pwsh
           run: |
@@ -608,14 +590,12 @@ jobs:
             Copy-Item -Path "services/worker/wininstaller/installer.iss" -Destination "wininstaller\installer.iss" -Force
             Copy-Item -Path "services/worker/wininstaller/service.xml" -Destination "wininstaller\service.xml" -Force
             Copy-Item -Path "services/worker/wininstaller/fluentd.conf" -Destination "wininstaller\fluentd.conf" -Force
-
         - name: Update installer version
           shell: pwsh
           run: |
             # Replace the version in installer.iss with the actual app version
             (Get-Content "wininstaller\installer.iss") -replace '#define ApplicationVersion ".*"', '#define ApplicationVersion "${{ env.BUILD_VERSION }}"' | Set-Content "wininstaller\installer.iss"
             Write-Host "Updated installer version to: ${{ env.BUILD_VERSION }}"
-
         - name: Verify installer version update
           shell: pwsh
           run: |
@@ -624,7 +604,6 @@ jobs:
             Get-Content "wininstaller\installer.iss" | Select-Object -First 10 | ForEach-Object { Write-Host $_ }
             Write-Host "=============================================="
             Write-Host "BUILD_VERSION environment variable: ${{ env.BUILD_VERSION }}"
-
         - name: Download WinSW and rename
           shell: pwsh
           run: |
@@ -645,7 +624,6 @@ jobs:
           shell: cmd
           run: |
             "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "wininstaller\installer.iss"
-
         - name: Upload Windows Installer as Artifact
           uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
           with:
@@ -655,6 +633,8 @@ jobs:
   upload-windows-installer:
     needs: [package-artifacts, build-windows-installer]
     runs-on: openlab
+    outputs:
+      windows_worker_installer_url: ${{ steps.upload-installer.outputs.windows_worker_installer_url }}
     steps:
       - name: Download Windows Installer Artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -663,17 +643,19 @@ jobs:
           path: ./
 
       - name: Upload Windows Installer to Artifactory
+        id: upload-installer
         run: |
           BUILD_TYPE="${{ needs.package-artifacts.outputs.build_type }}"
           BUILD_VERSION="${{ needs.package-artifacts.outputs.build_version }}"
-
           if [[ ! "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then 
             ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/windows-installer"
           else
             ARTIFACTORY_PATH="releases/${BUILD_VERSION}/windows-installer"
           fi
-
           INSTALLER_PATH="${ARTIFACTORY_PATH}/windows-worker-installer-${BUILD_VERSION}.exe"
+          INSTALLER_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${INSTALLER_PATH}"
+          echo "windows_worker_installer_url=$INSTALLER_URL" >> $GITHUB_OUTPUT
+          
           for REPO_PATH in "cicd/ndm" "team/ndm"; do
             TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${INSTALLER_PATH}"
             echo "Uploading Windows worker installer to $TARGET_URL..."
@@ -682,7 +664,6 @@ jobs:
               -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
             echo "Windows worker installer uploaded successfully to $TARGET_URL."
           done
-
       - name: Generate and upload manifests for windows-installer
         run: |
           set -e
@@ -697,7 +678,6 @@ jobs:
           RUN_ID="${GITHUB_RUN_ID}"
           WORKFLOW_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
           INSTALLER_FILENAME="windows-worker-installer-${BUILD_VERSION}.exe"
-
           # Generate metadata.json for windows installer
           cat > metadata.json <<EOF
           {
@@ -714,7 +694,6 @@ jobs:
             "workflow_run_url": "$WORKFLOW_RUN_URL"
           }
           EOF
-
           ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
             METADATA_PATH="releases/${BUILD_VERSION}/manifests/${COMPONENT}/${COMPONENT}.json"
@@ -722,7 +701,6 @@ jobs:
             METADATA_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/manifests/${COMPONENT}/${COMPONENT}.json"
             LATEST_PATH="builds/$BUILD_TYPE/${COMPONENT}-latest.json"
           fi
-
           # Generate latest.json for windows installer
           cat > latest.json <<EOF
           {
@@ -737,7 +715,6 @@ jobs:
             "published_by": "${{ github.actor }}"
           }
           EOF
-
           FILES_TO_UPLOAD="metadata.json"
           if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
             echo "Release branch detected, will only upload metadata.json"
@@ -745,7 +722,6 @@ jobs:
             FILES_TO_UPLOAD="$FILES_TO_UPLOAD latest.json"
             echo "Non-release branch detected, will upload both metadata.json and latest.json"
           fi
-
           for FILE in $FILES_TO_UPLOAD; do
             if [[ "$FILE" == "metadata.json" ]]; then
               ARTIFACTORY_PATH="$METADATA_PATH"
@@ -761,7 +737,6 @@ jobs:
               echo "$FILE uploaded successfully to $TARGET_URL."
             done
           done
-
   packer:
     if: ${{ github.event.inputs.component != 'windows-installer' }}
     needs: [package-artifacts, determine-matrix]
@@ -799,8 +774,11 @@ jobs:
       provider: ${{ matrix.provider }}
       component: ${{ matrix.component }}
       image_name: ${{ steps.image-info.outputs.image_name }}
-      control_plane_template: ${{ steps.set-template.outputs.control_plane_template }}
-      worker_template: ${{ steps.set-template.outputs.worker_template }}
+      build_image_version: ${{ steps.image-info.outputs.build_image_version }}
+      control_plane_template: ${{ steps.set-template-vsphere.outputs.control_plane_template }}
+      worker_template: ${{ steps.set-template-vsphere.outputs.worker_template }}
+      control_plane_image_version: ${{ steps.set-template-azure.outputs.control_plane_image_version }}
+      worker_image_version: ${{ steps.set-template-azure.outputs.worker_image_version }}
     steps:  
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -820,18 +798,15 @@ jobs:
         run: |
           # Dynamically generate the path for each component-provider combination
           PROVIDER_PATH="${{ matrix.provider }}"
-
           PACKER_PATH="app-deployment/packer/${PROVIDER_PATH}/${{ matrix.component }}"
           echo "path=$PACKER_PATH" >> $GITHUB_OUTPUT
           echo "Using packer configuration path: $PACKER_PATH"
-
       - name: Export ACR pull secret
         if: ${{ matrix.component != 'worker' }}
         run: |
           echo "Exporting ACR pull secret..."
           echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
           echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
-
       - name: Configure cloud provider credentials
         id: credentials
         run: |
@@ -857,7 +832,9 @@ jobs:
               echo "PKR_VAR_vsphere_password=$(echo "${{ secrets.VSPHERE_PASSWORD }}" | base64 --decode)" >> $GITHUB_ENV
               echo "PKR_VAR_build_username=$(echo "${{ secrets.VSPHERE_BUILD_USERNAME }}" | base64 --decode)" >> $GITHUB_ENV
               echo "PKR_VAR_build_password=$(echo "${{ secrets.VSPHERE_BUILD_PASSWORD }}" | base64 --decode)" >> $GITHUB_ENV
+              echo "::add-mask::$PKR_VAR_build_password"
               echo "PKR_VAR_build_password_encrypted=$(echo "${{ secrets.VSPHERE_BUILD_PASSWORD_ENCRYPTED }}" | base64 --decode)" >> $GITHUB_ENV
+              echo "::add-mask::$PKR_VAR_build_password_encrypted"
               echo "PKR_VAR_build_key=$(echo "${{ secrets.VSPHERE_BUILD_KEY }}" | base64 --decode)" >> $GITHUB_ENV
               ;;
             gcp)
@@ -865,6 +842,16 @@ jobs:
               echo "GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/gcp-key.json" >> $GITHUB_ENV
               ;;
           esac
+          # Determine image suffix based on trigger type
+          IMAGE_SUFFIX=""
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            IMAGE_SUFFIX="nightly"
+          elif [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            IMAGE_SUFFIX=""
+          else
+            IMAGE_SUFFIX="adhoc"
+          fi
+          echo "PKR_VAR_image_suffix=${IMAGE_SUFFIX}" >> $GITHUB_ENV
       
       - name: Download Ansible vars.yaml
         if: ${{ matrix.component == 'control-plane' }}
@@ -901,7 +888,6 @@ jobs:
         run: |
           BUILD_VERSION="${{ env.build_version }}"
           echo "worker_binary_path=${{ github.workspace }}/worker_bin/pkg/datamigrator-worker-$BUILD_VERSION" >> $GITHUB_OUTPUT
-
       - name: Add ovftool to PATH
         run: echo "/home/ubuntu/ovftool" >> $GITHUB_PATH
 
@@ -909,12 +895,10 @@ jobs:
         run: |
           cd ${{ steps.packer-path.outputs.path }}
           packer init .
-
       - name: Packer Validate
         id: validate
         run: |
           cd ${{ steps.packer-path.outputs.path }}
-
           if [ "${{ matrix.component }}" == "worker" ]; then
             echo "Validating worker configuration with binary path..."
             packer validate \
@@ -927,44 +911,46 @@ jobs:
               -var-file="variables.pkrvars.hcl" \
               linux-ubuntu.pkr.hcl
           fi
-
           if [ $? -ne 0 ]; then
             echo "Packer validation failed"
             exit 1
           fi
-
           echo "Packer validation completed successfully"
-
-      - name: Packer Build
+      - name: Packer Build with Retry
         id: build
         run: |
           cd ${{ steps.packer-path.outputs.path }}
-
           # Set build-specific variables
           BUILD_ID=$(date -u +'%Y%m%dT%H%M%SZ')-${{ github.sha }}
           echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
-
-          # Run packer build with appropriate parameters based on component
-          if [ "${{ matrix.component }}" == "worker" ]; then
-            echo "Building worker image with binary path..."
-            packer build \
-              -var "worker_binary_path=${{ steps.worker-binary-path.outputs.worker_binary_path }}" \
-              -var-file="variables.pkrvars.hcl" \
-              linux-ubuntu.pkr.hcl | tee $GITHUB_WORKSPACE/packer.log
-          else
-            echo "Building control-plane image..."
-            packer build \
-              -var-file="variables.pkrvars.hcl" \
-              linux-ubuntu.pkr.hcl | tee $GITHUB_WORKSPACE/packer.log
-          fi
-
-          if [ ${PIPESTATUS[0]} -ne 0 ]; then
-            echo "Packer build failed"
-            exit 1
-          fi
-
+          for attempt in {1..3}; do 
+            echo "Attempt $attempt: Running Packer build..."
+            if [ "${{ matrix.component }}" == "worker" ]; then
+              echo "Building worker image with binary path..."
+              packer build \
+                -var "worker_binary_path=${{ steps.worker-binary-path.outputs.worker_binary_path }}" \
+                -var-file="variables.pkrvars.hcl" \
+                linux-ubuntu.pkr.hcl | tee $GITHUB_WORKSPACE/packer.log
+            else
+              echo "Building control-plane image..."
+              packer build \
+                -var-file="variables.pkrvars.hcl" \
+                linux-ubuntu.pkr.hcl | tee $GITHUB_WORKSPACE/packer.log
+            fi
+            if [ ${PIPESTATUS[0]} -eq 0 ]; then
+              echo "Packer build succeeded on attempt $attempt"
+              break
+            else 
+              echo "Packer build failed on attempt $attempt"
+              if [ $attempt -eq 3 ]; then
+                echo "All retry attempts failed"
+                exit 1
+              fi
+              echo "Retrying in 10 seconds..."
+              sleep 10
+            fi
+          done
           echo "Packer build completed successfully"
-
       - name: Extract Image Info
         id: image-info
         run: |
@@ -977,9 +963,11 @@ jobs:
             IMAGE_NAME=$(grep 'ManagedImageName' $GITHUB_WORKSPACE/packer.log | awk '{print $2}')
             IMAGE_ID=$(grep 'ManagedImageId' $GITHUB_WORKSPACE/packer.log | awk '{print $2}')
             IMAGE_LOCATION=$(grep 'ManagedImageLocation' $GITHUB_WORKSPACE/packer.log | awk '{print $2}')
+            IMAGE_VERSION=$(grep 'SharedImageGalleryImageVersion' $GITHUB_WORKSPACE/packer.log | awk '{print $2}')
       
             echo "image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
             echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
+            echo "build_image_version=$IMAGE_VERSION" >> $GITHUB_OUTPUT
             echo "resource_group=$IMAGE_RESOURCE_GROUP" >> $GITHUB_OUTPUT
             echo "location=$IMAGE_LOCATION" >> $GITHUB_OUTPUT
       
@@ -987,6 +975,7 @@ jobs:
             echo "Captured image info for ${{ matrix.provider }}-${{ matrix.component }}"
             echo "Image ID: $IMAGE_ID"
             echo "Image Name: $IMAGE_NAME"
+            echo "Image Version: $IMAGE_VERSION"
             echo "Resource Group: $IMAGE_RESOURCE_GROUP"
             echo "Location: $IMAGE_LOCATION"
             ;;
@@ -1030,6 +1019,7 @@ jobs:
           case "${{ matrix.provider }}" in
             azure)
               echo "${{ steps.image-info.outputs.image_name }}" > ${{ matrix.component }}-${{ matrix.provider }}-image.txt
+              echo "${{ steps.image-info.outputs.build_image_version }}" > ${{ matrix.component }}-${{ matrix.provider }}-version.txt
               ;;
             vsphere)
               echo "${{ steps.image-info.outputs.image_name }}" > ${{ matrix.component }}-${{ matrix.provider }}-image.txt
@@ -1038,12 +1028,18 @@ jobs:
               echo "${{ steps.image-info.outputs.image_name }}" > ${{ matrix.component }}-${{ matrix.provider }}-image.txt
               ;;
           esac
-
       - name: Upload Image Info
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: image-info-${{ matrix.component }}-${{ matrix.provider }}
           path: ${{ matrix.component }}-${{ matrix.provider }}-image.txt
+
+      - name: Upload Image Version Info (Azure)
+        if: ${{ matrix.provider == 'azure' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: image-version-${{ matrix.component }}-${{ matrix.provider }}
+          path: ${{ matrix.component }}-${{ matrix.provider }}-version.txt
 
       - name: Generate and upload images and manifests for control-plane
         if: ${{ matrix.component == 'control-plane' }}
@@ -1051,17 +1047,15 @@ jobs:
           chmod +x ./app-deployment/scripts/services_manifest.sh
           ./app-deployment/scripts/services_manifest.sh services.json "${{ env.ref_type }}" "${{ env.ref_name }}"
           echo "services_json=$(cat services.json)" >> $GITHUB_OUTPUT
-
           BUILD_TYPE="${{ env.build_type }}"
           BUILD_VERSION="${{ env.build_version }}"
-
           CHART_JSON="{\"name\":\"datamigrator\",\"version\":\"$BUILD_VERSION\",\"path\":\"$HELM_PATH\"}"
           echo "$CHART_JSON" > chart.json
           echo "chart_json=$CHART_JSON" >> $GITHUB_OUTPUT
-
           PROVIDER="${{ matrix.provider }}"
           COMPONENT="${{ matrix.component }}"
           IMAGE_NAME="${{ steps.image-info.outputs.image_name }}"
+          IMAGE_VERSION="${{ steps.image-info.outputs.build_image_version }}"
           BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           COMMIT="${GITHUB_SHA}"
           SHORT_COMMIT="${GITHUB_SHA::7}"
@@ -1069,7 +1063,6 @@ jobs:
           WORKFLOW_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
           CHART_JSON=$(cat chart.json)
           SERVICES_JSON=$(cat services.json)
-
           ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
             METADATA_PATH="releases/${BUILD_VERSION}/manifests/${PROVIDER}/${COMPONENT}.json"
@@ -1081,8 +1074,28 @@ jobs:
             DOCKER_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/docker/datamigrator-$BUILD_VERSION.tar"
             HELM_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/helm/datamigrator-$BUILD_VERSION.tgz"
           fi
-
-          cat > metadata.json <<EOF
+          if [[ "$PROVIDER" == "azure" ]]; then
+            cat > metadata.json <<EOF
+          {
+            "build_version": "$BUILD_VERSION",
+            "provider": "$PROVIDER",
+            "component": "$COMPONENT",
+            "image_name": "$IMAGE_NAME",
+            "image_version": "$IMAGE_VERSION",
+            "build_timestamp": "$BUILD_TIMESTAMP",
+            "commit": "$COMMIT",
+            "short_commit": "$SHORT_COMMIT",
+            "workflow_run_id": "$RUN_ID",
+            "workflow_run_url": "$WORKFLOW_RUN_URL",
+            "chart": $CHART_JSON,
+            "services": {
+              "path": "$DOCKER_PATH",
+              "items": $SERVICES_JSON
+            }
+          }
+          EOF
+          else
+            cat > metadata.json <<EOF
           {
             "build_version": "$BUILD_VERSION",
             "provider": "$PROVIDER",
@@ -1100,7 +1113,7 @@ jobs:
             }
           }
           EOF
-
+          fi
           cat > latest.json <<EOF
           {
             "build_version": "$BUILD_VERSION",
@@ -1115,7 +1128,6 @@ jobs:
             "published_by": "${{ github.actor }}"
           }
           EOF
-
           FILES_TO_UPLOAD="metadata.json"
           if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
             echo "Release branch detected, will only upload metadata.json"
@@ -1123,7 +1135,6 @@ jobs:
             FILES_TO_UPLOAD="$FILES_TO_UPLOAD latest.json"
             echo "Non-release branch detected, will upload both metadata.json and latest.json"
           fi
-
           for FILE in $FILES_TO_UPLOAD; do
             if [[ "$FILE" == "metadata.json" ]]; then
               ARTIFACTORY_PATH="$METADATA_PATH"
@@ -1139,7 +1150,6 @@ jobs:
               echo "$FILE uploaded successfully to $TARGET_URL."
             done
           done
-
       - name: Generate and upload manifests for worker
         if: ${{ matrix.component == 'worker' }}
         run: |
@@ -1150,13 +1160,31 @@ jobs:
           PROVIDER="${{ matrix.provider }}"
           COMPONENT="${{ matrix.component }}"
           IMAGE_NAME="${{ steps.image-info.outputs.image_name }}"
+          IMAGE_VERSION="${{ steps.image-info.outputs.build_image_version }}"
           BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           COMMIT="${GITHUB_SHA}"
           SHORT_COMMIT="${GITHUB_SHA::7}"
           RUN_ID="${GITHUB_RUN_ID}"
           WORKFLOW_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
-
-          cat > metadata.json <<EOF
+          if [[ "$PROVIDER" == "azure" ]]; then
+            cat > metadata.json <<EOF
+          {
+            "build_version": "$BUILD_VERSION",
+            "provider": "$PROVIDER",
+            "component": "$COMPONENT",
+            "binary_name": "$LINUX_BINARY_NAME",
+            "binary_path": "$BINARY_PATH",
+            "image_name": "$IMAGE_NAME",
+            "image_version": "$IMAGE_VERSION",
+            "build_timestamp": "$BUILD_TIMESTAMP",
+            "commit": "$COMMIT",
+            "short_commit": "$SHORT_COMMIT",
+            "workflow_run_id": "$RUN_ID",
+            "workflow_run_url": "$WORKFLOW_RUN_URL"
+          }
+          EOF
+          else
+            cat > metadata.json <<EOF
           {
             "build_version": "$BUILD_VERSION",
             "provider": "$PROVIDER",
@@ -1171,7 +1199,7 @@ jobs:
             "workflow_run_url": "$WORKFLOW_RUN_URL"
           }
           EOF
-
+          fi
           ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           BUILD_TYPE="${{ env.build_type }}"
           if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
@@ -1180,7 +1208,6 @@ jobs:
             METADATA_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/manifests/${PROVIDER}/${COMPONENT}.json"
             LATEST_PATH="builds/$BUILD_TYPE/${PROVIDER}-${COMPONENT}-latest.json"
           fi
-
           cat > latest.json <<EOF
           {
             "build_version": "$BUILD_VERSION",
@@ -1195,7 +1222,6 @@ jobs:
             "published_by": "${{ github.actor }}"
           }
           EOF
-
           FILES_TO_UPLOAD="metadata.json"
           if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
             echo "Release branch detected, will only upload metadata.json"
@@ -1203,7 +1229,6 @@ jobs:
             FILES_TO_UPLOAD="$FILES_TO_UPLOAD latest.json"
             echo "Non-release branch detected, will upload both metadata.json and latest.json"
           fi
-
           for FILE in $FILES_TO_UPLOAD; do
             if [[ "$FILE" == "metadata.json" ]]; then
               ARTIFACTORY_PATH="$METADATA_PATH"
@@ -1219,12 +1244,10 @@ jobs:
               echo "$FILE uploaded successfully to $TARGET_URL."
             done
           done
-
       - name: Upload OVA file to Artifactory
         if: ${{ matrix.provider == 'vsphere' }}
         run: |
           echo "Uploading OVA file to Artifactory..."
-
           OVA_FILE="app-deployment/packer/vsphere/${{ matrix.component }}/artifacts/${{ steps.image-info.outputs.image_name }}/${{ steps.image-info.outputs.image_name }}.ova"
           BUILD_VERSION="${{ env.build_version }}"
           BUILD_TYPE="${{ env.build_type }}"
@@ -1233,7 +1256,6 @@ jobs:
           else
             ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/ova/${{ matrix.component }}-${BUILD_VERSION}.ova"
           fi
-
           if [ -f "$OVA_FILE" ]; then
             echo "Found OVA file: $OVA_FILE"
             for REPO_PATH in "cicd/ndm" "team/ndm"; do
@@ -1250,8 +1272,17 @@ jobs:
             exit 1
           fi
       
-      - name: Set template output
-        id: set-template
+      - name: Set template output for azure
+        id: set-template-azure
+        if: ${{ matrix.provider == 'azure' }}
+        run: |
+          if [ "${{ matrix.component }}" == "control-plane" ]; then
+            echo "control_plane_image_version=${{ steps.image-info.outputs.build_image_version }}" >> $GITHUB_OUTPUT
+          elif [ "${{ matrix.component }}" == "worker" ]; then
+            echo "worker_image_version=${{ steps.image-info.outputs.build_image_version }}" >> $GITHUB_OUTPUT
+          fi
+      - name: Set template output for vsphere
+        id: set-template-vsphere
         if: ${{ matrix.provider == 'vsphere' }}
         run: |
           if [ "${{ matrix.component }}" == "control-plane" ]; then
@@ -1259,7 +1290,6 @@ jobs:
           elif [ "${{ matrix.component }}" == "worker" ]; then
             echo "worker_template=${{ steps.image-info.outputs.image_name }}" >> $GITHUB_OUTPUT
           fi
-
   notify-build-completion:
     if: ${{ github.event_name == 'schedule' }}
     needs: [package-artifacts, packer, upload-windows-installer]
@@ -1269,6 +1299,13 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           pattern: image-info-*
+          merge-multiple: true
+          path: ./image-info/
+
+      - name: Download Image Version Artifacts (Azure)
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: image-version-*
           merge-multiple: true
           path: ./image-info/
 
@@ -1305,12 +1342,13 @@ jobs:
               "weight": "Bolder",
               "spacing": "Medium"
             }'
-
-          INSTALLER_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/builds/${BUILD_TYPE}/${BUILD_VERSION}/worker/windows-worker-installer-${BUILD_VERSION}.exe"
+          INSTALLER_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/builds/${BUILD_TYPE}/${BUILD_VERSION}/windows-installer/windows-worker-installer-${BUILD_VERSION}.exe"
           
           for provider in "azure" "vsphere" "gcp"; do
             CONTROL_PLANE_FILE="./image-info/control-plane-${provider}-image.txt"
             WORKER_FILE="./image-info/worker-${provider}-image.txt"
+            CONTROL_PLANE_VERSION_FILE="./image-info/control-plane-${provider}-version.txt"
+            WORKER_VERSION_FILE="./image-info/worker-${provider}-version.txt"
             
             if [[ -f "$CONTROL_PLANE_FILE" || -f "$WORKER_FILE" ]]; then
               case "$provider" in
@@ -1346,6 +1384,15 @@ jobs:
                     "value": "'"${CP_NAME}"'"
                   }'
                 FACTS_ADDED=true
+                
+                if [[ "$provider" == "azure" && -f "$CONTROL_PLANE_VERSION_FILE" ]]; then
+                  CP_VERSION=$(cat "$CONTROL_PLANE_VERSION_FILE")
+                  CARD_BODY+=',
+                  {
+                    "title": "Control Plane Image Version:",
+                    "value": "'"${CP_VERSION}"'"
+                  }'
+                fi
               fi
               
               if [[ -f "$WORKER_FILE" ]]; then
@@ -1358,6 +1405,16 @@ jobs:
                     "title": "Worker:",
                     "value": "'"${WORKER_NAME}"'"
                   }'
+                FACTS_ADDED=true
+                
+                if [[ "$provider" == "azure" && -f "$WORKER_VERSION_FILE" ]]; then
+                  WORKER_VERSION=$(cat "$WORKER_VERSION_FILE")
+                  CARD_BODY+=',
+                  {
+                    "title": "Worker Image Version:",
+                    "value": "'"${WORKER_VERSION}"'"
+                  }'
+                fi
               fi
               
               CARD_BODY+='
@@ -1365,7 +1422,6 @@ jobs:
               }'
             fi
           done
-
           CARD_BODY+=',
           {
             "type": "ActionSet",
@@ -1377,28 +1433,26 @@ jobs:
               }
             ]
           }'
-
           CARD_BODY+=']'
-
           ADAPTIVE_CARD='{
             "type": "AdaptiveCard",
             "version": "1.5",
             "body": '"${CARD_BODY}"'
           }'
-
           # Send the card
           curl -X POST \
             -H "Content-Type: application/json" \
             -d "$ADAPTIVE_CARD" \
             '${{ secrets.POWER_AUTOMATE_URL }}'
-
           echo "Build notification sent successfully"
-
-  run-ndm-api-tests:
-    if: ${{ needs.packer.outputs.control_plane_template != '' && needs.packer.outputs.worker_template != '' }}
-    needs: [packer, determine-matrix]
-    uses: ./.github/workflows/run-api-tests.yaml
-    with:
-      control_plane_template: ${{ needs.packer.outputs.control_plane_template }}
-      worker_template: ${{ needs.packer.outputs.worker_template }}
-    secrets: inherit
+  # run-azure-ndm-api-tests:
+  #   if: ${{ needs.packer.outputs.control_plane_image_version != '' && needs.packer.outputs.worker_image_version != '' }}
+  #   needs: [package-artifacts, packer, determine-matrix, upload-windows-installer]
+  #   uses: ./.github/workflows/run-api-tests-azure.yaml
+  #   with:
+  #     control_plane_image_version: ${{ needs.packer.outputs.control_plane_image_version }}
+  #     worker_image_version: ${{ needs.packer.outputs.worker_image_version }}
+  #     windows_worker_installer_url: ${{ needs.upload-windows-installer.outputs.windows_worker_installer_url }}
+  #     build_version: ${{ needs.package-artifacts.outputs.build_version }}
+  #     ref_type: ${{ needs.package-artifacts.outputs.ref_type }}
+  #   secrets: inherit
