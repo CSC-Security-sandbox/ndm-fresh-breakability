@@ -92,27 +92,7 @@ interface AdsValidationTask {
   validationLevel: 'basic' | 'full' | 'checksum';
 }
 
-// Processing mode configuration
-interface AdsProcessingConfig {
-  mode: 'low-level' | 'temporal' | 'hybrid';
-  temporalEnabled: boolean;
-  fallbackToLowLevel: boolean;
-  maxStreamSizeForLowLevel: number; // bytes
-  temporalTaskQueue: string;
-  batchSize: number; // streams per batch
-}
 
-interface AdsConfiguration {
-  enabled: boolean;
-  processingConfig: AdsProcessingConfig; // New processing mode config
-  maxStreamSize: number; // Maximum size for in-memory processing (bytes)
-  enableChecksum: boolean; // Whether to calculate checksums
-  enableCompression: boolean; // Whether to compress large streams
-  retryAttempts: number; // Number of retry attempts for failed operations
-  chunkSize: number; // Chunk size for large stream processing
-  supportedFileTypes: string[]; // File extensions to process ADS for
-  excludeStreams: string[]; // Stream names to exclude from processing
-}
 
 interface AdsOperationResult {
   success: boolean;

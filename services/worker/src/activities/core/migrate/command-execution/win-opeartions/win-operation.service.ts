@@ -16,26 +16,6 @@ import { OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
 export class WinOperationService {
   private readonly logger: LoggerService;
   private sidCache: LRUCache = new LRUCache(1000);
-  
-  // ADS Configuration with temporal processing support
-  private adsConfig: AdsConfiguration = {
-    enabled: true,
-    processingConfig: {
-      mode: 'temporal', // Default to temporal queue approach
-      temporalEnabled: true,
-      fallbackToLowLevel: false,
-      maxStreamSizeForLowLevel: 1048576, // 1MB - small streams can use low-level
-      temporalTaskQueue: 'ndm-ads-processing',
-      batchSize: 10 // Process 10 streams per batch
-    },
-    maxStreamSize: 10485760, // 10MB
-    enableChecksum: true,
-    enableCompression: false, // Disabled by default for compatibility
-    retryAttempts: 3,
-    chunkSize: 1048576, // 1MB chunks
-    supportedFileTypes: ['.doc', '.docx', '.xls', '.xlsx', '.pdf', '.txt', '.exe', '.dll'], // Common types with ADS
-    excludeStreams: ['Zone.Identifier', 'com.apple.quarantine'] // System streams to exclude
-  };
 
   constructor(
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
@@ -345,45 +325,10 @@ export class WinOperationService {
     return usernameToSidMap;
   }
 
-  // ADS Configuration Management
-  updateAdsConfiguration(config: Partial<AdsConfiguration>): void {
-    this.adsConfig = { ...this.adsConfig, ...config };
-    this.logger.log(`ADS configuration updated: ${JSON.stringify(this.adsConfig)}`);
-  }
 
-  getAdsConfiguration(): AdsConfiguration {
-    return { ...this.adsConfig };
-  }
-
-  // Enhanced ADS validation with configuration support
-  private shouldProcessAdsForFile(filePath: string): boolean {
-    if (!this.adsConfig.enabled) {
-      return false;
-    }
-
-    const fileExtension = filePath.toLowerCase().substring(filePath.lastIndexOf('.'));
-    return this.adsConfig.supportedFileTypes.length === 0 || 
-           this.adsConfig.supportedFileTypes.includes(fileExtension);
-  }
-
-  private shouldProcessStream(streamName: string): boolean {
-    return !this.adsConfig.excludeStreams.includes(streamName);
-  }
 
   // ADS Discovery Service - lightweight enumeration for temporal tasks
   async discoverAdsForFile(filePath: string): Promise<AdsDiscoveryResult> {
-    if (!this.shouldProcessAdsForFile(filePath)) {
-      return {
-        fileId: this.generateFileId(filePath),
-        filePath,
-        streamCount: 0,
-        totalAdsSize: 0,
-        streams: [],
-        estimatedTotalTime: 0,
-        requiresSpecialHandling: false
-      };
-    }
-
     try {
       const script = `$srcFile = '${filePath.replace(/'/g, "''")}'\nDiscover-FileADS $srcFile`;
       const output = await this.winShellService.executeCommand(script);
@@ -391,25 +336,17 @@ export class WinOperationService {
       
       const streamMetadata: AdsStreamMetadata[] = JSON.parse(output.stdout) || [];
       
-      // Filter out excluded streams
-      const filteredStreams = streamMetadata.filter(stream => 
-        this.shouldProcessStream(stream.streamName)
-      );
-
-      const totalAdsSize = filteredStreams.reduce((sum, stream) => sum + stream.size, 0);
-      const estimatedTotalTime = filteredStreams.reduce((sum, stream) => sum + stream.estimatedTransferTime, 0);
-      const requiresSpecialHandling = filteredStreams.some(stream => 
-        stream.size > this.adsConfig.maxStreamSize || stream.priority === 'critical'
-      );
+      const totalAdsSize = streamMetadata.reduce((sum, stream) => sum + stream.size, 0);
+      const estimatedTotalTime = streamMetadata.reduce((sum, stream) => sum + stream.estimatedTransferTime, 0);
 
       return {
         fileId: this.generateFileId(filePath),
         filePath,
-        streamCount: filteredStreams.length,
+        streamCount: streamMetadata.length,
         totalAdsSize,
-        streams: filteredStreams,
+        streams: streamMetadata,
         estimatedTotalTime,
-        requiresSpecialHandling
+        requiresSpecialHandling: false // Temporal handles all sizes
       };
     } catch (error) {
       this.logger.error(`Failed to discover ADS for ${filePath}: ${error.message}`);
