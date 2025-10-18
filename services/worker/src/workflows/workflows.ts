@@ -31,3 +31,5 @@ export { MigrationWorkflow } from './core/parent/migration-parent-workflow';
 export { ValidatePathWorkerWorkflow } from './validate-path/validate-path-worker-workflow';
 export { ValidatePathsWorkflow } from './validate-path/validate-path-workflow';
 
+export { AdsWorkflow, BatchAdsWorkflow } from './core/ads/ads-workflow';
+

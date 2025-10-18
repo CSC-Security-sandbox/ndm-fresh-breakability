@@ -17,9 +17,17 @@ export class WinOperationService {
   private readonly logger: LoggerService;
   private sidCache: LRUCache = new LRUCache(1000);
   
-  // ADS Configuration with sensible defaults
+  // ADS Configuration with temporal processing support
   private adsConfig: AdsConfiguration = {
     enabled: true,
+    processingConfig: {
+      mode: 'temporal', // Default to temporal queue approach
+      temporalEnabled: true,
+      fallbackToLowLevel: false,
+      maxStreamSizeForLowLevel: 1048576, // 1MB - small streams can use low-level
+      temporalTaskQueue: 'ndm-ads-processing',
+      batchSize: 10 // Process 10 streams per batch
+    },
     maxStreamSize: 10485760, // 10MB
     enableChecksum: true,
     enableCompression: false, // Disabled by default for compatibility
@@ -360,5 +368,64 @@ export class WinOperationService {
 
   private shouldProcessStream(streamName: string): boolean {
     return !this.adsConfig.excludeStreams.includes(streamName);
+  }
+
+  // ADS Discovery Service - lightweight enumeration for temporal tasks
+  async discoverAdsForFile(filePath: string): Promise<AdsDiscoveryResult> {
+    if (!this.shouldProcessAdsForFile(filePath)) {
+      return {
+        fileId: this.generateFileId(filePath),
+        filePath,
+        streamCount: 0,
+        totalAdsSize: 0,
+        streams: [],
+        estimatedTotalTime: 0,
+        requiresSpecialHandling: false
+      };
+    }
+
+    try {
+      const script = `$srcFile = '${filePath.replace(/'/g, "''")}'\nDiscover-FileADS $srcFile`;
+      const output = await this.winShellService.executeCommand(script);
+      if (output.stderr) throw new Error(output.stderr);
+      
+      const streamMetadata: AdsStreamMetadata[] = JSON.parse(output.stdout) || [];
+      
+      // Filter out excluded streams
+      const filteredStreams = streamMetadata.filter(stream => 
+        this.shouldProcessStream(stream.streamName)
+      );
+
+      const totalAdsSize = filteredStreams.reduce((sum, stream) => sum + stream.size, 0);
+      const estimatedTotalTime = filteredStreams.reduce((sum, stream) => sum + stream.estimatedTransferTime, 0);
+      const requiresSpecialHandling = filteredStreams.some(stream => 
+        stream.size > this.adsConfig.maxStreamSize || stream.priority === 'critical'
+      );
+
+      return {
+        fileId: this.generateFileId(filePath),
+        filePath,
+        streamCount: filteredStreams.length,
+        totalAdsSize,
+        streams: filteredStreams,
+        estimatedTotalTime,
+        requiresSpecialHandling
+      };
+    } catch (error) {
+      this.logger.error(`Failed to discover ADS for ${filePath}: ${error.message}`);
+      return {
+        fileId: this.generateFileId(filePath),
+        filePath,
+        streamCount: 0,
+        totalAdsSize: 0,
+        streams: [],
+        estimatedTotalTime: 0,
+        requiresSpecialHandling: false
+      };
+    }
+  }
+
+  private generateFileId(filePath: string): string {
+    return `file_${filePath.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`;
   }
 }

@@ -339,6 +339,61 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     }
 }
 
+function Discover-FileADS([string]$path) {
+    # Lightweight ADS discovery - only enumerate, don't read content
+    $adsMetadata = @()
+    
+    try {
+        # Get all streams for the file, excluding the main data stream
+        $streams = Get-Item -LiteralPath $path -Stream * -ErrorAction SilentlyContinue | Where-Object { $_.Stream -ne ':$DATA' -and $_.Stream -ne '' }
+        
+        foreach ($stream in $streams) {
+            try {
+                # Quick type estimation based on stream name and size
+                $estimatedType = 'unknown'
+                $priority = 'normal'
+                
+                # Heuristic type detection from stream name
+                switch -Regex ($stream.Stream) {
+                    '(?i)(thumb|icon|image)' { $estimatedType = 'binary'; $priority = 'low' }
+                    '(?i)(security|manifest|signature)' { $estimatedType = 'binary'; $priority = 'critical' }
+                    '(?i)(meta|desc|comment|author)' { $estimatedType = 'text'; $priority = 'normal' }
+                    '(?i)(zone\.identifier|quarantine)' { $priority = 'low' } # System streams
+                    default { 
+                        # Size-based heuristic
+                        if ($stream.Length -lt 1024) { $estimatedType = 'text' }
+                        elseif ($stream.Length -gt 1048576) { $estimatedType = 'binary' }
+                    }
+                }
+                
+                # Estimate transfer time based on size (rough calculation)
+                $estimatedTransferTime = [math]::Max(100, $stream.Length / 10240) # Min 100ms, ~10KB/s baseline
+                
+                $adsMetadata += [PSCustomObject]@{
+                    StreamName = $stream.Stream
+                    Size = $stream.Length
+                    EstimatedType = $estimatedType
+                    Priority = $priority
+                    EstimatedTransferTime = $estimatedTransferTime
+                }
+            } catch {
+                # If we can't analyze the stream, include basic info
+                $adsMetadata += [PSCustomObject]@{
+                    StreamName = $stream.Stream
+                    Size = $stream.Length
+                    EstimatedType = 'unknown'
+                    Priority = 'normal'
+                    EstimatedTransferTime = 1000 # Default 1 second
+                }
+            }
+        }
+    } catch {
+        # ADS discovery failed, return empty array
+    }
+    
+    return $adsMetadata
+}
+
 function Get-FileADS([string]$path, [int]$maxSizeBytes = 10485760) { # Default 10MB limit
     $adsStreams = @()
     
