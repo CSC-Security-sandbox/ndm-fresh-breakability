@@ -7,19 +7,27 @@ import "time"
 // ErrorCsvResponse represents the response from generate-error-csv endpoint
 type ErrorCsvResponse struct {
 	Message string `json:"message"`
+	Data    struct {
+		Items interface{} `json:"items"`
+	} `json:"data"`
 }
 
 // ErrorResponse represents error responses from the backend
 type ErrorResponse struct {
-	StatusCode int    `json:"statusCode"`
-	Message    string `json:"message"`
-	Error      string `json:"error"`
+	StatusCode     int    `json:"statusCode"`
+	Message        string `json:"message"`
+	DisplayMessage string `json:"displayMessage"`
+	Error          string `json:"error"`
 }
 
 // ErrorCsvReadyResponse represents the response from is-error-csv-ready endpoint
 type ErrorCsvReadyResponse struct {
-	Ready      bool `json:"ready"`
-	Processing bool `json:"processing"`
+	Data struct {
+		Items struct {
+			Ready      bool `json:"ready"`
+			Processing bool `json:"processing"`
+		} `json:"items"`
+	} `json:"data"`
 }
 
 type ErrorCsvConfig struct {

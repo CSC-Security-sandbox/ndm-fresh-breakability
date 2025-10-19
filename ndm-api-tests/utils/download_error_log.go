@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -29,7 +28,12 @@ func GenerateCsvFile(idType string, id string, headers map[string]string) (strin
 		if err := json.Unmarshal(bodyBytes, &errorResponse); err != nil {
 			return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
 		}
-		return "", fmt.Errorf("backend error: %s", errorResponse.Message)
+		// Use displayMessage if available, otherwise fall back to message
+		errorMsg := errorResponse.DisplayMessage
+		if errorMsg == "" {
+			errorMsg = errorResponse.Message
+		}
+		return "", fmt.Errorf("backend error: %s", errorMsg)
 	}
 
 	// Parse the success JSON response
@@ -55,6 +59,20 @@ func IsCsvFileReady(idType string, id string, headers map[string]string) (ErrorC
 		return ErrorCsvReadyResponse{}, err
 	}
 
+	// Check for successful response
+	if resp.StatusCode != http.StatusOK {
+		var errorResponse ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &errorResponse); err != nil {
+			return ErrorCsvReadyResponse{}, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
+		}
+		// Use displayMessage if available, otherwise fall back to message
+		errorMsg := errorResponse.DisplayMessage
+		if errorMsg == "" {
+			errorMsg = errorResponse.Message
+		}
+		return ErrorCsvReadyResponse{}, fmt.Errorf("backend error: %s", errorMsg)
+	}
+
 	// Parse the JSON response
 	var readyResponse ErrorCsvReadyResponse
 	if err := json.Unmarshal(bodyBytes, &readyResponse); err != nil {
@@ -73,12 +91,23 @@ func DownloadErrorCsv(idType string, id string, headers map[string]string) (int,
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return resp.StatusCode, fmt.Errorf("download CSV failed with status %d: %s", resp.StatusCode, resp.Status)
-	}
+		// Try to parse error response for better error messages
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return resp.StatusCode, fmt.Errorf("download CSV failed with status %d: %s", resp.StatusCode, resp.Status)
+		}
 
-	contentType := resp.Header.Get("Content-Type")
-	if !strings.Contains(contentType, "text/csv") && !strings.Contains(contentType, "application/octet-stream") {
-		return resp.StatusCode, fmt.Errorf("unexpected content type: %s (expected text/csv)", contentType)
+		var errorResponse ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &errorResponse); err != nil {
+			return resp.StatusCode, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
+		}
+		
+		// Use displayMessage if available, otherwise fall back to message
+		errorMsg := errorResponse.DisplayMessage
+		if errorMsg == "" {
+			errorMsg = errorResponse.Message
+		}
+		return resp.StatusCode, fmt.Errorf("backend error: %s", errorMsg)
 	}
 
 	return resp.StatusCode, nil
@@ -98,13 +127,13 @@ func PollForCsvReadiness(idType string, id string, headers map[string]string, ma
 		}
 		lastResponse = response
 
-		if response.Ready {
-			return response.Ready, response.Processing, nil
+		if response.Data.Items.Ready {
+			return response.Data.Items.Ready, response.Data.Items.Processing, nil
 		}
 
 		if i < maxAttempts-1 {
 			time.Sleep(pollInterval)
 		}
 	}
-	return lastResponse.Ready, lastResponse.Processing, nil
+	return lastResponse.Data.Items.Ready, lastResponse.Data.Items.Processing, nil
 }
