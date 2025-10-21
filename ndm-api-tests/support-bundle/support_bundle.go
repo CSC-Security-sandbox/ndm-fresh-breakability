@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"compress/flate"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	. "ndm-api-tests/utils"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -110,23 +112,47 @@ func main() {
 		return
 	}
 
-	// Step 4: Combine all downloaded zips into one
-	LogDebug(fmt.Sprintf("Combining %d support bundles into one zip file", len(downloadedZips)))
-	combinedZipPath := "ndm_logs_combined.zip"
-	err = CombineZipFiles(downloadedZips, combinedZipPath)
+	// Step 4: Extract, combine, and re-zip all support bundles
+	LogDebug(fmt.Sprintf("Extracting and combining %d support bundles", len(downloadedZips)))
+	combinedDir := "ndm_logs_combined_temp"
+
+	// Create temporary directory for extraction
+	err = os.MkdirAll(combinedDir, os.ModePerm)
 	if err != nil {
-		LogError(fmt.Sprintf("Error combining zip files: %v", err))
+		LogError(fmt.Sprintf("Error creating combined directory: %v", err))
 		return
 	}
-	LogDebug(fmt.Sprintf("Successfully combined all support bundles into %s", combinedZipPath))
+	defer os.RemoveAll(combinedDir) // Clean up temp directory
 
-	// Clean up individual zip files
+	// Extract each zip into its own project subfolder
+	for i, zipPath := range downloadedZips {
+		projectDir := fmt.Sprintf("%s/project_%d", combinedDir, i+1)
+		LogDebug(fmt.Sprintf("Extracting %s to %s (%d/%d)", zipPath, projectDir, i+1, len(downloadedZips)))
+
+		err = ExtractZipToDirectory(zipPath, projectDir)
+		if err != nil {
+			LogError(fmt.Sprintf("Error extracting %s: %v", zipPath, err))
+			continue
+		}
+		LogDebug(fmt.Sprintf("Successfully extracted %s", zipPath))
+	}
+
+	// Create a fresh combined zip from the extracted files
+	combinedZipPath := "ndm_logs_combined.zip"
+	LogDebug(fmt.Sprintf("Creating combined zip: %s", combinedZipPath))
+	err = ZipDirectory(combinedDir, combinedZipPath)
+	if err != nil {
+		LogError(fmt.Sprintf("Error creating combined zip: %v", err))
+		return
+	}
+	LogDebug(fmt.Sprintf("Successfully created combined zip: %s", combinedZipPath))
+
+	// Clean up individual zip files (optional)
 	for _, zipPath := range downloadedZips {
 		os.Remove(zipPath)
 	}
 
-	zipPath := combinedZipPath
-	// Step 2: Upload Support Bundle
+	// Step 5: Upload the combined bundle to Artifactory
 	if strings.Contains(BUILD_VERSION, "nightly") || REF_TYPE == "releases" {
 		buildType := ""
 		if strings.Contains(BUILD_VERSION, "nightly") {
@@ -134,9 +160,11 @@ func main() {
 		} else if REF_TYPE == "releases" {
 			buildType = "releases"
 		}
-		err = UploadSupportBundleToArtifactory(buildType, BUILD_VERSION, zipPath)
+
+		LogDebug("Uploading combined support bundle to Artifactory")
+		err = UploadSupportBundleToArtifactory(buildType, BUILD_VERSION, combinedZipPath)
 		if err != nil {
-			LogDebug(fmt.Sprintf("Support bundle upload failed: %v", err))
+			LogError(fmt.Sprintf("Support bundle upload failed: %v", err))
 		} else {
 			LogDebug("Support bundle uploaded successfully to Artifactory")
 		}
@@ -198,7 +226,7 @@ func UploadSupportBundleToArtifactory(buildType, buildVersion, zipFilePath strin
 	defer resp.Body.Close()
 
 	// Check if upload was successful
-	if resp.StatusCode != 201 && resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("artifactory upload failed to %s with status %d", uploadURL, resp.StatusCode)
 	}
 
@@ -318,7 +346,7 @@ func DownloadSupportBundleZipWithPath(outputPath string) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		respBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return fmt.Errorf("unexpected response code: %d\nError reading response body: %v", resp.StatusCode, err)
@@ -341,83 +369,143 @@ func DownloadSupportBundleZipWithPath(outputPath string) error {
 	return nil
 }
 
-func CombineZipFiles(zipPaths []string, outputPath string) error {
-	// Create output zip file
-	outFile, err := os.Create(outputPath)
+// ExtractZipToDirectory extracts all files from a zip to a directory
+// This function bypasses checksum validation to handle corrupted zip files
+func ExtractZipToDirectory(zipPath, destDir string) error {
+	reader, err := zip.OpenReader(zipPath)
 	if err != nil {
-		return fmt.Errorf("error creating combined zip file: %w", err)
+		return fmt.Errorf("error opening zip file: %w", err)
 	}
-	defer outFile.Close()
+	defer reader.Close()
 
-	zipWriter := zip.NewWriter(outFile)
-	defer zipWriter.Close()
+	successCount := 0
+	skipCount := 0
 
-	// Process each input zip file
-	for i, zipPath := range zipPaths {
-		LogDebug(fmt.Sprintf("Adding %s to combined zip (%d/%d)", zipPath, i+1, len(zipPaths)))
+	for _, file := range reader.File {
+		// Security: Sanitize file path to prevent Zip Slip vulnerability
+		fpath := filepath.Join(destDir, file.Name)
 
-		// Open the zip file
-		zipReader, err := zip.OpenReader(zipPath)
-		if err != nil {
-			LogError(fmt.Sprintf("Error opening zip file %s: %v", zipPath, err))
+		// Ensure the file path is within the destination directory
+		if !strings.HasPrefix(filepath.Clean(fpath), filepath.Clean(destDir)+string(os.PathSeparator)) {
+			LogError(fmt.Sprintf("Skipping file with unsafe path: %s", file.Name))
+			skipCount++
 			continue
 		}
 
-		// Copy all files from this zip to the combined zip
-		for _, file := range zipReader.File {
-			// Skip directories
-			if file.FileInfo().IsDir() {
-				LogDebug(fmt.Sprintf("Skipping directory: %s", file.Name))
-				continue
-			}
-
-			// Create a unique path by prefixing with project number
-			newPath := fmt.Sprintf("project_%d/%s", i+1, file.Name)
-
-			LogDebug(fmt.Sprintf("Adding file: %s", newPath))
-
-			// Create the file in the combined zip preserving the original compression method
-			header := file.FileHeader
-			header.Name = newPath
-
-			writer, err := zipWriter.CreateHeader(&header)
-			if err != nil {
-				LogError(fmt.Sprintf("Error creating file in combined zip: %v", err))
-				continue
-			}
-
-			// Open the file from the source zip with OpenRaw to bypass checksum verification
-			rawReader, err := file.OpenRaw()
-			if err != nil {
-				// If OpenRaw fails, try normal Open
-				normalReader, err := file.Open()
-				if err != nil {
-					LogError(fmt.Sprintf("Error opening file from source zip: %v", err))
-					continue
-				}
-				// Copy using normal reader
-				_, err = io.Copy(writer, normalReader)
-				normalReader.Close()
-				if err != nil {
-					LogError(fmt.Sprintf("Error copying file content: %v", err))
-					continue
-				}
-			} else {
-				// Copy using raw reader (bypasses checksum)
-				_, err = io.Copy(writer, rawReader)
-				if closer, ok := rawReader.(io.Closer); ok {
-					closer.Close()
-				}
-				if err != nil {
-					LogError(fmt.Sprintf("Error copying file content: %v", err))
-					continue
-				}
-			}
+		// Create directory if needed
+		if file.FileInfo().IsDir() {
+			os.MkdirAll(fpath, os.ModePerm)
+			continue
 		}
 
-		zipReader.Close()
+		// Create parent directories
+		if err := os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
+			return fmt.Errorf("error creating directory: %w", err)
+		}
+
+		// Extract file by reading raw data directly, bypassing checksum validation
+		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
+		if err != nil {
+			skipCount++
+			continue
+		}
+
+		// Use OpenRaw() instead of Open() to bypass checksum validation
+		rc, err := file.OpenRaw()
+		if err != nil {
+			outFile.Close()
+			skipCount++
+			continue
+		}
+
+		// For deflate compressed files, manually decompress
+		var dataReader io.Reader
+		if file.Method == zip.Deflate {
+			// Create a flate (deflate) reader to decompress the data
+			dataReader = flate.NewReader(rc)
+		} else {
+			// For uncompressed (Store method) files, read directly
+			dataReader = rc
+		}
+
+		_, err = io.Copy(outFile, dataReader)
+
+		// Close the decompressor if it was created
+		if closer, ok := dataReader.(io.Closer); ok && dataReader != rc {
+			closer.Close()
+		}
+
+		outFile.Close()
+
+		if err != nil {
+			skipCount++
+			continue
+		}
+		successCount++
 	}
 
-	LogDebug(fmt.Sprintf("Successfully combined %d zip files into %s", len(zipPaths), outputPath))
+	LogDebug(fmt.Sprintf("Extracted %d files successfully (%d skipped/failed)", successCount, skipCount))
 	return nil
+}
+
+// ZipDirectory creates a zip file from a directory
+func ZipDirectory(sourceDir, zipPath string) error {
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		return fmt.Errorf("error creating zip file: %w", err)
+	}
+	defer zipFile.Close()
+
+	zipWriter := zip.NewWriter(zipFile)
+	defer zipWriter.Close()
+
+	// Walk through the directory
+	err = filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip the root directory itself
+		if path == sourceDir {
+			return nil
+		}
+
+		// Get relative path
+		relPath, err := filepath.Rel(sourceDir, path)
+		if err != nil {
+			return err
+		}
+
+		// Create header
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return err
+		}
+		header.Name = relPath
+		header.Method = zip.Deflate
+
+		// Handle directories
+		if info.IsDir() {
+			header.Name += "/"
+			_, err = zipWriter.CreateHeader(header)
+			return err
+		}
+
+		// Handle files
+		writer, err := zipWriter.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		_, err = io.Copy(writer, file)
+		return err
+	})
+
+	return err
 }
