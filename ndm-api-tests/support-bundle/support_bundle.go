@@ -406,6 +406,7 @@ func ExtractZipToDirectory(zipPath, destDir string) error {
 		// Extract file by reading raw data directly, bypassing checksum validation
 		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
 		if err != nil {
+			LogError(fmt.Sprintf("Error extracting file %s: %v", fpath, err))
 			skipCount++
 			continue
 		}
@@ -414,6 +415,7 @@ func ExtractZipToDirectory(zipPath, destDir string) error {
 		rc, err := file.OpenRaw()
 		if err != nil {
 			outFile.Close()
+			LogDebug(fmt.Sprintf("Failed to open raw file for extraction: %s, error: %v", fpath, err))
 			skipCount++
 			continue
 		}
@@ -438,6 +440,7 @@ func ExtractZipToDirectory(zipPath, destDir string) error {
 		outFile.Close()
 
 		if err != nil {
+			LogError(fmt.Sprintf("Error copying file %s: %v", fpath, err))
 			skipCount++
 			continue
 		}
@@ -501,10 +504,13 @@ func ZipDirectory(sourceDir, zipPath string) error {
 		if err != nil {
 			return err
 		}
-		defer file.Close()
 
 		_, err = io.Copy(writer, file)
-		return err
+		closeErr := file.Close()
+		if err != nil {
+			return err
+		}
+		return closeErr
 	})
 
 	return err
