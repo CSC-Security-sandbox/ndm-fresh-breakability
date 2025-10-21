@@ -1,4 +1,9 @@
 ---
+- name: Set control plane IP dynamically
+  set_fact:
+    control_plane_ip: "{{ ansible_default_ipv4.address }}"
+  when: control_plane_ip is not defined
+
 - name: Creates keycloak directory
   become: yes
   file:
@@ -110,7 +115,7 @@
 
 - name: Wait for Keycloak to be ready
   uri:
-    url: "https://{{ control_plane_ip }}/keycloak/admin/realms/master"
+    url: "https://{{ control_plane_ip }}/keycloak/realms/master"
     method: GET
     validate_certs: false
   register: keycloak_ready
@@ -126,7 +131,7 @@
     body_format: form-urlencoded
     body:
       client_id: admin-cli
-      username: admin
+      username: kcadmin
       password: "{{ (keycloak_passwords.stdout_lines | select('match', 'KEYCLOAK_ADMIN_PASSWORD:.*') | map('regex_replace', 'KEYCLOAK_ADMIN_PASSWORD:(.*)', '\\1') | list | first) }}"
       grant_type: password
     validate_certs: false
@@ -134,6 +139,24 @@
   retries: 5
   delay: 10
   until: admin_token_result.status == 200
+
+- name: Create datamigrator realm
+  uri:
+    url: "https://{{ control_plane_ip }}/keycloak/admin/realms"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ admin_token_result.json.access_token }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      realm: "datamigrator"
+      enabled: true
+      displayName: "Data Migrator Realm"
+    status_code: [201, 409]  # 201 = created, 409 = already exists
+    validate_certs: false
+  register: realm_creation_result
+  ignore_errors: yes
+  when: admin_token_result.status == 200
 
 - name: Create redis-secret-reader role in Keycloak
   uri:

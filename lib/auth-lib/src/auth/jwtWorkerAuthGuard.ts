@@ -19,6 +19,10 @@ export class JwtWorkerAuthGuard implements CanActivate {
     async canActivate(context: ExecutionContext): Promise<boolean> {
         const request = context.switchToHttp().getRequest();
         const authHeader = request.headers.authorization;
+
+        this.logger.debug(`this was the request:${request}`);
+
+        this.logger.debug(`Authorization header: ${authHeader}`);
         if (!authHeader) {
             this.logger.warn("Authorization header is missing.");
             return false;
@@ -32,7 +36,10 @@ export class JwtWorkerAuthGuard implements CanActivate {
         try {
             const decoded: DecodedToken = await this.jwtService.verifyToken(token);
             this.logger.debug(`Token decoded successfully`);
-            if(!decoded.project_id)  
+            this.logger.debug(`Token`, decoded)
+            if(!decoded.project_id)
+                this.logger.debug(`Token: ${decoded}`)
+                this.logger.debug(`Project id not found.`);
                 return false
             
             request['project_id'] = decoded.project_id

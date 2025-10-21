@@ -1,8 +1,12 @@
 import { Body, Controller, Get, Post, Request, ForbiddenException } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
+import { Auth, Permission, AuthWorker } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from './user-permission-response-type';
+import {
+    LoggerFactory,
+    LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 class InviteUserDto {
   username: string;
@@ -18,6 +22,7 @@ class UserStatusDto {
 @ApiTags('auth')
 @Controller('/api/v1')
 export class AuthController {
+    private readonly logger: LoggerService;
   constructor(private readonly authService: AuthService) {}
 
   @Auth()
@@ -109,23 +114,45 @@ export class AuthController {
   }
 
   @Get('secrets/redis')
-  @Auth()
-  @ApiBearerAuth()
+  @AuthWorker()
   @ApiOperation({
     summary: 'Get Redis credentials for authenticated workers',
   })
   async getRedisCredentials(@Request() req) {
-    const roles = req.user?.realm_access?.roles || [];
+    try {
+      // @AuthWorker() should populate req.user automatically
+      const user = req.user;
 
-    if (!roles.includes('redis-secret-reader')) {
-      throw new ForbiddenException('Missing redis-secret-reader role');
+      this.logger.debug('🔍 Checking Redis access for user:', user?.preferred_username);
+      this.logger.debug('🔍 User ID (sub):', user?.sub);
+      this.logger.debug('🔍 Client ID:', user?.client_id);
+
+      // Check if it's a service account (optional - @AuthWorker might already validate this)
+      if (!user?.preferred_username?.startsWith('service-account-')) {
+        this.logger.warn('🚫 Access denied - not a service account');
+        throw new ForbiddenException('Access restricted to service accounts');
+      }
+
+      // Check for Redis role using the service account user ID
+      const hasAccess = await this.authService.checkUserHasRedisRole(user.sub);
+
+      if (!hasAccess) {
+        this.logger.warn('🚫 Access denied - user does not have redis-secret-reader role');
+        throw new ForbiddenException('Missing redis-secret-reader role');
+      }
+
+      this.logger.log('✅ Redis access granted with proper role');
+      return {
+        host: process.env.REDIS_HOST || 'redis-master.redis.svc.cluster.local',
+        username: process.env.REDIS_USERNAME || 'default',
+        password: process.env.REDIS_PASSWORD || 'welcome'
+      };
+    } catch (error) {
+      this.logger.error('❌ Redis access check failed:', error.message);
+
+      // Let @AuthWorker() handle the error formatting
+      throw error;
     }
-
-    return {
-      host: process.env.REDIS_HOST || 'redis-master.redis.svc.cluster.local',
-      username: process.env.REDIS_USERNAME || 'default',
-      password: process.env.REDIS_PASSWORD || 'welcome'
-    };
   }
 
 }

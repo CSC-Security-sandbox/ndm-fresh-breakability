@@ -121,7 +121,7 @@ ingressThrottle:
 # ==============================
 ingress:
   pathPrefix: api/v1/
-  trailingPath: "(health|admin-docs|inviteUser|email|worker-registration)"
+  trailingPath: "(health|admin-docs|inviteUser|email|worker-registration|secrets)"
   ingressClassName: public
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
