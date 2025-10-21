@@ -37,10 +37,11 @@ export class JwtWorkerAuthGuard implements CanActivate {
             const decoded: DecodedToken = await this.jwtService.verifyToken(token);
             this.logger.debug(`Token decoded successfully`);
             this.logger.debug(`Token`, decoded)
-            if(!decoded.project_id)
+            if(!decoded.project_id){
                 this.logger.debug(`Token: ${decoded}`)
                 this.logger.debug(`Project id not found.`);
                 return false
+            }
             
             request['project_id'] = decoded.project_id
             request['worker_id'] = decoded.client_id
