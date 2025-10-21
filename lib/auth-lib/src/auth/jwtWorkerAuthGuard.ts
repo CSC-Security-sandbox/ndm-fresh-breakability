@@ -45,7 +45,7 @@ export class JwtWorkerAuthGuard implements CanActivate {
 
             request['project_id'] = decoded.project_id;
             request['worker_id'] = decoded.client_id;
-            request['user'] = decoded;  // Add this line
+            request['user'] = decoded; 
 
             this.logger.debug('All is correct and user id', request);
 

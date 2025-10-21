@@ -82,19 +82,20 @@ begin
             begin
               if (ResultCode = 0) and LoadStringFromFile(TempFile, Response) then
               begin
-                // Parse Redis credentials (simple JSON parsing)
-                StartPos := Pos('"host":"', String(Response));
+                // Parse Redis credentials from nested JSON response (updated to match API format)
+                StartPos := Pos('"data":{"items":{"host":"', String(Response));
                 if StartPos > 0 then
                 begin
-                  StartPos := StartPos + 8;
+                  StartPos := StartPos + 22;  // Length of '"data":{"items":{"host":"'
                   EndPos := Pos('"', Copy(String(Response), StartPos, 100));
                   if EndPos > 0 then
                     RedisHost := Copy(String(Response), StartPos, EndPos-1);
                 end;
                 
-                StartPos := Pos('"username":"', String(Response));
+                StartPos := Pos('"items":{"host":"' + RedisHost + '","username":"', String(Response));
                 if StartPos > 0 then
                 begin
+                  StartPos := Pos('"username":"', String(Response));
                   StartPos := StartPos + 12;
                   EndPos := Pos('"', Copy(String(Response), StartPos, 100));
                   if EndPos > 0 then

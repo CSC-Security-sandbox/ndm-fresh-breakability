@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Request, ForbiddenException } from '@nestjs/common';
+import { Body, Controller, Get, Post, Request, ForbiddenException, Logger } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { Auth, Permission, AuthWorker } from '@netapp-cloud-datamigrate/auth-lib';
@@ -22,7 +22,7 @@ class UserStatusDto {
 @ApiTags('auth')
 @Controller('/api/v1')
 export class AuthController {
-    private readonly logger: LoggerService;
+  private readonly logger: Logger = new Logger(AuthController.name);
   constructor(private readonly authService: AuthService) {}
 
   @Auth()

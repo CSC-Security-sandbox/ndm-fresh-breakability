@@ -127,13 +127,14 @@ fetch_redis_credentials_via_jwt() {
             log_message "API Response: ${api_response}"
 
             if [ "$api_http_status" = "200" ] && [ -n "$api_response_body" ]; then
-                # Parse Redis credentials from API response
-                REDIS_HOST=$(echo "$api_response_body" | jq -r '.host // "'"${CONTROL_PLANE_IP}"'"')
-                REDIS_USERNAME=$(echo "$api_response_body" | jq -r '.username // "default"')
-                REDIS_PASSWORD=$(echo "$api_response_body" | jq -r '.password // "welcome"')
+                REDIS_HOST=$(echo "$api_response_body" | jq -r '.data.items.host // "'"${CONTROL_PLANE_IP}"'"')
+                REDIS_USERNAME=$(echo "$api_response_body" | jq -r '.data.items.username // "default"')
+                REDIS_PASSWORD=$(echo "$api_response_body" | jq -r '.data.items.password // "welcome"')
 
                 log_message "✅ Redis credentials fetched successfully"
                 log_message "Redis Host: ${REDIS_HOST}"
+                log_message "Redis Username: ${REDIS_USERNAME}"
+                log_message "Redis Password: ${REDIS_PASSWORD}}"
                 return 0
             else
                 log_message "❌ Failed to fetch Redis credentials from API (HTTP ${api_http_status})"
