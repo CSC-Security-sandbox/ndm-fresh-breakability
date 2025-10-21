@@ -40,11 +40,12 @@ export class JwtWorkerAuthGuard implements CanActivate {
             if(!decoded.project_id){
                 this.logger.debug(`Token: ${decoded}`)
                 this.logger.debug(`Project id not found.`);
-                return false
+                return false;
             }
-            
-            request['project_id'] = decoded.project_id
-            request['worker_id'] = decoded.client_id
+
+            request['project_id'] = decoded.project_id;
+            request['worker_id'] = decoded.client_id;
+            request['user'] = decoded;  // Add this line
 
             return true;
         } catch (error) {
