@@ -47,6 +47,9 @@ export class JwtWorkerAuthGuard implements CanActivate {
             request['worker_id'] = decoded.client_id;
             request['user'] = decoded;  // Add this line
 
+            this.logger.debug('All is correct and user id', request);
+
+
             return true;
         } catch (error) {
             this.logger.error("Error verifying token:", error);

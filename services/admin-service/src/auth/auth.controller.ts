@@ -121,6 +121,7 @@ export class AuthController {
   async getRedisCredentials(@Request() req) {
     try {
       // @AuthWorker() should populate req.user automatically
+      this.logger.debug(`getRedisCredentials called`);
       const user = req.user;
 
       this.logger.debug('🔍 Checking Redis access for user:', user?.preferred_username);
