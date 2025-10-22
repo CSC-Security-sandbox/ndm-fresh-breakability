@@ -1,20 +1,39 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException, BadRequestException, ServiceUnavailableException, Inject, Optional } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as fs from 'fs';
 import * as fastCsv from 'fast-csv';
 import { validateFilePath } from 'src/utils/utils';
+import {
+  LoggerService,
+  LoggerFactory,
+} from '@netapp-cloud-datamigrate/logger-lib';
+import { ProjectIdCacheService } from '../utils/project-id-cache.service';
 
 @Injectable()
 export class CsvService {
-    private readonly logger = new Logger(CsvService.name);
-    constructor(private readonly dataSource: DataSource) { }
+    private readonly logger: LoggerService | Logger;
+    constructor(
+        private readonly dataSource: DataSource, 
+        private readonly projectIdCacheService: ProjectIdCacheService,
+        @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory
+    ) {
+        if (loggerFactory) {
+            this.logger = loggerFactory.create(CsvService.name);
+        } else {
+            // Fallback to basic NestJS Logger for worker threads
+            this.logger = new Logger(CsvService.name);
+        }
+    }
 
     async generateCsv(filePath: string, jobRunId: string, batchSize: number = 10000) {
+        const projectId = await this.projectIdCacheService.getProjectIdFromCache(jobRunId);
+        this.logger.log(`projectId: ${projectId} Starting CSV generation for jobRunId: ${jobRunId}, filePath: ${filePath}`);
+        
         if (!validateFilePath(filePath)) {
-            this.logger.error(`File path contains invalid characters: ${filePath}`);
+            this.logger.error(`projectId: ${projectId} File path contains invalid characters: ${filePath}`);
             throw new Error('File path contains invalid characters.');
         } else {
-            this.logger.log(`File path validation passed: ${filePath}`);
+            this.logger.log(`projectId: ${projectId} File path validation passed: ${filePath}`);
         }
         const queryRunner = this.dataSource.createQueryRunner();
         await queryRunner.connect();
@@ -24,17 +43,25 @@ export class CsvService {
             csvStream.pipe(fileStream);
             let offset = 1;
 
+            let totalRecords = 0;
             while (true) {
                 const result = await this.getInventoryData(jobRunId, batchSize, offset);
                 if (!result || result.length === 0) break;
                 for (const row of result) {
                     csvStream.write(row);
                 }
+                totalRecords += result.length;
                 offset++;
+                
+                if (offset % 10 === 0) {
+                    this.logger.log(`projectId: ${projectId} Processed ${totalRecords} records so far for jobRunId: ${jobRunId}`);
+                }
             }
             csvStream.end();
+            this.logger.log(`projectId: ${projectId} CSV generation completed for jobRunId: ${jobRunId}, total records: ${totalRecords}`);
         } catch (err) {
-            console.error('Error:', err);
+            this.logger.error(`projectId: ${projectId} Error generating CSV for jobRunId: ${jobRunId}: ${err.message}`, err?.stack || err);
+            throw err;
         } finally {
             await queryRunner.release();
         }

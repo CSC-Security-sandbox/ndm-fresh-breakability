@@ -2,6 +2,10 @@ import {
   Injectable,
   StreamableFile,
   BadRequestException,
+  Logger,
+  ServiceUnavailableException,
+  Optional,
+  Inject,
 } from "@nestjs/common";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { Raw, Repository, In } from "typeorm";
@@ -14,15 +18,28 @@ import {
   sanitizeAndValidateFilePath,
   sanitizeIdentifier,
 } from "../utils/file-utils";
+import {
+  LoggerService,
+  LoggerFactory,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class ErrorLogService {
+  private readonly logger : LoggerService;
   constructor(
     @InjectRepository(OperationErrorEntity)
     private operationErrorRepo: Repository<OperationErrorEntity>,
     @InjectRepository(WorkerJobRunMap)
-    private workerJobRunMapRepo: Repository<WorkerJobRunMap>
-  ) {}
+    private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
+     @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory
+  ) {
+    if (loggerFactory) {
+            this.logger = loggerFactory.create(ErrorLogService.name);
+    } else {
+        // Fallback to basic NestJS Logger for worker threads
+        this.logger = new Logger(ErrorLogService.name) as any;
+    }
+  }
 
   async getPaginatedErrors({
     jobConfigId,
