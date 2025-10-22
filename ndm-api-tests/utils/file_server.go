@@ -29,7 +29,7 @@ type CreateServereParams struct {
 	ExportPathSource *ExportPathSource
 }
 
-func InitFileServer(src_volumes, dest_volumes, source_ips, dest_ips string) {
+func InitFileServer(src_volumes, dest_volumes, source_ips, dest_ips string, minVolumesCount int) {
 	SOURCE_VOLUMES = GetVolumesFromArgs(src_volumes)
 	DESTINATION_VOLUMES = GetVolumesFromArgs(dest_volumes)
 
@@ -61,8 +61,8 @@ func InitFileServer(src_volumes, dest_volumes, source_ips, dest_ips string) {
 		LogFatalf("Insufficient number of destination IPs provided. Got %d IPs for %d volumes", len(DESTINATION_HOST_IPs), len(DESTINATION_VOLUMES))
 	}
 
-	if len(SOURCE_VOLUMES) < 2 || len(DESTINATION_VOLUMES) < 2 {
-		LogFatalf("Expected atleast 2 source volumes and destination volumes")
+	if len(SOURCE_VOLUMES) < minVolumesCount || len(DESTINATION_VOLUMES) < minVolumesCount {
+		LogFatalf("Expected at least %d source volumes and destination volumes", minVolumesCount)
 	}
 }
 
