@@ -105,13 +105,12 @@ fetch_redis_credentials_via_jwt() {
     http_status=$(echo "$token_response" | grep "HTTP_STATUS:" | cut -d: -f2)
     response_body=$(echo "$token_response" | sed '/HTTP_STATUS:/d')
 
-    log_message "Token request HTTP Status: ${http_status}"
 
     if [ "$http_status" = "200" ]; then
         jwt_token=$(echo "$response_body" | jq -r '.access_token')
 
         if [ "$jwt_token" != "null" ] && [ -n "$jwt_token" ]; then
-            log_message "✅ JWT token obtained successfully"
+            log_message "JWT token obtained successfully"
 
             # Call Admin Service API to get Redis credentials
             api_response=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
@@ -122,31 +121,35 @@ fetch_redis_credentials_via_jwt() {
             api_http_status=$(echo "$api_response" | grep "HTTP_STATUS:" | cut -d: -f2)
             api_response_body=$(echo "$api_response" | sed '/HTTP_STATUS:/d')
 
-            log_message "API request HTTP Status: ${api_http_status}"
-
-            log_message "API Response: ${api_response}"
 
             if [ "$api_http_status" = "200" ] && [ -n "$api_response_body" ]; then
-                REDIS_HOST=$(echo "$api_response_body" | jq -r '.data.items.host // "'"${CONTROL_PLANE_IP}"'"')
-                REDIS_USERNAME=$(echo "$api_response_body" | jq -r '.data.items.username // "default"')
-                REDIS_PASSWORD=$(echo "$api_response_body" | jq -r '.data.items.password // "welcome"')
+                REDIS_HOST=$(echo "$api_response_body" | jq -r '.data.items.host')
+                REDIS_USERNAME=$(echo "$api_response_body" | jq -r '.data.items.username')
+                REDIS_PASSWORD=$(echo "$api_response_body" | jq -r '.data.items.password')
 
-                log_message "✅ Redis credentials fetched successfully"
+                # Check if any of the values are null or empty
+                if [ "$REDIS_HOST" = "null" ] || [ -z "$REDIS_HOST" ] || 
+                   [ "$REDIS_USERNAME" = "null" ] || [ -z "$REDIS_USERNAME" ] || 
+                   [ "$REDIS_PASSWORD" = "null" ] || [ -z "$REDIS_PASSWORD" ]; then
+                    log_message "Incomplete Redis credentials received from API"
+                    return 1
+                fi
+
+                log_message "Redis credentials fetched successfully"
                 log_message "Redis Host: ${REDIS_HOST}"
                 log_message "Redis Username: ${REDIS_USERNAME}"
-                log_message "Redis Password: ${REDIS_PASSWORD}}"
                 return 0
             else
-                log_message "❌ Failed to fetch Redis credentials from API (HTTP ${api_http_status})"
+                log_message "Failed to fetch Redis credentials from API (HTTP ${api_http_status})"
                 log_message "API Response: ${api_response_body}"
                 return 1
             fi
         else
-            log_message "❌ Failed to extract access token from response"
+            log_message "Failed to extract access token from response"
             return 1
         fi
     else
-        log_message "❌ Token request failed with HTTP ${http_status}"
+        log_message "Token request failed with HTTP ${http_status}"
         log_message "Response: ${response_body}"
         return 1
     fi
@@ -163,12 +166,10 @@ fi
 
 
 if fetch_redis_credentials_via_jwt; then
-        log_message "✅ Using secure Redis credentials from Admin Service"
+        log_message "Using secure Redis credentials from Admin Service"
     else
-        log_message "⚠️ API failed, using fallback Redis credentials"
-        REDIS_HOST="${CONTROL_PLANE_IP}"
-        REDIS_USERNAME="default"
-        REDIS_PASSWORD="welcome"
+        handle_failure "Failed to fetch Redis credentials from Admin Service. Worker registration aborted."
+
 fi
 
 # Create and write to worker.env

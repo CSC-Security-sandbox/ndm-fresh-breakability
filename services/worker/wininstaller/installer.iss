@@ -44,7 +44,7 @@ var
   RedisUsername: String;
   RedisPassword: String;
 
-  // ✅ ADD THIS FUNCTION AFTER THE VARIABLES
+  // ADD THIS FUNCTION AFTER THE VARIABLES
 function FetchRedisCredentials(): Boolean;
 var
   TokenCmd, RedisCmd: String;
@@ -116,6 +116,10 @@ begin
                   Log('Redis credentials fetched successfully');
                   Result := True;
                 end;
+                else 
+                begin
+                  Log('Incomplete Redis credentials received from API');
+                end;
               end;
             end;
           end;
@@ -130,11 +134,7 @@ begin
   // Fallback values
   if not Result then
   begin
-    Log('⚠️ Using fallback Redis credentials');
-    RedisHost := ConfigControlPlaneIP;
-    RedisUsername := 'default';
-    RedisPassword := 'welcome';
-    Result := True;
+    Log('Failed to fetch Redis credentials from Admin Service');
   end;
 end;
 
@@ -420,7 +420,11 @@ begin
     end;
 
     // For redis Creds
-    FetchRedisCredentials();
+    if not FetchRedisCredentials() then
+    begin
+      Log('Installation failed: Could not fetch Redis credentials');
+      Exit; // Abort installation
+    end;
 
     EnvContent := 
       TempContent + #13#10 + #13#10 +

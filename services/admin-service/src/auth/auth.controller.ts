@@ -124,13 +124,13 @@ export class AuthController {
       this.logger.debug(`getRedisCredentials called`);
       const user = req.user;
 
-      this.logger.debug('🔍 Checking Redis access for user:', user?.preferred_username);
-      this.logger.debug('🔍 User ID (sub):', user?.sub);
-      this.logger.debug('🔍 Client ID:', user?.client_id);
+      this.logger.debug('Checking Redis access for user:', user?.preferred_username);
+      this.logger.debug('User ID (sub):', user?.sub);
+      this.logger.debug('Client ID:', user?.client_id);
 
       // Check if it's a service account (optional - @AuthWorker might already validate this)
       if (!user?.preferred_username?.startsWith('service-account-')) {
-        this.logger.warn('🚫 Access denied - not a service account');
+        this.logger.warn('Access denied - not a service account');
         throw new ForbiddenException('Access restricted to service accounts');
       }
 
@@ -138,18 +138,18 @@ export class AuthController {
       const hasAccess = await this.authService.checkUserHasRedisRole(user.sub);
 
       if (!hasAccess) {
-        this.logger.warn('🚫 Access denied - user does not have redis-secret-reader role');
+        this.logger.warn('Access denied - user does not have redis-secret-reader role');
         throw new ForbiddenException('Missing redis-secret-reader role');
       }
 
-      this.logger.log('✅ Redis access granted with proper role');
+      this.logger.log('Redis access granted with proper role');
       return {
-        host: process.env.REDIS_HOST || 'redis-master.redis.svc.cluster.local',
-        username: process.env.REDIS_USERNAME || 'default',
-        password: process.env.REDIS_PASSWORD || 'welcome'
+        host: process.env.REDIS_HOST ,
+        username: process.env.REDIS_USERNAME,
+        password: process.env.REDIS_PASSWORD,
       };
     } catch (error) {
-      this.logger.error('❌ Redis access check failed:', error.message);
+      this.logger.error('Redis access check failed:', error.message);
 
       // Let @AuthWorker() handle the error formatting
       throw error;

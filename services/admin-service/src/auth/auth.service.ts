@@ -55,12 +55,12 @@ export class AuthService {
 
     public async checkUserHasRedisRole(userId: string): Promise<boolean> {
         try {
-            console.log('🔑 Getting Keycloak admin token...');
+            this.logger.log('Getting Keycloak admin token...');
 
             // Reuse the existing getKeycloakToken method
             const adminToken = await this.getKeycloakToken();
 
-            console.log('🔍 Checking roles for service account user:', userId);
+            this.logger.log('Checking roles for service account user:', userId);
 
             // Check user roles using makeAxiosRequest (consistent with your codebase)
             const rolesResponse = await makeAxiosRequest<any[]>({
@@ -70,14 +70,14 @@ export class AuthService {
             });
 
             const userRoles = rolesResponse.map(role => role.name);
-            console.log('📋 User roles found:', userRoles);
+            this.logger.log('User roles found:', userRoles);
 
             const hasRedisRole = rolesResponse.some(role => role.name === 'redis-secret-reader');
 
 
             return hasRedisRole;
         } catch (error) {
-            this.logger.error('❌ Failed to check user roles:', error.message);
+            this.logger.error('Failed to check user roles:', error.message);
             return false;
         }
     }
