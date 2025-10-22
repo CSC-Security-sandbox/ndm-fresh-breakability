@@ -6,12 +6,16 @@ import { Logger } from '@nestjs/common';
 @Injectable()
 export class NotifyConfigActivity {
   private readonly logger = new Logger(NotifyConfigActivity.name);
-  private configBaseUrl: string ;
+  private configBaseUrl: string;
 
   constructor(private readonly configService: ConfigService) {
-    const configUrl = this.configService.get<string>('support-bundle.api.configUrl');
+    const configUrl = this.configService.get<string>(
+      'support-bundle.api.configUrl',
+    );
     if (!configUrl) {
-      throw new Error('Config URL for support-bundle.api.configUrl is not defined');
+      throw new Error(
+        'Config URL for support-bundle.api.configUrl is not defined',
+      );
     }
     this.configBaseUrl = configUrl;
   }
@@ -23,7 +27,7 @@ export class NotifyConfigActivity {
         {
           traceId,
           status,
-          errorMessage
+          errorMessage,
         },
         {
           headers: {
@@ -31,9 +35,13 @@ export class NotifyConfigActivity {
           }
         }
       );
-      this.logger.log(`[${traceId}] Notification sent to Config Service for workflow completion`);
+      this.logger.log(
+        `[${traceId}] Notification sent to Config Service for workflow completion`,
+      );
     } catch (error) {
-      this.logger.error(`[${traceId}] Failed to notify Config Service: ${error.message}`);
+      this.logger.error(
+        `[${traceId}] Failed to notify Config Service: ${error.message}`,
+      );
       throw error;
     }
   }

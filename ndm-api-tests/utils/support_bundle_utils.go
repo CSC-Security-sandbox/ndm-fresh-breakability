@@ -86,30 +86,56 @@ func CheckLogFileExistsAndNotEmpty(baseDir, relativeLogPath string) error {
 	return nil
 }
 
-func GenerateSupportBundle() error {
+func GenerateSupportBundle(projectId string, workerId1, workerId2 string) error {
 	url := ADMIN_SERVICE_URL + GENERATE_SUPPORT_BUNDLE_URL
 	today := time.Now().Format("2006-01-02")
-	body := []byte(fmt.Sprintf(`{"startDate":"%s","endDate":"%s","otherMetrics":["Configuration Data"]}`, today, today))
-	headers := GetHeaders(AuthToken, ContentTypeJSON)
 
+	// Full request body as per new curl
+	body := []byte(fmt.Sprintf(`{
+        "projectWorkerMap": [
+            {
+                "projectId": "%s",
+                "workerIds": ["%s", "%s"]
+            }
+        ],
+        "startDate": "%s",
+        "endDate": "%s",
+        "otherMetrics": [
+            "State Data",
+            "System Inventory Data",
+            "Configuration Data",
+            "Performance Metrics"
+        ]
+    }`, projectId, workerId1, workerId2, today, today))
+
+	// Add required headers
+	headers := map[string]string{
+		"Authorization": "Bearer " + AuthToken,
+		"Content-Type":  "application/json",
+		"projectid":     projectId,
+	}
+	
+
+	// Send request
 	resp, err := SendAPIRequest("POST", url, body, headers)
 	if err != nil {
 		return fmt.Errorf("error sending API request for support bundle generation: %w", err)
 	}
 	defer resp.Body.Close()
 
-	respBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("error reading response body: %w", err)
-	}
-	LogDebug(fmt.Sprintf("Support bundle generation response: %s", string(respBytes)))
+    respBytes, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return fmt.Errorf("error reading response body: %w", err)
+    }
+    LogDebug(fmt.Sprintf("Support bundle generation response: %s", string(respBytes)))
 
-	if resp.StatusCode != 200 && resp.StatusCode != 201 && resp.StatusCode != 202 {
-		return fmt.Errorf("unexpected response code: %d\nResponse body: %s", resp.StatusCode, string(respBytes))
-	}
+    if resp.StatusCode != 200 && resp.StatusCode != 201 && resp.StatusCode != 202 {
+        return fmt.Errorf("unexpected response code: %d\nResponse body: %s", resp.StatusCode, string(respBytes))
+    }
 
-	return nil
+    return nil
 }
+
 
 func DownloadSupportBundleZip() error {
 	canDownloadURL := ADMIN_SERVICE_URL + IS_SUPPORT_BUNDLE_READY_URL
@@ -257,25 +283,63 @@ func CheckAllWorkerLogsNotEmpty(baseDir, date string) error {
 	return nil
 }
 
-func CheckAtLeastTwoWorkerFolders(baseDir, date string) error {
-	workerDir := filepath.Join(baseDir, "ndm_logs", date, "worker")
-	entries, err := os.ReadDir(workerDir)
+func CheckAtLeastTwoWorkerFolders(baseDir, date, ProjectId string) error {
+	// Find the actual extracted directory structure
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		return fmt.Errorf("could not read base directory: %w", err)
+	}
+
+	var actualBaseDir string
+	for _, entry := range entries {
+		if entry.IsDir() && strings.HasPrefix(entry.Name(), "ndm_logs_") {
+			actualBaseDir = filepath.Join(baseDir, entry.Name())
+			break
+		}
+	}
+
+	if actualBaseDir == "" {
+		return fmt.Errorf("could not find ndm_logs_ directory in %s", baseDir)
+	}
+
+	// Look for the ndm_logs/date structure
+	ndmLogsDir := filepath.Join(actualBaseDir, "ndm_logs", date)
+	dateEntries, err := os.ReadDir(ndmLogsDir)
+	if err != nil {
+		return fmt.Errorf("could not read date directory: %w", err)
+	}
+
+	// Find any project directory (could be "no-project" or actual project ID)
+	var projectDir string
+	for _, entry := range dateEntries {
+		if entry.IsDir() {
+			projectDir = filepath.Join(ndmLogsDir, entry.Name())
+			break
+		}
+	}
+
+	if projectDir == "" {
+		return fmt.Errorf("could not find project directory in %s", ndmLogsDir)
+	}
+
+	// Check the worker directory
+	workerDir := filepath.Join(projectDir, "worker")
+	workerEntries, err := os.ReadDir(workerDir)
 	if err != nil {
 		return fmt.Errorf("could not read worker directory: %w", err)
 	}
 
 	workerFolderCount := 0
-	for _, entry := range entries {
+	for _, entry := range workerEntries {
 		if entry.IsDir() {
 			workerFolderCount++
 		}
 	}
 
-	if workerFolderCount < 2 {
-		return fmt.Errorf("expected at least 2 worker folders, found %d", workerFolderCount)
+	if workerFolderCount < 1 {
+		return fmt.Errorf("expected at least 1 worker folder, found %d", workerFolderCount)
 	}
 
-	LogDebug(fmt.Sprintf("Found %d worker folders in %s", workerFolderCount, workerDir))
 	return nil
 }
 

@@ -1,6 +1,7 @@
 import { BlueXpFormType, isBundleReadyApiType } from "@/types/app.type";
 import { formatDateToYMD } from "@/utils/dateFormatter";
 import {
+  useFetchProjectWithWorkerQuery,
   useGenerateSupportBundleMutation,
   useLazyDownloadSupportBundleQuery,
   useLazyIsBundleReadyQuery,
@@ -8,6 +9,7 @@ import {
 import { notify } from "@components/notification/NotificationWrapper";
 import {
   INITIAL_FORM_STATE,
+  METRICS_OPTIONS,
   SUPPORT_BUNDLE_FORM_VALIDATION_SCHEMA,
 } from "@modules/Help/components/support-bundle/constants/support-bundle.constant";
 import { SupportBundleContext } from "@modules/Help/components/support-bundle/context/context";
@@ -21,6 +23,12 @@ import { useForm } from "@netapp/bxp-design-system-react";
 import { RootStateType } from "@store/store";
 import React, { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
+import { useTreeSelect } from "@modules/Help/components/support-bundle/hooks/useTreeSelect";
+import {
+  buildProjectWorkerMap,
+  createSupportBundleInfoMessage,
+  extractProjectAndWorkerNames,
+} from "@modules/Help/components/support-bundle/utils/support-bundle.utils";
 
 export const SupportBundleProvider = ({
   children,
@@ -32,6 +40,8 @@ export const SupportBundleProvider = ({
   const [bundleStatus, setBundleStatus] = useState<isBundleReadyApiType>(
     {} as isBundleReadyApiType
   );
+
+  const [infoMessage, setInfoMessage] = useState<Record<string, string>>({});
   const [lastFormChangeTime, setLastFormChangeTime] = useState<Date>(
     new Date()
   );
@@ -41,20 +51,18 @@ export const SupportBundleProvider = ({
   const [downloadBundle, { isFetching: isDownloading }] =
     useLazyDownloadSupportBundleQuery();
   const [isBundleReady] = useLazyIsBundleReadyQuery();
+  const { data: projectWorkerData } = useFetchProjectWithWorkerQuery();
 
   const permissionData = useSelector(
     (state: RootStateType) => state?.permissionSlice?.userPermissions
   );
 
-  // Helper function to check if bundle was created after last form change
-  const isBundleNewerThanFormChange = (
-    bundleResponse: isBundleReadyApiType
-  ) => {
-    if (!bundleResponse?.createdAt) return false;
-
-    const bundleCreatedAt = new Date(bundleResponse.createdAt);
-    return bundleCreatedAt > lastFormChangeTime;
-  };
+  const {
+    selectedItems,
+    treeSelectStyles,
+    handleSelectionChange,
+    wrapperClass,
+  } = useTreeSelect();
 
   // IS BUNDLE READY POLLING API
   useEffect(() => {
@@ -75,6 +83,31 @@ export const SupportBundleProvider = ({
             ? new Date(_isBundleReadyResponse.filters.endDate)
             : null;
 
+          const transformedMetrics =
+            _isBundleReadyResponse?.filters?.otherMetrics?.map(
+              (item: string) => {
+                const foundOption = METRICS_OPTIONS.find(
+                  (option) => option.label === item
+                );
+                return foundOption || { label: item, value: 0 };
+              }
+            );
+
+          const { projectNames, workerNames } = extractProjectAndWorkerNames(
+            _isBundleReadyResponse?.filters?.projectWorkerMap,
+            projectWorkerData?.data?.items || []
+          );
+
+          const infoMessage = createSupportBundleInfoMessage(
+            startDate,
+            endDate,
+            projectNames,
+            workerNames,
+            transformedMetrics || []
+          );
+
+          setInfoMessage(infoMessage);
+
           if (startDate && endDate) {
             supportBundleForm.resetForm({
               ...supportBundleForm.formState,
@@ -90,6 +123,7 @@ export const SupportBundleProvider = ({
         setBundleStatus(_isBundleReadyResponse);
       } catch (error) {
         console.error("Support Bundle Ready Status", error);
+        notify.error(error?.data?.message || "Failed to check bundle status.");
         setBundleStatus({
           isBundleReady: false,
           isProcessing: false,
@@ -114,21 +148,11 @@ export const SupportBundleProvider = ({
       createAndDownloadBlob(
         response,
         mimeType,
-        `ndm_log-${permissionData?.id}.zip`
+        `ndm_log_${permissionData?.id}.zip`
       );
     } catch (error) {
       console.error("Failed to download Error Report:", error?.data?.message);
       notify.error(error?.data?.message || "Failed to download Error Report.");
-    }
-  };
-
-  const updateFormField = (field: string, value: any) => {
-    supportBundleForm.resetForm({
-      ...supportBundleForm.formState,
-      [field]: value,
-    });
-    if (field !== "isProcessing") {
-      setLastFormChangeTime(new Date());
     }
   };
 
@@ -147,11 +171,16 @@ export const SupportBundleProvider = ({
     if (!supportBundleForm?.isValid) return;
 
     const { formState } = supportBundleForm;
-    const otherMetrics = formState?.otherMetrics?.label
-      ? [formState?.otherMetrics?.label]
-      : [];
+    const otherMetrics =
+      (formState?.otherMetrics &&
+        formState?.otherMetrics?.map((metric: any) => metric?.label)) ||
+      [];
 
     const payload: SupportBundlePayloadType = {
+      projectWorkerMap: buildProjectWorkerMap(
+        formState,
+        projectWorkerData?.data?.items || []
+      ),
       startDate: formatDateToYMD(formState?.startDate),
       endDate: formatDateToYMD(formState?.endDate),
       otherMetrics,
@@ -170,13 +199,13 @@ export const SupportBundleProvider = ({
   };
 
   useEffect(() => {
-    if (bundleStatus?.error) {
-      updateFormField("isProcessing", false);
-      notify.error(
-        bundleStatus?.error || "Something went while bundle generation."
-      );
+    if (selectedItems) {
+      supportBundleForm.resetForm({
+        ...supportBundleForm.formState,
+        projectWorker: selectedItems,
+      });
     }
-  }, [bundleStatus?.error]);
+  }, [selectedItems]);
 
   const supportBundleContextValue: SupportBundleContextType = {
     supportBundleForm,
@@ -184,7 +213,13 @@ export const SupportBundleProvider = ({
     handleDownloadReport,
     handleGenerateBundle,
     bundleStatus,
+    selectedItems,
+    treeSelectStyles,
+    handleSelectionChange,
+    wrapperClass,
+    projectWorkerData,
     isDownloading,
+    infoMessage,
   };
 
   return (

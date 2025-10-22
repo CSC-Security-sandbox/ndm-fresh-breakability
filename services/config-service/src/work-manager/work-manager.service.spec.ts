@@ -168,6 +168,8 @@ describe('WorkManagerService', () => {
         ip,
         projectId,
         Platform.WINDOWS,
+        { TEST_VAR: 'test_value' },
+        false,
       );
       expect(result).toEqual([{ key: 'value1' }, { key: 'value2' }]);
       // Verify that debug logging is called for each workerMap entry
@@ -202,6 +204,8 @@ describe('WorkManagerService', () => {
         ip,
         projectId,
         Platform.LINUX,
+        {},
+        true,
       );
       expect(result).toEqual(savedWorker.metaConfig);
       expect(sendMailService.sendMail).toHaveBeenCalledWith({
@@ -215,7 +219,10 @@ describe('WorkManagerService', () => {
       // Ensure update worker name is called after saving
       expect(workerRepo.update).toHaveBeenCalledWith(
         { workerId: savedWorker.workerId },
-        { workerName: `nfs-worker-${savedWorker.workerNumber}` },
+        {
+          workerName: `nfs-worker-${savedWorker.workerNumber}`,
+          envVariables: {},
+        },
       );
     });
 
@@ -224,7 +231,14 @@ describe('WorkManagerService', () => {
         new Error('DB error'),
       );
       await expect(
-        service.getConfiguration(workerId, ip, projectId, Platform.LINUX),
+        service.getConfiguration(
+          workerId,
+          ip,
+          projectId,
+          Platform.LINUX,
+          {},
+          false,
+        ),
       ).rejects.toThrow('Error while fetching worker configuration');
       expect(logger.error).toHaveBeenCalled();
     });

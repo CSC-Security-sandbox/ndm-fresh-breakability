@@ -17,12 +17,13 @@ import { SupportBundleEntity } from 'src/entities/support-bundle-log.entity';
 import { Options } from 'src/work-manager/dto/validate-connection.dto';
 import { WorkflowService } from 'src/workflow/workflow.service';
 import { StartWorkFlowPayload } from 'src/workflow/workflow.types';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { WORKFLOW_TIMEOUTS } from '../constants/constants';
 import { CreateSupportBundleDTO } from './dto/create-support-bundle.dto';
 import { SupportBundleWorkflowPayloadDTO } from './dto/support-bundle-workflow.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
+import { ProjectEntity } from 'src/entities/project.entity';
 
 @Injectable()
 export class SupportBundleService {
@@ -35,6 +36,8 @@ export class SupportBundleService {
     private loggerFactory: LoggerFactory,
     private readonly workFlowService: WorkflowService,
     private readonly configService: ConfigService,
+    @InjectRepository(ProjectEntity)
+    private readonly projectRepo: Repository<ProjectEntity>,
   ) {
     this.logger = this.loggerFactory.create(SupportBundleService.name);
     this.bundleOutputPath = this.configService.get<string>(
@@ -58,6 +61,7 @@ export class SupportBundleService {
       filters: {
         startDate: dto.startDate,
         endDate: dto.endDate,
+        projectWorkerMap: dto.projectWorkerMap ?? [],
         otherMetrics: dto.otherMetrics ?? [],
       },
     });
@@ -70,6 +74,7 @@ export class SupportBundleService {
       const payload: SupportBundleWorkflowPayloadDTO = {
         startDate: dto.startDate,
         endDate: dto.endDate,
+        projectWorkerMap: dto.projectWorkerMap ?? [],
         userId: userDetails.user.id,
         otherMetrics: dto.otherMetrics ?? [],
       };
@@ -192,5 +197,52 @@ export class SupportBundleService {
     }
 
     return fullPath;
+  }
+
+  async getProjects(userDetails: UserDetails) {
+    const isAppAdmin = userDetails.user.roles.some(
+      (role) => role.projects.length === 0,
+    );
+    if (isAppAdmin) {
+      const projects = await this.projectRepo.find({
+        select: ['id', 'projectName'],
+        relations: ['workers'],
+      });
+
+      return projects.map((project) => ({
+        label: project.projectName,
+        id: project.id,
+        ...(project.workers?.length > 0 && {
+          childrens: project.workers.map((worker) => ({
+            label: `${worker.workerName} (${project.projectName})`,
+            id: worker.workerId,
+          })),
+        }),
+      }));
+    } else {
+      const projectIdsSet = new Set<string>();
+      userDetails.user.roles.forEach((role) => {
+        role.projects.forEach((id: string) => projectIdsSet.add(id));
+      });
+
+      const projectIds = Array.from(projectIdsSet);
+
+      const projects = await this.projectRepo.find({
+        where: { id: In(projectIds) },
+        select: ['id', 'projectName'],
+        relations: ['workers'],
+      });
+
+      return projects.map((project) => ({
+        label: project.projectName,
+        id: project.id,
+        ...(project.workers?.length > 0 && {
+          childrens: project.workers.map((worker) => ({
+            label: `${worker.workerName} (${project.projectName})`,
+            id: worker.workerId,
+          })),
+        }),
+      }));
+    }
   }
 }

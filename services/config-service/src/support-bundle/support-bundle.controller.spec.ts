@@ -3,7 +3,10 @@ import { SupportBundleController } from './support-bundle.controller';
 import { SupportBundleService } from './support-bundle.service';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
-import { NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import {
+  NotFoundException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { CreateSupportBundleDTO } from './dto/create-support-bundle.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { BundleStatus, UserDetails } from 'src/constants/types';
@@ -70,6 +73,12 @@ describe('SupportBundleController', () => {
     const mockCreateSupportBundleDTO: CreateSupportBundleDTO = {
       startDate: '2023-01-01T00:00:00Z',
       endDate: '2023-01-31T23:59:59Z',
+      projectWorkerMap: [
+        {
+          projectId: 'project-1',
+          workerIds: ['worker-1', 'worker-2'],
+        },
+      ],
       otherMetrics: ['state data', 'inventory data'],
     };
 
@@ -97,7 +106,9 @@ describe('SupportBundleController', () => {
 
     it('should handle service errors when creating support bundle', async () => {
       const errorMessage = 'Failed to create support bundle';
-      mockSupportBundleService.create.mockRejectedValue(new Error(errorMessage));
+      mockSupportBundleService.create.mockRejectedValue(
+        new Error(errorMessage),
+      );
 
       await expect(
         controller.create(mockCreateSupportBundleDTO, mockUserDetails),
@@ -140,9 +151,9 @@ describe('SupportBundleController', () => {
         new Error(errorMessage),
       );
 
-      await expect(controller.updateStatus(mockUpdateStatusDto)).rejects.toThrow(
-        errorMessage,
-      );
+      await expect(
+        controller.updateStatus(mockUpdateStatusDto),
+      ).rejects.toThrow(errorMessage);
 
       expect(service.updateSupportBundleStatus).toHaveBeenCalledWith(
         mockUpdateStatusDto,
@@ -169,7 +180,11 @@ describe('SupportBundleController', () => {
       const expectedBundleStatus: BundleStatus = {
         isProcessing: false,
         isBundleReady: true,
-        filters: { startDate: '2023-01-01', endDate: '2023-01-31', otherMetrics: [] },
+        filters: {
+          startDate: '2023-01-01',
+          endDate: '2023-01-31',
+          otherMetrics: [],
+        },
         createdAt: new Date('2023-01-01T10:00:00Z'),
       };
 
@@ -187,7 +202,11 @@ describe('SupportBundleController', () => {
       const expectedBundleStatus: BundleStatus = {
         isProcessing: true,
         isBundleReady: false,
-        filters: { startDate: '2023-01-01', endDate: '2023-01-31', otherMetrics: ['metric1'] },
+        filters: {
+          startDate: '2023-01-01',
+          endDate: '2023-01-31',
+          otherMetrics: ['metric1'],
+        },
         createdAt: new Date('2023-01-01T10:00:00Z'),
       };
 
@@ -205,12 +224,12 @@ describe('SupportBundleController', () => {
       const errorMessage = 'Failed to create bundle';
 
       mockSupportBundleService.isBundleReady.mockRejectedValue(
-        new InternalServerErrorException(errorMessage)
+        new InternalServerErrorException(errorMessage),
       );
 
-      await expect(
-        controller.isBundleReady(mockUserDetails)
-      ).rejects.toThrow(new InternalServerErrorException(errorMessage));
+      await expect(controller.isBundleReady(mockUserDetails)).rejects.toThrow(
+        new InternalServerErrorException(errorMessage),
+      );
 
       expect(service.isBundleReady).toHaveBeenCalledWith('user-123');
     });
@@ -221,9 +240,9 @@ describe('SupportBundleController', () => {
         new Error(errorMessage),
       );
 
-      await expect(
-        controller.isBundleReady(mockUserDetails),
-      ).rejects.toThrow(errorMessage);
+      await expect(controller.isBundleReady(mockUserDetails)).rejects.toThrow(
+        errorMessage,
+      );
 
       expect(service.isBundleReady).toHaveBeenCalledWith('user-123');
     });
@@ -253,8 +272,8 @@ describe('SupportBundleController', () => {
     });
 
     it('should download support bundle successfully', async () => {
-      const expectedFilePath = '/tmp/support-bundles/ndm_user-123.zip';
-      const expectedFileName = 'ndm_user-123.zip';
+      const expectedFilePath = '/tmp/support-bundles/ndm_logs_user-123.zip';
+      const expectedFileName = 'ndm_logs_user-123.zip';
 
       mockSupportBundleService.downloadSupportBundle.mockReturnValue(
         expectedFilePath,
@@ -283,8 +302,8 @@ describe('SupportBundleController', () => {
     });
 
     it('should throw NotFoundException when file download fails', async () => {
-      const expectedFilePath = '/tmp/support-bundles/ndm_user-123.zip';
-      const expectedFileName = 'ndm_user-123.zip';
+      const expectedFilePath = '/tmp/support-bundles/ndm_logs_user-123.zip';
+      const expectedFileName = 'ndm_logs_user-123.zip';
 
       mockSupportBundleService.downloadSupportBundle.mockReturnValue(
         expectedFilePath,
@@ -316,7 +335,7 @@ describe('SupportBundleController', () => {
     });
 
     it('should handle service errors when getting file path', async () => {
-      const expectedFileName = 'ndm_user-123.zip';
+      const expectedFileName = 'ndm_logs_user-123.zip';
       const errorMessage = 'File not found in storage';
 
       mockSupportBundleService.downloadSupportBundle.mockImplementation(() => {
@@ -345,8 +364,9 @@ describe('SupportBundleController', () => {
         },
       };
 
-      const expectedFileName = 'ndm_different-user-id.zip';
-      const expectedFilePath = '/tmp/support-bundles/ndm_different-user-id.zip';
+      const expectedFileName = 'ndm_logs_different-user-id.zip';
+      const expectedFilePath =
+        '/tmp/support-bundles/ndm_logs_different-user-id.zip';
 
       mockSupportBundleService.downloadSupportBundle.mockReturnValue(
         expectedFilePath,
