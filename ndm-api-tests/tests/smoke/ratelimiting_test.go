@@ -66,8 +66,6 @@ var _ = Describe("Rate Limiting Smoke", func() {
 						successfulRequests++
 					case http.StatusTooManyRequests: // 429
 						rateLimitedRequests++
-					case http.StatusServiceUnavailable: // 503
-						rateLimitedRequests++
 					default:
 						otherErrors++
 					}

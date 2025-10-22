@@ -11,6 +11,12 @@
     src: data-configmap.j2
     dest: $HOME/ingress/configmap-patch.yaml
 
+- name: Create NGINX Ingress Controller ConfigMap
+  become: yes
+  template:
+    src: nginx-ingress-controller-configmap.j2
+    dest: $HOME/ingress/nginx-ingress-controller-configmap.yaml
+
 - name: Create patch file for DaemonSet
   become: yes
   template:
@@ -20,6 +26,13 @@
 - name: Patch the ConfigMap
   become: yes
   shell: kubectl patch configmap nginx-ingress-tcp-microk8s-conf -n ingress --type merge --patch-file $HOME/ingress/configmap-patch.yaml
+  args:
+    executable: /bin/bash
+    chdir: $HOME
+
+- name: Apply NGINX Ingress Controller ConfigMap
+  become: yes
+  shell: kubectl apply -f $HOME/ingress/nginx-ingress-controller-configmap.yaml
   args:
     executable: /bin/bash
     chdir: $HOME
