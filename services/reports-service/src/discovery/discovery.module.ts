@@ -5,11 +5,13 @@ import { InventoryEntity } from 'src/entities/inventory.entity';
 import { DiscoveryService } from './discovery.service';
 import { ReportsEntity } from 'src/entities/reports.entity';
 import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
+import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Module({
     imports: [
         TypeOrmModule.forFeature([InventoryEntity, ReportsEntity]),
-        AuthKeycloakModule
+        AuthKeycloakModule,
+        LoggerModule.forRoot()
     ],
     providers: [DiscoveryService],
     controllers: [DiscoveryController],

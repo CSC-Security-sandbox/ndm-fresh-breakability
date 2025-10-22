@@ -5,6 +5,8 @@ import * as fs from "fs";
 import * as fastCsv from "fast-csv";
 import exp from "constants";
 import * as validation from '../utils/utils';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { ProjectIdCacheService } from '../utils/project-id-cache.service';
 
 jest.mock("fs");
 jest.mock("fast-csv");
@@ -13,8 +15,17 @@ jest.mock("typeorm");
 describe("CsvService", () => {
   let service: CsvService;
   let mockDataSource: jest.Mocked<DataSource>;
+  let mockLogger: any;
 
   beforeEach(async () => {
+    mockLogger = {
+      info: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+      log: jest.fn(),
+    };
+
     mockDataSource = {
       createQueryRunner: jest.fn().mockReturnValue({
         connect: jest.fn(),
@@ -27,6 +38,18 @@ describe("CsvService", () => {
       providers: [
         CsvService,
         { provide: DataSource, useValue: mockDataSource },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue(mockLogger),
+          },
+        },
+        {
+          provide: ProjectIdCacheService,
+          useValue: {
+            getProjectIdFromCache: jest.fn().mockResolvedValue('project-123'),
+          },
+        },
       ],
     }).compile();
 
@@ -41,6 +64,16 @@ describe("CsvService", () => {
     beforeEach(() => {
       // Mock validateFilePath to avoid validation errors on paths
       jest.spyOn(validation, 'validateFilePath').mockImplementation((filePath: string) => true || false);
+    });
+
+    it("should throw error for invalid file path", async () => {
+      const invalidFilePath = "../../malicious/path.csv";
+      const jobRunId = "job-123";
+      
+      jest.spyOn(validation, 'validateFilePath').mockReturnValue(false);
+      
+      await expect(service.generateCsv(invalidFilePath, jobRunId))
+        .rejects.toThrow('File path contains invalid characters.');
     });
     
     it("should generate CSV file and write data in batches", async () => {
@@ -78,7 +111,7 @@ describe("CsvService", () => {
       expect(mockWriteStream.write).toHaveBeenCalledTimes(mockData.length);
     });
 
-    it("should handle error in generateCsv method and not crash", async () => {
+    it("should handle error in generateCsv method and properly throw", async () => {
       const filePath = "test.csv";
       const jobRunId = "12345";
 
@@ -88,10 +121,10 @@ describe("CsvService", () => {
 
       const result = service.generateCsv(filePath, jobRunId);
 
-      await expect(result).resolves.not.toThrow();
+      await expect(result).rejects.toThrow("File error");
     });
 
-    it("should handle error in fastCsv.format and not crash", async () => {
+    it("should handle error in fastCsv.format and properly throw", async () => {
       const filePath = "test.csv";
       const jobRunId = "12345";
       const mockData = [
@@ -116,10 +149,10 @@ describe("CsvService", () => {
 
       const result = service.generateCsv(filePath, jobRunId);
 
-      await expect(result).resolves.not.toThrow();
+      await expect(result).rejects.toThrow("CSV format error");
     });
 
-    it("should handle error in mockDataSource.query and not crash", async () => {
+    it("should handle error in mockDataSource.query and properly throw", async () => {
       const filePath = "test.csv";
       const jobRunId = "12345";
 
@@ -127,7 +160,7 @@ describe("CsvService", () => {
 
       const result = service.generateCsv(filePath, jobRunId);
 
-      await expect(result).resolves.not.toThrow();
+      await expect(result).rejects.toThrow("Query error");
     });
 
     it("should call release on queryRunner after completing generateCsv", async () => {
@@ -245,6 +278,25 @@ describe("CsvService", () => {
       );
 
       expect(result.query).toContain("FROM testSchema.inventory");
+    });
+  });
+
+  describe('constructor fallback', () => {
+    it('should use fallback logger when LoggerFactory is not provided', async () => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          CsvService,
+          { provide: DataSource, useValue: mockDataSource },
+          {
+            provide: ProjectIdCacheService,
+            useValue: { getProjectIdFromCache: jest.fn().mockResolvedValue('project-123') },
+          },
+          // Note: LoggerFactory is NOT provided, triggering fallback
+        ],
+      }).compile();
+
+      const fallbackService = module.get<CsvService>(CsvService);
+      expect(fallbackService).toBeDefined();
     });
   });
 });

@@ -111,7 +111,6 @@ ingressThrottle:
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
     nginx.ingress.kubernetes.io/limit-rps: "25" # max 25 req/s per client
     nginx.ingress.kubernetes.io/limit-burst-multiplier: "1" # 1 burst request allowed
-    nginx.ingress.kubernetes.io/limit-req-status-code: "429" # status code for rate limiting
   tls:
     enabled: false
   host: ""

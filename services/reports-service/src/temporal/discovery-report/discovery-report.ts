@@ -26,9 +26,12 @@ const { generateDiscoveryPdfReport, generateDiscoveryCsvReport , updateDiscovery
 
 interface GenerateDiscoveryReportWorkflowInput {
   jobRunId: string;
+  projectId?: string;
 }
 
-export const GenerateDiscoveryReportWorkflow = async ({ jobRunId }: GenerateDiscoveryReportWorkflowInput) => {
+export const GenerateDiscoveryReportWorkflow = async ({ jobRunId, projectId }: GenerateDiscoveryReportWorkflowInput) => {
+  const logPrefix = projectId ? `projectId: ${projectId}` : `jobRunId: ${jobRunId}`;
+  log.info(`${logPrefix} Starting discovery report workflow for jobRunId: ${jobRunId}`);
 
   const output: DiscoveryReportSection[] = [];
 
@@ -43,7 +46,7 @@ export const GenerateDiscoveryReportWorkflow = async ({ jobRunId }: GenerateDisc
     if (result.status === 'fulfilled') {
       output.push(...result.value)
     } else {
-      log.error(`Failed to generate report for section ${QueryList[index]}: ${result.reason}`);
+      log.error(`${logPrefix} Failed to generate report for section ${QueryList[index]} for jobRunId: ${jobRunId}: ${result.reason}`);
     }
   });
 
@@ -58,8 +61,9 @@ export const GenerateDiscoveryReportWorkflow = async ({ jobRunId }: GenerateDisc
   for(const section of DynamicMaps) {
     await generateDiscoveryJsonReport({ jobRunId, section, updateSection: true });
   }
-  // ----------------- Dynamic Section Proccess End -------------- //
+  // ----------------- Dynamic Section Process End -------------- //
 
+  log.info(`${logPrefix} Generating PDF and CSV reports for jobRunId: ${jobRunId}`);
   await Promise.allSettled(
     [
       generateDiscoveryPdfReport({ jobRunId }),
@@ -67,12 +71,13 @@ export const GenerateDiscoveryReportWorkflow = async ({ jobRunId }: GenerateDisc
     ]
   );
 
+  log.info(`${logPrefix} Updating final status for jobRunId: ${jobRunId}`);
   await updateDiscoveryReport({
     jobRunId,
     updateType: 'status'
   });
 
-  
+  log.info(`${logPrefix} Completed discovery report workflow for jobRunId: ${jobRunId}`);
 
   return output
 };

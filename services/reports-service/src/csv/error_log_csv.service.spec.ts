@@ -1,6 +1,7 @@
 import { ErrorLogService } from "./error_log_csv.service";
 import { BadRequestException, StreamableFile } from "@nestjs/common";
 import * as fs from "fs";
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 // Mock sanitizeAndValidateFilePath to always return the input file name
 jest.mock("../utils/file-utils", () => ({
@@ -20,10 +21,23 @@ const mockWorkerJobRunMapRepo = {
   count: jest.fn(),
 };
 
+const mockLogger = {
+  info: jest.fn(),
+  error: jest.fn(),
+  warn: jest.fn(),
+  debug: jest.fn(),
+  log: jest.fn(),
+};
+
+const mockLoggerFactory = {
+  create: jest.fn().mockReturnValue(mockLogger),
+};
+
 function createService() {
   return new ErrorLogService(
     mockOperationErrorRepo as any,
-    mockWorkerJobRunMapRepo as any
+    mockWorkerJobRunMapRepo as any,
+    mockLoggerFactory as any
   );
 }
 
