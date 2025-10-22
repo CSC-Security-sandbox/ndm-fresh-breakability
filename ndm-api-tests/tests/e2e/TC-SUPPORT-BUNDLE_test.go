@@ -12,7 +12,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = FDescribe("Support Bundle Test e2e", func() {
+var _ = Describe("Support Bundle Test e2e", func() {
 	var (
 		ProjectId              string
 		workerId1              string
