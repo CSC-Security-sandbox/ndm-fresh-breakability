@@ -2,12 +2,14 @@ package performance_testing
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/csv"
 	"fmt"
 	"math"
 	. "ndm-api-tests/utils"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -197,6 +199,18 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 
 		AfterEach(func() {
 			By("Cleanup started")
+
+			// Upload CSV report to Artifactory before cleanup
+			csvFilePath := fmt.Sprintf("../../%s_perf_report_%d.csv", PROTOCOL_TYPE, time.Now().Unix())
+			if _, err := os.Stat(csvFilePath); err == nil {
+				err := UploadCSVToArtifactory(csvFilePath)
+				if err != nil {
+					LogDebug(fmt.Sprintf("CSV upload failed: %v", err))
+				} else {
+					LogDebug("CSV performance report uploaded successfully to Artifactory")
+				}
+			}
+
 			err := StopAllWorkersAndWait()
 			Expect(err).NotTo(HaveOccurred(), "error stopping workers")
 
@@ -521,4 +535,65 @@ func getSSHClient(sshConfig SSHConfig) (*ssh.Client, error) {
 		return nil, fmt.Errorf("failed to connect to SSH server: %w", err)
 	}
 	return client, nil
+}
+
+// UploadCSVToArtifactory uploads a CSV performance report to Artifactory
+func UploadCSVToArtifactory(csvFilePath string) error {
+	// Check if the CSV file exists
+	if _, err := os.Stat(csvFilePath); os.IsNotExist(err) {
+		return fmt.Errorf("CSV file does not exist: %s", csvFilePath)
+	}
+
+	// Get file info for Content-Length header
+	fileInfo, err := os.Stat(csvFilePath)
+	if err != nil {
+		return fmt.Errorf("error getting file info: %w", err)
+	}
+
+	LogDebug(fmt.Sprintf("CSV file size: %d bytes", fileInfo.Size()))
+
+	// Open the CSV file for streaming upload
+	file, err := os.Open(csvFilePath)
+	if err != nil {
+		return fmt.Errorf("error opening CSV file: %w", err)
+	}
+	defer file.Close()
+
+	// Generate filename with timestamp
+	filename := filepath.Base(csvFilePath)
+
+	// Upload directly to /cicd/ndm/performance-reports/
+	uploadURL := fmt.Sprintf("%s/cicd/ndm/performance-reports/%s",
+		ARTIFACTORY_URL, filename)
+
+	LogDebug(fmt.Sprintf("Starting upload of %s to Artifactory: %s", csvFilePath, uploadURL))
+
+	// Create HTTP request with file as body (streaming upload)
+	req, err := http.NewRequest("PUT", uploadURL, file)
+	if err != nil {
+		return fmt.Errorf("error creating HTTP request: %w", err)
+	}
+
+	// Set headers Content-Type and Basic Auth
+	req.Header.Set("Content-Type", "text/csv")
+	req.Header.Set("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
+	auth := base64.StdEncoding.EncodeToString([]byte(NDM_NEXUS_USERNAME + ":" + NDM_NEXUS_PASSWORD))
+	req.Header.Set("Authorization", "Basic "+auth)
+
+	// Send the request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("error sending upload request to Artifactory (%s): %w", uploadURL, err)
+	}
+	defer resp.Body.Close()
+
+	// Check if upload was successful
+	if resp.StatusCode != 201 && resp.StatusCode != 200 {
+		return fmt.Errorf("artifactory upload failed to %s with status %d", uploadURL, resp.StatusCode)
+	}
+
+	LogDebug(fmt.Sprintf("Successfully uploaded %s (%d bytes) to: %s", csvFilePath, fileInfo.Size(), uploadURL))
+
+	return nil
 }

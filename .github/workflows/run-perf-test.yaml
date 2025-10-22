@@ -29,13 +29,13 @@ on:
         description: 'Reference type (releases or branches)'
         required: true
         type: string
-      run_smb_tests:
-        description: 'Run SMB tests'
+      run_smb_perf:
+        description: 'Run SMB perf'
         required: false
         default: true
         type: boolean
-      run_nfs_tests:
-        description: 'Run NFS tests'
+      run_nfs_perf:
+        description: 'Run NFS perf'
         required: false
         default: true
         type: boolean
@@ -61,13 +61,13 @@ on:
         description: 'Reference type (releases or branches)'
         required: true
         type: string
-      run_smb_tests:
-        description: 'Whether to run SMB tests (true/false)'
+      run_smb_perf:
+        description: 'Whether to run SMB perf (true/false)'
         required: false
         default: true
         type: boolean
-      run_nfs_tests:
-        description: 'Whether to run NFS tests (true/false)'
+      run_nfs_perf:
+        description: 'Whether to run NFS perf (true/false)'
         required: false
         default: true
         type: boolean
