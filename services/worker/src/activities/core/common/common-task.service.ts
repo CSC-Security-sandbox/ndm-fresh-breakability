@@ -79,7 +79,7 @@ export class CommonTaskService {
     if(!task && batchId) {
       const batch = await jobContext.getBatchDir(batchId);
       if(batch) {
-        const commands = batch.map(dir => new Command(dir, {}, `${uuid4()}`, 0));
+        const commands = batch.map(dir => new Cmd(`${uuid4()}`,dir, CommandStatus.READY, false, {}));
         task =  buildTask(TaskType.SCAN, jobRunId, jobContext, commands);
       }
       await jobContext.setTaskIfNotExists(taskHashId, task);

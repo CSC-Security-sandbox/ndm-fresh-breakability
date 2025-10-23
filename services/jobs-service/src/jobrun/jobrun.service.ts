@@ -798,7 +798,7 @@ export class JobRunService {
         (error) => error.errortype === "FATAL_ERROR"
       );
       if (fatalError) {
-        fatalError.count += setupFailedErrors.length;
+        fatalError.count = Number(fatalError.count) + setupFailedErrors.length;
       } else {
         errorTypeCounts.push({
           errortype: "FATAL_ERROR",

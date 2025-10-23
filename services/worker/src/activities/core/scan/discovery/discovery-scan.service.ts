@@ -72,7 +72,7 @@ export class DiscoveryScanService {
                 } else output.fileCount++;
             }
         }catch(error) {
-            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.id, error, {name: command.fPath, path: sourcePath});
+            const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, errorType, command.id, error, {name: command.fPath, path: sourcePath});
             await jobContext.publishToErrorStream(dmErr);
             throw error; 
         }
