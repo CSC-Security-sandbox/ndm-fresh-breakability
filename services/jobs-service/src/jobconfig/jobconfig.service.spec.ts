@@ -1908,6 +1908,7 @@ describe("JobConfigService", () => {
             totalScannedSize: "4.88 KiB",
             totalMigratedSize: "4.88 KiB",
             errors: [],
+            lastRefreshed: undefined,
           },
         ],
         aggregateData: {
@@ -1915,6 +1916,13 @@ describe("JobConfigService", () => {
           scannedFilesCount: "10",
           scannedDirectoriesCount: "5",
           totalScannedSize: "0 B",
+        },
+        configurationsSetToJob: {
+          "Skip Files modified in last": "-",
+          "Preserve a-time": "Disabled",
+          "Excluded Path Patterns": [],
+          "Exclude file older than (UTC)": undefined,
+          "Incremental sync schedule": undefined,
         },
         errors: [],
       });
@@ -2118,6 +2126,76 @@ describe("JobConfigService", () => {
       });
     });
     
+    it("should format skipFile value for MIGRATE job (minutes)", () => {
+      const jobConfig = {
+        jobType: JobType.MIGRATE,
+        skipFile: "35-M",
+        preserveAccessTime: false,
+        excludeFilePatterns: "*/logs/*,*/tmp/*",
+        excludeOlderThan: null,
+        futureScheduleAt: null,
+      };
+      const result = service.getConfigurationsSetToJob(jobConfig as any);
+      expect(result["Skip Files modified in last"]).toBe("35-Mins");
+      expect(result["Preserve a-time"]).toBe("Disabled");
+      expect(result["Excluded Path Patterns"]).toEqual(["*/logs/*", "*/tmp/*"]);
+    });
+
+    it("should handle CUT_OVER job type", () => {
+      const jobConfig = {
+        jobType: JobType.CUT_OVER,
+        preserveAccessTime: true,
+        excludeFilePatterns: "*/snapshot/*",
+        excludeOlderThan: "2025-01-01",
+      };
+      const result = service.getConfigurationsSetToJob(jobConfig as any);
+      expect(result["Preserve a-time"]).toBe("Enabled");
+      expect(result["Excluded Path Patterns"]).toEqual(["*/snapshot/*"]);
+      expect(result["Exclude file older than (UTC)"]).toBe("2025-01-01");
+    });
+
+    it("should handle other job types", () => {
+      const jobConfig = {
+        jobType: "DISCOVER",
+        excludeFilePatterns: "",
+      };
+      const result = service.getConfigurationsSetToJob(jobConfig as any);
+      expect(result["Excluded Path Patterns"]).toEqual([]);
+    });
+    it("should format skipFile value for MIGRATE job (hours and days)", () => {
+      const jobConfig = {
+        jobType: JobType.MIGRATE,
+        skipFile: "2-H",
+        preserveAccessTime: false,
+        excludeFilePatterns: "",
+        excludeOlderThan: null,
+        futureScheduleAt: null,
+      };
+      const result = service.getConfigurationsSetToJob(jobConfig as any);
+      expect(result["Skip Files modified in last"]).toBe("2-Hrs");
+    });
+    
+    it("should format skipFile value for MIGRATE job (days)", () => {
+      const jobConfig = {
+        jobType: JobType.MIGRATE,
+        skipFile: "5-D",
+        preserveAccessTime: false,
+        excludeFilePatterns: "",
+        excludeOlderThan: null,
+        futureScheduleAt: null,
+      };
+      const result = service.getConfigurationsSetToJob(jobConfig as any);
+      expect(result["Skip Files modified in last"]).toBe("5-Days");
+    });
+
+    it("should handle excludeFilePatterns with empty values", () => {
+      const jobConfig = {
+        jobType: JobType.MIGRATE,
+        excludeFilePatterns: ",,,",
+      };
+      const result = service.getConfigurationsSetToJob(jobConfig as any);
+      expect(result["Excluded Path Patterns"]).toEqual([]);
+    });
   });
 
   describe("parseSize", () => {

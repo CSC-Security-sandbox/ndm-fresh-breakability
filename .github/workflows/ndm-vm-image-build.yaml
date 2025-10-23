@@ -499,7 +499,7 @@ jobs:
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         run: | 
           cd app-deployment/artifacts
-          TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/docker-images/ndm-docker-images-v3.tar"
+          TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/docker-images/ndm-docker-images.tar"
           curl -o "ndm-docker-images.tar" \
               -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
               $TARGET_URL
@@ -566,10 +566,10 @@ jobs:
       BUILD_VERSION: ${{ needs.package-artifacts.outputs.build_version }}
     steps:
         - name: Checkout code
-          uses: actions/checkout@v4
+          uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
         - name: Download Binary Artifact
-          uses: actions/download-artifact@v4
+          uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
           with:
             name: worker-binary
             path: .

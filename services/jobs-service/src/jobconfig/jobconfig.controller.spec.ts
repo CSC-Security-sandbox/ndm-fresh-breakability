@@ -455,7 +455,7 @@ describe("JobConfigController", () => {
         const response = await controller.createBulkMigrate(bulkMigrate);
 
         expect(response).toEqual(result);
-        expect(service.createBulkMigrate).toHaveBeenCalledWith(bulkMigrate);
+        expect(service.createBulkMigrate).toHaveBeenCalledWith(bulkMigrate, undefined);
       });
 
       describe("createBulkCutover", () => {

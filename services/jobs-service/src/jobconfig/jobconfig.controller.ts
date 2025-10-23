@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, Inject } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, Res, Inject } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import {SpeedTestConfigEntity } from "src/entities/speed-test-job-config.entity"
@@ -93,8 +93,11 @@ export class JobConfigController {
   @ApiBearerAuth()
   @Auth(Permission.ManageJob)
   @Post('/bulk-migrate')
-  async createBulkMigrate(@Body() bulkMigrate: BulkMigrateJobConfig): Promise<JobConfigBulkMigrateFinalResponse> {
-    return await this.jobConfigService.createBulkMigrate(bulkMigrate);
+  async createBulkMigrate(
+    @Body() bulkMigrate: BulkMigrateJobConfig,
+    @Headers('projectId') projectId?: string
+  ): Promise<JobConfigBulkMigrateFinalResponse> {
+    return await this.jobConfigService.createBulkMigrate(bulkMigrate, projectId);
   }
 
   @ApiOperation({ summary: 'Create a new cutover job' })

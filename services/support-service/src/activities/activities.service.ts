@@ -3,6 +3,9 @@ import { LogGeneratorActivity } from './log-generator/log-generator.activity';
 import { NotifyConfigActivity } from './notify-config/notify-config.activity';
 import { ErrorCsvGenerationActivity } from './error-csv-generation/error-csv-generation.activity';
 import { ConfigurationDataCsvGenerationActivity } from './config-data-csv-generation/config-data-csv-generation.activity';
+import { StateDataCsvGenerationActivity } from './state-data-csv-generation/state-data-csv-generation.activity';
+import { PerformanceMetricsCsvGenerationActivity } from './performance-metrics-csv-generation/performance-metrics-csv-generation.activity';
+import { SystemInventoryCsvGenerationActivity } from './system-inventory-csv-generation/system-inventory-csv-generation.activity';
 
 @Injectable()
 export class ActivitiesService {
@@ -11,7 +14,9 @@ export class ActivitiesService {
     private readonly notifyConfigActivity: NotifyConfigActivity,
     private readonly errorCsvGenerationActivity: ErrorCsvGenerationActivity,
     private readonly configurationDataCsvGenerationActivity: ConfigurationDataCsvGenerationActivity,
-
+    private readonly stateDataCsvGenerationActivity: StateDataCsvGenerationActivity,
+    private readonly performanceMetricsCsvGenerationActivity: PerformanceMetricsCsvGenerationActivity,
+    private readonly systemInventoryCsvGenerationActivity: SystemInventoryCsvGenerationActivity,
   ) {}
 
   async fetchAndZipLogs({ traceId, payload }) {
@@ -25,8 +30,33 @@ export class ActivitiesService {
     });
   }
 
-   async generateConfigurationDataCsv({ traceId, payload }) {
+  async generateConfigurationDataCsv({ traceId, payload }) {
     return this.configurationDataCsvGenerationActivity.generateConfigurationDataCsv(
+      {
+        traceId,
+        payload,
+      },
+    );
+  }
+
+  async generateStateDataCsv({ traceId, payload }) {
+    return this.stateDataCsvGenerationActivity.generateStateDataCsv({
+      traceId,
+      payload,
+    });
+  }
+
+  async generatePerformanceMetricsCsv({ traceId, payload }) {
+    return this.performanceMetricsCsvGenerationActivity.generatePerformanceMetricsCsv(
+      {
+        traceId,
+        payload,
+      },
+    );
+  }
+
+  async generateSystemInventoryCsv({ traceId, payload }) {
+    return this.systemInventoryCsvGenerationActivity.generateSystemInventoryCsv(
       {
         traceId,
         payload,

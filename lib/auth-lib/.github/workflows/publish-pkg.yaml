@@ -9,7 +9,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       # Setup .npmrc file to publish to GitHub Packages
       - uses: actions/setup-node@v4
         with:

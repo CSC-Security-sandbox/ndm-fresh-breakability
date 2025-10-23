@@ -98,6 +98,7 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
         await signalIfRunning(syncWorkflow, 'scanResultSignal', output.scanJobStatus);
         try{
             const syncWorkflowOutput = await syncWorkflow.result(); 
+            
             output.syncJobStatus = syncWorkflowOutput.status;    
         }catch(error){  
             if (wf.isCancellation(error.cause)) {

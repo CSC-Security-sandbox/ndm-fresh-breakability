@@ -14,5 +14,9 @@ export const PDF_TEMPLATE_PATHS: Record<PDFTemplate, string> = {
 export interface GeneratePDFInput {
     data: any;
     template: PDFTemplate;
-    pdfOptions?: PDFOptions
+    pdfOptions?: PDFOptions;
+    context?: {
+        jobRunId?: string;
+        projectId?: string;
+    };
 }

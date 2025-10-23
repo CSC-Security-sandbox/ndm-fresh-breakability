@@ -20,11 +20,13 @@ import { PDFGeneratorService } from "./pdf-generator.service";
 import { GeneratePDFInput, PDF_TEMPLATE_PATHS } from "./pdf-generator.type";
 import * as fs from "fs"; 
 import * as hbs from "hbs";
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 describe("PDFGeneratorService", () => {
   let service: PDFGeneratorService;
   let mockBrowser: any;
   let mockPage: any;
+  let mockLogger: any;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -45,8 +47,24 @@ describe("PDFGeneratorService", () => {
 
     mockLaunch.mockResolvedValue(mockBrowser);
 
+    mockLogger = {
+      debug: jest.fn(),
+      log: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      verbose: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
-      providers: [PDFGeneratorService],
+      providers: [
+        PDFGeneratorService,
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue(mockLogger),
+          },
+        },
+      ],
     }).compile();
 
     service = module.get<PDFGeneratorService>(PDFGeneratorService);
@@ -227,6 +245,132 @@ describe("PDFGeneratorService", () => {
       });
       expect(mockLaunch).not.toHaveBeenCalled();
       expect(mockBrowser.newPage).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("context-aware logging", () => {
+    it("should generate PDF with projectId context", async () => {
+      const inputWithContext: GeneratePDFInput = {
+        data: { title: "Test Report" },
+        template: "reportTemplate" as keyof typeof PDF_TEMPLATE_PATHS,
+        context: { projectId: "proj-123" },
+      };
+      
+      (fs.promises.readFile as jest.Mock).mockResolvedValue("<html>{{title}}</html>");
+      (hbs.compile as jest.Mock).mockReturnValue(() => "<html>Test Report</html>");
+      
+      await service.generatePDF(inputWithContext);
+      
+      // Verify context is passed through to compileTemplate and logging
+      expect(mockLogger.log).toHaveBeenCalledWith(
+        expect.stringContaining('projectId: proj-123')
+      );
+    });
+
+    it("should generate PDF with both projectId and jobRunId context", async () => {
+      const inputWithFullContext: GeneratePDFInput = {
+        data: { title: "Test Report" },
+        template: "reportTemplate" as keyof typeof PDF_TEMPLATE_PATHS,
+        context: { projectId: "proj-123", jobRunId: "job-456" },
+      };
+      
+      (fs.promises.readFile as jest.Mock).mockResolvedValue("<html>{{title}}</html>");
+      (hbs.compile as jest.Mock).mockReturnValue(() => "<html>Test Report</html>");
+      
+      await service.generatePDF(inputWithFullContext);
+      
+      // Verify both context values are logged
+      expect(mockLogger.log).toHaveBeenCalledWith(
+        expect.stringContaining('projectId: proj-123')
+      );
+      expect(mockLogger.log).toHaveBeenCalledWith(
+        expect.stringContaining('jobRunId: job-456')
+      );
+    });
+
+    it("should handle template compilation error with projectId context", async () => {
+      const inputWithContext: GeneratePDFInput = {
+        data: { title: "Test Report" },
+        template: "reportTemplate" as keyof typeof PDF_TEMPLATE_PATHS,
+        context: { projectId: "proj-123" },
+      };
+      
+      (fs.promises.readFile as jest.Mock).mockResolvedValue("<html>{{title}}</html>");
+      (hbs.compile as jest.Mock).mockImplementation(() => {
+        throw new Error("Template compilation failed");
+      });
+      
+      await expect(service.generatePDF(inputWithContext)).rejects.toThrow("Template compilation failed");
+      
+      // Verify error is logged with project context
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('projectId: proj-123'),
+        expect.any(Error)
+      );
+    });
+
+    it("should handle PDF generation error with full context", async () => {
+      const inputWithContext: GeneratePDFInput = {
+        data: { title: "Test Report" },
+        template: "reportTemplate" as keyof typeof PDF_TEMPLATE_PATHS,
+        context: { projectId: "proj-123", jobRunId: "job-456" },
+      };
+      
+      (fs.promises.readFile as jest.Mock).mockResolvedValue("<html>{{title}}</html>");
+      (hbs.compile as jest.Mock).mockReturnValue(() => "<html>Test Report</html>");
+      mockPage.pdf.mockRejectedValue(new Error("PDF generation failed"));
+      
+      await expect(service.generatePDF(inputWithContext)).rejects.toThrow("PDF generation failed");
+      
+      // Verify error is logged with full context
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('projectId: proj-123'),
+        expect.any(Error)
+      );
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('jobRunId: job-456'),
+        expect.any(Error)
+      );
+    });
+  });
+
+  describe("constructor without LoggerFactory", () => {
+    it("should use fallback NestJS Logger when LoggerFactory is not provided", async () => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [PDFGeneratorService], // No LoggerFactory provided
+      }).compile();
+
+      const serviceWithFallback = module.get<PDFGeneratorService>(PDFGeneratorService);
+      
+      // This test ensures the fallback logger branch is covered
+      await serviceWithFallback.initBrowser();
+      
+      // The service should still work with fallback logger
+      expect(mockLaunch).toHaveBeenCalled();
+    });
+  });
+
+  describe("getBrowser error conditions", () => {
+    it("should throw error when trying to get browser before initialization", async () => {
+      // Create a fresh service without the initialized browser
+      const freshService = new PDFGeneratorService();
+      
+      // Mock the private getBrowser method to be accessed indirectly through generatePDF
+      // but make sure initBrowser fails to leave browser as null
+      mockLaunch.mockRejectedValueOnce(new Error("Browser launch failed"));
+      
+      const input: GeneratePDFInput = {
+        data: { title: "Test" },
+        template: "reportTemplate" as keyof typeof PDF_TEMPLATE_PATHS,
+      };
+      
+      (fs.promises.readFile as jest.Mock).mockResolvedValue("<html>{{title}}</html>");
+      (hbs.compile as jest.Mock).mockReturnValue(() => "<html>Test Report</html>");
+      
+      // This should fail because initBrowser will fail, preventing browser initialization
+      await expect(freshService.generatePDF(input)).rejects.toThrow(
+        "Browser launch failed"
+      );
     });
   });
 });

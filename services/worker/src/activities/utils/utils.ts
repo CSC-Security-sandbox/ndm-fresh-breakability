@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from 'path';
 import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, JobManagerContext, RedisUtils, Task, TaskStatus, TaskType, Protocol, Cmd, ItemInfo, TaskInfo } from "@netapp-cloud-datamigrate/jobs-lib";
-import { ACL, ExcludeOrSkipParams, getFileInfoInput, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
+import { ACL, ExcludeForDelete, ExcludeOrSkipParams, getFileInfoInput, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
 import { execSync } from "child_process";
@@ -75,7 +75,7 @@ export const shouldExcludeOlderThan = (stats: fs.Stats, olderThan: Date): boolea
 }
 
 export const shouldExcludeOrSkip = ({ fullPath, stats, excludePatterns, skipTime, olderThan, jobType }: ExcludeOrSkipParams): boolean => (shouldExclude(fullPath, excludePatterns) || shouldSkipFile(stats, skipTime, jobType) || shouldExcludeOlderThan(stats, olderThan));
-
+export const shouldExcludeForDelete = ({ fullPath, excludePatterns }: ExcludeForDelete): boolean => (shouldExclude(fullPath, excludePatterns));
 
 
 export function getFileType(stats: fs.Stats, isDirectory:boolean): FileType {
@@ -167,7 +167,8 @@ export const generateDummyItemEntry: ItemInfo = new ItemInfo(
     permission: "rwxr-xr-x", // permission  
     checksum: "dummy-checksum-target" // checksum
   }, // targeMeta
-  2048 // size
+  2048, // size
+  0
 );
 
 export const generateDummyTaskEntry: Task = new Task('8840625a-b818-42a8-98c8-5c05aaa19106', '', TaskType.MIGRATE, TaskStatus.ERRORED, '', '', '', [], '', '', '');

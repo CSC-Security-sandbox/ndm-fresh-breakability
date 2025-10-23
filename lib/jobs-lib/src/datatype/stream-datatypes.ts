@@ -12,6 +12,7 @@ export class ItemInfo implements Serializable {
     sourceMeta: ItemMeta;
     targetMeta: ItemMeta;
     size: number;
+    inode: number;
     
 
     constructor(
@@ -23,7 +24,8 @@ export class ItemInfo implements Serializable {
         fileType: string,
         sourceMeta: ItemMeta,
         targetMeta: ItemMeta,
-        size: number
+        size: number,
+        inode: number
     ) {
         this.fileName = fileName;
         this.isDirectory = isDirectory;
@@ -34,6 +36,7 @@ export class ItemInfo implements Serializable {
         this.sourceMeta = sourceMeta;
         this.targetMeta = targetMeta;
         this.size = size;
+        this.inode = inode;
     }
 
     serialize(): string {
@@ -103,6 +106,7 @@ export interface CmdMeta {
     uid: number;
     gid: number;
     sid: string;
+    inode: number;
     isSymLink?: boolean;
 }
 

@@ -209,7 +209,8 @@ describe("InventoryService", () => {
       overrides.fileType || 'text',
       overrides.sourceMeta || defaultSourceMeta,
       overrides.targetMeta || defaultTargetMeta,
-      overrides.size || 1024
+      overrides.size || 1024,
+      overrides.inode || 0
     );
   };
 
@@ -243,6 +244,7 @@ describe("InventoryService", () => {
             pathId: 'test-path-456',
             sourceMeta: expect.any(Object),
             targetMeta: expect.any(Object),
+            inode: 0
         });
     });
 
@@ -257,7 +259,8 @@ describe("InventoryService", () => {
           'text',
           null, // sourceMeta is null
           null, // targetMeta is null
-          1024
+          1024,
+          0
         );
 
         const result = service.mapSourceToTarget(file, jobRunId, pathId);

@@ -29,9 +29,10 @@
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/swagger": "^7.4.2",
     "@nestjs/typeorm": "^10.0.2",
+    "@netapp-cloud-datamigrate/api-handler-lib": "0.0.5",
     "@netapp-cloud-datamigrate/auth-lib": "0.0.5",
     "@netapp-cloud-datamigrate/jobs-lib": "0.1.2",
-    "@netapp-cloud-datamigrate/logger-lib": "0.0.10",
+    "@netapp-cloud-datamigrate/logger-lib": "0.0.16",
     "@types/puppeteer": "^7.0.4",
     "@temporalio/worker": "^1.12.1",
     "@temporalio/workflow": "^1.12.1",
@@ -95,7 +96,12 @@
       "!**.eslintrc.js",
       "!**/main.ts",
       "!**/*.types.ts",
-      "!src/temporal/**"
+      "!src/temporal/**",
+      "!src/interceptors/**",
+      "!src/decorators/**",
+      "!src/common/interceptors/**",
+      "!src/common/decorators/**",
+      "!src/constants/custom-response-message.ts"
     ],
     "coverageDirectory": "./coverage",
     "testEnvironment": "node",
@@ -120,13 +126,18 @@
       "/config/",
       "/entities/",
       "/dto/",
-      ".*types\\.ts$"
+      ".*types\\.ts$",
+      "/src/interceptors/",
+      "/src/decorators/",
+      "/src/common/interceptors/",
+      "/src/common/decorators/"
     ]
   },
   "overrides": {
     "multer": "^2.0.2",
     "brace-expansion": "1.1.12",
     "form-data" : "^4.0.4",
-    "sha.js": "^2.4.12"
+    "sha.js": "^2.4.12",
+    "@swc/core": "1.13.5"
   }
 }

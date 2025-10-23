@@ -681,6 +681,7 @@ export class ConfigurationService {
     createConfig: ConfigDTO,
     userId: string,
     traceId: string,
+    projectId?: string,
   ) {
     this.logger.debug('Config creation started');
 
@@ -767,6 +768,8 @@ export class ConfigurationService {
 
       await this.sendMailService.sendMail({
         successEmailType: SuccessEmailType.CREATE_CONFIGURATION,
+        traceId,
+        projectId,
         createConfig: {
           configName: update.configName,
           fileServers: update.fileServers.map((fs) => ({
@@ -810,6 +813,7 @@ export class ConfigurationService {
     updateConfig: ConfigDTO,
     userId: string,
     traceId: string,
+    projectId?: string
   ) {
     try {
       if (!isUUID(id)) throw new BadRequestException('Invalid configId');
@@ -951,6 +955,8 @@ export class ConfigurationService {
       }
       await this.sendMailService.sendMail({
         successEmailType: SuccessEmailType.UPDATE_CONFIGURATION,
+        traceId,
+        projectId,
         createConfig: {
           configName: update.configName,
           fileServers: update.fileServers.map((fs) => ({
@@ -1367,19 +1373,19 @@ export class ConfigurationService {
         fetch all the job configurations that has any of the volumeIds in
         their sourcePathId or targetPathId and status is ACTIVE
       */
-      const jobConfigs = await this.jobConfigRepo
-        .createQueryBuilder('jobConfig')
-        .where(
-          'jobConfig.source_path_id IN (:...volumeIds) OR jobConfig.target_path_id IN (:...volumeIds)',
-          { volumeIds },
-        )
-        .andWhere('jobConfig.status = :status', { status: 'ACTIVE' })
-        .getMany();
-
+      const jobConfigs = await this.jobConfigRepo.find({
+          where: [{
+              status: JobStatus.Active,
+              sourcePathId: In(volumeIds),
+            }, {
+              status: JobStatus.Active,
+              targetPathId: In(volumeIds),
+          }]
+      })
       // check if any job config has schedule as SCHEDULING if yes then return false
       if (jobConfigs.some((jc) => jc.scheduler === 'SCHEDULING')) {
         this.logger.warn(
-          `Refresh is not possible for configuration ${configId} as there are jobs with SCHEDULING status`,
+          `Refresh is not possible for configuration ${configId} as there are jobs with SCHEDULING status jobs : ${JSON.stringify(jobConfigs.filter((jc) => jc.scheduler === 'SCHEDULING'))}`,
         );
         return false;
       }
@@ -1387,7 +1393,7 @@ export class ConfigurationService {
       // check if futureScheduleAt is not null for any job config, if yes then return false
       if (jobConfigs.some((jc) => !!jc.futureScheduleAt)) {
         this.logger.warn(
-          `Refresh is not possible for configuration ${configId} as there are jobs with futureScheduleAt set`,
+          `Refresh is not possible for configuration ${configId} as there are jobs with futureScheduleAt set: ${JSON.stringify(jobConfigs.filter((jc) => !!jc.futureScheduleAt))}`,
         );
         return false;
       }

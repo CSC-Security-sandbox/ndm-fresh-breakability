@@ -63,7 +63,9 @@ export class SupportBundleController {
   })
   @Post('workflow-status-update')
   async updateStatus(@Body() updateStatusDto: UpdateStatusDto) {
-    return await this.supportBundleService.updateSupportBundleStatus(updateStatusDto);
+    return await this.supportBundleService.updateSupportBundleStatus(
+      updateStatusDto,
+    );
   }
 
   @ApiOperation({ summary: 'Check if bundle is ready for download' })
@@ -80,7 +82,7 @@ export class SupportBundleController {
       example: {
         isProcessing: false,
         isBundleReady: true,
-        error: null
+        error: null,
       },
     },
   })
@@ -94,9 +96,7 @@ export class SupportBundleController {
   async isBundleReady(
     @Request() userDetails: UserDetails,
   ): Promise<BundleStatus> {
-    return await this.supportBundleService.isBundleReady(
-      userDetails.user.id,
-    );
+    return await this.supportBundleService.isBundleReady(userDetails.user.id);
   }
 
   @ApiOperation({ summary: 'Download a support bundle ZIP file by name' })
@@ -111,7 +111,7 @@ export class SupportBundleController {
     @Request() userDetails: UserDetails,
     @Res() res: Response,
   ) {
-    const fullFileName = `ndm_${userDetails?.user?.id}.zip`;
+    const fullFileName = `ndm_logs_${userDetails?.user?.id}.zip`;
     const filePath =
       this.supportBundleService.downloadSupportBundle(fullFileName);
 
@@ -122,5 +122,17 @@ export class SupportBundleController {
         );
       }
     });
+  }
+
+  @ApiOperation({
+    summary: 'Get projects associated to a User',
+    description:
+      'Get list of projects associated to a User & workers list associated to a project',
+  })
+  @ApiBearerAuth()
+  @Auth()
+  @Get()
+  async getProjects(@Request() userDetails: UserDetails) {
+    return this.supportBundleService.getProjects(userDetails);
   }
 }

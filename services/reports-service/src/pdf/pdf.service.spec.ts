@@ -9,6 +9,8 @@ import * as path from "path";
 import { DiscoveryService } from "src/discovery/discovery.service";
 import { PDFGeneratorService } from "src/generator/pdf-generator.service";
 import { PDFTemplate } from "src/generator/pdf-generator.type";
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { ProjectIdCacheService } from '../utils/project-id-cache.service';
 
 describe("PdfService", () => {
   let pdfService: PdfService;
@@ -16,6 +18,7 @@ describe("PdfService", () => {
   let mockReportsRepo;
   let mockDiscoveryService: Partial<DiscoveryService>;
   let mockPdfGeneratorService: Partial<PDFGeneratorService>;
+  let mockLogger: any;
 
   beforeEach(async () => {
     // Reset all mocks
@@ -40,6 +43,14 @@ describe("PdfService", () => {
       onApplicationShutdown: jest.fn().mockResolvedValue(undefined),
     };
 
+    mockLogger = {
+      debug: jest.fn(),
+      log: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      verbose: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PdfService,
@@ -58,6 +69,18 @@ describe("PdfService", () => {
         {
           provide: PDFGeneratorService,
           useValue: mockPdfGeneratorService,
+        },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue(mockLogger),
+          },
+        },
+        {
+          provide: ProjectIdCacheService,
+          useValue: {
+            getProjectIdFromCache: jest.fn().mockResolvedValue('project-123'),
+          },
         },
       ],
     }).compile();
@@ -175,6 +198,10 @@ describe("PdfService", () => {
 
       // Verify PDF generator service was called correctly
       expect(mockPdfGeneratorService.generatePDF).toHaveBeenCalledWith({
+        context: {
+          jobRunId: jobRunId,
+          projectId: 'project-123',
+        },
         data: expect.objectContaining({
           summary: expect.arrayContaining([{ source: { job_type: "MIGRATE" } }]),
           last_iteration: expect.objectContaining({
@@ -203,6 +230,10 @@ describe("PdfService", () => {
       const jobRunId = "test-jobRunId";
 
       jest
+        .spyOn(mockInventoryRepo, "query")
+        .mockResolvedValue([]);
+      
+      jest
         .spyOn(mockReportsRepo, "query")
         .mockResolvedValue([{ report_data: "{}" }]);
 
@@ -210,6 +241,7 @@ describe("PdfService", () => {
         "Failed to generate jobs report"
       );
 
+      expect(mockInventoryRepo.query).toHaveBeenCalled();
       expect(mockReportsRepo.query).toHaveBeenCalled();
     });
 
@@ -217,14 +249,14 @@ describe("PdfService", () => {
       const jobRunId = "test-jobRunId";
 
       jest
-        .spyOn(mockReportsRepo, "query")
+        .spyOn(mockInventoryRepo, "query")
         .mockRejectedValue(new Error("Database error"));
 
       await expect(pdfService.generateJobsReportPdf(jobRunId)).rejects.toThrow(
         "Failed to generate jobs report"
       );
 
-      expect(mockReportsRepo.query).toHaveBeenCalled();
+      expect(mockInventoryRepo.query).toHaveBeenCalled();
     });
 
     it("should throw an error if the report data is missing", async () => {

@@ -31,14 +31,14 @@ jobs:
       RELEASE_TAG: ${{ steps.set_release_tag.outputs.RELEASE_TAG }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
           sparse-checkout: |
             services/worker
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '18'
 
@@ -68,7 +68,7 @@ jobs:
           fi
 
       - name: Upload Binary Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: worker-binary-${{ steps.set_release_tag.outputs.RELEASE_TAG }}
           path: services/worker/pkg.zip
@@ -85,10 +85,10 @@ jobs:
       RELEASE_TAG: ${{ needs.worker-package.outputs.RELEASE_TAG }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         
       - name: Download Binary Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: worker-binary-${{ env.RELEASE_TAG }}
           path: artifacts
@@ -230,6 +230,5 @@ jobs:
           echo "  }" >> $GITHUB_STEP_SUMMARY
           echo "}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-
 
 

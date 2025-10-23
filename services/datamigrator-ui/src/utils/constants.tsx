@@ -4,7 +4,7 @@ import StatusCellRenderer from "@components/custom-cell-renderer//StatusCellRend
 import { format } from "date-fns";
 import React from "react";
 
-export const INITIAL_VALUE_EXCLUDE_PATH_PATTERN = `*/snapshots/*,*/logs/*,*/tmp/*`;
+export const INITIAL_VALUE_EXCLUDE_PATH_PATTERN = `*/~snapshot/*,*/.snapshot/*`;
 
 export const COL_DEF_FOR_USER = [
   {

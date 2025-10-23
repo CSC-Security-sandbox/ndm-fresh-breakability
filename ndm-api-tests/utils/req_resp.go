@@ -7,19 +7,27 @@ import "time"
 // ErrorCsvResponse represents the response from generate-error-csv endpoint
 type ErrorCsvResponse struct {
 	Message string `json:"message"`
+	Data    struct {
+		Items interface{} `json:"items"`
+	} `json:"data"`
 }
 
 // ErrorResponse represents error responses from the backend
 type ErrorResponse struct {
-	StatusCode int    `json:"statusCode"`
-	Message    string `json:"message"`
-	Error      string `json:"error"`
+	StatusCode     int    `json:"statusCode"`
+	Message        string `json:"message"`
+	DisplayMessage string `json:"displayMessage"`
+	Error          string `json:"error"`
 }
 
 // ErrorCsvReadyResponse represents the response from is-error-csv-ready endpoint
 type ErrorCsvReadyResponse struct {
-	Ready      bool `json:"ready"`
-	Processing bool `json:"processing"`
+	Data struct {
+		Items struct {
+			Ready      bool `json:"ready"`
+			Processing bool `json:"processing"`
+		} `json:"items"`
+	} `json:"data"`
 }
 
 type ErrorCsvConfig struct {
@@ -150,23 +158,10 @@ type AboutNDMResponse struct {
 
 // ==============JOB Structs=====================
 type GetJobRunResponseItems struct {
-	JobRunID     string `json:"jobRunId"`
-	JobConfigID  string `json:"jobConfigId"`
-	Status       string `json:"status"`
-	StartTime    string `json:"startTime"`
-	EndTime      string `json:"endTime"`
-	JobType      string `json:"jobType"`
-	SourceServer struct {
-		ServerName string `json:"serverName"`
-		Path       string `json:"path"`
-		Protocol   string `json:"protocol"`
-	} `json:"sourceServer"`
-	TimeElapsed             int64    `json:"timeElapsed"`
-	ScannedFilesCount       string   `json:"scannedFilesCount"`
-	ScannedDirectoriesCount string   `json:"scannedDirectoriesCount"`
-	TotalScannedSize        string   `json:"totalScannedSize"`
-	TotalMigratedSize       string   `json:"totalMigratedSize"`
-	Errors                  []string `json:"errors"`
+	JobRunID  string `json:"jobRunId"`
+	Status    string `json:"status"`
+	StartTime string `json:"startTime"`
+	EndTime   string `json:"endTime"`
 }
 
 type GetJobRunResponse struct {

@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger, Optional, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as fs from 'fs';
 import * as path from "path";
@@ -9,10 +9,12 @@ import { PDFGeneratorService } from 'src/generator/pdf-generator.service';
 import { PDFTemplate } from 'src/generator/pdf-generator.type';
 import { Repository } from 'typeorm';
 import { DiscoveryService } from '../discovery/discovery.service';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { ProjectIdCacheService } from '../utils/project-id-cache.service';
 
 @Injectable()
 export class PdfService {
-    private logger: Logger = new Logger(PdfService.name);
+    private readonly logger: Logger | LoggerService;
     private readonly reportsDirectory =
     process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
     constructor( 
@@ -21,34 +23,54 @@ export class PdfService {
       @InjectRepository(ReportsEntity)
       private readonly reportsRepo: Repository<ReportsEntity>,
       private readonly discoveryService: DiscoveryService,
-      private readonly pdfGeneratorService: PDFGeneratorService
-    ) {}
+      private readonly pdfGeneratorService: PDFGeneratorService,
+      private readonly projectIdCacheService: ProjectIdCacheService,
+      @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory,
+    ) {
+      if (loggerFactory) {
+        this.logger = loggerFactory.create(PdfService.name);
+      } else {
+        // Fallback to basic NestJS Logger
+        this.logger = new Logger(PdfService.name) as any;
+      }
+    }
 
     async generatePdf(jobRunId: string, reportType: ReportType): Promise<Buffer> {
-      this.logger.log(`Checking for existing report for jobRunId: ${jobRunId} and reportType: ${reportType}`);
-      const sanitizedFileName = `${jobRunId.toString().replace(/[^a-zA-Z0-9-]/g, '')}-${reportType.toLowerCase().replace(/[^a-zA-Z0-9_-]/g, '')}-report.pdf`;
-      const filePath = path.join(this.reportsDirectory, sanitizedFileName);
+      const projectId = await this.projectIdCacheService.getProjectIdFromCache(jobRunId);
+      this.logger.log(`projectId: ${projectId} Checking for existing report for jobRunId: ${jobRunId} and reportType: ${reportType}`);
       
-      if (!filePath.startsWith(path.resolve(this.reportsDirectory))) {
-        this.logger.error(`Invalid file path: ${filePath}`);
-        throw new HttpException("Invalid file path", HttpStatus.BAD_REQUEST);
-      }
-      
-      if (reportType === ReportType.JOBS_RREPORT)
-        {
+      try {
+        const sanitizedFileName = `${jobRunId.toString().replace(/[^a-zA-Z0-9-]/g, '')}-${reportType.toLowerCase().replace(/[^a-zA-Z0-9_-]/g, '')}-report.pdf`;
+        const filePath = path.join(this.reportsDirectory, sanitizedFileName);
+        
+        if (!filePath.startsWith(path.resolve(this.reportsDirectory))) {
+          this.logger.error(`projectId: ${projectId} Invalid file path: ${filePath}`);
+          throw new HttpException("Invalid file path", HttpStatus.BAD_REQUEST);
+        }
+        
+        if (reportType === ReportType.JOBS_RREPORT) {
+          this.logger.log(`projectId: ${projectId} Generating jobs report PDF for jobRunId: ${jobRunId}`);
           let response = await this.generateJobsReportPdf(jobRunId);
           return response;
         }
-      
-      if (fs.existsSync(filePath) && reportType == ReportType.DISCOVERY) { 
-          this.logger.log(`Report found. Returning existing report: ${filePath}`);
-          return fs.readFileSync(filePath); 
-      } else {
-        throw new HttpException("Report not found, try again later",  HttpStatus.INTERNAL_SERVER_ERROR);
+        
+        if (fs.existsSync(filePath) && reportType == ReportType.DISCOVERY) { 
+            this.logger.log(`projectId: ${projectId} Report found. Returning existing report: ${filePath}`);
+            return fs.readFileSync(filePath); 
+        } else {
+          this.logger.warn(`projectId: ${projectId} Report not found for jobRunId: ${jobRunId}, reportType: ${reportType}`);
+          throw new HttpException("Report not found, try again later",  HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+      } catch (error) {
+        this.logger.error(`projectId: ${projectId} Error in generatePdf for jobRunId: ${jobRunId}, reportType: ${reportType}: ${error.message}`, error?.stack || error);
+        throw error;
       }
     }
 
     async generateJobsReportPdf(jobRunId: string): Promise<Buffer> {
+      const projectId = await this.projectIdCacheService.getProjectIdFromCache(jobRunId);
+      this.logger.log(`projectId: ${projectId} Starting generateJobsReportPdf for jobRunId: ${jobRunId}`);
+      
       try {
         const schema = process.env.SCHEMA || 'datamigrator';
 
@@ -74,13 +96,14 @@ export class PdfService {
 
         if(!data.length) {
           // if report data is not found, should call report generation again and return error
-          this.logger.error(`Report data not found for jobRunId: ${jobRunId} and reportType: JOBS_REPORT`);
-          this.logger.log(`Calling discoveryService.createJobsPDFReportData for jobRunId: ${jobRunId}`);
+          this.logger.error(`projectId: ${projectId} Report data not found for jobRunId: ${jobRunId} and reportType: JOBS_REPORT`);
+          this.logger.log(`projectId: ${projectId} Calling discoveryService.createJobsPDFReportData for jobRunId: ${jobRunId}`);
           this.discoveryService.createJobsPDFReportData(jobRunId);
-          this.logger.log(`Called discoveryService.createJobsPDFReportData for jobRunId: ${jobRunId}, try again later`);
+          this.logger.log(`projectId: ${projectId} Called discoveryService.createJobsPDFReportData for jobRunId: ${jobRunId}, try again later`);
           throw new HttpException("Report data not found", HttpStatus.INTERNAL_SERVER_ERROR);
         }
 
+        this.logger.log(`projectId: ${projectId} Found report data, processing for jobRunId: ${jobRunId}`);
         const reportData = JSON.parse(data[0].report_data);
          reportData.last_iteration = reportData.last_iteration || {};
         reportData.last_errors = reportData.last_errors || {};
@@ -93,11 +116,21 @@ export class PdfService {
           projectName: projectData.length > 0 ? projectData[0].project_name : 'NetApp Data Migrator',
           reportDate: new Date().toLocaleDateString(),
         }
-        return await this.pdfGeneratorService.generatePDF({data: reportData, template: PDFTemplate.JOBS_REPORT, pdfOptions: {
-          format: 'A0', printBackground: true, scale: 0.5, landscape: true, 
-        }});
+        
+        this.logger.log(`projectId: ${projectId} Generating PDF for jobs report, jobRunId: ${jobRunId}`);
+        return await this.pdfGeneratorService.generatePDF({
+          data: reportData, 
+          template: PDFTemplate.JOBS_REPORT, 
+          pdfOptions: {
+            format: 'A0', printBackground: true, scale: 0.5, landscape: true, 
+          },
+          context: {
+            jobRunId,
+            projectId
+          }
+        });
       } catch (error) {
-        this.logger.error(`Failed to generate jobs report for jobRunId: ${jobRunId}, error: ${error}`);
+        this.logger.error(`projectId: ${projectId} Failed to generate jobs report for jobRunId: ${jobRunId}, error: ${error.message}`, error?.stack || error);
         throw new HttpException("Failed to generate jobs report", HttpStatus.INTERNAL_SERVER_ERROR);
       }
     }

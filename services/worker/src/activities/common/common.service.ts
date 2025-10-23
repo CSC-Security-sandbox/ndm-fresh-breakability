@@ -10,7 +10,7 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { generateDummyErrorEntry, generateDummyItemEntry, generateDummyTaskInfoEntry } from '../utils/utils';
 import { JobType } from "@netapp-cloud-datamigrate/jobs-lib";
-import { SmbUserSetupService } from "../core/migrate/command-execution/smb-user-setup.service";
+// import { SmbUserSetupService } from "../core/migrate/command-execution/smb-user-setup.service";
 
 @Injectable()
 export class CommonActivityService{
@@ -21,20 +21,22 @@ export class CommonActivityService{
   readonly reportServiceUrl: string;
   readonly migrationTaskLimit: number;
   readonly maxRetryCount: number;
-  private readonly logger : LoggerService;
-  
+  readonly projectId: string;
+  private readonly logger: LoggerService;
+
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly authService: AuthService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly redisService: RedisService,
-    private readonly smbUserSetup: SmbUserSetupService,
+    // private readonly smbUserSetup: SmbUserSetupService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
     this.workerJobServiceUrl = this.configService.get('worker.connection.workerJobServiceUrl');
     this.reportServiceUrl = this.configService.get('worker.connection.workerReportServiceUrl');
     this.migrationTaskLimit = this.configService.get('worker.migrationTaskStreamLimit');
+    this.projectId = this.configService.get('worker.projectId');
     this.fetchTaskBatch = 50, this.pushTaskDirSize = 500;
     this.logger = loggerFactory.create(CommonActivityService.name);
   }
@@ -72,8 +74,13 @@ export class CommonActivityService{
       if (!accessToken) {
         throw new Error('Failed to get access token');
       }
-      await axios.patch(`${this.workerJobServiceUrl}/api/v1/job-run/${jobRunId}/${status}`, {}, {headers:{Authorization : `Bearer ${accessToken}`}});
-      
+      await axios.patch(`${this.workerJobServiceUrl}/api/v1/job-run/${jobRunId}/${status}`, {}, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          projectId: this.projectId
+        }
+      });
+
       this.logger.log(`[${jobRunId}] status updated to ${status}`);
       return { message: 'Job status updated for job id: ' + jobRunId };
     } catch (error) {
@@ -94,7 +101,12 @@ export class CommonActivityService{
       await axios.post(
         `${this.reportServiceUrl}/api/v1/report/inventory/generate-jobs-report`,
         { jobRunId },
-        { headers: { Authorization: `Bearer ${accessToken}` } },
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            projectId: this.projectId
+          }
+        },
       );
       this.logger.log(`[${jobRunId}] Triggering generateJobsReport successful`);
       return { message: 'Triggering generateJobsReport successful for job id: ' + jobRunId };
@@ -115,7 +127,12 @@ export class CommonActivityService{
       this.logger.log(`[${jobRunId}] Updating worker response to URL ${this.workerJobServiceUrl}/api/v1/job-run/worker-response/${jobRunId}/${workerId}`);
       const accessToken = await this.authService.getAccessToken();
       if (!accessToken) throw new Error('Failed to get access token');
-      await axios.put(`${this.workerJobServiceUrl}/api/v1/job-run/worker-response/${jobRunId}/${workerId}`, workerResponse, { headers: { Authorization: `Bearer ${accessToken}` } });
+      await axios.put(`${this.workerJobServiceUrl}/api/v1/job-run/worker-response/${jobRunId}/${workerId}`, workerResponse, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          projectId: this.projectId
+        }
+      });
       this.logger.log(`[${jobRunId}] Worker response updated successfully`);
       return { message: 'Worker response updated successfully for job id: ' + jobRunId };
     } catch (error) {
@@ -136,7 +153,12 @@ export class CommonActivityService{
       await axios.post(
         `${this.reportServiceUrl}/api/v1/report/inventory/generate-report`,
         payload,
-        { headers: { Authorization: `Bearer ${accessToken}` } },
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            projectId: this.projectId
+          }
+        },
       );
       this.logger.log(`[${jobRunId}] Trigger generateDiscoveryReport Successful`);
       return { message: 'Trigger generateDiscoveryReport Successful for job id: ' + jobRunId };
@@ -153,7 +175,12 @@ export class CommonActivityService{
       if (!accessToken) {
         throw new Error('Failed to get access token');
       }
-      await axios.get(`${this.reportServiceUrl}/api/v1/report/job-run/coc-report/${jobRunId}`, {headers:{Authorization:`Bearer ${accessToken}`}});
+      await axios.get(`${this.reportServiceUrl}/api/v1/report/job-run/coc-report/${jobRunId}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          projectId: this.projectId
+        }
+      });
       this.logger.log(`[${jobRunId}] Triggering generateCOCReport successful`);
       return { message: 'Triggering generateCOCReport successful for job id: ' + jobRunId };
     } catch (error) {
@@ -170,7 +197,12 @@ export class CommonActivityService{
       if (!accessToken) {
         throw new Error('Failed to get access token');
       }
-      await axios.put(`${this.workerJobServiceUrl}/api/v1/job-run/cutover/${jobRunId}/${status}`, {}, {headers:{Authorization:`Bearer ${accessToken}`}});
+      await axios.put(`${this.workerJobServiceUrl}/api/v1/job-run/cutover/${jobRunId}/${status}`, {}, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          projectId: this.projectId
+        }
+      });
       this.logger.log(`[${jobRunId}] status updated to ${status}`);
       return { message: 'Job status updated for job id: ' + jobRunId };
     } catch (error) {

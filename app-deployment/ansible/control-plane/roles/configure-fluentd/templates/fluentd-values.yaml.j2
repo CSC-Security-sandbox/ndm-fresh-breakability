@@ -1,17 +1,14 @@
 kind: DaemonSet
 
 resources:
-  limits:
-    cpu: 500m
-    memory: 512Mi
   requests:
     cpu: 400m
     memory: 128Mi
 
 image:
-  repository: fluent/fluentd-kubernetes-daemonset
+  repository: "{% if local_cluster is defined %}fluent/fluentd-kubernetes-daemonset{% else %}ndm-fluentd-loki{% endif %}"
   pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
-  tag: ""
+  tag: "{% if local_cluster is defined %}{% else %}v1.17-1{% endif %}"
 
 service:
   ports:
@@ -29,8 +26,10 @@ volumeMounts:
   - name: ndm-logs
     mountPath: /ndm-logs
 
+{% if local_cluster is defined %}
 plugins:
   - fluent-plugin-grafana-loki
+{% endif %}
 
 fileConfigs:
   01_sources.conf: |-
@@ -249,17 +248,21 @@ fileConfigs:
         @type record_transformer
         enable_ruby true
         <record>
+          # Extract project ID from logs; default to no-project
+          project_id ${begin; match_data = record['log'].to_s.match(/projectId\s*[:=]\s*([a-zA-Z0-9\-_]+)/); match_data ? match_data[1] : "no-project"; rescue; "no-project"; end}
+          
           # Determine service type
           service_name ${begin; container = record['container_name'].to_s.downcase; case container; when /db-writer/; "db-writer"; when /config-service/; "config-service"; when /db-migrations/; "db-migrations"; when /datamigrator-ui/; "datamigrator-ui"; when /reports-service/; "reports-service"; when /admin-service/; "admin-service"; when /jobs-service/; "jobs-service"; when /keycloak-customizations/; "keycloak-customizations"; when /support-service/; "support-service"; else; container; end; rescue; record['container_name'].to_s; end}
+
           component_type "control-plane"
         </record>
       </filter>
 
       <match **>
         @type file
-        path /ndm-logs/%Y-%m-%d/${component_type}/${service_name}
+        path /ndm-logs/%Y-%m-%d/${project_id}/${component_type}/${service_name}
         append true
-        <buffer time,component_type,service_name>
+        <buffer time,project_id,component_type,service_name>
           @type file
           path /var/log/fluentd-buffers/datamigrator
           timekey 24h
@@ -283,6 +286,8 @@ fileConfigs:
         enable_ruby true
         renew_record true
         <record>
+          # Extract project ID from logs; default to no-project
+          project_id ${begin; match_data = record['log'].to_s.match(/projectId\s*[:=]\s*([a-zA-Z0-9\-_]+)/); match_data ? match_data[1] : "no-project"; rescue; "no-project"; end}
           message "[${time.strftime('%Y-%m-%d %H:%M:%S')}] ${record.to_json}"
           worker_name "${record['worker_id'] || 'unknown-worker'}"
         </record>
@@ -290,14 +295,14 @@ fileConfigs:
 
       <match worker.tag>
         @type file
-        path /ndm-logs/%Y-%m-%d/worker/${worker_name}/worker
+        path /ndm-logs/%Y-%m-%d/${project_id}/worker/${worker_name}/worker
         append true
-        <buffer time,worker_name>
+        <buffer time,project_id,worker_name>
           @type file
           path /var/log/fluentd-buffers/worker
           timekey 24h
           timekey_wait 120
-          timekey_use_utc false
+          timekey_use_utc true
           flush_mode interval
           flush_interval 5s
           flush_at_shutdown true
@@ -309,4 +314,3 @@ fileConfigs:
         </format>
       </match>
     </label>
-    

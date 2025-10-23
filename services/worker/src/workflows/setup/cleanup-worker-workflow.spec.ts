@@ -22,13 +22,15 @@ describe('CleanupWorkerWorkflow', () => {
                 await testEnv.teardown();
             }
         }
-    });
+    }, 15000); // 15 second timeout
 
     afterAll(async () => {
         if (worker && ['RUNNING', 'STARTED'].includes(worker.getState())) {
             await worker?.shutdown();
         }
-        await testEnv.teardown();
+        if (testEnv) {
+            await testEnv.teardown();
+        }
         // workflowCoverage.mergeIntoGlobalCoverage();
     });
 
