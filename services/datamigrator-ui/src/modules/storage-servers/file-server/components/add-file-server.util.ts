@@ -23,11 +23,13 @@ export const createValidateConnectionPayload = (
   workerIds: string[],
   nfsCredentialsForm: BlueXpFormType<CredentialsValidationSchemaType>,
   smbCredentialsForm: BlueXpFormType<CredentialsValidationSchemaType>,
-  hostCredentialsForm: BlueXpFormType<any>
+  hostCredentialsForm: BlueXpFormType<any>,
+  selectedProtocol: 'NFS' | 'SMB'
 ) => {
   const protocols: protocolsType[] = [];
 
-  if (nfsCredentialsForm.isValid) {
+  // Only include the selected protocol
+  if (selectedProtocol === 'NFS' && nfsCredentialsForm.isValid) {
     protocols.push({
       type: nfsCredentialsForm.formState?.protocol,
       username: nfsCredentialsForm.formState?.userName,
@@ -35,7 +37,7 @@ export const createValidateConnectionPayload = (
     });
   }
 
-  if (smbCredentialsForm.isValid) {
+  if (selectedProtocol === 'SMB' && smbCredentialsForm.isValid) {
     protocols.push({
       type: smbCredentialsForm.formState?.protocol,
       username: smbCredentialsForm.formState?.userName,
@@ -58,41 +60,60 @@ export const createConfigPayload = (
   smbCredentialsForm: BlueXpFormType<CredentialsValidationSchemaType>,
   workers: string[],
   hostCredentialsForm: BlueXpFormType<HostFormType>,
-  jobConfigForm: BlueXpFormType<jobConfigFormFormType>
+  jobConfigForm: BlueXpFormType<jobConfigFormFormType>,
+  selectedProtocol: 'NFS' | 'SMB',
+  editingFileServerDetails?: any
 ) => {
   const mountPoints: any = [];
-  const fileServers: FileServerType[] = [
-    getFileServerDetails(
+  const fileServers: FileServerType[] = [];
+
+  let existingFileServerId = null;
+  if (editingFileServerDetails?.fileServers && editingFileServerDetails.fileServers.length > 0) {
+    existingFileServerId = editingFileServerDetails.fileServers[0]?.id || null;
+  }
+
+  // Create file server for the selected protocol
+  if (selectedProtocol === 'NFS') {
+    const nfsFileServer = getFileServerDetails(
       serverTypeForm,
       nfsCredentialsForm,
       hostCredentialsForm,
       mountPoints,
-      workers
-    ),
-    getFileServerDetails(
+      workers,
+      existingFileServerId
+    );
+    if (nfsFileServer) {
+      fileServers.push(nfsFileServer);
+    }
+  } else if (selectedProtocol === 'SMB') {
+    const smbFileServer = getFileServerDetails(
       serverTypeForm,
       smbCredentialsForm,
       hostCredentialsForm,
       mountPoints,
-      workers
-    ),
-  ].filter(Boolean);
+      workers,
+      existingFileServerId
+    );
+    if (smbFileServer) {
+      fileServers.push(smbFileServer);
+    }
+  }
 
   const configPayload: ConfigPayloadType = {
-    configName: serverTypeForm.formState?.configName,
+    configName: serverTypeForm.formState?.configName || "",
     configType: "FILE",
     projectId,
     fileServers,
     workingDirectory: {
-      workingDirectory: jobConfigForm?.formState?.workingDirectory,
+      workingDirectory: jobConfigForm?.formState?.workingDirectory || "",
       pathId:
-        jobConfigForm?.formState.pathId?.value.length === 0
+        !jobConfigForm?.formState?.pathId?.value || jobConfigForm?.formState?.pathId?.value?.length === 0
           ? null
           : jobConfigForm?.formState?.pathId?.value,
       pathName:
-        jobConfigForm?.formState.pathId?.value.length === 0
-          ? jobConfigForm?.formState?.pathName
-          : jobConfigForm?.formState?.pathId?.label,
+        !jobConfigForm?.formState?.pathId?.value || jobConfigForm?.formState?.pathId?.value?.length === 0
+          ? jobConfigForm?.formState?.pathName || ""
+          : jobConfigForm?.formState?.pathId?.label || "",
     },
   };
   return configPayload;
@@ -120,31 +141,45 @@ const getFileServerDetails = (
   credentialsForm: BlueXpFormType<CredentialsValidationSchemaType>,
   hostCredentialsForm: BlueXpFormType<any>,
   volumes: any[],
-  workers: string[]
+  workers: string[],
+  existingId?: string | null
 ) => {
-  if (credentialsForm.dirty && credentialsForm.isValid) {
-    const hostName = hostCredentialsForm?.formState.host.trim();
-    return {
-      serverType: serverTypeForm?.formState?.serverType?.value,
-      ...credentialsForm.formState,
+
+  if (credentialsForm.isValid && credentialsForm.formState) {
+    const hostName = hostCredentialsForm?.formState?.host?.trim() || "";
+    
+ 
+    const fileServerDetails: any = {
+      serverType: serverTypeForm?.formState?.serverType?.value || "OtherNAS",
+      protocol: credentialsForm.formState?.protocol || "",
+      userName: credentialsForm.formState?.userName || "",
+      password: credentialsForm.formState?.password || "",
       host: hostName,
-      protocolVersion: credentialsForm?.formState.protocolVersion?.value,
-      password: credentialsForm.formState?.password,
-      volumes,
-      workers,
+      protocolVersion: credentialsForm?.formState?.protocolVersion?.value || "",
+      exportPathSource: credentialsForm.formState?.exportPathSource || EXPORT_PATH_SOURCE_ENUM.AUTO_DISCOVER,
+      volumes: volumes || [],
+      workers: workers || [], 
     };
+
+    if (existingId) {
+      fileServerDetails.id = existingId;
+    }
+
+    return fileServerDetails;
   }
+  
+  return null;
 };
 
 export const patchJobConfigFormValue = (
   workingDirectory: WorkingDirectoryDetailsType,
   pathsList: MountPathsOptionsListType[]
 ) => {
-  const selectedPath = pathsList.find(
+  const selectedPath = pathsList?.find(
     (path) => path?.value === workingDirectory?.pathId
   );
   return {
-    pathId: selectedPath,
+    pathId: selectedPath || null,
     pathName: workingDirectory?.pathName || "",
     workingDirectory: workingDirectory?.workingDirectory || "",
   };

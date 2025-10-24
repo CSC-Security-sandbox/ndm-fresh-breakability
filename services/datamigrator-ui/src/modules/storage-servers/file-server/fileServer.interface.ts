@@ -47,6 +47,8 @@ export interface FileServerStateContextType {
   isJobRunning: boolean;
   setIsJobRunning: (arg: boolean) => void;
   editingFileServerDetails: ConfigPayloadType;
+  selectedProtocol: "NFS" | "SMB";
+  setSelectedProtocol: (protocol: "NFS" | "SMB") => void;
 }
 
 // THIS IS CHILD, ONLY FORM WILL BE STORED IN THIS CONTEXT

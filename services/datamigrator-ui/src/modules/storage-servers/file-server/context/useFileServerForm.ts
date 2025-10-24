@@ -43,6 +43,12 @@ export const useFileServerForm = () => {
   const { fileServerId } = useParams<{ fileServerId: string }>();
   const [isJobRunning, setIsJobRunning] = useState<boolean>(false);
   const { selectedProjectId } = useSelectedProjectId();
+  const [selectedProtocol, setSelectedProtocol] = useState<'NFS' | 'SMB'>('NFS');
+  const [originalProtocol, setOriginalProtocol] = useState<'NFS' | 'SMB' | null>(null);
+  
+  const [originalNfsWorkers, setOriginalNfsWorkers] = useState<string[]>([]);
+  const [originalSmbWorkers, setOriginalSmbWorkers] = useState<string[]>([]);
+  
   // State management
   const [allWorkersList, setAllWorkersList] = useState<GetAllWorkersApiType[]>(
     []
@@ -90,7 +96,19 @@ export const useFileServerForm = () => {
           allWorkersWithNameAndId[worker.workerId] = worker.workerName;
         });
         setWorkerIdWithName(allWorkersWithNameAndId);
-        setAllWorkersList(resp);
+        
+        // Filter workers based on selected protocol
+        const filteredWorkers = resp?.filter((worker: GetAllWorkersApiType) => {
+          const workerName = worker?.workerName?.toLowerCase() || "";
+          if (selectedProtocol === 'NFS') {
+            return workerName.startsWith("nfs-");
+          } else if (selectedProtocol === 'SMB') {
+            return workerName.startsWith("smb-");
+          }
+          return false;
+        });
+        
+        setAllWorkersList(filteredWorkers || []);
       })
       .catch((error: any) => {
         console.error({
@@ -100,6 +118,35 @@ export const useFileServerForm = () => {
         });
       });
   };
+
+  const handleProtocolChangeForEdit = (newProtocol: 'NFS' | 'SMB') => {
+    if (!isEditMode || !originalProtocol) return;
+
+    if (newProtocol === originalProtocol) {
+      if (newProtocol === 'NFS') {
+        setSelectedWorkerIds(originalNfsWorkers);
+      } else if (newProtocol === 'SMB') {
+        setSelectedWorkerIds(originalSmbWorkers);
+      }
+    } else {
+      setSelectedWorkerIds([]);
+    }
+  };
+
+  // Re-fetch workers when protocol changes
+  useEffect(() => {
+    if (selectedProjectId && selectedProtocol) {
+      fetchWorkers();
+      
+      if (isEditMode) {
+        // Handle protocol change for edit mode
+        handleProtocolChangeForEdit(selectedProtocol);
+      } else {
+        // For add mode, always clear workers on protocol change
+        setSelectedWorkerIds([]);
+      }
+    }
+  }, [selectedProjectId, selectedProtocol]);
 
   // API TO GET ALL WORKERS
   useEffect(() => {
@@ -175,7 +222,8 @@ export const useFileServerForm = () => {
       selectedWorkerIds,
       nfsCredentialsForm,
       smbCredentialsForm,
-      hostCredentialsForm
+      hostCredentialsForm,
+      selectedProtocol
     );
 
     try {
@@ -306,6 +354,16 @@ export const useFileServerForm = () => {
     setMountPaths,
     isJobRunning,
     setIsJobRunning,
+    // Protocol selection
+    selectedProtocol,
+    setSelectedProtocol,
+    originalProtocol,
+    setOriginalProtocol,
+    // Original workers for edit mode
+    originalNfsWorkers,
+    setOriginalNfsWorkers,
+    originalSmbWorkers,
+    setOriginalSmbWorkers,
     // STATE SETTERS
     setWorkerIdWithName,
     setIsEditMode,

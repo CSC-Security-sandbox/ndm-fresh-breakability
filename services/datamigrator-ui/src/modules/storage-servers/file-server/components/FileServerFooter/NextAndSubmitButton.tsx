@@ -30,6 +30,7 @@ const NextAndSubmitButton = () => {
     disableNextButton,
     nfsValidatedWorkersIds,
     editingFileServerDetails,
+    selectedProtocol,
   } = useContext(CommonFileServerContext);
 
   const handleFinish = async () => {
@@ -54,10 +55,17 @@ const NextAndSubmitButton = () => {
 
       case STEP_1_CREDENTIALS: {
         const isHostValid = hostCredentialsForm.isValid;
-        const isNfsValid = nfsCredentialsForm.isValid;
-        const isSmbValid = smbCredentialsForm.isValid;
-
-        return !isHostValid || (!isNfsValid && !isSmbValid);
+        
+        // Only validate the selected protocol form
+        if (selectedProtocol === 'NFS') {
+          const isNfsValid = nfsCredentialsForm.isValid;
+          return !isHostValid || !isNfsValid;
+        } else if (selectedProtocol === 'SMB') {
+          const isSmbValid = smbCredentialsForm.isValid;
+          return !isHostValid || !isSmbValid;
+        }
+        
+        return true; // Default to disabled if no protocol selected
       }
 
       case STEP_2_WORKERS: {

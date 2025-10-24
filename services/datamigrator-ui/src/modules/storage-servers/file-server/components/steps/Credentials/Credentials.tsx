@@ -1,13 +1,14 @@
 import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
 import { Box } from "@components/container/index";
-import { FormFieldInputNew } from "@netapp/bxp-design-system-react";
+import { FormFieldInputNew, Text, RadioButton } from "@netapp/bxp-design-system-react";
+import { InfoIcon } from "@netapp/bxp-style/react-icons/Notification";
 import { useContext } from "react";
 import NFSCredentials from "@modules/storage-servers/file-server/components/steps/Credentials/components/NFSCredentials";
 import SMBCredentials from "@modules/storage-servers/file-server/components/steps/Credentials/components/SMBCredentials";
 import FormFrame from "@modules/storage-servers/file-server/components/layout/FormFrame";
 
 const Credentials = () => {
-  const { hostCredentialsForm, isJobRunning } = useContext(
+  const { hostCredentialsForm, isJobRunning, selectedProtocol, setSelectedProtocol } = useContext(
     CommonFileServerContext
   );
 
@@ -28,6 +29,38 @@ const Credentials = () => {
               });
             }}
           />
+        </Box>
+      </FormFrame>
+
+      <FormFrame>
+        <Box className="mt-4 flex flex-col p-6">
+          <Text className="text-base font-semibold mb-4">Protocol Selection</Text>
+          <Box className="flex gap-4 mb-4">
+            <RadioButton
+              checked={selectedProtocol === 'NFS'}
+              onChange={() => setSelectedProtocol('NFS')}
+              disabled={isJobRunning}
+              name="protocol"
+              value="NFS"
+            >
+              NFS
+            </RadioButton>
+            <RadioButton
+              checked={selectedProtocol === 'SMB'}
+              onChange={() => setSelectedProtocol('SMB')}
+              disabled={isJobRunning}
+              name="protocol"
+              value="SMB"
+            >
+              SMB
+            </RadioButton>
+          </Box>
+          <Box className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
+            <InfoIcon className="text-blue-600 mt-0.5 flex-shrink-0" size="16" />
+            <Text className="text-sm text-blue-800">
+              If your file server supports both NFS and SMB, set up two distinct file servers—one using NFS and another using SMB.
+            </Text>
+          </Box>
         </Box>
       </FormFrame>
 
