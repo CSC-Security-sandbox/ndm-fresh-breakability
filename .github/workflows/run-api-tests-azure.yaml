@@ -21,21 +21,13 @@ on:
         description: 'Artifactory URL for windows worker installer'
         required: true
         type: string
-      build_version:
-        description: 'Build version for support bundle uploads'
-        required: true
-        type: string
-      ref_type:
-        description: 'Reference type (releases or branches)'
-        required: true
-        type: string
-      run_smb_tests:
-        description: 'Run SMB tests'
+      run_smb_perf:
+        description: 'Run SMB perf'
         required: false
         default: true
         type: boolean
-      run_nfs_tests:
-        description: 'Run NFS tests'
+      run_nfs_perf:
+        description: 'Run NFS perf'
         required: false
         default: true
         type: boolean
@@ -53,21 +45,13 @@ on:
       windows_worker_installer_url:
         description: 'Artifactory URL for windows worker installer'
         type: string
-      build_version:
-        description: 'Build version for support bundle uploads'
-        required: true
-        type: string
-      ref_type:
-        description: 'Reference type (releases or branches)'
-        required: true
-        type: string
-      run_smb_tests:
-        description: 'Whether to run SMB tests (true/false)'
+      run_smb_perf:
+        description: 'Whether to run SMB perf (true/false)'
         required: false
         default: true
         type: boolean
-      run_nfs_tests:
-        description: 'Whether to run NFS tests (true/false)'
+      run_nfs_perf:
+        description: 'Whether to run NFS perf (true/false)'
         required: false
         default: true
         type: boolean
@@ -180,7 +164,7 @@ jobs:
           echo "sshpass installed successfully."
 
       - name: Download Windows installer
-        if: ${{ inputs.run_smb_tests == true || github.event.inputs.run_smb_tests == 'true' }}
+        if: ${{ inputs.run_smb_perf == true || github.event.inputs.run_smb_perf == 'true' }}
         run: |
           WINDOWS_INSTALLER_URL="${{ inputs.windows_worker_installer_url || github.event.inputs.windows_worker_installer_url }}"
           if [ -n "$WINDOWS_INSTALLER_URL" ]; then
@@ -199,7 +183,7 @@ jobs:
           fi
 
       - name: Copy Windows installer to Windows VMs
-        if: ${{ inputs.run_smb_tests == true || github.event.inputs.run_smb_tests == 'true' }}
+        if: ${{ inputs.run_smb_perf == true || github.event.inputs.run_smb_perf == 'true' }}
         run: |
           WINDOWS_IPS='${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}'
           
@@ -254,11 +238,11 @@ jobs:
           
           echo "Service setup completed successfully"
 
-  run-smb-tests:
-    name: Run SMB API Tests
+  run-smb-perf:
+    name: Run SMB Performance Tests
     runs-on: openlab
     needs: setup-infrastructure
-    if: ${{ inputs.run_smb_tests == true || github.event.inputs.run_smb_tests == 'true' }}
+    if: ${{ inputs.run_smb_perf == true || github.event.inputs.run_smb_perf == 'true' }}
     env:
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
@@ -271,17 +255,15 @@ jobs:
       NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
 
-      AZURE_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
-      AZURE_SMB_NDM_WORKERS_PORT: ${{ vars.AZURE_SMB_NDM_WORKERS_PORT }}
-      AZURE_SMB_SOURCE_VOLUMES: ${{ vars.AZURE_SMB_SOURCE_VOLUMES }}
-      AZURE_SMB_DESTINATION_VOLUMES: ${{ vars.AZURE_SMB_DESTINATION_VOLUMES }}
-      AZURE_SMB_SOURCE_HOST_IP: ${{ vars.AZURE_SMB_SOURCE_HOST_IP }}
-      AZURE_SMB_DESTINATION_HOST_IP: ${{ vars.AZURE_SMB_DESTINATION_HOST_IP }}
-      AZURE_SMB_PROTOCOL_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
-      AZURE_SMB_PROTOCOL_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
-      SMB_EXECUTABLE_FILENAME: ${{ vars.SMB_EXECUTABLE_FILENAME }}
-      BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
-      REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
+      PERF_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
+      PERF_SMB_NDM_WORKERS_PORT: ${{ vars.AZURE_SMB_NDM_WORKERS_PORT }}
+      PERF_SMB_SOURCE_VOLUMES: ${{ vars.AZURE_SMB_SOURCE_VOLUMES }}
+      PERF_SMB_DESTINATION_VOLUMES: ${{ vars.AZURE_SMB_DESTINATION_VOLUMES }}
+      PERF_SMB_SOURCE_HOST_IP: ${{ vars.AZURE_SMB_SOURCE_HOST_IP }}
+      PERF_SMB_DESTINATION_HOST_IP: ${{ vars.AZURE_SMB_DESTINATION_HOST_IP }}
+      PERF_SMB_PROTOCOL_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
+      PERF_SMB_PROTOCOL_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
+      PERF_SMB_EXECUTABLE_FILENAME: ${{ vars.SMB_EXECUTABLE_FILENAME }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -300,8 +282,8 @@ jobs:
           echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "::add-mask::$VM_PASSWORD"
           echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "AZURE_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "AZURE_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "PERF_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "PERF_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
           echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
           echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
       - name: Install Ginkgo
@@ -312,11 +294,11 @@ jobs:
           go mod tidy
           echo "Ginkgo and Gomega installed successfully."
 
-      - name: Run SMB API Tests
+      - name: Run SMB Performance Test
         run: |
           cd ndm-api-tests
-          chmod +x ./run-smb-azure-automation.sh
-          ./run-smb-azure-automation.sh
+          chmod +x ./run-smb-azure-perf.sh
+          ./run-smb-azure-perf.sh
         continue-on-error: true
 
       - name: Upload SMB Test Logs
@@ -327,11 +309,11 @@ jobs:
           path: ndm-api-tests/reports/
           retention-days: 30
 
-  run-nfs-tests:
-    name: Run NFS API Tests
+  run-nfs-perf:
+    name: Run NFS Performance Tests
     runs-on: openlab
     needs: setup-infrastructure
-    if: ${{ inputs.run_nfs_tests == true || github.event.inputs.run_nfs_tests == 'true' }}
+    if: ${{ inputs.run_nfs_perf == true || github.event.inputs.run_nfs_perf == 'true' }}
     env:
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
@@ -344,15 +326,13 @@ jobs:
       NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
 
-      AZURE_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
-      AZURE_NFS_NDM_WORKERS_PORT: ${{ vars.AZURE_NFS_NDM_WORKERS_PORT }}
-      AZURE_NFS_SOURCE_VOLUMES: ${{ vars.AZURE_NFS_SOURCE_VOLUMES }}
-      AZURE_NFS_DESTINATION_VOLUMES: ${{ vars.AZURE_NFS_DESTINATION_VOLUMES }}
-      AZURE_NFS_SOURCE_HOST_IP: ${{ vars.AZURE_NFS_SOURCE_HOST_IP }}
-      AZURE_NFS_DESTINATION_HOST_IP: ${{ vars.AZURE_NFS_DESTINATION_HOST_IP }}
-      AZURE_NFS_PROTOCOL_USERNAME: ${{ vars.AZURE_NFS_PROTOCOL_USERNAME }}
-      BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
-      REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
+      PERF_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
+      PERF_NFS_NDM_WORKERS_PORT: ${{ vars.AZURE_NFS_NDM_WORKERS_PORT }}
+      PERF_NFS_SOURCE_VOLUMES: ${{ vars.AZURE_NFS_SOURCE_VOLUMES }}
+      PERF_NFS_DESTINATION_VOLUMES: ${{ vars.AZURE_NFS_DESTINATION_VOLUMES }}
+      PERF_NFS_SOURCE_HOST_IP: ${{ vars.AZURE_NFS_SOURCE_HOST_IP }}
+      PERF_NFS_DESTINATION_HOST_IP: ${{ vars.AZURE_NFS_DESTINATION_HOST_IP }}
+      PERF_NFS_PROTOCOL_USERNAME: ${{ vars.AZURE_NFS_PROTOCOL_USERNAME }}
     steps:
       - name: Waiting
         run: |
@@ -375,8 +355,8 @@ jobs:
           echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "::add-mask::$VM_PASSWORD"
           echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "AZURE_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "AZURE_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "PERF_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "PERF_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
           echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
           echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
 
@@ -388,11 +368,11 @@ jobs:
           go mod tidy
           echo "Ginkgo and Gomega installed successfully."
 
-      - name: Run NFS API Tests
+      - name: Run NFS Performance Test
         run: |
           cd ndm-api-tests
-          chmod +x ./run-nfs-azure-automation.sh
-          ./run-nfs-azure-automation.sh
+          chmod +x ./run-nfs-azure-perf.sh
+          ./run-nfs-azure-perf.sh
         continue-on-error: true
 
       - name: Upload NFS Test Logs
@@ -403,533 +383,10 @@ jobs:
           path: ndm-api-tests/reports/
           retention-days: 30
 
-  send-workflow-card:
-    name: Parse Test Results & Send Notifications
-    runs-on: openlab
-    if: ${{ github.event_name == 'schedule' }}
-    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
-    outputs:
-      test_status: ${{ steps.workflow_outputs.outputs.test_status }}
-      total_tests: ${{ steps.workflow_outputs.outputs.total_tests }}
-      total_failed: ${{ steps.workflow_outputs.outputs.total_failed }}
-      pipeline_url: ${{ steps.workflow_outputs.outputs.pipeline_url }}
-      badge_color: ${{ steps.workflow_outputs.outputs.badge_color }}
-      badge_message: ${{ steps.workflow_outputs.outputs.badge_message }}
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-    - name: Set up Go for Parser
-      uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
-      with:
-        go-version: ${{ env.GO_VERSION }}
-
-    - name: Setup GitHub Token
-      run: |
-        echo "GITHUB_TOKEN=${{ secrets.GITOPS_USER_GITHUB_TOKEN }}" >> $GITHUB_ENV
-
-    - name: Run Nightly Parser and Capture Output
-      id: parser
-      run: |
-        cd ndm-api-tests/parser
-        echo "Installing Go dependencies..."
-        go mod tidy
-        echo "Go dependencies installed successfully"
-        echo ""
-        echo "Running nightly parser..."
-        echo "=========================="
-        
-        # Capture parser output
-        OUTPUT=$(go run nightly-parser.go 2>&1)
-        echo "$OUTPUT"
-        
-        # Extract summary between markers
-        SUMMARY=$(echo "$OUTPUT" | sed -n '/TEST_SUMMARY_START/,/TEST_SUMMARY_END/p' | sed '1d;$d')
-        
-        # Extract JSON results between markers
-        JSON_RESULTS=$(echo "$OUTPUT" | sed -n '/JSON_RESULTS_START/,/JSON_RESULTS_END/p' | sed '1d;$d')
-        
-        # Extract individual metrics
-        TOTAL_TESTS=$(echo "$OUTPUT" | grep "TOTAL_TESTS=" | cut -d'=' -f2)
-        TOTAL_PASSED=$(echo "$OUTPUT" | grep "TOTAL_PASSED=" | cut -d'=' -f2)
-        TOTAL_FAILED=$(echo "$OUTPUT" | grep "TOTAL_FAILED=" | cut -d'=' -f2)
-        TOTAL_SKIPPED=$(echo "$OUTPUT" | grep "TOTAL_SKIPPED=" | cut -d'=' -f2)
-        PIPELINE_URL=$(echo "$OUTPUT" | grep "PIPELINE_URL=" | cut -d'=' -f2-)
-        TEST_STATUS=$(echo "$OUTPUT" | grep "TEST_STATUS=" | cut -d'=' -f2)
-        
-        # Extract individual test result lines
-        SMOKE_SMB_LINE=$(echo "$OUTPUT" | grep "SMOKE_SMB_LINE=" | cut -d'=' -f2- || echo "")
-        SMOKE_NFS_LINE=$(echo "$OUTPUT" | grep "SMOKE_NFS_LINE=" | cut -d'=' -f2- || echo "")
-        E2E_SMB_LINE=$(echo "$OUTPUT" | grep "E2E_SMB_LINE=" | cut -d'=' -f2- || echo "")
-        E2E_NFS_LINE=$(echo "$OUTPUT" | grep "E2E_NFS_LINE=" | cut -d'=' -f2- || echo "")
-        REGRESSION_SMB_LINE=$(echo "$OUTPUT" | grep "REGRESSION_SMB_LINE=" | cut -d'=' -f2- || echo "")
-        REGRESSION_NFS_LINE=$(echo "$OUTPUT" | grep "REGRESSION_NFS_LINE=" | cut -d'=' -f2- || echo "")
-        
-        # Extract individual failure summaries
-        SMOKE_SMB_FAILURE=$(echo "$OUTPUT" | sed -n '/SMOKE_SMB_FAILURE<<EOF/,/^EOF$/p' | sed '1d;$d' || echo "")
-        SMOKE_NFS_FAILURE=$(echo "$OUTPUT" | sed -n '/SMOKE_NFS_FAILURE<<EOF/,/^EOF$/p' | sed '1d;$d' || echo "")
-        E2E_SMB_FAILURE=$(echo "$OUTPUT" | sed -n '/E2E_SMB_FAILURE<<EOF/,/^EOF$/p' | sed '1d;$d' || echo "")
-        E2E_NFS_FAILURE=$(echo "$OUTPUT" | sed -n '/E2E_NFS_FAILURE<<EOF/,/^EOF$/p' | sed '1d;$d' || echo "")
-        REGRESSION_SMB_FAILURE=$(echo "$OUTPUT" | sed -n '/REGRESSION_SMB_FAILURE<<EOF/,/^EOF$/p' | sed '1d;$d' || echo "")
-        REGRESSION_NFS_FAILURE=$(echo "$OUTPUT" | sed -n '/REGRESSION_NFS_FAILURE<<EOF/,/^EOF$/p' | sed '1d;$d' || echo "")
-        
-        # Set GitHub Actions outputs
-        echo "summary<<EOF" >> $GITHUB_OUTPUT
-        echo "$SUMMARY" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        echo "json_results<<EOF" >> $GITHUB_OUTPUT
-        echo "$JSON_RESULTS" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        echo "total_tests=$TOTAL_TESTS" >> $GITHUB_OUTPUT
-        echo "total_passed=$TOTAL_PASSED" >> $GITHUB_OUTPUT
-        echo "total_failed=$TOTAL_FAILED" >> $GITHUB_OUTPUT
-        echo "total_skipped=$TOTAL_SKIPPED" >> $GITHUB_OUTPUT
-        echo "pipeline_url=$PIPELINE_URL" >> $GITHUB_OUTPUT
-        echo "test_status=$TEST_STATUS" >> $GITHUB_OUTPUT
-        
-        # Set individual test result lines as outputs
-        echo "smoke_smb_line=$SMOKE_SMB_LINE" >> $GITHUB_OUTPUT
-        echo "smoke_nfs_line=$SMOKE_NFS_LINE" >> $GITHUB_OUTPUT
-        echo "e2e_smb_line=$E2E_SMB_LINE" >> $GITHUB_OUTPUT
-        echo "e2e_nfs_line=$E2E_NFS_LINE" >> $GITHUB_OUTPUT
-        echo "regression_smb_line=$REGRESSION_SMB_LINE" >> $GITHUB_OUTPUT
-        echo "regression_nfs_line=$REGRESSION_NFS_LINE" >> $GITHUB_OUTPUT
-        
-        # Set individual failure summary outputs
-        echo "smoke_smb_failure<<EOF" >> $GITHUB_OUTPUT
-        echo "$SMOKE_SMB_FAILURE" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        echo "smoke_nfs_failure<<EOF" >> $GITHUB_OUTPUT
-        echo "$SMOKE_NFS_FAILURE" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        echo "e2e_smb_failure<<EOF" >> $GITHUB_OUTPUT
-        echo "$E2E_SMB_FAILURE" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        echo "e2e_nfs_failure<<EOF" >> $GITHUB_OUTPUT
-        echo "$E2E_NFS_FAILURE" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        echo "regression_smb_failure<<EOF" >> $GITHUB_OUTPUT
-        echo "$REGRESSION_SMB_FAILURE" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        echo "regression_nfs_failure<<EOF" >> $GITHUB_OUTPUT
-        echo "$REGRESSION_NFS_FAILURE" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        echo "=========================="
-        echo "Parser execution completed."
-
-    - name: Display Captured Results
-      run: |
-        echo "=== CAPTURED TEST SUMMARY ==="
-        echo "${{ steps.parser.outputs.summary }}"
-        echo ""
-        echo "=== TEST METRICS ==="
-        echo "Total Tests: ${{ steps.parser.outputs.total_tests }}"
-        echo "Passed: ${{ steps.parser.outputs.total_passed }}"
-        echo "Failed: ${{ steps.parser.outputs.total_failed }}"
-        echo "Skipped: ${{ steps.parser.outputs.total_skipped }}"
-        echo "Status: ${{ steps.parser.outputs.test_status }}"
-        echo "Pipeline: ${{ steps.parser.outputs.pipeline_url }}"
-        echo ""
-        echo "=== JSON RESULTS ==="
-        echo "${{ steps.parser.outputs.json_results }}"
-
-    - name: Send Teams Notification Card
-      if: always()
-      run: |
-        # Determine test status for title and color
-        TOTAL_FAILED="${{ steps.parser.outputs.total_failed }}"
-        TOTAL_TESTS="${{ steps.parser.outputs.total_tests }}"
-        TOTAL_PASSED="${{ steps.parser.outputs.total_passed }}"
-        TOTAL_SKIPPED="${{ steps.parser.outputs.total_skipped }}"
-        TEST_STATUS="${{ steps.parser.outputs.test_status }}"
-        
-        CARD_TITLE="NDM Test Results"
-        
-        # Build the unified Teams card with conditional failure sections
-        cat > teams_card.json << EOF
-        {
-          "type": "AdaptiveCard",
-          "version": "1.5",
-          "body": [
-            {
-              "type": "TextBlock",
-              "text": "${CARD_TITLE}",
-              "size": "Medium",
-              "weight": "Bolder"
-            },
-            {
-              "type": "FactSet",
-              "facts": [
-                {
-                  "title": "Total Tests:",
-                  "value": "${TOTAL_TESTS}"
-                },
-                {
-                  "title": "Passed:",
-                  "value": "${TOTAL_PASSED}"
-                },
-                {
-                  "title": "Failed:",
-                  "value": "${TOTAL_FAILED}"
-                },
-                {
-                  "title": "Skipped:",
-                  "value": "${TOTAL_SKIPPED}"
-                },
-                {
-                  "title": "Status:",
-                  "value": "${TEST_STATUS}"
-                }
-              ]
-            },
-            {
-              "type": "TextBlock",
-              "text": "**Test Results:**",
-              "weight": "Bolder",
-              "spacing": "Medium"
-            },
-            {
-              "type": "TextBlock",
-              "text": "**Smoke Tests -**",
-              "weight": "Bolder",
-              "spacing": "Small"
-            },
-            {
-              "type": "TextBlock", 
-              "text": "${{ steps.parser.outputs.smoke_smb_line }}",
-              "wrap": true,
-              "spacing": "None"
-            },
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.smoke_nfs_line }}",
-              "wrap": true,
-              "spacing": "None"
-            },
-            {
-              "type": "TextBlock",
-              "text": "**Regression Tests -**",
-              "weight": "Bolder",
-              "spacing": "Small"
-            },
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.regression_smb_line }}",
-              "wrap": true,
-              "spacing": "None"
-            },
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.regression_nfs_line }}",
-              "wrap": true,
-              "spacing": "None"
-            },
-            {
-              "type": "TextBlock",
-              "text": "**End-to-End (E2E) Tests -**",
-              "weight": "Bolder",
-              "spacing": "Small"
-            },
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.e2e_smb_line }}",
-              "wrap": true,
-              "spacing": "None"
-            },
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.e2e_nfs_line }}",
-              "wrap": true,
-              "spacing": "None"
-            }
-        EOF
-        
-        # Add failure sections conditionally if there are failures
-        if [ "${TOTAL_FAILED}" != "0" ]; then
-          cat >> teams_card.json << 'EOF'
-            ,
-            {
-              "type": "TextBlock",
-              "text": "**Failures:**",
-              "weight": "Bolder",
-              "spacing": "Medium"
-            }
-        EOF
-          
-          # Add individual failure sections
-          if [ -n "${{ steps.parser.outputs.smoke_smb_failure }}" ]; then
-            cat >> teams_card.json << 'EOF'
-            ,
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.smoke_smb_failure }}",
-              "wrap": true,
-              "spacing": "Small",
-              "fontType": "Monospace"
-            }
-        EOF
-          fi
-          
-          if [ -n "${{ steps.parser.outputs.smoke_nfs_failure }}" ]; then
-            cat >> teams_card.json << 'EOF'
-            ,
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.smoke_nfs_failure }}",
-              "wrap": true,
-              "spacing": "Small",
-              "fontType": "Monospace"
-            }
-        EOF
-          fi
-          
-          if [ -n "${{ steps.parser.outputs.regression_smb_failure }}" ]; then
-            cat >> teams_card.json << 'EOF'
-            ,
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.regression_smb_failure }}",
-              "wrap": true,
-              "spacing": "Small",
-              "fontType": "Monospace"
-            }
-        EOF
-          fi
-          
-          if [ -n "${{ steps.parser.outputs.regression_nfs_failure }}" ]; then
-            cat >> teams_card.json << 'EOF'
-            ,
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.regression_nfs_failure }}",
-              "wrap": true,
-              "spacing": "Small",
-              "fontType": "Monospace"
-            }
-        EOF
-          fi
-          
-          if [ -n "${{ steps.parser.outputs.e2e_smb_failure }}" ]; then
-            cat >> teams_card.json << 'EOF'
-            ,
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.e2e_smb_failure }}",
-              "wrap": true,
-              "spacing": "Small",
-              "fontType": "Monospace"
-            }
-        EOF
-          fi
-          
-          if [ -n "${{ steps.parser.outputs.e2e_nfs_failure }}" ]; then
-            cat >> teams_card.json << 'EOF'
-            ,
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.e2e_nfs_failure }}",
-              "wrap": true,
-              "spacing": "Small",
-              "fontType": "Monospace"
-            }
-        EOF
-          fi
-        fi
-        
-        # Close the Teams card
-        cat >> teams_card.json << 'EOF'
-          ],
-          "actions": [
-            {
-              "type": "Action.OpenUrl",
-              "title": "View Pipeline",
-              "url": "${{ steps.parser.outputs.pipeline_url }}"
-            }
-          ]
-        }
-        EOF
-        
-        # Display the card for debugging
-        echo "=== TEAMS CARD PAYLOAD ==="
-        cat teams_card.json | jq . 2>/dev/null || cat teams_card.json
-        echo ""
-        echo "=========================="
-        
-        # Send to Teams (if webhook URL is configured)
-        if [ -n "${{ secrets.POWER_AUTOMATE_URL }}" ]; then
-          echo "Sending Teams notification..."
-          curl -X POST \
-            -H "Content-Type: application/json" \
-            -d @teams_card.json \
-            "${{ secrets.POWER_AUTOMATE_URL }}"
-          
-          if [ $? -eq 0 ]; then
-            echo "Teams notification sent successfully!"
-          else
-            echo "Failed to send Teams notification"
-          fi
-        else
-          echo "POWER_AUTOMATE_URL not configured, skipping Teams notification"
-        fi
-
-    - name: Create Test Summary for GitHub Actions
-      if: always()
-      run: |
-        # Create GitHub Actions Job Summary
-        cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        ## Nightly Test Results Summary
-        
-        ### Test Metrics
-        | Metric | Count |
-        |--------|-------|
-        | Total Tests | ${{ steps.parser.outputs.total_tests }} |
-        | Passed | ${{ steps.parser.outputs.total_passed }} |
-        | Failed | ${{ steps.parser.outputs.total_failed }} |
-        | Skipped | ${{ steps.parser.outputs.total_skipped }} |
-        | Status | ${{ steps.parser.outputs.test_status }} |
-        
-        ### Test Results
-        
-        **Pipeline:** [${{ steps.parser.outputs.pipeline_url }}](${{ steps.parser.outputs.pipeline_url }})
-        
-        **Smoke Tests:**
-        - ${{ steps.parser.outputs.smoke_smb_line }}
-        - ${{ steps.parser.outputs.smoke_nfs_line }}
-        
-        **E2E Tests:**
-        - ${{ steps.parser.outputs.e2e_smb_line }}
-        - ${{ steps.parser.outputs.e2e_nfs_line }}
-        
-        **Regression Tests:**
-        - ${{ steps.parser.outputs.regression_smb_line }}
-        - ${{ steps.parser.outputs.regression_nfs_line }}
-        EOF
-        
-        # Add failure sections conditionally if there are failures
-        if [ "${{ steps.parser.outputs.total_failed }}" != "0" ]; then
-          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        
-        ### Failures
-        EOF
-          
-          # Add individual failure sections
-          if [ -n "${{ steps.parser.outputs.smoke_smb_failure }}" ]; then
-            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        
-        ```
-        ${{ steps.parser.outputs.smoke_smb_failure }}
-        ```
-        EOF
-          fi
-          
-          if [ -n "${{ steps.parser.outputs.smoke_nfs_failure }}" ]; then
-            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        
-        ```
-        ${{ steps.parser.outputs.smoke_nfs_failure }}
-        ```
-        EOF
-          fi
-          
-          if [ -n "${{ steps.parser.outputs.regression_smb_failure }}" ]; then
-            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        
-        ```
-        ${{ steps.parser.outputs.regression_smb_failure }}
-        ```
-        EOF
-          fi
-          
-          if [ -n "${{ steps.parser.outputs.regression_nfs_failure }}" ]; then
-            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        
-        ```
-        ${{ steps.parser.outputs.regression_nfs_failure }}
-        ```
-        EOF
-          fi
-          
-          if [ -n "${{ steps.parser.outputs.e2e_smb_failure }}" ]; then
-            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        
-        ```
-        ${{ steps.parser.outputs.e2e_smb_failure }}
-        ```
-        EOF
-          fi
-          
-          if [ -n "${{ steps.parser.outputs.e2e_nfs_failure }}" ]; then
-            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        
-        ```
-        ${{ steps.parser.outputs.e2e_nfs_failure }}
-        ```
-        EOF
-          fi
-        fi
-        
-        # Add the rest of the summary
-        cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        EOF
-        
-        echo " GitHub Actions Job Summary created!"
-
-        
-  upload-support-bundle:
-    name: Upload Support Bundles
-    runs-on: openlab
-    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
-    if: always()
-    env:
-      JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
-      BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
-      REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Set up Go for API Tests
-        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
-        with:
-          go-version: ${{ env.GO_VERSION }}
-      - name: Setup credentials for support bundle
-        run: |
-          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
-          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
-          
-          echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
-          echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
-          echo "NDM_USERNAME=${{ secrets.NDM_APP_USERNAME }}" >> $GITHUB_ENV
-          echo "PASSWORD=${{ secrets.NDM_APP_PASSWORD }}" >> $GITHUB_ENV
-      - name: Install Go dependencies
-        run: |
-          cd ndm-api-tests
-          go mod tidy
-          echo "Go dependencies installed successfully"
-          cd support-bundle
-          go run support_bundle.go
-          echo "Support bundle uploaded successfully"
-
   cleanup:
     name: Cleanup Infrastructure
     runs-on: openlab
-    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests, upload-support-bundle]
+    needs: [setup-infrastructure, run-nfs-perf, run-smb-perf]
     if: always()
     steps:
       - name: Checkout repository

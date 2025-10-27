@@ -404,7 +404,7 @@ func scpCPUMonitoringScript() error {
 
 	case ProtocolNFS:
 		localScriptPath = "./nfs_cpu_usage.sh"
-		remoteScriptPath = "/home/ubuntu/nfs_cpu_usage.sh"
+		remoteScriptPath = "/tmp/nfs_cpu_usage.sh"
 
 	default:
 		return fmt.Errorf("unsupported protocol type: %s", PROTOCOL_TYPE)
@@ -507,16 +507,9 @@ func startCPUMonitoring(jobID string) error {
 }
 
 func getWorkerSSHConfig() (SSHConfig, error) {
-	port, err := strconv.Atoi(NDM_WORKERS_PORT)
-	if err != nil {
-		return SSHConfig{}, fmt.Errorf("invalid port number in NDM_WORKERS_PORT: %v", err)
-	}
-	return SSHConfig{
-		Username: NDM_WORKERS_USER_NAME,
-		Host:     NDM_WORKERS_HOST,
-		Port:     port,
-		Password: NDM_WORKERS_PASSWORD,
-	}, nil
+	// Use GetAttachedWorkerDetails() which properly handles the first worker
+	// from the comma-separated NDM_WORKERS_HOST list
+	return GetAttachedWorkerDetails(), nil
 }
 
 // getSSHClient returns an SSH client connected to the VM.
