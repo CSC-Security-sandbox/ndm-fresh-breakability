@@ -74,9 +74,13 @@ run_tests() {
     print_log_banner "Starting" | tee -a "$report_file"
 
     # Run Ginkgo test and log output
+    # Capture exit code to allow proper cleanup even on test failure
+    set +e  # Temporarily disable exit on error
     ginkgo run -v --timeout="$timeout" "$test_path" -- \
         --protocol_type="$protocol_type" \
         --environment="$environment" | tee -a "$report_file"
+    local ginkgo_exit_code=$?
+    set -e  # Re-enable exit on error
 
     local end_time
     end_time=$(date +%s)
@@ -87,7 +91,14 @@ run_tests() {
     local formatted_duration="${minutes}m ${seconds}s"
 
     # Print footer
-    print_log_banner "Completed" "$formatted_duration" | tee -a "$report_file"
+    if [ $ginkgo_exit_code -eq 0 ]; then
+        print_log_banner "Completed Successfully" "$formatted_duration" | tee -a "$report_file"
+    else
+        print_log_banner "Completed with Failures (Exit Code: $ginkgo_exit_code)" "$formatted_duration" | tee -a "$report_file"
+    fi
+
+    # Return the Ginkgo exit code
+    return $ginkgo_exit_code
 }
 
 # Test runs

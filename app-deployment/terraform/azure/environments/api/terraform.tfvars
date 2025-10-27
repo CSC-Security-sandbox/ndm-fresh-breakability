@@ -13,6 +13,7 @@ worker_image_definition        = "ndm-worker"
 # VM Configuration
 control_plane_vm_size = "Standard_D8s_v4"
 worker_vm_size        = "Standard_D4s_v4"
+windows_worker_vm_size = "Standard_D16s_v4"
 
 # Deployment Scale
 linux_worker_count     = 2

@@ -110,7 +110,11 @@ jobs:
           echo "TF_VAR_vm_owner=${{ github.actor }}" >> $GITHUB_ENV
           echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV 
+          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
+          
+          # Network Configuration will be passed via -var flags
+          echo "Using VNet: MigrationAsAService-dev-VNET01"
+          echo "Using Subnet: MigrationAsAService-dev-Subnet01"
 
       - name: Initialize Terraform
         run: |
@@ -125,7 +129,11 @@ jobs:
       - name: Create Terraform Plan
         run: |
           cd app-deployment/terraform/azure/environments/api
-          terraform plan -out=tfplan
+          terraform plan -out=tfplan \
+            -var="linux_worker_count=1" \
+            -var="windows_worker_count=1" \
+            -var="worker_vm_size=Standard_D16s_v4" \
+            -var="windows_worker_vm_size=Standard_D16s_v4"
 
       - name: Apply Terraform Plan
         run: |
@@ -256,13 +264,13 @@ jobs:
       NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
 
       PERF_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
-      PERF_SMB_NDM_WORKERS_PORT: ${{ vars.AZURE_SMB_NDM_WORKERS_PORT }}
-      PERF_SMB_SOURCE_VOLUMES: ${{ vars.AZURE_SMB_SOURCE_VOLUMES }}
-      PERF_SMB_DESTINATION_VOLUMES: ${{ vars.AZURE_SMB_DESTINATION_VOLUMES }}
-      PERF_SMB_SOURCE_HOST_IP: ${{ vars.AZURE_SMB_SOURCE_HOST_IP }}
-      PERF_SMB_DESTINATION_HOST_IP: ${{ vars.AZURE_SMB_DESTINATION_HOST_IP }}
-      PERF_SMB_PROTOCOL_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
-      PERF_SMB_PROTOCOL_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
+      PERF_SMB_NDM_WORKERS_PORT: ${{ vars.PERF_SMB_NDM_WORKERS_PORT }}
+      PERF_SMB_SOURCE_VOLUMES: ${{ vars.PERF_SMB_SOURCE_VOLUMES }}
+      PERF_SMB_DESTINATION_VOLUMES: ${{ vars.PERF_SMB_DESTINATION_VOLUMES }}
+      PERF_SMB_SOURCE_HOST_IP: ${{ vars.PERF_SMB_SOURCE_HOST_IP }}
+      PERF_SMB_DESTINATION_HOST_IP: ${{ vars.PERF_SMB_DESTINATION_HOST_IP }}
+      PERF_SMB_PROTOCOL_USERNAME: ${{ secrets.PERF_SMB_PROTOCOL_USERNAME }}
+      PERF_SMB_PROTOCOL_PASSWORD: ${{ secrets.PERF_SMB_PROTOCOL_PASSWORD }}
       PERF_SMB_EXECUTABLE_FILENAME: ${{ vars.SMB_EXECUTABLE_FILENAME }}
     steps:
       - name: Checkout repository
@@ -319,12 +327,12 @@ jobs:
       NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
 
       PERF_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
-      PERF_NFS_NDM_WORKERS_PORT: ${{ vars.AZURE_NFS_NDM_WORKERS_PORT }}
-      PERF_NFS_SOURCE_VOLUMES: ${{ vars.AZURE_NFS_SOURCE_VOLUMES }}
-      PERF_NFS_DESTINATION_VOLUMES: ${{ vars.AZURE_NFS_DESTINATION_VOLUMES }}
-      PERF_NFS_SOURCE_HOST_IP: ${{ vars.AZURE_NFS_SOURCE_HOST_IP }}
-      PERF_NFS_DESTINATION_HOST_IP: ${{ vars.AZURE_NFS_DESTINATION_HOST_IP }}
-      PERF_NFS_PROTOCOL_USERNAME: ${{ vars.AZURE_NFS_PROTOCOL_USERNAME }}
+      PERF_NFS_NDM_WORKERS_PORT: ${{ vars.PERF_NFS_NDM_WORKERS_PORT }}
+      PERF_NFS_SOURCE_VOLUMES: ${{ vars.PERF_NFS_SOURCE_VOLUMES }}
+      PERF_NFS_DESTINATION_VOLUMES: ${{ vars.PERF_NFS_DESTINATION_VOLUMES }}
+      PERF_NFS_SOURCE_HOST_IP: ${{ vars.PERF_NFS_SOURCE_HOST_IP }}
+      PERF_NFS_DESTINATION_HOST_IP: ${{ vars.PERF_NFS_DESTINATION_HOST_IP }}
+      PERF_NFS_PROTOCOL_USERNAME: ${{ vars.PERF_NFS_PROTOCOL_USERNAME }}
     steps:
       - name: Waiting
         run: |
@@ -422,7 +430,11 @@ jobs:
       - name: Destroy Terraform Resources
         run: |
           cd app-deployment/terraform/azure/environments/api
-          terraform destroy -auto-approve
+          terraform destroy -auto-approve \
+            -var="linux_worker_count=1" \
+            -var="windows_worker_count=1" \
+            -var="worker_vm_size=Standard_D16s_v4" \
+            -var="windows_worker_vm_size=Standard_D16s_v4"
 
       - name: Clean Up Temporary Files
         run: |

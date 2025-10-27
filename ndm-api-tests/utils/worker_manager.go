@@ -689,22 +689,12 @@ func GetMaxCPUUsageReport(jobid string) (string, error) {
 	case ProtocolSMB:
 		script = `powershell.exe -Command '{0:N2}' -f (Get-Counter '\Processor(_Total)\% Processor Time' -SampleInterval 1 -MaxSamples 1).CounterSamples[0].CookedValue`
 	case ProtocolNFS:
-		// script = "cat /home/ubuntu/" + jobid + "_max_cpu_usage.txt"
-		script = "cat /home/ubuntu/" + jobid + "_max_cpu_usage.txt"
+		// Read from /tmp/ instead of /home/ubuntu/
+		script = "cat /tmp/" + jobid + "_max_cpu_usage.txt"
 	}
 
-	port, err := strconv.Atoi(NDM_WORKERS_PORT)
-	if err != nil {
-		LogFatalf("Invalid port number in NDM_WORKERS_PORT: %v", err)
-	}
-
-	// SSH config
-	config := SSHConfig{
-		Username: NDM_WORKERS_USER_NAME,
-		Host:     NDM_WORKERS_HOST,
-		Port:     port,
-		Password: NDM_WORKERS_PASSWORD,
-	}
+	// Use GetAttachedWorkerDetails() which properly handles comma-separated worker IPs
+	config := GetAttachedWorkerDetails()
 
 	output, err := sshRunScript(config, script)
 	if err != nil {
@@ -731,18 +721,8 @@ func StopCPUMonitoring() error {
 		script = "sudo pkill -f nfs_cpu_usage.sh"
 	}
 
-	port, err := strconv.Atoi(NDM_WORKERS_PORT)
-	if err != nil {
-		LogFatalf("Invalid port number in NDM_WORKERS_PORT: %v", err)
-	}
-
-	// SSH config
-	config := SSHConfig{
-		Username: NDM_WORKERS_USER_NAME,
-		Host:     NDM_WORKERS_HOST,
-		Port:     port,
-		Password: NDM_WORKERS_PASSWORD,
-	}
+	// Use GetAttachedWorkerDetails() which properly handles comma-separated worker IPs
+	config := GetAttachedWorkerDetails()
 
 	output, err := sshRunScript(config, script)
 	if err != nil {

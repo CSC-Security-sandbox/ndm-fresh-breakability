@@ -478,7 +478,7 @@ func startCPUMonitoring(jobID string) error {
 		//runScript = `powershell.exe -Command 'Start-Process powershell -WindowStyle Hidden -ArgumentList '-File C:\Users\datamigrator\smb_cpu_usage.ps1 OmI23''`
 		return nil
 	case ProtocolNFS:
-		remoteScriptPath = "/home/ubuntu/nfs_cpu_usage.sh"
+		remoteScriptPath = "/tmp/nfs_cpu_usage.sh"
 		runScript = fmt.Sprintf("nohup bash %s %s >/dev/null 2>&1 &", remoteScriptPath, jobID)
 	}
 
