@@ -149,8 +149,8 @@ export class DiscoveryScanService {
             )
             await jobContext.publishToFileStream(itemInfo);
 
-            // If it's a file (not directory), discover and publish NTFS streams
-            if (!isDirectory && !stats.isSymbolicLink()) {
+            // Discover and publish NTFS streams for both files and directories (not symbolic links)
+            if (!stats.isSymbolicLink()) {
                 try {
                     const streams = await this.discoverStreams(fPath);
                     
@@ -158,7 +158,7 @@ export class DiscoveryScanService {
                         // Create ItemInfo for the stream with path format "filePath:streamName"
                         const streamRelativePath = `${relativeSourcePath}:${stream.streamName}`;
                         const streamMeta: ItemMeta = {
-                            accessTime: stats.atime, // Use parent file times
+                            accessTime: stats.atime, // Use parent item times
                             birthTime: stats.birthtime,
                             modifiedTime: stats.mtime,
                             permission: getFilePermissions(stats, false), // Streams are like files
@@ -168,19 +168,19 @@ export class DiscoveryScanService {
                             streamRelativePath,
                             false, // Streams are not directories
                             false, // Streams are not symbolic links
-                            relativeSourcePath.split('/').length - 2, // Same depth as parent file
+                            relativeSourcePath.split('/').length - 2, // Same depth as parent item
                             '', // Streams don't have extensions
                             'FILE', // Treat streams as files
                             streamMeta,
                             streamMeta,
                             stream.size,
-                            stats.ino // Use parent file inode
+                            stats.ino // Use parent item inode
                         )
                         
                         await jobContext.publishToFileStream(streamItemInfo);
                     }
                 } catch (error) {
-                    // Stream discovery failed, continue with main file processing
+                    // Stream discovery failed, continue with main item processing
                     // Don't throw error to avoid disrupting the main discovery workflow
                 }
             }
