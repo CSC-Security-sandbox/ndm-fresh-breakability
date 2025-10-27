@@ -11,6 +11,8 @@ import { ReportType } from "src/constants/enums";
 import { PDFTemplate } from "src/generator/pdf-generator.type";
 import { groupAndOrder } from "src/utils/group-order";
 import { escapeCsvValue } from "src/utils/utils";
+import { ProjectIdCacheService } from '../../utils/project-id-cache.service';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 jest.mock("fs");
 
@@ -84,6 +86,24 @@ describe("DiscoveryReportService", () => {
                         update: jest.fn(),
                     },
                 },
+                {
+                    provide: ProjectIdCacheService,
+                    useValue: {
+                        getProjectIdFromCache: jest.fn().mockResolvedValue('project-123'),
+                    },
+                },
+                {
+                    provide: LoggerFactory,
+                    useValue: {
+                        create: jest.fn().mockReturnValue({
+                            info: jest.fn(),
+                            error: jest.fn(),
+                            warn: jest.fn(),
+                            debug: jest.fn(),
+                            log: jest.fn(),
+                        }),
+                    },
+                },
             ],
         }).compile();
 
@@ -110,6 +130,17 @@ describe("DiscoveryReportService", () => {
                 service.getSection({ jobRunId: "1", section: "doesnotexist", updateSection: false } as any)
             ).rejects.toThrow();
         });
+
+        it("should update section when updateSection is true", async () => {
+            const mockData = [{ id: 1, name: "test" }];
+            (dataSource.query as jest.Mock).mockResolvedValue(mockData);
+            const updateSpy = jest.spyOn(service, 'updateJsonReport').mockResolvedValue("Updated The report Data Successfully");
+            
+            const result = await service.getSection({ jobRunId: "123", section: "section1", updateSection: true } as any);
+            
+            expect(updateSpy).toHaveBeenCalledWith({ jobRunId: "123", data: mockData, updateType: 'data' });
+            expect(result).toEqual([]);
+        });
     });
 
     describe("generatePdfReport", () => {
@@ -134,6 +165,10 @@ describe("DiscoveryReportService", () => {
             });
             expect(groupAndOrder).toHaveBeenCalledWith([{ foo: "bar" }], ReportType.DISCOVERY);
             expect(pdfGenerator.generatePDF).toHaveBeenCalledWith({
+                context: {
+                    jobRunId: "42",
+                    projectId: "project-123"
+                },
                 data: { category: [] },
                 template: PDFTemplate.DISCOVERY_REPORT,
                 pdfOptions: {
@@ -165,6 +200,13 @@ describe("DiscoveryReportService", () => {
 
             const input = { jobRunId: "777" };
             await expect(service.generatePdfReport(input as any)).rejects.toThrow("fail");
+        });
+
+        it("should throw error when no report found in database", async () => {
+            (reportsRepo.findOne as jest.Mock).mockResolvedValue(null);
+            
+            const input = { jobRunId: "noReport" };
+            await expect(service.generatePdfReport(input as any)).rejects.toThrow("No discovery report found for jobRunId: noReport");
         });
     });
 
@@ -267,6 +309,85 @@ describe("DiscoveryReportService", () => {
             expect(result).toEqual({
                 message: "CSV report generated successfully",
                 path: "/tmp/999-discover-report.csv",
+            });
+        });
+
+        it("should handle CSV generation with undefined header values", async () => {
+            const fakeData = [{ header1: undefined, header2: "value2" }];
+            const mockReport = {
+                id: 1,
+                jobRunId: "undefinedTest",
+                reportType: ReportType.DISCOVERY,
+                reportData: JSON.stringify(fakeData)
+            };
+            (reportsRepo.findOne as jest.Mock).mockResolvedValue(mockReport);
+            (groupAndOrder as jest.Mock).mockReturnValue({ category: fakeData });
+            (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
+            (escapeCsvValue as jest.Mock).mockImplementation((v) => v);
+
+            const input = { jobRunId: "undefinedTest" };
+            const result = await service.generateCsvReport(input as any);
+
+            expect(result).toEqual({
+                message: "CSV report generated successfully",
+                path: "/tmp/undefinedTest-discover-report.csv",
+            });
+        });
+
+        it("should throw error when no report found for CSV generation", async () => {
+            (reportsRepo.findOne as jest.Mock).mockResolvedValue(null);
+            
+            const input = { jobRunId: "noCsvReport" };
+            await expect(service.generateCsvReport(input as any)).rejects.toThrow("No discovery report found for jobRunId: noCsvReport");
+        });
+
+        it("should handle CSV generation with sub_category matching logic", async () => {
+            const fakeData = [
+                { sub_category: "testCategory", value: "testValue" },
+                { otherField: "otherValue" }
+            ];
+            const mockReport = {
+                id: 1,
+                jobRunId: "subCategoryTest",
+                reportType: ReportType.DISCOVERY,
+                reportData: JSON.stringify(fakeData)
+            };
+            (reportsRepo.findOne as jest.Mock).mockResolvedValue(mockReport);
+            (groupAndOrder as jest.Mock).mockReturnValue({ category: fakeData });
+            (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
+            (escapeCsvValue as jest.Mock).mockImplementation((v) => v);
+
+            const input = { jobRunId: "subCategoryTest" };
+            const result = await service.generateCsvReport(input as any);
+
+            expect(result).toEqual({
+                message: "CSV report generated successfully",
+                path: "/tmp/subCategoryTest-discover-report.csv",
+            });
+        });
+
+        it("should handle CSV generation when header not found in any entry", async () => {
+            const fakeData = [
+                { otherField: "value1" },
+                { anotherField: "value2" }
+            ];
+            const mockReport = {
+                id: 1,
+                jobRunId: "noHeaderMatch",
+                reportType: ReportType.DISCOVERY,
+                reportData: JSON.stringify(fakeData)
+            };
+            (reportsRepo.findOne as jest.Mock).mockResolvedValue(mockReport);
+            (groupAndOrder as jest.Mock).mockReturnValue({ category: fakeData });
+            (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
+            (escapeCsvValue as jest.Mock).mockImplementation((v) => v);
+
+            const input = { jobRunId: "noHeaderMatch" };
+            const result = await service.generateCsvReport(input as any);
+
+            expect(result).toEqual({
+                message: "CSV report generated successfully",
+                path: "/tmp/noHeaderMatch-discover-report.csv",
             });
         });
     });
@@ -393,12 +514,99 @@ describe("DiscoveryReportService", () => {
                     { provide: ConfigService, useValue: customConfigService },
                     { provide: getRepositoryToken(ReportsEntity), useValue: {} },
                     { provide: getRepositoryToken(JobRunEntity), useValue: {} },
+                    {
+                        provide: ProjectIdCacheService,
+                        useValue: {
+                            getProjectIdFromCache: jest.fn().mockResolvedValue('project-123'),
+                        },
+                    },
+                    {
+                        provide: LoggerFactory,
+                        useValue: {
+                            create: jest.fn().mockReturnValue({
+                                info: jest.fn(),
+                                error: jest.fn(),
+                                warn: jest.fn(),
+                                debug: jest.fn(),
+                                log: jest.fn(),
+                            }),
+                        },
+                    },
                 ],
             }).compile();
 
             const customService = module.get<DiscoveryReportService>(DiscoveryReportService);
             await customService.getSection({ jobRunId: 1, section: "section1" } as any);
             expect(customConfigService.get).toHaveBeenCalledWith("typeorm.schema");
+        });
+
+        it('should use fallback logger when LoggerFactory is not provided', async () => {
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    DiscoveryReportService,
+                    {
+                        provide: DataSource,
+                        useValue: { query: jest.fn() },
+                    },
+                    {
+                        provide: PDFGeneratorService,
+                        useClass: PDFGeneratorService,
+                    },
+                    {
+                        provide: ConfigService,
+                        useValue: {
+                            get: jest.fn((key: string) => {
+                                if (key === "app.baseDir") return "/tmp";
+                                if (key === "typeorm.schema") return "testschema";
+                                return undefined;
+                            }),
+                        },
+                    },
+                    {
+                        provide: getRepositoryToken(ReportsEntity),
+                        useValue: { findOne: jest.fn(), create: jest.fn(), save: jest.fn() },
+                    },
+                    {
+                        provide: getRepositoryToken(JobRunEntity),
+                        useValue: { update: jest.fn() },
+                    },
+                    {
+                        provide: ProjectIdCacheService,
+                        useValue: { getProjectIdFromCache: jest.fn().mockResolvedValue('proj123') },
+                    },
+                    // Note: LoggerFactory is NOT provided, triggering fallback
+                ],
+            }).compile();
+
+            const fallbackService = module.get<DiscoveryReportService>(DiscoveryReportService);
+            expect(fallbackService).toBeDefined();
+        });
+
+        it('should handle updateJsonReport errors without stack trace', async () => {
+            const mockError = new Error('Update failed');
+            delete mockError.stack; // Remove stack property
+            (reportsRepo.findOne as jest.Mock).mockRejectedValue(mockError);
+
+            const input = { jobRunId: "errorTest", updateType: "data", data: [] };
+            await expect(service.updateJsonReport(input as any)).rejects.toThrow(mockError);
+        });
+
+        it('should handle generateCsvReport errors without stack trace', async () => {
+            const mockError = new Error('CSV generation failed');
+            delete mockError.stack; // Remove stack property  
+            (reportsRepo.findOne as jest.Mock).mockRejectedValue(mockError);
+
+            const input = { jobRunId: "csvErrorTest" };
+            await expect(service.generateCsvReport(input as any)).rejects.toThrow(mockError);
+        });
+
+        it('should handle generatePdfReport errors without stack trace', async () => {
+            const mockError = new Error('PDF generation failed');
+            delete mockError.stack; // Remove stack property
+            (reportsRepo.findOne as jest.Mock).mockRejectedValue(mockError);
+
+            const input = { jobRunId: "pdfErrorTest" };
+            await expect(service.generatePdfReport(input as any)).rejects.toThrow(mockError);
         });
     });
 });

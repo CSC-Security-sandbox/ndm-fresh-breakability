@@ -104,6 +104,10 @@ const ExportPathsTable = ({
           notify.success("Successfully refreshed the mount / share paths.");
           setDisableRefresh(false);
           clearInterval(interval.current);
+
+          if (refetch) {
+            refetch();
+          }
         } else if (data?.status === ValidateConnectionStatus.TERMINATED) {
           const error = new Error(
             `Seems like request to refresh paths got terminated, please try again.`
@@ -137,13 +141,6 @@ const ExportPathsTable = ({
   const FETCHING_DETAILS = (
     <Box className="flex gap-1 justify-end">
       <ReFreshExportPathsTime fileServerDetails={fileServerDetails} />
-      <Button
-        variant="text"
-        onClick={handleRefetchExportPaths}
-        disabled={isRefreshDisabled}
-      >
-        Click here to refresh
-      </Button>
     </Box>
   );
   const handleDownloadReport = () => {
@@ -187,8 +184,9 @@ const ExportPathsTable = ({
       tableStateProps={tableStateProps}
       content={contentValue}
       showLabel={false}
-      refetchTableData={refetch}
-      isRefreshing={isFetching}
+      refetchTableData={handleRefetchExportPaths}
+      isRefreshing={isFetching || disableRefresh}  
+      showRefresh={true}
       handleSelection={
         isRowSelectingEnabled ? setSelectedExportPathsIds : undefined
       }

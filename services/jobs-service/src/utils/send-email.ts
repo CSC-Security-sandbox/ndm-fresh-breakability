@@ -22,7 +22,13 @@ export class SendMailService {
   async sendMail(body: SuccessEventEmailDto) {
     try {
       const sendEmailFullUrl = `${this.sendEmailUrl}/api/v1/email/internal`;
-      const response = await axios.post(sendEmailFullUrl, body);
+
+      // Only include headers if they exist
+      const headers: any = {};
+      if (body?.traceId) headers['trackId'] = body.traceId;
+      if (body?.projectId) headers['projectId'] = body.projectId;
+
+      const response = await axios.post(sendEmailFullUrl, body, { headers });
       if (response.status !== 200)
         throw new Error(
           `Failed to post the send mail request, ${response.data}`

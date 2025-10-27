@@ -13,12 +13,21 @@ export const reportApi = createApi({
   endpoints: (builder) => ({
     getJobOverview: builder.query({
       query: ({ jobId }) => `overview?jobConfigId=${jobId}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      }
     }),
     getProjectOverview: builder.query({
       query: ({ projectId }) => `overview?projectId=${projectId}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      }
     }),
     getFileOverview: builder.query({
       query: ({ fileServerId }) => `overview?fileServerId=${fileServerId}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      }
     }),
     downloadReports: builder.mutation({
       query: (body) => ({
@@ -45,10 +54,16 @@ export const reportApi = createApi({
     getJobRunDetails: builder.query({
       query: ({ jobRunId }) => `job-run/${jobRunId}`,
       providesTags: ["JOB_RUN_DETAILS"],
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      }
     }),
     getReportData: builder.query({
       query: (payload) =>
         `job-run/job-report?jobRunId=${payload.jobRunId}&reportType=${payload.reportType}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      }
     }),
 
     downloadErrorLogsCSV: builder.query({
@@ -64,10 +79,16 @@ export const reportApi = createApi({
 
     generateErrorLogs: builder.query({
       query: ({ type, id }) => `job-run/generate-error-csv/${type}/${id}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      }
     }),
 
     isErrorLogsCsvReady: builder.query({
       query: ({ type, id }) => `job-run/is-error-csv-ready/${type}/${id}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || [];
+      }
     }),
   }),
 });

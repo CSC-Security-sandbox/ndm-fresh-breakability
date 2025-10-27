@@ -26,44 +26,23 @@ var _ = Describe("Support Bundle Test e2e", func() {
 		sourceVolumePath2      string
 	)
 
-	BeforeEach(func() {
-		var err error
-		numberOfWorker := 2
-		ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
-		Expect(err).To(BeNil(), "Error during test environment setup")
-		Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
-		workerIds = GetWorkerIds()
-		workerId1 = workerIds[0]
-		workerId2 = workerIds[1]
-		headers = GetHeaders(AuthToken, ContentTypeJSON)
-		sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
-		sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[1], SOURCE_VOLUMES[1])
-		destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
-		destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[1], DESTINATION_VOLUMES[1])
-	})
+	Context("SUPPORT BUNDLE E2E", Ordered, func() {
 
-	AfterEach(func() {
-		By("Cleanup started")
-		err := StopAllWorkersAndWait()
-		Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
-		err = RemoveDeltaFromVolume(sourceVolumePath1)
-		Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
-
-		err = RemoveDeltaFromVolume(sourceVolumePath2)
-		Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath2)
-
-		err = ClearVolume(destinationVolumePath1)
-		Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
-
-		err = ClearVolume(destinationVolumePath2)
-		Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
-
-		err = CleanupTestEnv()
-		Expect(err).To(BeNil(), "Error during test environment cleanup")
-		LogDebug("Cleanup complete.")
-	})
-
-	Context("SUPPORT BUNDLE E2E", func() {
+		BeforeAll(func() {
+			var err error
+			numberOfWorker := 2
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+			Expect(err).To(BeNil(), "Error during test environment setup")
+			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
+			workerIds = GetWorkerIds()
+			workerId1 = workerIds[0]
+			workerId2 = workerIds[1]
+			headers = GetHeaders(AuthToken, ContentTypeJSON)
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
+			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[1], SOURCE_VOLUMES[1])
+			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
+			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[1], DESTINATION_VOLUMES[1])
+		})
 
 		It("TC-001: Create a fileserver with 2 workers and check discovery and migration for support bundle", func() {
 			By("########################## START-TC-SUPPORT-BUNDLE ################################")
@@ -277,7 +256,7 @@ var _ = Describe("Support Bundle Test e2e", func() {
 
 		It("Should generate, download, and verify all control-plane service logs in the support bundle", func() {
 			By("Triggering support bundle generation")
-			Expect(GenerateSupportBundle()).To(Succeed(), "Support bundle generation failed")
+			Expect(GenerateSupportBundle(ProjectId, workerId1, workerId2)).To(Succeed(), "Support bundle generation failed")
 
 			By("Waiting for support bundle generation to complete")
 			Wait(10) // Adjust as needed for your environment
@@ -305,7 +284,7 @@ var _ = Describe("Support Bundle Test e2e", func() {
 			LogDebug(fmt.Sprintf("Log files to check: %s", strings.Join(logFiles, ", ")))
 
 			for _, logFile := range logFiles {
-				logPath := fmt.Sprintf("ndm_logs/%s/control-plane/%s", today, logFile)
+				logPath := fmt.Sprintf("ndm_logs/%s/%s/control-plane/%s", ProjectId, today, logFile)
 				err := CheckLogFileExistsAndNotEmpty(extractDir, logPath)
 				if err != nil && strings.Contains(err.Error(), "log file does not exist") {
 					LogDebug(fmt.Sprintf("Skipping %s: file does not exist", logFile))
@@ -322,7 +301,7 @@ var _ = Describe("Support Bundle Test e2e", func() {
 
 		It("Should generate, download, and verify worker service logs folder is there in support bundle", func() {
 			By("Triggering support bundle generation")
-			Expect(GenerateSupportBundle()).To(Succeed(), "Support bundle generation failed")
+			Expect(GenerateSupportBundle(ProjectId, workerId1, workerId2)).To(Succeed(), "Support bundle generation failed")
 
 			By("Waiting for support bundle generation to complete")
 			Wait(10) // Adjust as needed for your environment
@@ -341,15 +320,36 @@ var _ = Describe("Support Bundle Test e2e", func() {
 
 			today := time.Now().Format("2006-01-02")
 
-			By("Checking that at least 2 worker service log folders exist")
+			By("Checking that at least 1 worker service log folder exists")
 			baseDir := extractDir
-			err := CheckAtLeastTwoWorkerFolders(baseDir, today)
+			err := CheckAtLeastTwoWorkerFolders(baseDir, today, ProjectId)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Worker folder check failed: %v", err))
 
 			By("Cleaning up the extraction directory and zip file")
 			Expect(os.RemoveAll(extractDir)).To(Succeed(), "Error deleting extraction directory")
 			Expect(os.Remove(zipPath)).To(Succeed(), "Error deleting zip file")
 			By("########################## START-TC-SUPPORT-BUNDLE END ################################")
+		})
+
+		AfterAll(func() {
+			By("Cleanup started")
+			err := StopAllWorkersAndWait()
+			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
+			err = RemoveDeltaFromVolume(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
+
+			err = RemoveDeltaFromVolume(sourceVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath2)
+
+			err = ClearVolume(destinationVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
+
+			err = ClearVolume(destinationVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
+
+			err = CleanupTestEnv()
+			Expect(err).To(BeNil(), "Error during test environment cleanup")
+			LogDebug("Cleanup complete.")
 		})
 
 	})

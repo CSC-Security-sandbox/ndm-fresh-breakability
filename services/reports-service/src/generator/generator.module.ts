@@ -1,8 +1,10 @@
 import { Module } from "@nestjs/common";
 import { PDFGeneratorService } from "./pdf-generator.service";
 import { OnModuleInit } from "@nestjs/common";
+import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Module({
+  imports: [LoggerModule.forRoot()],
   providers: [PDFGeneratorService],
   exports: [PDFGeneratorService],
 })

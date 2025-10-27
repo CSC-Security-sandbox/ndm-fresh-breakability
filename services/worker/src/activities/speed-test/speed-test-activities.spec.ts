@@ -17,6 +17,16 @@ jest.mock('ping', () => ({
 }));
 jest.mock('axios');
 
+// Mock WorkersConfig before it's imported
+jest.mock('src/config/app.config', () => ({
+  WorkersConfig: {
+    configService: {
+      get: jest.fn()
+    },
+    get: jest.fn()
+  }
+}));
+
 const mockPingProbe = mocked(ping.promise.probe);
 const mockAxiosPost = mocked(axios.post);
 const mockWorkersConfigGet = jest.spyOn(WorkersConfig, 'get');
@@ -45,6 +55,14 @@ describe('SpeedTestActivities', () => {
 
     loggerFactory = mockLoggerFactory as unknown as LoggerFactory;
 
+    // Mock WorkersConfig.get for projectId
+    mockWorkersConfigGet.mockImplementation((key: string) => {
+      if (key === 'projectId') return 'test-project-id';
+      if (key === 'speedTestFileName') return 'testFile.bin';
+      if (key === 'workerJobServiceUrl') return 'http://mock-worker-job-service-url';
+      return null;
+    });
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SpeedTestActivities,
@@ -65,12 +83,7 @@ describe('SpeedTestActivities', () => {
     redisService = module.get<RedisService>(RedisService);
     mockReadFile = jest.spyOn(speedTestActivities, 'readFile').mockResolvedValue('mockReadResult');
     mockCreateFile = jest.spyOn(speedTestActivities, 'createFile').mockResolvedValue('mockWriteResult');
-    jest.spyOn(WorkersConfig, 'get').mockImplementation((key: string) => {
-      if (key === 'speedTestFileName') {
-        return 'testFile.bin';
-      }
-      return null;
-    });
+    
     jest.clearAllMocks();
   });
 
@@ -325,7 +338,8 @@ describe('SpeedTestActivities', () => {
           writeResult: { writeSpeed: 100, error: '' },
           readResult: { readSpeed: 200, error: '' },
           networkPerformanceResult: { latency: 50, error: '' },
-        }
+        },
+        { headers: { projectId: 'test-project-id' } }
       );
       expect(mockLogger.debug).toHaveBeenCalledWith(traceId, `Post call response: ${JSON.stringify(mockResponseData)}`);
       expect(response).toEqual(mockResponseData);
@@ -351,7 +365,8 @@ describe('SpeedTestActivities', () => {
           traceId,
           workerId,
           fileServerID: fileServerId,
-        }
+        },
+        { headers: { projectId: 'test-project-id' } }
       );
       expect(mockLogger.error).toHaveBeenCalledWith(traceId, `Failed to post results to API: ${mockError.message}`);
       expect(response).toBeUndefined();

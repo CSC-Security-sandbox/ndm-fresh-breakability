@@ -284,6 +284,8 @@ func GenerateNewPassword(length int) (string, error) {
 		password[i], password[j.Int64()] = password[j.Int64()], password[i]
 	}
 
+//     fmt.Println("Password is :", string(password))
+
 	return string(password), nil
 }
 

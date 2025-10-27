@@ -4,6 +4,8 @@ import {
   Logger,
   NotFoundException,
   NotAcceptableException,
+  Optional,
+  Inject
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { JobRunStatus, JobType, ReportType } from "src/constants/enums";
@@ -11,6 +13,7 @@ import { InventoryEntity } from "src/entities/inventory.entity";
 import { JobRunEntity } from "src/entities/jobrun.entity";
 import { ReportsEntity } from "src/entities/reports.entity";
 import { TaskEntity } from "src/entities/task.entity";
+import { ProjectIdCacheService } from "../utils/project-id-cache.service";
 import { Repository } from "typeorm";
 import {
   JobRunDetailsResponseDto,
@@ -23,10 +26,14 @@ import * as crypto from "crypto";
 import { formatBytes, TaskStatus } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as path from "path";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
+import {
+  LoggerService,
+  LoggerFactory,
+} from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class JobRunService {
-  private readonly logger = new Logger(JobRunService.name);
+  private readonly logger: LoggerService | Logger;
   constructor(
     @InjectRepository(JobRunEntity)
     private jobRunRepo: Repository<JobRunEntity>,
@@ -38,8 +45,17 @@ export class JobRunService {
     private reportsRepo: Repository<ReportsEntity>,
     private csvService: CsvService,
     @InjectRepository(JobStatsSummaryMvEntity)
-    private jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>
-  ) {}
+    private jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>,
+    private readonly projectIdCacheService: ProjectIdCacheService,
+    @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory
+  ) {
+    if (loggerFactory) {
+      this.logger = loggerFactory.create(JobRunService.name);
+    } else {
+      // Fallback to basic NestJS Logger for worker threads
+      this.logger = new Logger(JobRunService.name);
+    }
+  }
 
   async jobRunReportByJobRunId(jobRunId: string, reportType: string) {
     const report = await this.reportsRepo.findOne({
@@ -220,8 +236,10 @@ export class JobRunService {
   }
 
   async getCocReportByJobRunId(jobRunId: string) {
+    const projectId = await this.projectIdCacheService.getProjectIdFromCache(jobRunId);
+    this.logger.log(`projectId: ${projectId} Generating COC report for jobRunId: ${jobRunId}`);
+    
     try {
-      console.log(`Generating COC report for jobRunId: ${jobRunId}`);
       const jobRun = await this.jobRunRepo.findOne({
         where: { id: jobRunId },
         relations: ["jobConfig"],
@@ -264,12 +282,10 @@ export class JobRunService {
         reportType: ReportType.COC,
       });
       await this.reportsRepo.save(report);
-      console.log(`COC Report generated for jobRunId: ${jobRunId}`);
+      this.logger.log(`projectId: ${projectId} COC Report generated successfully for jobRunId: ${jobRunId}`);
       return filePath;
     } catch (error) {
-      console.log(
-        `Error while generating COC report for jobRunId: ${jobRunId} - ERROR: ${error}`
-      );
+      this.logger.error(`projectId: ${projectId} Error while generating COC report for jobRunId: ${jobRunId}: ${error.message}`, error?.stack || error);
       throw error;
     }
   }

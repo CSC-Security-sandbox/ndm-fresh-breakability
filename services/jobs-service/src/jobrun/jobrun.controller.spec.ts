@@ -159,7 +159,7 @@ describe('JobRunController', () => {
       const result = { runId: 'run1' };
       jobRunService.addHocRun.mockResolvedValue(result as any);
       expect(await controller.adhocRun(adhoc)).toBe(result);
-      expect(jobRunService.addHocRun).toHaveBeenCalledWith('cfg1');
+      expect(jobRunService.addHocRun).toHaveBeenCalledWith('cfg1', undefined);
     });
   });
 
@@ -170,7 +170,7 @@ describe('JobRunController', () => {
       const result = { updated: true };
       jobRunService.updateJobRunStatus.mockResolvedValue(result as any);
       expect(await controller.updateJobRunStatus(jobRunId, status)).toBe(result);
-      expect(jobRunService.updateJobRunStatus).toHaveBeenCalledWith(jobRunId, status);
+      expect(jobRunService.updateJobRunStatus).toHaveBeenCalledWith(jobRunId, status, undefined);
     });
   });
 

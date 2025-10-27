@@ -681,6 +681,7 @@ export class ConfigurationService {
     createConfig: ConfigDTO,
     userId: string,
     traceId: string,
+    projectId?: string,
   ) {
     this.logger.debug('Config creation started');
 
@@ -785,6 +786,8 @@ export class ConfigurationService {
 
       await this.sendMailService.sendMail({
         successEmailType: SuccessEmailType.CREATE_CONFIGURATION,
+        traceId,
+        projectId,
         createConfig: {
           configName: update.configName,
           fileServers: update.fileServers.map((fs) => ({
@@ -828,6 +831,7 @@ export class ConfigurationService {
     updateConfig: ConfigDTO,
     userId: string,
     traceId: string,
+    projectId?: string
   ) {
     try {
       if (!isUUID(id)) throw new BadRequestException('Invalid configId');
@@ -969,6 +973,8 @@ export class ConfigurationService {
       }
       await this.sendMailService.sendMail({
         successEmailType: SuccessEmailType.UPDATE_CONFIGURATION,
+        traceId,
+        projectId,
         createConfig: {
           configName: update.configName,
           fileServers: update.fileServers.map((fs) => ({

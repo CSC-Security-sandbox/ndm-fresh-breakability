@@ -64,7 +64,7 @@ describe("SendMailService", () => {
 
     const result = await service.sendMail(emailBody);
 
-    expect(mockPost).toHaveBeenCalledWith("http://mock-email-service/api/v1/email/internal", emailBody);
+    expect(mockPost).toHaveBeenCalledWith("http://mock-email-service/api/v1/email/internal", emailBody, { headers: {} });
     expect(result).toEqual(mockResponse.data);
   });
 
@@ -82,7 +82,7 @@ describe("SendMailService", () => {
 
     const result = await service.sendMail(emailBody);
 
-    expect(mockPost).toHaveBeenCalledWith("http://mock-email-service/api/v1/email/internal", emailBody);
+    expect(mockPost).toHaveBeenCalledWith("http://mock-email-service/api/v1/email/internal", emailBody, { headers: {} });
     expect(result).toBeUndefined();
   });
 
@@ -99,7 +99,32 @@ describe("SendMailService", () => {
 
     const result = await service.sendMail(emailBody);
 
-    expect(mockPost).toHaveBeenCalledWith("http://mock-email-service/api/v1/email/internal", emailBody);
+    expect(mockPost).toHaveBeenCalledWith("http://mock-email-service/api/v1/email/internal", emailBody, { headers: {} });
     expect(result).toBeUndefined();
+  });
+
+  it("should include traceId and projectId in headers when provided", async () => {
+    const mockResponse = { status: 200, data: { message: "Email sent successfully" } };
+    mockPost.mockResolvedValue(mockResponse);
+
+    const emailBody = {
+      workerUsage: {
+        id: "test-worker",
+        ip: "192.168.1.1",
+      },
+      successEmailType: SuccessEmailType.WORKER_USES,
+      traceId: "trace-123",
+      projectId: "project-456"
+    };
+
+    const result = await service.sendMail(emailBody);
+
+    expect(mockPost).toHaveBeenCalledWith("http://mock-email-service/api/v1/email/internal", emailBody, { 
+      headers: { 
+        trackId: "trace-123", 
+        projectId: "project-456" 
+      } 
+    });
+    expect(result).toEqual(mockResponse.data);
   });
 });
