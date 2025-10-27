@@ -35,7 +35,7 @@ export function withCreateFileServer(WrappedComponent: ComponentType<any>) {
         notify.success("Configuration Successfully saved...");
         navigate("/file-server");
       } catch (err) {
-        notify.error(`Error creating file server: ${err.message?.trim() || err.message || 'Unknown error'}.`);
+        notify.error(`Error creating file server: ${err.message?.trim() || 'Unknown error'}.`);
 
         console.error({ error: err, level: "Creating Config" });
       }

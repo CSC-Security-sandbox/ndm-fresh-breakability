@@ -704,7 +704,7 @@ export class ConfigurationService {
 
       const ids = configIds.map(config => config.id);
 
-      for(const fs of createConfig.fileServers) {
+      for (const fs of createConfig.fileServers) {
           const fsExist = await this.fileServerEntity.findOne({
               where: {host: fs.host.trim(), protocol: fs.protocol, configId: In(ids)},
           })
