@@ -22,8 +22,9 @@ import (
 
 const (
 	NUMBER_OF_PACKS     = 1
-	MIGRATIONS_PER_PACK = 1
-	DATASET_SIZE        = "188.13 MiB"
+	MIGRATIONS_PER_PACK = 5
+	NFS_DATASET_SIZE        = "28810.77 MiB"
+	SMB_DATASET_SIZE        = "188.13 MiB" // TODO: increase dataset size for SMB
 )
 
 var CSV_REPORT_HEADERS = []string{"Pack", "Worker-Host", "Protocol", "Source-FileServer", "Destination-FileServer",
@@ -308,7 +309,13 @@ func getMigrationDurationAndLineRate(startTime, endTime string, workerDownTimeSe
 	hours := int(diff.Hours())
 	minutes := int(math.Mod(diff.Minutes(), 60))
 
-	size, unit, err := parseSize(DATASET_SIZE)
+	var datasetSize string
+	if string(PROTOCOL_TYPE) == "NFS" {
+		datasetSize = NFS_DATASET_SIZE
+	} else {
+		datasetSize = SMB_DATASET_SIZE
+	}
+	size, unit, err := parseSize(datasetSize)
 	if err != nil {
 		return "", "", err
 	}
@@ -349,11 +356,19 @@ func appendRowsToPerfCSV(packNumb int, jobRunID, migrationDuration, lineRate, ma
 
 		return nil
 	}
+	
+
+	var datasetSize string
+	if string(PROTOCOL_TYPE) == "NFS" {
+		datasetSize = NFS_DATASET_SIZE
+	} else {
+		datasetSize = SMB_DATASET_SIZE
+	}
 
 	newRows := [][]string{
 		{
 			strconv.Itoa(packNumb), GetAttachedWorkerDetails().Host, string(PROTOCOL_TYPE), SOURCE_HOST_IPs[0], DESTINATION_HOST_IPs[0],
-			SOURCE_VOLUMES[0], DESTINATION_VOLUMES[0], jobRunID, DATASET_SIZE,
+			SOURCE_VOLUMES[0], DESTINATION_VOLUMES[0], jobRunID, datasetSize,
 			strconv.Itoa(PERF_PACK_CONFIG[packNumb]["MAX_WRITE_CONCURRENCY"]),
 			strconv.Itoa(PERF_PACK_CONFIG[packNumb]["JOB_TASK_ACTIVITY_CONCURRENCY"]),
 			strconv.Itoa(PERF_PACK_CONFIG[packNumb]["MAX_BUFFER_SIZE"]),

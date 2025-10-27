@@ -104,10 +104,19 @@ run_tests() {
 # Test runs
 
 #Performance Testing
+set +e  # Disable exit on error to capture test exit code
 run_tests "perf-testing" "./tests/performance-testing" "Azure" "NFS"
+test_exit_code=$?
+set -e  # Re-enable exit on error
 
+echo ""
+echo "================================================================================"
+if [ $test_exit_code -eq 0 ]; then
+    echo "✓ Test execution completed successfully"
+else
+    echo "✗ Test execution completed with failures (Exit Code: $test_exit_code)"
+fi
+echo "================================================================================"
 
-
-
-
-read -p "Press Enter to continue..."
+# Exit with the test's exit code
+exit $test_exit_code
