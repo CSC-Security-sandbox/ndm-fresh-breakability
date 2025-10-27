@@ -3,12 +3,21 @@ import { ConfigService } from "@nestjs/config";
 import { ErrorType, FileInfo, ItemInfo, ItemMeta } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
 import { dmError, getFileInfo, getFilePermissions, getFileType, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishItemInfoInput } from "./discovery-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
 import { isPathExists } from "../../utils/utils";
+
+export interface StreamInfo {
+    filePath: string;
+    streamName: string;
+    streamPath: string; // format: "filePath:streamName"
+    size: number;
+    type: string;
+}
 
 
 export class DiscoveryScanService {
@@ -79,6 +88,42 @@ export class DiscoveryScanService {
         return output;
     }
     
+    /**
+     * Discover NTFS alternate data streams using Windows dir command
+     */
+    async discoverStreams(filePath: string): Promise<StreamInfo[]> {
+        const streams: StreamInfo[] = [];
+
+        try {
+            // Use dir /r to show alternate data streams
+            const command = `dir /r "${filePath}"`;
+            const output = execSync(command, { encoding: 'utf8', windowsHide: true });
+            
+            // Parse the output to find streams
+            const lines = output.split('\n');
+            for (const line of lines) {
+                // Look for lines with stream format: filename:streamname:$DATA
+                const streamMatch = line.match(/\s+(\d+)\s+([^:]+):([^:]+):\$DATA/);
+                if (streamMatch) {
+                    const size = parseInt(streamMatch[1]);
+                    const streamName = streamMatch[3];
+                    
+                    streams.push({
+                        filePath,
+                        streamName,
+                        streamPath: `${filePath}:${streamName}`,
+                        size,
+                        type: 'DATA'
+                    });
+                }
+            }
+        } catch (error) {
+            // Failed to discover streams with dir command, continue silently
+        }
+
+        return streams;
+    }
+    
     
     async publishFileInfo({jobContext, stats, fPath, relativeSourcePath}: PublishItemInfoInput): Promise<void> {
             const isDirectory = stats.isDirectory();
@@ -88,6 +133,8 @@ export class DiscoveryScanService {
                 modifiedTime: stats.mtime,
                 permission: getFilePermissions(stats, isDirectory),
             }
+            
+            // Publish the main file/directory
             const itemInfo = new ItemInfo(
                 relativeSourcePath,
                 isDirectory,
@@ -101,6 +148,42 @@ export class DiscoveryScanService {
                 stats.ino
             )
             await jobContext.publishToFileStream(itemInfo);
+
+            // If it's a file (not directory), discover and publish NTFS streams
+            if (!isDirectory && !stats.isSymbolicLink()) {
+                try {
+                    const streams = await this.discoverStreams(fPath);
+                    
+                    for (const stream of streams) {
+                        // Create ItemInfo for the stream with path format "filePath:streamName"
+                        const streamRelativePath = `${relativeSourcePath}:${stream.streamName}`;
+                        const streamMeta: ItemMeta = {
+                            accessTime: stats.atime, // Use parent file times
+                            birthTime: stats.birthtime,
+                            modifiedTime: stats.mtime,
+                            permission: getFilePermissions(stats, false), // Streams are like files
+                        }
+                        
+                        const streamItemInfo = new ItemInfo(
+                            streamRelativePath,
+                            false, // Streams are not directories
+                            false, // Streams are not symbolic links
+                            relativeSourcePath.split('/').length - 2, // Same depth as parent file
+                            '', // Streams don't have extensions
+                            'FILE', // Treat streams as files
+                            streamMeta,
+                            streamMeta,
+                            stream.size,
+                            stats.ino // Use parent file inode
+                        )
+                        
+                        await jobContext.publishToFileStream(streamItemInfo);
+                    }
+                } catch (error) {
+                    // Stream discovery failed, continue with main file processing
+                    // Don't throw error to avoid disrupting the main discovery workflow
+                }
+            }
         }
 
 }

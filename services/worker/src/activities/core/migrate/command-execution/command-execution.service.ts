@@ -5,6 +5,7 @@ import { ConfigService } from "@nestjs/config";
 import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 import * as fs from "fs";
 import * as path from 'path';
+import { execSync } from 'child_process';
 import { dmError, getFilePermissions, getFileType } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { WorkerThreadService } from "src/thread/worker.thread.service";
