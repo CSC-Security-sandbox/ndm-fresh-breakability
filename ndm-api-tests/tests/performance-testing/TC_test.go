@@ -22,7 +22,7 @@ import (
 
 const (
 	NUMBER_OF_PACKS     = 1
-	MIGRATIONS_PER_PACK = 5
+	MIGRATIONS_PER_PACK = 1
 	NFS_DATASET_SIZE        = "28810.77 MiB"
 	SMB_DATASET_SIZE        = "188.13 MiB" // TODO: increase dataset size for SMB
 )
