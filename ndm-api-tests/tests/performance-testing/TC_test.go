@@ -22,10 +22,12 @@ import (
 
 const (
 	NUMBER_OF_PACKS     = 1
-	MIGRATIONS_PER_PACK = 1
-	NFS_DATASET_SIZE        = "28810.77 MiB"
-	SMB_DATASET_SIZE        = "188.13 MiB" // TODO: increase dataset size for SMB
+	MIGRATIONS_PER_PACK = 3
+	NFS_DATASET_SIZE    = "28810.77 MiB"
+	SMB_DATASET_SIZE    = "28038.02 MiB"
 )
+
+var csvTime = time.Now().Unix()
 
 var CSV_REPORT_HEADERS = []string{"Pack", "Worker-Host", "Protocol", "Source-FileServer", "Destination-FileServer",
 	"Source-Path", "Destination-Path", "Job-Run-ID", "Dataset-Size",
@@ -202,7 +204,7 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 			By("Cleanup started")
 
 			// Upload CSV report to Artifactory before cleanup
-			csvFilePath := fmt.Sprintf("../../%s_perf_report_%d.csv", PROTOCOL_TYPE, time.Now().Unix())
+			csvFilePath := fmt.Sprintf("../../%s_perf_report_%d.csv", PROTOCOL_TYPE, csvTime)
 			if _, err := os.Stat(csvFilePath); err == nil {
 				err := UploadCSVToArtifactory(csvFilePath)
 				if err != nil {
@@ -237,11 +239,6 @@ func createFileServer(name, host, volume, projectId, workerId string, headers ma
 	username := PROTOCOL_USERNAME
 	password := PROTOCOL_PASSWORD
 
-	if name == "destination-file-server" && PROTOCOL_TYPE == ProtocolSMB {
-		fmt.Println("destination chla : ::")
-		username = "rootdomain\\adadmin"
-		password = "Password@123"
-	}
 
 	params := CreateServereParams{
 		ConfigName:       name,
@@ -326,7 +323,7 @@ func getMigrationDurationAndLineRate(startTime, endTime string, workerDownTimeSe
 }
 
 func appendRowsToPerfCSV(packNumb int, jobRunID, migrationDuration, lineRate, maxCPUUsage string, workerDownTimeMin float64, emptyRowsNumb ...int) error {
-	var perf_report_file = fmt.Sprintf("../../%s_perf_report_%d.csv", PROTOCOL_TYPE, time.Now().Unix())
+	var perf_report_file = fmt.Sprintf("../../%s_perf_report_%d.csv", PROTOCOL_TYPE, csvTime)
 
 	_, err := os.Stat(perf_report_file)
 	fileExists := err == nil
@@ -356,7 +353,6 @@ func appendRowsToPerfCSV(packNumb int, jobRunID, migrationDuration, lineRate, ma
 
 		return nil
 	}
-	
 
 	var datasetSize string
 	if string(PROTOCOL_TYPE) == "NFS" {

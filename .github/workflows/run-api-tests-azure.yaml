@@ -1,4 +1,4 @@
-name: Run E2E API Automation Tests for NDM on Azure
+name: Run Performance Automation Tests for NDM on Azure
 
 env:
   GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
@@ -132,8 +132,8 @@ jobs:
           terraform plan -out=tfplan \
             -var="linux_worker_count=1" \
             -var="windows_worker_count=1" \
-            -var="worker_vm_size=Standard_D16s_v4" \
-            -var="windows_worker_vm_size=Standard_D16s_v4"
+            -var="windows_worker_vm_size=Standard_D16s_v4" \
+            -var="control_plane_vm_size=Standard_D16s_v4"
 
       - name: Apply Terraform Plan
         run: |
@@ -433,8 +433,8 @@ jobs:
           terraform destroy -auto-approve \
             -var="linux_worker_count=1" \
             -var="windows_worker_count=1" \
-            -var="worker_vm_size=Standard_D16s_v4" \
-            -var="windows_worker_vm_size=Standard_D16s_v4"
+            -var="windows_worker_vm_size=Standard_D16s_v4" \
+            -var="control_plane_vm_size=Standard_D16s_v4"
 
       - name: Clean Up Temporary Files
         run: |
