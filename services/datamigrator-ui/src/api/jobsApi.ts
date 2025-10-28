@@ -260,6 +260,18 @@ export const jobsApi = createApi({
         method: "GET",
       }),
     }),
+
+    deleteJobConfig: builder.mutation({
+      query: (id: string) => ({
+        url: `jobs/${id}`,
+        method: "DELETE",
+      }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response;
+      },
+      transformErrorResponse: structuredErrorResponse,
+      invalidatesTags: ["ALL_JOB_CONFIGS", "JOB_CONFIG_DETAILS"],
+    }),
   }),
 });
 
@@ -287,4 +299,5 @@ export const {
   useLazyGetJobRunErrorsOverviewQuery,
   useLazyGetNoticeBoardDetailsQuery,
   useGetFileServerWorkersQuery,
+  useDeleteJobConfigMutation,
 } = jobsApi;
