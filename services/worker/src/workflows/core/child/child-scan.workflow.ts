@@ -125,7 +125,7 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
       if(batchExecResults.error){
         errors.push(batchExecResults.error);
       }
-      iterations+= 100;
+      iterations+= 100+ MAX_CONCURRENT_BATCHES;
 
       if(iterations > ITERATIONS_LIMIT ){
         console.warn(`ChildScanWorkflow ${jobRunId} has exceeded 1000 iterations, stopping to prevent infinite loop.`);
