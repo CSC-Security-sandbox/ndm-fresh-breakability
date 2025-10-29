@@ -2,6 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import * as fs from "fs";
+import * as path from "path";
 import { dmError } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { RedisService } from "src/redis/redis.service";
@@ -94,6 +95,20 @@ export class StampMetaService {
             try {
                 await fs.promises.chmod(targetPath, command.metadata.mode);
             } catch (error) {
+                // Check if file doesn't exist due to 8.3 collision
+                if (error.code === 'ENOENT' && process.platform === 'win32') {
+                    const fileName = path.basename(targetPath);
+                    if (fileName.includes('~')) {
+                        // This is likely a file that was blocked due to 8.3 collision
+                        const collisionError: any = new Error(`8.3 short filename collision detected: Cannot update permissions for '${fileName}' - file was blocked due to collision with auto-generated short name`);
+                        collisionError.code = 'E8DOT3_COLLISION';
+                        this.logger.warn(`Skipping permission update for collision file: ${fileName}`);
+                        const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, collisionError, { name: command.fPath, path: targetPath });
+                        await jobContext.publishToErrorStream(dmErr);
+                        output.targetErrors.push(collisionError.code);
+                        return output;
+                    }
+                }
                 this.logger.error(`Stamping Permission from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
                 await jobContext.publishToErrorStream(dmErr);
@@ -145,6 +160,20 @@ export class StampMetaService {
                     await fs.promises.utimes(targetPath, new Date(command.metadata.atime), new Date(command.metadata.mtime));
                 }
             } catch (error) {
+                // Check if file doesn't exist due to 8.3 collision
+                if (error.code === 'ENOENT' && process.platform === 'win32') {
+                    const fileName = path.basename(targetPath);
+                    if (fileName.includes('~')) {
+                        // This is likely a file that was blocked due to 8.3 collision
+                        const collisionError: any = new Error(`8.3 short filename collision detected: Cannot update access time for '${fileName}' - file was blocked due to collision with auto-generated short name`);
+                        collisionError.code = 'E8DOT3_COLLISION';
+                        this.logger.warn(`Skipping access time update for collision file: ${fileName}`);
+                        const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_TIME, errorType, command.id, collisionError, { name: command.fPath, path: targetPath });
+                        await jobContext.publishToErrorStream(dmErr);
+                        output.targetErrors.push(collisionError.code);
+                        return output;
+                    }
+                }
                 this.logger.error(`Stamping Access and Modified Time  to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_TIME, errorType, command.id, error, { name: command.fPath, path: targetPath });
                 await jobContext.publishToErrorStream(dmErr);

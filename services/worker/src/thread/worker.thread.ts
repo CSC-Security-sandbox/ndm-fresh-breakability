@@ -32,6 +32,62 @@ function getOptimalBufferSize(fileSize: number, maxBufferSize: number): number {
   return maxBufferSize;
 }
 
+async function checkFor8dot3Collision(target: string, workerNumber?: string): Promise<void> {
+  const fileName = path.basename(target);
+  
+  if (!fileName.includes('~')) {
+    return; // No collision risk for files without ~ in name
+  }
+  
+  // Smart 8.3 collision detection: distinguish between legitimate existing files and collisions
+  try {
+    // First, check if file already exists
+    const fileExists = await fs.promises.access(target, fs.constants.F_OK).then(() => true).catch(() => false);
+    
+    if (fileExists) {
+      // File exists - test if it's accessible (legitimate) or collision
+      try {
+        const testHandle = await fs.promises.open(target, 'r+');
+        await testHandle.close();
+        // Successfully opened for read/write = legitimate existing file
+        console.log(`Worker Thread - ${workerNumber} - File '${fileName}' exists from previous migration, will overwrite`);
+      } catch (accessError: any) {
+        // Cannot access for read/write - likely 8.3 collision or permission issue
+        if (accessError.code === 'ENOENT' || accessError.code === 'EPERM' || accessError.code === 'EACCES') {
+          const collisionError: any = new Error(`8.3 short filename collision detected: File '${fileName}' cannot be accessed for writing (${accessError.code}) - conflicts with auto-generated short name of another file`);
+          collisionError.code = 'E8DOT3_COLLISION';
+          throw collisionError;
+        }
+        // For other errors, re-throw the original error
+        throw accessError;
+      }
+    } else {
+      // File doesn't exist - try to create it to detect collision
+      try {
+        await fs.promises.writeFile(target, '', { flag: 'wx' });
+        // Successfully created test file - remove it immediately to avoid corrupting actual copy
+        await fs.promises.unlink(target);
+        console.log(`Worker Thread - ${workerNumber} - No collision detected for '${fileName}', ready for copy`);
+      } catch (createError: any) {
+        if (createError?.code === 'EEXIST' || createError?.code === 'EPERM' || createError?.code === 'EACCES') {
+          // This is a true collision - file exists or permission denied due to collision
+          const collisionError: any = new Error(`8.3 short filename collision detected: File '${fileName}' conflicts with auto-generated short name (${createError.code})`);
+          collisionError.code = 'E8DOT3_COLLISION';
+          throw collisionError;
+        }
+        throw createError;
+      }
+    }
+  } catch (error: any) {
+    // Re-throw 8.3 collision errors
+    if (error.message.includes('8.3 short filename collision')) {
+      throw error;
+    }
+    // For other errors, continue with normal flow
+    console.log(`Worker Thread - ${workerNumber} - Error during 8.3 collision check: ${error.message}, continuing...`);
+  }
+}
+
 export async function smartCopy(source:string, target:string, filesize:number, maxBufferSize :number) {
   const destDir = path.dirname(target);  
   await fs.promises.mkdir(destDir, { recursive: true });
@@ -47,57 +103,8 @@ export async function smartCopy(source:string, target:string, filesize:number, m
     }
 
     // Special handling for potential 8.3 collisions on Windows
-    if (process.platform === 'win32') {
-      const fileName = path.basename(target);
-      if (fileName.includes('~')) {
-        // Smart 8.3 collision detection: distinguish between legitimate existing files and collisions
-        try {
-          // First, check if file already exists
-          const fileExists = await fs.promises.access(target, fs.constants.F_OK).then(() => true).catch(() => false);
-          
-          if (fileExists) {
-            // File exists - test if it's accessible (legitimate) or collision
-            try {
-              const testHandle = await fs.promises.open(target, 'r+');
-              await testHandle.close();
-              // Successfully opened for read/write = legitimate existing file
-              console.log(`Worker Thread - ${workerData?.threadNumber} - File '${fileName}' exists from previous migration, will overwrite`);
-            } catch (accessError: any) {
-              // Cannot access for read/write - likely 8.3 collision or permission issue
-              if (accessError.code === 'ENOENT' || accessError.code === 'EPERM' || accessError.code === 'EACCES') {
-                const collisionError: any = new Error(`8.3 short filename collision detected: File '${fileName}' cannot be accessed for writing (${accessError.code}) - conflicts with auto-generated short name of another file`);
-                collisionError.code = 'E8DOT3_COLLISION';
-                throw collisionError;
-              }
-              // For other errors, re-throw the original error
-              throw accessError;
-            }
-          } else {
-            // File doesn't exist - try to create it to detect collision
-            try {
-              await fs.promises.writeFile(target, '', { flag: 'wx' });
-              // Successfully created test file - remove it immediately to avoid corrupting actual copy
-              await fs.promises.unlink(target);
-              console.log(`Worker Thread - ${workerData?.threadNumber} - No collision detected for '${fileName}', ready for copy`);
-            } catch (createError: any) {
-              if (createError?.code === 'EEXIST' || createError?.code === 'EPERM' || createError?.code === 'EACCES') {
-                // This is a true collision - file exists or permission denied due to collision
-                const collisionError: any = new Error(`8.3 short filename collision detected: File '${fileName}' conflicts with auto-generated short name (${createError.code})`);
-                collisionError.code = 'E8DOT3_COLLISION';
-                throw collisionError;
-              }
-              throw createError;
-            }
-          }
-        } catch (error: any) {
-          // Re-throw 8.3 collision errors
-          if (error.message.includes('8.3 short filename collision')) {
-            throw error;
-          }
-          // For other errors, continue with normal flow
-          console.log(`Worker Thread - ${workerData?.threadNumber} - Error during 8.3 collision check: ${error.message}, continuing...`);
-        }
-      }
+    if (process.platform === 'win32' && path.basename(target).includes('~')) {
+      await checkFor8dot3Collision(target, workerData?.threadNumber);
     }
 
     // Create streams for content copying
