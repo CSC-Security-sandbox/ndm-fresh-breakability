@@ -19,6 +19,7 @@ import {
   SIZE_UNITS,
   TemplateType,
   JobConfigurationEnum,
+  USER_VISIBLE_ERROR_TYPES,
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
 import { Options } from "src/constants/types";
@@ -1831,6 +1832,7 @@ export class JobConfigService {
       .createQueryBuilder("oe")
       .innerJoin("oe.operation", "o")
       .where("o.jobRunId = :jobRunId", { jobRunId })
+      .andWhere("oe.errorType IN (:...errorTypes)", { errorTypes: USER_VISIBLE_ERROR_TYPES })
       .select(["oe.errorType AS errorType", "COUNT(*) AS count"])
       .groupBy("oe.errorType");
     let errorTypeCounts;

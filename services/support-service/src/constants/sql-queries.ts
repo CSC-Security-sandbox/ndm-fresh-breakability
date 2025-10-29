@@ -1,3 +1,9 @@
+/**
+ * Error types that should be visible to users
+ * RECOVERABLE_ERROR is excluded as it's handled internally through retry mechanism
+ */
+export const USER_VISIBLE_ERROR_TYPES = ['FATAL_ERROR', 'TRANSIENT_ERROR'] as const;
+
 export const SQL_QUERIES = {
   /**
    * Query to fetch worker IDs for multiple specific workers
@@ -78,6 +84,7 @@ export const GET_OPERATION_ERRORS_BY_DATE_RANGE = `
   WHERE p.id = ANY($1)
     AND DATE(oe.created_at) >= $2
     AND DATE(oe.created_at) <= $3
+    AND oe.error_type = ANY($4)
   ORDER BY p.id, DATE(oe.created_at), oe.created_at
 `;
 

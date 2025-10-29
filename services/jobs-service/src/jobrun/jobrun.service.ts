@@ -16,6 +16,7 @@ import {
   PausedReason,
   WorkFlows,
   WorkerStatus,
+  USER_VISIBLE_ERROR_TYPES,
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
@@ -780,6 +781,7 @@ export class JobRunService {
       .createQueryBuilder("oe")
       .innerJoin("oe.operation", "o")
       .where("o.jobRunId = :jobRunId", { jobRunId })
+      .andWhere("oe.errorType IN (:...errorTypes)", { errorTypes: USER_VISIBLE_ERROR_TYPES })
       .select(["oe.errorType AS errorType", "COUNT(*) AS count"])
       .groupBy("oe.errorType");
     let errorTypeCounts;
