@@ -71,7 +71,6 @@ const actionSignal = wf.defineSignal<[JobRunStatus]>('scanActionSignal');
 
 const MAX_CONCURRENT_BATCHES = 20;
 const ITERATIONS_LIMIT = 1000;
-const CMD_LENGTH_VALIDATION_ITERATIONS = 10;
 
 export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatchIds = [], batchSize = 100, dirCount = 0, fileCount = 0, isMigration = false, actionState = JobRunStatus.Running, isInitialScan = true, workerConcurrency = 20}: ChildScanWorkflowInput): Promise<ChildScanWorkflowOutput> => {
 
@@ -98,15 +97,13 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
   wf.setHandler(actionSignal, async (action:JobRunStatus)=>{    
     actionState = action;
     console.log(jobRunId, `action signal called with value: ${action}`);
-    
-    
   });
 
   let isStopRequested = false;
-  let errors: string[] = [];
-  let iterations = 0; 
+  const errors: string[] = [];
+  let iterations = 0;
 
-  while(dirBatchIds.length > 0) {   
+  while(dirBatchIds.length > 0) {
 
     if(actionState === JobRunStatus.Stopped) {
       isStopRequested = true
@@ -114,26 +111,29 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
       break;
     }
 
-    // wait until the state is paused. 
+    // wait until the state is paused.
     await updateJobStatusIfNotRunning(actionState, jobRunId);
     await wf.condition(() => actionState !== JobRunStatus.Paused);
 
-    iterations+= dirBatchIds.length + CMD_LENGTH_VALIDATION_ITERATIONS;
+    let discoverdBatchIds = [];
+    for(let i = 0 ; i< dirBatchIds.length;  i+= MAX_CONCURRENT_BATCHES){
+      await validateCommandStreamLength(jobRunId);
+      const batchExecResults: ExecuteBatchScansOutput = await executeBatchScan({ batches: dirBatchIds.slice(i, i + MAX_CONCURRENT_BATCHES), batchSize, isMigration, jobRunId});
+      scanWorkflowOutput.fileCount += batchExecResults.fileCount;
+      scanWorkflowOutput.dirCount += batchExecResults.dirCount;
+      discoverdBatchIds = discoverdBatchIds.concat(batchExecResults.batchDirs);
+      if(batchExecResults.error){
+        errors.push(batchExecResults.error);
+      }
+      iterations+= 100;
 
-    const batchExecResults: ExecuteBatchScansOutput = await executeBatchScan({ batches: dirBatchIds, batchSize, isMigration, jobRunId});
-    scanWorkflowOutput.fileCount += batchExecResults.fileCount;
-    scanWorkflowOutput.dirCount += batchExecResults.dirCount;
-    dirBatchIds = batchExecResults.batchDirs;
-
-    if(batchExecResults.error){
-      errors.push(batchExecResults.error);
-    }
-
-    if(iterations > ITERATIONS_LIMIT ){
-      console.warn(`ChildScanWorkflow ${jobRunId} has exceeded 1000 iterations, stopping to prevent infinite loop.`);                      
-      await wf.continueAsNew({ 
-        jobRunId, dirsToScan, dirBatchIds, batchSize, dirCount:scanWorkflowOutput.dirCount, fileCount:scanWorkflowOutput.fileCount, isMigration, actionState, isInitialScan: false, workerConcurrency 
-      });      
+      if(iterations > ITERATIONS_LIMIT ){
+        console.warn(`ChildScanWorkflow ${jobRunId} has exceeded 1000 iterations, stopping to prevent infinite loop.`);
+        const consolidatedBatchIds = discoverdBatchIds.concat(discoverdBatchIds);
+        await wf.continueAsNew({
+          jobRunId, dirsToScan, consolidatedBatchIds, batchSize, dirCount:scanWorkflowOutput.dirCount, fileCount:scanWorkflowOutput.fileCount, isMigration, actionState, isInitialScan: false, workerConcurrency 
+        });
+      }
     }
   }
   if(errors.length > 0) {
@@ -143,7 +143,6 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
   }else{
      scanWorkflowOutput.status = isStopRequested ? JobRunStatus.Stopped : JobRunStatus.Completed;    
   }
-  
   return  scanWorkflowOutput;
 }
 
@@ -174,15 +173,8 @@ export const executeBatchScan = async ({ batchSize, batches, isMigration, jobRun
     batchDirs: [],
     error: undefined,
   };
-
-
-  for (let i = 0; i < batches.length; i += MAX_CONCURRENT_BATCHES) {
-    if(isMigration){
-      await validateCommandStreamLength(jobRunId);
-    }
-  const batchSlice = batches.slice(i, i + MAX_CONCURRENT_BATCHES);
   const batchResults = await Promise.all(
-    batchSlice.map(async (batchId) => {
+    batches.map(async (batchId) => {
         try {
           return await scanDirectories({batchSize, isMigration, jobRunId, batchId: batchId});
         } catch (error) {
@@ -191,13 +183,11 @@ export const executeBatchScan = async ({ batchSize, batches, isMigration, jobRun
         }
       })
     );
-
     for(const result of batchResults){
       output.fileCount += result.fileCount;
-      output.dirCount += result.dirCount; 
+      output.dirCount += result.dirCount;
       output.batchDirs.push(...result.batchDirs);
-    }  
-  }
-
+    }
   return output;
+
 }
