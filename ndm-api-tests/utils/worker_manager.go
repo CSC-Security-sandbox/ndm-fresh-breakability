@@ -578,7 +578,8 @@ func GetRestartWorkerScript() string {
 }
 
 func getRestartWorkerScriptForSMB() string {
-	return `cmd /C net stop "Datamigrator Worker" && net start "Datamigrator Worker"`
+	// Use error suppression (2>nul) for stop command in case service is already stopped
+	return `cmd /C "net stop "Datamigrator Worker" 2>nul & net start "Datamigrator Worker""`
 }
 
 func getRestartWorkerScriptForNFS() string {
@@ -687,7 +688,8 @@ func GetMaxCPUUsageReport(jobid string) (string, error) {
 
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
-		script = `powershell.exe -Command '{0:N2}' -f (Get-Counter '\Processor(_Total)\% Processor Time' -SampleInterval 1 -MaxSamples 1).CounterSamples[0].CookedValue`
+		// Read the max CPU usage from the file created by the background monitoring script
+		script = fmt.Sprintf(`powershell.exe -Command "Get-Content -Path 'C:\Temp\%s_max_cpu_usage.txt' -ErrorAction Stop"`, jobid)
 	case ProtocolNFS:
 		// Read from /tmp/ instead of /home/ubuntu/
 		script = "cat /tmp/" + jobid + "_max_cpu_usage.txt"
@@ -701,12 +703,13 @@ func GetMaxCPUUsageReport(jobid string) (string, error) {
 		return "", fmt.Errorf("GetMaxCPUUsageReport failed: %w\noutput: %s", err, output)
 	}
 
-	if PROTOCOL_TYPE == ProtocolSMB {
-		return string(output), nil
+	// For both SMB and NFS, parse the output format: timestamp | jobid | cpu_usage%
+	cpuUsageInfo := strings.Split(strings.TrimSpace(string(output)), "|")
+	if len(cpuUsageInfo) < 3 {
+		return "", fmt.Errorf("unexpected CPU usage format. Expected 'timestamp|jobid|cpu_usage', got: %s", string(output))
 	}
 
-	cpuUsageInfo := strings.Split(string(output), "|") // Expecting format: timestamp | jobid | cpu_usage% ref *_cpu_usage.sh
-	return cpuUsageInfo[2], nil
+	return strings.TrimSpace(cpuUsageInfo[2]), nil
 }
 
 func StopCPUMonitoring() error {

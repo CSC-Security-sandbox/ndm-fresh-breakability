@@ -171,10 +171,8 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("migration job did not complete, pack=%d, iteration=%d", packNumb, run))
 					isMigrationCompleted <- struct{}{}
 					// capture final CPU usage spikes
-					if PROTOCOL_TYPE == ProtocolNFS {
-						maxCPUUsageInPercentage, err = GetMaxCPUUsageReport(jobRunID)
-						Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to get max CPU usage report, pack=%d, iteration=%d, err = %v", packNumb, run, err))
-					}
+					maxCPUUsageInPercentage, err = GetMaxCPUUsageReport(jobRunID)
+					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to get max CPU usage report, pack=%d, iteration=%d, err = %v", packNumb, run, err))
 
 					err = ClearVolume(destinationVolumePath1)
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error clearing destination volume, pack=%d, iteration=%d, err = %v", packNumb, run, err))
@@ -238,7 +236,6 @@ func createFileServer(name, host, volume, projectId, workerId string, headers ma
 
 	username := PROTOCOL_USERNAME
 	password := PROTOCOL_PASSWORD
-
 
 	params := CreateServereParams{
 		ConfigName:       name,
@@ -411,7 +408,7 @@ func scpCPUMonitoringScript() error {
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
 		localScriptPath = "./smb_cpu_usage.ps1"
-		remoteScriptPath = `c:\Users\datamigrator\smb_cpu_usage.ps1`
+		remoteScriptPath = `c:\Temp\smb_cpu_usage.ps1`
 
 	case ProtocolNFS:
 		localScriptPath = "./nfs_cpu_usage.sh"
@@ -483,11 +480,12 @@ func scpCPUMonitoringScript() error {
 func startCPUMonitoring(jobID string) error {
 	var remoteScriptPath, runScript string
 
+	LogDebug(fmt.Sprintf("[CPU Monitor] Starting CPU monitoring for jobID: %s, protocol: %s", jobID, PROTOCOL_TYPE))
+
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
-		// TODO - fix the quoting issue
-		//runScript = `powershell.exe -Command 'Start-Process powershell -WindowStyle Hidden -ArgumentList '-File C:\Users\datamigrator\smb_cpu_usage.ps1 OmI23''`
-		return nil
+		remoteScriptPath = `C:\Temp\smb_cpu_usage.ps1`
+		runScript = fmt.Sprintf(`cmd.exe /c "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File %s %s > C:\Temp\%s_startup.log 2>&1 &"`, remoteScriptPath, jobID, jobID)
 	case ProtocolNFS:
 		remoteScriptPath = "/tmp/nfs_cpu_usage.sh"
 		runScript = fmt.Sprintf("nohup bash %s %s >/dev/null 2>&1 &", remoteScriptPath, jobID)
@@ -510,8 +508,18 @@ func startCPUMonitoring(jobID string) error {
 	}
 	defer session.Close()
 
-	if err := session.Run(runScript); err != nil {
-		return fmt.Errorf("jobID %s: failed to run script: %v", jobID, err)
+
+	// For SMB, use session.Start() instead of session.Run() to not wait for completion
+	if PROTOCOL_TYPE == ProtocolSMB {
+		if err := session.Start(runScript); err != nil {
+			return fmt.Errorf("jobID %s: failed to start script: %v", jobID, err)
+		}
+		// Don't wait for the command to complete - it's running in background
+	} else {
+		// For NFS, use session.Run() since nohup handles backgrounding
+		if err := session.Run(runScript); err != nil {
+			return fmt.Errorf("jobID %s: failed to run script: %v", jobID, err)
+		}
 	}
 
 	return nil
