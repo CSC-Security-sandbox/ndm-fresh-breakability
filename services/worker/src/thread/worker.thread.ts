@@ -50,14 +50,43 @@ export async function smartCopy(source:string, target:string, filesize:number, m
     if (process.platform === 'win32') {
       const fileName = path.basename(target);
       if (fileName.includes('~')) {
-        // For 8.3 pattern files, create file first and let fs module throw natural errors
+        // Smart 8.3 collision detection: distinguish between legitimate existing files and collisions
         try {
-          await fs.promises.writeFile(target, '', { flag: 'wx' }); // 'wx' fails if file exists
-        } catch (error: any) {
-          if (error?.code === 'EEXIST') {
-            throw new Error(`8.3 short filename collision detected: File '${fileName}' already exists - conflicts with auto-generated short name of another file`);
+          // First, check if file already exists
+          const fileExists = await fs.promises.access(target, fs.constants.F_OK).then(() => true).catch(() => false);
+          
+          if (fileExists) {
+            // File exists - verify it's visible in directory listing (not a collision)
+            const targetDir = path.dirname(target);
+            const dirContents = await fs.promises.readdir(targetDir);
+            const fileVisibleInDir = dirContents.includes(fileName);
+            
+            if (!fileVisibleInDir) {
+              // File exists but not visible = 8.3 collision from previous run that failed
+              throw new Error(`8.3 short filename collision detected: File '${fileName}' exists but is not visible in directory listing - conflicts with auto-generated short name of another file`);
+            }
+            // File exists and is visible = legitimate existing file from previous migration
+            console.log(`Worker Thread - ${workerData?.threadNumber} - File '${fileName}' exists from previous migration, will overwrite`);
+          } else {
+            // File doesn't exist - try to create it to detect collision
+            try {
+              await fs.promises.writeFile(target, '', { flag: 'wx' });
+              console.log(`Worker Thread - ${workerData?.threadNumber} - Created new 8.3 pattern file '${fileName}'`);
+            } catch (createError: any) {
+              if (createError?.code === 'EEXIST') {
+                // This is a true collision - file was created by another process between our checks
+                throw new Error(`8.3 short filename collision detected: File '${fileName}' was created by another process - conflicts with auto-generated short name of another file`);
+              }
+              throw createError;
+            }
           }
-          throw error; // Propagate other errors (EACCES, EBUSY, etc.)
+        } catch (error: any) {
+          // Re-throw 8.3 collision errors
+          if (error.message.includes('8.3 short filename collision')) {
+            throw error;
+          }
+          // For other errors, continue with normal flow
+          console.log(`Worker Thread - ${workerData?.threadNumber} - Error during 8.3 collision check: ${error.message}, continuing...`);
         }
       }
     }
