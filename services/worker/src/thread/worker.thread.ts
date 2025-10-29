@@ -56,28 +56,33 @@ export async function smartCopy(source:string, target:string, filesize:number, m
           const fileExists = await fs.promises.access(target, fs.constants.F_OK).then(() => true).catch(() => false);
           
           if (fileExists) {
-            // File exists - verify it's visible in directory listing (not a collision)
-            const targetDir = path.dirname(target);
-            const dirContents = await fs.promises.readdir(targetDir);
-            const fileVisibleInDir = dirContents.includes(fileName);
-            
-            if (!fileVisibleInDir) {
-              // File exists but not visible = 8.3 collision from previous run that failed
-              const collisionError: any = new Error(`8.3 short filename collision detected: File '${fileName}' exists but is not visible in directory listing - conflicts with auto-generated short name of another file`);
-              collisionError.code = 'E8DOT3_COLLISION';
-              throw collisionError;
+            // File exists - test if it's accessible (legitimate) or collision
+            try {
+              const testHandle = await fs.promises.open(target, 'r+');
+              await testHandle.close();
+              // Successfully opened for read/write = legitimate existing file
+              console.log(`Worker Thread - ${workerData?.threadNumber} - File '${fileName}' exists from previous migration, will overwrite`);
+            } catch (accessError: any) {
+              // Cannot access for read/write - likely 8.3 collision or permission issue
+              if (accessError.code === 'ENOENT' || accessError.code === 'EPERM' || accessError.code === 'EACCES') {
+                const collisionError: any = new Error(`8.3 short filename collision detected: File '${fileName}' cannot be accessed for writing (${accessError.code}) - conflicts with auto-generated short name of another file`);
+                collisionError.code = 'E8DOT3_COLLISION';
+                throw collisionError;
+              }
+              // For other errors, re-throw the original error
+              throw accessError;
             }
-            // File exists and is visible = legitimate existing file from previous migration
-            console.log(`Worker Thread - ${workerData?.threadNumber} - File '${fileName}' exists from previous migration, will overwrite`);
           } else {
             // File doesn't exist - try to create it to detect collision
             try {
               await fs.promises.writeFile(target, '', { flag: 'wx' });
-              console.log(`Worker Thread - ${workerData?.threadNumber} - Created new 8.3 pattern file '${fileName}'`);
+              // Successfully created test file - remove it immediately to avoid corrupting actual copy
+              await fs.promises.unlink(target);
+              console.log(`Worker Thread - ${workerData?.threadNumber} - No collision detected for '${fileName}', ready for copy`);
             } catch (createError: any) {
-              if (createError?.code === 'EEXIST') {
-                // This is a true collision - file was created by another process between our checks
-                const collisionError: any = new Error(`8.3 short filename collision detected: File '${fileName}' was assigned to another file - conflicts with auto-generated short name by the file system`);
+              if (createError?.code === 'EEXIST' || createError?.code === 'EPERM' || createError?.code === 'EACCES') {
+                // This is a true collision - file exists or permission denied due to collision
+                const collisionError: any = new Error(`8.3 short filename collision detected: File '${fileName}' conflicts with auto-generated short name (${createError.code})`);
                 collisionError.code = 'E8DOT3_COLLISION';
                 throw collisionError;
               }
