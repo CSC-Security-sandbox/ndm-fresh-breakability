@@ -222,7 +222,7 @@ jobs:
         echo "Azure Deployment completed successfully!"
 
     - name: Upload Azure Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@11bd71901bbe5b1630ceea73d27597364c9af683
       if: always()
       with:
         name: azure-deployment-logs
