@@ -236,6 +236,9 @@ export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string 
       case 'EIO':
           // Filename too long
           return context === 'TASK' ? 'TASK_SERVER_DISCONNECTED' : 'OP_SERVER_DISCONNECTED';
+      case 'E8DOT3_COLLISION':
+        // 8.3 short filename collision
+        return context === 'TASK' ? 'TASK_8DOT3_COLLISION' : 'OP_8DOT3_COLLISION';
       default:
         // Unknown error
         return context === 'TASK' ? 'TASK_UNKNOWN_ERROR' : 'OP_UNKNOWN_ERROR';
@@ -258,8 +261,14 @@ export const dmError = (type: 'TASK' | 'OPERATION', origin :Origin, operationNam
     
     // Also check error.code for standard error codes
     if(error.code) {
-      if(origin === Origin.SOURCE && isSourceFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
-      if(origin === Origin.DESTINATION && isFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
+      // Check for transient errors first (non-retryable but don't cancel activity)
+      if(isTransientError(error.code)) {
+        errorType = ErrorType.TRANSIENT_ERROR;
+      } else {
+        // Check for fatal errors (cancel activity)
+        if(origin === Origin.SOURCE && isSourceFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
+        if(origin === Origin.DESTINATION && isFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
+      }
     }
   }
 
@@ -287,11 +296,15 @@ export const basePrefix = (jobRunId: string, pathId: string): string => {
 const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED'])
 const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED']);
 
+// Transient errors that should not be retried but don't cancel the entire activity
+const TRANSIENT_CODE = new Set<string>(['E8DOT3_COLLISION']);
+
 // File server down errno numbers (negative values as reported by Node.js)
 const FileServerDownErrorNo = new Set<number>([-116, -96]); // ESTALE, EADDRNOTAVAIL
 
 export const isSourceFatalError = (code :string) => code && SOURCE_FATAL_CODE.has(code)
 export const isFatalError = (code :string) => code && FATAL_CODE.has(code)
+export const isTransientError = (code :string) => code && TRANSIENT_CODE.has(code)
 export const hasFileServerDownErrorNo = (errno: number) => errno && FileServerDownErrorNo.has(errno)
 
 export const getServerInfoFromPath = (sourcePath: string, jobContext: JobContext): { protocol: Protocol[], server: string } => {

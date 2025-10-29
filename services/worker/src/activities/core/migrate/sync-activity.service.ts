@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CommandStatus, ErrorType, JobManagerContext, TaskInfo, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { ApplicationFailure, Context } from '@temporalio/activity';
-import { basePrefix, isFatalError, isSourceFatalError } from "src/activities/utils/utils";
+import { basePrefix, isFatalError, isSourceFatalError, isTransientError } from "src/activities/utils/utils";
 import { FatalError, RetryExceededError } from "src/errors/errors.types";
 import { RedisService } from "src/redis/redis.service";
 import { CommonTaskService } from "../common/common-task.service";
@@ -122,18 +122,28 @@ export class SyncService {
         const hasFatalSourceError = errors.source.some(isSourceFatalError);
         const hasFatalTargetError = errors.target.some(isFatalError);
         const isFatalErrored = hasFatalSourceError || hasFatalTargetError;
-    
+        
+        // Check for transient errors (non-retryable but don't cancel activity)
+        const hasTransientSourceError = errors.source.some(isTransientError);
+        const hasTransientTargetError = errors.target.some(isTransientError);
+        const hasTransientError = hasTransientSourceError || hasTransientTargetError;
+
         task.status = TaskStatus.ERRORED;
         await jobContext.publishToTaskStream(task);
-    
+
         if (isFatalErrored) {
           await jobContext.deleteTask(taskHashId);
             throw new FatalError(
             `Sync Task Update Failed: ${[...new Set(errors.source)].length} source errors: ${[...new Set(errors.source)].join(", ")} and ${[...new Set(errors.target)].length} target errors: ${[...new Set(errors.target)].join(", ")} with retry count ${task.retryCount} `
             );
         }
-    
-        if (task.retryCount >= this.maxRetryCount) {
+        
+        if (hasTransientError) {
+          await jobContext.deleteTask(taskHashId);
+          throw new RetryExceededError(
+            `Task ${task.id} contains transient errors that cannot be retried: ${[...new Set([...errors.source, ...errors.target])].join(", ")}`
+          );
+        }        if (task.retryCount >= this.maxRetryCount) {
           await jobContext.deleteTask(taskHashId);
           throw new RetryExceededError(
             `Task ${task.id} has exceeded maximum retry count of ${this.maxRetryCount}`

@@ -63,7 +63,9 @@ export async function smartCopy(source:string, target:string, filesize:number, m
             
             if (!fileVisibleInDir) {
               // File exists but not visible = 8.3 collision from previous run that failed
-              throw new Error(`8.3 short filename collision detected: File '${fileName}' exists but is not visible in directory listing - conflicts with auto-generated short name of another file`);
+              const collisionError: any = new Error(`8.3 short filename collision detected: File '${fileName}' exists but is not visible in directory listing - conflicts with auto-generated short name of another file`);
+              collisionError.code = 'E8DOT3_COLLISION';
+              throw collisionError;
             }
             // File exists and is visible = legitimate existing file from previous migration
             console.log(`Worker Thread - ${workerData?.threadNumber} - File '${fileName}' exists from previous migration, will overwrite`);
@@ -75,7 +77,9 @@ export async function smartCopy(source:string, target:string, filesize:number, m
             } catch (createError: any) {
               if (createError?.code === 'EEXIST') {
                 // This is a true collision - file was created by another process between our checks
-                throw new Error(`8.3 short filename collision detected: File '${fileName}' was created by another process - conflicts with auto-generated short name of another file`);
+                const collisionError: any = new Error(`8.3 short filename collision detected: File '${fileName}' was assigned to another file - conflicts with auto-generated short name by the file system`);
+                collisionError.code = 'E8DOT3_COLLISION';
+                throw collisionError;
               }
               throw createError;
             }
