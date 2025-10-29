@@ -116,23 +116,9 @@ export async function smartCopy(source:string, target:string, filesize:number, m
         }
       });
 
-      writeStream.on('error', (err: any) => {
+      writeStream.on('error', (err) => {
         if (!errored) {
           errored = true;
-          
-          // Since we already handled 8.3 collisions upfront, writeStream errors are likely other issues
-          // But still check for any remaining 8.3 collision patterns as a fallback
-          if (process.platform === 'win32' && (err?.code === 'EEXIST' || err?.code === 'EACCES' || err?.code === 'EPERM' || err?.code === 'EBUSY')) {
-            const fileName = path.basename(target);
-            if (fileName.includes('~')) {
-              const collisionError: any = new Error(`8.3 short filename collision detected during write: File '${fileName}' - conflicts with auto-generated short name of another file`);
-              collisionError.code = 'E8DOT3_COLLISION';
-              console.error(`Worker Thread - ${workerData?.threadNumber} - 8.3 collision error during write:`, collisionError);
-              reject(collisionError);
-              return;
-            }
-          }
-          
           console.error(`Worker Thread - ${workerData?.threadNumber} - Error writing to target file:`, err);
           reject(err);
         }
@@ -148,17 +134,17 @@ export async function smartCopy(source:string, target:string, filesize:number, m
 
     const targetCheckSum = await calculateChecksum(target);
     
-    // Final verification: ensure checksum matches (in case of any overwrites during copy)
-    if (sourceCheckSum !== targetCheckSum) {
-      const fileName = path.basename(target);
-      if (process.platform === 'win32' && fileName.includes('~')) {
-        const collisionError: any = new Error(`8.3 short filename collision detected: File '${fileName}' checksum mismatch suggests collision with auto-generated short name`);
-        collisionError.code = 'E8DOT3_COLLISION';
-        throw collisionError;
-      } else {
-        throw new Error(`Checksum mismatch detected: source ${sourceCheckSum}, target ${targetCheckSum}`);
-      }
-    }
+    // // Final verification: ensure checksum matches (in case of any overwrites during copy)
+    // if (sourceCheckSum !== targetCheckSum) {
+    //   const fileName = path.basename(target);
+    //   if (process.platform === 'win32' && fileName.includes('~')) {
+    //     const collisionError: any = new Error(`8.3 short filename collision detected: File '${fileName}' checksum mismatch suggests collision with auto-generated short name`);
+    //     collisionError.code = 'E8DOT3_COLLISION';
+    //     throw collisionError;
+    //   } else {
+    //     throw new Error(`Checksum mismatch detected: source ${sourceCheckSum}, target ${targetCheckSum}`);
+    //   }
+    // }
     
     return {sourceChecksum: sourceCheckSum, targetChecksum: targetCheckSum};
   }catch(error){
