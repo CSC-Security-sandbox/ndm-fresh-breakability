@@ -145,6 +145,30 @@ export class StampMetaService {
                     await fs.promises.utimes(targetPath, new Date(command.metadata.atime), new Date(command.metadata.mtime));
                 }
             } catch (error) {
+                // added log for debugging issue 
+                const fs = require('fs');
+                const os = require('os');
+                const { execSync } = require('child_process');
+                let statInfo = null;
+                let acl = '';
+                try { statInfo = fs.statSync(targetPath); } catch (e) { statInfo = { error: e.message }; }
+                try { acl = execSync(`icacls "${targetPath}"`).toString(); } catch (e) { acl = `Failed: ${e.message}`; }
+                const workerId = process.env.WORKER_ID;
+                const user = os.userInfo().username;
+
+                this.logger.log(
+                    `------------------Stamping Access and Modified Time to ${targetPath}, Error: ${error.message}`,
+                    {
+                        errorStack: error.stack,
+                        workerId,
+                        user,
+                        statInfo,
+                        acl,
+                        cwd: process.cwd(),
+                        env: { WORKER_ID: workerId }, 
+                    }
+                );
+                // Log end .
                 this.logger.error(`Stamping Access and Modified Time  to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_TIME, errorType, command.id, error, { name: command.fPath, path: targetPath });
                 await jobContext.publishToErrorStream(dmErr);
