@@ -46,8 +46,26 @@ export async function smartCopy(source:string, target:string, filesize:number, m
       throw new Error(`Source file ${source} does not exist or is not readable`);
     }
 
+    // Special handling for potential 8.3 collisions on Windows
+    if (process.platform === 'win32') {
+      const fileName = path.basename(target);
+      if (fileName.includes('~')) {
+        // For 8.3 pattern files, create file first and let fs module throw natural errors
+        try {
+          await fs.promises.writeFile(target, '', { flag: 'wx' }); // 'wx' fails if file exists
+        } catch (error: any) {
+          if (error?.code === 'EEXIST') {
+            throw new Error(`8.3 short filename collision detected: File '${fileName}' already exists - conflicts with auto-generated short name of another file`);
+          }
+          throw error; // Propagate other errors (EACCES, EBUSY, etc.)
+        }
+      }
+    }
+
+    // Create streams for content copying
     readStream = fs.createReadStream(source, { highWaterMark: bufferSize });
     writeStream = fs.createWriteStream(target, { flags: 'w', highWaterMark: bufferSize });
+    
     let hash = crypto.createHash('sha256');
 
     const sourceCheckSum  = await new Promise((resolve, reject) => {
@@ -65,9 +83,23 @@ export async function smartCopy(source:string, target:string, filesize:number, m
         }
       });
 
-      writeStream.on('error', (err) => {
+      writeStream.on('error', (err: any) => {
         if (!errored) {
           errored = true;
+          
+          // Since we already handled 8.3 collisions upfront, writeStream errors are likely other issues
+          // But still check for any remaining 8.3 collision patterns as a fallback
+          if (process.platform === 'win32' && (err?.code === 'EEXIST' || err?.code === 'EACCES' || err?.code === 'EPERM' || err?.code === 'EBUSY')) {
+            const fileName = path.basename(target);
+            if (fileName.includes('~')) {
+              const collisionError: any = new Error(`8.3 short filename collision detected during write: File '${fileName}' - conflicts with auto-generated short name of another file`);
+              collisionError.code = 'E8DOT3_COLLISION';
+              console.error(`Worker Thread - ${workerData?.threadNumber} - 8.3 collision error during write:`, collisionError);
+              reject(collisionError);
+              return;
+            }
+          }
+          
           console.error(`Worker Thread - ${workerData?.threadNumber} - Error writing to target file:`, err);
           reject(err);
         }
@@ -82,6 +114,19 @@ export async function smartCopy(source:string, target:string, filesize:number, m
     });
 
     const targetCheckSum = await calculateChecksum(target);
+    
+    // Final verification: ensure checksum matches (in case of any overwrites during copy)
+    if (sourceCheckSum !== targetCheckSum) {
+      const fileName = path.basename(target);
+      if (process.platform === 'win32' && fileName.includes('~')) {
+        const collisionError: any = new Error(`8.3 short filename collision detected: File '${fileName}' checksum mismatch suggests collision with auto-generated short name`);
+        collisionError.code = 'E8DOT3_COLLISION';
+        throw collisionError;
+      } else {
+        throw new Error(`Checksum mismatch detected: source ${sourceCheckSum}, target ${targetCheckSum}`);
+      }
+    }
+    
     return {sourceChecksum: sourceCheckSum, targetChecksum: targetCheckSum};
   }catch(error){
     console.error(`Worker Thread - ${workerData?.threadNumber} - Error during smartCopy from ${source} to ${target}:`, error);
