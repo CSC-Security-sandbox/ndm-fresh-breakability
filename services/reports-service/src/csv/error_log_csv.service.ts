@@ -23,6 +23,12 @@ import {
   LoggerFactory,
 } from '@netapp-cloud-datamigrate/logger-lib';
 
+/**
+ * Error types that should be visible to users
+ * RECOVERABLE_ERROR is excluded as it's handled internally through retry mechanism
+ */
+const USER_VISIBLE_ERROR_TYPES = ['FATAL_ERROR', 'TRANSIENT_ERROR'] as const;
+
 @Injectable()
 export class ErrorLogService {
   private readonly logger : LoggerService;
@@ -86,6 +92,7 @@ export class ErrorLogService {
     LEFT JOIN datamigrator.jobrun jr ON jr.id = o.job_run_id
     LEFT JOIN datamigrator.jobconfig jc ON jc.id = jr.job_config_id
     WHERE ${whereClause}
+      AND oe.error_type IN (${USER_VISIBLE_ERROR_TYPES.map(t => `'${t}'`).join(', ')})
     GROUP BY oe.file_path, o.job_run_id
     ORDER BY MIN(oe.created_at)
     LIMIT $${params.length - 1}
@@ -384,7 +391,8 @@ export class ErrorLogService {
         `SELECT COUNT(*) as count
          FROM datamigrator.operation_errors oe
          LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
-         WHERE o.job_run_id = $1`,
+         WHERE o.job_run_id = $1
+           AND oe.error_type IN (${USER_VISIBLE_ERROR_TYPES.map(t => `'${t}'`).join(', ')})`,
         [jobRunId]
       );
       const workerSetupCount = await this.getWorkerSetupCount(jobRunId);
@@ -407,7 +415,8 @@ export class ErrorLogService {
         `SELECT COUNT(*) as count
          FROM datamigrator.operation_errors oe
          LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
-         WHERE o.job_run_id IN (${placeholders})`,
+         WHERE o.job_run_id IN (${placeholders})
+           AND oe.error_type IN (${USER_VISIBLE_ERROR_TYPES.map(t => `'${t}'`).join(', ')})`,
         jobRunIds
       );
       const workerSetupCount = await this.getWorkerSetupCount(jobRunIds);

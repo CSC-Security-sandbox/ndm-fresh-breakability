@@ -1997,6 +1997,7 @@ describe("JobConfigService", () => {
       jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue({
         innerJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([]),
@@ -3932,6 +3933,7 @@ describe("JobConfigService", () => {
       jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue({
         innerJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue(mockError),
@@ -3955,6 +3957,7 @@ describe("JobConfigService", () => {
       jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue({
         innerJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockRejectedValue(new Error("Database error")),
@@ -3980,6 +3983,7 @@ describe("JobConfigService", () => {
     jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue({
       innerJoin: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
       groupBy: jest.fn().mockReturnThis(),
       getRawMany: jest.fn().mockResolvedValue(mockError),
@@ -4013,6 +4017,7 @@ describe("JobConfigService", () => {
     jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue({
       innerJoin: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
       groupBy: jest.fn().mockReturnThis(),
       getRawMany: jest.fn().mockResolvedValue(mockError),
