@@ -80,7 +80,7 @@ jobs:
     name: Setup Infrastructure and Services
     runs-on: openlab
     outputs:
-      # control_plane_vm_ip_address: ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}
+      control_plane_vm_ip_address: ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}
       linux_worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.linux_worker_vm_ip_addresses }}
       # windows_worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}
     steps:
@@ -117,17 +117,18 @@ jobs:
           echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
           echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
         
-          # CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
+          # Use default control plane image if Terraform requires it
+          CONTROL_PLANE_IMAGE="latest"
           # Force worker image to specific version - only create NFS worker
           WORKER_IMAGE="2025.29.10160822"
 
-          # Azure Terraform Variables - only for NFS worker
-          # echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
+          # Azure Terraform Variables - include control plane for Terraform compatibility
+          echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
           echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
           echo "TF_VAR_vm_owner=${{ github.actor }}" >> $GITHUB_ENV
           echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
-          # echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV 
+          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV 
 
       - name: Initialize Terraform
         run: |
@@ -163,13 +164,13 @@ jobs:
         id: deployment-info
         run: |
           cd app-deployment/terraform/azure/environments/api
-          # CONTROL_PLANE_IP=$(terraform output -raw control_plane_private_ip)
+          CONTROL_PLANE_IP=$(terraform output -raw control_plane_private_ip)
           LINUX_WORKER_IPS=$(terraform output -json linux_worker_private_ips | jq -c .)
           # WINDOWS_WORKER_IPS=$(terraform output -json windows_worker_private_ips | jq -c .)
           # echo "windows_worker_vm_ip_addresses=$WINDOWS_WORKER_IPS" >> $GITHUB_OUTPUT
-          # echo "control_plane_vm_ip_address=$CONTROL_PLANE_IP" >> $GITHUB_OUTPUT
+          echo "control_plane_vm_ip_address=$CONTROL_PLANE_IP" >> $GITHUB_OUTPUT
           echo "linux_worker_vm_ip_addresses=$LINUX_WORKER_IPS" >> $GITHUB_OUTPUT
-          # echo "Control Plane IP: $CONTROL_PLANE_IP"
+          echo "Control Plane IP: $CONTROL_PLANE_IP"
           echo "Linux Worker IPs (NFS): $LINUX_WORKER_IPS"
           # echo "Windows Worker IPs (SMB): $WINDOWS_WORKER_IPS"
 
