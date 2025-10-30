@@ -270,6 +270,9 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
       () => this.pushMetrics(),
       this.pushIntervalMs,
     );
+
+    this.setWorkerInfo();
+
     this.collectPingMetricsInterval = setInterval(
       () => this.collectPingMetrics(),
       30000, // 30 seconds
