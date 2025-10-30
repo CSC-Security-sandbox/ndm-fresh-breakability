@@ -3,6 +3,11 @@ import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-stat
 import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { createClient, RedisClientType } from 'redis';
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { fetchAndUpdateRedisCredentials } from 'src/utils/redis';
+import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
+import { AuthService } from 'src/auth/auth.service';
+
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
@@ -11,12 +16,32 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   constructor (
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    @Inject(ConfigService) private readonly configService: ConfigService,
+    @Inject(HttpService) private readonly httpService: HttpService,
+    @Inject(AuthService) private readonly authService: AuthService,
   ) {
     this.logger = loggerFactory.create(RedisService.name);
   }
+  
 
   async onModuleInit(): Promise<void> {
-    await this.createClient();
+    try {
+      this.logger.log('Initializing Redis service...');
+      
+      await fetchAndUpdateRedisCredentials(
+        this.httpService,
+        this.authService,
+        this.configService,
+        this.logger,
+      );
+      
+      await this.createClient();
+      
+      this.logger.log('Redis service initialized successfully');
+    } catch (error) {
+      this.logger.error(`Failed to initialize Redis service: ${error.message}`);
+      throw error;
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

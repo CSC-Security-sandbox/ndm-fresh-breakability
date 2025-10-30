@@ -23,11 +23,6 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { RedisService } from '../redis/redis.service';
 
-interface RedisCredentials {
-  host: string;
-  username: string;
-  password: string;
-}
 
 @Injectable()
 export class WorkManagerService {
@@ -44,7 +39,6 @@ export class WorkManagerService {
   private platform: Platform;
   private readonly logger: LoggerService;
   private isRebootCall: boolean = true;
-  private redisCredentials: RedisCredentials = null;
 
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
@@ -67,18 +61,6 @@ export class WorkManagerService {
   async onApplicationBootstrap() {
     this.logger.log('[onApplicationBootstrap] - Starting Worker Service');
     try {
-
-      await this.fetchRedisCredentials();
-      
-      this.updateRedisConfig();
-
-       // Force Redis to reconnect with new credentials
-      this.logger.log('Forcing Redis reconnection with new credentials...');
-      this.logger.log(`AFTER: Should connect to Redis at redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT || 6379}`);
-      await this.redisService.onModuleDestroy(); // Disconnect old connection
-      await this.redisService.createClient();      // Reconnect with new credentials
-    
-
       this.connection = await NativeConnection.connect(
         this.configService.get('temporal'),
       );
@@ -93,73 +75,6 @@ export class WorkManagerService {
       throw err;
     }
   }
-
-  private async fetchRedisCredentials(): Promise<void> {
-    this.logger.log('=== Starting Redis credentials fetch ===');
-    this.logger.log(`Worker ID: ${this.workerId}`);
-    
-    try {
-      // Get access token
-      const accessToken = await this.authService.getAccessToken();
-      if (!accessToken) {
-        throw new Error('Failed to get access token');
-      }
-
-      // Fetch Redis credentials from API
-      const response = await firstValueFrom(
-        this.httpService.get(
-          `${this.workerConfigUrl}/api/v1/secrets/redis`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
-            timeout: 10000,
-          },
-        ),
-      );
-
-      if (response.status !== 200) {
-        throw new Error(`Failed to fetch Redis credentials. Status: ${response.status}`);
-      }
-
-      this.logger.debug(`Redis response: ${JSON.stringify(response.data)}`);
-
-      // Parse Redis credentials
-      const data = response.data?.data?.items;
-      if (!data?.host || !data?.username || !data?.password) {
-        throw new Error('Incomplete Redis credentials received from API');
-      }
-
-      this.redisCredentials = {
-        host: data.host,
-        username: data.username,
-        password: data.password,
-      };
-
-      this.logger.log('Redis credentials fetched successfully:');
-      this.logger.log(`  Host: ${this.redisCredentials.host}`);
-      this.logger.log(`  Username: ${this.redisCredentials.username}`);
-      this.logger.log(`  Password length: ${this.redisCredentials.password.length}`);
-
-    } catch (error) {
-      this.logger.error(`Failed to fetch Redis credentials: ${error.message}`);
-      throw new Error(`Redis credentials are required for worker operation: ${error.message}`);
-    }
-  }
-
-  private updateRedisConfig(): void {
-    if (!this.redisCredentials) {
-      throw new Error('Redis credentials not available');
-    }
-
-    // Update environment variables or config service with Redis credentials
-    process.env.REDIS_USERNAME = this.redisCredentials.username;
-    process.env.REDIS_PASSWORD = this.redisCredentials.password;
-
-    this.logger.log('Redis configuration updated successfully');
-  }
-
 
   @Cron(CronExpression.EVERY_10_SECONDS)
   async handleCron() {
