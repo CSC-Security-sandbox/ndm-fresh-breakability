@@ -18,11 +18,12 @@ export type ErrorItem = {
 export type MigrationConflictDetail = {
   status: string;
   jobId: string;
-  jobRunIds: string[];
   sourcePathId: string;
   targetPathId: string;
   sourceServerId: string;
   targetServerId: string;
+  conflictType: 'circular' | 'destination';
+  jobType: string;
 };
 
 export type MigrationConflictError = {

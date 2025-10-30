@@ -58,6 +58,18 @@ const MigrationConflictErrors = ({
                         </span>
                       </Box>
                       <Box className="flex items-center gap-2">
+                        <span className="font-medium">Job Type:</span>
+                        <span className="px-2 py-1 rounded text-xs uppercase font-semibold bg-blue-100 text-blue-800">
+                          {conflict.jobType === 'CUT_OVER' ? 'CUTOVER' : conflict.jobType}
+                        </span>
+                      </Box>
+                      <Box className="flex items-center gap-2">
+                        <span className="font-medium">Conflict Type:</span>
+                        <span className="px-2 py-1 rounded text-xs uppercase font-semibold bg-red-100 text-red-800">
+                          {conflict.conflictType === 'circular' ? 'CIRCULAR TRANSFER' : 'DESTINATION'}
+                        </span>
+                      </Box>
+                      <Box className="flex items-center gap-2">
                         <span className="font-medium">Status:</span>
                         <span className={`px-2 py-1 rounded text-xs uppercase font-semibold ${
                           conflict.status === JOB_CONFIG_STATUS_ENUM.INACTIVE 
@@ -100,10 +112,18 @@ const MigrationConflictErrors = ({
             <Box className="mt-4 p-3 bg-blue-50 rounded-lg border-l-4 border-l-blue-400">
               <Box className="text-sm text-blue-800">
                 <Box className="font-medium mb-1">Resolution:</Box>
-                Please resolve these conflicts by either waiting for the
-                conflicting jobs to complete, stopping the conflicting jobs, 
-                deleting the conflicting job configurations, or selecting 
-                different source/destination paths that don't conflict.
+                {(() => {
+                  const hasCircular = conflictData.some(conflict => conflict.conflictType === 'circular');
+                  const hasDestination = conflictData.some(conflict => conflict.conflictType === 'destination');
+                  
+                  if (hasCircular && hasDestination) {
+                    return "Multiple conflict types detected. For circular transfer conflicts, please deactivate the conflicting jobs. For destination path conflicts, please delete the conflicting jobs.";
+                  } else if (hasCircular) {
+                    return "A circular transfer has been detected. Please resolve these conflicts by deactivating the conflicting jobs.";
+                  } else {
+                    return "Please resolve these conflicts by deleting the jobs.";
+                  }
+                })()}
               </Box>
             </Box>
           </AccordionCardContent>

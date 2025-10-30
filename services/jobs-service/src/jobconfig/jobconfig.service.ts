@@ -968,6 +968,26 @@ export class JobConfigService {
         throw new NotFoundException(`Job with id ${id} not found`);
       }
 
+      // Check for active job runs
+      const activeJobRuns = await this.jobRunRepo.find({
+        where: {
+          jobConfigId: id,
+          status: In([
+            JobRunStatus.Ready,
+            JobRunStatus.Pending,
+            JobRunStatus.Running,
+            JobRunStatus.Pausing,
+            JobRunStatus.Stopping,
+          ]),
+        },
+      });
+
+      if (activeJobRuns.length > 0) {
+        throw new BadRequestException(
+          'Cannot delete job configuration. There are active job runs associated with this configuration.',
+        );
+      }
+
       await this.jobConfigRepo.remove(job);
       this.logger.log(`Job with id ${id} has been deleted successfully`);
       return { message: `Job with id ${id} has been deleted` };

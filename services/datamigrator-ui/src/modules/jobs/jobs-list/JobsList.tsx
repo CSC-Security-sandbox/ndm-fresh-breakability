@@ -89,12 +89,12 @@ const JobsList = () => {
         dispatch(
           setModalProps({
             isOpen: true,
-            modalHeader: "Cannot Delete Job",
+            modalHeader: "Can not delete the Job",
             modalContent: (
               <div className="flex flex-col gap-4 text-gray-700">
                 <div className="bg-red-50 p-3 rounded-lg border-l-4 border-l-red-400">
                   <p className="text-red-800 font-medium">
-                    ⚠️ This job cannot be deleted because it has {activeJobRuns.length} active job run{activeJobRuns.length > 1 ? 's' : ''}.
+                     This job cannot be deleted because it has {activeJobRuns.length} active job run{activeJobRuns.length > 1 ? 's' : ''}.
                   </p>
                 </div>
 
@@ -104,7 +104,7 @@ const JobsList = () => {
                   <div className="grid grid-cols-1 gap-2 text-sm">
                     <div className="flex justify-between">
                       <span className="font-medium text-gray-600">Job ID:</span>
-                      <span className="font-mono text-xs text-blue-600">{row.jobConfigId}</span>
+                      <span className="font-mono text-xs text-black">{row.jobConfigId}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="font-medium text-gray-600">Job Type:</span>
@@ -141,7 +141,7 @@ const JobsList = () => {
                         <div className="grid grid-cols-1 gap-2 text-sm">
                           <div className="flex justify-between items-center">
                             <span className="font-medium text-gray-600">Run ID:</span>
-                            <span className="font-mono text-xs text-blue-600">
+                            <span className="font-mono text-xs text-black">
                               {jobRun.jobRunId || 'Unknown ID'}
                             </span>
                           </div>
@@ -173,15 +173,15 @@ const JobsList = () => {
                   </div>
                 </div>
 
-                <div className="bg-orange-50 p-3 rounded-lg border-l-4 border-l-orange-400">
-                  <p className="text-sm text-orange-800 font-medium mb-1">
-                    Resolution Options:
-                  </p>
-                  <ul className="text-sm text-orange-700 list-disc list-inside space-y-1">
-                    <li>Stop the active job runs manually</li>
-                    <li>Wait for the job runs to complete naturally</li>
-                    <li>Use the job management interface to pause/stop runs</li>
-                  </ul>
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg border-l-4 border-l-blue-400">
+                  <div className="text-sm text-blue-800">
+                    <p className="font-medium mb-1">Resolution Options:</p>
+                    <ul className="list-disc list-inside space-y-1">
+                      <li>Stop the active job runs manually</li>
+                      <li>Wait for the job runs to complete naturally</li>
+                      <li>Use the job management interface to pause/stop runs</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             ),
@@ -211,7 +211,7 @@ const JobsList = () => {
                   <div className="grid grid-cols-1 gap-2 text-sm">
                     <div className="flex justify-between">
                       <span className="font-medium text-gray-600">Job ID:</span>
-                      <span className="font-mono text-xs text-blue-600">{row.jobConfigId}</span>
+                      <span className="font-mono text-xs text-black">{row.jobConfigId}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="font-medium text-gray-600">Job Type:</span>
@@ -268,7 +268,7 @@ const JobsList = () => {
 
                 <div className="bg-red-50 p-3 rounded-lg border-l-4 border-l-red-400">
                   <p className="text-sm text-red-800 font-medium">
-                    ⚠️ This action cannot be undone.
+                     This action cannot be undone.
                   </p>
                   <p className="text-sm text-red-700 mt-1">
                     All associated job runs, logs, reports and configuration data will be permanently deleted.
@@ -299,7 +299,7 @@ const JobsList = () => {
         );
       }
     } catch (error: any) {
-      const errorMessage = error?.data?.message || 'Failed to delete job. Please try again.';
+      const errorMessage = 'Failed to delete job. Please try again.';
       notify.error(errorMessage);
       console.error(error);
     }

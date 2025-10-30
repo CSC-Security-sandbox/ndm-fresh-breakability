@@ -100,7 +100,7 @@ describe('MigrationConflictService', () => {
             });
         });
 
-        it('should detect circular dependency when conflicting jobs exist with active job runs', async () => {
+        it('should detect circular dependency when conflicting jobs exist', async () => {
             const data: MigrationConflictCheckData = {
                 migrateConfigs: [
                     {
@@ -118,6 +118,7 @@ describe('MigrationConflictService', () => {
             const mockConflictingJob = {
                 id: 'job-1',
                 status: JobStatus.Active,
+                jobType: JobType.MIGRATE,
                 jobRuns: mockJobRuns,
                 targetPath: {
                     volumePath: '/target/path',
@@ -133,9 +134,6 @@ describe('MigrationConflictService', () => {
             // Second call returns empty array (no destination path conflicts)
             mockJobConfigRepository.find.mockResolvedValueOnce([mockConflictingJob])
                 .mockResolvedValueOnce([]); // No destination path conflicts
-            mockJobRunRepository.find.mockResolvedValue([
-                { id: 'run-1', status: JobRunStatus.Running },
-            ]);
 
             const result = await service.checkMigrationConflicts(data);
 
@@ -143,15 +141,16 @@ describe('MigrationConflictService', () => {
             expect(result[0]).toEqual({
                 status: 'ACTIVE',
                 jobId: 'job-1',
-                jobRunIds: ['run-1'],
                 sourcePathId: '/target/path',
                 targetPathId: '/source/path',
                 sourceServerId: 'source-server',
                 targetServerId: 'target-server',
+                conflictType: 'circular',
+                jobType: JobType.MIGRATE,
             });
         });
 
-        it('should not detect circular dependency when conflicting jobs exist but no active job runs', async () => {
+        it('should detect circular dependency even when no active job runs exist', async () => {
             const data: MigrationConflictCheckData = {
                 migrateConfigs: [
                     {
@@ -169,6 +168,7 @@ describe('MigrationConflictService', () => {
             const mockConflictingJob = {
                 id: 'job-1',
                 status: JobStatus.Active,
+                jobType: JobType.MIGRATE,
                 jobRuns: mockJobRuns,
                 targetPath: {
                     volumePath: '/target/path',
@@ -183,11 +183,20 @@ describe('MigrationConflictService', () => {
             // First call returns the conflicting job, second call returns empty array
             mockJobConfigRepository.find.mockResolvedValueOnce([mockConflictingJob])
                 .mockResolvedValueOnce([]); // No destination path conflicts
-            mockJobRunRepository.find.mockResolvedValue([]); // No active job runs
 
             const result = await service.checkMigrationConflicts(data);
 
-            expect(result).toEqual([]);
+            expect(result).toHaveLength(1);
+            expect(result[0]).toEqual({
+                status: 'ACTIVE',
+                jobId: 'job-1',
+                sourcePathId: '/target/path',
+                targetPathId: '/source/path',
+                sourceServerId: 'source-server',
+                targetServerId: 'target-server',
+                conflictType: 'circular',
+                jobType: JobType.MIGRATE,
+            });
         });
 
         it('should handle multiple migrate configurations', async () => {
@@ -230,6 +239,7 @@ describe('MigrationConflictService', () => {
             const mockDestinationPathConflictingJob = {
                 id: 'job-2',
                 status: JobStatus.Active,
+                jobType: JobType.CUT_OVER,
                 sourcePathId: 'different-source',
                 targetPathId: 'dest-1',
                 jobRuns: mockJobRuns,
@@ -254,11 +264,12 @@ describe('MigrationConflictService', () => {
             expect(result[0]).toEqual({
                 status: 'ACTIVE',
                 jobId: 'job-2',
-                jobRunIds: [], // No job runs checked for destination path conflicts
                 sourcePathId: '/some/other/source', // Job's source path, not our source path
                 targetPathId: 'dest-1', // Conflicting destination path
                 sourceServerId: 'other-source-server', // Job's source server, not empty
                 targetServerId: 'dest-server',
+                conflictType: 'destination',
+                jobType: JobType.CUT_OVER,
             });
 
             // Verify the correct queries were made
@@ -347,11 +358,12 @@ describe('MigrationConflictService', () => {
             const mockDependency = {
                 status: 'ACTIVE',
                 jobId: 'job-1',
-                jobRunIds: ['run-1'],
                 sourcePathId: '/source/path',
                 targetPathId: '/target/path',
                 sourceServerId: 'source-server',
                 targetServerId: 'target-server',
+                conflictType: 'circular' as const,
+                jobType: JobType.MIGRATE,
             };
 
             jest.spyOn(service, 'checkMigrationConflicts').mockResolvedValue([mockDependency]);
@@ -406,7 +418,7 @@ describe('MigrationConflictService', () => {
     });
 
     describe('getActiveJobRunDependencies (private method testing through public methods)', () => {
-        it('should handle jobs with no job runs', async () => {
+        it('should detect circular dependency even with no job runs', async () => {
             const data: MigrationConflictCheckData = {
                 migrateConfigs: [
                     {
@@ -419,6 +431,7 @@ describe('MigrationConflictService', () => {
             const mockConflictingJob = {
                 id: 'job-1',
                 status: JobStatus.Active,
+                jobType: JobType.MIGRATE,
                 jobRuns: [], // No job runs
                 targetPath: {
                     volumePath: '/target/path',
@@ -430,15 +443,25 @@ describe('MigrationConflictService', () => {
                 },
             };
 
-            mockJobConfigRepository.find.mockResolvedValue([mockConflictingJob]);
+            mockJobConfigRepository.find.mockResolvedValueOnce([mockConflictingJob])
+                .mockResolvedValueOnce([]); // No destination path conflicts
 
             const result = await service.checkMigrationConflicts(data);
 
-            expect(result).toEqual([]);
-            expect(mockJobRunRepository.find).not.toHaveBeenCalled();
+            expect(result).toHaveLength(1);
+            expect(result[0]).toEqual({
+                status: 'ACTIVE',
+                jobId: 'job-1',
+                sourcePathId: '/target/path',
+                targetPathId: '/source/path',
+                sourceServerId: 'source-server',
+                targetServerId: 'target-server',
+                conflictType: 'circular',
+                jobType: JobType.MIGRATE,
+            });
         });
 
-        it('should filter only active job run statuses', async () => {
+        it('should detect circular dependency regardless of job run status', async () => {
             const data: MigrationConflictCheckData = {
                 migrateConfigs: [
                     {
@@ -457,6 +480,7 @@ describe('MigrationConflictService', () => {
             const mockConflictingJob = {
                 id: 'job-1',
                 status: JobStatus.Active,
+                jobType: JobType.MIGRATE,
                 jobRuns: mockJobRuns,
                 targetPath: {
                     volumePath: '/target/path',
@@ -468,22 +492,22 @@ describe('MigrationConflictService', () => {
                 },
             };
 
-            mockJobConfigRepository.find.mockResolvedValue([mockConflictingJob]);
-            mockJobRunRepository.find.mockResolvedValue([
-                { id: 'run-1', status: JobRunStatus.Running },
-                { id: 'run-3', status: JobRunStatus.Pending },
-            ]);
+            mockJobConfigRepository.find.mockResolvedValueOnce([mockConflictingJob])
+                .mockResolvedValueOnce([]); // No destination path conflicts
 
             const result = await service.checkMigrationConflicts(data);
 
-            expect(mockJobRunRepository.find).toHaveBeenCalledWith({
-                where: {
-                    id: expect.any(Object), // In() matcher for job run IDs
-                    status: expect.any(Object), // In() matcher for active statuses
-                },
+            expect(result).toHaveLength(1);
+            expect(result[0]).toEqual({
+                status: 'ACTIVE',
+                jobId: 'job-1',
+                sourcePathId: '/target/path',
+                targetPathId: '/source/path',
+                sourceServerId: 'source-server',
+                targetServerId: 'target-server',
+                conflictType: 'circular',
+                jobType: JobType.MIGRATE,
             });
-
-            expect(result[0].jobRunIds).toEqual(['run-1', 'run-3']);
         });
     });
 
@@ -519,6 +543,7 @@ describe('MigrationConflictService', () => {
                 {
                     id: 'job-1',
                     status: JobStatus.Active,
+                    jobType: JobType.MIGRATE,
                     jobRuns: [{ id: 'run-1', status: JobRunStatus.Running }],
                     targetPath: {
                         volumePath: '/target/path/1',
@@ -532,6 +557,7 @@ describe('MigrationConflictService', () => {
                 {
                     id: 'job-2',
                     status: JobStatus.Active,
+                    jobType: JobType.CUT_OVER,
                     jobRuns: [{ id: 'run-2', status: JobRunStatus.Pending }],
                     targetPath: {
                         volumePath: '/target/path/2',
@@ -547,15 +573,30 @@ describe('MigrationConflictService', () => {
             // First call returns conflicting jobs, second call returns empty array (no destination path conflicts)
             mockJobConfigRepository.find.mockResolvedValueOnce(mockConflictingJobs)
                 .mockResolvedValueOnce([]); // No destination path conflicts
-            mockJobRunRepository.find
-                .mockResolvedValueOnce([{ id: 'run-1', status: JobRunStatus.Running }])
-                .mockResolvedValueOnce([{ id: 'run-2', status: JobRunStatus.Pending }]);
 
             const result = await service.checkMigrationConflicts(data);
 
             expect(result).toHaveLength(2);
-            expect(result[0].jobId).toBe('job-1');
-            expect(result[1].jobId).toBe('job-2');
+            expect(result[0]).toEqual({
+                status: 'ACTIVE',
+                jobId: 'job-1',
+                sourcePathId: '/target/path/1',
+                targetPathId: '/source/path/1',
+                sourceServerId: 'source-server-1',
+                targetServerId: 'target-server-1',
+                conflictType: 'circular',
+                jobType: JobType.MIGRATE,
+            });
+            expect(result[1]).toEqual({
+                status: 'ACTIVE',
+                jobId: 'job-2',
+                sourcePathId: '/target/path/2',
+                targetPathId: '/source/path/2',
+                sourceServerId: 'source-server-2',
+                targetServerId: 'target-server-2',
+                conflictType: 'circular',
+                jobType: JobType.CUT_OVER,
+            });
         });
 
         it('should detect both traditional circular dependency and destination path conflict', async () => {
@@ -571,6 +612,7 @@ describe('MigrationConflictService', () => {
             const mockTraditionalConflictingJob = {
                 id: 'job-traditional',
                 status: JobStatus.Active,
+                jobType: JobType.MIGRATE,
                 sourcePathId: 'dest-1',
                 targetPathId: 'source-1',
                 jobRuns: [{ id: 'run-traditional', status: JobRunStatus.Running }],
@@ -587,6 +629,7 @@ describe('MigrationConflictService', () => {
             const mockDestinationConflictingJob = {
                 id: 'job-destination',
                 status: JobStatus.Active,
+                jobType: JobType.CUT_OVER,
                 sourcePathId: 'different-source',
                 targetPathId: 'dest-2',
                 jobRuns: [{ id: 'run-destination', status: JobRunStatus.Pending }],
@@ -604,9 +647,6 @@ describe('MigrationConflictService', () => {
             // Second call: destination path conflict check
             mockJobConfigRepository.find.mockResolvedValueOnce([mockTraditionalConflictingJob])
                 .mockResolvedValueOnce([mockDestinationConflictingJob]);
-            
-            mockJobRunRepository.find
-                .mockResolvedValueOnce([{ id: 'run-traditional', status: JobRunStatus.Running }]);
 
             const result = await service.checkMigrationConflicts(data);
 
@@ -616,22 +656,24 @@ describe('MigrationConflictService', () => {
             expect(result[0]).toEqual({
                 status: 'ACTIVE',
                 jobId: 'job-traditional',
-                jobRunIds: ['run-traditional'],
                 sourcePathId: '/target/traditional',
                 targetPathId: '/source/traditional',
                 sourceServerId: 'source-traditional-server',
                 targetServerId: 'target-traditional-server',
+                conflictType: 'circular',
+                jobType: JobType.MIGRATE,
             });
 
-            // Second result should be the destination path conflict (no job runs checked)
+            // Second result should be the destination path conflict
             expect(result[1]).toEqual({
                 status: 'ACTIVE',
                 jobId: 'job-destination',
-                jobRunIds: [], // No job runs checked for destination path conflicts
                 sourcePathId: '/some/other/source', // Job's source path
                 targetPathId: 'dest-2',
                 sourceServerId: 'other-source-server', // Job's source server
                 targetServerId: 'dest-conflict-server',
+                conflictType: 'destination',
+                jobType: JobType.CUT_OVER,
             });
         });
     });

@@ -112,19 +112,18 @@ export class MigrationConflictService {
             ]
         });
 
+        // Circular dependency conflicts (always added regardless of active job runs)
         for (const job of conflictingJobs) {
-            const activeDependencies = await this.getActiveJobRunDependencies(job);
-            if (activeDependencies.length > 0) {
-                dependencies.push({
-                    status: job.status.toString(),
-                    jobId: job.id,
-                    jobRunIds: activeDependencies,
-                    sourcePathId: job.targetPath.volumePath,
-                    targetPathId: job.sourcePath.volumePath,
-                    sourceServerId: job.sourcePath.fileServer.config.configName,
-                    targetServerId: job.targetPath.fileServer.config.configName,
-                });
-            }
+            dependencies.push({
+                status: job.status.toString(),
+                jobId: job.id,
+                sourcePathId: job.targetPath.volumePath,
+                targetPathId: job.sourcePath.volumePath,
+                sourceServerId: job.sourcePath.fileServer.config.configName,
+                targetServerId: job.targetPath.fileServer.config.configName,
+                conflictType: 'circular',
+                jobType: job.jobType,
+            });
         }
 
         // Process destination path conflicts (avoid duplicates from conflictingJobs)
@@ -133,17 +132,19 @@ export class MigrationConflictService {
             job => !conflictingJobIds.includes(job.id)
         );
 
+        // Normal destination path conflicts
         for (const job of uniqueDestinationPathConflicts) {
             // Only block if it's a different source path with same destination (not same source+destination)
             if (job.sourcePathId !== config.sourcePathId) {
                 dependencies.push({
                     status: job.status.toString(),
                     jobId: job.id,
-                    jobRunIds: [],
                     sourcePathId: job.sourcePath.volumePath,
                     targetPathId: job.targetPath.volumePath,
                     sourceServerId: job.sourcePath.fileServer.config.configName,
                     targetServerId: job.targetPath.fileServer.config.configName,
+                    conflictType: 'destination',
+                    jobType: job.jobType,
                 });
             }
         }
