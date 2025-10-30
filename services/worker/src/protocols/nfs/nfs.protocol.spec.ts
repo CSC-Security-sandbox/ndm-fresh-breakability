@@ -374,3 +374,168 @@ describe('NFSProtocol - getTotalUsedMemory', () => {
   });
 
 });
+
+describe('NFSProtocol - updateBootMounts', () => {
+  let nfsProtocol: NFSProtocol;
+  const traceId = 'test-trace-id';
+  const payload = {
+    hostname: 'localhost',
+    path: '/mnt/test',
+    mountDir: '/mnt/test',
+  };
+  const fstabPath = '/etc/fstab';
+
+  beforeEach(() => {
+    nfsProtocol = new NFSProtocol(loggerFactory);
+    Object.defineProperty(nfsProtocol, 'logger', {
+      value: {
+        log: jest.fn(),
+        error: jest.fn(),
+      },
+      writable: false,
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should add an entry to /etc/fstab if it does not exist', () => {
+    // Define payload with required properties
+    const payload :ProtocolPayload = {
+      hostname: 'myserver',
+      path: '/export/data',
+      jobRunId: 'job123',
+      pathId: 'path456',
+      mountBasePath: '/mnt',
+      protocolVersion: '',
+    };
+    const fstabPath = '/etc/fstab'; // define fstabPath if not defined
+    const traceId = 'trace-001';    // define traceId if not defined
+    const mockFstabContent = 'existing entry\n';
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(mockFstabContent);
+    jest.spyOn(fs, 'appendFileSync').mockImplementation();
+    jest.spyOn(nfsProtocol['logger'], 'log').mockImplementation(() => {});
+  
+    nfsProtocol.updateBootMounts(
+      { platform: 'linux', fstabPath, workerId: 'test-worker' },
+      payload,
+      'insert',
+      traceId
+    );
+
+    const mountDir = `${payload.mountBasePath}/${payload.jobRunId}/${payload.pathId}`;
+    const expectedEntry = `${payload.hostname}:${payload.path} ${mountDir} nfs defaults 0 0\n`;
+  
+    expect(fs.appendFileSync).toHaveBeenCalledWith(fstabPath, expectedEntry);
+    expect(nfsProtocol['logger'].log).toHaveBeenCalledWith(`[${traceId}] Added entry to ${fstabPath}`);
+  });
+
+  it('should not add an entry if it already exists', () => {
+    const payload :ProtocolPayload = {
+      hostname: 'myserver',
+      path: '/export/data',
+      jobRunId: 'job123',
+      pathId: 'path456',
+      mountBasePath: '/mnt',
+      protocolVersion: '',
+    };
+    const mountDir = `${payload.mountBasePath}/${payload.jobRunId}/${payload.pathId}`;
+    const mockFstabContent = `${payload.hostname}:${payload.path} ${mountDir} nfs defaults 0 0\n`;
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(mockFstabContent);
+    jest.spyOn(fs, 'appendFileSync').mockImplementation();
+
+    nfsProtocol.updateBootMounts(
+      { platform: 'linux', fstabPath, workerId: 'test-worker' },
+      payload,
+      'insert',
+      traceId
+    );
+
+    expect(fs.appendFileSync).not.toHaveBeenCalled();
+    expect(nfsProtocol['logger'].log).toHaveBeenCalledWith(`[${traceId}] Entry already exists in /etc/fstab`);
+  });
+
+  it('should remove an entry from /etc/fstab if it exists', () => {
+    const payload :ProtocolPayload = {
+      hostname: 'myserver',
+      path: '/export/data',
+      jobRunId: 'job123',
+      pathId: 'path456',
+      mountBasePath: '/mnt',
+      protocolVersion: '',
+    };
+    const mountDir = `${payload.mountBasePath}/${payload.jobRunId}/${payload.pathId}`;
+    const mockFstabContent = `${payload.hostname}:${payload.path} ${mountDir} nfs defaults 0 0\nother entry\n`.trim();
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(mockFstabContent);
+    jest.spyOn(fs, 'writeFileSync').mockImplementation();
+
+    nfsProtocol.updateBootMounts(
+      { platform: 'linux', fstabPath, workerId: 'test-worker' },
+      payload,
+      'delete',
+      traceId
+    );
+
+    const expectedContent = 'other entry';
+    expect(fs.writeFileSync).toHaveBeenCalledWith(fstabPath, expectedContent);
+    expect(nfsProtocol['logger'].log).toHaveBeenCalledWith(`[${traceId}] Removed entry from /etc/fstab`);
+  });
+
+  it('should not remove an entry if it does not exist', () => {
+    const payload :ProtocolPayload = {
+      hostname: 'myserver',
+      path: '/export/data',
+      jobRunId: 'job123',
+      pathId: 'path456',
+      mountBasePath: '/mnt',
+      protocolVersion: '',
+    };
+
+    const mockFstabContent = 'other entry\n';
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(mockFstabContent);
+    jest.spyOn(fs, 'writeFileSync').mockImplementation();
+
+    nfsProtocol.updateBootMounts(
+      { platform: 'linux', fstabPath, workerId: 'test-worker' },
+      payload,
+      'delete',
+      traceId
+    );
+
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+    expect(nfsProtocol['logger'].log).toHaveBeenCalledWith(`[${traceId}] Entry not found in /etc/fstab`);
+  });
+
+  it('should handle errors while updating /etc/fstab', () => {
+    const payload :ProtocolPayload = {
+      hostname: 'myserver',
+      path: '/export/data',
+      jobRunId: 'job123',
+      pathId: 'path456',
+      mountBasePath: '/mnt',
+      protocolVersion: '',
+    };
+
+    jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      throw new Error('Read error');
+    });
+
+    const result = nfsProtocol.updateBootMounts(
+      { platform: 'linux', fstabPath, workerId: 'test-worker' },
+      payload,
+      'insert',
+      traceId
+    );
+
+    expect(nfsProtocol['logger'].error).toHaveBeenCalledWith(`[${traceId}] Error updating /etc/fstab: Read error`);
+    expect(result).toEqual({
+      traceId,
+      status: 'error',
+      protocolType: 'NFS',
+      hostname: payload.hostname,
+      workerId: 'test-worker',
+      message: `[${traceId}] Error updating /etc/fstab: Read error`,
+    });
+  });
+});

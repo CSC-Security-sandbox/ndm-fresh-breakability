@@ -156,7 +156,7 @@ export class SMBProtocol extends Protocol {
     }
 
 
-  async unmountPath(traceId: string, payload: any): Promise<any> {
+  async unmountPath(traceId: string, payload: ProtocolPayload): Promise<any> {
     this.logger.log(
       `[${traceId}] Unmounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
@@ -190,7 +190,7 @@ export class SMBProtocol extends Protocol {
    
   }
 
-  async mountPath(traceId: string, payload: any): Promise<any> {
+  async mountPath(traceId: string, payload: ProtocolPayload): Promise<any> {
     this.logger.log(
       `[${traceId}] Mounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
@@ -250,8 +250,6 @@ export class SMBProtocol extends Protocol {
       this.logger.error(`[${traceId}] Error mounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}: ${error.message}`);
       throw new Error(`Failed to mount path at ${payload.hostname}, reason: ${error.message}`);
     }
-    
-
   }
   
   async disconnectSession(traceId: string, payload: ProtocolPayload): Promise<any> {
