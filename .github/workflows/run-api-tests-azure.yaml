@@ -129,19 +129,20 @@ jobs:
           echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
           echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
-          # Custom VM names with Gowda prefix for all VMs
-          echo "TF_VAR_control_plane_vm_name=Gowda-Achyuta-CP" >> $GITHUB_ENV
-          echo "TF_VAR_worker_vm_name_prefix=Gowda-Achyuta-worker" >> $GITHUB_ENV
-          echo "TF_VAR_windows_worker_vm_name_prefix=Gowda-Achyuta-windows-worker" >> $GITHUB_ENV
-          echo "TF_VAR_vm_name_prefix=Gowda-Achyuta" >> $GITHUB_ENV
-          # Custom NIC names with Gowda prefix
-          echo "TF_VAR_control_plane_nic_name=Gowda-Achyuta-CP-nic" >> $GITHUB_ENV
-          echo "TF_VAR_worker_nic_name_prefix=Gowda-Achyuta-worker-nic" >> $GITHUB_ENV
-          echo "TF_VAR_windows_worker_nic_name_prefix=Gowda-Achyuta-windows-worker-nic" >> $GITHUB_ENV
-          # Custom disk names with Gowda prefix
-          echo "TF_VAR_control_plane_disk_name=Gowda-Achyuta-CP-disk" >> $GITHUB_ENV
-          echo "TF_VAR_worker_disk_name_prefix=Gowda-Achyuta-worker-disk" >> $GITHUB_ENV
-          echo "TF_VAR_windows_worker_disk_name_prefix=Gowda-Achyuta-windows-worker-disk" >> $GITHUB_ENV 
+          # Custom VM names with Gowda prefix and unique timestamp
+          TIMESTAMP=$(date +%m%d%H%M)
+          echo "TF_VAR_control_plane_vm_name=Gowda-Achyuta-CP-$TIMESTAMP" >> $GITHUB_ENV
+          echo "TF_VAR_worker_vm_name_prefix=Gowda-Achyuta-worker-$TIMESTAMP" >> $GITHUB_ENV
+          echo "TF_VAR_windows_worker_vm_name_prefix=Gowda-Achyuta-windows-worker-$TIMESTAMP" >> $GITHUB_ENV
+          echo "TF_VAR_vm_name_prefix=Gowda-Achyuta-$TIMESTAMP" >> $GITHUB_ENV
+          # Custom NIC names with Gowda prefix and unique timestamp
+          echo "TF_VAR_control_plane_nic_name=Gowda-Achyuta-CP-nic-$TIMESTAMP" >> $GITHUB_ENV
+          echo "TF_VAR_worker_nic_name_prefix=Gowda-Achyuta-worker-nic-$TIMESTAMP" >> $GITHUB_ENV
+          echo "TF_VAR_windows_worker_nic_name_prefix=Gowda-Achyuta-windows-worker-nic-$TIMESTAMP" >> $GITHUB_ENV
+          # Custom disk names with Gowda prefix and unique timestamp
+          echo "TF_VAR_control_plane_disk_name=Gowda-Achyuta-CP-disk-$TIMESTAMP" >> $GITHUB_ENV
+          echo "TF_VAR_worker_disk_name_prefix=Gowda-Achyuta-worker-disk-$TIMESTAMP" >> $GITHUB_ENV
+          echo "TF_VAR_windows_worker_disk_name_prefix=Gowda-Achyuta-windows-worker-disk-$TIMESTAMP" >> $GITHUB_ENV 
 
       - name: Initialize Terraform
         run: |
