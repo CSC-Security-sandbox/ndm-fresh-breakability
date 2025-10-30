@@ -125,7 +125,7 @@ jobs:
           # Azure Terraform Variables - include control plane for Terraform compatibility
           echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
           echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
-          echo "TF_VAR_vm_owner=gowda" >> $GITHUB_ENV
+          echo "TF_VAR_vm_owner=Achyuta" >> $GITHUB_ENV
           echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
           echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV 
@@ -236,7 +236,7 @@ jobs:
       #     
       #     echo "Completed copying Windows installer to all available Windows VMs"
 
-      - name: Wait for Service Boot Setup to Complete
+            - name: Wait for Service Boot Setup to Complete
         run: |
           echo "Monitoring service boot setup on ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}..."
           
@@ -253,8 +253,8 @@ jobs:
             echo "Service setup failed or timed out"
             exit 1
           fi
-
-         echo "Service setup completed successfully"
+          
+          echo "Service setup completed successfully"
 
       - name: NFS Worker Creation Complete
         run: |
