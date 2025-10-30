@@ -129,9 +129,11 @@ jobs:
           echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
           echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
-          # Custom VM names
-          echo "TF_VAR_control_plane_vm_name=Achyuta-CP" >> $GITHUB_ENV
-          echo "TF_VAR_worker_vm_name_prefix=Achyuta-worker" >> $GITHUB_ENV 
+          # Custom VM names with Gowda prefix for all VMs
+          echo "TF_VAR_control_plane_vm_name=Gowda-Achyuta-CP" >> $GITHUB_ENV
+          echo "TF_VAR_worker_vm_name_prefix=Gowda-Achyuta-worker" >> $GITHUB_ENV
+          echo "TF_VAR_windows_worker_vm_name_prefix=Gowda-Achyuta-windows-worker" >> $GITHUB_ENV
+          echo "TF_VAR_vm_name_prefix=Gowda-Achyuta" >> $GITHUB_ENV 
 
       - name: Initialize Terraform
         run: |
