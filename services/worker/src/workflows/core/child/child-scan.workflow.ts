@@ -7,6 +7,7 @@ import { updateJobStatusIfNotRunning } from '../common/workflow-utils';
 import { ChildScanWorkflowInput, ChildScanWorkflowOutput, ExecuteBatchScanInput, ExecuteBatchScansOutput } from './chid-scan.workflow.type';
 import { MappingResolverService } from 'src/activities/core/initializer/mapping-resolver.service';
 import { SetupExportsPathPermissionService } from 'src/activities/core/initializer/setup-exports-path-permission.service';
+import { dir } from 'console';
 
 
 
@@ -121,7 +122,7 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
       const batchExecResults: ExecuteBatchScansOutput = await executeBatchScan({ batches: dirBatchIds.slice(i, i + MAX_CONCURRENT_BATCHES), batchSize, isMigration, jobRunId});
       scanWorkflowOutput.fileCount += batchExecResults.fileCount;
       scanWorkflowOutput.dirCount += batchExecResults.dirCount;
-      discoverdBatchIds = discoverdBatchIds.concat(batchExecResults.batchDirs);
+      discoverdBatchIds = discoverdBatchIds.concat(...batchExecResults.batchDirs);
       if(batchExecResults.error){
         errors.push(batchExecResults.error);
       }
@@ -129,12 +130,13 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
 
       if(iterations > ITERATIONS_LIMIT ){
         console.warn(`ChildScanWorkflow ${jobRunId} has exceeded 1000 iterations, stopping to prevent infinite loop.`);
-        const consolidatedBatchIds = discoverdBatchIds.concat(discoverdBatchIds);
+        const consolidatedBatchIds = dirBatchIds.slice(i + MAX_CONCURRENT_BATCHES).concat(discoverdBatchIds);
         await wf.continueAsNew({
-          jobRunId, dirsToScan, consolidatedBatchIds, batchSize, dirCount:scanWorkflowOutput.dirCount, fileCount:scanWorkflowOutput.fileCount, isMigration, actionState, isInitialScan: false, workerConcurrency 
+          jobRunId, dirsToScan, dirBatchIds: consolidatedBatchIds, batchSize, dirCount:scanWorkflowOutput.dirCount, fileCount:scanWorkflowOutput.fileCount, isMigration, actionState, isInitialScan: false, workerConcurrency 
         });
       }
     }
+    dirBatchIds = discoverdBatchIds;
   }
   if(errors.length > 0) {
     console.log(`[ERROR]ChildScanWorkflow ${jobRunId} encountered errors: ${errors.join(', ')}`);
