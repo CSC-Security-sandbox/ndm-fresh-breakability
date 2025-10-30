@@ -152,35 +152,6 @@ export class MigrationConflictService {
     }
 
     /**
-     * Gets active job run IDs for a job configuration
-     * @param job - Job configuration to check
-     * @returns Array of active job run IDs
-     */
-    private async getActiveJobRunDependencies(job: JobConfigEntity): Promise<string[]> {
-        const jobRunIds = job.jobRuns.map((run) => run.id);
-
-        if (jobRunIds.length === 0) {
-            return [];
-        }
-
-        const activeJobRuns = await this.jobRunRepo.find({
-            where: {
-                id: In(jobRunIds),
-                status: In([
-                    JobRunStatus.Ready,
-                    JobRunStatus.Stopping,
-                    JobRunStatus.Running,
-                    JobRunStatus.Pending,
-                    JobRunStatus.Pausing,
-                    JobRunStatus.Paused
-                ])
-            },
-        });
-
-        return activeJobRuns.map(run => run.id);
-    }
-
-    /**
      * Checks if there are any migration conflicts in the provided configurations
      * @param data - Data containing migrate configurations to check
      * @returns Boolean indicating if migration conflicts exist
