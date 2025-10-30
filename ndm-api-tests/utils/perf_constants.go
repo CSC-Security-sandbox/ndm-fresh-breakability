@@ -10,9 +10,6 @@ const (
 	TwoMB   = 2 * 1024 * 1024  // 2,097,152 bytes
 	ThreeMB = 3 * 1024 * 1024  // 3,145,728 bytes
 	FourMB  = 4 * 1024 * 1024  // 4,194,304 bytes
-	FiveMB  = 5 * 1024 * 1024  // 5,242,880 bytes
-	SevenMB = 7 * 1024 * 1024  // 7,340,032 bytes
-	TenMB   = 10 * 1024 * 1024 // 10,485,760 bytes
 
 	// SMB worker env path
 	SMBWorkerEnvPath = `C:\datamigrator\binary\.env`
