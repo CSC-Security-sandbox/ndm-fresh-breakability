@@ -676,5 +676,109 @@ describe('MigrationConflictService', () => {
                 jobType: JobType.CUT_OVER,
             });
         });
+
+        it('should allow circular configuration when dependent config is inactive', async () => {
+            const data: MigrationConflictCheckData = {
+                migrateConfigs: [
+                    {
+                        sourcePathId: 'source-1',
+                        destinationPathId: ['dest-1'],
+                    },
+                ],
+            };
+
+            // This test demonstrates that we can create a circular config when the dependent job is inactive
+            // The circular job exists but is inactive: dest-1 -> source-1 (which would conflict with source-1 -> dest-1)
+            const mockInactiveCircularJob = {
+                id: 'job-inactive-circular',
+                status: JobStatus.InActive, // This job is INACTIVE
+                jobType: JobType.MIGRATE,
+                sourcePathId: 'dest-1', // Uses our destination as its source
+                targetPathId: 'source-1', // Uses our source as its target - this would be circular if active
+                jobRuns: [{ id: 'run-inactive', status: JobRunStatus.Completed }],
+                targetPath: {
+                    volumePath: '/target/inactive',
+                    fileServer: { config: { configName: 'target-inactive-server' } },
+                },
+                sourcePath: {
+                    volumePath: '/source/inactive',
+                    fileServer: { config: { configName: 'source-inactive-server' } },
+                },
+            };
+
+            // First call: circular dependency check - returns empty because service only queries for ACTIVE jobs
+            // The inactive circular job won't be returned because of the status: JobStatus.Active filter
+            mockJobConfigRepository.find.mockResolvedValueOnce([]) // No ACTIVE circular dependencies found
+                .mockResolvedValueOnce([]); // No destination path conflicts
+
+            const result = await service.checkMigrationConflicts(data);
+
+            expect(result).toEqual([]); // No conflicts found - can create the config because circular job is inactive
+            
+            // Verify the service only queries for ACTIVE jobs in circular dependency check
+            expect(mockJobConfigRepository.find).toHaveBeenNthCalledWith(1, {
+                where: {
+                    jobType: expect.any(Object),
+                    status: JobStatus.Active, // This excludes our inactive circular job
+                    sourcePathId: expect.any(Object), // Would match ['dest-1'] 
+                    targetPathId: 'source-1', // Would match the inactive job's target if it were active
+                },
+                relations: [
+                    'jobRuns',
+                    'targetPath',
+                    'sourcePath',
+                    'sourcePath.fileServer.config',
+                    'targetPath.fileServer.config',
+                ],
+            });
+        });
+
+        it('should detect circular dependency when the same job config is active', async () => {
+            const data: MigrationConflictCheckData = {
+                migrateConfigs: [
+                    {
+                        sourcePathId: 'source-1',
+                        destinationPathId: ['dest-1'],
+                    },
+                ],
+            };
+
+            // Same circular job as above test, but this time it's ACTIVE
+            const mockActiveCircularJob = {
+                id: 'job-active-circular',
+                status: JobStatus.Active, // This job is ACTIVE now
+                jobType: JobType.MIGRATE,
+                sourcePathId: 'dest-1', // Uses our destination as its source
+                targetPathId: 'source-1', // Uses our source as its target - circular dependency!
+                jobRuns: [{ id: 'run-active', status: JobRunStatus.Running }],
+                targetPath: {
+                    volumePath: '/target/active',
+                    fileServer: { config: { configName: 'target-active-server' } },
+                },
+                sourcePath: {
+                    volumePath: '/source/active',
+                    fileServer: { config: { configName: 'source-active-server' } },
+                },
+            };
+
+            // First call: circular dependency check - returns the active circular job
+            // Second call: destination path conflicts - returns empty
+            mockJobConfigRepository.find.mockResolvedValueOnce([mockActiveCircularJob]) // Active circular dependency found
+                .mockResolvedValueOnce([]); // No destination path conflicts
+
+            const result = await service.checkMigrationConflicts(data);
+
+            expect(result).toHaveLength(1); // Conflict detected - cannot create the config
+            expect(result[0]).toEqual({
+                status: 'ACTIVE',
+                jobId: 'job-active-circular',
+                sourcePathId: '/target/active',
+                targetPathId: '/source/active',
+                sourceServerId: 'source-active-server',
+                targetServerId: 'target-active-server',
+                conflictType: 'circular',
+                jobType: JobType.MIGRATE,
+            });
+        });
     });
 });

@@ -44,7 +44,6 @@ const MigrationConflictErrors = ({
                 conflict: MigrationConflictDetail,
                 index: number
               ) => {
-                console.log('conflict.status:', conflict.status, 'INACTIVE enum:', JOB_CONFIG_STATUS_ENUM.INACTIVE);
                 return (
                   <Box className="mb-4 p-4 bg-gray-50 rounded-lg border-l-4 border-l-orange-400">
                     <Box className="font-medium text-sm mb-2">
