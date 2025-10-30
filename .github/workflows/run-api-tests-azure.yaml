@@ -133,7 +133,15 @@ jobs:
           echo "TF_VAR_control_plane_vm_name=Gowda-Achyuta-CP" >> $GITHUB_ENV
           echo "TF_VAR_worker_vm_name_prefix=Gowda-Achyuta-worker" >> $GITHUB_ENV
           echo "TF_VAR_windows_worker_vm_name_prefix=Gowda-Achyuta-windows-worker" >> $GITHUB_ENV
-          echo "TF_VAR_vm_name_prefix=Gowda-Achyuta" >> $GITHUB_ENV 
+          echo "TF_VAR_vm_name_prefix=Gowda-Achyuta" >> $GITHUB_ENV
+          # Custom NIC names with Gowda prefix
+          echo "TF_VAR_control_plane_nic_name=Gowda-Achyuta-CP-nic" >> $GITHUB_ENV
+          echo "TF_VAR_worker_nic_name_prefix=Gowda-Achyuta-worker-nic" >> $GITHUB_ENV
+          echo "TF_VAR_windows_worker_nic_name_prefix=Gowda-Achyuta-windows-worker-nic" >> $GITHUB_ENV
+          # Custom disk names with Gowda prefix
+          echo "TF_VAR_control_plane_disk_name=Gowda-Achyuta-CP-disk" >> $GITHUB_ENV
+          echo "TF_VAR_worker_disk_name_prefix=Gowda-Achyuta-worker-disk" >> $GITHUB_ENV
+          echo "TF_VAR_windows_worker_disk_name_prefix=Gowda-Achyuta-windows-worker-disk" >> $GITHUB_ENV 
 
       - name: Initialize Terraform
         run: |
