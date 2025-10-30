@@ -236,25 +236,25 @@ jobs:
       #     
       #     echo "Completed copying Windows installer to all available Windows VMs"
 
-      # - name: Wait for Service Boot Setup to Complete
-      #   run: |
-      #     echo "Monitoring service boot setup on ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}..."
-      #     
-      #     # Ensure script is executable
-      #     chmod +x ./app-deployment/scripts/service_check.sh
-      #     
-      #     # Run the service_check.sh script to wait for the microk8s-boot service to complete
-      #     ./app-deployment/scripts/service_check.sh \
-      #     "${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}" \
-      #     "$VM_USERNAME" \
-      #     "$VM_PASSWORD"
+      - name: Wait for Service Boot Setup to Complete
+        run: |
+          echo "Monitoring service boot setup on ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}..."
+          
+          # Ensure script is executable
+          chmod +x ./app-deployment/scripts/service_check.sh
+          
+          # Run the service_check.sh script to wait for the microk8s-boot service to complete
+          ./app-deployment/scripts/service_check.sh \
+          "${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}" \
+          "$VM_USERNAME" \
+          "$VM_PASSWORD"
+          
+          if [ $? -ne 0 ]; then
+            echo "Service setup failed or timed out"
+            exit 1
+          fi
 
-      #     if [ $? -ne 0 ]; then
-      #       echo "Service setup failed or timed out"
-      #       exit 1
-      #     fi
-      #     
-      #     echo "Service setup completed successfully"
+         echo "Service setup completed successfully"
 
       - name: NFS Worker Creation Complete
         run: |
