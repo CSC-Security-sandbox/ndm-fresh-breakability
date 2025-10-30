@@ -236,7 +236,7 @@ jobs:
       #     
       #     echo "Completed copying Windows installer to all available Windows VMs"
 
-            - name: Wait for Service Boot Setup to Complete
+      - name: Wait for Service Boot Setup to Complete
         run: |
           echo "Monitoring service boot setup on ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}..."
           
