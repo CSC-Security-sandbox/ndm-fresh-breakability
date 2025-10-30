@@ -19,7 +19,7 @@ export const getChecksum = (filePath: string): Promise<string> => {
 };
 
 export const removePrefix = (str: string, prefix: string): string => 
-    str.startsWith(prefix) ? str.slice(prefix.length, 1000) : str;
+    str.startsWith(prefix) ? str.slice(prefix.length) : str;
 
 export const getFilePermissions = (stats: fs.Stats, isDirectory: boolean) : string =>{
     const mode = stats.mode;
