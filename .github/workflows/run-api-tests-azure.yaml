@@ -9,68 +9,68 @@ env:
 on:
   workflow_dispatch:
     inputs:
-      control_plane_image_version:
-        description: 'Image version for control plane'
-        required: true
-        type: string
-      worker_image_version:
-        description: 'Image version for Linux workers'
-        required: true
-        type: string
-      windows_worker_installer_url:
-        description: 'Artifactory URL for windows worker installer'
-        required: true
-        type: string
-      build_version:
-        description: 'Build version for support bundle uploads'
-        required: true
-        type: string
-      ref_type:
-        description: 'Reference type (releases or branches)'
-        required: true
-        type: string
-      run_smb_tests:
-        description: 'Run SMB tests'
-        required: false
-        default: true
-        type: boolean
-      run_nfs_tests:
-        description: 'Run NFS tests'
-        required: false
-        default: true
-        type: boolean
+      # control_plane_image_version:
+      #   description: 'Image version for control plane'
+      #   required: true
+      #   type: string
+      # worker_image_version:
+      #   description: 'Image version for Linux workers'
+      #   required: true
+      #   type: string
+      # windows_worker_installer_url:
+      #   description: 'Artifactory URL for windows worker installer'
+      #   required: true
+      #   type: string
+      # build_version:
+      #   description: 'Build version for support bundle uploads'
+      #   required: true
+      #   type: string
+      # ref_type:
+      #   description: 'Reference type (releases or branches)'
+      #   required: true
+      #   type: string
+      # run_smb_tests:
+      #   description: 'Run SMB tests'
+      #   required: false
+      #   default: true
+      #   type: boolean
+      # run_nfs_tests:
+      #   description: 'Run NFS tests'
+      #   required: false
+      #   default: true
+      #   type: boolean
 
-  workflow_call: 
-    inputs:
-      control_plane_image_version:
-        description: 'Image version for control plane'
-        required: true
-        type: string
-      worker_image_version:
-        description: 'Image version for Linux workers'
-        required: true
-        type: string
-      windows_worker_installer_url:
-        description: 'Artifactory URL for windows worker installer'
-        type: string
-      build_version:
-        description: 'Build version for support bundle uploads'
-        required: true
-        type: string
-      ref_type:
-        description: 'Reference type (releases or branches)'
-        required: true
-        type: string
-      run_smb_tests:
-        description: 'Whether to run SMB tests (true/false)'
-        required: false
-        default: true
-        type: boolean
-      run_nfs_tests:
-        description: 'Whether to run NFS tests (true/false)'
-        required: false
-        default: true
-        type: boolean
+  # workflow_call: 
+  #   inputs:
+  #     control_plane_image_version:
+  #       description: 'Image version for control plane'
+  #       required: true
+  #       type: string
+  #     worker_image_version:
+  #       description: 'Image version for Linux workers'
+  #       required: true
+  #       type: string
+  #     windows_worker_installer_url:
+  #       description: 'Artifactory URL for windows worker installer'
+  #       type: string
+  #     build_version:
+  #       description: 'Build version for support bundle uploads'
+  #       required: true
+  #       type: string
+  #     ref_type:
+  #       description: 'Reference type (releases or branches)'
+  #       required: true
+  #       type: string
+  #     run_smb_tests:
+  #       description: 'Whether to run SMB tests (true/false)'
+  #       required: false
+  #       default: true
+  #       type: boolean
+  #     run_nfs_tests:
+  #       description: 'Whether to run NFS tests (true/false)'
+  #       required: false
+  #       default: true
+  #       type: boolean
 
 permissions: 
   contents: read
@@ -80,9 +80,9 @@ jobs:
     name: Setup Infrastructure and Services
     runs-on: openlab
     outputs:
-      control_plane_vm_ip_address: ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}
+      # control_plane_vm_ip_address: ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}
       linux_worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.linux_worker_vm_ip_addresses }}
-      windows_worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}
+      # windows_worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}
     steps:
       
       - name: Checkout repository
@@ -117,16 +117,17 @@ jobs:
           echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
           echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
         
-          CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
-          WORKER_IMAGE="${{ inputs.worker_image_version || github.event.inputs.worker_image_version }}"
+          # CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
+          # Force worker image to specific version - only create NFS worker
+          WORKER_IMAGE="2025.29.10160822"
 
-          # Azure Terraform Variables
-          echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
+          # Azure Terraform Variables - only for NFS worker
+          # echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
           echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
           echo "TF_VAR_vm_owner=${{ github.actor }}" >> $GITHUB_ENV
           echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV 
+          # echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV 
 
       - name: Initialize Terraform
         run: |
@@ -162,97 +163,104 @@ jobs:
         id: deployment-info
         run: |
           cd app-deployment/terraform/azure/environments/api
-          CONTROL_PLANE_IP=$(terraform output -raw control_plane_private_ip)
+          # CONTROL_PLANE_IP=$(terraform output -raw control_plane_private_ip)
           LINUX_WORKER_IPS=$(terraform output -json linux_worker_private_ips | jq -c .)
-          WINDOWS_WORKER_IPS=$(terraform output -json windows_worker_private_ips | jq -c .)
-          echo "windows_worker_vm_ip_addresses=$WINDOWS_WORKER_IPS" >> $GITHUB_OUTPUT
-          echo "control_plane_vm_ip_address=$CONTROL_PLANE_IP" >> $GITHUB_OUTPUT
+          # WINDOWS_WORKER_IPS=$(terraform output -json windows_worker_private_ips | jq -c .)
+          # echo "windows_worker_vm_ip_addresses=$WINDOWS_WORKER_IPS" >> $GITHUB_OUTPUT
+          # echo "control_plane_vm_ip_address=$CONTROL_PLANE_IP" >> $GITHUB_OUTPUT
           echo "linux_worker_vm_ip_addresses=$LINUX_WORKER_IPS" >> $GITHUB_OUTPUT
-          echo "Control Plane IP: $CONTROL_PLANE_IP"
+          # echo "Control Plane IP: $CONTROL_PLANE_IP"
           echo "Linux Worker IPs (NFS): $LINUX_WORKER_IPS"
-          echo "Windows Worker IPs (SMB): $WINDOWS_WORKER_IPS"
+          # echo "Windows Worker IPs (SMB): $WINDOWS_WORKER_IPS"
 
-      - name: Install sshpass
+      # - name: Install sshpass
+      #   run: |
+      #     echo "Installing sshpass..."
+      #     sudo apt-get update -qq
+      #     sudo apt-get install -y sshpass
+      #     echo "sshpass installed successfully."
+
+      # - name: Download Windows installer
+      #   if: ${{ inputs.run_smb_tests == true || github.event.inputs.run_smb_tests == 'true' }}
+      #   run: |
+      #     WINDOWS_INSTALLER_URL="${{ inputs.windows_worker_installer_url || github.event.inputs.windows_worker_installer_url }}"
+      #     if [ -n "$WINDOWS_INSTALLER_URL" ]; then
+      #       echo "Downloading Windows installer from: $WINDOWS_INSTALLER_URL"
+      #       curl -s -o "windows-worker-installer.exe" \
+      #         -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+      #         "$WINDOWS_INSTALLER_URL"
+      #       
+      #       if [ ! -f "windows-worker-installer.exe" ] || [ ! -s "windows-worker-installer.exe" ]; then
+      #         echo "Error: Failed to download Windows installer or file is empty"
+      #         exit 1
+      #       fi
+      #       echo "Windows installer downloaded successfully."
+      #     else
+      #       echo "No Windows installer URL provided, skipping download"
+      #     fi
+
+      # - name: Copy Windows installer to Windows VMs
+      #   if: ${{ inputs.run_smb_tests == true || github.event.inputs.run_smb_tests == 'true' }}
+      #   run: |
+      #     WINDOWS_IPS='${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}'
+      #     
+      #     if [ ! -f "windows-worker-installer.exe" ]; then
+      #       echo "Windows installer file not found, skipping copy to Windows VMs"
+      #       exit 0
+      #     fi
+      #     
+      #     WINDOWS_IP_ARRAY=($(echo "$WINDOWS_IPS" | jq -r '.[]'))
+      #     
+      #     if [ ${#WINDOWS_IP_ARRAY[@]} -eq 0 ]; then
+      #       echo "No Windows VM IP addresses found, skipping copy"
+      #       exit 0
+      #     fi
+      #     
+      #     echo "Found ${#WINDOWS_IP_ARRAY[@]} Windows VM(s), copying installer to each..."
+      #     
+      #     for i in "${!WINDOWS_IP_ARRAY[@]}"; do
+      #       WINDOWS_IP="${WINDOWS_IP_ARRAY[$i]}"
+      #       echo "$WINDOWS_IP"
+      #       VM_INDEX=$((i + 1))
+      #       
+      #       echo "Copying Windows installer to Windows VM #$VM_INDEX at $WINDOWS_IP"
+      #       if SSHPASS="$VM_PASSWORD" sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+      #         windows-worker-installer.exe "$VM_USERNAME@$WINDOWS_IP:/C:/Temp/"; then
+      #         echo "Windows installer copied successfully to Windows VM #$VM_INDEX ($WINDOWS_IP)"
+      #       else
+      #         echo "Failed to copy Windows installer to Windows VM #$VM_INDEX ($WINDOWS_IP)"
+      #         # Continue with other VMs instead of failing completely
+      #       fi
+      #     done
+      #     
+      #     echo "Completed copying Windows installer to all available Windows VMs"
+
+      # - name: Wait for Service Boot Setup to Complete
+      #   run: |
+      #     echo "Monitoring service boot setup on ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}..."
+      #     
+      #     # Ensure script is executable
+      #     chmod +x ./app-deployment/scripts/service_check.sh
+      #     
+      #     # Run the service_check.sh script to wait for the microk8s-boot service to complete
+      #     ./app-deployment/scripts/service_check.sh \
+      #     "${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}" \
+      #     "$VM_USERNAME" \
+      #     "$VM_PASSWORD"
+
+      #     if [ $? -ne 0 ]; then
+      #       echo "Service setup failed or timed out"
+      #       exit 1
+      #     fi
+      #     
+      #     echo "Service setup completed successfully"
+
+      - name: NFS Worker Creation Complete
         run: |
-          echo "Installing sshpass..."
-          sudo apt-get update -qq
-          sudo apt-get install -y sshpass
-          echo "sshpass installed successfully."
-
-      - name: Download Windows installer
-        if: ${{ inputs.run_smb_tests == true || github.event.inputs.run_smb_tests == 'true' }}
-        run: |
-          WINDOWS_INSTALLER_URL="${{ inputs.windows_worker_installer_url || github.event.inputs.windows_worker_installer_url }}"
-          if [ -n "$WINDOWS_INSTALLER_URL" ]; then
-            echo "Downloading Windows installer from: $WINDOWS_INSTALLER_URL"
-            curl -s -o "windows-worker-installer.exe" \
-              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
-              "$WINDOWS_INSTALLER_URL"
-            
-            if [ ! -f "windows-worker-installer.exe" ] || [ ! -s "windows-worker-installer.exe" ]; then
-              echo "Error: Failed to download Windows installer or file is empty"
-              exit 1
-            fi
-            echo "Windows installer downloaded successfully."
-          else
-            echo "No Windows installer URL provided, skipping download"
-          fi
-
-      - name: Copy Windows installer to Windows VMs
-        if: ${{ inputs.run_smb_tests == true || github.event.inputs.run_smb_tests == 'true' }}
-        run: |
-          WINDOWS_IPS='${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}'
-          
-          if [ ! -f "windows-worker-installer.exe" ]; then
-            echo "Windows installer file not found, skipping copy to Windows VMs"
-            exit 0
-          fi
-          
-          WINDOWS_IP_ARRAY=($(echo "$WINDOWS_IPS" | jq -r '.[]'))
-          
-          if [ ${#WINDOWS_IP_ARRAY[@]} -eq 0 ]; then
-            echo "No Windows VM IP addresses found, skipping copy"
-            exit 0
-          fi
-          
-          echo "Found ${#WINDOWS_IP_ARRAY[@]} Windows VM(s), copying installer to each..."
-          
-          for i in "${!WINDOWS_IP_ARRAY[@]}"; do
-            WINDOWS_IP="${WINDOWS_IP_ARRAY[$i]}"
-            echo "$WINDOWS_IP"
-            VM_INDEX=$((i + 1))
-            
-            echo "Copying Windows installer to Windows VM #$VM_INDEX at $WINDOWS_IP"
-            if SSHPASS="$VM_PASSWORD" sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-              windows-worker-installer.exe "$VM_USERNAME@$WINDOWS_IP:/C:/Temp/"; then
-              echo "Windows installer copied successfully to Windows VM #$VM_INDEX ($WINDOWS_IP)"
-            else
-              echo "Failed to copy Windows installer to Windows VM #$VM_INDEX ($WINDOWS_IP)"
-              # Continue with other VMs instead of failing completely
-            fi
-          done
-          
-          echo "Completed copying Windows installer to all available Windows VMs"
-
-      - name: Wait for Service Boot Setup to Complete
-        run: |
-          echo "Monitoring service boot setup on ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}..."
-          
-          # Ensure script is executable
-          chmod +x ./app-deployment/scripts/service_check.sh
-          
-          # Run the service_check.sh script to wait for the microk8s-boot service to complete
-          ./app-deployment/scripts/service_check.sh \
-          "${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}" \
-          "$VM_USERNAME" \
-          "$VM_PASSWORD"
-
-          if [ $? -ne 0 ]; then
-            echo "Service setup failed or timed out"
-            exit 1
-          fi
-          
-          echo "Service setup completed successfully"
+          echo "=== NFS WORKER CREATION COMPLETE ==="
+          echo "Worker Version: 2025.29.10160822"
+          echo "Linux Worker IPs (NFS): ${{ steps.deployment-info.outputs.linux_worker_vm_ip_addresses }}"
+          echo "=================================="
 
 #  run-smb-tests:
 #    name: Run SMB API Tests
