@@ -10,6 +10,11 @@ import (
 )
 
 var _ = Describe("TC-SMB-PERMISSIONS: Test SMB file default and explicit permissions preservation during migration", func() {
+	BeforeEach(func() {
+		if PROTOCOL_TYPE == ProtocolNFS {
+			Skip("SMB permissions is skipped in CI/CD as it is not supported in NFS")
+		}
+	})
 	var (
 		ProjectId              string
 		workerId1              string
@@ -22,10 +27,6 @@ var _ = Describe("TC-SMB-PERMISSIONS: Test SMB file default and explicit permiss
 
 	Context("SMB Permissions Migration Test", func() {
 		BeforeEach(func() {
-			if PROTOCOL_TYPE != ProtocolSMB {
-				Skip("Skipping SMB permissions test as protocol is not SMB")
-			}
-
 			numberOfWorker := 1
 
 			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
@@ -310,6 +311,11 @@ var _ = Describe("TC-SMB-PERMISSIONS: Test SMB file default and explicit permiss
 		})
 
 		AfterEach(func() {
+			if PROTOCOL_TYPE == ProtocolNFS {
+				LogDebug("Skipping cleanup as test was skipped for NFS protocol")
+				return
+			}
+
 			By("Cleanup started")
 			err := StopAllWorkersAndWait()
 			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
