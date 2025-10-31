@@ -18,7 +18,7 @@ autoinstall:
 ${storage}
 ${network}
   identity:
-    hostname: datamigrator
+    hostname: datamigrator-worker-${substr(timestamp(), -4, 4)}
     username: ${build_username}
     password: ${build_password_encrypted}
   ssh:
