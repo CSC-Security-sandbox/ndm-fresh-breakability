@@ -97,11 +97,10 @@ export class MigrationConflictService {
             ]
         });
 
-        // Check if any destination path already has an active job running on it (as target)
+        // Check if any destination path is already used in a config
         const destinationPathConflictingJobs = await this.jobConfigEntity.find({
             where: {
                 jobType: In([JobType.MIGRATE, JobType.CUT_OVER]),
-                status: JobStatus.Active,
                 targetPathId: In(config.destinationPathId),
             },
             relations: [
@@ -113,19 +112,18 @@ export class MigrationConflictService {
             ]
         });
 
+        // Circular dependency conflicts (always added regardless of active job runs)
         for (const job of conflictingJobs) {
-            const activeDependencies = await this.getActiveJobRunDependencies(job);
-            if (activeDependencies.length > 0) {
-                dependencies.push({
-                    status: job.status.toString(),
-                    jobId: job.id,
-                    jobRunIds: activeDependencies,
-                    sourcePathId: job.targetPath.volumePath,
-                    targetPathId: job.sourcePath.volumePath,
-                    sourceServerId: job.sourcePath.fileServer.config.configName,
-                    targetServerId: job.targetPath.fileServer.config.configName,
-                });
-            }
+            dependencies.push({
+                status: job.status.toString(),
+                jobId: job.id,
+                sourcePathId: job.targetPath.volumePath,
+                targetPathId: job.sourcePath.volumePath,
+                sourceServerId: job.sourcePath.fileServer.config.configName,
+                targetServerId: job.targetPath.fileServer.config.configName,
+                conflictType: 'circular',
+                jobType: job.jobType,
+            });
         }
 
         // Process destination path conflicts (avoid duplicates from conflictingJobs)
@@ -134,50 +132,23 @@ export class MigrationConflictService {
             job => !conflictingJobIds.includes(job.id)
         );
 
+        // Normal destination path conflicts
         for (const job of uniqueDestinationPathConflicts) {
-            const activeDependencies = await this.getActiveJobRunDependencies(job);
-            if (activeDependencies.length > 0) {
+            // Only block if it's a different source path with same destination (not same source+destination)
+            if (job.sourcePathId !== config.sourcePathId) {
                 dependencies.push({
                     status: job.status.toString(),
                     jobId: job.id,
-                    jobRunIds: activeDependencies,
-                    sourcePathId: config.sourcePathId,
+                    sourcePathId: job.sourcePath.volumePath,
                     targetPathId: job.targetPath.volumePath,
-                    sourceServerId: '',
+                    sourceServerId: job.sourcePath.fileServer.config.configName,
                     targetServerId: job.targetPath.fileServer.config.configName,
+                    conflictType: 'destination',
+                    jobType: job.jobType,
                 });
             }
         }
         return dependencies;
-    }
-
-    /**
-     * Gets active job run IDs for a job configuration
-     * @param job - Job configuration to check
-     * @returns Array of active job run IDs
-     */
-    private async getActiveJobRunDependencies(job: JobConfigEntity): Promise<string[]> {
-        const jobRunIds = job.jobRuns.map((run) => run.id);
-
-        if (jobRunIds.length === 0) {
-            return [];
-        }
-
-        const activeJobRuns = await this.jobRunRepo.find({
-            where: {
-                id: In(jobRunIds),
-                status: In([
-                    JobRunStatus.Ready,
-                    JobRunStatus.Stopping,
-                    JobRunStatus.Running,
-                    JobRunStatus.Pending,
-                    JobRunStatus.Pausing,
-                    JobRunStatus.Paused
-                ])
-            },
-        });
-
-        return activeJobRuns.map(run => run.id);
     }
 
     /**

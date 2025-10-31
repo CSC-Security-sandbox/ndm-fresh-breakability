@@ -1751,7 +1751,7 @@ describe("JobConfigService", () => {
   });
 
   describe("deleteJobConfig", () => {
-    it("should delete job config successfully", async () => {
+    it("should delete job config successfully when no active job runs exist", async () => {
       const mockJobConfigId = "jobConfigId";
       const mockJobConfig = {
         id: mockJobConfigId,
@@ -1760,7 +1760,9 @@ describe("JobConfigService", () => {
       jest
         .spyOn(jobConfigRepo, "findOne")
         .mockResolvedValue(mockJobConfig as any);
+      jest.spyOn(jobRunRepo, "find").mockResolvedValue([]);
       jest.spyOn(jobConfigRepo, "remove").mockResolvedValue(undefined);
+      const loggerSpy = jest.spyOn(service["logger"], "log");
 
       const result = await service.deleteJobConfig(mockJobConfigId);
 
@@ -1768,22 +1770,93 @@ describe("JobConfigService", () => {
         message: `Job with id ${mockJobConfigId} has been deleted`,
       });
       expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
-        where: { id: mockJobConfigId },
+        where: { id: mockJobConfigId }
+      });
+      expect(jobRunRepo.find).toHaveBeenCalledWith({
+        where: {
+          jobConfigId: mockJobConfigId,
+          status: expect.any(Object)
+        }
       });
       expect(jobConfigRepo.remove).toHaveBeenCalledWith(mockJobConfig);
+      expect(loggerSpy).toHaveBeenCalledWith(`Job with id ${mockJobConfigId} has been deleted successfully`);
     });
 
-    it("should throw an error if job config is not found", async () => {
+    it("should throw NotFoundException if job config is not found", async () => {
       const mockJobConfigId = "jobConfigId";
 
       jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(null);
+      const loggerSpy = jest.spyOn(service["logger"], "error");
 
       await expect(service.deleteJobConfig(mockJobConfigId)).rejects.toThrow(
-        `Job with id ${mockJobConfigId} not found`
+        NotFoundException
       );
       expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
-        where: { id: mockJobConfigId },
+        where: { id: mockJobConfigId }
       });
+      expect(loggerSpy).toHaveBeenCalledWith(
+        `Failed to delete job with id ${mockJobConfigId}`,
+        expect.any(String)
+      );
+    });
+
+    it("should throw BadRequestException when active job runs exist", async () => {
+      const mockJobConfigId = "jobConfigId";
+      const mockJobConfig = {
+        id: mockJobConfigId,
+      };
+      const mockActiveJobRuns = [
+        { id: "run1", status: "RUNNING" },
+        { id: "run2", status: "PENDING" }
+      ];
+
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(mockJobConfig as any);
+      jest.spyOn(jobRunRepo, "find").mockResolvedValue(mockActiveJobRuns as any);
+      const loggerSpy = jest.spyOn(service["logger"], "error");
+
+      await expect(service.deleteJobConfig(mockJobConfigId)).rejects.toThrow(
+        BadRequestException
+      );
+      await expect(service.deleteJobConfig(mockJobConfigId)).rejects.toThrow(
+        "Cannot delete job configuration. There are active job runs associated with this configuration."
+      );
+      expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
+        where: { id: mockJobConfigId }
+      });
+      expect(jobRunRepo.find).toHaveBeenCalledWith({
+        where: {
+          jobConfigId: mockJobConfigId,
+          status: expect.any(Object)
+        }
+      });
+      expect(jobConfigRepo.remove).not.toHaveBeenCalled();
+      expect(loggerSpy).toHaveBeenCalledWith(
+        `Failed to delete job with id ${mockJobConfigId}`,
+        expect.any(String)
+      );
+    });
+
+    it("should throw HttpException for unexpected database errors", async () => {
+      const mockJobConfigId = "jobConfigId";
+      const mockJobConfig = {
+        id: mockJobConfigId,
+      };
+
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(mockJobConfig as any);
+      jest.spyOn(jobRunRepo, "find").mockResolvedValue([]);
+      jest.spyOn(jobConfigRepo, "remove").mockRejectedValue(new Error("Database connection error"));
+      const loggerSpy = jest.spyOn(service["logger"], "error");
+
+      await expect(service.deleteJobConfig(mockJobConfigId)).rejects.toThrow(
+        HttpException
+      );
+      await expect(service.deleteJobConfig(mockJobConfigId)).rejects.toThrow(
+        "Database connection error"
+      );
+      expect(loggerSpy).toHaveBeenCalledWith(
+        `Failed to delete job with id ${mockJobConfigId}`,
+        expect.any(String)
+      );
     });
   });
 

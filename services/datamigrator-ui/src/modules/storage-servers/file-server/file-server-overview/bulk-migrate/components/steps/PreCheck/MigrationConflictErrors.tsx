@@ -11,6 +11,7 @@ import {
 import { memo } from "react";
 import RenderEach from "@components/render-each/RenderEach";
 import { Show } from "@components/show/Show";
+import { JOB_CONFIG_STATUS_ENUM } from "@/types/app.type";
 
 const MigrationConflictErrors = ({
   conflictData,
@@ -42,60 +43,86 @@ const MigrationConflictErrors = ({
               renderItem={(
                 conflict: MigrationConflictDetail,
                 index: number
-              ) => (
-                <Box className="mb-4 p-4 bg-gray-50 rounded-lg border-l-4 border-l-orange-400">
-                  <Box className="font-medium text-sm mb-2">
-                    Conflict {index + 1}:
+              ) => {
+                return (
+                  <Box className="mb-4 p-4 bg-gray-50 rounded-lg border-l-4 border-l-orange-400">
+                    <Box className="font-medium text-sm mb-2">
+                      Conflict {index + 1}:
+                    </Box>
+                    <Box className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                      <Box className="flex items-center gap-2">
+                        <span className="font-medium">Job ID:</span>
+                        <span className="text-xs font-mono text-gray-700">
+                          {conflict.jobId}
+                        </span>
+                      </Box>
+                      <Box className="flex items-center gap-2">
+                        <span className="font-medium">Job Type:</span>
+                        <span className="px-2 py-1 rounded text-xs uppercase font-semibold bg-blue-100 text-blue-800">
+                          {conflict.jobType === 'CUT_OVER' ? 'CUTOVER' : conflict.jobType}
+                        </span>
+                      </Box>
+                      <Box className="flex items-center gap-2">
+                        <span className="font-medium">Conflict Type:</span>
+                        <span className="px-2 py-1 rounded text-xs uppercase font-semibold bg-red-100 text-red-800">
+                          {conflict.conflictType === 'circular' ? 'CIRCULAR TRANSFER' : 'DESTINATION'}
+                        </span>
+                      </Box>
+                      <Box className="flex items-center gap-2">
+                        <span className="font-medium">Status:</span>
+                        <span className={`px-2 py-1 rounded text-xs uppercase font-semibold ${
+                          conflict.status === JOB_CONFIG_STATUS_ENUM.INACTIVE 
+                            ? 'bg-red-100 text-red-800' 
+                            : 'bg-green-100 text-green-800'
+                        }`}>
+                          {conflict.status}
+                        </span>
+                      </Box>
+                      <Box className="flex items-center gap-2">
+                        <span className="font-medium">Source Path:</span>
+                        <span className="text-xs font-mono text-gray-700">
+                          {conflict.sourcePathId}
+                        </span>
+                      </Box>
+                      <Box className="flex items-center gap-2">
+                        <span className="font-medium">Target Path:</span>
+                        <span className="text-xs font-mono text-gray-700">
+                          {conflict.targetPathId}
+                        </span>
+                      </Box>
+                      <Box className="flex items-center gap-2">
+                        <span className="font-medium">Source Server:</span>
+                        <span className="text-sm text-gray-700">
+                          {conflict.sourceServerId || "N/A"}
+                        </span>
+                      </Box>
+                      <Box className="flex items-center gap-2">
+                        <span className="font-medium">Target Server:</span>
+                        <span className="text-sm text-gray-700">
+                          {conflict.targetServerId || "N/A"}
+                        </span>
+                      </Box>
+                    </Box>
                   </Box>
-                  <Box className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                    <Box className="flex items-center gap-2">
-                      <span className="font-medium">Job ID:</span>
-                      <span className="text-xs font-mono text-gray-700">
-                        {conflict.jobId}
-                      </span>
-                    </Box>
-                    <Box className="flex items-center gap-2">
-                      <span className="font-medium">Status:</span>
-                      <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs uppercase font-semibold">
-                        {conflict.status}
-                      </span>
-                    </Box>
-                    <Box className="flex items-center gap-2">
-                      <span className="font-medium">Source Path:</span>
-                      <span className="text-xs font-mono text-gray-700">
-                        {conflict.sourcePathId}
-                      </span>
-                    </Box>
-                    <Box className="flex items-center gap-2">
-                      <span className="font-medium">Target Path:</span>
-                      <span className="text-xs font-mono text-gray-700">
-                        {conflict.targetPathId}
-                      </span>
-                    </Box>
-                    <Box className="flex items-center gap-2">
-                      <span className="font-medium">Source Server:</span>
-                      <span className="text-sm text-gray-700">
-                        {conflict.sourceServerId || "N/A"}
-                      </span>
-                    </Box>
-                    <Box className="flex items-center gap-2">
-                      <span className="font-medium">Target Server:</span>
-                      <span className="text-sm text-gray-700">
-                        {conflict.targetServerId || "N/A"}
-                      </span>
-                    </Box>
-                  </Box>
-                </Box>
-              )}
+                );
+              }}
             />
 
             <Box className="mt-4 p-3 bg-blue-50 rounded-lg border-l-4 border-l-blue-400">
               <Box className="text-sm text-blue-800">
                 <Box className="font-medium mb-1">Resolution:</Box>
-                Please resolve these conflicts by either waiting for the
-                conflicting jobs to complete, stopping the conflicting jobs, or
-                selecting different source/destination paths that don't
-                conflict.
+                {(() => {
+                  const hasCircular = conflictData.some(conflict => conflict.conflictType === 'circular');
+                  const hasDestination = conflictData.some(conflict => conflict.conflictType === 'destination');
+                  
+                  if (hasCircular && hasDestination) {
+                    return "Multiple conflict types detected. For circular transfer conflicts, please deactivate the conflicting jobs. For destination path conflicts, please delete the conflicting jobs.";
+                  } else if (hasCircular) {
+                    return "A circular transfer has been detected. Please resolve these conflicts by deactivating the conflicting jobs.";
+                  } else {
+                    return "Please resolve these conflicts by deleting the jobs.";
+                  }
+                })()}
               </Box>
             </Box>
           </AccordionCardContent>

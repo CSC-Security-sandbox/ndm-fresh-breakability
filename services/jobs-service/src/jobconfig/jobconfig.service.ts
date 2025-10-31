@@ -960,12 +960,50 @@ export class JobConfigService {
 
   // ------------ Bulk delete ---------------- //
   async deleteJobConfig(id: string): Promise<{ message: string }> {
-    const job = await this.jobConfigRepo.findOne({ where: { id } });
-    if (!job) {
-      throw new Error(`Job with id ${id} not found`);
+    try {
+      const job = await this.jobConfigRepo.findOne({ 
+        where: { id }
+      });
+      if (!job) {
+        throw new NotFoundException(`Job with id ${id} not found`);
+      }
+
+      // Check for active job runs
+      const activeJobRuns = await this.jobRunRepo.find({
+        where: {
+          jobConfigId: id,
+          status: In([
+            JobRunStatus.Ready,
+            JobRunStatus.Pending,
+            JobRunStatus.Running,
+            JobRunStatus.Pausing,
+            JobRunStatus.Stopping,
+          ]),
+        },
+      });
+
+      if (activeJobRuns.length > 0) {
+        throw new BadRequestException(
+          'Cannot delete job configuration. There are active job runs associated with this configuration.',
+        );
+      }
+
+      await this.jobConfigRepo.remove(job);
+      this.logger.log(`Job with id ${id} has been deleted successfully`);
+      return { message: `Job with id ${id} has been deleted` };
+    } catch (error) {
+      this.logger.error(`Failed to delete job with id ${id}`, error.stack);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        {
+          status: "failed",
+          message: error.message || "Failed to delete job configuration",
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
-    await this.jobConfigRepo.remove(job);
-    return { message: `Job with id ${id} has been deleted` };
   }
 
   // ------------ Job Config By Id ---------------- //
