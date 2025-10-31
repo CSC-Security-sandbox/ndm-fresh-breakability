@@ -60,7 +60,7 @@ export class ErrorLogService {
   }) {
     await this.handleError(jobRunId, jobConfigId);
     try {
-      const params: (string | number)[] = [];
+      const params: (string | number | string[])[] = [];
       let whereClause = "";
 
       if (jobConfigId) {
