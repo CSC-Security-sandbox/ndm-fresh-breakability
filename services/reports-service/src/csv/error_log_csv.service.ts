@@ -71,6 +71,9 @@ export class ErrorLogService {
         params.push(jobRunId);
       }
 
+      // Add error types as parameters
+      const errorTypesParamIndex = params.length + 1;
+      params.push([...USER_VISIBLE_ERROR_TYPES]);
       params.push(pageSize, offset);
 
       const query = `
@@ -92,7 +95,7 @@ export class ErrorLogService {
     LEFT JOIN datamigrator.jobrun jr ON jr.id = o.job_run_id
     LEFT JOIN datamigrator.jobconfig jc ON jc.id = jr.job_config_id
     WHERE ${whereClause}
-      AND oe.error_type IN (${USER_VISIBLE_ERROR_TYPES.map(t => `'${t}'`).join(', ')})
+      AND oe.error_type = ANY($${errorTypesParamIndex})
     GROUP BY oe.file_path, o.job_run_id
     ORDER BY MIN(oe.created_at)
     LIMIT $${params.length - 1}
@@ -392,8 +395,8 @@ export class ErrorLogService {
          FROM datamigrator.operation_errors oe
          LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
          WHERE o.job_run_id = $1
-           AND oe.error_type IN (${USER_VISIBLE_ERROR_TYPES.map(t => `'${t}'`).join(', ')})`,
-        [jobRunId]
+           AND oe.error_type = ANY($2)`,
+        [jobRunId, [...USER_VISIBLE_ERROR_TYPES]]
       );
       const workerSetupCount = await this.getWorkerSetupCount(jobRunId);
       return Number(opCount) + workerSetupCount;
@@ -411,13 +414,14 @@ export class ErrorLogService {
       const jobRunIds = await this.getJobRunIds(jobConfigId);
       if (jobRunIds.length === 0) return 0;
       const placeholders = jobRunIds.map((_, i) => `$${i + 1}`).join(",");
+      const errorTypesParamIndex = jobRunIds.length + 1;
       const [{ count: opCount }] = await this.operationErrorRepo.query(
         `SELECT COUNT(*) as count
          FROM datamigrator.operation_errors oe
          LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
          WHERE o.job_run_id IN (${placeholders})
-           AND oe.error_type IN (${USER_VISIBLE_ERROR_TYPES.map(t => `'${t}'`).join(', ')})`,
-        jobRunIds
+           AND oe.error_type = ANY($${errorTypesParamIndex})`,
+        [...jobRunIds, [...USER_VISIBLE_ERROR_TYPES]]
       );
       const workerSetupCount = await this.getWorkerSetupCount(jobRunIds);
       return Number(opCount) + workerSetupCount;
