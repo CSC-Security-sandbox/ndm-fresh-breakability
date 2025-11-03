@@ -95,7 +95,7 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
     error: undefined,
   };
 
-  wf.setHandler(actionSignal, async (action:JobRunStatus)=>{    
+  wf.setHandler(actionSignal, async (action:JobRunStatus)=>{
     actionState = action;
     console.log(jobRunId, `action signal called with value: ${action}`);
   });
@@ -111,14 +111,19 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
       console.log(`Stopping ChildScanWorkflow ${jobRunId} as requested. ${actionState}`);
       break;
     }
-
     // wait until the state is paused.
     await updateJobStatusIfNotRunning(actionState, jobRunId);
     await wf.condition(() => actionState !== JobRunStatus.Paused);
 
     let discoverdBatchIds = [];
     for(let i = 0 ; i< dirBatchIds.length;  i+= MAX_CONCURRENT_BATCHES){
-      await validateCommandStreamLength(jobRunId);
+      const isCmdLenValid = await validateCommandStreamLength(jobRunId, iterations);
+      if(!isCmdLenValid) {
+        console.warn(`ChildScanWorkflow ${jobRunId} has exceeded event limit of ${ITERATIONS_LIMIT}, continuing as new`);
+        await wf.continueAsNew({
+          jobRunId, dirsToScan, dirBatchIds: dirBatchIds, batchSize, dirCount:scanWorkflowOutput.dirCount, fileCount:scanWorkflowOutput.fileCount, isMigration, actionState, isInitialScan: false, workerConcurrency 
+        });
+      }
       const batchExecResults: ExecuteBatchScansOutput = await executeBatchScan({ batches: dirBatchIds.slice(i, i + MAX_CONCURRENT_BATCHES), batchSize, isMigration, jobRunId});
       scanWorkflowOutput.fileCount += batchExecResults.fileCount;
       scanWorkflowOutput.dirCount += batchExecResults.dirCount;
@@ -126,11 +131,10 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
       if(batchExecResults.error){
         errors.push(batchExecResults.error);
       }
-      iterations+= 100+ MAX_CONCURRENT_BATCHES;
-
+      iterations+= MAX_CONCURRENT_BATCHES;
       if(iterations > ITERATIONS_LIMIT ){
-        console.warn(`ChildScanWorkflow ${jobRunId} has exceeded 1000 iterations, stopping to prevent infinite loop.`);
-        const consolidatedBatchIds = dirBatchIds.slice(i + MAX_CONCURRENT_BATCHES).concat(discoverdBatchIds);
+        console.warn(`ChildScanWorkflow ${jobRunId} has exceeded event limit of ${ITERATIONS_LIMIT}, continuing as new`);
+        const consolidatedBatchIds = dirBatchIds.slice(i+MAX_CONCURRENT_BATCHES).concat(discoverdBatchIds);
         await wf.continueAsNew({
           jobRunId, dirsToScan, dirBatchIds: consolidatedBatchIds, batchSize, dirCount:scanWorkflowOutput.dirCount, fileCount:scanWorkflowOutput.fileCount, isMigration, actionState, isInitialScan: false, workerConcurrency 
         });
@@ -143,29 +147,26 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
     scanWorkflowOutput.error = errors.length > 0 ? errors.join(', ') : undefined;
     scanWorkflowOutput.status = JobRunStatus.Errored;
   }else{
-     scanWorkflowOutput.status = isStopRequested ? JobRunStatus.Stopped : JobRunStatus.Completed;    
+     scanWorkflowOutput.status = isStopRequested ? JobRunStatus.Stopped : JobRunStatus.Completed;
   }
   return  scanWorkflowOutput;
 }
 
-async function validateCommandStreamLength(jobRunId: string): Promise<void> {
-  let checkCount = 0;
-  const maxChecks = 100;
-
-   while(checkCount < maxChecks){
-      checkCount++;
+async function validateCommandStreamLength(jobRunId: string, iterations: number): Promise<boolean> {
+  let checkCount = iterations;
+  while(checkCount <= ITERATIONS_LIMIT){
       try{
         const isCmdStreamLenValid = await isCmdStreamLenValidActivity(jobRunId);
-        if(isCmdStreamLenValid) break;        
-        console.warn(`[WARNING] For jobRunId ${jobRunId}, Waiting for stream to be valid.`);                          
-        await wf.sleep('30s'); // wait before checking again        
+        if(isCmdStreamLenValid) return true;
+        console.warn(`[WARNING] For jobRunId ${jobRunId}, Waiting for stream to be valid.`);
+        await wf.sleep('30s'); // wait before checking again
+        checkCount+=2;
       }catch(error){
-        console.error(`[ERROR] Error validating command stream length for jobRunId ${jobRunId}: ${error.message}`);       
-      }      
+        console.error(`[ERROR] Error validating command stream length for jobRunId ${jobRunId}: ${error.message}`);
+        break;
+      }
     }
-    if (checkCount >= maxChecks) {
-      console.warn(`[WARNING] For jobRunId ${jobRunId}, Maximum checks reached. Exiting validation loop.`);
-    }
+    return false;
 }
 
 export const executeBatchScan = async ({ batchSize, batches, isMigration, jobRunId}: ExecuteBatchScanInput): Promise<ExecuteBatchScansOutput> => {
