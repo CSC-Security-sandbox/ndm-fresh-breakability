@@ -311,11 +311,6 @@ var _ = Describe("TC-SMB-PERMISSIONS: Test SMB file default and explicit permiss
 		})
 
 		AfterEach(func() {
-			if PROTOCOL_TYPE == ProtocolNFS {
-				LogDebug("Skipping cleanup as test was skipped for NFS protocol")
-				return
-			}
-
 			By("Cleanup started")
 			err := StopAllWorkersAndWait()
 			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")

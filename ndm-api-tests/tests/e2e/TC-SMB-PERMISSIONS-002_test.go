@@ -10,6 +10,11 @@ import (
 )
 
 var _ = Describe("TC-SMB-PERMISSIONS-NO-SID-MAPPING: Test SMB permissions with valid/invalid principals WITHOUT SID mapping", func() {
+	BeforeEach(func() {
+		if PROTOCOL_TYPE == ProtocolNFS {
+			Skip("SMB permissions is skipped in CI/CD as it is not supported in NFS")
+		}
+	})
 	var (
 		ProjectId              string
 		workerId1              string
@@ -23,10 +28,6 @@ var _ = Describe("TC-SMB-PERMISSIONS-NO-SID-MAPPING: Test SMB permissions with v
 
 	Context("SMB Permissions Migration Without SID Mapping Test", func() {
 		BeforeEach(func() {
-			if PROTOCOL_TYPE != ProtocolSMB {
-				Skip("Skipping SMB permissions test as protocol is not SMB")
-			}
-
 			numberOfWorker := 1
 
 			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)

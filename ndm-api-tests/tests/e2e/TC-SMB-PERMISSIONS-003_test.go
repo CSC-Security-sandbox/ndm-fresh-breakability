@@ -11,6 +11,11 @@ import (
 )
 
 var _ = Describe("TC-SMB-PERMISSIONS-SID-MAPPING: Test SMB permissions WITH SID mapping CSV", func() {
+    BeforeEach(func() {
+		if PROTOCOL_TYPE == ProtocolNFS {
+			Skip("SMB permissions is skipped in CI/CD as it is not supported in NFS")
+		}
+	})
     var (
         ProjectId              string
         workerId1              string
@@ -24,10 +29,6 @@ var _ = Describe("TC-SMB-PERMISSIONS-SID-MAPPING: Test SMB permissions WITH SID 
 
     Context("SMB Permissions Migration With SID Mapping CSV Test", func() {
         BeforeEach(func() {
-            if PROTOCOL_TYPE != ProtocolSMB {
-                Skip("Skipping SMB permissions test as protocol is not SMB")
-            }
-
             numberOfWorker := 1
 
             ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
