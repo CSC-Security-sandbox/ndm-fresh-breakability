@@ -256,7 +256,7 @@ jobs:
             exit 1
           fi
           
-        echo "Service setup completed successfully"
+          echo "Service setup completed successfully"
 
       - name: Infrastructure Creation Complete
         run: |
