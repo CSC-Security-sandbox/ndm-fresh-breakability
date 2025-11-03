@@ -61,6 +61,31 @@ export class WorkManagerController {
     );
   }
 
+  @ApiOperation({ summary: 'Get Worker Configurations' })
+  @ApiOkResponse({
+    description: 'Configurations Retrieved',
+    type: [WorkerConfiguration],
+  })
+  @ApiNotFoundResponse({ description: 'Worker Not Found' })
+  @AuthWorker()
+  @Get('config')
+  async getWorkerConfigurations(
+    @ClientIp() ip: string,
+    @Req() req: any,
+  ): Promise<WorkerConfiguration[]> {
+    this.logger.debug(
+      `Fetching configurations for worker ID: ${req['worker_id']} from IP: ${ip} for project ID: ${req['project_id']} on platform: ${req?.headers['x-client-platform']}`,
+    );
+    return await this.workManagerService.getConfiguration(
+      req['worker_id'],
+      ip,
+      req['project_id'],
+      req?.headers['x-client-platform'],
+      {},     
+      false,
+    );
+  }
+
   @ApiOperation({ summary: 'Create a new request' })
   @ApiResponse({ status: 201, description: 'Request created successfully' })
   @ApiResponse({ status: 400, description: 'Bad Request' })
