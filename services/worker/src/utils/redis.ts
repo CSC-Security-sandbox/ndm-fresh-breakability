@@ -19,9 +19,9 @@ export async function fetchRedisCredentials(
   const workerConfigUrl = configService.get('worker.connection.workerConfigUrl');
   const workerId = configService.get('worker.workerId');
 
-  logger.log('=== Starting Redis credentials fetch ===');
-  logger.log(`Worker ID: ${workerId}`);
-  
+  logger.debug('=== Starting Redis credentials fetch ===');
+  logger.debug(`Worker ID: ${workerId}`);
+
   try {
     // Get access token
     const accessToken = await authService.getAccessToken();
@@ -47,8 +47,6 @@ export async function fetchRedisCredentials(
       throw new Error(`Failed to fetch Redis credentials. Status: ${response.status}`);
     }
 
-    logger.debug(`Redis response: ${JSON.stringify(response.data)}`);
-
     // Parse Redis credentials
     const data = response.data?.data?.items;
     if (!data?.host || !data?.username || !data?.password) {
@@ -62,9 +60,9 @@ export async function fetchRedisCredentials(
     };
 
     logger.log('Redis credentials fetched successfully:');
-    logger.log(`  Host: ${redisCredentials.host}`);
-    logger.log(`  Username: ${redisCredentials.username}`);
-    logger.log(`  Password length: ${redisCredentials.password.length}`);
+    logger.debug(`  Host: ${redisCredentials.host}`);
+    logger.debug(`  Username: ${redisCredentials.username}`);
+    logger.debug(`  Password length: ${redisCredentials.password.length}`);
 
     return redisCredentials;
 
@@ -91,8 +89,7 @@ export async function fetchAndUpdateRedisCredentials(
   authService: AuthService,
   configService: ConfigService,
   logger: LoggerService,
-): Promise<RedisCredentials> {
+): Promise<void> {
   const credentials = await fetchRedisCredentials(httpService, authService, configService, logger);
   updateRedisConfig(credentials, logger);
-  return credentials;
 }

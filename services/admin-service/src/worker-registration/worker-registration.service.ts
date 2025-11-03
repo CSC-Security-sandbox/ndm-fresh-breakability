@@ -11,7 +11,7 @@ import {
   RegisterWorkerResponseDto,
 } from './dto/register-worker.dto';
 import { ConfigService } from '@nestjs/config';
-import keycloakConfig, { KeycloakAdminConfig } from 'src/config/keycloak.config';
+import { KeycloakAdminConfig } from 'src/config/keycloak.config';
 import { WorkerRegisterConfig } from 'src/config/workerregister.config';
 import {
   LoggerFactory,
@@ -63,7 +63,6 @@ export class WorkerRegistrationService {
                 const clientConfig = new ClientConfig(details.projectId).getConfig();
                 const accessToken = await this.getAdminAccessToken();
 
-
                 const response = await axios.post(
                 `${this.keycloak.keycloakUrl}/admin/realms/${this.keycloak.keycloakRealm}/clients`,
                 clientConfig,
@@ -76,7 +75,7 @@ export class WorkerRegistrationService {
             );
 
             if (response.status === 201) {
-                // Assign standard worker roles to ALL workers
+                // Assign standard worker roles to the newly registered worker
                 await this.assignStandardWorkerRoles(clientConfig.clientId, accessToken);
 
                 return new RegisterWorkerResponseDto(

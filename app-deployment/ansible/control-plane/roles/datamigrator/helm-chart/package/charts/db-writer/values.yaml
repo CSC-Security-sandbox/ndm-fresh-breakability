@@ -67,11 +67,6 @@ env:
   - name: REDIS_HOST
     value: "redis-master.redis.svc.cluster.local"
 
-  # - name: REDIS_USERNAME
-  #   value: "default"
-  # - name: REDIS_PASSWORD
-  #   value: "welcome"
-
   - name: REDIS_PORT
     value: "6379"
 

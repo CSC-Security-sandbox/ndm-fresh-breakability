@@ -47,7 +47,7 @@ export class WorkManagerService {
     @Inject(WorkerOptionsService)
     private readonly workerOptions: WorkerOptionsService,
     @Inject(AuthService) private readonly authService: AuthService,
-    @Inject(RedisService) private readonly redisService: RedisService, // ← ADD THIS
+    @Inject(RedisService) private readonly redisService: RedisService,
 
   ) {
     this.workerConfigUrl = `${this.configService.get('worker.connection.workerConfigUrl')}`;

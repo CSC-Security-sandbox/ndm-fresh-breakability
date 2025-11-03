@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Request, ForbiddenException, Logger } from '@nestjs/common';
+import { Body, Controller, Get, Post, Request, ForbiddenException, Logger, Inject } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { Auth, Permission, AuthWorker } from '@netapp-cloud-datamigrate/auth-lib';
@@ -22,8 +22,13 @@ class UserStatusDto {
 @ApiTags('auth')
 @Controller('/api/v1')
 export class AuthController {
-  private readonly logger: Logger = new Logger(AuthController.name);
-  constructor(private readonly authService: AuthService) {}
+    private readonly logger: LoggerService;
+  constructor(
+    private readonly authService: AuthService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+      this.logger = loggerFactory.create(AuthController.name);
+    }
 
   @Auth()
   @ApiBearerAuth()
@@ -144,14 +149,13 @@ export class AuthController {
 
       this.logger.log('Redis access granted with proper role');
       return {
-        host: process.env.REDIS_HOST ,
+        host: process.env.REDIS_HOST,
         username: process.env.REDIS_USERNAME,
         password: process.env.REDIS_PASSWORD,
       };
     } catch (error) {
       this.logger.error('Redis access check failed:', error.message);
 
-      // Let @AuthWorker() handle the error formatting
       throw error;
     }
   }

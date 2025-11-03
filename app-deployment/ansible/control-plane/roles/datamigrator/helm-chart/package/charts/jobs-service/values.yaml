@@ -72,10 +72,6 @@ env:
     value: "temporaltest-frontend.temporal.svc.cluster.local:7233"
   - name: REDIS_HOST
     value: "redis-master.redis.svc.cluster.local"
-  # - name: REDIS_USERNAME
-  #   value: "default"
-  # - name: REDIS_PASSWORD
-  #   value: "welcome"
   - name: REDIS_PORT
     value: "6379"
   - name: LOG_LEVEL

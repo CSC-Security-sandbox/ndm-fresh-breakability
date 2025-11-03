@@ -20,6 +20,8 @@ import {
 @Injectable()
 export class AuthService {
   private readonly logger: LoggerService;
+  private static readonly REDIS_SECRET_READER_ROLE = 'redis-secret-reader';
+
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
@@ -72,8 +74,7 @@ export class AuthService {
             const userRoles = rolesResponse.map(role => role.name);
             this.logger.log('User roles found:', userRoles);
 
-            const hasRedisRole = rolesResponse.some(role => role.name === 'redis-secret-reader');
-
+            const hasRedisRole = rolesResponse.some(role => role.name === AuthService.REDIS_SECRET_READER_ROLE);
 
             return hasRedisRole;
         } catch (error) {

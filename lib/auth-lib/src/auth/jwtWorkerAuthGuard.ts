@@ -20,7 +20,6 @@ export class JwtWorkerAuthGuard implements CanActivate {
         const request = context.switchToHttp().getRequest();
         const authHeader = request.headers.authorization;
 
-
         if (!authHeader) {
             this.logger.warn("Authorization header is missing.");
             return false;
