@@ -86,7 +86,7 @@ type MigrationJobParams struct {
 	FutureRunSchedule  string
 	SourcePathIDs      []string
 	DestinationPathIDs []string
-	SidMapping         bool
+	SidMapping         interface{}
 	Options            map[string]interface{}
 	ExtraParams        map[string]interface{}
 }
@@ -213,7 +213,7 @@ func CreateMigrationJob(params MigrationJobParams, headers map[string]string) ([
 		"firstRunAt":        params.FirstRunAt,
 		"futureRunSchedule": params.FutureRunSchedule,
 		"migrateConfigs":    migrateConfigs,
-		"sid_mapping":       params.SidMapping,
+		"sidMapping":       params.SidMapping,
 		"options":           params.Options,
 	}
 

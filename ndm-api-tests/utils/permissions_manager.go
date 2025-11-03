@@ -1216,3 +1216,805 @@ net use %s /delete /y >$null 2>&1
 	// Encode PowerShell script in Base64 to avoid quoting issues
 	return fmt.Sprintf(`powershell.exe -NoProfile -NonInteractive -EncodedCommand "%s"`, encodePowerShellCommand(psScript))
 }
+
+// InstallADPowerShellModule installs the Active Directory PowerShell module on Windows worker
+// This is required before using AD cmdlets like Remove-ADUser, New-ADUser, etc.
+func InstallADPowerShellModule() error {
+	script := installADModuleScript()
+
+	LogDebug("Installing Active Directory PowerShell module...")
+
+	config := GetAttachedWorkerDetails()
+	sshConfig := SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	output, err := sshRunScript(sshConfig, script)
+	LogDebug(fmt.Sprintf("InstallADPowerShellModule script output: %s", output))
+
+	if err != nil {
+		return fmt.Errorf("InstallADPowerShellModule failed: %w\noutput: %s", err, output)
+	}
+
+	LogDebug("Successfully installed AD PowerShell module")
+	return nil
+}
+
+func installADModuleScript() string {
+	script := `powershell.exe -Command "` +
+		`Write-Host 'Checking if AD module is already installed...'; ` +
+		`if (Get-Module -ListAvailable -Name ActiveDirectory) { ` +
+		`Write-Host 'AD module already installed'; ` +
+		`Import-Module ActiveDirectory -ErrorAction SilentlyContinue; ` +
+		`exit 0; ` +
+		`} else { ` +
+		`Write-Host 'Installing AD PowerShell module...'; ` +
+		`try { ` +
+		`Install-WindowsFeature -Name RSAT-AD-PowerShell -ErrorAction Stop; ` +
+		`Write-Host 'AD module installed via Install-WindowsFeature'; ` +
+		`} catch { ` +
+		`Write-Host 'Install-WindowsFeature failed, trying Add-WindowsCapability...'; ` +
+		`Add-WindowsCapability -Online -Name Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0 -ErrorAction Stop; ` +
+		`Write-Host 'AD module installed via Add-WindowsCapability'; ` +
+		`}; ` +
+		`Import-Module ActiveDirectory; ` +
+		`Write-Host 'AD module imported successfully'; ` +
+		`}" `
+
+	return script
+}
+
+// CreateADPrincipals creates users and groups in Active Directory for testing
+func CreateADPrincipals(users []string, group string) error {
+	script := createADPrincipalsScript(users, group)
+
+	LogDebug(fmt.Sprintf("Creating AD principals script: %s", script))
+
+	config := GetAttachedWorkerDetails()
+	sshConfig := SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	output, err := sshRunScript(sshConfig, script)
+	LogDebug(fmt.Sprintf("CreateADPrincipals script output: %s", output))
+
+	if err != nil {
+		return fmt.Errorf("CreateADPrincipals failed: %w\noutput: %s", err, output)
+	}
+
+	LogDebug("Successfully created AD principals")
+	return nil
+}
+
+func createADPrincipalsScript(users []string, group string) string {
+	adUsername := PROTOCOL_USERNAME
+	adPassword := PROTOCOL_PASSWORD
+
+	var parts []string
+	parts = append(parts, `powershell.exe -Command "`)
+	parts = append(parts, fmt.Sprintf(`$password = ConvertTo-SecureString '%s' -AsPlainText -Force; `, adPassword))
+	parts = append(parts, fmt.Sprintf(`$credential = New-Object System.Management.Automation.PSCredential('%s', $password); `, adUsername))
+	parts = append(parts, `Import-Module ActiveDirectory -ErrorAction Stop; `)
+
+	parts = append(parts, `$defaultPassword = ConvertTo-SecureString 'Welcome@123' -AsPlainText -Force; `)
+
+	// Create users
+	for _, user := range users {
+		username := user
+		if strings.Contains(user, "\\") {
+			userParts := strings.Split(user, "\\")
+			username = userParts[len(userParts)-1]
+		}
+		parts = append(parts, fmt.Sprintf(`$existingUser = Get-ADUser -Identity '%s' -Credential $credential -ErrorAction SilentlyContinue; `+
+			`if ($existingUser) { `+
+			`Write-Host 'User %s already exists'; `+
+			`} else { `+
+			`try { `+
+			`New-ADUser -Name '%s' -SamAccountName '%s' -AccountPassword $defaultPassword -Enabled $true -PasswordNeverExpires $true -ChangePasswordAtLogon $false -Credential $credential -ErrorAction Stop; `+
+			`Write-Host 'Created user: %s'; `+
+			`} catch { Write-Host 'Error creating user %s: ' $_; }; `+
+			`}; `,
+			username, username, username, username, username, username))
+	}
+
+	// Create group
+	groupname := group
+	if strings.Contains(group, "\\") {
+		groupParts := strings.Split(group, "\\")
+		groupname = groupParts[len(groupParts)-1]
+	}
+	parts = append(parts, fmt.Sprintf(`$existingGroup = Get-ADGroup -Identity '%s' -Credential $credential -ErrorAction SilentlyContinue; `+
+		`if ($existingGroup) { `+
+		`Write-Host 'Group %s already exists'; `+
+		`} else { `+
+		`try { `+
+		`New-ADGroup -Name '%s' -SamAccountName '%s' -GroupScope Global -GroupCategory Security -Credential $credential -ErrorAction Stop; `+
+		`Write-Host 'Created group: %s'; `+
+		`} catch { Write-Host 'Error creating group %s: ' $_; }; `+
+		`}; `,
+		groupname, groupname, groupname, groupname, groupname, groupname))
+
+	parts = append(parts, `"`)
+
+	return strings.Join(parts, " ")
+}
+
+// DeleteADPrincipals deletes users and groups from Active Directory
+func DeleteADPrincipals(users, groups []string) error {
+	script := deleteADPrincipalsScript(users, groups)
+
+	LogDebug(fmt.Sprintf("Deleting AD principals script: %s", script))
+
+	config := GetAttachedWorkerDetails()
+	sshConfig := SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	output, err := sshRunScript(sshConfig, script)
+	LogDebug(fmt.Sprintf("DeleteADPrincipals script output: %s", output))
+
+	if err != nil {
+		return fmt.Errorf("DeleteADPrincipals failed: %w\noutput: %s", err, output)
+	}
+
+	LogDebug("Successfully deleted AD principals")
+	return nil
+}
+
+func deleteADPrincipalsScript(users, groups []string) string {
+	adUsername := PROTOCOL_USERNAME
+	adPassword := PROTOCOL_PASSWORD
+
+	var parts []string
+	parts = append(parts, `powershell.exe -Command "`)
+	parts = append(parts, fmt.Sprintf(`$password = ConvertTo-SecureString '%s' -AsPlainText -Force; `, adPassword))
+	parts = append(parts, fmt.Sprintf(`$credential = New-Object System.Management.Automation.PSCredential('%s', $password); `, adUsername))
+	parts = append(parts, `Import-Module ActiveDirectory -ErrorAction Stop; `)
+
+	// Delete users
+	for _, user := range users {
+		username := user
+		if strings.Contains(user, "\\") {
+			userParts := strings.Split(user, "\\")
+			username = userParts[len(userParts)-1]
+		}
+		parts = append(parts, fmt.Sprintf(`try { Remove-ADUser -Identity '%s' -Credential $credential -Confirm:$false -ErrorAction Stop; Write-Host 'Deleted user: %s' } catch { Write-Host 'Error deleting user %s: ' $_; };`, username, username, username))
+	}
+
+	// Delete groups
+	for _, group := range groups {
+		groupname := group
+		if strings.Contains(group, "\\") {
+			groupParts := strings.Split(group, "\\")
+			groupname = groupParts[len(groupParts)-1]
+		}
+		parts = append(parts, fmt.Sprintf(`try { Remove-ADGroup -Identity '%s' -Credential $credential -Confirm:$false -ErrorAction Stop; Write-Host 'Deleted group: %s' } catch { Write-Host 'Error deleting group %s: ' $_; };`, groupname, groupname, groupname))
+	}
+
+	parts = append(parts, `"`)
+
+	return strings.Join(parts, " ")
+}
+
+// CreateSMBFilesWithMixedPrincipals creates files with specific user/group permissions
+func CreateSMBFilesWithMixedPrincipals(export string, validUsers, invalidUsers, validGroups, invalidGroups []string) error {
+	script := createSMBFilesWithMixedPrincipalsScript(export, validUsers, invalidUsers, validGroups, invalidGroups)
+
+	LogDebug(fmt.Sprintf("Creating SMB files with mixed principals script: %s", script))
+
+	config := GetAttachedWorkerDetails()
+	sshConfig := SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	output, err := sshRunScript(sshConfig, script)
+	LogDebug(fmt.Sprintf("CreateSMBFilesWithMixedPrincipals script output: %s", output))
+
+	if err != nil {
+		return fmt.Errorf("CreateSMBFilesWithMixedPrincipals failed: %w\noutput: %s", err, output)
+	}
+
+	LogDebug(fmt.Sprintf("Successfully created SMB files with mixed principals on %s", export))
+	return nil
+}
+
+func createSMBFilesWithMixedPrincipalsScript(export string, validUsers, invalidUsers, validGroups, invalidGroups []string) string {
+	split := strings.Split(export, ":")
+	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
+
+	localTestDir := `C:\permissions_test`
+	mappedDrive := `Z:`
+	testDir := `permissions_test`
+	share := fmt.Sprintf(`%s\%s`, smbShare, testDir)
+
+	var parts []string
+	parts = append(parts, `cmd /C`)
+	parts = append(parts, fmt.Sprintf(`if exist %s rmdir /s /q %s &&`, localTestDir, localTestDir))
+	parts = append(parts, fmt.Sprintf(`mkdir %s &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`mkdir %s\valid_principals &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`mkdir %s\invalid_principals &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`mkdir %s\mixed_principals &&`, localTestDir))
+
+	parts = append(parts, fmt.Sprintf(`echo Valid user 1 file > %s\valid_principals\valid_user1_file.txt &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`echo Valid user 2 file > %s\valid_principals\valid_user2_file.txt &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`echo Valid group file > %s\valid_principals\valid_group_file.txt &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`echo Invalid user 1 file > %s\invalid_principals\invalid_user1_file.txt &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`echo Invalid user 2 file > %s\invalid_principals\invalid_user2_file.txt &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`echo Invalid group file > %s\invalid_principals\invalid_group_file.txt &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`echo Mixed file > %s\mixed_principals\mixed_file.txt &&`, localTestDir))
+
+	parts = append(parts, fmt.Sprintf(`net use %s /delete /y >nul 2>&1 &`, mappedDrive))
+	parts = append(parts, fmt.Sprintf(`net use %s %s /user:%s "%s" &&`, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD))
+	parts = append(parts, fmt.Sprintf(`xcopy /E /I /Y %s %s &&`, localTestDir, share))
+
+	// Set permissions for valid users
+	if len(validUsers) > 0 {
+		parts = append(parts, fmt.Sprintf(`icacls "%s\valid_principals\valid_user1_file.txt" /grant "%s:F" &&`, share, validUsers[0]))
+		if len(validUsers) > 1 {
+			parts = append(parts, fmt.Sprintf(`icacls "%s\valid_principals\valid_user2_file.txt" /grant "%s:M" &&`, share, validUsers[1]))
+		}
+	}
+
+	// Set permissions for valid groups
+	if len(validGroups) > 0 {
+		parts = append(parts, fmt.Sprintf(`icacls "%s\valid_principals\valid_group_file.txt" /grant "%s:M" &&`, share, validGroups[0]))
+	}
+
+	// Set permissions for invalid users
+	if len(invalidUsers) > 0 {
+		parts = append(parts, fmt.Sprintf(`icacls "%s\invalid_principals\invalid_user1_file.txt" /grant "%s:F" &&`, share, invalidUsers[0]))
+		if len(invalidUsers) > 1 {
+			parts = append(parts, fmt.Sprintf(`icacls "%s\invalid_principals\invalid_user2_file.txt" /grant "%s:M" &&`, share, invalidUsers[1]))
+		}
+	}
+
+	// Set permissions for invalid groups
+	if len(invalidGroups) > 0 {
+		parts = append(parts, fmt.Sprintf(`icacls "%s\invalid_principals\invalid_group_file.txt" /grant "%s:M" &&`, share, invalidGroups[0]))
+	}
+
+	// Set mixed permissions
+	if len(validUsers) > 0 && len(invalidUsers) > 0 {
+		parts = append(parts, fmt.Sprintf(`icacls "%s\mixed_principals\mixed_file.txt" /grant "%s:F" &&`, share, validUsers[0]))
+		parts = append(parts, fmt.Sprintf(`icacls "%s\mixed_principals\mixed_file.txt" /grant "%s:R" &&`, share, invalidUsers[0]))
+	}
+
+	parts = append(parts, `echo ===== Files and permissions created ===== &&`)
+	parts = append(parts, fmt.Sprintf(`dir %s /s /b &&`, share))
+	parts = append(parts, fmt.Sprintf(`net use %s /delete /y &&`, mappedDrive))
+	parts = append(parts, fmt.Sprintf(`rmdir /s /q %s`, localTestDir))
+
+	return strings.Join(parts, " ")
+}
+
+// CreateSMBFilesForSIDMapping creates test files with permissions for specific users
+// Used for SID mapping scenarios (orphaned, name-based, and unmapped users)
+func CreateSMBFilesForSIDMapping(export string, users []string) error {
+	script := createSMBFilesForSIDMappingScript(export, users)
+
+	LogDebug(fmt.Sprintf("Creating SMB files for SID mapping test script: %s", script))
+
+	config := GetAttachedWorkerDetails()
+	sshConfig := SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	output, err := sshRunScript(sshConfig, script)
+	LogDebug(fmt.Sprintf("CreateSMBFilesForSIDMapping script output: %s", output))
+
+	if err != nil {
+		return fmt.Errorf("CreateSMBFilesForSIDMapping failed: %w\noutput: %s", err, output)
+	}
+
+	LogDebug(fmt.Sprintf("Successfully created SMB files for SID mapping test on %s", export))
+	return nil
+}
+
+func createSMBFilesForSIDMappingScript(export string, users []string) string {
+	split := strings.Split(export, ":")
+	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
+
+	localTestDir := `C:\permissions_test`
+	mappedDrive := `Z:`
+	testDir := `permissions_test`
+	share := fmt.Sprintf(`%s\%s`, smbShare, testDir)
+
+	var parts []string
+	parts = append(parts, `cmd /C`)
+	parts = append(parts, fmt.Sprintf(`if exist %s rmdir /s /q %s &&`, localTestDir, localTestDir))
+	parts = append(parts, fmt.Sprintf(`mkdir %s &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`mkdir %s\scenario1_orphaned &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`mkdir %s\scenario2_name_mapping &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`mkdir %s\scenario3_unmapped &&`, localTestDir))
+
+	// Create files for each scenario
+	parts = append(parts, fmt.Sprintf(`echo Orphaned SID test file > %s\scenario1_orphaned\orphaned_user_file.txt &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`echo Name mapping test file > %s\scenario2_name_mapping\name_mapping_file.txt &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`echo Unmapped user test file > %s\scenario3_unmapped\unmapped_user_file.txt &&`, localTestDir))
+
+	parts = append(parts, fmt.Sprintf(`net use %s /delete /y >nul 2>&1 &`, mappedDrive))
+	parts = append(parts, fmt.Sprintf(`net use %s %s /user:%s "%s" &&`, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD))
+	parts = append(parts, fmt.Sprintf(`xcopy /E /I /Y %s %s &&`, localTestDir, share))
+
+	// Set permissions for each scenario file based on the users array
+	// users[0] = orphaned user (will be deleted)
+	// users[1] = name-based mapping user
+	// users[2] = unmapped user
+	if len(users) > 0 {
+		parts = append(parts, fmt.Sprintf(`icacls "%s\scenario1_orphaned\orphaned_user_file.txt" /grant "%s:F" &&`, share, users[0]))
+	}
+	if len(users) > 1 {
+		parts = append(parts, fmt.Sprintf(`icacls "%s\scenario2_name_mapping\name_mapping_file.txt" /grant "%s:M" &&`, share, users[1]))
+	}
+	if len(users) > 2 {
+		parts = append(parts, fmt.Sprintf(`icacls "%s\scenario3_unmapped\unmapped_user_file.txt" /grant "%s:R" &&`, share, users[2]))
+	}
+
+	parts = append(parts, `echo ===== SID mapping test files and permissions created ===== &&`)
+	parts = append(parts, fmt.Sprintf(`dir %s /s /b &&`, share))
+	parts = append(parts, fmt.Sprintf(`net use %s /delete /y &&`, mappedDrive))
+	parts = append(parts, fmt.Sprintf(`rmdir /s /q %s`, localTestDir))
+
+	return strings.Join(parts, " ")
+}
+
+// ClearAllSMBSessions forcefully clears all SMB sessions and Windows name/DNS caches
+func ClearAllSMBSessions() error {
+	script := clearAllSMBSessionsScript()
+
+	LogDebug("Clearing all SMB sessions and Windows name/DNS caches...")
+
+	config := GetAttachedWorkerDetails()
+	sshConfig := SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	output, err := sshRunScript(sshConfig, script)
+	LogDebug(fmt.Sprintf("ClearAllSMBSessions script output: %s", output))
+
+	if err != nil {
+		return fmt.Errorf("ClearAllSMBSessions failed: %w\noutput: %s", err, output)
+	}
+
+	LogDebug("Successfully cleared all SMB sessions and caches")
+	return nil
+}
+
+func clearAllSMBSessionsScript() string {
+	var parts []string
+	parts = append(parts, `cmd /C`)
+	parts = append(parts, `net use * /delete /y >nul 2>&1 &`)
+	parts = append(parts, `nbtstat -R >nul 2>&1 &`)
+	parts = append(parts, `ipconfig /flushdns >nul 2>&1 &`)
+	parts = append(parts, `klist purge >nul 2>&1 &`)
+	parts = append(parts, `timeout /t 3 /nobreak >nul 2>&1 &`)
+	parts = append(parts, `echo SMB sessions and caches cleared`)
+
+	return strings.Join(parts, " ")
+}
+
+// VerifyADPrincipalsExist checks if the principals can be resolved in Active Directory
+func VerifyADPrincipalsExist(principals []string) (bool, error) {
+	script := verifyADPrincipalsScript(principals)
+
+	LogDebug(fmt.Sprintf("Verifying AD principals exist: %v", principals))
+
+	config := GetAttachedWorkerDetails()
+	sshConfig := SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	output, err := sshRunScript(sshConfig, script)
+	LogDebug(fmt.Sprintf("VerifyADPrincipalsExist script output: %s", output))
+
+	if err != nil {
+		return false, fmt.Errorf("VerifyADPrincipalsExist failed: %w\noutput: %s", err, output)
+	}
+
+	// Check if all principals were found
+	allExist := true
+	for _, principal := range principals {
+		username := principal
+		if strings.Contains(principal, "\\") {
+			parts := strings.Split(principal, "\\")
+			username = parts[len(parts)-1]
+		}
+
+		if !strings.Contains(output, fmt.Sprintf("EXISTS: %s", username)) {
+			allExist = false
+			LogDebug(fmt.Sprintf("Principal %s does NOT exist in AD", username))
+		}
+	}
+
+	return allExist, nil
+}
+
+func verifyADPrincipalsScript(principals []string) string {
+	adUsername := PROTOCOL_USERNAME
+	adPassword := PROTOCOL_PASSWORD
+
+	var parts []string
+	parts = append(parts, `powershell.exe -Command "`)
+	parts = append(parts, fmt.Sprintf(`$password = ConvertTo-SecureString '%s' -AsPlainText -Force; `, adPassword))
+	parts = append(parts, fmt.Sprintf(`$credential = New-Object System.Management.Automation.PSCredential('%s', $password); `, adUsername))
+	parts = append(parts, `Import-Module ActiveDirectory -ErrorAction Stop; `)
+
+	for _, principal := range principals {
+		username := principal
+		if strings.Contains(principal, "\\") {
+			userParts := strings.Split(principal, "\\")
+			username = userParts[len(userParts)-1]
+		}
+
+		parts = append(parts, fmt.Sprintf(`$obj = Get-ADUser -Identity '%s' -Credential $credential -ErrorAction SilentlyContinue; `+
+			`if ($obj) { Write-Host 'EXISTS: %s (User)'; } else { `+
+			`$obj = Get-ADGroup -Identity '%s' -Credential $credential -ErrorAction SilentlyContinue; `+
+			`if ($obj) { Write-Host 'EXISTS: %s (Group)'; } else { Write-Host 'NOT_FOUND: %s'; }; `+
+			`}; `,
+			username, username, username, username, username))
+	}
+
+	parts = append(parts, `"`)
+	return strings.Join(parts, " ")
+}
+
+type SMBPermissionWithSID struct {
+	FilePath    string
+	IsDirectory bool
+	ACLEntries  []ACLEntryWithSID
+}
+
+type ACLEntryWithSID struct {
+	DisplayName string
+	SID         string
+	AccessType  string
+	Permissions string
+	ExistsInAD  bool
+	IsOrphaned  bool
+}
+
+// GetSMBPermissionsWithSID uses PowerShell Get-Acl to capture both display names and SIDs
+// This bypasses icacls name resolution cache and directly queries AD to verify principal existence
+func GetSMBPermissionsWithSID(export string) ([]SMBPermissionWithSID, error) {
+	script := getSMBPermissionsWithSIDScript(export)
+
+	LogDebug("Getting SMB permissions with SID resolution script")
+
+	config := GetAttachedWorkerDetails()
+	sshConfig := SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	output, err := sshRunScript(sshConfig, script)
+	LogDebug("GetSMBPermissionsWithSID script successfully executed")
+
+	if err != nil {
+		return nil, fmt.Errorf("GetSMBPermissionsWithSID failed: %w\noutput: %s", err, output)
+	}
+
+	permissions, err := parseSMBPermissionsWithSID(output)
+	if err != nil {
+		LogDebug(fmt.Sprintf("Failed to parse SMB permissions with SID from output: %s", output))
+		return nil, fmt.Errorf("failed to parse SMB permissions with SID: %w", err)
+	}
+
+	LogDebug(fmt.Sprintf("Retrieved %d file/directory permissions with SID info from %s", len(permissions), export))
+	return permissions, nil
+}
+
+func getSMBPermissionsWithSIDScript(export string) string {
+	split := strings.Split(export, ":")
+	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
+
+	testDir := `permissions_test`
+	uncPath := fmt.Sprintf(`%s\%s`, smbShare, testDir)
+
+	adUsername := PROTOCOL_USERNAME
+	adPassword := PROTOCOL_PASSWORD
+
+	// PowerShell script content
+	psScriptContent := fmt.Sprintf(`$ErrorActionPreference = 'Stop'
+$password = ConvertTo-SecureString '%s' -AsPlainText -Force
+$credential = New-Object System.Management.Automation.PSCredential('%s', $password)
+Import-Module ActiveDirectory -ErrorAction SilentlyContinue
+try { net use '%s' /user:%s '%s' 2>&1 | Out-Null } catch { Write-Error "Failed to connect"; exit 1 }
+if (Test-Path '%s') {
+  $items = Get-ChildItem -Path '%s' -Recurse -Force
+  $results = @()
+  foreach ($item in $items) {
+    try {
+      $acl = Get-Acl -Path $item.FullName
+      $aclEntries = @()
+      foreach ($access in $acl.Access) {
+        $identity = $access.IdentityReference
+        $displayName = $identity.Value
+        $rawSID = ''
+        $existsInAD = $false
+        $isOrphaned = $false
+        $principalType = 'UNKNOWN'
+        try {
+          if ($identity -is [System.Security.Principal.SecurityIdentifier]) {
+            $rawSID = $identity.Value
+          } else {
+            $sidObj = $identity.Translate([System.Security.Principal.SecurityIdentifier])
+            $rawSID = $sidObj.Value
+          }
+        } catch { $rawSID = 'CANNOT_RESOLVE' }
+        if ($rawSID -match '^S-1-5-21-') {
+          try {
+            $null = Get-ADUser -Identity $rawSID -Credential $credential -ErrorAction Stop
+            $existsInAD = $true; $isOrphaned = $false; $principalType = 'USER'
+          } catch {
+            try {
+              $null = Get-ADGroup -Identity $rawSID -Credential $credential -ErrorAction Stop
+              $existsInAD = $true; $isOrphaned = $false; $principalType = 'GROUP'
+            } catch {
+              $existsInAD = $false; $isOrphaned = $true; $principalType = 'ORPHANED'
+            }
+          }
+        } else {
+          $existsInAD = $true; $isOrphaned = $false; $principalType = 'BUILTIN'
+        }
+        $aclEntries += [PSCustomObject]@{
+          DisplayName = $displayName; SID = $rawSID; Type = $access.AccessControlType.ToString()
+          Rights = $access.FileSystemRights.ToString(); ExistsInAD = $existsInAD
+          IsOrphaned = $isOrphaned; PrincipalType = $principalType
+        }
+      }
+      $results += [PSCustomObject]@{
+        Path = $item.FullName; IsDirectory = $item.PSIsContainer; Access = $aclEntries
+      }
+    } catch { 
+      Write-Warning "Failed to process $($item.FullName): $_"
+    }
+  }
+  $results | ConvertTo-Json -Depth 10 -Compress
+} else { 
+  Write-Error "Path not found"; exit 1 
+}
+try { net use '%s' /delete /y 2>&1 | Out-Null } catch { }
+`, adPassword, adUsername, uncPath, adUsername, adPassword, uncPath, uncPath, uncPath)
+
+	// Write script to temp file to avoid command line length issues
+	// Use Base64 encoding to avoid all quoting/escaping issues
+	tempScriptPath := `C:\Temp\get-smb-perms-sid.ps1`
+
+	// Base64 encode the script content as UTF-8 (not UTF-16LE like encodePowerShellCommand)
+	b64Script := base64Encode([]byte(psScriptContent))
+
+	// Decode Base64 and write to file
+	decodeAndWriteScript := fmt.Sprintf(`[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('%s')) | Out-File -FilePath '%s' -Encoding UTF8 -Force`, b64Script, tempScriptPath)
+
+	var parts []string
+	parts = append(parts, `cmd /C`)
+	parts = append(parts, `if not exist C:\Temp mkdir C:\Temp &&`)
+	parts = append(parts, fmt.Sprintf(`powershell -Command "%s" &&`, decodeAndWriteScript))
+	parts = append(parts, fmt.Sprintf(`powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%s" &&`, tempScriptPath))
+	parts = append(parts, fmt.Sprintf(`del "%s"`, tempScriptPath))
+
+	return strings.Join(parts, " ")
+}
+
+func parseSMBPermissionsWithSID(output string) ([]SMBPermissionWithSID, error) {
+	// Try to extract JSON from output
+	permissions, err := tryParsePowerShellJSONWithSID(output)
+	if err == nil && len(permissions) > 0 {
+		LogDebug(fmt.Sprintf("Successfully parsed %d permissions with SID from PowerShell JSON output", len(permissions)))
+		return permissions, nil
+	}
+
+	// If parsing fails, return the error
+	return nil, fmt.Errorf("failed to parse PowerShell JSON output with SID: %w", err)
+}
+
+// PowerShell Get-Acl JSON structures for SID permissions
+type PowerShellACLResponseWithSID struct {
+	Path        string                       `json:"Path"`
+	IsDirectory bool                         `json:"IsDirectory"`
+	Access      []PowerShellACLAccessWithSID `json:"Access"`
+}
+
+type PowerShellACLAccessWithSID struct {
+	DisplayName   string `json:"DisplayName"`
+	SID           string `json:"SID"`
+	Type          string `json:"Type"`
+	Rights        string `json:"Rights"`
+	ExistsInAD    bool   `json:"ExistsInAD"`
+	IsOrphaned    bool   `json:"IsOrphaned"`
+	PrincipalType string `json:"PrincipalType"`
+}
+
+// tryParsePowerShellJSONWithSID attempts to extract and parse PowerShell JSON with SID data
+func tryParsePowerShellJSONWithSID(output string) ([]SMBPermissionWithSID, error) {
+	// Clean up the output and find JSON array or object
+	output = strings.TrimSpace(output)
+
+	// Find the start of JSON (either [ or {)
+	jsonStart := strings.Index(output, "[")
+	if jsonStart == -1 {
+		jsonStart = strings.Index(output, "{")
+		if jsonStart == -1 {
+			return nil, fmt.Errorf("no JSON found in output")
+		}
+	}
+
+	// Extract everything from the JSON start
+	jsonOutput := output[jsonStart:]
+
+	// Try to find the end of JSON by counting brackets
+	jsonEnd := findJSONEnd(jsonOutput)
+	if jsonEnd > 0 {
+		jsonOutput = jsonOutput[:jsonEnd]
+	}
+
+	LogDebug(fmt.Sprintf("Attempting to parse JSON output with SID (length: %d)", len(jsonOutput)))
+
+	// Try to parse as array first (multiple files)
+	var psACLs []PowerShellACLResponseWithSID
+	err := json.Unmarshal([]byte(jsonOutput), &psACLs)
+	if err == nil {
+		LogDebug(fmt.Sprintf("Successfully parsed %d ACL entries with SID from JSON array", len(psACLs)))
+		return convertPowerShellACLsWithSIDToSMBPermissions(psACLs), nil
+	}
+
+	LogDebug(fmt.Sprintf("Failed to parse as array: %v", err))
+
+	// Try to parse as single object
+	var psACL PowerShellACLResponseWithSID
+	err2 := json.Unmarshal([]byte(jsonOutput), &psACL)
+	if err2 != nil {
+		LogDebug(fmt.Sprintf("Failed to parse as single object: %v", err2))
+		LogDebug(fmt.Sprintf("JSON content: %s", jsonOutput))
+		return nil, fmt.Errorf("failed to parse JSON as array (%w) or single object (%v)", err, err2)
+	}
+
+	psACLs = []PowerShellACLResponseWithSID{psACL}
+	LogDebug("Successfully parsed 1 ACL entry with SID from JSON object")
+	return convertPowerShellACLsWithSIDToSMBPermissions(psACLs), nil
+}
+
+// convertPowerShellACLsWithSIDToSMBPermissions converts PowerShell Get-Acl JSON with SID to SMBPermissionWithSID
+func convertPowerShellACLsWithSIDToSMBPermissions(psACLs []PowerShellACLResponseWithSID) []SMBPermissionWithSID {
+	var permissions []SMBPermissionWithSID
+
+	for _, psACL := range psACLs {
+		perm := SMBPermissionWithSID{
+			FilePath:    psACL.Path,
+			IsDirectory: psACL.IsDirectory,
+			ACLEntries:  []ACLEntryWithSID{},
+		}
+
+		// Convert PowerShell ACL entries to our ACLEntryWithSID format
+		for _, access := range psACL.Access {
+			aclEntry := ACLEntryWithSID{
+				DisplayName: access.DisplayName,
+				SID:         access.SID,
+				AccessType:  access.Type,
+				Permissions: access.Rights,
+				ExistsInAD:  access.ExistsInAD,
+				IsOrphaned:  access.IsOrphaned,
+			}
+
+			perm.ACLEntries = append(perm.ACLEntries, aclEntry)
+		}
+
+		permissions = append(permissions, perm)
+	}
+
+	return permissions
+}
+
+// CompareSMBPermissionsBySID compares source and destination permissions by matching SIDs
+func CompareSMBPermissionsBySID(sourcePerms, destPerms []SMBPermissionWithSID) (validMatches, orphanedMatches, mismatches []string, err error) {
+	if len(sourcePerms) == 0 {
+		return nil, nil, nil, fmt.Errorf("no source permissions to compare")
+	}
+
+	if len(destPerms) == 0 {
+		return nil, nil, nil, fmt.Errorf("no destination permissions found")
+	}
+
+	// Build maps for quick lookup by filename
+	sourceMap := make(map[string]SMBPermissionWithSID)
+	destMap := make(map[string]SMBPermissionWithSID)
+
+	for _, perm := range sourcePerms {
+		fileName := getFileNameFromPath(perm.FilePath)
+		sourceMap[fileName] = perm
+	}
+
+	for _, perm := range destPerms {
+		fileName := getFileNameFromPath(perm.FilePath)
+		destMap[fileName] = perm
+	}
+
+	validMatches = []string{}
+	orphanedMatches = []string{}
+	mismatches = []string{}
+
+	// Compare each source file
+	for fileName, sourcePerm := range sourceMap {
+		destPerm, exists := destMap[fileName]
+		if !exists {
+			mismatches = append(mismatches, fmt.Sprintf("File missing in destination: %s", fileName))
+			continue
+		}
+
+		// Build SID maps for this file
+		sourceACLs := make(map[string]ACLEntryWithSID)
+		destACLs := make(map[string]ACLEntryWithSID)
+
+		for _, acl := range sourcePerm.ACLEntries {
+			if acl.SID != "" && acl.SID != "CANNOT_RESOLVE" && strings.HasPrefix(acl.SID, "S-1-5-21-") {
+				sourceACLs[acl.SID] = acl
+			}
+		}
+
+		for _, acl := range destPerm.ACLEntries {
+			if acl.SID != "" && acl.SID != "CANNOT_RESOLVE" && strings.HasPrefix(acl.SID, "S-1-5-21-") {
+				destACLs[acl.SID] = acl
+			}
+		}
+
+		// Compare ACLs by SID
+		for sid, sourceACL := range sourceACLs {
+			destACL, found := destACLs[sid]
+
+			if !found {
+				mismatches = append(mismatches,
+					fmt.Sprintf("SID missing in destination: %s (was: %s) in file %s",
+						sid, sourceACL.DisplayName, fileName))
+				continue
+			}
+
+			// SID exists in destination - verify based on AD existence
+			if sourceACL.ExistsInAD && !sourceACL.IsOrphaned {
+				// Valid principal - verify name resolution matches
+				if sourceACL.DisplayName != destACL.DisplayName {
+					mismatches = append(mismatches,
+						fmt.Sprintf("Name mismatch for SID %s in file %s: source=%s, dest=%s",
+							sid, fileName, sourceACL.DisplayName, destACL.DisplayName))
+				} else {
+					validMatches = append(validMatches,
+						fmt.Sprintf("Valid principal %s (SID: %s) preserved in %s",
+							sourceACL.DisplayName, sid, fileName))
+				}
+			} else if sourceACL.IsOrphaned {
+				// Orphaned principal - SID match is sufficient
+				orphanedMatches = append(orphanedMatches,
+					fmt.Sprintf("Orphaned SID %s preserved in %s (source name: %s, dest name: %s)",
+						sid, fileName, sourceACL.DisplayName, destACL.DisplayName))
+			}
+		}
+	}
+
+	if len(mismatches) > 0 {
+		return validMatches, orphanedMatches, mismatches, fmt.Errorf("permission mismatches detected")
+	}
+
+	return validMatches, orphanedMatches, mismatches, nil
+}
