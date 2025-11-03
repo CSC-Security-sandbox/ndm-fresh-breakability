@@ -10,7 +10,7 @@ import (
     . "github.com/onsi/gomega"
 )
 
-var _ = FDescribe("TC-SMB-PERMISSIONS-SID-MAPPING: Test SMB permissions WITH SID mapping CSV", func() {
+var _ = Describe("TC-SMB-PERMISSIONS-SID-MAPPING: Test SMB permissions WITH SID mapping CSV", func() {
     var (
         ProjectId              string
         workerId1              string
@@ -47,6 +47,25 @@ var _ = FDescribe("TC-SMB-PERMISSIONS-SID-MAPPING: Test SMB permissions WITH SID
             var sourceConfigID, sourcePathID1 string
             var destinationConfigID, destinationPathID1 string
             var sourceJobConfigIDs, migrationJobConfigIDs []string
+
+            domainName := "rootdomain.local" // Default value
+
+			domainUser := PROTOCOL_USERNAME
+			if domainUser == "" {
+				Skip("AZURE_SMB_PROTOCOL_USERNAME not set - cannot join domain. Set this environment variable to run AD tests.")
+			}
+
+			domainPassword := PROTOCOL_PASSWORD
+			if domainPassword == "" {
+				Skip("AZURE_SMB_PROTOCOL_PASSWORD not set - cannot join domain. Set this environment variable to run AD tests.")
+			}
+
+			LogDebug(fmt.Sprintf("Domain join parameters: domain=%s, user=%s", domainName, domainUser))
+			err = EnsureWindowsWorkerDomainJoined(domainName, domainUser, domainPassword)
+			Expect(err).NotTo(HaveOccurred(), "Error joining Windows worker to domain")
+			LogDebug("Windows worker is domain-joined and ready for AD operations")
+
+            Wait(10)
 
             By("Installing Active Directory PowerShell module on Windows worker")
             err = InstallADPowerShellModule()
