@@ -18,28 +18,21 @@ export const ERROR_COLUMN_DEF = [
       React.createElement(ValueCellRenderer, { ...props }),
   },
   {
-    header: "Occurrence",
-    accessor: "occurrence",
-    id: "3",
-    Renderer: (props: BlueXpTableRowType<JobErrorType, string>) =>
-      React.createElement(ValueCellRenderer, { ...props }),
-  },
-  {
     header: "Code",
     accessor: "errorCode",
-    id: "4",
+    id: "3",
   },
   {
     header: "Origin",
     accessor: "origin",
-    id: "5",
+    id: "4",
     Renderer: (props: BlueXpTableRowType<JobErrorType, string>) =>
       React.createElement(ValueCellRenderer, { ...props }),
   },
   {
     header: "Error Details",
     accessor: "displayMessage",
-    id: "6",
+    id: "5",
     Renderer: (props: BlueXpTableRowType<JobErrorType, string>) =>
       React.createElement(TooltipCellRenderer, { ...props }),
   },

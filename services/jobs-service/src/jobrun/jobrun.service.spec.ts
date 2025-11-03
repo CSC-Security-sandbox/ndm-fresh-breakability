@@ -2148,7 +2148,7 @@ describe("JobRunService", () => {
       );
       expect(mockQueryBuilder.select).toHaveBeenCalledWith([
         "oe.errorType AS errorType",
-        "COUNT(*) AS count",
+        "COUNT(DISTINCT ROW(oe.filePath, oe.errorCode, oe.errorType)) AS count",
       ]);
       expect(mockQueryBuilder.groupBy).toHaveBeenCalledWith("oe.errorType");
       expect(mockQueryBuilder.getRawMany).toHaveBeenCalled();
@@ -2195,7 +2195,7 @@ describe("JobRunService", () => {
       );
       expect(mockQueryBuilder.select).toHaveBeenCalledWith([
         "oe.errorType AS errorType",
-        "COUNT(*) AS count",
+        "COUNT(DISTINCT ROW(oe.filePath, oe.errorCode, oe.errorType)) AS count",
       ]);
       expect(mockQueryBuilder.groupBy).toHaveBeenCalledWith("oe.errorType");
       expect(mockQueryBuilder.getRawMany).toHaveBeenCalled();
@@ -2243,7 +2243,7 @@ describe("JobRunService", () => {
       );
       expect(mockQueryBuilder.select).toHaveBeenCalledWith([
         "oe.errorType AS errorType",
-        "COUNT(*) AS count",
+        "COUNT(DISTINCT ROW(oe.filePath, oe.errorCode, oe.errorType)) AS count",
       ]);
       expect(mockQueryBuilder.groupBy).toHaveBeenCalledWith("oe.errorType");
       expect(mockQueryBuilder.getRawMany).toHaveBeenCalled();

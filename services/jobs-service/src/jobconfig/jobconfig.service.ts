@@ -1833,7 +1833,10 @@ export class JobConfigService {
       .innerJoin("oe.operation", "o")
       .where("o.jobRunId = :jobRunId", { jobRunId })
       .andWhere("oe.errorType IN (:...errorTypes)", { errorTypes: USER_VISIBLE_ERROR_TYPES })
-      .select(["oe.errorType AS errorType", "COUNT(*) AS count"])
+      .select([
+        "oe.errorType AS errorType", 
+        "COUNT(DISTINCT ROW(oe.filePath, oe.errorCode, oe.errorType)) AS count"
+      ])
       .groupBy("oe.errorType");
     let errorTypeCounts;
     try {
