@@ -8,7 +8,7 @@ data "azurerm_shared_image_version" "cp_version" {
   name                = var.image_version
   image_name          = var.image_definition
   gallery_name        = var.gallery_name
-  resource_group_name = var.resource_group
+  resource_group_name = "datamigrate-acr-resource-group"
 }
 
 # Get the latest image if no version is specified
@@ -16,7 +16,7 @@ data "azurerm_shared_image" "control_plane" {
   count               = var.image_version == "" ? 1 : 0
   name                = var.image_definition
   gallery_name        = var.gallery_name
-  resource_group_name = var.resource_group
+  resource_group_name = "datamigrate-acr-resource-group"
 }
 
 # Get network and subnet
