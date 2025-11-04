@@ -116,7 +116,7 @@ echo name prefix: "$NAME_PREFIX"
 for i in $(seq 1 $CONTROL_PLANE_COUNT); do
   MACHINE_TYPES+=("$CP_MACHINE_TYPE")
   IMAGES+=("$CP_IMAGE")
-  NAMES+=("cp-${CP_IMAGE_DATE}-build-${TODAY_DATE}-run-${BUILD_TIME}-${NAME_PREFIX}")
+  NAMES+=("cp-${CP_IMAGE_DATE}-build-${TODAY_DATE}-run-${BUILD_TIME}-${NAME_PREFIX}-${i}")
 done
 
 for i in $(seq 1 $WORKER_COUNT); do
