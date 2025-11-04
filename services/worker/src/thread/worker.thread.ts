@@ -2,6 +2,7 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { WorkerThreadInput, WorkerThreadOutput } from "./worker.thread.type";
+import { Collision8dot3Detector } from "../activities/utils/collision-detector";
 const { parentPort, workerData } = require('worker_threads');
 
 console.log(`Worker Thread - Starting Worker Thread  ${workerData?.threadNumber} for operationBand: ${workerData?.operationBand}`); 
@@ -33,86 +34,63 @@ function getOptimalBufferSize(fileSize: number, maxBufferSize: number): number {
 }
 
 async function checkFor8dot3Collision(target: string, workerNumber?: string): Promise<void> {
-  const fileName = path.basename(target);
+  return Collision8dot3Detector.checkFor8dot3FileCollision(target, `Worker Thread - ${workerNumber}`);
+}
 
-  
-  // Smart 8.3 collision detection: distinguish between legitimate existing files and collisions
-  try {
-    // First, try to check if the exact target path exists as a real file
-    let legitimateFileExists = false;
-    let realPath = '';
-    
-    try {
-      realPath = await fs.promises.realpath(target);
-      legitimateFileExists = true;
-      console.log(`Worker Thread - ${workerNumber} - File '${fileName}' already exists as legitimate file at: ${realPath}`);
-    } catch (realpathError) {
-      // ENOENT is expected for non-existent files and also for 8.3 collision scenarios
-      // where the short name doesn't exist as a real file but conflicts with auto-generated names
-      legitimateFileExists = false;
-    }
-    
-    if (!legitimateFileExists) {
-      // File doesn't exist as a real file - test for 8.3 collision by attempting creation
-      try {
-        await fs.promises.writeFile(target, '', { flag: 'wx' });
-        // Successfully created test file - remove it immediately to avoid corrupting actual copy
-        await fs.promises.unlink(target);
-        console.log(`Worker Thread - ${workerNumber} - No collision detected for '${fileName}', ready for copy`);
-      } catch (createError: any) {
-        if (createError?.code === 'EEXIST' || createError?.code === 'EPERM' || createError?.code === 'EACCES') {
-          // This is a true 8.3 collision - the file doesn't exist as a real file (realpath failed)
-          // but creation fails because the path conflicts with an auto-generated short name
-          console.log(`Worker Thread - ${workerNumber} - 8.3 collision detected: '${fileName}' conflicts with auto-generated short name`);
-          
-          const collisionError: any = new Error(`8.3 short filename collision detected: File '${fileName}' conflicts with auto-generated short name (${createError.code}). Target path does not exist as real file but cannot be created due to collision.`);
-          collisionError.code = 'E8DOT3_COLLISION';
-          throw collisionError;
-        }
-        throw createError;
-      }
-    }
-  } catch (error: any) {
-    // Re-throw 8.3 collision errors
-    if (error.message.includes('8.3 short filename collision')) {
-      throw error;
-    }
-    // For other errors, continue with normal flow
-    console.log(`Worker Thread - ${workerNumber} - Error during 8.3 collision check: ${error.message}, continuing...`);
-  }
+async function checkDirectoryPathFor8dot3Collisions(dirPath: string, workerNumber?: string): Promise<void> {
+  return Collision8dot3Detector.checkDirectoryPathFor8dot3Collisions(dirPath, `Worker Thread - ${workerNumber}`);
 }
 
 export async function smartCopy(source:string, target:string, filesize:number, maxBufferSize :number) {
-  const destDir = path.dirname(target);  
-  await fs.promises.mkdir(destDir, { recursive: true });
   let readStream: fs.ReadStream = null; 
   let writeStream: fs.WriteStream = null; 
-  try{    
+  
+  try {    
     const bufferSize = getOptimalBufferSize(filesize, maxBufferSize);
 
+    // First verify source file exists and is readable
     try {
       await fs.promises.access(source, fs.constants.R_OK);
     } catch {
       throw new Error(`Source file ${source} does not exist or is not readable`);
     }
 
-    // Create read stream first
-    readStream = fs.createReadStream(source, { highWaterMark: bufferSize });
-
-    // MOVE COLLISION CHECK TO JUST BEFORE WRITE STREAM CREATION
-    // This minimizes the race condition window
-    console.log(`Worker Thread - ${workerData?.threadNumber} - Checking target: ${target}`);
-    console.log(`Worker Thread - ${workerData?.threadNumber} - Platform: ${process.platform}`);
-    console.log(`Worker Thread - ${workerData?.threadNumber} - Basename: ${path.basename(target)}`);
-    console.log(`Worker Thread - ${workerData?.threadNumber} - Contains ~: ${path.basename(target).includes('~')}`);
-
-    if (process.platform === 'win32' && path.basename(target).includes('~')) {
-      console.log(`Worker Thread - ${workerData?.threadNumber} - COLLISION CHECK TRIGGERED for ${target}`);
-      await checkFor8dot3Collision(target, workerData?.threadNumber);
-      console.log(`Worker Thread - ${workerData?.threadNumber} - COLLISION CHECK PASSED for ${target}`);
+    // Get destination directory and check for 8.3 collisions BEFORE creating anything
+    const destDir = path.dirname(target);
+    
+    // Check directory path for 8.3 collisions before attempting to create
+    await checkDirectoryPathFor8dot3Collisions(destDir, workerData?.threadNumber);
+    
+    // Create destination directory with proper error handling
+    try {
+      await fs.promises.mkdir(destDir, { recursive: true });
+    } catch (mkdirError: any) {
+      // Handle race condition where directory was created by another worker thread
+      if (mkdirError?.code === 'EEXIST') {
+        // Directory already exists, this is fine - verify it's actually a directory
+        try {
+          const stat = await fs.promises.stat(destDir);
+          if (!stat.isDirectory()) {
+            throw new Error(`Destination path ${destDir} exists but is not a directory`);
+          }
+        } catch (statError) {
+          console.log(`Worker Thread - ${workerData?.threadNumber} - Error verifying directory ${destDir}:`, statError);
+          throw statError;
+        }
+      } else {
+        console.log(`Worker Thread - ${workerData?.threadNumber} - Error creating directory ${destDir}:`, mkdirError);
+        throw mkdirError;
+      }
     }
 
-    // Create write stream after collision check
+    readStream = fs.createReadStream(source, { highWaterMark: bufferSize });
+
+    // Check for file-level 8.3 collisions
+    if (process.platform === 'win32' && path.basename(target).includes('~')) {
+      await checkFor8dot3Collision(target, workerData?.threadNumber);
+    }
+
+    // Create write stream after all collision checks
     writeStream = fs.createWriteStream(target, { flags: 'w', highWaterMark: bufferSize });
     
     let hash = crypto.createHash('sha256');
@@ -174,7 +152,7 @@ export async function smartCopy(source:string, target:string, filesize:number, m
       writeStream.destroy();
     }
   }
-  }
+}
 
 
 parentPort.on('message', async (tasks: WorkerThreadInput[]) => {
