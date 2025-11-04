@@ -58,7 +58,7 @@ module "windows_workers" {
   vm_name                  = "${var.vm_owner}-worker-windows-${count.index + 1}-api"
   computer_name            = "win-worker-${count.index + 1}"
   resource_group           = var.resource_group
-  vm_size                  = var.worker_vm_size
+  vm_size                  = var.windows_worker_vm_size
   admin_username           = var.admin_username
   admin_password           = var.admin_password
   vnet_name                = var.vnet_name
