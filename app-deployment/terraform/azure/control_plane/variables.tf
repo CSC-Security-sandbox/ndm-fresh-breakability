@@ -34,19 +34,19 @@ variable "vm_name" {
 variable "resource_group" {
   description = "The resource group for the VM and gallery."
   type        = string
-  default     = "datamigrate-acr-resource-group"
+  default     = "MigrationAsAService-dev-infra"
 }
 
 variable "vnet_name" {
   description = "The name of the virtual network."
   type        = string
-  default     = "datamigrate-dev-vnet"
+  default     = "MigrationAsAService-dev-VNET02"
 }
 
 variable "subnet_name" {
   description = "The name of the subnet."
   type        = string
-  default     = "default"
+  default     = "MigrationAsAService-dev-VNET02_Subnet01"
 }
 
 variable "gallery_name" {
