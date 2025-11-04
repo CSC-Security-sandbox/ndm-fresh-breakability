@@ -137,7 +137,7 @@ jobs:
         
         terraform init -input=false
 
-        TF_ARGS="-var=image_definition=ndm-control-plane -var=username=${{ env.AZURE_USERNAME }} -var=admin_password=${{ env.ADMIN_PASSWORD }}"
+        TF_ARGS="-var=image_definition=ndm-control-plane -var=username=${{ env.AZURE_USERNAME }} -var=admin_password=${{ env.ADMIN_PASSWORD }} -var=vm_name_prefix=${{ env.NAME_PREFIX }}-cp"
         if [ -n "${{ env.CP_IMAGE }}" ]; then
           TF_ARGS="$TF_ARGS -var=image_version=${{ env.CP_IMAGE }}"
         fi
@@ -161,7 +161,7 @@ jobs:
 
         terraform init -input=false
 
-        TF_ARGS="-var=image_definition=ndm-worker -var=username=${{ env.AZURE_USERNAME }} -var=admin_password=${{ env.ADMIN_PASSWORD }}"
+        TF_ARGS="-var=image_definition=ndm-worker -var=username=${{ env.AZURE_USERNAME }} -var=admin_password=${{ env.ADMIN_PASSWORD }} -var=vm_name_prefix=${{ env.NAME_PREFIX }}-worker"
         if [ -n "${{ env.WORKER_IMAGE }}" ]; then
           TF_ARGS="$TF_ARGS -var=image_version=${{ env.WORKER_IMAGE }}"
         fi
@@ -245,7 +245,7 @@ jobs:
     - name: Set GCP Variables
       run: |
         echo "NAME_PREFIX=${{ github.event.inputs.name_prefix || 'admin' }}" >> $GITHUB_ENV
-        echo "CP_COUNT=10" >> $GITHUB_ENV
+        echo "CP_COUNT=1" >> $GITHUB_ENV
         echo "WORKER_COUNT=${{ github.event.inputs.worker_count || '2' }}" >> $GITHUB_ENV
         echo "CP_IMAGE=${{ github.event.inputs.cp_image }}" >> $GITHUB_ENV
         echo "WORKER_IMAGE=${{ github.event.inputs.worker_image }}" >> $GITHUB_ENV
@@ -314,7 +314,7 @@ jobs:
       working-directory: ./app-deployment/terraform/gcp
       run: |
         echo ""
-        echo "🖥️  ===== GCP DEPLOYMENT SUMMARY ===== 🖥️"
+        echo " ===== GCP DEPLOYMENT SUMMARY ===== "
         echo ""
 
         # Define NAME_PREFIX variable
