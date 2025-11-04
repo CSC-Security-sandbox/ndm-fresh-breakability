@@ -1,7 +1,8 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
+import { OPS_CMD, OPS_STATUS, ErrorType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import * as fs from "fs";
+import * as path from "path";
 import { dmError } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { RedisService } from "src/redis/redis.service";
@@ -9,6 +10,7 @@ import { SourceAclError } from "./win-opeartions/acl-operation.error";
 import { WinOperationService } from "./win-opeartions/win-operation.service";
 import { CommandExecInput, CommandOutput } from "./command-execution.type";
 import { StampMetaOutput } from "./stamp-meta.type";
+import { FatalError } from "src/errors/errors.types";
 
 
 @Injectable()
@@ -92,12 +94,30 @@ export class StampMetaService {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         if (command.metadata?.mode && !command?.metadata?.isSymLink) {
             try {
+                // Simple upfront validation: Check if target path is accessible before attempting operations
+                if (process.platform === 'win32' && targetPath.includes('~')) {
+                    try {
+                        await fs.promises.realpath(targetPath);
+                    } catch (realpathError) {
+                        const collisionError: any = new Error(`Cannot resolve path for permission operation: ${targetPath} (likely due to 8.3 collision during creation)`);
+                        collisionError.code = 'E8DOT3_COLLISION';
+                        throw collisionError;
+                    }
+                }
+
                 await fs.promises.chmod(targetPath, command.metadata.mode);
             } catch (error) {
-                this.logger.error(`Stamping Permission from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
-                const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
-                await jobContext.publishToErrorStream(dmErr);
-                output.targetErrors.push(error.code);
+                // Handle 8.3 collision errors specifically
+                if (error.code === 'E8DOT3_COLLISION') {
+                    this.logger.error(`8.3 collision detected during permission operation on ${targetPath}: ${error.message}`);
+                    // Throw FatalError to make this completely non-retryable
+                    throw new FatalError(`8.3 collision: Cannot resolve path for permission operation: ${targetPath} (likely due to 8.3 collision during creation)`);
+                } else {
+                    this.logger.error(`Stamping Permission from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
+                    const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
+                    await jobContext.publishToErrorStream(dmErr);
+                    output.targetErrors.push(error.code);
+                }
             }
         }
         return output;
@@ -139,16 +159,38 @@ export class StampMetaService {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         if (command.metadata.mtime && command.metadata.atime) {
             try {
+                // Simple upfront validation: Check if target path is accessible before attempting operations
+                // This prevents ENOENT errors when directory creation failed due to 8.3 collisions
+                if (process.platform === 'win32' && targetPath.includes('~')) {
+                    // Quick check: Does the target file/directory exist and is accessible using realpath?
+                    try {
+                        await fs.promises.realpath(targetPath);
+                    } catch (realpathError) {
+                        // Target doesn't exist or has collision issues
+                        const collisionError: any = new Error(`Cannot resolve path for metadata operation: ${targetPath} (likely due to 8.3 collision during creation)`);
+                        collisionError.code = 'E8DOT3_COLLISION';
+                        throw collisionError;
+                    }
+                }
+
+                // Proceed with timestamp operation if path is accessible
                 if (command?.metadata?.isSymLink) {
                     await fs.promises.lutimes(targetPath, new Date(command.metadata.atime), new Date(command.metadata.mtime));
                 } else {
                     await fs.promises.utimes(targetPath, new Date(command.metadata.atime), new Date(command.metadata.mtime));
                 }
-            } catch (error) {
-                this.logger.error(`Stamping Access and Modified Time  to ${targetPath}, Error: ${error.message}`, error.stack);
-                const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_TIME, errorType, command.id, error, { name: command.fPath, path: targetPath });
-                await jobContext.publishToErrorStream(dmErr);
-                output.targetErrors.push(error.code);
+            } catch (error: any) {
+                // Handle 8.3 collision errors specifically
+                if (error.code === 'E8DOT3_COLLISION') {
+                    this.logger.error(`8.3 collision detected during timestamp operation on ${targetPath}: ${error.message}`);
+                    // Throw FatalError to make this completely non-retryable
+                    throw new FatalError(`8.3 collision: Cannot resolve path for timestamp operation: ${targetPath} (likely due to 8.3 collision during creation)`);
+                } else {
+                    this.logger.error(`Stamping Access and Modified Time to ${targetPath}, Error: ${error.message}`, error.stack);
+                    const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_TIME, errorType, command.id, error, { name: command.fPath, path: targetPath });
+                    await jobContext.publishToErrorStream(dmErr);
+                    output.targetErrors.push(error.code);
+                }
             }
         }
         return output;
