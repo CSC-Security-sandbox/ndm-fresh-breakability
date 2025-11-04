@@ -9,7 +9,7 @@ data "azurerm_shared_image_version" "worker_version" {
   name                = var.image_version
   image_name          = var.image_definition
   gallery_name        = var.gallery_name
-  resource_group_name = var.resource_group
+  resource_group_name = "datamigrate-acr-resource-group"
 }
 
 # Get the latest image if no version is specified
@@ -17,7 +17,7 @@ data "azurerm_shared_image" "worker" {
   count               = var.image_version == "" ? 1 : 0
   name                = var.image_definition
   gallery_name        = var.gallery_name
-  resource_group_name = var.resource_group
+  resource_group_name = "datamigrate-acr-resource-group"
 }
 
 # Get network and subnet
@@ -34,7 +34,7 @@ data "azurerm_subnet" "subnet" {
 
 resource "azurerm_network_interface" "nic" {
   count               = var.worker_count
-  name                = "${local.vm_name_prefix}-nic-${count.index + 1}"
+  name                = "${var.vm_name_prefix}-nic-${count.index + 1}"
   location            = data.azurerm_virtual_network.vnet.location
   resource_group_name = var.resource_group
 
@@ -48,7 +48,7 @@ resource "azurerm_network_interface" "nic" {
 
 resource "azurerm_linux_virtual_machine" "wr_vm" {
   count               = var.worker_count
-  name                = "${local.vm_name_prefix}-${count.index + 1}"
+  name                = "${var.vm_name_prefix}-azure-automated-${count.index + 1}"
   resource_group_name = var.resource_group
   location            = data.azurerm_virtual_network.vnet.location
   size                = "Standard_D4s_v3"

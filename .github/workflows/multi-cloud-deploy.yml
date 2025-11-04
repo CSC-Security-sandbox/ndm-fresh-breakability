@@ -161,7 +161,7 @@ jobs:
 
         terraform init -input=false
 
-        TF_ARGS="-var=image_definition=ndm-worker -var=username=${{ env.AZURE_USERNAME }} -var=admin_password=${{ env.ADMIN_PASSWORD }} -var=vm_name_prefix=${{ env.NAME_PREFIX }}-worker"
+        TF_ARGS="-var=image_definition=ndm-worker -var=username=${{ env.AZURE_USERNAME }} -var=admin_password=${{ env.ADMIN_PASSWORD }} -var=vm_name_prefix=${{ env.NAME_PREFIX }}-wk"
         if [ -n "${{ env.WORKER_IMAGE }}" ]; then
           TF_ARGS="$TF_ARGS -var=image_version=${{ env.WORKER_IMAGE }}"
         fi

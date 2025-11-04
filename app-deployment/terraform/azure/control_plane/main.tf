@@ -32,7 +32,7 @@ data "azurerm_subnet" "subnet" {
 }
 
 resource "azurerm_network_interface" "nic" {
-  name                = "${local.vm_name_prefix}-nic"
+  name                = "${var.vm_name_prefix}-nic"
   location            = data.azurerm_virtual_network.vnet.location
   resource_group_name = var.resource_group
 
@@ -45,7 +45,7 @@ resource "azurerm_network_interface" "nic" {
 }
 
 resource "azurerm_linux_virtual_machine" "cp_vm" {
-  name                = local.vm_name_prefix
+  name                = "${var.vm_name_prefix}-azure-automated"
   resource_group_name = var.resource_group
   location            = data.azurerm_virtual_network.vnet.location
   size                = "Standard_D8s_v3"
