@@ -5,8 +5,10 @@ variable "worker_count" {
 }
 
 # Generate VM name prefix
-locals {
-  vm_name_prefix = "${var.username}-worker-azure-automated"
+variable "vm_name_prefix" {
+  description = "The VM name prefix to use for the worker nodes."
+  type        = string
+  default     = "ubuntu-worker-azure-automated"
 }
 
 variable "image_version" {

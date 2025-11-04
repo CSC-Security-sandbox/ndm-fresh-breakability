@@ -5,8 +5,10 @@ variable "image_version" {
 }
 
 # Generate VM name prefix
-locals {
-  vm_name_prefix = "${var.username}-cp-azure-automated"
+variable "vm_name_prefix" {
+  description = "The VM name prefix to use for the cp nodes."
+  type        = string
+  default     = "ubuntu-cp-azure-automated"
 }
 
 variable "admin_password" {
