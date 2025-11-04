@@ -9,20 +9,27 @@ import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishItemInfoInput } from "./discovery-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
 import { isPathExists } from "../../utils/utils";
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { WinOperationService } from "../../../core/migrate/command-execution/win-opeartions/win-operation.service"
+import { FileType } from "src/activities/types/tasks";
 
 
 export class DiscoveryScanService {
     readonly workerId: string;
     readonly maxConcurrency: number;
     readonly maxRetryCount: number;
+    private readonly logger: LoggerService;
 
      constructor(
         @Inject(ConfigService) 
         private readonly configService: ConfigService,
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+        private readonly winOperationService: WinOperationService,
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100; 
-        this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;  
+        this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3; 
+        this.logger = loggerFactory.create(DiscoveryScanService.name);  
     }
 
 
@@ -88,13 +95,31 @@ export class DiscoveryScanService {
                 modifiedTime: stats.mtime,
                 permission: getFilePermissions(stats, isDirectory),
             }
+            let symlinkType: FileType | undefined;
+            if (process.platform === 'win32') {
+                if (stats.isSymbolicLink()) {
+                    try {
+                        symlinkType = await this.winOperationService.detectSymbolicLinkType(fPath);
+                        this.logger.debug(`Detected symlink type for ${fPath} is ${symlinkType}`);
+                    } catch (error) {
+                        this.logger.error(`Failed to detect symlink type for ${fPath}: ${error.message}`);
+                        throw error;
+                    }
+                } else if (!isDirectory && path.extname(fPath).toLowerCase() === '.lnk') {
+                    symlinkType = FileType.SHORTCUT;
+                    this.logger.debug(`Detected shortcut for ${fPath}`);
+                }
+            }
+
+            const fileType = symlinkType ?? getFileType(stats, isDirectory);
+
             const itemInfo = new ItemInfo(
                 relativeSourcePath,
                 isDirectory,
                 stats.isSymbolicLink(),
                 relativeSourcePath.split('/').length - 2,
                 path.extname(fPath),
-                getFileType(stats, isDirectory),
+                fileType,
                 sourceMeta,
                 sourceMeta,
                 stats.size,

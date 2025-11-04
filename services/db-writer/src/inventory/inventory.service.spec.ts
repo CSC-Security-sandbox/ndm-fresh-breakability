@@ -16,7 +16,7 @@ import {
   ItemInfo,
   ItemMeta,
 } from "@netapp-cloud-datamigrate/jobs-lib";
-import { CreateInventory } from "./inventory.types";
+import { CreateInventory, FileType } from "./inventory.types";
 import { OperationStatus } from "../enum/queues.enum";
 import { SpeedLogEntity, SpeedLogEntryEntity } from '../entities/speed-test.entity';
 import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
@@ -336,6 +336,38 @@ describe("InventoryService", () => {
       );
       expect(loggerSpy).toHaveBeenCalledWith(
         `Failed to save 1 inventory records`
+      );
+    });
+
+    it("should populate file_type as Junction when fileType is Junction", async () => {
+      const data = [
+      createMockItemInfo({ fileName: '/junction/path', fileType: FileType.JUNCTION }),
+      ];
+      const mappedData = {
+      path: "/junction/path",
+      jobRunId: "jobRunId",
+      pathId: "pathId",
+      fileName: "/junction/path",
+      isDirectory: false,
+      fileSize: "1024",
+      fileType: FileType.JUNCTION,
+      };
+
+      jest.spyOn(service, "mapSourceToTarget").mockReturnValue(mappedData);
+      inventoryRepo.upsert.mockResolvedValue({ identifiers: [{ id: 1 }] } as any);
+
+      await service.createInventory(data, "jobRunId", "pathId");
+
+      expect(service.mapSourceToTarget).toHaveBeenCalledWith(
+      data[0],
+      "jobRunId",
+      "pathId"
+      );
+      expect(inventoryRepo.upsert).toHaveBeenCalledWith(
+      expect.arrayContaining([
+      expect.objectContaining({ fileType: FileType.JUNCTION }),
+      ]),
+      ['path', 'jobRunId', 'isDirectory']
       );
     });
 

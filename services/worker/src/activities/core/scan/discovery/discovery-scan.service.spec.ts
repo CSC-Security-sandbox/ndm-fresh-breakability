@@ -1,9 +1,13 @@
 import { ErrorType } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
+import { ConfigService } from "@nestjs/config";
+import { Test, TestingModule } from '@nestjs/testing';
 import * as path from 'path';
 import { getFileInfo, getFilePermissions, removePrefix, shouldExcludeOrSkip } from 'src/activities/utils/utils';
 import { FatalError } from 'src/errors/errors.types';
 import { DiscoveryScanService } from './discovery-scan.service';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { WinOperationService } from "../../../core/migrate/command-execution/win-opeartions/win-operation.service"
 
 jest.mock('fs', () => {
   const actualFs = jest.requireActual('fs');
@@ -43,20 +47,54 @@ const mockConfigService = {
 };
 
 describe('DiscoveryScanService', () => {
-  let service: DiscoveryScanService;
   let mockJobContext: any;
   let mockCommand: any;
+  let service: DiscoveryScanService;
+  let configService: ConfigService;
+  let loggerFactory: LoggerFactory;
+  let winOperationService: WinOperationService;
+  let logger: LoggerService;
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    service = new DiscoveryScanService(mockConfigService as any);
-
-    mockCommand = {
-      commandId: 'cmd-1',
-      retryCount: 1,
-      fPath: 'some/file.txt',
-    };
-
+  const mockLoggerFactory = {
+    create: jest.fn().mockReturnValue({
+      log: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      info: jest.fn(),
+    }),
+  };
+   
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        DiscoveryScanService,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockImplementation((key: string) => {
+              switch (key) {
+                case 'worker.workerId':
+                  return 'worker-1';
+                case 'worker.maxCommandConcurrency':
+                  return 50;
+                case 'worker.maxRetryCount':
+                  return 5;
+                default:
+                  return null;
+              }
+            }),
+          },
+        },
+        {
+          provide: LoggerFactory,
+          useValue: mockLoggerFactory,
+        },
+        {
+          provide: WinOperationService,
+          useValue: winOperationService,
+        },
+      ],
+    }).compile();
     mockJobContext = {
       publishToErrorStream: jest.fn(),
       publishToFileStream: jest.fn(),
@@ -67,6 +105,21 @@ describe('DiscoveryScanService', () => {
         jobType: 'DISCOVERY',
       },
     };
+    mockCommand = {
+      commandId: 'cmd-1',
+      retryCount: 1,
+      fPath: 'some/file.txt',
+    };
+
+    service = module.get<DiscoveryScanService>(DiscoveryScanService);
+    configService = module.get<ConfigService>(ConfigService);
+    loggerFactory = module.get<LoggerFactory>(LoggerFactory);
+    winOperationService = module.get<WinOperationService>(WinOperationService);
+    logger = loggerFactory.create(DiscoveryScanService.name);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
   describe('getDirContents', () => {

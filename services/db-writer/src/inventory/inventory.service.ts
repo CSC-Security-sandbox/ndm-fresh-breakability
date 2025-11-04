@@ -3,7 +3,6 @@ import { InjectRepository } from "@nestjs/typeorm";
 import {
   ItemInfo,
   OperationError,
-  Task,
   TaskError,
   TaskStatus,
 } from "@netapp-cloud-datamigrate/jobs-lib";
@@ -14,8 +13,6 @@ import { TaskErrorEntity } from "../entities/task-error.entity";
 import { TaskEntity } from "../entities/task.entity";
 import { OperationStatus } from "../enum/queues.enum";
 import { DataSource, Repository, UpdateResult } from "typeorm";
-import { CreateInventory } from "./inventory.types";
-import { randomUUID } from "crypto";
 import { SpeedLogEntity, SpeedLogEntryEntity } from '../entities/speed-test.entity';
 import {
   LoggerService,

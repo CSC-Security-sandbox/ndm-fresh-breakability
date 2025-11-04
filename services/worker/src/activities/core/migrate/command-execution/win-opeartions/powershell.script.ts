@@ -344,6 +344,50 @@ function SidToName {
         return $false
     }
 }
+function Get-NTFSLinkInfo {
+    param([string]$path)
+    
+    try {
+        $item = Get-Item -Path $path -Force -ErrorAction Stop
+        
+        $isReparsePoint = ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0
+        
+        if (-not $isReparsePoint) {
+            return (@{
+                IsLink = $false
+                LinkType = "None"
+                IsSymbolicLink = $false
+                IsJunction = $false
+                Target = $null
+            } | ConvertTo-Json -Compress)
+        }
+        
+        # Detect link type
+        $linkType = if ($item.PSObject.Properties['LinkType']) { 
+            $item.LinkType 
+        } else { 
+            "Unknown" 
+        }
+        
+        $target = if ($item.PSObject.Properties['Target']) { 
+            $item.Target 
+        } else { 
+            $null 
+        }
+        
+        return (@{
+            IsLink = $true
+            LinkType = $linkType
+            IsSymbolicLink = ($linkType -eq "SymbolicLink")
+            IsJunction = ($linkType -eq "Junction")
+            Target = $target
+            IsDirectory = $item.PSIsContainer
+        } | ConvertTo-Json -Compress)
+        
+    } catch {
+        return (@{ error = $_.Exception.Message } | ConvertTo-Json -Compress)
+    }
+}
 `
 
 export const psGetAclScript = `
@@ -361,5 +405,13 @@ try {
     Set-FileSecurityFast $dstFile $aclJson
 } catch {
     Write-Output ('{"error":' + (($_.Exception.Message | ConvertTo-Json -Compress)) + '}')
+}
+`;
+
+export const psGetLinkInfoScript = `
+try {
+    Get-NTFSLinkInfo $srcFile
+} catch {
+    Write-Output (@{ error = $_.Exception.Message } | ConvertTo-Json -Compress)
 }
 `;
