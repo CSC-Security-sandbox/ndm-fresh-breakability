@@ -2018,3 +2018,357 @@ func CompareSMBPermissionsBySID(sourcePerms, destPerms []SMBPermissionWithSID) (
 
 	return validMatches, orphanedMatches, mismatches, nil
 }
+
+// CreateSMBFilesWithInheritanceScenarios creates test structure for 6 inheritance scenarios
+// This is a NEW function that doesn't modify CreateSMBFilesWithMultiplePermissions
+//
+// Creates 12 items (7 folders + 5 files):
+//
+//	permissions_test/                              [Share root]
+//	├─ share_level_file.txt                        [S1: Inherits from share]
+//	├─ inheritance_enabled/                        [S2: L1 with (OI)(CI)]
+//	│  ├─ file1.txt                                [Inherits from parent]
+//	│  ├─ child_enabled/                           [S4: L2 both enabled]
+//	│  │  └─ file2.txt                             [Multi-level inheritance]
+//	│  └─ child_disabled/                          [S6: Mixed - blocks parent]
+//	│     └─ file3.txt                             [Explicit only]
+//	└─ inheritance_disabled/                       [S3: L1 blocked]
+//	   ├─ file1.txt                                [Explicit only]
+//	   └─ child_disabled/                          [S5: L2 both blocked]
+//	      └─ file2.txt                             [Explicit only]
+func CreateSMBFilesWithInheritanceScenarios(export string) error {
+	script := createInheritanceTestStructureScript(export)
+
+	LogDebug(fmt.Sprintf("Creating SMB files with inheritance scenarios on: %s", export))
+
+	config := GetAttachedWorkerDetails()
+	sshConfig := SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	output, err := sshRunScript(sshConfig, script)
+	LogDebug(fmt.Sprintf("CreateSMBFilesWithInheritanceScenarios output: %s", output))
+
+	if err != nil {
+		return fmt.Errorf("CreateSMBFilesWithInheritanceScenarios failed: %w\noutput: %s", err, output)
+	}
+
+	LogDebug("Successfully created inheritance test structure")
+	return nil
+}
+
+func createInheritanceTestStructureScript(export string) string {
+	split := strings.Split(export, ":")
+	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
+
+	localTestDir := `C:\permissions_test`
+	testDir := `permissions_test`
+	mappedDrive := `Z:`
+	share := fmt.Sprintf(`%s\%s`, smbShare, testDir)
+
+	var parts []string
+	parts = append(parts, `cmd /C`)
+	parts = append(parts, fmt.Sprintf(`if exist %s rmdir /s /q %s &&`, localTestDir, localTestDir))
+	parts = append(parts, fmt.Sprintf(`mkdir %s &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`mkdir %s\inheritance_enabled &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`mkdir %s\inheritance_disabled &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`mkdir %s\inheritance_enabled\child_enabled &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`mkdir %s\inheritance_disabled\child_disabled &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`mkdir %s\inheritance_enabled\child_disabled &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`echo Share level file > %s\share_level_file.txt &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`echo L1 enabled file > %s\inheritance_enabled\file1.txt &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`echo L1 disabled file > %s\inheritance_disabled\file1.txt &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`echo L2 enabled file > %s\inheritance_enabled\child_enabled\file2.txt &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`echo L2 disabled file > %s\inheritance_disabled\child_disabled\file2.txt &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`echo Mixed file > %s\inheritance_enabled\child_disabled\file3.txt &&`, localTestDir))
+	parts = append(parts, fmt.Sprintf(`net use %s /delete /y >nul 2>&1 &`, mappedDrive))
+	parts = append(parts, fmt.Sprintf(`net use %s %s /user:%s "%s" &&`, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD))
+	parts = append(parts, fmt.Sprintf(`(if exist %s\ ( rmdir /s /q %s ) else ( echo "permissions_test not found" )) &`, share, share))
+	parts = append(parts, fmt.Sprintf(`xcopy /E /I /Y %s %s &&`, localTestDir, share))
+
+	// 5. Set up inheritance scenarios
+	parts = append(parts, `echo ===== SCENARIO 1: Share Level (default) ===== &&`)
+	parts = append(parts, fmt.Sprintf(`icacls "%s" /grant Everyone:M &&`, share))
+
+	parts = append(parts, `echo ===== SCENARIO 2: Level 1 - Inheritance ENABLED (OI)(CI) ===== &&`)
+	parts = append(parts, fmt.Sprintf(`icacls "%s\inheritance_enabled" /grant Everyone:(OI)(CI)F &&`, share))
+
+	parts = append(parts, `echo ===== SCENARIO 3: Level 1 - Inheritance DISABLED ===== &&`)
+	parts = append(parts, fmt.Sprintf(`icacls "%s\inheritance_disabled" /inheritance:r &&`, share))
+	parts = append(parts, fmt.Sprintf(`icacls "%s\inheritance_disabled" /grant "BUILTIN\Administrators":F &&`, share))
+	parts = append(parts, fmt.Sprintf(`icacls "%s\inheritance_disabled\file1.txt" /inheritance:r &&`, share))
+	parts = append(parts, fmt.Sprintf(`icacls "%s\inheritance_disabled\file1.txt" /grant "BUILTIN\Users":R &&`, share))
+
+	parts = append(parts, `echo ===== SCENARIO 4: Level 2 - Both Enabled ===== &&`)
+	parts = append(parts, fmt.Sprintf(`icacls "%s\inheritance_enabled\child_enabled" /grant Everyone:(OI)(CI)M &&`, share))
+
+	parts = append(parts, `echo ===== SCENARIO 5: Level 2 - Both Disabled ===== &&`)
+	parts = append(parts, fmt.Sprintf(`icacls "%s\inheritance_disabled\child_disabled" /inheritance:r &&`, share))
+	parts = append(parts, fmt.Sprintf(`icacls "%s\inheritance_disabled\child_disabled" /grant "BUILTIN\Users":M &&`, share))
+	parts = append(parts, fmt.Sprintf(`icacls "%s\inheritance_disabled\child_disabled\file2.txt" /inheritance:r &&`, share))
+	parts = append(parts, fmt.Sprintf(`icacls "%s\inheritance_disabled\child_disabled\file2.txt" /grant Everyone:R &&`, share))
+
+	parts = append(parts, `echo ===== SCENARIO 6: MIXED - Parent Enabled, Child Blocks ===== &&`)
+	parts = append(parts, fmt.Sprintf(`icacls "%s\inheritance_enabled\child_disabled" /inheritance:r &&`, share))
+	parts = append(parts, fmt.Sprintf(`icacls "%s\inheritance_enabled\child_disabled" /grant "BUILTIN\Users":F &&`, share))
+	parts = append(parts, fmt.Sprintf(`icacls "%s\inheritance_enabled\child_disabled\file3.txt" /inheritance:r &&`, share))
+	parts = append(parts, fmt.Sprintf(`icacls "%s\inheritance_enabled\child_disabled\file3.txt" /grant "BUILTIN\Users":RX &&`, share))
+
+	// 6. Verify
+	parts = append(parts, `echo ===== Verifying structure ===== &&`)
+	parts = append(parts, fmt.Sprintf(`dir %s /s /b &&`, share))
+	parts = append(parts, fmt.Sprintf(`net use %s /delete /y &&`, mappedDrive))
+	parts = append(parts, fmt.Sprintf(`rmdir /s /q %s`, localTestDir))
+
+	return strings.Join(parts, " ")
+}
+
+func GetSMBPermissionsWithInheritanceDetails(export string) ([]SMBFilePermission, error) {
+	// Use the inheritance-specific function instead of the generic comprehensive one
+	permissions, err := GetSMBPermissionsForInheritanceTest(export)
+	if err != nil {
+		return nil, fmt.Errorf("GetSMBPermissionsWithInheritanceDetails failed: %w", err)
+	}
+
+	// Validate that inheritance flags are captured
+	for i := range permissions {
+		if len(permissions[i].ACLEntries) == 0 {
+			LogDebug(fmt.Sprintf("Warning: No ACL entries for %s", permissions[i].FilePath))
+		}
+	}
+
+	return permissions, nil
+}
+
+// GetSMBPermissionsForInheritanceTest retrieves permissions for the inheritance test structure
+func GetSMBPermissionsForInheritanceTest(export string) ([]SMBFilePermission, error) {
+	script := getSMBPermissionsForInheritanceTestScript(export)
+
+	LogDebug(fmt.Sprintf("Getting inheritance test SMB file permissions script: %s", script))
+
+	config := GetAttachedWorkerDetails()
+	sshConfig := SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	output, err := sshRunScript(sshConfig, script)
+	LogDebug("GetSMBPermissionsForInheritanceTest script successfully executed")
+
+	if err != nil {
+		return nil, fmt.Errorf("GetSMBPermissionsForInheritanceTest failed: %w\noutput: %s", err, output)
+	}
+
+	permissions, err := parseSMBPermissions(output)
+	if err != nil {
+		LogDebug(fmt.Sprintf("Failed to parse SMB permissions from output: %s", output))
+		return nil, fmt.Errorf("failed to parse SMB permissions: %w", err)
+	}
+
+	LogDebug(fmt.Sprintf("Retrieved %d file permissions from %s", len(permissions), export))
+	if len(permissions) == 0 {
+		LogDebug(fmt.Sprintf("No permissions parsed from output: %s", output))
+	}
+	return permissions, nil
+}
+
+func getSMBPermissionsForInheritanceTestScript(export string) string {
+	split := strings.Split(export, ":")
+	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
+
+	mappedDrive := `Z:`
+	testDir := `permissions_test`
+	share := fmt.Sprintf(`%s\%s`, mappedDrive, testDir)
+
+	// PowerShell script to get comprehensive ACLs in JSON format for inheritance test structure
+	psScript := fmt.Sprintf(`
+$ErrorActionPreference = 'Stop'
+try { net use %s /delete /y *>$null } catch { }
+net use %s %s /user:%s "%s" | Out-Null
+
+if (Test-Path "%s") {
+    $paths = @(
+        "%s\share_level_file.txt",
+        "%s\inheritance_enabled",
+        "%s\inheritance_enabled\file1.txt",
+        "%s\inheritance_enabled\child_enabled",
+        "%s\inheritance_enabled\child_enabled\file2.txt",
+        "%s\inheritance_enabled\child_disabled",
+        "%s\inheritance_enabled\child_disabled\file3.txt",
+        "%s\inheritance_disabled",
+        "%s\inheritance_disabled\file1.txt",
+        "%s\inheritance_disabled\child_disabled",
+        "%s\inheritance_disabled\child_disabled\file2.txt",
+        "%s"
+    )
+    
+    $results = @()
+    foreach ($path in $paths) {
+        if (Test-Path $path) {
+            $acl = Get-Acl $path
+            $isDir = (Get-Item $path) -is [System.IO.DirectoryInfo]
+            
+            $obj = [PSCustomObject]@{
+                Path = $path
+                Owner = $acl.Owner
+                IsDirectory = $isDir
+                Access = @($acl.Access | ForEach-Object {
+                    [PSCustomObject]@{
+                        Principal = $_.IdentityReference.Value
+                        Rights = $_.FileSystemRights.ToString()
+                        Type = $_.AccessControlType.ToString()
+                        IsInherited = $_.IsInherited
+                        InheritanceFlags = $_.InheritanceFlags.ToString()
+                        PropagationFlags = $_.PropagationFlags.ToString()
+                    }
+                })
+            }
+            $results += $obj
+        }
+    }
+    
+    $results | ConvertTo-Json -Depth 10
+} else {
+    Write-Output "Test directory does not exist: %s"
+}
+
+net use %s /delete /y >$null 2>&1
+`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD,
+		share, share, share, share, share, share, share, share, share, share, share, share, share, share, mappedDrive)
+
+	// Encode PowerShell script in Base64 to avoid quoting issues
+	return fmt.Sprintf(`powershell.exe -NoProfile -NonInteractive -EncodedCommand "%s"`, encodePowerShellCommand(psScript))
+}
+
+// This CALLS CompareSMBPermissions (doesn't modify it) and adds extra checks
+func CompareSMBPermissionsWithInheritanceValidation(sourcePerms, destPerms []SMBFilePermission) error {
+	// First, use existing comparison function
+	err := CompareSMBPermissions(sourcePerms, destPerms)
+	if err != nil {
+		return fmt.Errorf("base permission comparison failed: %w", err)
+	}
+
+	// Additional inheritance-specific validation
+	LogDebug("Starting inheritance-specific validation...")
+
+	// Build maps for comparison
+	sourceMap := make(map[string]SMBFilePermission)
+	destMap := make(map[string]SMBFilePermission)
+
+	for _, perm := range sourcePerms {
+		fileName := getFileNameFromPath(perm.FilePath)
+		sourceMap[fileName] = perm
+	}
+
+	for _, perm := range destPerms {
+		fileName := getFileNameFromPath(perm.FilePath)
+		destMap[fileName] = perm
+	}
+
+	var inheritanceIssues []string
+
+	// Check inheritance blocking scenarios
+	for fileName, sourcePerm := range sourceMap {
+		destPerm, exists := destMap[fileName]
+		if !exists {
+			continue // Already caught by base comparison
+		}
+
+		sourceBlocked := isInheritanceBlocked(sourcePerm)
+		destBlocked := isInheritanceBlocked(destPerm)
+
+		if sourceBlocked != destBlocked {
+			inheritanceIssues = append(inheritanceIssues,
+				fmt.Sprintf("Inheritance blocking mismatch for %s: source blocked=%v, dest blocked=%v",
+					fileName, sourceBlocked, destBlocked))
+		}
+	}
+
+	if len(inheritanceIssues) > 0 {
+		LogDebug(fmt.Sprintf("Inheritance validation issues: %v", inheritanceIssues))
+		return fmt.Errorf("inheritance validation failed: %v", inheritanceIssues)
+	}
+
+	LogDebug("Inheritance validation passed")
+	return nil
+}
+
+// Improved version that checks both inherited ACLs and propagation flags
+func isInheritanceBlocked(perm SMBFilePermission) bool {
+	if len(perm.ACLEntries) == 0 {
+		return false
+	}
+
+	// Count inherited ACLs (have "I" flag)
+	inheritedCount := 0
+	hasPropagationFlags := false
+
+	for _, acl := range perm.ACLEntries {
+		// Check for inherited flag
+		for _, flag := range acl.InheritanceFlags {
+			if flag == "I" {
+				inheritedCount++
+			}
+			if flag == "OI" || flag == "CI" {
+				hasPropagationFlags = true
+			}
+		}
+	}
+
+	// Determine if this is root level
+	isRootLevel := !strings.Contains(perm.FilePath, "\\") ||
+		strings.Count(perm.FilePath, "\\") <= 1
+
+	if isRootLevel {
+		return false // Root level naturally has no inherited ACLs
+	}
+
+	// If no inherited ACLs and no propagation flags, inheritance is blocked
+	// Exception: if it has propagation flags, it's explicit but not blocked
+	return inheritedCount == 0 && !hasPropagationFlags
+}
+
+// LogInheritanceScenarioSummary logs a summary of inheritance scenarios found
+func LogInheritanceScenarioSummary(permissions []SMBFilePermission) {
+	shareLevel := 0
+	level1Enabled := 0
+	level1Disabled := 0
+	level2Enabled := 0
+	level2Disabled := 0
+	mixedScenario := 0
+
+	for _, perm := range permissions {
+		path := strings.ToLower(perm.FilePath)
+
+		if strings.HasSuffix(path, "permissions_test") {
+			shareLevel++
+		} else if strings.Contains(path, "inheritance_enabled") && !strings.Contains(path, "child") {
+			level1Enabled++
+		} else if strings.Contains(path, "inheritance_disabled") && !strings.Contains(path, "child") {
+			level1Disabled++
+		} else if strings.Contains(path, "inheritance_enabled\\child_enabled") ||
+			strings.Contains(path, "inheritance_enabled/child_enabled") {
+			level2Enabled++
+		} else if strings.Contains(path, "inheritance_disabled\\child_disabled") ||
+			strings.Contains(path, "inheritance_disabled/child_disabled") {
+			level2Disabled++
+		} else if strings.Contains(path, "inheritance_enabled\\child_disabled") ||
+			strings.Contains(path, "inheritance_enabled/child_disabled") {
+			mixedScenario++
+		}
+	}
+
+	LogDebug("Inheritance Scenario Summary:")
+	LogDebug(fmt.Sprintf("  Share Level: %d items", shareLevel))
+	LogDebug(fmt.Sprintf("  L1 Enabled: %d items", level1Enabled))
+	LogDebug(fmt.Sprintf("  L1 Disabled: %d items", level1Disabled))
+	LogDebug(fmt.Sprintf("  L2 Enabled: %d items", level2Enabled))
+	LogDebug(fmt.Sprintf("  L2 Disabled: %d items", level2Disabled))
+	LogDebug(fmt.Sprintf("  Mixed (Parent Child): %d items", mixedScenario))
+	LogDebug(fmt.Sprintf("  Total items: %d", len(permissions)))
+}

@@ -10,6 +10,11 @@ import (
 )
 
 var _ = Describe("TC-SMB-PERMISSIONS-NO-SID-MAPPING: Test SMB permissions with valid/invalid principals WITHOUT SID mapping", func() {
+	BeforeEach(func() {
+		if PROTOCOL_TYPE == ProtocolNFS {
+			Skip("SMB permissions is skipped in CI/CD as it is not supported in NFS")
+		}
+	})
 	var (
 		ProjectId              string
 		workerId1              string
@@ -23,10 +28,6 @@ var _ = Describe("TC-SMB-PERMISSIONS-NO-SID-MAPPING: Test SMB permissions with v
 
 	Context("SMB Permissions Migration Without SID Mapping Test", func() {
 		BeforeEach(func() {
-			if PROTOCOL_TYPE != ProtocolSMB {
-				Skip("Skipping SMB permissions test as protocol is not SMB")
-			}
-
 			numberOfWorker := 1
 
 			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
@@ -45,7 +46,7 @@ var _ = Describe("TC-SMB-PERMISSIONS-NO-SID-MAPPING: Test SMB permissions with v
 			By("########################## TC-SMB-NO-SID-MAPPING start ################################")
 			var sourceConfigID, sourcePathID1 string
 			var destinationConfigID, destinationPathID1 string
-			var sourceJobConfigIDs, migrationJobConfigIDs []string
+			var migrationJobConfigIDs []string
 
 			By("Ensuring Windows worker is joined to Active Directory domain")
 			// Get domain credentials from environment variables
@@ -199,33 +200,6 @@ var _ = Describe("TC-SMB-PERMISSIONS-NO-SID-MAPPING: Test SMB permissions with v
 			Expect(orphanedSIDsInSource).To(Equal(4), "Expected exactly 4 orphaned SIDs after deleting 2 users and 1 group (4 ACL entries total)")
 			Expect(validSIDsInSource).To(Equal(4), "Expected exactly 4 valid SIDs remaining (invaliduser1 x2, invaliduser2, invalidgroup1)")
 			LogDebug(fmt.Sprintf("Source after deletion: Valid SIDs=%d, Orphaned SIDs=%d", validSIDsInSource, orphanedSIDsInSource))
-
-			By("Creating a Bulk Discovery Job for the Source File Server")
-			jobParams := DiscoveryJobParams{
-				SourcePathIDs:            []string{sourcePathID1},
-				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
-				PreserveAccessTime:       true,
-				FirstRunAt:               GetCurrentUTCTimestamp(),
-				CreatedBy:                nil,
-				WorkflowExecutionTimeout: "60s",
-				WorkflowTaskTimeout:      "30s",
-				WorkflowRunTimeout:       "30s",
-				StartDelay:               "10s",
-			}
-			sourceJobConfigIDs, resp, err = CreateDiscoveryJob(jobParams, headers)
-			Expect(err).NotTo(HaveOccurred())
-			defer resp.Body.Close()
-
-			sourceJobConfigID := sourceJobConfigIDs[0]
-			getJobsResp, resp, err := GetJobRunDetails(sourceJobConfigID, headers)
-			Expect(err).NotTo(HaveOccurred())
-			defer resp.Body.Close()
-
-			sourceDiscoveryJobRunID := getJobsResp.JobRuns[0].JobRunId
-			err = WaitForJobState(sourceDiscoveryJobRunID, COMPLETED_JOBRUN)
-			Expect(err).NotTo(HaveOccurred())
-			LogDebug(fmt.Sprintf("Source discovery: %s", sourceDiscoveryJobRunID))
 
 			By("Creating destination SMB file server")
 			destinationParams := CreateServereParams{
