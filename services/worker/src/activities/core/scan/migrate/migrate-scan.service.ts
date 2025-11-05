@@ -61,17 +61,31 @@ export class MigrateScanService {
 
     
     async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings , targetPrefix, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> { 
-
+        const isSMB = jobContext.jobConfig.destinationFileServer.protocols.some(
+            protocol => protocol.type === 'SMB' || protocol.type.includes('SMB')
+        );
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
         let commands: Cmd[] = [];
-
         const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command});
-        const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});        
+        const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});    
+        
+        let sourceContentLowerCase = new Set<string>();    
         for (const item of sourceContent) {
             try {
                 const sourceContentPath = path.join(sourcePath, item);
                 const sourceContentExists = await isExists(sourceContentPath);
-                if(!sourceContentExists) continue;                      
+                if(!sourceContentExists) continue; 
+                if (isSMB){
+                    const itemLowerCase = item.toLowerCase();
+                    if (sourceContentLowerCase.has(itemLowerCase)) {
+                        const error = new Error(`Skipping file because another file with same name but differing in case exists`) as Error & {code:string};
+                        error.code = 'EEXIST';
+                        const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_FILE, ErrorType.FATAL_ERROR, command.id, error, {name: item, path: sourceContentPath});
+                        await jobContext.publishToErrorStream(dmErr);
+                        continue;
+                    }
+                    sourceContentLowerCase.add(itemLowerCase);
+                }
                 const sourceStat = await fs.promises.lstat(sourceContentPath);                
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
                 

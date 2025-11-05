@@ -236,6 +236,9 @@ export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string 
       case 'EIO':
           // Filename too long
           return context === 'TASK' ? 'TASK_SERVER_DISCONNECTED' : 'OP_SERVER_DISCONNECTED';
+      case 'EEXIST':
+          // Duplicate file in terms of case (Isilon SMB)
+          return context === 'TASK' ? 'TASK_FILE_ALREADY_EXISTS' : 'OP_FILE_ALREADY_EXISTS';
       default:
         // Unknown error
         return context === 'TASK' ? 'TASK_UNKNOWN_ERROR' : 'OP_UNKNOWN_ERROR';
@@ -284,7 +287,7 @@ export const basePrefix = (jobRunId: string, pathId: string): string => {
   return `${process.env.BASE_WORKING_PATH}/${jobRunId}/${pathId}`;
 }
 
-const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED'])
+const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED', 'EEXIST'])
 const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED']);
 
 // File server down errno numbers (negative values as reported by Node.js)
