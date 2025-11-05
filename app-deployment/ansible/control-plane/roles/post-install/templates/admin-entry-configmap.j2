@@ -277,6 +277,36 @@ data:
     --header "Authorization: Bearer ${token}" \
     --data-raw '{"name":"redis-secret-reader","description":"Can access Redis credentials via Admin Service API"}'
 
+    # Get all realm roles in one request and parse as needed
+    ALL_ROLES=`curl -k --silent --show-error --request GET \
+    --url "${KEYCLOAK_BASEURL}/admin/realms/${REALM_NAME}/roles" \
+    --header "Content-Type: application/json" \
+    --header "Authorization: Bearer ${token}"`
 
+    # Parse default-roles-datamigrator role ID
+    DEFAULT_ROLES_ID=$(echo "$ALL_ROLES" | jq -r ".[] | select(.name == \"default-roles-${REALM_NAME}\") | .id")
+    echo "Default roles ID: ${DEFAULT_ROLES_ID}"
+
+    # Parse redis-secret-reader role details as complete JSON object
+    REDIS_ROLE_DETAILS=$(echo "$ALL_ROLES" | jq -c ".[] | select(.name == \"redis-secret-reader\")")
+    echo "Redis role details: ${REDIS_ROLE_DETAILS}"
+
+    # Verify we got both required data
+    if [ -z "$DEFAULT_ROLES_ID" ] || [ "$DEFAULT_ROLES_ID" = "null" ]; then
+        echo "Error: Could not find default-roles-${REALM_NAME} role"
+        exit 1
+    fi
+
+    if [ -z "$REDIS_ROLE_DETAILS" ] || [ "$REDIS_ROLE_DETAILS" = "null" ]; then
+        echo "Error: Could not find redis-secret-reader role"
+        exit 1
+    fi
+
+    # Add redis-secret-reader to default-roles-datamigrator composite using roles-by-id endpoint
+    curl -k --silent --show-error --request POST \
+    --url "${KEYCLOAK_BASEURL}/admin/realms/${REALM_NAME}/roles-by-id/${DEFAULT_ROLES_ID}/composites" \
+    --header "Content-Type: application/json" \
+    --header "Authorization: Bearer ${token}" \
+    --data-raw "[${REDIS_ROLE_DETAILS}]"
 
     echo "Keycloak setup completed successfully"
