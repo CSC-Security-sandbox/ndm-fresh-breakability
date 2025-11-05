@@ -24,7 +24,7 @@ resource "google_compute_instance" "vm_instance" {
 
   network_interface {
     network    = "appmicro-vpc1"
-    subnetwork = "appmicro-vpc-subnet-01"
+    subnetwork = "appmicro-vpc-subnet-02"
 
   }
 

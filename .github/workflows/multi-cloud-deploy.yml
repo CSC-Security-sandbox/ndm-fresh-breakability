@@ -245,11 +245,11 @@ jobs:
     - name: Set GCP Variables
       run: |
         echo "NAME_PREFIX=${{ github.event.inputs.name_prefix || 'admin' }}" >> $GITHUB_ENV
-        echo "CP_COUNT=1" >> $GITHUB_ENV
+        echo "CP_COUNT=10" >> $GITHUB_ENV
         echo "WORKER_COUNT=${{ github.event.inputs.worker_count || '2' }}" >> $GITHUB_ENV
         echo "CP_IMAGE=${{ github.event.inputs.cp_image }}" >> $GITHUB_ENV
         echo "WORKER_IMAGE=${{ github.event.inputs.worker_image }}" >> $GITHUB_ENV
-        echo "REGION=us-east1" >> $GITHUB_ENV
+        echo "REGION=us-east4" >> $GITHUB_ENV
         echo "CP_MACHINE_TYPE=e2-custom-8-32768" >> $GITHUB_ENV
         echo "WORKER_MACHINE_TYPE=e2-custom-4-16384" >> $GITHUB_ENV
         echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID || 'app-microservices-cm' }}" >> $GITHUB_ENV
