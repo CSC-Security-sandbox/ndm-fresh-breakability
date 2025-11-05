@@ -154,7 +154,21 @@ export class CommandExecService {
             //TODO: add handling for the symlink to the directory. 
 
             try {                
-                await fs.promises.mkdir(targetPath, {recursive: true});                
+                await fs.promises.mkdir(targetPath, {recursive: true});    
+                
+                // Check for 8.3 collision after directory creation
+                if (process.platform === 'win32' && targetPath.includes('~')) {
+                    try {
+                        await fs.promises.realpath(targetPath);
+                    } catch (realpathError) {
+                        const fileName = path.basename(targetPath);
+                        console.error(`Worker Thread - 8.3 collision detected: '${fileName}' conflicts with auto-generated short name`);
+                        const collisionError: any = new Error(`8.3 short filename collision detected: Directory '${fileName}' cannot be created due to short name collision.`);
+                        collisionError.code = 'E8DOT3_COLLISION';
+                        throw collisionError;
+                    }
+                }
+                
                 command.ops[OPS_CMD.COPY_DIR].status = OPS_STATUS.COMPLETED;
                 output.shouldStampMeta = true;
                 output.shouldUpdateItemInfo = true;

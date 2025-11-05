@@ -1,7 +1,8 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
+import { OPS_CMD, OPS_STATUS, ErrorType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import * as fs from "fs";
+import * as path from "path";
 import { dmError } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { RedisService } from "src/redis/redis.service";
@@ -9,6 +10,7 @@ import { SourceAclError } from "./win-opeartions/acl-operation.error";
 import { WinOperationService } from "./win-opeartions/win-operation.service";
 import { CommandExecInput, CommandOutput } from "./command-execution.type";
 import { StampMetaOutput } from "./stamp-meta.type";
+import { FatalError } from "src/errors/errors.types";
 
 
 @Injectable()
@@ -30,51 +32,74 @@ export class StampMetaService {
             input.command.ops[OPS_CMD.STAMP_META].status !== OPS_STATUS.COMPLETED
         ) {
 
-            if (process.platform === 'win32') {
+            try {
+                // Check for 8.3 collision before attempting any metadata operations 
+                // TODO: verify and remove this check as its handled at call
+                if (process.platform === 'win32' && input.targetPath.includes('~')) {
+                    try {
+                        await fs.promises.realpath(input.targetPath);
+                    } catch (realpathError) {
+                        const collisionError: any = new Error(`Cannot resolve path for metadata operations: ${input.targetPath} (likely due to 8.3 collision during creation)`);
+                        collisionError.code = 'E8DOT3_COLLISION';
+                        throw collisionError;
+                    }
+                }
 
-                // Stamp SID to object
+                if (process.platform === 'win32') {
 
-                const [aclStampOutput, preserveTimeOutput] = await Promise.all([
-                    this.stampObjectACL(input),
-                    this.preserveAccessAndModifiedTime(input)
-                ]);
+                    // Stamp SID to object
 
-                output.sourceErrors.push(...aclStampOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
-                output.targetErrors.push(...aclStampOutput.targetErrors, ...preserveTimeOutput.targetErrors);
+                    const [aclStampOutput, preserveTimeOutput] = await Promise.all([
+                        this.stampObjectACL(input),
+                        this.preserveAccessAndModifiedTime(input)
+                    ]);
+
+                    output.sourceErrors.push(...aclStampOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
+                    output.targetErrors.push(...aclStampOutput.targetErrors, ...preserveTimeOutput.targetErrors);
 
 
-                // Stamp access and modified time
-                const timeOutput = await this.stampAccessAndModifiedTime(input);
-                output.sourceErrors.push(...timeOutput.sourceErrors);
-                output.targetErrors.push(...timeOutput.targetErrors);
+                    // Stamp access and modified time
+                    const timeOutput = await this.stampAccessAndModifiedTime(input);
+                    output.sourceErrors.push(...timeOutput.sourceErrors);
+                    output.targetErrors.push(...timeOutput.targetErrors);
 
-                // Stamp permissions
-                const permissionsOutput = await this.stampPermission(input);
-                output.sourceErrors.push(...permissionsOutput.sourceErrors);
-                output.targetErrors.push(...permissionsOutput.targetErrors);
+                    // Stamp permissions
+                    const permissionsOutput = await this.stampPermission(input);
+                    output.sourceErrors.push(...permissionsOutput.sourceErrors);
+                    output.targetErrors.push(...permissionsOutput.targetErrors);
 
-            }
-            else {
+                }
+                else {
 
-                // Stamp GID and UID
-                const gidUidOutput = await this.stampGIDandUID(input);
-                output.sourceErrors.push(...gidUidOutput.sourceErrors);
-                output.targetErrors.push(...gidUidOutput.targetErrors);
+                    // Stamp GID and UID
+                    const gidUidOutput = await this.stampGIDandUID(input);
+                    output.sourceErrors.push(...gidUidOutput.sourceErrors);
+                    output.targetErrors.push(...gidUidOutput.targetErrors);
 
-                // Preserve access and modified time
-                const preserveTimeOutput = await this.preserveAccessAndModifiedTime(input);
-                output.sourceErrors.push(...preserveTimeOutput.sourceErrors);
-                output.targetErrors.push(...preserveTimeOutput.targetErrors);
+                    // Preserve access and modified time
+                    const preserveTimeOutput = await this.preserveAccessAndModifiedTime(input);
+                    output.sourceErrors.push(...preserveTimeOutput.sourceErrors);
+                    output.targetErrors.push(...preserveTimeOutput.targetErrors);
 
-                // Stamp access and modified time
-                const timeOutput = await this.stampAccessAndModifiedTime(input);
-                output.sourceErrors.push(...timeOutput.sourceErrors);
-                output.targetErrors.push(...timeOutput.targetErrors);
+                    // Stamp access and modified time
+                    const timeOutput = await this.stampAccessAndModifiedTime(input);
+                    output.sourceErrors.push(...timeOutput.sourceErrors);
+                    output.targetErrors.push(...timeOutput.targetErrors);
 
-                // Stamp permissions
-                const permissionsOutput = await this.stampPermission(input);
-                output.sourceErrors.push(...permissionsOutput.sourceErrors);
-                output.targetErrors.push(...permissionsOutput.targetErrors);
+                    // Stamp permissions
+                    const permissionsOutput = await this.stampPermission(input);
+                    output.sourceErrors.push(...permissionsOutput.sourceErrors);
+                    output.targetErrors.push(...permissionsOutput.targetErrors);
+                }
+            } catch (error) {
+                // Handle 8.3 collision errors specifically
+                if (error.code === 'E8DOT3_COLLISION') {
+                    this.logger.error(`8.3 collision detected during metadata operations on ${input.targetPath}: ${error.message}`);
+                    // Throw FatalError to make this completely non-retryable
+                    throw new FatalError(`8.3 collision: Cannot resolve path for metadata operations: ${input.targetPath} (likely due to 8.3 collision during creation)`);
+                } else {
+                    throw error;
+                }
             }
         }
 
@@ -139,13 +164,14 @@ export class StampMetaService {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         if (command.metadata.mtime && command.metadata.atime) {
             try {
+                // Proceed with timestamp operation
                 if (command?.metadata?.isSymLink) {
                     await fs.promises.lutimes(targetPath, new Date(command.metadata.atime), new Date(command.metadata.mtime));
                 } else {
                     await fs.promises.utimes(targetPath, new Date(command.metadata.atime), new Date(command.metadata.mtime));
                 }
-            } catch (error) {
-                this.logger.error(`Stamping Access and Modified Time  to ${targetPath}, Error: ${error.message}`, error.stack);
+            } catch (error: any) {
+                this.logger.error(`Stamping Access and Modified Time to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_TIME, errorType, command.id, error, { name: command.fPath, path: targetPath });
                 await jobContext.publishToErrorStream(dmErr);
                 output.targetErrors.push(error.code);
