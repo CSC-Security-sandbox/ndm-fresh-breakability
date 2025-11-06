@@ -976,6 +976,7 @@ export class JobConfigService {
             JobRunStatus.Ready,
             JobRunStatus.Pending,
             JobRunStatus.Running,
+            JobRunStatus.Paused,
             JobRunStatus.Pausing,
             JobRunStatus.Stopping,
           ]),
