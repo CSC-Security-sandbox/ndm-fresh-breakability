@@ -1,6 +1,7 @@
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
+import { createDirectoryWithTildeCheck } from "../activities/utils/directory.utils";
 import { WorkerThreadInput, WorkerThreadOutput } from "./worker.thread.type";
 const { parentPort, workerData } = require('worker_threads');
 
@@ -32,22 +33,72 @@ function getOptimalBufferSize(fileSize: number, maxBufferSize: number): number {
   return maxBufferSize;
 }
 
+async function checkFor8dot3Collision(target: string, workerNumber?: string): Promise<void> {
+  const fileName = path.basename(target);
+  try {
+    await fs.promises.writeFile(target, '', { flag: 'wx' });
+  } catch (createError: any) {
+    if (createError?.code === 'EEXIST' || createError?.code === 'EPERM' || createError?.code === 'EACCES') {
+      try {
+        const realPath = await fs.promises.realpath(target);
+        return; 
+      } catch (realpathError) {
+        console.error(`Worker Thread - ${workerNumber} - 8.3 collision detected: '${fileName}' conflicts with auto-generated short name`);
+        const collisionError: any = new Error(`8.3 short filename collision detected: File '${fileName}' cannot be created due to short name collision.`);
+        collisionError.code = 'E8DOT3_COLLISION';
+        throw collisionError;
+      }
+    } else {
+      throw createError;
+    }
+  }
+}
+
 export async function smartCopy(source:string, target:string, filesize:number, maxBufferSize :number) {
-  const destDir = path.dirname(target);  
-  await fs.promises.mkdir(destDir, { recursive: true });
   let readStream: fs.ReadStream = null; 
   let writeStream: fs.WriteStream = null; 
-  try{    
+  
+  try {    
     const bufferSize = getOptimalBufferSize(filesize, maxBufferSize);
 
+    // First verify source file exists and is readable
     try {
       await fs.promises.access(source, fs.constants.R_OK);
     } catch {
       throw new Error(`Source file ${source} does not exist or is not readable`);
     }
 
+    // Get destination directory and ensure it exists with collision detection
+    const destDir = path.dirname(target);
+    
+    try {
+      // Create destination directory with collision detection
+      if (process.platform === 'win32' && target.includes('~')) {
+        await createDirectoryWithTildeCheck(destDir);
+      } else {
+        await fs.promises.mkdir(destDir, { recursive: true });
+      }
+    } catch (mkdirError: any) {
+      console.log(`Worker Thread - ${workerData?.threadNumber} - Error creating directory ${destDir}:`, mkdirError);
+      
+      // Record directory failure for coordination with metadata operations
+      // We'll create a simple mechanism to communicate this failure
+      console.error(`8.3 collision detected: '${destDir}' conflicts with auto-generated short name`);
+        const collisionError: any = new Error(`8.3 short filename collision detected: Directory '${destDir}' cannot be created due to short name collision.`);
+        collisionError.code = 'E8DOT3_COLLISION';
+        throw collisionError;
+    }
+
     readStream = fs.createReadStream(source, { highWaterMark: bufferSize });
+
+    // Check for file-level 8.3 collisions
+    if (process.platform === 'win32' && path.basename(target).includes('~')) {
+      await checkFor8dot3Collision(target, workerData?.threadNumber);
+    }
+
+    // Create write stream after all collision checks
     writeStream = fs.createWriteStream(target, { flags: 'w', highWaterMark: bufferSize });
+    
     let hash = crypto.createHash('sha256');
 
     const sourceCheckSum  = await new Promise((resolve, reject) => {
@@ -82,6 +133,7 @@ export async function smartCopy(source:string, target:string, filesize:number, m
     });
 
     const targetCheckSum = await calculateChecksum(target);
+    
     return {sourceChecksum: sourceCheckSum, targetChecksum: targetCheckSum};
   }catch(error){
     console.error(`Worker Thread - ${workerData?.threadNumber} - Error during smartCopy from ${source} to ${target}:`, error);
@@ -94,7 +146,7 @@ export async function smartCopy(source:string, target:string, filesize:number, m
       writeStream.destroy();
     }
   }
-  }
+}
 
 
 parentPort.on('message', async (tasks: WorkerThreadInput[]) => {
