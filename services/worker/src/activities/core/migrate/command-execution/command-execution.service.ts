@@ -10,12 +10,14 @@ import { Operation, Origin } from "src/activities/utils/utils.types";
 import { WorkerThreadService } from "src/thread/worker.thread.service";
 import { CommandExecInput, CommandExecOutput, CommandOutput, ValidateCommandInput } from "./command-execution.type";
 import { StampMetaService } from "./stamp-meta.service";
-import { isNotWritable, isPathExists } from "../../utils/utils";
+import { isNotWritable, isPathExists, smartCopy } from "../../utils/utils";
+
 
 @Injectable()
 export class CommandExecService {
     readonly workerId: string;
     private readonly logger: LoggerService;
+    private readonly maxBufferSize: number;
 
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
@@ -25,6 +27,7 @@ export class CommandExecService {
     ) {
         this.workerId = this.configService?.get<string>('worker.workerId') ?? '';
         this.logger = loggerFactory.create(CommandExecService.name);
+        this.maxBufferSize = this.configService.get<number>('worker.thread.maxBufferSize') || 1048576;
     }
     async executeCommand(input: CommandExecInput): Promise<CommandExecOutput> {
 
@@ -120,12 +123,8 @@ export class CommandExecService {
             try {
                 if(targetPathExists)
                     await this.stampMetaService.resetFileAttributes(targetPath);
-
-                // TODO: 
-                const checksums = await this.workerThreadService.migrateWorkerThread({ sourcePath, destinationPath: targetPath, operationId: command.id, size: command.metadata?.size ?? 0
-                });
-
-
+                
+                const checksums = await smartCopy(sourcePath, targetPath, command.metadata?.size, this.maxBufferSize);
                 output.shouldUpdateItemInfo = true;
                 if(checksums?.targetChecksum !== checksums?.sourceChecksum) {
                     command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.ERROR, params : { checksums } };
