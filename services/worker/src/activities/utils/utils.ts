@@ -287,7 +287,7 @@ export const basePrefix = (jobRunId: string, pathId: string): string => {
   return `${process.env.BASE_WORKING_PATH}/${jobRunId}/${pathId}`;
 }
 
-const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED', 'EEXIST'])
+const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED'])
 const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED']);
 
 // File server down errno numbers (negative values as reported by Node.js)
