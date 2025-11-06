@@ -180,7 +180,6 @@ const JobsList = () => {
                     <ul className="list-disc list-inside space-y-1">
                       <li>Stop the active job runs manually</li>
                       <li>Wait for the job runs to complete naturally</li>
-                      <li>Use the job management interface to pause/stop runs</li>
                     </ul>
                   </div>
                 </div>
