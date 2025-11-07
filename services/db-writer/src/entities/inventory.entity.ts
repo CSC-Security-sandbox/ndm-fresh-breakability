@@ -101,6 +101,6 @@ export class InventoryEntity {
     targetMeta: Record<string, any>;    
 
     @ApiProperty({ description: 'Inode number', nullable: true })
-    @Column({ name: 'inode', type: 'bigint', nullable: true })
+    @Column({ name: 'inode', type: 'numeric', nullable: true })
     inode: number;  
 }

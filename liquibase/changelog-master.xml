@@ -491,4 +491,11 @@
          <sqlFile path="liquibase/20251008_02_add_inode_index_to_inventory_rollback.sql"/>
       </rollback>
    </changeSet>
+
+   <changeSet id="20251031_01_alter_inventory_table_inode_type_to_numeric.sql" author="dk49889">
+      <sqlFile path="liquibase/20251031_01_alter_inventory_table_inode_type_to_numeric.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/20251031_01_alter_inventory_table_inode_type_to_numeric_rollback.sql"/>
+      </rollback>
+   </changeSet>
 </databaseChangeLog>
