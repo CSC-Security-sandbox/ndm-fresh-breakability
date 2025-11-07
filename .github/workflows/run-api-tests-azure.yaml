@@ -29,13 +29,27 @@ on:
         description: 'Reference type (releases or branches)'
         required: true
         type: string
-      run_smb_tests:
-        description: 'Run SMB tests'
+      protocol:
+        description: 'Select protocol to test'
+        required: false
+        default: 'Both'
+        type: choice
+        options:
+          - 'Both'
+          - 'SMB'
+          - 'NFS'
+      run_smoke_tests:
+        description: 'Run smoke tests'
         required: false
         default: true
         type: boolean
-      run_nfs_tests:
-        description: 'Run NFS tests'
+      run_e2e_tests:
+        description: 'Run end-to-end tests'
+        required: false
+        default: true
+        type: boolean
+      run_regression_tests:
+        description: 'Run regression tests'
         required: false
         default: true
         type: boolean
@@ -61,13 +75,23 @@ on:
         description: 'Reference type (releases or branches)'
         required: true
         type: string
-      run_smb_tests:
-        description: 'Whether to run SMB tests (true/false)'
+      protocol:
+        description: 'Select protocol to test (Both/SMB/NFS)'
+        required: false
+        default: 'Both'
+        type: string
+      run_smoke_tests:
+        description: 'Whether to run smoke tests (true/false)'
         required: false
         default: true
         type: boolean
-      run_nfs_tests:
-        description: 'Whether to run NFS tests (true/false)'
+      run_e2e_tests:
+        description: 'Whether to run end-to-end tests (true/false)'
+        required: false
+        default: true
+        type: boolean
+      run_regression_tests:
+        description: 'Whether to run regression tests (true/false)'
         required: false
         default: true
         type: boolean
@@ -180,7 +204,7 @@ jobs:
           echo "sshpass installed successfully."
 
       - name: Download Windows installer
-        if: ${{ inputs.run_smb_tests == true || github.event.inputs.run_smb_tests == 'true' }}
+        if: ${{ (inputs.protocol == 'SMB' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'SMB' || github.event.inputs.protocol == 'Both') }}
         run: |
           WINDOWS_INSTALLER_URL="${{ inputs.windows_worker_installer_url || github.event.inputs.windows_worker_installer_url }}"
           if [ -n "$WINDOWS_INSTALLER_URL" ]; then
@@ -199,7 +223,7 @@ jobs:
           fi
 
       - name: Copy Windows installer to Windows VMs
-        if: ${{ inputs.run_smb_tests == true || github.event.inputs.run_smb_tests == 'true' }}
+        if: ${{ (inputs.protocol == 'SMB' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'SMB' || github.event.inputs.protocol == 'Both') }}
         run: |
           WINDOWS_IPS='${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}'
           
@@ -258,7 +282,7 @@ jobs:
     name: Run SMB API Tests
     runs-on: openlab
     needs: setup-infrastructure
-    if: ${{ inputs.run_smb_tests == true || github.event.inputs.run_smb_tests == 'true' }}
+    if: ${{ (inputs.protocol == 'SMB' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'SMB' || github.event.inputs.protocol == 'Both') }}
     env:
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
@@ -316,7 +340,26 @@ jobs:
         run: |
           cd ndm-api-tests
           chmod +x ./run-smb-azure-automation.sh
-          ./run-smb-azure-automation.sh
+
+          SCRIPT_ARGS=""
+          RUN_SMOKE="${{ inputs.run_smoke_tests || github.event.inputs.run_smoke_tests || 'true' }}"
+          RUN_E2E="${{ inputs.run_e2e_tests || github.event.inputs.run_e2e_tests || 'true' }}"
+          RUN_REGRESSION="${{ inputs.run_regression_tests || github.event.inputs.run_regression_tests || 'true' }}"
+          
+          if [ "$RUN_SMOKE" = "true" ]; then
+            SCRIPT_ARGS="$SCRIPT_ARGS --smoke"
+          fi
+          
+          if [ "$RUN_E2E" = "true" ]; then
+            SCRIPT_ARGS="$SCRIPT_ARGS --e2e"
+          fi
+          
+          if [ "$RUN_REGRESSION" = "true" ]; then
+            SCRIPT_ARGS="$SCRIPT_ARGS --regression"
+          fi
+          
+          echo "Running SMB tests with arguments: $SCRIPT_ARGS"
+          ./run-smb-azure-automation.sh $SCRIPT_ARGS
         continue-on-error: true
 
       - name: Upload SMB Test Logs
@@ -331,7 +374,7 @@ jobs:
     name: Run NFS API Tests
     runs-on: openlab
     needs: setup-infrastructure
-    if: ${{ inputs.run_nfs_tests == true || github.event.inputs.run_nfs_tests == 'true' }}
+    if: ${{ (inputs.protocol == 'NFS' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'NFS' || github.event.inputs.protocol == 'Both') }}
     env:
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
@@ -392,7 +435,26 @@ jobs:
         run: |
           cd ndm-api-tests
           chmod +x ./run-nfs-azure-automation.sh
-          ./run-nfs-azure-automation.sh
+          
+          SCRIPT_ARGS=""
+          RUN_SMOKE="${{ inputs.run_smoke_tests || github.event.inputs.run_smoke_tests || 'true' }}"
+          RUN_E2E="${{ inputs.run_e2e_tests || github.event.inputs.run_e2e_tests || 'true' }}"
+          RUN_REGRESSION="${{ inputs.run_regression_tests || github.event.inputs.run_regression_tests || 'true' }}"
+          
+          if [ "$RUN_SMOKE" = "true" ]; then
+            SCRIPT_ARGS="$SCRIPT_ARGS --smoke"
+          fi
+          
+          if [ "$RUN_E2E" = "true" ]; then
+            SCRIPT_ARGS="$SCRIPT_ARGS --e2e"
+          fi
+          
+          if [ "$RUN_REGRESSION" = "true" ]; then
+            SCRIPT_ARGS="$SCRIPT_ARGS --regression"
+          fi
+          
+          echo "Running NFS tests with arguments: $SCRIPT_ARGS"
+          ./run-nfs-azure-automation.sh $SCRIPT_ARGS
         continue-on-error: true
 
       - name: Upload NFS Test Logs
