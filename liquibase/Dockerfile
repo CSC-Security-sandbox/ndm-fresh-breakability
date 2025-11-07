@@ -9,6 +9,15 @@ RUN apk update && \
 # Remove vulnerable Go binary (lpm) to fix CVE-2025-47906
 RUN rm -f /liquibase/bin/lpm
 
+# Update commons-lang3 to fix CVE-2025-48924
+RUN cd /liquibase/internal/lib && \
+    rm -f commons-lang3*.jar && \
+    wget -O commons-lang3-3.18.0.jar https://repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.18.0/commons-lang3-3.18.0.jar
+
+# Remove SQL Server JDBC driver to fix CVE-2025-59250 (not needed for PostgreSQL)
+RUN cd /liquibase/internal/lib && \
+    rm -f mssql-jdbc*.jar
+
 USER liquibase
 
 ENV LIQUIBASE_COMMAND_DRIVER=org.postgresql.Driver \
