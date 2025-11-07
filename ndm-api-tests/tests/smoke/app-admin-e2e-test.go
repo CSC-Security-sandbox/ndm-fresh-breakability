@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("App Admin Source File Server Test", Ordered, func() {
+var _ = Describe("App Admin Source File Server Test", func() {
 
     var (
         headers                    map[string]string 
@@ -214,21 +214,20 @@ var _ = Describe("App Admin Source File Server Test", Ordered, func() {
         
     })
 
-    AfterAll(func() {
+    AfterEach(func() {
 
-        err := RemoveDeltaFromVolume(sourceVolumePath1)
+        By("Cleanup started")
+        err := StopAllWorkersAndWait()
+        Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
+
+        err = RemoveDeltaFromVolume(sourceVolumePath1)
         Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
-        LogDebug(fmt.Sprintf("Restored original data to source volume: %s", sourceVolumePath1))
 
         err = ClearVolume(destinationVolumePath1)
         Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
-        LogDebug(fmt.Sprintf("Cleared volume of destination: %s", destinationVolumePath1))
 
         err = CleanupTestEnv()
         Expect(err).To(BeNil(), "Error during test environment cleanup")
-        LogDebug("Test environment cleanup complete.")
-        By("Cleanup complete.")
-
-        LogDebug("All source file server test cleanup operations completed.")
+        LogDebug("Cleanup complete.")
     })
 })
