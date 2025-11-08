@@ -619,5 +619,169 @@ describe('StampMetaService', () => {
         '/test/path.txt',
       );
     });
+
+    describe('8.3 Collision Detection Tests', () => {
+      it('should handle target path not found during permission stamping', async () => {
+        const input = createMockInput(
+          { 
+            mode: 0o644, 
+            isSymLink: false 
+          },
+          {},
+          false
+        );
+        input.sourcePath = '/source/LONGLO~1/test.txt';
+        input.targetPath = '/target/LONGLO~1/test.txt';
+        input.command.fPath = '/LONGLO~1/test.txt';
+
+        const pathError: any = new Error('ENOENT: no such file or directory');
+        pathError.code = 'ENOENT';
+        (fs.promises.chmod as jest.Mock).mockRejectedValue(pathError);
+
+        const result = await service.stampPermission(input);
+
+        expect(result.targetErrors).toEqual(['ENOENT']);
+        expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          'Stamping Permission from /source/LONGLO~1/test.txt to /target/LONGLO~1/test.txt, Error: ENOENT: no such file or directory',
+          pathError.stack
+        );
+      });
+
+      it('should handle access denied errors on tilde paths', async () => {
+        const input = createMockInput(
+          { 
+            uid: 1000, 
+            gid: 1000 
+          },
+          {},
+          true
+        );
+        input.sourcePath = '/source/LONGLO~1';
+        input.targetPath = '/target/LONGLO~1';
+        input.command.fPath = '/LONGLO~1';
+
+        const accessError: any = new Error('EACCES: permission denied');
+        accessError.code = 'EACCES';
+        (fs.promises.chown as jest.Mock).mockRejectedValue(accessError);
+
+        const result = await service.stampGIDandUID(input);
+
+        expect(result.targetErrors).toEqual(['EACCES']);
+        expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          'Stamping GID and UID from /source/LONGLO~1 to /target/LONGLO~1, Error: EACCES: permission denied',
+          accessError.stack
+        );
+      });
+
+      it('should handle timestamp errors on collision paths', async () => {
+        const input = createMockInput(
+          { 
+            atime: new Date('2023-01-01T00:00:00Z'),
+            mtime: new Date('2023-01-01T00:00:00Z'),
+            isSymLink: false
+          },
+          {},
+          false
+        );
+        input.sourcePath = '/source/SOMELO~1/file.txt';
+        input.targetPath = '/target/SOMELO~1/file.txt';
+        input.command.fPath = '/SOMELO~1/file.txt';
+
+        const timestampError: any = new Error('EINVAL: invalid argument');
+        timestampError.code = 'EINVAL';
+        (fs.promises.utimes as jest.Mock).mockRejectedValue(timestampError);
+
+        const result = await service.stampAccessAndModifiedTime(input);
+
+        expect(result.targetErrors).toEqual(['EINVAL']);
+        expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          'Stamping Access and Modified Time  to /target/SOMELO~1/file.txt, Error: EINVAL: invalid argument',
+          timestampError.stack
+        );
+      });
+
+      it('should handle Windows ACL errors on tilde paths', async () => {
+        // Set platform to Windows for this test
+        const originalPlatform = process.platform;
+        Object.defineProperty(process, 'platform', { value: 'win32' });
+
+        const input = createMockInput({}, {}, false);
+        input.sourcePath = '/source/LONGLO~1/document.docx';
+        input.targetPath = '/target/LONGLO~1/document.docx';
+        input.command.fPath = '/LONGLO~1/document.docx';
+        input.command.ops[OPS_CMD.STAMP_META].params = {
+          sidMap: {
+            sourceAcl: 'S-1-5-21-123456789',
+            targetAcl: 'S-1-5-21-987654321',
+          },
+        };
+
+        const aclError = new Error('Failed to set ACL on collision path');
+        (aclError as any).code = 'EACCES';
+        winOperationService.stampAclOperation.mockRejectedValue(aclError);
+
+        const result = await service.stampObjectACL(input);
+
+        expect(result.sourceErrors).toContain('EACCES');
+        expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          'Stamping ACL from /source/LONGLO~1/document.docx to /target/LONGLO~1/document.docx, Error: Failed to set ACL on collision path',
+          aclError.stack
+        );
+
+        // Restore platform
+        Object.defineProperty(process, 'platform', { value: originalPlatform });
+      });
+
+      it('should handle reset file attributes errors on collision paths', async () => {
+        const pathError: any = new Error('File system error on tilde path');
+        pathError.code = 'EIO';
+        winOperationService.resetFileAttributes.mockRejectedValue(pathError);
+
+        await expect(
+          service.resetFileAttributes('/target/SHORTF~1/test.txt')
+        ).rejects.toThrow('File system error on tilde path');
+
+        expect(winOperationService.resetFileAttributes).toHaveBeenCalledWith(
+          '/target/SHORTF~1/test.txt'
+        );
+        // No logger.error expected since resetFileAttributes just propagates errors
+      });
+
+      it('should successfully stamp metadata despite tilde paths', async () => {
+        const input = createMockInput(
+          {
+            mode: 0o755,
+            uid: 1000,
+            gid: 1000,
+            atime: new Date('2023-01-01T00:00:00Z'),
+            mtime: new Date('2023-01-01T00:00:00Z'),
+            isSymLink: false
+          },
+          {},
+          false
+        );
+        input.sourcePath = '/source/LONGLO~1/success.txt';
+        input.targetPath = '/target/LONGLO~1/success.txt';
+        input.command.fPath = '/LONGLO~1/success.txt';
+
+        // Mock all operations to succeed
+        (fs.promises.chmod as jest.Mock).mockResolvedValue(undefined);
+        (fs.promises.chown as jest.Mock).mockResolvedValue(undefined);
+        (fs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
+        winOperationService.stampAclOperation.mockResolvedValue({ output: undefined, errors: [] });
+
+        const result = await service.stampMetaData(input);
+
+        expect(result.sourceErrors).toEqual([]);
+        expect(result.targetErrors).toEqual([]);
+        expect(result.shouldUpdateItemInfo).toBe(true);
+        expect(input.command.ops[OPS_CMD.STAMP_META].status).toBe(OPS_STATUS.COMPLETED);
+        expect(input.jobContext.publishToErrorStream).not.toHaveBeenCalled();
+      });
+    });
   });
 });

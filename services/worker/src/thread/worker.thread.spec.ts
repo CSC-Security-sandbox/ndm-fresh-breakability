@@ -13,9 +13,11 @@ import * as crypto from "crypto";
 import { Readable, Writable } from "stream";
 
 import { calculateChecksum, smartCopy } from "./worker.thread";
+import { createDirectoryWithTildeCheck } from "../activities/utils/directory.utils";
 
 jest.mock("fs");
 jest.mock("crypto");
+jest.mock("../activities/utils/directory.utils");
 
 describe("smartCopy", () => {
   const sourcePath = "source.txt";
@@ -110,6 +112,123 @@ describe("smartCopy", () => {
     // Verify directory creation was called (mkdir is always called in implementation)
     expect(mockMakeDir).toHaveBeenCalledWith("dest", { recursive: true });
     expect(result.sourceChecksum).toBe("checksum123");
+  });
+
+  describe("8.3 Collision Detection", () => {
+    const mockCreateDirectoryWithTildeCheck = createDirectoryWithTildeCheck as jest.MockedFunction<typeof createDirectoryWithTildeCheck>;
+
+    beforeEach(() => {
+      // Reset the mock before each test
+      mockCreateDirectoryWithTildeCheck.mockReset();
+    });
+
+    it("should use collision detection for Windows paths with tildes", async () => {
+      const destPathWithTilde = "dest/LONGLO~1/target.txt";
+      const originalPlatform = process.platform;
+      
+      // Mock Windows platform
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+
+      const mockMakeDir = jest.fn().mockResolvedValue(undefined);
+      (fs as any).promises.mkdir = mockMakeDir;
+      mockCreateDirectoryWithTildeCheck.mockResolvedValue(undefined);
+
+      (fs.createReadStream as jest.Mock).mockImplementation(() => mockFsStream(mockData));
+      (fs.createWriteStream as jest.Mock).mockImplementation(() => mockWritableStream());
+
+      const fakeHash = {
+        update: jest.fn().mockReturnThis(),
+        digest: jest.fn().mockReturnValue("checksum123"),
+      };
+
+      (crypto.createHash as jest.Mock).mockReturnValueOnce(fakeHash).mockReturnValueOnce(fakeHash);
+
+      await smartCopy(sourcePath, destPathWithTilde, size, maxBufferSize);
+
+      expect(mockCreateDirectoryWithTildeCheck).toHaveBeenCalledWith("dest/LONGLO~1");
+      
+      // Restore original platform
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    });
+
+    it("should handle collision detection error during directory creation", async () => {
+      const destPathWithTilde = "dest/LONGLO~1/target.txt";
+      const originalPlatform = process.platform;
+      
+      // Mock Windows platform
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+
+      const collisionError: any = new Error('8.3 short filename collision detected');
+      collisionError.code = 'E8DOT3_COLLISION';
+      mockCreateDirectoryWithTildeCheck.mockRejectedValue(collisionError);
+
+      await expect(smartCopy(sourcePath, destPathWithTilde, size, maxBufferSize))
+        .rejects.toMatchObject({
+          message: expect.stringContaining('8.3 short filename collision detected'),
+          code: 'E8DOT3_COLLISION'
+        });
+
+      // Restore original platform
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    });
+
+    it("should use regular mkdir for non-Windows platforms", async () => {
+      const destPathWithTilde = "dest/LONGLO~1/target.txt";
+      const originalPlatform = process.platform;
+      
+      // Mock non-Windows platform
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+
+      const mockMakeDir = jest.fn().mockResolvedValue(undefined);
+      (fs as any).promises.mkdir = mockMakeDir;
+
+      (fs.createReadStream as jest.Mock).mockImplementation(() => mockFsStream(mockData));
+      (fs.createWriteStream as jest.Mock).mockImplementation(() => mockWritableStream());
+
+      const fakeHash = {
+        update: jest.fn().mockReturnThis(),
+        digest: jest.fn().mockReturnValue("checksum123"),
+      };
+
+      (crypto.createHash as jest.Mock).mockReturnValueOnce(fakeHash).mockReturnValueOnce(fakeHash);
+
+      await smartCopy(sourcePath, destPathWithTilde, size, maxBufferSize);
+
+      expect(mockMakeDir).toHaveBeenCalledWith("dest/LONGLO~1", { recursive: true });
+      expect(mockCreateDirectoryWithTildeCheck).not.toHaveBeenCalled();
+
+      // Restore original platform
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    });
+
+    it("should use regular mkdir for Windows paths without tildes", async () => {
+      const regularDestPath = "dest/regular_folder/target.txt";
+      const originalPlatform = process.platform;
+      
+      // Mock Windows platform
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+
+      const mockMakeDir = jest.fn().mockResolvedValue(undefined);
+      (fs as any).promises.mkdir = mockMakeDir;
+
+      (fs.createReadStream as jest.Mock).mockImplementation(() => mockFsStream(mockData));
+      (fs.createWriteStream as jest.Mock).mockImplementation(() => mockWritableStream());
+
+      const fakeHash = {
+        update: jest.fn().mockReturnThis(),
+        digest: jest.fn().mockReturnValue("checksum123"),
+      };
+
+      (crypto.createHash as jest.Mock).mockReturnValueOnce(fakeHash).mockReturnValueOnce(fakeHash);
+
+      await smartCopy(sourcePath, regularDestPath, size, maxBufferSize);
+
+      expect(mockMakeDir).toHaveBeenCalledWith("dest/regular_folder", { recursive: true });
+      expect(mockCreateDirectoryWithTildeCheck).not.toHaveBeenCalled();
+
+      // Restore original platform
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    });
   });
 
 });

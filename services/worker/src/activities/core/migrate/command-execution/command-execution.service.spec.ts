@@ -9,10 +9,12 @@ import { mockLogger } from 'src/auth/auth.service.spec';
 import { WorkerThreadService } from 'src/thread/worker.thread.service';
 import { CommandExecService } from './command-execution.service';
 import { StampMetaService } from './stamp-meta.service';
+import { createDirectoryWithTildeCheck } from 'src/activities/utils/directory.utils';
 
 // Mock fs module
 jest.mock('fs', () => ({
     mkdirSync: jest.fn(),
+    existsSync: jest.fn(() => true), // Add existsSync mock for systeminformation module
     promises: {
         access: jest.fn(),
         mkdir: jest.fn(),
@@ -47,6 +49,11 @@ jest.mock('src/activities/core/utils/utils', () => {
     };
 });
 
+// Mock directory utils
+jest.mock('src/activities/utils/directory.utils', () => ({
+    createDirectoryWithTildeCheck: jest.fn(),
+}));
+
 describe('CommandExecService', () => {
     let service: CommandExecService;
     let configService: jest.Mocked<ConfigService>;
@@ -56,6 +63,7 @@ describe('CommandExecService', () => {
     let mockJobContext: any;
 
     const mockFs = fs as jest.Mocked<typeof fs>;
+    const mockCreateDirectoryWithTildeCheck = createDirectoryWithTildeCheck as jest.MockedFunction<typeof createDirectoryWithTildeCheck>;
 
     beforeEach(async () => {
         configService = {
@@ -146,7 +154,8 @@ describe('CommandExecService', () => {
                 mode: 644,
                 uid: 1000,
                 gid: 1000,
-                sid: 'test-sid'
+                sid: 'test-sid',
+                inode: 123456
             },
             serialize: jest.fn(),
         });
@@ -229,7 +238,8 @@ describe('CommandExecService', () => {
                 mode: 644,
                 uid: 1000,
                 gid: 1000,
-                sid: 'test-sid'
+                sid: 'test-sid',
+                inode: 123456
             },
             serialize: jest.fn(),
         });
@@ -316,7 +326,8 @@ describe('CommandExecService', () => {
                 mode: 644,
                 uid: 1000,
                 gid: 1000,
-                sid: 'test-sid'
+                sid: 'test-sid',
+                inode: 123456
             },
             serialize: jest.fn(),
         });
@@ -408,7 +419,8 @@ describe('CommandExecService', () => {
                     mode: 644,
                     uid: 1000,
                     gid: 1000,
-                    sid: 'test-sid'
+                    sid: 'test-sid',
+                    inode: 123456
                 },
                 serialize: jest.fn(),
             });
@@ -458,7 +470,8 @@ describe('CommandExecService', () => {
                     mode: 644,
                     uid: 1000,
                     gid: 1000,
-                    sid: 'test-sid'
+                    sid: 'test-sid',
+                    inode: 123456
                 },
                 serialize: jest.fn(),
             });
@@ -501,7 +514,8 @@ describe('CommandExecService', () => {
                     mode: 644,
                     uid: 1000,
                     gid: 1000,
-                    sid: 'test-sid'
+                    sid: 'test-sid',
+                    inode: 123456
                 },
                 serialize: jest.fn(),
             });
@@ -557,7 +571,8 @@ describe('CommandExecService', () => {
                 mode: 644,
                 uid: 1000,
                 gid: 1000,
-                sid: 'test-sid'
+                sid: 'test-sid',
+                inode: 123456
             },
             serialize: jest.fn(),
             });
@@ -784,7 +799,8 @@ describe('CommandExecService', () => {
                 mode: 644,
                 uid: 1000,
                 gid: 1000,
-                sid: 'test-sid'
+                sid: 'test-sid',
+                inode: 123456
             },
             serialize: jest.fn(),
         });
@@ -965,6 +981,224 @@ describe('CommandExecService', () => {
             expect(result.targetErrors).toEqual([]);
             expect(input.command.ops[OPS_CMD.COPY_FILE].status).toBe(OPS_STATUS.COMPLETED);
             expect(stampMetaService.resetFileAttributes).not.toHaveBeenCalled(); // Target not writable
+        });
+
+        describe('8.3 Collision Detection in copyFile', () => {
+            it('should skip metadata stamping when E8DOT3_COLLISION occurs', async () => {
+                coreUtils.isPathExists.mockResolvedValue(true);
+                coreUtils.isNotWritable.mockResolvedValue(false);
+                
+                const collisionError: any = new Error('8.3 short filename collision detected');
+                collisionError.code = 'E8DOT3_COLLISION';
+                workerThreadService.migrateWorkerThread.mockRejectedValue(collisionError);
+
+                const input = {
+                    sourcePath: '/source/LONGLO~1/test.txt',
+                    targetPath: '/target/LONGLO~1/test.txt',
+                    jobContext: {
+                        publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+                    },
+                    command: createMockCommand(),
+                    errorType: ErrorType.RECOVERABLE_ERROR,
+                };
+
+                const result = await service.copyFile(input as any);
+
+                expect(result.shouldStampMeta).toBe(false);
+                expect(result.shouldUpdateItemInfo).toBe(false);
+                expect(result.targetErrors).toEqual(['E8DOT3_COLLISION']);
+                expect(mockLogger.debug).toHaveBeenCalledWith(
+                    'Skipping metadata stamping for /target/LONGLO~1/test.txt due to 8.3 collision'
+                );
+            });
+
+            it('should handle non-collision errors normally', async () => {
+                coreUtils.isPathExists.mockResolvedValue(true);
+                coreUtils.isNotWritable.mockResolvedValue(false);
+                
+                const normalError: any = new Error('Permission denied');
+                normalError.code = 'EACCES';
+                workerThreadService.migrateWorkerThread.mockRejectedValue(normalError);
+
+                const input = {
+                    sourcePath: '/source/test.txt',
+                    targetPath: '/target/test.txt',
+                    jobContext: {
+                        publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+                    },
+                    command: createMockCommand(),
+                    errorType: ErrorType.RECOVERABLE_ERROR,
+                };
+
+                const result = await service.copyFile(input as any);
+
+                // Should not set shouldStampMeta to false explicitly (default behavior)
+                expect(result.targetErrors).toEqual(['EACCES']);
+                expect(mockLogger.debug).not.toHaveBeenCalledWith(
+                    expect.stringContaining('Skipping metadata stamping')
+                );
+            });
+        });
+
+        describe('8.3 Collision Detection in copyDirectory', () => {
+            const createDirMockCommand = (status = OPS_STATUS.READY) => ({
+                id: 'cmd-1',
+                fPath: '/LONGLO~1',
+                status: CommandStatus.READY,
+                isDir: true,
+                ops: {
+                    [OPS_CMD.COPY_DIR]: { 
+                        status,
+                        params: {}
+                    },
+                },
+                metadata: { 
+                    size: 0,
+                    mtime: new Date(),
+                    atime: new Date(),
+                    ctime: new Date(),
+                    birthtime: new Date(),
+                    mode: 755,
+                    uid: 1000,
+                    gid: 1000,
+                    sid: 'test-sid',
+                    inode: 123456
+                },
+                serialize: jest.fn(),
+            });
+
+            it('should skip metadata stamping when directory collision occurs', async () => {
+                const collisionError: any = new Error('8.3 short filename collision detected');
+                collisionError.code = 'E8DOT3_COLLISION';
+                
+                // Mock createDirectoryWithTildeCheck to throw collision error
+                mockCreateDirectoryWithTildeCheck.mockRejectedValue(collisionError);
+
+                const input = {
+                    sourcePath: '/source/LONGLO~1',
+                    targetPath: '/target/LONGLO~1',
+                    jobContext: {
+                        publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+                    },
+                    command: createDirMockCommand(),
+                    errorType: ErrorType.RECOVERABLE_ERROR,
+                };
+
+                const result = await service.copyDirectory(input as any);
+
+                expect(result.shouldStampMeta).toBe(false);
+                expect(result.shouldUpdateItemInfo).toBe(false);
+                expect(result.targetErrors).toEqual(['E8DOT3_COLLISION']);
+                expect(mockLogger.debug).toHaveBeenCalledWith(
+                    'Skipping metadata stamping for /target/LONGLO~1 due to 8.3 collision'
+                );
+            });
+
+            it('should handle successful directory creation with tilde check', async () => {
+                const originalPlatform = process.platform;
+                Object.defineProperty(process, 'platform', { value: 'win32' });
+
+                mockCreateDirectoryWithTildeCheck.mockResolvedValue(undefined);
+
+                const input = {
+                    sourcePath: '/source/LONGLO~1',
+                    targetPath: '/target/LONGLO~1',
+                    jobContext: {
+                        publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+                    },
+                    command: createDirMockCommand(),
+                    errorType: ErrorType.RECOVERABLE_ERROR,
+                };
+
+                const result = await service.copyDirectory(input as any);
+
+                expect(result.shouldStampMeta).toBe(true);
+                expect(result.shouldUpdateItemInfo).toBe(true);
+                expect(result.targetErrors).toEqual([]);
+                expect(input.command.ops[OPS_CMD.COPY_DIR].status).toBe(OPS_STATUS.COMPLETED);
+
+                // Restore platform
+                Object.defineProperty(process, 'platform', { value: originalPlatform });
+            });
+
+            it('should use regular mkdir for non-Windows platforms', async () => {
+                const originalPlatform = process.platform;
+                Object.defineProperty(process, 'platform', { value: 'linux' });
+
+                (mockFs.promises.mkdir as jest.Mock).mockResolvedValue('/target/LONGLO~1');
+
+                const input = {
+                    sourcePath: '/source/LONGLO~1',
+                    targetPath: '/target/LONGLO~1',
+                    jobContext: {
+                        publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+                    },
+                    command: createDirMockCommand(),
+                    errorType: ErrorType.RECOVERABLE_ERROR,
+                };
+
+                const result = await service.copyDirectory(input as any);
+
+                expect(mockFs.promises.mkdir).toHaveBeenCalledWith('/target/LONGLO~1', { recursive: true });
+                expect(result.shouldStampMeta).toBe(true);
+
+                // Restore platform
+                Object.defineProperty(process, 'platform', { value: originalPlatform });
+            });
+        });
+    });
+
+    describe('Stamp Meta Service Integration', () => {
+        it('should not call stamp meta service when collision occurs', async () => {
+            const createMockCommand = () => ({
+                id: 'cmd-1',
+                fPath: '/LONGLO~1/test.txt',
+                status: CommandStatus.READY,
+                isDir: false,
+                ops: {
+                    [OPS_CMD.COPY_FILE]: { 
+                        status: OPS_STATUS.READY,
+                        params: {}
+                    },
+                },
+                metadata: { 
+                    size: 1024,
+                    mtime: new Date(),
+                    atime: new Date(),
+                    ctime: new Date(),
+                    birthtime: new Date(),
+                    mode: 644,
+                    uid: 1000,
+                    gid: 1000,
+                    sid: 'test-sid',
+                    inode: 123456
+                },
+                serialize: jest.fn(),
+            });
+
+            const coreUtils = require('src/activities/core/utils/utils');
+            coreUtils.isPathExists.mockResolvedValue(true);
+            coreUtils.isNotWritable.mockResolvedValue(false);
+            
+            const collisionError: any = new Error('8.3 collision');
+            collisionError.code = 'E8DOT3_COLLISION';
+            workerThreadService.migrateWorkerThread.mockRejectedValue(collisionError);
+
+            const input = {
+                sourcePath: '/source/LONGLO~1/test.txt',
+                targetPath: '/target/LONGLO~1/test.txt',
+                jobContext: {
+                    publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+                },
+                command: createMockCommand(),
+                errorType: ErrorType.RECOVERABLE_ERROR,
+            };
+
+            const result = await service.executeCommand(input as any);
+
+            // Verify stamp meta service is not called due to shouldStampMeta being false
+            expect(stampMetaService.stampMetaData).not.toHaveBeenCalled();
+            expect(result.cmd.status).toBe(CommandStatus.ERROR);
         });
     });
 });
