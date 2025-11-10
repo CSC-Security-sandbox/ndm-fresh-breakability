@@ -25,7 +25,7 @@ export enum FileSystemCategory {
 export enum FileSystemSubCategory {
   // File System Stats subcategories
   REGULAR_FILES = "Regular Files",
-  SYMBOLIC_LINKS = "Symbolic Links",
+  SYMBOLIC_LINKS_COUNT = "Symbolic Links Count",
   SPECIAL_FILES = "Special Files",
   TOTAL_COUNT = "Total Count",
   TOTAL_SPACE_FOR_REGULAR_FILES = "Total Space for Regular Files",

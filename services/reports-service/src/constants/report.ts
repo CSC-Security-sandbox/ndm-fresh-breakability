@@ -13,6 +13,7 @@ export const PDFReportHeaders = {
     "Maximum Values",
     "Job Run Stats",
     "Biggest",
+    "Redirects"
   ],
 };
 export enum formatStringTypeCategories {

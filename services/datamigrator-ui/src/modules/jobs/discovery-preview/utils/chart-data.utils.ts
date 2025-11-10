@@ -443,7 +443,7 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
   const symbolicLinks =
     data?.find(
       (item: DataItemType) =>
-        item.sub_category === FileSystemSubCategory.SYMBOLIC_LINKS
+        item.sub_category === FileSystemSubCategory.SYMBOLIC_LINKS_COUNT
     )?.value || 0;
   const totalCount =
     data?.find(

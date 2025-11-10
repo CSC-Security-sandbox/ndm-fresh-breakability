@@ -139,7 +139,10 @@ export const FILE_SYSTEM_DISTRIBUTION = (schema: string) => `
                 GROUP BY i2.inode
                 HAVING COUNT(1) > 1
             ) AS hard_links
-        ), 0) as total_hard_link_files
+        ), 0) as total_hard_link_files,
+        sum(case when upper(file_type) = 'JUNCTION' then 1 else 0 end) as total_junctions,
+        sum(case when upper(file_type) = 'VOLUME_MOUNT_POINT' then 1 else 0 end) as total_volume_mount_point,
+        sum(case when upper(file_type) = 'SHORTCUT' then 1 else 0 end) as total_shortcuts
     from ${schema}.inventory i
     where i.job_run_id = $1
 `;
@@ -285,4 +288,12 @@ export const JOB_RUN_DETAILS = (schema: string) => `
     inner join ${schema}.file_server fsrv on fsrv.id = file_server_id
     inner join ${schema}.config c on c.id = fsrv.config_id
     where jr.id = $1
+`;
+
+
+export const REDIRECTS = (schema: string) => `
+    SELECT i.file_type, i.path
+    FROM ${schema}.inventory i
+    WHERE i.job_run_id = $1
+    AND i.file_type IN ('JUNCTION', 'SYMBOLIC_LINK');
 `;
