@@ -83,3 +83,9 @@ export interface JobRunDetailsInput {
     config_name: string;
     protocol: string;
 }
+
+export interface Potential8Dot3ConflictsInput {
+    conflict_type: string;
+    total_conflict_groups: string;
+    total_files_affected: string;
+}

@@ -1,6 +1,6 @@
 import { DiscoveryReportSection } from "../discovery-report.type";
-import { ACCESS_TIME_DISTRIBUTION, CREATED_TIME_DISTRIBUTION, DEPTH_DISTRIBUTION, EXTENSION_DISTRIBUTION, FILE_SYSTEM_DISTRIBUTION, JOB_RUN_DETAILS, MAX_VALUES, MODIFIED_TIME_DISTRIBUTION, NUMBER_OF_FILES_BY_SIZE, TOP_BIGGEST_FILE_NAME, TOP_DIRECTORY_WITH_MAX_COUNT_CHILD, TOP_DIRECTORY_WITH_MAX_SIZE, TOP_LONGEST_DIRECTORY_NAMES, TOP_LONGEST_DIRECTORY_PATHS, TOP_LONGEST_FILE_NAMES, TOP_LONGEST_FILE_PATHS } from './discovery-report.query';
-import { AccessTimeDistributionInput, CreatedTimeDistributionInput, DepthDistributionInput, ExtensionDistributionInput, FileSystemDistributionInput, JobRunDetailsInput, MaxValuesInput, ModifiedTimeDistributionInput, NumberOfFilesBySizeInput, TopBiggestFileNameInput, TopDirectoryWithMaxCountChildInput, TopDirectoryWithMaxSizeInput, TopLongestDirectoryNamesInput, TopLongestDirectoryPathsInput, TopLongestFileNamesInput, TopLongestFilePathsInput } from "./discovery-report.query.type";
+import { ACCESS_TIME_DISTRIBUTION, CREATED_TIME_DISTRIBUTION, DEPTH_DISTRIBUTION, EXTENSION_DISTRIBUTION, FILE_SYSTEM_DISTRIBUTION, JOB_RUN_DETAILS, MAX_VALUES, MODIFIED_TIME_DISTRIBUTION, NUMBER_OF_FILES_BY_SIZE, POTENTIAL_8DOT3_CONFLICTS, TOP_BIGGEST_FILE_NAME, TOP_DIRECTORY_WITH_MAX_COUNT_CHILD, TOP_DIRECTORY_WITH_MAX_SIZE, TOP_LONGEST_DIRECTORY_NAMES, TOP_LONGEST_DIRECTORY_PATHS, TOP_LONGEST_FILE_NAMES, TOP_LONGEST_FILE_PATHS } from './discovery-report.query';
+import { AccessTimeDistributionInput, CreatedTimeDistributionInput, DepthDistributionInput, ExtensionDistributionInput, FileSystemDistributionInput, JobRunDetailsInput, MaxValuesInput, ModifiedTimeDistributionInput, NumberOfFilesBySizeInput, Potential8Dot3ConflictsInput, TopBiggestFileNameInput, TopDirectoryWithMaxCountChildInput, TopDirectoryWithMaxSizeInput, TopLongestDirectoryNamesInput, TopLongestDirectoryPathsInput, TopLongestFileNamesInput, TopLongestFilePathsInput } from "./discovery-report.query.type";
 import { SECONDS_PER_MINUTE, SECONDS_PER_HOUR, SECONDS_PER_DAY, TIME_UNITS } from "../../../constants/report";
 
 
@@ -360,6 +360,61 @@ export const JOB_RUN_DETAILS_MAPPER = (input: JobRunDetailsInput[]) : DiscoveryR
     return output;
 }
 
+export const POTENTIAL_8DOT3_CONFLICTS_MAPPER = (input: Potential8Dot3ConflictsInput[]) : DiscoveryReportSection[] => {
+    const output: DiscoveryReportSection[] = [];
+    
+    if (input.length === 0) {
+        output.push({
+            value: 'No real 8.3 filename conflicts detected - Migration safe',
+            category: 'Migration Risk Assessment',
+            valueType: 'string',
+            sub_category: '8.3 Filename Conflicts'
+        });
+        return output;
+    }
+
+    input.forEach(item => {
+        if (item.conflict_type === 'Real 8.3 Conflicts Detected') {
+            // Summary row - only show if there are actual conflicts
+            if (parseInt(item.total_conflict_groups) > 0) {
+                output.push({
+                    value: `⚠️ CRITICAL: ${item.total_conflict_groups} conflict patterns affecting ${item.total_files_affected} long filenames`,
+                    category: 'Migration Risk Assessment',
+                    valueType: 'string',
+                    sub_category: '8.3 Filename Conflicts Summary'
+                });
+                output.push({
+                    value: 'These files will fail to migrate due to existing short name conflicts',
+                    category: 'Migration Risk Assessment',
+                    valueType: 'string',
+                    sub_category: 'Impact Description'
+                });
+            }
+        } else if (item.conflict_type.startsWith('Directory: ')) {
+            // Individual conflict details
+            const directory = item.conflict_type.substring(11); // Remove 'Directory: ' prefix
+            output.push({
+                value: `${item.total_conflict_groups} - ${item.total_files_affected}`,
+                category: 'Migration Risk Assessment',
+                valueType: 'string',
+                sub_category: `⚠️ Conflicts in ${directory}`
+            });
+        }
+    });
+    
+    // If no conflicts found in summary, show safe message
+    if (output.length === 0) {
+        output.push({
+            value: 'No real 8.3 filename conflicts detected - Migration safe',
+            category: 'Migration Risk Assessment',
+            valueType: 'string',
+            sub_category: '8.3 Filename Conflicts'
+        });
+    }
+    
+    return output;
+}
+
 export const QueryMapper = {
     ['NUMBER_OF_FILES_BY_SIZE']: {query: NUMBER_OF_FILES_BY_SIZE , mapper: NUMBER_OF_FILES_BY_SIZE_MAPPER , isDynamic: false},
     ['MODIFIED_TIME_DISTRIBUTION']: {query: MODIFIED_TIME_DISTRIBUTION, mapper: MODIFIED_TIME_DISTRIBUTION_MAPPER, isDynamic: false},
@@ -368,6 +423,7 @@ export const QueryMapper = {
     ['DEPTH_DISTRIBUTION']: {query: DEPTH_DISTRIBUTION, mapper: DEPTH_DISTRIBUTION_MAPPER, isDynamic: false},
     ['FILE_SYSTEM_DISTRIBUTION']: {query: FILE_SYSTEM_DISTRIBUTION, mapper: FILE_SYSTEM_DISTRIBUTION_MAPPER, isDynamic: false},
     ['MAX_VALUES']: {query: MAX_VALUES, mapper: MAX_VALUES_MAPPER, isDynamic: false},
+    ['POTENTIAL_8DOT3_CONFLICTS']: {query: POTENTIAL_8DOT3_CONFLICTS, mapper: POTENTIAL_8DOT3_CONFLICTS_MAPPER, isDynamic: false},
     ['EXTENSION_DISTRIBUTION']: {query: EXTENSION_DISTRIBUTION, mapper: EXTENSION_DISTRIBUTION_MAPPER, isDynamic: true},
     ['TOP_LONGEST_FILE_NAMES']: {query: TOP_LONGEST_FILE_NAMES, mapper: TOP_LONGEST_FILE_NAMES_MAPPER, isDynamic: true},
     ['TOP_LONGEST_DIRECTORY_NAMES']: {query: TOP_LONGEST_DIRECTORY_NAMES, mapper: TOP_LONGEST_DIRECTORY_NAMES_MAPPER, isDynamic: true},
