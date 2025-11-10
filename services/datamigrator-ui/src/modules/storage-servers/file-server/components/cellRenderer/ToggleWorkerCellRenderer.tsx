@@ -12,8 +12,6 @@ const ToggleWorkerCellRenderer = ({
     setSelectedWorkerIds,
     validateConnectionLoader,
     isJobRunning,
-    nfsCredentialsForm,
-    smbCredentialsForm,
   } = useContext(CommonFileServerContext);
 
   const handleToggle = useCallback(() => {
@@ -28,18 +26,12 @@ const ToggleWorkerCellRenderer = ({
 
   const isOnline = row?.status === "Online";
   const isSelected = selectedWorkerIds.includes(value);
-  const workerName = row?.workerName?.toLowerCase() || "";
 
-  const isWorkerTypeValid =
-    (nfsCredentialsForm.isValid && workerName.startsWith("nfs-")) ||
-    (smbCredentialsForm.isValid && workerName.startsWith("smb-"));
-
+  // Simplified logic since we only show compatible workers now
   const isDisabled = (() => {
-    if (!isWorkerTypeValid) return true;
     if (validateConnectionLoader) return true;
     if (isJobRunning && isOnline) return true;
     if (!isSelected && !isOnline && !isJobRunning) return true;
-
     return false;
   })();
 

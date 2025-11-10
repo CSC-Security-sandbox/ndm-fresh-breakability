@@ -2,9 +2,10 @@ import * as Yup from "yup";
 import NFSStatusRenderer from "@modules/storage-servers/file-server/components/steps/ValidateConnection/components/NFSStatusRenderer";
 import StatusCellRenderer from "@components/custom-cell-renderer/StatusCellRenderer";
 import { BlueXpTableRowType } from "@/types/app.type";
-import React from "react";
+import React, { useContext } from "react";
 import ToggleWorker from "@modules/storage-servers/file-server/components/cellRenderer/ToggleWorkerCellRenderer";
 import SMBStatusRenderer from "@modules/storage-servers/file-server/components/steps/ValidateConnection/components/SMBStatusRenderer";
+import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
 
 export const SERVICE_AND_PROTOCOL_VALIDATION_SCHEMA = Yup.object({
   configName: Yup.string().required("Name is required"),
@@ -47,6 +48,9 @@ export const SMB_CREDENTIALS_VALIDATION_SCHEMA = Yup.object().shape({
   protocol: Yup.string()
     .oneOf(["SMB"], "Invalid protocol selected")
     .required("Protocol selection is required"),
+  exportPathSource: Yup.string()
+    .oneOf(Object.values(EXPORT_PATH_SOURCE_ENUM), "Invalid selection.")
+    .required("Export Path Source is required."), // Required for shared schema compatibility with NFS
 });
 
 export const VALIDATE_CONNECTION_COLUMN_DEF: any[] = [
@@ -71,21 +75,24 @@ export const VALIDATE_CONNECTION_COLUMN_DEF: any[] = [
       }),
   },
   {
-    header: "NFS",
+    header: "Connection Status",
     accessor: "",
     id: 4,
-    Renderer: NFSStatusRenderer,
-  },
-  {
-    header: "SMB",
-    accessor: "",
-    Renderer: SMBStatusRenderer,
-    id: 5,
+    Renderer: (props: BlueXpTableRowType<any, string>) => {
+      // Show the appropriate status renderer based on context
+      const { selectedProtocol } = useContext(CommonFileServerContext);
+      if (selectedProtocol === 'NFS') {
+        return React.createElement(NFSStatusRenderer, props);
+      } else if (selectedProtocol === 'SMB') {
+        return React.createElement(SMBStatusRenderer, props);
+      }
+      return "-";
+    },
   },
   {
     header: "Associated",
     accessor: "id",
-    id: 6,
+    id: 5,
     Renderer: (props: BlueXpTableRowType<any, string>) => {
       return React.createElement(ToggleWorker, {
         ...props,
@@ -120,6 +127,7 @@ export const INITIAL_VALUE_SMB_CREDENTIALS_FORM = {
     label: "",
     value: "",
   },
+  exportPathSource: EXPORT_PATH_SOURCE_ENUM.AUTO_DISCOVER, // Required for unified schema
 };
 
 export const INITIAL_VALUE_NFS_CREDENTIALS_FORM = {

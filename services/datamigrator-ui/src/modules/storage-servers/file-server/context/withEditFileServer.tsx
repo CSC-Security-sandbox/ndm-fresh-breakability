@@ -22,8 +22,6 @@ import { EXPORT_PATH_SOURCE_ENUM } from "@modules/storage-servers/file-server/co
 
 export function withEditFileServer(WrappedComponent: ComponentType<any>) {
   return function WithEditFileServerComponent(props: any) {
-    const nfsAndSmbWorkersList: string[] = [];
-    const nfsAndSmbVolumeList: MountPathsOptionsListType[] = [];
     const { selectedProjectId } = useSelectedProjectId();
     const navigate = useNavigate();
     const [editingFileServerDetails, setEditingFileServerDetails] = useState(
@@ -57,6 +55,8 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
 
     // THIS IS MAIN LOGIC WHERE WE PRE SET VALUES TO ALL FORMS TO EDIT, FILE SERVER
     useEffect(() => {
+      if (!editingFileServerDetails?.id) return;
+
       // STEP 1 FORM PRE FILLING
       fileServerForm.serverTypeForm.resetForm({
         configName: editingFileServerDetails?.configName || "",
@@ -106,21 +106,49 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
         host: editingFileServerDetails?.fileServers?.[0]?.host,
       });
 
-      extractWorkersAndVolumes(nfsCredentialsInitialValues);
-      extractWorkersAndVolumes(smbCredentialsInitialValues);
+      // Determine the current protocol and set it
+      let currentProtocol: 'NFS' | 'SMB' = 'NFS';
+      if (nfsCredentialsInitialValues.id) {
+        currentProtocol = 'NFS';
+      } else if (smbCredentialsInitialValues.id) {
+        currentProtocol = 'SMB';
+      }
+      
+      fileServerForm.setSelectedProtocol(currentProtocol);
+      fileServerForm.setOriginalProtocol(currentProtocol);
+
+      // Extract workers and volumes for both protocols and store them separately
+      const { workers: nfsWorkers, volumes: nfsVolumes } = extractWorkersAndVolumes(nfsCredentialsInitialValues);
+      const { workers: smbWorkers, volumes: smbVolumes } = extractWorkersAndVolumes(smbCredentialsInitialValues);
+
+      // Store original workers by protocol
+      fileServerForm.setOriginalNfsWorkers(nfsWorkers);
+      fileServerForm.setOriginalSmbWorkers(smbWorkers);
+
+      // Set current workers and volumes based on current protocol
+      let currentWorkers: string[] = [];
+      let currentVolumes: MountPathsOptionsListType[] = [];
+      
+      if (currentProtocol === 'NFS') {
+        currentWorkers = nfsWorkers;
+        currentVolumes = nfsVolumes;
+      } else if (currentProtocol === 'SMB') {
+        currentWorkers = smbWorkers;
+        currentVolumes = smbVolumes;
+      }
+
+      // Set the extracted workers and volumes
+      fileServerForm?.setSelectedWorkerIds(currentWorkers);
+      fileServerForm?.setMountPaths(currentVolumes);
 
       fileServerForm?.jobConfigForm.resetForm(
         patchJobConfigFormValue(
           editingFileServerDetails.workingDirectory,
-          nfsAndSmbVolumeList
+          currentVolumes
         )
       );
 
       fileServerForm?.setIsJobRunning(false);
-
-      fileServerForm?.setSelectedWorkerIds(nfsAndSmbWorkersList);
-      // nfsAndSmbVolumeList.forEach();
-      fileServerForm?.setMountPaths(nfsAndSmbVolumeList);
       const isJobRunning = isAnyJobRunReady(editingFileServerDetails);
       fileServerForm?.setIsJobRunning(isJobRunning);
     }, [editingFileServerDetails]);
@@ -143,20 +171,30 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
       );
     };
 
-    //  LOGIC TO PRE SELECT ALL WORKERS - FOR WORKERS SCREEN
-    // LOGIC TO GET ALL MOUNT_PATHS TO LIST ON WORKING_DIR
+    // Update the extractWorkersAndVolumes function to return both workers and volumes
     const extractWorkersAndVolumes = (credentials: FileServerApiType) => {
+      const workers: string[] = [];
+      const volumes: MountPathsOptionsListType[] = [];
+
+      // Extract workers
       credentials?.workers?.forEach((worker) => {
-        nfsAndSmbWorkersList.push(worker?.workerId);
+        workers.push(worker?.workerId);
       });
 
+      // Extract volumes
       if (credentials?.volumes) {
-        nfsAndSmbVolumeList.push(
+        volumes.push(
           ...credentials.volumes
             .filter((volume) => volume?.isValid)
-            .map(({ volumePath, id }) => ({ label: volumePath, value: id }))
+            .map(({ volumePath, id }) => ({ 
+              label: volumePath, 
+              value: id, 
+              volumePath: volumePath 
+            }))
         );
       }
+
+      return { workers, volumes };
     };
 
     const handleEditConfiguration = async () => {
@@ -167,7 +205,9 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
         fileServerForm.smbCredentialsForm,
         fileServerForm.selectedWorkerIds,
         fileServerForm.hostCredentialsForm,
-        fileServerForm.jobConfigForm
+        fileServerForm.jobConfigForm,
+        fileServerForm.selectedProtocol,
+        editingFileServerDetails
       );
 
       try {
