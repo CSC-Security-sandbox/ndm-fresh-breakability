@@ -2,6 +2,7 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { createDirectoryWithTildeCheck } from "../activities/utils/directory.utils";
+import { E8Dot3CollisionError } from "../errors/errors.types";
 import { WorkerThreadInput, WorkerThreadOutput } from "./worker.thread.type";
 const { parentPort, workerData } = require('worker_threads');
 
@@ -33,7 +34,7 @@ function getOptimalBufferSize(fileSize: number, maxBufferSize: number): number {
   return maxBufferSize;
 }
 
-async function checkFor8dot3Collision(target: string, workerNumber?: string): Promise<void> {
+async function checkFor8dot3Collision(target: string): Promise<void> {
   const fileName = path.basename(target);
   try {
     await fs.promises.writeFile(target, '', { flag: 'wx' });
@@ -43,10 +44,8 @@ async function checkFor8dot3Collision(target: string, workerNumber?: string): Pr
         const realPath = await fs.promises.realpath(target);
         return; 
       } catch (realpathError) {
-        console.error(`Worker Thread - ${workerNumber} - 8.3 collision detected: '${fileName}' conflicts with auto-generated short name`);
-        const collisionError: any = new Error(`8.3 short filename collision detected: File '${fileName}' cannot be created due to short name collision.`);
-        collisionError.code = 'E8DOT3_COLLISION';
-        throw collisionError;
+        console.error(`8.3 collision detected: '${fileName}' conflicts with auto-generated short name`);
+        throw E8Dot3CollisionError.forFile(target, fileName);
       }
     } else {
       throw createError;
@@ -84,16 +83,14 @@ export async function smartCopy(source:string, target:string, filesize:number, m
       // Record directory failure for coordination with metadata operations
       // We'll create a simple mechanism to communicate this failure
       console.error(`8.3 collision detected: '${destDir}' conflicts with auto-generated short name`);
-        const collisionError: any = new Error(`8.3 short filename collision detected: Directory '${destDir}' cannot be created due to short name collision.`);
-        collisionError.code = 'E8DOT3_COLLISION';
-        throw collisionError;
+      throw E8Dot3CollisionError.forDirectory(destDir);
     }
 
     readStream = fs.createReadStream(source, { highWaterMark: bufferSize });
 
     // Check for file-level 8.3 collisions
     if (process.platform === 'win32' && path.basename(target).includes('~')) {
-      await checkFor8dot3Collision(target, workerData?.threadNumber);
+      await checkFor8dot3Collision(target);
     }
 
     // Create write stream after all collision checks

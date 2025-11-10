@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { E8Dot3CollisionError } from '../../errors/errors.types';
 
 export async function createDirectoryWithTildeCheck(targetPath: string): Promise<void> {
    const pathParts = targetPath.split(path.sep);
@@ -27,12 +28,7 @@ export async function createDirectoryWithTildeCheck(targetPath: string): Promise
             await fs.promises.realpath(pathUpToTilde);
             console.log(`Realpath success for: ${tildeDirectoryName}`);
         } catch (error) {
-            const collisionError: any = new Error(
-                `8.3 short filename collision detected: Cannot create directory '${tildeDirectoryName}' ` +
-                `This indicates the directory name collided with existing 8.3 short names.`
-            );
-            collisionError.code = 'E8DOT3_COLLISION';
-            throw collisionError;
+            throw E8Dot3CollisionError.forDirectory(pathUpToTilde);
         }
         
         lastTildeIndex = tildeIndex;

@@ -115,7 +115,7 @@ describe('createDirectoryWithTildeCheck', () => {
             mockRealpath.mockRejectedValue(new Error('ENOENT: no such file or directory'));
 
             await expect(createDirectoryWithTildeCheck(testPath)).rejects.toMatchObject({
-                message: expect.stringContaining('8.3 short filename collision detected: Cannot create directory \'LONGLO~1\''),
+                message: expect.stringContaining('8.3 directory name collision: \'LONGLO~1\' conflicts with existing short name pattern'),
                 code: 'E8DOT3_COLLISION'
             });
 
@@ -142,7 +142,7 @@ describe('createDirectoryWithTildeCheck', () => {
                 .mockRejectedValueOnce(new Error('Collision')); // Second call fails
 
             await expect(createDirectoryWithTildeCheck(testPath)).rejects.toMatchObject({
-                message: expect.stringContaining('8.3 short filename collision detected: Cannot create directory \'SHORTF~1\''),
+                message: expect.stringContaining('8.3 directory name collision: \'SHORTF~1\' conflicts with existing short name pattern'),
                 code: 'E8DOT3_COLLISION'
             });
 
@@ -164,7 +164,7 @@ describe('createDirectoryWithTildeCheck', () => {
             mockRealpath.mockRejectedValue(new Error('Collision'));
 
             await expect(createDirectoryWithTildeCheck(testPath)).rejects.toMatchObject({
-                message: '8.3 short filename collision detected: Cannot create directory \'TESTDIR~1\' This indicates the directory name collided with existing 8.3 short names.',
+                message: '8.3 directory name collision: \'TESTDIR~1\' conflicts with existing short name pattern',
                 code: 'E8DOT3_COLLISION'
             });
         });
