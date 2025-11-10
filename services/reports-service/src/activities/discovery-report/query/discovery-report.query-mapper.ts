@@ -365,7 +365,7 @@ export const POTENTIAL_8DOT3_CONFLICTS_MAPPER = (input: Potential8Dot3ConflictsI
     
     if (input.length === 0) {
         output.push({
-            value: 'No real 8.3 filename conflicts detected - Migration safe',
+            value: 'No 8.3 filename conflicts detected - Migration safe',
             category: 'Migration Risk Assessment',
             valueType: 'string',
             sub_category: '8.3 Filename Conflicts'
@@ -374,43 +374,45 @@ export const POTENTIAL_8DOT3_CONFLICTS_MAPPER = (input: Potential8Dot3ConflictsI
     }
 
     input.forEach(item => {
-        if (item.conflict_type === 'Real 8.3 Conflicts Detected') {
-            // Summary row - only show if there are actual conflicts
-            if (parseInt(item.total_conflict_groups) > 0) {
-                output.push({
-                    value: `⚠️ CRITICAL: ${item.total_conflict_groups} conflict patterns affecting ${item.total_files_affected} long filenames`,
-                    category: 'Migration Risk Assessment',
-                    valueType: 'string',
-                    sub_category: '8.3 Filename Conflicts Summary'
-                });
-                output.push({
-                    value: 'These files will fail to migrate due to existing short name conflicts',
-                    category: 'Migration Risk Assessment',
-                    valueType: 'string',
-                    sub_category: 'Impact Description'
-                });
-            }
-        } else if (item.conflict_type.startsWith('Directory: ')) {
-            // Individual conflict details
-            const directory = item.conflict_type.substring(11); // Remove 'Directory: ' prefix
+        if (item.conflict_type === 'No 8.3 Conflicts Detected') {
+            // No conflicts found
             output.push({
-                value: `${item.total_conflict_groups} - ${item.total_files_affected}`,
+                value: 'No 8.3 filename conflicts detected - Migration safe',
                 category: 'Migration Risk Assessment',
                 valueType: 'string',
-                sub_category: `⚠️ Conflicts in ${directory}`
+                sub_category: '8.3 Filename Conflicts'
+            });
+        } else if (item.conflict_type === '8.3 Conflicts Found') {
+            // Summary row - show conflict statistics
+            output.push({
+                value: `⚠️ CRITICAL: ${item.total_conflict_groups} directories have conflicts affecting ${item.total_files_affected} files`,
+                category: 'Migration Risk Assessment',
+                valueType: 'string',
+                sub_category: '8.3 Filename Conflicts Summary'
+            });
+            output.push({
+                value: 'Multiple files in same directory would generate identical 8.3 short names - Migration will fail',
+                category: 'Migration Risk Assessment',
+                valueType: 'string',
+                sub_category: 'Impact Description'
+            });
+        } else if (item.conflict_type.startsWith('Directory: ')) {
+            // Individual directory conflict details
+            const directory = item.conflict_type.substring(11); // Remove 'Directory: ' prefix
+            output.push({
+                value: `${item.total_conflict_groups}`,
+                category: 'Migration Risk Assessment',
+                valueType: 'string',
+                sub_category: `⚠️ ${directory}`
+            });
+            output.push({
+                value: item.total_files_affected,
+                category: 'Migration Risk Assessment',
+                valueType: 'string',
+                sub_category: `📋 Files in ${directory}`
             });
         }
     });
-    
-    // If no conflicts found in summary, show safe message
-    if (output.length === 0) {
-        output.push({
-            value: 'No real 8.3 filename conflicts detected - Migration safe',
-            category: 'Migration Risk Assessment',
-            valueType: 'string',
-            sub_category: '8.3 Filename Conflicts'
-        });
-    }
     
     return output;
 }

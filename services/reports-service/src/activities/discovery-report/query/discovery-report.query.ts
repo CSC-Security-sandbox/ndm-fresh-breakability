@@ -273,102 +273,88 @@ export const TOP_BIGGEST_FILE_NAME = (schema: string) => `
 `;
 
 export const POTENTIAL_8DOT3_CONFLICTS = (schema: string) => `
-    WITH all_files AS (
-        SELECT 
-            i.path,
-            i.file_name,
-            i.parent_path,
-            i.is_directory,
-            -- Check if filename is already in 8.3 format (tilde pattern)
-            CASE 
-                WHEN i.is_directory = true THEN 
-                    i.file_name ~ '^[A-Z0-9]{1,6}~[0-9]+$'
-                ELSE 
-                    i.file_name ~ '^[A-Z0-9]{1,6}~[0-9]+(\.[A-Z0-9]{1,3})?$'
-            END as is_shortname_format,
-            -- Extract base name for long files (before extension)
-            CASE 
-                WHEN i.is_directory = true THEN i.file_name
-                ELSE SPLIT_PART(i.file_name, '.', 1)
-            END as base_name,
-            -- Extract extension for files
-            CASE 
-                WHEN i.is_directory = true THEN ''
-                WHEN POSITION('.' IN i.file_name) > 0 THEN 
-                    SUBSTRING(i.file_name FROM POSITION('.' IN i.file_name) + 1)
-                ELSE ''
-            END as extension,
-            -- Check if filename needs 8.3 conversion (long name)
-            CASE 
-                WHEN i.is_directory = true AND LENGTH(i.file_name) > 8 THEN true
-                WHEN i.is_directory = false AND (
-                    LENGTH(SPLIT_PART(i.file_name, '.', 1)) > 8 OR 
-                    (POSITION('.' IN i.file_name) > 0 AND LENGTH(SUBSTRING(i.file_name FROM POSITION('.' IN i.file_name) + 1)) > 3)
-                ) THEN true
-                ELSE false
-            END as needs_shortname
-        FROM ${schema}.inventory i 
-        WHERE i.job_run_id = $1
-    ),
-    shortname_patterns AS (
+    WITH existing_83_files AS (
+        -- Find files already in 8.3 format (these "reserve" their short names)
         SELECT 
             parent_path,
-            is_directory,
-            -- Generate the base short name pattern (without ~number)
-            CASE 
-                WHEN is_directory = true THEN 
-                    UPPER(LEFT(REGEXP_REPLACE(base_name, '[^A-Z0-9]', '', 'g'), 6))
-                ELSE 
-                    UPPER(LEFT(REGEXP_REPLACE(base_name, '[^A-Z0-9]', '', 'g'), 6)) ||
-                    CASE WHEN extension != '' THEN '.' || UPPER(LEFT(extension, 3)) ELSE '' END
-            END as base_pattern,
-            file_name,
-            is_shortname_format,
-            needs_shortname
-        FROM all_files
+            file_name as existing_shortname
+        FROM ${schema}.inventory 
+        WHERE job_run_id = $1
+            AND (
+                -- Directory: 8 chars or less, no spaces/special chars
+                (is_directory = true AND LENGTH(file_name) <= 8 AND file_name ~ '^[A-Za-z0-9~]+$') OR
+                -- File: 8.3 format (8 chars + dot + 3 chars), no spaces/special chars  
+                (is_directory = false AND file_name ~ '^[A-Za-z0-9~]{1,8}(\.[A-Za-z0-9]{1,3})?$')
+            )
     ),
-    conflicts AS (
+    long_files_needing_shortnames AS (
+        -- Find long files that would generate short names
         SELECT 
-            s1.parent_path,
-            s1.base_pattern,
-            s1.is_directory,
-            -- Count existing short names with this pattern
-            COUNT(CASE WHEN s2.is_shortname_format = true AND s2.file_name ~ ('^' || s1.base_pattern || '~[0-9]+' || 
-                CASE WHEN s1.is_directory = false AND POSITION('.' IN s1.base_pattern) > 0 THEN '$' ELSE '$' END)
-                THEN 1 END) as existing_shortnames,
-            -- Count long names that would generate this pattern
-            COUNT(CASE WHEN s2.needs_shortname = true THEN 1 END) as long_names_count,
-            ARRAY_AGG(DISTINCT CASE WHEN s2.needs_shortname = true THEN s2.file_name END) 
-                FILTER (WHERE s2.needs_shortname = true) as long_filenames,
-            ARRAY_AGG(DISTINCT CASE WHEN s2.is_shortname_format = true AND 
-                s2.file_name ~ ('^' || s1.base_pattern || '~[0-9]+' || 
-                CASE WHEN s1.is_directory = false AND POSITION('.' IN s1.base_pattern) > 0 THEN '$' ELSE '$' END)
-                THEN s2.file_name END) 
-                FILTER (WHERE s2.is_shortname_format = true) as existing_shortnames_list
-        FROM shortname_patterns s1
-        JOIN shortname_patterns s2 ON s1.parent_path = s2.parent_path 
-            AND s1.is_directory = s2.is_directory 
-            AND s1.base_pattern = s2.base_pattern
-        WHERE s1.needs_shortname = true OR s1.is_shortname_format = true
-        GROUP BY s1.parent_path, s1.base_pattern, s1.is_directory
-        HAVING (COUNT(CASE WHEN s2.is_shortname_format = true AND s2.file_name ~ ('^' || s1.base_pattern || '~[0-9]+' || 
-            CASE WHEN s1.is_directory = false AND POSITION('.' IN s1.base_pattern) > 0 THEN '$' ELSE '$' END) THEN 1 END) > 0
-            AND COUNT(CASE WHEN s2.needs_shortname = true THEN 1 END) > 0)
+            parent_path,
+            file_name as long_filename,
+            is_directory,
+            -- Generate what short name would be (always ~1 for first attempt)
+            CASE 
+                WHEN is_directory = true THEN
+                    UPPER(LEFT(REGEXP_REPLACE(file_name, '[^A-Z0-9]', '', 'gi'), 6)) || '~1'
+                ELSE
+                    UPPER(LEFT(REGEXP_REPLACE(SPLIT_PART(file_name, '.', 1), '[^A-Z0-9]', '', 'gi'), 6)) || '~1' ||
+                    CASE 
+                        WHEN POSITION('.' IN file_name) > 0 THEN 
+                            '.' || UPPER(LEFT(REGEXP_REPLACE(SUBSTRING(file_name FROM POSITION('.' IN file_name) + 1), '[^A-Z0-9]', '', 'gi'), 3))
+                        ELSE ''
+                    END
+            END as generated_shortname
+        FROM ${schema}.inventory 
+        WHERE job_run_id = $1
+            AND (
+                -- Directory: longer than 8 chars OR has invalid chars
+                (is_directory = true AND (LENGTH(file_name) > 8 OR file_name ~ '[^A-Za-z0-9]')) OR
+                -- File: base > 8 chars OR extension > 3 chars OR has invalid chars
+                (is_directory = false AND (
+                    LENGTH(SPLIT_PART(file_name, '.', 1)) > 8 OR 
+                    (POSITION('.' IN file_name) > 0 AND LENGTH(SUBSTRING(file_name FROM POSITION('.' IN file_name) + 1)) > 3) OR
+                    file_name ~ '[^A-Za-z0-9.]'
+                ))
+            )
+    ),
+    true_conflicts AS (
+        -- Find where long files would collide with existing 8.3 files
+        SELECT 
+            lf.parent_path,
+            lf.long_filename,
+            lf.generated_shortname,
+            ef.existing_shortname,
+            COUNT(*) OVER (PARTITION BY lf.parent_path, lf.generated_shortname) as conflict_count
+        FROM long_files_needing_shortnames lf
+        INNER JOIN existing_83_files ef 
+            ON lf.parent_path = ef.parent_path 
+            AND UPPER(lf.generated_shortname) = UPPER(ef.existing_shortname)
+    ),
+    collision_summary AS (
+        SELECT 
+            parent_path,
+            generated_shortname,
+            existing_shortname,
+            COUNT(DISTINCT long_filename) as collision_count,
+            ARRAY_AGG(DISTINCT long_filename ORDER BY long_filename) as colliding_files
+        FROM true_conflicts
+        GROUP BY parent_path, generated_shortname, existing_shortname
     )
     SELECT 
-        'Real 8.3 Conflicts Detected' as conflict_type,
-        COUNT(*)::text as total_conflict_groups,
-        SUM(long_names_count)::text as total_files_affected
-    FROM conflicts
-    WHERE existing_shortnames > 0 AND long_names_count > 0
+        CASE 
+            WHEN COUNT(*) = 0 THEN 'No 8.3 Conflicts Detected'
+            ELSE '8.3 Conflicts Found'
+        END as conflict_type,
+        COALESCE(COUNT(*)::text, '0') as total_conflict_groups,
+        COALESCE(SUM(collision_count)::text, '0') as total_files_affected
+    FROM collision_summary
     UNION ALL
     SELECT 
         CONCAT('Directory: ', parent_path) as conflict_type,
-        CONCAT(existing_shortnames, ' existing + ', long_names_count, ' long names') as total_conflict_groups,
-        CONCAT('Existing: ', COALESCE(ARRAY_TO_STRING(existing_shortnames_list, ', '), 'none'), 
-               ' | Long: ', COALESCE(ARRAY_TO_STRING(long_filenames, ', '), 'none')) as total_files_affected
-    FROM conflicts
-    WHERE existing_shortnames > 0 AND long_names_count > 0
+        CONCAT('Existing 8.3 file "', existing_shortname, '" will be blocked by long file: "', ARRAY_TO_STRING(colliding_files, '", "'), '"') as total_conflict_groups,
+        CONCAT('BLOCKED: ', parent_path, '/', existing_shortname, ' cannot migrate (short name collision)') as total_files_affected
+    FROM collision_summary
     ORDER BY conflict_type;
 `;
 
