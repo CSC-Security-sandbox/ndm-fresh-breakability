@@ -273,89 +273,133 @@ export const TOP_BIGGEST_FILE_NAME = (schema: string) => `
 `;
 
 export const POTENTIAL_8DOT3_CONFLICTS = (schema: string) => `
-    WITH existing_83_files AS (
-        -- Find files already in 8.3 format (these "reserve" their short names)
+    WITH file_breakdown AS (
         SELECT 
-            parent_path,
-            file_name as existing_shortname
+            path,
+            is_directory,
+            string_to_array(path, '\\\\') as path_parts
         FROM ${schema}.inventory 
         WHERE job_run_id = $1
-            AND (
-                -- Directory: 8 chars or less, no spaces/special chars
-                (is_directory = true AND LENGTH(file_name) <= 8 AND file_name ~ '^[A-Za-z0-9~]+$') OR
-                -- File: 8.3 format (8 chars + dot + 3 chars), no spaces/special chars  
-                (is_directory = false AND file_name ~ '^[A-Za-z0-9~]{1,8}(\.[A-Za-z0-9]{1,3})?$')
-            )
+    ),
+    file_parsed AS (
+        SELECT 
+            path,
+            is_directory,
+            path_parts[array_length(path_parts, 1)] as actual_filename,
+            CASE 
+                WHEN array_length(path_parts, 1) > 1 THEN
+                    array_to_string(path_parts[1:array_length(path_parts, 1)-1], '\\\\')
+                ELSE ''
+            END as actual_parent
+        FROM file_breakdown
+    ),
+    existing_83_files AS (
+        SELECT 
+            actual_parent,
+            actual_filename as existing_shortname,
+            path as full_path,
+            is_directory
+        FROM file_parsed
+        WHERE (
+            (is_directory = true AND LENGTH(actual_filename) <= 8 AND actual_filename ~ '^[A-Za-z0-9~!]+$') OR
+            (is_directory = false AND 
+             actual_filename ~ '^[A-Za-z0-9~!]{1,8}(\\.[A-Za-z0-9]{1,3})?$' AND
+             LENGTH(SPLIT_PART(actual_filename, '.', 1)) <= 8)
+        )
     ),
     long_files_needing_shortnames AS (
-        -- Find long files that would generate short names
         SELECT 
-            parent_path,
-            file_name as long_filename,
+            actual_parent,
+            actual_filename as long_filename,
+            path as full_path,
             is_directory,
-            -- Generate what short name would be (always ~1 for first attempt)
             CASE 
                 WHEN is_directory = true THEN
-                    UPPER(LEFT(REGEXP_REPLACE(file_name, '[^A-Z0-9]', '', 'gi'), 6)) || '~1'
+                    UPPER(LEFT(REGEXP_REPLACE(actual_filename, '[^A-Z0-9~!]', '', 'gi'), 6)) || '~1'
                 ELSE
-                    UPPER(LEFT(REGEXP_REPLACE(SPLIT_PART(file_name, '.', 1), '[^A-Z0-9]', '', 'gi'), 6)) || '~1' ||
+                    UPPER(LEFT(REGEXP_REPLACE(SPLIT_PART(actual_filename, '.', 1), '[^A-Z0-9~!]', '', 'gi'), 6)) || '~1' ||
                     CASE 
-                        WHEN POSITION('.' IN file_name) > 0 THEN 
-                            '.' || UPPER(LEFT(REGEXP_REPLACE(SUBSTRING(file_name FROM POSITION('.' IN file_name) + 1), '[^A-Z0-9]', '', 'gi'), 3))
+                        WHEN POSITION('.' IN actual_filename) > 0 THEN 
+                            '.' || UPPER(LEFT(REGEXP_REPLACE(SUBSTRING(actual_filename FROM POSITION('.' IN actual_filename) + 1), '[^A-Z0-9]', '', 'gi'), 3))
                         ELSE ''
                     END
             END as generated_shortname
-        FROM ${schema}.inventory 
-        WHERE job_run_id = $1
-            AND (
-                -- Directory: longer than 8 chars OR has invalid chars
-                (is_directory = true AND (LENGTH(file_name) > 8 OR file_name ~ '[^A-Za-z0-9]')) OR
-                -- File: base > 8 chars OR extension > 3 chars OR has invalid chars
-                (is_directory = false AND (
-                    LENGTH(SPLIT_PART(file_name, '.', 1)) > 8 OR 
-                    (POSITION('.' IN file_name) > 0 AND LENGTH(SUBSTRING(file_name FROM POSITION('.' IN file_name) + 1)) > 3) OR
-                    file_name ~ '[^A-Za-z0-9.]'
-                ))
-            )
+        FROM file_parsed
+        WHERE (
+            (is_directory = true AND (LENGTH(actual_filename) > 8 OR actual_filename ~ '[^A-Za-z0-9~!]')) OR
+            (is_directory = false AND (
+                LENGTH(SPLIT_PART(actual_filename, '.', 1)) > 8 OR 
+                (POSITION('.' IN actual_filename) > 0 AND LENGTH(SUBSTRING(actual_filename FROM POSITION('.' IN actual_filename) + 1)) > 3) OR
+                actual_filename ~ '[^A-Za-z0-9~!.]'
+            ))
+        )
     ),
     true_conflicts AS (
-        -- Find where long files would collide with existing 8.3 files
         SELECT 
-            lf.parent_path,
-            lf.long_filename,
-            lf.generated_shortname,
+            ef.actual_parent as parent_path,
             ef.existing_shortname,
-            COUNT(*) OVER (PARTITION BY lf.parent_path, lf.generated_shortname) as conflict_count
-        FROM long_files_needing_shortnames lf
-        INNER JOIN existing_83_files ef 
-            ON lf.parent_path = ef.parent_path 
-            AND UPPER(lf.generated_shortname) = UPPER(ef.existing_shortname)
+            ef.full_path as existing_file_path,
+            ef.is_directory as existing_is_dir,
+            lf.long_filename,
+            lf.full_path as long_file_path,
+            lf.is_directory as long_is_dir,
+            lf.generated_shortname
+        FROM existing_83_files ef
+        JOIN long_files_needing_shortnames lf 
+            ON COALESCE(ef.actual_parent, '') = COALESCE(lf.actual_parent, '')
+        WHERE (
+            UPPER(ef.existing_shortname) = UPPER(lf.generated_shortname)
+            OR 
+            REGEXP_REPLACE(UPPER(ef.existing_shortname), '~+', '~', 'g') = 
+            REGEXP_REPLACE(UPPER(lf.generated_shortname), '~+', '~', 'g')
+        )
     ),
     collision_summary AS (
         SELECT 
             parent_path,
             generated_shortname,
             existing_shortname,
+            existing_file_path,
+            existing_is_dir,
+            long_is_dir,
             COUNT(DISTINCT long_filename) as collision_count,
-            ARRAY_AGG(DISTINCT long_filename ORDER BY long_filename) as colliding_files
+            ARRAY_AGG(DISTINCT long_filename ORDER BY long_filename) as colliding_long_files,
+            ARRAY_AGG(DISTINCT long_file_path ORDER BY long_file_path) as colliding_long_file_paths
         FROM true_conflicts
-        GROUP BY parent_path, generated_shortname, existing_shortname
+        GROUP BY parent_path, generated_shortname, existing_shortname, existing_file_path, existing_is_dir, long_is_dir
     )
     SELECT 
         CASE 
-            WHEN COUNT(*) = 0 THEN 'No 8.3 Conflicts Detected'
+            WHEN NOT EXISTS (SELECT 1 FROM collision_summary) THEN 'No 8.3 Conflicts Detected'
             ELSE '8.3 Conflicts Found'
         END as conflict_type,
-        COALESCE(COUNT(*)::text, '0') as total_conflict_groups,
-        COALESCE(SUM(collision_count)::text, '0') as total_files_affected
-    FROM collision_summary
+        COALESCE((SELECT COUNT(*)::text FROM collision_summary), '0') as total_conflict_groups,
+        COALESCE((SELECT SUM(collision_count)::text FROM collision_summary), '0') as total_files_affected,
+        '' as file_or_directory_name,
+        '' as parent_path_column,
+        '' as file_type,
+        '' as blocking_item
     UNION ALL
     SELECT 
-        CONCAT('Directory: ', parent_path) as conflict_type,
-        CONCAT('Existing 8.3 file "', existing_shortname, '" will be blocked by long file: "', ARRAY_TO_STRING(colliding_files, '", "'), '"') as total_conflict_groups,
-        CONCAT('BLOCKED: ', parent_path, '/', existing_shortname, ' cannot migrate (short name collision)') as total_files_affected
+        'HEADER' as conflict_type,
+        'All the files, folders and subfolders listed below may not be migrated due to short name collision' as total_conflict_groups,
+        '' as total_files_affected,
+        'File/Directory Name' as file_or_directory_name,
+        'Parent Path' as parent_path_column,
+        'Type' as file_type,
+        'Blocked By' as blocking_item
+    WHERE EXISTS (SELECT 1 FROM collision_summary)
+    UNION ALL
+    SELECT 
+        'DATA' as conflict_type,
+        '' as total_conflict_groups,
+        '' as total_files_affected,
+        existing_shortname as file_or_directory_name,
+        COALESCE(NULLIF(parent_path, ''), '\\\\') as parent_path_column,
+        CASE WHEN existing_is_dir THEN 'Directory' ELSE 'File' END as file_type,
+        ARRAY_TO_STRING(colliding_long_files, ', ') as blocking_item
     FROM collision_summary
-    ORDER BY conflict_type;
+    ORDER BY conflict_type, parent_path_column, file_or_directory_name;
 `;
 
 export const JOB_RUN_DETAILS = (schema: string) => `

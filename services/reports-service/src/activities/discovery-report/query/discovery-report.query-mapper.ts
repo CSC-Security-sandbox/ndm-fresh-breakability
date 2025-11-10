@@ -385,7 +385,7 @@ export const POTENTIAL_8DOT3_CONFLICTS_MAPPER = (input: Potential8Dot3ConflictsI
         } else if (item.conflict_type === '8.3 Conflicts Found') {
             // Summary row - show conflict statistics
             output.push({
-                value: `⚠️ CRITICAL: ${item.total_conflict_groups} directories have conflicts affecting ${item.total_files_affected} files`,
+                value: `CRITICAL: ${item.total_conflict_groups} directories have conflicts affecting ${item.total_files_affected} files`,
                 category: 'Migration Risk Assessment',
                 valueType: 'string',
                 sub_category: '8.3 Filename Conflicts Summary'
@@ -396,20 +396,28 @@ export const POTENTIAL_8DOT3_CONFLICTS_MAPPER = (input: Potential8Dot3ConflictsI
                 valueType: 'string',
                 sub_category: 'Impact Description'
             });
-        } else if (item.conflict_type.startsWith('Directory: ')) {
-            // Individual directory conflict details
-            const directory = item.conflict_type.substring(11); // Remove 'Directory: ' prefix
+        } else if (item.conflict_type === 'HEADER') {
+            // Table header - display warning message and column headers
             output.push({
-                value: `${item.total_conflict_groups}`,
+                value: item.total_conflict_groups, // Warning message from query
                 category: 'Migration Risk Assessment',
                 valueType: 'string',
-                sub_category: `⚠️ ${directory}`
+                sub_category: '8.3 Conflicts Warning'
             });
             output.push({
-                value: item.total_files_affected,
+                value: 'File/Directory Name | Parent Path | Type | Blocked By',
                 category: 'Migration Risk Assessment',
                 valueType: 'string',
-                sub_category: `📋 Files in ${directory}`
+                sub_category: 'Table Header'
+            });
+        } else if (item.conflict_type === 'DATA') {
+            // Individual blocked items - format as pipe-separated table row
+            const tableRow = `${item.file_or_directory_name} | ${item.parent_path_column} | ${item.file_type} | ${item.blocking_item}`;
+            output.push({
+                value: tableRow,
+                category: 'Migration Risk Assessment',
+                valueType: 'string',
+                sub_category: 'Blocked Items'
             });
         }
     });

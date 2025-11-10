@@ -88,4 +88,8 @@ export interface Potential8Dot3ConflictsInput {
     conflict_type: string;
     total_conflict_groups: string;
     total_files_affected: string;
+    file_or_directory_name: string;
+    parent_path_column: string;
+    file_type: string;
+    blocking_item: string;
 }
