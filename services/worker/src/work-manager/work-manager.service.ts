@@ -21,8 +21,6 @@ import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
-import { RedisService } from '../redis/redis.service';
-
 
 @Injectable()
 export class WorkManagerService {
@@ -47,8 +45,6 @@ export class WorkManagerService {
     @Inject(WorkerOptionsService)
     private readonly workerOptions: WorkerOptionsService,
     @Inject(AuthService) private readonly authService: AuthService,
-    @Inject(RedisService) private readonly redisService: RedisService,
-
   ) {
     this.workerConfigUrl = `${this.configService.get('worker.connection.workerConfigUrl')}`;
     this.workerId = this.configService.get('worker.workerId');
@@ -67,11 +63,8 @@ export class WorkManagerService {
       this.temporalClientConnection = await Connection.connect(
         this.configService.get('temporal'),
       );
-
-      this.logger.log('Worker service initialized successfully with dynamic Redis credentials');
-
     } catch (err) {
-      this.logger.error(`Error during worker service initialization: ${err}`);
+      this.logger.error(`Error on setting temporal connection: ${err}`);
       throw err;
     }
   }

@@ -41,7 +41,6 @@ var
   ConfigWorkerSecret: String;
   ConfigProjectID: String;
 
-
 function InitializeSetup(): Boolean;
 begin
   Result := True;
@@ -364,8 +363,6 @@ begin
         MsgBox('Template file missing.', mbError, MB_OK);
       exit;
     end;
-
-
 
     EnvContent := 
       TempContent + #13#10 + #13#10 +

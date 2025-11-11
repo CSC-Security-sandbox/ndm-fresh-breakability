@@ -8,7 +8,6 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from 'src/auth/auth.service';
 
-
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private client: RedisClientType;
@@ -22,7 +21,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   ) {
     this.logger = loggerFactory.create(RedisService.name);
   }
-  
 
   async onModuleInit(): Promise<void> {
     try {

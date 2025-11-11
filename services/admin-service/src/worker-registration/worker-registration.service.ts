@@ -84,7 +84,7 @@ export class WorkerRegistrationService {
                 );
             }
             throw new InternalServerErrorException(
-                `Failed to register worker with status code ${response.status}`,
+                `Unexpected error occurred while registering worker`,
             );
         } catch (error) {
             this.logger.error('Error during worker registration', {
@@ -108,7 +108,7 @@ export class WorkerRegistrationService {
                 const errorMessage = typeof error.response.data === 'string'
                     ? error.response.data
                     : JSON.stringify(error.response.data);
-                throw new InternalServerErrorException(`Keycloak API error: ${errorMessage}`);
+                throw new InternalServerErrorException(`${errorMessage}`);
             }
 
             // Re-throw known exceptions
@@ -117,10 +117,8 @@ export class WorkerRegistrationService {
             }
 
             throw new InternalServerErrorException(
-                `Unexpected error occurred while registering worker: ${error.message}`,
+                `Unexpected error occurred while registering worker`,
             );
         }
     }
-
-
 }

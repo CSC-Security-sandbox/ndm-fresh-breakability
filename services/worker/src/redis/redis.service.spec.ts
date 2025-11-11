@@ -3,6 +3,11 @@ import { JobContextFactory } from '@netapp-cloud-datamigrate/jobs-lib';
 import { createClient } from 'redis';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { mockLogger } from 'src/auth/auth.service.spec';
+import { ConfigService } from '@nestjs/config';
+import { HttpService } from '@nestjs/axios';
+import { Test, TestingModule } from '@nestjs/testing';
+import { AuthService } from '../auth/auth.service';
+import { of } from 'rxjs';
 
 jest.mock('redis', () => ({
   createClient: jest.fn(),
@@ -18,9 +23,12 @@ jest.mock('@netapp-cloud-datamigrate/jobs-lib', () => ({
 describe('RedisService', () => {
   let service: RedisService;
   let mockClient: any;
+  let configService: ConfigService;
+  let httpService: HttpService;
+  let authService: AuthService;
   let loggerFactory: LoggerFactory;
 
-  beforeEach(() => {
+  beforeEach(async() => {
     jest.clearAllMocks();
     mockClient = {
       isOpen: false,
@@ -28,25 +36,83 @@ describe('RedisService', () => {
       quit: jest.fn().mockResolvedValue(undefined),
       on: jest.fn(),
       set: jest.fn().mockResolvedValue('OK'),
+      hSet: jest.fn().mockResolvedValue(1),
+      hGet: jest.fn().mockResolvedValue('identity'),
+      hKeys: jest.fn().mockResolvedValue([]),
       info: jest
         .fn()
         .mockResolvedValue('used_memory:1024\ntotal_system_memory:4096\n'),
-      hGet: jest.fn().mockResolvedValue('identity'),
     };
     (createClient as jest.Mock).mockReturnValue(mockClient);
 
-    loggerFactory = {
-      create: jest.fn().mockReturnValue(mockLogger),
-    } as unknown as LoggerFactory;
+    const mockConfigService = {
+      get: jest.fn((key: string) => {
+        const configMap = {
+          'worker.connection.workerConfigUrl': 'http://test-url',
+          'worker.workerId': 'test-worker-123'
+        };
+        return configMap[key];
+      }),
+    };
 
-    service = new RedisService(loggerFactory);
+    const mockHttpService = {
+      get: jest.fn(),
+    };
+
+    const mockAuthService = {
+      getAccessToken: jest.fn().mockResolvedValue('mock-access-token'),
+    };
+
+    const mockLoggerFactory = {
+      create: jest.fn().mockReturnValue(mockLogger),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        RedisService,
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: HttpService, useValue: mockHttpService },
+        { provide: AuthService, useValue: mockAuthService },
+        { provide: LoggerFactory, useValue: mockLoggerFactory },
+      ],
+    }).compile();
+
+    service = module.get<RedisService>(RedisService);
+    configService = module.get<ConfigService>(ConfigService);
+    httpService = module.get<HttpService>(HttpService);
+    authService = module.get<AuthService>(AuthService);
+    loggerFactory = module.get<LoggerFactory>(LoggerFactory)
   });
 
   describe('onModuleInit', () => {
     it('should create client on init', async () => {
+      // Mock the HTTP response for Redis credentials
+      const mockCredentials = {
+        host: 'redis.example.com',
+        username: 'redis-user',
+        password: 'redis-password',
+      };
+
+      const mockResponse = {
+        status: 200,
+        data: {
+          data: {
+            items: mockCredentials,
+          },
+        },
+      };
+
+      (httpService.get as jest.Mock).mockReturnValue(of(mockResponse));
+
       const spyCreate = jest.spyOn(service, 'createClient');
+      
       await service.onModuleInit();
+      
       expect(spyCreate).toHaveBeenCalled();
+      expect(configService.get).toHaveBeenCalledWith('worker.connection.workerConfigUrl');
+      expect(configService.get).toHaveBeenCalledWith('worker.workerId');
+      expect(authService.getAccessToken).toHaveBeenCalled();
+      expect(httpService.get).toHaveBeenCalled();
     });
   });
 

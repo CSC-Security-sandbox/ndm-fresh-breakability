@@ -1,12 +1,8 @@
-import { Body, Controller, Get, Post, Request, ForbiddenException, Logger, Inject } from '@nestjs/common';
+import { Body, Controller, Get, Post, Request, ForbiddenException , Inject } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { Auth, Permission, AuthWorker } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from './user-permission-response-type';
-import {
-    LoggerFactory,
-    LoggerService,
-} from '@netapp-cloud-datamigrate/logger-lib';
 
 class InviteUserDto {
   username: string;
@@ -22,13 +18,9 @@ class UserStatusDto {
 @ApiTags('auth')
 @Controller('/api/v1')
 export class AuthController {
-    private readonly logger: LoggerService;
   constructor(
     private readonly authService: AuthService,
-    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
-  ) {
-      this.logger = loggerFactory.create(AuthController.name);
-    }
+  ) {}
 
   @Auth()
   @ApiBearerAuth()
@@ -124,19 +116,10 @@ export class AuthController {
     summary: 'Get Redis credentials for authenticated workers',
   })
   async getRedisCredentials(@Request() req) {
-    try {
-      // @AuthWorker() should populate req.user automatically
-      this.logger.debug(`getRedisCredentials called`);
-      return {
-        host: process.env.REDIS_HOST,
-        username: process.env.REDIS_USERNAME,
-        password: process.env.REDIS_PASSWORD,
-      };
-    } catch (error) {
-      this.logger.error('Redis access check failed:', error.message);
-
-      throw error;
-    }
+    return {
+      host: process.env.REDIS_HOST,
+      username: process.env.REDIS_USERNAME,
+      password: process.env.REDIS_PASSWORD,
+    };
   }
-
 }
