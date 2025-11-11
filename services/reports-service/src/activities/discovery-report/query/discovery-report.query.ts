@@ -297,3 +297,12 @@ export const REDIRECTS = (schema: string) => `
     WHERE i.job_run_id = $1
     AND i.file_type IN ('JUNCTION', 'SYMBOLIC_LINK', 'VOLUME_MOUNT_POINT', 'SHORTCUT');
 `;
+export const EEXIST_ERRORS = (schema: string) => `
+    select 
+        i.parent_path,
+        ARRAY_AGG(i.file_name) as file_paths
+    FROM ${schema}.inventory i
+    WHERE i.job_run_id = $1
+    GROUP BY i.parent_path, LOWER(i.file_name)
+    HAVING COUNT(*) > 1
+`;

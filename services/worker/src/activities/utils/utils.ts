@@ -237,8 +237,8 @@ export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string 
           // Filename too long
           return context === 'TASK' ? 'TASK_SERVER_DISCONNECTED' : 'OP_SERVER_DISCONNECTED';
       case 'EEXIST':
-          // Duplicate file in terms of case (Isilon SMB)
-          return context === 'TASK' ? 'TASK_FILE_ALREADY_EXISTS' : 'OP_FILE_ALREADY_EXISTS';
+          // Duplicate in terms of case (Isilon SMB)
+          return context === 'TASK' ? 'TASK_ALREADY_EXISTS' : 'OP_ALREADY_EXISTS';
       default:
         // Unknown error
         return context === 'TASK' ? 'TASK_UNKNOWN_ERROR' : 'OP_UNKNOWN_ERROR';

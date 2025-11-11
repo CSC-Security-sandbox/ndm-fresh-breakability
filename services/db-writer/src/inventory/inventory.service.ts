@@ -19,6 +19,7 @@ import {
   LoggerFactory,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { DatabaseError, ValidationError } from '../errors/custom-errors';
+import * as path from 'path';
 
 @Injectable()
 export class InventoryService {
@@ -64,9 +65,9 @@ export class InventoryService {
       isDirectory: file.isDirectory ?? false,
       sourceChecksum: file?.sourceMeta?.checksum ?? null,
       targetChecksum: file?.targetMeta?.checksum ?? null,
-      parentPath: file?.fileName ?? '', // TODO - deprecate
+      parentPath: file?.fileName ? path.dirname(file.fileName) : '', // TODO - deprecate
       depth: file?.depth ?? 0,
-      fileName: file?.fileName ?? '', // TO-DO deprecate
+      fileName: file?.fileName ? path.basename(file.fileName) : '', // TO-DO deprecate
       uid: file?.targetMeta?.uid?.toString() ?? file?.sourceMeta?.uid?.toString() ?? '',
       gid: file?.targetMeta?.gid?.toString() ?? file?.sourceMeta?.gid?.toString() ?? '',
       fileSize: file?.size ? BigInt(file.size).toString() : '0',

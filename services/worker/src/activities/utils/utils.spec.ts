@@ -520,7 +520,7 @@ describe('utils', () => {
                 { code: 'EPIPE', task: 'TASK_BROKEN_PIPE', op: 'OP_BROKEN_PIPE' },
                 { code: 'ENAMETOOLONG', task: 'TASK_FILENAME_TOO_LONG', op: 'OP_FILENAME_TOO_LONG' },
                 { code: 'EIO', task: 'TASK_SERVER_DISCONNECTED', op: 'OP_SERVER_DISCONNECTED' },
-                { code: 'EEXIST', task: 'TASK_FILE_ALREADY_EXISTS', op: 'OP_FILE_ALREADY_EXISTS' }
+                { code: 'EEXIST', task: 'TASK_ALREADY_EXISTS', op: 'OP_ALREADY_EXISTS' }
             ];
 
             testCases.forEach(({ code, task, op }) => {

@@ -39,16 +39,21 @@ export class MigrateScanService {
         await jobContext.publishBulkToCommandStream(commands);
     }
 
-    async getDirContents({path, origin, jobContext, errorType, command}: DirContentsInput): Promise<Set<string>>{
-        let content = new Set<string>();
+    async getDirContents({path, origin, jobContext, errorType, command}: DirContentsInput): Promise<{pathContent: Set<string>, lowerCasePathContent: Set<string>}>{
+        let pathContent = new Set<string>();
+        let lowerCasePathContent = new Set<string>();
         try{
             const pathExists = await isPathExists(path);
             if (!pathExists) {
                 if (origin === Origin.SOURCE)  
                     throw new FatalError(`Source directory does not exist: ${path}`);
-                return content; 
+                return {pathContent, lowerCasePathContent};  
             }
-            content = new Set<string>( await fs.promises.readdir(path)); 
+            const dirItems = await fs.promises.readdir(path);
+            for (const item of dirItems) {
+                pathContent.add(item);
+                lowerCasePathContent.add(item.toLowerCase());
+            }
         }catch(error){
             if(error instanceof FatalError) 
                 errorType = ErrorType.FATAL_ERROR;
@@ -56,36 +61,38 @@ export class MigrateScanService {
             await jobContext.publishToErrorStream(ndmError);
             throw error; 
         }
-        return content;
+        return {pathContent, lowerCasePathContent};
     }
 
     
     async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings , targetPrefix, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> { 
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
         let commands: Cmd[] = [];
-        const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command});
-        const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});    
+        const sourceContent = (await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command})).pathContent;
+        const targetData = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});    
+        const targetContent = targetData.pathContent;    
         
         const isSMB = process.platform === 'win32'
-        let lowerCaseSourceFiles = new Set<string>();    
+        let lowerCaseSourceData = new Set<string>();  
+        let lowerCaseTargetData = targetData.lowerCasePathContent;
         for (const item of sourceContent) {
             try {
                 const sourceContentPath = path.join(sourcePath, item);
                 const sourceContentExists = await isExists(sourceContentPath);
+                const sourceStat = await fs.promises.lstat(sourceContentPath);                
+                const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
                 if(!sourceContentExists) continue; 
                 if (isSMB){
                     const lowerCaseFileName = item.toLowerCase();
-                    if (lowerCaseSourceFiles.has(lowerCaseFileName)) {
-                        const error = new Error(`Skipping file: Another file with same name but differing in case exists`) as Error & {code:string};
+                    if (lowerCaseSourceData.has(lowerCaseFileName) || (lowerCaseTargetData.has(lowerCaseFileName) && !targetContent.has(item))) {
+                        const error = new Error(`File not migrated: Another file with same name but differing in case exists`) as Error & {code:string};
                         error.code = 'EEXIST';
-                        const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_FILE, ErrorType.TRANSIENT_ERROR, command.id, error, {name: path.join(command.fPath, item), path: sourceContentPath});
+                        const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_FILE, ErrorType.TRANSIENT_ERROR, command.id, error, {name: relativeSourcePath, path: sourceContentPath});
                         await jobContext.publishToErrorStream(dmErr);
                         continue;
                     }
-                    lowerCaseSourceFiles.add(lowerCaseFileName);
+                    lowerCaseSourceData.add(lowerCaseFileName);
                 }
-                const sourceStat = await fs.promises.lstat(sourceContentPath);                
-                const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
                 
                 if (shouldExcludeOrSkip({
                     fullPath: sourceContentPath,
@@ -101,7 +108,7 @@ export class MigrateScanService {
                 // TODO: change the if/else logic. it is difficult to read and understand.
                 if (sourceStat.isDirectory() && !sourceStat.isSymbolicLink()) {   // only resolving to dir 
                     output.dirCount++;
-                    output.subDirs.push(relativeSourcePath);                    
+                    output.subDirs.push(relativeSourcePath);
                     if(!targetContent.has(item)) {
                         const command = this.buildCommand(sourceStat, fileInfo.path);
                         if (command) commands.push(command);
