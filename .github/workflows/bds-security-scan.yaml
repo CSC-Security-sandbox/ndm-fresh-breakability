@@ -5,10 +5,8 @@ on:
     - cron: "30 18 * * *"
   pull_request:
     branches:
-      #- main
-      - release/2025.10-preview
-  workflow_dispatch:
-
+      - main
+      - 'release/**'
 
 permissions:
   contents: read
