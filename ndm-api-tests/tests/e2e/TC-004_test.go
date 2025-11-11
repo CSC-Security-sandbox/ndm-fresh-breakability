@@ -207,6 +207,10 @@ var _ = Describe("TC-004: Running discovery and batch pause/resume/stop/adhoc-ru
 
 		AfterEach(func() {
 			By("Cleanup started")
+
+			err := StopAllWorkersAndWait()
+			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
+
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
 			LogDebug("Cleanup complete.")

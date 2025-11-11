@@ -10,6 +10,7 @@ type ServerType string
 type Protocol string
 type ProtocolVersion string
 type CloudEnvironment string
+type FileServerStatus string
 
 // Package-level configuration variables loaded from the environment.
 var (
@@ -128,7 +129,7 @@ const (
 	NFS_SOURCE_VOLUME_1                              = "/vol_src_automation2"
 	NFS_DESTINATION_VOLUME_1                         = "/vol_dest_automation2"
 	NFS_SOURCE_VOLUME_2                              = "/vol_src_automation"
-	CREATE_FILESERVER_ENDPOINT                       = "/api/v1/servers"
+	FILESERVER_ENDPOINT                              = "/api/v1/servers"
 	CREATE_DISCOVERY_ENDPOINT                        = "/api/v1/jobs/bulk-discovery"
 	CREATE_MIGRATION_ENDPOINT                        = "/api/v1/jobs/bulk-migrate"
 	CREATE_CUTOVER_ENDPOINT                          = "/api/v1/jobs/bulk-cutover"
@@ -162,6 +163,9 @@ const (
 	APPROVED_JOBRUN                                  = "APPROVED"
 	ERRORED_JOBRUN                                   = "ERRORED"
 	PAUSED_JOBRUN                                    = "PAUSED"
+	FileServerStatusActive          FileServerStatus = "ACTIVE"
+	FileServerStatusInProgress      FileServerStatus = "IN_PROGRESS"
+	FileServerStatusErrored         FileServerStatus = "ERRORED"
 	DeltaFolder                                      = "delta"
 	ConfigTypeFile                  ConfigType       = "FILE"
 	ServerTypeOtherNAS              ServerType       = "OtherNAS"

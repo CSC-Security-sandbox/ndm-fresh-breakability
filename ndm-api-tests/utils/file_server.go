@@ -74,7 +74,7 @@ func PtrExportPathSource(e ExportPathSource) *ExportPathSource {
 
 // CreateFileServer creates a File server with different config details
 func CreateFileServer(params CreateServereParams, headers map[string]string) (string, *http.Response, error) {
-	createSourceURL := CONFIG_SERVICE_URL + CREATE_FILESERVER_ENDPOINT
+	createSourceURL := CONFIG_SERVICE_URL + FILESERVER_ENDPOINT
 
 	fileServerParams := map[string]interface{}{
 		"serverType":      params.ServerType,
@@ -106,12 +106,6 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 		},
 	}
 
-	/*jsonBytes, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		fmt.Println("Error marshaling payload to JSON:", err)
-
-	}*/
-
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return "", nil, err
@@ -133,7 +127,134 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 		return "", resp, err
 	}
 
-	return createFileServerResp.Data.ID, resp, nil
+	fileConfigID := createFileServerResp.Data.ID
+
+	// Initial status check
+	fileServerID, err := checkFileServerStatus(fileConfigID, headers)
+	if err == nil {
+		LogDebug("FileServer creation completed successfully")
+		return fileConfigID, resp, nil
+	}
+
+	// Poll and retry update attempts if initial status check failed
+	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
+		LogDebug(fmt.Sprintf("Update attempt: %d", attempt))
+
+		// Since status check failed (file server is errored), update it first
+		LogDebug("Attempting to update FileServer with PUT request...")
+		updateErr := UpdateFileServer(fileConfigID, fileServerID, payload, headers)
+		if updateErr != nil {
+			LogDebug(fmt.Sprintf("UpdateFileServer failed: %v", updateErr))
+		} else {
+			LogDebug("FileServer update completed, retrying status check...")
+			// After update, retry status check once more
+			_, err := checkFileServerStatus(fileConfigID, headers)
+			if err == nil {
+				LogDebug("FileServer became ACTIVE after update")
+				return fileConfigID, resp, nil
+			}
+			LogDebug(fmt.Sprintf("Status check after update still failed: %v", err))
+		}
+
+		// If this is not the last attempt, wait before retrying
+		if attempt < MaxPollRetries {
+			LogDebug("Waiting before next update attempt...")
+			Wait(DefaultPollInterval)
+		}
+	}
+
+	return "", resp, fmt.Errorf("file server failed to become ACTIVE after %d update attempts", MaxPollRetries)
+}
+
+// UpdateFileServer updates an existing File server using the same payload that was used for creation
+func UpdateFileServer(fileConfigID string, fileServerID string, payload map[string]interface{}, headers map[string]string) error {
+	updateFileServerURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILESERVER_ENDPOINT, fileConfigID)
+
+	// Add the ID to the fileServers in the existing payload for update
+	if fileServers, ok := payload["fileServers"].([]map[string]interface{}); ok && len(fileServers) > 0 {
+		fileServers[0]["id"] = fileServerID
+	} else {
+		return fmt.Errorf("invalid payload structure: fileServers not found or empty")
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("error marshaling update payload: %w", err)
+	}
+
+	LogDebug(fmt.Sprintf("Updating FileServer %s with PUT request", fileServerID))
+	resp, err := SendAPIRequest(http.MethodPut, updateFileServerURL, payloadBytes, headers)
+	if err != nil {
+		return fmt.Errorf("error sending PUT request to update file server: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("file server update failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	LogDebug("FileServer update request completed successfully")
+	return nil
+}
+
+// checkFileServerStatus polls the file server status until it becomes ACTIVE
+// If status is IN_PROGRESS, it will wait and retry
+// If status is ERRORED, it will return an error
+// Returns the file server ID and nil error when status becomes ACTIVE
+func checkFileServerStatus(fileConfigID string, headers map[string]string) (string, error) {
+	getFileServerURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILESERVER_ENDPOINT, fileConfigID)
+
+	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
+		LogDebug(fmt.Sprintf("Checking FileServer status, attempt: %d", attempt))
+
+		resp, err := SendAPIRequest(http.MethodGet, getFileServerURL, nil, headers)
+		if err != nil {
+			return "", fmt.Errorf("error checking file server status: %w", err)
+		}
+		defer resp.Body.Close()
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("error reading response body: %w", err)
+		}
+
+		var fileServerDetails FileServerStatusDetails
+		err = json.Unmarshal(bodyBytes, &fileServerDetails)
+		if err != nil {
+			return "", fmt.Errorf("error unmarshalling response: %w", err)
+		}
+
+		status := fileServerDetails.Data.Items.Status
+		LogDebug(fmt.Sprintf("FileServer status is: %s", status))
+
+		// Extract file server ID from the fileServers array
+		var fileServerID string
+		if len(fileServerDetails.Data.Items.FileServers) > 0 {
+			fileServerID = fileServerDetails.Data.Items.FileServers[0].ID
+			LogDebug(fmt.Sprintf("FileServer ID from response: %s", fileServerID))
+		}
+
+		switch FileServerStatus(status) {
+		case FileServerStatusActive:
+			LogDebug("FileServer is now ACTIVE")
+			return fileServerID, nil
+		case FileServerStatusInProgress:
+			LogDebug("FileServer is still IN_PROGRESS, waiting...")
+			if attempt < MaxPollRetries {
+				Wait(DefaultPollInterval)
+			}
+		case FileServerStatusErrored:
+			return fileServerID, fmt.Errorf("FileServer is in ERRORED state: %s", status)
+		default:
+			LogDebug(fmt.Sprintf("FileServer has unknown status: %s, continuing to wait...", status))
+			if attempt < MaxPollRetries {
+				Wait(DefaultPollInterval)
+			}
+		}
+	}
+
+	return "", fmt.Errorf("FileServer did not become ACTIVE after %d attempts", MaxPollRetries)
 }
 
 // GetSourcePathID fetches the source file server by Volume Name, validates the response,
@@ -146,7 +267,7 @@ func GetExportPathID(
 ) (string, error) {
 
 	refreshURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILE_SERVER_REFRESH_URL, configID)
-	getSourceURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configID)
+	getSourceURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILESERVER_ENDPOINT, configID)
 
 	var response FileServerDetails
 
@@ -669,7 +790,7 @@ func GetFileUserGroupId(export, fileName string) (uid, gid int, err error) {
 }
 
 func GetFileServerDetails(configId string, headers map[string]string) (FileServerDetailsItems, error) {
-	getSourceURL := fmt.Sprintf("%s/api/v1/servers/%s", CONFIG_SERVICE_URL, configId)
+	getSourceURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILESERVER_ENDPOINT, configId)
 
 	var response FileServerDetails
 

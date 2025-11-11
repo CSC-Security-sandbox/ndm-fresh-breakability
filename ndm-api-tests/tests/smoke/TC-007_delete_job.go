@@ -294,6 +294,9 @@ var _ = Describe("TC-007_delete_job: Test job deletion with and without active j
 		AfterEach(func() {
 			By("Cleanup started")
 
+			err := StopAllWorkersAndWait()
+			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
+
 			err = ClearVolume(destinationVolumePath)
 			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath)
 

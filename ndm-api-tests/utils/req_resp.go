@@ -81,6 +81,18 @@ type FileServerDetails struct {
 	} `json:"data"`
 }
 
+type FileServerStatusDetails struct {
+	error `json:"error"`
+	Data  struct {
+		Items struct {
+			Status      string `json:"status"`
+			FileServers []struct {
+				ID string `json:"id"`
+			} `json:"fileServers"`
+		} `json:"items"`
+	} `json:"data"`
+}
+
 // =============Support Bundle Structs=====================
 type CanDownloadResp struct {
 	Data struct {
