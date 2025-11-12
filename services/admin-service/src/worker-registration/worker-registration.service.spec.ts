@@ -87,7 +87,7 @@ describe('WorkerRegistrationService', () => {
     it('should throw InternalServerErrorException when details are invalid', async () => {
       const invalidDetails: RegisterWorkerDto = { projectId: '' };
       await expect(service.registerWorker(invalidDetails)).rejects.toThrow(
-        'Invalid project Id'
+        InternalServerErrorException,
       );
     });
 

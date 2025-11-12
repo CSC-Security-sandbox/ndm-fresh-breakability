@@ -20,8 +20,6 @@ import {
 @Injectable()
 export class AuthService {
   private readonly logger: LoggerService;
-  private static readonly REDIS_SECRET_READER_ROLE = 'redis-secret-reader';
-
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,

@@ -28,13 +28,6 @@
     owner: root
     group: root
 
-# for json parsing
-- name: 4.1.2 Install jq for JSON parsing
-  become: yes
-  package:
-    name: jq
-    state: present
-
 - name: 4.2. Copy binary file to remote server
   become: yes
   ansible.builtin.copy:

@@ -84,40 +84,14 @@ export class WorkerRegistrationService {
                 );
             }
             throw new InternalServerErrorException(
-                `Unexpected error occurred while registering worker`,
+                `Failed to register worker with status code ${response.status}`,
             );
         } catch (error) {
-            this.logger.error('Error during worker registration', {
-                error: error.message,
-                stack: error.stack,
-                isAxiosError: axios.isAxiosError(error),
-                response: axios.isAxiosError(error) ? {
-                    status: error.response?.status,
-                    statusText: error.response?.statusText,
-                    data: error.response?.data,
-                    headers: error.response?.headers
-                } : null,
-                config: axios.isAxiosError(error) ? {
-                    url: error.config?.url,
-                    method: error.config?.method,
-                    headers: error.config?.headers
-                } : null
-            });
-
-            if (axios.isAxiosError(error) && error.response) {
-                const errorMessage = typeof error.response.data === 'string'
-                    ? error.response.data
-                    : JSON.stringify(error.response.data);
-                throw new InternalServerErrorException(`${errorMessage}`);
-            }
-
-            // Re-throw known exceptions
-            if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
-                throw error;
-            }
-
+            this.logger.error('Error during worker registration', error);
+            if (axios.isAxiosError(error) && error.response)
+                throw new InternalServerErrorException(error.response.data);
             throw new InternalServerErrorException(
-                `Unexpected error occurred while registering worker`,
+                'Unexpected error occurred while registering worker',
             );
         }
     }
