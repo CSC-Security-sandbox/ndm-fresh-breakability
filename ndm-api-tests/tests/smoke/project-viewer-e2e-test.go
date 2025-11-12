@@ -117,7 +117,6 @@ var _ = Describe("Project Viewer Discovery Migration Cutover Test", func() {
         }
         
         _, resp, err = CreateFileServer(sourceParams, headers)
-        Expect(err).NotTo(HaveOccurred(), "Error creating source file server")
         Expect(resp.StatusCode).To(Equal(http.StatusForbidden), "Expected HTTP 403 Forbidden")
         defer resp.Body.Close()
 

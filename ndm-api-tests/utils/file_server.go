@@ -116,6 +116,11 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 		return "", nil, err
 	}
 
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return "", resp, fmt.Errorf("file server creation failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", resp, err
