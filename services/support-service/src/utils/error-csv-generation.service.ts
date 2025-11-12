@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OperationErrorEntity } from '../entities/operation-error.entity';
 import { OperationErrorExportData } from 'src/constants/types';
-import { GET_OPERATION_ERRORS_BY_DATE_RANGE } from 'src/constants/sql-queries';
+import { GET_OPERATION_ERRORS_BY_DATE_RANGE, USER_VISIBLE_ERROR_TYPES } from 'src/constants/sql-queries';
 
 @Injectable()
 export class OperationErrorService {
@@ -25,6 +25,7 @@ export class OperationErrorService {
       projectIds,
       startDate,
       endDate,
+      [...USER_VISIBLE_ERROR_TYPES],
     ]);
   }
 }

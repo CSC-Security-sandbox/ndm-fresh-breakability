@@ -784,6 +784,7 @@ describe("JobRunService", () => {
       const operationErrorQueryBuilder: any = {
         innerJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([
@@ -2116,6 +2117,7 @@ describe("JobRunService", () => {
       const mockQueryBuilder = {
         innerJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue(mockErrorCounts),
@@ -2146,7 +2148,7 @@ describe("JobRunService", () => {
       );
       expect(mockQueryBuilder.select).toHaveBeenCalledWith([
         "oe.errorType AS errorType",
-        "COUNT(*) AS count",
+        "COUNT(DISTINCT ROW(oe.filePath, oe.errorCode, oe.errorType)) AS count",
       ]);
       expect(mockQueryBuilder.groupBy).toHaveBeenCalledWith("oe.errorType");
       expect(mockQueryBuilder.getRawMany).toHaveBeenCalled();
@@ -2159,6 +2161,7 @@ describe("JobRunService", () => {
       const mockQueryBuilder = {
         innerJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockRejectedValue(mockError),
@@ -2192,7 +2195,7 @@ describe("JobRunService", () => {
       );
       expect(mockQueryBuilder.select).toHaveBeenCalledWith([
         "oe.errorType AS errorType",
-        "COUNT(*) AS count",
+        "COUNT(DISTINCT ROW(oe.filePath, oe.errorCode, oe.errorType)) AS count",
       ]);
       expect(mockQueryBuilder.groupBy).toHaveBeenCalledWith("oe.errorType");
       expect(mockQueryBuilder.getRawMany).toHaveBeenCalled();
@@ -2209,6 +2212,7 @@ describe("JobRunService", () => {
       const mockQueryBuilder = {
         innerJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockRejectedValue(mockError),
@@ -2239,7 +2243,7 @@ describe("JobRunService", () => {
       );
       expect(mockQueryBuilder.select).toHaveBeenCalledWith([
         "oe.errorType AS errorType",
-        "COUNT(*) AS count",
+        "COUNT(DISTINCT ROW(oe.filePath, oe.errorCode, oe.errorType)) AS count",
       ]);
       expect(mockQueryBuilder.groupBy).toHaveBeenCalledWith("oe.errorType");
       expect(mockQueryBuilder.getRawMany).toHaveBeenCalled();
@@ -2261,6 +2265,7 @@ describe("JobRunService", () => {
       const mockQueryBuilder = {
         innerJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue(mockErrorCounts),

@@ -49,9 +49,6 @@ const JobErrorsContainer = ({
   const transientErrorCount = getErrorCount(
     JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR
   );
-  const recoverableErrorCount = getErrorCount(
-    JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR
-  );
 
   return (
     <CardContent className="flex flex-col gap-4">
@@ -63,11 +60,6 @@ const JobErrorsContainer = ({
       {transientErrorCount !== 0 && (
         <Notification type="warning">
           Transient Errors ({transientErrorCount})
-        </Notification>
-      )}
-      {recoverableErrorCount !== 0 && (
-        <Notification type="info">
-          Recoverable Errors ({recoverableErrorCount})
         </Notification>
       )}
     </CardContent>

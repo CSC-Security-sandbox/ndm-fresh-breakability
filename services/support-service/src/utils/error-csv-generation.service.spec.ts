@@ -83,7 +83,7 @@ describe('OperationErrorService', () => {
       expect(mockQuery).toHaveBeenCalledTimes(1);
       expect(mockQuery).toHaveBeenCalledWith(
         GET_OPERATION_ERRORS_BY_DATE_RANGE,
-        [projectIds, startDate, endDate],
+        [projectIds, startDate, endDate, ['FATAL_ERROR', 'TRANSIENT_ERROR']],
       );
 
       expect(result).toEqual(mockOperationErrors);
@@ -102,7 +102,7 @@ describe('OperationErrorService', () => {
       expect(mockQuery).toHaveBeenCalledTimes(1);
       expect(mockQuery).toHaveBeenCalledWith(
         GET_OPERATION_ERRORS_BY_DATE_RANGE,
-        [projectIds, startDate, endDate],
+        [projectIds, startDate, endDate, ['FATAL_ERROR', 'TRANSIENT_ERROR']],
       );
       expect(result).toEqual([]);
     });
@@ -133,7 +133,7 @@ describe('OperationErrorService', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         GET_OPERATION_ERRORS_BY_DATE_RANGE,
-        [projectIds, startDate, endDate],
+        [projectIds, startDate, endDate, ['FATAL_ERROR', 'TRANSIENT_ERROR']],
       );
     });
 
@@ -166,7 +166,7 @@ describe('OperationErrorService', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         GET_OPERATION_ERRORS_BY_DATE_RANGE,
-        [singleProjectId, startDate, endDate],
+        [singleProjectId, startDate, endDate, ['FATAL_ERROR', 'TRANSIENT_ERROR']],
       );
       expect(result).toEqual(singleProjectErrors);
       expect(result).toHaveLength(1);
@@ -184,7 +184,7 @@ describe('OperationErrorService', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         GET_OPERATION_ERRORS_BY_DATE_RANGE,
-        [emptyProjectIds, startDate, endDate],
+        [emptyProjectIds, startDate, endDate, ['FATAL_ERROR', 'TRANSIENT_ERROR']],
       );
       expect(result).toEqual([]);
     });
@@ -201,7 +201,7 @@ describe('OperationErrorService', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         GET_OPERATION_ERRORS_BY_DATE_RANGE,
-        [projectIds, sameDate, sameDate],
+        [projectIds, sameDate, sameDate, ['FATAL_ERROR', 'TRANSIENT_ERROR']],
       );
       expect(result).toHaveLength(1);
     });
@@ -218,7 +218,7 @@ describe('OperationErrorService', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         GET_OPERATION_ERRORS_BY_DATE_RANGE,
-        [multipleProjectIds, startDate, endDate],
+        [multipleProjectIds, startDate, endDate, ['FATAL_ERROR', 'TRANSIENT_ERROR']],
       );
       expect(result).toEqual(mockOperationErrors);
     });
@@ -236,7 +236,7 @@ describe('OperationErrorService', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         GET_OPERATION_ERRORS_BY_DATE_RANGE,
-        [projectIds, earlyStartDate, futureEndDate],
+        [projectIds, earlyStartDate, futureEndDate, ['FATAL_ERROR', 'TRANSIENT_ERROR']],
       );
       expect(result).toEqual([]);
     });
@@ -284,6 +284,7 @@ describe('OperationErrorService', () => {
         ['test-project'],
         '2023-05-01',
         '2023-05-31',
+        ['FATAL_ERROR', 'TRANSIENT_ERROR'],
       ]);
     });
   });

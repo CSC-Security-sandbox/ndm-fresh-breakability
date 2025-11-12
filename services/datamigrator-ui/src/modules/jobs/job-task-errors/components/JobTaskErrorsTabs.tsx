@@ -47,24 +47,15 @@ const JobTaskErrorsTabs = ({
     [JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR]: getErrorCount(
       JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR
     ),
-    [JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR]: getErrorCount(
-      JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR
-    ),
   };
   const showFatalError = errorCounts[JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR] > 0;
   const showTransientError =
     errorCounts[JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR] > 0;
-  const showRecoverableError =
-    errorCounts[JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR] > 0;
 
   useEffect(() => {
-    let defaultTab: string;
-    if (showFatalError) {
-      defaultTab = JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR;
-    } else if (showTransientError) {
+    let defaultTab = JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR;
+    if (!showFatalError) {
       defaultTab = JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR;
-    } else {
-      defaultTab = JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR;
     }
 
     setCurrentErrorType(defaultTab);
@@ -97,21 +88,6 @@ const JobTaskErrorsTabs = ({
           >
             Transient Errors (
             {errorCounts[JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR]})
-          </InnerTab.Button>
-        </Show.When>
-
-        {/* RECOVERABLE ERRORS */}
-        <Show.When isTrue={showRecoverableError}>
-          <InnerTab.Button
-            isActive={
-              currentErrorType === JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR
-            }
-            onClick={() =>
-              setCurrentErrorType(JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR)
-            }
-          >
-            Recoverable Errors (
-            {errorCounts[JOB_RUN_ERRORS_TYPE_KEY.RECOVERABLE_ERROR]})
           </InnerTab.Button>
         </Show.When>
       </Show>
