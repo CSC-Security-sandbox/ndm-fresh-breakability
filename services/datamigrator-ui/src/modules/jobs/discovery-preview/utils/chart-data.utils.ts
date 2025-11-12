@@ -478,14 +478,34 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
     data?.find(
       (item: DataItemType) => item.sub_category === FileSystemSubCategory.PATH
     )?.value || 0;
+  // Fixed: Look for correct category AND sub_category, return empty string instead of 0
   const fileServerProtocol =
     data?.find(
       (item: DataItemType) =>
+        item.category === "File Server Info" &&
         item.sub_category === FileSystemSubCategory.PROTOCOL
+    )?.value || "";
+  const hardLinks =
+    data?.find(
+      (item: DataItemType) =>
+        item.sub_category === FileSystemSubCategory.HARD_LINKS_COUNT
+    )?.value || 0;
+  const junctionCount =
+    data?.find(
+      (item: DataItemType) =>
+        item.sub_category === FileSystemSubCategory.JUNCTIONS_COUNT
+    )?.value || 0;
+  const volumeMountCount =
+    data?.find(
+      (item: DataItemType) =>
+        item.sub_category === FileSystemSubCategory.VOLUME_MOUNT_COUNT
     )?.value || 0;
   return {
     regularFiles,
     symbolicLinks,
+    hardLinks,
+    junctionCount,
+    volumeMountCount,
     totalCount,
     totalSpaceUsed,
     directories,
