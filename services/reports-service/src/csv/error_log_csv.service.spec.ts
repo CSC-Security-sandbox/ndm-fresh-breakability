@@ -383,4 +383,232 @@ describe("ErrorLogService", () => {
       ).rejects.toThrow("fail");
     });
   });
+
+  describe('Comprehensive Error Count Tests', () => {
+    describe('getTotalErrorCountForJobRun', () => {
+      it('should count all errors for single job run', async () => {
+        // Scenario: 15 operation errors + 2 worker setup errors
+        mockOperationErrorRepo.query.mockResolvedValue([{ count: '15' }]);
+        mockWorkerJobRunMapRepo.count.mockResolvedValue(2);
+
+        const result = await service.getTotalErrorCountForJobRun('job-run-123');
+        
+        expect(result).toBe(17); // 15 + 2
+        expect(mockOperationErrorRepo.query).toHaveBeenCalledWith(
+          expect.stringContaining('COUNT(*) as count'),
+          expect.arrayContaining(['job-run-123'])
+        );
+      });
+
+      it('should handle large error counts efficiently', async () => {
+        // Scenario: Large migration with hundreds of errors
+        mockOperationErrorRepo.query.mockResolvedValue([{ count: '523' }]);
+        mockWorkerJobRunMapRepo.count.mockResolvedValue(12);
+
+        const result = await service.getTotalErrorCountForJobRun('job-run-large');
+        
+        expect(result).toBe(535); // 523 + 12
+      });
+
+      it('should count errors with no worker setup failures', async () => {
+        // Scenario: Only operation errors, no worker failures
+        mockOperationErrorRepo.query.mockResolvedValue([{ count: '8' }]);
+        mockWorkerJobRunMapRepo.count.mockResolvedValue(0);
+
+        const result = await service.getTotalErrorCountForJobRun('job-run-no-setup');
+        
+        expect(result).toBe(8);
+      });
+
+      it('should count errors with only worker setup failures', async () => {
+        // Scenario: All workers failed setup, no operation errors
+        mockOperationErrorRepo.query.mockResolvedValue([{ count: '0' }]);
+        mockWorkerJobRunMapRepo.count.mockResolvedValue(5);
+
+        const result = await service.getTotalErrorCountForJobRun('job-run-setup-only');
+        
+        expect(result).toBe(5);
+      });
+
+      it('should handle zero errors correctly', async () => {
+        // Scenario: Successful job run with no errors
+        mockOperationErrorRepo.query.mockResolvedValue([{ count: '0' }]);
+        mockWorkerJobRunMapRepo.count.mockResolvedValue(0);
+
+        const result = await service.getTotalErrorCountForJobRun('job-run-success');
+        
+        expect(result).toBe(0);
+      });
+
+      it('should filter only FATAL_ERROR and TRANSIENT_ERROR types', async () => {
+        // Scenario: Verify query filters by USER_VISIBLE_ERROR_TYPES
+        mockOperationErrorRepo.query.mockResolvedValue([{ count: '10' }]);
+        mockWorkerJobRunMapRepo.count.mockResolvedValue(1);
+
+        await service.getTotalErrorCountForJobRun('job-run-filtered');
+        
+        expect(mockOperationErrorRepo.query).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.arrayContaining([
+            'job-run-filtered',
+            expect.arrayContaining(['FATAL_ERROR', 'TRANSIENT_ERROR'])
+          ])
+        );
+      });
+
+      it('should throw BadRequestException on database error', async () => {
+        mockOperationErrorRepo.query.mockRejectedValue(new Error('DB connection failed'));
+
+        await expect(
+          service.getTotalErrorCountForJobRun('job-run-error')
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
+
+    describe('getTotalErrorCountForConfig', () => {
+      it('should count all errors across multiple job runs', async () => {
+        // Scenario: Job config with 3 job runs
+        jest.spyOn(service, 'getJobRunIds').mockResolvedValue(['run1', 'run2', 'run3']);
+        mockOperationErrorRepo.query.mockResolvedValue([{ count: '45' }]);
+        mockWorkerJobRunMapRepo.count.mockResolvedValue(6);
+
+        const result = await service.getTotalErrorCountForConfig('job-config-123');
+        
+        expect(result).toBe(51); // 45 + 6
+        expect(mockOperationErrorRepo.query).toHaveBeenCalledWith(
+          expect.stringContaining('COUNT(*) as count'),
+          expect.arrayContaining(['run1', 'run2', 'run3'])
+        );
+      });
+
+      it('should return 0 when job config has no job runs', async () => {
+        jest.spyOn(service, 'getJobRunIds').mockResolvedValue([]);
+
+        const result = await service.getTotalErrorCountForConfig('job-config-empty');
+        
+        expect(result).toBe(0);
+        expect(mockOperationErrorRepo.query).not.toHaveBeenCalled();
+      });
+
+      it('should handle single job run in config', async () => {
+        jest.spyOn(service, 'getJobRunIds').mockResolvedValue(['run1']);
+        mockOperationErrorRepo.query.mockResolvedValue([{ count: '12' }]);
+        mockWorkerJobRunMapRepo.count.mockResolvedValue(1);
+
+        const result = await service.getTotalErrorCountForConfig('job-config-single');
+        
+        expect(result).toBe(13);
+      });
+
+      it('should aggregate errors from many job runs', async () => {
+        // Scenario: 10 job runs with total 200 errors
+        const jobRunIds = Array.from({ length: 10 }, (_, i) => `run-${i}`);
+        jest.spyOn(service, 'getJobRunIds').mockResolvedValue(jobRunIds);
+        mockOperationErrorRepo.query.mockResolvedValue([{ count: '200' }]);
+        mockWorkerJobRunMapRepo.count.mockResolvedValue(15);
+
+        const result = await service.getTotalErrorCountForConfig('job-config-many-runs');
+        
+        expect(result).toBe(215);
+        expect(mockOperationErrorRepo.query).toHaveBeenCalledWith(
+          expect.stringContaining('IN'),
+          expect.arrayContaining(jobRunIds)
+        );
+      });
+
+      it('should build correct SQL with multiple placeholders', async () => {
+        jest.spyOn(service, 'getJobRunIds').mockResolvedValue(['run1', 'run2', 'run3']);
+        mockOperationErrorRepo.query.mockResolvedValue([{ count: '30' }]);
+        mockWorkerJobRunMapRepo.count.mockResolvedValue(3);
+
+        await service.getTotalErrorCountForConfig('job-config-placeholders');
+        
+        // Verify SQL query has correct placeholders for 3 job runs
+        expect(mockOperationErrorRepo.query).toHaveBeenCalledWith(
+          expect.stringMatching(/\$1.*\$2.*\$3/),
+          expect.any(Array)
+        );
+      });
+
+      it('should count only visible error types across all runs', async () => {
+        jest.spyOn(service, 'getJobRunIds').mockResolvedValue(['run1', 'run2']);
+        mockOperationErrorRepo.query.mockResolvedValue([{ count: '25' }]);
+        mockWorkerJobRunMapRepo.count.mockResolvedValue(2);
+
+        await service.getTotalErrorCountForConfig('job-config-filtered');
+        
+        expect(mockOperationErrorRepo.query).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.arrayContaining([
+            'run1',
+            'run2',
+            expect.arrayContaining(['FATAL_ERROR', 'TRANSIENT_ERROR'])
+          ])
+        );
+      });
+
+      it('should handle mixed success and failed runs', async () => {
+        // Scenario: 3 runs, 2 with errors, 1 successful
+        jest.spyOn(service, 'getJobRunIds').mockResolvedValue(['run1', 'run2', 'run3']);
+        mockOperationErrorRepo.query.mockResolvedValue([{ count: '18' }]);
+        mockWorkerJobRunMapRepo.count.mockResolvedValue(1);
+
+        const result = await service.getTotalErrorCountForConfig('job-config-mixed');
+        
+        expect(result).toBe(19);
+      });
+
+      it('should throw BadRequestException on database error', async () => {
+        jest.spyOn(service, 'getJobRunIds').mockResolvedValue(['run1']);
+        mockOperationErrorRepo.query.mockRejectedValue(new Error('Query timeout'));
+
+        await expect(
+          service.getTotalErrorCountForConfig('job-config-error')
+        ).rejects.toThrow(BadRequestException);
+      });
+
+      it('should handle extremely large job configs', async () => {
+        // Scenario: 100 job runs with total 5000 errors
+        const jobRunIds = Array.from({ length: 100 }, (_, i) => `run-${i}`);
+        jest.spyOn(service, 'getJobRunIds').mockResolvedValue(jobRunIds);
+        mockOperationErrorRepo.query.mockResolvedValue([{ count: '5000' }]);
+        mockWorkerJobRunMapRepo.count.mockResolvedValue(50);
+
+        const result = await service.getTotalErrorCountForConfig('job-config-huge');
+        
+        expect(result).toBe(5050);
+      });
+    });
+
+    describe('Edge Cases and Error Scenarios', () => {
+      it('should handle string count values and convert to numbers', async () => {
+        mockOperationErrorRepo.query.mockResolvedValue([{ count: '999' }]);
+        mockWorkerJobRunMapRepo.count.mockResolvedValue(1);
+
+        const result = await service.getTotalErrorCountForJobRun('job-run-string');
+        
+        expect(result).toBe(1000);
+        expect(typeof result).toBe('number');
+      });
+
+      it('should handle count as zero string', async () => {
+        mockOperationErrorRepo.query.mockResolvedValue([{ count: '0' }]);
+        mockWorkerJobRunMapRepo.count.mockResolvedValue(0);
+
+        const result = await service.getTotalErrorCountForJobRun('job-run-zero');
+        
+        expect(result).toBe(0);
+      });
+
+      it('should handle worker setup count being zero', async () => {
+        mockOperationErrorRepo.query.mockResolvedValue([{ count: '10' }]);
+        mockWorkerJobRunMapRepo.count.mockResolvedValue(0);
+
+        const result = await service.getTotalErrorCountForJobRun('job-run-zero-setup');
+        
+        expect(result).toBe(10);
+      });
+    });
+  });
 });
+
