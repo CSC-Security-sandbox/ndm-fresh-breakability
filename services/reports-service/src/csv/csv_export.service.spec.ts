@@ -92,7 +92,9 @@ describe("CsvService", () => {
         },
       ];
 
+      mockDataSource.query.mockResolvedValueOnce([{ protocol: 'NFS' }]);
       mockDataSource.query.mockResolvedValueOnce(mockData);
+      mockDataSource.query.mockResolvedValueOnce([]);
 
       const mockWriteStream = {
         pipe: jest.fn(),
@@ -297,6 +299,86 @@ describe("CsvService", () => {
 
       const fallbackService = module.get<CsvService>(CsvService);
       expect(fallbackService).toBeDefined();
+    });
+  });
+
+  describe("getMigrationCoCColumns", () => {
+    it("should return SMB-specific columns when protocol is SMB", () => {
+      const protocol = "SMB";
+      const result = service.getMigrationCoCColumns(protocol);
+
+      expect(result).toContain("Source Owner SID");
+      expect(result).toContain("Source Group SID");
+      expect(result).toContain("Target Owner SID");
+      expect(result).toContain("Target Group SID");
+      expect(result).toContain("Source ACE Details");
+      expect(result).toContain("Target ACE Details");
+    });
+
+    it("should return NFS-specific columns when protocol is NFS", () => {
+      const protocol = "NFS";
+      const result = service.getMigrationCoCColumns(protocol);
+
+      expect(result).toContain("Source UID");
+      expect(result).toContain("Source GID");
+      expect(result).toContain("Destination UID");
+      expect(result).toContain("Destination GID");
+      expect(result).toContain("Source Unix Permissions");
+      expect(result).toContain("Destination Unix Permissions");
+    });
+
+    it("should handle case-insensitive protocol matching", () => {
+      const protocols = ["SMB", "smb", "Smb", "sMb"];
+    
+      protocols.forEach(protocol => {
+        const result = service.getMigrationCoCColumns(protocol);
+          expect(result).toContain("Source Owner SID");
+          expect(result).toContain("Source Group SID");
+          expect(result).toContain("Target Owner SID");
+          expect(result).toContain("Target Group SID");
+          expect(result).toContain("Source ACE Details");
+          expect(result).toContain("Target ACE Details");
+      });
+    });
+
+    it("should return SQL columns with proper SQL formatting for both protocols", () => {
+      // Test with SMB
+      let result = service.getMigrationCoCColumns("SMB");
+      expect(result).toContain("AS");
+      expect(result).toContain('"');
+      expect(result).not.toContain("undefined");
+      expect(result.length).toBeGreaterThan(0);
+
+      // Test with NFS 
+      result = service.getMigrationCoCColumns("NFS");
+      expect(result).toContain("AS");
+      expect(result).toContain('"');
+      expect(result).not.toContain("undefined");
+      expect(result.length).toBeGreaterThan(0);
+
+      // Both should return valid SQL but different columns
+      const smbColumns = service.getMigrationCoCColumns("SMB");
+      const nfsColumns = service.getMigrationCoCColumns("NFS");
+      expect(smbColumns).not.toEqual(nfsColumns);
+    });
+    it("should use ACE pattern constants in SMB columns", () => {
+      const result = service.getMigrationCoCColumns("SMB");
+      
+      // Verify the ACE pattern constants are included in the SQL query
+      expect(result).toContain("ACE in source:");
+      expect(result).toContain("ACE in target:");
+    });
+
+    it("should default to NFS columns when protocol is null or empty", () => {
+      const resultNull = service.getMigrationCoCColumns(null as any);
+      const resultEmpty = service.getMigrationCoCColumns("");
+      
+      // Both should return NFS columns (default)
+      expect(resultNull).toContain("Source UID");
+      expect(resultNull).toContain("Source Unix Permissions");
+      
+      expect(resultEmpty).toContain("Source UID");
+      expect(resultEmpty).toContain("Source Unix Permissions");
     });
   });
 });
