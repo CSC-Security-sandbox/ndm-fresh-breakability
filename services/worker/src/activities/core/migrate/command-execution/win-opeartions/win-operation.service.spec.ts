@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { WinOperationService } from './win-operation.service';
 import {
   LoggerFactory,
@@ -10,6 +11,7 @@ import { SourceAclError, TargetAclError } from './acl-operation.error';
 import { LRUCache } from 'src/activities/core/utils/lru-cache';
 import { OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
 import { FileType } from 'src/activities/types/tasks';
+import { NativeAclService } from './native-acl.service';
 
 // Import correct types
 type SecurityDescriptor = {
@@ -39,12 +41,37 @@ interface ValidatorOutput {
   inValid: string;
 }
 
+type ShareSecurityDescriptor = {
+  shareName: string;
+  serverName: string;
+  permissions: SharePermission[];
+  maxUsers: number;
+  currentUsers: number;
+  path: string;
+  remark: string;
+};
+
+type SharePermission = {
+  accountName: string;
+  sid: string;
+  accessMask: number;
+  accessType: 'Allow' | 'Deny';
+};
+
+type SharePermissions = {
+  permissions: SharePermission[];
+  maxUsers?: number;
+  remark?: string;
+};
+
 describe('WinOperationService', () => {
   let service: WinOperationService;
   let mockLoggerFactory: Partial<LoggerFactory>;
   let mockLogger: Partial<LoggerService>;
   let mockWinShellService: Partial<WinShellService>;
   let mockRedisService: Partial<RedisService>;
+  let mockConfigService: Partial<ConfigService>;
+  let mockNativeAclService: Partial<NativeAclService>;
 
   beforeEach(async () => {
     // Create mock logger with all required methods
@@ -72,12 +99,27 @@ describe('WinOperationService', () => {
       setOwnerIdentity: jest.fn(),
     };
 
+    // Create mock ConfigService
+    mockConfigService = {
+      get: jest.fn().mockReturnValue('false'), // Default to PowerShell mode
+    };
+
+    // Create mock NativeAclService
+    mockNativeAclService = {
+      getFileSecurity: jest.fn(),
+      setFileSecurity: jest.fn(),
+      getShareSecurity: jest.fn(),
+      setShareSecurity: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WinOperationService,
         { provide: LoggerFactory, useValue: mockLoggerFactory },
+        { provide: ConfigService, useValue: mockConfigService },
         { provide: WinShellService, useValue: mockWinShellService },
         { provide: RedisService, useValue: mockRedisService },
+        { provide: NativeAclService, useValue: mockNativeAclService },
       ],
     }).compile();
 
@@ -1329,6 +1371,172 @@ describe('WinOperationService', () => {
         expect.stringContaining("C:\\test\\path''s folder"),
       );
       expect(result).toBe(FileType.SYMBOLIC_LINK);
+    });
+  });
+
+  describe('Native ACL Mode', () => {
+    let nativeService: WinOperationService;
+    const mockSecurityDescriptor: SecurityDescriptor = {
+      Owner: 'S-1-5-21-123456789-123456789-123456789-1001',
+      Group: 'S-1-5-21-123456789-123456789-123456789-1002',
+      DaclAces: [
+        {
+          Sid: 'S-1-5-21-123456789-123456789-123456789-1003',
+          AccessMask: 2032127,
+          AceType: 0,
+          AceFlags: 0,
+          IsInherited: false,
+          originalSid: 'S-1-5-21-123456789-123456789-123456789-1003',
+        },
+      ],
+      Attributes: 'Archive',
+      DaclPresent: true,
+      DaclProtected: false,
+      DaclAutoInherit: false,
+      originalOwner: 'S-1-5-21-123456789-123456789-123456789-1001',
+      originalGroup: 'S-1-5-21-123456789-123456789-123456789-1002',
+    };
+
+    beforeEach(async () => {
+      // Create service with native ACL enabled
+      const nativeConfigService = {
+        get: jest.fn().mockReturnValue('true'), // Enable native mode
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          WinOperationService,
+          { provide: LoggerFactory, useValue: mockLoggerFactory },
+          { provide: ConfigService, useValue: nativeConfigService },
+          { provide: WinShellService, useValue: mockWinShellService },
+          { provide: RedisService, useValue: mockRedisService },
+          { provide: NativeAclService, useValue: mockNativeAclService },
+        ],
+      }).compile();
+
+      nativeService = module.get<WinOperationService>(WinOperationService);
+    });
+
+    it('should use native ACL service when enabled', async () => {
+      const testPath = 'C:\\test\\path';
+      mockNativeAclService.getFileSecurity = jest
+        .fn()
+        .mockResolvedValue(mockSecurityDescriptor);
+
+      const result = await nativeService.getAclOperation(testPath, true);
+
+      expect(mockNativeAclService.getFileSecurity).toHaveBeenCalledWith(testPath);
+      expect(mockWinShellService.executeCommand).not.toHaveBeenCalled();
+      expect(result).toEqual(mockSecurityDescriptor);
+    });
+
+    it('should use native ACL service for setAclOperation when enabled', async () => {
+      const testPath = 'C:\\test\\path';
+      const mockResult = { success: true, unresolved_sids: [] };
+      mockNativeAclService.setFileSecurity = jest
+        .fn()
+        .mockResolvedValue(mockResult);
+
+      const result = await nativeService.setAclOperation(testPath, mockSecurityDescriptor);
+
+      expect(mockNativeAclService.setFileSecurity).toHaveBeenCalledWith(
+        testPath,
+        mockSecurityDescriptor,
+      );
+      expect(mockWinShellService.executeCommand).not.toHaveBeenCalled();
+      expect(result.stdout).toContain('"success":true');
+    });
+  });
+
+  describe('Share-level Permissions', () => {
+    const mockShareSecurity: ShareSecurityDescriptor = {
+      shareName: 'TestShare',
+      serverName: 'localhost',
+      permissions: [
+        {
+          accountName: 'DOMAIN\\User',
+          sid: 'S-1-5-21-123456789-123456789-123456789-1001',
+          accessMask: 2032127,
+          accessType: 'Allow',
+        },
+      ],
+      maxUsers: 10,
+      currentUsers: 0,
+      path: 'C:\\Shares\\TestShare',
+      remark: 'Test share',
+    };
+
+    beforeEach(() => {
+      // Enable native mode for share permissions
+      mockConfigService.get = jest.fn().mockReturnValue('true');
+    });
+
+    it('should get share security when native ACL is enabled', async () => {
+      mockNativeAclService.getShareSecurity = jest
+        .fn()
+        .mockResolvedValue(mockShareSecurity);
+
+      const result = await service.getShareSecurity('localhost', 'TestShare');
+
+      expect(mockNativeAclService.getShareSecurity).toHaveBeenCalledWith(
+        'localhost',
+        'TestShare',
+      );
+      expect(result).toEqual(mockShareSecurity);
+    });
+
+    it('should throw error when share security is requested but native ACL is disabled', async () => {
+      mockConfigService.get = jest.fn().mockReturnValue('false');
+
+      // Recreate service with native disabled
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          WinOperationService,
+          { provide: LoggerFactory, useValue: mockLoggerFactory },
+          { provide: ConfigService, useValue: mockConfigService },
+          { provide: WinShellService, useValue: mockWinShellService },
+          { provide: RedisService, useValue: mockRedisService },
+          { provide: NativeAclService, useValue: mockNativeAclService },
+        ],
+      }).compile();
+
+      const disabledService = module.get<WinOperationService>(WinOperationService);
+
+      await expect(
+        disabledService.getShareSecurity('localhost', 'TestShare'),
+      ).rejects.toThrow('Share-level permissions require native Windows API');
+    });
+
+    it('should set share security when native ACL is enabled', async () => {
+      const sharePermissions: SharePermissions = {
+        permissions: [
+          {
+            accountName: 'DOMAIN\\User',
+            sid: 'S-1-5-21-123456789-123456789-123456789-1001',
+            accessMask: 2032127,
+            accessType: 'Allow',
+          },
+        ],
+        maxUsers: 10,
+        remark: 'Test share',
+      };
+
+      mockNativeAclService.setShareSecurity = jest
+        .fn()
+        .mockResolvedValue(true);
+
+      const result = await service.setShareSecurity(
+        'localhost',
+        'TestShare',
+        sharePermissions,
+      );
+
+      expect(mockNativeAclService.setShareSecurity).toHaveBeenCalledWith(
+        'localhost',
+        'TestShare',
+        sharePermissions,
+      );
+      expect(result).toBe(true);
     });
   });
 });

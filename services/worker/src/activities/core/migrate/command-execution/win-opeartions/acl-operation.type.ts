@@ -25,4 +25,28 @@ interface ValidatorOutput {
   inValid: string;
 }
 
+// Share-level permission types
+type ShareSecurityDescriptor = {
+  shareName: string;
+  serverName: string;
+  permissions: SharePermission[];
+  maxUsers: number;
+  currentUsers: number;
+  path: string;
+  remark: string;
+};
+
+type SharePermission = {
+  accountName: string;
+  sid: string;
+  accessMask: number;
+  accessType: 'Allow' | 'Deny';
+};
+
+type SharePermissions = {
+  permissions: SharePermission[];
+  maxUsers?: number;
+  remark?: string;
+};
+
 

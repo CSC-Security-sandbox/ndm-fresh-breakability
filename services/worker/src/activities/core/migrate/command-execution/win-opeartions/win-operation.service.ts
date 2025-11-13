@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { CommandExecInput } from '../command-execution.type';
 import { StampMetaOutput } from '../stamp-meta.type';
 import {
@@ -12,18 +13,35 @@ import { RedisService } from 'src/redis/redis.service';
 import { LRUCache } from 'src/activities/core/utils/lru-cache';
 import { OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
 import { FileType } from 'src/activities/types/tasks';
+import { NativeAclService } from './native-acl.service';
+import { isWindowsApiAvailable } from './windows-api-native';
 
 @Injectable()
 export class WinOperationService {
   private readonly logger: LoggerService;
   private sidCache: LRUCache = new LRUCache(1000);
+  private useNativeAcl: boolean;
 
   constructor(
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    @Inject(ConfigService) private readonly configService: ConfigService,
     private readonly winShellService: WinShellService,
     private readonly redisService: RedisService,
+    private readonly nativeAclService?: NativeAclService,
   ) {
     this.logger = loggerFactory.create(WinOperationService.name);
+    // Feature flag: Use native ACL if available and enabled
+    // Default to false for gradual migration, can be enabled via USE_NATIVE_ACL env var
+    this.useNativeAcl =
+      this.configService.get<string>('USE_NATIVE_ACL', 'false').toLowerCase() === 'true' &&
+      isWindowsApiAvailable() &&
+      this.nativeAclService !== undefined;
+    
+    if (this.useNativeAcl) {
+      this.logger.log('Using native Windows API for ACL operations');
+    } else {
+      this.logger.log('Using PowerShell for ACL operations');
+    }
   }
 
   async getAclOperation(
@@ -31,10 +49,15 @@ export class WinOperationService {
     isSource: boolean,
   ): Promise<SecurityDescriptor> {
     try {
-      const script = `$srcFile = '${path.replace(/'/g, "''")}'\n${psGetAclScript}`;
-      const output = await this.winShellService.executeCommand(script);
-      if (output.stderr) throw new Error(output.stderr);
-      return JSON.parse(output.stdout) as SecurityDescriptor;
+      if (this.useNativeAcl && this.nativeAclService) {
+        return await this.nativeAclService.getFileSecurity(path);
+      } else {
+        // Fallback to PowerShell
+        const script = `$srcFile = '${path.replace(/'/g, "''")}'\n${psGetAclScript}`;
+        const output = await this.winShellService.executeCommand(script);
+        if (output.stderr) throw new Error(output.stderr);
+        return JSON.parse(output.stdout) as SecurityDescriptor;
+      }
     } catch (error) {
       this.logger.error(`Failed to get ACL for ${path}: ${error.message}`);
       if (isSource)
@@ -53,11 +76,21 @@ export class WinOperationService {
     acl: SecurityDescriptor,
   ): Promise<any> {
     try {
-      const aclJsonString = JSON.stringify(acl).replace(/'/g, "''");
-      const script = `$dstFile = '${targetPath.replace(/'/g, "''")}'\n$aclJson = '${aclJsonString}'\n${psSetAclScript}`;
-      const output = await this.winShellService.executeCommand(script);
-      if (output.stderr) throw new Error(output.stderr);
-      return output;
+      if (this.useNativeAcl && this.nativeAclService) {
+        const result = await this.nativeAclService.setFileSecurity(targetPath, acl);
+        // Return in same format as PowerShell for compatibility
+        return {
+          stdout: JSON.stringify(result),
+          stderr: '',
+        };
+      } else {
+        // Fallback to PowerShell
+        const aclJsonString = JSON.stringify(acl).replace(/'/g, "''");
+        const script = `$dstFile = '${targetPath.replace(/'/g, "''")}'\n$aclJson = '${aclJsonString}'\n${psSetAclScript}`;
+        const output = await this.winShellService.executeCommand(script);
+        if (output.stderr) throw new Error(output.stderr);
+        return output;
+      }
     } catch (error) {
       this.logger.error(
         `Failed to set ACL for ${targetPath}: ${error.message}`,
@@ -113,14 +146,33 @@ export class WinOperationService {
     }
     const result = await this.setAclOperation(targetPath, acl);
 
-    if (result?.stdout && result.stdout.includes('unresolved_sids')) {
-      const unresolved_sids = JSON.parse(result.stdout)?.unresolved_sids;
-      if (unresolved_sids && unresolved_sids.length > 0) {
-        unresolved_sids.forEach((sid) => {
-          errors.push(
-            `Unresolved SID ${sid} found while setting ACL on target`,
-          );
-        });
+    // Handle unresolved SIDs from both native and PowerShell implementations
+    if (result?.stdout) {
+      try {
+        const resultObj = typeof result.stdout === 'string' ? JSON.parse(result.stdout) : result.stdout;
+        if (resultObj?.unresolved_sids && Array.isArray(resultObj.unresolved_sids) && resultObj.unresolved_sids.length > 0) {
+          resultObj.unresolved_sids.forEach((sid: string) => {
+            errors.push(
+              `Unresolved SID ${sid} found while setting ACL on target`,
+            );
+          });
+        }
+      } catch (parseError) {
+        // If parsing fails, check if it's a string with unresolved_sids
+        if (result.stdout.includes('unresolved_sids')) {
+          try {
+            const unresolved_sids = JSON.parse(result.stdout)?.unresolved_sids;
+            if (unresolved_sids && unresolved_sids.length > 0) {
+              unresolved_sids.forEach((sid: string) => {
+                errors.push(
+                  `Unresolved SID ${sid} found while setting ACL on target`,
+                );
+              });
+            }
+          } catch {
+            // Ignore parse errors
+          }
+        }
       }
     }
 
@@ -282,6 +334,35 @@ export class WinOperationService {
     } catch (error) {
       this.logger.error(`Failed to detect symbolic link for ${path}: ${error.message}`);
       return FileType.UNKNOWN;
+    }
+  }
+
+  /**
+   * Get share-level security permissions
+   */
+  async getShareSecurity(
+    serverName: string | null,
+    shareName: string,
+  ): Promise<ShareSecurityDescriptor> {
+    if (this.useNativeAcl && this.nativeAclService) {
+      return await this.nativeAclService.getShareSecurity(serverName, shareName);
+    } else {
+      throw new Error('Share-level permissions require native Windows API. Enable USE_NATIVE_ACL=true');
+    }
+  }
+
+  /**
+   * Set share-level security permissions
+   */
+  async setShareSecurity(
+    serverName: string | null,
+    shareName: string,
+    permissions: SharePermissions,
+  ): Promise<boolean> {
+    if (this.useNativeAcl && this.nativeAclService) {
+      return await this.nativeAclService.setShareSecurity(serverName, shareName, permissions);
+    } else {
+      throw new Error('Share-level permissions require native Windows API. Enable USE_NATIVE_ACL=true');
     }
   }
 }
