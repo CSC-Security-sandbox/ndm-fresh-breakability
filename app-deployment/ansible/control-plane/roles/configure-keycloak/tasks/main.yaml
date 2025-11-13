@@ -173,6 +173,49 @@
       ignore_errors: yes
       when: admin_token_result.status == 200
 
+    - name: Get all realm roles from Keycloak
+      uri:
+        url: "https://{{ control_plane_ip }}/keycloak/admin/realms/datamigrator/roles"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ admin_token_result.json.access_token }}"
+          Content-Type: "application/json"
+        validate_certs: false
+      register: all_roles_result
+      when: admin_token_result.status == 200
+
+    - name: Extract default-roles-datamigrator role ID
+      set_fact:
+        default_roles_id: "{{ all_roles_result.json | selectattr('name', 'equalto', 'default-roles-datamigrator') | map(attribute='id') | first }}"
+      when: 
+        - admin_token_result.status == 200
+        - all_roles_result.status == 200
+
+    - name: Extract redis-secret-reader role details
+      set_fact:
+        redis_role_details: "{{ all_roles_result.json | selectattr('name', 'equalto', 'redis-secret-reader') | first }}"
+      when: 
+        - admin_token_result.status == 200
+        - all_roles_result.status == 200
+
+    - name: Add redis-secret-reader to default-roles-datamigrator composite
+      uri:
+        url: "https://{{ control_plane_ip }}/keycloak/admin/realms/datamigrator/roles-by-id/{{ default_roles_id }}/composites"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ admin_token_result.json.access_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body: 
+          - "{{ redis_role_details }}"
+        status_code: [204, 409]  # 204 = success, 409 = already exists
+        validate_certs: false
+      ignore_errors: yes
+      when: 
+        - admin_token_result.status == 200
+        - default_roles_id is defined
+        - redis_role_details is defined
+
 
   when: local_cluster is defined
   
