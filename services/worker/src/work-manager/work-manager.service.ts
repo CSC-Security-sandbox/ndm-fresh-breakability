@@ -62,15 +62,15 @@ export class WorkManagerService {
       this.temporalClientConnection = await Connection.connect(
         this.configService.get('temporal'),
       );
-      await this.registerWorker();
+      await this.notifyWorkerRestart();
     } catch (err) {
       this.logger.error(`Error on setting temporal connection: ${err}`);
       throw err;
     }
   }
 
-  private async registerWorker() {
-    this.logger.log('Registering worker with config-service');
+  private async notifyWorkerRestart() {
+    this.logger.log('Notifying worker restart to config-service');
     try {
       const accessToken = await this.authService.getAccessToken();
       if (!accessToken) throw new Error('Access token is null');

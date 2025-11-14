@@ -70,6 +70,44 @@ describe('WorkManagerController', () => {
     });
   });
 
+  describe('getWorkerConfigurations', () => {
+    it('should return worker configurations', async () => {
+      const workerId = '123123';
+      const ip = '127.0.0.1';
+      const projectId = 'projectId';
+      const mockConfig: WorkerConfiguration[] = [
+        {
+          configName: 'TestConfig',
+          dynamicTaskQueue: false,
+          taskQueueId: null,
+          workerId: workerId,
+        }
+      ];
+
+      jest.spyOn(serviceMock, 'getConfiguration').mockResolvedValue(mockConfig);
+
+      const reqMock = {
+        project_id: projectId,
+        worker_id: '123123',
+        headers: {
+          'x-client-platform': Platform.LINUX,
+        },
+      };
+
+      const result = await controller.getWorkerConfigurations(ip, reqMock);
+      
+      expect(result).toEqual(mockConfig);
+      expect(serviceMock.getConfiguration).toHaveBeenCalledWith(
+        workerId,
+        ip,
+        projectId,
+        Platform.LINUX,
+        {},     
+        false,
+      );
+    });
+  });
+
   describe('create', () => {
     it('should call validateConnection with the correct parameters', async () => {
       const payload: CreateRequestDto = {
