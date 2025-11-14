@@ -1,5 +1,6 @@
 import { Cmd, Command, ErrorType, JobManagerContext } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as fs from 'fs';
+import { FileType } from "src/activities/types/tasks";
 export interface DirContentsInput {
     jobContext: JobManagerContext;
     path: string;
@@ -14,4 +15,5 @@ export interface PublishItemInfoInput {
     jobContext: JobManagerContext;
     command: Cmd;
     relativeSourcePath: string;
+    fileType: FileType;
 }

@@ -466,7 +466,11 @@ it('REDIRECTS_FILE_NAME_MAPPER maps multiple symbolic links and junctions correc
       { file_type: 'SYMBOLIC_LINK', path: '/a/b.txt; ' },
       { file_type: 'SYMBOLIC_LINK', path: '/e/f.txt; ' },
       { file_type: 'JUNCTION', path: '/c/d.txt; ' },
-      { file_type: 'JUNCTION', path: '/g/h.txt; ' }
+      { file_type: 'JUNCTION', path: '/g/h.txt; ' },
+      { file_type: 'VOLUME_MOUNT_POINT', path: '/c/d1.txt; ' },
+      { file_type: 'VOLUME_MOUNT_POINT', path: '/g/h1.txt; ' },
+      { file_type: 'SHORTCUT', path: '/c/d2.txt; ' },
+      { file_type: 'SHORTCUT', path: '/g/h2.txt; ' }
     ];
   
     // Clean input: trim and remove trailing semicolon
@@ -489,6 +493,18 @@ it('REDIRECTS_FILE_NAME_MAPPER maps multiple symbolic links and junctions correc
         category: 'Redirects',
         valueType: 'string',
         sub_category: 'Junctions'
+      },
+      {
+        value: '/c/d1.txt; /g/h1.txt',
+        category: 'Redirects',
+        valueType: 'string',
+        sub_category: 'Volume Mount Points'
+      },
+      {
+        value: '/c/d2.txt; /g/h2.txt',
+        category: 'Redirects',
+        valueType: 'string',
+        sub_category: 'Shortcuts'
       }
     ]);
   });

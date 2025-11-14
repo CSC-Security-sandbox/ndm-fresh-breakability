@@ -344,6 +344,16 @@ export const REDIRECTS_FILE_NAME_MAPPER = (input: {
         .map(item => item.path)
         .join('; ');
 
+    const volumeMountPoints = input
+        .filter(item => item.file_type === 'VOLUME_MOUNT_POINT')
+        .map(item => item.path)
+        .join('; ');
+
+    const shortcuts = input
+        .filter(item => item.file_type === 'SHORTCUT')
+        .map(item => item.path)
+        .join('; ');
+
     return [
         {
             value: symbolicLinks,
@@ -356,6 +366,18 @@ export const REDIRECTS_FILE_NAME_MAPPER = (input: {
             category: 'Redirects',
             valueType: 'string',
             sub_category: 'Junctions'
+        },
+        {
+            value: volumeMountPoints,
+            category: 'Redirects',
+            valueType: 'string',
+            sub_category: 'Volume Mount Points'
+        },
+        {
+            value: shortcuts,
+            category: 'Redirects',
+            valueType: 'string',
+            sub_category: 'Shortcuts'
         },
     ];
 };

@@ -295,5 +295,5 @@ export const REDIRECTS = (schema: string) => `
     SELECT i.file_type, i.path
     FROM ${schema}.inventory i
     WHERE i.job_run_id = $1
-    AND i.file_type IN ('JUNCTION', 'SYMBOLIC_LINK');
+    AND i.file_type IN ('JUNCTION', 'SYMBOLIC_LINK', 'VOLUME_MOUNT_POINT', 'SHORTCUT');
 `;

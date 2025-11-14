@@ -346,44 +346,64 @@ function SidToName {
 }
 function Get-NTFSLinkInfo {
     param([string]$path)
-    
+
     try {
         $item = Get-Item -Path $path -Force -ErrorAction Stop
-        
+
         $isReparsePoint = ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0
-        
+
         if (-not $isReparsePoint) {
             return (@{
                 IsLink = $false
                 LinkType = "None"
                 IsSymbolicLink = $false
                 IsJunction = $false
+                IsVolumeMountPoint = $false
                 Target = $null
+                IsDirectory = $item.PSIsContainer
             } | ConvertTo-Json -Compress)
         }
-        
-        # Detect link type
-        $linkType = if ($item.PSObject.Properties['LinkType']) { 
+
+        # Get target path if available
+        $target = $null
+        if ($item.PSObject.Properties['Target'] -and $item.Target) {
+            $target = $item.Target
+        }
+
+        # Get LinkType (usually "Junction" or "SymbolicLink")
+        $linkType = if ($item.PSObject.Properties['LinkType'] -and $item.LinkType) { 
             $item.LinkType 
         } else { 
             "Unknown" 
         }
-        
-        $target = if ($item.PSObject.Properties['Target']) { 
-            $item.Target 
-        } else { 
-            $null 
+
+        # Initialize flags
+        $isVolumeMountPoint = $false
+        $isJunction = $false
+        $isSymbolicLink = $false
+
+        if ($linkType -eq "SymbolicLink") {
+            $isSymbolicLink = $true
         }
-        
+        elseif ($linkType -eq "Junction") {
+            $pattern = 'Volume\{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}'
+            if ($target -and ($target -match  $pattern)) {
+                $isVolumeMountPoint = $true
+            } else {
+                $isJunction = $true
+            }
+        }
+
         return (@{
             IsLink = $true
-            LinkType = $linkType
-            IsSymbolicLink = ($linkType -eq "SymbolicLink")
-            IsJunction = ($linkType -eq "Junction")
+            LinkType = if ($isVolumeMountPoint) { "VolumeMountPoint" } else { $linkType }
+            IsSymbolicLink = $isSymbolicLink
+            IsJunction = $isJunction
+            IsVolumeMountPoint = $isVolumeMountPoint
             Target = $target
             IsDirectory = $item.PSIsContainer
         } | ConvertTo-Json -Compress)
-        
+
     } catch {
         return (@{ error = $_.Exception.Message } | ConvertTo-Json -Compress)
     }

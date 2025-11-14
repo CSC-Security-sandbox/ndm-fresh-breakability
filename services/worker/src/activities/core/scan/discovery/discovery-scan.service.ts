@@ -3,7 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { ErrorType, FileInfo, ItemInfo, ItemMeta } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as fs from 'fs';
 import * as path from 'path';
-import { dmError, getFileInfo, getFilePermissions, getFileType, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
+import { dmError, getFilePermissions, getFileType, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishItemInfoInput } from "./discovery-scan.type";
@@ -68,13 +68,20 @@ export class DiscoveryScanService {
                 })) continue;
 
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
+                const fileType = await this.detectFileType(sourceContentPath, sourceStat);
+                this.logger.debug(`FileType for path ${sourceContentPath} is ${fileType}`);
+
                 await this.publishFileInfo({
-                    stats: sourceStat, command, jobContext, fPath: sourceContentPath, relativeSourcePath
+                    stats: sourceStat, command, jobContext, fPath: sourceContentPath, relativeSourcePath, fileType
                 });
                 
                 if (sourceStat.isDirectory()) {
                     if(sourceStat.isSymbolicLink()) continue;
                     output.dirCount++;
+                    if (fileType === FileType.VOLUME_MOUNT_POINT) {
+                        // Skip this directory: do not add to subDirs, do not recurse
+                        continue;
+                    }
                     output.subDirs.push(relativeSourcePath);
                 } else output.fileCount++;
             }
@@ -87,45 +94,69 @@ export class DiscoveryScanService {
     }
     
     
-    async publishFileInfo({jobContext, stats, fPath, relativeSourcePath}: PublishItemInfoInput): Promise<void> {
-            const isDirectory = stats.isDirectory();
-            const sourceMeta: ItemMeta = {
-                accessTime: stats.atime,
-                birthTime: stats.birthtime,
-                modifiedTime: stats.mtime,
-                permission: getFilePermissions(stats, isDirectory),
-            }
-            let symlinkType: FileType | undefined;
-            if (process.platform === 'win32') {
-                if (stats.isSymbolicLink()) {
-                    try {
-                        symlinkType = await this.winOperationService.detectSymbolicLinkType(fPath);
-                        this.logger.debug(`Detected symlink type for ${fPath} is ${symlinkType}`);
-                    } catch (error) {
-                        this.logger.error(`Failed to detect symlink type for ${fPath}: ${error.message}`);
-                        throw error;
+    async publishFileInfo({ jobContext, stats, fPath, relativeSourcePath, fileType }: PublishItemInfoInput): Promise<void> {
+        const isDirectory = stats.isDirectory();
+        const sourceMeta: ItemMeta = {
+            accessTime: stats.atime,
+            birthTime: stats.birthtime,
+            modifiedTime: stats.mtime,
+            permission: getFilePermissions(stats, isDirectory),
+        };
+
+        const itemInfo = new ItemInfo(
+            relativeSourcePath,
+            isDirectory,
+            stats.isSymbolicLink(),
+            relativeSourcePath.split('/').length - 2,
+            path.extname(fPath),
+            fileType,
+            sourceMeta,
+            sourceMeta,
+            stats.size,
+            stats.ino
+        );
+
+        await jobContext.publishToFileStream(itemInfo);
+    }
+
+
+    // Detect File type using special Windows link types
+    private async detectFileType(sourceContentPath: string, sourceStat: fs.Stats): Promise<FileType> {
+        let symlinkType: FileType | undefined;
+        if (process.platform === 'win32') {
+            // Check if symbolic link or directory (to detect junctions and volume mount points)
+            if (sourceStat.isSymbolicLink() || sourceStat.isDirectory()) {
+                try {
+                    // Detect detailed link type (junction, volume mount point, symbolic link)
+                    const linkInfo = await this.winOperationService.detectSymbolicLinkType(sourceContentPath);
+                    if (linkInfo === FileType.VOLUME_MOUNT_POINT) {
+                        symlinkType = FileType.VOLUME_MOUNT_POINT;
+                        this.logger.debug(`Detected volume mount point for ${sourceContentPath}`);
+                    } else if (linkInfo === FileType.JUNCTION) {
+                        symlinkType = FileType.JUNCTION;
+                        this.logger.debug(`Detected junction for ${sourceContentPath}`);
+                    } else if (linkInfo === FileType.SYMBOLIC_LINK) {
+                        symlinkType = FileType.SYMBOLIC_LINK;
+                        this.logger.debug(`Detected symbolic link for ${sourceContentPath}`);
+                    } else {
+                        symlinkType = FileType.UNKNOWN;
+                        this.logger.debug(`Detected unknown link type for ${sourceContentPath}`);
                     }
-                } else if (!isDirectory && path.extname(fPath).toLowerCase() === '.lnk') {
-                    symlinkType = FileType.SHORTCUT;
-                    this.logger.debug(`Detected shortcut for ${fPath}`);
+                } catch (error) {
+                    this.logger.error(`Failed to detect link type for ${sourceContentPath}: ${error.message}`);
+                    throw error;
                 }
+            } else if (!sourceStat.isDirectory() && path.extname(sourceContentPath).toLowerCase() === '.lnk') {
+                symlinkType = FileType.SHORTCUT;
+                this.logger.debug(`Detected shortcut for ${sourceContentPath}`);
             }
-
-            const fileType = symlinkType ?? getFileType(stats, isDirectory);
-
-            const itemInfo = new ItemInfo(
-                relativeSourcePath,
-                isDirectory,
-                stats.isSymbolicLink(),
-                relativeSourcePath.split('/').length - 2,
-                path.extname(fPath),
-                fileType,
-                sourceMeta,
-                sourceMeta,
-                stats.size,
-                stats.ino
-            )
-            await jobContext.publishToFileStream(itemInfo);
         }
+
+        const fileType = (symlinkType && symlinkType !== FileType.UNKNOWN)
+            ? symlinkType
+            : getFileType(sourceStat, sourceStat.isDirectory());
+        
+        return fileType;
+    }
 
 }
