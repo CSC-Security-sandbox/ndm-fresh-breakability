@@ -1835,7 +1835,7 @@ export class JobConfigService {
       .andWhere("oe.errorType IN (:...errorTypes)", { errorTypes: USER_VISIBLE_ERROR_TYPES })
       .select([
         "oe.errorType AS errorType", 
-        "COUNT(DISTINCT ROW(oe.filePath, oe.errorCode, oe.errorType)) AS count"
+        "COUNT(*) AS count"
       ])
       .groupBy("oe.errorType");
     let errorTypeCounts;

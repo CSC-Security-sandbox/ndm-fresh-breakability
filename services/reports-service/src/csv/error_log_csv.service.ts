@@ -77,7 +77,7 @@ export class ErrorLogService {
       params.push(pageSize, offset);
 
       const query = `
-    SELECT DISTINCT ON (oe.file_path, o.job_run_id, oe.error_code, oe.error_type)
+    SELECT
       oe.id::text                AS "Error Id",
       oe.created_at              AS "Created At",
       o.job_run_id               AS "Job Run Id",
@@ -95,7 +95,7 @@ export class ErrorLogService {
     LEFT JOIN datamigrator.jobconfig jc ON jc.id = jr.job_config_id
     WHERE ${whereClause}
       AND oe.error_type = ANY($${errorTypesParamIndex})
-    ORDER BY oe.file_path, o.job_run_id, oe.error_code, oe.error_type, oe.created_at
+    ORDER BY oe.created_at DESC
     LIMIT $${params.length - 1}
     OFFSET $${params.length}
   `;
@@ -389,7 +389,7 @@ export class ErrorLogService {
   async getTotalErrorCountForJobRun(jobRunId: string): Promise<number> {
     try {
       const [{ count: opCount }] = await this.operationErrorRepo.query(
-        `SELECT COUNT(DISTINCT ROW(oe.file_path, oe.error_code, oe.error_type)) as count
+        `SELECT COUNT(*) as count
          FROM datamigrator.operation_errors oe
          LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
          WHERE o.job_run_id = $1
@@ -414,7 +414,7 @@ export class ErrorLogService {
       const placeholders = jobRunIds.map((_, i) => `$${i + 1}`).join(",");
       const errorTypesParamIndex = jobRunIds.length + 1;
       const [{ count: opCount }] = await this.operationErrorRepo.query(
-        `SELECT COUNT(DISTINCT ROW(oe.file_path, oe.error_code, oe.error_type, o.job_run_id)) as count
+        `SELECT COUNT(*) as count
          FROM datamigrator.operation_errors oe
          LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
          WHERE o.job_run_id IN (${placeholders})
