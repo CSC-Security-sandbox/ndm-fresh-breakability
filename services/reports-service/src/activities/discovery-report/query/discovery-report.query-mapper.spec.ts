@@ -18,7 +18,8 @@ TOP_BIGGEST_FILE_NAME_MAPPER,
 JOB_RUN_DETAILS_MAPPER,
 QueryMapper,
 QueryList,
-REDIRECTS_FILE_NAME_MAPPER
+REDIRECTS_FILE_NAME_MAPPER,
+EEXIST_ERRORS_MAPPER
 } from './discovery-report.query-mapper';
 
 describe('discovery-report.query-mapper', () => {
@@ -508,6 +509,41 @@ it('REDIRECTS_FILE_NAME_MAPPER maps multiple symbolic links and junctions correc
       }
     ]);
   });
+
+it('EEXIST_ERRORS_MAPPER maps input correctly', () => {
+    const input = [
+        { 
+            parent_path: '/home/user/documents', 
+            file_paths: ['FILE.txt', 'file.txt', 'File.TXT'] 
+        },
+        { 
+            parent_path: '/home/user/images', 
+            file_paths: ['IMAGE.jpg', 'image.JPG'] 
+        }
+    ];
+    const result = EEXIST_ERRORS_MAPPER(input as any);
+    expect(result).toEqual([
+        {
+            value: '/home/user/documents (FILE.txt, file.txt, File.TXT); /home/user/images (IMAGE.jpg, image.JPG)',
+            category: 'Case Sensitivity Conflicts',
+            valueType: 'string',
+            sub_category: 'EEXIST Errors'
+        }
+    ]);
+});
+
+it('EEXIST_ERRORS_MAPPER handles empty input array', () => {
+    const input: any[] = [];
+    const result = EEXIST_ERRORS_MAPPER(input);
+    expect(result).toEqual([
+        {
+            value: '',
+            category: 'Case Sensitivity Conflicts',
+            valueType: 'string',
+            sub_category: 'EEXIST Errors'
+        }
+    ]);
+});
 
 it('QueryMapper and QueryList are defined and consistent', () => {
     expect(QueryMapper).toBeDefined();

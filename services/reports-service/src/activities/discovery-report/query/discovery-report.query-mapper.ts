@@ -418,16 +418,11 @@ export const JOB_RUN_DETAILS_MAPPER = (input: JobRunDetailsInput[]) : DiscoveryR
 
 export const EEXIST_ERRORS_MAPPER = (input: EEXISTErrorsInput[]) : DiscoveryReportSection[] => {
     const output: DiscoveryReportSection[] = [];
-    
-    const allErrors = input.map(({ parent_path, file_paths }) => 
-        `${parent_path} (${file_paths.join(', ')})`
-    ).join('; ');
-    
     output.push({
-        value: allErrors,
+        value: input.map(item => `${item.parent_path} (${item.file_paths.join(', ')})`).join('; '),
         category: 'Case Sensitivity Conflicts',
         valueType: 'string',
-        sub_category: `EEXIST Errors`
+        sub_category: 'EEXIST Errors'
     });
     return output;
 }

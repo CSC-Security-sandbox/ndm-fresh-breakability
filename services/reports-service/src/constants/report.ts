@@ -13,7 +13,8 @@ export const PDFReportHeaders = {
     "Maximum Values",
     "Job Run Stats",
     "Biggest",
-    "Redirects"
+    "Redirects",
+    "Case Sensitivity Conflicts" // Add this line
   ],
 };
 export enum formatStringTypeCategories {
@@ -158,6 +159,9 @@ export const ReportSubCategoriesHeader = {
     "Top 5 Biggest File Names",
     "Top 5 Biggest Directory With Count",
     "Top 5 Biggest Directory With Capacity",
+  ],
+  "Case Sensitivity Conflicts": [  // Add this new section
+    "EEXIST Errors"
   ],
 };
 
