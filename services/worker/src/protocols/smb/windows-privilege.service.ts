@@ -72,7 +72,7 @@ if ($backupResult -like "*SUCCESS*" -and $restoreResult -like "*SUCCESS*") {
                 const result = stdout.trim();
                 this.logger.log(`PowerShell output:\n${result}`);
 
-                if (result.includes('SUCCESS')) {
+                if (result.includes('OVERALL: SUCCESS')) {
                     this.privilegesEnabled = true;
                     this.logger.log('SeBackupPrivilege and SeRestorePrivilege enabled successfully in Node.js process');
                     return true;

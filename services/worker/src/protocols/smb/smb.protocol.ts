@@ -4,20 +4,23 @@ import { Protocol } from '../protocol/protocol';
 import { CommandOutput, ProtocolPayload } from '../protocol/protocol.type';
 import { handleConnectionError, parseLinMacShares, parseProtocolVersions, parseWindowsShares } from './smb.utils';
 import * as fs from 'fs';
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { isPathExists } from 'src/activities/core/utils/utils';
 import { WindowsPrivilegeService } from './windows-privilege.service';
 
 @Injectable()
 export class SMBProtocol extends Protocol {
+  @Optional()
+  @Inject(WindowsPrivilegeService)
+  private readonly windowsPrivilegeService?: WindowsPrivilegeService;
+
   protected getCommandPattern( key : string): string {
     return CommandConfig.getSMBCommand(this.platform, key)
   }
 
   constructor(
-    private readonly loggerFactory: LoggerFactory,
-    private readonly windowsPrivilegeService: WindowsPrivilegeService
+    private readonly loggerFactory: LoggerFactory
   ) {
     super(loggerFactory); // Pass to abstract class protocol
   }
@@ -201,7 +204,7 @@ export class SMBProtocol extends Protocol {
 
     // Enable Windows backup privileges for SMB on Windows platform
     if (this.platform === 'win32') {
-      this.logger.log(`[${traceId}] Enabling Windows backup privileges for SMB access...`);
+      this.logger.log(`[${traceId}] Enabling Windows backup privileges for SMB access`);
       const privilegesEnabled = await this.windowsPrivilegeService.enableBackupPrivileges();
       if (privilegesEnabled) {
         this.logger.log(`[${traceId}] Backup privileges enabled successfully for SMB`);
