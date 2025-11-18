@@ -636,6 +636,88 @@ describe('SMBProtocol', () => {
             // Restore mocks
             mockMkdir.mockRestore();
           });
+
+          it('should call WindowsPrivilegeService.enableBackupPrivileges() before mounting on Windows', async () => {
+            // Mock WindowsPrivilegeService
+            const mockPrivilegeService = {
+              enableBackupPrivileges: jest.fn().mockResolvedValue(true),
+              logCurrentPrivileges: jest.fn().mockResolvedValue(undefined),
+            };
+            (smbProtocol as any).windowsPrivilegeService = mockPrivilegeService;
+            (smbProtocol as any).platform = 'win32';
+
+            jest.spyOn(require('src/activities/core/utils/utils'), 'isPathExists').mockResolvedValue(true);
+            (smbProtocol as any).executeCommand
+              .mockResolvedValueOnce({ message: 'credentials saved successfully.' })
+              .mockResolvedValueOnce({ message: 'mounted successfully.' })
+              .mockResolvedValueOnce({ message: 'link created successfully.' });
+
+            const payload = { ...mockPayload };
+            await smbProtocol.mountPath(mockTraceId, payload);
+
+            // Verify privilege service was called
+            expect(mockPrivilegeService.enableBackupPrivileges).toHaveBeenCalled();
+            expect(mockPrivilegeService.logCurrentPrivileges).toHaveBeenCalled();
+            expect(loggerMock.log).toHaveBeenCalledWith(expect.stringContaining('Enabling Windows backup privileges'));
+          });
+
+          it('should skip privilege enablement on non-Windows platforms', async () => {
+            const mockPrivilegeService = {
+              enableBackupPrivileges: jest.fn().mockResolvedValue(true),
+              logCurrentPrivileges: jest.fn().mockResolvedValue(undefined),
+            };
+            (smbProtocol as any).windowsPrivilegeService = mockPrivilegeService;
+            (smbProtocol as any).platform = 'linux';
+
+            jest.spyOn(require('src/activities/core/utils/utils'), 'isPathExists').mockResolvedValue(true);
+            (smbProtocol as any).executeCommand
+              .mockResolvedValueOnce({ message: 'credentials saved successfully.' })
+              .mockResolvedValueOnce({ message: 'mounted successfully.' })
+              .mockResolvedValueOnce({ message: 'link created successfully.' });
+
+            const payload = { ...mockPayload };
+            await smbProtocol.mountPath(mockTraceId, payload);
+
+            // Verify privilege service was NOT called on non-Windows
+            expect(mockPrivilegeService.enableBackupPrivileges).not.toHaveBeenCalled();
+            expect(mockPrivilegeService.logCurrentPrivileges).not.toHaveBeenCalled();
+          });
+
+          it('should throw error when privilege enablement fails', async () => {
+            const mockPrivilegeService = {
+              enableBackupPrivileges: jest.fn().mockResolvedValue(false),
+              logCurrentPrivileges: jest.fn().mockResolvedValue(undefined),
+            };
+            (smbProtocol as any).windowsPrivilegeService = mockPrivilegeService;
+            (smbProtocol as any).platform = 'win32';
+
+            const payload = { ...mockPayload };
+            
+            // Should throw error when privileges fail to enable
+            await expect(smbProtocol.mountPath(mockTraceId, payload)).rejects.toThrow(
+              'Failed to enable Windows backup privileges'
+            );
+            expect(loggerMock.error).toHaveBeenCalledWith(expect.stringContaining('Failed to enable Windows backup privileges'));
+          });
+
+          it('should handle WindowsPrivilegeService being null gracefully', async () => {
+            (smbProtocol as any).windowsPrivilegeService = null;
+            (smbProtocol as any).platform = 'win32';
+
+            jest.spyOn(require('src/activities/core/utils/utils'), 'isPathExists').mockResolvedValue(true);
+            (smbProtocol as any).executeCommand
+              .mockResolvedValueOnce({ message: 'credentials saved successfully.' })
+              .mockResolvedValueOnce({ message: 'mounted successfully.' })
+              .mockResolvedValueOnce({ message: 'link created successfully.' });
+
+            const payload = { ...mockPayload };
+            const result = await smbProtocol.mountPath(mockTraceId, payload);
+
+            // Should complete mounting when service is not available (non-DI environments)
+            expect(result).toEqual({ message: 'link created successfully.' });
+            // Should not attempt to log privilege messages
+            expect(loggerMock.log).not.toHaveBeenCalledWith(expect.stringContaining('Enabling Windows backup privileges'));
+          });
         });
       });
     });

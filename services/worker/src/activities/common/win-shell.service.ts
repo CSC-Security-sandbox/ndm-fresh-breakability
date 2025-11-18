@@ -96,8 +96,13 @@ class PersistentShell extends EventEmitter {
             // Inject the script
             this.process.stdin?.write(psBaseAclDefinition + '\n');
 
-            // ENable backup privileges in this powershell process
-            this.process.stdin?.write(this.getShellPrivilegeEnablementScript(this.id) + '\n');
+            // Enable backup privileges in this powershell process
+            const privilegeScript = this.getShellPrivilegeEnablementScript(this.id);
+            this.process.stdin?.write(privilegeScript + '\n');
+            
+            // Check if privilege enablement succeeded by looking for error markers in output
+            const privilegeCheckMarker = `__PRIV_CHECK_${this.id}__`;
+            this.process.stdin?.write(`if ($LASTEXITCODE -ne 0) { Write-Host 'PRIVILEGE_ENABLEMENT_FAILED' }; Write-Host '${privilegeCheckMarker}'\r\n`);
 
             // Write a unique marker directly, not through the queue
             this.initMarker = `__READY_${Date.now()}_${Math.floor(Math.random() * 1e9)}__`;

@@ -203,13 +203,14 @@ export class SMBProtocol extends Protocol {
     );
 
     // Enable Windows backup privileges for SMB on Windows platform
-    if (this.platform === 'win32') {
+    if (this.platform === 'win32' && this.windowsPrivilegeService) {
       this.logger.log(`[${traceId}] Enabling Windows backup privileges for SMB access`);
       const privilegesEnabled = await this.windowsPrivilegeService.enableBackupPrivileges();
       if (privilegesEnabled) {
         this.logger.log(`[${traceId}] Backup privileges enabled successfully for SMB`);
       } else {
-        this.logger.warn(`[${traceId}] Failed to enable backup privileges, continuing anyway`);
+        this.logger.error(`[${traceId}] Failed to enable Windows backup privileges. These privileges are required for SMB operations.`);
+        throw new Error(`Failed to enable Windows backup privileges. These privileges are required for SMB operations.`);
       }
       await this.windowsPrivilegeService.logCurrentPrivileges();
     }
