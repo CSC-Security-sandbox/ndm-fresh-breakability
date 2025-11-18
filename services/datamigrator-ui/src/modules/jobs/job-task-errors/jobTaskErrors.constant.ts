@@ -4,7 +4,7 @@ import ValueCellRenderer from "@modules/jobs/job-task-errors/components/ValueCel
 import TooltipCellRenderer from "@modules/jobs/job-task-errors/components/TooltipCellRenderer";
 export const ERROR_COLUMN_DEF = [
   {
-    header: "File",
+    header: "File Path",
     accessor: "fileName",
     id: "1",
     Renderer: (props: BlueXpTableRowType<JobErrorType, string>) =>
