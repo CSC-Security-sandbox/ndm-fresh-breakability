@@ -22,7 +22,7 @@ export class StampMetaService {
         this.logger = loggerFactory.create(StampMetaService.name);
     }
 
-    async stampMetaData(input: CommandExecInput): Promise<CommandOutput> {
+    async stampMetaData(input: CommandExecInput, shouldStampPermissions: boolean = true): Promise<CommandOutput> {
         const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: true };
 
         if (
@@ -35,7 +35,7 @@ export class StampMetaService {
                 // Stamp SID to object
 
                 const [aclStampOutput, preserveTimeOutput] = await Promise.all([
-                    this.stampObjectACL(input),
+                    this.stampObjectACL(input, shouldStampPermissions),
                     this.preserveAccessAndModifiedTime(input)
                 ]);
 
@@ -47,11 +47,6 @@ export class StampMetaService {
                 const timeOutput = await this.stampAccessAndModifiedTime(input);
                 output.sourceErrors.push(...timeOutput.sourceErrors);
                 output.targetErrors.push(...timeOutput.targetErrors);
-
-                // Stamp permissions
-                const permissionsOutput = await this.stampPermission(input);
-                output.sourceErrors.push(...permissionsOutput.sourceErrors);
-                output.targetErrors.push(...permissionsOutput.targetErrors);
 
             }
             else {
@@ -72,7 +67,7 @@ export class StampMetaService {
                 output.targetErrors.push(...timeOutput.targetErrors);
 
                 // Stamp permissions
-                const permissionsOutput = await this.stampPermission(input);
+                const permissionsOutput = await this.stampPermission(input, shouldStampPermissions);
                 output.sourceErrors.push(...permissionsOutput.sourceErrors);
                 output.targetErrors.push(...permissionsOutput.targetErrors);
             }
@@ -88,8 +83,9 @@ export class StampMetaService {
         return output;
     }
 
-    async stampPermission({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
+    async stampPermission({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput, shouldStampPermissions: boolean = true): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
+        if(!shouldStampPermissions) return output;
         if (command.metadata?.mode && !command?.metadata?.isSymLink) {
             try {
                 await fs.promises.chmod(targetPath, command.metadata.mode);
@@ -173,8 +169,9 @@ export class StampMetaService {
         return output;
     }
 
-    async stampObjectACL({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
+    async stampObjectACL({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput, shouldStampPermissions: boolean = true): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
+        if(!shouldStampPermissions) return output;
         try {
             this.logger.debug(`Stamping ACL from ${sourcePath} to ${targetPath}`);
           const { output, errors } = await this.winOperationService.stampAclOperation({command, jobContext, sourcePath, targetPath, errorType});

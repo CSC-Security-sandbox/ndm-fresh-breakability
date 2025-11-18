@@ -101,7 +101,7 @@ export class SyncService {
                               : err?.message || JSON.stringify(err) || 'Unknown error'
                         )
                         : [result.reason?.message || String(result.reason) || 'Unknown error'];
-                    syncOutput.errors.source.push(...messages);                    
+                    syncOutput.errors.source.push(...messages);
                 }
             });
         }

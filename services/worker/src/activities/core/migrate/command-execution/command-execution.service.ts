@@ -16,7 +16,7 @@ import { isNotWritable, isPathExists } from "../../utils/utils";
 export class CommandExecService {
     readonly workerId: string;
     private readonly logger: LoggerService;
-
+    private readonly shouldStampPermissions: boolean;
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
@@ -24,6 +24,7 @@ export class CommandExecService {
         private readonly stampMetaService: StampMetaService,
     ) {
         this.workerId = this.configService?.get<string>('worker.workerId') ?? '';
+        this.shouldStampPermissions = this.configService?.get<boolean>('worker.shouldStampPermissions') ?? true;
         this.logger = loggerFactory.create(CommandExecService.name);
     }
     async executeCommand(input: CommandExecInput): Promise<CommandExecOutput> {
@@ -58,7 +59,7 @@ export class CommandExecService {
 
        // Stamp Meta if needed
         if (baseCmdRes.shouldStampMeta) {
-            const metaResult = await this.stampMetaService.stampMetaData(input);
+            const metaResult = await this.stampMetaService.stampMetaData(input, this.shouldStampPermissions);
             baseCmdRes.shouldUpdateItemInfo = metaResult.shouldUpdateItemInfo;
             output.targetErrors.push(...metaResult.targetErrors);
             output.sourceErrors.push(...metaResult.sourceErrors);
@@ -102,7 +103,7 @@ export class CommandExecService {
     async copyFile({command , jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
         const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] , shouldUpdateItemInfo: false };
         if(command.ops[OPS_CMD.COPY_FILE].status === OPS_STATUS.COMPLETED) {
-            output.shouldStampMeta = true;
+            output.shouldStampMeta =  true;
             return output;  // skip if already completed
         }
         if( command.ops[OPS_CMD.COPY_FILE].status !== OPS_STATUS.COMPLETED) {
@@ -153,8 +154,8 @@ export class CommandExecService {
         if( command.ops[OPS_CMD.COPY_DIR].status !== OPS_STATUS.COMPLETED) {
             //TODO: add handling for the symlink to the directory. 
 
-            try {                
-                await fs.promises.mkdir(targetPath, {recursive: true});                
+            try {
+                await fs.promises.mkdir(targetPath, {recursive: true});
                 command.ops[OPS_CMD.COPY_DIR].status = OPS_STATUS.COMPLETED;
                 output.shouldStampMeta = true;
                 output.shouldUpdateItemInfo = true;

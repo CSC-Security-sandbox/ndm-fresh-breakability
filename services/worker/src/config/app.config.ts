@@ -5,6 +5,7 @@ export default registerAs(
   'worker',
   (): ConfigObject => ({
     workerId: process.env.WORKER_ID || '6cf21220-5627-4614-a947-778915dba29f',
+    shouldStampPermissions: process.env.SHOULD_STAMP_PERMISSIONS === 'true',
     buildId: process.env.BUILD_ID || '1.0.0',
     baseWorkingPath: process.env.BASE_WORKING_PATH || '/mnt/datamigrate',
     platform: process.platform,
