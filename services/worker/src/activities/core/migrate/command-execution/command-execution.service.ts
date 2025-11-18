@@ -170,11 +170,12 @@ export class CommandExecService {
     }
 
     async deleteFile({command , jobContext, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
-        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] , shouldUpdateItemInfo: false };
+        const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] , shouldUpdateItemInfo: true };
         if( command.ops[OPS_CMD.REMOVE_FILE].status !== OPS_STATUS.COMPLETED) {
             try {
                 await fs.promises.unlink(targetPath);
                 command.ops[OPS_CMD.REMOVE_FILE].status = OPS_STATUS.COMPLETED;
+                output.shouldUpdateItemInfo = true;
             } catch (error) {
                 if (error.code !== 'ENOENT') {
                     command.ops[OPS_CMD.REMOVE_FILE].status = OPS_STATUS.ERROR;
@@ -194,6 +195,7 @@ export class CommandExecService {
             try {
                 await fs.promises.rm(targetPath, { recursive: true, force: true });
                 command.ops[OPS_CMD.REMOVE_DIR].status = OPS_STATUS.COMPLETED;
+                output.shouldUpdateItemInfo = true;
             } catch (error) {
                 if (error.code !== 'ENOENT') {
                     command.ops[OPS_CMD.REMOVE_DIR].status = OPS_STATUS.ERROR;
@@ -237,7 +239,7 @@ export class CommandExecService {
             sid: command.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.targetAcl ?? ''
         }
 
-
+        const isDeleted =  command.ops?.[OPS_CMD.REMOVE_DIR] || command.ops?.[OPS_CMD.REMOVE_FILE];
         const itemInfo = new ItemInfo(
             command.fPath,
             isDirectory,
@@ -248,7 +250,9 @@ export class CommandExecService {
             sourceMeta,
             targetMeta,
             targetStats.size,
-            command.metadata.inode
+            command.metadata.inode,
+            isDeleted
+            
         )
 
         await this.validateCommand({ cmd: command, item: itemInfo, jobContext, errorType});
