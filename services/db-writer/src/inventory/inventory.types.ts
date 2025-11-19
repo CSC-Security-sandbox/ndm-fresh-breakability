@@ -14,6 +14,7 @@ export enum FileType {
     JUNCTION = "JUNCTION",
     SHORTCUT = "SHORTCUT",
     VOLUME_MOUNT_POINT = "VOLUME_MOUNT_POINT",
+    STREAM = "STREAM",  // NTFS Alternate Data Stream
     UNKNOWN = "UNKNOWN"
 }
 

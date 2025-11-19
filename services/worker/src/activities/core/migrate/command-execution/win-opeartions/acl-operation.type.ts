@@ -25,4 +25,15 @@ interface ValidatorOutput {
   inValid: string;
 }
 
+/**
+ * Interface for NTFS Alternate Data Stream (ADS) information
+ * Returned by detectADSInfo() method
+ */
+interface ADSInfo {
+  hasADS: boolean;         // Whether the file has any ADS
+  streamCount: number;     // Number of ADS streams
+  streamNames: string[];   // Array of stream names
+  streamSizes: number[];   // Array of stream sizes (same order as names)
+  totalSize: number;       // Total size of all streams combined
+}
 

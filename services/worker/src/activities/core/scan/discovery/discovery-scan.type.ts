@@ -15,5 +15,5 @@ export interface PublishItemInfoInput {
     jobContext: JobManagerContext;
     command: Cmd;
     relativeSourcePath: string;
-    fileType: FileType;
+    fileType?: FileType;  // Optional - not needed for ADS stream publishing
 }

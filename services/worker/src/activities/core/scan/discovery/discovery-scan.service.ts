@@ -58,6 +58,8 @@ export class DiscoveryScanService {
         try {
             for (const item of sourceContent) {
                 const sourceContentPath = path.join(sourcePath, item.name);
+                // Get basic file stats (size, timestamps, permissions)
+                // Note: lstat does NOT include ADS information - we detect that separately
                 const sourceStat: fs.Stats = await fs.promises.lstat(sourceContentPath);
                 
                 if (shouldExcludeOrSkip({
@@ -73,9 +75,21 @@ export class DiscoveryScanService {
                 const fileType = await this.fileTypeDetectionService.detectFileType(sourceContentPath, sourceStat);
                 this.logger.debug(`FileType for path ${sourceContentPath} is ${fileType}`);
 
+                // Publish main file/directory
                 await this.publishFileInfo({
                     stats: sourceStat, command, jobContext, fPath: sourceContentPath, relativeSourcePath, fileType
                 });
+                
+                // Detect and publish ADS streams for files (not directories) on Windows
+                if (!sourceStat.isDirectory() && process.platform === 'win32') {
+                    await this.publishADSStreams({
+                        stats: sourceStat,
+                        command,
+                        jobContext,
+                        fPath: sourceContentPath,
+                        relativeSourcePath
+                    });
+                }
 
                 if (sourceStat.isDirectory()) {
                     if(sourceStat.isSymbolicLink() ) continue;
@@ -130,4 +144,92 @@ export class DiscoveryScanService {
 
         await jobContext.publishToFileStream(itemInfo);
     }
+
+    /**
+     * Detect and publish ADS streams as separate inventory items
+     * Each stream is published with fileName format: "file.txt:StreamName"
+     */
+    async publishADSStreams({ jobContext, stats, fPath, relativeSourcePath }: PublishItemInfoInput): Promise<void> {
+        try {
+            const adsInfo = await this.winOperationService.detectADSInfo(fPath);
+            
+            if (!adsInfo.hasADS) {
+                return; // No streams to publish
+            }
+            
+            this.logger.debug(`File ${relativeSourcePath} has ${adsInfo.streamCount} ADS: ${adsInfo.streamNames.join(', ')}`);
+            
+            // Publish each stream as a separate inventory item
+            for (let i = 0; i < adsInfo.streamNames.length; i++) {
+                const streamName = adsInfo.streamNames[i];
+                const streamSize = adsInfo.streamSizes[i];
+                
+                const sourceMeta: ItemMeta = {
+                    accessTime: stats.atime,
+                    birthTime: stats.birthtime,
+                    modifiedTime: stats.mtime,
+                    permission: getFilePermissions(stats, false),
+                };
+                
+                const streamItemInfo = new ItemInfo(
+                    `${relativeSourcePath}:${streamName}`,  // Format: "folder/file.txt:StreamName"
+                    false,  // Not a directory
+                    false,  // Not a symlink
+                    relativeSourcePath.split('/').length - 2,  // Same depth as parent file
+                    '',  // No extension for streams
+                    FileType.STREAM,  // New file type for ADS streams
+                    sourceMeta,
+                    sourceMeta,
+                    streamSize,  // Individual stream size
+                    stats.ino  // Same inode as parent file
+                );
+                
+                await jobContext.publishToFileStream(streamItemInfo);
+            }
+        } catch (error) {
+            // Don't fail discovery if ADS detection fails - log warning and continue
+            this.logger.warn(`Failed to detect ADS for ${relativeSourcePath}: ${error.message}`);
+        }
+    }
+
+
+    // Detect File type using special Windows link types
+    private async detectFileType(sourceContentPath: string, sourceStat: fs.Stats): Promise<FileType> {
+        let symlinkType: FileType | undefined;
+        if (process.platform === 'win32') {
+            // Check if symbolic link or directory (to detect junctions and volume mount points)
+            if (sourceStat.isSymbolicLink() || sourceStat.isDirectory()) {
+                try {
+                    // Detect detailed link type (junction, volume mount point, symbolic link)
+                    const linkInfo = await this.winOperationService.detectSymbolicLinkType(sourceContentPath);
+                    if (linkInfo === FileType.VOLUME_MOUNT_POINT) {
+                        symlinkType = FileType.VOLUME_MOUNT_POINT;
+                        this.logger.debug(`Detected volume mount point for ${sourceContentPath}`);
+                    } else if (linkInfo === FileType.JUNCTION) {
+                        symlinkType = FileType.JUNCTION;
+                        this.logger.debug(`Detected junction for ${sourceContentPath}`);
+                    } else if (linkInfo === FileType.SYMBOLIC_LINK) {
+                        symlinkType = FileType.SYMBOLIC_LINK;
+                        this.logger.debug(`Detected symbolic link for ${sourceContentPath}`);
+                    } else {
+                        symlinkType = FileType.UNKNOWN;
+                        this.logger.debug(`Detected unknown link type for ${sourceContentPath}`);
+                    }
+                } catch (error) {
+                    this.logger.error(`Failed to detect link type for ${sourceContentPath}: ${error.message}`);
+                    throw error;
+                }
+            } else if (!sourceStat.isDirectory() && path.extname(sourceContentPath).toLowerCase() === '.lnk') {
+                symlinkType = FileType.SHORTCUT;
+                this.logger.debug(`Detected shortcut for ${sourceContentPath}`);
+            }
+        }
+
+        const fileType = (symlinkType && symlinkType !== FileType.UNKNOWN)
+            ? symlinkType
+            : getFileType(sourceStat, sourceStat.isDirectory());
+        
+        return fileType;
+    }
+
 }

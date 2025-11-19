@@ -7,7 +7,7 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { WinShellService } from 'src/activities/common/win-shell.service';
 import { SourceAclError, TargetAclError } from './acl-operation.error';
-import { psGetAclScript, psSetAclScript, psGetLinkInfoScript } from './powershell.script';
+import { psGetAclScript, psSetAclScript, psGetLinkInfoScript, psGetADSInfoScript } from './powershell.script';
 import { RedisService } from 'src/redis/redis.service';
 import { LRUCache } from 'src/activities/core/utils/lru-cache';
 import { OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
@@ -285,6 +285,48 @@ export class WinOperationService {
     } catch (error) {
       this.logger.error(`Failed to detect symbolic link for ${path}: ${error.message}`);
       return FileType.UNKNOWN;
+    }
+  }
+
+  /**
+   * Detect NTFS Alternate Data Streams (ADS) on a file
+   * Uses PowerShell Get-Item -Stream to enumerate streams
+   * Returns structured data with stream names and sizes
+   */
+  async detectADSInfo(filePath: string): Promise<ADSInfo> {
+    try {
+      // Use PowerShell script from powershell.script.ts - more maintainable and consistent
+      const script = `$srcFile = '${filePath.replace(/'/g, "''")}'\n${psGetADSInfoScript}`;
+      const output = await this.winShellService.executeCommand(script);
+      
+      if (output.stderr) {
+        this.logger.warn(`ADS detection warning for ${filePath}: ${output.stderr}`);
+      }
+
+      const result = JSON.parse(output.stdout);
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to detect ADS');
+      }
+
+      const streams = result.streams || [];
+      return {
+        hasADS: result.hasADS,
+        streamCount: result.streamCount,
+        streamNames: streams.map((s: any) => s.name),
+        streamSizes: streams.map((s: any) => s.size),
+        totalSize: streams.reduce((sum: number, s: any) => sum + s.size, 0)
+      };
+    } catch (error) {
+      this.logger.error(`Failed to detect ADS for ${filePath}: ${error.message}`);
+      // Return empty result instead of throwing - don't fail discovery
+      return {
+        hasADS: false,
+        streamCount: 0,
+        streamNames: [],
+        streamSizes: [],
+        totalSize: 0
+      };
     }
   }
 }
