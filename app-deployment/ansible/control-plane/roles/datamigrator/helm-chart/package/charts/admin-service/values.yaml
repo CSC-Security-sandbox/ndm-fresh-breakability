@@ -12,6 +12,7 @@ annotations:
   vault.hashicorp.com/agent-inject-status: "update"
   vault.hashicorp.com/agent-inject-secret-keycloak.env: "secrets/keycloak-secrets/keycloak-creds"
   vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
+  vault.hashicorp.com/agent-inject-secret-redis.env: "secrets/redis-secrets/redis-creds"
   vault.hashicorp.com/agent-inject-template-keycloak.env: |
     {{- with secret "secrets/keycloak-secrets/keycloak-creds" -}}
     export KEYCLOAK_CLIENT_SECRET="{{ .Data.KEYCLOAK_CLIENT_SECRET }}"
@@ -22,6 +23,11 @@ annotations:
     {{- with secret "secrets/postgres-secrets/postgres-creds" -}}
     export DATABASE_USERNAME="{{ .Data.POSTGRES_DMADMIN_USER }}"
     export DATABASE_PASSWORD="{{ .Data.POSTGRES_DMADMIN_PASSWORD }}"
+    {{- end }}
+  vault.hashicorp.com/agent-inject-template-redis.env: |
+    {{- with secret "secrets/redis-secrets/redis-creds" -}}
+    export REDIS_USERNAME="{{ .Data.REDIS_USERNAME }}"
+    export REDIS_PASSWORD="{{ .Data.REDIS_PASSWORD }}"
     {{- end }}
 
 serviceAccountName: datamigrator-openbao-sa
@@ -39,6 +45,8 @@ env:
     value: "postgresql.postgres.svc.cluster.local"
   - name: DATABASE_PORT
     value: "5432"
+  - name: REDIS_HOST
+    value: "redis-master.redis.svc.cluster.local"
 
   # - name: DATABASE_USERNAME # from secret
   #   value: "dmadmin"
@@ -112,7 +120,7 @@ ingressThrottle:
 # ==============================
 ingress:
   pathPrefix: api/v1/
-  trailingPath: "(health|admin-docs|inviteUser|email|worker-registration)"
+  trailingPath: "(health|admin-docs|inviteUser|email|worker-registration|secrets)"
   ingressClassName: public
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"

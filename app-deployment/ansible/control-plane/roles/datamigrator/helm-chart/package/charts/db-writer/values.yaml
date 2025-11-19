@@ -25,7 +25,8 @@ annotations:
   #   {{- end }}
   vault.hashicorp.com/agent-inject-template-redis.env: |
     {{- with secret "secrets/redis-secrets/redis-creds" -}}
-    export REDIS_USERNAME="{{ .Data.REDIS_USERNAME }}" 
+    export REDIS_USERNAME="{{ .Data.REDIS_USERNAME }}"
+    export REDIS_PASSWORD="{{ .Data.REDIS_PASSWORD }}"
     {{- end }}
 
 serviceAccountName: datamigrator-openbao-sa
@@ -65,11 +66,6 @@ env:
     value: "/logs"
   - name: REDIS_HOST
     value: "redis-master.redis.svc.cluster.local"
-
-  # - name: REDIS_USERNAME
-  #   value: "default"
-  - name: REDIS_PASSWORD
-    value: "welcome"
 
   - name: REDIS_PORT
     value: "6379"

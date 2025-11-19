@@ -107,3 +107,5 @@
         path: $HOME/keycloak
         state: absent
   when: local_cluster is defined
+  
+  

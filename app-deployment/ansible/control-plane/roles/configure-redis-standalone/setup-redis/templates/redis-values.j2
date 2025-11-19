@@ -6,7 +6,8 @@ global:
 architecture: standalone
 auth:
   enabled: true
-  password: "welcome"
+  existingSecret: "redis-credentials"
+  existingSecretPasswordKey: "password"
 
 existingConfigmap: "redis-config"
 

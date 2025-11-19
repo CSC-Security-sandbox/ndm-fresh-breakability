@@ -375,8 +375,6 @@ begin
       'WORKER_SECRET=' + ConfigWorkerSecret + #13#10 +
       'CONTROL_PLANE_IP=' + ConfigControlPlaneIP + #13#10 +
       'REDIS_HOST=' + ConfigControlPlaneIP + #13#10 +
-      'REDIS_USERNAME=default' + #13#10 +
-      'REDIS_PASSWORD=welcome' + #13#10 +
       'BASE_WORKING_PATH=''C:\datamigrator\mnt''' + #13#10 +
       'PROJECT_ID=' + ConfigProjectID + #13#10 +
       'OTEL_COLLECTOR_ENDPOINT=' + ConfigControlPlaneIP + ':4318';
