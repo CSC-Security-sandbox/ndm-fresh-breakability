@@ -20,6 +20,7 @@ export enum FileSystemCategory {
   FILE_SERVER_INFO = "File Server Info",
   AVERAGE_VALUES = "Average Values",
   TOP_5_FILE_EXTENSIONS_SUMMERY = "Top File Extensions Summary",
+  CASE_SENSITIVITY_CONFLICTS = "Case Sensitivity Conflicts",
 }
 
 export enum FileSystemSubCategory {

@@ -92,3 +92,8 @@ export interface JobRunDetailsInput {
     config_name: string;
     protocol: string;
 }
+
+export interface CaseErrorsInput {
+    parent_path: string;
+    file_paths: Array<string>;
+}

@@ -61,19 +61,39 @@ export class MigrateScanService {
 
     
     async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings , targetPrefix, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> { 
-
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
         let commands: Cmd[] = [];
-
+        const isSMB = process.platform === 'win32'
         const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command});
-        const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});        
+        const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});    
+        
+        let lowerCaseSourceData = new Set<string>();
+        let lowerCaseTargetData = new Set<string>();
+        if(isSMB){
+            for (const item of targetContent) {
+                lowerCaseTargetData.add(item.toLowerCase());
+            }
+        }
         for (const item of sourceContent) {
             try {
                 const sourceContentPath = path.join(sourcePath, item);
                 const sourceContentExists = await isExists(sourceContentPath);
-                if(!sourceContentExists) continue;                      
                 const sourceStat = await fs.promises.lstat(sourceContentPath);                
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
+                if(!sourceContentExists) continue; 
+                if (isSMB){
+                    const lowerCaseFileName = item.toLowerCase();
+                    if (lowerCaseSourceData.has(lowerCaseFileName) || (lowerCaseTargetData.has(lowerCaseFileName) && !targetContent.has(item))) {
+                        const itemType = sourceStat.isDirectory() ? 'Directory' : 'File';
+                        const error = new Error(`${itemType} not migrated: Another ${itemType.toLowerCase()} with same name but different case exists`) as Error & {code:string};
+                        error.code = 'EEXIST';
+                        const operation = itemType === 'Directory' ? Operation.READ_DIR : Operation.READ_FILE;
+                        const dmErr = dmError("OPERATION", Origin.SOURCE, operation, ErrorType.TRANSIENT_ERROR, command.id, error, {name: relativeSourcePath, path: sourceContentPath});
+                        await jobContext.publishToErrorStream(dmErr);
+                        continue;
+                    }
+                    lowerCaseSourceData.add(lowerCaseFileName);
+                }
                 
                 if (shouldExcludeOrSkip({
                     fullPath: sourceContentPath,
@@ -89,7 +109,7 @@ export class MigrateScanService {
                 // TODO: change the if/else logic. it is difficult to read and understand.
                 if (sourceStat.isDirectory() && !sourceStat.isSymbolicLink()) {   // only resolving to dir 
                     output.dirCount++;
-                    output.subDirs.push(relativeSourcePath);                    
+                    output.subDirs.push(relativeSourcePath);
                     if(!targetContent.has(item)) {
                         const command = this.buildCommand(sourceStat, fileInfo.path);
                         if (command) commands.push(command);
