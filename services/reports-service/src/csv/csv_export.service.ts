@@ -93,7 +93,7 @@ export class CsvService {
         const columns = this.getMigrationCoCColumns(protocol);
     
         const query = `
-        SELECT
+        SELECT DISTINCT ON (i.path)
             COALESCE(v_source.volume_path, '') || i.path as "Source Path",
             v_target.volume_path || i.path as "Destination Path",
             ${columns}
@@ -103,7 +103,7 @@ export class CsvService {
         LEFT JOIN ${dbSchema}.volume v_source ON jc.source_path_id = v_source.id
         LEFT JOIN ${dbSchema}.volume v_target ON jc.target_path_id = v_target.id
         WHERE i.job_run_id = $1
-        ORDER BY i.created_at DESC
+        ORDER BY i.path, i.updated_at DESC, i.created_at DESC
         LIMIT $2 OFFSET ($3 - 1) * $2;
     `;
         return { query, values: [jobRunId, limit, offset] };
