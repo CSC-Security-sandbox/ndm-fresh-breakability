@@ -11,6 +11,8 @@ import { DirContentsInput, PublishCommandInput } from "./migrate-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput, ScanDirectorySettings } from "../scan-activity.type";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { isExists, isPathExists } from "../../utils/utils";
+import { WinOperationService } from "../../migrate/command-execution/win-opeartions/win-operation.service";
+import { FileType } from "src/activities/types/tasks";
 import { FileTypeDetectionService } from "../../utils/file-type-detection.service";
 import { FileType } from "src/activities/types/tasks";
 
@@ -28,6 +30,7 @@ export class MigrateScanService {
         @Inject(ConfigService) 
         private readonly configService: ConfigService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+        private readonly winOperationService: WinOperationService,
         private readonly fileTypeDetectionService: FileTypeDetectionService
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
@@ -184,6 +187,14 @@ export class MigrateScanService {
                     output.fileCount++;
                     const command = this.buildCommand(sourceStat, fileInfo.path);
                     if (command) commands.push(command);
+                    
+                    // Detect and create commands for ADS streams (only for files, not directories/symlinks)
+                    await this.detectAndCreateADSCommands({
+                        sourcePath: sourceContentPath,
+                        sourcePrefix,
+                        sourceStat,
+                        commands
+                    });
                 } else {                                                   // not directory and not symlink and target exist                           
                     const targetFilePath = path.join(targetPath, item);
                     const targetFileExists = await isExists(targetFilePath);
@@ -197,6 +208,14 @@ export class MigrateScanService {
                         }
                         const command = this.buildCommand(sourceStat, fileInfo.path, targetStat);
                         if (command) commands.push(command);
+                        
+                        // Detect and create commands for ADS streams (only for files, not directories/symlinks)
+                        await this.detectAndCreateADSCommands({
+                            sourcePath: sourceContentPath,
+                            sourcePrefix,
+                            sourceStat,
+                            commands
+                        });
                     }
                 }
                 //TODO: this is duplicated many times, need to refactor.
@@ -346,6 +365,81 @@ export class MigrateScanService {
             return OPS_CMD.COPY_SYMLINK;
         }else{
             return isDirectory ? OPS_CMD.COPY_DIR : OPS_CMD.COPY_FILE;
+        }
+    }
+
+    /**
+     * Detect ADS on a file and create COPY_FILE commands for each stream
+     * Treats each ADS stream as a separate file with path format: "file.txt:StreamName"
+     * Uses existing COPY_FILE operation - no special handling needed!
+     */
+    async detectAndCreateADSCommands({
+        sourcePath,
+        sourcePrefix,
+        sourceStat,
+        commands
+    }: {
+        sourcePath: string;
+        sourcePrefix: string;
+        sourceStat: fs.Stats;
+        commands: Cmd[];
+    }): Promise<void> {
+        // Only on Windows, only for files (not directories, not symlinks)
+        if (process.platform !== 'win32' || sourceStat.isDirectory() || sourceStat.isSymbolicLink()) {
+            return;
+        }
+        
+        try {
+            const adsInfo = await this.winOperationService.detectADSInfo(sourcePath);
+            
+            if (!adsInfo.hasADS) {
+                return;
+            }
+            
+            const relativeSourcePath = removePrefix(sourcePath, sourcePrefix);
+            
+            this.logger.debug(`File ${relativeSourcePath} has ${adsInfo.streamCount} ADS: ${adsInfo.streamNames.join(', ')}`);
+            
+            // Create COPY_FILE command for each stream
+            for (let i = 0; i < adsInfo.streamNames.length; i++) {
+                const streamName = adsInfo.streamNames[i];
+                const streamSize = adsInfo.streamSizes[i];
+                
+                // Path format: "folder/file.txt:StreamName"
+                // COPY_FILE will handle this natively via fs.readFile/writeFile
+                const streamCommand = new Cmd(
+                    uuid4(),
+                    `${relativeSourcePath}:${streamName}`,
+                    CommandStatus.READY,
+                    false,  // Not a directory
+                    {
+                        [OPS_CMD.COPY_FILE]: { 
+                            status: OPS_STATUS.READY, 
+                            params: {} 
+                        }
+                    },
+                    {
+                        size: streamSize,
+                        mtime: sourceStat.mtime,
+                        mode: sourceStat.mode,
+                        uid: sourceStat.uid,
+                        gid: sourceStat.gid,
+                        atime: sourceStat.atime,
+                        ctime: sourceStat.ctime,
+                        birthtime: sourceStat.birthtime,
+                        sid: undefined,
+                        inode: sourceStat.ino,
+                        isSymLink: false
+                    }
+                );
+                
+                commands.push(streamCommand);
+            }
+            
+            this.logger.debug(`Created ${adsInfo.streamCount} COPY_FILE commands for ADS streams of ${relativeSourcePath}`);
+        } catch (error) {
+            this.logger.warn(`Failed to detect ADS for ${sourcePath}: ${error.message}`);
+            // Don't fail migration if ADS detection fails
         }
     }
 }
