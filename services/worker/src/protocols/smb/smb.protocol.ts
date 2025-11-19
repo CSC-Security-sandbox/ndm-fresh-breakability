@@ -197,13 +197,13 @@ export class SMBProtocol extends Protocol {
    
   }
 
-  async mountPath(traceId: string, payload: ProtocolPayload): Promise<any> {
+  async mountPath(traceId: string, payload: ProtocolPayload, manageMount: boolean = false): Promise<any> {
     this.logger.log(
       `[${traceId}] Mounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
 
     // Enable Windows backup privileges for SMB on Windows platform
-    if (this.platform === 'win32' && this.windowsPrivilegeService) {
+    if (this.platform === 'win32' && this.windowsPrivilegeService && manageMount) {
       this.logger.log(`[${traceId}] Enabling Windows backup privileges for SMB access`);
       const privilegesEnabled = await this.windowsPrivilegeService.enableBackupPrivileges();
       if (privilegesEnabled) {
@@ -212,7 +212,6 @@ export class SMBProtocol extends Protocol {
         this.logger.error(`[${traceId}] Failed to enable Windows backup privileges. These privileges are required for SMB operations.`);
         throw new Error(`Failed to enable Windows backup privileges. These privileges are required for SMB operations.`);
       }
-      await this.windowsPrivilegeService.logCurrentPrivileges();
     }
 
     const mountDir = `${payload.mountBasePath}/${payload.jobRunId}`;

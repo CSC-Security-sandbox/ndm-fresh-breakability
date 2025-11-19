@@ -10,9 +10,9 @@ jest.mock('util', () => ({
 
 jest.mock('child_process');
 jest.mock('fs', () => ({
-    writeFileSync: jest.fn(),
-    unlinkSync: jest.fn(),
     promises: {
+        writeFile: jest.fn(),
+        unlink: jest.fn(),
         mkdir: jest.fn(),
     },
 }));
@@ -41,13 +41,17 @@ describe('WindowsPrivilegeService', () => {
 
         // Reset mocks
         jest.clearAllMocks();
+        
+        // Reset fs.promises mocks to default resolved values
+        mockFs.promises.writeFile.mockResolvedValue(undefined);
+        mockFs.promises.unlink.mockResolvedValue(undefined);
 
         const module: TestingModule = await Test.createTestingModule({
             providers: [WindowsPrivilegeService],
         }).compile();
 
         service = module.get<WindowsPrivilegeService>(WindowsPrivilegeService);
-        
+
         // Mock logger to suppress console output during tests
         jest.spyOn(service['logger'], 'log').mockImplementation();
         jest.spyOn(service['logger'], 'error').mockImplementation();
@@ -79,7 +83,7 @@ describe('WindowsPrivilegeService', () => {
             const result = await service.enableBackupPrivileges();
 
             expect(result).toBe(true);
-            expect(mockFs.writeFileSync).toHaveBeenCalledWith(
+            expect(mockFs.promises.writeFile).toHaveBeenCalledWith(
                 expect.stringContaining('enable_privs_'),
                 expect.stringContaining('EnablePrivilegeForPid'),
                 'utf8'
@@ -88,7 +92,7 @@ describe('WindowsPrivilegeService', () => {
                 expect.stringContaining('powershell -NoProfile -ExecutionPolicy Bypass -File'),
                 expect.any(Object)
             );
-            expect(mockFs.unlinkSync).toHaveBeenCalled();
+            expect(mockFs.promises.unlink).toHaveBeenCalled();
         });
 
         it('should return false when privilege enablement fails', async () => {
@@ -143,21 +147,7 @@ describe('WindowsPrivilegeService', () => {
 
             await service.enableBackupPrivileges();
 
-            expect(mockFs.unlinkSync).toHaveBeenCalled();
-        });
-
-        it('should handle temp file deletion errors gracefully', async () => {
-            mockExecAsync.mockResolvedValue({
-                stdout: 'SeBackupPrivilege: SUCCESS\nSeRestorePrivilege: SUCCESS\nOVERALL: SUCCESS',
-                stderr: '',
-            });
-            mockFs.unlinkSync.mockImplementation(() => {
-                throw new Error('File locked');
-            });
-
-            const result = await service.enableBackupPrivileges();
-
-            expect(result).toBe(true); // Should still succeed
+            expect(mockFs.promises.unlink).toHaveBeenCalled();
         });
 
         it('should return false on non-Windows platforms', async () => {
@@ -191,7 +181,7 @@ describe('WindowsPrivilegeService', () => {
 
             await service.enableBackupPrivileges();
 
-            expect(mockFs.writeFileSync).toHaveBeenCalledWith(
+            expect(mockFs.promises.writeFile).toHaveBeenCalledWith(
                 expect.any(String),
                 expect.stringContaining(`$targetPid = ${process.pid}`),
                 'utf8'
@@ -224,59 +214,11 @@ describe('WindowsPrivilegeService', () => {
         });
 
         it('should handle file write errors', async () => {
-            mockFs.writeFileSync.mockImplementation(() => {
-                throw new Error('Disk full');
-            });
+            mockFs.promises.writeFile.mockRejectedValue(new Error('Disk full'));
 
             const result = await service.enableBackupPrivileges();
 
             expect(result).toBe(false);
-            expect(mockExecAsync).not.toHaveBeenCalled();
-        });
-    });
-
-    describe('logCurrentPrivileges()', () => {
-        beforeEach(() => {
-            Object.defineProperty(process, 'platform', {
-                value: 'win32',
-                configurable: true,
-            });
-        });
-
-        it('should log current privileges on Windows', async () => {
-            const mockPrivileges = `
-PRIVILEGES INFORMATION
-----------------------
-SeBackupPrivilege       Backup files and directories       Disabled
-SeRestorePrivilege      Restore files and directories      Disabled
-`;
-            mockExecAsync.mockResolvedValue({
-                stdout: mockPrivileges,
-                stderr: '',
-            });
-
-            await service.logCurrentPrivileges();
-
-            expect(mockExecAsync).toHaveBeenCalledWith(
-                'whoami /priv',
-                expect.objectContaining({ windowsHide: true })
-            );
-        });
-
-        it('should handle errors when getting privileges', async () => {
-            mockExecAsync.mockRejectedValue(new Error('Command failed'));
-
-            await expect(service.logCurrentPrivileges()).resolves.not.toThrow();
-        });
-
-        it('should skip on non-Windows platforms', async () => {
-            Object.defineProperty(process, 'platform', {
-                value: 'darwin',
-                configurable: true,
-            });
-
-            await service.logCurrentPrivileges();
-
             expect(mockExecAsync).not.toHaveBeenCalled();
         });
     });

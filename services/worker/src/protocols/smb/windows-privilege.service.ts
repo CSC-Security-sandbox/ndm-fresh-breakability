@@ -2,6 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { exec } from 'child_process';
 import { psEnableBackupPrivilegeScript } from '../../activities/core/migrate/command-execution/win-opeartions/powershell.script';
 import { promisify } from 'util';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 const execAsync = promisify(exec);
 
@@ -50,44 +53,30 @@ if ($backupResult -like "*SUCCESS*" -and $restoreResult -like "*SUCCESS*") {
 `;
         }
         const psScript = getNodeProcessPrivilegeScript(process.pid);
-
+        const tempFile = path.join(os.tmpdir(), `enable_privs_${process.pid}.ps1`);
         try {
-            const fs = require('fs');
-            const os = require('os');
-            const path = require('path');
+            await fs.promises.writeFile(tempFile, psScript, 'utf8');
 
-            const tempFile = path.join(os.tmpdir(), `enable_privs_${process.pid}.ps1`);
-            fs.writeFileSync(tempFile, psScript, 'utf8');
+            const { stdout, stderr } = await execAsync(
+                `powershell -NoProfile -ExecutionPolicy Bypass -File "${tempFile}"`,
+                { windowsHide: true }
+            );
 
-            try {
-                const { stdout, stderr } = await execAsync(
-                    `powershell -NoProfile -ExecutionPolicy Bypass -File "${tempFile}"`,
-                    { windowsHide: true }
-                );
+            if (stderr) {
+                this.logger.warn(`PowerShell stderr: ${stderr}`);
+            }
 
-                if (stderr) {
-                    this.logger.warn(`PowerShell stderr: ${stderr}`);
-                }
+            const result = stdout.trim();
+            this.logger.log(`PowerShell output:\n${result}`);
 
-                const result = stdout.trim();
-                this.logger.log(`PowerShell output:\n${result}`);
-
-                if (result.includes('OVERALL: SUCCESS')) {
-                    this.privilegesEnabled = true;
-                    this.logger.log('SeBackupPrivilege and SeRestorePrivilege enabled successfully in Node.js process');
-                    return true;
-                } else {
-                    this.logger.error('Failed to enable backup privileges - check output above for details');
-                    this.logger.error('This usually means the user account needs to be added to the "Backup Operators" group or run as Administrator');
-                    return false;
-                }
-            } finally {
-                // Clean up temp file
-                try {
-                    fs.unlinkSync(tempFile);
-                } catch (e) {
-                    this.logger.warn(`Failed to delete temp PowerShell script: ${e.message}`);
-                }
+            if (result.includes('OVERALL: SUCCESS')) {
+                this.privilegesEnabled = true;
+                this.logger.log('SeBackupPrivilege and SeRestorePrivilege enabled successfully in Node.js process');
+                return true;
+            } else {
+                this.logger.error('Failed to enable backup privileges - check output above for details');
+                this.logger.error('This usually means the user account needs to be added to the "Backup Operators" group or run as Administrator');
+                return false;
             }
         } catch (error) {
             this.logger.error(`Error enabling backup privileges: ${error.message}`);
@@ -95,25 +84,8 @@ if ($backupResult -like "*SUCCESS*" -and $restoreResult -like "*SUCCESS*") {
                 this.logger.error(`PowerShell error details: ${error.stderr}`);
             }
             return false;
-        }
-    }
-
-    /**
-     * Print current privileges to the log
-     * This shows privileges for a new PowerShell process, not the Node.js process
-     * The privileges enabled by enableBackupPrivileges() apply to the Node.js process only
-     */
-    async logCurrentPrivileges(): Promise<void> {
-        if (process.platform !== 'win32') {
-            return;
-        }
-
-        try {
-            const { stdout } = await execAsync('whoami /priv', { windowsHide: true });
-            this.logger.log('Note: This shows privileges for a separate PowerShell process (PID ' + process.pid + ' has its own token):');
-            this.logger.log(stdout);
-        } catch (error) {
-            this.logger.error(`Error getting current privileges: ${error.message}`);
+        } finally {
+            await fs.promises.unlink(tempFile);
         }
     }
 }

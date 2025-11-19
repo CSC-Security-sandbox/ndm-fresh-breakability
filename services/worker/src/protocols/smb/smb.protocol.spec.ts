@@ -653,11 +653,10 @@ describe('SMBProtocol', () => {
               .mockResolvedValueOnce({ message: 'link created successfully.' });
 
             const payload = { ...mockPayload };
-            await smbProtocol.mountPath(mockTraceId, payload);
+            await smbProtocol.mountPath(mockTraceId, payload, true);
 
             // Verify privilege service was called
             expect(mockPrivilegeService.enableBackupPrivileges).toHaveBeenCalled();
-            expect(mockPrivilegeService.logCurrentPrivileges).toHaveBeenCalled();
             expect(loggerMock.log).toHaveBeenCalledWith(expect.stringContaining('Enabling Windows backup privileges'));
           });
 
@@ -676,11 +675,10 @@ describe('SMBProtocol', () => {
               .mockResolvedValueOnce({ message: 'link created successfully.' });
 
             const payload = { ...mockPayload };
-            await smbProtocol.mountPath(mockTraceId, payload);
+            await smbProtocol.mountPath(mockTraceId, payload, true);
 
             // Verify privilege service was NOT called on non-Windows
             expect(mockPrivilegeService.enableBackupPrivileges).not.toHaveBeenCalled();
-            expect(mockPrivilegeService.logCurrentPrivileges).not.toHaveBeenCalled();
           });
 
           it('should throw error when privilege enablement fails', async () => {
@@ -694,7 +692,7 @@ describe('SMBProtocol', () => {
             const payload = { ...mockPayload };
             
             // Should throw error when privileges fail to enable
-            await expect(smbProtocol.mountPath(mockTraceId, payload)).rejects.toThrow(
+            await expect(smbProtocol.mountPath(mockTraceId, payload, true)).rejects.toThrow(
               'Failed to enable Windows backup privileges'
             );
             expect(loggerMock.error).toHaveBeenCalledWith(expect.stringContaining('Failed to enable Windows backup privileges'));
