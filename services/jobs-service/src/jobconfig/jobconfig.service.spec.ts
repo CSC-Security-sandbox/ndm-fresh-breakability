@@ -4043,6 +4043,295 @@ describe("JobConfigService", () => {
       const result = await service.getErrorCounts(jobRunId);
       expect(result).toEqual([]);
     });
+
+    describe('Comprehensive Error Count Scenarios with Query Testing', () => {
+      it('should count all errors when same file has multiple different error codes', async () => {
+        const mockJobRunId = "job-run-123";
+        
+        // Raw DB rows: Same file with 3 different error codes
+        const mockDbRows = [
+          { id: 1, operation_id: 'op1', error_code: 'EACCES', error_message: 'Permission denied', file_path: '/data/file.txt', error_type: 'FATAL_ERROR', origin: 'SOURCE' },
+          { id: 2, operation_id: 'op1', error_code: 'ENOSPC', error_message: 'No space left', file_path: '/data/file.txt', error_type: 'FATAL_ERROR', origin: 'SOURCE' },
+          { id: 3, operation_id: 'op1', error_code: 'ECONNRESET', error_message: 'Connection reset', file_path: '/data/file.txt', error_type: 'FATAL_ERROR', origin: 'SOURCE' }
+        ];
+        
+        // Query result: COUNT(*) groups by error_type
+        const mockErrorCounts = [
+          { errorType: "FATAL_ERROR", count: 3 }
+        ];
+
+        const mockQueryBuilder = {
+          innerJoin: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          select: jest.fn().mockReturnThis(),
+          groupBy: jest.fn().mockReturnThis(),
+          getRawMany: jest.fn().mockResolvedValue(mockErrorCounts),
+        };
+
+        jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue(mockQueryBuilder as any);
+        jest.spyOn(workerJobRunMapRepo, "createQueryBuilder").mockReturnValue({
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([]),
+        } as any);
+
+        const result = await service.getErrorCounts(mockJobRunId);
+        expect(result).toEqual(mockErrorCounts);
+        expect(result[0].count).toBe(3); // All 3 errors counted (no deduplication)
+      });
+
+      it('should count TRANSIENT_ERROR when non-fatal errors exhaust retries', async () => {
+        const mockJobRunId = "job-run-456";
+        
+        // Raw DB rows: Non-fatal error (ENOENT) retried 3 times
+        const mockDbRows = [
+          { id: 1, operation_id: 'op1', error_code: 'ENOENT', error_type: 'RECOVERABLE_ERROR', origin: 'SOURCE' }, // Excluded
+          { id: 2, operation_id: 'op1', error_code: 'ENOENT', error_type: 'RECOVERABLE_ERROR', origin: 'SOURCE' }, // Excluded
+          { id: 3, operation_id: 'op1', error_code: 'ENOENT', error_type: 'TRANSIENT_ERROR', origin: 'SOURCE' }  // Counted
+        ];
+        
+        // Query result: WHERE filters RECOVERABLE_ERROR, only counts TRANSIENT_ERROR
+        const mockErrorCounts = [
+          { errorType: "TRANSIENT_ERROR", count: 1 }
+        ];
+
+        const mockQueryBuilder = {
+          innerJoin: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          select: jest.fn().mockReturnThis(),
+          groupBy: jest.fn().mockReturnThis(),
+          getRawMany: jest.fn().mockResolvedValue(mockErrorCounts),
+        };
+
+        jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue(mockQueryBuilder as any);
+        jest.spyOn(workerJobRunMapRepo, "createQueryBuilder").mockReturnValue({
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([]),
+        } as any);
+
+        const result = await service.getErrorCounts(mockJobRunId);
+        expect(result).toEqual(mockErrorCounts);
+        expect(result[0].count).toBe(1);
+      });
+
+      it('should count errors from both Source and Destination separately', async () => {
+        const mockJobRunId = "job-run-789";
+        
+        // Raw DB rows: Same file failed on both SOURCE and DESTINATION
+        const mockDbRows = [
+          { id: 1, operation_id: 'op1', error_code: 'EACCES', file_path: '/data/file.txt', error_type: 'FATAL_ERROR', origin: 'SOURCE' },
+          { id: 2, operation_id: 'op1', error_code: 'EROFS', file_path: '/data/file.txt', error_type: 'FATAL_ERROR', origin: 'DESTINATION' }
+        ];
+        
+        // Query result: COUNT(*) counts both origins
+        const mockErrorCounts = [
+          { errorType: "FATAL_ERROR", count: 2 }
+        ];
+
+        const mockQueryBuilder = {
+          innerJoin: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          select: jest.fn().mockReturnThis(),
+          groupBy: jest.fn().mockReturnThis(),
+          getRawMany: jest.fn().mockResolvedValue(mockErrorCounts),
+        };
+
+        jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue(mockQueryBuilder as any);
+        jest.spyOn(workerJobRunMapRepo, "createQueryBuilder").mockReturnValue({
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([]),
+        } as any);
+
+        const result = await service.getErrorCounts(mockJobRunId);
+        expect(result).toEqual(mockErrorCounts);
+        expect(result[0].count).toBe(2);
+      });
+
+      it('should count mixed FATAL_ERROR and TRANSIENT_ERROR separately', async () => {
+        const mockJobRunId = "job-run-mixed";
+        
+        // Raw DB rows: 5 FATAL + 3 TRANSIENT errors
+        const mockDbRows = [
+          { id: 1, error_code: 'EACCES', file_path: '/file1.txt', error_type: 'FATAL_ERROR', origin: 'SOURCE' },
+          { id: 2, error_code: 'ENOSPC', file_path: '/file2.txt', error_type: 'FATAL_ERROR', origin: 'SOURCE' },
+          { id: 3, error_code: 'ECONNRESET', file_path: '/file3.txt', error_type: 'FATAL_ERROR', origin: 'SOURCE' },
+          { id: 4, error_code: 'ETIMEDOUT', file_path: '/file4.txt', error_type: 'FATAL_ERROR', origin: 'DESTINATION' },
+          { id: 5, error_code: 'EROFS', file_path: '/file5.txt', error_type: 'FATAL_ERROR', origin: 'DESTINATION' },
+          { id: 6, error_code: 'ENOENT', file_path: '/file6.txt', error_type: 'TRANSIENT_ERROR', origin: 'SOURCE' },
+          { id: 7, error_code: 'ENOENT', file_path: '/file6.txt', error_type: 'TRANSIENT_ERROR', origin: 'SOURCE' },
+          { id: 8, error_code: 'EIO', file_path: '/file7.txt', error_type: 'TRANSIENT_ERROR', origin: 'DESTINATION' }
+        ];
+        
+        // Query result: GROUP BY error_type
+        const mockErrorCounts = [
+          { errorType: "FATAL_ERROR", count: 5 },
+          { errorType: "TRANSIENT_ERROR", count: 3 }
+        ];
+
+        const mockQueryBuilder = {
+          innerJoin: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          select: jest.fn().mockReturnThis(),
+          groupBy: jest.fn().mockReturnThis(),
+          getRawMany: jest.fn().mockResolvedValue(mockErrorCounts),
+        };
+
+        jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue(mockQueryBuilder as any);
+        jest.spyOn(workerJobRunMapRepo, "createQueryBuilder").mockReturnValue({
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([]),
+        } as any);
+
+        const result = await service.getErrorCounts(mockJobRunId);
+        expect(result).toEqual(mockErrorCounts);
+        expect(result.length).toBe(2);
+        expect(result.find(e => e.errorType === "FATAL_ERROR")?.count).toBe(5);
+        expect(result.find(e => e.errorType === "TRANSIENT_ERROR")?.count).toBe(3);
+      });
+
+      it('should count large dataset with hundreds of errors efficiently', async () => {
+        const mockJobRunId = "job-run-large";
+        
+        const mockErrorCounts = [
+          { errorType: "FATAL_ERROR", count: 245 },
+          { errorType: "TRANSIENT_ERROR", count: 178 }
+        ];
+
+        const mockQueryBuilder = {
+          innerJoin: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          select: jest.fn().mockReturnThis(),
+          groupBy: jest.fn().mockReturnThis(),
+          getRawMany: jest.fn().mockResolvedValue(mockErrorCounts),
+        };
+
+        jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue(mockQueryBuilder as any);
+        jest.spyOn(workerJobRunMapRepo, "createQueryBuilder").mockReturnValue({
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([]),
+        } as any);
+
+        const result = await service.getErrorCounts(mockJobRunId);
+        expect(result).toEqual(mockErrorCounts);
+        expect(result[0].count + result[1].count).toBe(423);
+      });
+
+      it('should exclude RECOVERABLE_ERROR from count', async () => {
+        const mockJobRunId = "job-run-with-recoverable";
+        
+        // Raw DB rows: Mixed error types including RECOVERABLE_ERROR
+        const mockDbRows = [
+          { id: 1, error_code: 'EACCES', file_path: '/file1.txt', error_type: 'FATAL_ERROR', origin: 'SOURCE' },
+          { id: 2, error_code: 'ENOSPC', file_path: '/file2.txt', error_type: 'FATAL_ERROR', origin: 'SOURCE' },
+          { id: 3, error_code: 'ENOENT', file_path: '/file3.txt', error_type: 'RECOVERABLE_ERROR', origin: 'SOURCE' }, // Excluded
+          { id: 4, error_code: 'ENOENT', file_path: '/file3.txt', error_type: 'RECOVERABLE_ERROR', origin: 'SOURCE' }, // Excluded
+          { id: 5, error_code: 'ETIMEDOUT', file_path: '/file4.txt', error_type: 'FATAL_ERROR', origin: 'DESTINATION' },
+          { id: 6, error_code: 'EIO', file_path: '/file5.txt', error_type: 'RECOVERABLE_ERROR', origin: 'DESTINATION' } // Excluded
+        ];
+        
+        // Query result: WHERE error_type IN ('FATAL_ERROR', 'TRANSIENT_ERROR')
+        const mockErrorCounts = [
+          { errorType: "FATAL_ERROR", count: 3 }
+        ];
+
+        const mockQueryBuilder = {
+          innerJoin: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          select: jest.fn().mockReturnThis(),
+          groupBy: jest.fn().mockReturnThis(),
+          getRawMany: jest.fn().mockResolvedValue(mockErrorCounts),
+        };
+
+        jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue(mockQueryBuilder as any);
+        jest.spyOn(workerJobRunMapRepo, "createQueryBuilder").mockReturnValue({
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([]),
+        } as any);
+
+        const result = await service.getErrorCounts(mockJobRunId);
+        
+        expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+          "oe.errorType IN (:...errorTypes)", 
+          { errorTypes: expect.arrayContaining(["FATAL_ERROR", "TRANSIENT_ERROR"]) }
+        );
+        expect(result).toEqual(mockErrorCounts);
+        expect(result.find(e => e.errorType === "RECOVERABLE_ERROR")).toBeUndefined();
+        expect(result.find(e => e.errorType === "FATAL_ERROR")?.count).toBe(3);
+      });
+
+      it('should add worker setup errors to FATAL_ERROR count', async () => {
+        const mockJobRunId = "job-run-with-setup-errors";
+        const mockErrorCounts = [
+          { errorType: "FATAL_ERROR", count: 3 }
+        ];
+
+        const mockQueryBuilder = {
+          innerJoin: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          select: jest.fn().mockReturnThis(),
+          groupBy: jest.fn().mockReturnThis(),
+          getRawMany: jest.fn().mockResolvedValue(mockErrorCounts),
+        };
+
+        jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue(mockQueryBuilder as any);
+        
+        // 2 workers with setup failures
+        jest.spyOn(workerJobRunMapRepo, "createQueryBuilder").mockReturnValue({
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([
+            { workerId: "worker1", workerResponse: { code: "SETUP_FAILED" } },
+            { workerId: "worker2", workerResponse: { code: "SETUP_FAILED" } }
+          ]),
+        } as any);
+
+        const result = await service.getErrorCounts(mockJobRunId);
+        
+        expect(result).toEqual([{ errorType: "FATAL_ERROR", count: 5 }]); // 3 + 2
+      });
+
+      it('should create FATAL_ERROR entry if only setup errors exist', async () => {
+        const mockJobRunId = "job-run-only-setup-errors";
+        const mockErrorCounts = []; // No operation errors
+
+        const mockQueryBuilder = {
+          innerJoin: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          select: jest.fn().mockReturnThis(),
+          groupBy: jest.fn().mockReturnThis(),
+          getRawMany: jest.fn().mockResolvedValue(mockErrorCounts),
+        };
+
+        jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue(mockQueryBuilder as any);
+        
+        jest.spyOn(workerJobRunMapRepo, "createQueryBuilder").mockReturnValue({
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([
+            { workerId: "worker1", workerResponse: { code: "SETUP_FAILED" } },
+            { workerId: "worker2", workerResponse: { code: "SETUP_FAILED" } },
+            { workerId: "worker3", workerResponse: { code: "SETUP_FAILED" } }
+          ]),
+        } as any);
+
+        const result = await service.getErrorCounts(mockJobRunId);
+        
+        expect(result).toEqual([{ errorType: "FATAL_ERROR", count: 3 }]);
+      });
+    });
   });
 
   it("should count error from setupFailedErrors", async () => {

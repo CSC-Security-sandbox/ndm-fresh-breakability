@@ -644,34 +644,53 @@ export class JobRunService {
       jobRunId,
       errorType,
     } = taskQuery;
-    const data = await this.operationErrorRepo.query(
-      `
-      SELECT 
-        MIN(oe.id::text) AS id,
-        MIN(oe.error_message) AS "errorMessage",
-        MIN(oe.error_type) AS "errorType",
-        MIN(oe.created_at) AS "createdAt",
-        MIN(oe.file_name) AS "fileName",
-        MIN(oe.file_path) AS "filePath",
-        MIN(oe.origin) AS "origin",
-        MIN(oe.operation_type) AS "operationType",
-        MIN(oe.error_code) AS "errorCode",
-        COUNT(*) AS occurrence
+    
+    // Define allowed sort columns (camelCase from API)
+    const SORTABLE_COLUMNS = ['createdAt', 'errorMessage', 'errorType', 'fileName', 'filePath', 'origin', 'operationType', 'errorCode'];
+
+    // Validate and map to SQL column with table prefix
+    const sortColumn =
+      SORTABLE_COLUMNS.includes(sort)
+        ? {
+            createdAt: 'oe.created_at',
+            errorMessage: 'oe.error_message',
+            errorType: 'oe.error_type',
+            fileName: 'oe.file_name',
+            filePath: 'oe.file_path',
+            origin: 'oe.origin',
+            operationType: 'oe.operation_type',
+            errorCode: 'oe.error_code',
+          }[sort]
+        : 'oe.created_at';
+
+    const orderClause = order?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+
+    const query = `
+      SELECT
+        oe.id::text AS id,
+        oe.error_message AS "errorMessage",
+        oe.error_type AS "errorType",
+        oe.created_at AS "createdAt",
+        oe.file_name AS "fileName",
+        oe.file_path AS "filePath",
+        oe.origin AS "origin",
+        oe.operation_type AS "operationType",
+        oe.error_code AS "errorCode"
       FROM datamigrator.operation_errors oe
       LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
       WHERE o.job_run_id = $1 AND oe.error_type = $2
-      GROUP BY oe.file_path, oe.origin
-      ORDER BY MIN($3) ${order.toUpperCase() === "DESC" ? "DESC" : "ASC"}
-      LIMIT $4 OFFSET $5
-      `,
-      [
-        jobRunId,
-        errorType,
-        `oe.${sort}`,
-        parseInt(limit, 10),
-        (parseInt(page, 10) - 1) * parseInt(limit, 10),
-      ]
-    );
+      ORDER BY ${sortColumn} ${orderClause}
+      LIMIT $3 OFFSET $4
+    `;
+
+    const params = [
+      jobRunId,
+      errorType,
+      parseInt(limit, 10),
+      (parseInt(page, 10) - 1) * parseInt(limit, 10),
+    ];
+
+    const data = await this.operationErrorRepo.query(query, params);
 
     // Map errors to include error remedy descriptions
     const mappedData = await Promise.all(
@@ -718,7 +737,7 @@ export class JobRunService {
       .leftJoin("oe.operation", "o")
       .where("o.jobRunId = :jobRunId", { jobRunId })
       .andWhere("oe.errorType = :errorType", { errorType })
-      .select("COUNT(DISTINCT oe.filePath)", "total")
+      .select("COUNT(*)", "total")
       .getRawOne();
 
     const total = parseInt(totalResult.total ?? "0", 10);
@@ -784,7 +803,7 @@ export class JobRunService {
       .andWhere("oe.errorType IN (:...errorTypes)", { errorTypes: USER_VISIBLE_ERROR_TYPES })
       .select([
         "oe.errorType AS errorType", 
-        "COUNT(DISTINCT ROW(oe.filePath, oe.errorCode, oe.errorType)) AS count"
+        "COUNT(*) AS count"
       ])
       .groupBy("oe.errorType");
     let errorTypeCounts;
