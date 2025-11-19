@@ -509,6 +509,32 @@ it('REDIRECTS_FILE_NAME_MAPPER maps multiple symbolic links and junctions correc
     ]);
   });
 
+it('REDIRECTS_FILE_NAME_MAPPER maps only shortcuts and junctions correctly', () => {
+    const input = [
+        { file_type: 'SHORTCUT', path: '/shortcut1' },
+        { file_type: 'SHORTCUT', path: '/shortcut2' },
+        { file_type: 'JUNCTION', path: '/junction1' },
+        { file_type: 'JUNCTION', path: '/junction2' }
+    ];
+
+    const result = REDIRECTS_FILE_NAME_MAPPER(input);
+
+    expect(result).toEqual([
+        {
+            value: '/junction1; /junction2',
+            category: 'Redirects',
+            valueType: 'string',
+            sub_category: 'Junctions'
+        },
+        {
+            value: '/shortcut1; /shortcut2',
+            category: 'Redirects',
+            valueType: 'string',
+            sub_category: 'Shortcuts'
+        }
+    ]);
+});
+
 it('QueryMapper and QueryList are defined and consistent', () => {
     expect(QueryMapper).toBeDefined();
     expect(Array.isArray(QueryList)).toBe(true);

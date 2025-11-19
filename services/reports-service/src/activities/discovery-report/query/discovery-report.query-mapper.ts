@@ -334,52 +334,61 @@ export const REDIRECTS_FILE_NAME_MAPPER = (input: {
     file_type: string;
     path: string;
 }[]): DiscoveryReportSection[] => {
+    const output: DiscoveryReportSection[] = [];
+
     const symbolicLinks = input
         .filter(item => item.file_type === 'SYMBOLIC_LINK')
-        .map(item => item.path)
-        .join('; ');
+        .map(item => item.path);
 
-    const junctions = input
-        .filter(item => item.file_type === 'JUNCTION')
-        .map(item => item.path)
-        .join('; ');
-
-    const volumeMountPoints = input
-        .filter(item => item.file_type === 'VOLUME_MOUNT_POINT')
-        .map(item => item.path)
-        .join('; ');
-
-    const shortcuts = input
-        .filter(item => item.file_type === 'SHORTCUT')
-        .map(item => item.path)
-        .join('; ');
-
-    return [
-        {
-            value: symbolicLinks,
+    if (symbolicLinks.length > 0) {
+        output.push({
+            value: symbolicLinks.join('; '),
             category: 'Redirects',
             valueType: 'string',
             sub_category: 'Symbolic Links'
-        },
-        {
-            value: junctions,
+        });
+    }
+
+    const junctions = input
+        .filter(item => item.file_type === 'JUNCTION')
+        .map(item => item.path);
+
+    if (junctions.length > 0) {
+        output.push({
+            value: junctions.join('; '),
             category: 'Redirects',
             valueType: 'string',
             sub_category: 'Junctions'
-        },
-        {
-            value: volumeMountPoints,
+        });
+    }
+
+    const volumeMountPoints = input
+        .filter(item => item.file_type === 'VOLUME_MOUNT_POINT')
+        .map(item => item.path);
+
+    if (volumeMountPoints.length > 0) {
+        output.push({
+            value: volumeMountPoints.join('; '),
             category: 'Redirects',
             valueType: 'string',
             sub_category: 'Volume Mount Points'
-        },
-        {
-            value: shortcuts,
+        });
+    }
+
+    const shortcuts = input
+        .filter(item => item.file_type === 'SHORTCUT')
+        .map(item => item.path);
+
+    if (shortcuts.length > 0) {
+        output.push({
+            value: shortcuts.join('; '),
             category: 'Redirects',
             valueType: 'string',
             sub_category: 'Shortcuts'
-        },
-    ];
+        });
+    }
+
+    return output;
 };
 
 
