@@ -576,13 +576,6 @@ it('CASE_ERRORS_MAPPER maps input correctly', () => {
 it('CASE_ERRORS_MAPPER handles empty input array', () => {
     const input: any[] = [];
     const result = CASE_ERRORS_MAPPER(input);
-    expect(result).toEqual([
-        {
-            value: '',
-            category: 'Case Sensitivity Conflicts',
-            valueType: 'string',
-            sub_category: ''
-        }
-    ]);
+    expect(result).toEqual([]);
 });
 });

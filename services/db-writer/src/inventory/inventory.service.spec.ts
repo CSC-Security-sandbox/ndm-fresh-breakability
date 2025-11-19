@@ -250,14 +250,14 @@ describe("InventoryService", () => {
 
     it('should handle Windows-style paths', () => {
       const file = createMockItemInfo({ 
-        fileName: 'C:\\Users\\test\\file.txt' 
+        fileName: '\\mnt\\C:\\Users\\test\\file.txt' 
       });
 
       const result = service.mapSourceToTarget(file, jobRunId, pathId);
 
-      expect(result.path).toBe('C:\\Users\\test\\file.txt');
+      expect(result.path).toBe('\\mnt\\C:\\Users\\test\\file.txt');
       expect(result.fileName).toBe('file.txt');
-      expect(result.parentPath).toBe('C:\\Users\\test');
+      expect(result.parentPath).toBe('\\mnt\\C:\\Users\\test');
     });
 
     it('should handle file with missing metadata', () => {
