@@ -435,3 +435,117 @@ try {
     Write-Output (@{ error = $_.Exception.Message } | ConvertTo-Json -Compress)
 }
 `;
+
+export const psEnableBackupPrivilegeScript = `
+using System;
+using System.Runtime.InteropServices;
+using System.ComponentModel;
+
+public class TokenManipulator {
+    [DllImport("advapi32.dll", SetLastError = true)]
+    internal static extern bool AdjustTokenPrivileges(IntPtr htok, bool disall,
+        ref TokPriv1Luid newst, int len, IntPtr prev, IntPtr relen);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    internal static extern bool OpenProcessToken(IntPtr h, int acc, ref IntPtr phtok);
+
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    internal static extern bool LookupPrivilegeValue(string host, string name, ref long pluid);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    internal static extern bool CloseHandle(IntPtr hObject);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    internal static extern IntPtr GetCurrentProcess();
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    internal struct TokPriv1Luid {
+        public int Count;
+        public long Luid;
+        public int Attr;
+    }
+
+    internal const int SE_PRIVILEGE_ENABLED = 0x00000002;
+    internal const int TOKEN_QUERY = 0x00000008;
+    internal const int TOKEN_ADJUST_PRIVILEGES = 0x00000020;
+
+    // For PowerShell shells: Enable privilege in current process
+    public static string EnablePrivilege(string privilegeName) {
+        IntPtr hToken = IntPtr.Zero;
+        try {
+            IntPtr hProc = GetCurrentProcess();
+            
+            if (!OpenProcessToken(hProc, TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, ref hToken)) {
+                return "FAILED: OpenProcessToken - " + new Win32Exception(Marshal.GetLastWin32Error()).Message;
+            }
+            
+            long luid = 0;
+            if (!LookupPrivilegeValue(null, privilegeName, ref luid)) {
+                return "FAILED: LookupPrivilegeValue for " + privilegeName + " - " + new Win32Exception(Marshal.GetLastWin32Error()).Message;
+            }
+            
+            TokPriv1Luid tp = new TokPriv1Luid();
+            tp.Count = 1;
+            tp.Luid = luid;
+            tp.Attr = SE_PRIVILEGE_ENABLED;
+            
+            if (!AdjustTokenPrivileges(hToken, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero)) {
+                return "FAILED: AdjustTokenPrivileges - " + new Win32Exception(Marshal.GetLastWin32Error()).Message;
+            }
+            
+            int lastError = Marshal.GetLastWin32Error();
+            if (lastError == 1300) {
+                return "FAILED: Privilege not assigned to user";
+            }
+            
+            return "SUCCESS";
+        } catch (Exception ex) {
+            return "FAILED: " + ex.Message;
+        } finally {
+            if (hToken != IntPtr.Zero) {
+                CloseHandle(hToken);
+            }
+        }
+    }
+
+    // For Node.js main process: Enable privilege in specific process by PID
+    public static string EnablePrivilegeForPid(int processId, string privilegeName) {
+        IntPtr hToken = IntPtr.Zero;
+        try {
+            var proc = System.Diagnostics.Process.GetProcessById(processId);
+            IntPtr hProc = proc.Handle;
+            
+            if (!OpenProcessToken(hProc, TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, ref hToken)) {
+                return "FAILED: OpenProcessToken - " + new Win32Exception(Marshal.GetLastWin32Error()).Message;
+            }
+            
+            long luid = 0;
+            if (!LookupPrivilegeValue(null, privilegeName, ref luid)) {
+                return "FAILED: LookupPrivilegeValue for " + privilegeName + " - " + new Win32Exception(Marshal.GetLastWin32Error()).Message;
+            }
+            
+            TokPriv1Luid tp = new TokPriv1Luid();
+            tp.Count = 1;
+            tp.Luid = luid;
+            tp.Attr = SE_PRIVILEGE_ENABLED;
+            
+            if (!AdjustTokenPrivileges(hToken, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero)) {
+                return "FAILED: AdjustTokenPrivileges - " + new Win32Exception(Marshal.GetLastWin32Error()).Message;
+            }
+            
+            int lastError = Marshal.GetLastWin32Error();
+            if (lastError == 1300) {
+                return "FAILED: Privilege not assigned to user";
+            }
+            
+            return "SUCCESS";
+        } catch (Exception ex) {
+            return "FAILED: " + ex.Message;
+        } finally {
+            if (hToken != IntPtr.Zero) {
+                CloseHandle(hToken);
+            }
+        }
+    }
+}
+`;

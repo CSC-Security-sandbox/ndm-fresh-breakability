@@ -42,17 +42,10 @@ export class StampMetaService {
                 output.sourceErrors.push(...aclStampOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
                 output.targetErrors.push(...aclStampOutput.targetErrors, ...preserveTimeOutput.targetErrors);
 
-
                 // Stamp access and modified time
                 const timeOutput = await this.stampAccessAndModifiedTime(input);
                 output.sourceErrors.push(...timeOutput.sourceErrors);
                 output.targetErrors.push(...timeOutput.targetErrors);
-
-                // Stamp permissions
-                const permissionsOutput = await this.stampPermission(input);
-                output.sourceErrors.push(...permissionsOutput.sourceErrors);
-                output.targetErrors.push(...permissionsOutput.targetErrors);
-
             }
             else {
 
