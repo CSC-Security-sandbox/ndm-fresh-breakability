@@ -168,12 +168,13 @@ jobs:
           terraform plan -out=tfplan
 
       - name: Apply Terraform Plan
+        id: terraform-apply
         run: |
           cd app-deployment/terraform/azure/environments/api
           terraform apply -auto-approve tfplan
 
       - name: Upload Terraform State
-        if: always()
+        if: always() && steps.terraform-apply.outcome != 'skipped'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: terraform-state
@@ -181,6 +182,7 @@ jobs:
             app-deployment/terraform/azure/environments/api/terraform.tfstate
             app-deployment/terraform/azure/environments/api/.terraform.lock.hcl
             app-deployment/terraform/azure/environments/api/.terraform
+          retention-days: 1
 
       - name: Extract Deployment Information
         id: deployment-info
