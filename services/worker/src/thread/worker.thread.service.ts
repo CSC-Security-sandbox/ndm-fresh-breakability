@@ -229,13 +229,14 @@ export class WorkerThreadService {
     sourcePath,
     operationId,
     size,
+    isADS,
   }: MigrateFile): Promise<any> {
     return new Promise((resolve, reject) => {
       const operationBand = this.getTaskBand(size);
       const maxBufferSize = this.maxBufferSize;
       this.operationBands.get(operationBand).task.push({
         id: operationId,
-        data: { sourcePath, destinationPath, operationId, size , maxBufferSize},
+        data: { sourcePath, destinationPath, operationId, size, maxBufferSize, isADS },
         Operation: ThreadOperation.COPY_FILE,
         resolve,
         reject,

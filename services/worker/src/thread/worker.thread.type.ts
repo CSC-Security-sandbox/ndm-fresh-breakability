@@ -46,4 +46,5 @@ export interface MigrateFile{
     destinationPath: string;
     operationId: string;
     size: number;
+    isADS?: boolean;  // Flag to indicate this is an ADS stream copy
 }

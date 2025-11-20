@@ -25,6 +25,11 @@ export class StampMetaService {
     async stampMetaData(input: CommandExecInput): Promise<CommandOutput> {
         const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: true };
 
+        // DEBUG: Detect if STAMP_META is being called on ADS streams (which shouldn't happen)
+        if (input.command.fPath.includes(':') && input.command.ops[OPS_CMD.STAMP_META]) {
+            this.logger.warn(`[ADS] STAMP_META operation found on stream: ${input.command.fPath} - This should NOT happen! Streams inherit metadata from parent file.`);
+        }
+
         if (
             input.command.ops[OPS_CMD.STAMP_META] &&
             input.command.ops[OPS_CMD.STAMP_META].status !== OPS_STATUS.COMPLETED

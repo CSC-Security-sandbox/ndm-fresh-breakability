@@ -188,7 +188,7 @@ export class MigrateScanService {
                     const command = this.buildCommand(sourceStat, fileInfo.path);
                     if (command) commands.push(command);
                     
-                    // Detect and create commands for ADS streams (only for files, not directories/symlinks)
+                    // Detect and create commands for ADS streams
                     await this.detectAndCreateADSCommands({
                         sourcePath: sourceContentPath,
                         sourcePrefix,
@@ -209,7 +209,7 @@ export class MigrateScanService {
                         const command = this.buildCommand(sourceStat, fileInfo.path, targetStat);
                         if (command) commands.push(command);
                         
-                        // Detect and create commands for ADS streams (only for files, not directories/symlinks)
+                        // Detect and create commands for ADS streams
                         await this.detectAndCreateADSCommands({
                             sourcePath: sourceContentPath,
                             sourcePrefix,
@@ -372,6 +372,7 @@ export class MigrateScanService {
      * Detect ADS on a file and create COPY_FILE commands for each stream
      * Treats each ADS stream as a separate file with path format: "file.txt:StreamName"
      * Uses existing COPY_FILE operation - no special handling needed!
+     * Note: NO STAMP_META for streams - they inherit metadata from parent file
      */
     async detectAndCreateADSCommands({
         sourcePath,
@@ -405,8 +406,6 @@ export class MigrateScanService {
                 const streamName = adsInfo.streamNames[i];
                 const streamSize = adsInfo.streamSizes[i];
                 
-                // Path format: "folder/file.txt:StreamName"
-                // COPY_FILE will handle this natively via fs.readFile/writeFile
                 const streamCommand = new Cmd(
                     uuid4(),
                     `${relativeSourcePath}:${streamName}`,

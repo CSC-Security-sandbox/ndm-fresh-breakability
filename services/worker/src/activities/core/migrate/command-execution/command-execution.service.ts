@@ -102,9 +102,19 @@ export class CommandExecService {
 }
 
     async copyFile({command , jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
+        // DEBUG: Log operations for ADS streams to diagnose STAMP_META issue
+        if (command.fPath.includes(':')) {
+            this.logger.debug(`[ADS] copyFile for stream: ${command.fPath}, operations: ${JSON.stringify(Object.keys(command.ops))}`);
+        }
+        
         const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] , shouldUpdateItemInfo: false };
+        
+        // Check if this is an ADS stream
+        const isADS = command.fPath.includes(':');
+        
         if(command.ops[OPS_CMD.COPY_FILE].status === OPS_STATUS.COMPLETED) {
-            output.shouldStampMeta = true;
+            // For ADS streams, never stamp metadata (they inherit from parent file)
+            output.shouldStampMeta = !isADS;
             return output;  // skip if already completed
         }
         if( command.ops[OPS_CMD.COPY_FILE].status !== OPS_STATUS.COMPLETED) {
@@ -122,9 +132,13 @@ export class CommandExecService {
             try {
                 if(targetPathExists)
                     await this.stampMetaService.resetFileAttributes(targetPath);
-
-                // TODO: 
-                const checksums = await this.workerThreadService.migrateWorkerThread({ sourcePath, destinationPath: targetPath, operationId: command.id, size: command.metadata?.size ?? 0
+                
+                const checksums = await this.workerThreadService.migrateWorkerThread({ 
+                    sourcePath, 
+                    destinationPath: targetPath, 
+                    operationId: command.id, 
+                    size: command.metadata?.size ?? 0,
+                    isADS 
                 });
 
 
@@ -134,7 +148,8 @@ export class CommandExecService {
                     throw new Error(`Checksum mismatch detected, source: ${checksums?.sourceChecksum}, target: ${checksums?.targetChecksum}`);
                 }
                 command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.COMPLETED, params : { checksums } };
-                output.shouldStampMeta = true;
+                // For ADS streams, never stamp metadata (they inherit from parent file)
+                output.shouldStampMeta = !isADS;
             }catch(error){
                 command.ops[OPS_CMD.COPY_FILE] = {  ... command.ops[OPS_CMD.COPY_FILE], status: OPS_STATUS.ERROR }; 
                 this.logger.error(`Copying FILE from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);

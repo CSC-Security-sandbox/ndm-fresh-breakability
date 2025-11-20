@@ -62,13 +62,37 @@ async function getWriteStreamFlags(target: string): Promise<string> {
   }
 }
 
-export async function smartCopy(source:string, target:string, filesize:number, maxBufferSize :number) {
+export async function smartCopy(source:string, target:string, filesize:number, maxBufferSize :number, isADS?: boolean) {
+  // Handle ADS (Alternate Data Streams) via explicit flag
+  // For ADS, the parent FILE must exist before writing to stream
+  if (isADS) {
+    // Extract base file path (before the colon)
+    const colonIndex = target.lastIndexOf(':');
+    const baseFile = target.substring(0, colonIndex);
+    
+    // Ensure base file exists before writing to its stream
+    try {
+      await fs.promises.access(baseFile, fs.constants.F_OK);
+    } catch {
+      throw new Error(`Base file ${baseFile} must exist before writing ADS stream ${target}`);
+    }
+    
+    // Ensure parent directory exists
+    const baseDir = path.dirname(baseFile);
+    await fs.promises.mkdir(baseDir, { recursive: true });
+  } else {
+    // Normal file - ensure parent directory exists
+    const destDir = path.dirname(target);  
+    await fs.promises.mkdir(destDir, { recursive: true });
+  }
+  
   let readStream: fs.ReadStream = null; 
   let writeStream: fs.WriteStream = null; 
   
   try {    
     const bufferSize = getOptimalBufferSize(filesize, maxBufferSize);
 
+    // Verify source exists
     // First verify source file exists and is readable
     try {
       await fs.promises.access(source, fs.constants.R_OK);
@@ -76,6 +100,8 @@ export async function smartCopy(source:string, target:string, filesize:number, m
       throw new Error(`Source file ${source} does not exist or is not readable`);
     }
 
+    // Create read/write streams
+    // 'w' flag works for both regular files and ADS streams
     // Get destination directory and ensure it exists with collision detection
     const destDir = path.dirname(target);
     
@@ -147,7 +173,7 @@ export async function smartCopy(source:string, target:string, filesize:number, m
 parentPort.on('message', async (tasks: WorkerThreadInput[]) => {
   const result:WorkerThreadOutput[] = await Promise.all(tasks.map(async(task)=> {
     try {
-        const result = await smartCopy(task.data.sourcePath, task.data.destinationPath, task.data.size, task.data.maxBufferSize);
+        const result = await smartCopy(task.data.sourcePath, task.data.destinationPath, task.data.size, task.data.maxBufferSize, task.data.isADS);
         return { isResolved: true, id: task.id, data: result, Operation: task.Operation };
     } catch (error) {
         console.error(`Worker Thread - ${workerData?.threadNumber} - Error processing task ${task.id}:`, error);
