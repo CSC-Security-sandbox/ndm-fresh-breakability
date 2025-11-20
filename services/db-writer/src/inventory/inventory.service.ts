@@ -64,7 +64,7 @@ export class InventoryService {
     let actualFileName = '';
     let parentPath = '';
     if (fullPath) {
-      const isWindowsPath = fullPath.startsWith('\\') && !fullPath.startsWith('/');
+      const isWindowsPath = fullPath.startsWith('\\');
       const pathModule = isWindowsPath ? path.win32 : path.posix;
       actualFileName = pathModule.basename(fullPath);
       parentPath = pathModule.dirname(fullPath);
