@@ -306,3 +306,13 @@ export const CASE_ERRORS = (schema: string) => `
     GROUP BY i.parent_path, LOWER(i.file_name)
     HAVING COUNT(*) > 1
 `;
+
+export const TRAILING_SPACE_FILE= (schema: string) => `
+    SELECT
+        i.parent_path,
+        ARRAY_AGG(i.file_name) as file_names
+    FROM ${schema}.inventory i
+    WHERE i.job_run_id = $1
+    AND (i.file_name ~ ' $' OR i.file_name ~ '\t$')
+    GROUP BY i.parent_path
+`;

@@ -243,6 +243,9 @@ export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string 
       case 'EEXIST':
           // Duplicate in terms of case (Isilon SMB)
           return context === 'TASK' ? 'TASK_CASE_CONFLICT' : 'OP_CASE_CONFLICT';
+      case 'ETRAILSPACE':
+          // Filename contains trailing spaces
+          return context === 'TASK' ? 'TASK_TRAILING_SPACE' : 'OP_TRAILING_SPACE';
       default:
         // Unknown error
         return context === 'TASK' ? 'TASK_UNKNOWN_ERROR' : 'OP_UNKNOWN_ERROR';
@@ -265,12 +268,12 @@ export const dmError = (type: 'TASK' | 'OPERATION', origin :Origin, operationNam
     
     // Check error.code for standard error codes
     if(error.code) {
-      // Check for transient errors 
+      // Check for transient errors
       if( isTransientError(error.code)) errorType = ErrorType.TRANSIENT_ERROR;
         // Check for fatal errors (cancel activity)
       if(origin === Origin.SOURCE && isSourceFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
       if(origin === Origin.DESTINATION && isFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
-      
+
     }
   }
 
@@ -298,7 +301,7 @@ export const basePrefix = (jobRunId: string, pathId: string): string => {
 const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED'])
 const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED']);
 
-// Transient errors that should not be retried 
+// Transient errors that should not be retried
 const TRANSIENT_CODE = new Set<string>(['E8DOT3_COLLISION']);
 
 // File server down errno numbers (negative values as reported by Node.js)
