@@ -92,3 +92,9 @@ export interface JobRunDetailsInput {
     config_name: string;
     protocol: string;
 }
+
+export interface TrailingSpaceInput {
+    parent_path: string;
+    file_names: Array<string>;
+}
+

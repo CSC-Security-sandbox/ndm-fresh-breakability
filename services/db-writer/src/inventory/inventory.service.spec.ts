@@ -228,9 +228,9 @@ describe("InventoryService", () => {
             isDirectory: false,
             sourceChecksum: 'abc123',
             targetChecksum: 'xyz456',
-            parentPath: '/test/path/file.txt',
+            parentPath: '/test/path',
             depth: 2,
-            fileName: '/test/path/file.txt',
+            fileName: 'file.txt',
             uid: '1001',
             gid: '1002',
             fileSize: '1024',
@@ -246,6 +246,18 @@ describe("InventoryService", () => {
             targetMeta: expect.any(Object),
             inode: 0
         });
+    });
+
+    it('should handle Windows-style paths', () => {
+      const file = createMockItemInfo({ 
+        fileName: 'C:\\Users\\test\\file.txt' 
+      });
+
+      const result = service.mapSourceToTarget(file, jobRunId, pathId);
+
+      expect(result.path).toBe('C:\\Users\\test\\file.txt');
+      expect(result.fileName).toBe('file.txt');
+      expect(result.parentPath).toBe('C:\\Users\\test');
     });
 
     it('should handle file with missing metadata', () => {

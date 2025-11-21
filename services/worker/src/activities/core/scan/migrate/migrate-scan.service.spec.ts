@@ -2,7 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { Cmd, Command, ErrorType, CommandStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
 import { getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip, shouldExcludeForDelete } from 'src/activities/utils/utils';
-import { Origin } from 'src/activities/utils/utils.types';
+import { Origin, Operation } from 'src/activities/utils/utils.types';
 import { FatalError } from 'src/errors/errors.types';
 import { MigrateScanService } from './migrate-scan.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
@@ -33,7 +33,15 @@ jest.mock('path', () => {
 });
 
 jest.mock('src/activities/utils/utils', () => ({
-    dmError: jest.fn(),
+    dmError: jest.fn((type, origin, operation, errorType, commandId, error, metadata) => ({
+        type,
+        origin,
+        operation,
+        errorType,
+        commandId,
+        error,
+        metadata,
+    })),
     getFileInfo: jest.fn(),
     removePrefix: jest.fn(),
     shouldExcludeOrSkip: jest.fn(),
@@ -41,6 +49,7 @@ jest.mock('src/activities/utils/utils', () => ({
     isMetaUpdated: jest.fn(),
     shouldExcludeForDelete: jest.fn(),
 }));
+
 
 describe('MigrateScanService', () => {
     let service: MigrateScanService;
@@ -98,6 +107,254 @@ describe('MigrateScanService', () => {
         jest.clearAllMocks();
     });
 
+        // --- hasTrailingSpaces ---
+    describe('hasTrailingSpaces', () => {
+        it('should return true for filename with trailing space', () => {
+            const result = service['hasTrailingSpaces']('file.txt ');
+            expect(result).toBe(true);
+        });
+
+        it('should return true for filename with trailing tab', () => {
+            const result = service['hasTrailingSpaces']('document.doc\t');
+            expect(result).toBe(true);
+        });
+
+        it('should return true for filename with multiple trailing spaces', () => {
+            const result = service['hasTrailingSpaces']('image.jpg   ');
+            expect(result).toBe(true);
+        });
+
+        it('should return false for filename without trailing spaces', () => {
+            const result = service['hasTrailingSpaces']('normal-file.txt');
+            expect(result).toBe(false);
+        });
+
+        it('should return false for filename with leading spaces only', () => {
+            const result = service['hasTrailingSpaces'](' file.txt');
+            expect(result).toBe(false);
+        });
+
+        it('should return false for filename with spaces in the middle', () => {
+            const result = service['hasTrailingSpaces']('my file.txt');
+            expect(result).toBe(false);
+        });
+
+        it('should return false for empty string', () => {
+            const result = service['hasTrailingSpaces']('');
+            expect(result).toBe(false);
+        });
+
+        it('should return true for space-only filename', () => {
+            const result = service['hasTrailingSpaces'](' ');
+            expect(result).toBe(true);
+        });
+
+        it('should return true for tab-only filename', () => {
+            const result = service['hasTrailingSpaces']('\t');
+            expect(result).toBe(true);
+        });
+    });
+
+        // --- scanDirectory with Trailing Spaces ---
+    describe('scanDirectory - Trailing Space Detection', () => {
+        it('should skip file with trailing spaces on Windows (SMB)', async () => {
+            // Mock process.platform
+            Object.defineProperty(process, 'platform', {
+                value: 'win32',
+                configurable: true,
+            });
+
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+            (fs.promises.readdir as jest.Mock).mockResolvedValue(['file-with-space.txt ']);
+
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set(['file-with-space.txt ']);
+                return new Set();
+            });
+
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 1024,
+                mtime: new Date(),
+                mode: 33188,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+            });
+
+            (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+            (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+
+            await service.scanDirectory(commandInput);
+
+            expect(jobContext.publishToErrorStream).toHaveBeenCalled();
+            const errorCall = jobContext.publishToErrorStream.mock.calls[0][0];
+            expect(errorCall.error?.code).toBe('ETRAILSPACE');
+            expect(errorCall.error?.message).toContain('trailing spaces');
+        });
+
+        it('should skip file with trailing tab on Windows (SMB)', async () => {
+            Object.defineProperty(process, 'platform', {
+                value: 'win32',
+                configurable: true,
+            });
+
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+            (fs.promises.readdir as jest.Mock).mockResolvedValue(['file-with-tab.txt\t']);
+
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set(['file-with-tab.txt\t']);
+                return new Set();
+            });
+
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 1024,
+                mtime: new Date(),
+                mode: 33188,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+            });
+
+            (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+            (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+
+            await service.scanDirectory(commandInput);
+
+            expect(jobContext.publishToErrorStream).toHaveBeenCalled();
+            const errorCall = jobContext.publishToErrorStream.mock.calls[0][0];
+            expect(errorCall.error?.code).toBe('ETRAILSPACE');
+        });
+
+        it('should process file with trailing spaces on non-Windows platform', async () => {
+            Object.defineProperty(process, 'platform', {
+                value: 'linux',
+                configurable: true,
+            });
+
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+            (fs.promises.readdir as jest.Mock).mockResolvedValue(['file-with-space.txt ']);
+
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set(['file-with-space.txt ']);
+                return new Set();
+            });
+
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 777,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+            });
+
+            (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+            (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+            (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/file' });
+            (isContentUpdate as jest.Mock).mockReturnValue(true);
+
+            const result = await service.scanDirectory(commandInput);
+
+            // File should be processed on non-Windows, not skipped
+            expect(result.fileCount).toBe(1);
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalled();
+        });
+
+        it('should include proper error details in trailing space error', async () => {
+            Object.defineProperty(process, 'platform', {
+                value: 'win32',
+                configurable: true,
+            });
+
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+            (fs.promises.readdir as jest.Mock).mockResolvedValue(['problem-file.pdf ']);
+
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set(['problem-file.pdf ']);
+                return new Set();
+            });
+
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 2048,
+                mtime: new Date(),
+                mode: 33188,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+            });
+
+            (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+            (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+
+            await service.scanDirectory(commandInput);
+
+            expect(jobContext.publishToErrorStream).toHaveBeenCalled();
+            const errorPublished = jobContext.publishToErrorStream.mock.calls[0][0];
+            expect(errorPublished.type).toBe('OPERATION');
+            expect(errorPublished.origin).toBe(Origin.SOURCE);
+            expect(errorPublished.operation).toBe(Operation.READ_FILE);
+            expect(errorPublished.errorType).toBe(ErrorType.TRANSIENT_ERROR);
+        });
+
+        it('should continue processing other files after skipping one with trailing spaces', async () => {
+            Object.defineProperty(process, 'platform', {
+                value: 'win32',
+                configurable: true,
+            });
+
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+            (fs.promises.readdir as jest.Mock).mockResolvedValue([
+                'file-with-space.txt ',
+                'normal-file.txt',
+            ]);
+
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set(['file-with-space.txt ', 'normal-file.txt']);
+                return new Set();
+            });
+
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 777,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+            });
+
+            (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+            (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+            (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/file' });
+            (isContentUpdate as jest.Mock).mockReturnValue(true);
+
+            await service.scanDirectory(commandInput);
+
+            // Should have one error for trailing space file
+            expect(jobContext.publishToErrorStream).toHaveBeenCalled();
+            // Should process normal file
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalled();
+        });
+    });
     // --- getDirContents ---
     describe('getDirContents', () => {
         it('should return directory contents', async () => {

@@ -59,22 +59,39 @@ export class MigrateScanService {
         return content;
     }
 
-    
-    async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings , targetPrefix, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> { 
+
+    private hasTrailingSpaces(filename: string): boolean {
+        // Check for trailing spaces at the end of filename
+        return filename.endsWith(' ') || filename.endsWith('\t');
+    }
+
+    async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings , targetPrefix, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> {
 
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
         let commands: Cmd[] = [];
 
         const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command});
-        const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});        
+        const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});  
+        const isSMB = process.platform === 'win32'      
         for (const item of sourceContent) {
             try {
                 const sourceContentPath = path.join(sourcePath, item);
                 const sourceContentExists = await isExists(sourceContentPath);
-                if(!sourceContentExists) continue;                      
                 const sourceStat = await fs.promises.lstat(sourceContentPath);                
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
-                
+                if(!sourceContentExists) continue;
+                if (isSMB){
+
+                    if (this.hasTrailingSpaces(item)) {
+                        console.log('Trailing space filename detected:', item);
+                        const error = new Error(`File not migrated: filename contains trailing spaces`) as Error & {code:string};
+                        error.code = 'ETRAILSPACE';
+                        const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_FILE, ErrorType.TRANSIENT_ERROR, command.id, error, {name: relativeSourcePath, path: sourceContentPath});
+                        await jobContext.publishToErrorStream(dmErr);
+                        continue;
+                    }
+                }
+
                 if (shouldExcludeOrSkip({
                     fullPath: sourceContentPath,
                     stats: sourceStat,

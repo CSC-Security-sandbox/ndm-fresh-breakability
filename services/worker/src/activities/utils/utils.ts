@@ -236,6 +236,9 @@ export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string 
       case 'EIO':
           // Filename too long
           return context === 'TASK' ? 'TASK_SERVER_DISCONNECTED' : 'OP_SERVER_DISCONNECTED';
+      case 'ETRAILSPACE':
+          // Filename contains trailing spaces
+          return context === 'TASK' ? 'TASK_TRAILING_SPACE' : 'OP_TRAILING_SPACE';
       default:
         // Unknown error
         return context === 'TASK' ? 'TASK_UNKNOWN_ERROR' : 'OP_UNKNOWN_ERROR';

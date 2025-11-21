@@ -18,7 +18,8 @@ TOP_BIGGEST_FILE_NAME_MAPPER,
 JOB_RUN_DETAILS_MAPPER,
 QueryMapper,
 QueryList,
-REDIRECTS_FILE_NAME_MAPPER
+REDIRECTS_FILE_NAME_MAPPER,
+TRAILING_SPACE_FILE_MAPPER
 } from './discovery-report.query-mapper';
 
 describe('discovery-report.query-mapper', () => {
@@ -508,6 +509,182 @@ it('REDIRECTS_FILE_NAME_MAPPER maps multiple symbolic links and junctions correc
       }
     ]);
   });
+
+it('QueryMapper and QueryList are defined and consistent', () => {
+    expect(QueryMapper).toBeDefined();
+    expect(Array.isArray(QueryList)).toBe(true);
+    QueryList.forEach(key => {
+        expect(QueryMapper[key]).toBeDefined();
+        expect(QueryMapper[key].mapper).toBeInstanceOf(Function);
+    });
+});
+
+it('REDIRECTS_FILE_NAME_MAPPER maps multiple symbolic links and junctions correctly', () => {
+    const input = [
+      { file_type: 'SYMBOLIC_LINK', path: '/a/b.txt; ' },
+      { file_type: 'SYMBOLIC_LINK', path: '/e/f.txt; ' },
+      { file_type: 'JUNCTION', path: '/c/d.txt; ' },
+      { file_type: 'JUNCTION', path: '/g/h.txt; ' },
+      { file_type: 'VOLUME_MOUNT_POINT', path: '/c/d1.txt; ' },
+      { file_type: 'VOLUME_MOUNT_POINT', path: '/g/h1.txt; ' },
+      { file_type: 'SHORTCUT', path: '/c/d2.txt; ' },
+      { file_type: 'SHORTCUT', path: '/g/h2.txt; ' }
+    ];
+  
+    // Clean input: trim and remove trailing semicolon
+    const cleanedInput = input.map(item => ({
+      file_type: item.file_type,
+      path: item.path.trim().replace(/;$/, ''),
+    }));
+  
+    const result = REDIRECTS_FILE_NAME_MAPPER(cleanedInput);
+  
+    expect(result).toEqual([
+      {
+        value: '/a/b.txt; /e/f.txt',
+        category: 'Redirects',
+        valueType: 'string',
+        sub_category: 'Symbolic Links'
+      },
+      {
+        value: '/c/d.txt; /g/h.txt',
+        category: 'Redirects',
+        valueType: 'string',
+        sub_category: 'Junctions'
+      },
+      {
+        value: '/c/d1.txt; /g/h1.txt',
+        category: 'Redirects',
+        valueType: 'string',
+        sub_category: 'Volume Mount Points'
+      },
+      {
+        value: '/c/d2.txt; /g/h2.txt',
+        category: 'Redirects',
+        valueType: 'string',
+        sub_category: 'Shortcuts'
+      }
+    ]);
+  });
+
+// --- TRAILING_SPACE_FILE_MAPPER Tests ---
+describe('TRAILING_SPACE_FILE_MAPPER', () => {
+    
+    it('should map single file with trailing space', () => {
+        const input = [
+            {
+                parent_path: '/home/user/documents',
+                file_names: ['file1    ']
+            }
+        ];
+        
+        const result = TRAILING_SPACE_FILE_MAPPER(input as any);
+        
+        expect(result).toHaveLength(1);
+        expect(result[0]).toEqual({
+            value: 'file1    ',
+            category: 'Files without extensions and trailing spaces',
+            valueType: 'string',
+            sub_category: '/home/user/documents'
+        });
+    });
+
+
+    it('should map files across multiple directories', () => {
+        const input = [
+            {
+                parent_path: '/home/user/documents',
+                file_names: ['file1.txt ', 'file2    ']
+            },
+            {
+                parent_path: '/home/user/downloads',
+                file_names: ['image.jpg ', 'video.mp4 ']
+            },
+            {
+                parent_path: '/home/user/pictures',
+                file_names: ['photo.png ']
+            }
+        ];
+        
+        const result = TRAILING_SPACE_FILE_MAPPER(input as any);
+        
+        expect(result).toHaveLength(3);
+        expect(result[0]).toEqual({
+            value: 'file1.txt , file2    ',
+            category: 'Files without extensions and trailing spaces',
+            valueType: 'string',
+            sub_category: '/home/user/documents'
+        });
+        expect(result[1].sub_category).toBe('/home/user/downloads');
+        expect(result[2].sub_category).toBe('/home/user/pictures');
+    });
+
+    it('should handle empty input array', () => {
+        const input: any[] = [];
+        
+        const result = TRAILING_SPACE_FILE_MAPPER(input);
+        
+        expect(result).toEqual([]);
+    });
+
+
+    it('should have correct category and valueType', () => {
+        const input = [
+            {
+                parent_path: '/test',
+                file_names: ['test   ']
+            }
+        ];
+        
+        const result = TRAILING_SPACE_FILE_MAPPER(input as any);
+        
+        expect(result[0].category).toBe('Files without extensions and trailing spaces');
+        expect(result[0].valueType).toBe('string');
+    });
+
+    it('should maintain file names order', () => {
+        const input = [
+            {
+                parent_path: '/home/user',
+                file_names: ['alpha ', 'beta ', 'gamma ', 'delta ']
+            }
+        ];
+        
+        const result = TRAILING_SPACE_FILE_MAPPER(input as any);
+        
+        expect(result[0].value).toBe('alpha , beta , gamma , delta ');
+    });
+
+    it('should handle single file with multiple trailing spaces', () => {
+        const input = [
+            {
+                parent_path: '/home/user',
+                file_names: ['file.txt   ']
+            }
+        ];
+        
+        const result = TRAILING_SPACE_FILE_MAPPER(input as any);
+        
+        expect(result[0].value).toBe('file.txt   ');
+    });
+
+
+    it('should return correct structure for result array', () => {
+        const input = [
+            {
+                parent_path: '/test/path',
+                file_names: ['test  ']
+            }
+        ];
+        
+        const result = TRAILING_SPACE_FILE_MAPPER(input as any);
+        
+        expect(result[0]).toHaveProperty('value');
+        expect(result[0]).toHaveProperty('category');
+        expect(result[0]).toHaveProperty('valueType');
+        expect(result[0]).toHaveProperty('sub_category');
+    });
+});
 
 it('QueryMapper and QueryList are defined and consistent', () => {
     expect(QueryMapper).toBeDefined();
