@@ -19,6 +19,7 @@ import {
   LoggerFactory,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { DatabaseError, ValidationError } from '../errors/custom-errors';
+import * as path from 'path';
 
 @Injectable()
 export class InventoryService {
@@ -59,14 +60,23 @@ export class InventoryService {
     if (!file) {
       throw new ValidationError('Invalid file object: Cannot map undefined or null file', 'file');
     }
+    const fullPath = file.fileName ?? '';
+    let actualFileName = '';
+    let parentPath = '';
+    if (fullPath) {
+      const isWindowsPath = fullPath.startsWith('\\');
+      const pathModule = isWindowsPath ? path.win32 : path.posix;
+      actualFileName = pathModule.basename(fullPath);
+      parentPath = pathModule.dirname(fullPath);
+    }
     return {
-      path: file.fileName ?? '', 
+      path: fullPath, 
       isDirectory: file.isDirectory ?? false,
       sourceChecksum: file?.sourceMeta?.checksum ?? null,
       targetChecksum: file?.targetMeta?.checksum ?? null,
-      parentPath: file?.fileName ?? '', // TODO - deprecate
+      parentPath: parentPath, 
       depth: file?.depth ?? 0,
-      fileName: file?.fileName ?? '', // TO-DO deprecate
+      fileName: actualFileName, 
       uid: file?.targetMeta?.uid?.toString() ?? file?.sourceMeta?.uid?.toString() ?? '',
       gid: file?.targetMeta?.gid?.toString() ?? file?.sourceMeta?.gid?.toString() ?? '',
       fileSize: file?.size ? BigInt(file.size).toString() : '0',

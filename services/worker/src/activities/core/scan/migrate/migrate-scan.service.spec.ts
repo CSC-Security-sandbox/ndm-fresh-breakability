@@ -1,8 +1,8 @@
 import { ConfigService } from '@nestjs/config';
 import { Cmd, Command, ErrorType, CommandStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
-import { getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip, shouldExcludeForDelete } from 'src/activities/utils/utils';
-import { Origin } from 'src/activities/utils/utils.types';
+import { dmError, getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip, shouldExcludeForDelete } from 'src/activities/utils/utils';
+import { Operation, Origin } from 'src/activities/utils/utils.types';
 import { FatalError } from 'src/errors/errors.types';
 import { MigrateScanService } from './migrate-scan.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
@@ -223,6 +223,18 @@ describe('MigrateScanService', () => {
 
     // --- scanDirectory ---
     describe('scanDirectory', () => {
+        beforeEach(() => {
+            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory);
+            (dmError as jest.Mock).mockImplementation((category, origin, operation, errorType, commandId, error, metadata) => ({
+                category,
+                origin,
+                operation,
+                errorType,
+                commandId,
+                error,
+                metadata,
+            }));
+        });
         it('should skip excluded items', async () => {
             jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             (fs.promises.readdir as jest.Mock).mockResolvedValue(['file1']);
@@ -273,6 +285,146 @@ describe('MigrateScanService', () => {
             await service.scanDirectory(commandInput);
 
             expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledTimes(2);
+        });
+
+        it('should detect and skip files with case collisions in source directory on SMB', async () => {
+            const originalPlatform = process.platform;
+            Object.defineProperty(process, 'platform', { value: 'win32' });
+            
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set(['file1.txt', 'File1.TXT', 'FILE1.txt', 'MyFolder', 'myfolder']);
+                return new Set();
+            });
+
+            (fs.promises.lstat as jest.Mock).mockImplementation(async (path: string) => {
+                const isDirectory = path.includes('Folder') || path.includes('folder');
+                return {
+                    isDirectory: () => isDirectory,
+                    isSymbolicLink: () => false,
+                    size: isDirectory ? 0 : 100,
+                    mtime: new Date(),
+                    mode: 777,
+                    uid: 0,
+                    gid: 0,
+                    atime: new Date(),
+                    ctime: new Date(),
+                    birthtime: new Date(),
+                };
+            });
+            (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+            (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+            (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/path' });
+            (isContentUpdate as jest.Mock).mockReturnValue(true);
+
+            await service.scanDirectory(commandInput);
+
+            expect(jobContext.publishToErrorStream).toHaveBeenCalledTimes(3);
+            expect(jobContext.publishToErrorStream).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    error: expect.objectContaining({
+                        message: expect.stringContaining('same name but different case')
+                    })
+                })
+            );
+            
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledWith(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        fPath: expect.any(String),
+                        isDir: false
+                    }),
+                    expect.objectContaining({
+                        fPath: expect.any(String),
+                        isDir: true
+                    })
+                ])
+            );
+            Object.defineProperty(process, 'platform', { value: originalPlatform });
+        });
+
+        it('should handle case collision between source and target on SMB (cutover/incremental scenario)', async () => {
+            const originalPlatform = process.platform;
+            Object.defineProperty(process, 'platform', { value: 'win32' });
+
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set(['MyFolder', 'File1.txt', 'TestDir.txt', 'testdir.txt']);
+                if (origin === Origin.DESTINATION) return new Set(['myfolder', 'free.txt', 'file1.txt', 'testdir.txt']);
+                return new Set();
+            });
+
+            (fs.promises.lstat as jest.Mock).mockImplementation(async (path: string) => {
+                const isDirectory = path.includes('MyFolder') || path.includes('myfolder');
+                return {
+                    isDirectory: () => isDirectory,
+                    isSymbolicLink: () => false,
+                    size: isDirectory ? 0 : 100,
+                    mtime: new Date(),
+                    mode: 777,
+                    uid: 0,
+                    gid: 0,
+                    atime: new Date(),
+                    ctime: new Date(),
+                    birthtime: new Date(),
+                };
+            });
+            (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+            (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+            (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/path' });
+            (isContentUpdate as jest.Mock).mockReturnValue(true);
+
+            await service.scanDirectory(commandInput);
+
+            expect(jobContext.publishToErrorStream).toHaveBeenCalledTimes(3);
+            expect(jobContext.publishToErrorStream).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    error: expect.objectContaining({
+                        message: expect.stringContaining('same name but different case')
+                    })
+                })
+            );
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledTimes(1);       
+
+            Object.defineProperty(process, 'platform', { value: originalPlatform });
+        });
+
+
+        it('should not check for case collisions on non-SMB platforms', async () => {
+            const originalPlatform = process.platform;
+            Object.defineProperty(process, 'platform', { value: 'linux' });
+
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set(['File1.txt', 'file1.txt']);
+                return new Set();
+            });
+
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 777,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+            });
+            (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+            (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+            (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/path' });
+            (isContentUpdate as jest.Mock).mockReturnValue(true);
+
+            await service.scanDirectory(commandInput);
+
+            expect(jobContext.publishToErrorStream).not.toHaveBeenCalledWith(
+                expect.objectContaining({
+                    operation: expect.any(String),
+                    origin: Origin.SOURCE
+                })
+            );
+
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalled();
+            Object.defineProperty(process, 'platform', { value: originalPlatform });
         });
 
         it('should increment dirCount and subDirs for directories and publish command if not in target', async () => {
