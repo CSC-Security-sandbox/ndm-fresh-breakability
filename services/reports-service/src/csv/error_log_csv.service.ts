@@ -76,29 +76,41 @@ export class ErrorLogService {
       params.push([...USER_VISIBLE_ERROR_TYPES]);
       params.push(pageSize, offset);
 
+      // Uses first 10 chars of file_path as a unique prefix to match and replace
+      // the full path with just the relative_file_path.
+
       const query = `
-    SELECT
-      oe.id::text                AS "Error Id",
-      oe.created_at              AS "Created At",
-      o.job_run_id               AS "Job Run Id",
-      jc.job_type                AS "Job Type",
-      oe.error_type              AS "Error Type",
-      oe.error_message           AS "Error Details",
-      oe.file_name               AS "File Name",
-      oe.file_path               AS "File Path",
-      oe.origin                  AS "Origin",
-      oe.operation_type          AS "Operation",
-      oe.error_code              AS "Code"
-    FROM datamigrator.operation_errors oe
-    LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
-    LEFT JOIN datamigrator.jobrun jr ON jr.id = o.job_run_id
-    LEFT JOIN datamigrator.jobconfig jc ON jc.id = jr.job_config_id
-    WHERE ${whereClause}
-      AND oe.error_type = ANY($${errorTypesParamIndex})
-    ORDER BY oe.created_at DESC
-    LIMIT $${params.length - 1}
-    OFFSET $${params.length}
-  `;
+  SELECT
+    oe.id::text                AS "Error Id",
+    oe.created_at              AS "Created At",
+    o.job_run_id               AS "Job Run Id",
+    jc.job_type                AS "Job Type",
+    oe.error_type              AS "Error Type",
+    CASE
+      WHEN oe.file_path IS NOT NULL AND LENGTH(oe.file_path) > 10 THEN
+        REGEXP_REPLACE(
+          oe.error_message,
+          '[''"]?' || SUBSTRING(oe.file_path FROM 1 FOR 10) || '[^''"\\s]*([''".\\s]|$)',
+          oe.file_name,
+          'g'
+        )
+      ELSE oe.error_message
+    END AS "Error Details",
+    oe.file_name               AS "File Name",
+    oe.file_path               AS "File Path",
+    oe.origin                  AS "Origin",
+    oe.operation_type          AS "Operation",
+    oe.error_code              AS "Code"
+  FROM datamigrator.operation_errors oe
+  LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
+  LEFT JOIN datamigrator.jobrun jr ON jr.id = o.job_run_id
+  LEFT JOIN datamigrator.jobconfig jc ON jc.id = jr.job_config_id
+  WHERE ${whereClause}
+    AND oe.error_type = ANY($${errorTypesParamIndex})
+  ORDER BY oe.created_at DESC
+  LIMIT $${params.length - 1}
+  OFFSET $${params.length}
+`;
 
       return this.operationErrorRepo.query(query, params);
     } catch (error) {
