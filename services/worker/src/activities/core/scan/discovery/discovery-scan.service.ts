@@ -3,15 +3,15 @@ import { ConfigService } from "@nestjs/config";
 import { ErrorType, FileInfo, ItemInfo, ItemMeta } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as fs from 'fs';
 import * as path from 'path';
-import { dmError, getFilePermissions, getFileType, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
+import { dmError, getFilePermissions, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishItemInfoInput } from "./discovery-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
 import { isPathExists } from "../../utils/utils";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
-import { WinOperationService } from "../../../core/migrate/command-execution/win-opeartions/win-operation.service"
 import { FileType } from "src/activities/types/tasks";
+import { FileTypeDetectionService } from '../../utils/file-type-detection.service';
 
 
 export class DiscoveryScanService {
@@ -20,11 +20,11 @@ export class DiscoveryScanService {
     readonly maxRetryCount: number;
     private readonly logger: LoggerService;
 
-     constructor(
+    constructor(
         @Inject(ConfigService) 
         private readonly configService: ConfigService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
-        private readonly winOperationService: WinOperationService,
+        private readonly fileTypeDetectionService: FileTypeDetectionService,
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100; 
@@ -68,20 +68,17 @@ export class DiscoveryScanService {
                 })) continue;
 
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
-                const fileType = await this.detectFileType(sourceContentPath, sourceStat);
+                const fileType = await this.fileTypeDetectionService.detectFileType(sourceContentPath, sourceStat);
                 this.logger.debug(`FileType for path ${sourceContentPath} is ${fileType}`);
 
                 await this.publishFileInfo({
                     stats: sourceStat, command, jobContext, fPath: sourceContentPath, relativeSourcePath, fileType
                 });
-                
+
                 if (sourceStat.isDirectory()) {
-                    if(sourceStat.isSymbolicLink()) continue;
+                    if(sourceStat.isSymbolicLink() ) continue;
                     output.dirCount++;
-                    if (fileType === FileType.VOLUME_MOUNT_POINT) {
-                        // Skip this directory: do not add to subDirs, do not recurse
-                        continue;
-                    }
+                    if (fileType === FileType.VOLUME_MOUNT_POINT) continue;
                     output.subDirs.push(relativeSourcePath);
                 } else output.fileCount++;
             }
@@ -118,45 +115,4 @@ export class DiscoveryScanService {
 
         await jobContext.publishToFileStream(itemInfo);
     }
-
-
-    // Detect File type using special Windows link types
-    private async detectFileType(sourceContentPath: string, sourceStat: fs.Stats): Promise<FileType> {
-        let symlinkType: FileType | undefined;
-        if (process.platform === 'win32') {
-            // Check if symbolic link or directory (to detect junctions and volume mount points)
-            if (sourceStat.isSymbolicLink() || sourceStat.isDirectory()) {
-                try {
-                    // Detect detailed link type (junction, volume mount point, symbolic link)
-                    const linkInfo = await this.winOperationService.detectSymbolicLinkType(sourceContentPath);
-                    if (linkInfo === FileType.VOLUME_MOUNT_POINT) {
-                        symlinkType = FileType.VOLUME_MOUNT_POINT;
-                        this.logger.debug(`Detected volume mount point for ${sourceContentPath}`);
-                    } else if (linkInfo === FileType.JUNCTION) {
-                        symlinkType = FileType.JUNCTION;
-                        this.logger.debug(`Detected junction for ${sourceContentPath}`);
-                    } else if (linkInfo === FileType.SYMBOLIC_LINK) {
-                        symlinkType = FileType.SYMBOLIC_LINK;
-                        this.logger.debug(`Detected symbolic link for ${sourceContentPath}`);
-                    } else {
-                        symlinkType = FileType.UNKNOWN;
-                        this.logger.debug(`Detected unknown link type for ${sourceContentPath}`);
-                    }
-                } catch (error) {
-                    this.logger.error(`Failed to detect link type for ${sourceContentPath}: ${error.message}`);
-                    throw error;
-                }
-            } else if (!sourceStat.isDirectory() && path.extname(sourceContentPath).toLowerCase() === '.lnk') {
-                symlinkType = FileType.SHORTCUT;
-                this.logger.debug(`Detected shortcut for ${sourceContentPath}`);
-            }
-        }
-
-        const fileType = (symlinkType && symlinkType !== FileType.UNKNOWN)
-            ? symlinkType
-            : getFileType(sourceStat, sourceStat.isDirectory());
-        
-        return fileType;
-    }
-
 }

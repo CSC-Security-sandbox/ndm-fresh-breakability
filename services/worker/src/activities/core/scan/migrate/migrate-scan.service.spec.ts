@@ -7,6 +7,7 @@ import { FatalError } from 'src/errors/errors.types';
 import { MigrateScanService } from './migrate-scan.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { mockLogger } from 'src/auth/auth.service.spec';
+import { FileTypeDetectionService } from '../../utils/file-type-detection.service';
 
 // --- Mocks ---
 jest.mock('fs', () => {
@@ -49,6 +50,7 @@ describe('MigrateScanService', () => {
     let redisService: any;
     let jobContext: any;
     let commandInput: any;
+    let fileTypeDetectionService: Partial<FileTypeDetectionService>;
 
     const mockLoggerFactory: Partial<LoggerFactory> = {
         create: jest.fn().mockReturnValue(mockLogger),
@@ -68,8 +70,15 @@ describe('MigrateScanService', () => {
         } as any;
 
         logger = mockLogger;
+        fileTypeDetectionService = {
+            detectFileType: jest.fn().mockResolvedValue('mockFileType'),
+        } as Partial<FileTypeDetectionService>;
 
-        service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory);
+        service = new MigrateScanService(
+            configService, 
+            mockLoggerFactory as LoggerFactory, 
+            fileTypeDetectionService as FileTypeDetectionService
+        );  
 
         jobContext = {
             publishToErrorStream: jest.fn(),
@@ -224,7 +233,7 @@ describe('MigrateScanService', () => {
     // --- scanDirectory ---
     describe('scanDirectory', () => {
         beforeEach(() => {
-            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory);
+            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService);
             (dmError as jest.Mock).mockImplementation((category, origin, operation, errorType, commandId, error, metadata) => ({
                 category,
                 origin,
@@ -680,7 +689,7 @@ describe('MigrateScanService', () => {
 
         it('should handle command publishing in chunks during delete processing', async () => {
             jobContext.jobConfig.skipDelete = false;
-            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory);
+            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService);
             (service as any).maxMigrationCommand = 2;
 
             jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
@@ -747,6 +756,7 @@ describe('MigrateScanService', () => {
     let logger: Partial<LoggerService>;
     let jobContext: any;
     let commandInput: any;
+    let fileTypeDetectionService: Partial<FileTypeDetectionService>;
 
     const mockLoggerFactory: Partial<LoggerFactory> = {
         create: jest.fn().mockReturnValue(mockLogger),
@@ -767,7 +777,11 @@ describe('MigrateScanService', () => {
 
         logger = mockLogger;
 
-        service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory);
+        fileTypeDetectionService = {
+            detectFileType: jest.fn().mockResolvedValue('mockFileType'),
+        } as Partial<FileTypeDetectionService>;
+
+        service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService);
 
         jobContext = {
             publishToErrorStream: jest.fn(),

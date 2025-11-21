@@ -7,7 +7,8 @@ import { getFileInfo, getFilePermissions, removePrefix, shouldExcludeOrSkip } fr
 import { FatalError } from 'src/errors/errors.types';
 import { DiscoveryScanService } from './discovery-scan.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
-import { WinOperationService } from "../../../core/migrate/command-execution/win-opeartions/win-operation.service"
+import { WinOperationService } from "../../../core/migrate/command-execution/win-opeartions/win-operation.service";
+import { FileTypeDetectionService } from '../../utils/file-type-detection.service';
 
 jest.mock('fs', () => {
   const actualFs = jest.requireActual('fs');
@@ -54,6 +55,7 @@ describe('DiscoveryScanService', () => {
   let loggerFactory: LoggerFactory;
   let winOperationService: WinOperationService;
   let logger: LoggerService;
+  let fileTypeDetectionService: FileTypeDetectionService;
 
   const mockLoggerFactory = {
     create: jest.fn().mockReturnValue({
@@ -61,6 +63,7 @@ describe('DiscoveryScanService', () => {
       error: jest.fn(),
       warn: jest.fn(),
       info: jest.fn(),
+      debug: jest.fn(),
     }),
   };
    
@@ -93,6 +96,12 @@ describe('DiscoveryScanService', () => {
           provide: WinOperationService,
           useValue: winOperationService,
         },
+        {
+          provide: FileTypeDetectionService,
+          useValue: {
+            detectFileType: jest.fn(),
+          },
+        },
       ],
     }).compile();
     mockJobContext = {
@@ -116,6 +125,7 @@ describe('DiscoveryScanService', () => {
     loggerFactory = module.get<LoggerFactory>(LoggerFactory);
     winOperationService = module.get<WinOperationService>(WinOperationService);
     logger = loggerFactory.create(DiscoveryScanService.name);
+    fileTypeDetectionService = module.get<FileTypeDetectionService>(FileTypeDetectionService);
   });
 
   afterEach(() => {

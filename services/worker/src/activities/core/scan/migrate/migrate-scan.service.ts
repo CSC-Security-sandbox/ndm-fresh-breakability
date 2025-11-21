@@ -11,6 +11,9 @@ import { DirContentsInput, PublishCommandInput } from "./migrate-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput, ScanDirectorySettings } from "../scan-activity.type";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { isExists, isPathExists } from "../../utils/utils";
+import { FileTypeDetectionService } from "../../utils/file-type-detection.service";
+import { FileType } from "src/activities/types/tasks";
+
 
 @Injectable()
 export class MigrateScanService {
@@ -25,6 +28,7 @@ export class MigrateScanService {
         @Inject(ConfigService) 
         private readonly configService: ConfigService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+        private readonly fileTypeDetectionService: FileTypeDetectionService
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
@@ -120,20 +124,34 @@ export class MigrateScanService {
                 })) continue;
 
                 const fileInfo: FileInfo = await getFileInfo({name: item, fullFilePath: sourceContentPath, relativePath: relativeSourcePath});
-
+                const fileType = await this.fileTypeDetectionService.detectFileType(sourceContentPath, sourceStat);
                 // TODO: change the if/else logic. it is difficult to read and understand.
-                if (sourceStat.isDirectory() && !sourceStat.isSymbolicLink()) {   // only resolving to dir 
+                if (sourceStat.isDirectory() && !sourceStat.isSymbolicLink()) {   // only resolving to directory
                     output.dirCount++;
+                    if ((process.platform === 'win32') && (fileType === FileType.VOLUME_MOUNT_POINT)) {
+                        const transientError = new Error(`Volume mount point detected at ${relativeSourcePath}`);
+                        await jobContext.publishToErrorStream(
+                            dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, ErrorType.TRANSIENT_ERROR, command.id, transientError, { name: relativeSourcePath, path: relativeSourcePath })
+                        );
+                        continue;
+                    }
                     output.subDirs.push(relativeSourcePath);
                     if(!targetContent.has(item)) {
-                        const command = this.buildCommand(sourceStat, fileInfo.path);
-                        if (command) commands.push(command);
+                        const newcommand = this.buildCommand(sourceStat, fileInfo.path);
+                        if (newcommand) commands.push(newcommand);
                     }
                 } 
                  else if (sourceStat.isSymbolicLink()) {   // not a directory but a sym link                                                                             
-                    if(!targetContent.has(item)) {               
-                        const command = this.buildCommand(sourceStat, fileInfo.path);                        
-                        if (command) commands.push(command);                    
+                    if(!targetContent.has(item)) {
+                        if ((process.platform === 'win32') && (fileType === FileType.JUNCTION || fileType === FileType.SYMBOLIC_LINK)) {
+                            const transientError = new Error(`${fileType} detected at ${relativeSourcePath}`);
+                                await jobContext.publishToErrorStream(
+                                    dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, ErrorType.TRANSIENT_ERROR, command.id, transientError, { name: relativeSourcePath, path: relativeSourcePath })
+                                );
+                            continue;
+                        }
+                        const newcommand = this.buildCommand(sourceStat, fileInfo.path);                        
+                        if (newcommand) commands.push(newcommand);                    
                     }else{
                         const targetFilePath = path.join(targetPath, item);
                         const targetStatLstat = await fs.promises.lstat(targetFilePath);
@@ -141,7 +159,7 @@ export class MigrateScanService {
                         if (command) commands.push(command);
                     }
                 }
-                else if (!targetContent.has(item)) {                       // not directory and not symlink and target dont exist 
+                else if (!targetContent.has(item)) {                       // not directory and not symlink and target dont exist
                     output.fileCount++;
                     const command = this.buildCommand(sourceStat, fileInfo.path);
                     if (command) commands.push(command);
