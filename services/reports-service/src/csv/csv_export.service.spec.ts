@@ -93,7 +93,11 @@ describe("CsvService", () => {
       ];
 
       mockDataSource.query.mockResolvedValueOnce([{ protocol: 'NFS' }]);
-      mockDataSource.query.mockResolvedValueOnce(mockData);
+      jest
+        .spyOn(service, "getInventoryData")
+        .mockResolvedValueOnce(mockData)
+        .mockResolvedValueOnce([]);
+
       mockDataSource.query.mockResolvedValueOnce([]);
 
       const mockWriteStream = {
@@ -379,6 +383,127 @@ describe("CsvService", () => {
       
       expect(resultEmpty).toContain("Source UID");
       expect(resultEmpty).toContain("Source Unix Permissions");
+    });
+  });
+
+  describe("Cutover CSV - Query Selection Logic", () => {
+    it("should call cutover query for CUT_OVER jobType", async () => {
+      const jobRunId = "test-job-run-id";
+      const limit = 100;
+      const offset = 1;
+
+      // Spy on getCutoverInventoryDataQuery
+      const cutoverSpy = jest.spyOn(service as any, 'getCutoverInventoryDataQuery').mockResolvedValue({
+        query: "SELECT * FROM cutover",
+        values: [jobRunId, limit, offset]
+      });
+
+      mockDataSource.query.mockResolvedValue([{ test: 'data' }]);
+
+      await service.getInventoryData(jobRunId, limit, offset, 'CUT_OVER');
+
+      expect(cutoverSpy).toHaveBeenCalledWith(jobRunId, limit, offset);
+      expect(cutoverSpy).toHaveBeenCalledTimes(1);
+
+      cutoverSpy.mockRestore();
+    });
+
+    it("should call cutover query for lowercase cutover jobType", async () => {
+      const cutoverSpy = jest.spyOn(service as any, 'getCutoverInventoryDataQuery').mockResolvedValue({
+        query: "SELECT * FROM cutover",
+        values: ["test-id", 100, 1]
+      });
+
+      mockDataSource.query.mockResolvedValue([]);
+
+      await service.getInventoryData("test-id", 100, 1, 'cut_over');
+
+      expect(cutoverSpy).toHaveBeenCalled();
+      cutoverSpy.mockRestore();
+    });
+
+    it("should call regular migration query when jobType is MIGRATE", async () => {
+      const migrationSpy = jest.spyOn(service, 'getInventoryDataQuery').mockResolvedValue({
+        query: "SELECT * FROM migration",
+        values: ["test-id", 100, 1]
+      });
+
+      mockDataSource.query.mockResolvedValue([]);
+
+      await service.getInventoryData("test-id", 100, 1, 'MIGRATE');
+
+      expect(migrationSpy).toHaveBeenCalledWith("test-id", 100, 1);
+      migrationSpy.mockRestore();
+    });
+
+    it("should call regular migration query when jobType is undefined", async () => {
+      const migrationSpy = jest.spyOn(service, 'getInventoryDataQuery').mockResolvedValue({
+        query: "SELECT * FROM migration",
+        values: ["test-id", 100, 1]
+      });
+
+      mockDataSource.query.mockResolvedValue([]);
+
+      await service.getInventoryData("test-id", 100, 1);
+
+      expect(migrationSpy).toHaveBeenCalled();
+      migrationSpy.mockRestore();
+    });
+
+    it("should return data from database after query selection", async () => {
+      const mockData = [{ path: '/test/file.txt' }];
+      mockDataSource.query.mockResolvedValue(mockData);
+
+      const result = await service.getInventoryData("test-id", 100, 1, 'CUT_OVER');
+
+      expect(result).toEqual(mockData);
+      expect(mockDataSource.query).toHaveBeenCalled();
+    });
+  });
+
+  describe("Cutover CSV - generateCsv with jobType", () => {
+    beforeEach(() => {
+      jest.spyOn(validation, 'validateFilePath').mockReturnValue(true);
+    });
+
+    it("should call cutover query when jobType is CUT_OVER", async () => {
+      const filePath = "/path/to/report.csv";
+      const jobRunId = "test-job-run-id";
+      const jobType = "CUT_OVER";
+
+      const mockWriteStream = {
+        pipe: jest.fn(),
+        write: jest.fn(),
+        end: jest.fn(),
+      };
+
+      jest.spyOn(fs, "createWriteStream").mockReturnValue(mockWriteStream as any);
+      jest.spyOn(fastCsv, "format").mockReturnValue(mockWriteStream as any);
+      jest.spyOn(service, "getInventoryData").mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+      await service.generateCsv(filePath, jobRunId, 10000, jobType);
+
+      expect(service.getInventoryData).toHaveBeenCalledWith(jobRunId, 10000, 1, jobType);
+    });
+
+    it("should call regular query when jobType is MIGRATE", async () => {
+      const filePath = "/path/to/report.csv";
+      const jobRunId = "test-job-run-id";
+      const jobType = "MIGRATE";
+
+      const mockWriteStream = {
+        pipe: jest.fn(),
+        write: jest.fn(),
+        end: jest.fn(),
+      };
+
+      jest.spyOn(fs, "createWriteStream").mockReturnValue(mockWriteStream as any);
+      jest.spyOn(fastCsv, "format").mockReturnValue(mockWriteStream as any);
+      jest.spyOn(service, "getInventoryData").mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+      await service.generateCsv(filePath, jobRunId, 10000, jobType);
+
+      expect(service.getInventoryData).toHaveBeenCalledWith(jobRunId, 10000, 1, jobType);
     });
   });
 });

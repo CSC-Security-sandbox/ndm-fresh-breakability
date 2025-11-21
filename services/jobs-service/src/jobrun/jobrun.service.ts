@@ -665,10 +665,22 @@ export class JobRunService {
 
     const orderClause = order?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
 
+    // Uses first 10 chars of file_path as a unique prefix to match and replace
+    // the full path with just the relative_file_path.
+
     const query = `
       SELECT
         oe.id::text AS id,
-        oe.error_message AS "errorMessage",
+        CASE
+          WHEN oe.file_path IS NOT NULL AND LENGTH(oe.file_path) > 10 THEN
+            REGEXP_REPLACE(
+              oe.error_message,
+              '[''"]?' || SUBSTRING(oe.file_path FROM 1 FOR 10) || '[^''"\\s]*([''".\\s]|$)',
+              oe.file_name,
+              'g'
+            )
+          ELSE oe.error_message
+        END AS "errorMessage",
         oe.error_type AS "errorType",
         oe.created_at AS "createdAt",
         oe.file_name AS "fileName",

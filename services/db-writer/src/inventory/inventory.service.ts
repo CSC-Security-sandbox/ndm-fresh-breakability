@@ -91,6 +91,7 @@ export class InventoryService {
       sourceMeta: file?.sourceMeta ?? null,
       targetMeta: file?.targetMeta ?? null,
       inode: file?.inode ?? null,
+      isDeleted: file?.isDeleted ?? false,
     };
   }
 

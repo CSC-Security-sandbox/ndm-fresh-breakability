@@ -1,4 +1,4 @@
-import { CsvService } from "./../csv/csv_export.service";
+import { CsvService } from "./../csv/csv_export.service"; 
 import {
   Injectable,
   Logger,
@@ -260,7 +260,9 @@ export class JobRunService {
       }
 
       if (fs.existsSync(filePath)) return filePath;
-      await this.csvService.generateCsv(filePath, jobRunId);
+      
+      const jobType = jobRun.jobConfig.jobType;
+      await this.csvService.generateCsv(filePath, jobRunId, 10000, jobType);
 
       if (jobRun.jobConfig.jobType !== JobType.CutOver) {
         this.logger.log("Updating report status for job other than cutover");
