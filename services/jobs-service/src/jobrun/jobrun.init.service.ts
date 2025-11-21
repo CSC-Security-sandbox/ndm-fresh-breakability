@@ -258,8 +258,8 @@ export class JobRunInitService {
     }
     const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
     const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
-    // skip if job Is migration and futureScheduleAt is not set or empty
-    const skipDelete : boolean = jobConfig?.jobType === JobType.MIGRATE && (!jobConfig?.futureScheduleAt || jobConfig?.futureScheduleAt === "")
+    // We always set 'skip delete' to false, as we want the baseline and incremental migrations to mirror the source exactly.
+    const skipDelete : boolean = false
     const details: JobRunConfig = {
       id: jobConfig.id,
       preserveAccessTime: jobConfig.preserveAccessTime,
