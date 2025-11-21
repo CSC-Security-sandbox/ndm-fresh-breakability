@@ -6,6 +6,7 @@ import { ACL, ExcludeForDelete, ExcludeOrSkipParams, getFileInfoInput, GetJobCon
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
 import { execSync } from "child_process";
+import { E8Dot3CollisionError } from "../../errors/errors.types";
 
 export const getChecksum = (filePath: string): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -236,6 +237,9 @@ export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string 
       case 'EIO':
           // Filename too long
           return context === 'TASK' ? 'TASK_SERVER_DISCONNECTED' : 'OP_SERVER_DISCONNECTED';
+      case 'E8DOT3_COLLISION':
+        // 8.3 short filename collision
+        return context === 'TASK' ? 'TASK_8DOT3_COLLISION' : 'OP_8DOT3_COLLISION';
       case 'EEXIST':
           // Duplicate in terms of case (Isilon SMB)
           return context === 'TASK' ? 'TASK_CASE_CONFLICT' : 'OP_CASE_CONFLICT';
@@ -259,10 +263,14 @@ export const dmError = (type: 'TASK' | 'OPERATION', origin :Origin, operationNam
       error.code = 'EIO'; // Standardize code for known error
     }
     
-    // Also check error.code for standard error codes
+    // Check error.code for standard error codes
     if(error.code) {
+      // Check for transient errors 
+      if( isTransientError(error.code)) errorType = ErrorType.TRANSIENT_ERROR;
+        // Check for fatal errors (cancel activity)
       if(origin === Origin.SOURCE && isSourceFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
       if(origin === Origin.DESTINATION && isFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
+      
     }
   }
 
@@ -290,11 +298,15 @@ export const basePrefix = (jobRunId: string, pathId: string): string => {
 const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED'])
 const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED']);
 
+// Transient errors that should not be retried 
+const TRANSIENT_CODE = new Set<string>(['E8DOT3_COLLISION']);
+
 // File server down errno numbers (negative values as reported by Node.js)
 const FileServerDownErrorNo = new Set<number>([-116, -96]); // ESTALE, EADDRNOTAVAIL
 
 export const isSourceFatalError = (code :string) => code && SOURCE_FATAL_CODE.has(code)
 export const isFatalError = (code :string) => code && FATAL_CODE.has(code)
+export const isTransientError = (code :string) => code && TRANSIENT_CODE.has(code)
 export const hasFileServerDownErrorNo = (errno: number) => errno && FileServerDownErrorNo.has(errno)
 
 export const getServerInfoFromPath = (sourcePath: string, jobContext: JobContext): { protocol: Protocol[], server: string } => {

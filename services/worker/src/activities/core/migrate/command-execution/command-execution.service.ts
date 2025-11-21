@@ -5,8 +5,10 @@ import { ConfigService } from "@nestjs/config";
 import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 import * as fs from "fs";
 import * as path from 'path';
+import { WINDOWS } from "../../../../config/app.config";
 import { dmError, getFilePermissions, getFileType } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
+import { createDirectory } from "src/activities/utils/directory.utils";
 import { WorkerThreadService } from "src/thread/worker.thread.service";
 import { CommandExecInput, CommandExecOutput, CommandOutput, ValidateCommandInput } from "./command-execution.type";
 import { StampMetaService } from "./stamp-meta.service";
@@ -139,6 +141,13 @@ export class CommandExecService {
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
                 await jobContext.publishToErrorStream(dmErr);   
                 output.targetErrors.push(error.code);
+                
+                // Do not attempt metadata stamping if file creation failed due to collision
+                if (error.code === 'E8DOT3_COLLISION') {
+                    this.logger.error(`Skipping metadata stamping for ${targetPath} due to 8.3 collision`);
+                    output.shouldStampMeta = false;
+                    output.shouldUpdateItemInfo = false;
+                }
             }
         }
         return output;
@@ -153,8 +162,8 @@ export class CommandExecService {
         if( command.ops[OPS_CMD.COPY_DIR].status !== OPS_STATUS.COMPLETED) {
             //TODO: add handling for the symlink to the directory. 
 
-            try {                
-                await fs.promises.mkdir(targetPath, {recursive: true});                
+            try {
+                await createDirectory(targetPath);
                 command.ops[OPS_CMD.COPY_DIR].status = OPS_STATUS.COMPLETED;
                 output.shouldStampMeta = true;
                 output.shouldUpdateItemInfo = true;
@@ -164,6 +173,13 @@ export class CommandExecService {
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
                 await jobContext.publishToErrorStream(dmErr);
                 output.targetErrors.push(error.code);
+                
+                // Do not attempt metadata stamping if directory creation failed due to collision
+                if (error.code === 'E8DOT3_COLLISION') {
+                    this.logger.debug(`Skipping metadata stamping for ${targetPath} due to 8.3 collision`);
+                    output.shouldStampMeta = false;
+                    output.shouldUpdateItemInfo = false;
+                }
             }
         }
         return output
