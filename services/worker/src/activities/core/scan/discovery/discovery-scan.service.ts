@@ -110,7 +110,8 @@ export class DiscoveryScanService {
             sourceMeta,
             sourceMeta,
             stats.size,
-            stats.ino
+            stats.ino,
+            false
         );
 
         await jobContext.publishToFileStream(itemInfo);

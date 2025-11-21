@@ -191,6 +191,7 @@ export class CommandExecService {
             try {
                 await fs.promises.unlink(targetPath);
                 command.ops[OPS_CMD.REMOVE_FILE].status = OPS_STATUS.COMPLETED;
+                output.shouldUpdateItemInfo = true;
             } catch (error) {
                 if (error.code !== 'ENOENT') {
                     command.ops[OPS_CMD.REMOVE_FILE].status = OPS_STATUS.ERROR;
@@ -210,6 +211,7 @@ export class CommandExecService {
             try {
                 await fs.promises.rm(targetPath, { recursive: true, force: true });
                 command.ops[OPS_CMD.REMOVE_DIR].status = OPS_STATUS.COMPLETED;
+                output.shouldUpdateItemInfo = true;
             } catch (error) {
                 if (error.code !== 'ENOENT') {
                     command.ops[OPS_CMD.REMOVE_DIR].status = OPS_STATUS.ERROR;
@@ -224,7 +226,55 @@ export class CommandExecService {
     }
 
     async publishFileInfo({command , jobContext, targetPath, sourcePath, errorType  }: CommandExecInput): Promise<void> {
-        // TODO: add sid - uid - gid to meta
+        const isDeleted = !!(command.ops?.[OPS_CMD.REMOVE_DIR] || command.ops?.[OPS_CMD.REMOVE_FILE]);
+        if (isDeleted) {
+            let sourceStats = null;
+            try {
+                sourceStats = await fs.promises.lstat(sourcePath);
+            } catch (error) {
+                this.logger.log(`[DELETE] Source path ${sourcePath} doesn't exist, using metadata from command`);
+            }
+            
+            const sourceMeta: ItemMeta = sourceStats ? {
+                accessTime: sourceStats.atime,
+                birthTime: sourceStats.birthtime,
+                modifiedTime: sourceStats.mtime,
+                permission: getFilePermissions(sourceStats, sourceStats.isDirectory()),
+                checksum : command.ops?.[OPS_CMD.COPY_FILE]?.params?.checksums?.sourceChecksum ?? '',
+                uid: sourceStats.uid,
+                gid: sourceStats.gid,
+                sid: command.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.sourceAcl ?? ''
+            } : {
+                accessTime: new Date(),
+                birthTime: new Date(),
+                modifiedTime: new Date(),
+                permission: '',
+                checksum: '',
+                uid: 0,
+                gid: 0,
+                sid: ''
+            };
+
+            const isDirectory = command.ops?.[OPS_CMD.REMOVE_DIR] ? true : false;
+            const itemInfo = new ItemInfo(
+                command.fPath,
+                isDirectory,
+                false, 
+                command.fPath.split('/').length - 2,
+                path.extname(targetPath),
+                isDirectory ? 'directory' : 'file',
+                sourceMeta,
+                sourceMeta, 
+                0, 
+                command.metadata?.inode ?? 0,
+                true, 
+            );
+    
+            await jobContext.publishToFileStream(itemInfo);
+            return;
+        }
+
+        // For copy operations, get both source and target stats
         const [sourceStats, targetStats] = await Promise.all([
             fs.promises.lstat(sourcePath),
             fs.promises.lstat(targetPath),
@@ -253,7 +303,6 @@ export class CommandExecService {
             sid: command.ops?.[OPS_CMD.STAMP_META]?.params?.sidMap?.targetAcl ?? ''
         }
 
-
         const itemInfo = new ItemInfo(
             command.fPath,
             isDirectory,
@@ -264,7 +313,8 @@ export class CommandExecService {
             sourceMeta,
             targetMeta,
             targetStats.size,
-            command.metadata.inode
+            command.metadata.inode,
+            false, // isDeleted is false for copy operations
         )
 
         await this.validateCommand({ cmd: command, item: itemInfo, jobContext, errorType});

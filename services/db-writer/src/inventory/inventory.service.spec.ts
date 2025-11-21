@@ -244,7 +244,8 @@ describe("InventoryService", () => {
             pathId: 'test-path-456',
             sourceMeta: expect.any(Object),
             targetMeta: expect.any(Object),
-            inode: 0
+            inode: 0,
+            isDeleted: false
         });
     });
 

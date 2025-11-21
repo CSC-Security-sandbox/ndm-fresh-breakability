@@ -622,7 +622,9 @@ describe("JobRunService", () => {
       // Verify the mocks were called correctly
       expect(mockCsvService.generateCsv).toHaveBeenCalledWith(
         mockFilePath,
-        jobRunId
+        jobRunId,
+        10000,
+        'MIGRATE'
       );
       expect(mockJobRunRepo.update).toHaveBeenCalledWith(
         { id: jobRunId },

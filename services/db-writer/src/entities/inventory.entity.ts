@@ -103,4 +103,8 @@ export class InventoryEntity {
     @ApiProperty({ description: 'Inode number', nullable: true })
     @Column({ name: 'inode', type: 'numeric', nullable: true })
     inode: number;  
+
+    @ApiProperty({ description: 'Is file deleted' })
+    @Column({ name: 'is_deleted', type: 'boolean', default: false })
+    isDeleted: boolean;
 }
