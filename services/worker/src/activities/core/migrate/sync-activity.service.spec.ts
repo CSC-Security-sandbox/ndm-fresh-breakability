@@ -20,9 +20,10 @@ jest.mock('@temporalio/activity', () => ({
 
 // Mock utils functions
 jest.mock('src/activities/utils/utils', () => ({
-    basePrefix: jest.fn((jobRunId, pathId) => `/base/${jobRunId}/${pathId}/`),
+    basePrefix: jest.fn((jobRunId, pathId) => `/base/${jobRunId}/${pathId}`),
     isFatalError: jest.fn((error) => error === 'FATAL'),
     isSourceFatalError: jest.fn((error) => error === 'SOURCE_FATAL'),
+    isTransientError: jest.fn((error) => error === 'TRANSIENT'),
 }));
 
 describe('SyncService', () => {
@@ -431,6 +432,271 @@ describe('SyncService', () => {
             expect(result.errors.source).toEqual([]);
             expect(result.errors.target).toEqual([]);
             expect(commandExecService.executeCommand).not.toHaveBeenCalled();
+        });
+
+        describe('8.3 Collision Detection Error Handling', () => {
+            it('should treat E8DOT3_COLLISION as TRANSIENT_ERROR when max retries exceeded', async () => {
+                const collisionCommand = {
+                    id: 'collision-cmd',
+                    fPath: '/LONGLO~1/test.txt',
+                    status: CommandStatus.READY,
+                    isDir: false,
+                    ops: {},
+                    metadata: {
+                        size: 1024,
+                        mtime: new Date(),
+                        atime: new Date(),
+                        ctime: new Date(),
+                        birthtime: new Date(),
+                        mode: 644,
+                        uid: 1000,
+                        gid: 1000,
+                        sid: 'test-sid',
+                        inode: 123456
+                    },
+                    serialize: jest.fn(),
+                };
+
+                const taskWithCollision = new TaskInfo(
+                    'task-collision-1',
+                    'job-collision-123',
+                    TaskType.MIGRATE,
+                    TaskStatus.RUNNING,
+                    'test-worker-1',
+                    'source-collision',
+                    [collisionCommand],
+                    'target-collision'
+                );
+                taskWithCollision.retryCount = 3; // At max retry count
+
+                const collisionError: any = new Error('8.3 short filename collision detected');
+                collisionError.code = 'E8DOT3_COLLISION';
+                
+                const collisionResult = {
+                    cmd: { ...collisionCommand, status: 'ERROR' },
+                    sourceErrors: ['E8DOT3_COLLISION'],
+                    targetErrors: [],
+                    shouldStampMeta: false,
+                    shouldUpdateItemInfo: false,
+                };
+                
+                commandExecService.executeCommand.mockResolvedValue(collisionResult);
+
+                const result = await service.executeSyncTask('task-hash-collision', taskWithCollision, mockJobContext);
+
+                expect(result.status).toBe('PENDING');
+                expect(result.errors.source).toContain('E8DOT3_COLLISION');
+                expect(commandExecService.executeCommand).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        sourcePath: `/base/job-collision-123/source-collision/LONGLO~1/test.txt`,
+                        targetPath: `/base/job-collision-123/target-collision/LONGLO~1/test.txt`,
+                        command: collisionCommand,
+                        errorType: 'TRANSIENT_ERROR' // Should be TRANSIENT_ERROR due to max retries
+                    })
+                );
+            });
+
+            it('should treat E8DOT3_COLLISION as RECOVERABLE_ERROR when under max retries', async () => {
+                const collisionCommand = {
+                    id: 'collision-cmd-2',
+                    fPath: '/SHORTF~1/document.docx',
+                    status: CommandStatus.READY,
+                    isDir: false,
+                    ops: {},
+                    metadata: {
+                        size: 2048,
+                        mtime: new Date(),
+                        atime: new Date(),
+                        ctime: new Date(),
+                        birthtime: new Date(),
+                        mode: 644,
+                        uid: 1000,
+                        gid: 1000,
+                        sid: 'test-sid-2',
+                        inode: 123457
+                    },
+                    serialize: jest.fn(),
+                };
+
+                const taskWithCollision = new TaskInfo(
+                    'task-collision-2',
+                    'job-collision-456',
+                    TaskType.MIGRATE,
+                    TaskStatus.RUNNING,
+                    'test-worker-1',
+                    'source-collision-2',
+                    [collisionCommand],
+                    'target-collision-2'
+                );
+                taskWithCollision.retryCount = 1; // Under max retry count
+
+                const collisionResult = {
+                    cmd: { ...collisionCommand, status: 'ERROR' },
+                    sourceErrors: ['E8DOT3_COLLISION'],
+                    targetErrors: [],
+                    shouldStampMeta: false,
+                    shouldUpdateItemInfo: false,
+                };
+                
+                commandExecService.executeCommand.mockResolvedValue(collisionResult);
+
+                const result = await service.executeSyncTask('task-hash-collision-2', taskWithCollision, mockJobContext);
+
+                expect(result.status).toBe('PENDING');
+                expect(result.errors.source).toContain('E8DOT3_COLLISION');
+                expect(commandExecService.executeCommand).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        sourcePath: `/base/job-collision-456/source-collision-2/SHORTF~1/document.docx`,
+                        targetPath: `/base/job-collision-456/target-collision-2/SHORTF~1/document.docx`,
+                        command: collisionCommand,
+                        errorType: 'RECOVERABLE_ERROR' // Should be RECOVERABLE_ERROR under max retries
+                    })
+                );
+            });
+
+            it('should handle successful command execution on tilde paths', async () => {
+                const successCommand = {
+                    id: 'success-cmd',
+                    fPath: '/LONGLO~1/success.txt',
+                    status: CommandStatus.READY,
+                    isDir: false,
+                    ops: {},
+                    metadata: {
+                        size: 512,
+                        mtime: new Date(),
+                        atime: new Date(),
+                        ctime: new Date(),
+                        birthtime: new Date(),
+                        mode: 644,
+                        uid: 1000,
+                        gid: 1000,
+                        sid: 'success-sid',
+                        inode: 123458
+                    },
+                    serialize: jest.fn(),
+                };
+
+                const taskWithTildePath = new TaskInfo(
+                    'task-success-1',
+                    'job-success-123',
+                    TaskType.MIGRATE,
+                    TaskStatus.RUNNING,
+                    'test-worker-1',
+                    'source-success',
+                    [successCommand],
+                    'target-success'
+                );
+                taskWithTildePath.retryCount = 0;
+
+                const successResult = {
+                    cmd: { ...successCommand, status: CommandStatus.COMPLETED },
+                    sourceErrors: [],
+                    targetErrors: [],
+                    shouldStampMeta: true,
+                    shouldUpdateItemInfo: true,
+                };
+
+                commandExecService.executeCommand.mockResolvedValue(successResult);
+
+                const result = await service.executeSyncTask('task-hash-success', taskWithTildePath, mockJobContext);
+
+                expect(result.status).toBe(TaskStatus.PENDING);
+                expect(result.errors.source).toEqual([]);
+                expect(result.errors.target).toEqual([]);
+                expect(commandExecService.executeCommand).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        sourcePath: `/base/job-success-123/source-success/LONGLO~1/success.txt`,
+                        targetPath: `/base/job-success-123/target-success/LONGLO~1/success.txt`,
+                        command: successCommand,
+                        errorType: 'RECOVERABLE_ERROR'
+                    })
+                );
+            });
+
+            it('should aggregate collision errors properly in batch processing', async () => {
+                const commands = [
+                    {
+                        id: 'cmd-1',
+                        fPath: '/NORMFI~1.txt',
+                        status: CommandStatus.READY,
+                        isDir: false,
+                        ops: {},
+                        metadata: {
+                            size: 256,
+                            mtime: new Date(),
+                            atime: new Date(),
+                            ctime: new Date(),
+                            birthtime: new Date(),
+                            mode: 644,
+                            uid: 1000,
+                            gid: 1000,
+                            sid: 'batch-sid-1',
+                            inode: 123459
+                        },
+                        serialize: jest.fn(),
+                    },
+                    {
+                        id: 'cmd-2',
+                        fPath: '/LONGLO~1/file.pdf',
+                        status: CommandStatus.READY,
+                        isDir: false,
+                        ops: {},
+                        metadata: {
+                            size: 4096,
+                            mtime: new Date(),
+                            atime: new Date(),
+                            ctime: new Date(),
+                            birthtime: new Date(),
+                            mode: 644,
+                            uid: 1000,
+                            gid: 1000,
+                            sid: 'batch-sid-2',
+                            inode: 123460
+                        },
+                        serialize: jest.fn(),
+                    }
+                ];
+
+                const taskWithMultipleCommands = new TaskInfo(
+                    'task-batch-1',
+                    'job-batch-789',
+                    TaskType.MIGRATE,
+                    TaskStatus.RUNNING,
+                    'test-worker-1',
+                    'source-batch',
+                    commands,
+                    'target-batch'
+                );
+                taskWithMultipleCommands.retryCount = 2;
+
+                // First command succeeds
+                const successResult = {
+                    cmd: { ...commands[0], status: CommandStatus.COMPLETED },
+                    sourceErrors: [],
+                    targetErrors: [],
+                    shouldStampMeta: true,
+                    shouldUpdateItemInfo: true,
+                };
+
+                // Second command has collision error
+                const collisionResult = {
+                    cmd: { ...commands[1], status: CommandStatus.ERROR },
+                    sourceErrors: [],
+                    targetErrors: ['E8DOT3_COLLISION'],
+                    shouldStampMeta: false,
+                    shouldUpdateItemInfo: false,
+                };
+
+                commandExecService.executeCommand
+                    .mockResolvedValueOnce(successResult)
+                    .mockResolvedValueOnce(collisionResult);
+
+                const result = await service.executeSyncTask('task-hash-batch', taskWithMultipleCommands, mockJobContext);
+
+                expect(result.status).toBe(TaskStatus.PENDING);
+                expect(result.errors.target).toContain('E8DOT3_COLLISION');
+                expect(commandExecService.executeCommand).toHaveBeenCalledTimes(2);
+            });
         });
     });
 });
