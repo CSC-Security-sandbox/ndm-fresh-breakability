@@ -63,6 +63,27 @@ export class MigrateScanService {
         return content;
     }
 
+
+    private async checkAndPublishTrailingSpaceError(item: string, relativeSourcePath: string, sourceContentPath: string, command: Cmd, jobContext: JobManagerContext, errorType: ErrorType): Promise<boolean> {
+        if (!item.endsWith(' ') && !item.endsWith('\t')) {
+            return false; 
+        }
+        const error = new Error(`File not migrated: filename contains trailing spaces`) as Error & {code: string};
+        error.code = 'ETRAILSPACE';
+        const dmErr = dmError(
+            "OPERATION",
+            Origin.SOURCE,
+            Operation.READ_FILE,
+            ErrorType.TRANSIENT_ERROR,
+            command.id,
+            error,
+            { name: relativeSourcePath, path: sourceContentPath }
+        );
+        await jobContext.publishToErrorStream(dmErr);
+        
+        return true;
+    }
+
     private async checkCaseSensitiveConflict(item: string, lowerCaseSourceData: Set<string>, lowerCaseTargetData: Set<string>, targetContent: Set<string>, relativeSourcePath: string, sourceContentPath: string, command: Cmd, jobContext: JobManagerContext, isDirectory: boolean): Promise<boolean> {
         const lowerCaseFileName = item.toLowerCase();
         if (lowerCaseSourceData.has(lowerCaseFileName) || (lowerCaseTargetData.has(lowerCaseFileName) && !targetContent.has(item))) {
@@ -77,13 +98,14 @@ export class MigrateScanService {
         return false;
     }
 
-    async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings , targetPrefix, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> { 
+    async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings , targetPrefix, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> {
+
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
         let commands: Cmd[] = [];
         const isSMB = process.platform === 'win32'
         const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command});
-        const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});    
-        
+        const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});
+
         let lowerCaseSourceData: Set<string>;
         let lowerCaseTargetData: Set<string>;
         if(isSMB){
@@ -97,7 +119,7 @@ export class MigrateScanService {
             try {
                 const sourceContentPath = path.join(sourcePath, item);
                 const sourceContentExists = await isExists(sourceContentPath);
-                if(!sourceContentExists) continue; 
+                if(!sourceContentExists) continue;
                 const sourceStat = await fs.promises.lstat(sourceContentPath);                
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
                 if (isSMB){
@@ -112,8 +134,18 @@ export class MigrateScanService {
                         sourceStat.isDirectory()
                     );
                     if (hasConflict) continue;
+
+                    const hasTrailingSpace = await this.checkAndPublishTrailingSpaceError(
+                        item,
+                        relativeSourcePath,
+                        sourceContentPath,
+                        command,
+                        jobContext,
+                        errorType
+                    );
+                    if (hasTrailingSpace) continue;
                 }
-                
+
                 if (shouldExcludeOrSkip({
                     fullPath: sourceContentPath,
                     stats: sourceStat,
@@ -150,8 +182,8 @@ export class MigrateScanService {
                                 );
                             continue;
                         }
-                        const newcommand = this.buildCommand(sourceStat, fileInfo.path);                        
-                        if (newcommand) commands.push(newcommand);                    
+                        const newcommand = this.buildCommand(sourceStat, fileInfo.path);
+                        if (newcommand) commands.push(newcommand);
                     }else{
                         const targetFilePath = path.join(targetPath, item);
                         const targetStatLstat = await fs.promises.lstat(targetFilePath);

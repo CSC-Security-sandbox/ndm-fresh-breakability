@@ -1,6 +1,6 @@
 import { DiscoveryReportSection } from "../discovery-report.type";
-import { ACCESS_TIME_DISTRIBUTION, CREATED_TIME_DISTRIBUTION, DEPTH_DISTRIBUTION, EXTENSION_DISTRIBUTION, FILE_SYSTEM_DISTRIBUTION, JOB_RUN_DETAILS, MAX_VALUES, MODIFIED_TIME_DISTRIBUTION, NUMBER_OF_FILES_BY_SIZE, TOP_BIGGEST_FILE_NAME, TOP_DIRECTORY_WITH_MAX_COUNT_CHILD, TOP_DIRECTORY_WITH_MAX_SIZE, TOP_LONGEST_DIRECTORY_NAMES, TOP_LONGEST_DIRECTORY_PATHS, TOP_LONGEST_FILE_NAMES, TOP_LONGEST_FILE_PATHS, REDIRECTS, CASE_ERRORS } from './discovery-report.query';
-import { AccessTimeDistributionInput, CreatedTimeDistributionInput, DepthDistributionInput, ExtensionDistributionInput, FileSystemDistributionInput, JobRunDetailsInput, MaxValuesInput, ModifiedTimeDistributionInput, NumberOfFilesBySizeInput, TopBiggestFileNameInput, TopDirectoryWithMaxCountChildInput, TopDirectoryWithMaxSizeInput, TopLongestDirectoryNamesInput, TopLongestDirectoryPathsInput, TopLongestFileNamesInput, TopLongestFilePathsInput, RedirectsFileNameInput, CaseErrorsInput} from "./discovery-report.query.type";
+import { ACCESS_TIME_DISTRIBUTION, CREATED_TIME_DISTRIBUTION, DEPTH_DISTRIBUTION, EXTENSION_DISTRIBUTION, FILE_SYSTEM_DISTRIBUTION, JOB_RUN_DETAILS, MAX_VALUES, MODIFIED_TIME_DISTRIBUTION, NUMBER_OF_FILES_BY_SIZE, TOP_BIGGEST_FILE_NAME, TOP_DIRECTORY_WITH_MAX_COUNT_CHILD, TOP_DIRECTORY_WITH_MAX_SIZE, TOP_LONGEST_DIRECTORY_NAMES, TOP_LONGEST_DIRECTORY_PATHS, TOP_LONGEST_FILE_NAMES, TOP_LONGEST_FILE_PATHS, REDIRECTS, CASE_ERRORS, TRAILING_SPACE_FILE} from './discovery-report.query';
+import { AccessTimeDistributionInput, CreatedTimeDistributionInput, DepthDistributionInput, ExtensionDistributionInput, FileSystemDistributionInput, JobRunDetailsInput, MaxValuesInput, ModifiedTimeDistributionInput, NumberOfFilesBySizeInput, TopBiggestFileNameInput, TopDirectoryWithMaxCountChildInput, TopDirectoryWithMaxSizeInput, TopLongestDirectoryNamesInput, TopLongestDirectoryPathsInput, TopLongestFileNamesInput, TopLongestFilePathsInput, RedirectsFileNameInput, CaseErrorsInput, TrailingSpaceInput} from "./discovery-report.query.type";
 import { SECONDS_PER_MINUTE, SECONDS_PER_HOUR, SECONDS_PER_DAY, TIME_UNITS } from "../../../constants/report";
 
 
@@ -427,11 +427,24 @@ export const JOB_RUN_DETAILS_MAPPER = (input: JobRunDetailsInput[]) : DiscoveryR
 
 export const CASE_ERRORS_MAPPER = (input: CaseErrorsInput[]) : DiscoveryReportSection[] => {
     const output: DiscoveryReportSection[] = [];
-    
+
     input.forEach(item => {
         output.push({
             value: item.file_paths.join(', '),
             category: 'Case Sensitivity Conflicts',
+            valueType: 'string',
+            sub_category: item.parent_path
+        });
+    });
+    return output;
+}
+
+export const TRAILING_SPACE_FILE_MAPPER = (input: TrailingSpaceInput[]) : DiscoveryReportSection[] => {
+    const output: DiscoveryReportSection[] = [];
+    input.forEach(item => {
+        output.push({
+            value: item.file_names.join(', '),
+            category: 'Files without extensions and trailing spaces',
             valueType: 'string',
             sub_category: item.parent_path
         });
@@ -457,7 +470,9 @@ export const QueryMapper = {
     ['TOP_BIGGEST_FILE_NAME']: {query: TOP_BIGGEST_FILE_NAME, mapper: TOP_BIGGEST_FILE_NAME_MAPPER, isDynamic: true},
     ['JOB_RUN_DETAILS']: {query : JOB_RUN_DETAILS, mapper: JOB_RUN_DETAILS_MAPPER, isDynamic: false},
     ['REDIRECTS']: {query : REDIRECTS, mapper: REDIRECTS_FILE_NAME_MAPPER, isDynamic: false},
-    ['CASE_ERRORS']: {query : CASE_ERRORS, mapper: CASE_ERRORS_MAPPER, isDynamic: true}
+    ['CASE_ERRORS']: {query : CASE_ERRORS, mapper: CASE_ERRORS_MAPPER, isDynamic: true},
+    ['TRAILING_SPACE_FILE']: {query : TRAILING_SPACE_FILE, mapper: TRAILING_SPACE_FILE_MAPPER, isDynamic: true},
+
 }
 
 export const DynamicMaps: string[] = Object.entries(QueryMapper)

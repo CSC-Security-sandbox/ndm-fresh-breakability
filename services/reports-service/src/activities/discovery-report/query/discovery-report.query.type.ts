@@ -93,6 +93,12 @@ export interface JobRunDetailsInput {
     protocol: string;
 }
 
+export interface TrailingSpaceInput {
+    parent_path: string;
+    file_names: Array<string>;
+}
+
+
 export interface CaseErrorsInput {
     parent_path: string;
     file_paths: Array<string>;

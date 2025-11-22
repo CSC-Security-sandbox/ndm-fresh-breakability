@@ -520,7 +520,8 @@ describe('utils', () => {
                 { code: 'EPIPE', task: 'TASK_BROKEN_PIPE', op: 'OP_BROKEN_PIPE' },
                 { code: 'ENAMETOOLONG', task: 'TASK_FILENAME_TOO_LONG', op: 'OP_FILENAME_TOO_LONG' },
                 { code: 'EIO', task: 'TASK_SERVER_DISCONNECTED', op: 'OP_SERVER_DISCONNECTED' },
-                { code: 'EEXIST', task: 'TASK_CASE_CONFLICT', op: 'OP_CASE_CONFLICT' }
+                { code: 'EEXIST', task: 'TASK_CASE_CONFLICT', op: 'OP_CASE_CONFLICT' },
+                { code: 'ETRAILSPACE', task: 'TASK_TRAILING_SPACE', op: 'OP_TRAILING_SPACE' }
             ];
 
             testCases.forEach(({ code, task, op }) => {

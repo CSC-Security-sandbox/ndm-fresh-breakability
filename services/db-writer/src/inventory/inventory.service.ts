@@ -70,13 +70,13 @@ export class InventoryService {
       parentPath = pathModule.dirname(fullPath);
     }
     return {
-      path: fullPath, 
+      path: fullPath,
       isDirectory: file.isDirectory ?? false,
       sourceChecksum: file?.sourceMeta?.checksum ?? null,
       targetChecksum: file?.targetMeta?.checksum ?? null,
-      parentPath: parentPath, 
+      parentPath: parentPath,
       depth: file?.depth ?? 0,
-      fileName: actualFileName, 
+      fileName: actualFileName,
       uid: file?.targetMeta?.uid?.toString() ?? file?.sourceMeta?.uid?.toString() ?? '',
       gid: file?.targetMeta?.gid?.toString() ?? file?.sourceMeta?.gid?.toString() ?? '',
       fileSize: file?.size ? BigInt(file.size).toString() : '0',

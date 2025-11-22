@@ -18,8 +18,9 @@ TOP_BIGGEST_FILE_NAME_MAPPER,
 JOB_RUN_DETAILS_MAPPER,
 QueryMapper,
 QueryList,
-CASE_ERRORS_MAPPER,
-REDIRECTS_FILE_NAME_MAPPER
+REDIRECTS_FILE_NAME_MAPPER,
+TRAILING_SPACE_FILE_MAPPER,
+CASE_ERRORS_MAPPER
 } from './discovery-report.query-mapper';
 
 describe('discovery-report.query-mapper', () => {
@@ -545,15 +546,108 @@ it('QueryMapper and QueryList are defined and consistent', () => {
     });
 });
 
+
+// --- TRAILING_SPACE_FILE_MAPPER Tests ---
+describe('TRAILING_SPACE_FILE_MAPPER', () => {
+
+    it('should map single file with trailing space', () => {
+        const input = [
+            {
+                parent_path: '/home/user/documents',
+                file_names: ['file1    ']
+            }
+        ];
+
+        const result = TRAILING_SPACE_FILE_MAPPER(input as any);
+
+        expect(result).toHaveLength(1);
+        expect(result[0]).toEqual({
+            value: 'file1    ',
+            category: 'Files without extensions and trailing spaces',
+            valueType: 'string',
+            sub_category: '/home/user/documents'
+        });
+    });
+
+
+    it('should map files across multiple directories', () => {
+        const input = [
+            {
+                parent_path: '/home/user/documents',
+                file_names: ['file1.txt ', 'file2    ']
+            },
+            {
+                parent_path: '/home/user/downloads',
+                file_names: ['image.jpg ', 'video.mp4 ']
+            },
+            {
+                parent_path: '/home/user/pictures',
+                file_names: ['photo.png ']
+            }
+        ];
+
+        const result = TRAILING_SPACE_FILE_MAPPER(input as any);
+
+        expect(result).toHaveLength(3);
+        expect(result[0]).toEqual({
+            value: 'file1.txt , file2    ',
+            category: 'Files without extensions and trailing spaces',
+            valueType: 'string',
+            sub_category: '/home/user/documents'
+        });
+        expect(result[1].sub_category).toBe('/home/user/downloads');
+        expect(result[2].sub_category).toBe('/home/user/pictures');
+    });
+
+    it('should handle empty input array', () => {
+        const input: any[] = [];
+
+        const result = TRAILING_SPACE_FILE_MAPPER(input);
+
+        expect(result).toEqual([]);
+    });
+
+
+    it('should have correct category and valueType', () => {
+        const input = [
+            {
+                parent_path: '/test',
+                file_names: ['test   ']
+            }
+        ];
+
+        const result = TRAILING_SPACE_FILE_MAPPER(input as any);
+
+        expect(result[0].category).toBe('Files without extensions and trailing spaces');
+        expect(result[0].valueType).toBe('string');
+    });
+
+    it('should return correct structure for result array', () => {
+        const input = [
+            {
+                parent_path: '/test/path',
+                file_names: ['test  ']
+            }
+        ];
+
+        const result = TRAILING_SPACE_FILE_MAPPER(input as any);
+
+        expect(result[0]).toHaveProperty('value');
+        expect(result[0]).toHaveProperty('category');
+        expect(result[0]).toHaveProperty('valueType');
+        expect(result[0]).toHaveProperty('sub_category');
+    });
+});
+
 it('CASE_ERRORS_MAPPER maps input correctly', () => {
     const input = [
-        { 
-            parent_path: '/home/user/documents', 
-            file_paths: ['FILE.txt', 'file.txt', 'File.TXT'] 
+        {
+            parent_path: '/home/user/documents',
+            file_paths: ['FILE.txt', 'file.txt', 'File.TXT']
         },
-        { 
-            parent_path: '/home/user/images', 
-            file_paths: ['IMAGE.jpg', 'image.JPG'] 
+        {
+            parent_path: '/home/user/images',
+            file_paths: ['IMAGE.jpg', 'image.JPG']
         }
     ];
     const result = CASE_ERRORS_MAPPER(input as any);

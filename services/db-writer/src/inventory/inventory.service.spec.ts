@@ -250,8 +250,8 @@ describe("InventoryService", () => {
     });
 
     it('should handle Windows-style paths', () => {
-      const file = createMockItemInfo({ 
-        fileName: '\\mnt\\C:\\Users\\test\\file.txt' 
+      const file = createMockItemInfo({
+        fileName: '\\mnt\\C:\\Users\\test\\file.txt'
       });
 
       const result = service.mapSourceToTarget(file, jobRunId, pathId);
