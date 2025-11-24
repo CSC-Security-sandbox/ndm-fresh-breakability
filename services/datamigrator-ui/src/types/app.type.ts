@@ -527,6 +527,7 @@ export type TaskInfoCardPropType = {
 
 export type JobRunTaskCardPropType = {
   jobRunDetails?: JobRunDetailsApiType;
+  jobRunId?: string;
 };
 
 export type JobRunHeaderPropType = JobRunTaskCardPropType;

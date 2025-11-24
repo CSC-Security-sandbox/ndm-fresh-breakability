@@ -7,15 +7,15 @@ import {
 import JobRunStatusCellRenderer from "@components/custom-cell-renderer/JobRunStatusCellRenderer";
 import TaskInfoCard from "@modules/jobs/jobs-list/job-details/components/TaskInfoCard";
 
-const JobRunTaskCard = ({ jobRunDetails }: JobRunTaskCardPropType) => {
+const JobRunTaskCard = ({ jobRunDetails, jobRunId }: JobRunTaskCardPropType) => {
   const completed = jobRunDetails?.task.completed || 0;
   const pending = jobRunDetails?.task.pending || 0;
   const errored = jobRunDetails?.task.errored || 0;
   const running = jobRunDetails?.task.running || 0;
 
   const total = completed + pending + errored + running;
-  const url = `/job-details/${jobRunDetails?.jobConfig.id}/run/${jobRunDetails?.id}/tasks`;
-  const workersUrl = `/workers/${jobRunDetails?.id}`;
+  const url = `/job-details/${jobRunDetails?.jobConfig.id}/run/${jobRunId}/tasks`;
+  const workersUrl = `/workers/${jobRunId}`;
 
   const generateUrl = (status: TASK_STATUS_TYPE_ENUM, count: number) => {
     return `${url}?status=${status}&count=${count}`;
