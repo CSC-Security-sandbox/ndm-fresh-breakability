@@ -46,7 +46,7 @@ const {
         backoffCoefficient: 2.0,
         nonRetryableErrorTypes: ['ActivityFailure','FatalError',],
     },
-    startToCloseTimeout: '24h',
+    startToCloseTimeout: '96h',
     heartbeatTimeout: '2m',
 });
 
