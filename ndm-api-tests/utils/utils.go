@@ -284,7 +284,7 @@ func GenerateNewPassword(length int) (string, error) {
 		password[i], password[j.Int64()] = password[j.Int64()], password[i]
 	}
 
-//     fmt.Println("Password is :", string(password))
+	// fmt.Println("Password is :", string(password))
 
 	return string(password), nil
 }
@@ -542,7 +542,7 @@ func GetProjectIdHeader(authToken string, projectId string) map[string]string {
 		headers[AuthHeader] = BearerPrefix + authToken
 	}
 
-	headers["projectid"] = projectId 
+	headers["projectid"] = projectId
 
 	return headers
 }
