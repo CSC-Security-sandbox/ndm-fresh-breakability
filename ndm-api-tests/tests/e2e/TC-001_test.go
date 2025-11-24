@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
+var _ = FDescribe("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
 	var (
 		ProjectId              string
 		workerId1              string

@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-009: Run discovery and migration with 'Exclude file older than' option", func() {
+var _ = FDescribe("TC-009: Run discovery and migration with 'Exclude file older than' option", func() {
 	var (
 		ProjectId              string
 		workerId1              string

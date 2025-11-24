@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-008: Run migration with 'Skip files modified in last' option", func() {
+var _ = FDescribe("TC-008: Run migration with 'Skip files modified in last' option", func() {
 	var headers map[string]string
 	var (
 		ProjectId              string

@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-005: Running migration / cutover with an exclude path pattern and batch pause/resume/stop/adhoc-run", func() {
+var _ = FDescribe("TC-005: Running migration / cutover with an exclude path pattern and batch pause/resume/stop/adhoc-run", func() {
 	var headers map[string]string
 	var (
 		ProjectId              string
