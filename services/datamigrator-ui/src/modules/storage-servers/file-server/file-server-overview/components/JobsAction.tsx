@@ -29,7 +29,7 @@ const JobsAction = ({
   }, [allExportPaths]);
 
   // Bulk buttons should be disabled if file server is not active OR all export paths are disabled
-  const areBulkButtonsDisabled = !isActive || areAllExportPathsDisabled;
+  const areExportPathsInvalid = !isActive || areAllExportPathsDisabled;
 
   const handleEdit = () => {
     navigate(`/edit-file-server/${fileServerDetails?.id}`);
@@ -55,19 +55,19 @@ const JobsAction = ({
       <Box className="flex justify-end gap-2">
         <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.ManageJob}>
           <Button
-            disabled={areBulkButtonsDisabled}
+            disabled={areExportPathsInvalid}
             onClick={() => navigate(`${pathname}/bulk-discover`)}
           >
             Bulk Discover
           </Button>
           <Button
-            disabled={areBulkButtonsDisabled}
+            disabled={areExportPathsInvalid}
             onClick={() => navigate(`${pathname}/bulk-migrate`)}
           >
             Bulk Migrate
           </Button>
           <Button
-            disabled={areBulkButtonsDisabled}
+            disabled={areExportPathsInvalid}
             onClick={() => navigate(`${pathname}/bulk-cutover`)}
           >
             Bulk Cutover
