@@ -1040,10 +1040,10 @@ jobs:
           cd app-deployment/terraform/azure/environments/api
           terraform init
 
-      # - name: Destroy Terraform Resources
-      #   run: |
-      #     cd app-deployment/terraform/azure/environments/api
-      #     terraform destroy -auto-approve
+      - name: Destroy Terraform Resources
+        run: |
+          cd app-deployment/terraform/azure/environments/api
+          terraform destroy -auto-approve
 
       - name: Clean Up Temporary Files
         run: |
