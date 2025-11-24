@@ -48,7 +48,7 @@ export class CsvService {
             const fileStream = fs.createWriteStream(filePath); 
             const csvStream = fastCsv.format({ headers: true });
             csvStream.pipe(fileStream);
-            let offset = 1;
+            let offset = 0;
 
             let totalRecords = 0;
             while (true) {
@@ -58,9 +58,9 @@ export class CsvService {
                     csvStream.write(row);
                 }
                 totalRecords += result.length;
-                offset++;
+                offset += batchSize;
                 
-                if (offset % 10 === 0) {
+                if (totalRecords % (batchSize * 10) === 0) {
                     this.logger.log(`projectId: ${projectId} Processed ${totalRecords} records so far for jobRunId: ${jobRunId}`);
                 }
             }
@@ -109,6 +109,7 @@ export class CsvService {
         LEFT JOIN ${dbSchema}.volume v_source ON jc.source_path_id = v_source.id
         LEFT JOIN ${dbSchema}.volume v_target ON jc.target_path_id = v_target.id
         WHERE i.job_run_id = $1
+          AND (i.is_deleted = false OR i.is_deleted IS NULL)
         ORDER BY i.path, i.updated_at DESC, i.created_at DESC
         LIMIT $2 OFFSET $3;
     `;

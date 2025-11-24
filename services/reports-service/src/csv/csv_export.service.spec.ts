@@ -483,7 +483,7 @@ describe("CsvService", () => {
 
       await service.generateCsv(filePath, jobRunId, 10000, jobType);
 
-      expect(service.getInventoryData).toHaveBeenCalledWith(jobRunId, 10000, 1, jobType);
+      expect(service.getInventoryData).toHaveBeenCalledWith(jobRunId, 10000, 0, jobType);
     });
 
     it("should call regular query when jobType is MIGRATE", async () => {
@@ -503,7 +503,7 @@ describe("CsvService", () => {
 
       await service.generateCsv(filePath, jobRunId, 10000, jobType);
 
-      expect(service.getInventoryData).toHaveBeenCalledWith(jobRunId, 10000, 1, jobType);
+      expect(service.getInventoryData).toHaveBeenCalledWith(jobRunId, 10000, 0, jobType);
     });
   });
 });
