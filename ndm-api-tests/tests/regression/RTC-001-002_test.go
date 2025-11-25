@@ -82,6 +82,10 @@ var _ = Describe("RTC-001-002: Check worker status when worker goes down/becomes
 
 		AfterEach(func() {
 			By("Cleanup started")
+
+		    err := StopAllWorkersAndWait()
+			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
+			
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
 			LogDebug("Cleanup complete.")
