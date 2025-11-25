@@ -79,6 +79,14 @@ on:
               "branch": "main"
             }
           }
+      run_e2e:
+        description: 'Run E2E tests'
+        required: false
+        type: choice
+        default: 'true'
+        options:
+          - 'true'
+          - 'false'
   schedule:
     - cron: '30 18 * * *'
   workflow_call:
@@ -1529,7 +1537,7 @@ jobs:
           echo "Build notification sent successfully"
 
   run-azure-ndm-api-tests:
-    if: ${{ github.event_name != 'schedule' && needs.packer.outputs.control_plane_image_version != '' && needs.packer.outputs.worker_image_version != '' }}
+    if: ${{ ((github.event_name == 'schedule' && vars.RUN_E2E_ON_NIGHTLY == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_e2e == 'true') || github.event_name == 'workflow_call') && needs.packer.outputs.control_plane_image_version != '' && needs.packer.outputs.worker_image_version != '' }}
     needs: [package-artifacts, packer, determine-matrix, upload-windows-installer]
     uses: ./.github/workflows/run-api-tests-azure.yaml
     with:
