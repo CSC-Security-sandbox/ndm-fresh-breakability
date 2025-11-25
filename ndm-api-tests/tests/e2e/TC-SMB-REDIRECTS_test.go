@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = FDescribe("TC-SMB-REDIRECTS: Test Redirect in SMB discovery", func() {
+var _ = Describe("TC-SMB-REDIRECTS: Test Redirect in SMB discovery", func() {
 	BeforeEach(func() {
 		if PROTOCOL_TYPE == ProtocolNFS {
 			Skip("SMB Redirects is skipped in CI/CD as it is not supported in NFS")
