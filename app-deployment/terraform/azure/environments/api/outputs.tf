@@ -1,17 +1,22 @@
 # Control Plane Outputs
-output "control_plane_vm_name" {
-  description = "The name of the control plane VM"
-  value       = module.control_plane.vm_name
+output "control_plane_vm_names" {
+  description = "The names of the control plane VMs"
+  value       = [for cp in module.control_plane : cp.vm_name]
 }
 
 output "control_plane_private_ip" {
-  description = "The private IP address of the control plane VM"
-  value       = module.control_plane.vm_private_ip
+  description = "The private IP address of the first control plane VM (for backward compatibility)"
+  value       = length(module.control_plane) > 0 ? module.control_plane[0].vm_private_ip : ""
 }
 
-output "control_plane_admin_password" {
-  description = "The admin password for the control plane VM"
-  value       = module.control_plane.admin_password
+output "control_plane_private_ips" {
+  description = "The private IP addresses of all control plane VMs"
+  value       = [for cp in module.control_plane : cp.vm_private_ip]
+}
+
+output "control_plane_admin_passwords" {
+  description = "The admin passwords for the control plane VMs"
+  value       = [for cp in module.control_plane : cp.admin_password]
   sensitive   = true
 }
 
@@ -53,7 +58,7 @@ output "windows_worker_admin_passwords" {
 output "all_vm_names" {
   description = "All VM names"
   value = concat(
-    [module.control_plane.vm_name],
+    [for cp in module.control_plane : cp.vm_name],
     [for worker in module.linux_workers : worker.vm_name],
     [for worker in module.windows_workers : worker.vm_name]
   )
@@ -62,7 +67,7 @@ output "all_vm_names" {
 output "all_private_ips" {
   description = "All VM private IP addresses"
   value = concat(
-    [module.control_plane.vm_private_ip],
+    [for cp in module.control_plane : cp.vm_private_ip],
     [for worker in module.linux_workers : worker.vm_private_ip],
     [for worker in module.windows_workers : worker.vm_private_ip]
   )
@@ -71,11 +76,14 @@ output "all_private_ips" {
 output "deployment_summary" {
   description = "Summary of the deployment"
   value = {
-    control_plane = {
-      name = module.control_plane.vm_name
-      ip   = module.control_plane.vm_private_ip
-      os   = "linux"
-    }
+    control_planes = [
+      for i, cp in module.control_plane : {
+        name  = cp.vm_name
+        ip    = cp.vm_private_ip
+        os    = "linux"
+        cp_id = i + 1
+      }
+    ]
     linux_workers = [
       for i, worker in module.linux_workers : {
         name      = worker.vm_name

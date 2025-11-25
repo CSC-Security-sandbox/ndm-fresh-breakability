@@ -1,7 +1,8 @@
 # Control Plane (Linux)
 module "control_plane" {
+  count                           = var.deploy_control_plane ? var.control_plane_count : 0
   source                          = "../../modules/linux"
-  vm_name                         = "${var.vm_owner}-cp-api"
+  vm_name                         = var.control_plane_count > 1 ? "${var.vm_owner}-cp-${count.index + 1}-api" : "${var.vm_owner}-cp-api"
   resource_group                  = var.resource_group
   gallery_resource_group          = var.gallery_resource_group
   vnet_name                       = var.vnet_name
@@ -20,12 +21,13 @@ module "control_plane" {
     environment = "dev"
     owner       = "user"
     role        = "control-plane"
+    cp_id       = count.index + 1
   }
 }
 
 # # Linux Workers
 module "linux_workers" {
-  count                           = var.linux_worker_count
+  count                           = var.deploy_linux_workers ? var.linux_worker_count : 0
   source                          = "../../modules/linux"
   vm_name                         = "${var.vm_owner}-worker-linux-${count.index + 1}-api"
   resource_group                  = var.resource_group

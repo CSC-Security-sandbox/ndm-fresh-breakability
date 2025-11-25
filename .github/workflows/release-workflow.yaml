@@ -2,70 +2,216 @@ name: Release Workflow
 
 on:
   workflow_dispatch:
-    
-permissions: 
-  contents: write
-  actions: read
-  pull-requests: write
-  security-events: write
-  id-token: write
-  
+    inputs:
+      vm_prefix:
+        description: 'VM name prefix to delete (e.g., "john-cp", "test-worker")'
+        required: true
+        type: string
+      resource_group:
+        description: 'Azure Resource Group'
+        required: true
+        default: 'MigrationAsAService-dev-infra'
+        type: string
+      dry_run:
+        description: 'Dry run (list VMs without deleting)'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_CLIENT_ID: ${{ secrets.AZURE_SP_USERNAME }}
+  ARM_CLIENT_SECRET: ${{ secrets.AZURE_SP_PASSWORD }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
 jobs:
-  check-branch:
-    runs-on: ubuntu-latest
-    outputs:
-      build: ${{ steps.extract_build.outputs.build }}
+  cleanup-vms:
+    name: Delete VMs with prefix "${{ inputs.vm_prefix }}"
+    runs-on: openlab
     steps:
-      - name: Ensure branch is release/*
+      - name: Azure CLI Login
         run: |
-          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
-          if [[ ! "$BRANCH_NAME" =~ ^release/[^/]+$ ]]; then
-            echo "This workflow can only be run on release/* branches."
-            exit 1
+          az login --service-principal \
+            -u "${{ secrets.AZURE_SP_USERNAME }}" \
+            -p "${{ secrets.AZURE_SP_PASSWORD }}" \
+            --tenant "${{ secrets.AZURE_TENANT_ID }}"
+          
+          az account set --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          echo "Logged in to Azure successfully"
+
+      - name: Find VMs matching prefix
+        id: find-vms
+        run: |
+          PREFIX="${{ inputs.vm_prefix }}"
+          RG="${{ inputs.resource_group }}"
+          
+          echo "=== Searching for VMs with prefix: $PREFIX in RG: $RG ==="
+          
+          # Get all VMs matching the prefix
+          VMS=$(az vm list -g "$RG" --query "[?starts_with(name, '$PREFIX')].{name:name, id:id}" -o json)
+          
+          VM_COUNT=$(echo "$VMS" | jq length)
+          echo "Found $VM_COUNT VM(s) matching prefix '$PREFIX'"
+          
+          if [ "$VM_COUNT" -eq 0 ]; then
+            echo "No VMs found with prefix '$PREFIX'"
+            echo "vm_count=0" >> $GITHUB_OUTPUT
+            exit 0
           fi
           
-          VERSION="${BRANCH_NAME#release/}"
+          echo ""
+          echo "=== VMs to be deleted ==="
+          echo "$VMS" | jq -r '.[].name'
+          echo ""
           
-          VALID_PATTERN="^([0-9]{4}\.[0-9]{1,2}(\.[0-9]{1,2})?(-[a-zA-Z0-9_]+)?|[a-zA-Z][a-zA-Z0-9_]*(-[a-zA-Z0-9_]+)?)$"
+          # Store VM names for next steps
+          VM_NAMES=$(echo "$VMS" | jq -r '.[].name' | tr '\n' ' ')
+          echo "vm_names=$VM_NAMES" >> $GITHUB_OUTPUT
+          echo "vm_count=$VM_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Find associated NICs and Disks
+        if: steps.find-vms.outputs.vm_count != '0'
+        id: find-resources
+        run: |
+          PREFIX="${{ inputs.vm_prefix }}"
+          RG="${{ inputs.resource_group }}"
+          VM_NAMES="${{ steps.find-vms.outputs.vm_names }}"
           
-          if [[ ! "$VERSION" =~ $VALID_PATTERN ]]; then
-            echo "Error: Invalid release version format: $VERSION"
-            echo "Valid formats are:"
-            echo "  - YYYY.MM (e.g., 2025.08)"
-            echo "  - YYYY.MM-<suffix> (e.g., 2025.08-1, 2025.08-alpha, 2025.08-username)"
-            echo "  - YYYY.MM.DD (e.g., 2025.08.03)"
-            echo "  - YYYY.MM.<numeric suffix> (e.g., 2025.08.1, 2025.10.1)"
-            echo "  - YYYY.MM.DD-<suffix> (e.g., 2025.08.03-testing)"
-            echo "  - <name> (e.g., preview, testing)"
-            echo "  - <name>-<suffix> (e.g., preview-1, testing-beta)"
-            exit 1
+          echo "=== Finding associated NICs and Disks ==="
+          
+          NICS=""
+          DISKS=""
+          
+          for VM_NAME in $VM_NAMES; do
+            echo ""
+            echo "--- VM: $VM_NAME ---"
+            
+            # Get VM details
+            VM_INFO=$(az vm show -g "$RG" -n "$VM_NAME" -o json 2>/dev/null || echo "{}")
+            
+            # Get NIC IDs
+            VM_NICS=$(echo "$VM_INFO" | jq -r '.networkProfile.networkInterfaces[]?.id // empty' 2>/dev/null)
+            for NIC_ID in $VM_NICS; do
+              NIC_NAME=$(basename "$NIC_ID")
+              echo "  NIC: $NIC_NAME"
+              NICS="$NICS $NIC_NAME"
+            done
+            
+            # Get OS Disk
+            OS_DISK=$(echo "$VM_INFO" | jq -r '.storageProfile.osDisk.name // empty' 2>/dev/null)
+            if [ -n "$OS_DISK" ]; then
+              echo "  OS Disk: $OS_DISK"
+              DISKS="$DISKS $OS_DISK"
+            fi
+            
+            # Get Data Disks
+            DATA_DISKS=$(echo "$VM_INFO" | jq -r '.storageProfile.dataDisks[]?.name // empty' 2>/dev/null)
+            for DISK in $DATA_DISKS; do
+              echo "  Data Disk: $DISK"
+              DISKS="$DISKS $DISK"
+            done
+          done
+          
+          echo ""
+          echo "nic_names=$NICS" >> $GITHUB_OUTPUT
+          echo "disk_names=$DISKS" >> $GITHUB_OUTPUT
+
+      - name: Display cleanup summary
+        if: steps.find-vms.outputs.vm_count != '0'
+        run: |
+          echo ""
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║                    CLEANUP SUMMARY                         ║"
+          echo "╠════════════════════════════════════════════════════════════╣"
+          echo "║ Resource Group: ${{ inputs.resource_group }}"
+          echo "║ VM Prefix: ${{ inputs.vm_prefix }}"
+          echo "║ Dry Run: ${{ inputs.dry_run }}"
+          echo "╠════════════════════════════════════════════════════════════╣"
+          echo "║ VMs to delete: ${{ steps.find-vms.outputs.vm_names }}"
+          echo "║ NICs to delete: ${{ steps.find-resources.outputs.nic_names }}"
+          echo "║ Disks to delete: ${{ steps.find-resources.outputs.disk_names }}"
+          echo "╚════════════════════════════════════════════════════════════╝"
+          echo ""
+
+      - name: Delete VMs
+        if: steps.find-vms.outputs.vm_count != '0' && inputs.dry_run == false
+        run: |
+          RG="${{ inputs.resource_group }}"
+          VM_NAMES="${{ steps.find-vms.outputs.vm_names }}"
+          
+          echo "=== Deleting VMs ==="
+          for VM_NAME in $VM_NAMES; do
+            echo "Deleting VM: $VM_NAME..."
+            az vm delete -g "$RG" -n "$VM_NAME" --yes --no-wait
+            echo "  ✓ Delete initiated for $VM_NAME"
+          done
+          
+          echo ""
+          echo "Waiting for VM deletions to complete..."
+          for VM_NAME in $VM_NAMES; do
+            echo "Waiting for $VM_NAME to be deleted..."
+            az vm wait -g "$RG" -n "$VM_NAME" --deleted --timeout 600 2>/dev/null || true
+            echo "  ✓ $VM_NAME deleted"
+          done
+
+      - name: Delete NICs
+        if: steps.find-vms.outputs.vm_count != '0' && inputs.dry_run == false
+        run: |
+          RG="${{ inputs.resource_group }}"
+          NIC_NAMES="${{ steps.find-resources.outputs.nic_names }}"
+          
+          if [ -z "$NIC_NAMES" ]; then
+            echo "No NICs to delete"
+            exit 0
           fi
           
-          echo "Valid release branch: $BRANCH_NAME (version: $VERSION)"
-          
-      - name: Extract build from branch name
-        id: extract_build
+          echo "=== Deleting NICs ==="
+          for NIC_NAME in $NIC_NAMES; do
+            echo "Deleting NIC: $NIC_NAME..."
+            az network nic delete -g "$RG" -n "$NIC_NAME" --no-wait 2>/dev/null || echo "  NIC $NIC_NAME may already be deleted"
+            echo "  ✓ Delete initiated for $NIC_NAME"
+          done
+
+      - name: Delete Disks
+        if: steps.find-vms.outputs.vm_count != '0' && inputs.dry_run == false
         run: |
-          BRANCH_NAME="${GITHUB_REF#refs/heads/release/}"
-          echo "build=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          RG="${{ inputs.resource_group }}"
+          DISK_NAMES="${{ steps.find-resources.outputs.disk_names }}"
+          
+          if [ -z "$DISK_NAMES" ]; then
+            echo "No disks to delete"
+            exit 0
+          fi
+          
+          echo "=== Deleting Disks ==="
+          for DISK_NAME in $DISK_NAMES; do
+            echo "Deleting Disk: $DISK_NAME..."
+            az disk delete -g "$RG" -n "$DISK_NAME" --yes --no-wait 2>/dev/null || echo "  Disk $DISK_NAME may already be deleted"
+            echo "  ✓ Delete initiated for $DISK_NAME"
+          done
 
-  build-docker-images:
-    needs: check-branch
-    uses: ./.github/workflows/build-push-service-images.yaml
-    with:
-      build: ${{ needs.check-branch.outputs.build }}
-    secrets: inherit
+      - name: Cleanup complete
+        if: steps.find-vms.outputs.vm_count != '0'
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo ""
+            echo "╔════════════════════════════════════════════════════════════╗"
+            echo "║                     DRY RUN COMPLETE                       ║"
+            echo "║   No resources were deleted. Uncheck 'Dry run' to delete.  ║"
+            echo "╚════════════════════════════════════════════════════════════╝"
+          else
+            echo ""
+            echo "╔════════════════════════════════════════════════════════════╗"
+            echo "║                   CLEANUP COMPLETE                         ║"
+            echo "║   All VMs, NICs, and Disks have been deleted.              ║"
+            echo "╚════════════════════════════════════════════════════════════╝"
+          fi
 
-  build-worker-binary:
-    needs: check-branch
-    uses: ./.github/workflows/build-binary-and-installer-for-worker.yaml
-    with:
-      build: ${{ needs.check-branch.outputs.build }}
-    secrets: inherit
-  
-  build-vm-images:
-    needs: [check-branch, build-worker-binary, build-docker-images]
-    uses: ./.github/workflows/ndm-vm-image-build.yaml
-    with:
-      build: ${{ needs.check-branch.outputs.build }}
-    secrets: inherit
+      - name: Azure CLI Logout
+        if: always()
+        run: |
+          az logout || true
+          echo "Logged out of Azure"

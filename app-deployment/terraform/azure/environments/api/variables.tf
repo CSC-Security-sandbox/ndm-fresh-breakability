@@ -97,6 +97,18 @@ variable "linux_worker_count" {
   default     = 2
 }
 
+variable "control_plane_count" {
+  description = "Number of Control Plane VMs to create"
+  type        = number
+  default     = 1
+}
+
+variable "deploy_control_plane" {
+  description = "Whether to deploy Control Plane VMs"
+  type        = bool
+  default     = true
+}
+
 variable "windows_worker_count" {
   description = "Number of Windows worker nodes to create"
   type        = number
@@ -105,6 +117,12 @@ variable "windows_worker_count" {
 
 variable "deploy_windows_workers" {
   description = "Whether to deploy Windows workers"
+  type        = bool
+  default     = true
+}
+
+variable "deploy_linux_workers" {
+  description = "Whether to deploy Linux workers"
   type        = bool
   default     = true
 }
