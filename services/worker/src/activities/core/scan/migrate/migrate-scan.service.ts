@@ -64,21 +64,14 @@ export class MigrateScanService {
     }
 
 
-    private async checkAndPublishTrailingSpaceError(item: string, relativeSourcePath: string, sourceContentPath: string, command: Cmd, jobContext: JobManagerContext, errorType: ErrorType): Promise<boolean> {
+    private async checkAndPublishTrailingSpaceError(item: string, relativeSourcePath: string, sourceContentPath: string, command: Cmd, jobContext: JobManagerContext, errorType: ErrorType, isDirectory: boolean): Promise<boolean> {
         if (!item.endsWith(' ') && !item.endsWith('\t')) {
             return false; 
         }
-        const error = new Error(`File not migrated: filename contains trailing spaces`) as Error & {code: string};
+        const itemType = isDirectory ? 'Directory' : 'File';
+        const error = new Error(`${itemType} not migrated: ${item} contains trailing spaces`) as Error & {code: string};
         error.code = 'ETRAILSPACE';
-        const dmErr = dmError(
-            "OPERATION",
-            Origin.SOURCE,
-            Operation.READ_FILE,
-            ErrorType.TRANSIENT_ERROR,
-            command.id,
-            error,
-            { name: relativeSourcePath, path: sourceContentPath }
-        );
+        const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_FILE, ErrorType.TRANSIENT_ERROR, command.id, error, { name: relativeSourcePath, path: sourceContentPath });
         await jobContext.publishToErrorStream(dmErr);
         
         return true;
@@ -139,7 +132,8 @@ export class MigrateScanService {
                         sourceContentPath,
                         command,
                         jobContext,
-                        errorType
+                        errorType,
+                        sourceStat.isDirectory()
                     );
                     if (hasTrailingSpace) continue;
                     // TODO: check if the item has streams or not using detectADsInfo method. 
