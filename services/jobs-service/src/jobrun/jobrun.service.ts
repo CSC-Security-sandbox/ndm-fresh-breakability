@@ -645,10 +645,8 @@ export class JobRunService {
       errorType,
     } = taskQuery;
     
-    // Define allowed sort columns (camelCase from API)
     const SORTABLE_COLUMNS = ['createdAt', 'errorMessage', 'errorType', 'fileName', 'filePath', 'origin', 'operationType', 'errorCode'];
 
-    // Validate and map to SQL column with table prefix
     const sortColumn =
       SORTABLE_COLUMNS.includes(sort)
         ? {
@@ -665,18 +663,19 @@ export class JobRunService {
 
     const orderClause = order?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
 
-    // Uses first 10 chars of file_path as a unique prefix to match and replace
-    // the full path with just the relative_file_path.
 
     const query = `
       SELECT
         oe.id::text AS id,
         CASE
-          WHEN oe.file_path IS NOT NULL AND LENGTH(oe.file_path) > 10 THEN
+          WHEN oe.file_path IS NOT NULL AND oe.file_name IS NOT NULL AND LENGTH(oe.file_path) > 10 THEN
             REGEXP_REPLACE(
               oe.error_message,
-              '[''"]?' || SUBSTRING(oe.file_path FROM 1 FOR 10) || '[^''"\\s]*([''".\\s]|$)',
-              oe.file_name,
+              '[''"]?' || 
+              REPLACE(REPLACE(SUBSTRING(oe.file_path FROM 1 FOR 10), E'\\\\', E'\\\\\\\\'), '/', '\\/') || 
+              '[^''\"\\s]*' ||
+              '([''\"\\s]|$)',
+              '''' || oe.file_name || E'\\\\1',
               'g'
             )
           ELSE oe.error_message
@@ -703,7 +702,7 @@ export class JobRunService {
     ];
 
     const data = await this.operationErrorRepo.query(query, params);
-
+    
     // Map errors to include error remedy descriptions
     const mappedData = await Promise.all(
       data.map(async (error) => {

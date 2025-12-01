@@ -18,20 +18,14 @@ const GENERAL_ERROR_CODES = new Set([
     'TASK_UNKNOWN_ERROR'
 ]);
 
-const isGeneralError = (errorCode: string): boolean => {
-    return GENERAL_ERROR_CODES.has(errorCode);
-};
-
 export const getErrorDisplayMessage = (
     errorCode: string,
-    systemMessage: string,
-    errorRemedy?: string
+    errorSystemMessage: string,
+    errorDescription?: string
 ): string => {
-    const isGeneral = isGeneralError(errorCode);
-
-    if (errorRemedy) {
-        return isGeneral && systemMessage ? systemMessage : errorRemedy;
+    const isGeneralError = GENERAL_ERROR_CODES.has(errorCode);
+    if(errorDescription && isGeneralError && !errorSystemMessage){
+        return errorDescription;
     }
-
-    return systemMessage;
+    return errorSystemMessage;
 };
