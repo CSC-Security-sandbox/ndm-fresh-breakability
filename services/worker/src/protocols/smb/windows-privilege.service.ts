@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { spawn } from 'child_process';
+import { exec } from 'child_process';
 import { psEnableBackupPrivilegeScript } from '../../activities/core/migrate/command-execution/win-opeartions/powershell.script';
+import { promisify } from 'util';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
+const execAsync = promisify(exec);
 
 @Injectable()
 export class WindowsPrivilegeService {
@@ -11,7 +17,7 @@ export class WindowsPrivilegeService {
      * Enable Windows SeBackupPrivilege and SeRestorePrivilege for the current process
      * This allows bypassing file permissions when accessing SMB shares
      */
-    async enableBackupPrivileges(): Promise<boolean> {
+    async enableBackupPrivileges(jobRunId: string): Promise<boolean> {
         if (process.platform !== 'win32') {
             this.logger.log('Not a Windows platform, skipping privilege enablement');
             return false;
@@ -46,81 +52,48 @@ if ($backupResult -like "*SUCCESS*" -and $restoreResult -like "*SUCCESS*") {
 }
 `;
         }
+        const tempFile = path.join(os.tmpdir(), `enable_privs_${jobRunId}.ps1`);
         const psScript = getNodeProcessPrivilegeScript(process.pid);
         
-        return new Promise<boolean>((resolve) => {
-            this.logger.debug('Executing PowerShell script via stdin');
-            
-            let resolved = false;
-            const safeResolve = (value: boolean) => {
-                if (!resolved) {
-                    resolved = true;
-                    resolve(value);
+        try {
+            await fs.promises.writeFile(tempFile, psScript, 'utf8');
+
+            const { stdout, stderr } = await execAsync(
+                `powershell -NoProfile -ExecutionPolicy Bypass -File "${tempFile}"`,
+                { windowsHide: true }
+            );
+
+            if (stderr) {
+                this.logger.warn(`PowerShell stderr: ${stderr}`);
+            }
+
+            const result = stdout.trim();
+            this.logger.log(`PowerShell output:\n${result}`);
+
+            if (result.includes('OVERALL: SUCCESS')) {
+                this.privilegesEnabled = true;
+                this.logger.log('SeBackupPrivilege and SeRestorePrivilege enabled successfully in Node.js process');
+                return true;
+            } else {
+                this.logger.error('Failed to enable backup privileges - check output above for details');
+                this.logger.error('This usually means the user account needs to be added to the "Backup Operators" group or run as Administrator');
+                return false;
+            }
+        } catch (error) {
+            this.logger.error(`Error enabling backup privileges: ${error.message}`);
+            if (error.stderr) {
+                this.logger.error(`PowerShell error details: ${error.stderr}`);
+            }
+            return false;
+        } finally {
+            // Only attempt to delete the file if tempFile is defined
+            if (tempFile) {
+                try {
+                    await fs.promises.unlink(tempFile);
+                } catch (error) {
+                    this.logger.error(`Error deleting powershell script file: ${error.message}`);
                 }
-            };
-            
-            const ps = spawn('powershell', [
-                '-NoProfile',
-                '-ExecutionPolicy', 'Bypass',
-                '-Command', '-'
-            ], {
-                windowsHide: true
-            });
-
-            let stdout = '';
-            let stderr = '';
-
-            ps.stdout.on('data', (data) => {
-                stdout += data.toString();
-            });
-
-            ps.stderr.on('data', (data) => {
-                stderr += data.toString();
-            });
-
-            ps.on('error', (error) => {
-                this.logger.error(`Failed to spawn PowerShell: ${error.message}`);
-                safeResolve(false);
-            });
-
-            ps.on('close', (code) => {
-                if (stderr) {
-                    this.logger.warn(`PowerShell stderr: ${stderr}`);
-                }
-
-                const result = stdout.trim();
-                this.logger.log(`PowerShell output:\n${result}`);
-
-                if (code !== 0) {
-                    this.logger.error(`PowerShell exited with code ${code}`);
-                    safeResolve(false);
-                    return;
-                }
-
-                // Check if both privileges were enabled successfully
-                const backupSuccess = result.includes('SeBackupPrivilege: SUCCESS');
-                const restoreSuccess = result.includes('SeRestorePrivilege: SUCCESS');
-                
-                if (backupSuccess && restoreSuccess) {
-                    this.privilegesEnabled = true;
-                    this.logger.log('SeBackupPrivilege and SeRestorePrivilege enabled successfully in Node.js process');
-                    safeResolve(true);
-                } else {
-                    this.logger.error('Failed to enable backup privileges - check output above for details');
-                    this.logger.error('This usually means the user account needs to be added to the "Backup Operators" group or run as Administrator');
-                    safeResolve(false);
-                }
-            });
-
-            // Handle stdin errors
-            ps.stdin.on('error', (error) => {
-                this.logger.error(`Failed to write to PowerShell stdin: ${error.message}`);
-                safeResolve(false);
-            });
-
-            // Write script to stdin and close
-            ps.stdin.write(psScript);
-            ps.stdin.end();
-        });
+            }
+        }
     }
 }
