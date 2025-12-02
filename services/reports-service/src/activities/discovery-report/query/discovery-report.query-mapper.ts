@@ -450,7 +450,7 @@ export const TRAILING_SPACE_FILE_MAPPER = (input: TrailingSpaceInput[]) : Discov
     input.forEach(item => {
         output.push({
             value: item.file_names.join(', '),
-            category: 'Files without extensions and trailing spaces',
+            category: 'Files/folders without extensions and trailing spaces',
             valueType: 'string',
             sub_category: item.parent_path
         });

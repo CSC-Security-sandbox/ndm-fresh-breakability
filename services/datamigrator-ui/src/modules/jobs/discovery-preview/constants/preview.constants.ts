@@ -20,7 +20,7 @@ export enum FileSystemCategory {
   FILE_SERVER_INFO = "File Server Info",
   AVERAGE_VALUES = "Average Values",
   TOP_5_FILE_EXTENSIONS_SUMMERY = "Top File Extensions Summary",
-  FILE_NAME_TRAILING_SPACES = "Files without extensions and trailing spaces",
+  FILE_NAME_TRAILING_SPACES = "Files/folders without extensions and trailing spaces",
   CASE_SENSITIVITY_CONFLICTS = "Case Sensitivity Conflicts",
 }
 

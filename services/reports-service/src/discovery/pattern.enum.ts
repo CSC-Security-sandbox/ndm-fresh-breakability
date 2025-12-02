@@ -159,5 +159,5 @@ export enum ReportHeaders {
   BIGGEST_DIRECTORIES_WITH_CAPACITY = "Biggest Directory With Capacity",
   TOP_FILE_EXTENSIONS = "Top File Extensions (with file count and Capacity)",
   CASE_SENSITIVITY_CONFLICTS = "Case Sensitivity Conflicts",
-  FILE_NAME_TRAILING_SPACES = "Files without extensions and trailing spaces",
+  FILE_NAME_TRAILING_SPACES = "Files/folders without extensions and trailing spaces",
 }

@@ -619,7 +619,7 @@ describe('TRAILING_SPACE_FILE_MAPPER', () => {
         expect(result).toHaveLength(1);
         expect(result[0]).toEqual({
             value: 'file1    ',
-            category: 'Files without extensions and trailing spaces',
+            category: 'Files/folders without extensions and trailing spaces',
             valueType: 'string',
             sub_category: '/home/user/documents'
         });
@@ -647,7 +647,7 @@ describe('TRAILING_SPACE_FILE_MAPPER', () => {
         expect(result).toHaveLength(3);
         expect(result[0]).toEqual({
             value: 'file1.txt , file2    ',
-            category: 'Files without extensions and trailing spaces',
+            category: 'Files/folders without extensions and trailing spaces',
             valueType: 'string',
             sub_category: '/home/user/documents'
         });
@@ -674,7 +674,7 @@ describe('TRAILING_SPACE_FILE_MAPPER', () => {
 
         const result = TRAILING_SPACE_FILE_MAPPER(input as any);
 
-        expect(result[0].category).toBe('Files without extensions and trailing spaces');
+        expect(result[0].category).toBe('Files/folders without extensions and trailing spaces');
         expect(result[0].valueType).toBe('string');
     });
 

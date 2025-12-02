@@ -42,17 +42,18 @@
 <body>
   <h1>Data Summary</h1>
   {{#each this}}
-    <h2>{{@key}}</h2>
-    <table>
-      <tr>
-        <th>Sub Category</th>
-        <th></th>
-      </tr>
-      {{#each this}}
-        {{#if sub_category}}
-          <tr>
-            <td>{{sub_category}}</td>
-            <td>{{#if value}}{{value}}{{/if}}</td>
+    {{#if this.length}}
+      <h2>{{@key}}</h2>
+      <table>
+        <tr>
+          <th>Sub Category</th>
+          <th></th>
+        </tr>
+        {{#each this}}
+          {{#if sub_category}}
+            <tr>
+              <td>{{sub_category}}</td>
+              <td>{{#if value}}{{value}}{{/if}}</td>
           </tr>
         {{/if}}
       {{/each}}
