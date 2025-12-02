@@ -166,26 +166,59 @@ jobs:
           
           # Test ONTAP connectivity first
           echo "🔌 Testing ONTAP connectivity to $SOURCE_SVM_IP..."
-          CONNECTIVITY_TEST=$(curl -s -w "%{http_code}" \
+          
+          # First test basic network connectivity
+          echo "Testing basic network connectivity..."
+          if ping -c 3 -W 5 "$SOURCE_SVM_IP" >/dev/null 2>&1; then
+            echo "✅ Network ping to $SOURCE_SVM_IP successful"
+          else
+            echo "❌ Network ping to $SOURCE_SVM_IP failed"
+            echo "Network connectivity issue - cannot reach host"
+          fi
+          
+          # Test HTTPS port connectivity
+          echo "Testing HTTPS port 443 connectivity..."
+          if timeout 10 bash -c "</dev/tcp/$SOURCE_SVM_IP/443" 2>/dev/null; then
+            echo "✅ HTTPS port 443 is reachable on $SOURCE_SVM_IP"
+          else
+            echo "❌ HTTPS port 443 is not reachable on $SOURCE_SVM_IP"
+            echo "ONTAP HTTPS management interface may not be enabled or accessible"
+          fi
+          
+          # Test ONTAP API connectivity with verbose output
+          echo "Testing ONTAP API authentication..."
+          CONNECTIVITY_TEST=$(curl -v -s -w "\nHTTP_CODE:%{http_code}\nTIME_TOTAL:%{time_total}\n" \
             -X GET "https://${SOURCE_SVM_IP}/api/cluster" \
             -u "${ONTAP_USERNAME}:${ONTAP_PASSWORD}" \
             -k \
             --connect-timeout 10 \
-            --max-time 30)
+            --max-time 30 2>&1)
           
-          CONNECTIVITY_HTTP_CODE="${CONNECTIVITY_TEST: -3}"
-          echo "Connectivity test HTTP code: $CONNECTIVITY_HTTP_CODE"
+          echo "Full connectivity test output:"
+          echo "$CONNECTIVITY_TEST"
+          
+          CONNECTIVITY_HTTP_CODE=$(echo "$CONNECTIVITY_TEST" | grep "HTTP_CODE:" | cut -d':' -f2)
+          TOTAL_TIME=$(echo "$CONNECTIVITY_TEST" | grep "TIME_TOTAL:" | cut -d':' -f2)
+          
+          echo "Extracted HTTP code: '$CONNECTIVITY_HTTP_CODE'"
+          echo "Total time: '$TOTAL_TIME' seconds"
           
           if [ "$CONNECTIVITY_HTTP_CODE" != "200" ]; then
             echo "❌ Failed to connect to ONTAP cluster at $SOURCE_SVM_IP"
-            echo "Response: ${CONNECTIVITY_TEST%???}"
-            echo "Please check:"
-            echo "1. Network connectivity to $SOURCE_SVM_IP"
-            echo "2. ONTAP username and password"
-            echo "3. ONTAP HTTPS management interface is enabled"
+            echo "HTTP Code: $CONNECTIVITY_HTTP_CODE"
+            echo ""
+            echo "🔍 Troubleshooting steps:"
+            echo "1. Verify ONTAP cluster IP address: $SOURCE_SVM_IP"
+            echo "2. Check ONTAP username: '$ONTAP_USERNAME'"
+            echo "3. Verify ONTAP password is correct"
+            echo "4. Ensure ONTAP HTTPS management is enabled"
+            echo "5. Check if the ONTAP cluster is accessible from this runner"
+            echo "6. Verify firewall rules allow HTTPS (443) traffic"
+            echo "7. Check ONTAP cluster health and management LIF status"
             exit 1
           else
             echo "✅ Successfully connected to ONTAP cluster"
+            echo "Authentication successful in $TOTAL_TIME seconds"
           fi
           
           # Clone source volume 1 from golden master
