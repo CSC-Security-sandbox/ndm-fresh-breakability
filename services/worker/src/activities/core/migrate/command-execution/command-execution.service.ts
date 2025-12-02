@@ -13,6 +13,7 @@ import { WorkerThreadService } from "src/thread/worker.thread.service";
 import { CommandExecInput, CommandExecOutput, CommandOutput, ValidateCommandInput } from "./command-execution.type";
 import { StampMetaService } from "./stamp-meta.service";
 import { isNotWritable, isPathExists } from "../../utils/utils";
+import * as crypto from "crypto";
 
 @Injectable()
 export class CommandExecService {
@@ -123,11 +124,15 @@ export class CommandExecService {
                 if(targetPathExists)
                     await this.stampMetaService.resetFileAttributes(targetPath);
 
-                // TODO: 
-                const checksums = await this.workerThreadService.migrateWorkerThread({ sourcePath, destinationPath: targetPath, operationId: command.id, size: command.metadata?.size ?? 0
+                let checksums = null; 
+                if(command.metadata?.size < 1048576){ // less than 1MB 
+                    checksums= await this.copyFileAndGetChecksums(sourcePath, targetPath)
+                }else{
+                   checksums = await this.workerThreadService.migrateWorkerThread({ sourcePath, destinationPath: targetPath, operationId: command.id, size: command.metadata?.size ?? 0
                 });
-
-
+ 
+                }
+                
                 output.shouldUpdateItemInfo = true;
                 if(checksums?.targetChecksum !== checksums?.sourceChecksum) {
                     command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.ERROR, params : { checksums } };
@@ -151,6 +156,27 @@ export class CommandExecService {
             }
         }
         return output;
+    }
+
+    async copyFileAndGetChecksums(source: string, target: string): Promise<{sourceChecksum: string, targetChecksum: string}> {
+         try {
+              await fs.promises.access(source, fs.constants.R_OK);
+            } catch {
+              throw new Error(`Source file ${source} does not exist or is not readable`);
+            }
+         // Get destination directory and ensure it exists with collision detection
+            const destDir = path.dirname(target);
+            
+            // Create destination directory with collision detection
+            await createDirectory(destDir);
+            await fs.promises.copyFile(source, target, fs.constants.COPYFILE_FICLONE);
+            const sourceHash = crypto.createHash('sha256');
+            const targetHash = crypto.createHash('sha256');
+            sourceHash.update(await fs.promises.readFile(source));
+            targetHash.update(await fs.promises.readFile(target));
+
+        return { sourceChecksum: sourceHash.digest('hex'), targetChecksum: targetHash.digest('hex') };
+
     }
 
     async copyDirectory({command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
