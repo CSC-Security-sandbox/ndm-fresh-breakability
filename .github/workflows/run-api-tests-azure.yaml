@@ -18,7 +18,7 @@ on:
 
 jobs:
   generate-sas-urls:
-    runs-on: ubuntu-latest
+    runs-on: openlab
     name: Generate VHD SAS URLs
     
     outputs:
