@@ -151,14 +151,53 @@ jobs:
           ONTAP_USERNAME="${{ inputs.ontap_username || github.event.inputs.ontap_username }}"
           ONTAP_PASSWORD="${{ inputs.ontap_password || github.event.inputs.ontap_password }}"
           
+          # Mask the password in logs for security
+          echo "::add-mask::$ONTAP_PASSWORD"
+          
+          echo "🔍 ONTAP Configuration:"
+          echo "Source SVM IP: $SOURCE_SVM_IP"
+          echo "Destination SVM IP: $DEST_SVM_IP"
+          echo "Golden Volume: $GOLDEN_VOLUME"
+          echo "ONTAP Username: $ONTAP_USERNAME"
+          echo "Test ID: $TEST_ID"
+          echo "Actor: $ACTOR"
+          
           echo "Creating source volumes: $SOURCE_VOLUME_1 and $SOURCE_VOLUME_2 from golden master: $GOLDEN_VOLUME"
           
+          # Test ONTAP connectivity first
+          echo "🔌 Testing ONTAP connectivity to $SOURCE_SVM_IP..."
+          CONNECTIVITY_TEST=$(curl -s -w "%{http_code}" \
+            -X GET "https://${SOURCE_SVM_IP}/api/cluster" \
+            -u "${ONTAP_USERNAME}:${ONTAP_PASSWORD}" \
+            -k \
+            --connect-timeout 10 \
+            --max-time 30)
+          
+          CONNECTIVITY_HTTP_CODE="${CONNECTIVITY_TEST: -3}"
+          echo "Connectivity test HTTP code: $CONNECTIVITY_HTTP_CODE"
+          
+          if [ "$CONNECTIVITY_HTTP_CODE" != "200" ]; then
+            echo "❌ Failed to connect to ONTAP cluster at $SOURCE_SVM_IP"
+            echo "Response: ${CONNECTIVITY_TEST%???}"
+            echo "Please check:"
+            echo "1. Network connectivity to $SOURCE_SVM_IP"
+            echo "2. ONTAP username and password"
+            echo "3. ONTAP HTTPS management interface is enabled"
+            exit 1
+          else
+            echo "✅ Successfully connected to ONTAP cluster"
+          fi
+          
           # Clone source volume 1 from golden master
+          echo "🔄 Creating source volume 1: $SOURCE_VOLUME_1"
           SOURCE1_CLONE_RESPONSE=$(curl -s -w "%{http_code}" \
             -X POST "https://${SOURCE_SVM_IP}/api/storage/volumes" \
             -u "${ONTAP_USERNAME}:${ONTAP_PASSWORD}" \
             -k \
             -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            --connect-timeout 30 \
+            --max-time 120 \
             -d '{
               "name": "'${SOURCE_VOLUME_1}'",
               "svm": {"name": "phc-1"},
@@ -170,11 +209,21 @@ jobs:
             }')
           
           SOURCE1_HTTP_CODE="${SOURCE1_CLONE_RESPONSE: -3}"
+          SOURCE1_RESPONSE_BODY="${SOURCE1_CLONE_RESPONSE%???}"
+          
+          echo "Source volume 1 HTTP code: $SOURCE1_HTTP_CODE"
+          echo "Source volume 1 response: $SOURCE1_RESPONSE_BODY"
+          
           if [ "$SOURCE1_HTTP_CODE" = "202" ] || [ "$SOURCE1_HTTP_CODE" = "201" ]; then
             echo "✅ Source volume 1 $SOURCE_VOLUME_1 created successfully"
           else
             echo "❌ Failed to create source volume 1. HTTP Code: $SOURCE1_HTTP_CODE"
-            echo "Response: ${SOURCE1_CLONE_RESPONSE%???}"
+            echo "Response Body: $SOURCE1_RESPONSE_BODY"
+            echo "Possible issues:"
+            echo "1. Golden volume '$GOLDEN_VOLUME' may not exist"
+            echo "2. SVM 'phc-1' may not exist or be accessible"
+            echo "3. Insufficient permissions for FlexClone operations"
+            echo "4. Volume name '$SOURCE_VOLUME_1' may already exist"
             exit 1
           fi
           
