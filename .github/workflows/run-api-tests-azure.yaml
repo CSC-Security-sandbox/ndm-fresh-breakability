@@ -53,6 +53,14 @@ on:
         required: false
         default: true
         type: boolean
+      ontap_username:
+        description: 'ONTAP username for volume management'
+        required: true
+        type: string
+      ontap_password:
+        description: 'ONTAP password for volume management'
+        required: true
+        type: string
 
   workflow_call: 
     inputs:
@@ -95,956 +103,228 @@ on:
         required: false
         default: true
         type: boolean
+      ontap_username:
+        description: 'ONTAP username for volume management'
+        required: true
+        type: string
+      ontap_password:
+        description: 'ONTAP password for volume management'
+        required: true
+        type: string
 
 permissions: 
   contents: read
 
 jobs:
   setup-infrastructure:
-    name: Setup Infrastructure and Services
+    name: Setup ONTAP Volumes Only
     runs-on: openlab
     outputs:
-      control_plane_vm_ip_address: ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}
-      linux_worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.linux_worker_vm_ip_addresses }}
-      windows_worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}
+      ontap_source_volumes: ${{ steps.ontap-volumes.outputs.ontap_source_volumes }}
+      ontap_dest_volumes: ${{ steps.ontap-volumes.outputs.ontap_dest_volumes }}
+      ontap_source_paths: ${{ steps.ontap-volumes.outputs.ontap_source_paths }}
+      ontap_dest_paths: ${{ steps.ontap-volumes.outputs.ontap_dest_paths }}
     steps:
       
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Setup Node.js
-        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Configure Provider Credentials
-        id: credentials
+      - name: Setup ONTAP Source and Destination Volumes
+        id: ontap-volumes
         run: |
-          mkdir -p $GITHUB_WORKSPACE/credentials
-
-          echo "Setting VM credentials..."
-          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
-          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
-
-          # Write to GITHUB_ENV
-          echo "VM_USERNAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "::add-mask::$VM_PASSWORD"
-          echo "VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          # Azure Provider Credentials
-          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
-          echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
-          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
-          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
-        
-          CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
-          WORKER_IMAGE="${{ inputs.worker_image_version || github.event.inputs.worker_image_version }}"
-
-          # Azure Terraform Variables
-          echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
-          echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
-          echo "TF_VAR_vm_owner=${{ github.actor }}" >> $GITHUB_ENV
-          echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
-          echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV 
-
-      - name: Initialize Terraform
-        run: |
-          cd app-deployment/terraform/azure/environments/api
-          terraform init
-
-      - name: Validate Terraform Configuration
-        run: |
-          cd app-deployment/terraform/azure/environments/api
-          terraform validate
-
-      - name: Create Terraform Plan
-        run: |
-          cd app-deployment/terraform/azure/environments/api
-          terraform plan -out=tfplan
-
-      - name: Apply Terraform Plan
-        run: |
-          cd app-deployment/terraform/azure/environments/api
-          terraform apply -auto-approve tfplan
-
-      - name: Upload Terraform State
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: terraform-state
-          path: |
-            app-deployment/terraform/azure/environments/api/terraform.tfstate
-            app-deployment/terraform/azure/environments/api/.terraform.lock.hcl
-            app-deployment/terraform/azure/environments/api/.terraform
-
-      - name: Extract Deployment Information
-        id: deployment-info
-        run: |
-          cd app-deployment/terraform/azure/environments/api
-          CONTROL_PLANE_IP=$(terraform output -raw control_plane_private_ip)
-          LINUX_WORKER_IPS=$(terraform output -json linux_worker_private_ips | jq -c .)
-          WINDOWS_WORKER_IPS=$(terraform output -json windows_worker_private_ips | jq -c .)
-          echo "windows_worker_vm_ip_addresses=$WINDOWS_WORKER_IPS" >> $GITHUB_OUTPUT
-          echo "control_plane_vm_ip_address=$CONTROL_PLANE_IP" >> $GITHUB_OUTPUT
-          echo "linux_worker_vm_ip_addresses=$LINUX_WORKER_IPS" >> $GITHUB_OUTPUT
-          echo "Control Plane IP: $CONTROL_PLANE_IP"
-          echo "Linux Worker IPs (NFS): $LINUX_WORKER_IPS"
-          echo "Windows Worker IPs (SMB): $WINDOWS_WORKER_IPS"
-
-      - name: Install sshpass
-        run: |
-          echo "Installing sshpass..."
-          sudo apt-get update -qq
-          sudo apt-get install -y sshpass
-          echo "sshpass installed successfully."
-
-      - name: Download Windows installer
-        if: ${{ (inputs.protocol == 'SMB' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'SMB' || github.event.inputs.protocol == 'Both') }}
-        run: |
-          WINDOWS_INSTALLER_URL="${{ inputs.windows_worker_installer_url || github.event.inputs.windows_worker_installer_url }}"
-          if [ -n "$WINDOWS_INSTALLER_URL" ]; then
-            echo "Downloading Windows installer from: $WINDOWS_INSTALLER_URL"
-            curl -s -o "windows-worker-installer.exe" \
-              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
-              "$WINDOWS_INSTALLER_URL"
-            
-            if [ ! -f "windows-worker-installer.exe" ] || [ ! -s "windows-worker-installer.exe" ]; then
-              echo "Error: Failed to download Windows installer or file is empty"
-              exit 1
-            fi
-            echo "Windows installer downloaded successfully."
+          echo "Setting up ONTAP volumes for migration testing..."
+          
+          # ONTAP Configuration (hardcoded for now)
+          SOURCE_SVM_IP="10.192.7.43"
+          DEST_SVM_IP="10.192.7.111"
+          GOLDEN_VOLUME="voleda_ws1"
+          
+          # Generate unique volume names for this test run
+          TEST_ID="${{ github.run_id }}"
+          ACTOR="${{ github.actor }}"
+          SOURCE_VOLUME_1="ndm_src1_${ACTOR}_${TEST_ID}"
+          SOURCE_VOLUME_2="ndm_src2_${ACTOR}_${TEST_ID}"
+          DEST_VOLUME_1="ndm_dest1_${ACTOR}_${TEST_ID}"
+          DEST_VOLUME_2="ndm_dest2_${ACTOR}_${TEST_ID}"
+          
+          # ONTAP Credentials (from workflow inputs)
+          ONTAP_USERNAME="${{ inputs.ontap_username || github.event.inputs.ontap_username }}"
+          ONTAP_PASSWORD="${{ inputs.ontap_password || github.event.inputs.ontap_password }}"
+          
+          echo "Creating source volumes: $SOURCE_VOLUME_1 and $SOURCE_VOLUME_2 from golden master: $GOLDEN_VOLUME"
+          
+          # Clone source volume 1 from golden master
+          SOURCE1_CLONE_RESPONSE=$(curl -s -w "%{http_code}" \
+            -X POST "https://${SOURCE_SVM_IP}/api/storage/volumes" \
+            -u "${ONTAP_USERNAME}:${ONTAP_PASSWORD}" \
+            -k \
+            -H "Content-Type: application/json" \
+            -d '{
+              "name": "'${SOURCE_VOLUME_1}'",
+              "svm": {"name": "phc-1"},
+              "clone": {
+                "is_flexclone": true,
+                "parent_volume": {"name": "'${GOLDEN_VOLUME}'"}
+              },
+              "guarantee": {"type": "none"}
+            }')
+          
+          SOURCE1_HTTP_CODE="${SOURCE1_CLONE_RESPONSE: -3}"
+          if [ "$SOURCE1_HTTP_CODE" = "202" ] || [ "$SOURCE1_HTTP_CODE" = "201" ]; then
+            echo "✅ Source volume 1 $SOURCE_VOLUME_1 created successfully"
           else
-            echo "No Windows installer URL provided, skipping download"
-          fi
-
-      - name: Copy Windows installer to Windows VMs
-        if: ${{ (inputs.protocol == 'SMB' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'SMB' || github.event.inputs.protocol == 'Both') }}
-        run: |
-          WINDOWS_IPS='${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}'
-          
-          if [ ! -f "windows-worker-installer.exe" ]; then
-            echo "Windows installer file not found, skipping copy to Windows VMs"
-            exit 0
-          fi
-          
-          WINDOWS_IP_ARRAY=($(echo "$WINDOWS_IPS" | jq -r '.[]'))
-          
-          if [ ${#WINDOWS_IP_ARRAY[@]} -eq 0 ]; then
-            echo "No Windows VM IP addresses found, skipping copy"
-            exit 0
-          fi
-          
-          echo "Found ${#WINDOWS_IP_ARRAY[@]} Windows VM(s), copying installer to each..."
-          
-          for i in "${!WINDOWS_IP_ARRAY[@]}"; do
-            WINDOWS_IP="${WINDOWS_IP_ARRAY[$i]}"
-            echo "$WINDOWS_IP"
-            VM_INDEX=$((i + 1))
-            
-            echo "Copying Windows installer to Windows VM #$VM_INDEX at $WINDOWS_IP"
-            if SSHPASS="$VM_PASSWORD" sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-              windows-worker-installer.exe "$VM_USERNAME@$WINDOWS_IP:/C:/Temp/"; then
-              echo "Windows installer copied successfully to Windows VM #$VM_INDEX ($WINDOWS_IP)"
-            else
-              echo "Failed to copy Windows installer to Windows VM #$VM_INDEX ($WINDOWS_IP)"
-              # Continue with other VMs instead of failing completely
-            fi
-          done
-          
-          echo "Completed copying Windows installer to all available Windows VMs"
-
-      - name: Wait for Service Boot Setup to Complete
-        run: |
-          echo "Monitoring service boot setup on ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}..."
-          
-          # Ensure script is executable
-          chmod +x ./app-deployment/scripts/service_check.sh
-          
-          # Run the service_check.sh script to wait for the microk8s-boot service to complete
-          ./app-deployment/scripts/service_check.sh \
-          "${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}" \
-          "$VM_USERNAME" \
-          "$VM_PASSWORD"
-
-          if [ $? -ne 0 ]; then
-            echo "Service setup failed or timed out"
+            echo "❌ Failed to create source volume 1. HTTP Code: $SOURCE1_HTTP_CODE"
+            echo "Response: ${SOURCE1_CLONE_RESPONSE%???}"
             exit 1
           fi
           
-          echo "Service setup completed successfully"
-
-  run-smb-tests:
-    name: Run SMB API Tests
-    runs-on: openlab
-    needs: setup-infrastructure
-    if: ${{ (inputs.protocol == 'SMB' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'SMB' || github.event.inputs.protocol == 'Both') }}
-    env:
-      JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-
-      NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
-      PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
-
-      NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
-
-      AZURE_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
-      AZURE_SMB_NDM_WORKERS_PORT: ${{ vars.AZURE_SMB_NDM_WORKERS_PORT }}
-      AZURE_SMB_SOURCE_VOLUMES: ${{ vars.AZURE_SMB_SOURCE_VOLUMES }}
-      AZURE_SMB_DESTINATION_VOLUMES: ${{ vars.AZURE_SMB_DESTINATION_VOLUMES }}
-      AZURE_SMB_SOURCE_HOST_IP: ${{ vars.AZURE_SMB_SOURCE_HOST_IP }}
-      AZURE_SMB_DESTINATION_HOST_IP: ${{ vars.AZURE_SMB_DESTINATION_HOST_IP }}
-      AZURE_SMB_PROTOCOL_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
-      AZURE_SMB_PROTOCOL_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
-      SMB_EXECUTABLE_FILENAME: ${{ vars.SMB_EXECUTABLE_FILENAME }}
-      BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
-      REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Set up Go for API Tests
-        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Setup credentials for SMB tests
-        run: |
-
-          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
-          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
-          
-          echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "::add-mask::$VM_PASSWORD"
-          echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "AZURE_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "AZURE_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
-          echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
-      - name: Install Ginkgo
-        run: |
-          cd ndm-api-tests
-          go install github.com/onsi/ginkgo/v2/ginkgo@latest
-          go get github.com/onsi/gomega/...
-          go mod tidy
-          echo "Ginkgo and Gomega installed successfully."
-
-      - name: Run SMB API Tests
-        run: |
-          cd ndm-api-tests
-          chmod +x ./run-smb-azure-automation.sh
-
-          SCRIPT_ARGS=""
-          RUN_SMOKE="${{ inputs.run_smoke_tests || github.event.inputs.run_smoke_tests || 'true' }}"
-          RUN_E2E="${{ inputs.run_e2e_tests || github.event.inputs.run_e2e_tests || 'true' }}"
-          RUN_REGRESSION="${{ inputs.run_regression_tests || github.event.inputs.run_regression_tests || 'true' }}"
-          
-          if [ "$RUN_SMOKE" = "true" ]; then
-            SCRIPT_ARGS="$SCRIPT_ARGS --smoke"
-          fi
-          
-          if [ "$RUN_E2E" = "true" ]; then
-            SCRIPT_ARGS="$SCRIPT_ARGS --e2e"
-          fi
-          
-          if [ "$RUN_REGRESSION" = "true" ]; then
-            SCRIPT_ARGS="$SCRIPT_ARGS --regression"
-          fi
-          
-          echo "Running SMB tests with arguments: $SCRIPT_ARGS"
-          ./run-smb-azure-automation.sh $SCRIPT_ARGS
-        continue-on-error: true
-
-      - name: Upload SMB Test Logs
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: smb-test-logs-${{ github.run_id }}
-          path: ndm-api-tests/reports/
-          retention-days: 30
-
-  run-nfs-tests:
-    name: Run NFS API Tests
-    runs-on: openlab
-    needs: setup-infrastructure
-    if: ${{ (inputs.protocol == 'NFS' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'NFS' || github.event.inputs.protocol == 'Both') }}
-    env:
-      JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-
-      NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
-      PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
-      
-      NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
-
-      AZURE_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
-      AZURE_NFS_NDM_WORKERS_PORT: ${{ vars.AZURE_NFS_NDM_WORKERS_PORT }}
-      AZURE_NFS_SOURCE_VOLUMES: ${{ vars.AZURE_NFS_SOURCE_VOLUMES }}
-      AZURE_NFS_DESTINATION_VOLUMES: ${{ vars.AZURE_NFS_DESTINATION_VOLUMES }}
-      AZURE_NFS_SOURCE_HOST_IP: ${{ vars.AZURE_NFS_SOURCE_HOST_IP }}
-      AZURE_NFS_DESTINATION_HOST_IP: ${{ vars.AZURE_NFS_DESTINATION_HOST_IP }}
-      AZURE_NFS_PROTOCOL_USERNAME: ${{ vars.AZURE_NFS_PROTOCOL_USERNAME }}
-      BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
-      REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
-    steps:
-      - name: Waiting
-        run: |
-          sleep 30
-          echo "Wait completed"
-
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Set up Go for API Tests
-        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Setup credentials for NFS tests
-        run: |
-          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
-          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
-          
-          echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "::add-mask::$VM_PASSWORD"
-          echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "AZURE_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "AZURE_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
-          echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
-
-      - name: Install Ginkgo
-        run: |
-          cd ndm-api-tests
-          go install github.com/onsi/ginkgo/v2/ginkgo@latest
-          go get github.com/onsi/gomega/...
-          go mod tidy
-          echo "Ginkgo and Gomega installed successfully."
-
-      - name: Run NFS API Tests
-        run: |
-          cd ndm-api-tests
-          chmod +x ./run-nfs-azure-automation.sh
-          
-          SCRIPT_ARGS=""
-          RUN_SMOKE="${{ inputs.run_smoke_tests || github.event.inputs.run_smoke_tests || 'true' }}"
-          RUN_E2E="${{ inputs.run_e2e_tests || github.event.inputs.run_e2e_tests || 'true' }}"
-          RUN_REGRESSION="${{ inputs.run_regression_tests || github.event.inputs.run_regression_tests || 'true' }}"
-          
-          if [ "$RUN_SMOKE" = "true" ]; then
-            SCRIPT_ARGS="$SCRIPT_ARGS --smoke"
-          fi
-          
-          if [ "$RUN_E2E" = "true" ]; then
-            SCRIPT_ARGS="$SCRIPT_ARGS --e2e"
-          fi
-          
-          if [ "$RUN_REGRESSION" = "true" ]; then
-            SCRIPT_ARGS="$SCRIPT_ARGS --regression"
-          fi
-          
-          echo "Running NFS tests with arguments: $SCRIPT_ARGS"
-          ./run-nfs-azure-automation.sh $SCRIPT_ARGS
-        continue-on-error: true
-
-      - name: Upload NFS Test Logs
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: nfs-test-logs-${{ github.run_id }}
-          path: ndm-api-tests/reports/
-          retention-days: 30
-
-  send-workflow-card:
-    name: Parse Test Results & Send Notifications
-    runs-on: openlab
-    if: ${{ github.event_name == 'schedule' }}
-    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
-    outputs:
-      test_status: ${{ steps.workflow_outputs.outputs.test_status }}
-      total_tests: ${{ steps.workflow_outputs.outputs.total_tests }}
-      total_failed: ${{ steps.workflow_outputs.outputs.total_failed }}
-      pipeline_url: ${{ steps.workflow_outputs.outputs.pipeline_url }}
-      badge_color: ${{ steps.workflow_outputs.outputs.badge_color }}
-      badge_message: ${{ steps.workflow_outputs.outputs.badge_message }}
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-    - name: Set up Go for Parser
-      uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
-      with:
-        go-version: ${{ env.GO_VERSION }}
-
-    - name: Setup GitHub Token
-      run: |
-        echo "GITHUB_TOKEN=${{ secrets.GITOPS_USER_GITHUB_TOKEN }}" >> $GITHUB_ENV
-
-    - name: Run Nightly Parser and Capture Output
-      id: parser
-      run: |
-        cd ndm-api-tests/parser
-        echo "Installing Go dependencies..."
-        go mod tidy
-        echo "Go dependencies installed successfully"
-        echo ""
-        echo "Running nightly parser..."
-        echo "=========================="
-        
-        # Capture parser output
-        OUTPUT=$(go run nightly-parser.go 2>&1)
-        echo "$OUTPUT"
-        
-        # Extract summary between markers
-        SUMMARY=$(echo "$OUTPUT" | sed -n '/TEST_SUMMARY_START/,/TEST_SUMMARY_END/p' | sed '1d;$d')
-        
-        # Extract JSON results between markers
-        JSON_RESULTS=$(echo "$OUTPUT" | sed -n '/JSON_RESULTS_START/,/JSON_RESULTS_END/p' | sed '1d;$d')
-        
-        # Extract individual metrics
-        TOTAL_TESTS=$(echo "$OUTPUT" | grep "TOTAL_TESTS=" | cut -d'=' -f2)
-        TOTAL_PASSED=$(echo "$OUTPUT" | grep "TOTAL_PASSED=" | cut -d'=' -f2)
-        TOTAL_FAILED=$(echo "$OUTPUT" | grep "TOTAL_FAILED=" | cut -d'=' -f2)
-        TOTAL_SKIPPED=$(echo "$OUTPUT" | grep "TOTAL_SKIPPED=" | cut -d'=' -f2)
-        PIPELINE_URL=$(echo "$OUTPUT" | grep "PIPELINE_URL=" | cut -d'=' -f2-)
-        TEST_STATUS=$(echo "$OUTPUT" | grep "TEST_STATUS=" | cut -d'=' -f2)
-        
-        # Extract individual test result lines
-        SMOKE_SMB_LINE=$(echo "$OUTPUT" | grep "SMOKE_SMB_LINE=" | cut -d'=' -f2- || echo "")
-        SMOKE_NFS_LINE=$(echo "$OUTPUT" | grep "SMOKE_NFS_LINE=" | cut -d'=' -f2- || echo "")
-        E2E_SMB_LINE=$(echo "$OUTPUT" | grep "E2E_SMB_LINE=" | cut -d'=' -f2- || echo "")
-        E2E_NFS_LINE=$(echo "$OUTPUT" | grep "E2E_NFS_LINE=" | cut -d'=' -f2- || echo "")
-        REGRESSION_SMB_LINE=$(echo "$OUTPUT" | grep "REGRESSION_SMB_LINE=" | cut -d'=' -f2- || echo "")
-        REGRESSION_NFS_LINE=$(echo "$OUTPUT" | grep "REGRESSION_NFS_LINE=" | cut -d'=' -f2- || echo "")
-        
-        # Extract individual failure summaries
-        SMOKE_SMB_FAILURE=$(echo "$OUTPUT" | sed -n '/SMOKE_SMB_FAILURE<<EOF/,/^EOF$/p' | sed '1d;$d' || echo "")
-        SMOKE_NFS_FAILURE=$(echo "$OUTPUT" | sed -n '/SMOKE_NFS_FAILURE<<EOF/,/^EOF$/p' | sed '1d;$d' || echo "")
-        E2E_SMB_FAILURE=$(echo "$OUTPUT" | sed -n '/E2E_SMB_FAILURE<<EOF/,/^EOF$/p' | sed '1d;$d' || echo "")
-        E2E_NFS_FAILURE=$(echo "$OUTPUT" | sed -n '/E2E_NFS_FAILURE<<EOF/,/^EOF$/p' | sed '1d;$d' || echo "")
-        REGRESSION_SMB_FAILURE=$(echo "$OUTPUT" | sed -n '/REGRESSION_SMB_FAILURE<<EOF/,/^EOF$/p' | sed '1d;$d' || echo "")
-        REGRESSION_NFS_FAILURE=$(echo "$OUTPUT" | sed -n '/REGRESSION_NFS_FAILURE<<EOF/,/^EOF$/p' | sed '1d;$d' || echo "")
-        
-        # Set GitHub Actions outputs
-        echo "summary<<EOF" >> $GITHUB_OUTPUT
-        echo "$SUMMARY" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        echo "json_results<<EOF" >> $GITHUB_OUTPUT
-        echo "$JSON_RESULTS" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        echo "total_tests=$TOTAL_TESTS" >> $GITHUB_OUTPUT
-        echo "total_passed=$TOTAL_PASSED" >> $GITHUB_OUTPUT
-        echo "total_failed=$TOTAL_FAILED" >> $GITHUB_OUTPUT
-        echo "total_skipped=$TOTAL_SKIPPED" >> $GITHUB_OUTPUT
-        echo "pipeline_url=$PIPELINE_URL" >> $GITHUB_OUTPUT
-        echo "test_status=$TEST_STATUS" >> $GITHUB_OUTPUT
-        
-        # Set individual test result lines as outputs
-        echo "smoke_smb_line=$SMOKE_SMB_LINE" >> $GITHUB_OUTPUT
-        echo "smoke_nfs_line=$SMOKE_NFS_LINE" >> $GITHUB_OUTPUT
-        echo "e2e_smb_line=$E2E_SMB_LINE" >> $GITHUB_OUTPUT
-        echo "e2e_nfs_line=$E2E_NFS_LINE" >> $GITHUB_OUTPUT
-        echo "regression_smb_line=$REGRESSION_SMB_LINE" >> $GITHUB_OUTPUT
-        echo "regression_nfs_line=$REGRESSION_NFS_LINE" >> $GITHUB_OUTPUT
-        
-        # Set individual failure summary outputs
-        echo "smoke_smb_failure<<EOF" >> $GITHUB_OUTPUT
-        echo "$SMOKE_SMB_FAILURE" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        echo "smoke_nfs_failure<<EOF" >> $GITHUB_OUTPUT
-        echo "$SMOKE_NFS_FAILURE" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        echo "e2e_smb_failure<<EOF" >> $GITHUB_OUTPUT
-        echo "$E2E_SMB_FAILURE" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        echo "e2e_nfs_failure<<EOF" >> $GITHUB_OUTPUT
-        echo "$E2E_NFS_FAILURE" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        echo "regression_smb_failure<<EOF" >> $GITHUB_OUTPUT
-        echo "$REGRESSION_SMB_FAILURE" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        echo "regression_nfs_failure<<EOF" >> $GITHUB_OUTPUT
-        echo "$REGRESSION_NFS_FAILURE" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        echo "=========================="
-        echo "Parser execution completed."
-
-    - name: Display Captured Results
-      run: |
-        echo "=== CAPTURED TEST SUMMARY ==="
-        echo "${{ steps.parser.outputs.summary }}"
-        echo ""
-        echo "=== TEST METRICS ==="
-        echo "Total Tests: ${{ steps.parser.outputs.total_tests }}"
-        echo "Passed: ${{ steps.parser.outputs.total_passed }}"
-        echo "Failed: ${{ steps.parser.outputs.total_failed }}"
-        echo "Skipped: ${{ steps.parser.outputs.total_skipped }}"
-        echo "Status: ${{ steps.parser.outputs.test_status }}"
-        echo "Pipeline: ${{ steps.parser.outputs.pipeline_url }}"
-        echo ""
-        echo "=== JSON RESULTS ==="
-        echo "${{ steps.parser.outputs.json_results }}"
-
-    - name: Send Teams Notification Card
-      if: always()
-      run: |
-        # Determine test status for title and color
-        TOTAL_FAILED="${{ steps.parser.outputs.total_failed }}"
-        TOTAL_TESTS="${{ steps.parser.outputs.total_tests }}"
-        TOTAL_PASSED="${{ steps.parser.outputs.total_passed }}"
-        TOTAL_SKIPPED="${{ steps.parser.outputs.total_skipped }}"
-        TEST_STATUS="${{ steps.parser.outputs.test_status }}"
-        
-        CARD_TITLE="NDM Test Results"
-        
-        # Build the unified Teams card with conditional failure sections
-        cat > teams_card.json << EOF
-        {
-          "type": "AdaptiveCard",
-          "version": "1.5",
-          "body": [
-            {
-              "type": "TextBlock",
-              "text": "${CARD_TITLE}",
-              "size": "Medium",
-              "weight": "Bolder"
-            },
-            {
-              "type": "FactSet",
-              "facts": [
-                {
-                  "title": "Total Tests:",
-                  "value": "${TOTAL_TESTS}"
-                },
-                {
-                  "title": "Passed:",
-                  "value": "${TOTAL_PASSED}"
-                },
-                {
-                  "title": "Failed:",
-                  "value": "${TOTAL_FAILED}"
-                },
-                {
-                  "title": "Skipped:",
-                  "value": "${TOTAL_SKIPPED}"
-                },
-                {
-                  "title": "Status:",
-                  "value": "${TEST_STATUS}"
-                }
-              ]
-            },
-            {
-              "type": "TextBlock",
-              "text": "**Test Results:**",
-              "weight": "Bolder",
-              "spacing": "Medium"
-            },
-            {
-              "type": "TextBlock",
-              "text": "**Smoke Tests -**",
-              "weight": "Bolder",
-              "spacing": "Small"
-            },
-            {
-              "type": "TextBlock", 
-              "text": "${{ steps.parser.outputs.smoke_smb_line }}",
-              "wrap": true,
-              "spacing": "None"
-            },
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.smoke_nfs_line }}",
-              "wrap": true,
-              "spacing": "None"
-            },
-            {
-              "type": "TextBlock",
-              "text": "**Regression Tests -**",
-              "weight": "Bolder",
-              "spacing": "Small"
-            },
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.regression_smb_line }}",
-              "wrap": true,
-              "spacing": "None"
-            },
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.regression_nfs_line }}",
-              "wrap": true,
-              "spacing": "None"
-            },
-            {
-              "type": "TextBlock",
-              "text": "**End-to-End (E2E) Tests -**",
-              "weight": "Bolder",
-              "spacing": "Small"
-            },
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.e2e_smb_line }}",
-              "wrap": true,
-              "spacing": "None"
-            },
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.e2e_nfs_line }}",
-              "wrap": true,
-              "spacing": "None"
-            }
-        EOF
-        
-        # Add failure sections conditionally if there are failures
-        if [ "${TOTAL_FAILED}" != "0" ]; then
-          cat >> teams_card.json << 'EOF'
-            ,
-            {
-              "type": "TextBlock",
-              "text": "**Failures:**",
-              "weight": "Bolder",
-              "spacing": "Medium"
-            }
-        EOF
-          
-          # Add individual failure sections
-          if [ -n "${{ steps.parser.outputs.smoke_smb_failure }}" ]; then
-            cat >> teams_card.json << 'EOF'
-            ,
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.smoke_smb_failure }}",
-              "wrap": true,
-              "spacing": "Small",
-              "fontType": "Monospace"
-            }
-        EOF
-          fi
-          
-          if [ -n "${{ steps.parser.outputs.smoke_nfs_failure }}" ]; then
-            cat >> teams_card.json << 'EOF'
-            ,
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.smoke_nfs_failure }}",
-              "wrap": true,
-              "spacing": "Small",
-              "fontType": "Monospace"
-            }
-        EOF
-          fi
-          
-          if [ -n "${{ steps.parser.outputs.regression_smb_failure }}" ]; then
-            cat >> teams_card.json << 'EOF'
-            ,
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.regression_smb_failure }}",
-              "wrap": true,
-              "spacing": "Small",
-              "fontType": "Monospace"
-            }
-        EOF
-          fi
-          
-          if [ -n "${{ steps.parser.outputs.regression_nfs_failure }}" ]; then
-            cat >> teams_card.json << 'EOF'
-            ,
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.regression_nfs_failure }}",
-              "wrap": true,
-              "spacing": "Small",
-              "fontType": "Monospace"
-            }
-        EOF
-          fi
-          
-          if [ -n "${{ steps.parser.outputs.e2e_smb_failure }}" ]; then
-            cat >> teams_card.json << 'EOF'
-            ,
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.e2e_smb_failure }}",
-              "wrap": true,
-              "spacing": "Small",
-              "fontType": "Monospace"
-            }
-        EOF
-          fi
-          
-          if [ -n "${{ steps.parser.outputs.e2e_nfs_failure }}" ]; then
-            cat >> teams_card.json << 'EOF'
-            ,
-            {
-              "type": "TextBlock",
-              "text": "${{ steps.parser.outputs.e2e_nfs_failure }}",
-              "wrap": true,
-              "spacing": "Small",
-              "fontType": "Monospace"
-            }
-        EOF
-          fi
-        fi
-        
-        # Close the Teams card
-        cat >> teams_card.json << 'EOF'
-          ],
-          "actions": [
-            {
-              "type": "Action.OpenUrl",
-              "title": "View Pipeline",
-              "url": "${{ steps.parser.outputs.pipeline_url }}"
-            }
-          ]
-        }
-        EOF
-        
-        # Display the card for debugging
-        echo "=== TEAMS CARD PAYLOAD ==="
-        cat teams_card.json | jq . 2>/dev/null || cat teams_card.json
-        echo ""
-        echo "=========================="
-        
-        # Send to Teams (if webhook URL is configured)
-        if [ -n "${{ secrets.POWER_AUTOMATE_URL }}" ]; then
-          echo "Sending Teams notification..."
-          curl -X POST \
+          # Clone source volume 2 from golden master
+          SOURCE2_CLONE_RESPONSE=$(curl -s -w "%{http_code}" \
+            -X POST "https://${SOURCE_SVM_IP}/api/storage/volumes" \
+            -u "${ONTAP_USERNAME}:${ONTAP_PASSWORD}" \
+            -k \
             -H "Content-Type: application/json" \
-            -d @teams_card.json \
-            "${{ secrets.POWER_AUTOMATE_URL }}"
+            -d '{
+              "name": "'${SOURCE_VOLUME_2}'",
+              "svm": {"name": "phc-1"},
+              "clone": {
+                "is_flexclone": true,
+                "parent_volume": {"name": "'${GOLDEN_VOLUME}'"}
+              },
+              "guarantee": {"type": "none"}
+            }')
           
-          if [ $? -eq 0 ]; then
-            echo "Teams notification sent successfully!"
+          SOURCE2_HTTP_CODE="${SOURCE2_CLONE_RESPONSE: -3}"
+          if [ "$SOURCE2_HTTP_CODE" = "202" ] || [ "$SOURCE2_HTTP_CODE" = "201" ]; then
+            echo "✅ Source volume 2 $SOURCE_VOLUME_2 created successfully"
           else
-            echo "Failed to send Teams notification"
-          fi
-        else
-          echo "POWER_AUTOMATE_URL not configured, skipping Teams notification"
-        fi
-
-    - name: Create Test Summary for GitHub Actions
-      if: always()
-      run: |
-        # Create GitHub Actions Job Summary
-        cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        ## Nightly Test Results Summary
-        
-        ### Test Metrics
-        | Metric | Count |
-        |--------|-------|
-        | Total Tests | ${{ steps.parser.outputs.total_tests }} |
-        | Passed | ${{ steps.parser.outputs.total_passed }} |
-        | Failed | ${{ steps.parser.outputs.total_failed }} |
-        | Skipped | ${{ steps.parser.outputs.total_skipped }} |
-        | Status | ${{ steps.parser.outputs.test_status }} |
-        
-        ### Test Results
-        
-        **Pipeline:** [${{ steps.parser.outputs.pipeline_url }}](${{ steps.parser.outputs.pipeline_url }})
-        
-        **Smoke Tests:**
-        - ${{ steps.parser.outputs.smoke_smb_line }}
-        - ${{ steps.parser.outputs.smoke_nfs_line }}
-        
-        **E2E Tests:**
-        - ${{ steps.parser.outputs.e2e_smb_line }}
-        - ${{ steps.parser.outputs.e2e_nfs_line }}
-        
-        **Regression Tests:**
-        - ${{ steps.parser.outputs.regression_smb_line }}
-        - ${{ steps.parser.outputs.regression_nfs_line }}
-        EOF
-        
-        # Add failure sections conditionally if there are failures
-        if [ "${{ steps.parser.outputs.total_failed }}" != "0" ]; then
-          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        
-        ### Failures
-        EOF
-          
-          # Add individual failure sections
-          if [ -n "${{ steps.parser.outputs.smoke_smb_failure }}" ]; then
-            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        
-        ```
-        ${{ steps.parser.outputs.smoke_smb_failure }}
-        ```
-        EOF
+            echo "❌ Failed to create source volume 2. HTTP Code: $SOURCE2_HTTP_CODE"
+            echo "Response: ${SOURCE2_CLONE_RESPONSE%???}"
+            exit 1
           fi
           
-          if [ -n "${{ steps.parser.outputs.smoke_nfs_failure }}" ]; then
-            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        
-        ```
-        ${{ steps.parser.outputs.smoke_nfs_failure }}
-        ```
-        EOF
+          echo "Creating destination volumes: $DEST_VOLUME_1 and $DEST_VOLUME_2"
+          
+          # Create empty destination volume 1
+          DEST1_RESPONSE=$(curl -s -w "%{http_code}" \
+            -X POST "https://${DEST_SVM_IP}/api/storage/volumes" \
+            -u "${ONTAP_USERNAME}:${ONTAP_PASSWORD}" \
+            -k \
+            -H "Content-Type: application/json" \
+            -d '{
+              "name": "'${DEST_VOLUME_1}'",
+              "svm": {"name": "phc-1"},
+              "size": 10737418240,
+              "guarantee": {"type": "none"},
+              "aggregates": [{"name": "phc1_01_data01_mirrored"}]
+            }')
+          
+          DEST1_HTTP_CODE="${DEST1_RESPONSE: -3}"
+          if [ "$DEST1_HTTP_CODE" = "202" ] || [ "$DEST1_HTTP_CODE" = "201" ]; then
+            echo "✅ Destination volume 1 $DEST_VOLUME_1 created successfully"
+          else
+            echo "❌ Failed to create destination volume 1. HTTP Code: $DEST1_HTTP_CODE"
+            echo "Response: ${DEST1_RESPONSE%???}"
           fi
           
-          if [ -n "${{ steps.parser.outputs.regression_smb_failure }}" ]; then
-            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        
-        ```
-        ${{ steps.parser.outputs.regression_smb_failure }}
-        ```
-        EOF
+          # Create empty destination volume 2
+          DEST2_RESPONSE=$(curl -s -w "%{http_code}" \
+            -X POST "https://${DEST_SVM_IP}/api/storage/volumes" \
+            -u "${ONTAP_USERNAME}:${ONTAP_PASSWORD}" \
+            -k \
+            -H "Content-Type: application/json" \
+            -d '{
+              "name": "'${DEST_VOLUME_2}'",
+              "svm": {"name": "phc-1"},
+              "size": 10737418240,
+              "guarantee": {"type": "none"},
+              "aggregates": [{"name": "phc1_01_data01_mirrored"}]
+            }')
+          
+          DEST2_HTTP_CODE="${DEST2_RESPONSE: -3}"
+          if [ "$DEST2_HTTP_CODE" = "202" ] || [ "$DEST2_HTTP_CODE" = "201" ]; then
+            echo "✅ Destination volume 2 $DEST_VOLUME_2 created successfully"
+          else
+            echo "❌ Failed to create destination volume 2. HTTP Code: $DEST2_HTTP_CODE"
+            echo "Response: ${DEST2_RESPONSE%???}"
           fi
           
-          if [ -n "${{ steps.parser.outputs.regression_nfs_failure }}" ]; then
-            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        
-        ```
-        ${{ steps.parser.outputs.regression_nfs_failure }}
-        ```
-        EOF
-          fi
+          # Export volume information as JSON arrays for use in subsequent jobs
+          echo "ontap_source_volumes=[\"$SOURCE_VOLUME_1\",\"$SOURCE_VOLUME_2\"]" >> $GITHUB_OUTPUT
+          echo "ontap_dest_volumes=[\"$DEST_VOLUME_1\",\"$DEST_VOLUME_2\"]" >> $GITHUB_OUTPUT
+          echo "ontap_source_paths=[\"${SOURCE_SVM_IP}:/vol/${SOURCE_VOLUME_1}\",\"${SOURCE_SVM_IP}:/vol/${SOURCE_VOLUME_2}\"]" >> $GITHUB_OUTPUT
+          echo "ontap_dest_paths=[\"${DEST_SVM_IP}:/vol/${DEST_VOLUME_1}\",\"${DEST_SVM_IP}:/vol/${DEST_VOLUME_2}\"]" >> $GITHUB_OUTPUT
           
-          if [ -n "${{ steps.parser.outputs.e2e_smb_failure }}" ]; then
-            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        
-        ```
-        ${{ steps.parser.outputs.e2e_smb_failure }}
-        ```
-        EOF
-          fi
+          echo "📊 ONTAP Volume Setup Summary:"
+          echo "Source 1: ${SOURCE_SVM_IP}:/vol/${SOURCE_VOLUME_1} (cloned from ${GOLDEN_VOLUME})"
+          echo "Source 2: ${SOURCE_SVM_IP}:/vol/${SOURCE_VOLUME_2} (cloned from ${GOLDEN_VOLUME})"
+          echo "Destination 1: ${DEST_SVM_IP}:/vol/${DEST_VOLUME_1} (empty)"
+          echo "Destination 2: ${DEST_SVM_IP}:/vol/${DEST_VOLUME_2} (empty)"
+
+  # cleanup:
+  #   name: Cleanup ONTAP Volumes
+  #   runs-on: openlab
+  #   needs: [setup-infrastructure]
+  #   if: always()
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+  #     - name: Cleanup ONTAP Test Volumes
+  #       run: |
+  #         echo "Cleaning up ONTAP test volumes..."
           
-          if [ -n "${{ steps.parser.outputs.e2e_nfs_failure }}" ]; then
-            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        
-        ```
-        ${{ steps.parser.outputs.e2e_nfs_failure }}
-        ```
-        EOF
-          fi
-        fi
-        
-        # Add the rest of the summary
-        cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        EOF
-        
-        echo " GitHub Actions Job Summary created!"
-
-        
-  upload-support-bundle:
-    name: Upload Support Bundles
-    runs-on: openlab
-    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
-    if: always()
-    env:
-      JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
-      BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
-      REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Set up Go for API Tests
-        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
-        with:
-          go-version: ${{ env.GO_VERSION }}
-      - name: Setup credentials for support bundle
-        run: |
-          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
-          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+  #         # ONTAP Configuration (same as setup)
+  #         SOURCE_SVM_IP="10.192.7.106"
+  #         DEST_SVM_IP="10.192.7.107"
           
-          echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
-          echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
-          echo "NDM_USERNAME=${{ secrets.NDM_APP_USERNAME }}" >> $GITHUB_ENV
-          echo "PASSWORD=${{ secrets.NDM_APP_PASSWORD }}" >> $GITHUB_ENV
-      - name: Install Go dependencies
-        run: |
-          cd ndm-api-tests
-          go mod tidy
-          echo "Go dependencies installed successfully"
-          cd support-bundle
-          go run support_bundle.go
-          echo "Support bundle uploaded successfully"
-
-  cleanup:
-    name: Cleanup Infrastructure
-    runs-on: openlab
-    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests, upload-support-bundle]
-    if: always()
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Setup Node.js
-        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Configure Provider Credentials for Cleanup
-        run: |
-          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
-          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+  #         # ONTAP Credentials
+  #         ONTAP_USERNAME="${{ secrets.NDM_ONTAP_USERNAME }}"
+  #         ONTAP_PASSWORD="${{ secrets.NDM_ONTAP_PASSWORD }}"
           
-          # Azure Provider Credentials
-          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
-          echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
-          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
-          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
-        
-          CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
-          WORKER_IMAGE="${{ inputs.worker_image_version || github.event.inputs.worker_image_version }}"
-
-          # Azure Terraform Variables
-          echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
-          echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
-          echo "TF_VAR_vm_owner=${{ github.actor }}" >> $GITHUB_ENV
-          echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
-          echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
-
-      - name: Download Terraform State
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: terraform-state
-          path: app-deployment/terraform/azure/environments/api
-
-      - name: Initialize Terraform for Cleanup
-        run: |
-          cd app-deployment/terraform/azure/environments/api
-          terraform init
-
-      - name: Destroy Terraform Resources
-        run: |
-          cd app-deployment/terraform/azure/environments/api
-          terraform destroy -auto-approve
-
-      - name: Clean Up Temporary Files
-        run: |
-          rm -rf $GITHUB_WORKSPACE/credentials 2>/dev/null || true
+  #         # Get volume names from setup job output
+  #         SOURCE_VOLUME_1="${{ needs.setup-infrastructure.outputs.ontap_source_volume_1 }}"
+  #         SOURCE_VOLUME_2="${{ needs.setup-infrastructure.outputs.ontap_source_volume_2 }}"
+  #         DEST_VOLUME_1="${{ needs.setup-infrastructure.outputs.ontap_dest_volume_1 }}"
+  #         DEST_VOLUME_2="${{ needs.setup-infrastructure.outputs.ontap_dest_volume_2 }}"
+          
+  #         # Function to delete volume
+  #         delete_volume() {
+  #           local svm_ip=$1
+  #           local volume_name=$2
+            
+  #           if [ -n "$volume_name" ]; then
+  #             echo "Deleting volume: $volume_name on $svm_ip"
+              
+  #             # First, unmount the volume
+  #             curl -s -X PATCH "https://${svm_ip}/api/storage/volumes?name=${volume_name}" \
+  #               -u "${ONTAP_USERNAME}:${ONTAP_PASSWORD}" \
+  #               -k \
+  #               -H "Content-Type: application/json" \
+  #               -d '{"nas": {"path": ""}}'
+              
+  #             sleep 2
+              
+  #             # Then delete the volume
+  #             DELETE_RESPONSE=$(curl -s -w "%{http_code}" \
+  #               -X DELETE "https://${svm_ip}/api/storage/volumes?name=${volume_name}" \
+  #               -u "${ONTAP_USERNAME}:${ONTAP_PASSWORD}" \
+  #               -k)
+              
+  #             DELETE_HTTP_CODE="${DELETE_RESPONSE: -3}"
+  #             if [ "$DELETE_HTTP_CODE" = "202" ] || [ "$DELETE_HTTP_CODE" = "200" ]; then
+  #               echo "✅ Volume $volume_name deleted successfully"
+  #             else
+  #               echo "⚠️ Failed to delete volume $volume_name. HTTP Code: $DELETE_HTTP_CODE"
+  #               echo "Response: ${DELETE_RESPONSE%???}"
+  #             fi
+  #           fi
+  #         }
+          
+  #         # Delete all test volumes
+  #         delete_volume "$SOURCE_SVM_IP" "$SOURCE_VOLUME_1"
+  #         delete_volume "$SOURCE_SVM_IP" "$SOURCE_VOLUME_2"
+  #         delete_volume "$DEST_SVM_IP" "$DEST_VOLUME_1"  
+  #         delete_volume "$DEST_SVM_IP" "$DEST_VOLUME_2"
+          
+  #         echo "🧹 ONTAP volume cleanup completed"
