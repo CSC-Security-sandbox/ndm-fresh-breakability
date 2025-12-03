@@ -13,6 +13,7 @@ jest.mock('fs', () => ({
     promises: {
         writeFile: jest.fn(),
         unlink: jest.fn(),
+        access: jest.fn(),
         mkdir: jest.fn(),
     },
 }));
@@ -56,6 +57,7 @@ describe('WindowsPrivilegeService', () => {
         jest.spyOn(service['logger'], 'log').mockImplementation();
         jest.spyOn(service['logger'], 'error').mockImplementation();
         jest.spyOn(service['logger'], 'warn').mockImplementation();
+        jest.spyOn(service['logger'], 'debug').mockImplementation();
     });
 
     afterEach(() => {
@@ -253,7 +255,7 @@ describe('WindowsPrivilegeService', () => {
             // Should still return true even if cleanup fails
             expect(result).toBe(true);
             expect(service['logger'].error).toHaveBeenCalledWith(
-                expect.stringContaining('Error deleting powershell script file')
+                expect.stringContaining('Error deleting PowerShell script file')
             );
         });
     });

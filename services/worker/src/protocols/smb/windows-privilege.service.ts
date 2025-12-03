@@ -52,14 +52,14 @@ if ($backupResult -like "*SUCCESS*" -and $restoreResult -like "*SUCCESS*") {
 }
 `;
         }
-        const tempFile = path.join(os.tmpdir(), `enable_privs_${jobRunId}.ps1`);
+        const privilegeScriptPath = path.join(os.tmpdir(), `enable_privs_${jobRunId}.ps1`);
         const psScript = getNodeProcessPrivilegeScript(process.pid);
         
         try {
-            await fs.promises.writeFile(tempFile, psScript, 'utf8');
+            await fs.promises.writeFile(privilegeScriptPath, psScript, 'utf8');
 
             const { stdout, stderr } = await execAsync(
-                `powershell -NoProfile -ExecutionPolicy Bypass -File "${tempFile}"`,
+                `powershell -NoProfile -ExecutionPolicy Bypass -File "${privilegeScriptPath}"`,
                 { windowsHide: true }
             );
 
@@ -86,12 +86,16 @@ if ($backupResult -like "*SUCCESS*" -and $restoreResult -like "*SUCCESS*") {
             }
             return false;
         } finally {
-            // Only attempt to delete the file if tempFile is defined
-            if (tempFile) {
-                try {
-                    await fs.promises.unlink(tempFile);
-                } catch (error) {
-                    this.logger.error(`Error deleting powershell script file: ${error.message}`);
+            // Only attempt to delete the file if it exists
+            try {
+                await fs.promises.access(privilegeScriptPath);
+                await fs.promises.unlink(privilegeScriptPath);
+                this.logger.debug(`Successfully deleted PowerShell script: ${privilegeScriptPath}`);
+            } catch (error) {
+                if (error.code === 'ENOENT') {
+                    this.logger.debug(`PowerShell script file does not exist, skipping cleanup: ${privilegeScriptPath}`);
+                } else {
+                    this.logger.error(`Error deleting PowerShell script file: ${error.message}`);
                 }
             }
         }
