@@ -151,6 +151,37 @@ export class CommandExecService {
                 // For ADS streams, never stamp metadata (they inherit from parent file)
                 output.shouldStampMeta = !isADS;
             }catch(error){
+                // Special handling for ADS streams where parent file is not yet migrated
+                if (error.code === 'EPARENT_NOT_READY') {
+                    // Track defer count to prevent infinite retries
+                    const deferCount = (command.ops[OPS_CMD.COPY_FILE].params?.deferCount || 0) + 1;
+                    const maxDefers = 50; // Maximum 50 deferrals (~5 minutes if workers check every 6 seconds)
+                    
+                    if (deferCount > maxDefers) {
+                        // Exceeded max deferrals - parent file likely failed to migrate
+                        this.logger.error(`ADS stream ${command.fPath} exceeded max deferrals (${maxDefers}) - parent file migration failed`);
+                        command.ops[OPS_CMD.COPY_FILE] = {  ... command.ops[OPS_CMD.COPY_FILE], status: OPS_STATUS.ERROR };
+                        const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, 
+                            new Error(`Parent file not migrated after ${maxDefers} retries for stream ${command.fPath}`), 
+                            {name: command.fPath, path: targetPath});
+                        await jobContext.publishToErrorStream(dmErr);
+                        output.targetErrors.push('EPARENT_FAILED');
+                        return output;
+                    }
+                    
+                    this.logger.debug(`ADS stream ${command.fPath} deferred (${deferCount}/${maxDefers}) - parent file not ready yet`);
+                    // Reset status to READY, increment defer count, and re-publish for later retry
+                    command.ops[OPS_CMD.COPY_FILE].status = OPS_STATUS.READY;
+                    command.ops[OPS_CMD.COPY_FILE].params = { 
+                        ...command.ops[OPS_CMD.COPY_FILE].params,
+                        deferCount 
+                    };
+                    command.status = CommandStatus.READY;
+                    await jobContext.publishToCommandStream(command);
+                    // Don't mark as error - this is a normal deferral
+                    return output;
+                }
+                
                 command.ops[OPS_CMD.COPY_FILE] = {  ... command.ops[OPS_CMD.COPY_FILE], status: OPS_STATUS.ERROR }; 
                 this.logger.error(`Copying FILE from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
