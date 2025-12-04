@@ -147,7 +147,18 @@ jobs:
           # Azure Terraform Variables
           echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
           echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
-          echo "TF_VAR_vm_owner=${{ github.actor }}" >> $GITHUB_ENV
+
+          # Determine VM owner based on trigger type
+          TRIGGER_TYPE="${{ inputs.trigger_type || github.event_name }}"
+          TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
+          if [[ "$TRIGGER_TYPE" == "schedule" ]]; then
+            VM_OWNER="NDM-Nightly-$TIMESTAMP"
+            echo "Nightly build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
+          else
+            VM_OWNER="NDM-Adhoc-${{ github.actor }}-$TIMESTAMP"
+            echo "Adhoc/called build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
+          fi
+          echo "TF_VAR_vm_owner=$VM_OWNER" >> $GITHUB_ENV
           echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
           echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV 
@@ -1024,7 +1035,17 @@ jobs:
           # Azure Terraform Variables
           echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
           echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
-          echo "TF_VAR_vm_owner=${{ github.actor }}" >> $GITHUB_ENV
+          # Determine VM owner based on trigger type
+          TRIGGER_TYPE="${{ inputs.trigger_type || github.event_name }}"
+          TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
+          if [[ "$TRIGGER_TYPE" == "schedule" ]]; then
+            VM_OWNER="NDM-Nightly-$TIMESTAMP"
+            echo "Nightly build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
+          else
+            VM_OWNER="NDM-Adhoc-${{ github.actor }}-$TIMESTAMP"
+            echo "Adhoc/called build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
+          fi
+          echo "TF_VAR_vm_owner=$VM_OWNER" >> $GITHUB_ENV
           echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
           echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
