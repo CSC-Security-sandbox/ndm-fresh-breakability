@@ -1,6 +1,48 @@
 #cloud-config
 
-hostname: datamigrator
+# Temporary hostname during boot (will be updated by runcmd)
+hostname: datamigrator-worker-temp
 create_hostname_file: true
-fqdn: datamigrator
+fqdn: datamigrator-worker-temp
 prefer_fqdn_over_hostname: true
+
+# Set unique hostname based on MAC address after network interfaces are available
+runcmd:
+  - |
+    # Get MAC address from primary network interface
+    MAC_ADDR=""
+    
+    # Try to get MAC from default route interface
+    DEFAULT_IFACE=$(ip route | grep default | awk '{print $5}' | head -n1 2>/dev/null)
+    if [ -n "$DEFAULT_IFACE" ] && [ -f "/sys/class/net/$DEFAULT_IFACE/address" ]; then
+      MAC_ADDR=$(cat /sys/class/net/$DEFAULT_IFACE/address | tr -d ':' | tr '[:upper:]' '[:lower:]')
+    fi
+    
+    # Fallback: get first non-loopback interface
+    if [ -z "$MAC_ADDR" ]; then
+      for iface in /sys/class/net/*; do
+        iface_name=$(basename $iface)
+        if [ "$iface_name" != "lo" ] && [ -f "$iface/address" ]; then
+          MAC_ADDR=$(cat $iface/address | tr -d ':' | tr '[:upper:]' '[:lower:]')
+          break
+        fi
+      done
+    fi
+    
+    # Final fallback to UUID if no MAC found
+    if [ -z "$MAC_ADDR" ]; then
+      MAC_ADDR=$(cat /proc/sys/kernel/random/uuid | tr -d '-' | head -c 12)
+    fi
+    
+    NEW_HOSTNAME="datamigrator-worker-${MAC_ADDR}"
+    
+    # Set hostname using proper system tools
+    hostnamectl set-hostname "${NEW_HOSTNAME}"
+    echo "${NEW_HOSTNAME}" > /etc/hostname
+    
+    # Update /etc/hosts for local resolution
+    echo "127.0.0.1 localhost ${NEW_HOSTNAME}" > /etc/hosts
+    echo "::1 localhost ${NEW_HOSTNAME}" >> /etc/hosts
+    
+    # Restart hostname-related services to ensure proper propagation
+    systemctl restart systemd-hostnamed 2>/dev/null || true
