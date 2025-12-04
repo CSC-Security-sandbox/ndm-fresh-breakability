@@ -59,8 +59,49 @@
     state: started
   when: local_cluster is defined
 
-- name: 2.7. Set the hostname
-  command: hostnamectl set-hostname datamigrator
+- name: 2.7. Get MAC address for unique hostname
+  shell: |
+    # Get MAC address from primary network interface
+    DEFAULT_IFACE=$(ip route | grep default | awk '{print $5}' | head -n1 2>/dev/null)
+    if [ -n "$DEFAULT_IFACE" ] && [ -f "/sys/class/net/$DEFAULT_IFACE/address" ]; then
+      cat /sys/class/net/$DEFAULT_IFACE/address | tr -d ':' | tr '[:upper:]' '[:lower:]'
+    else
+      # Fallback: get first non-loopback interface
+      for iface in /sys/class/net/*; do
+        iface_name=$(basename $iface)
+        if [ "$iface_name" != "lo" ] && [ -f "$iface/address" ]; then
+          cat $iface/address | tr -d ':' | tr '[:upper:]' '[:lower:]'
+          break
+        fi
+      done
+    fi
+  register: mac_address_result
+  changed_when: false
+
+- name: 2.8. Generate unique hostname using MAC address
+  set_fact:
+    unique_hostname: "datamigrator-worker-{{ mac_address_result.stdout if mac_address_result.stdout else ansible_date_time.epoch }}"
+
+- name: 2.9. Set the unique hostname
+  command: hostnamectl set-hostname "{{ unique_hostname }}"
+  
+- name: 2.10. Update /etc/hostname file
+  copy:
+    content: "{{ unique_hostname }}"
+    dest: /etc/hostname
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: 2.11. Update /etc/hosts for local resolution
+  copy:
+    content: |
+      127.0.0.1 localhost {{ unique_hostname }}
+      ::1 localhost {{ unique_hostname }}
+    dest: /etc/hosts
+    owner: root
+    group: root
+    mode: '0644'
 
 - name: Set recommended SSH ciphers
   lineinfile:
