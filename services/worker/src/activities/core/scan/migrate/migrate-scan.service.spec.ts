@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { Cmd, Command, ErrorType, CommandStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
-import { dmError, getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip, shouldExcludeForDelete } from 'src/activities/utils/utils';
+import { dmError, getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip, shouldExcludeForDelete, checkCaseSensitiveConflict } from 'src/activities/utils/utils';
 import { Operation, Origin } from 'src/activities/utils/utils.types';
 import { FatalError } from 'src/errors/errors.types';
 import { MigrateScanService } from './migrate-scan.service';
@@ -33,6 +33,36 @@ jest.mock('path', () => {
     };
 });
 
+function createCaseSensitiveConflictMock() {
+    return jest.fn().mockImplementation(async (
+        jobType: string,
+        item: string,
+        lowerCaseSourceData: Set<string>,
+        relativeSourcePath: string,
+        sourceContentPath: string,
+        command: any,
+        jobContext: any,
+        lowerCaseTargetData: Set<string>,
+        targetContent: Set<string>,
+        isDirectory: boolean
+    ) => {
+        const lowerCaseFileName = item.toLowerCase();
+        if (lowerCaseSourceData.has(lowerCaseFileName) || 
+            (lowerCaseTargetData?.has(lowerCaseFileName) && !targetContent?.has(item))) {
+            const itemType = isDirectory ? 'Directory' : 'File';
+            const dmErr = {
+                error: {
+                    message: `${itemType} not migrated: Another ${itemType.toLowerCase()} with same name but different case exists`
+                }
+            };
+            await jobContext.publishToErrorStream(dmErr);
+            return true;
+        }
+        lowerCaseSourceData.add(lowerCaseFileName);
+        return false;
+    });
+}
+
 jest.mock('src/activities/utils/utils', () => ({
     dmError: jest.fn((type, origin, operation, errorType, commandId, error, metadata) => ({
         type,
@@ -49,6 +79,7 @@ jest.mock('src/activities/utils/utils', () => ({
     isContentUpdate: jest.fn(),
     isMetaUpdated: jest.fn(),
     shouldExcludeForDelete: jest.fn(),
+    checkCaseSensitiveConflict: jest.fn(),
 }));
 
 describe('MigrateScanService', () => {
@@ -532,6 +563,7 @@ describe('MigrateScanService', () => {
             (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
             (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/path' });
             (isContentUpdate as jest.Mock).mockReturnValue(true);
+            (checkCaseSensitiveConflict as jest.Mock).mockImplementation(createCaseSensitiveConflictMock());
 
             await service.scanDirectory(commandInput);
 
@@ -588,6 +620,7 @@ describe('MigrateScanService', () => {
             (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
             (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/path' });
             (isContentUpdate as jest.Mock).mockReturnValue(true);
+            (checkCaseSensitiveConflict as jest.Mock).mockImplementation(createCaseSensitiveConflictMock());
 
             await service.scanDirectory(commandInput);
 
@@ -630,6 +663,7 @@ describe('MigrateScanService', () => {
             (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
             (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/path' });
             (isContentUpdate as jest.Mock).mockReturnValue(true);
+            (checkCaseSensitiveConflict as jest.Mock).mockImplementation(createCaseSensitiveConflictMock());
 
             await service.scanDirectory(commandInput);
 

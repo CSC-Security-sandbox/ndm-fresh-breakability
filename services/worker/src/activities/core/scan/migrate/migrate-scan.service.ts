@@ -4,7 +4,7 @@ import { Cmd, CmdMeta, Command, CommandStatus, ErrorType, FileInfo, ItemMeta, Jo
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
 import * as path from "path";
-import { dmError, getFileInfo, isContentUpdate, isMetaUpdated, removePrefix, shouldExcludeForDelete, shouldExcludeOrSkip } from "src/activities/utils/utils";
+import { dmError, getFileInfo, isContentUpdate, isMetaUpdated, removePrefix, shouldExcludeForDelete, shouldExcludeOrSkip, checkCaseSensitiveConflict } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishCommandInput } from "./migrate-scan.type";
@@ -84,25 +84,11 @@ export class MigrateScanService {
         return true;
     }
 
-    private async checkCaseSensitiveConflict(item: string, lowerCaseSourceData: Set<string>, lowerCaseTargetData: Set<string>, targetContent: Set<string>, relativeSourcePath: string, sourceContentPath: string, command: Cmd, jobContext: JobManagerContext, isDirectory: boolean): Promise<boolean> {
-        const lowerCaseFileName = item.toLowerCase();
-        if (lowerCaseSourceData.has(lowerCaseFileName) || (lowerCaseTargetData.has(lowerCaseFileName) && !targetContent.has(item))) {
-            const itemType = isDirectory ? 'Directory' : 'File';
-            const error = new Error(`${itemType} not migrated: Another ${itemType.toLowerCase()} with same name but different case exists`) as Error & {code:string};
-            error.code = 'EEXIST';
-            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, ErrorType.TRANSIENT_ERROR, command.id, error, {name: relativeSourcePath, path: sourceContentPath});
-            await jobContext.publishToErrorStream(dmErr);
-            return true;
-        }
-        lowerCaseSourceData.add(lowerCaseFileName);
-        return false;
-    }
-
     async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings , targetPrefix, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> {
 
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
         let commands: Cmd[] = [];
-        const isSMB = process.platform === 'win32'
+        const isSMB = process.platform === 'win32';
         const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command});
         const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});
 
@@ -122,15 +108,27 @@ export class MigrateScanService {
                 if(!sourceContentExists) continue;
                 const sourceStat = await fs.promises.lstat(sourceContentPath);                
                 const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
+
+                if (shouldExcludeOrSkip({
+                    fullPath: sourceContentPath,
+                    stats: sourceStat,
+                    excludePatterns: settings.excludePatterns,
+                    skipTime: settings.skipFile,
+                    olderThan: new Date(jobContext.jobConfig.options?.excludeOlderThan),
+                    jobType: jobContext.jobConfig.jobType
+                })) continue;
+
                 if (isSMB){
-                    const hasConflict = await this.checkCaseSensitiveConflict(item,
+                    const hasConflict = await checkCaseSensitiveConflict(
+                        jobContext.jobConfig.jobType,
+                        item,
                         lowerCaseSourceData,
-                        lowerCaseTargetData,
-                        targetContent,
                         relativeSourcePath,
                         sourceContentPath,
                         command,
                         jobContext,
+                        lowerCaseTargetData,
+                        targetContent,
                         sourceStat.isDirectory()
                     );
                     if (hasConflict) continue;
@@ -145,15 +143,6 @@ export class MigrateScanService {
                     );
                     if (hasTrailingSpace) continue;
                 }
-
-                if (shouldExcludeOrSkip({
-                    fullPath: sourceContentPath,
-                    stats: sourceStat,
-                    excludePatterns: settings.excludePatterns,
-                    skipTime: settings.skipFile,
-                    olderThan: new Date(jobContext.jobConfig.options?.excludeOlderThan),
-                    jobType: jobContext.jobConfig.jobType
-                })) continue;
 
                 const fileInfo: FileInfo = await getFileInfo({name: item, fullFilePath: sourceContentPath, relativePath: relativeSourcePath});
                 const fileType = await this.fileTypeDetectionService.detectFileType(sourceContentPath, sourceStat);

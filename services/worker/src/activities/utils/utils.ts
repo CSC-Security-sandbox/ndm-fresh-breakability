@@ -78,6 +78,22 @@ export const shouldExcludeOlderThan = (stats: fs.Stats, olderThan: Date): boolea
 export const shouldExcludeOrSkip = ({ fullPath, stats, excludePatterns, skipTime, olderThan, jobType }: ExcludeOrSkipParams): boolean => (shouldExclude(fullPath, excludePatterns) || shouldSkipFile(stats, skipTime, jobType) || shouldExcludeOlderThan(stats, olderThan));
 export const shouldExcludeForDelete = ({ fullPath, excludePatterns }: ExcludeForDelete): boolean => (shouldExclude(fullPath, excludePatterns));
 
+export const checkCaseSensitiveConflict = async (jobType: string, itemName: string, lowerCaseSourceData: Set<string>, relativeSourcePath: string, sourceContentPath: string, command: Cmd, jobContext: JobManagerContext, lowerCaseTargetData?: Set<string>, targetContent?: Set<string>, isDirectory?: boolean): Promise<boolean> => {
+  const lowerCaseFileName = itemName.toLowerCase();
+  if (lowerCaseSourceData.has(lowerCaseFileName) || (lowerCaseTargetData?.has(lowerCaseFileName) && !targetContent?.has(itemName))) {
+    const isDiscovery = jobType === "DISCOVER";
+    const itemType = isDirectory ? 'Directory' : 'File';
+    const errorMessage = isDiscovery ? "Directory contents not discovered: Another directory with same name but different case exists" : `${itemType} not migrated: Another ${itemType.toLowerCase()} with same name but different case exists`;
+    const error = new Error(errorMessage) as Error & {code: "EEXIST"};
+    const origin = isDiscovery ? Origin.SOURCE : Origin.DESTINATION;
+    const operationName: Operation = isDiscovery ? Operation.READ_DIR : Operation.COPY_CONTENT;
+    const dmErr = dmError("OPERATION", origin, operationName, ErrorType.TRANSIENT_ERROR, command.id, error, {name: relativeSourcePath, path: sourceContentPath});
+    await jobContext.publishToErrorStream(dmErr);
+    return true;
+  }
+  lowerCaseSourceData.add(lowerCaseFileName);
+  return false;
+}
 
 export function getFileType(stats: fs.Stats, isDirectory:boolean): FileType {
     switch (true) {

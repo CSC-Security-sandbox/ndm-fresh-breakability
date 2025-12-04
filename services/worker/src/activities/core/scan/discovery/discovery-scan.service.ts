@@ -1,9 +1,9 @@
 import { Inject } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { ErrorType, FileInfo, ItemInfo, ItemMeta } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Cmd, ErrorType, FileInfo, JobManagerContext, ItemInfo, ItemMeta } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as fs from 'fs';
 import * as path from 'path';
-import { dmError, getFilePermissions, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
+import { dmError, getFilePermissions, removePrefix, shouldExcludeOrSkip, checkCaseSensitiveConflict } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishItemInfoInput } from "./discovery-scan.type";
@@ -53,6 +53,8 @@ export class DiscoveryScanService {
     async scanDirectory({ jobContext, sourcePath, sourcePrefix, command, settings, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> {
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
         const sourceContent = await this.getDirContents({path: sourcePath, jobContext, errorType, command});
+        const isSMB = process.platform === 'win32';
+        const lowerCaseSourceDirs = new Set<string>();
         try {
             for (const item of sourceContent) {
                 const sourceContentPath = path.join(sourcePath, item.name);
@@ -79,6 +81,18 @@ export class DiscoveryScanService {
                     if(sourceStat.isSymbolicLink() ) continue;
                     output.dirCount++;
                     if (fileType === FileType.VOLUME_MOUNT_POINT) continue;
+                    if (isSMB){
+                        const hasConflict = await checkCaseSensitiveConflict(
+                            jobContext.jobConfig.jobType,
+                            item.name,
+                            lowerCaseSourceDirs,
+                            relativeSourcePath,
+                            sourceContentPath,
+                            command,
+                            jobContext
+                        );
+                        if (hasConflict) continue;
+                    }
                     output.subDirs.push(relativeSourcePath);
                 } else output.fileCount++;
             }

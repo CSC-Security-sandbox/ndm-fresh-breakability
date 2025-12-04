@@ -3,12 +3,13 @@ import * as fs from 'fs';
 import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from '@nestjs/testing';
 import * as path from 'path';
-import { getFileInfo, getFilePermissions, removePrefix, shouldExcludeOrSkip } from 'src/activities/utils/utils';
+import { getFileInfo, getFilePermissions, removePrefix, shouldExcludeOrSkip, checkCaseSensitiveConflict } from 'src/activities/utils/utils';
 import { FatalError } from 'src/errors/errors.types';
 import { DiscoveryScanService } from './discovery-scan.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { WinOperationService } from "../../../core/migrate/command-execution/win-opeartions/win-operation.service";
 import { FileTypeDetectionService } from '../../utils/file-type-detection.service';
+import { FileType } from 'src/activities/types/tasks';
 
 jest.mock('fs', () => {
   const actualFs = jest.requireActual('fs');
@@ -30,13 +31,39 @@ jest.mock('path', () => {
   };
 });
 
+function createCaseSensitiveConflictMock() {
+    return jest.fn().mockImplementation(async (
+        jobType: string,
+        item: string,
+        lowerCaseSourceData: Set<string>,
+        relativeSourcePath: string,
+        sourceContentPath: string,
+        command: any,
+        jobContext: any
+    ) => {
+        const lowerCaseFileName = item.toLowerCase();
+        if (lowerCaseSourceData.has(lowerCaseFileName)) {
+            const dmErr = {
+                error: {
+                    message: "Directory contents not discovered: Another directory with same name but different case exists"
+                }
+            };
+            await jobContext.publishToErrorStream(dmErr);
+            return true;
+        }
+        lowerCaseSourceData.add(lowerCaseFileName);
+        return false;
+    });
+}
+
 jest.mock('src/activities/utils/utils', () => ({
-  dmError: jest.fn(),
+  dmError: jest.fn((type, origin, operation, errorType, corrId, error) => ({error,})),
   getFileInfo: jest.fn(),
   getFilePermissions: jest.fn(),
   getFileType: jest.fn(),
   removePrefix: jest.fn(),
   shouldExcludeOrSkip: jest.fn(),
+  checkCaseSensitiveConflict: jest.fn(),
 }))
 
 const mockConfigService = {
@@ -56,6 +83,7 @@ describe('DiscoveryScanService', () => {
   let winOperationService: WinOperationService;
   let logger: LoggerService;
   let fileTypeDetectionService: FileTypeDetectionService;
+  let detectFileTypeMock: jest.Mock;
 
   const mockLoggerFactory = {
     create: jest.fn().mockReturnValue({
@@ -126,6 +154,9 @@ describe('DiscoveryScanService', () => {
     winOperationService = module.get<WinOperationService>(WinOperationService);
     logger = loggerFactory.create(DiscoveryScanService.name);
     fileTypeDetectionService = module.get<FileTypeDetectionService>(FileTypeDetectionService);
+    detectFileTypeMock = fileTypeDetectionService.detectFileType as unknown as jest.Mock;
+    detectFileTypeMock.mockReset();
+    detectFileTypeMock.mockResolvedValue(FileType.FILE);
   });
 
   afterEach(() => {
@@ -199,7 +230,7 @@ describe('DiscoveryScanService', () => {
       (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
       (getFileInfo as jest.Mock).mockResolvedValue({ fileName: 'file1.txt' });
       (getFilePermissions as jest.Mock).mockReturnValue('755');
-      (removePrefix as jest.Mock).mockReturnValue('relative/path');
+      (removePrefix as jest.Mock).mockImplementation((fullPath: string, prefix: string) => fullPath.replace(`${prefix}/`, ''));
 
       (path.join as jest.Mock).mockImplementation((...args) => args.join('/'));
     });
@@ -232,7 +263,7 @@ describe('DiscoveryScanService', () => {
 
       expect(result.fileCount).toBe(1);
       expect(result.dirCount).toBe(1);
-      expect(result.subDirs).toEqual(['relative/path']);
+      expect(result.subDirs).toEqual(['subdir']);
       expect(mockJobContext.publishToFileStream).toHaveBeenCalledTimes(2);
     });
 
@@ -363,6 +394,105 @@ describe('DiscoveryScanService', () => {
       expect(result.dirCount).toBe(0);
       expect(result.subDirs).toEqual([]);
       expect(mockJobContext.publishToFileStream).not.toHaveBeenCalled();
+    });
+
+    it('should skip duplicate directories with same name and different case for SMB', async () => {
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, 'platform', { value: 'win32'});
+      (fs.promises.readdir as jest.Mock).mockResolvedValue([
+        { name: 'Folder' },
+        { name: 'folder' },
+        { name: 'FOLder' },
+        { name: 'FILE.txt' },
+        { name: 'file.txt' },
+      ]);
+      (fs.promises.lstat as jest.Mock).mockImplementation((filePath: string) => {
+        if (filePath.endsWith('.txt')) {
+          return Promise.resolve({
+            isDirectory: () => false,
+            isSymbolicLink: () => false,
+          });
+        }
+        return Promise.resolve({
+          isDirectory: () => true,
+          isSymbolicLink: () => false,
+        });
+      });
+      detectFileTypeMock.mockImplementation((filePath: string) =>
+        filePath.endsWith('.txt') ? FileType.FILE : FileType.DIRECTORY,
+      );
+      (checkCaseSensitiveConflict as jest.Mock).mockImplementation(createCaseSensitiveConflictMock());
+
+      const result = await service.scanDirectory({
+        jobContext: mockJobContext,
+        sourcePath: '/mock',
+        sourcePrefix: '/mock',
+        command: mockCommand,
+        settings: {
+          excludePatterns: [],
+          skipFile: 0,
+        },
+      } as any);
+
+      expect(result.fileCount).toBe(2);
+      expect(result.dirCount).toBe(3);
+      expect(result.subDirs).toHaveLength(1);
+      expect(mockJobContext.publishToErrorStream).toHaveBeenCalledTimes(2);
+      expect(mockJobContext.publishToErrorStream).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.objectContaining({
+            message: expect.stringContaining('same name but different case')
+          })
+        })
+      );
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    });
+
+    it('should include directories with same name and different case for NFS', async () => {
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      (fs.promises.readdir as jest.Mock).mockResolvedValue([
+        { name: 'Folder' },
+        { name: 'folder' },
+        { name: 'FOLder' },
+        { name: 'FILE.txt' },
+        { name: 'file.txt' },
+      ]);
+      (fs.promises.lstat as jest.Mock).mockImplementation((filePath: string) => {
+        if (filePath.endsWith('.txt')) {
+          return Promise.resolve({
+            isDirectory: () => false,
+            isSymbolicLink: () => false,
+          });
+        }
+        return Promise.resolve({
+          isDirectory: () => true,
+          isSymbolicLink: () => false,
+        });
+      });
+      detectFileTypeMock.mockImplementation((filePath: string) =>
+        filePath.endsWith('.txt') ? FileType.FILE : FileType.DIRECTORY,
+      );
+      (checkCaseSensitiveConflict as jest.Mock).mockImplementation(
+        createCaseSensitiveConflictMock()
+      );
+
+      const result = await service.scanDirectory({
+        jobContext: mockJobContext,
+        sourcePath: '/mock',
+        sourcePrefix: '/mock',
+        command: mockCommand,
+        settings: {
+          excludePatterns: [],
+          skipFile: 0,
+        },
+      } as any);
+
+      expect(result.fileCount).toBe(2);
+      expect(result.dirCount).toBe(3);
+      expect(result.subDirs).toEqual(['Folder', 'folder', 'FOLder']);
+      expect(mockJobContext.publishToErrorStream).not.toHaveBeenCalled();
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
   });
 });
