@@ -53,6 +53,7 @@ if ($backupResult -like "*SUCCESS*" -and $restoreResult -like "*SUCCESS*") {
 }
 `;
         }
+        
         const privilegeScriptPath = path.join(os.tmpdir(), `enable_privs_${jobRunId}.ps1`);
         const psScript = getNodeProcessPrivilegeScript(process.pid);
         
@@ -76,7 +77,7 @@ if ($backupResult -like "*SUCCESS*" -and $restoreResult -like "*SUCCESS*") {
                 this.logger.log('SeBackupPrivilege and SeRestorePrivilege enabled successfully in Node.js process');
                 return;
             } else {
-                const errorMsg = 'Failed to enable backup privileges. This usually means the user account needs to be added to the "Backup Operators" group or run as Administrator. Check PowerShell output above for details.';
+                const errorMsg = 'Failed to enable backup privileges. Check if the user account needs to be added to the "Backup Operators" group or run as Administrator.';
                 this.logger.error(errorMsg);
                 throw new Error(errorMsg);
             }
@@ -93,7 +94,6 @@ if ($backupResult -like "*SUCCESS*" -and $restoreResult -like "*SUCCESS*") {
         } finally {
             // Only attempt to delete the file if it exists
             try {
-                await fs.promises.access(privilegeScriptPath);
                 await fs.promises.unlink(privilegeScriptPath);
                 this.logger.debug(`Successfully deleted PowerShell script: ${privilegeScriptPath}`);
             } catch (error) {
