@@ -313,7 +313,7 @@ export class CommandExecService {
                 sourceMeta, 
                 0, 
                 command.metadata?.inode ?? 0,
-                true, 
+                true
             );
     
             await jobContext.publishToFileStream(itemInfo);
@@ -360,7 +360,7 @@ export class CommandExecService {
             targetMeta,
             targetStats.size,
             command.metadata.inode,
-            false, // isDeleted is false for copy operations
+            false // isDeleted is false for copy operations
         )
 
         await this.validateCommand({ cmd: command, item: itemInfo, jobContext, errorType});

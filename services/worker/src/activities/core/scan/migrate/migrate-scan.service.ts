@@ -14,7 +14,6 @@ import { isExists, isPathExists } from "../../utils/utils";
 import { WinOperationService } from "../../migrate/command-execution/win-opeartions/win-operation.service";
 import { FileType } from "src/activities/types/tasks";
 import { FileTypeDetectionService } from "../../utils/file-type-detection.service";
-import { FileType } from "src/activities/types/tasks";
 
 
 @Injectable()

@@ -3,7 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { Cmd, ErrorType, FileInfo, JobManagerContext, ItemInfo, ItemMeta } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as fs from 'fs';
 import * as path from 'path';
-import { dmError, getFilePermissions, removePrefix, shouldExcludeOrSkip, checkCaseSensitiveConflict } from "src/activities/utils/utils";
+import { dmError, getFilePermissions, getFileType, removePrefix, shouldExcludeOrSkip, checkCaseSensitiveConflict } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishItemInfoInput } from "./discovery-scan.type";
@@ -12,6 +12,8 @@ import { isPathExists } from "../../utils/utils";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { FileType } from "src/activities/types/tasks";
 import { FileTypeDetectionService } from '../../utils/file-type-detection.service';
+import { WinOperationService } from '../../migrate/command-execution/win-opeartions/win-operation.service';
+import { platform } from "os";
 
 
 export class DiscoveryScanService {
@@ -25,6 +27,7 @@ export class DiscoveryScanService {
         private readonly configService: ConfigService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
         private readonly fileTypeDetectionService: FileTypeDetectionService,
+        private readonly winOperationService: WinOperationService,
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100; 
@@ -80,16 +83,11 @@ export class DiscoveryScanService {
                     stats: sourceStat, command, jobContext, fPath: sourceContentPath, relativeSourcePath, fileType
                 });
                 
-                // Detect and publish ADS streams for files (not directories) on Windows
-                if (!sourceStat.isDirectory() && process.platform === 'win32') {
-                    await this.publishADSStreams({
-                        stats: sourceStat,
-                        command,
-                        jobContext,
-                        fPath: sourceContentPath,
-                        relativeSourcePath
-                    });
-                }
+                // Detect and publish ADS streams for files
+                await this.publishADSStreams({
+                        stats: sourceStat,command,jobContext,fPath: sourceContentPath,relativeSourcePath
+                });
+                
 
                 if (sourceStat.isDirectory()) {
                     if(sourceStat.isSymbolicLink() ) continue;
@@ -150,6 +148,9 @@ export class DiscoveryScanService {
      * Each stream is published with fileName format: "file.txt:StreamName"
      */
     async publishADSStreams({ jobContext, stats, fPath, relativeSourcePath }: PublishItemInfoInput): Promise<void> {
+        if (process.platform !== 'win32') {
+            return; // ADS only applicable on Windows
+        }
         try {
             const adsInfo = await this.winOperationService.detectADSInfo(fPath);
             
@@ -181,7 +182,8 @@ export class DiscoveryScanService {
                     sourceMeta,
                     sourceMeta,
                     streamSize,  // Individual stream size
-                    stats.ino  // Same inode as parent file
+                    stats.ino, // Same inode as parent file
+                    false 
                 );
                 
                 await jobContext.publishToFileStream(streamItemInfo);

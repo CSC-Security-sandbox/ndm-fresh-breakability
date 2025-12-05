@@ -74,7 +74,9 @@ export async function smartCopy(source:string, target:string, filesize:number, m
     try {
       await fs.promises.access(baseFile, fs.constants.F_OK);
     } catch {
-      throw new Error(`Base file ${baseFile} must exist before writing ADS stream ${target}`);
+      const error: any = new Error(`Base file ${baseFile} must exist before writing ADS stream ${target}`);
+      error.code = 'EPARENT_NOT_READY';
+      throw error;
     }
     
     // Ensure parent directory exists

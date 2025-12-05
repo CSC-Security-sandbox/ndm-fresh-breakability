@@ -7,11 +7,53 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { WinShellService } from 'src/activities/common/win-shell.service';
 import { SourceAclError, TargetAclError } from './acl-operation.error';
-import { psGetAclScript, psSetAclScript, psGetLinkInfoScript, psGetADSInfoScript } from './powershell.script';
+import { psGetAclScript, psSetAclScript, psGetLinkInfoScript } from './powershell.script';
 import { RedisService } from 'src/redis/redis.service';
 import { LRUCache } from 'src/activities/core/utils/lru-cache';
 import { OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
 import { FileType } from 'src/activities/types/tasks';
+import * as koffi from 'koffi';
+
+// Windows API structures and functions for ADS detection
+let kernel32: any = null;
+let WIN32_FIND_STREAM_DATA: any = null;
+let FindFirstStreamW: any = null;
+let FindNextStreamW: any = null;
+let FindClose: any = null;
+
+// Initialize Windows API bindings (only on Windows)
+function initializeWindowsAPI() {
+  if (process.platform !== 'win32' || kernel32) {
+    return; // Already initialized or not on Windows
+  }
+
+  try {
+    // Load kernel32.dll
+    kernel32 = koffi.load('kernel32.dll');
+
+    // Define WIN32_FIND_STREAM_DATA structure
+    WIN32_FIND_STREAM_DATA = koffi.struct('WIN32_FIND_STREAM_DATA', {
+      StreamSize: 'int64',
+      cStreamName: koffi.array('uint16', 296)  // Wide char array (MAX_PATH + 36)
+    });
+
+    // Define FindFirstStreamW function
+    FindFirstStreamW = kernel32.func('FindFirstStreamW', 'void *', [
+      'str16', 'int', koffi.pointer(WIN32_FIND_STREAM_DATA), 'uint32'
+    ]);
+
+    // Define FindNextStreamW function  
+    FindNextStreamW = kernel32.func('FindNextStreamW', 'bool', [
+      'void *', koffi.pointer(WIN32_FIND_STREAM_DATA)
+    ]);
+
+    // Define FindClose function
+    FindClose = kernel32.func('FindClose', 'bool', ['void *']);
+  } catch (error) {
+    console.error('Failed to initialize Windows API for ADS detection:', error);
+    kernel32 = null; // Mark as failed
+  }
+}
 
 @Injectable()
 export class WinOperationService {
@@ -290,32 +332,97 @@ export class WinOperationService {
 
   /**
    * Detect NTFS Alternate Data Streams (ADS) on a file
-   * Uses PowerShell Get-Item -Stream to enumerate streams
+   * Uses native Windows API FindFirstStreamW/FindNextStreamW for high performance
    * Returns structured data with stream names and sizes
    */
   async detectADSInfo(filePath: string): Promise<ADSInfo> {
-    try {
-      // Use PowerShell script from powershell.script.ts - more maintainable and consistent
-      const script = `$srcFile = '${filePath.replace(/'/g, "''")}'\n${psGetADSInfoScript}`;
-      const output = await this.winShellService.executeCommand(script);
-      
-      if (output.stderr) {
-        this.logger.warn(`ADS detection warning for ${filePath}: ${output.stderr}`);
-      }
-
-      const result = JSON.parse(output.stdout);
-      
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to detect ADS');
-      }
-
-      const streams = result.streams || [];
+    if (process.platform !== 'win32') {
+      // Not on Windows - return empty result
       return {
-        hasADS: result.hasADS,
-        streamCount: result.streamCount,
-        streamNames: streams.map((s: any) => s.name),
-        streamSizes: streams.map((s: any) => s.size),
-        totalSize: streams.reduce((sum: number, s: any) => sum + s.size, 0)
+        hasADS: false,
+        streamCount: 0,
+        streamNames: [],
+        streamSizes: [],
+        totalSize: 0
+      };
+    }
+
+    try {
+      // Initialize Windows API if not already done
+      if (!kernel32) {
+        initializeWindowsAPI();
+      }
+
+      // If initialization failed, return empty result
+      if (!kernel32 || !FindFirstStreamW) {
+        this.logger.warn('Windows API not available for ADS detection');
+        return {
+          hasADS: false,
+          streamCount: 0,
+          streamNames: [],
+          streamSizes: [],
+          totalSize: 0
+        };
+      }
+
+      const streamDataPtr = koffi.alloc(WIN32_FIND_STREAM_DATA, 1);
+      const hFind = FindFirstStreamW(filePath, 0, streamDataPtr, 0);
+
+      // Handle pointer comparison - check if null or invalid
+      if (!hFind) {
+        // No streams found or error
+        return {
+          hasADS: false,
+          streamCount: 0,
+          streamNames: [],
+          streamSizes: [],
+          totalSize: 0
+        };
+      }
+
+      const streamNames: string[] = [];
+      const streamSizes: number[] = [];
+      let totalSize = 0;
+
+      try {
+        do {
+          // Dereference the pointer to get the actual struct
+          const data = koffi.decode(streamDataPtr, WIN32_FIND_STREAM_DATA);
+
+          // Convert wide char array to string
+          let streamName = '';
+          if (data.cStreamName) {
+            for (let i = 0; i < data.cStreamName.length; i++) {
+              if (data.cStreamName[i] === 0) break;
+              streamName += String.fromCharCode(data.cStreamName[i]);
+            }
+          }
+
+          const streamSize = Number(data.StreamSize);
+
+          // Skip the default data stream (::$DATA)
+          if (streamName && streamName !== '::$DATA') {
+            // Extract stream name (remove leading ':' and trailing ':$DATA')
+            let name = streamName;
+            if (name.startsWith(':')) name = name.slice(1);
+            const dollarIndex = name.lastIndexOf(':$DATA');
+            if (dollarIndex > 0) name = name.slice(0, dollarIndex);
+
+            streamNames.push(name);
+            streamSizes.push(streamSize);
+            totalSize += streamSize;
+          }
+        } while (FindNextStreamW(hFind, streamDataPtr));
+      } finally {
+        FindClose(hFind);
+      }
+
+      return {
+        hasADS: streamNames.length > 0,
+        streamCount: streamNames.length,
+        streamNames,
+        streamSizes,
+        totalSize
       };
     } catch (error) {
       this.logger.error(`Failed to detect ADS for ${filePath}: ${error.message}`);
