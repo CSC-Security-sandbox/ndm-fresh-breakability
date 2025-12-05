@@ -284,6 +284,8 @@ func GenerateNewPassword(length int) (string, error) {
 		password[i], password[j.Int64()] = password[j.Int64()], password[i]
 	}
 
+	// fmt.Println("Password is :", string(password))
+
 	return string(password), nil
 }
 
@@ -527,6 +529,20 @@ func GetHeaders(authToken, contentType string) map[string]string {
 	if authToken != "" {
 		headers[AuthHeader] = BearerPrefix + authToken
 	}
+
+	return headers
+}
+
+func GetProjectIdHeader(authToken string, projectId string) map[string]string {
+	headers := make(map[string]string)
+
+	headers["Content-Type"] = ContentTypeJSON
+
+	if authToken != "" {
+		headers[AuthHeader] = BearerPrefix + authToken
+	}
+
+	headers["projectid"] = projectId
 
 	return headers
 }

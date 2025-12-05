@@ -1,7 +1,7 @@
-import { Body, Controller, Get, Post, Request } from '@nestjs/common';
+import { Body, Controller, Get, Post, Request} from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
+import { Auth, Permission, AuthWorker } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from './user-permission-response-type';
 
 class InviteUserDto {
@@ -18,7 +18,9 @@ class UserStatusDto {
 @ApiTags('auth')
 @Controller('/api/v1')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+  ) {}
 
   @Auth()
   @ApiBearerAuth()
@@ -106,5 +108,18 @@ export class AuthController {
   async setUserStatus(@Body() userStatusDto: UserStatusDto) {
     const { email, enable } = userStatusDto;
     return await this.authService.setUserStatus(email, enable);
+  }
+
+  @Get('secrets/redis')
+  @AuthWorker()
+  @ApiOperation({
+    summary: 'Get Redis credentials for authenticated workers',
+  })
+  async getRedisCredentials(@Request() req) {
+    return {
+      host: process.env.REDIS_HOST,
+      username: process.env.REDIS_USERNAME,
+      password: process.env.REDIS_PASSWORD,
+    };
   }
 }

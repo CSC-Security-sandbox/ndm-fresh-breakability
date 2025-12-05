@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { ErrorRemedyEntity } from '../entities/error-remedies.entity';
 import { OperationErrorEntity } from 'src/entities/operation-error.entity';
+import { USER_VISIBLE_ERROR_TYPES } from 'src/constants/enums';
 
 @Injectable()
 export class ErrorRemedyService {
@@ -35,6 +36,7 @@ export class ErrorRemedyService {
       .createQueryBuilder('oe')
       .innerJoin("oe.operation", "o")
       .where("o.jobRunId = :jobRunId", { jobRunId })
+      .andWhere("oe.errorType IN (:...errorTypes)", { errorTypes: USER_VISIBLE_ERROR_TYPES })
       .select('DISTINCT oe.errorCode', 'errorCode')
       .groupBy("oe.errorType, oe.errorCode")
       .getRawMany();

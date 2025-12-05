@@ -151,7 +151,7 @@ export class NFSProtocol extends Protocol {
     }
   }
 
-  async unmountPath(traceId: string, payload: any, manageMount: boolean): Promise<any> {
+  async unmountPath(traceId: string, payload: ProtocolPayload, manageMount: boolean): Promise<any> {
     this.logger.log(
       `[${traceId}] Unmounting path for ${payload.hostname} of type ${ProtocolTypes.NFS} from ${this.workerId} with payload: ${JSON.stringify(payload)}`,
     );
@@ -190,7 +190,7 @@ export class NFSProtocol extends Protocol {
     }
   }
 
-  async mountPath(traceId: string, payload: any, manageMount: boolean): Promise<any> {
+  async mountPath(traceId: string, payload: ProtocolPayload, manageMount: boolean): Promise<any> {
     this.logger.log(
       `[${traceId}] Mounting path for ${payload.hostname} of type ${payload} from ${this.workerId}`,
     );
@@ -235,7 +235,6 @@ export class NFSProtocol extends Protocol {
     await new Promise((resolve) => setTimeout(resolve, 5000));
     this.logger.log(`[${traceId}] Mount result: ${JSON.stringify(mountResult)}`);
 
-    payload.mountDir = mountDir;
     if (manageMount && mountResult.status === 'success') {
       this.updateBootMounts(
       {
@@ -252,9 +251,10 @@ export class NFSProtocol extends Protocol {
 }
 
   // This file updates the /etc/fstab file to ensure that the mount persists across reboots.
-  public updateBootMounts({ platform, fstabPath, workerId}, payload, action, traceId) {
+  public updateBootMounts({ platform, fstabPath, workerId}, payload: ProtocolPayload, action, traceId) {
     try {
-      const fstabEntry = `${payload.hostname}:${payload.path} ${payload.mountDir} nfs defaults 0 0\n`;
+      const mountDir = `${payload.mountBasePath}/${payload.jobRunId}/${payload.pathId}`;
+      const fstabEntry = `${payload.hostname}:${payload.path} ${mountDir} nfs defaults 0 0\n`;
       if (platform === 'linux') {
         const fstabContent = fs.readFileSync(fstabPath, 'utf-8');
         const entryExists = fstabContent.includes(fstabEntry);

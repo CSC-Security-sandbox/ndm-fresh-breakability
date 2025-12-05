@@ -17,7 +17,10 @@ TOP_LONGEST_FILE_PATHS_MAPPER,
 TOP_BIGGEST_FILE_NAME_MAPPER,
 JOB_RUN_DETAILS_MAPPER,
 QueryMapper,
-QueryList
+QueryList,
+REDIRECTS_FILE_NAME_MAPPER,
+TRAILING_SPACE_FILE_MAPPER,
+CASE_ERRORS_MAPPER
 } from './discovery-report.query-mapper';
 
 describe('discovery-report.query-mapper', () => {
@@ -121,6 +124,10 @@ it('FILE_SYSTEM_DISTRIBUTION_MAPPER maps input correctly', () => {
         total_count: 10,
         regular_files: 8,
         symbolic_links: 2,
+        total_hard_link_files: 3,
+        total_junctions: 5,
+        total_volume_mount_point: 4,
+        total_shortcuts: 6,
         total_space_regular_files: 500,
         total_space_directories: 100,
         total_space_used: 600
@@ -128,8 +135,12 @@ it('FILE_SYSTEM_DISTRIBUTION_MAPPER maps input correctly', () => {
     const result = FILE_SYSTEM_DISTRIBUTION_MAPPER(input as any);
     expect(result).toEqual([
         { value: 10, category: 'File System Stats', valueType: 'count', sub_category: 'Total Count' },
-        { value: 8, category: 'File System Stats', valueType: 'count', sub_category: 'Regular Files' },
-        { value: 2, category: 'File System Stats', valueType: 'count', sub_category: 'Symbolic Links' },
+        { value: 8, category: 'File System Stats', valueType: 'count', sub_category: 'Regular Files Count' },
+        { value: 2, category: 'File System Stats', valueType: 'count', sub_category: 'Symbolic Links Count' },
+        { value: 3, category: 'File System Stats', valueType: 'count', sub_category: 'Hard Links Count' },
+        { value: 5, category: 'File System Stats', valueType: 'count', sub_category: 'Junctions Count' },
+        { value: 4, category: 'File System Stats', valueType: 'count', sub_category: 'Volume Mount Points Count' },
+        { value: 6, category: 'File System Stats', valueType: 'count', sub_category: 'Shortcuts Count' },
         { value: 500, category: 'File System Stats', valueType: 'size', sub_category: 'Total Space for Regular Files' },
         { value: 100, category: 'File System Stats', valueType: 'size', sub_category: 'Total Space for Directories' },
         { value: 600, category: 'File System Stats', valueType: 'size', sub_category: 'Total Space Used' }
@@ -452,6 +463,80 @@ it('JOB_RUN_DETAILS_MAPPER handles invalid stat_value gracefully', () => {
     });
 });
 
+it('REDIRECTS_FILE_NAME_MAPPER maps multiple symbolic links and junctions correctly', () => {
+    const input = [
+      { file_type: 'SYMBOLIC_LINK', path: '/a/b.txt; ' },
+      { file_type: 'SYMBOLIC_LINK', path: '/e/f.txt; ' },
+      { file_type: 'JUNCTION', path: '/c/d.txt; ' },
+      { file_type: 'JUNCTION', path: '/g/h.txt; ' },
+      { file_type: 'VOLUME_MOUNT_POINT', path: '/c/d1.txt; ' },
+      { file_type: 'VOLUME_MOUNT_POINT', path: '/g/h1.txt; ' },
+      { file_type: 'SHORTCUT', path: '/c/d2.txt; ' },
+      { file_type: 'SHORTCUT', path: '/g/h2.txt; ' }
+    ];
+  
+    // Clean input: trim and remove trailing semicolon
+    const cleanedInput = input.map(item => ({
+      file_type: item.file_type,
+      path: item.path.trim().replace(/;$/, ''),
+    }));
+  
+    const result = REDIRECTS_FILE_NAME_MAPPER(cleanedInput);
+  
+    expect(result).toEqual([
+      {
+        value: '/a/b.txt; /e/f.txt',
+        category: 'Redirects',
+        valueType: 'string',
+        sub_category: 'Symbolic Links'
+      },
+      {
+        value: '/c/d.txt; /g/h.txt',
+        category: 'Redirects',
+        valueType: 'string',
+        sub_category: 'Junctions'
+      },
+      {
+        value: '/c/d1.txt; /g/h1.txt',
+        category: 'Redirects',
+        valueType: 'string',
+        sub_category: 'Volume Mount Points'
+      },
+      {
+        value: '/c/d2.txt; /g/h2.txt',
+        category: 'Redirects',
+        valueType: 'string',
+        sub_category: 'Shortcuts'
+      }
+    ]);
+  });
+
+it('REDIRECTS_FILE_NAME_MAPPER maps only shortcuts and junctions correctly', () => {
+    const input = [
+        { file_type: 'SHORTCUT', path: '/shortcut1' },
+        { file_type: 'SHORTCUT', path: '/shortcut2' },
+        { file_type: 'JUNCTION', path: '/junction1' },
+        { file_type: 'JUNCTION', path: '/junction2' }
+    ];
+
+    const result = REDIRECTS_FILE_NAME_MAPPER(input);
+
+    expect(result).toEqual([
+        {
+            value: '/junction1; /junction2',
+            category: 'Redirects',
+            valueType: 'string',
+            sub_category: 'Junctions'
+        },
+        {
+            value: '/shortcut1; /shortcut2',
+            category: 'Redirects',
+            valueType: 'string',
+            sub_category: 'Shortcuts'
+        }
+    ]);
+});
+
 it('QueryMapper and QueryList are defined and consistent', () => {
     expect(QueryMapper).toBeDefined();
     expect(Array.isArray(QueryList)).toBe(true);
@@ -459,5 +544,132 @@ it('QueryMapper and QueryList are defined and consistent', () => {
         expect(QueryMapper[key]).toBeDefined();
         expect(QueryMapper[key].mapper).toBeInstanceOf(Function);
     });
+});
+
+
+// --- TRAILING_SPACE_FILE_MAPPER Tests ---
+describe('TRAILING_SPACE_FILE_MAPPER', () => {
+
+    it('should map single file with trailing space', () => {
+        const input = [
+            {
+                parent_path: '/home/user/documents',
+                file_names: ['file1    ']
+            }
+        ];
+
+        const result = TRAILING_SPACE_FILE_MAPPER(input as any);
+
+        expect(result).toHaveLength(1);
+        expect(result[0]).toEqual({
+            value: 'file1    ',
+            category: 'Files without extensions and trailing spaces',
+            valueType: 'string',
+            sub_category: '/home/user/documents'
+        });
+    });
+
+
+    it('should map files across multiple directories', () => {
+        const input = [
+            {
+                parent_path: '/home/user/documents',
+                file_names: ['file1.txt ', 'file2    ']
+            },
+            {
+                parent_path: '/home/user/downloads',
+                file_names: ['image.jpg ', 'video.mp4 ']
+            },
+            {
+                parent_path: '/home/user/pictures',
+                file_names: ['photo.png ']
+            }
+        ];
+
+        const result = TRAILING_SPACE_FILE_MAPPER(input as any);
+
+        expect(result).toHaveLength(3);
+        expect(result[0]).toEqual({
+            value: 'file1.txt , file2    ',
+            category: 'Files without extensions and trailing spaces',
+            valueType: 'string',
+            sub_category: '/home/user/documents'
+        });
+        expect(result[1].sub_category).toBe('/home/user/downloads');
+        expect(result[2].sub_category).toBe('/home/user/pictures');
+    });
+
+    it('should handle empty input array', () => {
+        const input: any[] = [];
+
+        const result = TRAILING_SPACE_FILE_MAPPER(input);
+
+        expect(result).toEqual([]);
+    });
+
+
+    it('should have correct category and valueType', () => {
+        const input = [
+            {
+                parent_path: '/test',
+                file_names: ['test   ']
+            }
+        ];
+
+        const result = TRAILING_SPACE_FILE_MAPPER(input as any);
+
+        expect(result[0].category).toBe('Files without extensions and trailing spaces');
+        expect(result[0].valueType).toBe('string');
+    });
+
+    it('should return correct structure for result array', () => {
+        const input = [
+            {
+                parent_path: '/test/path',
+                file_names: ['test  ']
+            }
+        ];
+
+        const result = TRAILING_SPACE_FILE_MAPPER(input as any);
+
+        expect(result[0]).toHaveProperty('value');
+        expect(result[0]).toHaveProperty('category');
+        expect(result[0]).toHaveProperty('valueType');
+        expect(result[0]).toHaveProperty('sub_category');
+    });
+});
+
+it('CASE_ERRORS_MAPPER maps input correctly', () => {
+    const input = [
+        {
+            parent_path: '/home/user/documents',
+            file_paths: ['FILE.txt', 'file.txt', 'File.TXT']
+        },
+        {
+            parent_path: '/home/user/images',
+            file_paths: ['IMAGE.jpg', 'image.JPG']
+        }
+    ];
+    const result = CASE_ERRORS_MAPPER(input as any);
+    expect(result).toEqual([
+        {
+            value: 'FILE.txt, file.txt, File.TXT',
+            category: 'Case Sensitivity Conflicts',
+            valueType: 'string',
+            sub_category: '/home/user/documents'
+        },
+        {
+            value: 'IMAGE.jpg, image.JPG',
+            category: 'Case Sensitivity Conflicts',
+            valueType: 'string',
+            sub_category: '/home/user/images'
+        }
+    ]);
+});
+
+it('CASE_ERRORS_MAPPER handles empty input array', () => {
+    const input: any[] = [];
+    const result = CASE_ERRORS_MAPPER(input);
+    expect(result).toEqual([]);
 });
 });

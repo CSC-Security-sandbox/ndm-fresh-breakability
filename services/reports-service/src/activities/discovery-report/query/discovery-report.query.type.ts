@@ -31,6 +31,10 @@ export interface FileSystemDistributionInput {
     total_space_regular_files: string;
     total_space_directories: string;
     total_space_used: string;
+    total_hard_link_files: string;
+    total_junctions: string;
+    total_volume_mount_point: string;
+    total_shortcuts: string;
 }
 export interface ExtensionDistributionInput {
     extension: string;
@@ -75,10 +79,27 @@ export interface TopBiggestFileNameInput {
     path: string;
     file_size: string;
 }
+export interface RedirectsFileNameInput {
+    file_type: string;
+    path: string;
+}
+
+
 export interface JobRunDetailsInput {
     stat_value: string;
     volume_path: string;
     status: string;
     config_name: string;
     protocol: string;
+}
+
+export interface TrailingSpaceInput {
+    parent_path: string;
+    file_names: Array<string>;
+}
+
+
+export interface CaseErrorsInput {
+    parent_path: string;
+    file_paths: Array<string>;
 }

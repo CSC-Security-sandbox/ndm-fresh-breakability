@@ -1,6 +1,6 @@
 <head>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss/dist/tailwind.min.css" rel="stylesheet">
+    <link href="${url.resourcesPath}/css/vendor/font-awesome.min.css" rel="stylesheet">
+    <link href="${url.resourcesPath}/css/vendor/tailwind.min.css" rel="stylesheet">
     <style>
     .password-rule {
         font-size: 0.75rem;

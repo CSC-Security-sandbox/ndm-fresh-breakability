@@ -154,7 +154,7 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Error confirming path file upload")
 			Expect(confirmResp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(confirmStats.WorkflowId).NotTo(BeEmpty(), "Expected non-empty workflow ID")
-			Wait(20)
+			Wait(60)
 
 			// Confirm volume creation
 			By("Confirming the volume creation")
@@ -523,6 +523,7 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			defer resp.Body.Close()
 			Expect(jobRunDetails.JobRuns).To(BeEmpty(), "Expected jobRuns to be empty for config %s", sourceJobConfigIDs[0])
 			Expect(jobRunDetails.Status).To(Equal("ACTIVE"), "Expected status to be ACTIVE for config %s", sourceJobConfigIDs[0])
+			
 			Expect(jobRunDetails.JobType).To(Equal("DISCOVER"), "Expected jobType to be DISCOVER for config %s", sourceJobConfigIDs[0])
 		})
 
@@ -578,10 +579,13 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			var err error
 			var resp *http.Response
 			DestinationConfigID, resp, err = CreateFileServer(destinationServerParams, headers)
+			defer resp.Body.Close()
 			Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
 			Expect(DestinationConfigID).NotTo(BeEmpty(), "DestinationConfigID is empty")
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-			defer resp.Body.Close()
+			_, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], DestinationConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			
 		})
 
 		It("Should verify the file server creation with auto upload option", func() {

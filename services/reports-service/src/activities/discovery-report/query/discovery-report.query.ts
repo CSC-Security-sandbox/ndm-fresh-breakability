@@ -128,7 +128,21 @@ export const FILE_SYSTEM_DISTRIBUTION = (schema: string) => `
         sum(case when upper(file_type) = 'SYMBOLIC_LINK' then 1 else 0 end) as symbolic_links,
         sum(case when is_directory = false then file_size else 0 end) as total_space_regular_files,
         sum(case when is_directory = true then file_size else 0 end) as total_space_directories,
-        sum(file_size) as total_space_used
+        sum(file_size) as total_space_used,
+        COALESCE((
+            SELECT SUM(link_count - 1)
+            FROM (
+                SELECT COUNT(1) as link_count
+                FROM ${schema}.inventory i2
+                WHERE i2.job_run_id = $1
+                    AND i2.inode IS NOT NULL
+                GROUP BY i2.inode
+                HAVING COUNT(1) > 1
+            ) AS hard_links
+        ), 0) as total_hard_link_files,
+        sum(case when upper(file_type) = 'JUNCTION' then 1 else 0 end) as total_junctions,
+        sum(case when upper(file_type) = 'VOLUME_MOUNT_POINT' then 1 else 0 end) as total_volume_mount_point,
+        sum(case when upper(file_type) = 'SHORTCUT' then 1 else 0 end) as total_shortcuts
     from ${schema}.inventory i
     where i.job_run_id = $1
 `;
@@ -274,4 +288,31 @@ export const JOB_RUN_DETAILS = (schema: string) => `
     inner join ${schema}.file_server fsrv on fsrv.id = file_server_id
     inner join ${schema}.config c on c.id = fsrv.config_id
     where jr.id = $1
+`;
+
+
+export const REDIRECTS = (schema: string) => `
+    SELECT i.file_type, i.path
+    FROM ${schema}.inventory i
+    WHERE i.job_run_id = $1
+    AND i.file_type IN ('JUNCTION', 'SYMBOLIC_LINK', 'VOLUME_MOUNT_POINT', 'SHORTCUT');
+`;
+export const CASE_ERRORS = (schema: string) => `
+    select 
+        i.parent_path,
+        ARRAY_AGG(i.file_name) as file_paths
+    FROM ${schema}.inventory i
+    WHERE i.job_run_id = $1
+    GROUP BY i.parent_path, LOWER(i.file_name)
+    HAVING COUNT(*) > 1
+`;
+
+export const TRAILING_SPACE_FILE= (schema: string) => `
+    SELECT
+        i.parent_path,
+        ARRAY_AGG(i.file_name) as file_names
+    FROM ${schema}.inventory i
+    WHERE i.job_run_id = $1
+    AND (i.file_name ~ ' $' OR i.file_name ~ '\t$')
+    GROUP BY i.parent_path
 `;

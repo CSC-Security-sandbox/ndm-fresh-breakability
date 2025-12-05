@@ -13,6 +13,8 @@ import * as path from "path";
 import { find } from "rxjs";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 import { StorageOverviewSummaryEntity } from "src/entities/storage-summary-mv.entity";
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { ProjectIdCacheService } from '../utils/project-id-cache.service';
 
 describe("JobRunService", () => {
   let service: JobRunService;
@@ -114,6 +116,15 @@ describe("JobRunService", () => {
     mockCsvService = {
       generateCsv: jest.fn(),
     };
+
+    const mockLogger = {
+      info: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+      log: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         JobRunService,
@@ -139,6 +150,18 @@ describe("JobRunService", () => {
         {
           provide: getRepositoryToken(StorageOverviewSummaryEntity),
           useValue: mockStorageSummaryMvRepo,
+        },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue(mockLogger),
+          },
+        },
+        {
+          provide: ProjectIdCacheService,
+          useValue: {
+            getProjectIdFromCache: jest.fn().mockResolvedValue('project-123'),
+          },
         },
       ],
     }).compile();
@@ -599,7 +622,9 @@ describe("JobRunService", () => {
       // Verify the mocks were called correctly
       expect(mockCsvService.generateCsv).toHaveBeenCalledWith(
         mockFilePath,
-        jobRunId
+        jobRunId,
+        10000,
+        'MIGRATE'
       );
       expect(mockJobRunRepo.update).toHaveBeenCalledWith(
         { id: jobRunId },

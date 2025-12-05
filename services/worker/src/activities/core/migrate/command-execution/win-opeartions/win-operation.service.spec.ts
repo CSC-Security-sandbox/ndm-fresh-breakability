@@ -9,6 +9,7 @@ import { RedisService } from 'src/redis/redis.service';
 import { SourceAclError, TargetAclError } from './acl-operation.error';
 import { LRUCache } from 'src/activities/core/utils/lru-cache';
 import { OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
+import { FileType } from 'src/activities/types/tasks';
 
 // Import correct types
 type SecurityDescriptor = {
@@ -1220,6 +1221,114 @@ describe('WinOperationService', () => {
         sourceSid,
         'SID',
       );
+    });
+  });
+
+  describe('detectSymbolicLinkType', () => {
+    it('should return JUNCTION when IsJunction is true', async () => {
+      const testPath = 'C:\\test\\junction';
+      const mockOutput = {
+        stdout: JSON.stringify({ IsJunction: true, IsSymbolicLink: false }),
+        stderr: '',
+      };
+
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue(mockOutput);
+
+      const result = await service.detectSymbolicLinkType(testPath);
+
+      expect(mockWinShellService.executeCommand).toHaveBeenCalledWith(
+        expect.stringContaining(testPath.replace(/'/g, "''")),
+      );
+      expect(result).toBe(FileType.JUNCTION);
+    });
+
+    it('should return SYMBOLIC_LINK when IsSymbolicLink is true', async () => {
+      const testPath = 'C:\\test\\symlink';
+      const mockOutput = {
+        stdout: JSON.stringify({ IsJunction: false, IsSymbolicLink: true }),
+        stderr: '',
+      };
+
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue(mockOutput);
+
+      const result = await service.detectSymbolicLinkType(testPath);
+
+      expect(mockWinShellService.executeCommand).toHaveBeenCalledWith(
+        expect.stringContaining(testPath.replace(/'/g, "''")),
+      );
+      expect(result).toBe(FileType.SYMBOLIC_LINK);
+    });
+
+    it('should return UNKNOWN when neither IsJunction nor IsSymbolicLink is true', async () => {
+      const testPath = 'C:\\test\\unknown';
+      const mockOutput = {
+        stdout: JSON.stringify({ IsJunction: false, IsSymbolicLink: false }),
+        stderr: '',
+      };
+
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue(mockOutput);
+
+      const result = await service.detectSymbolicLinkType(testPath);
+
+      expect(mockWinShellService.executeCommand).toHaveBeenCalledWith(
+        expect.stringContaining(testPath.replace(/'/g, "''")),
+      );
+      expect(result).toBe(FileType.UNKNOWN);
+    });
+
+    it('should return UNKNOWN and log error when PowerShell command fails', async () => {
+      const testPath = 'C:\\test\\error';
+      const errorMessage = 'PowerShell execution error';
+      mockWinShellService.executeCommand = jest
+        .fn()
+        .mockRejectedValue(new Error(errorMessage));
+
+      const result = await service.detectSymbolicLinkType(testPath);
+
+      expect(mockWinShellService.executeCommand).toHaveBeenCalledWith(
+        expect.stringContaining(testPath.replace(/'/g, "''")),
+      );
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining(`Failed to detect symbolic link for ${testPath}`),
+      );
+      expect(result).toBe(FileType.UNKNOWN);
+    });
+
+    it('should return UNKNOWN and log error when stderr is present in output', async () => {
+      const testPath = 'C:\\test\\stderr';
+      const mockOutput = {
+        stdout: '',
+        stderr: 'Access denied',
+      };
+
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue(mockOutput);
+
+      const result = await service.detectSymbolicLinkType(testPath);
+
+      expect(mockWinShellService.executeCommand).toHaveBeenCalledWith(
+        expect.stringContaining(testPath.replace(/'/g, "''")),
+      );
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining(`Failed to detect symbolic link for ${testPath}`),
+      );
+      expect(result).toBe(FileType.UNKNOWN);
+    });
+
+    it('should handle paths with single quotes correctly', async () => {
+      const testPath = "C:\\test\\path's folder";
+      const mockOutput = {
+        stdout: JSON.stringify({ IsJunction: false, IsSymbolicLink: true }),
+        stderr: '',
+      };
+
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue(mockOutput);
+
+      const result = await service.detectSymbolicLinkType(testPath);
+
+      expect(mockWinShellService.executeCommand).toHaveBeenCalledWith(
+        expect.stringContaining("C:\\test\\path''s folder"),
+      );
+      expect(result).toBe(FileType.SYMBOLIC_LINK);
     });
   });
 });

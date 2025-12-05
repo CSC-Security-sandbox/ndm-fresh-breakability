@@ -62,9 +62,46 @@ export class WorkManagerService {
       this.temporalClientConnection = await Connection.connect(
         this.configService.get('temporal'),
       );
+      await this.notifyWorkerRestart();
     } catch (err) {
       this.logger.error(`Error on setting temporal connection: ${err}`);
       throw err;
+    }
+  }
+
+  private async notifyWorkerRestart() {
+    this.logger.log('Notifying worker restart to config-service');
+    try {
+      const accessToken = await this.authService.getAccessToken();
+      if (!accessToken) throw new Error('Access token is null');
+      
+      const response = await firstValueFrom(
+        this.httpService.post(
+          `${this.workerConfigUrl}/api/v1/work-manager/config`,
+          {
+            envVariables: process.env,
+            isRebootCall: true,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'x-client-platform': this.platform,
+              'Content-Type': 'application/json',
+            },
+            timeout: 5000,
+          },
+        ),
+      );
+      
+      if (response.status !== 200) {
+        throw new Error(
+          `Failed to register worker. Status: ${response.status}`,
+        );
+      }
+      this.logger.log('Worker registered successfully');
+    } catch (error) {
+      this.logger.error(`Error registering worker: ${error.message}`);
+      throw error;
     }
   }
 
@@ -80,6 +117,7 @@ export class WorkManagerService {
       this.loadingConfigs = true;
       const accessToken = await this.authService.getAccessToken();
       if (!accessToken) throw new Error('Access token is null');
+      
       const response = await firstValueFrom(
         this.httpService.get(
           `${this.workerConfigUrl}/api/v1/work-manager/config`,
@@ -92,6 +130,7 @@ export class WorkManagerService {
           },
         ),
       );
+      
       if (response.status !== 200) {
         throw new Error(
           `Failed to fetch configurations. Status: ${response.status}`,

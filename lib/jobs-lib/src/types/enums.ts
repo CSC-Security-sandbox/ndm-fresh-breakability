@@ -14,7 +14,7 @@ export enum OPS_CMD {
   COPY_DIR = 'cd',
   REMOVE_DIR = 'rd', // This is used to remove directories
   REMOVE_FILE = 'rf', // This is used to remove files
-
+  COPY_SYMLINK = 'cs',
 }
 
 export enum OPS_STATUS {

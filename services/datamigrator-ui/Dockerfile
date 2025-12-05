@@ -12,7 +12,7 @@ FROM nginx:1.28.0-alpine3.21-slim
 
 RUN apk update && \
     apk upgrade --no-cache && \
-    apk add --no-cache nodejs npm bash curl && \
+    apk add --no-cache nodejs npm bash && \
     rm -vrf /var/cache/apk/*
 
 WORKDIR /app

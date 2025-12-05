@@ -20,12 +20,17 @@ export enum FileSystemCategory {
   FILE_SERVER_INFO = "File Server Info",
   AVERAGE_VALUES = "Average Values",
   TOP_5_FILE_EXTENSIONS_SUMMERY = "Top File Extensions Summary",
+  FILE_NAME_TRAILING_SPACES = "Files without extensions and trailing spaces",
+  CASE_SENSITIVITY_CONFLICTS = "Case Sensitivity Conflicts",
 }
 
 export enum FileSystemSubCategory {
   // File System Stats subcategories
-  REGULAR_FILES = "Regular Files",
-  SYMBOLIC_LINKS = "Symbolic Links",
+  REGULAR_FILES = "Regular Files Count",
+  SYMBOLIC_LINKS_COUNT = "Symbolic Links Count",
+  HARD_LINKS_COUNT = "Hard Links Count",
+  JUNCTIONS_COUNT = "Junctions Count",
+  VOLUME_MOUNT_COUNT = "Volume Mount Points Count",
   SPECIAL_FILES = "Special Files",
   TOTAL_COUNT = "Total Count",
   TOTAL_SPACE_FOR_REGULAR_FILES = "Total Space for Regular Files",

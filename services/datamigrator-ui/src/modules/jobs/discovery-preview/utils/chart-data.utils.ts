@@ -31,8 +31,9 @@ const toMB = (value: number): number => {
 };
 
 const covertBytes = (bytes: number): string => {
-  if (bytes === 0) return "0 B";
-  let size = bytes;
+  const numBytes = Number(bytes);
+  if (isNaN(numBytes) || numBytes === 0) return "0 B";
+  let size = numBytes;
   let unitIndex = 0;
   while (
     size >= BYTES_IN_KILOBYTE &&
@@ -442,7 +443,7 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
   const symbolicLinks =
     data?.find(
       (item: DataItemType) =>
-        item.sub_category === FileSystemSubCategory.SYMBOLIC_LINKS
+        item.sub_category === FileSystemSubCategory.SYMBOLIC_LINKS_COUNT
     )?.value || 0;
   const totalCount =
     data?.find(
@@ -477,14 +478,34 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
     data?.find(
       (item: DataItemType) => item.sub_category === FileSystemSubCategory.PATH
     )?.value || 0;
+  // Fixed: Look for correct category AND sub_category, return empty string instead of 0
   const fileServerProtocol =
     data?.find(
       (item: DataItemType) =>
+        item.category === "File Server Info" &&
         item.sub_category === FileSystemSubCategory.PROTOCOL
+    )?.value || "";
+  const hardLinks =
+    data?.find(
+      (item: DataItemType) =>
+        item.sub_category === FileSystemSubCategory.HARD_LINKS_COUNT
+    )?.value || 0;
+  const junctionCount =
+    data?.find(
+      (item: DataItemType) =>
+        item.sub_category === FileSystemSubCategory.JUNCTIONS_COUNT
+    )?.value || 0;
+  const volumeMountCount =
+    data?.find(
+      (item: DataItemType) =>
+        item.sub_category === FileSystemSubCategory.VOLUME_MOUNT_COUNT
     )?.value || 0;
   return {
     regularFiles,
     symbolicLinks,
+    hardLinks,
+    junctionCount,
+    volumeMountCount,
     totalCount,
     totalSpaceUsed,
     directories,
@@ -500,10 +521,12 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
   /* This function smartly convert bytes to KiB, MiB, GiB, TiB, PiB, EiB, ZiB or YiB */
 }
 export function formatBytes(bytes: number, decimals = 2): string {
-  if (bytes === 0) return "0 B";
+
+const numBytes = Number(bytes);
+  if (isNaN(numBytes) || numBytes === 0) return "0 B";
 
   const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
-  let size = bytes;
+  let size = numBytes;
   let i = 0;
 
   while (size >= 1024 && i < units.length - 1) {

@@ -1,12 +1,13 @@
 import { ConfigService } from '@nestjs/config';
 import { Cmd, Command, ErrorType, CommandStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
-import { getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip } from 'src/activities/utils/utils';
-import { Origin } from 'src/activities/utils/utils.types';
+import { dmError, getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip, shouldExcludeForDelete, checkCaseSensitiveConflict } from 'src/activities/utils/utils';
+import { Operation, Origin } from 'src/activities/utils/utils.types';
 import { FatalError } from 'src/errors/errors.types';
 import { MigrateScanService } from './migrate-scan.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { mockLogger } from 'src/auth/auth.service.spec';
+import { FileTypeDetectionService } from '../../utils/file-type-detection.service';
 
 // --- Mocks ---
 jest.mock('fs', () => {
@@ -32,14 +33,53 @@ jest.mock('path', () => {
     };
 });
 
+function createCaseSensitiveConflictMock() {
+    return jest.fn().mockImplementation(async (
+        jobType: string,
+        item: string,
+        lowerCaseSourceData: Set<string>,
+        relativeSourcePath: string,
+        sourceContentPath: string,
+        command: any,
+        jobContext: any,
+        lowerCaseTargetData: Set<string>,
+        targetContent: Set<string>,
+        isDirectory: boolean
+    ) => {
+        const lowerCaseFileName = item.toLowerCase();
+        if (lowerCaseSourceData.has(lowerCaseFileName) || 
+            (lowerCaseTargetData?.has(lowerCaseFileName) && !targetContent?.has(item))) {
+            const itemType = isDirectory ? 'Directory' : 'File';
+            const dmErr = {
+                error: {
+                    message: `${itemType} not migrated: Another ${itemType.toLowerCase()} with same name but different case exists`
+                }
+            };
+            await jobContext.publishToErrorStream(dmErr);
+            return true;
+        }
+        lowerCaseSourceData.add(lowerCaseFileName);
+        return false;
+    });
+}
+
 jest.mock('src/activities/utils/utils', () => ({
-    dmError: jest.fn(),
+    dmError: jest.fn((type, origin, operation, errorType, commandId, error, metadata) => ({
+        type,
+        origin,
+        operation,
+        errorType,
+        commandId,
+        error,
+        metadata,
+    })),
     getFileInfo: jest.fn(),
     removePrefix: jest.fn(),
     shouldExcludeOrSkip: jest.fn(),
     isContentUpdate: jest.fn(),
-    isMetaUpdated: jest.fn(), 
-
+    isMetaUpdated: jest.fn(),
+    shouldExcludeForDelete: jest.fn(),
+    checkCaseSensitiveConflict: jest.fn(),
 }));
 
 describe('MigrateScanService', () => {
@@ -49,6 +89,7 @@ describe('MigrateScanService', () => {
     let redisService: any;
     let jobContext: any;
     let commandInput: any;
+    let fileTypeDetectionService: Partial<FileTypeDetectionService>;
 
     const mockLoggerFactory: Partial<LoggerFactory> = {
         create: jest.fn().mockReturnValue(mockLogger),
@@ -68,8 +109,15 @@ describe('MigrateScanService', () => {
         } as any;
 
         logger = mockLogger;
+        fileTypeDetectionService = {
+            detectFileType: jest.fn().mockResolvedValue('mockFileType'),
+        } as Partial<FileTypeDetectionService>;
 
-        service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory);
+        service = new MigrateScanService(
+            configService,
+            mockLoggerFactory as LoggerFactory,
+            fileTypeDetectionService as FileTypeDetectionService
+        );
 
         jobContext = {
             publishToErrorStream: jest.fn(),
@@ -98,6 +146,206 @@ describe('MigrateScanService', () => {
         jest.clearAllMocks();
     });
 
+        // --- scanDirectory with Trailing Spaces ---
+    describe('scanDirectory - Trailing Space Detection', () => {
+        it('should skip file with trailing spaces on Windows (SMB)', async () => {
+            // Mock process.platform
+            Object.defineProperty(process, 'platform', {
+                value: 'win32',
+                configurable: true,
+            });
+
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+            (fs.promises.readdir as jest.Mock).mockResolvedValue(['file-with-space.txt ']);
+
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set(['file-with-space.txt ']);
+                return new Set();
+            });
+
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 1024,
+                mtime: new Date(),
+                mode: 33188,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+            });
+
+            (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+            (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+
+            await service.scanDirectory(commandInput);
+
+            expect(jobContext.publishToErrorStream).toHaveBeenCalled();
+            const errorCall = jobContext.publishToErrorStream.mock.calls[0][0];
+            expect(errorCall.error?.code).toBe('ETRAILSPACE');
+            expect(errorCall.error?.message).toContain('trailing spaces');
+        });
+
+        it('should skip file with trailing tab on Windows (SMB)', async () => {
+            Object.defineProperty(process, 'platform', {
+                value: 'win32',
+                configurable: true,
+            });
+
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+            (fs.promises.readdir as jest.Mock).mockResolvedValue(['file-with-tab.txt\t']);
+
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set(['file-with-tab.txt\t']);
+                return new Set();
+            });
+
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 1024,
+                mtime: new Date(),
+                mode: 33188,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+            });
+
+            (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+            (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+
+            await service.scanDirectory(commandInput);
+
+            expect(jobContext.publishToErrorStream).toHaveBeenCalled();
+            const errorCall = jobContext.publishToErrorStream.mock.calls[0][0];
+            expect(errorCall.error?.code).toBe('ETRAILSPACE');
+        });
+
+        it('should process file with trailing spaces on non-Windows platform', async () => {
+            Object.defineProperty(process, 'platform', {
+                value: 'linux',
+                configurable: true,
+            });
+
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+            (fs.promises.readdir as jest.Mock).mockResolvedValue(['file-with-space.txt ']);
+
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set(['file-with-space.txt ']);
+                return new Set();
+            });
+
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 777,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+            });
+
+            (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+            (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+            (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/file' });
+            (isContentUpdate as jest.Mock).mockReturnValue(true);
+
+            const result = await service.scanDirectory(commandInput);
+
+            // File should be processed on non-Windows, not skipped
+            expect(result.fileCount).toBe(1);
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalled();
+        });
+
+        it('should include proper error details in trailing space error', async () => {
+            Object.defineProperty(process, 'platform', {
+                value: 'win32',
+                configurable: true,
+            });
+
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+            (fs.promises.readdir as jest.Mock).mockResolvedValue(['problem-file.pdf ']);
+
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set(['problem-file.pdf ']);
+                return new Set();
+            });
+
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 2048,
+                mtime: new Date(),
+                mode: 33188,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+            });
+
+            (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+            (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+
+            await service.scanDirectory(commandInput);
+
+            expect(jobContext.publishToErrorStream).toHaveBeenCalled();
+            const errorPublished = jobContext.publishToErrorStream.mock.calls[0][0];
+            expect(errorPublished.type).toBe('OPERATION');
+            expect(errorPublished.origin).toBe(Origin.SOURCE);
+            expect(errorPublished.operation).toBe(Operation.READ_FILE);
+            expect(errorPublished.errorType).toBe(ErrorType.TRANSIENT_ERROR);
+        });
+
+        it('should continue processing other files after skipping one with trailing spaces', async () => {
+            Object.defineProperty(process, 'platform', {
+                value: 'win32',
+                configurable: true,
+            });
+
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+            (fs.promises.readdir as jest.Mock).mockResolvedValue([
+                'file-with-space.txt ',
+                'normal-file.txt',
+            ]);
+
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set(['file-with-space.txt ', 'normal-file.txt']);
+                return new Set();
+            });
+
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 777,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+            });
+
+            (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+            (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+            (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/file' });
+            (isContentUpdate as jest.Mock).mockReturnValue(true);
+
+            await service.scanDirectory(commandInput);
+
+            // Should have one error for trailing space file
+            expect(jobContext.publishToErrorStream).toHaveBeenCalled();
+            // Should process normal file
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalled();
+        });
+    });
     // --- getDirContents ---
     describe('getDirContents', () => {
         it('should return directory contents', async () => {
@@ -223,6 +471,18 @@ describe('MigrateScanService', () => {
 
     // --- scanDirectory ---
     describe('scanDirectory', () => {
+        beforeEach(() => {
+            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService);
+            (dmError as jest.Mock).mockImplementation((category, origin, operation, errorType, commandId, error, metadata) => ({
+                category,
+                origin,
+                operation,
+                errorType,
+                commandId,
+                error,
+                metadata,
+            }));
+        });
         it('should skip excluded items', async () => {
             jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
             (fs.promises.readdir as jest.Mock).mockResolvedValue(['file1']);
@@ -273,6 +533,149 @@ describe('MigrateScanService', () => {
             await service.scanDirectory(commandInput);
 
             expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledTimes(2);
+        });
+
+        it('should detect and skip files with case collisions in source directory on SMB', async () => {
+            const originalPlatform = process.platform;
+            Object.defineProperty(process, 'platform', { value: 'win32' });
+
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set(['file1.txt', 'File1.TXT', 'FILE1.txt', 'MyFolder', 'myfolder']);
+                return new Set();
+            });
+
+            (fs.promises.lstat as jest.Mock).mockImplementation(async (path: string) => {
+                const isDirectory = path.includes('Folder') || path.includes('folder');
+                return {
+                    isDirectory: () => isDirectory,
+                    isSymbolicLink: () => false,
+                    size: isDirectory ? 0 : 100,
+                    mtime: new Date(),
+                    mode: 777,
+                    uid: 0,
+                    gid: 0,
+                    atime: new Date(),
+                    ctime: new Date(),
+                    birthtime: new Date(),
+                };
+            });
+            (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+            (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+            (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/path' });
+            (isContentUpdate as jest.Mock).mockReturnValue(true);
+            (checkCaseSensitiveConflict as jest.Mock).mockImplementation(createCaseSensitiveConflictMock());
+
+            await service.scanDirectory(commandInput);
+
+            expect(jobContext.publishToErrorStream).toHaveBeenCalledTimes(3);
+            expect(jobContext.publishToErrorStream).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    error: expect.objectContaining({
+                        message: expect.stringContaining('same name but different case')
+                    })
+                })
+            );
+
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledWith(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        fPath: expect.any(String),
+                        isDir: false
+                    }),
+                    expect.objectContaining({
+                        fPath: expect.any(String),
+                        isDir: true
+                    })
+                ])
+            );
+            Object.defineProperty(process, 'platform', { value: originalPlatform });
+        });
+
+        it('should handle case collision between source and target on SMB (cutover/incremental scenario)', async () => {
+            const originalPlatform = process.platform;
+            Object.defineProperty(process, 'platform', { value: 'win32' });
+
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set(['MyFolder', 'File1.txt', 'TestDir.txt', 'testdir.txt']);
+                if (origin === Origin.DESTINATION) return new Set(['myfolder', 'free.txt', 'file1.txt', 'testdir.txt']);
+                return new Set();
+            });
+
+            (fs.promises.lstat as jest.Mock).mockImplementation(async (path: string) => {
+                const isDirectory = path.includes('MyFolder') || path.includes('myfolder');
+                return {
+                    isDirectory: () => isDirectory,
+                    isSymbolicLink: () => false,
+                    size: isDirectory ? 0 : 100,
+                    mtime: new Date(),
+                    mode: 777,
+                    uid: 0,
+                    gid: 0,
+                    atime: new Date(),
+                    ctime: new Date(),
+                    birthtime: new Date(),
+                };
+            });
+            (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+            (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+            (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/path' });
+            (isContentUpdate as jest.Mock).mockReturnValue(true);
+            (checkCaseSensitiveConflict as jest.Mock).mockImplementation(createCaseSensitiveConflictMock());
+
+            await service.scanDirectory(commandInput);
+
+            expect(jobContext.publishToErrorStream).toHaveBeenCalledTimes(3);
+            expect(jobContext.publishToErrorStream).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    error: expect.objectContaining({
+                        message: expect.stringContaining('same name but different case')
+                    })
+                })
+            );
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledTimes(1);
+
+            Object.defineProperty(process, 'platform', { value: originalPlatform });
+        });
+
+
+        it('should not check for case collisions on non-SMB platforms', async () => {
+            const originalPlatform = process.platform;
+            Object.defineProperty(process, 'platform', { value: 'linux' });
+
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set(['File1.txt', 'file1.txt']);
+                return new Set();
+            });
+
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 777,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+            });
+            (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+            (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+            (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/path' });
+            (isContentUpdate as jest.Mock).mockReturnValue(true);
+            (checkCaseSensitiveConflict as jest.Mock).mockImplementation(createCaseSensitiveConflictMock());
+
+            await service.scanDirectory(commandInput);
+
+            expect(jobContext.publishToErrorStream).not.toHaveBeenCalledWith(
+                expect.objectContaining({
+                    operation: expect.any(String),
+                    origin: Origin.SOURCE
+                })
+            );
+
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalled();
+            Object.defineProperty(process, 'platform', { value: originalPlatform });
         });
 
         it('should increment dirCount and subDirs for directories and publish command if not in target', async () => {
@@ -520,13 +923,15 @@ describe('MigrateScanService', () => {
                 return new Set();
             });
             
+            (shouldExcludeForDelete as jest.Mock).mockReturnValue(false);
+            
             await service.scanDirectory(commandInput);
             expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
         });
 
         it('should handle command publishing in chunks during delete processing', async () => {
             jobContext.jobConfig.skipDelete = false;
-            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory);
+            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService);
             (service as any).maxMigrationCommand = 2;
 
             jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
@@ -549,6 +954,7 @@ describe('MigrateScanService', () => {
                 birthtime: new Date(),
             });
             (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
+            (shouldExcludeForDelete as jest.Mock).mockReturnValue(false);
 
             commandInput.targetPrefix = '/dst';
             await service.scanDirectory(commandInput);
@@ -592,6 +998,7 @@ describe('MigrateScanService', () => {
     let logger: Partial<LoggerService>;
     let jobContext: any;
     let commandInput: any;
+    let fileTypeDetectionService: Partial<FileTypeDetectionService>;
 
     const mockLoggerFactory: Partial<LoggerFactory> = {
         create: jest.fn().mockReturnValue(mockLogger),
@@ -612,7 +1019,11 @@ describe('MigrateScanService', () => {
 
         logger = mockLogger;
 
-        service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory);
+        fileTypeDetectionService = {
+            detectFileType: jest.fn().mockResolvedValue('mockFileType'),
+        } as Partial<FileTypeDetectionService>;
+
+        service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService);
 
         jobContext = {
             publishToErrorStream: jest.fn(),

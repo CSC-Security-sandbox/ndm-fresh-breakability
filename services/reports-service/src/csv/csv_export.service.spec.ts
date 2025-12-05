@@ -5,6 +5,8 @@ import * as fs from "fs";
 import * as fastCsv from "fast-csv";
 import exp from "constants";
 import * as validation from '../utils/utils';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { ProjectIdCacheService } from '../utils/project-id-cache.service';
 
 jest.mock("fs");
 jest.mock("fast-csv");
@@ -13,8 +15,17 @@ jest.mock("typeorm");
 describe("CsvService", () => {
   let service: CsvService;
   let mockDataSource: jest.Mocked<DataSource>;
+  let mockLogger: any;
 
   beforeEach(async () => {
+    mockLogger = {
+      info: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+      log: jest.fn(),
+    };
+
     mockDataSource = {
       createQueryRunner: jest.fn().mockReturnValue({
         connect: jest.fn(),
@@ -27,6 +38,18 @@ describe("CsvService", () => {
       providers: [
         CsvService,
         { provide: DataSource, useValue: mockDataSource },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue(mockLogger),
+          },
+        },
+        {
+          provide: ProjectIdCacheService,
+          useValue: {
+            getProjectIdFromCache: jest.fn().mockResolvedValue('project-123'),
+          },
+        },
       ],
     }).compile();
 
@@ -41,6 +64,16 @@ describe("CsvService", () => {
     beforeEach(() => {
       // Mock validateFilePath to avoid validation errors on paths
       jest.spyOn(validation, 'validateFilePath').mockImplementation((filePath: string) => true || false);
+    });
+
+    it("should throw error for invalid file path", async () => {
+      const invalidFilePath = "../../malicious/path.csv";
+      const jobRunId = "job-123";
+      
+      jest.spyOn(validation, 'validateFilePath').mockReturnValue(false);
+      
+      await expect(service.generateCsv(invalidFilePath, jobRunId))
+        .rejects.toThrow('File path contains invalid characters.');
     });
     
     it("should generate CSV file and write data in batches", async () => {
@@ -59,7 +92,13 @@ describe("CsvService", () => {
         },
       ];
 
-      mockDataSource.query.mockResolvedValueOnce(mockData);
+      mockDataSource.query.mockResolvedValueOnce([{ protocol: 'NFS' }]);
+      jest
+        .spyOn(service, "getInventoryData")
+        .mockResolvedValueOnce(mockData)
+        .mockResolvedValueOnce([]);
+
+      mockDataSource.query.mockResolvedValueOnce([]);
 
       const mockWriteStream = {
         pipe: jest.fn(),
@@ -78,7 +117,7 @@ describe("CsvService", () => {
       expect(mockWriteStream.write).toHaveBeenCalledTimes(mockData.length);
     });
 
-    it("should handle error in generateCsv method and not crash", async () => {
+    it("should handle error in generateCsv method and properly throw", async () => {
       const filePath = "test.csv";
       const jobRunId = "12345";
 
@@ -88,10 +127,10 @@ describe("CsvService", () => {
 
       const result = service.generateCsv(filePath, jobRunId);
 
-      await expect(result).resolves.not.toThrow();
+      await expect(result).rejects.toThrow("File error");
     });
 
-    it("should handle error in fastCsv.format and not crash", async () => {
+    it("should handle error in fastCsv.format and properly throw", async () => {
       const filePath = "test.csv";
       const jobRunId = "12345";
       const mockData = [
@@ -116,10 +155,10 @@ describe("CsvService", () => {
 
       const result = service.generateCsv(filePath, jobRunId);
 
-      await expect(result).resolves.not.toThrow();
+      await expect(result).rejects.toThrow("CSV format error");
     });
 
-    it("should handle error in mockDataSource.query and not crash", async () => {
+    it("should handle error in mockDataSource.query and properly throw", async () => {
       const filePath = "test.csv";
       const jobRunId = "12345";
 
@@ -127,7 +166,7 @@ describe("CsvService", () => {
 
       const result = service.generateCsv(filePath, jobRunId);
 
-      await expect(result).resolves.not.toThrow();
+      await expect(result).rejects.toThrow("Query error");
     });
 
     it("should call release on queryRunner after completing generateCsv", async () => {
@@ -245,6 +284,226 @@ describe("CsvService", () => {
       );
 
       expect(result.query).toContain("FROM testSchema.inventory");
+    });
+  });
+
+  describe('constructor fallback', () => {
+    it('should use fallback logger when LoggerFactory is not provided', async () => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          CsvService,
+          { provide: DataSource, useValue: mockDataSource },
+          {
+            provide: ProjectIdCacheService,
+            useValue: { getProjectIdFromCache: jest.fn().mockResolvedValue('project-123') },
+          },
+          // Note: LoggerFactory is NOT provided, triggering fallback
+        ],
+      }).compile();
+
+      const fallbackService = module.get<CsvService>(CsvService);
+      expect(fallbackService).toBeDefined();
+    });
+  });
+
+  describe("getMigrationCoCColumns", () => {
+    it("should return SMB-specific columns when protocol is SMB", () => {
+      const protocol = "SMB";
+      const result = service.getMigrationCoCColumns(protocol);
+
+      expect(result).toContain("Source Owner SID");
+      expect(result).toContain("Source Group SID");
+      expect(result).toContain("Target Owner SID");
+      expect(result).toContain("Target Group SID");
+      expect(result).toContain("Source ACE Details");
+      expect(result).toContain("Target ACE Details");
+    });
+
+    it("should return NFS-specific columns when protocol is NFS", () => {
+      const protocol = "NFS";
+      const result = service.getMigrationCoCColumns(protocol);
+
+      expect(result).toContain("Source UID");
+      expect(result).toContain("Source GID");
+      expect(result).toContain("Destination UID");
+      expect(result).toContain("Destination GID");
+      expect(result).toContain("Source Unix Permissions");
+      expect(result).toContain("Destination Unix Permissions");
+    });
+
+    it("should handle case-insensitive protocol matching", () => {
+      const protocols = ["SMB", "smb", "Smb", "sMb"];
+    
+      protocols.forEach(protocol => {
+        const result = service.getMigrationCoCColumns(protocol);
+          expect(result).toContain("Source Owner SID");
+          expect(result).toContain("Source Group SID");
+          expect(result).toContain("Target Owner SID");
+          expect(result).toContain("Target Group SID");
+          expect(result).toContain("Source ACE Details");
+          expect(result).toContain("Target ACE Details");
+      });
+    });
+
+    it("should return SQL columns with proper SQL formatting for both protocols", () => {
+      // Test with SMB
+      let result = service.getMigrationCoCColumns("SMB");
+      expect(result).toContain("AS");
+      expect(result).toContain('"');
+      expect(result).not.toContain("undefined");
+      expect(result.length).toBeGreaterThan(0);
+
+      // Test with NFS 
+      result = service.getMigrationCoCColumns("NFS");
+      expect(result).toContain("AS");
+      expect(result).toContain('"');
+      expect(result).not.toContain("undefined");
+      expect(result.length).toBeGreaterThan(0);
+
+      // Both should return valid SQL but different columns
+      const smbColumns = service.getMigrationCoCColumns("SMB");
+      const nfsColumns = service.getMigrationCoCColumns("NFS");
+      expect(smbColumns).not.toEqual(nfsColumns);
+    });
+    it("should use ACE pattern constants in SMB columns", () => {
+      const result = service.getMigrationCoCColumns("SMB");
+      
+      // Verify the ACE pattern constants are included in the SQL query
+      expect(result).toContain("ACE in source:");
+      expect(result).toContain("ACE in target:");
+    });
+
+    it("should default to NFS columns when protocol is null or empty", () => {
+      const resultNull = service.getMigrationCoCColumns(null as any);
+      const resultEmpty = service.getMigrationCoCColumns("");
+      
+      // Both should return NFS columns (default)
+      expect(resultNull).toContain("Source UID");
+      expect(resultNull).toContain("Source Unix Permissions");
+      
+      expect(resultEmpty).toContain("Source UID");
+      expect(resultEmpty).toContain("Source Unix Permissions");
+    });
+  });
+
+  describe("Cutover CSV - Query Selection Logic", () => {
+    it("should call cutover query for CUT_OVER jobType", async () => {
+      const jobRunId = "test-job-run-id";
+      const limit = 100;
+      const offset = 1;
+
+      // Spy on getCutoverInventoryDataQuery
+      const cutoverSpy = jest.spyOn(service as any, 'getCutoverInventoryDataQuery').mockResolvedValue({
+        query: "SELECT * FROM cutover",
+        values: [jobRunId, limit, offset]
+      });
+
+      mockDataSource.query.mockResolvedValue([{ test: 'data' }]);
+
+      await service.getInventoryData(jobRunId, limit, offset, 'CUT_OVER');
+
+      expect(cutoverSpy).toHaveBeenCalledWith(jobRunId, limit, offset);
+      expect(cutoverSpy).toHaveBeenCalledTimes(1);
+
+      cutoverSpy.mockRestore();
+    });
+
+    it("should call cutover query for lowercase cutover jobType", async () => {
+      const cutoverSpy = jest.spyOn(service as any, 'getCutoverInventoryDataQuery').mockResolvedValue({
+        query: "SELECT * FROM cutover",
+        values: ["test-id", 100, 1]
+      });
+
+      mockDataSource.query.mockResolvedValue([]);
+
+      await service.getInventoryData("test-id", 100, 1, 'cut_over');
+
+      expect(cutoverSpy).toHaveBeenCalled();
+      cutoverSpy.mockRestore();
+    });
+
+    it("should call regular migration query when jobType is MIGRATE", async () => {
+      const migrationSpy = jest.spyOn(service, 'getInventoryDataQuery').mockResolvedValue({
+        query: "SELECT * FROM migration",
+        values: ["test-id", 100, 1]
+      });
+
+      mockDataSource.query.mockResolvedValue([]);
+
+      await service.getInventoryData("test-id", 100, 1, 'MIGRATE');
+
+      expect(migrationSpy).toHaveBeenCalledWith("test-id", 100, 1);
+      migrationSpy.mockRestore();
+    });
+
+    it("should call regular migration query when jobType is undefined", async () => {
+      const migrationSpy = jest.spyOn(service, 'getInventoryDataQuery').mockResolvedValue({
+        query: "SELECT * FROM migration",
+        values: ["test-id", 100, 1]
+      });
+
+      mockDataSource.query.mockResolvedValue([]);
+
+      await service.getInventoryData("test-id", 100, 1);
+
+      expect(migrationSpy).toHaveBeenCalled();
+      migrationSpy.mockRestore();
+    });
+
+    it("should return data from database after query selection", async () => {
+      const mockData = [{ path: '/test/file.txt' }];
+      mockDataSource.query.mockResolvedValue(mockData);
+
+      const result = await service.getInventoryData("test-id", 100, 1, 'CUT_OVER');
+
+      expect(result).toEqual(mockData);
+      expect(mockDataSource.query).toHaveBeenCalled();
+    });
+  });
+
+  describe("Cutover CSV - generateCsv with jobType", () => {
+    beforeEach(() => {
+      jest.spyOn(validation, 'validateFilePath').mockReturnValue(true);
+    });
+
+    it("should call cutover query when jobType is CUT_OVER", async () => {
+      const filePath = "/path/to/report.csv";
+      const jobRunId = "test-job-run-id";
+      const jobType = "CUT_OVER";
+
+      const mockWriteStream = {
+        pipe: jest.fn(),
+        write: jest.fn(),
+        end: jest.fn(),
+      };
+
+      jest.spyOn(fs, "createWriteStream").mockReturnValue(mockWriteStream as any);
+      jest.spyOn(fastCsv, "format").mockReturnValue(mockWriteStream as any);
+      jest.spyOn(service, "getInventoryData").mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+      await service.generateCsv(filePath, jobRunId, 10000, jobType);
+
+      expect(service.getInventoryData).toHaveBeenCalledWith(jobRunId, 10000, 0, jobType);
+    });
+
+    it("should call regular query when jobType is MIGRATE", async () => {
+      const filePath = "/path/to/report.csv";
+      const jobRunId = "test-job-run-id";
+      const jobType = "MIGRATE";
+
+      const mockWriteStream = {
+        pipe: jest.fn(),
+        write: jest.fn(),
+        end: jest.fn(),
+      };
+
+      jest.spyOn(fs, "createWriteStream").mockReturnValue(mockWriteStream as any);
+      jest.spyOn(fastCsv, "format").mockReturnValue(mockWriteStream as any);
+      jest.spyOn(service, "getInventoryData").mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+      await service.generateCsv(filePath, jobRunId, 10000, jobType);
+
+      expect(service.getInventoryData).toHaveBeenCalledWith(jobRunId, 10000, 0, jobType);
     });
   });
 });

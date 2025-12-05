@@ -13,10 +13,15 @@ export const PDFReportHeaders = {
     "Maximum Values",
     "Job Run Stats",
     "Biggest",
+    "Redirects",
+    "Case Sensitivity Conflicts",
+    "Files without extensions and trailing spaces"
   ],
 };
 export enum formatStringTypeCategories {
   Top_File_Extension = "Top 5 File Extensions (with file Capacity and Count)",
+  FILE_NAME_TRAILING_SPACES = "Files without extensions and trailing spaces",
+  Case_Sensitivity_Conflicts = "Case Sensitivity Conflicts",
 }
 export const ReportSubCategoriesHeader = {
   "Number of Files": [

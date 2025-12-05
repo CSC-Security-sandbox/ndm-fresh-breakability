@@ -79,6 +79,14 @@ on:
               "branch": "main"
             }
           }
+      run_e2e:
+        description: 'Run E2E tests'
+        required: false
+        type: choice
+        default: 'true'
+        options:
+          - 'true'
+          - 'false'
   schedule:
     - cron: '30 18 * * *'
   workflow_call:
@@ -499,7 +507,7 @@ jobs:
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         run: | 
           cd app-deployment/artifacts
-          TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/docker-images/ndm-docker-images-v3.tar"
+          TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/docker-images/ndm-docker-images.tar"
           curl -o "ndm-docker-images.tar" \
               -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
               $TARGET_URL
@@ -566,10 +574,10 @@ jobs:
       BUILD_VERSION: ${{ needs.package-artifacts.outputs.build_version }}
     steps:
         - name: Checkout code
-          uses: actions/checkout@v4
+          uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
         - name: Download Binary Artifact
-          uses: actions/download-artifact@v4
+          uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
           with:
             name: worker-binary
             path: .
@@ -1529,7 +1537,7 @@ jobs:
           echo "Build notification sent successfully"
 
   run-azure-ndm-api-tests:
-    if: ${{ needs.packer.outputs.control_plane_image_version != '' && needs.packer.outputs.worker_image_version != '' }}
+    if: ${{ ((github.event_name == 'schedule' && vars.RUN_E2E_ON_NIGHTLY == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_e2e == 'true') || github.event_name == 'workflow_call') && needs.packer.outputs.control_plane_image_version != '' && needs.packer.outputs.worker_image_version != '' }}
     needs: [package-artifacts, packer, determine-matrix, upload-windows-installer]
     uses: ./.github/workflows/run-api-tests-azure.yaml
     with:

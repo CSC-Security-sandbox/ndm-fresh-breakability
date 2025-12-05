@@ -9,9 +9,11 @@ import { SMB_PROTOCOL_VERSION_OPTIONS } from "@modules/storage-servers/file-serv
 import ProtocolAccordion from "@modules/storage-servers/file-server/components/steps/Credentials/components/ProtocolAccordion";
 
 const SMBCredentials = () => {
-  const { smbCredentialsForm, isJobRunning } = useContext(
+  const { smbCredentialsForm, isJobRunning, selectedProtocol } = useContext(
     CommonFileServerContext
   );
+
+  const isDisabled = isJobRunning || selectedProtocol !== 'SMB';
 
   return (
     <FormFrame>
@@ -20,7 +22,7 @@ const SMBCredentials = () => {
           form={smbCredentialsForm}
           name="userName"
           placeholder="Username"
-          disabled={isJobRunning}
+          disabled={isDisabled}
           label="Username"
           onBlur={(e: any) => {
             smbCredentialsForm.resetForm({
@@ -35,7 +37,7 @@ const SMBCredentials = () => {
           placeholder="Password"
           type="password"
           label="Password"
-          disabled={isJobRunning}
+          disabled={isDisabled}
           onBlur={(e: any) => {
             smbCredentialsForm.resetForm({
               ...smbCredentialsForm?.formState,
@@ -48,7 +50,7 @@ const SMBCredentials = () => {
           name="protocolVersion"
           placeholder="Protocol Version"
           form={smbCredentialsForm}
-          disabled={isJobRunning}
+          disabled={isDisabled}
           options={SMB_PROTOCOL_VERSION_OPTIONS}
         />
       </ProtocolAccordion>

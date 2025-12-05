@@ -237,7 +237,7 @@ const JobRunDetails = () => {
         </Box>
       </Box>
       <JobRunHeader jobRunDetails={jobRunDetails} />
-      <JobRunTaskCard jobRunDetails={jobRunDetails} />
+      <JobRunTaskCard jobRunDetails={jobRunDetails} jobRunId={jobRunId} />
       <Box className="flex gap-6 items-stretch">
         <Box className="grow basis-1/2">
           <JobDescription

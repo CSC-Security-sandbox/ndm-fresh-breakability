@@ -10,6 +10,7 @@ type ServerType string
 type Protocol string
 type ProtocolVersion string
 type CloudEnvironment string
+type FileServerStatus string
 
 // Package-level configuration variables loaded from the environment.
 var (
@@ -128,13 +129,14 @@ const (
 	NFS_SOURCE_VOLUME_1                              = "/vol_src_automation2"
 	NFS_DESTINATION_VOLUME_1                         = "/vol_dest_automation2"
 	NFS_SOURCE_VOLUME_2                              = "/vol_src_automation"
-	CREATE_FILESERVER_ENDPOINT                       = "/api/v1/servers"
+	FILESERVER_ENDPOINT                              = "/api/v1/servers"
 	CREATE_DISCOVERY_ENDPOINT                        = "/api/v1/jobs/bulk-discovery"
 	CREATE_MIGRATION_ENDPOINT                        = "/api/v1/jobs/bulk-migrate"
 	CREATE_CUTOVER_ENDPOINT                          = "/api/v1/jobs/bulk-cutover"
 	CUTOVER_APPROVE_REJECT_ENDPOINT                  = "/api/v1/job-run/cutover/approve"
 	JOB_RUN_ACTION_ENDPOINT                          = "/api/v1/job-run/action"
 	JOB_RUN_ENDPOINT                                 = "/api/v1/job-run"
+	JOB_RUN_REPORT_ENDPOINT                          = "/api/v1/report/job-run"
 	JOBS_ENDPOINT                                    = "/api/v1/jobs"
 	FILE_SERVER_REFRESH_URL                          = "/api/v1/servers/refresh"
 	ADHOC_JOBRUN_URL                                 = "/api/v1/job-run/ad-hoc"
@@ -161,6 +163,9 @@ const (
 	APPROVED_JOBRUN                                  = "APPROVED"
 	ERRORED_JOBRUN                                   = "ERRORED"
 	PAUSED_JOBRUN                                    = "PAUSED"
+	FileServerStatusActive          FileServerStatus = "ACTIVE"
+	FileServerStatusInProgress      FileServerStatus = "IN_PROGRESS"
+	FileServerStatusErrored         FileServerStatus = "ERRORED"
 	DeltaFolder                                      = "delta"
 	ConfigTypeFile                  ConfigType       = "FILE"
 	ServerTypeOtherNAS              ServerType       = "OtherNAS"
@@ -294,5 +299,5 @@ func UpdateConfVariables(protocolType, environment string) {
 	}
 
 	InitWorkers(NDM_WORKERS_HOST, NDM_WORKERS_PORT, NDM_WORKERS_PASSWORD, NDM_WORKERS_USER_NAME)
-	InitFileServer(SOURCE_VOLUMES_LIST, DESTINATION_VOLUMES_LIST, SOURCE_HOST_IP, DESTINATION_HOST_IP)
+	InitFileServer(SOURCE_VOLUMES_LIST, DESTINATION_VOLUMES_LIST, SOURCE_HOST_IP, DESTINATION_HOST_IP, 2)
 }

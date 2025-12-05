@@ -18,6 +18,11 @@ export interface ExcludeOrSkipParams {
     olderThan: Date;
     jobType: string;
 }
+export interface ExcludeForDelete {
+    fullPath: string;
+    excludePatterns: string[];
+}
+
 export enum Origin {
     SOURCE = 'Source',
     DESTINATION = 'Destination'

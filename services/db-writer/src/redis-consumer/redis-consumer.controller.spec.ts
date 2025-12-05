@@ -37,7 +37,7 @@ describe('RedisConsumerController', () => {
 
     controller = module.get<RedisConsumerController>(RedisConsumerController);
     service = module.get<RedisConsumerService>(RedisConsumerService);
-    
+
     // Reset mocks before each test
     jest.clearAllMocks();
     // Ensure default behavior returns a resolved promise
@@ -56,8 +56,26 @@ describe('RedisConsumerController', () => {
 
       const result = await controller.start(dto);
 
-      // Verifies the service was called with correct jobRunId
-      expect(service.saveJobConsumersToRedis).toHaveBeenCalledWith('job-1234');
+      // Verifies the service was called with correct jobRunId and undefined projectId
+      expect(service.saveJobConsumersToRedis).toHaveBeenCalledWith('job-1234', undefined);
+
+      // Verifies the controller returned the success message
+      expect(result).toEqual({
+        success: true,
+        message: 'Consumer started successfully.',
+      });
+    });
+
+    it('should call service method with projectId when provided', async () => {
+      const dto: ConsumerDto = {
+        jobRunId: 'job-1234',
+      };
+      const projectId = 'project-123';
+
+      const result = await controller.start(dto, projectId);
+
+      // Verifies the service was called with correct jobRunId and projectId
+      expect(service.saveJobConsumersToRedis).toHaveBeenCalledWith('job-1234', 'project-123');
 
       // Verifies the controller returned the success message
       expect(result).toEqual({
@@ -68,7 +86,7 @@ describe('RedisConsumerController', () => {
 
     it('should not throw even if service method throws (fire-and-forget)', async () => {
       const dto: ConsumerDto = {
-      jobRunId: 'job-5678',
+        jobRunId: 'job-5678',
       };
 
       // Simulate internal service error (async to match fire-and-forget)
@@ -79,10 +97,10 @@ describe('RedisConsumerController', () => {
       // Controller should still return success, since fire-and-forget
       const result = await controller.start(dto);
 
-      expect(service.saveJobConsumersToRedis).toHaveBeenCalledWith('job-5678');
+      expect(service.saveJobConsumersToRedis).toHaveBeenCalledWith('job-5678', undefined);
       expect(result).toEqual({
-      success: true,
-      message: 'Consumer started successfully.',
+        success: true,
+        message: 'Consumer started successfully.',
       });
 
       // Reset mock to avoid affecting other tests

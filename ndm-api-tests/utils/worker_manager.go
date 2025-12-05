@@ -578,7 +578,8 @@ func GetRestartWorkerScript() string {
 }
 
 func getRestartWorkerScriptForSMB() string {
-	return `cmd /C net stop "Datamigrator Worker" && net start "Datamigrator Worker"`
+	// Use error suppression (2>nul) for stop command in case service is already stopped
+	return `cmd /C "net stop "Datamigrator Worker" 2>nul & net start "Datamigrator Worker""`
 }
 
 func getRestartWorkerScriptForNFS() string {
@@ -592,4 +593,144 @@ func getRestartWorkerScriptForNFS() string {
 
 	`, NDM_VM_PASSWORD)
 	return script
+}
+
+func UpdateWorkerEnvAndRestart(maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize int) error {
+	config := GetAttachedWorkerDetails()
+	sshConfig := SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	var script string
+	switch PROTOCOL_TYPE {
+	case ProtocolNFS:
+		script = WorkerEnvVarsScriptForNFS(sshConfig.Password, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize)
+	case ProtocolSMB:
+		script = WorkerEnvVarsScriptForSMB(maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize)
+	}
+
+	_, err := sshRunScript(sshConfig, script)
+	if err != nil {
+		return fmt.Errorf("failed to update worker config on %s: %w", sshConfig.Host, err)
+	}
+
+	LogDebug(fmt.Sprintf("Worker %s config successfully updated, MAX_WRITE_CONCURRENCY=%d, JOB_TASK_ACTIVITY_CONCURRENCY=%d, MAX_BUFFER_SIZE=%d",
+		sshConfig.Host, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize))
+
+	_, err = RestartWorker(sshConfig)
+	if err != nil {
+		return fmt.Errorf("failed to restart worker, worker=%s, err=%v", sshConfig.Host, err)
+	}
+	return nil
+}
+
+// WorkerEnvVarsScriptForNFS generates a shell script to update specific env vars in worker.env.
+func WorkerEnvVarsScriptForNFS(passwd string, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize int) string {
+	script := fmt.Sprintf(`
+	#!/bin/bash
+	set -e
+
+	SUDO_PASS="%s"
+	ENV_FILE="%s"
+
+	echo "$SUDO_PASS" | sudo -S sed -i 's/^MAX_WRITE_CONCURRENCY=.*/MAX_WRITE_CONCURRENCY=%d/' "$ENV_FILE"
+	echo "$SUDO_PASS" | sudo -S sed -i 's/^JOB_TASK_ACTIVITY_CONCURRENCY=.*/JOB_TASK_ACTIVITY_CONCURRENCY=%d/' "$ENV_FILE"
+	echo "$SUDO_PASS" | sudo -S sed -i 's/^MAX_BUFFER_SIZE=.*/MAX_BUFFER_SIZE=%d/' "$ENV_FILE"
+
+	echo "Updated MAX_WRITE_CONCURRENCY, JOB_TASK_ACTIVITY_CONCURRENCY, and MAX_BUFFER_SIZE in $ENV_FILE"
+	`, passwd, NFSWorkerEnvPath, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize)
+	return script
+}
+
+// WorkerEnvVarsScriptForSMB generates a PowerShell script to update specific env vars in worker.env for SMB workers.
+func WorkerEnvVarsScriptForSMB(maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize int) string {
+	script := fmt.Sprintf(`powershell.exe -Command "(Get-Content %s) -replace 'MAX_BUFFER_SIZE=\d+', 'MAX_BUFFER_SIZE=%d' -replace 'MAX_WRITE_CONCURRENCY=\d+', 'MAX_WRITE_CONCURRENCY=%d' -replace 'JOB_TASK_ACTIVITY_CONCURRENCY=\d+', 'JOB_TASK_ACTIVITY_CONCURRENCY=%d' | Set-Content %s"`, SMBWorkerEnvPath, maxBufferSize, maxWriteConcurrency, jobTaskActivityConcurrency, SMBWorkerEnvPath)
+	return script
+}
+
+func IsWorkerRunning() (bool, error) {
+	script := ""
+
+	switch PROTOCOL_TYPE {
+	case ProtocolNFS:
+		script = `systemctl status datamigrator-worker.service | grep 'Active'`
+	case ProtocolSMB:
+		script = `sc query "DatamigratorWorker" | find "STATE"`
+	}
+
+	config := GetAttachedWorkerDetails()
+	sshConfig := SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	output, err := sshRunScript(sshConfig, script)
+	if err != nil {
+		return false, fmt.Errorf("GetWorkerStatus failed: %w\noutput: %s", err, output)
+	}
+
+	if strings.Contains(strings.ToLower(string(output)), "running") {
+		LogDebug("Datamigrator Worker service is running.")
+		return true, nil
+	}
+
+	LogDebug("Datamigrator Worker service is NOT running.")
+	return false, nil
+}
+
+func GetMaxCPUUsageReport(jobid string) (string, error) {
+	script := ""
+
+	switch PROTOCOL_TYPE {
+	case ProtocolSMB:
+		// Read the max CPU usage from the file created by the background monitoring script
+		script = fmt.Sprintf(`powershell.exe -Command "Get-Content -Path 'C:\Temp\%s_max_cpu_usage.txt' -ErrorAction Stop"`, jobid)
+	case ProtocolNFS:
+		// Read from /tmp/ instead of /home/ubuntu/
+		script = "cat /tmp/" + jobid + "_max_cpu_usage.txt"
+	}
+
+	// Use GetAttachedWorkerDetails() which properly handles comma-separated worker IPs
+	config := GetAttachedWorkerDetails()
+
+	output, err := sshRunScript(config, script)
+	if err != nil {
+		return "", fmt.Errorf("GetMaxCPUUsageReport failed: %w\noutput: %s", err, output)
+	}
+
+	// For both SMB and NFS, parse the output format: timestamp | jobid | cpu_usage%
+	cpuUsageInfo := strings.Split(strings.TrimSpace(string(output)), "|")
+	if len(cpuUsageInfo) < 3 {
+		return "", fmt.Errorf("unexpected CPU usage format. Expected 'timestamp|jobid|cpu_usage', got: %s", string(output))
+	}
+
+	return strings.TrimSpace(cpuUsageInfo[2]), nil
+}
+
+func StopCPUMonitoring() error {
+	var script string
+
+	switch PROTOCOL_TYPE {
+	case ProtocolSMB:
+		// TODO - implement for SMB workers
+		// script = `"powershell.exe -Command  "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match "smb_cpu_usage.ps1" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"`
+		return nil
+	case ProtocolNFS:
+		script = "sudo pkill -f nfs_cpu_usage.sh"
+	}
+
+	// Use GetAttachedWorkerDetails() which properly handles comma-separated worker IPs
+	config := GetAttachedWorkerDetails()
+
+	output, err := sshRunScript(config, script)
+	if err != nil {
+		return fmt.Errorf("StopCPUMonitoring failed: %w\noutput: %s", err, output)
+	}
+
+	return nil
 }

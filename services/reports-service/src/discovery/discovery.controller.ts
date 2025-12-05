@@ -1,4 +1,4 @@
-import { Controller, Query, BadRequestException, Get, Post, Body, Header, StreamableFile,Logger } from '@nestjs/common';
+import { Controller, Query, BadRequestException, Get, Post, Body, Header, StreamableFile,Logger, Inject, Optional } from '@nestjs/common';
 import { ApiQuery, ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { DiscoveryService } from './discovery.service';
 import {
@@ -10,15 +10,25 @@ import {
 import { DiscoveryCompletedPayload } from 'src/discovery/discovery.interface';
 import { Pattern, ReportType } from 'src/discovery/pattern.enum';
 import { Auth, AuthWorker, Permission } from '@netapp-cloud-datamigrate/auth-lib';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { SkipResponseTransform } from '../decorators/skip-response-transform.decorator';
 
 
 @ApiTags('Get discovery inventory')
 @Controller('inventory')
 export class DiscoveryController {
-  private readonly logger = new Logger(DiscoveryController.name);
+  private readonly logger : LoggerService;
   constructor(
     private readonly discoveryService: DiscoveryService,
-  ) { }
+    @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory,
+    ) {
+        if (loggerFactory) {
+            this.logger = loggerFactory.create(DiscoveryController.name);
+        } else {
+            // Fallback to basic NestJS Logger
+            this.logger = new Logger(DiscoveryController.name) as any;
+        }
+    }
 
 
   @Auth(Permission.Reports)
@@ -71,6 +81,7 @@ export class DiscoveryController {
 
   @Auth(Permission.Reports)
   @ApiBearerAuth()
+  @SkipResponseTransform() // Skip response transformation for binary downloads
   @Post('/download')
   @ApiOperation({ summary: 'Download reports based on jobRunId and report type' })
   @ApiBody({

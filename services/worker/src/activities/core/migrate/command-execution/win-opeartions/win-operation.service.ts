@@ -7,10 +7,11 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { WinShellService } from 'src/activities/common/win-shell.service';
 import { SourceAclError, TargetAclError } from './acl-operation.error';
-import { psGetAclScript, psSetAclScript } from './powershell.script';
+import { psGetAclScript, psSetAclScript, psGetLinkInfoScript } from './powershell.script';
 import { RedisService } from 'src/redis/redis.service';
 import { LRUCache } from 'src/activities/core/utils/lru-cache';
 import { OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
+import { FileType } from 'src/activities/types/tasks';
 
 @Injectable()
 export class WinOperationService {
@@ -266,5 +267,24 @@ export class WinOperationService {
     });
 
     return usernameToSidMap;
+  }
+
+  async detectSymbolicLinkType(path: string): Promise<FileType> {
+    try {
+      const script = `$srcFile = '${path.replace(/'/g, "''")}'\n${psGetLinkInfoScript}`;
+      const output = await this.winShellService.executeCommand(script);
+      if (output.stderr) throw new Error(output.stderr);
+      const result = JSON.parse(output.stdout);
+
+      this.logger.log(`Parsed link detection result for path ${path} is : ${JSON.stringify(result, null, 2)}`);
+
+      if (result.IsJunction) return FileType.JUNCTION;
+      if (result.IsSymbolicLink) return FileType.SYMBOLIC_LINK;
+      if (result.IsVolumeMountPoint) return FileType.VOLUME_MOUNT_POINT;
+      return FileType.UNKNOWN;
+    } catch (error) {
+      this.logger.error(`Failed to detect symbolic link for ${path}: ${error.message}`);
+      return FileType.UNKNOWN;
+    }
   }
 }

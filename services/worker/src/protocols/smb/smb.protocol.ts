@@ -4,17 +4,24 @@ import { Protocol } from '../protocol/protocol';
 import { CommandOutput, ProtocolPayload } from '../protocol/protocol.type';
 import { handleConnectionError, parseLinMacShares, parseProtocolVersions, parseWindowsShares } from './smb.utils';
 import * as fs from 'fs';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { isPathExists } from 'src/activities/core/utils/utils';
+import { WindowsPrivilegeService } from './windows-privilege.service';
 
 @Injectable()
 export class SMBProtocol extends Protocol {
+  @Optional()
+  @Inject(WindowsPrivilegeService)
+  private readonly windowsPrivilegeService?: WindowsPrivilegeService;
+
   protected getCommandPattern( key : string): string {
     return CommandConfig.getSMBCommand(this.platform, key)
   }
 
-  constructor(private readonly loggerFactory: LoggerFactory) {
+  constructor(
+    private readonly loggerFactory: LoggerFactory
+  ) {
     super(loggerFactory); // Pass to abstract class protocol
   }
 
@@ -156,7 +163,7 @@ export class SMBProtocol extends Protocol {
     }
 
 
-  async unmountPath(traceId: string, payload: any): Promise<any> {
+  async unmountPath(traceId: string, payload: ProtocolPayload): Promise<any> {
     this.logger.log(
       `[${traceId}] Unmounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
@@ -190,10 +197,22 @@ export class SMBProtocol extends Protocol {
    
   }
 
-  async mountPath(traceId: string, payload: any): Promise<any> {
+  async mountPath(traceId: string, payload: ProtocolPayload, manageMount: boolean = false): Promise<any> {
     this.logger.log(
       `[${traceId}] Mounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
+
+    // Enable Windows backup privileges for SMB on Windows platform
+    if (this.platform === 'win32' && this.windowsPrivilegeService && manageMount) {
+      this.logger.log(`[${traceId}] Enabling Windows backup privileges for SMB access`);
+      const privilegesEnabled = await this.windowsPrivilegeService.enableBackupPrivileges();
+      if (privilegesEnabled) {
+        this.logger.log(`[${traceId}] Backup privileges enabled successfully for SMB`);
+      } else {
+        this.logger.error(`[${traceId}] Failed to enable Windows backup privileges. These privileges are required for SMB operations.`);
+        throw new Error(`Failed to enable Windows backup privileges. These privileges are required for SMB operations.`);
+      }
+    }
 
     const mountDir = `${payload.mountBasePath}/${payload.jobRunId}`;
     const mountDirExists = await isPathExists(mountDir);
@@ -250,8 +269,6 @@ export class SMBProtocol extends Protocol {
       this.logger.error(`[${traceId}] Error mounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}: ${error.message}`);
       throw new Error(`Failed to mount path at ${payload.hostname}, reason: ${error.message}`);
     }
-    
-
   }
   
   async disconnectSession(traceId: string, payload: ProtocolPayload): Promise<any> {

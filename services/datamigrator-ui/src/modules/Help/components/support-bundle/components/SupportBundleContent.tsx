@@ -1,4 +1,4 @@
-import { Button, Card } from "@netapp/bxp-design-system-react";
+import { Button, Card, Popover } from "@netapp/bxp-design-system-react";
 import { Box } from "@components/container";
 import { useContext } from "react";
 import { Show } from "@components/show/Show";
@@ -19,6 +19,7 @@ const SupportBundleContent = () => {
     bundleStatus,
     supportBundleForm,
     isDownloading,
+    infoMessage,
   } = useContext(SupportBundleContext);
 
   const { startDate, endDate } = supportBundleForm?.formState;
@@ -31,18 +32,33 @@ const SupportBundleContent = () => {
 
   return (
     <Card className="p-6 flex flex-col m-8">
-      <Button
-        className="ml-auto w-44"
-        disabled={!isDateSame || !bundleStatus.isBundleReady}
-        onClick={handleDownloadReport}
-        isSubmitting={isDownloading}
-      >
-        {DOWNLOAD_REPORT_LABEL}
-      </Button>
+      <Box className="flex flex-col ml-auto">
+        {infoMessage?.date && (
+          <Box className="ml-auto pb-1">
+            <Popover>
+              Support Bundle includes the following details based on your
+              selection:
+              <Box>{infoMessage?.date}</Box>
+              <Box>{infoMessage?.projects}</Box>
+              <Box>{infoMessage?.workers}</Box>
+              <Box>{infoMessage?.metrics}</Box>
+            </Popover>
+          </Box>
+        )}
+
+        <Button
+          className="w-44"
+          disabled={!isDateSame || !bundleStatus.isBundleReady}
+          onClick={handleDownloadReport}
+          isSubmitting={isDownloading}
+        >
+          {DOWNLOAD_REPORT_LABEL}
+        </Button>
+      </Box>
 
       <SupportBundleForm />
 
-      <Box className="flex justify-center">
+      <Box className="flex justify-center mt-2">
         <Show>
           <Show.When isTrue={bundleStatus.isProcessing}>
             <ReportsGeneratingLoader label={GENERATING_SUPPORT_BUNDLE_LABEL} />

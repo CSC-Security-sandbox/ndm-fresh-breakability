@@ -3,6 +3,11 @@ import { JobContextFactory } from '@netapp-cloud-datamigrate/jobs-lib';
 import { createClient } from 'redis';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { mockLogger } from 'src/auth/auth.service.spec';
+import { ConfigService } from '@nestjs/config';
+import { HttpService } from '@nestjs/axios';
+import { Test, TestingModule } from '@nestjs/testing';
+import { AuthService } from '../auth/auth.service';
+import { of, throwError } from 'rxjs';
 
 jest.mock('redis', () => ({
   createClient: jest.fn(),
@@ -12,41 +17,269 @@ jest.mock('@netapp-cloud-datamigrate/jobs-lib', () => ({
   JobContextFactory: {
     getProvider: jest.fn(),
     getSpeedTestProvider: jest.fn(),
+    getJobManagerProvider: jest.fn(),
   },
 }));
 
 describe('RedisService', () => {
   let service: RedisService;
   let mockClient: any;
+  let configService: ConfigService;
+  let httpService: HttpService;
+  let authService: AuthService;
   let loggerFactory: LoggerFactory;
 
-  beforeEach(() => {
+  beforeEach(async() => {
     jest.clearAllMocks();
+
+    delete process.env.REDIS_HOST;
+    delete process.env.REDIS_PORT;
+    delete process.env.REDIS_USERNAME;
+    delete process.env.REDIS_PASSWORD;
+
     mockClient = {
       isOpen: false,
       connect: jest.fn().mockResolvedValue(undefined),
       quit: jest.fn().mockResolvedValue(undefined),
       on: jest.fn(),
       set: jest.fn().mockResolvedValue('OK'),
+      hSet: jest.fn().mockResolvedValue(1),
+      hGet: jest.fn().mockResolvedValue('identity'),
+      hKeys: jest.fn().mockResolvedValue([]),
       info: jest
         .fn()
         .mockResolvedValue('used_memory:1024\ntotal_system_memory:4096\n'),
-      hGet: jest.fn().mockResolvedValue('identity'),
     };
     (createClient as jest.Mock).mockReturnValue(mockClient);
 
-    loggerFactory = {
-      create: jest.fn().mockReturnValue(mockLogger),
-    } as unknown as LoggerFactory;
+    const mockConfigService = {
+      get: jest.fn((key: string) => {
+        const configMap = {
+          'worker.connection.workerConfigUrl': 'http://test-url',
+          'worker.workerId': 'test-worker-123'
+        };
+        return configMap[key];
+      }),
+    };
 
-    service = new RedisService(loggerFactory);
+    const mockHttpService = {
+      get: jest.fn(),
+    };
+
+    const mockAuthService = {
+      getAccessToken: jest.fn().mockResolvedValue('mock-access-token'),
+    };
+
+    const mockLoggerFactory = {
+      create: jest.fn().mockReturnValue(mockLogger),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        RedisService,
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: HttpService, useValue: mockHttpService },
+        { provide: AuthService, useValue: mockAuthService },
+        { provide: LoggerFactory, useValue: mockLoggerFactory },
+      ],
+    }).compile();
+
+    service = module.get<RedisService>(RedisService);
+    configService = module.get<ConfigService>(ConfigService);
+    httpService = module.get<HttpService>(HttpService);
+    authService = module.get<AuthService>(AuthService);
+    loggerFactory = module.get<LoggerFactory>(LoggerFactory);
   });
 
   describe('onModuleInit', () => {
     it('should create client on init', async () => {
+      // Mock the HTTP response for Redis credentials
+      const mockCredentials = {
+        host: 'redis.example.com',
+        username: 'redis-user',
+        password: 'redis-password',
+      };
+
+      const mockResponse = {
+        status: 200,
+        data: {
+          data: {
+            items: mockCredentials,
+          },
+        },
+      };
+
+      (httpService.get as jest.Mock).mockReturnValue(of(mockResponse));
+
       const spyCreate = jest.spyOn(service, 'createClient');
+      
       await service.onModuleInit();
+      
       expect(spyCreate).toHaveBeenCalled();
+      expect(configService.get).toHaveBeenCalledWith('worker.connection.workerConfigUrl');
+      expect(configService.get).toHaveBeenCalledWith('worker.workerId');
+      expect(authService.getAccessToken).toHaveBeenCalled();
+      expect(httpService.get).toHaveBeenCalled();
+      expect(mockLogger.log).toHaveBeenCalledWith('Initializing Redis service...');
+      expect(mockLogger.log).toHaveBeenCalledWith('Redis service initialized successfully');
+    });
+
+    it('should handle initialization errors', async () => {
+      (authService.getAccessToken as jest.Mock).mockRejectedValue(new Error('Auth failed'));
+      
+      await expect(service.onModuleInit()).rejects.toThrow('Redis credentials are required for worker operation');
+      expect(mockLogger.error).toHaveBeenCalledWith('Failed to initialize Redis service: Redis credentials are required for worker operation: Auth failed');
+    });
+
+    it('should handle fetchAndUpdateRedisCredentials failures', async () => {
+    // Mock HTTP request to fail
+      (httpService.get as jest.Mock).mockReturnValue(throwError(() => new Error('API unavailable')));
+      
+      await expect(service.onModuleInit()).rejects.toThrow('Redis credentials are required for worker operation');
+      
+      // This will cover the catch block when fetchAndUpdateRedisCredentials fails
+      expect(mockLogger.error).toHaveBeenCalledWith('Failed to initialize Redis service: Redis credentials are required for worker operation: API unavailable');
+    });
+
+    it('should handle auth service failures in fetchAndUpdateRedisCredentials', async () => {
+      // Mock auth to fail
+      (authService.getAccessToken as jest.Mock).mockRejectedValue(new Error('Auth token expired'));
+      
+      await expect(service.onModuleInit()).rejects.toThrow('Redis credentials are required for worker operation');
+      expect(mockLogger.error).toHaveBeenCalledWith('Failed to initialize Redis service: Redis credentials are required for worker operation: Auth token expired');
+    });
+
+
+    it('should handle createClient failures in onModuleInit', async () => {
+      // Mock successful credential fetch
+      const mockCredentials = {
+        host: 'redis.test.com',
+        username: 'test-user',
+        password: 'test-pass',
+      };
+
+      const mockResponse = {
+        status: 200,
+        data: { data: { items: mockCredentials } },
+      };
+
+      (httpService.get as jest.Mock).mockReturnValue(of(mockResponse));
+
+      // Mock createClient to fail
+      jest.spyOn(service, 'createClient').mockRejectedValue(new Error('Connection failed'));
+      
+      await expect(service.onModuleInit()).rejects.toThrow('Connection failed');
+      
+      expect(mockLogger.error).toHaveBeenCalledWith('Failed to initialize Redis service: Connection failed');
+    });
+  });
+
+  describe('fetchRedisCredentials', () => {
+    it('should fetch credentials successfully', async () => {
+      const mockCredentials = {
+        host: 'redis.test.com',
+        username: 'test-user',
+        password: 'test-pass',
+      };
+
+      const mockResponse = {
+        status: 200,
+        data: { data: { items: mockCredentials } },
+      };
+
+      (httpService.get as jest.Mock).mockReturnValue(of(mockResponse));
+
+      const credentials = await (service as any).fetchRedisCredentials();
+
+      expect(credentials).toEqual(mockCredentials);
+      expect(mockLogger.log).toHaveBeenCalledWith('Redis credentials fetched successfully:');
+      expect(mockLogger.debug).toHaveBeenCalledWith('  Host: redis.test.com');
+      expect(mockLogger.debug).toHaveBeenCalledWith('  Username: test-user');
+      expect(mockLogger.debug).toHaveBeenCalledWith('  Password length: 9');
+    });
+
+    it('should handle missing access token', async () => {
+      (authService.getAccessToken as jest.Mock).mockResolvedValue(null);
+
+      await expect((service as any).fetchRedisCredentials()).rejects.toThrow('Failed to get access token');
+    });
+
+    it('should handle HTTP request failure', async () => {
+      (httpService.get as jest.Mock).mockReturnValue(throwError(() => new Error('Network error')));
+
+      await expect((service as any).fetchRedisCredentials()).rejects.toThrow(
+        'Redis credentials are required for worker operation'
+      );
+    });
+
+    it('should handle non-200 response', async () => {
+      const mockResponse = { status: 401, data: {} };
+      (httpService.get as jest.Mock).mockReturnValue(of(mockResponse));
+
+      await expect((service as any).fetchRedisCredentials()).rejects.toThrow(
+        'Failed to fetch Redis credentials. Status: 401'
+      );
+    });
+
+    it('should handle incomplete credentials', async () => {
+      const mockResponse = {
+        status: 200,
+        data: { data: { items: { host: 'redis.test.com' } } }, // Missing username/password
+      };
+      (httpService.get as jest.Mock).mockReturnValue(of(mockResponse));
+
+      await expect((service as any).fetchRedisCredentials()).rejects.toThrow(
+        'Incomplete Redis credentials received from API'
+      );
+    });
+  });
+
+  describe('updateRedisConfig', () => {
+    it('should update all environment variables including REDIS_HOST', () => {
+      const credentials = {
+        host: 'test-host',
+        username: 'test-user',
+        password: 'test-pass',
+      };
+
+      (service as any).updateRedisConfig(credentials);
+      expect(process.env.REDIS_USERNAME).toBe('test-user');
+      expect(process.env.REDIS_PASSWORD).toBe('test-pass');
+      expect(mockLogger.log).toHaveBeenCalledWith('Redis configuration updated successfully');
+    });
+
+    it('should throw error for null credentials', () => {
+      expect(() => (service as any).updateRedisConfig(null)).toThrow(
+        'Redis credentials not available'
+      );
+    });
+
+    it('should throw error for undefined credentials', () => {
+      expect(() => (service as any).updateRedisConfig(undefined)).toThrow(
+        'Redis credentials not available'
+      );
+    });
+  });
+
+  describe('fetchAndUpdateRedisCredentials', () => {
+    it('should fetch and update credentials successfully', async () => {
+      const mockCredentials = {
+        host: 'redis.integration.com',
+        username: 'integration-user',
+        password: 'integration-pass',
+      };
+
+      const mockResponse = {
+        status: 200,
+        data: { data: { items: mockCredentials } },
+      };
+
+      (httpService.get as jest.Mock).mockReturnValue(of(mockResponse));
+
+      await (service as any).fetchAndUpdateRedisCredentials();
+
+      expect(process.env.REDIS_USERNAME).toBe('integration-user');
+      expect(process.env.REDIS_PASSWORD).toBe('integration-pass');
     });
   });
 

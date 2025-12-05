@@ -31,6 +31,10 @@ export class InventoryEntity extends Base {
   @Column({ name: "is_directory", type: "boolean" })
   isDirectory: boolean;
 
+  @ApiProperty({ description: 'Is file deleted' })
+  @Column({ name: 'is_deleted', type: 'boolean', default: false })
+  isDeleted: boolean;
+
   @ApiProperty({ description: "Source Server file checksum" })
   @Column({ name: "source_checksum", type: "text", nullable: true })
   sourceChecksum: string;

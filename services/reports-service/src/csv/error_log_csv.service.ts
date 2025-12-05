@@ -2,6 +2,10 @@ import {
   Injectable,
   StreamableFile,
   BadRequestException,
+  Logger,
+  ServiceUnavailableException,
+  Optional,
+  Inject,
 } from "@nestjs/common";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { Raw, Repository, In } from "typeorm";
@@ -14,15 +18,34 @@ import {
   sanitizeAndValidateFilePath,
   sanitizeIdentifier,
 } from "../utils/file-utils";
+import {
+  LoggerService,
+  LoggerFactory,
+} from '@netapp-cloud-datamigrate/logger-lib';
+
+/**
+ * Error types that should be visible to users
+ * RECOVERABLE_ERROR is excluded as it's handled internally through retry mechanism
+ */
+const USER_VISIBLE_ERROR_TYPES = ['FATAL_ERROR', 'TRANSIENT_ERROR'] as const;
 
 @Injectable()
 export class ErrorLogService {
+  private readonly logger : LoggerService;
   constructor(
     @InjectRepository(OperationErrorEntity)
     private operationErrorRepo: Repository<OperationErrorEntity>,
     @InjectRepository(WorkerJobRunMap)
-    private workerJobRunMapRepo: Repository<WorkerJobRunMap>
-  ) {}
+    private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
+     @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory
+  ) {
+    if (loggerFactory) {
+            this.logger = loggerFactory.create(ErrorLogService.name);
+    } else {
+        // Fallback to basic NestJS Logger for worker threads
+        this.logger = new Logger(ErrorLogService.name) as any;
+    }
+  }
 
   async getPaginatedErrors({
     jobConfigId,
@@ -37,7 +60,7 @@ export class ErrorLogService {
   }) {
     await this.handleError(jobRunId, jobConfigId);
     try {
-      const params: (string | number)[] = [];
+      const params: (string | number | string[])[] = [];
       let whereClause = "";
 
       if (jobConfigId) {
@@ -48,32 +71,46 @@ export class ErrorLogService {
         params.push(jobRunId);
       }
 
+      // Add error types as parameters
+      const errorTypesParamIndex = params.length + 1;
+      params.push([...USER_VISIBLE_ERROR_TYPES]);
       params.push(pageSize, offset);
 
+      // Uses first 10 chars of file_path as a unique prefix to match and replace
+      // the full path with just the relative_file_path.
+
       const query = `
-    SELECT
-      MIN(oe.id::text)           AS "Error Id",
-      MIN(oe.created_at)         AS "Created At",
-      (o.job_run_id)             AS "Job Run Id",
-      MIN(jc.job_type)           AS "Job Type",
-      MIN(oe.error_type)         AS "Error Type",
-      MIN(oe.error_message)      AS "Error Details",
-      MIN(oe.file_name)          AS "File Name",
-      MIN(oe.file_path)          AS "File Path",
-      MIN(oe.origin)             AS "Origin",
-      MIN(oe.operation_type)     AS "Operation",
-      MIN(oe.error_code)         AS "Code",
-      COUNT(*)                   AS "Occurrence"
-    FROM datamigrator.operation_errors oe
-    LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
-    LEFT JOIN datamigrator.jobrun jr ON jr.id = o.job_run_id
-    LEFT JOIN datamigrator.jobconfig jc ON jc.id = jr.job_config_id
-    WHERE ${whereClause}
-    GROUP BY oe.file_path, o.job_run_id
-    ORDER BY MIN(oe.created_at)
-    LIMIT $${params.length - 1}
-    OFFSET $${params.length}
-  `;
+  SELECT
+    oe.id::text                AS "Error Id",
+    oe.created_at              AS "Created At",
+    o.job_run_id               AS "Job Run Id",
+    jc.job_type                AS "Job Type",
+    oe.error_type              AS "Error Type",
+    CASE
+      WHEN oe.file_path IS NOT NULL AND LENGTH(oe.file_path) > 10 THEN
+        REGEXP_REPLACE(
+          oe.error_message,
+          '[''"]?' || SUBSTRING(oe.file_path FROM 1 FOR 10) || '[^''"\\s]*([''".\\s]|$)',
+          oe.file_name,
+          'g'
+        )
+      ELSE oe.error_message
+    END AS "Error Details",
+    oe.file_name               AS "File Name",
+    oe.file_path               AS "File Path",
+    oe.origin                  AS "Origin",
+    oe.operation_type          AS "Operation",
+    oe.error_code              AS "Code"
+  FROM datamigrator.operation_errors oe
+  LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
+  LEFT JOIN datamigrator.jobrun jr ON jr.id = o.job_run_id
+  LEFT JOIN datamigrator.jobconfig jc ON jc.id = jr.job_config_id
+  WHERE ${whereClause}
+    AND oe.error_type = ANY($${errorTypesParamIndex})
+  ORDER BY oe.created_at DESC
+  LIMIT $${params.length - 1}
+  OFFSET $${params.length}
+`;
 
       return this.operationErrorRepo.query(query, params);
     } catch (error) {
@@ -367,8 +404,9 @@ export class ErrorLogService {
         `SELECT COUNT(*) as count
          FROM datamigrator.operation_errors oe
          LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
-         WHERE o.job_run_id = $1`,
-        [jobRunId]
+         WHERE o.job_run_id = $1
+           AND oe.error_type = ANY($2)`,
+        [jobRunId, [...USER_VISIBLE_ERROR_TYPES]]
       );
       const workerSetupCount = await this.getWorkerSetupCount(jobRunId);
       return Number(opCount) + workerSetupCount;
@@ -386,12 +424,14 @@ export class ErrorLogService {
       const jobRunIds = await this.getJobRunIds(jobConfigId);
       if (jobRunIds.length === 0) return 0;
       const placeholders = jobRunIds.map((_, i) => `$${i + 1}`).join(",");
+      const errorTypesParamIndex = jobRunIds.length + 1;
       const [{ count: opCount }] = await this.operationErrorRepo.query(
         `SELECT COUNT(*) as count
          FROM datamigrator.operation_errors oe
          LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
-         WHERE o.job_run_id IN (${placeholders})`,
-        jobRunIds
+         WHERE o.job_run_id IN (${placeholders})
+           AND oe.error_type = ANY($${errorTypesParamIndex})`,
+        [...jobRunIds, [...USER_VISIBLE_ERROR_TYPES]]
       );
       const workerSetupCount = await this.getWorkerSetupCount(jobRunIds);
       return Number(opCount) + workerSetupCount;

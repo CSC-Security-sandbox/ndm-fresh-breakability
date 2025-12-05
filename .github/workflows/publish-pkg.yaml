@@ -29,10 +29,10 @@ jobs:
     steps:
 
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '20.x'
           registry-url: 'https://npm.pkg.github.com'
@@ -48,8 +48,6 @@ jobs:
             echo "Provided version '$version' is not a valid semantic version."
             exit 1
           fi
-
-
       - name: Get latest published version from GitHub Packages
         id: get_latest
         run: |
@@ -62,21 +60,16 @@ jobs:
           
           echo "Latest version is $latest_version"
           echo "latest=$latest_version" >> $GITHUB_OUTPUT
-
       - name: Compare with provided version
         run: |
           latest="${{ steps.get_latest.outputs.latest }}"
           new="${{ github.event.inputs.version_to_publish }}"
-
           echo "Validating: new=$new vs latest=$latest"
-
           if dpkg --compare-versions "$new" le "$latest"; then
             echo "Provided version $new is not greater than published $latest"
             exit 1
           fi
-
           echo "Version is valid"
-
       - name: Install dependencies
         working-directory: lib/${{ github.event.inputs.lib_name }}
         run: npm i && npm run build
@@ -111,7 +104,6 @@ jobs:
             "published_by": "${{ github.actor }}"
           }
           EOF
-
       - name: Upload manifest to Artifactory
         env:
           NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
@@ -120,15 +112,12 @@ jobs:
           BUILD_TYPE="${{ github.event_name }}"
           LIB_NAME="${{ github.event.inputs.lib_name }}"
           VERSION="${{ github.event.inputs.version_to_publish }}"
-
           if [ "$BUILD_TYPE" = "workflow_dispatch" ]; then
             ARTIFACTORY_PATH="manifests/libs/adhoc/${LIB_NAME}/${VERSION}/metadata.json"
           fi
-
           curl --silent --show-error --fail --request PUT --upload-file metadata.json \
             "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACTORY_PATH}" \
             -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}"
-
       - name: Generate latest.json pointer
         run: |
           LIB_NAME="${{ github.event.inputs.lib_name }}"
@@ -138,7 +127,6 @@ jobs:
           ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           DATE=$(date -u +'%Y-%m-%d')
           METADATA_PATH="manifests/libs/adhoc/${LIB_NAME}/${VERSION}/metadata.json"
-
           cat <<EOF > latest.json
           {
             "library": "$LIB_NAME",
@@ -151,7 +139,6 @@ jobs:
             "published_by": "${{ github.actor }}"
           }
           EOF
-
       - name: Upload latest.json pointer to Artifactory
         env:
           NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
@@ -159,7 +146,6 @@ jobs:
         run: |
           LIB_NAME="${{ github.event.inputs.lib_name }}"
           LATEST_VERSION_PATH="manifests/libs/adhoc/${LIB_NAME}/latest.json"
-
           curl --silent --show-error --fail --request PUT --upload-file latest.json \
             "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${LATEST_VERSION_PATH}" \
             -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}"

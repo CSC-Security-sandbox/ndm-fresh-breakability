@@ -344,8 +344,8 @@ export class ConfigurationService {
       const isUploadInProgress = await this.isUploadInProgress(
         config.fileServers.map((fs) => fs.id),
       );
-      const isRefreshAvailable =
-        !isUploadInProgress && (await this.isRefreshPossible(config.id));
+      const refreshStatus = await this.isRefreshPossible(config.id);
+      const isRefreshAvailable = !isUploadInProgress && refreshStatus.isRefreshAvailable;
 
       return { ...config, isRefreshAvailable, isUploadInProgress };
     } catch (error) {
@@ -681,6 +681,7 @@ export class ConfigurationService {
     createConfig: ConfigDTO,
     userId: string,
     traceId: string,
+    projectId?: string,
   ) {
     this.logger.debug('Config creation started');
 
@@ -767,6 +768,8 @@ export class ConfigurationService {
 
       await this.sendMailService.sendMail({
         successEmailType: SuccessEmailType.CREATE_CONFIGURATION,
+        traceId,
+        projectId,
         createConfig: {
           configName: update.configName,
           fileServers: update.fileServers.map((fs) => ({
@@ -810,6 +813,7 @@ export class ConfigurationService {
     updateConfig: ConfigDTO,
     userId: string,
     traceId: string,
+    projectId?: string
   ) {
     try {
       if (!isUUID(id)) throw new BadRequestException('Invalid configId');
@@ -951,6 +955,8 @@ export class ConfigurationService {
       }
       await this.sendMailService.sendMail({
         successEmailType: SuccessEmailType.UPDATE_CONFIGURATION,
+        traceId,
+        projectId,
         createConfig: {
           configName: update.configName,
           fileServers: update.fileServers.map((fs) => ({
@@ -1107,11 +1113,11 @@ export class ConfigurationService {
         throw new BadRequestException('Invalid UUID format');
       }
       // check refresh eligibility
-      const isRefreshAvailable = await this.isRefreshPossible(configId);
-      if (!isRefreshAvailable) {
-        this.logger.warn(`Refresh not available for configId: ${configId}`);
+      const refreshStatus = await this.isRefreshPossible(configId);
+      if (!refreshStatus.isRefreshAvailable) {
+        this.logger.warn(`Refresh not available for configId: ${configId}. Reason: ${refreshStatus.message}`);
         throw new BadRequestException(
-          'Refresh not available for this configuration.',
+          refreshStatus.message || 'Refresh not available for this configuration.',
         );
       }
 
@@ -1348,7 +1354,7 @@ export class ConfigurationService {
     }
   }
 
-  async isRefreshPossible(configId: string): Promise<boolean> {
+  async isRefreshPossible(configId: string): Promise<{ isRefreshAvailable: boolean; message?: string }> {
     try {
       const fileServers = await this.configEntity.find({
         where: { id: configId },
@@ -1360,36 +1366,36 @@ export class ConfigurationService {
       ); // volume ids from all file servers
       if (volumeIds.length === 0) {
         this.logger.warn(`No valid volumes found for config ID ${configId}.`);
-        return true; // No volumes means no jobs, so refresh is possible
+        return { isRefreshAvailable: true }; // No volumes means no jobs, so refresh is possible
       }
 
       /*
         fetch all the job configurations that has any of the volumeIds in
         their sourcePathId or targetPathId and status is ACTIVE
       */
-      const jobConfigs = await this.jobConfigRepo
-        .createQueryBuilder('jobConfig')
-        .where(
-          'jobConfig.source_path_id IN (:...volumeIds) OR jobConfig.target_path_id IN (:...volumeIds)',
-          { volumeIds },
-        )
-        .andWhere('jobConfig.status = :status', { status: 'ACTIVE' })
-        .getMany();
-
+      const jobConfigs = await this.jobConfigRepo.find({
+          where: [{
+              status: JobStatus.Active,
+              sourcePathId: In(volumeIds),
+            }, {
+              status: JobStatus.Active,
+              targetPathId: In(volumeIds),
+          }]
+      })
       // check if any job config has schedule as SCHEDULING if yes then return false
       if (jobConfigs.some((jc) => jc.scheduler === 'SCHEDULING')) {
-        this.logger.warn(
-          `Refresh is not possible for configuration ${configId} as there are jobs with SCHEDULING status`,
-        );
-        return false;
+        const userMessage = `Job scheduling in progress. Please retry shortly.`;
+        const logMessage = `Refresh is not possible for configuration ${configId} as there are jobs with SCHEDULING status : ${JSON.stringify(jobConfigs.filter((jc) => jc.scheduler === 'SCHEDULING'))}`;
+        this.logger.warn(logMessage);
+        return { isRefreshAvailable: false, message: userMessage };
       }
 
       // check if futureScheduleAt is not null for any job config, if yes then return false
       if (jobConfigs.some((jc) => !!jc.futureScheduleAt)) {
-        this.logger.warn(
-          `Refresh is not possible for configuration ${configId} as there are jobs with futureScheduleAt set`,
-        );
-        return false;
+        const userMessage = `Jobs are scheduled for future execution. Please cancel or reschedule these jobs before refreshing.`;
+        const logMessage = `Refresh is not possible for configuration ${configId} as there are jobs with futureScheduleAt set: ${JSON.stringify(jobConfigs.filter((jc) => !!jc.futureScheduleAt))}`;
+        this.logger.warn(logMessage);
+        return { isRefreshAvailable: false, message: userMessage };
       }
 
       // fetch all the jobs that are in running state for above job configurations
@@ -1405,16 +1411,16 @@ export class ConfigurationService {
       });
 
       if (runningJobs > 0) {
-        this.logger.warn(
-          `Refresh is not possible for configuration ${configId} as there are running jobs`,
-        );
-        return false;
+        const userMessage = `Jobs are currently running. Please wait for active jobs to complete and try again.`;
+        const logMessage = `Refresh is not possible for configuration ${configId} as there are currently running jobs`;
+        this.logger.warn(logMessage);
+        return { isRefreshAvailable: false, message: userMessage };
       }
 
       this.logger.log(`Refresh is possible for configuration ${configId}`);
-      return true;
+      return { isRefreshAvailable: true };
     } catch (error) {
-      this.logger.error(`Error checking refresh possibility: ${error.message}`);
+      this.logger.error(`Error checking refresh possibility for config ${configId}: ${error.message}`);
       if (
         error instanceof BadRequestException ||
         error instanceof NotFoundException
@@ -1424,7 +1430,6 @@ export class ConfigurationService {
       throw new InternalServerErrorException(
         `Failed to check refresh possibility. ${error.message}`,
       );
-      return false;
     }
   }
 

@@ -9,9 +9,11 @@ import { NFS_PROTOCOL_VERSION_OPTIONS } from "@modules/storage-servers/file-serv
 import FormFrame from "@modules/storage-servers/file-server/components/layout/FormFrame";
 
 const NFSCredentials = () => {
-  const { nfsCredentialsForm, isJobRunning } = useContext(
+  const { nfsCredentialsForm, isJobRunning, selectedProtocol } = useContext(
     CommonFileServerContext
   );
+
+  const isDisabled = isJobRunning || selectedProtocol !== 'NFS';
 
   return (
     <FormFrame>
@@ -20,7 +22,7 @@ const NFSCredentials = () => {
           form={nfsCredentialsForm}
           name="userName"
           placeholder="Username"
-          disabled={isJobRunning}
+          disabled={isDisabled}
           label="Username"
           onBlur={(e: any) => {
             nfsCredentialsForm.resetForm({
@@ -35,7 +37,7 @@ const NFSCredentials = () => {
           placeholder="Password"
           label="Password"
           type="password"
-          disabled={isJobRunning}
+          disabled={isDisabled}
           isOptional
           onBlur={(e: any) => {
             nfsCredentialsForm.resetForm({
@@ -48,7 +50,7 @@ const NFSCredentials = () => {
           label="Protocol Version"
           name="protocolVersion"
           form={nfsCredentialsForm}
-          disabled={isJobRunning}
+          disabled={isDisabled}
           options={NFS_PROTOCOL_VERSION_OPTIONS}
         />
       </ProtocolAccordion>

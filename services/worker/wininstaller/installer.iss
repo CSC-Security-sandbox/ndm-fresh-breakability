@@ -132,16 +132,6 @@ begin
   end;
 end;
 
-function VCRedistNeedsInstall: Boolean;
-begin
-  Result := not RegKeyExists(HKLM, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64');
-end;
-
-function FluentPackageNeedsInstall: Boolean;
-begin
-  Result := not RegKeyExists(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\fluent-package');
-end;
-
 function InstallVCRedist(): Boolean;
 var
   ResultCode: Integer;
@@ -241,6 +231,37 @@ begin
   end;
 end;
 
+procedure StopFluentdService();
+var
+  ResultCode: Integer;
+begin
+  Log('Stopping fluentdwinsvc service...');
+  if Exec('sc.exe', 'query fluentdwinsvc', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    if ResultCode = 0 then
+    begin
+      Log('fluentdwinsvc service is running, stopping it...');
+      if not Exec('net.exe', 'stop fluentdwinsvc', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      begin
+        Log('Failed to stop fluentdwinsvc service with code: ' + IntToStr(ResultCode));
+      end
+      else
+      begin
+        Log('fluentdwinsvc service stopped successfully');
+      end;
+      Sleep(2000);
+    end
+    else
+    begin
+      Log('fluentdwinsvc service is not running');
+    end;
+  end
+  else
+  begin
+    Log('fluentdwinsvc service not found');
+  end;
+end;
+
 function StartFluentdService(): Boolean;
 var
   ResultCode: Integer;
@@ -262,6 +283,26 @@ begin
   end;
 end;
 
+procedure UninstallFluentPackage();
+var
+  ResultCode: Integer;
+begin
+  Log('Uninstalling fluent-package...');
+  
+  StopFluentdService();
+  
+  if not Exec('powershell.exe', 
+              '-NoProfile -Command "Get-Package -Name ''fluent-package'' | Uninstall-Package -Force"', 
+              '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    Log('fluent-package uninstallation failed with code: ' + IntToStr(ResultCode));
+  end
+  else
+  begin
+    Log('fluent-package uninstalled successfully');
+  end;
+end;
+
 function InitializeUninstall(): Boolean;
 begin
   Result := True;
@@ -273,11 +314,12 @@ begin
   if CurUninstallStep = usUninstall then
   begin
     Log('Running uninstallation process');
+    UninstallFluentPackage();
   end
   else if CurUninstallStep = usPostUninstall then
   begin
     if not UninstallSilent() then
-      MsgBox('Datamigrator Worker has been successfully uninstalled.', mbInformation, MB_OK)
+      MsgBox('Datamigrator Worker and Fluentd have been successfully uninstalled.', mbInformation, MB_OK)
     else
       Log('Uninstallation completed successfully');
   end;
@@ -333,8 +375,6 @@ begin
       'WORKER_SECRET=' + ConfigWorkerSecret + #13#10 +
       'CONTROL_PLANE_IP=' + ConfigControlPlaneIP + #13#10 +
       'REDIS_HOST=' + ConfigControlPlaneIP + #13#10 +
-      'REDIS_USERNAME=default' + #13#10 +
-      'REDIS_PASSWORD=welcome' + #13#10 +
       'BASE_WORKING_PATH=''C:\datamigrator\mnt''' + #13#10 +
       'PROJECT_ID=' + ConfigProjectID + #13#10 +
       'OTEL_COLLECTOR_ENDPOINT=' + ConfigControlPlaneIP + ':4318';
@@ -353,50 +393,12 @@ begin
     CreateVersionsConfig();
 
     // Install prerequisites and fluent-package
-    if VCRedistNeedsInstall then
-      InstallVCRedist();
-      
-    if FluentPackageNeedsInstall then
+    Log('Installing VC++ Redistributable...');
+    InstallVCRedist();
+    
+    Log('Installing fluent-package...');
+    if InstallFluentPackage then
     begin
-      Log('fluent-package not found, installing...');
-      if InstallFluentPackage then
-      begin
-        CreateFluentdConfig();
-        StartFluentdService();
-      end;
-    end
-    else
-    begin
-      Log('fluent-package is already installed, updating configuration...');
-      
-      // Check if service is running
-      if Exec('sc.exe', 'query fluentdwinsvc', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-      begin
-        if ResultCode = 0 then
-        begin
-          Log('fluentdwinsvc service is running, stopping it...');
-          if not Exec('net.exe', 'stop fluentdwinsvc', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-          begin
-            Log('Failed to stop fluentdwinsvc service with code: ' + IntToStr(ResultCode));
-          end
-          else
-          begin
-            Log('fluentdwinsvc service stopped successfully');
-          end;
-          Sleep(2000);
-        end
-        else
-        begin
-          Log('fluentdwinsvc service is not running');
-        end;
-      end
-      else
-      begin
-        Log('Could not query fluentdwinsvc service status, attempting to stop anyway...');
-        Exec('net.exe', 'stop fluentdwinsvc', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-        Sleep(2000);
-      end;
-
       CreateFluentdConfig();
       StartFluentdService();
     end;

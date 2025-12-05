@@ -1,6 +1,6 @@
 <head>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="${url.resourcesPath}/css/vendor/font-awesome.min.css" rel="stylesheet">
+    <link href="${url.resourcesPath}/css/vendor/tailwind.min.css" rel="stylesheet">
     <style>
         .customBackgroundClassColor {
             background-color: #f3f4f6;
@@ -43,12 +43,9 @@
                         <i class="fas fa-exclamation-triangle" style="color: #EF4444; font-size: 2.5rem;"></i>
                     </div>
                     
-                    <div style="font-size: 1.5rem; margin-bottom: 1.5rem; color: #DC2626; font-weight: 600;">
-                        <#if message??>
-                            We are sorry...
-                        <#else>
-                            Error
-                        </#if>
+                    <div style="font-size: 1.25rem; margin-bottom: 1.5rem; color: #DC2626; font-weight: 600; line-height: 1.5;">
+                        NetApp Data Migrator will be available shortly.<br>
+    Please refresh this page in a few minutes.
                     </div>
                     
                     <div id="kc-error-message" style="margin-bottom: 2rem;">

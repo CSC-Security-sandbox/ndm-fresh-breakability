@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Inject,
   Param,
   Patch,
@@ -136,8 +137,11 @@ export class JobRunController {
   @ApiBearerAuth()
   @Auth(Permission.ManageJob)
   @Post("/ad-hoc")
-  async adhocRun(@Body() adhocRun: AdHocRunDTO) {
-    return this.jobRunService.addHocRun(adhocRun.jobConfigId);
+  async adhocRun(
+    @Body() adhocRun: AdHocRunDTO,
+    @Headers("projectId") projectId?: string
+  ) {
+    return this.jobRunService.addHocRun(adhocRun.jobConfigId, projectId);
   }
 
   @ApiOperation({ summary: "Update Job Run Status" })
@@ -149,10 +153,11 @@ export class JobRunController {
   @Patch("/:jobRunId/:status")
   async updateJobRunStatus(
     @Param("jobRunId") jobRunId: string,
-    @Param("status") status: JobRunStatus
+    @Param("status") status: JobRunStatus,
+    @Headers("projectId") projectId?: string
   ) {
     console.log("updatingStatus" + "jobRunId", jobRunId, "status", status);
-    return await this.jobRunService.updateJobRunStatus(jobRunId, status);
+    return await this.jobRunService.updateJobRunStatus(jobRunId, status, projectId);
   }
 
   @ApiOperation({ summary: "Approve cutover by jon run ID" })

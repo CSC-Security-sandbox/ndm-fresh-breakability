@@ -21,11 +21,20 @@ export const isPathExists = async (path: string): Promise<boolean> => {
     await fs.promises.access(path, fs.constants.F_OK);
     return true;
   } catch (error) {
-    if (error.code === 'ENOENT') {
+    if (error.code === 'ENOENT') {      
       return false; // Path does not exist
     }
   }
   return false;
+}
+
+export const isExists = async (path: string): Promise<boolean> => {
+  try {
+    await fs.promises.lstat(path);
+    return true;
+  } catch (error) {
+     return false;
+    }  
 }
 
 

@@ -46,7 +46,7 @@ const {
         backoffCoefficient: 2.0,
         nonRetryableErrorTypes: ['ActivityFailure','FatalError',],
     },
-    startToCloseTimeout: '24h',
+    startToCloseTimeout: '96h',
     heartbeatTimeout: '2m',
 });
 
@@ -132,7 +132,7 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
     if(iterations > ITERATIONS_LIMIT ){
       console.warn(`ChildScanWorkflow ${jobRunId} has exceeded 1000 iterations, stopping to prevent infinite loop.`);                      
       await wf.continueAsNew({ 
-        jobRunId, dirsToScan, batchSize, preBatchDirs: dirBatchIds, dirCount:scanWorkflowOutput.dirCount, fileCount:scanWorkflowOutput.fileCount, isMigration, actionState, initialScan: false, workerConcurrency 
+        jobRunId, dirsToScan, dirBatchIds, batchSize, dirCount:scanWorkflowOutput.dirCount, fileCount:scanWorkflowOutput.fileCount, isMigration, actionState, isInitialScan: false, workerConcurrency 
       });      
     }
   }

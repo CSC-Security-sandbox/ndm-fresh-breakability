@@ -165,11 +165,12 @@ describe('PreCheckService', () => {
   const migrationConflictResult = [{
     status: 'ACTIVE',
     jobId: 'job-1',
-    jobRunIds: ['run-1'],
     sourcePathId: 'src1',
     targetPathId: 'dest1',
     sourceServerId: 'source-server',
     targetServerId: 'target-server',
+    conflictType: 'circular' as const,
+    jobType: 'MIGRATE',
   }];
   jest.spyOn(service['migrationConflictService'], 'checkMigrationConflicts').mockResolvedValue(migrationConflictResult);
 

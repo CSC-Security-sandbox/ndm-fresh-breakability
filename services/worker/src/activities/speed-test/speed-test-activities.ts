@@ -27,12 +27,14 @@ export interface NetworkMetrics {
 @Injectable()
 export class SpeedTestActivities {
   private readonly logger: LoggerService;
+  private readonly projectId: string;
 
   constructor(
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly redisService: RedisService,
   ) {
     this.logger = loggerFactory.create(SpeedTestActivities.name);
+    this.projectId = WorkersConfig.get('projectId');
   }
 
   async readActivity(payload: any, traceId: string, volumeId:string, resultId:string): Promise<SpeedTestOutput> {
@@ -142,7 +144,11 @@ export class SpeedTestActivities {
         error: results.networkPerformanceResult.errors?.[0] || '',
       };
     }
-    const response = await axios.post(`${workerJobServiceUrl}/api/v1/jobs/speed-test/store-result`, data);
+    const response = await axios.post(
+      `${workerJobServiceUrl}/api/v1/jobs/speed-test/store-result`,
+      data,
+      { headers: { projectId: this.projectId } }
+    );
     this.logger.debug(traceId, `Post call response: ${JSON.stringify(response.data)}`);
     return response.data;
   } catch (error) {

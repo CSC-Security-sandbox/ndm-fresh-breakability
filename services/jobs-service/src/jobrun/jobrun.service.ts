@@ -16,6 +16,7 @@ import {
   PausedReason,
   WorkFlows,
   WorkerStatus,
+  USER_VISIBLE_ERROR_TYPES,
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
@@ -38,7 +39,7 @@ import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { JobRunStats } from "./dto/jobstats";
 import { JobRunInitService } from "./jobrun.init.service";
 import { SuccessEmailType } from "src/utils/send-email.type";
-import { getErrorDisplayMessage } from "./jobrun.utli";
+import { getErrorDisplayMessage } from "./jobrun.util";
 import { WorkFlowFailureReason } from "./jobrun.types";
 import {
   LoggerFactory,
@@ -148,7 +149,7 @@ export class JobRunService {
   }
 
   // ------------------ Ad-hoc Run -------------------- //
-  async addHocRun(jobConfigId: string) {
+  async addHocRun(jobConfigId: string, projectId?: string) {
     const jobConfig = await this.jobConfigRepo.findOne({
       where: { id: jobConfigId },
     });
@@ -187,7 +188,7 @@ export class JobRunService {
         );
       }
     }
-    return await this.jobRunInitService.createJobRun(jobConfig.id, new Date());
+    return await this.jobRunInitService.createJobRun(jobConfig.id, new Date(), projectId);
   }
 
   //  ------------------- get JobRun Details ------------------ //
@@ -471,7 +472,7 @@ export class JobRunService {
     return allJobsRuns;
   }
 
-  async updateJobRunStatus(jobRunId: string, status: JobRunStatus) {
+  async updateJobRunStatus(jobRunId: string, status: JobRunStatus, projectId?: string) {
     const jobRunDetails: JobRunEntity = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
     });
@@ -531,6 +532,7 @@ export class JobRunService {
                 targetHost: jobConfig.targetPath?.fileServer?.host,
                 jobType: jobConfig.jobType,
                 errorCodes,
+                projectId
               });
               this.logger.log(`Error remedy email sent successfully for job run ${jobRunId}`);
             } catch (emailError) {
@@ -551,6 +553,7 @@ export class JobRunService {
             try {
               await this.sendMailService.sendMail({
                 successEmailType: SuccessEmailType.JOB_UPDATE,
+                projectId,
                 jobStatusUpdate: {
                   jobType: jobConfig.jobType,
                   jobAction: "completed",
@@ -602,6 +605,7 @@ export class JobRunService {
           try {
             await this.sendMailService.sendMail({
               successEmailType: SuccessEmailType.JOB_UPDATE,
+              projectId,
               jobStatusUpdate: {
                 jobType: jobConfig.jobType,
                 jobAction: "started",
@@ -640,34 +644,65 @@ export class JobRunService {
       jobRunId,
       errorType,
     } = taskQuery;
-    const data = await this.operationErrorRepo.query(
-      `
-      SELECT 
-        MIN(oe.id::text) AS id,
-        MIN(oe.error_message) AS "errorMessage",
-        MIN(oe.error_type) AS "errorType",
-        MIN(oe.created_at) AS "createdAt",
-        MIN(oe.file_name) AS "fileName",
-        MIN(oe.file_path) AS "filePath",
-        MIN(oe.origin) AS "origin",
-        MIN(oe.operation_type) AS "operationType",
-        MIN(oe.error_code) AS "errorCode",
-        COUNT(*) AS occurrence
+    
+    // Define allowed sort columns (camelCase from API)
+    const SORTABLE_COLUMNS = ['createdAt', 'errorMessage', 'errorType', 'fileName', 'filePath', 'origin', 'operationType', 'errorCode'];
+
+    // Validate and map to SQL column with table prefix
+    const sortColumn =
+      SORTABLE_COLUMNS.includes(sort)
+        ? {
+            createdAt: 'oe.created_at',
+            errorMessage: 'oe.error_message',
+            errorType: 'oe.error_type',
+            fileName: 'oe.file_name',
+            filePath: 'oe.file_path',
+            origin: 'oe.origin',
+            operationType: 'oe.operation_type',
+            errorCode: 'oe.error_code',
+          }[sort]
+        : 'oe.created_at';
+
+    const orderClause = order?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+
+    // Uses first 10 chars of file_path as a unique prefix to match and replace
+    // the full path with just the relative_file_path.
+
+    const query = `
+      SELECT
+        oe.id::text AS id,
+        CASE
+          WHEN oe.file_path IS NOT NULL AND LENGTH(oe.file_path) > 10 THEN
+            REGEXP_REPLACE(
+              oe.error_message,
+              '[''"]?' || SUBSTRING(oe.file_path FROM 1 FOR 10) || '[^''"\\s]*([''".\\s]|$)',
+              oe.file_name,
+              'g'
+            )
+          ELSE oe.error_message
+        END AS "errorMessage",
+        oe.error_type AS "errorType",
+        oe.created_at AS "createdAt",
+        oe.file_name AS "fileName",
+        oe.file_path AS "filePath",
+        oe.origin AS "origin",
+        oe.operation_type AS "operationType",
+        oe.error_code AS "errorCode"
       FROM datamigrator.operation_errors oe
       LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
       WHERE o.job_run_id = $1 AND oe.error_type = $2
-      GROUP BY oe.file_path
-      ORDER BY MIN($3) ${order.toUpperCase() === "DESC" ? "DESC" : "ASC"}
-      LIMIT $4 OFFSET $5
-      `,
-      [
-        jobRunId,
-        errorType,
-        `oe.${sort}`,
-        parseInt(limit, 10),
-        (parseInt(page, 10) - 1) * parseInt(limit, 10),
-      ]
-    );
+      ORDER BY ${sortColumn} ${orderClause}
+      LIMIT $3 OFFSET $4
+    `;
+
+    const params = [
+      jobRunId,
+      errorType,
+      parseInt(limit, 10),
+      (parseInt(page, 10) - 1) * parseInt(limit, 10),
+    ];
+
+    const data = await this.operationErrorRepo.query(query, params);
 
     // Map errors to include error remedy descriptions
     const mappedData = await Promise.all(
@@ -714,7 +749,7 @@ export class JobRunService {
       .leftJoin("oe.operation", "o")
       .where("o.jobRunId = :jobRunId", { jobRunId })
       .andWhere("oe.errorType = :errorType", { errorType })
-      .select("COUNT(DISTINCT oe.filePath)", "total")
+      .select("COUNT(*)", "total")
       .getRawOne();
 
     const total = parseInt(totalResult.total ?? "0", 10);
@@ -777,7 +812,11 @@ export class JobRunService {
       .createQueryBuilder("oe")
       .innerJoin("oe.operation", "o")
       .where("o.jobRunId = :jobRunId", { jobRunId })
-      .select(["oe.errorType AS errorType", "COUNT(*) AS count"])
+      .andWhere("oe.errorType IN (:...errorTypes)", { errorTypes: USER_VISIBLE_ERROR_TYPES })
+      .select([
+        "oe.errorType AS errorType", 
+        "COUNT(*) AS count"
+      ])
       .groupBy("oe.errorType");
     let errorTypeCounts;
     try {
@@ -795,7 +834,7 @@ export class JobRunService {
         (error) => error.errortype === "FATAL_ERROR"
       );
       if (fatalError) {
-        fatalError.count += setupFailedErrors.length;
+        fatalError.count = Number(fatalError.count) + setupFailedErrors.length;
       } else {
         errorTypeCounts.push({
           errortype: "FATAL_ERROR",
@@ -843,6 +882,7 @@ export class JobRunService {
     targetHost,
     jobType,
     errorCodes,
+    projectId,
   }): Promise<void> {
     if (!errorCodes || errorCodes.length === 0) {
       this.logger.log(`No error codes found for job run ${jobRunId}`);
@@ -856,6 +896,7 @@ export class JobRunService {
 
       await this.sendMailService.sendMail({
         successEmailType: SuccessEmailType.ERROR_REMEDY,
+        projectId,
         errorRemedy: {
           jobRunId,
           jobType,

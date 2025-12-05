@@ -107,9 +107,10 @@ export interface PreCheckWorkflowOPayload {
 export interface PreCheckCircularDependency {
   status: string;
   jobId: string;
-  jobRunIds: string[];
   sourcePathId: string;
   targetPathId: string;
   sourceServerId: string;
   targetServerId: string;
+  conflictType: 'circular' | 'destination';
+  jobType: string;
 }

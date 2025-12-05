@@ -139,7 +139,7 @@ var _ = Describe("TC-005: Running migration / cutover with an exclude path patte
 					err = HandleJobRunStateChange(migrationJobRunID, "PAUSE", list)
 					Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
 					Wait(5)
-					err = WaitForJobState(migrationJobRunID, "PAUSED", 15)
+					err = WaitForJobState(migrationJobRunID, "PAUSED")
 					Expect(err).NotTo(HaveOccurred(), "Migration job did not reach PAUSED state")
 					Wait(5)
 					err = HandleJobRunStateChange(migrationJobRunID, "RESUME", list)
@@ -149,7 +149,7 @@ var _ = Describe("TC-005: Running migration / cutover with an exclude path patte
 					Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
 					flag = true
 					Wait(10)
-					err = WaitForJobState(migrationJobRunID, "STOPPED", 30)
+					err = WaitForJobState(migrationJobRunID, "STOPPED")
 					Expect(err).NotTo(HaveOccurred(), "Job did not reach STOPPED state")
 					//Adding wait to ensure temporal worker shut down completes after reaching STOPPED state
 					Wait(60)

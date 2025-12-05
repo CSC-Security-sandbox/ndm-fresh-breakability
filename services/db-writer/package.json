@@ -29,7 +29,7 @@
     "@nestjs/schedule": "^6.0.0",
     "@nestjs/swagger": "^11.0.6",
     "@nestjs/typeorm": "^11.0.0",
-    "@netapp-cloud-datamigrate/jobs-lib": "0.1.2",
+    "@netapp-cloud-datamigrate/jobs-lib": "0.2.1",
     "@netapp-cloud-datamigrate/auth-lib": "0.0.5",
     "@netapp-cloud-datamigrate/api-handler-lib": "0.0.5",
     "@netapp-cloud-datamigrate/logger-lib": "0.0.16",

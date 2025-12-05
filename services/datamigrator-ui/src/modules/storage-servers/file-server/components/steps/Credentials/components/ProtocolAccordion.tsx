@@ -17,12 +17,16 @@ interface ProtocolAccordion {
 }
 
 const ProtocolAccordion = ({ children, title }: ProtocolAccordion) => {
-  const { isJobRunning } = useContext(CommonFileServerContext);
+  const { isJobRunning, selectedProtocol } = useContext(CommonFileServerContext);
+  
+  const isProtocolDisabled = selectedProtocol !== title;
+  const accordionClassName = `w-full ${isProtocolDisabled ? 'opacity-50' : ''}`;
+  
   return (
     <Box className="mt-8">
       <Box className="flex gap-3 -my-3">
         <AccordionController>
-          <AccordionCard title={title} className="w-full">
+          <AccordionCard title={title} className={accordionClassName}>
             <AccordionCardContent className="w-full">
               <Box className="flex flex-col gap-4">
                 <Box className="gap-4 inline-flex">{children}</Box>
@@ -32,6 +36,11 @@ const ProtocolAccordion = ({ children, title }: ProtocolAccordion) => {
                 <InlineNotification type="warning">
                   Credentials cannot be edited as there are ongoing jobs in the
                   file server.
+                </InlineNotification>
+              )}
+              {isProtocolDisabled && !isJobRunning && (
+                <InlineNotification type="info">
+                  This protocol is not selected. Switch to {title} protocol to edit these credentials.
                 </InlineNotification>
               )}
             </AccordionCardContent>

@@ -21,6 +21,7 @@ export class ValidatePathActivity {
     private readonly workerId: string;
     private readonly mountBasePath: string;
     private readonly workerConfigUrl: string;
+    private readonly projectId: string;
     private readonly logger: LoggerService;
 
     constructor(
@@ -32,6 +33,7 @@ export class ValidatePathActivity {
         this.workerId = this.configService.get('worker.workerId');
         this.mountBasePath = this.configService.get('worker.baseWorkingPath');
         this.workerConfigUrl = this.configService.get('worker.connection.workerConfigUrl');
+        this.projectId = this.configService.get('worker.projectId');
         this.logger = loggerFactory.create(ValidatePathActivity.name);
     }
 
@@ -91,7 +93,12 @@ export class ValidatePathActivity {
         if (!accessToken) throw new Error('Failed to get access token');
         this.logger.log(`[${this.workerId}] Posting validation result to ${url}`);
         try {
-            await axios.patch(url, { validationResult: result }, { headers: { Authorization : `Bearer ${accessToken}`}})
+            await axios.patch(url, { validationResult: result }, {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    projectId: this.projectId
+                }
+            })
             this.logger.log(`[${this.workerId}] Validation result posted successfully for uploadId: ${uploadId}`);
         }
         catch (error) {

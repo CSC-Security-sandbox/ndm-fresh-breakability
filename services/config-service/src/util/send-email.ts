@@ -14,7 +14,16 @@ export class SendMailService {
       this.logger.log('SEND_MAIL', SEND_MAIL);
       const url = `${SEND_MAIL}/api/v1/email/internal`;
       this.logger.log('URL', url);
-      const response = await axios.post(url, body, { timeout: 30000 });
+
+      // Only include headers if they exist
+      const headers: any = {};
+      if (body?.traceId) headers['trackId'] = body.traceId;
+      if (body?.projectId) headers['projectId'] = body.projectId;
+
+      const response = await axios.post(url, body, {
+        timeout: 30000,
+        headers
+      });
       this.logger.log('RESPONSE', JSON.stringify(response.data));
       if (response.status !== 200) throw new Error(`Failed to send the mail, ${response.data}`);
       this.logger.log(`Successfully sent the mail`, response.data);

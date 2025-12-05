@@ -50,7 +50,15 @@ export const executeWorkerSetup = async ( { jobRunId, workerIds , options}: Setu
         }catch (error) {
             console.error(`Error in SetupWorkerWorkflow for worker ${worker}: ${error.message}`);
             failedWorkers.push(worker);
-            await updateWorkerFailedResponse(worker, jobRunId, error.message);
+
+            let detailedErrorMessage = error.message || 'An unknown error occurred during worker setup';
+            if (error.message?.includes('ECONNRESET')) {
+                detailedErrorMessage = 'Connection lost during worker setup. Please check network connectivity and try again.';
+            } else if (error.message?.includes('ETIMEDOUT')) {
+                detailedErrorMessage = 'Worker setup timed out. Please try again later.';
+            }
+
+            await updateWorkerFailedResponse(worker, jobRunId, detailedErrorMessage);
         }
 
     })

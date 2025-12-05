@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigObject, ConfigService, registerAs } from '@nestjs/config';
 
+// Platform constants
+export const WINDOWS = 'win32';
+
 export default registerAs(
   'worker',
   (): ConfigObject => ({

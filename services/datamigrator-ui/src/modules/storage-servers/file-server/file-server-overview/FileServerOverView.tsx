@@ -55,7 +55,7 @@ const FileServerOverView = () => {
 
   return (
     <Box className="p-8">
-      <JobsAction fileServerDetails={fileServerDetails} />
+      <JobsAction fileServerDetails={fileServerDetails} allExportPaths={allExportPaths} />
       <Box className="flex gap-3 w-full my-4">
         <ChartInfo
           children={

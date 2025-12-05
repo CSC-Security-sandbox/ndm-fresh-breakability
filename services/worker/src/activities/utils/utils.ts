@@ -2,10 +2,11 @@ import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from 'path';
 import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, JobManagerContext, RedisUtils, Task, TaskStatus, TaskType, Protocol, Cmd, ItemInfo, TaskInfo } from "@netapp-cloud-datamigrate/jobs-lib";
-import { ACL, ExcludeOrSkipParams, getFileInfoInput, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
+import { ACL, ExcludeForDelete, ExcludeOrSkipParams, getFileInfoInput, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
 import { execSync } from "child_process";
+import { E8Dot3CollisionError } from "../../errors/errors.types";
 
 export const getChecksum = (filePath: string): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -19,7 +20,7 @@ export const getChecksum = (filePath: string): Promise<string> => {
 };
 
 export const removePrefix = (str: string, prefix: string): string => 
-    str.startsWith(prefix) ? str.slice(prefix.length, 1000) : str;
+    str.startsWith(prefix) ? str.slice(prefix.length) : str;
 
 export const getFilePermissions = (stats: fs.Stats, isDirectory: boolean) : string =>{
     const mode = stats.mode;
@@ -75,8 +76,24 @@ export const shouldExcludeOlderThan = (stats: fs.Stats, olderThan: Date): boolea
 }
 
 export const shouldExcludeOrSkip = ({ fullPath, stats, excludePatterns, skipTime, olderThan, jobType }: ExcludeOrSkipParams): boolean => (shouldExclude(fullPath, excludePatterns) || shouldSkipFile(stats, skipTime, jobType) || shouldExcludeOlderThan(stats, olderThan));
+export const shouldExcludeForDelete = ({ fullPath, excludePatterns }: ExcludeForDelete): boolean => (shouldExclude(fullPath, excludePatterns));
 
-
+export const checkCaseSensitiveConflict = async (jobType: string, itemName: string, lowerCaseSourceData: Set<string>, relativeSourcePath: string, sourceContentPath: string, command: Cmd, jobContext: JobManagerContext, lowerCaseTargetData?: Set<string>, targetContent?: Set<string>, isDirectory?: boolean): Promise<boolean> => {
+  const lowerCaseFileName = itemName.toLowerCase();
+  if (lowerCaseSourceData.has(lowerCaseFileName) || (lowerCaseTargetData?.has(lowerCaseFileName) && !targetContent?.has(itemName))) {
+    const isDiscovery = jobType === "DISCOVER";
+    const itemType = isDirectory ? 'Directory' : 'File';
+    const errorMessage = isDiscovery ? "Directory contents not discovered: Another directory with same name but different case exists" : `${itemType} not migrated: Another ${itemType.toLowerCase()} with same name but different case exists`;
+    const error = new Error(errorMessage) as Error & {code: "EEXIST"};
+    const origin = isDiscovery ? Origin.SOURCE : Origin.DESTINATION;
+    const operationName: Operation = isDiscovery ? Operation.READ_DIR : Operation.COPY_CONTENT;
+    const dmErr = dmError("OPERATION", origin, operationName, ErrorType.TRANSIENT_ERROR, command.id, error, {name: relativeSourcePath, path: sourceContentPath});
+    await jobContext.publishToErrorStream(dmErr);
+    return true;
+  }
+  lowerCaseSourceData.add(lowerCaseFileName);
+  return false;
+}
 
 export function getFileType(stats: fs.Stats, isDirectory:boolean): FileType {
     switch (true) {
@@ -167,7 +184,9 @@ export const generateDummyItemEntry: ItemInfo = new ItemInfo(
     permission: "rwxr-xr-x", // permission  
     checksum: "dummy-checksum-target" // checksum
   }, // targeMeta
-  2048 // size
+  2048, // size
+  0,
+  false 
 );
 
 export const generateDummyTaskEntry: Task = new Task('8840625a-b818-42a8-98c8-5c05aaa19106', '', TaskType.MIGRATE, TaskStatus.ERRORED, '', '', '', [], '', '', '');
@@ -235,6 +254,15 @@ export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string 
       case 'EIO':
           // Filename too long
           return context === 'TASK' ? 'TASK_SERVER_DISCONNECTED' : 'OP_SERVER_DISCONNECTED';
+      case 'E8DOT3_COLLISION':
+        // 8.3 short filename collision
+        return context === 'TASK' ? 'TASK_8DOT3_COLLISION' : 'OP_8DOT3_COLLISION';
+      case 'EEXIST':
+          // Duplicate in terms of case (Isilon SMB)
+          return context === 'TASK' ? 'TASK_CASE_CONFLICT' : 'OP_CASE_CONFLICT';
+      case 'ETRAILSPACE':
+          // Filename contains trailing spaces
+          return context === 'TASK' ? 'TASK_TRAILING_SPACE' : 'OP_TRAILING_SPACE';
       default:
         // Unknown error
         return context === 'TASK' ? 'TASK_UNKNOWN_ERROR' : 'OP_UNKNOWN_ERROR';
@@ -249,9 +277,21 @@ export const formatDate = (date: Date): string => {
 };
 
 export const dmError = (type: 'TASK' | 'OPERATION', origin :Origin, operationName: Operation , errorType: ErrorType, correlationId: string, error?: any, file? : {name:  string, path: string}, customError ?: {errorCode: string[], message: string}) => {
-  if(error && error?.code ) {
-    if(origin === Origin.SOURCE && isSourceFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
-    if(origin === Origin.DESTINATION && isFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
+  if(error) {
+    // Check errno numbers when error.code might be "Unknown system error"
+    if (hasFileServerDownErrorNo(error.errno)) {
+      error.code = 'EIO'; // Standardize code for known error
+    }
+    
+    // Check error.code for standard error codes
+    if(error.code) {
+      // Check for transient errors
+      if( isTransientError(error.code)) errorType = ErrorType.TRANSIENT_ERROR;
+        // Check for fatal errors (cancel activity)
+      if(origin === Origin.SOURCE && isSourceFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
+      if(origin === Origin.DESTINATION && isFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
+
+    }
   }
 
   switch (type) {
@@ -275,11 +315,19 @@ export const basePrefix = (jobRunId: string, pathId: string): string => {
   return `${process.env.BASE_WORKING_PATH}/${jobRunId}/${pathId}`;
 }
 
-const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO'])
-const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED','EIO']);
+const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED'])
+const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED']);
+
+// Transient errors that should not be retried
+const TRANSIENT_CODE = new Set<string>(['E8DOT3_COLLISION']);
+
+// File server down errno numbers (negative values as reported by Node.js)
+const FileServerDownErrorNo = new Set<number>([-116, -96]); // ESTALE, EADDRNOTAVAIL
 
 export const isSourceFatalError = (code :string) => code && SOURCE_FATAL_CODE.has(code)
 export const isFatalError = (code :string) => code && FATAL_CODE.has(code)
+export const isTransientError = (code :string) => code && TRANSIENT_CODE.has(code)
+export const hasFileServerDownErrorNo = (errno: number) => errno && FileServerDownErrorNo.has(errno)
 
 export const getServerInfoFromPath = (sourcePath: string, jobContext: JobContext): { protocol: Protocol[], server: string } => {
   try {

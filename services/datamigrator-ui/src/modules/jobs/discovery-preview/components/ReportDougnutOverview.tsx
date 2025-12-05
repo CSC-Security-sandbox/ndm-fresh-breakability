@@ -5,12 +5,14 @@ import {
   CardContent,
   DoughnutChart,
   MetricItemAdvance,
+  Text,
 } from "@netapp/bxp-design-system-react";
 import {
   FileIcon,
   FolderIcon,
 } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { ExpandIcon, LinkIcon } from "@netapp/bxp-style/react-icons/Action";
+import { ExternalLinkIcon } from "@netapp/bxp-style/react-icons/Navigation";
 import { useParams } from "react-router-dom";
 import { JOBS_TYPE, ReportDataPayloadType } from "@/types/app.type";
 import {
@@ -18,21 +20,24 @@ import {
   formatBytes,
   formatLargeNumber,
 } from "@modules/jobs/discovery-preview/utils/chart-data.utils";
-
+ 
 interface ReportOverviewProps {
   Icon: any;
   iconBgColor: string;
   label: string;
   value: string | number;
 }
-
+ 
 const colorClassMap: Record<string, string> = {
   i4: "chart-4",
   i9: "chart-9",
   i3: "chart-3",
   i6: "chart-6",
+  i5: "chart-5",
+  i7: "chart-7",
+  i8: "chart-8",
 };
-
+ 
 const ReportDougnutOverview = () => {
   const { jobRunId } = useParams<{ jobRunId: string }>();
   const payload: ReportDataPayloadType = {
@@ -40,7 +45,9 @@ const ReportDougnutOverview = () => {
     reportType: JOBS_TYPE.DISCOVERY,
   };
   const { data: reportData } = useGetReportDataQuery(payload);
-
+ 
+  const dataItems = reportData?.data?.items || reportData || [];
+ 
   const LegendMetric = (props: ReportOverviewProps) => (
     <MetricItemAdvance
       Icon={props.Icon}
@@ -49,15 +56,22 @@ const ReportDougnutOverview = () => {
       value={props.value}
     />
   );
-
+ 
   const {
     regularFiles,
     symbolicLinks,
+    junctionCount,
+    volumeMountCount,
+    hardLinks,
     totalCount,
     totalSpaceUsed,
     directories,
-  } = extractSystemFileStatAndDirectories(reportData);
-  
+    fileServerProtocol,
+  } = extractSystemFileStatAndDirectories(dataItems);
+ 
+  const protocolString = String(fileServerProtocol || '').toUpperCase().trim();
+  const isSMBProtocol = protocolString === "SMB";
+ 
   const overviewLegendMap = [
     {
       Icon: FolderIcon,
@@ -72,21 +86,48 @@ const ReportDougnutOverview = () => {
       value: formatLargeNumber(regularFiles as number),
     },
     {
-      Icon: LinkIcon,
-      iconBgColor: "i3",
-      label: "Symbolic links",
-      value: formatLargeNumber(symbolicLinks as number),
-    },
-    {
       Icon: ExpandIcon,
       iconBgColor: "i6",
       label: "Total Size",
       value: formatBytes(totalSpaceUsed as number),
     },
   ];
-
+ 
+  const linkDetailsMap = [
+    {
+      Icon: LinkIcon,
+      iconBgColor: "i3",
+      label: "Symbolic links",
+      value: formatLargeNumber(symbolicLinks as number),
+      show: true,
+    },
+    {
+      Icon: LinkIcon,
+      iconBgColor: "i8",
+      label: "Hard Links",
+      value: formatLargeNumber(hardLinks as number),
+      show: true,
+    },
+    {
+      Icon: ExternalLinkIcon,
+      iconBgColor: "i5",
+      label: "Junctions",
+      value: formatLargeNumber(junctionCount as number),
+      show: isSMBProtocol,
+    },
+    {
+      Icon: ExternalLinkIcon,
+      iconBgColor: "i7",
+      label: "Volume Mount Points",
+      value: formatLargeNumber(volumeMountCount as number),
+      show: isSMBProtocol,
+    },
+  ];
+ 
+  const showLinkDetailsCard = true;
+ 
   return (
-    <Box className="mb-4">
+    <Box className="mb-4 space-y-4">
       <Card>
         <CardContent>
           <Box className="flex gap-8 items-center">
@@ -104,7 +145,7 @@ const ReportDougnutOverview = () => {
               ]}
             />
             <Box className="flex flex-col gap-2 grow">
-              <Box className="flex gap-8">
+              <Box className="flex gap-8 flex-wrap">
                 {overviewLegendMap?.map((item, index) => (
                   <LegendMetric
                     key={index}
@@ -130,8 +171,47 @@ const ReportDougnutOverview = () => {
           </Box>
         </CardContent>
       </Card>
+ 
+      {showLinkDetailsCard && (
+        <Card>
+          <CardContent>
+            <Box className="flex flex-col gap-2 grow">
+              <Box className="flex items-center gap-2 mb-2">
+                <LinkIcon className="w-4 h-4" />
+                <Text className="font-semibold">
+                  Redirects
+                </Text>
+              </Box>
+              <Box
+                className="grid gap-8"
+                style={{
+                  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                  gridTemplateRows: '1fr'
+                }}
+              >
+                {linkDetailsMap.map((item, index) => (
+                  <Box
+                    key={index}
+                    style={{ gridColumn: index + 1 }}
+                  >
+                    {item.show && (
+                      <LegendMetric
+                        Icon={item.Icon}
+                        iconBgColor={colorClassMap[item.iconBgColor]}
+                        label={item.label}
+                        value={item.value}
+                      />
+                    )}
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          </CardContent>
+        </Card>
+      )}
     </Box>
   );
 };
-
+ 
 export default ReportDougnutOverview;
+

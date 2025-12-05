@@ -1,7 +1,7 @@
 import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
-import { psBaseAclDefinition } from '../core/migrate/command-execution/win-opeartions/powershell.script';
+import { psBaseAclDefinition, psEnableBackupPrivilegeScript } from '../core/migrate/command-execution/win-opeartions/powershell.script';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { ConfigService } from '@nestjs/config';
 
@@ -95,6 +95,14 @@ class PersistentShell extends EventEmitter {
 
             // Inject the script
             this.process.stdin?.write(psBaseAclDefinition + '\n');
+
+            // Enable backup privileges in this powershell process
+            const privilegeScript = this.getShellPrivilegeEnablementScript(this.id);
+            this.process.stdin?.write(privilegeScript + '\n');
+            
+            // Check if privilege enablement succeeded by looking for error markers in output
+            const privilegeCheckMarker = `__PRIV_CHECK_${this.id}__`;
+            this.process.stdin?.write(`if ($LASTEXITCODE -ne 0) { Write-Host 'PRIVILEGE_ENABLEMENT_FAILED' }; Write-Host '${privilegeCheckMarker}'\r\n`);
 
             // Write a unique marker directly, not through the queue
             this.initMarker = `__READY_${Date.now()}_${Math.floor(Math.random() * 1e9)}__`;
@@ -297,6 +305,30 @@ Write-Host '${cmd.endMarker}'
             return false;
         }
     }
+
+    private getShellPrivilegeEnablementScript(shellId: string): string {
+  return `
+Add-Type -TypeDefinition @"
+${psEnableBackupPrivilegeScript}
+"@
+
+try {
+    $backupResult = [TokenManipulator]::EnablePrivilege("SeBackupPrivilege")
+    $restoreResult = [TokenManipulator]::EnablePrivilege("SeRestorePrivilege")
+    
+    Write-Host "[Shell:${shellId}] SeBackupPrivilege: $backupResult"
+    Write-Host "[Shell:${shellId}] SeRestorePrivilege: $restoreResult"
+    
+    if ($backupResult -like "*SUCCESS*" -and $restoreResult -like "*SUCCESS*") {
+        Write-Host "[Shell:${shellId}] Backup privileges enabled"
+    } else {
+        Write-Host "[Shell:${shellId}] Warning: Failed to enable some privileges"
+    }
+} catch {
+    Write-Host "[Shell:${shellId}] Warning: Privilege error: $($_.Exception.Message)"
+}
+`;
+}
 
     needsRecreation(): boolean {
         return this.healthCheckFailures >= 3;

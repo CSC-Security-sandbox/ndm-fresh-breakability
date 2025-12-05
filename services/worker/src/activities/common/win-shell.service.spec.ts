@@ -92,6 +92,69 @@ describe('WinShellService', () => {
 
       expect(mockSpawn).toHaveBeenCalled();
     });
+
+    it('should enable privileges during shell initialization', () => {
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+
+      const mockProcess = new EventEmitter() as any;
+      mockProcess.stdin = { write: jest.fn() };
+      mockProcess.stdout = new EventEmitter();
+      mockProcess.stderr = new EventEmitter();
+      mockProcess.kill = jest.fn();
+
+      mockSpawn.mockReturnValue(mockProcess);
+
+      service.onModuleInit();
+
+      // Verify that privilege enablement script was written to stdin
+      expect(mockProcess.stdin.write).toHaveBeenCalled();
+      const writtenScript = mockProcess.stdin.write.mock.calls[0][0];
+      expect(writtenScript).toContain('EnablePrivilege');
+      expect(writtenScript).toContain('SeBackupPrivilege');
+      expect(writtenScript).toContain('SeRestorePrivilege');
+    });
+
+    it('should call EnablePrivilege() without PID (current process)', () => {
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+
+      const mockProcess = new EventEmitter() as any;
+      mockProcess.stdin = { write: jest.fn() };
+      mockProcess.stdout = new EventEmitter();
+      mockProcess.stderr = new EventEmitter();
+      mockProcess.kill = jest.fn();
+
+      mockSpawn.mockReturnValue(mockProcess);
+
+      service.onModuleInit();
+
+      // Verify EnablePrivilege is called (not EnablePrivilegeForPid)
+      const writtenScript = mockProcess.stdin.write.mock.calls[0][0];
+      expect(writtenScript).toContain('EnablePrivilege(');
+      expect(writtenScript).not.toContain('EnablePrivilegeForPid');
+    });
+
+    it('should check for privilege enablement errors during initialization', () => {
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+
+      const mockProcess = new EventEmitter() as any;
+      mockProcess.stdin = { write: jest.fn() };
+      mockProcess.stdout = new EventEmitter();
+      mockProcess.stderr = new EventEmitter();
+      mockProcess.kill = jest.fn();
+
+      mockSpawn.mockReturnValue(mockProcess);
+
+      service.onModuleInit();
+
+      // Should write privilege check command after enabling privileges
+      expect(mockProcess.stdin.write).toHaveBeenCalled();
+      const calls = mockProcess.stdin.write.mock.calls;
+      const privilegeCheckCall = calls.find((call: any) =>
+        call[0].includes('__PRIV_CHECK_') || call[0].includes('PRIVILEGE_ENABLEMENT_FAILED'),
+      );
+      expect(privilegeCheckCall).toBeDefined();
+      expect(mockSpawn).toHaveBeenCalled();
+    });
   });
 
   describe('executeCommand', () => {

@@ -22,6 +22,7 @@ export class SetupActivityService {
   readonly workerId: string;
   readonly workerConfigUrl: string;
   readonly baseWorkingPath: string;
+  readonly projectId: string;
 
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
@@ -34,6 +35,7 @@ export class SetupActivityService {
     this.workerId = this.configService.get('worker.workerId');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
     this.workerConfigUrl = this.configService.get('worker.connection.workerConfigUrl');
+    this.projectId = this.configService.get('worker.projectId');
     this.logger = loggerFactory.create(SetupActivityService.name);
   }
 
@@ -110,7 +112,8 @@ export class SetupActivityService {
       this.logger.debug(`[${args.jobRunId}] - [${this.workerId}] Updating worker configuration`);
       await axios.post(
         `${this.workerConfigUrl}/api/v1/work-manager/update/configs`,
-        { jobRunId: args.jobRunId, workerId: this.workerId }
+        { jobRunId: args.jobRunId, workerId: this.workerId },
+        { headers: { projectId: this.projectId } }
       );
 
       // Wait for 1 second to ensure the configuration is updated
@@ -186,7 +189,12 @@ export class SetupActivityService {
       await axios.post(
         `${this.workerConfigUrl}/api/v1/work-manager/update/configs`,
         { jobRunId, workerId: this.workerId },
-        { headers: { Authorization: `Bearer ${accessToken}` } },
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            projectId: this.projectId
+          }
+        },
       );
       
       await this.waitFor(1000);

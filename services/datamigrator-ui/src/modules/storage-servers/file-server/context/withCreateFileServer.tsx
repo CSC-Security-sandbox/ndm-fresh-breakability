@@ -24,7 +24,8 @@ export function withCreateFileServer(WrappedComponent: ComponentType<any>) {
           fileServerForm.smbCredentialsForm,
           fileServerForm.selectedWorkerIds,
           fileServerForm.hostCredentialsForm,
-          fileServerForm.jobConfigForm
+          fileServerForm.jobConfigForm,
+          fileServerForm.selectedProtocol
         );
 
         const resp = await createConfigurationApi(payload);

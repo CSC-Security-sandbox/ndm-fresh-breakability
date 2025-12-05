@@ -61,6 +61,7 @@ export interface VolumeType {
   jobConfig: JobConfig[];
   protocol: string;
   isValid?: boolean;
+  isDisabled?: boolean;
 }
 
 interface DataType {
@@ -308,6 +309,7 @@ export enum JOB_STATUS_TYPE_ENUM {
   RUNNING = TASK_STATUS_TYPE_ENUM.RUNNING,
   PAUSED = "PAUSED",
   PAUSING = "PAUSING",
+  STOPPING = "STOPPING",
   STOPPED = "STOPPED",
   COMPLETED = TASK_STATUS_TYPE_ENUM.COMPLETED,
   FAILED = "FAILED",
@@ -526,6 +528,7 @@ export type TaskInfoCardPropType = {
 
 export type JobRunTaskCardPropType = {
   jobRunDetails?: JobRunDetailsApiType;
+  jobRunId?: string;
 };
 
 export type JobRunHeaderPropType = JobRunTaskCardPropType;
@@ -804,6 +807,7 @@ export type isBundleReadyApiType = {
     startDate: string;
     endDate: string;
     otherMetrics: string[];
+    projectWorkerMap: any[];
   };
   createdAt?: string;
 };

@@ -14,8 +14,7 @@ import {
   NestModule,
 } from '@nestjs/common';
 import { Protocols } from './protocols/protocols';
-import { NFSProtocol } from "./protocols/nfs/nfs.protocol";
-import { SMBProtocol } from "./protocols/smb/smb.protocol";
+import { ProtocolsModule } from './protocols/protocols.module';
 import {
   LoggerModule,
   RequestContextMiddleware,
@@ -27,6 +26,7 @@ import { WorkManagerModule } from './work-manager/work-manager.module';
   imports: [
     LoggerModule.forRoot(),
     ConfigModule.forRoot({ load: [appConfig, commandConfig, temporalConfig, shellMonitoringConfig] }),
+    ProtocolsModule,
     ActivitiesModule,
     HealthcheckModule,
     ScheduleModule.forRoot(),
@@ -35,7 +35,7 @@ import { WorkManagerModule } from './work-manager/work-manager.module';
     WorkManagerModule,
     WorkerThreadModule,
   ],
-  providers: [WorkersConfig, CommandConfig, Protocols, NFSProtocol, SMBProtocol],
+  providers: [WorkersConfig, CommandConfig, Protocols],
 })
 
 export class AppModule implements NestModule {

@@ -86,7 +86,7 @@ type MigrationJobParams struct {
 	FutureRunSchedule  string
 	SourcePathIDs      []string
 	DestinationPathIDs []string
-	SidMapping         bool
+	SidMapping         interface{}
 	Options            map[string]interface{}
 	ExtraParams        map[string]interface{}
 }
@@ -213,7 +213,7 @@ func CreateMigrationJob(params MigrationJobParams, headers map[string]string) ([
 		"firstRunAt":        params.FirstRunAt,
 		"futureRunSchedule": params.FutureRunSchedule,
 		"migrateConfigs":    migrateConfigs,
-		"sid_mapping":       params.SidMapping,
+		"sidMapping":       params.SidMapping,
 		"options":           params.Options,
 	}
 
@@ -434,6 +434,12 @@ func GetJobRunDetails(jobConfigID string, headers map[string]string, needRetryAt
 			return GetJobResponse{}, resp, fmt.Errorf("error while sending api request, err: %v", err)
 		}
 
+		// Check if response status is not 200 OK
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return GetJobResponse{}, resp, fmt.Errorf("API request failed with status code %d", resp.StatusCode)
+		}
+
 		bodyBytes, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
@@ -558,7 +564,7 @@ func HandleJobRunStateChange(jobRunID, stateType string, jobRunIDs []string) err
 		if err != nil {
 			return err
 		}
-		if stateType == COMPLETED_JOBRUN {
+		if status == COMPLETED_JOBRUN {
 			LogDebug("Job is Completed")
 			return nil
 		}
@@ -575,7 +581,7 @@ func HandleJobRunStateChange(jobRunID, stateType string, jobRunIDs []string) err
 			if err != nil {
 				return err
 			}
-			if stateType == COMPLETED_JOBRUN {
+			if status == COMPLETED_JOBRUN {
 				LogDebug("Job is Completed")
 				return nil
 			}
@@ -670,4 +676,10 @@ func ChangeJobRunState(action string, jobRunIDs []string) error {
 	}
 	LogDebug(fmt.Sprintf("State of Job Run IDs [%s] is changed to %s", strings.Join(jobRunIDs, ","), action))
 	return nil
+}
+
+// Helper function to delete a job
+func DeleteJob(jobID string, headers map[string]string) (*http.Response, error) {
+	url := fmt.Sprintf("%s/api/v1/jobs/%s", JOB_SERVICE_URL, jobID)
+	return SendAPIRequest("DELETE", url, nil, headers)
 }

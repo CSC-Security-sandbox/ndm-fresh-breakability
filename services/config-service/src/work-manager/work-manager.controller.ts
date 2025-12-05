@@ -38,10 +38,15 @@ export class WorkManagerController {
   })
   @ApiNotFoundResponse({ description: 'Configuration Not Found' })
   @AuthWorker()
-  @Get('config')
+  @Post('config')
+  @ApiBody({
+    description: 'Worker configuration request with environment variables',
+    required: true,
+  })
   async getConfiguration(
     @ClientIp() ip: string,
     @Req() req: any,
+    @Body() body: any,
   ): Promise<WorkerConfiguration[]> {
     this.logger.debug(
       `Fetching configuration for worker ID: ${req['worker_id']} from IP: ${ip} for project ID: ${req['project_id']} on platform: ${req?.headers['x-client-platform']}`,
@@ -51,6 +56,33 @@ export class WorkManagerController {
       ip,
       req['project_id'],
       req?.headers['x-client-platform'],
+      body?.envVariables,
+      body?.isRebootCall,
+    );
+  }
+
+  @ApiOperation({ summary: 'Get Worker Configurations' })
+  @ApiOkResponse({
+    description: 'Configurations Retrieved',
+    type: [WorkerConfiguration],
+  })
+  @ApiNotFoundResponse({ description: 'Worker Not Found' })
+  @AuthWorker()
+  @Get('config')
+  async getWorkerConfigurations(
+    @ClientIp() ip: string,
+    @Req() req: any,
+  ): Promise<WorkerConfiguration[]> {
+    this.logger.debug(
+      `Fetching configurations for worker ID: ${req['worker_id']} from IP: ${ip} for project ID: ${req['project_id']} on platform: ${req?.headers['x-client-platform']}`,
+    );
+    return await this.workManagerService.getConfiguration(
+      req['worker_id'],
+      ip,
+      req['project_id'],
+      req?.headers['x-client-platform'],
+      {},     
+      false,
     );
   }
 

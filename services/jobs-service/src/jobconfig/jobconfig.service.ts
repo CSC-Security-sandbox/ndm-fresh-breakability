@@ -18,6 +18,8 @@ import {
   JobType,
   SIZE_UNITS,
   TemplateType,
+  JobConfigurationEnum,
+  USER_VISIBLE_ERROR_TYPES,
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
 import { Options } from "src/constants/types";
@@ -575,7 +577,8 @@ export class JobConfigService {
   }
 
   async createBulkMigrate(
-    bulkMigrate: BulkMigrateJobConfig
+    bulkMigrate: BulkMigrateJobConfig,
+    projectId?: string
   ): Promise<JobConfigBulkMigrateFinalResponse> {
     const firstRunAt = bulkMigrate?.firstRunAt ?? new Date();
     const jobConfigs: Partial<JobConfigEntity>[] = [];
@@ -770,6 +773,7 @@ export class JobConfigService {
 
       await this.sendMailService.sendMail({
         successEmailType: SuccessEmailType.JOB_CREATION,
+        projectId,
         migrateJob: {
           savedJobConfigs: savedJobConfigs.map((jobConfig) => ({
             id: jobConfig.id,
@@ -957,12 +961,51 @@ export class JobConfigService {
 
   // ------------ Bulk delete ---------------- //
   async deleteJobConfig(id: string): Promise<{ message: string }> {
-    const job = await this.jobConfigRepo.findOne({ where: { id } });
-    if (!job) {
-      throw new Error(`Job with id ${id} not found`);
+    try {
+      const job = await this.jobConfigRepo.findOne({ 
+        where: { id }
+      });
+      if (!job) {
+        throw new NotFoundException(`Job with id ${id} not found`);
+      }
+
+      // Check for active job runs
+      const activeJobRuns = await this.jobRunRepo.find({
+        where: {
+          jobConfigId: id,
+          status: In([
+            JobRunStatus.Ready,
+            JobRunStatus.Pending,
+            JobRunStatus.Running,
+            JobRunStatus.Paused,
+            JobRunStatus.Pausing,
+            JobRunStatus.Stopping,
+          ]),
+        },
+      });
+
+      if (activeJobRuns.length > 0) {
+        throw new BadRequestException(
+          'Cannot delete job configuration. There are active job runs associated with this configuration.',
+        );
+      }
+
+      await this.jobConfigRepo.remove(job);
+      this.logger.log(`Job with id ${id} has been deleted successfully`);
+      return { message: `Job with id ${id} has been deleted` };
+    } catch (error) {
+      this.logger.error(`Failed to delete job with id ${id}`, error.stack);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        {
+          status: "failed",
+          message: error.message || "Failed to delete job configuration",
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
-    await this.jobConfigRepo.remove(job);
-    return { message: `Job with id ${id} has been deleted` };
   }
 
   // ------------ Job Config By Id ---------------- //
@@ -1059,6 +1102,7 @@ export class JobConfigService {
             .reduce((a, b) => (a ?? 0) + (b ?? 0), 0)
         ),
       },
+      configurationsSetToJob: this.getConfigurationsSetToJob(jobConfig),
       errors: [],
     };
 
@@ -1077,6 +1121,44 @@ export class JobConfigService {
     const unit = match[2] as keyof typeof units;
 
     return value * units[unit];
+  }
+
+  getConfigurationsSetToJob(jobConfig: JobConfigEntity) {
+    const excludeFilePatternsArray = jobConfig.excludeFilePatterns ?
+                                      ( jobConfig.excludeFilePatterns
+                                      .split(",")
+                                      .map(pattern => pattern.trim())
+                                      .filter(pattern => pattern !== "") ) : [];
+
+    if (jobConfig.jobType === JobType.MIGRATE) {
+      return {
+        [JobConfigurationEnum.skipFile]: jobConfig.skipFile
+          ? jobConfig.skipFile
+              .split("-")
+              .map((part) => {
+                if (part.endsWith("M")) return `${part.replace("M", "")}-Mins`;
+                if (part.endsWith("H")) return `${part.replace("H", "")}-Hrs`;
+                if (part.endsWith("D")) return `${part.replace("D", "")}-Days`;
+                return part;
+              })
+              .join("")
+          : "-",
+        [JobConfigurationEnum.preserveAccessTime]: jobConfig.preserveAccessTime ? "Enabled" : "Disabled",
+        [JobConfigurationEnum.excludeFilePatterns]: excludeFilePatternsArray,
+        [JobConfigurationEnum.excludeOlderThan]: jobConfig.excludeOlderThan,
+        [JobConfigurationEnum.futureScheduleAt]: jobConfig.futureScheduleAt,
+      }
+    } else if (jobConfig.jobType === JobType.CUT_OVER) {
+      return {
+        [JobConfigurationEnum.preserveAccessTime]: jobConfig.preserveAccessTime ? "Enabled" : "Disabled",
+        [JobConfigurationEnum.excludeFilePatterns]: excludeFilePatternsArray,
+        [JobConfigurationEnum.excludeOlderThan]: jobConfig.excludeOlderThan,
+      }
+    } else {
+      return {
+        [JobConfigurationEnum.excludeFilePatterns]: excludeFilePatternsArray,
+      }
+    }
   }
 
   async getConfigsByProjectId(projectId: string) {
@@ -1750,7 +1832,11 @@ export class JobConfigService {
       .createQueryBuilder("oe")
       .innerJoin("oe.operation", "o")
       .where("o.jobRunId = :jobRunId", { jobRunId })
-      .select(["oe.errorType AS errorType", "COUNT(*) AS count"])
+      .andWhere("oe.errorType IN (:...errorTypes)", { errorTypes: USER_VISIBLE_ERROR_TYPES })
+      .select([
+        "oe.errorType AS errorType", 
+        "COUNT(*) AS count"
+      ])
       .groupBy("oe.errorType");
     let errorTypeCounts;
     try {

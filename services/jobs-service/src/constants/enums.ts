@@ -170,3 +170,17 @@ export const SIZE_UNITS: Record<string, number> = {
   TiB: 1024 ** 4,
   PiB: 1024 ** 5,
 };
+
+export enum JobConfigurationEnum {
+  skipFile = "Skip Files modified in last",
+  preserveAccessTime = "Preserve a-time",
+  excludeFilePatterns = "Excluded Path Patterns",
+  excludeOlderThan = "Exclude file older than (UTC)",
+  futureScheduleAt = "Incremental sync schedule",
+}
+
+/**
+ * Error types that should be displayed to users in UI, reports, and emails.
+ * RECOVERABLE_ERROR is excluded as it's handled internally through retry mechanism.
+ */
+export const USER_VISIBLE_ERROR_TYPES = ['FATAL_ERROR', 'TRANSIENT_ERROR'] as const;

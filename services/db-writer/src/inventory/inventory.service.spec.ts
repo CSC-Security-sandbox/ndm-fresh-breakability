@@ -16,7 +16,7 @@ import {
   ItemInfo,
   ItemMeta,
 } from "@netapp-cloud-datamigrate/jobs-lib";
-import { CreateInventory } from "./inventory.types";
+import { CreateInventory, FileType } from "./inventory.types";
 import { OperationStatus } from "../enum/queues.enum";
 import { SpeedLogEntity, SpeedLogEntryEntity } from '../entities/speed-test.entity';
 import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
@@ -209,7 +209,8 @@ describe("InventoryService", () => {
       overrides.fileType || 'text',
       overrides.sourceMeta || defaultSourceMeta,
       overrides.targetMeta || defaultTargetMeta,
-      overrides.size || 1024
+      overrides.size || 1024,
+      overrides.inode || 0
     );
   };
 
@@ -227,9 +228,9 @@ describe("InventoryService", () => {
             isDirectory: false,
             sourceChecksum: 'abc123',
             targetChecksum: 'xyz456',
-            parentPath: '/test/path/file.txt',
+            parentPath: '/test/path',
             depth: 2,
-            fileName: '/test/path/file.txt',
+            fileName: 'file.txt',
             uid: '1001',
             gid: '1002',
             fileSize: '1024',
@@ -243,7 +244,21 @@ describe("InventoryService", () => {
             pathId: 'test-path-456',
             sourceMeta: expect.any(Object),
             targetMeta: expect.any(Object),
+            inode: 0,
+            isDeleted: false
         });
+    });
+
+    it('should handle Windows-style paths', () => {
+      const file = createMockItemInfo({
+        fileName: '\\mnt\\C:\\Users\\test\\file.txt'
+      });
+
+      const result = service.mapSourceToTarget(file, jobRunId, pathId);
+
+      expect(result.path).toBe('\\mnt\\C:\\Users\\test\\file.txt');
+      expect(result.fileName).toBe('file.txt');
+      expect(result.parentPath).toBe('\\mnt\\C:\\Users\\test');
     });
 
     it('should handle file with missing metadata', () => {
@@ -257,7 +272,8 @@ describe("InventoryService", () => {
           'text',
           null, // sourceMeta is null
           null, // targetMeta is null
-          1024
+          1024,
+          0
         );
 
         const result = service.mapSourceToTarget(file, jobRunId, pathId);
@@ -333,6 +349,38 @@ describe("InventoryService", () => {
       );
       expect(loggerSpy).toHaveBeenCalledWith(
         `Failed to save 1 inventory records`
+      );
+    });
+
+    it("should populate file_type as Junction when fileType is Junction", async () => {
+      const data = [
+      createMockItemInfo({ fileName: '/junction/path', fileType: FileType.JUNCTION }),
+      ];
+      const mappedData = {
+      path: "/junction/path",
+      jobRunId: "jobRunId",
+      pathId: "pathId",
+      fileName: "/junction/path",
+      isDirectory: false,
+      fileSize: "1024",
+      fileType: FileType.JUNCTION,
+      };
+
+      jest.spyOn(service, "mapSourceToTarget").mockReturnValue(mappedData);
+      inventoryRepo.upsert.mockResolvedValue({ identifiers: [{ id: 1 }] } as any);
+
+      await service.createInventory(data, "jobRunId", "pathId");
+
+      expect(service.mapSourceToTarget).toHaveBeenCalledWith(
+      data[0],
+      "jobRunId",
+      "pathId"
+      );
+      expect(inventoryRepo.upsert).toHaveBeenCalledWith(
+      expect.arrayContaining([
+      expect.objectContaining({ fileType: FileType.JUNCTION }),
+      ]),
+      ['path', 'jobRunId', 'isDirectory']
       );
     });
 

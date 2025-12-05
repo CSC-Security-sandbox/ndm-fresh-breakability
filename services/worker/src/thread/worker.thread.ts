@@ -1,7 +1,10 @@
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
+import { createDirectory } from "../activities/utils/directory.utils";
+import { E8Dot3CollisionError } from "../errors/errors.types";
 import { WorkerThreadInput, WorkerThreadOutput } from "./worker.thread.type";
+import { WINDOWS } from "../config/app.config";
 const { parentPort, workerData } = require('worker_threads');
 
 console.log(`Worker Thread - Starting Worker Thread  ${workerData?.threadNumber} for operationBand: ${workerData?.operationBand}`); 
@@ -32,22 +35,60 @@ function getOptimalBufferSize(fileSize: number, maxBufferSize: number): number {
   return maxBufferSize;
 }
 
+/**
+ * Determines the appropriate write stream flags for a Windows tilde file.
+ * Checks if file exists to prevent EEXIST errors on 8.3 short name files.
+ * 
+ * @param target - The target file path (must be a Windows tilde file)
+ * @returns 'w' if file exists (overwrite), 'wx' if file doesn't exist (exclusive creation)
+ */
+async function getWriteStreamFlags(target: string): Promise<string> {
+  if (process.platform === WINDOWS && path.basename(target).includes('~')) {
+      try {
+        // If realpath succeeds, file exists - use 'w' flag to overwrite
+        await fs.promises.realpath(target);
+        return 'w';
+      } catch (error) {
+        // If realpath fails with ENOENT or EBADF, file doesn't exist - use 'wx' flag for exclusive creation
+        if (error.code === 'ENOENT' || error.code === 'EBADF') {
+          return 'wx';
+        }
+        // Other errors should propagate
+        throw error;
+      }
+  }
+  else {
+    return 'w';
+  }
+}
+
 export async function smartCopy(source:string, target:string, filesize:number, maxBufferSize :number) {
-  const destDir = path.dirname(target);  
-  await fs.promises.mkdir(destDir, { recursive: true });
   let readStream: fs.ReadStream = null; 
   let writeStream: fs.WriteStream = null; 
-  try{    
+  
+  try {    
     const bufferSize = getOptimalBufferSize(filesize, maxBufferSize);
 
+    // First verify source file exists and is readable
     try {
       await fs.promises.access(source, fs.constants.R_OK);
     } catch {
       throw new Error(`Source file ${source} does not exist or is not readable`);
     }
 
+    // Get destination directory and ensure it exists with collision detection
+    const destDir = path.dirname(target);
+    
+    // Create destination directory with collision detection
+    await createDirectory(destDir);
+
+    //Read Stream from Source
     readStream = fs.createReadStream(source, { highWaterMark: bufferSize });
-    writeStream = fs.createWriteStream(target, { flags: 'w', highWaterMark: bufferSize });
+
+    // Determine appropriate write flags (handles 8.3 collision prevention for Windows tilde files)
+    let flag = await getWriteStreamFlags(target);
+    
+    writeStream = fs.createWriteStream(target, { flags: flag, highWaterMark: bufferSize });
     let hash = crypto.createHash('sha256');
 
     const sourceCheckSum  = await new Promise((resolve, reject) => {
@@ -65,11 +106,16 @@ export async function smartCopy(source:string, target:string, filesize:number, m
         }
       });
 
-      writeStream.on('error', (err) => {
+      writeStream.on('error', (err: any) => {
         if (!errored) {
           errored = true;
           console.error(`Worker Thread - ${workerData?.threadNumber} - Error writing to target file:`, err);
-          reject(err);
+          // EEXIST on tilde files indicates 8.3 collision 
+          if (err.code === 'EEXIST' && process.platform === WINDOWS && target.includes('~')) {
+            reject(new E8Dot3CollisionError(target));
+          } else {
+            reject(err);
+          }
         }
       });
 
@@ -82,6 +128,7 @@ export async function smartCopy(source:string, target:string, filesize:number, m
     });
 
     const targetCheckSum = await calculateChecksum(target);
+    
     return {sourceChecksum: sourceCheckSum, targetChecksum: targetCheckSum};
   }catch(error){
     console.error(`Worker Thread - ${workerData?.threadNumber} - Error during smartCopy from ${source} to ${target}:`, error);
@@ -94,7 +141,7 @@ export async function smartCopy(source:string, target:string, filesize:number, m
       writeStream.destroy();
     }
   }
-  }
+}
 
 
 parentPort.on('message', async (tasks: WorkerThreadInput[]) => {

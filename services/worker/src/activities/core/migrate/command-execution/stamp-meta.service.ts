@@ -42,17 +42,10 @@ export class StampMetaService {
                 output.sourceErrors.push(...aclStampOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
                 output.targetErrors.push(...aclStampOutput.targetErrors, ...preserveTimeOutput.targetErrors);
 
-
                 // Stamp access and modified time
                 const timeOutput = await this.stampAccessAndModifiedTime(input);
                 output.sourceErrors.push(...timeOutput.sourceErrors);
                 output.targetErrors.push(...timeOutput.targetErrors);
-
-                // Stamp permissions
-                const permissionsOutput = await this.stampPermission(input);
-                output.sourceErrors.push(...permissionsOutput.sourceErrors);
-                output.targetErrors.push(...permissionsOutput.targetErrors);
-
             }
             else {
 
@@ -90,7 +83,7 @@ export class StampMetaService {
 
     async stampPermission({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
-        if (command.metadata?.mode) {
+        if (command.metadata?.mode && !command?.metadata?.isSymLink) {
             try {
                 await fs.promises.chmod(targetPath, command.metadata.mode);
             } catch (error) {
@@ -118,8 +111,13 @@ export class StampMetaService {
                     gid = gid_res;
                     uid = uid_res;
                 }
-                if (gid && uid)
-                    await fs.promises.chown(targetPath, parseInt(uid), parseInt(gid));
+                if (gid && uid){
+                    if(command?.metadata?.isSymLink){
+                        await fs.promises.lchown(targetPath, parseInt(uid), parseInt(gid));
+                    }else{
+                        await fs.promises.chown(targetPath, parseInt(uid), parseInt(gid));
+                    }   
+                }                 
             } catch (error) {
                 this.logger.error(`Stamping GID and UID from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
@@ -134,7 +132,11 @@ export class StampMetaService {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         if (command.metadata.mtime && command.metadata.atime) {
             try {
-                await fs.promises.utimes(targetPath, new Date(command.metadata.atime), new Date(command.metadata.mtime));
+                if (command?.metadata?.isSymLink) {
+                    await fs.promises.lutimes(targetPath, new Date(command.metadata.atime), new Date(command.metadata.mtime));
+                } else {
+                    await fs.promises.utimes(targetPath, new Date(command.metadata.atime), new Date(command.metadata.mtime));
+                }
             } catch (error) {
                 this.logger.error(`Stamping Access and Modified Time  to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_TIME, errorType, command.id, error, { name: command.fPath, path: targetPath });

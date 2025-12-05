@@ -192,7 +192,25 @@ describe('JobRunInitService', () => {
 
       expect(result).toEqual(jobs);
       expect(jobConfigRepo.find).toHaveBeenCalledWith({
-        select: { id: true },
+        select: { 
+          id: true, 
+          sourcePathId: true, 
+          targetPathId: true,
+          sourcePath: {
+            fileServer: {
+              config: {
+                projectId: true
+              }
+            }
+          }
+        },
+        relations: {
+          sourcePath: {
+            fileServer: {
+              config: true
+            }
+          }
+        },
         where: {
           status: 'ACTIVE',
           scheduler: ScheduleStatus.SCHEDULING,
@@ -447,7 +465,7 @@ describe('JobRunInitService', () => {
       },
       { status: JS.InActive }
     );
-    expect(service.startStreamConsumer).toHaveBeenCalledWith(jobRunId);
+    expect(service.startStreamConsumer).toHaveBeenCalledWith(jobRunId, undefined);
   });
 
   it('should start MIGRATE workflow (default case) and update jobRunRepo', async () => {
@@ -471,7 +489,7 @@ describe('JobRunInitService', () => {
         ],
       })
     );
-    expect(service.startStreamConsumer).toHaveBeenCalledWith(jobRunId);
+    expect(service.startStreamConsumer).toHaveBeenCalledWith(jobRunId, undefined);
   });
 });
   describe('buildJobContext', () => {
@@ -747,7 +765,8 @@ describe('startStreamConsumer', () => {
 
     expect(axios.post).toHaveBeenCalledWith(
       `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
-      { jobRunId }
+      { jobRunId },
+      { headers: { projectId: undefined, trackId: jobRunId } }
     );
     expect(axios.post).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ success: false, message: 'Consumer started' });
@@ -776,7 +795,8 @@ describe('startStreamConsumer', () => {
 
     expect(axios.post).toHaveBeenCalledWith(
       `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
-      { jobRunId }
+      { jobRunId },
+      { headers: { projectId: undefined, trackId: jobRunId } }
     );
     expect(result).toEqual({
       success: true,
@@ -794,7 +814,8 @@ describe('startStreamConsumer', () => {
 
     expect(axios.post).toHaveBeenCalledWith(
       `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
-      { jobRunId }
+      { jobRunId },
+      { headers: { projectId: undefined, trackId: jobRunId } }
     );
     // When there's a network error, only 1 call is made before going to catch block
     expect(axios.post).toHaveBeenCalledTimes(1);
@@ -810,7 +831,8 @@ describe('startStreamConsumer', () => {
 
     expect(axios.post).toHaveBeenCalledWith(
       `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
-      { jobRunId }
+      { jobRunId },
+      { headers: { projectId: undefined, trackId: jobRunId } }
     );
     // Initial call + 3 retries = 4 total calls
     expect(axios.post).toHaveBeenCalledTimes(4);
@@ -1020,93 +1042,7 @@ describe("buildJobContext", () => {
       // Should handle null fileServer gracefully
       expect(result.workers).toEqual([]);
     });
-    
-    it('should set skipDelete to false when futureScheduleAt is not null', async () => {
-      const jobConfigId = 'jobConfigId';
-      const healthStatsTimeout = 60;
-      const mockJobConfig = {
-        id: jobConfigId,
-        jobType: JobType.DISCOVER,
-        preserveAccessTime: true,
-        excludeFilePatterns: '*.tmp',
-        excludeOlderThan: new Date(),
-        futureScheduleAt: '0 0 * * * *', // futureScheduleAt is not null
-        sourcePath: {
-          id: 'sourcePathId',
-          volumePath: '/source/path',
-          fileServer: {
-            protocol: Protocol.NFS,
-            userName: 'user',
-            password: 'pass',
-            host: 'host',
-            config: { configName: 'sourceConfig' },
-            workers: [
-              { 
-                workerId: 'worker1', 
-                stats: { 
-                  healthStatus: 'Healthy', 
-                  updatedAt: new Date() 
-                } 
-              }
-            ]
-          }
-        },
-        targetPath: null
-      };
 
-      jest.spyOn(configService, 'get').mockReturnValue(healthStatsTimeout.toString());
-      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
-
-      const result = await service.getJobConfig(jobConfigId);
-
-      expect(result).toBeDefined();
-      // skipDelete should be false when futureScheduleAt is not null
-      expect(result.skipDelete).toBe(false);
-    });
-    
-    it('should set skipDelete to false for CUT_OVER job type', async () => {
-      const jobConfigId = 'jobConfigId';
-      const healthStatsTimeout = 60;
-      const mockJobConfig = {
-        id: jobConfigId,
-        jobType: JobType.CUT_OVER, // CUT_OVER job type
-        preserveAccessTime: true,
-        excludeFilePatterns: '*.tmp',
-        excludeOlderThan: new Date(),
-        futureScheduleAt: null, // futureScheduleAt is null
-        sourcePath: {
-          id: 'sourcePathId',
-          volumePath: '/source/path',
-          fileServer: {
-            protocol: Protocol.NFS,
-            userName: 'user',
-            password: 'pass',
-            host: 'host',
-            config: { configName: 'sourceConfig' },
-            workers: [
-              { 
-                workerId: 'worker1', 
-                stats: { 
-                  healthStatus: 'Healthy', 
-                  updatedAt: new Date() 
-                } 
-              }
-            ]
-          }
-        },
-        targetPath: null
-      };
-
-      jest.spyOn(configService, 'get').mockReturnValue(healthStatsTimeout.toString());
-      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
-
-      const result = await service.getJobConfig(jobConfigId);
-
-      expect(result).toBeDefined();
-      // skipDelete should be false for CUT_OVER job type
-      expect(result.skipDelete).toBe(false);
-    });
-    
     it('should return empty workers array when there are no common workers between source and target', async () => {
       const jobConfigId = 'jobConfigId';
       const healthStatsTimeout = 60;
@@ -1631,7 +1567,7 @@ describe('createJobRun', () => {
         const result = await service.scheduleAJob();
 
         expect(result).toEqual([jobs[1]]);
-        expect(service.createJobRun).toHaveBeenCalledWith('job2', expect.any(Date));
+        expect(service.createJobRun).toHaveBeenCalledWith('job2', expect.any(Date), undefined);
       });
     });
 

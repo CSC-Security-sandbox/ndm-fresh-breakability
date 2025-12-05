@@ -107,7 +107,11 @@ var _ = Describe("RTC-003: Test discovery with single worker and restart the wor
 
 		AfterEach(func() {
 			By("Cleanup started.")
-			err := CleanupTestEnv()
+			
+			err := StopAllWorkersAndWait()
+			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
+
+			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")
 			LogDebug("Cleanup complete.")
 		})

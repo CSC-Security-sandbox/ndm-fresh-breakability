@@ -16,6 +16,7 @@ import {
 } from "@netapp-cloud-datamigrate/auth-lib";
 import { ConfigService } from "@nestjs/config";
 import { serializeJobRunDetailsResponse } from "./dto/job-rundetails.dto";
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 // Mock the serialization function
 jest.mock("./dto/job-rundetails.dto", () => ({
@@ -27,7 +28,7 @@ describe("JobRunController", () => {
   let controller: JobRunController;
   let jobRunService: jest.Mocked<JobRunService>;
   let errorLogService: jest.Mocked<ErrorLogService>;
-  let logger: jest.Mocked<Logger>;
+  let mockLogger: any;
 
   beforeEach(async () => {
     const mockJobRunService = {
@@ -43,7 +44,7 @@ describe("JobRunController", () => {
       isCsvFileReady: jest.fn(),
     };
 
-    const mockLogger = {
+    mockLogger = {
       debug: jest.fn(),
       log: jest.fn(),
       error: jest.fn(),
@@ -76,7 +77,12 @@ describe("JobRunController", () => {
       providers: [
         { provide: JobRunService, useValue: mockJobRunService },
         { provide: ErrorLogService, useValue: mockErrorLogService },
-        { provide: Logger, useValue: mockLogger },
+        {
+          provide: LoggerFactory,
+          useValue: {
+            create: jest.fn().mockReturnValue(mockLogger),
+          },
+        },
         { provide: Reflector, useValue: {} },
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
@@ -91,7 +97,6 @@ describe("JobRunController", () => {
     controller = module.get<JobRunController>(JobRunController);
     jobRunService = module.get(JobRunService);
     errorLogService = module.get(ErrorLogService);
-    logger = module.get(Logger);
   });
 
   afterEach(() => {
@@ -662,7 +667,7 @@ describe("JobRunController", () => {
       const result = await controller.getCocReportByJobRunId("");
 
       expect(result.message).toBe("COC report generation started for JobRunId: ");
-      expect(logger.debug).toHaveBeenCalledWith(
+      expect(mockLogger.debug).toHaveBeenCalledWith(
         "Fetching COC report for JobRunId: "
       );
     });
@@ -674,7 +679,7 @@ describe("JobRunController", () => {
       const result = await controller.getCocReportByJobRunId(undefined);
 
       expect(result.message).toBe("COC report generation started for JobRunId: undefined");
-      expect(logger.debug).toHaveBeenCalledWith(
+      expect(mockLogger.debug).toHaveBeenCalledWith(
         "Fetching COC report for JobRunId: undefined"
       );
     });
@@ -687,7 +692,7 @@ describe("JobRunController", () => {
       const result = await controller.getCocReportByJobRunId(specialJobRunId);
 
       expect(result.message).toBe("COC report generation started for JobRunId: " + specialJobRunId);
-      expect(logger.debug).toHaveBeenCalledWith(
+      expect(mockLogger.debug).toHaveBeenCalledWith(
         `Fetching COC report for JobRunId: ${specialJobRunId}`
       );
     });
@@ -700,7 +705,7 @@ describe("JobRunController", () => {
       const result = await controller.getCocReportByJobRunId(longJobRunId);
 
       expect(result).toBeDefined();
-      expect(logger.debug).toHaveBeenCalledWith(
+      expect(mockLogger.debug).toHaveBeenCalledWith(
         `Fetching COC report for JobRunId: ${longJobRunId}`
       );
     });
@@ -750,7 +755,7 @@ describe("JobRunController", () => {
     it("should have all required dependencies injected", () => {
       expect(jobRunService).toBeDefined();
       expect(errorLogService).toBeDefined();
-      expect(logger).toBeDefined();
+      expect(mockLogger).toBeDefined();
     });
 
     it("should have correct method signatures", () => {

@@ -4,6 +4,17 @@ import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { createClient, RedisClientType } from 'redis';
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
+import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
+import { AuthService } from 'src/auth/auth.service';
+import { firstValueFrom } from 'rxjs';
+
+export interface RedisCredentials {
+  host: string;
+  username: string;
+  password: string;
+}
+
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private client: RedisClientType;
@@ -11,12 +22,26 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   constructor (
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    @Inject(ConfigService) private readonly configService: ConfigService,
+    @Inject(HttpService) private readonly httpService: HttpService,
+    @Inject(AuthService) private readonly authService: AuthService,
   ) {
     this.logger = loggerFactory.create(RedisService.name);
   }
 
   async onModuleInit(): Promise<void> {
-    await this.createClient();
+    try {
+      this.logger.log('Initializing Redis service...');
+      
+      await this.fetchAndUpdateRedisCredentials();
+      
+      await this.createClient();
+      
+      this.logger.log('Redis service initialized successfully');
+    } catch (error) {
+      this.logger.error(`Failed to initialize Redis service: ${error.message}`);
+      throw error;
+    }
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -24,6 +49,80 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       await this.client.quit();
       this.logger.log('Redis client disconnected');
     }
+  }
+
+  private async fetchRedisCredentials(): Promise<RedisCredentials> {
+    const workerConfigUrl = this.configService.get('worker.connection.workerConfigUrl');
+    const workerId = this.configService.get('worker.workerId');
+
+    this.logger.debug('=== Starting Redis credentials fetch ===');
+    this.logger.debug(`Worker ID: ${workerId}`);
+
+    try {
+      // Get access token
+      const accessToken = await this.authService.getAccessToken();
+      if (!accessToken) {
+        throw new Error('Failed to get access token');
+      }
+
+      // Fetch Redis credentials from API
+      const response = await firstValueFrom(
+        this.httpService.get(
+          `${workerConfigUrl}/api/v1/secrets/redis`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 10000,
+          },
+        ),
+      );
+
+      if (response.status !== 200) {
+        throw new Error(`Failed to fetch Redis credentials. Status: ${response.status}`);
+      }
+
+      // Parse Redis credentials
+      const data = response.data?.data?.items;
+      if (!data?.host || !data?.username || !data?.password) {
+        throw new Error('Incomplete Redis credentials received from API');
+      }
+
+      const redisCredentials: RedisCredentials = {
+        host: data.host,
+        username: data.username,
+        password: data.password,
+      };
+
+      this.logger.log('Redis credentials fetched successfully:');
+      this.logger.debug(`  Host: ${redisCredentials.host}`);
+      this.logger.debug(`  Username: ${redisCredentials.username}`);
+      this.logger.debug(`  Password length: ${redisCredentials.password.length}`);
+
+      return redisCredentials;
+
+    } catch (error) {
+      this.logger.error(`Failed to fetch Redis credentials: ${error.message}`);
+      throw new Error(`Redis credentials are required for worker operation: ${error.message}`);
+    }
+  }
+
+  private updateRedisConfig(credentials: RedisCredentials): void {
+    if (!credentials) {
+      throw new Error('Redis credentials not available');
+    }
+
+    // Update environment variables with Redis credentials
+    process.env.REDIS_USERNAME = credentials.username;
+    process.env.REDIS_PASSWORD = credentials.password;
+
+    this.logger.log('Redis configuration updated successfully');
+  }
+
+  private async fetchAndUpdateRedisCredentials(): Promise<void> {
+    const credentials = await this.fetchRedisCredentials();
+    this.updateRedisConfig(credentials);
   }
 
   async createClient(): Promise<void> {

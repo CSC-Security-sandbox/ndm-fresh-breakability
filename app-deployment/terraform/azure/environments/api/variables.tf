@@ -115,6 +115,12 @@ variable "worker_vm_size" {
   default     = "Standard_D4s_v4"
 }
 
+variable "windows_worker_vm_size" {
+  description = "The VM size for windows worker nodes"
+  type = string
+  default = "Standard_D16s_v4"
+}
+
 variable "control_plane_vm_size" {
   description = "The VM size for control plane"
   type        = string

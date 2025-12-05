@@ -48,7 +48,7 @@ import { In, LessThan, Repository } from "typeorm";
 import { v4 as uuid4 } from "uuid";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import { JobRunConfig } from "./jobrun.types";
-import { getWorkflowId } from "./jobrun.utli";
+import { getWorkflowId } from "./jobrun.util";
 
 @Injectable()
 export class JobRunInitService {
@@ -89,7 +89,25 @@ export class JobRunInitService {
   async scheduleAJob() {
     const currentTime = new Date();
     const jobs: JobConfigEntity[] = await this.jobConfigRepo.find({
-      select: { id: true },
+      select: { 
+        id: true, 
+        sourcePathId: true, 
+        targetPathId: true,
+        sourcePath: {
+          fileServer: {
+            config: {
+              projectId: true
+            }
+          }
+        }
+      },
+      relations: {
+        sourcePath: {
+          fileServer: {
+            config: true
+          }
+        }
+      },
       where: {
         status: JobStatus.Active,
         scheduler: ScheduleStatus.SCHEDULING,
@@ -107,7 +125,8 @@ export class JobRunInitService {
         ],
       });
       if (alreadyExists.length === 0) {
-        await this.createJobRun(job.id, currentTime);
+        const projectId = job.sourcePath?.fileServer?.config?.projectId;
+        await this.createJobRun(job.id, currentTime, projectId);
         scheduledJobs.push(job);
       } else {
         this.logger.warn(
@@ -119,7 +138,7 @@ export class JobRunInitService {
   }
 
   // ------------------ Create job run  -------------------- //
-  async createJobRun(jobConfigId: string, currentTime: Date) {
+  async createJobRun(jobConfigId: string, currentTime: Date, projectId?: string) {
     // TODO: job config is fetched from here
     const details: JobRunConfig = await this.getJobConfig(jobConfigId);
 
@@ -171,7 +190,7 @@ export class JobRunInitService {
         options: options,
       });
       await this.buildJobContext(jobRun.id, details);
-      await this.initiateWorkflow(jobRun.id, details);
+      await this.initiateWorkflow(jobRun.id, details, projectId);
       jobRun.workFlowId = getWorkflowId(jobRun.id, details.jobType);
       return await this.jobRunRepo.save(jobRun);
     } catch (error) {
@@ -239,8 +258,8 @@ export class JobRunInitService {
     }
     const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
     const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
-    // skip if job Is migration and futureScheduleAt is not set or empty
-    const skipDelete : boolean = jobConfig?.jobType === JobType.MIGRATE && (!jobConfig?.futureScheduleAt || jobConfig?.futureScheduleAt === "")
+    // We always set 'skip delete' to false, as we want the baseline and incremental migrations to mirror the source exactly.
+    const skipDelete : boolean = false
     const details: JobRunConfig = {
       id: jobConfig.id,
       preserveAccessTime: jobConfig.preserveAccessTime,
@@ -354,7 +373,7 @@ export class JobRunInitService {
     return mergedResults;
   }
   // ------------------ InitiateWorkflow -------------------- //
-  async initiateWorkflow(jobRunId: string, jobRunConfig: JobRunConfig) {
+  async initiateWorkflow(jobRunId: string, jobRunConfig: JobRunConfig, projectId?: string) {
 
     const options = new Options();
     options.workflowExecutionTimeout = "120s";
@@ -439,7 +458,7 @@ export class JobRunInitService {
         break;
       }
     }
-    await this.startStreamConsumer(jobRunId);
+    await this.startStreamConsumer(jobRunId, projectId);
   }
   // TODO deprecated, remove later
   // ------------------ BuildJobContext for SpeedTest -------------------- //
@@ -594,7 +613,7 @@ export class JobRunInitService {
 
 
   // ------------------ StartStreamConsumer -------------------- //
-  async startStreamConsumer(jobRunId: string) {
+  async startStreamConsumer(jobRunId: string, projectId?: string) {
     this.logger.log("Starting Stream Consumer for jobRunId:", jobRunId);
     try {
       const START_CONSUMER_URL = this.configService.get<string>(
@@ -603,6 +622,12 @@ export class JobRunInitService {
       let response = await axios.post(
         `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
         { jobRunId },
+        { 
+          headers: { 
+            'projectId': projectId,
+            'trackId': jobRunId,
+          } 
+        }
       );
 
       let count = 0;
@@ -611,6 +636,12 @@ export class JobRunInitService {
         response = await axios.post(
           `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
           { jobRunId },
+          { 
+            headers: { 
+              'projectId': projectId,
+              'trackId': jobRunId,
+            } 
+          }
         );
 
         this.logger.log(`Retry attempt ${count + 1} for ${jobRunId}:`, {

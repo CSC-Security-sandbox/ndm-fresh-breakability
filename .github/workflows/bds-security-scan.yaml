@@ -3,17 +3,26 @@ name: BDS Security Scan
 on:
   schedule:
     - cron: "30 18 * * *"
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to scan'
+        required: false
+        default: 'main'
+        type: string
+      version_name:
+        description: 'Version name for Black Duck'
+        required: false
+        default: 'ndm_main'
+        type: string
 
 permissions:
   contents: read
 
 env:
   BLACKDUCK_URL: https://blackduck.eng.netapp.com
-  PROJECT_NAME: NetApp Data Migrator
-  VERSION_NAME: 25.08_preview
+  PROJECT_NAME: NetApp Data Migrator Scans
+  VERSION_NAME: ${{ github.event.inputs.version_name || 'ndm_main' }}
   BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
   GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
   NODE_VERSION: 22.15.0
@@ -30,6 +39,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          ref: ${{ github.event_name == 'schedule' && 'main' || github.event.inputs.branch || github.ref }}
           fetch-depth: 0
 
       - name: Set matrix
@@ -54,34 +64,16 @@ jobs:
 
           declare -a matrix_items=()
 
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            echo "=================================================="
-            echo "Nightly scan - including all services"
-            echo "=================================================="
-            # For nightly scans, include all services
-            for service in "${ALL_SERVICES[@]}"; do
-              name="${service%%:*}"
-              path="${service##*:}"
-              matrix_items+=("{\"name\":\"$name\",\"path\":\"$path\"}")
-            done
-          else
-            echo "=================================================="
-            echo "PR scan - detecting changed files..."
-            echo "=================================================="
-            CHANGED_FILES=$(git diff --name-only origin/main...HEAD)
-            echo "$CHANGED_FILES"
-
-            # For PR scans, only include changed services
-            for service in "${ALL_SERVICES[@]}"; do
-              name="${service%%:*}"
-              path="${service##*:}"
-              
-              if echo "$CHANGED_FILES" | grep -q "^$path/"; then
-                echo "Found changes in: $name ($path)"
-                matrix_items+=("{\"name\":\"$name\",\"path\":\"$path\"}")
-              fi
-            done
-          fi
+          echo "=================================================="
+          echo "Full scan - including all services"
+          echo "Event: ${{ github.event_name }}"
+          echo "=================================================="
+          # For scheduled and manual scans, include all services
+          for service in "${ALL_SERVICES[@]}"; do
+            name="${service%%:*}"
+            path="${service##*:}"
+            matrix_items+=("{\"name\":\"$name\",\"path\":\"$path\"}")
+          done
 
           if [ ${#matrix_items[@]} -eq 0 ]; then
             echo "matrix={\"include\":[]}" >> $GITHUB_OUTPUT
@@ -105,6 +97,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'main' || github.event.inputs.branch || github.ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020

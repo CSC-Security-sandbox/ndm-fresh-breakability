@@ -7,12 +7,55 @@ set -e  # Exit on any error
 # run_tests <test_type> <test_path> <environment> [protocol_type] [timeout]
 #
 # Arguments:
-#   test_type      : Mandatory (eg., regression, smoke, end-to-end)
-#   test_path      : Mandatory (path to test directory)
-#   environment    : Mandatory (eg., Azure, vSphere, GCP)
-#   protocol_type  : Optional (default: "NFS")
-#   timeout        : Optional (default: "3h")
+#   test_type      : Mandatory (eg., regression, smoke, end-to-end)
+#   test_path      : Mandatory (path to test directory)
+#   environment    : Mandatory (eg., Azure, vSphere, GCP)
+#   protocol_type  : Optional (default: "NFS")
+#   timeout        : Optional (default: "3h")
+#
+# Script Arguments (optional):
+#   --smoke         : Run only smoke tests
+#   --e2e           : Run only end-to-end tests  
+#   --regression    : Run only regression tests
+#   (If no flags provided, runs all test types)
 # -------------------------------------------
+
+# Parse command line arguments for selective test execution
+RUN_SMOKE=false
+RUN_E2E=false
+RUN_REGRESSION=false
+RUN_ALL=true
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --smoke)
+            RUN_SMOKE=true
+            RUN_ALL=false
+            shift
+            ;;
+        --e2e)
+            RUN_E2E=true
+            RUN_ALL=false
+            shift
+            ;;
+        --regression)
+            RUN_REGRESSION=true
+            RUN_ALL=false
+            shift
+            ;;
+        *)
+            # Unknown option, ignore and continue
+            shift
+            ;;
+    esac
+done
+
+# If no specific flags provided, run all tests
+if [[ "$RUN_ALL" == true ]]; then
+    RUN_SMOKE=true
+    RUN_E2E=true
+    RUN_REGRESSION=true
+fi
 
 # Function to run tests and log output
 run_tests() {
@@ -93,13 +136,22 @@ run_tests() {
 # Test runs
 
 #Smoke Testing
-run_tests "smoke" "./tests/smoke" "Azure" "NFS"
+if [[ "$RUN_SMOKE" == true ]]; then
+    echo "Running NFS Smoke Tests..."
+    run_tests "smoke" "./tests/smoke" "Azure" "NFS"
+fi
 
 #End-to-End Testing
-run_tests "end-to-end" "./tests/e2e" "Azure" "NFS"
+if [[ "$RUN_E2E" == true ]]; then
+    echo "Running NFS End-to-End Tests..."
+    run_tests "end-to-end" "./tests/e2e" "Azure" "NFS"
+fi
 
 #Regression Testing
-run_tests "regression" "./tests/regression" "Azure" "NFS"
+if [[ "$RUN_REGRESSION" == true ]]; then
+    echo "Running NFS Regression Tests..."
+    run_tests "regression" "./tests/regression" "Azure" "NFS"
+fi
 
 
 #Download-Error-Report-Regression Testing
@@ -111,3 +163,4 @@ run_tests "regression" "./tests/regression" "Azure" "NFS"
 
 
 #read -p "Test execution complete. Press [Enter] key to exit..."
+
