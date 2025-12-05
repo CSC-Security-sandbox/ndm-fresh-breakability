@@ -29,7 +29,6 @@
     "formik": "^2.4.6",
     "nanoid": "^3.3.11",
     "nprogress": "^0.2.0",
-    "oidc-client": "^1.11.5",
     "path": "^0.12.7",
     "prismjs": "^1.30.0",
     "react": "^18.0.0",
