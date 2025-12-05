@@ -39,7 +39,7 @@ import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { JobRunStats } from "./dto/jobstats";
 import { JobRunInitService } from "./jobrun.init.service";
 import { SuccessEmailType } from "src/utils/send-email.type";
-import { getErrorDisplayMessage } from "./jobrun.utli";
+import { getErrorDisplayMessage } from "./jobrun.util";
 import { WorkFlowFailureReason } from "./jobrun.types";
 import {
   LoggerFactory,

@@ -2672,7 +2672,7 @@ describe("JobRunService", () => {
         jobRunId: "job123",
         errorType: ErrorType.FATAL_ERROR,
       };
-      const mockData = [{ id: '1', errorType: 'FATAL_ERROR', occurrence: '2' }];
+      const mockData = [{ id: '1', errorType: 'FATAL_ERROR', occurrence: '2', errorMessage: "err_msg", errorCode: 'E1' }];
       const mockTotal = { total: '1' };
       const setupFailedErrors = [
         {
@@ -2710,13 +2710,13 @@ describe("JobRunService", () => {
             errorType: "FATAL_ERROR",
             referenceCommands: "cmd",
             resolutionSteps: "steps",
-            displayMessage: "desc"
+            displayMessage: "err_msg"
           }),
           expect.objectContaining({
             errorType: "FATAL_ERROR",
             errorCode: "SETUP_WORKER_FAILURE",
             createdAt: "2024-01-01",
-            displayMessage: "desc",
+            displayMessage: "fail",
             errorMessage: "fail",
             occurrence: 1,
             operationType: "Setup",

@@ -48,7 +48,7 @@ import { In, LessThan, Repository } from "typeorm";
 import { v4 as uuid4 } from "uuid";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import { JobRunConfig } from "./jobrun.types";
-import { getWorkflowId } from "./jobrun.utli";
+import { getWorkflowId } from "./jobrun.util";
 
 @Injectable()
 export class JobRunInitService {
