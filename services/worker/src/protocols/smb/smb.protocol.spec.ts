@@ -683,7 +683,9 @@ describe('SMBProtocol', () => {
 
           it('should throw error when privilege enablement fails', async () => {
             const mockPrivilegeService = {
-              enableBackupPrivileges: jest.fn().mockResolvedValue(false),
+              enableBackupPrivileges: jest.fn().mockRejectedValue(
+                new Error('Failed to enable backup privileges. This usually means the user account needs to be added to the "Backup Operators" group or run as Administrator.')
+              ),
               logCurrentPrivileges: jest.fn().mockResolvedValue(undefined),
             };
             (smbProtocol as any).windowsPrivilegeService = mockPrivilegeService;

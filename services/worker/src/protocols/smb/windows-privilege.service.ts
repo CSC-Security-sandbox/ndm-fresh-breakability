@@ -16,16 +16,17 @@ export class WindowsPrivilegeService {
     /**
      * Enable Windows SeBackupPrivilege and SeRestorePrivilege for the current process
      * This allows bypassing file permissions when accessing SMB shares
+     * @throws Error if privileges cannot be enabled
      */
-    async enableBackupPrivileges(jobRunId: string): Promise<boolean> {
+    async enableBackupPrivileges(jobRunId: string): Promise<void> {
         if (process.platform !== 'win32') {
             this.logger.log('Not a Windows platform, skipping privilege enablement');
-            return false;
+            return;
         }
 
         if (this.privilegesEnabled) {
             this.logger.log('Backup privileges already enabled');
-            return true;
+            return;
         }
 
         this.logger.log('Enabling SeBackupPrivilege and SeRestorePrivilege...');
@@ -73,18 +74,22 @@ if ($backupResult -like "*SUCCESS*" -and $restoreResult -like "*SUCCESS*") {
             if (result.includes('OVERALL: SUCCESS')) {
                 this.privilegesEnabled = true;
                 this.logger.log('SeBackupPrivilege and SeRestorePrivilege enabled successfully in Node.js process');
-                return true;
+                return;
             } else {
-                this.logger.error('Failed to enable backup privileges - check output above for details');
-                this.logger.error('This usually means the user account needs to be added to the "Backup Operators" group or run as Administrator');
-                return false;
+                const errorMsg = 'Failed to enable backup privileges. This usually means the user account needs to be added to the "Backup Operators" group or run as Administrator. Check PowerShell output above for details.';
+                this.logger.error(errorMsg);
+                throw new Error(errorMsg);
             }
         } catch (error) {
-            this.logger.error(`Error enabling backup privileges: ${error.message}`);
+            if (error.message?.includes('Failed to enable backup privileges')) {
+                throw error;
+            }
+            
+            this.logger.error(`Error executing privilege enablement script: ${error.message}`);
             if (error.stderr) {
                 this.logger.error(`PowerShell error details: ${error.stderr}`);
             }
-            return false;
+            throw new Error(`Failed to enable Windows backup privileges: ${error.message}`);
         } finally {
             // Only attempt to delete the file if it exists
             try {
