@@ -317,11 +317,11 @@ export class CommandExecService {
             false, // isDeleted is false for copy operations
         )
 
-        await this.validateCommand({ cmd: command, item: itemInfo, jobContext, errorType});
+        await this.validateCommand({ cmd: command, item: itemInfo, jobContext, errorType,targetPath});
         await jobContext.publishToFileStream(itemInfo);
     }
 
-    async validateCommand({ cmd, item, jobContext, errorType}:ValidateCommandInput): Promise<void> {
+    async validateCommand({ cmd, item, jobContext, errorType, targetPath}:ValidateCommandInput): Promise<void> {
         let validateMisMatch : string = ""
 
         if (!cmd.metadata?.isSymLink && item.sourceMeta.checksum !== item.targetMeta.checksum) 
@@ -340,7 +340,7 @@ export class CommandExecService {
             const error = new Error(validateMisMatch);
             const dmErr = dmError( "OPERATION",
                 Origin.DESTINATION, Operation.STAMP_META,
-                errorType, cmd.id, error, {name: cmd.fPath, path: item.fileName});
+                errorType, cmd.id, error, {name: cmd.fPath, path: targetPath});
             await jobContext.publishToErrorStream(dmErr);
         }
         
