@@ -4,7 +4,10 @@ import (
 	"fmt"
 	. "ndm-api-tests/utils"
 	"net/http"
+	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -17,32 +20,53 @@ var _ = Describe("TC-SMB-PERMISSIONS-001: Test SMB default/explicit permissions 
 	})
 	var (
 		ProjectId              string
+		ProjectName            string
 		workerId1              string
 		err                    error
 		destinationVolumePath1 string
 		sourceVolumePath1      string
 		headers                map[string]string
 		attachedWorkersConfig  map[string]SSHConfig
+		clonedSourceVolumes    []string
+		clonedDestVolumes      []string
+		sourceVolumeManager    *TestVolumeManager
+		destVolumeManager      *TestVolumeManager
+		testStartTime          time.Time
 	)
 
 	Context("SMB Permissions Migration Test", func() {
 		BeforeEach(func() {
-			numberOfWorker := 1
-
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
-
-			Expect(err).To(BeNil(), "Error during test environment setup")
-			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 1), "Expected 1 worker to be attached")
+			ProjectId, ProjectName, attachedWorkersConfig, err = GetGlobalTestEnv()
+			Expect(err).To(BeNil(), "Error getting global test environment")
+			LogDebug(fmt.Sprintf("[BeforeEach] Using Project: %s (ID: %s)", ProjectName, ProjectId))
+			Expect(len(attachedWorkersConfig)).Should(BeNumerically(">=", 1), "Expected at least 1 worker to be attached")
 			workerIds := GetWorkerIds()
 			workerId1 = workerIds[0]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
 
-			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[2], DESTINATION_VOLUMES[2])
-			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[3], SOURCE_VOLUMES[3])
+			// Setup ONTAP volume cloning for parallel test execution
+			clonedSourceVolumes, clonedDestVolumes, sourceVolumeManager, destVolumeManager, err = SetupTestVolumesBeforeEach()
+			if err != nil {
+				Skip(fmt.Sprintf("Failed to setup test volumes: %v", err))
+			}
+
+			// Guarantee cleanup even on manual interrupt (Ctrl+C)
+			DeferCleanup(func() {
+				err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+				if err != nil {
+					LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
+				}
+			})
+
+			// Set volume paths using cloned volumes (index 3 for source, index 2 for dest)
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[3], clonedSourceVolumes[3])
+			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[2], clonedDestVolumes[2])
 		})
 
 		It("TC-SMB-PERMISSIONS-001: Should preserve file permissions and inheritance flags during SMB migration", func() {
+			testStartTime = time.Now()
 			By("########################## TC-SMB-PERMISSIONS-001 start ################################")
+			LogDebug(fmt.Sprintf("[TC-SMB-PERMISSIONS-001 START] Test execution started at: %s", testStartTime.Format("2006-01-02 15:04:05")))
 
 			// MERGED TEST: TC-001 + TC-004
 			// This test validates BOTH:
@@ -61,9 +85,13 @@ var _ = Describe("TC-SMB-PERMISSIONS-001: Test SMB default/explicit permissions 
 			var destinationConfigID, destinationPathID1 string
 			var sourceJobConfigIDs, migrationJobConfigIDs []string
 
+			// Generate unique ID for FileServer names
+			uniqueID := uuid.New().String()[:8]
+			protocol := strings.ToLower(string(PROTOCOL_TYPE))
+
 			By("Creating source SMB file server")
 			sourceParams := CreateServereParams{
-				ConfigName:       "source-smb-permissions-server",
+				ConfigName:       fmt.Sprintf("tc-smb-perm-001-%s-src-fs-%s", protocol, uniqueID),
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
@@ -81,7 +109,7 @@ var _ = Describe("TC-SMB-PERMISSIONS-001: Test SMB default/explicit permissions 
 			defer resp.Body.Close()
 
 			By("Getting the source file server export path ID")
-			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[3], sourceConfigID, headers)
+			sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[3], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting source export path, err : %s", err))
 
 			By("Creating files with DEFAULT inherited permissions on source SMB volume")
@@ -177,7 +205,7 @@ var _ = Describe("TC-SMB-PERMISSIONS-001: Test SMB default/explicit permissions 
 
 			By("Creating destination SMB file server")
 			destinationParams := CreateServereParams{
-				ConfigName:       "destination-smb-permissions-server",
+				ConfigName:       fmt.Sprintf("tc-smb-perm-001-%s-dest-fs-%s", protocol, uniqueID),
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
@@ -195,7 +223,7 @@ var _ = Describe("TC-SMB-PERMISSIONS-001: Test SMB default/explicit permissions 
 			defer resp.Body.Close()
 
 			By("Getting the destination file server export path ID")
-			destinationPathID1, err = GetExportPathID("destination", DESTINATION_VOLUMES[2], destinationConfigID, headers)
+			destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[2], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting destination export path, err : %s", err))
 
 			By("Creating a migration job to migrate permissions")
@@ -232,7 +260,12 @@ var _ = Describe("TC-SMB-PERMISSIONS-001: Test SMB default/explicit permissions 
 			Expect(err).NotTo(HaveOccurred(), "Migration job did not complete successfully")
 
 			By("Validating migration job report")
-			migrationResult, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../../validators/SMB-PERMISSIONS/tc_01_migration.json")
+			// Create volume replacement map for dynamic validation
+			volumeReplacementMap := map[string]string{
+				"smb_auto_perms1": clonedSourceVolumes[3], // Old SMB source vol (index 3) -> cloned name
+				"smb_auto_perms2": clonedDestVolumes[2],   // Old SMB dest vol (index 2) -> cloned name
+			}
+			migrationResult, err := ValidateReport(migrationJobRunID, JobTypeMigration, "../../validators/SMB-PERMISSIONS/tc_01_migration.json", volumeReplacementMap)
 			Expect(err).NotTo(HaveOccurred(), "Error while validating migration report")
 			By(fmt.Sprintf("Migration report validation result: %s", migrationResult))
 
@@ -339,24 +372,26 @@ var _ = Describe("TC-SMB-PERMISSIONS-001: Test SMB default/explicit permissions 
 		})
 
 		AfterEach(func() {
+			testEndTime := time.Now()
+			testDuration := testEndTime.Sub(testStartTime)
+			
 			if PROTOCOL_TYPE == ProtocolNFS {
 				LogDebug("Skipping cleanup as test was skipped for NFS protocol")
 				return
 			}
 
 			By("Cleanup started")
-			err := StopAllWorkersAndWait()
-			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
+			LogDebug(fmt.Sprintf("[AfterEach] Cleaning up for Project: %s (ID: %s)", ProjectName, ProjectId))
 
-			err = ClearVolume(sourceVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing source volume %s", sourceVolumePath1)
+			// Cleanup ONTAP cloned volumes (this removes all test data)
+			err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+			if err != nil {
+				LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
+			}
 
-			err = ClearVolume(destinationVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing destination volume %s", destinationVolumePath1)
-
-			err = CleanupTestEnv()
-			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			LogDebug("Cleanup complete.")
+			LogDebug("Cleanup completed")
+			LogDebug(fmt.Sprintf("[TC-SMB-PERMISSIONS-001 END] Test execution completed at: %s", testEndTime.Format("2006-01-02 15:04:05")))
+			LogDebug(fmt.Sprintf("[TC-SMB-PERMISSIONS-001 DURATION] Total test duration: %s", testDuration))
 		})
 	})
 })

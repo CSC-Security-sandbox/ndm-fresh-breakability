@@ -213,7 +213,7 @@ func CreateMigrationJob(params MigrationJobParams, headers map[string]string) ([
 		"firstRunAt":        params.FirstRunAt,
 		"futureRunSchedule": params.FutureRunSchedule,
 		"migrateConfigs":    migrateConfigs,
-		"sidMapping":       params.SidMapping,
+		"sidMapping":        params.SidMapping,
 		"options":           params.Options,
 	}
 
@@ -488,6 +488,10 @@ func WaitForJobState(jobRunID string, desiredJobState string, pollRetries ...int
 
 		if status == ERRORED_JOBRUN {
 			return fmt.Errorf("job %s entered ERRORED state", jobRunID)
+		}
+
+		if status == FAILED_JOBRUN {
+			return fmt.Errorf("job %s entered FAILED state", jobRunID)
 		}
 
 		if status == desiredJobState {

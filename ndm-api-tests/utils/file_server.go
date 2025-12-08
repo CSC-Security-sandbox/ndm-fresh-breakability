@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -283,11 +284,23 @@ func GetExportPathID(
 
 	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
 
+		// Refresh the file server to trigger re-discovery of volumes
+		LogDebug(fmt.Sprintf("Triggering FileServer refresh for re-discovery (attempt %d)...", attempt))
 		resp, err := SendAPIRequest(http.MethodGet, refreshURL, nil, headers)
 		if err != nil {
 			return "", fmt.Errorf("error refreshing file server: %w", err)
 		}
 		defer resp.Body.Close()
+
+		// Wait for refresh to complete - the refresh triggers an async background scan
+		// We need to wait longer on first attempt to allow full re-scan
+		if attempt == 1 {
+			LogDebug("First refresh - waiting 10 seconds for full ONTAP re-scan...")
+			time.Sleep(10 * time.Second)
+		} else {
+			LogDebug("FileServer refresh triggered, waiting for discovery scan to complete...")
+			Wait(DefaultPollInterval)
+		}
 
 		LogDebug(fmt.Sprintf("Getting Export Path ID of FileServer Volume = %s, attempt: %d", volumeName, attempt))
 		getFileServerResp, err := SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
@@ -308,9 +321,11 @@ func GetExportPathID(
 
 		// Check if fileserver and volumes exist
 		if len(response.Data.Items.FileServers) > 0 && len(response.Data.Items.FileServers[0].Volumes) > 0 {
+			LogDebug(fmt.Sprintf("Found %d volume(s) for FileServer, checking for volume '%s'", len(response.Data.Items.FileServers[0].Volumes), volumeName))
 			break
 		}
 
+		LogDebug(fmt.Sprintf("No volumes found yet for FileServer, waiting... (attempt %d/%d)", attempt, MaxPollRetries))
 		if attempt < MaxPollRetries {
 			Wait(DefaultPollInterval) // Wait before retrying
 		}
@@ -745,15 +760,22 @@ func RestoreOriginalDataOnVolume(export string) error {
 
 // GetVolumeID retrieves the ID of a volume by its path from the FileServerInfo response.
 func GetVolumeID(response FileServerDetailsItems, volumePath string) (string, error) {
+	// Try both with and without leading slash
+	volumePathWithSlash := "/" + volumePath
+	LogDebug(fmt.Sprintf("GetVolumeID: Searching for volumePath='%s' or '%s'", volumePath, volumePathWithSlash))
+
 	for _, fileServer := range response.FileServers {
 		for _, volume := range fileServer.Volumes {
-			if volume.VolumePath == volumePath {
+			// Match either exact path or path with leading slash
+			if volume.VolumePath == volumePath || volume.VolumePath == volumePathWithSlash {
+				LogDebug(fmt.Sprintf("GetVolumeID: MATCH FOUND! Returning ID='%s'", volume.ID))
 				return volume.ID, nil // Return the found ID and no error
 			}
 		}
 	}
 	// If no volume is found, return an error
-	return "", fmt.Errorf("no volume found with path '%s'", volumePath)
+	LogDebug(fmt.Sprintf("GetVolumeID: NO MATCH - searched %d fileServers", len(response.FileServers)))
+	return "", fmt.Errorf("no volume found with path '%s' or '%s'", volumePath, volumePathWithSlash)
 }
 
 // GetFileUserGroupId mounts the NFS export, stats the given file‐path

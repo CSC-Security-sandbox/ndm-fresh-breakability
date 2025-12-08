@@ -79,9 +79,11 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 
 	Context("TC-001", func() {
 		BeforeEach(func() {
+			var ProjectName string
 			numberOfWorker := 1
 			var attachedWorkersConfig map[string]SSHConfig
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+			ProjectId, ProjectName, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+			_ = ProjectName
 			Expect(err).To(BeNil(), "error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(Equal(1), "expected 1 worker to be attached")
 

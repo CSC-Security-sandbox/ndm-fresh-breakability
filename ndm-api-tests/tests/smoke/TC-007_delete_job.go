@@ -25,10 +25,12 @@ var _ = Describe("TC-007_delete_job: Test job deletion with and without active j
 
 	Context("TC-007_delete_job", func() {
 		BeforeEach(func() {
+			var ProjectName string
 			numberOfWorker := 1
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+			ProjectId, ProjectName, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 1), "Expected 1 worker to be attached")
+			_ = ProjectName
 			workerIds = GetWorkerIds()
 			workerId = workerIds[0]
 			destinationVolumePath = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])

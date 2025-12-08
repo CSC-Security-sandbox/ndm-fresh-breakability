@@ -38,7 +38,9 @@ var _ = Describe("Project Management - User functionality Tests", func() {
 			By("########################## PROJECT-MANAGEMENT-OPERATIONS start ################################")
 
 			By("Creating a new project")
-			projectId, err = CreateProject(AuthToken, AccountId)
+			var projectName string
+			projectId, projectName, err = CreateProject(AuthToken, AccountId)
+			_ = projectName
 			Expect(err).NotTo(HaveOccurred(), "Error creating project")
 			Expect(projectId).NotTo(BeEmpty(), "Project ID should be extracted successfully")
 			By("Project created successfully with ID")
@@ -110,7 +112,9 @@ var _ = Describe("Project Management - User functionality Tests", func() {
 			By("Get project by ID completed successfully for project")
 
 			By("Creating a new project")
-			projectId2, err = CreateProject(AuthToken, AccountId)
+			var projectName2 string
+			projectId2, projectName2, err = CreateProject(AuthToken, AccountId)
+			_ = projectName2
 			Expect(err).NotTo(HaveOccurred(), "Error creating second project")
 			Expect(projectId2).NotTo(BeEmpty(), "Second project ID should be extracted successfully")
 			By("Second project created successfully with ID")

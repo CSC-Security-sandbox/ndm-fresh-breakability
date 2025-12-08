@@ -27,7 +27,9 @@ var _ = Describe("Login Logout Smoke", func() {
 
 	BeforeEach(func() {
 		var err error
-		projectID, err = CreateProject(AuthToken, AccountId)
+		var projectName string
+		projectID, projectName, err = CreateProject(AuthToken, AccountId)
+		_ = projectName
 		if err != nil {
 			Fail(fmt.Sprintf("Failed to create project using utility: %v", err))
 		}

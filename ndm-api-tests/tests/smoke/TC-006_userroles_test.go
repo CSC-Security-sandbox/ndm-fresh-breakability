@@ -35,7 +35,9 @@ var _ = Describe("User Roles Smoke", func() {
 		usernames = make([]string, 5)
 		userRoleIDs = make([]string, 5)
 		for i := range 3 {
-			projectID[i], _ = CreateProject(AuthToken, AccountId)
+			var projectName string
+			projectID[i], projectName, _ = CreateProject(AuthToken, AccountId)
+			_ = projectName
 		}
 	})
 	Context("User Roles", func() {

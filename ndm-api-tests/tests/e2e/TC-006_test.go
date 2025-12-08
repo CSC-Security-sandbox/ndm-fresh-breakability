@@ -4,7 +4,10 @@ import (
 	"fmt"
 	. "ndm-api-tests/utils"
 	"net/http"
+	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -12,41 +15,66 @@ import (
 var _ = Describe("TC-006: Run bulk cutover with concurrent migration jobs - batch pause/resume and stop/restart", func() {
 	var headers map[string]string
 	var (
-		ProjectId              string
-		workerId1              string
-		workerId2              string
-		workerIds              []string
-		err                    error
-		attachedWorkersConfig  map[string]SSHConfig
-		sourceVolumePath1      string
-		destinationVolumePath1 string
-		destinationVolumePath2 string
+		ProjectId             string
+		ProjectName           string
+		workerId1             string
+		workerId2             string
+		workerIds             []string
+		err                   error
+		attachedWorkersConfig map[string]SSHConfig
+		sourceVolumePath1     string
+		clonedSourceVolumes   []string
+		clonedDestVolumes     []string
+		sourceVolumeManager   *TestVolumeManager
+		destVolumeManager     *TestVolumeManager
+		testStartTime         time.Time
 	)
 	Context("TC-006: Run bulk cutover with concurrent migration jobs - batch pause/resume and stop/restart", func() {
 		BeforeEach(func() {
-			NumberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
-			Expect(err).To(BeNil(), "Error during test environment setup")
+			// Use globally created project and workers (created once in InitTestEnv)
+			ProjectId, ProjectName, attachedWorkersConfig, err = GetGlobalTestEnv()
+			Expect(err).To(BeNil(), "Error getting global test environment")
+			LogDebug(fmt.Sprintf("[BeforeEach] Using Project: %s (ID: %s)", ProjectName, ProjectId))
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically(">", 1), "Expected at least one worker to be attached")
 			workerIds = GetWorkerIds()
 			workerId1 = workerIds[0]
 			workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
-			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
-			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[1], DESTINATION_VOLUMES[1])
-			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
+
+			// Setup ONTAP volume cloning for parallel test execution
+			clonedSourceVolumes, clonedDestVolumes, sourceVolumeManager, destVolumeManager, err = SetupTestVolumesBeforeEach()
+			if err != nil {
+				Skip(fmt.Sprintf("Failed to setup test volumes: %v", err))
+			}
+
+			// Guarantee cleanup even on manual interrupt (Ctrl+C)
+			DeferCleanup(func() {
+				err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+				if err != nil {
+					LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
+				}
+			})
+
+			// Set volume paths using THIS test's cloned volumes
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], clonedSourceVolumes[0])
 		})
 
 		It("TC-006: Run bulk cutover with concurrent migration jobs - batch pause/resume and stop/restart", func() {
+			testStartTime = time.Now()
 			By("########################## TC-006 start ################################")
+			LogDebug(fmt.Sprintf("[TC-006 START] Test execution started at: %s", testStartTime.Format("2006-01-02 15:04:05")))
 			var sourceConfigID1, sourcePathID1, sourcePathID2 string
 			var jobConfigIDs, migrationJobConfigIDs []string
 			var migrationJobRunID string
 			var destinationConfigID, destinationPathID1, destinationPathID2 string
 
+			// Generate unique ID for FileServer names
+			uniqueID := uuid.New().String()[:8]
+			protocol := strings.ToLower(string(PROTOCOL_TYPE))
+
 			By("Creating the source file server")
 			sourceParams := CreateServereParams{
-				ConfigName:       "source-file-server",
+				ConfigName:       fmt.Sprintf("tc-006-%s-src-fs-%s", protocol, uniqueID),
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
@@ -64,15 +92,15 @@ var _ = Describe("TC-006: Run bulk cutover with concurrent migration jobs - batc
 			defer resp.Body.Close()
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID1, headers)
+			sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[0], sourceConfigID1, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID1, headers)
+			sourcePathID2, err = GetExportPathID("source", clonedSourceVolumes[1], sourceConfigID1, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating the destination file server")
 			destinationParams := CreateServereParams{
-				ConfigName:       "destination-file-server",
+				ConfigName:       fmt.Sprintf("tc-006-%s-dest-fs-%s", protocol, uniqueID),
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
@@ -90,10 +118,10 @@ var _ = Describe("TC-006: Run bulk cutover with concurrent migration jobs - batc
 			defer resp.Body.Close()
 
 			By("Getting the destination file server by configId")
-			destinationPathID1, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationConfigID, headers)
+			destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[0], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
+			destinationPathID2, err = GetExportPathID("destination", clonedDestVolumes[1], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a first migration job")
@@ -235,21 +263,21 @@ var _ = Describe("TC-006: Run bulk cutover with concurrent migration jobs - batc
 		})
 
 		AfterEach(func() {
+			testEndTime := time.Now()
+			testDuration := testEndTime.Sub(testStartTime)
+			
 			By("Cleanup started")
-			err := StopAllWorkersAndWait()
-			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
-			err = RemoveDeltaFromVolume(sourceVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error while deleting delta data to %s", sourceVolumePath1)
 
-			err = ClearVolume(destinationVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
+			// Cleanup ONTAP cloned volumes (this removes all test data)
+			// Note: This is redundant with DeferCleanup in BeforeEach, but provides defense in depth
+			err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+			if err != nil {
+				LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
+			}
 
-			err = ClearVolume(destinationVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
-
-			err = CleanupTestEnv()
-			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			LogDebug("Cleanup complete.")
+			LogDebug("Cleanup completed")
+			LogDebug(fmt.Sprintf("[TC-006 END] Test execution completed at: %s", testEndTime.Format("2006-01-02 15:04:05")))
+			LogDebug(fmt.Sprintf("[TC-006 DURATION] Total test execution time: %s (%.2f minutes)", testDuration, testDuration.Minutes()))
 		})
 	})
 })

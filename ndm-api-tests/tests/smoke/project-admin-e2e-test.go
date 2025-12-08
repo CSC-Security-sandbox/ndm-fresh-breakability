@@ -38,15 +38,16 @@ var _ = Describe("Project Admin Discovery Migration Cutover Test", func() {
 
 	BeforeEach(func() {
 		headers = GetHeaders(AuthToken, ContentTypeJSON)
-		numberOfWorker := 1
-		ProjectID, attachedWorkersConfig, err := SetupTestEnv(numberOfWorker)
-		Expect(err).To(BeNil(), "Error during test environment setup")
-		Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 1), "Expected 1 worker to be attached")
-		workerIds := GetWorkerIds()
-		workerId = workerIds[0]
-		projectId = ProjectID
-		destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
-		sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
+        numberOfWorker := 1
+        ProjectID, projectName, attachedWorkersConfig, err := SetupTestEnv(numberOfWorker)
+        _ = projectName
+        Expect(err).To(BeNil(), "Error during test environment setup")
+        Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 1), "Expected 1 worker to be attached")
+        workerIds := GetWorkerIds()
+        workerId = workerIds[0]
+        projectId = ProjectID
+        destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
+        sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
 	})
 
 	AfterEach(func() {
@@ -288,6 +289,6 @@ var _ = Describe("Project Admin Discovery Migration Cutover Test", func() {
 		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 		defer resp.Body.Close()
 
-	})
-
+    })
+   
 })
