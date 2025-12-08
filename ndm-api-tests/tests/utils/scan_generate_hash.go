@@ -13,8 +13,8 @@ import (
 // Usage: go run scan_dirs.go <directory-path>"
 
 type entry struct {
-	Path string `json:"path"`
-	Hash string `json:"hash,omitempty"`
+	Path string `json:"Source Path"`
+	Hash string `json:"Destination Checksum,omitempty"`
 }
 
 const maxGoroutines = 100
