@@ -2,8 +2,9 @@ import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { ErrorType, JobManagerContext, TaskStatus } from "@netapp-cloud-datamigrate/jobs-lib";
 import { Context } from '@temporalio/activity';
-import { basePrefix, isSourceFatalError } from "src/activities/utils/utils";
+import { basePrefix, dmError, isSourceFatalError } from "src/activities/utils/utils";
 import { FatalError, RetryableError, RetryExceededError } from "src/errors/errors.types";
+import { Operation, Origin } from "src/activities/utils/utils.types";
 import { RedisService } from "src/redis/redis.service";
 import { CommonTaskService } from "../common/common-task.service";
 import { DiscoveryScanService } from "./discovery/discovery-scan.service";
@@ -85,7 +86,8 @@ export class ScanService {
             return scanActivityOutput;
 
         }catch(error){
-            if(error instanceof FatalError || error instanceof RetryExceededError) 
+            if(error instanceof FatalError) 
+            if(error instanceof FatalError) 
                 throw error;  
             //TODO: this is not requried we can just throw the error.isn't it ?     
             throw new RetryableError(error.message)
@@ -165,10 +167,32 @@ export class ScanService {
         }
 
         if (retryCount >= this.maxRetryCount) {
+            const error = new RetryExceededError(`RETRY_EXCEEDED: Task ${task.id} has exceeded maximum retry count of ${this.maxRetryCount}`);
+            
+            const dmErr = this.generateDMErr(task, jobContext, error);
+            
+            await jobContext.publishToErrorStream(dmErr);
             await jobContext.deleteTask(taskHashId);
-            throw new RetryExceededError(`Task ${task.id} has exceeded maximum retry count of ${this.maxRetryCount}`);
+            
+            return;
         }
         throw new RetryableError(`Sync Task Update Failed: ${errors.length} source errors with retry count ${retryCount} With Retryable Error`);   
+    }
+
+    private generateDMErr(task: any, jobContext: JobManagerContext, error: Error) {
+        const baseSourcePrefixPath = basePrefix(jobContext.jobRunId, task.sPathId);
+        const relativePath = task.commands && task.commands.length > 0 ? task.commands[0].fPath : '/';
+        const fullSourcePath = `${baseSourcePrefixPath}${relativePath}`;
+        
+        return dmError(
+            "OPERATION",
+            Origin.SOURCE,
+            Operation.READ_DIR,
+            ErrorType.TRANSIENT_ERROR,
+            task.commands?.[0]?.id,
+            error,
+            { name: relativePath, path: fullSourcePath }
+        );
     }
 
     async batchSubDirs({batchSize, subDirs, jobContext}: BatchSubDirInput): Promise<BatchSubDirOutput> {

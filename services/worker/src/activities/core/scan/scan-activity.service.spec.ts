@@ -21,7 +21,9 @@ const mockJobContext = {
             excludeFilePattern: 'node_modules,.git',
         },
     },
+    jobRunId: 'test-job-run-id',
     publishToTaskStream: jest.fn(),
+    publishToErrorStream: jest.fn(),
     deleteTask: jest.fn(),
     setTask: jest.fn(),
 };
@@ -148,16 +150,17 @@ describe('ScanService', () => {
             expect(mockJobContext.deleteTask).toHaveBeenCalled();
         });
 
-        it('should throw RetryExceededError if retryCount exceeded', async () => {
+        it('should publish error and delete task if retryCount exceeded', async () => {
             const task = { ...mockTask };
             jest.spyOn(require('src/activities/utils/utils'), 'isSourceFatalError').mockReturnValue(false);
-            await expect(scanService.updateAndReportTaskStatus({
+            await scanService.updateAndReportTaskStatus({
                 errors: ['err'],
                 jobContext: mockJobContext as any,
                 taskHashId: 'activity-1',
                 task,
                 retryCount: 3,
-            }as any)).rejects.toBeInstanceOf(RetryExceededError);
+            }as any);
+            expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
             expect(mockJobContext.deleteTask).toHaveBeenCalled();
         });
 
@@ -335,7 +338,7 @@ describe('ScanService', () => {
             })).rejects.toBeInstanceOf(RetryableError);
         });
 
-        it('should rethrow FatalError and RetryExceededError', async () => {
+        it('should rethrow FatalError', async () => {
             jest.spyOn(scanService, 'executeTask').mockRejectedValue(new FatalError('fatal'));
             await expect(scanService.scanDirectories({
             jobRunId: 'job-1',
@@ -343,14 +346,6 @@ describe('ScanService', () => {
             batchSize: 10,
             batchId: undefined,
             })).rejects.toBeInstanceOf(FatalError);
-
-            jest.spyOn(scanService, 'executeTask').mockRejectedValue(new RetryExceededError('retry exceeded'));
-            await expect(scanService.scanDirectories({
-            jobRunId: 'job-1',
-            isMigration: false,
-            batchSize: 10,
-            batchId: undefined,
-            })).rejects.toBeInstanceOf(RetryExceededError);
         });
         });
     });
