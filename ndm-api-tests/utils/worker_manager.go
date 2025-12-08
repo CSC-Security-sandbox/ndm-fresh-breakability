@@ -473,6 +473,18 @@ func attachWorkerForConfig(workerConfig SSHConfig, authToken, accountId, project
 		return
 	}
 
+	// First, clean up any existing worker registration
+	var cleanupScript string
+	switch PROTOCOL_TYPE {
+	case ProtocolNFS:
+		cleanupScript = GetDetachWorkerScriptForNFS(workerConfig)
+	case ProtocolSMB:
+		cleanupScript = GetDetachWorkerScriptForSMB()
+	}
+	LogDebug(fmt.Sprintf("Cleaning up existing worker registration on %s", workerConfig.Host))
+	_, _ = sshRunScript(workerConfig, cleanupScript) // Ignore errors if worker wasn't registered
+
+	// Now register the worker
 	LogDebug(fmt.Sprintf("Attaching Worker %s and running script: \n%s", workerConfig.Host, script))
 	_, err = sshRunScript(workerConfig, script)
 	if err != nil {

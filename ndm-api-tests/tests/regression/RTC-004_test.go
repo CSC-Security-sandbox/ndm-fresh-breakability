@@ -20,8 +20,10 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 	)
 	Context("RTC-004", func() {
 		BeforeEach(func() {
+			var ProjectName string
 			NumberOfWorker := 1
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
+			ProjectId, ProjectName, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
+			_ = ProjectName
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).To(Equal(1), "Expected one worker to be attached")
 			workerIds = GetWorkerIds()

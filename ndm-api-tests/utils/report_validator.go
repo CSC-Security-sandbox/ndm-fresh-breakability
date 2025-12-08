@@ -39,11 +39,18 @@ var jobFormats = map[JobType][]Format{
 // 2) validated on the user supplied json on each format.
 // Returns a map[Format][]error of any non‐fatal validation issues
 // or a fatal error if an HTTP or parsing error occurs.
+// volumeReplacements: optional map to replace volume names in JSON spec (e.g., "vol_dnd_src_automation_1" -> "clone_master_nfs_vol_s_tc001_12345")
 func ValidateReport(
 	jobRunID string,
 	jobType JobType,
 	spec string,
+	volumeReplacements ...map[string]string,
 ) (map[Format][]error, error) {
+	
+	var volReplace map[string]string
+	if len(volumeReplacements) > 0 {
+		volReplace = volumeReplacements[0]
+	}
 
 	formats, ok := jobFormats[jobType]
 	if !ok {
@@ -96,8 +103,8 @@ func ValidateReport(
 				return nil, fmt.Errorf("write temp CSV: %w", err)
 			}
 
-			// 3) validate CSV against JSON spec
-			ferr = validateCSVAgainstJSON(tmpCSV.Name(), spec)
+			// 3) validate CSV against JSON spec (with optional volume replacements)
+			ferr = validateCSVAgainstJSON(tmpCSV.Name(), spec, volReplace)
 
 		default:
 			ferr = fmt.Errorf("unsupported format %s", fmtType)
@@ -215,15 +222,25 @@ func fetchReport(
 // --- PDF & CSV Validator Helpers ------------------------------------------
 
 // validateCSV reads the first row (header) of CSV and checks required columns.
-func validateCSVAgainstJSON(csvPath, jsonPath string) error {
+func validateCSVAgainstJSON(csvPath, jsonPath string, volumeReplacements map[string]string) error {
+	LogDebug(fmt.Sprintf("[ValidateReport] Validating CSV against JSON spec: %s", jsonPath))
 	// 1) Load and parse JSON
 	raw, err := os.ReadFile(jsonPath)
 	if err != nil {
 		return fmt.Errorf("read JSON %q: %w", jsonPath, err)
 	}
 
+	// 2) Replace volume names in JSON content if replacements provided
+	jsonContent := string(raw)
+	if volumeReplacements != nil {
+		for oldVol, newVol := range volumeReplacements {
+			jsonContent = strings.ReplaceAll(jsonContent, oldVol, newVol)
+			LogDebug(fmt.Sprintf("Replaced volume name in validator: '%s' -> '%s'", oldVol, newVol))
+		}
+	}
+
 	var expectedRows []map[string]interface{}
-	if err := json.Unmarshal(raw, &expectedRows); err != nil {
+	if err := json.Unmarshal([]byte(jsonContent), &expectedRows); err != nil {
 		return fmt.Errorf("parse JSON %q: %w", jsonPath, err)
 	}
 
@@ -298,6 +315,7 @@ func validateCSVAgainstJSON(csvPath, jsonPath string) error {
 
 // validatePDFAgainstJSON extracts text from the PDF and validates it against the JSON spec.
 func validatePDFAgainstJSON(pdfPath, jsonPath string) error {
+	LogDebug(fmt.Sprintf("[ValidateReport] Validating PDF against JSON spec: %s", jsonPath))
 	// 1) Extract PDF text
 	txt, err := extractTextFromPDF(pdfPath)
 	if err != nil {
@@ -321,7 +339,18 @@ func validatePDFAgainstJSON(pdfPath, jsonPath string) error {
 			pattern := regexp.QuoteMeta(key) + `\s*[:=]?\s*` + regexp.QuoteMeta(val)
 			re := regexp.MustCompile(pattern)
 			if !re.MatchString(txt) {
-				return fmt.Errorf("validation failed: missing key-value pair %q in format for key %q", val, key)
+				// Extract what value is actually in the PDF for this key
+				actualPattern := regexp.QuoteMeta(key) + `\s*[:=]?\s*(\S+)`
+				actualRe := regexp.MustCompile(actualPattern)
+				actualMatch := actualRe.FindStringSubmatch(txt)
+				var actualValue string
+				if len(actualMatch) > 1 {
+					actualValue = actualMatch[1]
+				} else {
+					actualValue = "<not found>"
+				}
+				LogError(fmt.Sprintf("PDF Validation mismatch - Key: %q, Expected: %q, Actual: %q", key, val, actualValue))
+				return fmt.Errorf("validation failed: missing key-value pair %q in format for key %q (actual value in PDF: %q)", val, key, actualValue)
 			}
 		}
 	}

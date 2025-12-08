@@ -20,8 +20,10 @@ var _ = Describe("RTC-003: Test discovery with single worker and restart the wor
 	)
 	Context("RTC-003", func() {
 		BeforeEach(func() {
+			var ProjectName string
 			NumberOfWorker := 1
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
+			ProjectId, ProjectName, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
+			_ = ProjectName
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).To(Equal(1), "Expected one worker to be attached")
 			workerIds = GetWorkerIds()

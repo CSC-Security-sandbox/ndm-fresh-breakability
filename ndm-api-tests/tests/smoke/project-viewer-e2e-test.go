@@ -26,7 +26,8 @@ var _ = Describe("Project Viewer Discovery Migration Cutover Test", func() {
 
     BeforeEach(func() {
 		headers = GetHeaders(AuthToken, ContentTypeJSON)
-        ProjectID, err := CreateProject(AuthToken, AccountId)
+        ProjectID, projectName, err := CreateProject(AuthToken, AccountId)
+        _ = projectName
 		Expect(err).To(BeNil(), "Error creating project")
         projectId = ProjectID
 	})

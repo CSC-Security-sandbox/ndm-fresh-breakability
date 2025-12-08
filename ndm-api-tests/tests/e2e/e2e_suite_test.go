@@ -13,7 +13,7 @@ var ProtocolType, Environment string
 
 func init() {
 	flag.StringVar(&ProtocolType, "protocol_type", "NFS", "Enter protocol_type (SMB / NFS)")
-	flag.StringVar(&Environment, "environment", "vSphere", "Enter environment (vSphere / Azure / GCP)")
+	flag.StringVar(&Environment, "environment", "Azure", "Enter environment (vSphere / Azure / GCP)")
 }
 
 func TestE2e(t *testing.T) {
@@ -24,6 +24,6 @@ func TestE2e(t *testing.T) {
 var _ = BeforeSuite(func() {
 	By("Setting before the suite")
 	flag.Parse()
-	InitTestEnv()
 	UpdateConfVariables(ProtocolType, Environment)
+	InitTestEnv()
 })

@@ -19,8 +19,10 @@ var _ = Describe("RTC-001-002: Check worker status when worker goes down/becomes
 	)
 	Context("RTC-001-002", func() {
 		BeforeEach(func() {
+			var ProjectName string
 			NumberOfWorker := 1
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
+			ProjectId, ProjectName, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
+			_ = ProjectName
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).To(Equal(1), "Expected two worker to be attached")
 			workerIds = GetWorkerIds()
