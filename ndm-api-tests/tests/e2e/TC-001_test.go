@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
+var _ = Describe("TC-001-003-AboutNDM: Create a fileserver with 2 workers and check discovery and scheduled migration", func() {
 	var (
 		ProjectId              string
 		workerId1              string
@@ -24,7 +24,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 		sourceVolumePath2      string
 	)
 
-	Context("TC-001", func() {
+	Context("TC-001-003-AboutNDM", func() {
 		BeforeEach(func() {
 			numberOfWorker := 2
 			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
@@ -41,13 +41,14 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[1], SOURCE_VOLUMES[1])
 		})
 
-		It("TC-001: Create a fileserver with 2 workers and check discovery and migration", func() {
+		It("TC-001-003: Create a fileserver with 2 workers and check discovery and scheduled migration", func() {
 			By("########################## TC-001 start ################################")
 
 			var sourceConfigID, sourcePathID1, sourcePathID2 string
 			var sourceJobConfigIDs, destinationJobConfigIDs, jobConfigIDs, migrationJobConfigIDs, cutoverRunIDs []string
 			var destinationConfigID, destinationPathID1, destinationPathID2 string
 
+			By(fmt.Sprintf("Creating Source File Server : %s", SOURCE_HOST_IPs[0]))
 			sourceParams := CreateServereParams{
 				ConfigName:       "source-file-server",
 				ConfigType:       ConfigTypeFile,
@@ -62,7 +63,6 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				WorkingDirectory: "",
 			}
 
-			By(fmt.Sprintf("Creating Source File Server : %s", SOURCE_HOST_IPs[0]))
 			sourceConfigID, resp, err := CreateFileServer(sourceParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
 			Expect(sourceConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
@@ -177,9 +177,9 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", destinationDiscoveryJobRunID)
 			}
 
-			By("Creating a Bulk Migration Job")
+			By("Creating a Scheduled Bulk Migration Job")
 			migrationParams := MigrationJobParams{
-				FirstRunAt:         GetCurrentUTCTimestamp(),
+				FirstRunAt:         GetFutureUTCTimestamp(90),
 				FutureRunSchedule:  "",
 				SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
 				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
@@ -193,6 +193,19 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
+
+			Wait(10)
+			for _, migrationJobConfigID := range migrationJobConfigIDs {
+				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers, false)
+				Expect(getJobsResp.JobRuns).To(BeEmpty(), "Expected jobRuns to be empty")
+				Expect(getJobsResp.Status).To(Equal("ACTIVE"), "Expected status to be ACTIVE")
+				Expect(getJobsResp.JobType).To(Equal("MIGRATE"), "Expected jobType to be MIGRATE")
+				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
+				defer resp.Body.Close()
+				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+			}
+
+			Wait(80) // Waiting for the scheduled time to trigger migration jobs
 
 			migration_validators := []string{
 				"src_to_dest_vol_migration.json",
@@ -266,7 +279,30 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			// 	Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
 			// 	LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
 			// }
-			By("########################## TC-001 end ################################")
+			By("########################## TC-001-003 end ################################")
+		})
+
+		It("should get versions ", func() {
+			By("########################## About NDM START ################################")
+			By("waiting 15 sec to set worker version on prometheus..")
+			Wait(15)
+			headers = GetHeaders(AuthToken, ContentTypeJSON)
+			abouNDMResp, err := GetVersions(headers)
+			Expect(err).To(BeNil())
+			// get versions using ssh
+			cpVersion, err := GetCPVersion()
+			Expect(err).To(BeNil())
+			Expect(cpVersion).Should(Not(BeEmpty()), "Expect CP version but got empty")
+			workerVersion, err := GetWorkerVersion()
+			Expect(err).To(BeNil())
+			Expect(workerVersion).Should(Not(BeEmpty()), "Expect Worker version but got empty")
+
+			// Validate versions
+			gotWorkerVersion := abouNDMResp.Data.Items.Build.WorkerVersion.Version
+			Expect(workerVersion).To(Equal(gotWorkerVersion), "Expected Worker version")
+			gotCPVersion := abouNDMResp.Data.Items.Build.ControlPlaneVersion.Version
+			Expect(cpVersion).To(Equal(gotCPVersion), "Expected CP version")
+			By("########################## About NDM END ################################")
 		})
 
 		AfterEach(func() {

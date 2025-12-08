@@ -10,7 +10,7 @@ import (
     . "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-SMB-PERMISSIONS-SID-MAPPING: Test SMB permissions WITH SID mapping CSV", func() {
+var _ = Describe("TC-SMB-PERMISSIONS-002-003: Test SMB permissions with and without SID mapping", func() {
     BeforeEach(func() {
 		if PROTOCOL_TYPE == ProtocolNFS {
 			Skip("SMB permissions is skipped in CI/CD as it is not supported in NFS")
@@ -27,7 +27,7 @@ var _ = Describe("TC-SMB-PERMISSIONS-SID-MAPPING: Test SMB permissions WITH SID 
         attachedWorkersConfig  map[string]SSHConfig
     )
 
-    Context("SMB Permissions Migration With SID Mapping CSV Test", func() {
+    Context("SMB Permissions Migration With and Without SID Mapping Test", func() {
         BeforeEach(func() {
             numberOfWorker := 1
 
@@ -352,23 +352,208 @@ var _ = Describe("TC-SMB-PERMISSIONS-SID-MAPPING: Test SMB permissions WITH SID 
             LogDebug("SCENARIO 2: Name-based mapping → Applied correctly via CSV")
             LogDebug("SCENARIO 3: Unmapped valid user → Original SID preserved (proves only CSV name-based mapping works, not automatic SID mapping)")
 
-            By("TC-SMB-SID-MAPPING: Test completed!")
-            By("########################## TC-SMB-SID-MAPPING end ################################")
+            By("TC-SMB-SID-MAPPING-WITH-CSV: Test completed!")
+            By("########################## TC-SMB-SID-MAPPING-WITH-CSV end ################################")
+        })
+
+        It("TC-SMB-NO-SID-MAPPING: Should handle valid/invalid principals without SID mapping during migration (TC-002 merged)", func() {
+            By("########################## TC-SMB-NO-SID-MAPPING start ################################")
+            var sourceConfigID, sourcePathID1 string
+            var destinationConfigID, destinationPathID1 string
+            var migrationJobConfigIDs []string
+
+            By("Ensuring Windows worker is joined to Active Directory domain")
+            domainName := "rootdomain.local"
+
+            domainUser := PROTOCOL_USERNAME
+            if domainUser == "" {
+                Skip("AZURE_SMB_PROTOCOL_USERNAME not set - cannot join domain")
+            }
+
+            domainPassword := PROTOCOL_PASSWORD
+            if domainPassword == "" {
+                Skip("AZURE_SMB_PROTOCOL_PASSWORD not set - cannot join domain")
+            }
+
+            LogDebug(fmt.Sprintf("Domain join parameters: domain=%s, user=%s", domainName, domainUser))
+            err = EnsureWindowsWorkerDomainJoined(domainName, domainUser, domainPassword)
+            Expect(err).NotTo(HaveOccurred(), "Error joining Windows worker to domain")
+            LogDebug("Windows worker is domain-joined and ready for AD operations")
+
+            Wait(10)
+
+            By("Installing Active Directory PowerShell module on Windows worker")
+            err = InstallADPowerShellModule()
+            Expect(err).NotTo(HaveOccurred(), "Error installing AD PowerShell module")
+            LogDebug("AD PowerShell module installed successfully")
+
+            Wait(5)
+
+            // Define test principals
+            validUsers := []string{"rootdomain\\invaliduser1", "rootdomain\\invaliduser2"}
+            validGroups := []string{"rootdomain\\invalidgroup1"}
+            invalidUsers := []string{"rootdomain\\invusr11760105113", "rootdomain\\invusr21760105113"}
+            invalidGroups := []string{"rootdomain\\invgrp11760105113"}
+
+            By("Principal configuration summary")
+            LogDebug(fmt.Sprintf("Valid Users (remain in AD): %v", validUsers))
+            LogDebug(fmt.Sprintf("Valid Groups (remain in AD): %v", validGroups))
+            LogDebug(fmt.Sprintf("Invalid Users (will be DELETED): %v", invalidUsers))
+            LogDebug(fmt.Sprintf("Invalid Groups (will be DELETED): %v", invalidGroups))
+
+            By("Creating source SMB file server")
+            sourceParams := CreateServereParams{
+                ConfigName:       "source-smb-no-sid-mapping",
+                ConfigType:       ConfigTypeFile,
+                ProjectID:        ProjectId,
+                ServerType:       ServerTypeOtherNAS,
+                UserName:         PROTOCOL_USERNAME,
+                Password:         PROTOCOL_PASSWORD,
+                Protocol:         PROTOCOL_TYPE,
+                ProtocolVersion:  ProtocolVersion3,
+                Host:             SOURCE_HOST_IPs[3],
+                Workers:          []string{workerId1},
+                WorkingDirectory: "",
+            }
+            sourceConfigID, resp, err := CreateFileServer(sourceParams, headers)
+            Expect(err).NotTo(HaveOccurred())
+            defer resp.Body.Close()
+
+            By("Getting source export path ID")
+            sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[3], sourceConfigID, headers)
+            Expect(err).NotTo(HaveOccurred())
+
+            Wait(3)
+
+            By("Creating test files with valid and invalid principal permissions")
+            err = CreateSMBFilesWithMixedPrincipals(sourceVolumePath1, validUsers, invalidUsers, validGroups, invalidGroups)
+            Expect(err).NotTo(HaveOccurred())
+
+            Wait(5)
+
+            By("Capturing source permissions WITH SID information")
+            sourcePermsWithSID, err := GetSMBPermissionsWithSID(sourceVolumePath1)
+            Expect(err).NotTo(HaveOccurred())
+            Expect(len(sourcePermsWithSID)).To(BeNumerically(">", 0))
+
+            By("DELETING invalid principals from Active Directory")
+            err = DeleteADPrincipals(invalidUsers, invalidGroups)
+            Expect(err).NotTo(HaveOccurred())
+            LogDebug("Invalid principals deleted - creating orphaned SIDs")
+
+            By("Clearing all SMB sessions")
+            err = ClearAllSMBSessions()
+            Expect(err).NotTo(HaveOccurred())
+
+            By("Waiting for AD deletion to propagate")
+            Wait(180)
+
+            By("Re-reading source permissions AFTER deletion")
+            sourcePermsAfterDeletion, err := GetSMBPermissionsWithSID(sourceVolumePath1)
+            Expect(err).NotTo(HaveOccurred())
+
+            orphanedSIDsInSource := 0
+            validSIDsInSource := 0
+            for _, perm := range sourcePermsAfterDeletion {
+                for _, acl := range perm.ACLEntries {
+                    if acl.IsOrphaned && strings.HasPrefix(acl.SID, "S-1-5-21-") {
+                        orphanedSIDsInSource++
+                    } else if acl.ExistsInAD && strings.HasPrefix(acl.SID, "S-1-5-21-") {
+                        validSIDsInSource++
+                    }
+                }
+            }
+
+            Expect(orphanedSIDsInSource).To(Equal(4), "Expected 4 orphaned SIDs")
+            Expect(validSIDsInSource).To(Equal(4), "Expected 4 valid SIDs")
+
+            By("Creating destination SMB file server")
+            destinationParams := CreateServereParams{
+                ConfigName:       "dest-smb-no-sid-mapping",
+                ConfigType:       ConfigTypeFile,
+                ProjectID:        ProjectId,
+                ServerType:       ServerTypeOtherNAS,
+                UserName:         PROTOCOL_USERNAME,
+                Password:         PROTOCOL_PASSWORD,
+                Protocol:         PROTOCOL_TYPE,
+                ProtocolVersion:  ProtocolVersion3,
+                Host:             DESTINATION_HOST_IPs[2],
+                Workers:          []string{workerId1},
+                WorkingDirectory: "",
+            }
+            destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
+            Expect(err).NotTo(HaveOccurred())
+            defer resp.Body.Close()
+
+            destinationPathID1, err = GetExportPathID("destination", DESTINATION_VOLUMES[2], destinationConfigID, headers)
+            Expect(err).NotTo(HaveOccurred())
+
+            Wait(5)
+
+            migrationParams := MigrationJobParams{
+                FirstRunAt:         GetCurrentUTCTimestamp(),
+                FutureRunSchedule:  "",
+                SourcePathIDs:      []string{sourcePathID1},
+                DestinationPathIDs: []string{destinationPathID1},
+                SidMapping:         false, // NO SID MAPPING
+                Options: map[string]interface{}{
+                    "excludeFilePatterns": "*/snapshots/*",
+                    "preserveAccessTime":  true,
+                    "skipFile":            "0-M",
+                },
+            }
+
+            By("Creating migration job WITHOUT SID mapping")
+            migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
+            Expect(err).NotTo(HaveOccurred())
+            defer resp.Body.Close()
+
+            migrationJobConfigID := migrationJobConfigIDs[0]
+            getMigrationJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
+            Expect(err).NotTo(HaveOccurred())
+            defer resp.Body.Close()
+
+            migrationJobRunID := getMigrationJobsResp.JobRuns[0].JobRunId
+            err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
+            Expect(err).NotTo(HaveOccurred())
+
+            Wait(15)
+
+            By("Capturing destination permissions")
+            destPermsWithSID, err := GetSMBPermissionsWithSID(destinationVolumePath1)
+            Expect(err).NotTo(HaveOccurred())
+
+            By("Comparing source and destination permissions BY SID")
+            validMatches, orphanedMatches, mismatches, err := CompareSMBPermissionsBySID(sourcePermsAfterDeletion, destPermsWithSID)
+
+            Expect(err).To(BeNil())
+            Expect(len(orphanedMatches)).To(Equal(4), "Expected 4 orphaned SID matches")
+            Expect(len(validMatches)).To(Equal(4), "Expected 4 valid principal matches")
+            Expect(len(mismatches)).To(Equal(0), "Expected zero mismatches")
+
+            LogDebug(fmt.Sprintf("Validation passed: %d valid, %d orphaned, %d mismatches", len(validMatches), len(orphanedMatches), len(mismatches)))
+
+            By("TC-SMB-NO-SID-MAPPING: Test completed!")
+            By("########################## TC-SMB-NO-SID-MAPPING end ################################")
         })
 
         AfterEach(func() {
             By("Cleanup started")
 
-            // Recreate the orphaned user that was deleted during the test
+            // Recreate ALL deleted AD principals from both test scenarios
             // This ensures the AD is in a clean state for subsequent tests
-            sourceOrphanedUser := "rootdomain\\invusr11760105113"
+            allDeletedUsers := []string{
+                "rootdomain\\invusr11760105113",  // Used in both tests
+                "rootdomain\\invusr21760105113",  // Used in TC-002 test
+            }
+            deletedGroups := []string{"rootdomain\\invgrp11760105113"}
 
-            By("Recreating deleted AD principal for cleanup")
-            err := CreateADPrincipals([]string{sourceOrphanedUser}, "")
+            By("Recreating deleted AD principals for cleanup")
+            err := CreateADPrincipals(allDeletedUsers, deletedGroups[0])
             if err != nil {
-                LogDebug(fmt.Sprintf("Warning: Could not recreate AD principal: %v", err))
+                LogDebug(fmt.Sprintf("Warning: Could not recreate AD principals: %v", err))
             } else {
-                LogDebug(fmt.Sprintf("Successfully recreated AD principal: %s", sourceOrphanedUser))
+                LogDebug("Successfully recreated all AD principals")
             }
 
             err = StopAllWorkersAndWait()

@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch stop/restart migration jobs.", func() {
+var _ = Describe("TC-012-013: Run bulk cutover with concurrent migration jobs - batch pause/resume and stop/restart", func() {
 	var headers map[string]string
 	var (
 		ProjectId              string
@@ -22,7 +22,7 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 		destinationVolumePath1 string
 		destinationVolumePath2 string
 	)
-	Context("TC-013", func() {
+	Context("TC-012-013", func() {
 		BeforeEach(func() {
 			NumberOfWorker := 2
 			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
@@ -37,13 +37,12 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
 		})
 
-		It("TC-013 : bulk cutover with concurrent migration jobs and batch stop/restart migration jobs.", func() {
-			By("########################## TC-013 start ################################")
+		It("TC-012-013: Run bulk cutover with concurrent migration jobs - batch pause/resume and stop/restart", func() {
+			By("########################## TC-012-013 start ################################")
 			var sourceConfigID1, sourcePathID1, sourcePathID2 string
 			var jobConfigIDs, migrationJobConfigIDs []string
 			var migrationJobRunID string
 			var destinationConfigID, destinationPathID1, destinationPathID2 string
-			var list []string
 
 			By("Creating the source file server")
 			sourceParams := CreateServereParams{
@@ -134,7 +133,7 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
-					"skipFile":            "15-M",
+					"skipFile":            "0-M",
 				},
 			}
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
@@ -159,43 +158,80 @@ var _ = Describe("TC-013 : bulk cutover with concurrent migration jobs and batch
 			defer resp.Body.Close()
 			firstCutoverjobRunID := getJobsResp.JobRuns[0].JobRunId
 
+			getJobsResp, resp, err = GetJobRunDetails(jobConfigIDs[0], headers)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Cutover%d job did not reach BLOCKED state", 1))
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+			Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">", 0), "No jobRuns found in response")
+			Expect(getJobsResp.JobRuns[0].JobRunId).NotTo(BeEmpty(), "Expected a valid cutoverID")
+
 			By("Changing migration job run state")
-			migrationJobRunIds := make([]string, 2)
-			for i, migrationJobConfigID := range migrationJobConfigIDs {
+			migrationJobRunIds := []string{}
+			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 				migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
 				defer resp.Body.Close()
 				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
-				migrationJobRunIds[i] = migrationJobRunID
-				list = nil
-				list = append(list, migrationJobRunID)
-				err = HandleJobRunStateChange(migrationJobRunID, "STOP", list)
+				migrationJobRunIds = append(migrationJobRunIds, migrationJobRunID)
+				err = HandleJobRunStateChange(migrationJobRunID, "PAUSE", []string{migrationJobRunID})
 				Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
-
-				err = WaitForJobState(migrationJobRunID, STOPPED_JOBRUN, 30)
-				Expect(err).NotTo(HaveOccurred(), "Migration job did not stop or complete")
 			}
 
 			err = WaitForJobState(firstCutoverjobRunID, BLOCKED_JOBRUN)
-			Expect(err).NotTo(HaveOccurred(), "Cutover job did not reach to blocked state")
+			Expect(err).NotTo(HaveOccurred(), "Cutover job did not reach BLOCKED state")
 
-			// result, err := ValidateReport(firstCutoverjobRunID, JobTypeCutover, fmt.Sprintf("../../validators/%s/cutover_validation.json", PROTOCOL_TYPE))
-			// Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", firstCutoverjobRunID)
-			// By(fmt.Sprintf("validation report result %s", result))
+			By("Testing PAUSE/RESUME operations on migration jobs")
+			for _, jubrunid := range migrationJobRunIds {
+				err = WaitForJobState(jubrunid, "PAUSED", 30)
+				Expect(err).NotTo(HaveOccurred(), "Job did not reach PAUSED state")
+				Wait(5) // wait for 5 seconds before resuming
+				err = HandleJobRunStateChange(jubrunid, "RESUME", []string{jubrunid})
+				Expect(err).NotTo(HaveOccurred(), "Error while resuming job run ID")
+			}
 
-			By("Restarting migration job run")
+			By("Waiting for all resumed migration jobs to complete")
+			for _, jubrunid := range migrationJobRunIds {
+				err = WaitForJobState(jubrunid, COMPLETED_JOBRUN)
+				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete after resume")
+			}
+
+			By("Testing STOP/RESTART operations with ad-hoc job runs")
 			for _, migrationJobConfigID := range migrationJobConfigIDs {
+				By("Triggering ad-hoc run for migration job to test stop/restart")
 				adHocJobRunId, resp, err := TriggerAdHocJobRun(migrationJobConfigID)
 				Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
 				defer resp.Body.Close()
-				err = WaitForJobState(adHocJobRunId, COMPLETED_JOBRUN)
-				Expect(err).NotTo(HaveOccurred(), "Ad-hoc job did not complete")
-				continue
+				Expect(adHocJobRunId).NotTo(BeEmpty(), "Ad-hoc JobRun ID should not be empty")
+
+				By("Stopping ad-hoc migration job")
+				err = HandleJobRunStateChange(adHocJobRunId, "STOP", []string{adHocJobRunId})
+				Expect(err).NotTo(HaveOccurred(), "Error while stopping job run ID")
+
+				err = WaitForJobState(adHocJobRunId, STOPPED_JOBRUN, 30)
+				Expect(err).NotTo(HaveOccurred(), "Ad-hoc migration job did not stop")
 			}
 
-			By("########################## TC-013 end ################################")
+			By("Verifying cutover job remains in BLOCKED state while migrations are stopped")
+			err = WaitForJobState(firstCutoverjobRunID, BLOCKED_JOBRUN)
+			Expect(err).NotTo(HaveOccurred(), "Cutover job did not remain in BLOCKED state")
+
+			By("Restarting all stopped migration jobs with new ad-hoc runs")
+			for _, migrationJobConfigID := range migrationJobConfigIDs {
+				By("Triggering new ad-hoc run to restart migration job")
+				restartedJobRunId, resp, err := TriggerAdHocJobRun(migrationJobConfigID)
+				Expect(err).NotTo(HaveOccurred(), "Error triggering restart ad-hoc job run")
+				defer resp.Body.Close()
+
+				err = WaitForJobState(restartedJobRunId, COMPLETED_JOBRUN)
+				Expect(err).NotTo(HaveOccurred(), "Restarted migration job did not complete")
+			}
+
+			// result, err := ValidateReport(firstCutoverjobRunID, JobTypeCutover, fmt.Sprintf("../../validators/%s/cutover_validation.json", PROTOCOL_TYPE))
+			// Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", firstCutoverjobRunID)
+			// By(fmt.Sprintf("validate report result for %s: %s", firstCutoverjobRunID, result))
+
+			By("########################## TC-012-013 end ################################")
 		})
 
 		AfterEach(func() {

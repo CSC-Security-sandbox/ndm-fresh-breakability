@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-SMB-PERMISSIONS: Test SMB file default and explicit permissions preservation during migration", func() {
+var _ = Describe("TC-SMB-PERMISSIONS-001-004: Test SMB default/explicit permissions and inheritance flags preservation during migration", func() {
 	BeforeEach(func() {
 		if PROTOCOL_TYPE == ProtocolNFS {
 			Skip("SMB permissions is skipped in CI/CD as it is not supported in NFS")
@@ -41,10 +41,14 @@ var _ = Describe("TC-SMB-PERMISSIONS: Test SMB file default and explicit permiss
 			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[3], SOURCE_VOLUMES[3])
 		})
 
-		It("TC-SMB-PERMISSIONS: Should preserve file permissions during SMB migration", func() {
-			By("########################## TC-SMB-PERMISSIONS start ################################")
+		It("TC-SMB-PERMISSIONS-001-004: Should preserve file permissions and inheritance flags during SMB migration", func() {
+			By("########################## TC-SMB-PERMISSIONS-001-004 start ################################")
 
-			// This test uses PowerShell Get-Acl with JSON output for robust ACL reading
+			// MERGED TEST: TC-001 + TC-004
+			// This test validates BOTH:
+			//   1. Default vs Explicit permissions preservation (original TC-001)
+			//   2. Inheritance flags preservation (original TC-004)
+			// Both use PowerShell Get-Acl with JSON output for robust ACL reading
 			// The PowerShell approach provides:
 			//   - Structured JSON output (no fragile icacls parsing)
 			//   - Direct access to FileSystemRights, InheritanceFlags, PropagationFlags
@@ -100,8 +104,12 @@ var _ = Describe("TC-SMB-PERMISSIONS: Test SMB file default and explicit permiss
 			err = CreateSMBFilesWithMultiplePermissions(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error creating files with multiple permissions on source volume %s", sourceVolumePath1)
 
+			By("Creating comprehensive inheritance test structure on source SMB volume (TC-004 merged)")
+			err = CreateSMBFilesWithInheritanceScenarios(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error creating inheritance test structure on source volume %s", sourceVolumePath1)
+
 			By("Waiting for file creation and permission setup to complete")
-			Wait(10)
+			Wait(15)
 
 			By("Listing directory contents to verify file creation")
 			dirOutput, err := ListSMBDirectoryContents(sourceVolumePath1)
@@ -118,6 +126,15 @@ var _ = Describe("TC-SMB-PERMISSIONS: Test SMB file default and explicit permiss
 			explicitSourcePermissions, err := GetSMBFilePermissionsComprehensive(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error getting original permissions from source volume")
 			Expect(len(explicitSourcePermissions)).To(BeNumerically(">", 0), "No permissions were recorded from source volume")
+
+			By("Recording inheritance permissions from source volume (TC-004 merged)")
+			sourceInheritancePermissions, err := GetSMBPermissionsWithInheritanceDetails(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error getting inheritance permissions from source volume %s", sourceVolumePath1)
+			Expect(len(sourceInheritancePermissions)).To(BeNumerically(">", 0), "No inheritance permissions were recorded from source volume")
+			LogDebug(fmt.Sprintf("Captured %d files/directories with inheritance permissions", len(sourceInheritancePermissions)))
+
+			By("Logging inheritance scenarios found in source")
+			LogInheritanceScenarioSummary(sourceInheritancePermissions)
 
 			By("Combining DEFAULT and EXPLICIT permissions for complete source inventory")
 			// Merge both permission sets for comprehensive comparison
@@ -239,6 +256,12 @@ var _ = Describe("TC-SMB-PERMISSIONS: Test SMB file default and explicit permiss
 			Expect(len(explicitDestinationPermissions)).To(BeNumerically(">", 0), "No explicit permissions found on destination volume")
 			LogDebug(fmt.Sprintf("Retrieved %d files/directories with EXPLICIT permissions from destination", len(explicitDestinationPermissions)))
 
+			By("Recording inheritance permissions from destination volume (TC-004 merged)")
+			destinationInheritancePermissions, err := GetSMBPermissionsWithInheritanceDetails(destinationVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error getting inheritance permissions from destination volume %s", destinationVolumePath1)
+			Expect(len(destinationInheritancePermissions)).To(BeNumerically(">", 0), "No inheritance permissions were recorded from destination volume")
+			LogDebug(fmt.Sprintf("Captured %d files/directories with inheritance permissions from destination", len(destinationInheritancePermissions)))
+
 			By("Combining destination permissions for complete comparison")
 			allDestinationPermissions := append(defaultDestinationPermissions, explicitDestinationPermissions...)
 			LogDebug(fmt.Sprintf("Total destination permissions retrieved: %d (Default: %d, Explicit: %d)",
@@ -267,7 +290,12 @@ var _ = Describe("TC-SMB-PERMISSIONS: Test SMB file default and explicit permiss
 			err = CompareSMBPermissions(explicitSourcePermissions, explicitDestinationPermissions)
 			Expect(err).To(BeNil(), "Explicit SMB permissions were not properly preserved during migration: %v", err)
 
-			LogDebug("SMB permissions comparison successful - all comprehensive permissions preserved!")
+			By("Validating inheritance flag preservation (TC-004 merged)")
+			err = CompareSMBPermissionsWithInheritanceValidation(sourceInheritancePermissions, destinationInheritancePermissions)
+			Expect(err).To(BeNil(), "SMB permissions with inheritance were not properly preserved during migration: %v", err)
+			LogDebug("Expected inheritance scenarios validated")
+
+			LogDebug("SMB permissions comparison successful - all comprehensive permissions and inheritance flags preserved!")
 
 			By("Creating discovery job on destination to verify file structure")
 			destinationJobParams := DiscoveryJobParams{
@@ -307,7 +335,8 @@ var _ = Describe("TC-SMB-PERMISSIONS: Test SMB file default and explicit permiss
 			Expect(err).NotTo(HaveOccurred(), "Error validating discovery report for destination")
 			By(fmt.Sprintf("Discovery report validation result: %s", result))
 
-			By("########################## TC-SMB-PERMISSIONS end ################################")
+			By("########################## TC-SMB-PERMISSIONS-001-004 end ################################")
+			LogDebug("MERGED TEST COMPLETE: Validated default/explicit permissions (TC-001) + inheritance flags (TC-004)")
 		})
 
 		AfterEach(func() {
