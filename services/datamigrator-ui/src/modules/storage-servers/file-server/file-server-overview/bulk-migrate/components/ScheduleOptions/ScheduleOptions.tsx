@@ -55,6 +55,7 @@ const ScheduleOptions = () => {
             <MobileTimePicker
               openTo="hours"
               className="w-52"
+              
               value={optionForm.formState.incremental_sync_schedule_daily}
               onChange={(newValue) => {
                 optionForm.resetForm({

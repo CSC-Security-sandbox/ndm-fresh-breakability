@@ -272,6 +272,16 @@ export const jobsApi = createApi({
       transformErrorResponse: structuredErrorResponse,
       invalidatesTags: ["ALL_JOB_CONFIGS", "JOB_CONFIG_DETAILS"],
     }),
+
+    getJobIdentityMappings: builder.query({
+      query: (jobConfigId: string) => ({
+        url: `jobs/${jobConfigId}/mappings`,  // Changed from job-configs to jobs
+        method: 'GET',
+      }),
+      transformResponse: (response) => {
+        return response?.data || response;
+      },
+    }),
   }),
 });
 
@@ -300,4 +310,5 @@ export const {
   useLazyGetNoticeBoardDetailsQuery,
   useGetFileServerWorkersQuery,
   useDeleteJobConfigMutation,
+  useGetJobIdentityMappingsQuery,
 } = jobsApi;

@@ -72,7 +72,7 @@ const Options = () => {
             label="Excluded Path Patterns"
             isOptional
             labelChildren={
-              <Popover>Mention File Patterns that's needs to exclude</Popover>
+              <Popover>Mention File Patterns that should be excluded</Popover>
             }
           />
 

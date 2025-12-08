@@ -212,5 +212,13 @@ export class JobConfigController {
   async deleteJobConfig(@Param('id') id: string): Promise<{ message: string }> {
     return await this.jobConfigService.deleteJobConfig(id);
   }
+
+  @ApiOperation({ summary: 'Get identity mappings for a job by ID' })
+  @Get(':id/mappings')
+  @Auth(Permission.ViewJob)
+  @ApiBearerAuth()
+  async getJobIdentityMappings(@Param('id') id: string): Promise<any> {
+    return await this.jobConfigService.getIdentityMappingsForJob(id);
+  }
 }
 

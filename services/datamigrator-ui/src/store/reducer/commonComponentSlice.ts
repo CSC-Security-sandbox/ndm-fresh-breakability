@@ -11,6 +11,8 @@ interface ModalPropsType {
   modalHeader: ReactNode;
   modalContent: ReactNode;
   modalFooter: ReactNode;
+  modalClassName?: string;
+  modalStyle?: React.CSSProperties;
   footerWarning?: ReactNode;
   footerError?: ReactNode;
 }

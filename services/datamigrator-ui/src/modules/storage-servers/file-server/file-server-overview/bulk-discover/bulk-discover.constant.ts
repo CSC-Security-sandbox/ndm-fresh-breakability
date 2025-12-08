@@ -51,8 +51,7 @@ export const BULK_DISCOVERY_FORM_SCHEMA = yup.object().shape({
             const minFutureTime = dayjs().add(1, "minute");
             return (
               selectedDate.isValid() &&
-              (selectedDate.isAfter(minFutureTime) ||
-                selectedDate.isSame(minFutureTime))
+              (!selectedDate.isBefore(minFutureTime))
             );
           }
         ),

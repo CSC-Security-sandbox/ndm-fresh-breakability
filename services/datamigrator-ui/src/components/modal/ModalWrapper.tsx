@@ -16,7 +16,8 @@ const ModalWrapper = () => {
   return (
     <>
       {modalProps?.isOpen && (
-        <Modal>
+        <Modal className={modalProps?.modalClassName}
+          style={modalProps?.modalStyle}>
           <ModalHeader>{modalProps?.modalHeader}</ModalHeader>
           <ModalContent>{modalProps?.modalContent}</ModalContent>
           {modalProps?.modalFooter && (

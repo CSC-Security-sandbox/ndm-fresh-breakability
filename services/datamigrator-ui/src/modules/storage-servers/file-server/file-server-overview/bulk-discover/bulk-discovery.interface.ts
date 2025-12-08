@@ -16,6 +16,7 @@ export interface TopSectionPropsType {
 
 export interface ScheduleComponentType {
   bulkDiscoveryForm: BlueXpFormType<bulkDiscoveryFormType>;
+  variant?: "normal_run" | "edit_config";
 }
 
 export interface BulkDiscoveryFooterType {

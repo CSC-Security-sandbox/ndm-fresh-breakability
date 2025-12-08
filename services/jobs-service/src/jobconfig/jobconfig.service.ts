@@ -1129,6 +1129,10 @@ export class JobConfigService {
                                       .split(",")
                                       .map(pattern => pattern.trim())
                                       .filter(pattern => pattern !== "") ) : [];
+    const isFutureDate = (date: Date | null | undefined): boolean => {
+      if (!date) return false;
+      return new Date(date).getTime() > Date.now();
+    };
 
     if (jobConfig.jobType === JobType.MIGRATE) {
       return {
@@ -1146,6 +1150,9 @@ export class JobConfigService {
         [JobConfigurationEnum.preserveAccessTime]: jobConfig.preserveAccessTime ? "Enabled" : "Disabled",
         [JobConfigurationEnum.excludeFilePatterns]: excludeFilePatternsArray,
         [JobConfigurationEnum.excludeOlderThan]: jobConfig.excludeOlderThan,
+        ...(isFutureDate(jobConfig.firstRunAt) && {
+          [JobConfigurationEnum.firstRunAt]: jobConfig.firstRunAt,
+        }),
         [JobConfigurationEnum.futureScheduleAt]: jobConfig.futureScheduleAt,
       }
     } else if (jobConfig.jobType === JobType.CUT_OVER) {
@@ -1157,9 +1164,57 @@ export class JobConfigService {
     } else {
       return {
         [JobConfigurationEnum.excludeFilePatterns]: excludeFilePatternsArray,
+        ...(isFutureDate(jobConfig.firstRunAt) && {
+          [JobConfigurationEnum.firstRunAt]: jobConfig.firstRunAt,
+        }),
       }
     }
   }
+
+  async getIdentityMappingsForJob(jobConfigId: string): Promise<any> {
+  // Get cross mappings for this job
+  const crossMappings = await this.identityCrossMappingRepo.find({
+    where: { jobConfigId, isOrphan: false },
+    relations: ['identityMapping']
+  });
+
+  if (crossMappings.length === 0) {
+    return null;
+  }
+
+  // Get all identity mapping IDs
+  const identityMappingIds = crossMappings.map(cm => cm.identityMappingId);
+  
+  // Get actual mappings - FIXED: use identityMap field not identityMappingId
+  const mappings = await this.identityMappingRepo.find({
+    where: { identityMap: In(identityMappingIds) }
+  });
+
+  // Group by type
+  const result = {
+    gidMappings: [],
+    uidMappings: [], 
+    sidMappings: []
+  };
+
+  mappings.forEach(mapping => {
+    const mappingData = {
+      sourceMapping: mapping.sourceMapping,
+      targetMapping: mapping.targetMapping
+    };
+    
+    // FIXED: Use lowercase for comparison
+    if (mapping.identityType.toLowerCase() === 'gid') {
+      result.gidMappings.push(mappingData);
+    } else if (mapping.identityType.toLowerCase() === 'uid') {
+      result.uidMappings.push(mappingData);
+    } else if (mapping.identityType.toLowerCase() === 'sid') {
+      result.sidMappings.push(mappingData);
+    }
+  });
+
+  return result;
+}
 
   async getConfigsByProjectId(projectId: string) {
     if (!isUUID(projectId)) throw new BadRequestException("Invalid projectId");

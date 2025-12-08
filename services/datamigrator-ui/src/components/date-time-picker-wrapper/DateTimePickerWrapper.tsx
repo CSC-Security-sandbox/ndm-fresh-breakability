@@ -46,6 +46,7 @@ const DateTimePickerWrapper = ({
               helperText: errorMessage,
               error: !!errorMessage,
             },
+            popper: { sx: { zIndex: 200000010 } },
           }}
           onError={(newError) => setError(newError)}
           onChange={(newValue) => {

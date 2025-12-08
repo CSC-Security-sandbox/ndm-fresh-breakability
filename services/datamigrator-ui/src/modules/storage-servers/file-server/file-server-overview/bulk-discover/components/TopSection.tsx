@@ -21,7 +21,7 @@ const TopSection = ({
             <Text>File Server </Text>
             <Text bold>{fileServerDetails?.configName}</Text>
           </Box>
-          <ScheduleComponent bulkDiscoveryForm={bulkDiscoveryForm} />
+          <ScheduleComponent bulkDiscoveryForm={bulkDiscoveryForm} variant="normal_run" />
         </Box>
         <Box className="w-3/6">
           <FormFieldTextArea
@@ -31,7 +31,7 @@ const TopSection = ({
             label="Excluded Path Patterns"
             isOptional
             labelChildren={
-              <Popover>Mention File Patterns that's needs to exclude</Popover>
+              <Popover>Mention file patterns that should be excluded</Popover>
             }
           />
         </Box>

@@ -177,6 +177,7 @@ export enum JobConfigurationEnum {
   excludeFilePatterns = "Excluded Path Patterns",
   excludeOlderThan = "Exclude file older than (UTC)",
   futureScheduleAt = "Incremental sync schedule",
+  firstRunAt = "Job Scheduled For",
 }
 
 /**
