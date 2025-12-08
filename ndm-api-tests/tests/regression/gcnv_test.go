@@ -28,8 +28,10 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			Skip("GCNV Flex Test regression is skipped in CI/CD as it is not supported in SMB")
 		}
 		var err error
+		var ProjectName string
 		numberOfWorker := 2
-		ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+		ProjectId, ProjectName, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+		_ = ProjectName
 		Expect(err).To(BeNil(), "Error during test environment setup")
 		Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 		workerIds = GetWorkerIds()

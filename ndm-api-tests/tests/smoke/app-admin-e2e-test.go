@@ -27,7 +27,8 @@ var _ = Describe("App Admin Source File Server Test", func() {
         headers = GetHeaders(AuthToken, ContentTypeJSON)
         fmt.Println("Headers initialized for test execution.")
         numberOfWorker := 1
-        ProjectID, attachedWorkersConfig, err := SetupTestEnv(numberOfWorker)
+        ProjectID, projectName, attachedWorkersConfig, err := SetupTestEnv(numberOfWorker)
+        _ = projectName
         Expect(err).To(BeNil(), "Error during test environment setup")
         Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 1), "Expected 1 worker to be attached")
         workerIds := GetWorkerIds()

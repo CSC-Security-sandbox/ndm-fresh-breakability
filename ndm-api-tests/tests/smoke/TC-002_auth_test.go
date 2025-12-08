@@ -25,7 +25,9 @@ var _ = Describe("Authentication API Tests", func() {
 			Fail("AuthToken is not set. Please ensure authentication is working.")
 		}
 		headers = GetHeaders(AuthToken, ContentTypeJSON)
-		projectId, err = CreateProject(AuthToken, AccountId)
+		var projectName string
+		projectId, projectName, err = CreateProject(AuthToken, AccountId)
+		_ = projectName
 		Expect(err).To(BeNil(), "Error creating project")
 	})
 

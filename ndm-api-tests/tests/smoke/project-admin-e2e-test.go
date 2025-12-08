@@ -38,7 +38,8 @@ var _ = Describe("Project Admin Discovery Migration Cutover Test", func() {
     BeforeEach(func() {
 		headers = GetHeaders(AuthToken, ContentTypeJSON)
         numberOfWorker := 1
-        ProjectID, attachedWorkersConfig, err := SetupTestEnv(numberOfWorker)
+        ProjectID, projectName, attachedWorkersConfig, err := SetupTestEnv(numberOfWorker)
+        _ = projectName
         Expect(err).To(BeNil(), "Error during test environment setup")
         Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 1), "Expected 1 worker to be attached")
         workerIds := GetWorkerIds()

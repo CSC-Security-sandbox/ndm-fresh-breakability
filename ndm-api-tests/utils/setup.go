@@ -19,6 +19,11 @@ var (
 	ScenarioFiles                                                                                        []string
 	AccountId                                                                                            = DEFAULT_ACCOUNT_ID
 	AuthToken, RefreshToken, KeycloakUser, KeycloakPassword, AppAdminId, ProjectAdminId, ProjectViewerId string
+
+	// Global project and workers - created once in InitTestEnv and reused across all tests
+	GlobalProjectId             string
+	GlobalProjectName           string
+	GlobalAttachedWorkersConfig map[string]SSHConfig
 )
 
 // InitTestEnvForSMoke sets up variables, loads configuration,
@@ -106,27 +111,35 @@ func InitTestEnv() {
 	if roleIdsErr != nil {
 		LogFatalf("Error getting Role Ids: %v", roleIdsErr)
 	}
+
+	// Create project and attach 2 workers once for all tests
+	LogDebug("Creating project and attaching 2 workers for all test cases")
+	GlobalProjectId, GlobalProjectName, GlobalAttachedWorkersConfig, err = SetupTestEnv(2)
+	if err != nil {
+		LogFatalf("Error setting up test environment with workers: %v", err)
+	}
+	LogDebug(fmt.Sprintf("Global project created: %s (name: %s) with %d workers attached", GlobalProjectId, GlobalProjectName, len(GlobalAttachedWorkersConfig)))
 }
 
-func SetupTestEnv(workerCount int) (string, map[string]SSHConfig, error) {
+func SetupTestEnv(workerCount int) (string, string, map[string]SSHConfig, error) {
 	// Create the project first.
-	projectId, err := CreateProject(AuthToken, AccountId)
+	projectId, projectName, err := CreateProject(AuthToken, AccountId)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to create project: %w", err)
+		return "", "", nil, fmt.Errorf("failed to create project: %w", err)
 	}
 
 	attachedWorkersConfig, err := AttachWorkers(workerCount, AuthToken, AccountId, projectId)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to attach workers: %w", err)
+		return "", "", nil, fmt.Errorf("failed to attach workers: %w", err)
 	}
 	if len(attachedWorkersConfig) == 0 {
-		return "", nil, fmt.Errorf("failed to attach workers: worker may have been already attached")
+		return "", "", nil, fmt.Errorf("failed to attach workers: worker may have been already attached")
 	}
 	workerIds := GetWorkerIds()
 	for i := 0; i < MaxPollRetries; i++ {
 		workerIdWithStatus, err := GetWorkerStatus(projectId, workerIds)
 		if err != nil {
-			return "", nil, fmt.Errorf("error getting worker status: %w", err)
+			return "", "", nil, fmt.Errorf("error getting worker status: %w", err)
 		}
 		onlineWorkers := 0
 		for _, workerId := range workerIds {
@@ -142,7 +155,16 @@ func SetupTestEnv(workerCount int) (string, map[string]SSHConfig, error) {
 		Wait(DefaultPollInterval)
 	}
 	LogDebug("Test environment setup complete and all worker are Online")
-	return projectId, attachedWorkersConfig, nil
+	return projectId, projectName, attachedWorkersConfig, nil
+}
+
+// GetGlobalTestEnv returns the globally created project and workers
+// This should be used in test cases instead of SetupTestEnv to reuse the same workers
+func GetGlobalTestEnv() (string, string, map[string]SSHConfig, error) {
+	if GlobalProjectId == "" || GlobalAttachedWorkersConfig == nil {
+		return "", "", nil, fmt.Errorf("global test environment not initialized. Make sure InitTestEnv() is called in BeforeSuite")
+	}
+	return GlobalProjectId, GlobalProjectName, GlobalAttachedWorkersConfig, nil
 }
 
 func CleanupTestEnv() error {

@@ -4,53 +4,80 @@ import (
 	"fmt"
 	. "ndm-api-tests/utils"
 	"net/http"
+	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery and scheduled migration", func() {
 	var (
-		ProjectId              string
-		workerId1              string
-		workerId2              string
-		workerIds              []string
-		err                    error
-		destinationVolumePath1 string
-		destinationVolumePath2 string
-		headers                map[string]string
-		attachedWorkersConfig  map[string]SSHConfig
-		sourceVolumePath1      string
-		sourceVolumePath2      string
+		ProjectId             string
+		ProjectName           string
+		workerId1             string
+		workerId2             string
+		workerIds             []string
+		err                   error
+		headers               map[string]string
+		attachedWorkersConfig map[string]SSHConfig
+		sourceVolumePath1     string
+		sourceVolumePath2     string
+		clonedSourceVolumes   []string
+		clonedDestVolumes     []string
+		sourceVolumeManager   *TestVolumeManager
+		destVolumeManager     *TestVolumeManager
+		testStartTime         time.Time
 	)
 
 	Context("TC-001", func() {
 		BeforeEach(func() {
-			numberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
-			Expect(err).To(BeNil(), "Error during test environment setup")
+			// Use globally created project and workers (created once in InitTestEnv)
+			ProjectId, ProjectName, attachedWorkersConfig, err = GetGlobalTestEnv()
+			Expect(err).To(BeNil(), "Error getting global test environment")
+			LogDebug(fmt.Sprintf("[BeforeEach] Using Project: %s (ID: %s)", ProjectName, ProjectId))
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 			workerIds = GetWorkerIds()
 			workerId1 = workerIds[0]
 			workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
-			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
-			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[1], DESTINATION_VOLUMES[1])
 
-			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
-			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[1], SOURCE_VOLUMES[1])
+			// Setup ONTAP volume cloning for parallel test execution
+			clonedSourceVolumes, clonedDestVolumes, sourceVolumeManager, destVolumeManager, err = SetupTestVolumesBeforeEach()
+			if err != nil {
+				Skip(fmt.Sprintf("Failed to setup test volumes: %v", err))
+			}
+
+			// Guarantee cleanup even on manual interrupt (Ctrl+C)
+			DeferCleanup(func() {
+				err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+				if err != nil {
+					LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
+				}
+			})
+			// Set volume paths using THIS test's cloned volumes
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], clonedSourceVolumes[0])
+			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[1], clonedSourceVolumes[1])
 		})
 
 		It("TC-001: Create a fileserver with 2 workers and check discovery and scheduled migration", func() {
+			testStartTime = time.Now()
 			By("########################## TC-001 start ################################")
+			LogDebug(fmt.Sprintf("[TC-001 START] Test execution started at: %s", testStartTime.Format("2006-01-02 15:04:05")))
+			LogDebug(fmt.Sprintf("[TC-001 It Block] Using Project: %s (ID: %s)", ProjectName, ProjectId))
 
 			var sourceConfigID, sourcePathID1, sourcePathID2 string
 			var sourceJobConfigIDs, destinationJobConfigIDs, jobConfigIDs, migrationJobConfigIDs, cutoverRunIDs []string
 			var destinationConfigID, destinationPathID1, destinationPathID2 string
 
+			// Generate unique ID for FileServer names
+			uniqueID := uuid.New().String()[:8]
+			protocol := strings.ToLower(string(PROTOCOL_TYPE))
+
 			By(fmt.Sprintf("Creating Source File Server : %s", SOURCE_HOST_IPs[0]))
 			sourceParams := CreateServereParams{
-				ConfigName:       "source-file-server",
+				ConfigName:       fmt.Sprintf("tc-001-%s-src-fs-%s", protocol, uniqueID),
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
@@ -71,10 +98,10 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 			By("Getting the Source File Server Export Path ID")
-			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID, headers)
+			sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[0], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID, headers)
+			sourcePathID2, err = GetExportPathID("source", clonedSourceVolumes[1], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			LogDebug(fmt.Sprintf("Source File Server Export Path ID : [%s, %s]", sourcePathID1, sourcePathID2))
@@ -120,7 +147,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 
 			By(fmt.Sprintf("Creating Destination File Server : %s", DESTINATION_HOST_IPs[0]))
 			destinationParams := CreateServereParams{
-				ConfigName:       "destination-file-server",
+				ConfigName:       fmt.Sprintf("tc-001-%s-dest-fs-%s", protocol, uniqueID),
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
@@ -139,10 +166,10 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 
 			By("Getting the Destination File Server Export Path ID")
-			destinationPathID1, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationConfigID, headers)
+			destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[0], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
+			destinationPathID2, err = GetExportPathID("destination", clonedDestVolumes[1], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			LogDebug(fmt.Sprintf("Destination File Server Export Path ID : [%s, %s]", destinationPathID1, destinationPathID2))
@@ -211,6 +238,34 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				"src_to_dest_vol_migration.json",
 				"src2_to_dest2_vol_migration.json",
 			}
+
+			// Create volume replacement maps for dynamic validation
+			// Map old hardcoded validator volume names to cloned volume names
+			var volumeReplacementMaps []map[string]string
+			if PROTOCOL_TYPE == "NFS" {
+				volumeReplacementMaps = []map[string]string{
+					{
+						"vol_dnd_src_automation_1":  clonedSourceVolumes[0], // Old NFS source vol -> cloned name
+						"vol_dnd_dest_automation_1": clonedDestVolumes[0],   // Old NFS dest vol -> cloned name
+					},
+					{
+						"vol_dnd_src_automation_2":  clonedSourceVolumes[1], // Old NFS source vol -> cloned name
+						"vol_dnd_dest_automation_2": clonedDestVolumes[1],   // Old NFS dest vol -> cloned name
+					},
+				}
+			} else { // SMB
+				volumeReplacementMaps = []map[string]string{
+					{
+						"volSMBAuto_vol1": clonedSourceVolumes[0], // Old SMB source vol -> cloned name
+						"vol1":            clonedDestVolumes[0],   // Old SMB dest vol -> cloned name
+					},
+					{
+						"vol4_33": clonedSourceVolumes[1], // Old SMB source vol -> cloned name
+						"vol2":    clonedDestVolumes[1],   // Old SMB dest vol -> cloned name
+					},
+				}
+			}
+
 			// Get migration job run IDs and wait for completion
 			for i, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
@@ -222,7 +277,12 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
+				result, err := ValidateReport(
+					migrationJobRunID,
+					JobTypeMigration,
+					fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]),
+					volumeReplacementMaps[i],
+				)
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 				LogDebug(fmt.Sprintf("validate report result : %s", result))
 			}
@@ -279,6 +339,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			// 	Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
 			// 	LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
 			// }
+
 			By("########################## TC-001 end ################################")
 		})
 
@@ -306,24 +367,21 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 		})
 
 		AfterEach(func() {
+			testEndTime := time.Now()
+			testDuration := testEndTime.Sub(testStartTime)
+
 			By("Cleanup started")
-			err := StopAllWorkersAndWait()
-			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
-			err = RemoveDeltaFromVolume(sourceVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
+			LogDebug(fmt.Sprintf("[AfterEach] Cleaning up for Project: %s (ID: %s)", ProjectName, ProjectId))
 
-			err = RemoveDeltaFromVolume(sourceVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath2)
+			// Cleanup ONTAP cloned volumes (this removes all test data)
+			err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+			if err != nil {
+				LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
+			}
 
-			err = ClearVolume(destinationVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
-
-			err = ClearVolume(destinationVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
-
-			err = CleanupTestEnv()
-			Expect(err).To(BeNil(), "Error during test environment cleanup")
 			LogDebug("Cleanup completed")
+			LogDebug(fmt.Sprintf("[TC-001 END] Test execution completed at: %s", testEndTime.Format("2006-01-02 15:04:05")))
+			LogDebug(fmt.Sprintf("[TC-001 DURATION] Total test execution time: %s (%.2f minutes)", testDuration, testDuration.Minutes()))
 		})
 	})
 })
