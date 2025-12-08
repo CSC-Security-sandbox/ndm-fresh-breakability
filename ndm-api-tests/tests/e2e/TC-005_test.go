@@ -8,10 +8,10 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-011: Run migration with 'Upload GID/UID Mapping' option", func() {
+var _ = Describe("TC-005: Run migration with 'Upload GID/UID Mapping' option", func() {
 	BeforeEach(func() {
 		if PROTOCOL_TYPE == ProtocolSMB {
-			Skip("TC-011: is skipped in CI/CD as it is not supported in SMB")
+			Skip("TC-005: is skipped in CI/CD as it is not supported in SMB")
 		}
 	})
 	var (
@@ -33,7 +33,7 @@ var _ = Describe("TC-011: Run migration with 'Upload GID/UID Mapping' option", f
 		csvData                string
 	)
 
-	Context("TC-011: Run migration with 'Upload GID/UID Mapping' option", func() {
+	Context("TC-005: Run migration with 'Upload GID/UID Mapping' option", func() {
 		BeforeEach(func() {
 			numberOfWorker := 2
 			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
@@ -57,8 +57,8 @@ var _ = Describe("TC-011: Run migration with 'Upload GID/UID Mapping' option", f
 
 		})
 
-		It("TC-011: Run migration with 'Upload GID/UID Mapping' option", func() {
-			By("########################## TC-011 start ################################")
+		It("TC-005: Run migration with 'Upload GID/UID Mapping' option", func() {
+			By("########################## TC-005 start ################################")
 
 			var sourceFileServerID, sourcePathID1, sourcePathID2 string
 			var migrationJobConfigIDs []string
@@ -169,7 +169,7 @@ var _ = Describe("TC-011: Run migration with 'Upload GID/UID Mapping' option", f
 			Expect(userId).To(Equal(destinationUserId), "fileuserId incorrect at destination")
 			Expect(groupId).To(Equal(destinationGrpId), "fileGroupId incorrect at destination")
 
-			By("########################## TC-011 end ################################")
+			By("########################## TC-005 end ################################")
 		})
 
 		AfterEach(func() {

@@ -23,7 +23,7 @@ var _ = Describe("TC-008-009-010: Run discovery and migration with 'Exclude file
 		destinationVolumePath1 string
 		destinationVolumePath2 string
 	)
-	Context("TC-009: Run discovery and migration with 'Exclude file older than' option", func() {
+	Context("TC-008-009-010: Run discovery and migration with 'Exclude file older than', 'Exclude Path Patterns' and 'Skip files modified in last' options", func() {
 
 		BeforeEach(func() {
 			numberOfWorker := 2
@@ -41,8 +41,8 @@ var _ = Describe("TC-008-009-010: Run discovery and migration with 'Exclude file
 			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[1], DESTINATION_VOLUMES[1])
 		})
 
-		It("TC-009: Run migration with 'Exclude file older than' option", func() {
-			By("########################## TC-009 start ################################")
+		It("TC-008-009-010: Run discovery and migration with 'Exclude file older than', 'Exclude Path Patterns' and 'Skip files modified in last' options", func() {
+			By("########################## TC-008-009-010 start ################################")
 
 			var (
 				// Source-related IDs
