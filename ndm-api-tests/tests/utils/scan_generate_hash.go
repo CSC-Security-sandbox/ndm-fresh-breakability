@@ -44,14 +44,13 @@ func scanDirectories(path string) {
 	if err != nil {
 		fmt.Println("Error scanning directories:", err)
 	}
-
+	wg.Wait()
 	f, err := os.Create("results.json")
 	if err != nil {
 		fmt.Println("Error creating results file:", err)
 		return
 	}
 	defer f.Close()
-	wg.Wait()
 	if err := json.NewEncoder(f).Encode(results); err != nil {
 		fmt.Println("Error writing results to file:", err)
 		return
