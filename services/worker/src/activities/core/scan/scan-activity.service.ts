@@ -87,7 +87,6 @@ export class ScanService {
 
         }catch(error){
             if(error instanceof FatalError) 
-            if(error instanceof FatalError) 
                 throw error;  
             //TODO: this is not requried we can just throw the error.isn't it ?     
             throw new RetryableError(error.message)
