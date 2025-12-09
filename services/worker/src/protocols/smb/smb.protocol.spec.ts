@@ -655,8 +655,8 @@ describe('SMBProtocol', () => {
             const payload = { ...mockPayload };
             await smbProtocol.mountPath(mockTraceId, payload, true);
 
-            // Verify privilege service was called
-            expect(mockPrivilegeService.enableBackupPrivileges).toHaveBeenCalled();
+            // Verify privilege service was called with jobRunId
+            expect(mockPrivilegeService.enableBackupPrivileges).toHaveBeenCalledWith(payload.jobRunId);
             expect(loggerMock.log).toHaveBeenCalledWith(expect.stringContaining('Enabling Windows backup privileges'));
           });
 
@@ -683,7 +683,9 @@ describe('SMBProtocol', () => {
 
           it('should throw error when privilege enablement fails', async () => {
             const mockPrivilegeService = {
-              enableBackupPrivileges: jest.fn().mockResolvedValue(false),
+              enableBackupPrivileges: jest.fn().mockRejectedValue(
+                new Error('Failed to enable backup privileges. This usually means the user account needs to be added to the "Backup Operators" group or run as Administrator.')
+              ),
               logCurrentPrivileges: jest.fn().mockResolvedValue(undefined),
             };
             (smbProtocol as any).windowsPrivilegeService = mockPrivilegeService;
@@ -695,6 +697,7 @@ describe('SMBProtocol', () => {
             await expect(smbProtocol.mountPath(mockTraceId, payload, true)).rejects.toThrow(
               'Failed to enable Windows backup privileges'
             );
+            expect(mockPrivilegeService.enableBackupPrivileges).toHaveBeenCalledWith(payload.jobRunId);
             expect(loggerMock.error).toHaveBeenCalledWith(expect.stringContaining('Failed to enable Windows backup privileges'));
           });
 
