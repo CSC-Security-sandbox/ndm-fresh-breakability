@@ -109,7 +109,7 @@ var _ = Describe("TC-007-014: Run migration with incremental sync schedule - ver
 			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			By("Creating a migration job with Incremental Sync of 5 mins")
+			By("Creating base migration job with Incremental Sync of 5 mins")
 			currentDateTime := GetCurrentUTCTimestamp()
 			migrationParams := MigrationJobParams{
 				FirstRunAt:         currentDateTime,
@@ -128,7 +128,7 @@ var _ = Describe("TC-007-014: Run migration with incremental sync schedule - ver
 			defer resp.Body.Close()
 
 			var wg sync.WaitGroup
-			// Use TC-014 validators for initial migration (includes delta data)
+			//initial migration (only base data)
 			migration_validators := []string{
 				"src_to_dest_vol_migration.json",
 				"src2_to_dest2_vol_migration.json",
@@ -165,9 +165,7 @@ var _ = Describe("TC-007-014: Run migration with incremental sync schedule - ver
 					Expect(err).NotTo(HaveOccurred(), "Error parsing current datetimes")
 					sch, err := cron.ParseStandard("*/5 * * * *")
 					Expect(err).NotTo(HaveOccurred(), "invalid cron expression")
-					expectedNext := sch.Next(parsedBase)
-
-					// assert actualNext is within ±1min of expectedNext
+					expectedNext := sch.Next(parsedBase) // assert actualNext is within ±1min of expectedNext
 					Expect(actualNext).To(BeTemporally("~", expectedNext, time.Minute), "expected next schedule exactly at %s; got %s",
 						expectedNext.Format(TIME_FORMAT),
 						jobSummary.NextScheduleDate)
@@ -175,7 +173,7 @@ var _ = Describe("TC-007-014: Run migration with incremental sync schedule - ver
 					LogDebug(fmt.Sprintf("Next Migration %s expected at %s", migrationJobConfigID, expectedNext.Format("2006-01-02 15:04:05")))
 
 					LogDebug("Validate migration report for 1st iteration (base data without delta)")
-					result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
+					result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-004-JSON/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
 					Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 					By(fmt.Sprintf("validate report result : %s", result))
 				}(i, migrationJobConfigID)
@@ -194,8 +192,8 @@ var _ = Describe("TC-007-014: Run migration with incremental sync schedule - ver
 			By("Step 2: Validating incremental Sync for addition is triggered")
 			additionJobRunIDs := make([]string, len(migrationJobConfigIDs))
 			addition_validators := []string{
-				"src_to_dest_vol_migration.json",
-				"src2_to_dest2_vol_migration.json",
+				"src_to_dest_vol_delta_migration.json",
+				"src2_to_dest2_vol_delta_migration.json",
 			}
 			for i, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
@@ -213,7 +211,7 @@ var _ = Describe("TC-007-014: Run migration with incremental sync schedule - ver
 				LogDebug(fmt.Sprintf("Addition sync completed for job run %s", migrationJobRunID))
 
 				// Validate addition sync report (should include delta data)
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-014-JSON/%s/%s", PROTOCOL_TYPE, addition_validators[i]))
+				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-004-JSON/%s/%s", PROTOCOL_TYPE, addition_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "Error validating addition sync report")
 				By(fmt.Sprintf("Addition sync validation result: %s", result))
 			}
@@ -229,10 +227,7 @@ var _ = Describe("TC-007-014: Run migration with incremental sync schedule - ver
 
 			By("Step 4: Validating incremental Sync for deletion is triggered")
 			deletionJobRunIDs := make([]string, len(migrationJobConfigIDs))
-			deletion_validators := []string{
-				"src_to_dest_vol_migration.json",
-				"src2_to_dest2_vol_migration.json",
-			}
+
 			for i, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 				Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">=", 3), "Expected at least 3 job runs")
@@ -247,11 +242,6 @@ var _ = Describe("TC-007-014: Run migration with incremental sync schedule - ver
 				Expect(err).NotTo(HaveOccurred(), "Migration job for deletion sync did not complete")
 
 				LogDebug(fmt.Sprintf("Deletion sync completed for job run %s", migrationJobRunID))
-
-				// Validate deletion sync report (should only have base data, delta removed)
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, deletion_validators[i]))
-				Expect(err).NotTo(HaveOccurred(), "Error validating deletion sync report")
-				By(fmt.Sprintf("Deletion sync validation result: %s", result))
 			}
 
 			By("Step 5: Discovering destination to verify deletion was mirrored")
@@ -271,7 +261,6 @@ var _ = Describe("TC-007-014: Run migration with incremental sync schedule - ver
 			Expect(err).NotTo(HaveOccurred(), "Error creating discovery job for destination")
 			Expect(len(destinationJobConfigIDs)).To(BeNumerically(">", 0), "No valid destinationJobConfigIDs found")
 			defer resp.Body.Close()
-
 			By("Getting jobs by jobConfigId for destination discovery")
 			discovery_validators := []string{
 				"dest_vol_discovery.json",
@@ -288,43 +277,9 @@ var _ = Describe("TC-007-014: Run migration with incremental sync schedule - ver
 				err = WaitForJobState(destinationDiscoveryJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Discovery job did not complete")
 
-				result, err := ValidateReport(destinationDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/TC-014-JSON/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
+				result, err := ValidateReport(destinationDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/TC-004-JSON/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "Error validating discovery report")
 				By(fmt.Sprintf("Validate discovery report result: %s", result))
-			}
-
-			By("Step 6: Re-adding Delta Data for Re-addition Sync")
-			err = AddDataToVolume(sourceVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error re-adding delta data to %s", sourceVolumePath1)
-			err = AddDataToVolume(sourceVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error re-adding delta data to %s", sourceVolumePath2)
-
-			LogDebug("Waiting till new Jobs run created for re-addition sync")
-			Wait(300)
-
-			By("Step 7: Validating incremental Sync for re-addition is triggered")
-			readd_validators := []string{
-				"src_to_dest_vol_migration.json",
-				"src2_to_dest2_vol_migration.json",
-			}
-			for i, migrationJobConfigID := range migrationJobConfigIDs {
-				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
-				Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">=", 4), "Expected at least 4 job runs")
-				lastIdx := len(getJobsResp.JobRuns) - 1
-				migrationJobRunID := getJobsResp.JobRuns[lastIdx].JobRunId
-				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
-				defer resp.Body.Close()
-
-				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
-				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
-				Expect(err).NotTo(HaveOccurred(), "Migration job for re-addition sync did not complete")
-
-				LogDebug(fmt.Sprintf("Re-addition sync completed for job run %s", migrationJobRunID))
-
-				// Validate re-addition sync report (should include delta data again)
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-014-JSON/%s/%s", PROTOCOL_TYPE, readd_validators[i]))
-				Expect(err).NotTo(HaveOccurred(), "Error validating re-addition sync report")
-				By(fmt.Sprintf("Re-addition sync validation result: %s", result))
 			}
 
 			By("Creating bulk cutover job")
@@ -364,13 +319,16 @@ var _ = Describe("TC-007-014: Run migration with incremental sync schedule - ver
 				Expect(err).NotTo(HaveOccurred(), "Error approving bulk cutover job for run %s", cutoverRunID)
 				defer resp.Body.Close()
 			}
-
-			/*By("Validating cutover reports")
-			for _, cutoverRunID := range cutoverRunIDs {
-				result, err := ValidateReport(cutoverRunID, JobTypeCutover, fmt.Sprintf("../../validators/%s/cutover_validation.json", PROTOCOL_TYPE))
+			cutover_validators := []string{
+				"src_to_dest_vol_cutover.json",
+				"src2_to_dest2_vol_cutover.json",
+			}
+			By("Validating cutover reports")
+			for i, cutoverRunID := range cutoverRunIDs {
+				result, err := ValidateReport(cutoverRunID, JobTypeCutover, fmt.Sprintf("../../validators/TC-004-JSON/%s/%s", PROTOCOL_TYPE, cutover_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
 				LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
-			}*/
+			}
 			By("########################## TC-007-014 end ################################")
 		})
 

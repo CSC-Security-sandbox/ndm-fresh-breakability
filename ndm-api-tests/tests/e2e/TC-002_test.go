@@ -115,7 +115,7 @@ var _ = Describe("TC-008-009-010: Run discovery and migration with 'Exclude file
 				err = WaitForJobState(sourceDiscoveryJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", sourceDiscoveryJobRunID)
 
-				result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/TC-009-JSON/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
+				result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/TC-002-JSON/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", sourceDiscoveryJobRunID)
 				LogDebug(fmt.Sprintf("Validate Report Result for Discovery Job : %s = %s", sourceDiscoveryJobRunID, result))
 			}
@@ -183,7 +183,7 @@ var _ = Describe("TC-008-009-010: Run discovery and migration with 'Exclude file
 				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
-				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-009-JSON/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
+				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/TC-002-JSON/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 				By(fmt.Sprintf("validate report result : %s", result))
 			}
