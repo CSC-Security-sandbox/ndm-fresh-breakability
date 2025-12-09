@@ -242,13 +242,20 @@ var _ = Describe("TC-008-009-010: Run discovery and migration with 'Exclude file
 			// 	Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
 			// 	By(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
 			// }
-			By("########################## TC-009 end ################################")
+			By("########################## TC-008-009-010 end ################################")
 		})
 
 		AfterEach(func() {
 			By("Cleanup started")
 			err := StopAllWorkersAndWait()
 			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
+
+			err = RestoreOriginalDataOnVolume(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error while restoring volume of %s", sourceVolumePath1)
+
+			err = RestoreOriginalDataOnVolume(sourceVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error while restoring volume of %s", sourceVolumePath2)
+
 			err = RemoveDeltaFromVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
 

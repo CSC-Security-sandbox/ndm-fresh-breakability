@@ -336,7 +336,6 @@ var _ = Describe("TC-SMB-PERMISSIONS-001-004: Test SMB default/explicit permissi
 			By(fmt.Sprintf("Discovery report validation result: %s", result))
 
 			By("########################## TC-SMB-PERMISSIONS-001-004 end ################################")
-			LogDebug("MERGED TEST COMPLETE: Validated default/explicit permissions (TC-001) + inheritance flags (TC-004)")
 		})
 
 		AfterEach(func() {
