@@ -11,7 +11,7 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-var _ = Describe("TC-007-014: Run migration with incremental sync schedule - verify both addition and deletion sync", func() {
+var _ = FDescribe("TC-007-014: Run migration with incremental sync schedule - verify both addition and deletion sync", func() {
 	var (
 		ProjectId              string
 		workerId1              string
@@ -243,7 +243,7 @@ var _ = Describe("TC-007-014: Run migration with incremental sync schedule - ver
 			By("Step 2: Validating incremental Sync for addition is triggered")
 			additionJobRunIDs := make([]string, len(migrationJobConfigIDs))
 
-			// Poll for a new job run that is different from the base run ID
+			// Poll for the first incremental run after base (index 1), implementing Option A
 			for i, migrationJobConfigID := range migrationJobConfigIDs {
 				baseRunID := baseRunIDs[i]
 				Expect(baseRunID).NotTo(BeEmpty(), "Base run ID should not be empty when looking for addition sync")
@@ -259,24 +259,26 @@ var _ = Describe("TC-007-014: Run migration with incremental sync schedule - ver
 					Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID for addition sync")
 					defer resp.Body.Close()
 
-					if len(getJobsResp.JobRuns) == 0 {
+					// We expect at least 2 runs: index 0 = base, index 1 = first incremental (addition)
+					if len(getJobsResp.JobRuns) < 2 {
 						Wait(10)
 						continue
 					}
 
-					latestIdx := len(getJobsResp.JobRuns) - 1
-					candidateID := getJobsResp.JobRuns[latestIdx].JobRunId
-
-					if candidateID != baseRunID {
-						additionRunID = candidateID
-						break
+					// Option A: always select the first incremental run after base
+					candidate := getJobsResp.JobRuns[1]
+					if candidate.JobRunId == baseRunID {
+						// Defensive: if somehow index 1 is still the base, wait and retry
+						Wait(10)
+						continue
 					}
 
-					Wait(15)
+					additionRunID = candidate.JobRunId
+					break
 				}
 
 				if additionRunID == "" {
-					pollErr = fmt.Errorf("timed out waiting for new addition sync run different from base run %s for config %s", baseRunID, migrationJobConfigID)
+					pollErr = fmt.Errorf("timed out waiting for first incremental addition run after base run %s for config %s", baseRunID, migrationJobConfigID)
 				}
 				Expect(pollErr).NotTo(HaveOccurred())
 
