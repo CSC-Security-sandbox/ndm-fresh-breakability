@@ -136,15 +136,80 @@ jobs:
           
           # Save export info
           cat >> ~/vhd-export-info.txt << EOF
-            VHD Export - $TIMESTAMP
-            Account: $SOURCE_STORAGE_ACCOUNT
-            Container: $SOURCE_CONTAINER_NAME
-            Worker Blob: worker-${TIMESTAMP}.vhd
-            Control Plane Blob: controlplane-${TIMESTAMP}.vhd
-            EOF
-                
-            echo "VHD export completed successfully"
-            REMOTE_SCRIPT
+          VHD Export - $TIMESTAMP
+          Account: $SOURCE_STORAGE_ACCOUNT
+          Container: $SOURCE_CONTAINER_NAME
+          Worker Blob: worker-${TIMESTAMP}.vhd
+          Control Plane Blob: controlplane-${TIMESTAMP}.vhd
+          EOF
+          
+          # Mount blob storage with blobfuse2 and generate SHA256 checksums
+          echo "Mounting blob storage with blobfuse2..."
+          
+          # Create mount and cache directories
+          sudo mkdir -p /mnt/azureblob /mnt/blobfuse_blockcache /mnt/blobfuse_filecache /root/.blobfuse2
+          
+          # Generate blobfuse2 config
+          cat > /tmp/blobfuse2-config-${TIMESTAMP}.yaml << BLOBFUSE_CONFIG
+          allow-other: true
+          
+          logging:
+            type: base
+            level: log_info
+            file-path: /root/.blobfuse2/blobfuse2.log
+          
+          components:
+            - libfuse
+            - block_cache
+            - attr_cache
+            - azstorage
+          
+          libfuse:
+            attribute-expiration-sec: 120
+            entry-expiration-sec: 120
+            negative-entry-expiration-sec: 240
+          
+          block_cache:
+            block-size-mb: 64
+            mem-size-mb: 32768
+            path: /mnt/blobfuse_blockcache
+            disk-size-mb: 80000
+            disk-timeout-sec: 600
+            prefetch: 32
+            parallelism: 64
+          
+          file_cache:
+            path: /mnt/blobfuse_filecache
+            max-size-mb: 80000
+            timeout-sec: 600
+          
+          attr_cache:
+            timeout-sec: 300
+          
+          azstorage:
+            type: block
+            account-name: $SOURCE_STORAGE_ACCOUNT
+            account-key: $STORAGE_KEY
+            mode: key
+            container: $SOURCE_CONTAINER_NAME
+          BLOBFUSE_CONFIG
+          
+          # Mount blob storage
+          sudo blobfuse2 mount /mnt/azureblob --config-file=/tmp/blobfuse2-config-${TIMESTAMP}.yaml
+          
+          # Generate SHA256 checksums
+          echo "Generating SHA256 checksums..."
+          cd /mnt/azureblob
+          sha256sum worker-${TIMESTAMP}.vhd controlplane-${TIMESTAMP}.vhd > ~/vhd-checksums-${TIMESTAMP}.txt
+          
+          # Unmount blob storage
+          sudo umount /mnt/azureblob
+          
+          # Cleanup blobfuse2 config
+          rm -f /tmp/blobfuse2-config-${TIMESTAMP}.yaml
+          
+          echo "VHD export completed successfully"
+          REMOTE_SCRIPT
 
       - name: Retrieve Files from VM
         run: |
@@ -155,6 +220,9 @@ jobs:
           
           sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp -o StrictHostKeyChecking=no \
             'ubuntu@20.51.200.139:~/.vhd-export/storage-key-*.txt' /tmp/vhd-export/ 2>/dev/null || true
+          
+          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp -o StrictHostKeyChecking=no \
+            'ubuntu@20.51.200.139:~/vhd-checksums-*.txt' /tmp/vhd-export/ 2>/dev/null || true
 
       - name: Parse and Output Blob Information
         id: blob-info
@@ -189,6 +257,12 @@ jobs:
     needs: vhd-export
     runs-on: openlab
     steps:
+      - name: Download Export Info
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: vhd-export-info
+          path: /tmp/vhd-export
+
       - name: Display Results
         run: |
           echo "VHD Export Complete"
@@ -199,4 +273,15 @@ jobs:
           echo "Control Plane Blob: ${{ needs.vhd-export.outputs.controlplane_blob_name }}"
           echo ""
           echo "Storage key available in artifact: vhd-export-info"
+          echo ""
+          
+          # Display SHA256 checksums if available
+          CHECKSUM_FILE=$(ls -t /tmp/vhd-export/vhd-checksums-*.txt 2>/dev/null | head -1)
+          if [ -f "$CHECKSUM_FILE" ]; then
+            echo "SHA256 Checksums:"
+            echo "================="
+            cat "$CHECKSUM_FILE"
+          else
+            echo "No checksum file found"
+          fi
  
