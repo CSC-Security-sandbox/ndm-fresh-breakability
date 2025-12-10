@@ -58,6 +58,7 @@ export interface FileServerFormContextType {
   serverTypeForm: any;
   nfsCredentialsForm: BlueXpFormType<CredentialsValidationSchemaType>;
   smbCredentialsForm: BlueXpFormType<CredentialsValidationSchemaType>;
+  isilonCredentialsForm: BlueXpFormType<any>;
   jobConfigForm: BlueXpFormType<jobConfigFormFormType>;
   hostCredentialsForm: BlueXpFormType<{ hostname: string }>;
   workersListTableStateProps: any;

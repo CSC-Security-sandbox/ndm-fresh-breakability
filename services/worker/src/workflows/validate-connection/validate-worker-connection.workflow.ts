@@ -18,6 +18,9 @@ export async function ValidateWorkerConnectionWorkflow(
     fileServer.protocols.map(async (protocol) => {
       return await validateActivity(args.traceId, protocol.type, {
         hostname: fileServer.hostname,
+        serverType: fileServer.serverType,
+        useStorageAPI: fileServer.useStorageAPI,
+        storageApiCredentials: fileServer.storageApiCredentials,
         ...protocol,
       },
       args.feature

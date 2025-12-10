@@ -6,7 +6,9 @@ import { unlinkSync, writeFileSync } from 'fs';
 import * as path from 'path';
 import { join } from 'path';
 import { AuthService } from 'src/auth/auth.service';
-import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
+import { ProtocolTypes } from 'src/protocols/protocols';
+import { ProtocolRouter } from 'src/protocols/routing/protocol-router';
+import { ServerType } from 'src/protocols/protocol/protocol.type';
 import { ConfigError, ConfigStatus, ConfigStatusPayload } from './working-directory.type';
 import { ExportPathSource } from '../list-path/list-path.type';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
@@ -23,7 +25,7 @@ export class ValidateWorkingDirectoryActivity {
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly authService: AuthService,
-    private readonly protocols: Protocols
+    private readonly protocolRouter: ProtocolRouter
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
@@ -127,9 +129,11 @@ export class ValidateWorkingDirectoryActivity {
           continue;
         }
         
-        const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
+        // Determine server type from payload, default to OtherNAS
+        const serverType = fileServer.serverType || ServerType.OTHER_NAS;
+        const protocol = this.protocolRouter.getProtocol(serverType, ProtocolTypes[fileServer.type]);
 
-        const mountPathPayload = {
+        const mountPathPayload: any = {
           hostname: fileServer.host,
           username: fileServer.username,
           password: fileServer.password,
@@ -139,6 +143,16 @@ export class ValidateWorkingDirectoryActivity {
           pathId: traceId,
           jobRunId: traceId,
         };
+
+        // For Dell Isilon, add API credentials to enable dummy mode
+        if (serverType === 'DellIsilon') {
+          mountPathPayload.useStorageAPI = true;
+          mountPathPayload.storageApiCredentials = {
+            apiEndpoint: 'https://dummy-isilon:8080',
+            username: 'dummy-user',
+            password: 'dummy-password',
+          };
+        }
 
         this.logger.log(`Mounting export path for host ${fileServer.host}`);
         await protocol.mountPath(traceId, mountPathPayload, false);
@@ -176,9 +190,11 @@ export class ValidateWorkingDirectoryActivity {
 
     try {
       for (const fileServer of payload.listPathPayload) {
-        const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
+        // Determine server type from payload, default to OtherNAS
+        const serverType = fileServer.serverType || ServerType.OTHER_NAS;
+        const protocol = this.protocolRouter.getProtocol(serverType, ProtocolTypes[fileServer.type]);
 
-        const mountPathPayload = {
+        const mountPathPayload: any = {
           hostname: fileServer.host,
           username: fileServer.username,
           password: fileServer.password,
@@ -188,6 +204,20 @@ export class ValidateWorkingDirectoryActivity {
           pathId: traceId,
           jobRunId: traceId
         };
+
+        // For Dell Isilon, add API credentials to enable dummy mode
+        if (serverType === 'DellIsilon') {
+          mountPathPayload.useStorageAPI = true;
+          mountPathPayload.storageApiCredentials = {
+            apiEndpoint: 'https://dummy-isilon:8080',
+            username: 'dummy-user',
+            password: 'dummy-password',
+          };
+          
+          // In dummy mode, skip actual directory validation and return success
+          this.logger.log(`[${traceId}] Dell Isilon API mode - skipping directory validation (dummy data)`);
+          return true;
+        }
 
         this.logger.log(`Mounting export path for host ${fileServer.host}`);
         await protocol.mountPath(traceId, mountPathPayload, false);

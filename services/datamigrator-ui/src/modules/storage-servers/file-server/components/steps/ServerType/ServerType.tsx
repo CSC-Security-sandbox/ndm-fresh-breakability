@@ -36,6 +36,10 @@ const ServerType = () => {
               label: "Other NAS",
               value: "OtherNAS",
             },
+            {
+              label: "Dell Isilon",
+              value: "DellIsilon",
+            },
           ]}
         />
       </Box>

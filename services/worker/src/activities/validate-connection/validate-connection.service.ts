@@ -1,7 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Protocol } from 'src/protocols/protocol/protocol';
-import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
+import { ProtocolTypes } from 'src/protocols/protocols';
+import { ProtocolRouter } from 'src/protocols/routing/protocol-router';
+import { ServerType } from 'src/protocols/protocol/protocol.type';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
@@ -12,7 +14,7 @@ export class ValidateConnectionActivity {
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
-    private readonly protocols: Protocols
+    private readonly protocolRouter: ProtocolRouter
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.logger = loggerFactory.create(ValidateConnectionActivity.name);
@@ -33,7 +35,12 @@ export class ValidateConnectionActivity {
       message: `[${protocolType}] Connection to ${payload.hostname} from ${this.workerId} validated successfully`,
     };
     try {
-      const protocol: Protocol = this.protocols.getProtocol(ProtocolTypes[protocolType]);
+      // Determine server type from payload, default to OtherNAS if not specified
+      const serverType = payload.serverType || ServerType.OTHER_NAS;
+      
+      // Get the appropriate protocol implementation based on server type and protocol type
+      const protocol: Protocol = this.protocolRouter.getProtocol(serverType, ProtocolTypes[protocolType]);
+      
       await protocol.validateConnection(traceId, payload);
       if (feature.enablePreListPath) {
         response.paths = await protocol.listPaths(traceId, payload);

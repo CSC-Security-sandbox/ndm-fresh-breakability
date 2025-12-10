@@ -1,8 +1,25 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsString, IsArray, IsObject, IsOptional, ValidateNested, IsUUID } from 'class-validator';
+import { IsString, IsArray, IsObject, IsOptional, ValidateNested, IsUUID, IsBoolean } from 'class-validator';
 import { Trim } from '../../utils/transformers';
 import { ExportPathSource } from 'src/constants/enums';
+
+class StorageApiCredentials {
+  @ApiProperty({ description: 'API endpoint URL for storage system', required: false })
+  @IsOptional()
+  @IsString()
+  apiEndpoint?: string;
+
+  @ApiProperty({ description: 'Username for storage API', required: false })
+  @IsOptional()
+  @IsString()
+  username?: string;
+
+  @ApiProperty({ description: 'Password for storage API', required: false })
+  @IsOptional()
+  @IsString()
+  password?: string;
+}
 
 class Protocol {
   @ApiProperty({ enum: ['NFS', 'SMB'], description: 'The type of protocol (NFS or SMB)' })
@@ -30,6 +47,23 @@ class FileServer {
   @IsString()
   @Trim()
   hostname: string;
+
+  @ApiProperty({ description: 'The type of storage server (e.g., OtherNAS, DellIsilon)', required: false })
+  @IsOptional()
+  @IsString()
+  serverType?: string;
+
+  @ApiProperty({ description: 'Whether to use storage-specific API for operations', required: false })
+  @IsOptional()
+  @IsBoolean()
+  useStorageAPI?: boolean;
+
+  @ApiProperty({ type: StorageApiCredentials, description: 'Credentials for storage API access', required: false })
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => StorageApiCredentials)
+  storageApiCredentials?: StorageApiCredentials;
 
   @ApiProperty({
     type: [Protocol],

@@ -21,9 +21,11 @@ import {
   INITIAL_VALUE_SERVER_TYPE_FORM,
   INITIAL_VALUE_SERVICE_AND_PROTOCOL_FORM,
   INITIAL_VALUE_SMB_CREDENTIALS_FORM,
+  INITIAL_VALUE_ISILON_CREDENTIALS_FORM,
   NFS_CREDENTIALS_VALIDATION_SCHEMA,
   SERVICE_AND_PROTOCOL_VALIDATION_SCHEMA,
   SMB_CREDENTIALS_VALIDATION_SCHEMA,
+  ISILON_CREDENTIALS_VALIDATION_SCHEMA,
   VALIDATE_CONNECTION_COLUMN_DEF,
 } from "@modules/storage-servers/file-server/components/file-server.constant";
 import {
@@ -187,6 +189,13 @@ export const useFileServerForm = () => {
     SMB_CREDENTIALS_VALIDATION_SCHEMA
   );
 
+  const isilonCredentialsForm: BlueXpFormType<
+    typeof INITIAL_VALUE_ISILON_CREDENTIALS_FORM
+  > = useForm(
+    INITIAL_VALUE_ISILON_CREDENTIALS_FORM,
+    ISILON_CREDENTIALS_VALIDATION_SCHEMA
+  );
+
   const jobConfigForm: BlueXpFormType<jobConfigFormFormType> = useForm(
     INITIAL_VALUE_JOB_CONFIG
   );
@@ -223,7 +232,9 @@ export const useFileServerForm = () => {
       nfsCredentialsForm,
       smbCredentialsForm,
       hostCredentialsForm,
-      selectedProtocol
+      selectedProtocol,
+      serverTypeForm,
+      isilonCredentialsForm  // NEW: Pass isilonCredentialsForm for Dell Isilon API credentials
     );
 
     try {
@@ -329,6 +340,7 @@ export const useFileServerForm = () => {
     hostCredentialsForm,
     nfsCredentialsForm,
     smbCredentialsForm,
+    isilonCredentialsForm,
     workersListTableStateProps,
     isFetching,
     refetch: fetchWorkers,

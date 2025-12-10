@@ -5,6 +5,7 @@ import { InfoIcon } from "@netapp/bxp-style/react-icons/Notification";
 import { useContext } from "react";
 import NFSCredentials from "@modules/storage-servers/file-server/components/steps/Credentials/components/NFSCredentials";
 import SMBCredentials from "@modules/storage-servers/file-server/components/steps/Credentials/components/SMBCredentials";
+import IsilonCredentials from "@modules/storage-servers/file-server/components/steps/Credentials/components/IsilonCredentials";
 import FormFrame from "@modules/storage-servers/file-server/components/layout/FormFrame";
 
 const Credentials = () => {
@@ -63,6 +64,8 @@ const Credentials = () => {
           </Box>
         </Box>
       </FormFrame>
+
+      <IsilonCredentials />
 
       <NFSCredentials />
       <SMBCredentials />

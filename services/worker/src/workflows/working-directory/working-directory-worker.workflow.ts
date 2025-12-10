@@ -22,12 +22,30 @@ export async function ValidateWorkingDirectoryWorkerWorkflow(
   
   const results = await Promise.all(
     args.payload.listPathPayload.map(async (data: any) => {
-      return await listPathActivity(args.traceId, data.type, {
+      // Build base payload
+      const activityPayload: any = {
         hostname: data.host,
         username: data.username,
         password: data.password,
         exportPathSource: data.exportPathSource,
-      });
+      };
+
+      // Add serverType if present
+      if (data.serverType) {
+        activityPayload.serverType = data.serverType;
+      }
+
+      // Auto-inject dummy credentials for Dell Isilon
+      if (data.serverType === 'DellIsilon') {
+        activityPayload.useStorageAPI = true;
+        activityPayload.storageApiCredentials = {
+          apiEndpoint: 'https://dummy-isilon:8080',
+          username: 'dummy-user',
+          password: 'dummy-password',
+        };
+      }
+
+      return await listPathActivity(args.traceId, data.type, activityPayload);
     }),
   );
 

@@ -207,7 +207,8 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
         fileServerForm.hostCredentialsForm,
         fileServerForm.jobConfigForm,
         fileServerForm.selectedProtocol,
-        editingFileServerDetails
+        editingFileServerDetails,
+        fileServerForm.isilonCredentialsForm
       );
 
       try {

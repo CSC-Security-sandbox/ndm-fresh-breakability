@@ -53,6 +53,25 @@ export const SMB_CREDENTIALS_VALIDATION_SCHEMA = Yup.object().shape({
     .required("Export Path Source is required."), // Required for shared schema compatibility with NFS
 });
 
+export const ISILON_CREDENTIALS_VALIDATION_SCHEMA = Yup.object().shape({
+  useStorageAPI: Yup.boolean().required("Use Storage API flag is required"),
+  apiEndpoint: Yup.string().when("useStorageAPI", {
+    is: true,
+    then: (schema) => schema.required("API Endpoint is required when OneFS API is enabled"),
+    otherwise: (schema) => schema.notRequired(),
+  }),
+  apiUsername: Yup.string().when("useStorageAPI", {
+    is: true,
+    then: (schema) => schema.required("API Username is required when OneFS API is enabled"),
+    otherwise: (schema) => schema.notRequired(),
+  }),
+  apiPassword: Yup.string().when("useStorageAPI", {
+    is: true,
+    then: (schema) => schema.required("API Password is required when OneFS API is enabled"),
+    otherwise: (schema) => schema.notRequired(),
+  }),
+});
+
 export const VALIDATE_CONNECTION_COLUMN_DEF: any[] = [
   {
     header: "Workers",
@@ -139,6 +158,13 @@ export const INITIAL_VALUE_NFS_CREDENTIALS_FORM = {
     value: "",
   },
   exportPathSource: EXPORT_PATH_SOURCE_ENUM.AUTO_DISCOVER,
+};
+
+export const INITIAL_VALUE_ISILON_CREDENTIALS_FORM = {
+  useStorageAPI: false,
+  apiEndpoint: "",
+  apiUsername: "",
+  apiPassword: "",
 };
 
 export const INITIAL_VALUE_JOB_CONFIG = {

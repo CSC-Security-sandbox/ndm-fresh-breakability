@@ -24,7 +24,9 @@ export const createValidateConnectionPayload = (
   nfsCredentialsForm: BlueXpFormType<CredentialsValidationSchemaType>,
   smbCredentialsForm: BlueXpFormType<CredentialsValidationSchemaType>,
   hostCredentialsForm: BlueXpFormType<any>,
-  selectedProtocol: 'NFS' | 'SMB'
+  selectedProtocol: 'NFS' | 'SMB',
+  serverTypeForm?: BlueXpFormType<ServerTypeFormType>,
+  isilonCredentialsForm?: BlueXpFormType<any>
 ) => {
   const protocols: protocolsType[] = [];
 
@@ -44,11 +46,28 @@ export const createValidateConnectionPayload = (
       password: smbCredentialsForm.formState?.password,
     });
   }
+  
+  // Extract serverType from form, default to OtherNAS
+  const serverType = serverTypeForm?.formState?.serverType?.value || "OtherNAS";
+  
+  const fileServer: any = {
+    hostname: hostCredentialsForm?.formState?.host.trim(),
+    serverType: serverType,
+    protocols,
+  };
+
+  // Add Dell Isilon API credentials if provided
+  if (serverType === "DellIsilon" && isilonCredentialsForm?.formState?.useStorageAPI) {
+    fileServer.useStorageAPI = true;
+    fileServer.storageApiCredentials = {
+      apiEndpoint: isilonCredentialsForm.formState.apiEndpoint || "",
+      username: isilonCredentialsForm.formState.apiUsername || "",
+      password: isilonCredentialsForm.formState.apiPassword || "",
+    };
+  }
+  
   return {
-    fileServer: {
-      hostname: hostCredentialsForm?.formState?.host.trim(),
-      protocols,
-    },
+    fileServer,
     workerIds,
   };
 };
@@ -62,7 +81,8 @@ export const createConfigPayload = (
   hostCredentialsForm: BlueXpFormType<HostFormType>,
   jobConfigForm: BlueXpFormType<jobConfigFormFormType>,
   selectedProtocol: 'NFS' | 'SMB',
-  editingFileServerDetails?: any
+  editingFileServerDetails?: any,
+  isilonCredentialsForm?: BlueXpFormType<any>
 ) => {
   const mountPoints: any = [];
   const fileServers: FileServerType[] = [];
@@ -80,7 +100,8 @@ export const createConfigPayload = (
       hostCredentialsForm,
       mountPoints,
       workers,
-      existingFileServerId
+      existingFileServerId,
+      isilonCredentialsForm
     );
     if (nfsFileServer) {
       fileServers.push(nfsFileServer);
@@ -92,7 +113,8 @@ export const createConfigPayload = (
       hostCredentialsForm,
       mountPoints,
       workers,
-      existingFileServerId
+      existingFileServerId,
+      isilonCredentialsForm
     );
     if (smbFileServer) {
       fileServers.push(smbFileServer);
@@ -142,15 +164,16 @@ const getFileServerDetails = (
   hostCredentialsForm: BlueXpFormType<any>,
   volumes: any[],
   workers: string[],
-  existingId?: string | null
+  existingId?: string | null,
+  isilonCredentialsForm?: BlueXpFormType<any>
 ) => {
 
   if (credentialsForm.isValid && credentialsForm.formState) {
     const hostName = hostCredentialsForm?.formState?.host?.trim() || "";
+    const serverType = serverTypeForm?.formState?.serverType?.value || "OtherNAS";
     
- 
     const fileServerDetails: any = {
-      serverType: serverTypeForm?.formState?.serverType?.value || "OtherNAS",
+      serverType: serverType,
       protocol: credentialsForm.formState?.protocol || "",
       userName: credentialsForm.formState?.userName || "",
       password: credentialsForm.formState?.password || "",
@@ -160,6 +183,18 @@ const getFileServerDetails = (
       volumes: volumes || [],
       workers: workers || [], 
     };
+
+    // Add Isilon-specific credentials if Dell Isilon is selected and API is enabled
+    if (serverType === "DellIsilon" && isilonCredentialsForm?.formState?.useStorageAPI) {
+      fileServerDetails.useStorageAPI = true;
+      fileServerDetails.storageApiCredentials = {
+        apiEndpoint: isilonCredentialsForm.formState.apiEndpoint || "",
+        username: isilonCredentialsForm.formState.apiUsername || "",
+        password: isilonCredentialsForm.formState.apiPassword || "",
+      };
+    } else if (serverType === "DellIsilon") {
+      fileServerDetails.useStorageAPI = false;
+    }
 
     if (existingId) {
       fileServerDetails.id = existingId;

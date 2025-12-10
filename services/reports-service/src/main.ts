@@ -57,7 +57,13 @@ async function bootstrap() {
   hbs.registerHelper("sum", (a, b) => a + b);
 
   Logger.log("Service Queue Microservice is listening...");
-  app.enableCors();
+  
+  app.enableCors({
+    origin: true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'projectid', 'projectId'],
+  });
 
   await app.listen(3006);
 }

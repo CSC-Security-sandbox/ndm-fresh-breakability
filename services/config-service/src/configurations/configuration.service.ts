@@ -1026,6 +1026,7 @@ export class ConfigurationService {
           username: fileServer?.userName,
           password: fileServer?.password,
           exportPathSource: fileServer.exportPathSource,
+          serverType: fileServer.serverType,
         };
         listPathPayload.push(payload);
       });
@@ -1135,6 +1136,7 @@ export class ConfigurationService {
       const payload: CreateRequestDto = {
         fileServer: {
           hostname: '',
+          serverType: undefined,
           protocols: [],
         },
         options: new Options(),
@@ -1143,6 +1145,18 @@ export class ConfigurationService {
 
       config.fileServers?.forEach((fileServer) => {
         payload.fileServer.hostname = fileServer.host;
+        payload.fileServer.serverType = fileServer.serverType;
+        
+        // For Dell Isilon, automatically add dummy API credentials for testing
+        if (fileServer.serverType === 'DellIsilon') {
+          payload.fileServer.useStorageAPI = true;
+          payload.fileServer.storageApiCredentials = {
+            apiEndpoint: 'https://dummy-isilon:8080',
+            username: 'dummy-user',
+            password: 'dummy-password',
+          };
+        }
+        
         payload.fileServer.protocols.push({
           type: fileServer.protocol,
           username: fileServer.userName,
