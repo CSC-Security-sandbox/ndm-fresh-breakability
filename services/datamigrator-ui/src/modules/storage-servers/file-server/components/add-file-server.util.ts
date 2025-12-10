@@ -148,18 +148,24 @@ const getFileServerDetails = (
   if (credentialsForm.isValid && credentialsForm.formState) {
     const hostName = hostCredentialsForm?.formState?.host?.trim() || "";
     
- 
+    // Get protocolVersion value - only include if it has a valid non-empty value
+    const protocolVersionValue = credentialsForm?.formState?.protocolVersion?.value;
+    
     const fileServerDetails: any = {
       serverType: serverTypeForm?.formState?.serverType?.value || "OtherNAS",
       protocol: credentialsForm.formState?.protocol || "",
       userName: credentialsForm.formState?.userName || "",
       password: credentialsForm.formState?.password || "",
       host: hostName,
-      protocolVersion: credentialsForm?.formState?.protocolVersion?.value || "",
       exportPathSource: credentialsForm.formState?.exportPathSource || EXPORT_PATH_SOURCE_ENUM.AUTO_DISCOVER,
       volumes: volumes || [],
       workers: workers || [], 
     };
+
+    // Only include protocolVersion if it has a valid non-empty value
+    if (protocolVersionValue && protocolVersionValue.trim() !== "") {
+      fileServerDetails.protocolVersion = protocolVersionValue;
+    }
 
     if (existingId) {
       fileServerDetails.id = existingId;

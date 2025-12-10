@@ -82,8 +82,8 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
           ...nfsCredentialsInitialValues,
           protocol: "NFS",
           protocolVersion: {
-            value: nfsCredentialsInitialValues.protocolVersion || "",
-            label: nfsCredentialsInitialValues.protocolVersion || "",
+            value: nfsCredentialsInitialValues.protocolVersion || "v3",
+            label: nfsCredentialsInitialValues.protocolVersion || "v3",
           },
           exportPathSource:
             nfsCredentialsInitialValues.exportPathSource ||
