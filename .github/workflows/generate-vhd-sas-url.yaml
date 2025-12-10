@@ -1,0 +1,199 @@
+name: Generate Azure SAS URLs for Azure Artifacts
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      control_plane_blob_name:
+        description: 'Control Plane VHD blob name (Ex: controlplane_2025.12.0.vhd)'
+        required: true
+      linux_worker_blob_name:
+        description: 'Linux Worker VHD blob name (Ex: worker_2025.12.0.vhd)'
+        required: true
+      windows_worker_blob_name:
+        description: 'Windows Worker installer blob name (Ex: windows-worker-installer-2025.12.0.exe)'
+        required: true
+      storage_account_name:
+        description: 'Azure Storage Account name (Ex: netappvhdexports)'
+        required: true
+      container_name:
+        description: 'Storage Container name (Ex: ndm-releases-vhd)'
+        required: true
+      sas_expiry_days:
+        description: 'SAS URL expiry in days (ex: 7)'
+        required: true
+
+jobs:
+  generate-sas-urls:
+    runs-on: openlab
+    name: Generate VHD SAS URLs
+    
+    outputs:
+      control_plane_url: ${{ steps.generate-sas.outputs.control_plane_url }}
+      linux_worker_url: ${{ steps.generate-sas.outputs.linux_worker_url }}
+      windows_worker_url: ${{ steps.generate-sas.outputs.windows_worker_url }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install SSH client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+
+      - name: Generate SAS URLs via SSH
+        id: generate-sas
+        env:
+          SSH_HOST: ${{ vars.SAS_SSH_HOST }}
+          SSH_USER: 'ubuntu'
+          SSH_PASSWORD: ${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}
+          STORAGE_ACCOUNT_KEY: ${{ secrets.SAS_AZURE_STORAGE_ACCOUNT_KEY }}
+          STORAGE_ACCOUNT_NAME: ${{ github.event.inputs.storage_account_name }}
+          CONTAINER_NAME: ${{ github.event.inputs.container_name }}
+          CP_BLOB_NAME: ${{ github.event.inputs.control_plane_blob_name }}
+          LINUX_WORKER_BLOB_NAME: ${{ github.event.inputs.linux_worker_blob_name }}
+          WINDOWS_WORKER_BLOB_NAME: ${{ github.event.inputs.windows_worker_blob_name }}
+          EXPIRY_DAYS: ${{ github.event.inputs.sas_expiry_days }}
+        run: |
+          # Create SSH commands script
+          cat > generate_sas.sh <<'EOFSCRIPT'
+          #!/bin/bash
+          set -e
+          
+          # Calculate expiry date
+          SAS_EXPIRY=$(date -u -d "+${EXPIRY_DAYS} days" +"%Y-%m-%dT%H:%MZ")
+          
+          echo "Generating SAS URL for Control Plane VHD..."
+          CP_URL=$(az storage blob generate-sas \
+            --account-key "${STORAGE_ACCOUNT_KEY}" \
+            --account-name "${STORAGE_ACCOUNT_NAME}" \
+            --container-name "${CONTAINER_NAME}" \
+            --name "${CP_BLOB_NAME}" \
+            --permissions r \
+            --expiry "$SAS_EXPIRY" \
+            --full-uri \
+            --output tsv)
+          
+          echo "Generating SAS URL for Linux Worker VHD..."
+          LINUX_WORKER_URL=$(az storage blob generate-sas \
+            --account-key "${STORAGE_ACCOUNT_KEY}" \
+            --account-name "${STORAGE_ACCOUNT_NAME}" \
+            --container-name "${CONTAINER_NAME}" \
+            --name "${LINUX_WORKER_BLOB_NAME}" \
+            --permissions r \
+            --expiry "$SAS_EXPIRY" \
+            --full-uri \
+            --output tsv)
+          
+          echo "Generating SAS URL for Windows Worker Installer..."
+          WINDOWS_WORKER_URL=$(az storage blob generate-sas \
+            --account-key "${STORAGE_ACCOUNT_KEY}" \
+            --account-name "${STORAGE_ACCOUNT_NAME}" \
+            --container-name "${CONTAINER_NAME}" \
+            --name "${WINDOWS_WORKER_BLOB_NAME}" \
+            --permissions r \
+            --expiry "$SAS_EXPIRY" \
+            --full-uri \
+            --output tsv)
+          
+          echo "CP_URL=${CP_URL}"
+          echo "LINUX_WORKER_URL=${LINUX_WORKER_URL}"
+          echo "WINDOWS_WORKER_URL=${WINDOWS_WORKER_URL}"
+          EOFSCRIPT
+          
+          chmod +x generate_sas.sh
+          
+          # Transfer script to remote host
+          sshpass -p "${SSH_PASSWORD}" scp -o StrictHostKeyChecking=no \
+            generate_sas.sh ${SSH_USER}@${SSH_HOST}:/tmp/
+          
+          # Execute script on remote host and capture output
+          OUTPUT=$(sshpass -p "${SSH_PASSWORD}" ssh -o StrictHostKeyChecking=no \
+            ${SSH_USER}@${SSH_HOST} \
+            "export STORAGE_ACCOUNT_KEY='${STORAGE_ACCOUNT_KEY}' && \
+             export STORAGE_ACCOUNT_NAME='${STORAGE_ACCOUNT_NAME}' && \
+             export CONTAINER_NAME='${CONTAINER_NAME}' && \
+             export CP_BLOB_NAME='${CP_BLOB_NAME}' && \
+             export LINUX_WORKER_BLOB_NAME='${LINUX_WORKER_BLOB_NAME}' && \
+             export WINDOWS_WORKER_BLOB_NAME='${WINDOWS_WORKER_BLOB_NAME}' && \
+             export EXPIRY_DAYS='${EXPIRY_DAYS}' && \
+             bash /tmp/generate_sas.sh")
+          
+          
+          # Parse URLs from output
+          CP_URL=$(echo "$OUTPUT" | grep "CP_URL=" | cut -d'=' -f2-)
+          LINUX_WORKER_URL=$(echo "$OUTPUT" | grep "LINUX_WORKER_URL=" | cut -d'=' -f2-)
+          WINDOWS_WORKER_URL=$(echo "$OUTPUT" | grep "WINDOWS_WORKER_URL=" | cut -d'=' -f2-)
+          
+          # Set outputs
+          echo "control_plane_url=${CP_URL}" >> $GITHUB_OUTPUT
+          echo "linux_worker_url=${LINUX_WORKER_URL}" >> $GITHUB_OUTPUT
+          echo "windows_worker_url=${WINDOWS_WORKER_URL}" >> $GITHUB_OUTPUT
+
+      - name: Clean up remote script
+        if: always()
+        env:
+          SSH_HOST: ${{ vars.SAS_SSH_HOST }}
+          SSH_USER: 'ubuntu'
+          SSH_PASSWORD: ${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}
+        run: |
+          sshpass -p "${SSH_PASSWORD}" ssh -o StrictHostKeyChecking=no \
+            ${SSH_USER}@${SSH_HOST} "rm -f /tmp/generate_sas.sh"
+
+      - name: Display SAS URLs
+        run: |
+          # Calculate expiry date
+          EXPIRY_DATE=$(date -u -d "+${{ github.event.inputs.sas_expiry_days }} days" +"%d/%m/%Y")
+          RUN_DATE=$(date -u +"%d/%m/%Y")
+          
+          echo "### Azure Artifact SAS URLs Generated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Generated on:** ${RUN_DATE}" >> $GITHUB_STEP_SUMMARY
+          echo "**Expires on:** ${EXPIRY_DATE} (${{ github.event.inputs.sas_expiry_days }} days from run)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Control Plane VHD:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.generate-sas.outputs.control_plane_url }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Linux Worker VHD:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.generate-sas.outputs.linux_worker_url }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Windows Worker Installer:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.generate-sas.outputs.windows_worker_url }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Create artifact with URLs
+        run: |
+          mkdir -p vhd-urls
+          
+          # Calculate dates
+          EXPIRY_DATE=$(date -u -d "+${{ github.event.inputs.sas_expiry_days }} days" +"%d/%m/%Y")
+          RUN_DATE=$(date -u +"%d/%m/%Y")
+          
+          cat > vhd-urls/sas-urls-$(date +%Y%m%d-%H%M%S).txt <<EOF
+          Azure Artifact SAS URLs Generated on ${RUN_DATE}
+          Expires on ${EXPIRY_DATE} (${{ github.event.inputs.sas_expiry_days }} days from run)
+          
+          Control Plane VHD:
+          ${{ steps.generate-sas.outputs.control_plane_url }}
+          
+          Linux Worker VHD:
+          ${{ steps.generate-sas.outputs.linux_worker_url }}
+          
+          Windows Worker Installer:
+          ${{ steps.generate-sas.outputs.windows_worker_url }}
+          EOF
+
+      - name: Upload URLs as artifact
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: vhd-sas-urls-${{ github.run_number }}
+          path: vhd-urls/
+          retention-days: 10
