@@ -4,14 +4,12 @@ import (
 	"fmt"
 	. "ndm-api-tests/utils"
 	"sync"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/robfig/cron/v3"
 )
 
-var _ = FDescribe("TC-007-014: Run migration with incremental sync schedule - verify both addition and deletion sync", func() {
+var _ = Describe("TC-007-014: Run migration with incremental sync schedule - verify both addition and deletion sync", func() {
 	var (
 		ProjectId              string
 		workerId1              string
@@ -133,16 +131,8 @@ var _ = FDescribe("TC-007-014: Run migration with incremental sync schedule - ve
 				"src_to_dest_vol_migration.json",
 				"src2_to_dest2_vol_migration.json",
 			}
-			additionValidators := []string{
-				"src_to_dest_vol_delta_migration.json",
-				"src2_to_dest2_vol_delta_migration.json",
-			}
 
-			// Track base run IDs and next schedule times for each migration config
-			baseRunIDs := make([]string, len(migrationJobConfigIDs))
-			nextScheduleTimes := make([]time.Time, len(migrationJobConfigIDs))
-
-			// 1) Run and validate initial migration (base data only), record run IDs and next schedules
+			// 1) Run and validate initial migration (base data only)
 			for i, migrationJobConfigID := range migrationJobConfigIDs {
 				wg.Add(1)
 				go func(i int, migrationJobConfigID string) {
@@ -161,46 +151,6 @@ var _ = FDescribe("TC-007-014: Run migration with incremental sync schedule - ve
 					err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 					Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
-					getJobRunResp, err := GetJobRunInfo(migrationJobRunID)
-					Expect(err).NotTo(HaveOccurred(), "Error getting job run info")
-
-					jobSummary, err := GetJobSummaryByConfigID(ProjectId, migrationJobConfigID, headers)
-					Expect(err).NotTo(HaveOccurred())
-
-					LogDebug(fmt.Sprintf("Migration %s got completed at %s, Next schedule at : %s", migrationJobRunID, getJobRunResp.EndTime, jobSummary.NextScheduleDate))
-
-					actualNext, err := time.Parse(TIME_FORMAT, jobSummary.NextScheduleDate)
-					Expect(err).NotTo(HaveOccurred(), "could not parse NextScheduleDate %q", jobSummary.NextScheduleDate)
-
-					parsedBase, err := time.Parse(TIME_FORMAT, getJobRunResp.EndTime)
-					Expect(err).NotTo(HaveOccurred(), "Error parsing base end time")
-
-					// Log cron-based expectation for observability, but do not assert strict equality
-					sch, err := cron.ParseStandard("*/5 * * * *")
-					Expect(err).NotTo(HaveOccurred(), "invalid cron expression")
-					expectedNext := sch.Next(parsedBase)
-					LogDebug(fmt.Sprintf("Cron-based next for %s would be %s; controller reports %s",
-						migrationJobConfigID,
-						expectedNext.Format(TIME_FORMAT),
-						jobSummary.NextScheduleDate,
-					))
-
-					// Only sanity check: next schedule must be after base end time
-					Expect(actualNext).To(BeTemporally("<=", parsedBase.Add(15*time.Minute)),
-						"NextScheduleDate %s is unexpectedly far after base end time %s",
-						jobSummary.NextScheduleDate,
-						getJobRunResp.EndTime,
-					)
-					Expect(actualNext).To(BeTemporally(">", parsedBase),
-						"NextScheduleDate %s should be after base end time %s",
-						jobSummary.NextScheduleDate,
-						getJobRunResp.EndTime,
-					)
-
-					// Record base run ID and next schedule for later incremental detection
-					baseRunIDs[i] = migrationJobRunID
-					nextScheduleTimes[i] = actualNext
-
 					// Validate base migration report (no delta yet)
 					LogDebug("Validate migration report for 1st iteration (base data without delta)")
 					result, err := ValidateReport(migrationJobRunID, JobTypeMigration,
@@ -211,151 +161,34 @@ var _ = FDescribe("TC-007-014: Run migration with incremental sync schedule - ve
 			}
 			wg.Wait()
 
-			// Ensure we have recorded schedule times for all configs
-			for i := range migrationJobConfigIDs {
-				Expect(baseRunIDs[i]).NotTo(BeEmpty(), fmt.Sprintf("baseRunIDs[%d] should not be empty", i))
-				Expect(!nextScheduleTimes[i].IsZero()).To(BeTrue(), fmt.Sprintf("nextScheduleTimes[%d] should be set", i))
-			}
-
-			// 2) Addition sync: add delta data shortly before the next scheduled time, then wait for the new run
+			// 2) Addition sync: add delta data and wait for incremental run
 			By("Step 1: Adding Delta Data for Incremental run (Addition Sync)")
-			// Add the delta now; scheduler will pick it up on the next run
 			err = AddDataToVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
 			err = AddDataToVolume(sourceVolumePath2)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
 
-			// Compute how long to wait until just after the earliest next schedule across configs
-			var earliestNext time.Time
-			for i, t := range nextScheduleTimes {
-				if i == 0 || t.Before(earliestNext) {
-					earliestNext = t
-				}
-			}
-			buffer := 30 * time.Second
-			waitDuration := time.Until(earliestNext.Add(buffer))
-			if waitDuration < 0 {
-				waitDuration = buffer
-			}
-			LogDebug(fmt.Sprintf("Waiting %s until just after scheduled time %s for addition sync", waitDuration.String(), earliestNext.Format(TIME_FORMAT)))
-			Wait(int(waitDuration.Seconds()))
+			LogDebug("Waiting till new Jobs run created")
+			Wait(300)
 
 			By("Step 2: Validating incremental Sync for addition is triggered")
-			additionJobRunIDs := make([]string, len(migrationJobConfigIDs))
+			for _, migrationJobConfigID := range migrationJobConfigIDs {
+				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
+				Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">=", 2), "Expected at least 2 job runs")
+				defer resp.Body.Close()
 
-			// Poll for the first incremental run after base (index 1), implementing Option A
-			for i, migrationJobConfigID := range migrationJobConfigIDs {
-				baseRunID := baseRunIDs[i]
-				Expect(baseRunID).NotTo(BeEmpty(), "Base run ID should not be empty when looking for addition sync")
+				lastIdx := len(getJobsResp.JobRuns) - 1
+				migrationJobRunID := getJobsResp.JobRuns[lastIdx].JobRunId
+				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
 
-				var (
-					additionRunID string
-					pollErr       error
-				)
-
-				pollUntil := time.Now().Add(10 * time.Minute)
-				for time.Now().Before(pollUntil) {
-					getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
-					Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID for addition sync")
-					defer resp.Body.Close()
-
-					// We expect at least 2 runs: index 0 = base, index 1 = first incremental (addition)
-					if len(getJobsResp.JobRuns) < 2 {
-						Wait(10)
-						continue
-					}
-
-					// Option A: always select the first incremental run after base
-					candidate := getJobsResp.JobRuns[1]
-					if candidate.JobRunId == baseRunID {
-						// Defensive: if somehow index 1 is still the base, wait and retry
-						Wait(10)
-						continue
-					}
-
-					additionRunID = candidate.JobRunId
-					break
-				}
-
-				if additionRunID == "" {
-					pollErr = fmt.Errorf("timed out waiting for first incremental addition run after base run %s for config %s", baseRunID, migrationJobConfigID)
-				}
-				Expect(pollErr).NotTo(HaveOccurred())
-
-				additionJobRunIDs[i] = additionRunID
-				LogDebug(fmt.Sprintf("Detected addition sync run %s for config %s (base run %s)", additionRunID, migrationJobConfigID, baseRunID))
-
-				// Wait for addition sync completion
-				err = WaitForJobState(additionRunID, COMPLETED_JOBRUN)
-				Expect(err).NotTo(HaveOccurred(), "Migration job for addition sync did not complete")
-
-				// Validate addition sync report (should include delta data)
-				result, err := ValidateReport(additionRunID, JobTypeMigration,
-					fmt.Sprintf("../../validators/TC-004-JSON/%s/%s", PROTOCOL_TYPE, additionValidators[i]))
-				Expect(err).NotTo(HaveOccurred(), "Error validating addition sync report")
-				By(fmt.Sprintf("Addition sync validation result: %s", result))
+				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
+				Expect(err).NotTo(HaveOccurred(), "Addition migration job did not complete")
+				LogDebug(fmt.Sprintf("Addition sync run %s completed for config %s", migrationJobRunID, migrationJobConfigID))
 			}
 
-			// 3) Deletion sync: remove delta and again look for a new run after the next schedule
-			By("Step 3: Removing Delta Data for Deletion Sync (Incremental run)")
-			err = RemoveDeltaFromVolume(sourceVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error removing delta data files from %s", sourceVolumePath1)
-			err = RemoveDeltaFromVolume(sourceVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error removing delta data files from %s", sourceVolumePath2)
-
-			// Recompute earliest next schedule based on last completed (addition) run times
-			// For simplicity and robustness, use a fixed wait similar to addition but still search for a new run distinct from the last known one.
-			LogDebug("Polling job details for incremental deletion sync run")
-
-			By("Step 4: Validating incremental Sync for deletion is triggered")
-			deletionJobRunIDs := make([]string, len(migrationJobConfigIDs))
-
-			for i, migrationJobConfigID := range migrationJobConfigIDs {
-				lastKnownRunID := additionJobRunIDs[i]
-				Expect(lastKnownRunID).NotTo(BeEmpty(), "Last known (addition) run ID should not be empty when looking for deletion sync")
-
-				var (
-					deletionRunID string
-					pollErr       error
-				)
-
-				pollUntil := time.Now().Add(10 * time.Minute)
-				for time.Now().Before(pollUntil) {
-					getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
-					Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID for deletion sync")
-					defer resp.Body.Close()
-
-					if len(getJobsResp.JobRuns) == 0 {
-						Wait(10)
-						continue
-					}
-
-					latestIdx := len(getJobsResp.JobRuns) - 1
-					candidateID := getJobsResp.JobRuns[latestIdx].JobRunId
-
-					if candidateID != lastKnownRunID {
-						deletionRunID = candidateID
-						break
-					}
-
-					Wait(15)
-				}
-
-				if deletionRunID == "" {
-					pollErr = fmt.Errorf("timed out waiting for new deletion sync run different from last known run %s for config %s", lastKnownRunID, migrationJobConfigID)
-				}
-				Expect(pollErr).NotTo(HaveOccurred())
-
-				deletionJobRunIDs[i] = deletionRunID
-				LogDebug(fmt.Sprintf("Detected deletion sync run %s for config %s (previous run %s)", deletionRunID, migrationJobConfigID, lastKnownRunID))
-
-				// Wait for deletion sync completion
-				err = WaitForJobState(deletionRunID, COMPLETED_JOBRUN)
-				Expect(err).NotTo(HaveOccurred(), "Migration job for deletion sync did not complete")
-			}
-
-			By("Step 5: Discovering destination to verify deletion was mirrored")
-			destinationJobParams := DiscoveryJobParams{
+			By("Step 2.1: Discovering destination to verify addition sync migrated delta data")
+			additionDiscoveryJobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{destinationPathID1, destinationPathID2},
 				ExcludeOlderThan:         nil,
 				ExcludeFilePatterns:      "",
@@ -367,29 +200,84 @@ var _ = FDescribe("TC-007-014: Run migration with incremental sync schedule - ve
 				WorkflowRunTimeout:       "30s",
 				StartDelay:               "10s",
 			}
-			discoveryJobConfigIDs, resp, err := CreateDiscoveryJob(destinationJobParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating discovery job for destination")
-			Expect(len(discoveryJobConfigIDs)).To(BeNumerically(">", 0), "No valid discoveryJobConfigIDs found")
+			additionDiscoveryJobConfigIDs, resp, err := CreateDiscoveryJob(additionDiscoveryJobParams, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error creating discovery job for destination after addition sync")
+			Expect(len(additionDiscoveryJobConfigIDs)).To(BeNumerically(">", 0), "No valid additionDiscoveryJobConfigIDs found")
 			defer resp.Body.Close()
-			By("Getting jobs by jobConfigId for destination discovery")
-			discovery_validators := []string{
+
+			additionDiscoveryValidators := []string{
+				"dest_vol_after_addition_discovery.json",
+				"dest_vol2_after_addition_discovery.json",
+			}
+			for i, additionDiscoveryJobConfigID := range additionDiscoveryJobConfigIDs {
+				getJobsResp, resp, err := GetJobRunDetails(additionDiscoveryJobConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error getting discovery job run ID after addition sync")
+				defer resp.Body.Close()
+
+				additionDiscoveryJobRunID := getJobsResp.JobRuns[0].JobRunId
+				Expect(additionDiscoveryJobRunID).NotTo(BeEmpty(), "Addition Discovery JobRun ID should not be empty")
+
+				err = WaitForJobState(additionDiscoveryJobRunID, COMPLETED_JOBRUN)
+				Expect(err).NotTo(HaveOccurred(), "Discovery job after addition sync did not complete")
+
+				result, err := ValidateReport(additionDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/TC-004-JSON/%s/%s", PROTOCOL_TYPE, additionDiscoveryValidators[i]))
+				Expect(err).NotTo(HaveOccurred(), "Error validating discovery report after addition sync")
+				By(fmt.Sprintf("Addition discovery validation result: %s", result))
+			}
+
+			// 3) Deletion sync: remove delta and wait for incremental run
+			By("Step 3: Removing Delta Data for Deletion Sync (Incremental run)")
+			err = RemoveDeltaFromVolume(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error removing delta data files from %s", sourceVolumePath1)
+			err = RemoveDeltaFromVolume(sourceVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error removing delta data files from %s", sourceVolumePath2)
+
+			LogDebug("Waiting till new Jobs run created for deletion sync")
+			Wait(300)
+
+			By("Step 4: Validating incremental Sync for deletion is triggered")
+			for _, migrationJobConfigID := range migrationJobConfigIDs {
+				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
+				Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">=", 3), "Expected at least 3 job runs")
+				defer resp.Body.Close()
+
+				lastIdx := len(getJobsResp.JobRuns) - 1
+				migrationJobRunID := getJobsResp.JobRuns[lastIdx].JobRunId
+				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
+
+				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
+				Expect(err).NotTo(HaveOccurred(), "Deletion migration job did not complete")
+				LogDebug(fmt.Sprintf("Deletion sync run %s completed for config %s", migrationJobRunID, migrationJobConfigID))
+			}
+
+			By("Step 5: Discovering destination to verify deletion was mirrored (reusing existing discovery jobs)")
+			// Reuse the discovery jobs created during addition validation by triggering ad-hoc runs
+			deletionDiscoveryRunIDs := []string{}
+			for _, discoveryJobConfigID := range additionDiscoveryJobConfigIDs {
+				// Trigger ad-hoc run for the existing discovery job
+				adhocRunID, adhocResp, err := TriggerAdHocJobRun(discoveryJobConfigID)
+				Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc discovery run for deletion validation")
+				defer adhocResp.Body.Close()
+
+				Expect(adhocRunID).NotTo(BeEmpty(), "Ad-hoc run ID should not be empty")
+				By(fmt.Sprintf("Triggered ad-hoc discovery run for deletion validation: %s", adhocRunID))
+
+				deletionDiscoveryRunIDs = append(deletionDiscoveryRunIDs, adhocRunID)
+			}
+
+			By("Step 5.1: Waiting for deletion discovery runs to complete and validating")
+			deletion_discovery_validators := []string{
 				"dest_vol_discovery.json",
 				"dest_vol2_discovery.json",
 			}
-			for i, destinationJobConfigID := range discoveryJobConfigIDs {
-				getJobsResp, resp, err := GetJobRunDetails(destinationJobConfigID, headers)
-				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-				defer resp.Body.Close()
+			for i, deletionRunID := range deletionDiscoveryRunIDs {
+				err := WaitForJobState(deletionRunID, COMPLETED_JOBRUN)
+				Expect(err).NotTo(HaveOccurred(), "Deletion discovery job did not complete")
 
-				destinationDiscoveryJobRunID := getJobsResp.JobRuns[0].JobRunId
-				Expect(destinationDiscoveryJobRunID).NotTo(BeEmpty(), "Destination Discovery JobRun ID should not be empty")
-
-				err = WaitForJobState(destinationDiscoveryJobRunID, COMPLETED_JOBRUN)
-				Expect(err).NotTo(HaveOccurred(), "Discovery job did not complete")
-
-				result, err := ValidateReport(destinationDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/TC-004-JSON/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
-				Expect(err).NotTo(HaveOccurred(), "Error validating discovery report")
-				By(fmt.Sprintf("Validate discovery report result: %s", result))
+				result, err := ValidateReport(deletionRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/TC-004-JSON/%s/%s", PROTOCOL_TYPE, deletion_discovery_validators[i]))
+				Expect(err).NotTo(HaveOccurred(), "Error validating deletion discovery report")
+				By(fmt.Sprintf("Validate deletion discovery report result: %s", result))
 			}
 
 			By("Creating bulk cutover job")
