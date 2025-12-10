@@ -1,0 +1,202 @@
+name: Azure VHD Export & SAS URL Generation
+
+on:
+  workflow_dispatch:
+    inputs:
+      sig_image_id_worker:
+        description: "Worker SIG Image ID"
+        required: true
+      sig_image_id_controlplane:
+        description: "Control Plane SIG Image ID"
+        required: true
+
+env:
+  SOURCE_RESOURCE_GROUP: datamigrate-acr-resource-group
+  SOURCE_STORAGE_ACCOUNT: netappvhdexports
+  SOURCE_CONTAINER_NAME: ndm-releases-vhd
+  SOURCE_AZURE_REGION: eastus
+
+jobs:
+  vhd-export:
+    runs-on: openlab
+    outputs:
+      storage_account: ${{ steps.blob-info.outputs.storage_account }}
+      container_name: ${{ steps.blob-info.outputs.container_name }}
+      worker_blob_name: ${{ steps.blob-info.outputs.worker_blob_name }}
+      controlplane_blob_name: ${{ steps.blob-info.outputs.controlplane_blob_name }}
+    steps:
+      - name: Install SSH Tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y sshpass
+
+      - name: SSH into VM and Export VHDs
+        run: |
+          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" ssh -o StrictHostKeyChecking=no ubuntu@20.51.200.139 << 'REMOTE_SCRIPT'
+          
+          export SOURCE_RESOURCE_GROUP="datamigrate-acr-resource-group"
+          export SOURCE_STORAGE_ACCOUNT="netappvhdexports"
+          export SOURCE_CONTAINER_NAME="ndm-releases-vhd"
+          export SOURCE_AZURE_REGION="eastus"
+          export SIG_IMAGE_WORKER="${{ github.event.inputs.sig_image_id_worker }}"
+          export SIG_IMAGE_CP="${{ github.event.inputs.sig_image_id_controlplane }}"
+          export TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          
+          echo "Starting VHD export - Timestamp: $TIMESTAMP"
+          
+          # Login to Azure
+          az login --service-principal -u "${{ secrets.AZURE_CLIENT_ID }}" \
+            -p "${{ secrets.AZURE_CLIENT_SECRET }}" \
+            --tenant "${{ secrets.AZURE_TENANT_ID }}" --output none
+          
+          # Get storage account key
+          STORAGE_KEY=$(az storage account keys list \
+            --resource-group "$SOURCE_RESOURCE_GROUP" \
+            --account-name "$SOURCE_STORAGE_ACCOUNT" \
+            --query "[0].value" -o tsv)
+          
+          # Save storage key
+          mkdir -p ~/.vhd-export
+          echo "$STORAGE_KEY" > ~/.vhd-export/storage-key-${TIMESTAMP}.txt
+          chmod 600 ~/.vhd-export/storage-key-${TIMESTAMP}.txt
+          
+          # Create disks
+          DISK_ACCESS_ID="ndm-vm-export-acr-rg"
+          WORKER_DISK_NAME="ndm-worker-vhd-$TIMESTAMP"
+          CONTROLPLANE_DISK_NAME="ndm-controlplane-vhd-$TIMESTAMP"
+          
+          echo "Creating worker disk..."
+          az disk create \
+            --resource-group "$SOURCE_RESOURCE_GROUP" \
+            --name "$WORKER_DISK_NAME" \
+            --location "$SOURCE_AZURE_REGION" \
+            --gallery-image-reference "$SIG_IMAGE_WORKER" \
+            --network-access-policy AllowPrivate \
+            --disk-access "$DISK_ACCESS_ID" \
+            --output none
+          
+          echo "Creating control plane disk..."
+          az disk create \
+            --resource-group "$SOURCE_RESOURCE_GROUP" \
+            --name "$CONTROLPLANE_DISK_NAME" \
+            --location "$SOURCE_AZURE_REGION" \
+            --gallery-image-reference "$SIG_IMAGE_CP" \
+            --network-access-policy AllowPrivate \
+            --disk-access "$DISK_ACCESS_ID" \
+            --output none
+          
+          # Function to copy disk to blob
+          copy_disk() {
+            local disk_name=$1
+            local blob_name=$2
+            
+            echo "Copying $disk_name to blob storage..."
+            
+            DISK_SAS=$(az disk grant-access \
+              --resource-group "$SOURCE_RESOURCE_GROUP" \
+              --name "$disk_name" \
+              --access-level Read \
+              --duration-in-seconds 3600 \
+              --query accessSAS -o tsv)
+            
+            az storage blob copy start \
+              --source-uri "$DISK_SAS" \
+              --destination-blob "${blob_name}-${TIMESTAMP}.vhd" \
+              --destination-container "$SOURCE_CONTAINER_NAME" \
+              --account-name "$SOURCE_STORAGE_ACCOUNT" \
+              --account-key "$STORAGE_KEY" \
+              --output none
+            
+            while true; do
+              STATUS=$(az storage blob show \
+                --account-name "$SOURCE_STORAGE_ACCOUNT" \
+                --container-name "$SOURCE_CONTAINER_NAME" \
+                --name "${blob_name}-${TIMESTAMP}.vhd" \
+                --query "properties.copy.status" -o tsv \
+                --account-key "$STORAGE_KEY" 2>/dev/null)
+              
+              [ "$STATUS" = "success" ] && break
+              [ "$STATUS" = "failed" ] || [ "$STATUS" = "aborted" ] && return 1
+              
+              echo "Copy status: $STATUS"
+              sleep 30
+            done
+            
+            echo "Copy completed for $blob_name"
+            az disk revoke-access --resource-group "$SOURCE_RESOURCE_GROUP" --name "$disk_name" --output none
+          }
+          
+          # Copy both disks
+          copy_disk "$WORKER_DISK_NAME" "worker"
+          copy_disk "$CONTROLPLANE_DISK_NAME" "controlplane"
+          
+          # Cleanup temporary disks
+          az disk delete --resource-group "$SOURCE_RESOURCE_GROUP" --name "$WORKER_DISK_NAME" --yes --output none
+          az disk delete --resource-group "$SOURCE_RESOURCE_GROUP" --name "$CONTROLPLANE_DISK_NAME" --yes --output none
+          
+          # Save export info
+          cat >> ~/vhd-export-info.txt << EOF
+            VHD Export - $TIMESTAMP
+            Account: $SOURCE_STORAGE_ACCOUNT
+            Container: $SOURCE_CONTAINER_NAME
+            Worker Blob: worker-${TIMESTAMP}.vhd
+            Control Plane Blob: controlplane-${TIMESTAMP}.vhd
+            EOF
+                
+            echo "VHD export completed successfully"
+            REMOTE_SCRIPT
+
+      - name: Retrieve Files from VM
+        run: |
+          mkdir -p /tmp/vhd-export
+          
+          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp -o StrictHostKeyChecking=no \
+            ubuntu@20.51.200.139:~/vhd-export-info.txt /tmp/vhd-export/info.txt 2>/dev/null || true
+          
+          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp -o StrictHostKeyChecking=no \
+            'ubuntu@20.51.200.139:~/.vhd-export/storage-key-*.txt' /tmp/vhd-export/ 2>/dev/null || true
+
+      - name: Parse and Output Blob Information
+        id: blob-info
+        run: |
+          STORAGE_ACCOUNT="netappvhdexports"
+          CONTAINER_NAME="ndm-releases-vhd"
+          
+          # Extract blob names from info file
+          WORKER_BLOB_NAME=$(grep "Worker Blob:" /tmp/vhd-export/info.txt | tail -1 | sed 's/.*Worker Blob: //' | xargs)
+          CONTROLPLANE_BLOB_NAME=$(grep "Control Plane Blob:" /tmp/vhd-export/info.txt | tail -1 | sed 's/.*Control Plane Blob: //' | xargs)
+          
+          # Get storage key
+          STORAGE_KEY_FILE=$(ls -t /tmp/vhd-export/storage-key-*.txt 2>/dev/null | head -1)
+          STORAGE_KEY=$(cat "$STORAGE_KEY_FILE" 2>/dev/null | sed 's/[[:space:]]*//g')
+          
+          echo "storage_account=$STORAGE_ACCOUNT" >> $GITHUB_OUTPUT
+          echo "container_name=$CONTAINER_NAME" >> $GITHUB_OUTPUT
+          echo "worker_blob_name=$WORKER_BLOB_NAME" >> $GITHUB_OUTPUT
+          echo "controlplane_blob_name=$CONTROLPLANE_BLOB_NAME" >> $GITHUB_OUTPUT
+          
+          # Mask storage key
+          [ ! -z "$STORAGE_KEY" ] && echo "::add-mask::$STORAGE_KEY"
+
+      - name: Upload Export Info
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: vhd-export-info
+          path: /tmp/vhd-export/
+          retention-days: 30
+
+  display-results:
+    needs: vhd-export
+    runs-on: openlab
+    steps:
+      - name: Display Results
+        run: |
+          echo "VHD Export Complete"
+          echo "==================="
+          echo "Storage Account: ${{ needs.vhd-export.outputs.storage_account }}"
+          echo "Container: ${{ needs.vhd-export.outputs.container_name }}"
+          echo "Worker Blob: ${{ needs.vhd-export.outputs.worker_blob_name }}"
+          echo "Control Plane Blob: ${{ needs.vhd-export.outputs.controlplane_blob_name }}"
+          echo ""
+          echo "Storage key available in artifact: vhd-export-info"
+ 
