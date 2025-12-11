@@ -2020,11 +2020,11 @@ func CompareSMBPermissionsBySID(sourcePerms, destPerms []SMBPermissionWithSID) (
 }
 
 // CreateSMBFilesWithInheritanceScenarios creates test structure for 6 inheritance scenarios
-// This is a NEW function that doesn't modify CreateSMBFilesWithMultiplePermissions
+// Uses a SEPARATE directory (inheritance_test) to avoid conflicts with permissions_test
 //
 // Creates 12 items (7 folders + 5 files):
 //
-//	permissions_test/                              [Share root]
+//	inheritance_test/                              [Share root]
 //	├─ share_level_file.txt                        [S1: Inherits from share]
 //	├─ inheritance_enabled/                        [S2: L1 with (OI)(CI)]
 //	│  ├─ file1.txt                                [Inherits from parent]
@@ -2064,8 +2064,8 @@ func createInheritanceTestStructureScript(export string) string {
 	split := strings.Split(export, ":")
 	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
 
-	localTestDir := `C:\permissions_test`
-	testDir := `permissions_test`
+	localTestDir := `C:\inheritance_test`
+	testDir := `inheritance_test`
 	mappedDrive := `Z:`
 	share := fmt.Sprintf(`%s\%s`, smbShare, testDir)
 
@@ -2182,7 +2182,7 @@ func getSMBPermissionsForInheritanceTestScript(export string) string {
 	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
 
 	mappedDrive := `Z:`
-	testDir := `permissions_test`
+	testDir := `inheritance_test`
 	share := fmt.Sprintf(`%s\%s`, mappedDrive, testDir)
 
 	// PowerShell script to get comprehensive ACLs in JSON format for inheritance test structure
