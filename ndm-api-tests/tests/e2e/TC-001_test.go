@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-001-003-AboutNDM: Create a fileserver with 2 workers and check discovery and scheduled migration", func() {
+var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery and scheduled migration", func() {
 	var (
 		ProjectId              string
 		workerId1              string
@@ -24,7 +24,7 @@ var _ = Describe("TC-001-003-AboutNDM: Create a fileserver with 2 workers and ch
 		sourceVolumePath2      string
 	)
 
-	Context("TC-001-003-AboutNDM", func() {
+	Context("TC-001", func() {
 		BeforeEach(func() {
 			numberOfWorker := 2
 			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
@@ -41,7 +41,7 @@ var _ = Describe("TC-001-003-AboutNDM: Create a fileserver with 2 workers and ch
 			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[1], SOURCE_VOLUMES[1])
 		})
 
-		It("TC-001-003: Create a fileserver with 2 workers and check discovery and scheduled migration", func() {
+		It("TC-001: Create a fileserver with 2 workers and check discovery and scheduled migration", func() {
 			By("########################## TC-001 start ################################")
 
 			var sourceConfigID, sourcePathID1, sourcePathID2 string
@@ -279,7 +279,7 @@ var _ = Describe("TC-001-003-AboutNDM: Create a fileserver with 2 workers and ch
 			// 	Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
 			// 	LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
 			// }
-			By("########################## TC-001-003 end ################################")
+			By("########################## TC-001 end ################################")
 		})
 
 		It("should get versions ", func() {

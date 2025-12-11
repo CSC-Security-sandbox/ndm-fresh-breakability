@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-008-009-010: Run discovery and migration with 'Exclude file older than', 'Exclude Path Patterns' and 'Skip files modified in last' options", func() {
+var _ = Describe("TC-002: Run discovery and migration with 'Exclude file older than', 'Exclude Path Patterns' and 'Skip files modified in last' options", func() {
 	var (
 		ProjectId              string
 		workerId1              string
@@ -23,7 +23,7 @@ var _ = Describe("TC-008-009-010: Run discovery and migration with 'Exclude file
 		destinationVolumePath1 string
 		destinationVolumePath2 string
 	)
-	Context("TC-008-009-010: Run discovery and migration with 'Exclude file older than', 'Exclude Path Patterns' and 'Skip files modified in last' options", func() {
+	Context("TC-002: Run discovery and migration with 'Exclude file older than', 'Exclude Path Patterns' and 'Skip files modified in last' options", func() {
 
 		BeforeEach(func() {
 			numberOfWorker := 2
@@ -41,8 +41,8 @@ var _ = Describe("TC-008-009-010: Run discovery and migration with 'Exclude file
 			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[1], DESTINATION_VOLUMES[1])
 		})
 
-		It("TC-008-009-010: Run discovery and migration with 'Exclude file older than', 'Exclude Path Patterns' and 'Skip files modified in last' options", func() {
-			By("########################## TC-008-009-010 start ################################")
+		It("TC-002: Run discovery and migration with 'Exclude file older than', 'Exclude Path Patterns' and 'Skip files modified in last' options", func() {
+			By("########################## TC-002 start ################################")
 
 			var (
 				// Source-related IDs
@@ -242,7 +242,7 @@ var _ = Describe("TC-008-009-010: Run discovery and migration with 'Exclude file
 			// 	Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
 			// 	By(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
 			// }
-			By("########################## TC-008-009-010 end ################################")
+			By("########################## TC-002 end ################################")
 		})
 
 		AfterEach(func() {

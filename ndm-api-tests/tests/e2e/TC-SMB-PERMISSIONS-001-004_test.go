@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-SMB-PERMISSIONS-001-004: Test SMB default/explicit permissions and inheritance flags preservation during migration", func() {
+var _ = Describe("TC-SMB-PERMISSIONS-001: Test SMB default/explicit permissions and inheritance flags preservation during migration", func() {
 	BeforeEach(func() {
 		if PROTOCOL_TYPE == ProtocolNFS {
 			Skip("SMB permissions is skipped in CI/CD as it is not supported in NFS")
@@ -41,8 +41,8 @@ var _ = Describe("TC-SMB-PERMISSIONS-001-004: Test SMB default/explicit permissi
 			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[3], SOURCE_VOLUMES[3])
 		})
 
-		It("TC-SMB-PERMISSIONS-001-004: Should preserve file permissions and inheritance flags during SMB migration", func() {
-			By("########################## TC-SMB-PERMISSIONS-001-004 start ################################")
+		It("TC-SMB-PERMISSIONS-001: Should preserve file permissions and inheritance flags during SMB migration", func() {
+			By("########################## TC-SMB-PERMISSIONS-001 start ################################")
 
 			// MERGED TEST: TC-001 + TC-004
 			// This test validates BOTH:
@@ -335,7 +335,7 @@ var _ = Describe("TC-SMB-PERMISSIONS-001-004: Test SMB default/explicit permissi
 			Expect(err).NotTo(HaveOccurred(), "Error validating discovery report for destination")
 			By(fmt.Sprintf("Discovery report validation result: %s", result))
 
-			By("########################## TC-SMB-PERMISSIONS-001-004 end ################################")
+			By("########################## TC-SMB-PERMISSIONS-001 end ################################")
 		})
 
 		AfterEach(func() {

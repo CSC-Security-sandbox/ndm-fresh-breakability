@@ -10,7 +10,7 @@ import (
     . "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-SMB-PERMISSIONS-002-003: Test SMB permissions with and without SID mapping", func() {
+var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without SID mapping", func() {
     BeforeEach(func() {
 		if PROTOCOL_TYPE == ProtocolNFS {
 			Skip("SMB permissions is skipped in CI/CD as it is not supported in NFS")

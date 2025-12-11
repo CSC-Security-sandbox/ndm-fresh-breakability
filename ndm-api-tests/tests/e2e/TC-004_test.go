@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-007-014: Run migration with incremental sync schedule - verify both addition and deletion sync", func() {
+var _ = Describe("TC-004: Run migration with incremental sync schedule - verify both addition and deletion sync", func() {
 	var (
 		ProjectId              string
 		workerId1              string
@@ -23,7 +23,7 @@ var _ = Describe("TC-007-014: Run migration with incremental sync schedule - ver
 		destinationVolumePath1 string
 		destinationVolumePath2 string
 	)
-	Context("TC-007-014: Run migration with incremental sync schedule - verify both addition and deletion sync", func() {
+	Context("TC-004: Run migration with incremental sync schedule - verify both addition and deletion sync", func() {
 
 		BeforeEach(func() {
 			numberOfWorker := 2
@@ -41,8 +41,8 @@ var _ = Describe("TC-007-014: Run migration with incremental sync schedule - ver
 			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[1], DESTINATION_VOLUMES[1])
 		})
 
-		It("TC-007-014: Run migration with incremental sync schedule - verify both addition and deletion sync", func() {
-			By("########################## TC-007-014 start ################################")
+		It("TC-004: Run migration with incremental sync schedule - verify both addition and deletion sync", func() {
+			By("########################## TC-004 start ################################")
 			var (
 				// Source-related IDs
 				sourceConfigID               string
@@ -330,7 +330,7 @@ var _ = Describe("TC-007-014: Run migration with incremental sync schedule - ver
 				LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
 			}
 
-			By("########################## TC-007-014 end ################################")
+			By("########################## TC-004 end ################################")
 		})
 
 		AfterEach(func() {

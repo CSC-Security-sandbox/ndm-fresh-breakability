@@ -999,73 +999,73 @@ jobs:
           go run support_bundle.go
           echo "Support bundle uploaded successfully"
 
-  # cleanup:
-  #   name: Cleanup Infrastructure
-  #   runs-on: openlab
-  #   needs: [setup-infrastructure, run-nfs-tests, run-smb-tests, upload-support-bundle]
-  #   if: always()
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+  cleanup:
+    name: Cleanup Infrastructure
+    runs-on: openlab
+    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests, upload-support-bundle]
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-  #     - name: Setup Node.js
-  #       uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
-  #       with:
-  #         node-version: ${{ env.NODE_VERSION }}
+      - name: Setup Node.js
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
-  #     - name: Setup Terraform
-  #       uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
-  #       with:
-  #         terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-  #     - name: Configure Provider Credentials for Cleanup
-  #       run: |
-  #         VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
-  #         VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+      - name: Configure Provider Credentials for Cleanup
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
           
-  #         # Azure Provider Credentials
-  #         echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
-  #         echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
-  #         echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
-  #         echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+          # Azure Provider Credentials
+          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
         
-  #         CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
-  #         WORKER_IMAGE="${{ inputs.worker_image_version || github.event.inputs.worker_image_version }}"
+          CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
+          WORKER_IMAGE="${{ inputs.worker_image_version || github.event.inputs.worker_image_version }}"
 
-  #         # Azure Terraform Variables
-  #         echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
-  #         echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
-  #         # Determine VM owner based on trigger type
-  #         TRIGGER_TYPE="${{ inputs.trigger_type || github.event_name }}"
-  #         TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
-  #         if [[ "$TRIGGER_TYPE" == "schedule" ]]; then
-  #           VM_OWNER="NDM-Nightly-$TIMESTAMP"
-  #           echo "Nightly build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
-  #         else
-  #           VM_OWNER="${{ github.actor }}-$TIMESTAMP"
-  #           echo "Adhoc/called build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
-  #         fi
-  #         echo "TF_VAR_vm_owner=$VM_OWNER" >> $GITHUB_ENV
-  #         echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
-  #         echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
-  #         echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
+          # Azure Terraform Variables
+          echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
+          echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
+          # Determine VM owner based on trigger type
+          TRIGGER_TYPE="${{ inputs.trigger_type || github.event_name }}"
+          TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
+          if [[ "$TRIGGER_TYPE" == "schedule" ]]; then
+            VM_OWNER="NDM-Nightly-$TIMESTAMP"
+            echo "Nightly build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
+          else
+            VM_OWNER="${{ github.actor }}-$TIMESTAMP"
+            echo "Adhoc/called build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
+          fi
+          echo "TF_VAR_vm_owner=$VM_OWNER" >> $GITHUB_ENV
+          echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
+          echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
 
-  #     - name: Download Terraform State
-  #       uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-  #       with:
-  #         name: terraform-state
-  #         path: app-deployment/terraform/azure/environments/api
+      - name: Download Terraform State
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: terraform-state
+          path: app-deployment/terraform/azure/environments/api
 
-  #     - name: Initialize Terraform for Cleanup
-  #       run: |
-  #         cd app-deployment/terraform/azure/environments/api
-  #         terraform init
+      - name: Initialize Terraform for Cleanup
+        run: |
+          cd app-deployment/terraform/azure/environments/api
+          terraform init
 
-  #     - name: Destroy Terraform Resources
-  #       run: |
-  #         cd app-deployment/terraform/azure/environments/api
-  #         terraform destroy -auto-approve
+      - name: Destroy Terraform Resources
+        run: |
+          cd app-deployment/terraform/azure/environments/api
+          terraform destroy -auto-approve
 
-  #     - name: Clean Up Temporary Files
-  #       run: |
-  #         rm -rf $GITHUB_WORKSPACE/credentials 2>/dev/null || true
+      - name: Clean Up Temporary Files
+        run: |
+          rm -rf $GITHUB_WORKSPACE/credentials 2>/dev/null || true

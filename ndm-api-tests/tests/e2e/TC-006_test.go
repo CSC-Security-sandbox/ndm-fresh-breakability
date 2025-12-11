@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-012-013: Run bulk cutover with concurrent migration jobs - batch pause/resume and stop/restart", func() {
+var _ = Describe("TC-006: Run bulk cutover with concurrent migration jobs - batch pause/resume and stop/restart", func() {
 	var headers map[string]string
 	var (
 		ProjectId              string
@@ -22,7 +22,7 @@ var _ = Describe("TC-012-013: Run bulk cutover with concurrent migration jobs - 
 		destinationVolumePath1 string
 		destinationVolumePath2 string
 	)
-	Context("TC-012-013", func() {
+	Context("TC-006: Run bulk cutover with concurrent migration jobs - batch pause/resume and stop/restart", func() {
 		BeforeEach(func() {
 			NumberOfWorker := 2
 			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
@@ -37,8 +37,8 @@ var _ = Describe("TC-012-013: Run bulk cutover with concurrent migration jobs - 
 			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
 		})
 
-		It("TC-012-013: Run bulk cutover with concurrent migration jobs - batch pause/resume and stop/restart", func() {
-			By("########################## TC-012-013 start ################################")
+		It("TC-006: Run bulk cutover with concurrent migration jobs - batch pause/resume and stop/restart", func() {
+			By("########################## TC-006 start ################################")
 			var sourceConfigID1, sourcePathID1, sourcePathID2 string
 			var jobConfigIDs, migrationJobConfigIDs []string
 			var migrationJobRunID string
@@ -231,7 +231,7 @@ var _ = Describe("TC-012-013: Run bulk cutover with concurrent migration jobs - 
 			// Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", firstCutoverjobRunID)
 			// By(fmt.Sprintf("validate report result for %s: %s", firstCutoverjobRunID, result))
 
-			By("########################## TC-012-013 end ################################")
+			By("########################## TC-006 end ################################")
 		})
 
 		AfterEach(func() {

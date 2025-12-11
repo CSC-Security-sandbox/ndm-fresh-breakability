@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-004-005: Complete workflow with discovery, migration, and cutover - testing pause/resume/stop/adhoc-run at each stage", func() {
+var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutover - testing pause/resume/stop/adhoc-run at each stage", func() {
 	var headers map[string]string
 	var (
 		ProjectId              string
@@ -22,7 +22,7 @@ var _ = Describe("TC-004-005: Complete workflow with discovery, migration, and c
 		destinationVolumePath1 string
 		destinationVolumePath2 string
 	)
-	Context("TC-004-005", func() {
+	Context("TC-003", func() {
 		BeforeEach(func() {
 			NumberOfWorker := 2
 			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
@@ -38,8 +38,8 @@ var _ = Describe("TC-004-005: Complete workflow with discovery, migration, and c
 			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[1], DESTINATION_VOLUMES[1])
 		})
 
-		It("TC-004-005: Complete workflow with discovery, migration, and cutover - testing pause/resume/stop/adhoc-run at each stage", func() {
-			By("########################## TC-004-005 start ################################")
+		It("TC-003: Complete workflow with discovery, migration, and cutover - testing pause/resume/stop/adhoc-run at each stage", func() {
+			By("########################## TC-003 start ################################")
 			var sourceConfigID1, sourceConfigID2, sourcePathID1, sourcePathID2 string
 			var sourceJobConfigIDs, destinationJobConfigIDs, migrationJobConfigIDs, jobConfigIDs []string
 			var destinationConfigID, destinationPathID1, destinationPathID2, destinationJobConfigID1, destinationJobConfigID2 string
@@ -347,7 +347,7 @@ var _ = Describe("TC-004-005: Complete workflow with discovery, migration, and c
 				defer resp.Body.Close()
 			}
 
-			By("########################## TC-004-005 end ################################")
+			By("########################## TC-003 end ################################")
 		})
 
 		AfterEach(func() {
