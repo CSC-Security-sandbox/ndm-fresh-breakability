@@ -23,6 +23,7 @@ import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
+import { ManagementServerEntity } from 'src/entities/ManagementServerEntity';
 import {
   JobConfigEntity,
   JobStatus,
@@ -30,7 +31,7 @@ import {
 } from 'src/entities/jobconfig.entity';
 import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 import { WorkflowService } from 'src/workflow/workflow.service';
-import { ConfigDTO } from './dto/config.dto';
+import { ConfigDTO, ManagementServerDTO } from './dto/config.dto';
 import { ValidateExportPathAndWorkingDirectoryDTO } from './dto/validate-export-path-working-directory.dto';
 import { FindAllConfigPageDto } from './dto/findallconfig.dto';
 import {
@@ -63,6 +64,8 @@ export class ConfigurationService {
   private escapeHtml: typeof escapeHtml;
   private sanitizeHtml: typeof sanitizeHtml;
   constructor(
+    @InjectRepository(ManagementServerEntity)
+    private readonly managementServerEntity: Repository<ManagementServerEntity>,
     @InjectRepository(ConfigEntity)
     private readonly configEntity: Repository<ConfigEntity>,
     @InjectRepository(FileServerEntity)
@@ -677,6 +680,43 @@ export class ConfigurationService {
     });
   }
 
+  async createManagementServer(
+    createManagementServer: ManagementServerDTO,
+    userId: string,
+    traceId: string,
+    projectId?: string,
+  ) {
+      
+      this.logger.debug('Management server creation started');
+       // Sanitize configName input
+      const sanitizedConfigName = await this.sanitizeConfigName(
+        createManagementServer.configName,
+      );
+
+      const mgmntServerConfig = this.managementServerEntity.create({
+        name: sanitizedConfigName,
+        projectId: createManagementServer.projectId,
+        createdBy: userId,
+        updatedBy: userId,
+        hostname: createManagementServer.host,
+        serverType: createManagementServer.serverType,
+        username: createManagementServer.username,
+        password: createManagementServer?.password,
+        tlsAccepted: createManagementServer.tlsAccepted,
+        //tlsCert: createManagementServer.tlsCertificate,
+        //tlsCert: '',
+      });
+
+      await this.managementServerEntity.save(mgmntServerConfig);
+      // Call the function to get the Zones from Isilon Management Server
+
+      return {
+          message: "Management server created successfully",
+          createdBy: userId,
+          data: createManagementServer,
+      };
+  }
+
   async createConfiguration(
     createConfig: ConfigDTO,
     userId: string,
@@ -684,6 +724,8 @@ export class ConfigurationService {
     projectId?: string,
   ) {
     this.logger.debug('Config creation started');
+
+    this.logger.debug("############################# ASHISH  STARTS #############################");
 
     // Sanitize configName input
     const sanitizedConfigName = await this.sanitizeConfigName(
@@ -790,7 +832,7 @@ export class ConfigurationService {
         });
       await this.fileServerWorkingDirectoryMappingEntity.save(workingDirectory);
       this.refreshConfig(update.id, traceId);
-
+      this.logger.debug("############################# ASHISH  ENDS #############################");
       return update;
     } catch (error) {
       this.logger.error(
@@ -806,6 +848,7 @@ export class ConfigurationService {
         `Error Occurred during creating Config ${error.message}`,
       );
     }
+    
   }
 
   async updateConfiguration(
