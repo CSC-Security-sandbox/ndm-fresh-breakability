@@ -11,6 +11,7 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { FindManyOptions, In, Repository } from 'typeorm';
 import { validate as isUUID } from 'uuid';
+import * as tls from 'tls';
 import {
   ConfigErrorMsg,
   ConfigStatus,
@@ -31,7 +32,7 @@ import {
 } from 'src/entities/jobconfig.entity';
 import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 import { WorkflowService } from 'src/workflow/workflow.service';
-import { ConfigDTO, ManagementServerDTO } from './dto/config.dto';
+import { ConfigDTO, ManagementServerDTO, FetchCertificateRequestDTO, FetchCertificateResponseDTO } from './dto/config.dto';
 import { ValidateExportPathAndWorkingDirectoryDTO } from './dto/validate-export-path-working-directory.dto';
 import { FindAllConfigPageDto } from './dto/findallconfig.dto';
 import {
@@ -1513,5 +1514,157 @@ export class ConfigurationService {
       }
       return false;
     }
+  }
+
+  // fetch host name and port from host string
+  private parseHostString(hostString: string): { host: string; port: number } {
+    // Strip protocol prefix if present (http://, https://)
+    let cleanedHost = hostString.replace(/^https?:\/\//, '');
+    
+    // Remove trailing slash and path if present
+    cleanedHost = cleanedHost.split('/')[0];
+    
+    const parts = cleanedHost.split(':');
+    const host = parts[0];
+    const isIPAddress = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
+    const port = parts.length > 1 ? parseInt(parts[1], 10) : (isIPAddress ? 8080 : 443); // Default to 8080 for IP, 443 for domain
+    return { host, port };
+  }
+
+  // Extract issuer chain from certificate
+  private extractIssuerChain(cert: any): any[] {
+    const chain: any[] = [];
+    let current = cert;
+    
+    while (current && current.issuerCertificate && current !== current.issuerCertificate) {
+      chain.push({
+        CN: current.issuer?.CN,
+        O: current.issuer?.O,
+        OU: current.issuer?.OU,
+        C: current.issuer?.C,
+        ST: current.issuer?.ST,
+        L: current.issuer?.L,
+      });
+      current = current.issuerCertificate;
+    }
+    
+    return chain;
+  }
+
+  async fetchCertificate(request: FetchCertificateRequestDTO): Promise<FetchCertificateResponseDTO> {
+    const { host: hostString } = request;
+    const { host, port } = this.parseHostString(hostString);
+
+    this.logger.log(`Fetching TLS certificate from ${host}:${port}`);
+
+    return new Promise((resolve, reject) => {
+      const options: tls.ConnectionOptions = {
+        host,
+        port,
+        servername: host, // SNI (Server Name Indication)
+        rejectUnauthorized: false, // Accept self-signed certificates
+      };
+
+      const socket = tls.connect(options, () => {
+        try {
+          const cert = socket.getPeerCertificate(true);
+
+          if (!cert || Object.keys(cert).length === 0) {
+            socket.destroy();
+            reject(new BadRequestException({
+              message: `No certificate received from ${host}:${port}`,
+              host: hostString,
+              resolvedHost: host,
+              resolvedPort: port,
+            }));
+            return;
+          }
+
+          // Calculate dates
+          const validFrom = new Date(cert.valid_from);
+          const validTo = new Date(cert.valid_to);
+          const now = new Date();
+          const daysRemaining = Math.floor((validTo.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          const isExpired = now > validTo;
+
+          // Check if self-signed (subject === issuer)
+          const isSelfSigned = (
+            cert.subject?.CN === cert.issuer?.CN &&
+            cert.subject?.O === cert.issuer?.O
+          ) || !cert.issuerCertificate || cert === cert.issuerCertificate;
+
+          // Parse subject alt names
+          const subjectAltNames = cert.subjectaltname?.split(', ') || [];
+
+          // Extract issuer chain
+          const issuerChain = this.extractIssuerChain(cert);
+
+          const response: FetchCertificateResponseDTO = {
+            isSelfSigned,
+            subject: {
+              CN: cert.subject?.CN,
+              O: cert.subject?.O,
+              OU: cert.subject?.OU,
+              C: cert.subject?.C,
+              ST: cert.subject?.ST,
+              L: cert.subject?.L,
+            },
+            issuer: {
+              CN: cert.issuer?.CN,
+              O: cert.issuer?.O,
+              OU: cert.issuer?.OU,
+              C: cert.issuer?.C,
+              ST: cert.issuer?.ST,
+              L: cert.issuer?.L,
+            },
+            validFrom: validFrom.toISOString(),
+            validTo: validTo.toISOString(),
+            serialNumber: cert.serialNumber,
+            fingerprint: cert.fingerprint,
+            fingerprint256: cert.fingerprint256,
+            subjectAltNames,
+            daysRemaining,
+            isExpired,
+            issuerChain,
+            host,
+            port,
+          };
+
+          socket.destroy();
+          this.logger.log(`Successfully fetched certificate from ${host}:${port}, isSelfSigned: ${isSelfSigned}`);
+          resolve(response);
+        } catch (error) {
+          socket.destroy();
+          this.logger.error(`Error parsing certificate from ${host}:${port}: ${error.message}`);
+          reject(new InternalServerErrorException({
+            message: `Failed to parse certificate: ${error.message}`,
+            host: hostString,
+            resolvedHost: host,
+            resolvedPort: port,
+          }));
+        }
+      });
+
+      socket.on('error', (err) => {
+        this.logger.error(`TLS connection error to ${host}:${port}: ${err.message}`);
+        reject(new BadRequestException({
+          message: `Connection failed to ${host}:${port}: ${err.message}`,
+          host: hostString,
+          resolvedHost: host,
+          resolvedPort: port,
+        }));
+      });
+
+      socket.setTimeout(10000, () => {
+        socket.destroy();
+        this.logger.error(`TLS connection timeout to ${host}:${port}`);
+        reject(new BadRequestException({
+          message: `Connection timeout to ${host}:${port}`,
+          host: hostString,
+          resolvedHost: host,
+          resolvedPort: port,
+        }));
+      });
+    });
   }
 }
