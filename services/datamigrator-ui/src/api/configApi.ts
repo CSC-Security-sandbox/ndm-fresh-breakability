@@ -220,6 +220,31 @@ export const configApi = createApi({
         return response?.data || response || {};
       },
     }),
+
+    // Create Management Server for Dell Isilon
+    createManagementServer: builder.mutation<
+      { message: string; createdBy: string; data: any },
+      {
+        configName: string;
+        projectId: string;
+        host: string;
+        port: number;
+        serverType: string;
+        username: string;
+        password: string;
+        tlsAccepted: boolean;
+        tlsCertificate: string;
+      }
+    >({
+      query: (body) => ({
+        url: `servers/management-server`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: any) => {
+        return response?.data?.items || response?.data || response || {};
+      },
+    }),
   }),
 });
 
@@ -244,4 +269,5 @@ export const {
   useLazyDownloadSupportBundleQuery,
   useFetchProjectWithWorkerQuery,
   useFetchCertificateMutation,
+  useCreateManagementServerMutation,
 } = configApi;
