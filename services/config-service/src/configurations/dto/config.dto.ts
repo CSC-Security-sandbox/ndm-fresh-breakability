@@ -106,3 +106,49 @@ export class ConfigDTO {
     @IsOptional()
     createdBy?: string;
 }
+
+
+export class ManagementServerDTO {
+    @ApiProperty({ description: 'Project Id', example: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f' })
+    @IsNotEmpty()
+    projectId: string;
+
+    @ApiProperty({ description: 'Name', example: 'Isilon-Management-server' })
+    @IsString()
+    @IsNotEmpty()
+    configName: string;
+
+    @ApiProperty({ description: 'Server type', enum: ServerType, default: ServerType.dell, example: ServerType.dell })
+    @IsEnum(ServerType)
+    serverType?: ServerType = ServerType.dell;
+
+    @ApiProperty({ description: 'Host', example: '127.0.0.1:2049' })
+    @IsString()
+    @IsNotEmpty()
+    host: string;
+
+    @ApiProperty({ description: 'Username', example: 'admin' })
+    @IsNotEmpty()
+    username: string;
+
+    @ApiPropertyOptional({ description: 'password', example: '***' })
+    @IsString()
+    @IsOptional()
+    password?: string;
+
+    @ApiProperty({ description: 'UUID of createdBy', example: "36bfd77f-1d7c-47a3-8c62-3c8739e2f88f" })
+    @IsString()
+    @IsUUID()
+    @IsOptional()
+    createdBy?: string;
+
+    @ApiPropertyOptional({ description: 'TLS Accepted', example: true })
+    @IsOptional()
+    @IsNotEmpty()
+    tlsAccepted?: boolean;
+
+    @ApiPropertyOptional({ description: 'TLS Certificate', example: '-----BEGIN CERTIFICATE-----...' })
+    @IsString()
+    @IsOptional()
+    tlsCertificate?: string;
+}
