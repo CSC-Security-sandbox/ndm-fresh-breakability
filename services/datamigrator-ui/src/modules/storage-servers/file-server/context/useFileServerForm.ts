@@ -11,7 +11,7 @@ import {
   useValidateConnectionMutation,
 } from "@api/workerManagerApi";
 import { useLazyGetAllWorkersQuery } from "@api/workersApi";
-import { useFetchCertificateMutation } from "@api/configApi";
+import { useFetchCertificateMutation, useCreateManagementServerMutation } from "@api/configApi";
 import { notify } from "@components/notification/NotificationWrapper";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
 import { createValidateConnectionPayload } from "@modules/storage-servers/file-server/components/add-file-server.util";
@@ -99,6 +99,7 @@ export const useFileServerForm = () => {
   const [validateConnectionMutationApi] = useValidateConnectionMutation();
   const [checkConnectionRespApi] = useLazyCheckConnectionRespQuery();
   const [fetchCertificateApi] = useFetchCertificateMutation();
+  const [createManagementServerApi] = useCreateManagementServerMutation();
 
   const fetchWorkers = async () => {
     await getAllWorkers(`?projectId=${selectedProjectId}`)
@@ -238,12 +239,47 @@ export const useFileServerForm = () => {
     }
   };
 
-  const handleAcceptCertificate = () => {
-    // Just close the modal - navigation is handled separately
-    setShowCertificateView(false);
-    setCertificateError(null);
-    // Note: We don't set certificateAccepted here anymore
-    // The accept action triggers navigation in the component
+  const handleAcceptCertificate = async (): Promise<boolean> => {
+    // Call the management server API with the certificate PEM
+    try {
+      const configName = serverTypeForm?.formState?.configName?.trim();
+      const username = managementConsoleForm?.formState?.managementUsername?.trim();
+      const password = managementConsoleForm?.formState?.managementPassword;
+      const serverType = serverTypeForm?.formState?.serverType?.value || "dell";
+      
+      // Use host and port from the certificate fetch response
+      const host = certificateData?.host || managementConsoleForm?.formState?.managementHost?.trim();
+      const port = certificateData?.port || 8080;
+      const certificatePEM = certificateData?.certificatePEM || "";
+
+      if (!configName || !host || !username || !password) {
+        notify.error("Missing required fields for management server");
+        return false;
+      }
+
+      await createManagementServerApi({
+        configName,
+        projectId: selectedProjectId,
+        host,
+        port,
+        serverType,
+        username,
+        password,
+        tlsAccepted: true,
+        tlsCertificate: certificatePEM,
+      }).unwrap();
+
+      // Close the modal on success
+      setShowCertificateView(false);
+      setCertificateError(null);
+      setCertificateAccepted(true);
+      return true;
+    } catch (error: any) {
+      console.error("Management server creation error:", error);
+      const errorMessage = error?.data?.message || error?.message || "Failed to create management server";
+      notify.error(errorMessage);
+      return false;
+    }
   };
 
   const handleDeclineCertificate = () => {

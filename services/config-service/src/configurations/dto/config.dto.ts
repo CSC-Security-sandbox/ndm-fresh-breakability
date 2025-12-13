@@ -122,10 +122,15 @@ export class ManagementServerDTO {
     @IsEnum(ServerType)
     serverType?: ServerType = ServerType.dell;
 
-    @ApiProperty({ description: 'Host', example: '127.0.0.1:2049' })
+    @ApiProperty({ description: 'Host', example: '127.0.0.1' })
     @IsString()
     @IsNotEmpty()
     host: string;
+
+    @ApiProperty({ description: 'Port', example: 8080 })
+    @IsNumber()
+    @IsOptional()
+    port?: number;
 
     @ApiProperty({ description: 'Username', example: 'admin' })
     @IsNotEmpty()
