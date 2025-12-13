@@ -37,4 +37,8 @@ export class ManagementServerEntity extends Base {
     @Column({ type: 'boolean', nullable: true, name: 'tls_accepted', default: false })
     tlsAccepted: boolean;
 
+    @ApiProperty({ description: 'TLS Certificate (PEM format)' })
+    @Column({ type: 'text', nullable: true, name: 'tls_ca_certificate' })
+    tlsCertificate: string;
+
 }
