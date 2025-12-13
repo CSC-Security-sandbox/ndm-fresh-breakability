@@ -505,4 +505,11 @@
          <sqlFile path="liquibase/20251119_01_alter_inventory_table_add_column_for_deletion_rollback.sql"/>
       </rollback>
    </changeSet>
+
+   <changeSet id="20251212_01_create_management_server_table.sql" author="ashish">
+      <sqlFile path="liquibase/20251212_01_create_management_server_table.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/20251212_01_create_management_server_table_rollback.sql"/>
+      </rollback>
+   </changeSet>
 </databaseChangeLog>
