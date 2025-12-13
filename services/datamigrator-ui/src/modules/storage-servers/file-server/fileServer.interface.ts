@@ -83,7 +83,7 @@ export interface FileServerFormContextType {
   fetchingCertificate: boolean;
   certificateError: string | null;
   handleFetchCertificate: () => Promise<void>;
-  handleAcceptCertificate: () => void;
+  handleAcceptCertificate: () => Promise<boolean>;
   handleDeclineCertificate: () => void;
   resetCertificateState: () => void;
   isDellIsilonFormValid: () => boolean;

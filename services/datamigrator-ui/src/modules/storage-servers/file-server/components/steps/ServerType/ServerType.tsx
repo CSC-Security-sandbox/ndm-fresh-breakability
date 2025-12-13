@@ -35,7 +35,11 @@ const ServerType = () => {
   
   // Handle accept and navigate to next step (with unique name check)
   const onAcceptAndContinue = async () => {
-    handleAcceptCertificate();
+    // First, call the management server API
+    const success = await handleAcceptCertificate();
+    if (!success) {
+      return; // Don't proceed if management server creation failed
+    }
     
     const configName = serverTypeForm?.formState?.configName;
     const isConfigNameChanged = editingFileServerDetails?.configName !== configName;
