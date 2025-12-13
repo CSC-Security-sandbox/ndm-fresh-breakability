@@ -11,6 +11,7 @@ import {
   useValidateConnectionMutation,
 } from "@api/workerManagerApi";
 import { useLazyGetAllWorkersQuery } from "@api/workersApi";
+import { useFetchCertificateMutation } from "@api/configApi";
 import { notify } from "@components/notification/NotificationWrapper";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
 import { createValidateConnectionPayload } from "@modules/storage-servers/file-server/components/add-file-server.util";
@@ -21,13 +22,17 @@ import {
   INITIAL_VALUE_SERVER_TYPE_FORM,
   INITIAL_VALUE_SERVICE_AND_PROTOCOL_FORM,
   INITIAL_VALUE_SMB_CREDENTIALS_FORM,
+  INITIAL_VALUE_MANAGEMENT_CONSOLE_FORM,
+  MANAGEMENT_CONSOLE_VALIDATION_SCHEMA,
   NFS_CREDENTIALS_VALIDATION_SCHEMA,
   SERVICE_AND_PROTOCOL_VALIDATION_SCHEMA,
   SMB_CREDENTIALS_VALIDATION_SCHEMA,
   VALIDATE_CONNECTION_COLUMN_DEF,
 } from "@modules/storage-servers/file-server/components/file-server.constant";
 import {
+  CertificateResponseType,
   ErroredWorkersDetailsType,
+  ManagementConsoleFormType,
   MountPathsOptionsListType,
   WorkerIdWithNameType,
   jobConfigFormFormType,
@@ -82,10 +87,18 @@ export const useFileServerForm = () => {
   // WORKING DIR SCREEN
   const [mountPaths, setMountPaths] = useState<MountPathsOptionsListType[]>([]);
 
+  // DELL ISILON CERTIFICATE STATE
+  const [certificateData, setCertificateData] = useState<CertificateResponseType | null>(null);
+  const [showCertificateView, setShowCertificateView] = useState<boolean>(false);
+  const [certificateAccepted, setCertificateAccepted] = useState<boolean>(false);
+  const [fetchingCertificate, setFetchingCertificate] = useState<boolean>(false);
+  const [certificateError, setCertificateError] = useState<string | null>(null);
+
   // API
   const [getAllWorkers, { isFetching }] = useLazyGetAllWorkersQuery();
   const [validateConnectionMutationApi] = useValidateConnectionMutation();
   const [checkConnectionRespApi] = useLazyCheckConnectionRespQuery();
+  const [fetchCertificateApi] = useFetchCertificateMutation();
 
   const fetchWorkers = async () => {
     await getAllWorkers(`?projectId=${selectedProjectId}`)
@@ -190,6 +203,76 @@ export const useFileServerForm = () => {
   const jobConfigForm: BlueXpFormType<jobConfigFormFormType> = useForm(
     INITIAL_VALUE_JOB_CONFIG
   );
+
+  // Dell Isilon Management Console Form
+  const managementConsoleForm: BlueXpFormType<ManagementConsoleFormType> = useForm(
+    INITIAL_VALUE_MANAGEMENT_CONSOLE_FORM,
+    MANAGEMENT_CONSOLE_VALIDATION_SCHEMA
+  );
+
+  // Dell Isilon Certificate Handlers
+  const handleFetchCertificate = async () => {
+    const host = managementConsoleForm?.formState?.managementHost;
+    if (!host) {
+      notify.error("Management host is required");
+      return;
+    }
+
+    // Show modal immediately with loading state
+    setCertificateError(null);
+    setCertificateData(null);
+    setShowCertificateView(true);
+    setFetchingCertificate(true);
+    
+    try {
+      const result: any = await fetchCertificateApi({ host }).unwrap();
+      // Extract certificate data from the API response structure: { data: { items: {...} } }
+      const certificateInfo = result?.data?.items || result?.items || result;
+      setCertificateData(certificateInfo as CertificateResponseType);
+    } catch (error: any) {
+      console.error("Certificate fetch error:", error);
+      const errorMessage = error?.data?.message || error?.message || "Failed to fetch certificate from management console";
+      setCertificateError(errorMessage);
+    } finally {
+      setFetchingCertificate(false);
+    }
+  };
+
+  const handleAcceptCertificate = () => {
+    // Just close the modal - navigation is handled separately
+    setShowCertificateView(false);
+    setCertificateError(null);
+    // Note: We don't set certificateAccepted here anymore
+    // The accept action triggers navigation in the component
+  };
+
+  const handleDeclineCertificate = () => {
+    setCertificateData(null);
+    setCertificateAccepted(false);
+    setShowCertificateView(false);
+    setCertificateError(null);
+  };
+
+  // Reset certificate state when coming back to this step
+  const resetCertificateState = () => {
+    setCertificateData(null);
+    setCertificateAccepted(false);
+    setShowCertificateView(false);
+    setCertificateError(null);
+  };
+
+  // Check if Dell Isilon form is valid for proceeding
+  const isDellIsilonFormValid = () => {
+    const serverType = serverTypeForm?.formState?.serverType?.value;
+    if (serverType !== "dell") return true; // Not Dell Isilon, no validation needed
+    
+    const configName = serverTypeForm?.formState?.configName?.trim();
+    const managementHost = managementConsoleForm?.formState?.managementHost?.trim();
+    const managementUsername = managementConsoleForm?.formState?.managementUsername?.trim();
+    const managementPassword = managementConsoleForm?.formState?.managementPassword;
+    
+    return !!(configName && managementHost && managementUsername && managementPassword);
+  };
 
   const workersListTableStateProps: any = {
     columns: VALIDATE_CONNECTION_COLUMN_DEF,
@@ -329,6 +412,7 @@ export const useFileServerForm = () => {
     hostCredentialsForm,
     nfsCredentialsForm,
     smbCredentialsForm,
+    managementConsoleForm,
     workersListTableStateProps,
     isFetching,
     refetch: fetchWorkers,
@@ -378,5 +462,19 @@ export const useFileServerForm = () => {
     setDisableNextButton,
     setErrorMessageList,
     handleValidateConnection,
+    // Dell Isilon Certificate State & Handlers
+    certificateData,
+    setCertificateData,
+    showCertificateView,
+    setShowCertificateView,
+    certificateAccepted,
+    setCertificateAccepted,
+    fetchingCertificate,
+    certificateError,
+    handleFetchCertificate,
+    handleAcceptCertificate,
+    handleDeclineCertificate,
+    resetCertificateState,
+    isDellIsilonFormValid,
   };
 };
