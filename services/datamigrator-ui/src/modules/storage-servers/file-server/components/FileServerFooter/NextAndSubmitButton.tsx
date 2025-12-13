@@ -31,7 +31,15 @@ const NextAndSubmitButton = () => {
     nfsValidatedWorkersIds,
     editingFileServerDetails,
     selectedProtocol,
+    // Dell Isilon Certificate
+    isDellIsilonFormValid,
+    handleFetchCertificate,
+    fetchingCertificate,
+    showCertificateView,
+    certificateAccepted,
   } = useContext(CommonFileServerContext);
+
+  const isDellIsilon = serverTypeForm?.formState?.serverType?.value === "dell";
 
   const handleFinish = async () => {
     if (isEditMode) {
@@ -44,6 +52,17 @@ const NextAndSubmitButton = () => {
   const getDisableStatus = () => {
     switch (currentStepIndex) {
       case STEP_0_FILE_SERVER_NAME: {
+        // For Dell Isilon, check management console form validity
+        if (isDellIsilon) {
+          // If certificate view is showing, hide the button (handled in render)
+          if (showCertificateView) {
+            return true;
+          }
+          // Check if Dell Isilon form is valid for fetching certificate
+          return !isDellIsilonFormValid();
+        }
+        
+        // For Other NAS (existing logic)
         const isFormValid = serverTypeForm.isValid;
         const isFormDirty = serverTypeForm.dirty;
 
@@ -89,6 +108,15 @@ const NextAndSubmitButton = () => {
     const isFirstStep = currentStepIndex === STEP_0_FILE_SERVER_NAME;
 
     if (isFirstStep) {
+      // Dell Isilon: Always fetch certificate when clicking Proceed
+      // User must accept certificate in modal to proceed to next step
+      if (isDellIsilon) {
+        // Always fetch the certificate - modal's Accept button handles navigation
+        handleFetchCertificate();
+        return;
+      }
+      
+      // Other NAS: existing logic
       if (!isEditMode) {
         checkUniqueFileServerName();
         return;
