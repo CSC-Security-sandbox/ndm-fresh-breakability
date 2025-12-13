@@ -700,6 +700,7 @@ export class ConfigurationService {
         createdBy: userId,
         updatedBy: userId,
         hostname: createManagementServer.host,
+        port: createManagementServer.port,
         serverType: createManagementServer.serverType,
         username: createManagementServer.username,
         password: createManagementServer?.password,
