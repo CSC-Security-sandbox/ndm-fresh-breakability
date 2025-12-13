@@ -704,8 +704,7 @@ export class ConfigurationService {
         username: createManagementServer.username,
         password: createManagementServer?.password,
         tlsAccepted: createManagementServer.tlsAccepted,
-        //tlsCert: createManagementServer.tlsCertificate,
-        //tlsCert: '',
+        tlsCertificate: createManagementServer.tlsCertificate,
       });
 
       await this.managementServerEntity.save(mgmntServerConfig);
@@ -1599,6 +1598,15 @@ export class ConfigurationService {
           // Extract issuer chain
           const issuerChain = this.extractIssuerChain(cert);
 
+          // Convert DER-encoded certificate to PEM format
+          let certificatePEM: string | undefined;
+          if (cert.raw) {
+            const base64Cert = cert.raw.toString('base64');
+            // Split into 64-character lines for proper PEM format
+            const lines = base64Cert.match(/.{1,64}/g) || [];
+            certificatePEM = `-----BEGIN CERTIFICATE-----\n${lines.join('\n')}\n-----END CERTIFICATE-----`;
+          }
+
           const response: FetchCertificateResponseDTO = {
             isSelfSigned,
             subject: {
@@ -1626,6 +1634,7 @@ export class ConfigurationService {
             daysRemaining,
             isExpired,
             issuerChain,
+            certificatePEM,
             host,
             port,
           };
