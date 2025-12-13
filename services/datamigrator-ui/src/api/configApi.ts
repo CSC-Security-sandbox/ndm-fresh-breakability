@@ -175,6 +175,51 @@ export const configApi = createApi({
     fetchProjectWithWorker: builder.query<Array<Record<string, string>>, void>({
       query: () => "support-bundle",
     }),
+
+    // Fetch TLS Certificate from Dell Isilon Management Console
+    fetchCertificate: builder.mutation<
+      {
+        isSelfSigned: boolean;
+        subject: {
+          CN?: string;
+          O?: string;
+          OU?: string;
+          C?: string;
+          ST?: string;
+          L?: string;
+        };
+        issuer: {
+          CN?: string;
+          O?: string;
+          OU?: string;
+          C?: string;
+          ST?: string;
+          L?: string;
+        };
+        validFrom: string;
+        validTo: string;
+        serialNumber: string;
+        fingerprint: string;
+        fingerprint256: string;
+        subjectAltNames: string[];
+        daysRemaining: number;
+        isExpired: boolean;
+        issuerChain: any[];
+        certificatePEM: string;
+        host: string;
+        port: number;
+      },
+      { host: string }
+    >({
+      query: ({ host }) => ({
+        url: `servers/certificate/fetch`,
+        method: "POST",
+        body: { host },
+      }),
+      transformResponse: (response: any) => {
+        return response?.data || response || {};
+      },
+    }),
   }),
 });
 
@@ -198,4 +243,5 @@ export const {
   useLazyIsBundleReadyQuery,
   useLazyDownloadSupportBundleQuery,
   useFetchProjectWithWorkerQuery,
+  useFetchCertificateMutation,
 } = configApi;
