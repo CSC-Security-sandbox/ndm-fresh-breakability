@@ -3,9 +3,10 @@ import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiN
 import { Auth, Permission } from "@netapp-cloud-datamigrate/auth-lib";
 import { ConfigurationService } from "./configuration.service";
 import { UserDetails } from "./configuration.types";
-import { ConfigDTO } from "./dto/config.dto";
+import { ConfigDTO, ManagementServerDTO } from "./dto/config.dto";
 import { ConfigResponseDto, FindAllConfigPageDto, FileServerInfo} from "./dto/findallconfig.dto";
 import { ConfigApiDoc } from "src/swaggerdoc/swagger.doc";
+
 
 @ApiTags("Configuration")
 @Controller('servers')
@@ -30,6 +31,21 @@ export class ConfigurationController{
         return await this.configurationService.createConfiguration(createConfigurationDto, userDetails.user.id, userDetails?.trackId, projectId)
     }
 
+    @ApiOperation({ summary: 'Create Management Server' })
+    @ApiCreatedResponse({ description: 'Management Server Created Successfully.' })
+    @ApiBearerAuth()
+    @Auth(Permission.ManageConfig)
+    @Post('management-server')
+    @HttpCode(HttpStatus.CREATED)
+    @ApiBody({ description: 'Management server data', type: ManagementServerDTO })
+    async createManagementServer(
+        @Body() managementServerDto: ManagementServerDTO,
+        @Request() userDetails: UserDetails,
+        @Headers('projectId') projectId?: string,
+    ) {
+        
+        return await this.configurationService.createManagementServer(managementServerDto, userDetails.user.id, userDetails?.trackId, projectId);
+    }
 
     @ApiOperation({ summary: 'Get a paginated list of Config',  description: ConfigApiDoc.GET_ALL_CONFIG})
     @ApiOkResponse({ description: 'The list of Config has been retrieved successfully.',  type: ConfigResponseDto})
