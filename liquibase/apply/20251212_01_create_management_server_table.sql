@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TABLE management_server (
+CREATE TABLE IF NOT EXISTS management_server (
     id uuid DEFAULT uuid_generate_v4() NOT NULL PRIMARY KEY,
     name varchar(255) NOT NULL,
     hostname varchar(255) NOT NULL,
