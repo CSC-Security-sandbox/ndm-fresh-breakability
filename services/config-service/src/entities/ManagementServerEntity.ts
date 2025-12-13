@@ -21,6 +21,10 @@ export class ManagementServerEntity extends Base {
     @Column({ type: 'text', nullable: false, name: 'hostname' })
     hostname: string;
 
+    @ApiProperty({ description: 'Port' })
+    @Column({ type: 'integer', nullable: true, name: 'port' })
+    port: number;
+
     @ApiProperty({ description: 'Server Type' })
     @Column({ type: 'varchar', name: 'server_type' })
     serverType: ServerType;
