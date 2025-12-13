@@ -149,3 +149,16 @@ export const INITIAL_VALUE_JOB_CONFIG = {
   pathName: "",
   workingDirectory: "",
 };
+
+// Dell Isilon Management Console Form
+export const INITIAL_VALUE_MANAGEMENT_CONSOLE_FORM = {
+  managementHost: "",
+  managementUsername: "",
+  managementPassword: "",
+};
+
+export const MANAGEMENT_CONSOLE_VALIDATION_SCHEMA = Yup.object().shape({
+  managementHost: Yup.string().required("Management Host is required"),
+  managementUsername: Yup.string().required("Username is required"),
+  managementPassword: Yup.string().required("Password is required"),
+});
