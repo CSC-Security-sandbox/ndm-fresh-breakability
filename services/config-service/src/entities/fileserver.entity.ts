@@ -75,7 +75,11 @@ export class FileServerEntity extends Base {
     @OneToMany(() => PathUploadsEntity, (upload) => upload.fileServer)
     uploads: PathUploadsEntity[];
 
-    @ManyToOne(() => ManagementServerEntity, managamentServer => managamentServer.id, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
+    @ApiProperty({ description: 'Management Server ID (FK)' })
+    @Column({ type: 'uuid', nullable: true, name: 'management_server_id' })
+    managementServerId?: string;
+
+    @ManyToOne(() => ManagementServerEntity, managementServer => managementServer.fileServers, { nullable: true, onDelete:'CASCADE', orphanedRowAction : 'delete'})
     @JoinColumn({ name: 'management_server_id' }) 
-    managementServerId: ManagementServerEntity;
+    managementServer?: ManagementServerEntity;
 }
