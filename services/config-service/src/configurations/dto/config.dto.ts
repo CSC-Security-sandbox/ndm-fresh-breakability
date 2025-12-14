@@ -278,3 +278,137 @@ export class FetchCertificateResponseDTO {
     @IsNumber()
     port: number;
 }
+
+// ==========================================
+// Storage Client DTOs
+// ==========================================
+
+/**
+ * Request DTO for fetching zones from Dell Isilon
+ */
+export class FetchZonesRequestDTO {
+    @ApiProperty({ description: 'Server type', enum: ServerType, example: ServerType.dell })
+    @IsEnum(ServerType)
+    @IsNotEmpty()
+    serverType: ServerType;
+
+    @ApiProperty({ description: 'Host address (IP or domain)', example: '10.192.7.32' })
+    @IsString()
+    @IsNotEmpty()
+    host: string;
+
+    @ApiProperty({ description: 'Port number', example: 8080, default: 8080 })
+    @IsNumber()
+    @IsOptional()
+    port?: number;
+
+    @ApiProperty({ description: 'Username for authentication', example: 'root' })
+    @IsString()
+    @IsNotEmpty()
+    username: string;
+
+    @ApiProperty({ description: 'Password for authentication', example: 'password123' })
+    @IsString()
+    @IsNotEmpty()
+    password: string;
+
+    @ApiProperty({ description: 'TLS certificate in PEM format' })
+    @IsString()
+    @IsNotEmpty()
+    certificate: string;
+}
+
+/**
+ * Zone information from Isilon
+ */
+export class IsilonZoneDTO {
+    @ApiProperty({ description: 'Zone name/ID', example: 'System' })
+    @IsString()
+    name: string;
+
+    @ApiProperty({ description: 'Zone path', example: '/ifs' })
+    @IsString()
+    @IsOptional()
+    path?: string;
+
+    @ApiProperty({ description: 'Zone ID', example: 1 })
+    @IsNumber()
+    @IsOptional()
+    id?: number;
+}
+
+/**
+ * Response DTO for fetching zones
+ */
+export class FetchZonesResponseDTO {
+    @ApiProperty({ description: 'List of zones', type: [IsilonZoneDTO] })
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => IsilonZoneDTO)
+    zones: IsilonZoneDTO[];
+
+    @ApiProperty({ description: 'Total number of zones found', example: 3 })
+    @IsNumber()
+    totalZones: number;
+}
+
+/**
+ * NFS Export Path DTO
+ */
+export class NFSExportPathDTO {
+    @ApiProperty({ description: 'Export path', example: '/ifs/data' })
+    @IsString()
+    path: string;
+
+    @ApiProperty({ description: 'Export ID', example: 1 })
+    @IsNumber()
+    @IsOptional()
+    id?: number;
+}
+
+/**
+ * SMB Share DTO
+ */
+export class SMBShareDTO {
+    @ApiProperty({ description: 'Share name', example: 'data' })
+    @IsString()
+    name: string;
+
+    @ApiProperty({ description: 'Share path', example: '/ifs/data' })
+    @IsString()
+    @IsOptional()
+    path?: string;
+}
+export class GetNFSExportPathsRequestDTO {
+    @ApiProperty({ description: 'File Server ID (zone)', example: 'uuid' })
+    @IsUUID()
+    fileServerId: string;
+}
+
+// Response DTO
+export class GetNFSExportPathsResponseDTO {
+    @ApiProperty({ description: 'List of NFS export paths', type: [NFSExportPathDTO] })
+    @IsArray()
+    exports: NFSExportPathDTO[];
+
+    @ApiProperty({ description: 'Total number of exports found', example: 5 })
+    @IsNumber()
+    totalExports: number;
+}
+
+export class GetSMBExportPathsRequestDTO {
+    @ApiProperty({ description: 'File Server ID (zone)', example: 'uuid' })
+    @IsUUID()
+    fileServerId: string;
+}
+
+// Response DTO
+export class GetSMBExportPathsResponseDTO {
+    @ApiProperty({ description: 'List of SMB export paths', type: [SMBShareDTO] })
+    @IsArray()
+    exports: SMBShareDTO[];
+
+    @ApiProperty({ description: 'Total number of exports found', example: 5 })
+    @IsNumber()
+    totalExports: number;
+}
