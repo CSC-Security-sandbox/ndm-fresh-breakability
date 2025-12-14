@@ -88,42 +88,6 @@ export class ConfigurationController{
         return await this.configurationService.refreshConfig(id, userDetails?.trackId)
     }
 
-    @ApiOperation({ summary: 'Get Configuration by ID' , description: ConfigApiDoc.GET_CONFIG_BY_ID})
-    @ApiOkResponse({ description: 'Configuration Found' ,  type: ConfigDTO})
-    @ApiNotFoundResponse({ description: 'Configuration Not Found' })
-    @ApiBearerAuth()
-    @Auth(Permission.ViewConfig)
-    @Get(':id')
-    async getConfiguration(@Param('id') id: string) {
-        return await this.configurationService.getConfigById(id)
-    }
-
-    @ApiOperation({ summary: 'Update Configuration by ID', description: ConfigApiDoc.UPDATE_CONFIG_ID })
-    @ApiOkResponse({ description: 'Configuration Updated Successfully' })
-    @ApiNotFoundResponse({ description: 'Configuration Not Found' })
-    @ApiBody({ description: 'Configuration data to update', type: ConfigDTO })
-    @ApiBearerAuth()
-    @Auth(Permission.ManageConfig)
-    @Put(':id')
-    async update(
-        @Param('id') id: string,
-        @Body() updateConfig: ConfigDTO,
-        @Request() userDetails: UserDetails,
-        @Headers('projectId') projectId?: string,
-    ) {
-        return await this.configurationService.updateConfiguration(id, updateConfig, userDetails.user.id, userDetails?.trackId, projectId);
-    }
-
-    @ApiOperation({ summary: 'Delete Configuration by ID' , description: ConfigApiDoc.DELETE_CONFIG_ID})
-    @ApiOkResponse({ description: 'Configuration Deleted Successfully' })
-    @ApiNotFoundResponse({ description: 'Configuration Not Found' })
-    @ApiBearerAuth()
-    @Auth(Permission.ManageConfig)
-    @Delete(':id')
-    async remove(@Param('id') id: string) {
-        return await this.configurationService.remove(id);
-    }
-
     // ==================== TLS Certificate API ==================== //
 
     @ApiOperation({ 
@@ -172,5 +136,41 @@ export class ConfigurationController{
         @Body() request: FetchZonesRequestDTO,
     ): Promise<FetchZonesResponseDTO> {
         return await this.configurationService.fetchZones(request);
+    }
+
+    @ApiOperation({ summary: 'Get Configuration by ID' , description: ConfigApiDoc.GET_CONFIG_BY_ID})
+    @ApiOkResponse({ description: 'Configuration Found' ,  type: ConfigDTO})
+    @ApiNotFoundResponse({ description: 'Configuration Not Found' })
+    @ApiBearerAuth()
+    @Auth(Permission.ViewConfig)
+    @Get(':id')
+    async getConfiguration(@Param('id') id: string) {
+        return await this.configurationService.getConfigById(id)
+    }
+
+    @ApiOperation({ summary: 'Update Configuration by ID', description: ConfigApiDoc.UPDATE_CONFIG_ID })
+    @ApiOkResponse({ description: 'Configuration Updated Successfully' })
+    @ApiNotFoundResponse({ description: 'Configuration Not Found' })
+    @ApiBody({ description: 'Configuration data to update', type: ConfigDTO })
+    @ApiBearerAuth()
+    @Auth(Permission.ManageConfig)
+    @Put(':id')
+    async update(
+        @Param('id') id: string,
+        @Body() updateConfig: ConfigDTO,
+        @Request() userDetails: UserDetails,
+        @Headers('projectId') projectId?: string,
+    ) {
+        return await this.configurationService.updateConfiguration(id, updateConfig, userDetails.user.id, userDetails?.trackId, projectId);
+    }
+
+    @ApiOperation({ summary: 'Delete Configuration by ID' , description: ConfigApiDoc.DELETE_CONFIG_ID})
+    @ApiOkResponse({ description: 'Configuration Deleted Successfully' })
+    @ApiNotFoundResponse({ description: 'Configuration Not Found' })
+    @ApiBearerAuth()
+    @Auth(Permission.ManageConfig)
+    @Delete(':id')
+    async remove(@Param('id') id: string) {
+        return await this.configurationService.remove(id);
     }
 }
