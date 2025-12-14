@@ -59,11 +59,9 @@ const BulkMigrateScheduleComponent = ({
     if (typeof scheduledError === "string") {
       return scheduledError;
     }
-
     if (pickerError === "disablePast") {
       return "You can't select a date in the past";
     }
-
     return "";
   }, [pickerError, errors?.scheduledDateTime]);
 

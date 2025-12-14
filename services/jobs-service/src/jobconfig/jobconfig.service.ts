@@ -953,10 +953,27 @@ export class JobConfigService {
   ): Promise<JobConfigEntity> {
     const job = await this.jobConfigRepo.findOne({ where: { id } });
     if (!job) {
-      throw new Error(`Job with id ${id} not found`);
+      throw new NotFoundException(`Job with id ${id} not found`);
     }
-    Object.assign(job, data);
+    
+    // Handle field mapping between DTO and entity
+    const { futureSchedule, ...otherData } = data;
+    Object.assign(job, otherData);
+    
+    // Map futureSchedule from DTO to futureScheduleAt in entity
+    if (futureSchedule !== undefined) {
+      job.futureScheduleAt = futureSchedule;
+    }
+    
     return this.jobConfigRepo.save(job);
+  }
+
+  async getJobEntity(id: string): Promise<JobConfigEntity> {
+    const job = await this.jobConfigRepo.findOne({ where: { id } });
+    if (!job) {
+      throw new NotFoundException(`Job with id ${id} not found`);
+    }
+    return job;
   }
 
   // ------------ Bulk delete ---------------- //
@@ -1129,10 +1146,6 @@ export class JobConfigService {
                                       .split(",")
                                       .map(pattern => pattern.trim())
                                       .filter(pattern => pattern !== "") ) : [];
-    const isFutureDate = (date: Date | null | undefined): boolean => {
-      if (!date) return false;
-      return new Date(date).getTime() > Date.now();
-    };
 
     if (jobConfig.jobType === JobType.MIGRATE) {
       return {
@@ -1150,10 +1163,8 @@ export class JobConfigService {
         [JobConfigurationEnum.preserveAccessTime]: jobConfig.preserveAccessTime ? "Enabled" : "Disabled",
         [JobConfigurationEnum.excludeFilePatterns]: excludeFilePatternsArray,
         [JobConfigurationEnum.excludeOlderThan]: jobConfig.excludeOlderThan,
-        ...(isFutureDate(jobConfig.firstRunAt) && {
-          [JobConfigurationEnum.firstRunAt]: jobConfig.firstRunAt,
-        }),
         [JobConfigurationEnum.futureScheduleAt]: jobConfig.futureScheduleAt,
+        [JobConfigurationEnum.firstRunAt]: jobConfig.firstRunAt,
       }
     } else if (jobConfig.jobType === JobType.CUT_OVER) {
       return {
@@ -1164,57 +1175,10 @@ export class JobConfigService {
     } else {
       return {
         [JobConfigurationEnum.excludeFilePatterns]: excludeFilePatternsArray,
-        ...(isFutureDate(jobConfig.firstRunAt) && {
-          [JobConfigurationEnum.firstRunAt]: jobConfig.firstRunAt,
-        }),
+        [JobConfigurationEnum.firstRunAt]: jobConfig.firstRunAt,
       }
     }
   }
-
-  async getIdentityMappingsForJob(jobConfigId: string): Promise<any> {
-  // Get cross mappings for this job
-  const crossMappings = await this.identityCrossMappingRepo.find({
-    where: { jobConfigId, isOrphan: false },
-    relations: ['identityMapping']
-  });
-
-  if (crossMappings.length === 0) {
-    return null;
-  }
-
-  // Get all identity mapping IDs
-  const identityMappingIds = crossMappings.map(cm => cm.identityMappingId);
-  
-  // Get actual mappings - FIXED: use identityMap field not identityMappingId
-  const mappings = await this.identityMappingRepo.find({
-    where: { identityMap: In(identityMappingIds) }
-  });
-
-  // Group by type
-  const result = {
-    gidMappings: [],
-    uidMappings: [], 
-    sidMappings: []
-  };
-
-  mappings.forEach(mapping => {
-    const mappingData = {
-      sourceMapping: mapping.sourceMapping,
-      targetMapping: mapping.targetMapping
-    };
-    
-    // FIXED: Use lowercase for comparison
-    if (mapping.identityType.toLowerCase() === 'gid') {
-      result.gidMappings.push(mappingData);
-    } else if (mapping.identityType.toLowerCase() === 'uid') {
-      result.uidMappings.push(mappingData);
-    } else if (mapping.identityType.toLowerCase() === 'sid') {
-      result.sidMappings.push(mappingData);
-    }
-  });
-
-  return result;
-}
 
   async getConfigsByProjectId(projectId: string) {
     if (!isUUID(projectId)) throw new BadRequestException("Invalid projectId");
@@ -1928,5 +1892,88 @@ export class JobConfigService {
       }
     }
     return errorTypeCounts;
+  }
+
+  async getIdentityMappingsForJob(jobConfigId: string): Promise<any> {
+    try {
+      // Find cross mappings for this job config
+      const crossMappings = await this.identityCrossMappingRepo.find({
+        where: { jobConfigId, isOrphan: false },
+        relations: ['identityMapping'],
+      });
+
+      if (!crossMappings.length) {
+        return {
+          data: [],
+          message: 'No identity mappings found for this job configuration',
+        };
+      }
+
+      // Extract identity mapping IDs
+      const identityMappingIds = crossMappings.map(
+        (crossMapping) => crossMapping.identityMappingId
+      );
+
+      // Get the actual identity mappings
+      const identityMappings = await this.identityMappingRepo.findBy({
+        identityMap: In(identityMappingIds),
+      });
+
+      return {
+        data: identityMappings,
+        crossMappings: crossMappings,
+      };
+    } catch (error) {
+      this.logger.error(`Error fetching identity mappings for job ${jobConfigId}:`, error);
+      throw new BadRequestException(`Failed to fetch identity mappings: ${error.message}`);
+    }
+  }
+
+  async updateJobIdentityMappings(jobConfigId: string, mappingData: { sidMapping?: string; gidMapping?: string }): Promise<void> {
+    try {
+      let parsedMappings = [];
+      let templateType;
+      const identityMap = uuidv4();
+      
+      const existingCrossMapping = await this.identityCrossMappingRepo.find({
+        where: {
+          jobConfigId: jobConfigId,
+          isOrphan: false,
+        },
+      });
+
+      if (existingCrossMapping.length > 0) {
+        await this.identityCrossMappingRepo.update(
+          { jobConfigId: jobConfigId, isOrphan: false },
+          { isOrphan: true }
+        );
+        this.logger.log(`Marked existing mappings as orphan for job config: ${jobConfigId}`);
+      }
+
+      if (mappingData.sidMapping) {
+        templateType = TemplateType.SID;
+        const sidMapping = await this.decodeBase64(mappingData.sidMapping);
+        parsedMappings = await this.parseBlobData(sidMapping, templateType);
+      }
+      
+      if (mappingData.gidMapping) {
+        templateType = TemplateType.GID;
+        const gidMapping = await this.decodeBase64(mappingData.gidMapping);
+        parsedMappings = await this.parseBlobData(gidMapping, templateType);
+      }
+
+      if (parsedMappings.length > 0) {
+        await this.saveIdentityMappingsWithMap(
+          [jobConfigId],
+          parsedMappings,
+          identityMap,
+          templateType
+        );
+        this.logger.log(`Successfully updated identity mappings for job config: ${jobConfigId}`);
+      }
+    } catch (error) {
+      this.logger.error(`Error updating identity mappings for job ${jobConfigId}:`, error);
+      throw new BadRequestException(`Failed to update identity mappings: ${error.message}`);
+    }
   }
 }

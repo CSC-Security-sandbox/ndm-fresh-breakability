@@ -12,7 +12,9 @@ import {
   useGetJobConfigDetailsQuery,
   useLazyDownloadTemplateQuery,
   useUpdateJobRunStatusMutation,
-  useGetJobIdentityMappingsQuery,
+  useLazyGetJobIdentityMappingsQuery,
+  useUpdateDiscoveryJobConfigMutation,
+  useUpdateMigrationJobConfigMutation,
 } from "@api/jobsApi";
 import {
   useDownloadReportsMutation,
@@ -21,6 +23,7 @@ import {
   useLazyDownloadErrorLogsCSVQuery,
   useLazyGenerateErrorLogsQuery,
 } from "@api/reportApi";
+import { convertFileToBase64 } from "@/utils/common.utils";
 import { hasPermission } from "@auth/auth.utils";
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import { Box } from "@components/container/index";
@@ -31,10 +34,7 @@ import TableWrapper from "@components/table-wrapper/TableWrapper";
 import TitleWithLastRefreshedDate from "@components/TitleWithLastRefreshedDate/TitleWithLastRefreshedDate";
 import useAdhocRun from "@hooks/useAdhocRun";
 import { useLatestJobRun } from "@/hooks/useLatestJobRun";
-import {
-  getActionMenu,
-  getReportActions,
-} from "@modules/jobs/job-run-list/run.utils";
+import { getActionMenu, getReportActions } from "@modules/jobs/job-run-list/run.utils";
 import { ErrorLogActionButton } from "@modules/jobs/job-task-errors/components/ErrorLogActionButton";
 import {
   DOWNLOAD_BULK_ERROR_REPORT,
@@ -50,12 +50,16 @@ import {
   handleDownloadReport,
 } from "@modules/jobs/jobs.utils";
 import ScheduleComponent from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/components/ScheduleComponent";
-import { BULK_DISCOVERY_FORM_SCHEMA } from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discover.constant";
+import {
+  BULK_DISCOVERY_FORM_SCHEMA,
+  DEFAULT_MINUTES_AHEAD as DISCOVERY_DEFAULT_MINUTES_AHEAD,
+} from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discover.constant";
 import { bulkDiscoveryFormType } from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discovery.interface";
 import {
   SKIP_FILE_OPTIONS,
   OPTIONS_FORM,
   MIGRATE_OPTION_ENUM,
+  DEFAULT_MINUTES_AHEAD  as MIGRATE_DEFAULT_MINUTES_AHEAD
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import { MappingStepFormikFormType, OptionsFormType } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.interface";
 import { 
@@ -85,7 +89,11 @@ import {
   Toggle,
   useForm,
 } from "@netapp/bxp-design-system-react";
-import { useEffect, useMemo, useState } from "react";
+import { WEEKDAY_OPTIONS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
+import { MobileTimePicker } from "@mui/x-date-pickers/MobileTimePicker";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { setModalClose, setModalProps } from "@store/reducer/commonComponentSlice";
@@ -93,6 +101,7 @@ import { isValidCron } from "cron-validator";
 import cronstrue from "cronstrue";
 import { useFormik } from "formik";
 import dayjs from "dayjs";
+import ExistingIdentityMappings from "@/hooks/useExistingIdentityMappings";
 
 type DownloadTemplateTrigger = ReturnType<
   typeof useLazyDownloadTemplateQuery
@@ -104,13 +113,13 @@ const JobDetails = () => {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
   const adhocRun = useAdhocRun();
-
   const [openConfirmation, setOpenConfirmation] = useState(false);
   const [selectedJobRunId, setSelectedJobRunId] = useState("");
   const [isFrequentInterval, setIsFrequentInterval] = useState<boolean>(false);
-
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [showGeneratingReportBtn, setShowGeneratingReportBtn] =
     useState<Record<string, boolean>>();
+  const [isJobRunning, setIsJobRunning] = useState<boolean>(false);
   const {
     data: jobConfigDetails,
     isLoading,
@@ -131,6 +140,8 @@ const JobDetails = () => {
   const [downloadErrorLogs] = useLazyDownloadErrorLogsCSVQuery();
   const [generateErrorLogs] = useLazyGenerateErrorLogsQuery();
   const [downloadTemplateApi] = useLazyDownloadTemplateQuery();
+  const [shouldFetchMappings, setShouldFetchMappings] = useState(false);
+  const [getJobIdentityMappings, { data: existingMappings, isLoading: isMappingsLoading }] = useLazyGetJobIdentityMappingsQuery();
   const BulkMigrateContextWrapper = withBulkMigrateCreateForm(
     BulkMigrateContextProvider
   );
@@ -153,18 +164,27 @@ const JobDetails = () => {
     }
   }, [jobConfigDetails?.jobRuns?.length]);
 
-  const { data: existingMappings, isLoading: isMappingsLoading } = useGetJobIdentityMappingsQuery(
-    jobId,
-    { skip: !jobId }
-  );
+  useEffect(() => {
+    if (!isModalOpen || !jobId) return;
+    const fastCheckInterval = setInterval(() => {
+      refetch();
+    }, 2000);
+    return () => clearInterval(fastCheckInterval);
+  }, [isModalOpen, jobId, refetch]);
+
+  useEffect(() => {
+    if (shouldFetchMappings || jobId) {
+      getJobIdentityMappings(jobId);
+      setShouldFetchMappings(false);
+    }
+  }, [shouldFetchMappings, jobId, getJobIdentityMappings]);
 
   const [downloadReportApi] = useDownloadReportsMutation();
   const [getPdfReportApi] = useGetPdfReportMutation();
-
   const canDownloadReport = hasPermission(USER_PERMISSION_TYPE_ENUM.Reports);
-
-  const [updateStatus, { isLoading: isUpdating }] =
-    useUpdateJobRunStatusMutation();
+  const [updateStatus, { isLoading: isUpdating }] = useUpdateJobRunStatusMutation();
+  const [updateDiscoveryConfig, { isLoading: isUpdatingDiscoveryConfig }] = useUpdateDiscoveryJobConfigMutation();
+  const [updateMigrationConfig, { isLoading: isUpdatingMigrationConfig }] = useUpdateMigrationJobConfigMutation();
   
   const handleUpdateStatus = async (
     jobRunId: JobRunApiType["jobRunId"],
@@ -178,7 +198,6 @@ const JobDetails = () => {
       console.error(error);
     }
   };
-
   const canUpdateStatus = hasPermission(USER_PERMISSION_TYPE_ENUM.ManageJob);
 
   const rowMenu = (row: JobRunApiType) => {
@@ -280,7 +299,6 @@ const JobDetails = () => {
   const isDisplayGeneratingLabel = useMemo(() => {
     const hasReportData =
       showGeneratingReportBtn && Object.keys(showGeneratingReportBtn).length;
-
     return hasReportData ? showGeneratingReportBtn : data;
   }, [showGeneratingReportBtn]);
 
@@ -428,38 +446,37 @@ const JobDetails = () => {
     );
   };
 
+  // common configurations
+  const configurationsSetToJob = jobConfigDetails?.configurationsSetToJob;
+  const excludeFilePatterns = configurationsSetToJob?.["Excluded Path Patterns"];
+  const jobScheduledFor = configurationsSetToJob?.["Job Scheduled For"];
+  const isScheduledForFuture = jobScheduledFor ? dayjs.utc(jobScheduledFor).isAfter(dayjs.utc()) : false;
+  const jobProtocol = jobConfigDetails?.sourceServer?.protocol;
+  const preserveATime = configurationsSetToJob?.["Preserve a-time"] === "Enabled";
+  const skipFilesModified = configurationsSetToJob?.["Skip Files modified in last"] || "-";
+
   const MigrationConfigDetailsModalContent = ({
-    downloadTemplateApi,
+    downloadTemplateApi, onSave, isLoading 
   }: {
     downloadTemplateApi: DownloadTemplateTrigger;
+    onSave: (data: any) => void;
+    isLoading: boolean;
   }) => {
-    const configurationsSetToJob = jobConfigDetails?.configurationsSetToJob;
-    const excludeFilePatterns = configurationsSetToJob?.["Excluded Path Patterns"] || [];
     const migrateFileOption = configurationsSetToJob?.["Exclude file older than (UTC)"] ? "excludeFilesOlderThan" : "all";
     const migrationFileOptionExcludeDate = migrateFileOption === "excludeFilesOlderThan" ? dayjs(configurationsSetToJob?.["Exclude file older than (UTC)"]) : dayjs().subtract(1, "day");
-    const preserveATime = configurationsSetToJob?.["Preserve a-time"] === "Enabled";
-    const skipFilesModified = configurationsSetToJob?.["Skip Files modified in last"] || "-";
     const incrementalSyncSchedule = configurationsSetToJob?.["Incremental sync schedule"] || "";
-    const jobScheduledFor = configurationsSetToJob?.["Job Scheduled For"];
-    const jobProtocol = jobConfigDetails?.sourceServer?.protocol || "NFS";
-    console.log("config", configurationsSetToJob);
     const { num: skipFileNum, option: skipFileOption } = parseSkipFiles(skipFilesModified);
     const scheduleConfig = parseIncrementalSchedule(incrementalSyncSchedule);
 
-    const optionForm: BlueXpFormType<OptionsFormType> = useForm(
-      {
-        exclude_file_patterns: Array.isArray(excludeFilePatterns) 
-          ? excludeFilePatterns.join("\n") 
-          : excludeFilePatterns,
+    const optionForm: BlueXpFormType<OptionsFormType> = useForm({
+        exclude_file_patterns: Array.isArray(excludeFilePatterns) ? excludeFilePatterns.join("\n") : excludeFilePatterns,
         preserve_a_time: preserveATime,
         sid_mapping: "",
         uid_mapping: "",
         migrate_file_option: migrateFileOption,
         migrate_file_option_exclude: migrationFileOptionExcludeDate,
-        
         skipFileNum: skipFileNum,
         skipFileOption: SKIP_FILE_OPTIONS.find(opt => opt.value === skipFileOption) || SKIP_FILE_OPTIONS[0],
-        
         incremental_sync_schedule: scheduleConfig.schedule,
         incremental_sync_schedule_daily: scheduleConfig.daily,
         incremental_sync_schedule_set: scheduleConfig.set,
@@ -476,8 +493,8 @@ const JobDetails = () => {
       initialValues: {
         selectedMountPathsId: [],
         migrationDetailsTableConfigurationValue: [],
-        scheduleTime: jobScheduledFor ? "schedule_date" : "",
-        scheduledDateTime: jobScheduledFor ? dayjs.utc(jobScheduledFor) : dayjs.utc().add(5, "minute"),
+        scheduleTime:  jobScheduledFor && isScheduledForFuture ? "schedule_date" : "start_now",
+        scheduledDateTime: jobScheduledFor && isScheduledForFuture ? dayjs.utc(jobScheduledFor) : dayjs.utc().add(MIGRATE_DEFAULT_MINUTES_AHEAD.SCHEDULE_DATE, "minute"),
       },
       validate: validateMappingStepForm,
       onSubmit: () => {},
@@ -485,6 +502,75 @@ const JobDetails = () => {
 
     const [cronErrorMessage, setCronErrorMessage] = useState<string>();
     const { incremental_sync_schedule_cron_expression } = optionForm.formState;
+    const handleSave = async () => {
+      if (isJobCurrentlyRunning()) {
+        notify.error("Failed to update migration job configuration.");
+        return;
+      }
+      const formData = optionForm.formState;
+      const mappingData = mappingStepForm.values;
+      let futureScheduleValue = null;
+      switch (formData.incremental_sync_schedule) {
+        case "Off":
+          futureScheduleValue = null;
+          break;
+        case "cron_expression":
+          futureScheduleValue = formData.incremental_sync_schedule_cron_expression;
+          break;
+        case "schedule":
+          if (formData.incremental_sync_schedule_set === "hourly") {
+            futureScheduleValue = "0 * * * *";
+          }
+          else if (formData.incremental_sync_schedule_set === "daily") {
+            futureScheduleValue = `${formData.incremental_sync_schedule_daily.minute()} ${formData.incremental_sync_schedule_daily.hour()} * * *`;
+          }
+          else if (formData.incremental_sync_schedule_set === "weekly") {
+            const weekdayValue = formData.incremental_sync_schedule_weekly_weekday?.value ?? 0;
+            futureScheduleValue = `0 0 * * ${weekdayValue}`;
+          }
+          break;
+        default:
+          futureScheduleValue = null;
+      }
+      const updateData: any = {
+        excludeFilePatterns: formData.exclude_file_patterns || "",
+        firstRunAt: mappingData.scheduleTime === "schedule_date" ? mappingData.scheduledDateTime?.toISOString() : null,
+        excludeOlderThan: formData.migrate_file_option === "excludeFilesOlderThan" ? formData.migrate_file_option_exclude?.toISOString() : null,
+        preserveAccessTime: formData.preserve_a_time,
+        skipFile: `${formData.skipFileNum}-${formData.skipFileOption?.value || 'M'}`,
+        futureScheduleAt: futureScheduleValue,
+      };
+      let hasMappingUpdate = false;
+      if (jobProtocol === ProtocolType.NFS && formData.upload_uid_mapping) {
+        try {
+          const base64Data = await convertFileToBase64(
+            new Blob([formData.upload_uid_mapping.contents], {
+              type: "text/csv;charset=utf-8",
+            })
+          );
+          updateData.gidMapping = base64Data;
+          hasMappingUpdate = true;
+        } catch (error) {
+          notify.error("Failed to process GID/UID mapping file");
+          return;
+        }
+      }
+      if (jobProtocol === ProtocolType.SMB && formData.upload_sid_mapping) {
+        try {
+          const base64Data = await convertFileToBase64(
+            new Blob([formData.upload_sid_mapping.contents], {
+              type: "text/csv;charset=utf-8",
+            })
+          );
+          updateData.sidMapping = base64Data;
+          hasMappingUpdate = true;
+        } catch (error) {
+          notify.error("Failed to process SID mapping file");
+          return;
+        }
+      }
+      onSave(updateData);
+    };
   
     const cronString = useMemo(() => {
       setCronErrorMessage("");
@@ -494,7 +580,6 @@ const JobDetails = () => {
       }
       try {
         optionForm.formState.incremental_sync_schedule_cron_expression_error = "";
-  
         if (!isValidCron(incremental_sync_schedule_cron_expression)) {
           throw new Error("Invalid cron expression");
         }
@@ -513,6 +598,17 @@ const JobDetails = () => {
       }
     }, [incremental_sync_schedule_cron_expression]);
 
+    const hasChanges = () => optionForm?.isDirty || mappingStepForm?.dirty;
+    const isSaveDisabled = () => {
+      return (
+        isJobRunning || 
+        isLoading || 
+        !optionForm?.isValid ||
+        !mappingStepForm?.isValid ||
+        !hasChanges()
+      );
+    };
+    
     return (
       <Box className="!bg-white mx-auto shadow-[rgba(0,_0,_0,_0.24)_0px_3px_8px]">
         <Box className="p-6 flex">
@@ -527,9 +623,9 @@ const JobDetails = () => {
             </Box>
             <Box>
               <Box className="flex gap-2 items-center mb-1">
-                <Text bold className="!mb-0">Migrate File</Text>
+                <Text bold className="!mb-0">Migrate Files</Text>
                 <Popover placement="right" verticalPlacement="center">
-                  Migrate all files or exclude files older than date?
+                  Migrate all files or exclude files older than a specific date and time
                 </Popover>
               </Box>
               <Box className="flex gap-6">
@@ -557,9 +653,9 @@ const JobDetails = () => {
             </Box>
             <Box className="flex flex-col">
               <Box className="flex gap-2 items-center mb-1">
-                <Text className="!mb-0 font-semibold">Skip Files modified in last</Text>
+                <Text className="!mb-0 font-semibold">Skip files modified in last</Text>
                 <Popover placement="right" verticalPlacement="center">
-                  Skip Files that are recently modified to avoid the need to
+                  Skip files that are recently modified to avoid the need to
                   migrate multiple times. These will be migrated during
                   cutover.
                 </Popover>
@@ -597,7 +693,63 @@ const JobDetails = () => {
             {optionForm.formState.incremental_sync_schedule ===
               INCREMENTAL_SYNC_SCHEDULE_ENUM.SCHEDULE && (
               <Box className="flex mt-3">
-                <ScheduleOptions />
+                <Box className="w-full">
+                  <Text className="flex gap-6">
+                    <RadioButton
+                      form={optionForm}
+                      name="incremental_sync_schedule_set"
+                      value="hourly"
+                    >
+                      Hourly
+                    </RadioButton>
+                    <RadioButton
+                      form={optionForm}
+                      name="incremental_sync_schedule_set"
+                      value="daily"
+                    >
+                      Daily
+                    </RadioButton>
+                    <RadioButton
+                      form={optionForm}
+                      name="incremental_sync_schedule_set"
+                      value="weekly"
+                    >
+                      Weekly
+                    </RadioButton>
+                  </Text>
+                  {optionForm.formState.incremental_sync_schedule_set === "daily" && (
+                    <Box className="flex flex-col gap-3 mt-3">
+                      <Text>Schedule Daily Start time</Text>
+                      <LocalizationProvider dateAdapter={AdapterDayjs}>
+                        <MobileTimePicker
+                          openTo="hours"
+                          className="w-52"
+                          value={optionForm.formState.incremental_sync_schedule_daily}
+                          onChange={(newValue) => {
+                            optionForm.wrappedHandleFormChange("incremental_sync_schedule_daily")(newValue, null);
+                          }}
+                          slotProps={{
+                            dialog: { sx: { zIndex: 200000010 } },
+                          }}
+                        />
+                      </LocalizationProvider>
+                    </Box>
+                  )}
+                  {optionForm.formState.incremental_sync_schedule_set === "weekly" && (
+                    <Box className="flex flex-col mt-3">
+                      <Text>Select day of the week:</Text>
+                      <Box className="flex gap-2">
+                        <FormFieldSelect
+                          name="incremental_sync_schedule_weekly_weekday"
+                          form={optionForm}
+                          options={WEEKDAY_OPTIONS}
+                          placeholder="Select weekday"
+                          style={{ width: 150 }}
+                        />
+                      </Box>
+                    </Box>
+                  )}
+                </Box>
               </Box>
             )}
             {optionForm.formState.incremental_sync_schedule ===
@@ -634,85 +786,121 @@ const JobDetails = () => {
                 <Popover>Mention File Patterns that should be excluded</Popover>
               }
             />
-            {jobProtocol === ProtocolType.NFS ? (
-              <FormFieldUploadFile
-                form={optionForm}
-                label="Upload GID / UID Mapping"
-                labelClassName="!mb-0 font-semibold"
-                name="upload_uid_mapping"
-                placeholder="Choose a file"
-                labelChildren={
-                  <Box className="flex gap-1 items-center">
-                    <Button
-                      variant="text"
-                      onClick={() =>
-                        handleDownloadTemplate(
-                          () => downloadTemplateApi("gid"),
-                          "gid-template.csv"
-                        )
-                      }
-                    >
-                      Download Template
-                    </Button>
-                    <Popover>Download/Upload GID & UID Mapping</Popover>
-                  </Box>
-                }
-                errorMessage={
-                  optionForm?.formErrors?.["upload_uid_mapping.fileName"]
-                }
-                showError={
-                  optionForm?.formErrors?.["upload_uid_mapping.fileName"] ??
-                  false
-                }
+            <Box className="flex-col gap-2 mb-2">
+              { existingMappings?.items?.data.length > 0 &&
+              <ExistingIdentityMappings
+                existingMappings={existingMappings}
+                protocol={jobProtocol}
               />
-            ) : (
-              <FormFieldUploadFile
-                form={optionForm}
-                label="Upload SID Mapping"
-                labelClassName="!mb-0 font-semibold"
-                name="upload_sid_mapping"
-                placeholder="Choose a file"
-                labelChildren={
-                  <Box className="flex gap-1 items-center">
-                    <Button
-                      variant="text"
-                      onClick={() =>
-                        handleDownloadTemplate(
-                          () => downloadTemplateApi("sid"),
-                          "sid-template.csv"
-                        )
-                      }
-                    >
-                      Download Template
-                    </Button>
-                    <Popover>Download/Upload SID Mapping</Popover>
-                  </Box>
-                }
-                errorMessage={
-                  optionForm?.formErrors?.["upload_sid_mapping.fileName"]
-                }
-                showError={
-                  optionForm?.formErrors?.["upload_sid_mapping.fileName"] ??
-                  false
-                }
-              />
-            )}
+              }
+              {jobProtocol === ProtocolType.NFS ? (
+                <FormFieldUploadFile
+                  form={optionForm}
+                  label="Upload GID / UID Mapping"
+                  labelClassName="!mb-0 font-semibold"
+                  name="upload_uid_mapping"
+                  placeholder="Choose a file"
+                  labelChildren={
+                    <Box className="flex gap-1 items-center">
+                      <Button
+                        variant="text"
+                        onClick={() =>
+                          handleDownloadTemplate(
+                            () => downloadTemplateApi("gid"),
+                            "gid-template.csv"
+                          )
+                        }
+                      >
+                        Download Template
+                      </Button>
+                      <Popover>Download/Upload GID & UID Mapping</Popover>
+                    </Box>
+                  }
+                  errorMessage={
+                    optionForm?.formErrors?.["upload_uid_mapping.fileName"]
+                  }
+                  showError={
+                    optionForm?.formErrors?.["upload_uid_mapping.fileName"] ??
+                    false
+                  }
+                />
+              ) : (
+                <FormFieldUploadFile
+                  form={optionForm}
+                  label="Upload SID Mapping"
+                  labelClassName="!mb-0 font-semibold"
+                  name="upload_sid_mapping"
+                  placeholder="Choose a file"
+                  labelChildren={
+                    <Box className="flex gap-1 items-center">
+                      <Button
+                        variant="text"
+                        onClick={() =>
+                          handleDownloadTemplate(
+                            () => downloadTemplateApi("sid"),
+                            "sid-template.csv"
+                          )
+                        }
+                      >
+                        Download Template
+                      </Button>
+                      <Popover>Download/Upload SID Mapping</Popover>
+                    </Box>
+                  }
+                  errorMessage={
+                    optionForm?.formErrors?.["upload_sid_mapping.fileName"]
+                  }
+                  showError={
+                    optionForm?.formErrors?.["upload_sid_mapping.fileName"] ??
+                    false
+                  }
+                />
+              )}
+            </Box>
             <BulkMigrateScheduleComponent mappingStepForm={mappingStepForm} variant="edit_config" />
           </Box>
+        </Box>
+        <Box className="p-6 pt-0 flex gap-3 justify-end">
+          <Button
+            onClick={handleSave}
+            disabled={isSaveDisabled()}
+          >
+            {isLoading ? 'Saving...' : 'Save'}
+          </Button>
+          <Button onClick={() => dispatch(setModalClose())} variant="secondary">
+            Close
+          </Button>
         </Box>
       </Box>
     );
   };
 
   const showMigrationJobConfigDetails = () => {
-    const isRunning = isJobCurrentlyRunning();
+    setIsModalOpen(true);
+    const handleSaveMigrationConfig = async (updateData: any) => {
+      try {
+        await updateMigrationConfig({
+          jobConfigId: jobId,
+          updateData,
+        }).unwrap();
+        notify.success("Migration job configuration updated successfully.");
+        dispatch(setModalClose());
+        setIsModalOpen(false);
+        await refetch();
+      } catch (error) {
+        notify.error("Failed to update migration job configuration.");
+        console.error(error);
+      }
+    };
+    setShouldFetchMappings(true);
+    
     dispatch(
       setModalProps({
         isOpen: true,
         modalHeader: "Job Configuration Details",
         modalContent: (
           <Box>
-            {isRunning && (
+            {isJobRunning && (
               <div className="bg-red-50 p-3 rounded-lg border-l-4 border-l-red-400 mb-4 shadow-[rgba(0,_0,_0,_0.24)_0px_3px_8px]">
                 <p className="text-sm text-red-800 font-medium">
                   Job Configuration cannot be edited because the job is running.
@@ -722,41 +910,55 @@ const JobDetails = () => {
             <BulkMigrateContextWrapper>
               <MigrationConfigDetailsModalContent
                 downloadTemplateApi={downloadTemplateApi}
+                onSave={handleSaveMigrationConfig}
+                isLoading={isUpdatingMigrationConfig}
               />
             </BulkMigrateContextWrapper>
           </Box>
         ),
-        modalFooter: (
-          <Box className="flex gap-3 justify-end">
-            <Button
-            onClick={() => dispatch(setModalClose())}
-            disabled={
-              isRunning
-            }
-            >Save</Button>
-            <Button onClick={() => dispatch(setModalClose())}>Close</Button>
-          </Box>
-        ),
         modalStyle: { width: "900px", maxWidth: "90vw" },
+        modalFooter: null,
       })
     );
   };
 
-  const DiscoveryConfigDetailsModalContent = () => {
-    const configurationsSetToJob = jobConfigDetails?.configurationsSetToJob;
-    const excludeFilePatterns = configurationsSetToJob?.["Excluded Path Patterns"] || [];
-    const jobScheduledFor = configurationsSetToJob?.["Job Scheduled For"];
-
+  const DiscoveryConfigDetailsModalContent = ({
+    onSave, isLoading 
+  }: {
+    onSave: (data: any) => void;
+    isLoading: boolean;
+  }) => {
     const bulkDiscoveryForm: BlueXpFormType<bulkDiscoveryFormType> = useForm({
-      excludeFilePatterns: Array.isArray(excludeFilePatterns) 
-        ? excludeFilePatterns.join("\n") 
-        : "",
-      scheduleTime: jobScheduledFor ? "schedule_date" : "",
-      firstRunAt: jobScheduledFor ? dayjs.utc(jobScheduledFor) : dayjs.utc().add(5, "minute"),
+      excludeFilePatterns: Array.isArray(excludeFilePatterns) ? excludeFilePatterns.join("\n") : "",
+      scheduleTime: jobScheduledFor && isScheduledForFuture ? "schedule_date" : "start_now",
+      firstRunAt: jobScheduledFor && isScheduledForFuture ? dayjs.utc(jobScheduledFor) : dayjs.utc().add(DISCOVERY_DEFAULT_MINUTES_AHEAD.SCHEDULE_DATE, "minute"),
+      protocol: { label: jobProtocol, value: jobProtocol }
     },
       BULK_DISCOVERY_FORM_SCHEMA
     );
+
+    const handleSave = () => {
+      if (isJobRunning) {
+        notify.error("Failed to update discovery job configuration.");
+        return;
+      }
+      const formData = bulkDiscoveryForm.formState;
+      const updateData = {
+        excludeFilePatterns: formData.excludeFilePatterns || "",
+        firstRunAt: formData.scheduleTime === "schedule_date" ? formData.firstRunAt : null,
+      };
+      onSave(updateData);
+    };
     
+    const isSaveDisabled = () => {
+      return (
+        isJobRunning || 
+        isLoading || 
+        !bulkDiscoveryForm?.isValid ||
+        !bulkDiscoveryForm?.isDirty
+      );
+    };
+
     return (
       <Box className="!bg-white mx-auto shadow-[rgba(0,_0,_0,_0.24)_0px_3px_8px]">
         <Box className="p-6 flex gap-10">
@@ -777,12 +979,40 @@ const JobDetails = () => {
             <ScheduleComponent bulkDiscoveryForm={bulkDiscoveryForm} variant="edit_config" />
           </Box>
         </Box>
+        <Box className="p-6 pt-0 flex gap-3 justify-end">
+          <Button
+            onClick={handleSave}
+            disabled={isSaveDisabled()}
+          >
+            {isLoading ? 'Saving...' : 'Save'}
+          </Button>
+          <Button onClick={() => dispatch(setModalClose())} variant="secondary">
+            Close
+          </Button>
+        </Box>
       </Box>
     )
   };
 
   const showDiscoveryJobConfigDetails = () => {
-    const isRunning = isJobCurrentlyRunning();
+    setIsModalOpen(true);
+    const isRunning = isJobRunning;
+    const handleSaveDiscoveryConfig = async (updateData: any) => {
+      try {
+        await updateDiscoveryConfig({
+          jobConfigId: jobId,
+          updateData,
+        }).unwrap();
+        notify.success("Discovery job configuration updated successfully.");
+        dispatch(setModalClose());
+        setIsModalOpen(false);
+        await refetch();
+      } catch (error) {
+        notify.error("Failed to update discovery job configuration.");
+        console.error(error);
+      }
+    };
+
     dispatch(
       setModalProps({
         isOpen: true,
@@ -796,52 +1026,16 @@ const JobDetails = () => {
                 </p>
               </div>
             )}
-            <DiscoveryConfigDetailsModalContent />
+            <DiscoveryConfigDetailsModalContent 
+              onSave={handleSaveDiscoveryConfig}
+              isLoading={isUpdatingDiscoveryConfig}
+            />
           </Box>
         ),
-        modalFooter: (
-          <Box className="flex gap-3 justify-end">
-            <Button
-              onClick={() => dispatch(setModalClose())}
-              disabled={
-                isRunning
-              }
-            >Save</Button>
-            <Button onClick={() => dispatch(setModalClose())}>Close</Button>
-          </Box>
-        ),
+        modalFooter: null,
       })
     );
   };
-
-  const CutoverConfigDetailsModalContent = () => {
-    const configurationsSetToJob = jobConfigDetails?.configurationsSetToJob;
-    const preserveATime = configurationsSetToJob?.["Preserve a-time"];
-    const excludeFilePatterns = configurationsSetToJob?.["Excluded Path Patterns"] || [];
-    const excludeFilesOlderThan = configurationsSetToJob?.["Skip Files modified in last"] || "-";
-    return (
-      <Box className="!bg-white mx-auto shadow-[rgba(0,_0,_0,_0.24)_0px_3px_8px]">
-        <Box className="p-6 flex gap-8">
-          <Box className="w-3/6 flex flex-col gap-8">
-            <Box>
-              <Text className="font-semibold">Preserve a-time:</Text>
-              <Text>{preserveATime}</Text>
-            </Box>
-            <Box>
-              <Text className="font-semibold">Exclude Files Older Than:</Text>
-              <Text>{excludeFilesOlderThan}</Text>
-            </Box>
-          </Box>  
-          <Box className="w-3/6 flex flex-col gap-8">
-            <Box>
-              <Text className="font-semibold">Excluded Path Patterns:</Text>
-              <Text>{excludeFilePatterns.join("\n")}</Text>
-            </Box>
-          </Box>
-        </Box>
-      </Box>
-    )
-  }
 
   const showCutoverJobConfigDetails = () => {
     dispatch(
@@ -849,7 +1043,26 @@ const JobDetails = () => {
         isOpen: true,
         modalHeader: "Job Configuration Details",
         modalContent: (
-          <CutoverConfigDetailsModalContent />
+          <Box className="!bg-white mx-auto shadow-[rgba(0,_0,_0,_0.24)_0px_3px_8px]">
+            <Box className="p-6 flex gap-8">
+              <Box className="w-3/6 flex flex-col gap-8">
+                <Box>
+                  <Text className="font-semibold">Preserve a-time:</Text>
+                  <Text>{preserveATime}</Text>
+                </Box>
+                <Box>
+                  <Text className="font-semibold">Exclude Files Older Than:</Text>
+                  <Text>{skipFilesModified}</Text>
+                </Box>
+              </Box>  
+              <Box className="w-3/6 flex flex-col gap-8">
+                <Box>
+                  <Text className="font-semibold">Excluded Path Patterns:</Text>
+                  <Text>{excludeFilePatterns.join("\n")}</Text>
+                </Box>
+              </Box>
+            </Box>
+          </Box>
         ),
         modalFooter: (
           <Button onClick={() => dispatch(setModalClose())}>Close</Button>

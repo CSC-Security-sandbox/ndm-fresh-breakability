@@ -16,6 +16,7 @@ export const jobsApi = createApi({
     "JOB_CONFIG_DETAILS",
     "ALL_MIGRATION_PATHS",
     "SPEED_TEST_JOBS",
+    "JOB_IDENTITY_MAPPINGS",
   ],
   baseQuery: fetchBaseQuery({
     baseUrl:
@@ -275,12 +276,45 @@ export const jobsApi = createApi({
 
     getJobIdentityMappings: builder.query({
       query: (jobConfigId: string) => ({
-        url: `jobs/${jobConfigId}/mappings`,  // Changed from job-configs to jobs
+        url: `jobs/${jobConfigId}/mappings`,
         method: 'GET',
       }),
       transformResponse: (response) => {
         return response?.data || response;
       },
+      providesTags: (result, error, jobConfigId) => [
+        { type: 'JOB_IDENTITY_MAPPINGS', id: jobConfigId }
+      ],
+    }),
+
+    updateDiscoveryJobConfig: builder.mutation({
+      query: ({ jobConfigId, updateData }: { jobConfigId: string; updateData: any }) => ({
+        url: `jobs/${jobConfigId}/discovery-config`,
+        method: 'PUT',
+        body: updateData,
+      }),
+      transformResponse: (response) => {
+        return response?.data || response;
+      },
+      transformErrorResponse: structuredErrorResponse,
+      invalidatesTags: ['JOB_CONFIG_DETAILS', 'ALL_JOB_CONFIGS'],
+    }),
+
+    updateMigrationJobConfig: builder.mutation({
+      query: ({ jobConfigId, updateData }: { jobConfigId: string; updateData: any }) => ({
+        url: `jobs/${jobConfigId}/migration-config`,
+        method: 'PUT',
+        body: updateData,
+      }),
+      transformResponse: (response) => {
+        return response?.data || response;
+      },
+      transformErrorResponse: structuredErrorResponse,
+      invalidatesTags: (result, error, { jobConfigId }) => [
+        'JOB_CONFIG_DETAILS',
+        'ALL_JOB_CONFIGS',
+        { type: 'JOB_IDENTITY_MAPPINGS', id: jobConfigId },
+      ],
     }),
   }),
 });
@@ -311,4 +345,7 @@ export const {
   useGetFileServerWorkersQuery,
   useDeleteJobConfigMutation,
   useGetJobIdentityMappingsQuery,
+  useLazyGetJobIdentityMappingsQuery,
+  useUpdateDiscoveryJobConfigMutation,
+  useUpdateMigrationJobConfigMutation,
 } = jobsApi;
