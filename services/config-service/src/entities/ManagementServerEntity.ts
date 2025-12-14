@@ -1,7 +1,8 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, PrimaryGeneratedColumn, OneToMany } from "typeorm";
 import { ServerType } from "src/constants/enums";
 import { Base } from "./base.entity";
+import { FileServerEntity } from "./fileserver.entity";
 
 @Entity({ name: 'management_server', schema: 'datamigrator' })
 export class ManagementServerEntity extends Base {
@@ -45,4 +46,6 @@ export class ManagementServerEntity extends Base {
     @Column({ type: 'text', nullable: true, name: 'tls_ca_certificate' })
     tlsCertificate: string;
 
+    @OneToMany(() => FileServerEntity, fileServer => fileServer.managementServerId, { cascade: true, eager: false })
+    fileServers: FileServerEntity[]
 }
