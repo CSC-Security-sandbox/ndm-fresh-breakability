@@ -16,6 +16,7 @@ import {
   ConfigErrorMsg,
   ConfigStatus,
   ProtocolVersionError,
+  ServerType,
   WorkerStatus,
   WorkFlows,
 } from 'src/constants/enums';
@@ -456,8 +457,6 @@ export class ConfigurationService {
               jobConfig: {
                 id: true,
                 jobType: true,
-                sourcePathId: true,
-                targetPathId: true,
                 status: true,
               },
             },
@@ -727,6 +726,31 @@ export class ConfigurationService {
     this.logger.debug('Config creation started');
 
     this.logger.debug("############################# ASHISH  STARTS #############################");
+
+    const sanitizedMgmtServerName = await this.sanitizeConfigName(
+      createConfig.managementServer.configName,
+    );
+
+    let managementServerId: string | null = null;
+
+    if (createConfig.serverType === ServerType.dell) {
+      const mgmntServerConfig = this.managementServerEntity.create({
+        name: sanitizedMgmtServerName,
+        projectId: createConfig.managementServer.projectId,
+        createdBy: userId,
+        updatedBy: userId,
+        hostname: createConfig.managementServer.host,
+        port: createConfig.managementServer.port,
+        serverType: createConfig.managementServer.serverType,
+        username: createConfig.managementServer.username,
+        password: createConfig.managementServer?.password,
+        tlsAccepted: createConfig.managementServer.tlsAccepted,
+        tlsCertificate: createConfig.managementServer.tlsCertificate,
+      });
+
+      const savedMgmntServer = await this.managementServerEntity.save(mgmntServerConfig);
+      managementServerId = savedMgmntServer?.id;
+    }
 
     // Sanitize configName input
     const sanitizedConfigName = await this.sanitizeConfigName(

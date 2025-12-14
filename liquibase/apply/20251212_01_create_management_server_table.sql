@@ -22,3 +22,15 @@ CREATE INDEX idx_management_server_project_id ON management_server(project_id);
 CREATE INDEX idx_management_server_created_by ON management_server(created_by);
 CREATE INDEX idx_management_server_updated_by ON management_server(updated_by);
 
+ALTER TABLE datamigrator.file_server
+ADD COLUMN management_server_id uuid NULL;
+
+ALTER TABLE datamigrator.file_server
+ADD CONSTRAINT fk_file_server_management_server
+FOREIGN KEY (management_server_id)
+REFERENCES management_server(id)
+ON DELETE CASCADE;
+
+CREATE INDEX idx_file_server_management_server_id ON datamigrator.file_server(management_server_id);
+
+
