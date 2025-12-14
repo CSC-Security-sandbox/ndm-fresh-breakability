@@ -212,9 +212,9 @@ export const configApi = createApi({
       { host: string }
     >({
       query: ({ host }) => ({
-        url: `servers/certificate/fetch`,
-        method: "POST",
-        body: { host },
+        url: `servers/fetch-certificate`,
+        method: "GET",
+        params: { host },
       }),
       transformResponse: (response: any) => {
         return response?.data || response || {};
