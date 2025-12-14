@@ -5,6 +5,16 @@ import {
 } from "@/types/app.type";
 import { ReactNode } from "react";
 
+// Dell Isilon Zone Credentials Type
+export interface ZoneCredentialsType {
+  smbIp?: string;
+  smbUsername?: string;
+  smbPassword?: string;
+  nfsIp?: string;
+  nfsUsername?: string;
+  nfsPassword?: string;
+}
+
 // THIS IS ONLY STATE LEVEL VARIABLES INCLUDE THIS WILL BE PARENT OF ALL
 export interface FileServerStateContextType {
   fileServerId: string;
@@ -49,6 +59,11 @@ export interface FileServerStateContextType {
   editingFileServerDetails: ConfigPayloadType;
   selectedProtocol: "NFS" | "SMB";
   setSelectedProtocol: (protocol: "NFS" | "SMB") => void;
+  // Dell Isilon Access Zones
+  selectedZoneIds: string[];
+  setSelectedZoneIds: (arg: string[] | ((prev: string[]) => string[])) => void;
+  zoneCredentials: Record<string, ZoneCredentialsType>;
+  setZoneCredentials: (arg: Record<string, ZoneCredentialsType> | ((prev: Record<string, ZoneCredentialsType>) => Record<string, ZoneCredentialsType>)) => void;
 }
 
 // Management Console Form Type for Dell Isilon

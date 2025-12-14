@@ -94,6 +94,10 @@ export const useFileServerForm = () => {
   const [fetchingCertificate, setFetchingCertificate] = useState<boolean>(false);
   const [certificateError, setCertificateError] = useState<string | null>(null);
 
+  // DELL ISILON ACCESS ZONES STATE
+  const [selectedZoneIds, setSelectedZoneIds] = useState<string[]>([]);
+  const [zoneCredentials, setZoneCredentials] = useState<Record<string, any>>({});
+
   // API
   const [getAllWorkers, { isFetching }] = useLazyGetAllWorkersQuery();
   const [validateConnectionMutationApi] = useValidateConnectionMutation();
@@ -512,5 +516,10 @@ export const useFileServerForm = () => {
     handleDeclineCertificate,
     resetCertificateState,
     isDellIsilonFormValid,
+    // Dell Isilon Access Zones State
+    selectedZoneIds,
+    setSelectedZoneIds,
+    zoneCredentials,
+    setZoneCredentials,
   };
 };
