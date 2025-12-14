@@ -5,15 +5,15 @@ import { hasPermission } from "@auth/auth.utils";
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
 import { Box } from "@components/container/index";
 import TableWrapper from "@components/table-wrapper/TableWrapper";
-import { Button, Text } from "@netapp/bxp-design-system-react";
+import { Button } from "@netapp/bxp-design-system-react";
 import { AddIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
-import { ChevronDownMonochromeIcon, ChevronRightMonochromeIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { RootStateType } from "@store/store";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { FILE_SERVER_LIST_COLUMN_DEFS } from "@modules/storage-servers/file-server/file-server.constant";
 import { FILE_SERVER_STATUS_ENUM } from "@/types/app.type";
 import { groupDellIsilonFileServers } from "@modules/storage-servers/file-server/components/add-file-server.util";
+import { dellIsilonExpandEvents } from "@modules/storage-servers/file-server/components/cellRenderer/NameCellRenderer";
 
 const FileServer = () => {
   const LOWER_TIME_INTERVAL_FOR_IN_PROGRESS = 5000; // 5 seconds
@@ -56,45 +56,13 @@ const FileServer = () => {
     }
   }, [configByProject]);
 
-  // Group Dell Isilon file servers by parent and build display rows
-  const displayRows = useMemo(() => {
-    const serverList = configByProject?.serverConfig || [];
-    const { parents, regularServers } = groupDellIsilonFileServers(serverList);
-    
-    const rows: any[] = [];
-    
-    // Add Dell Isilon parents with expandable zones
-    for (const parent of parents) {
-      // Add parent row (expandable header)
-      rows.push({
-        ...parent,
-        id: `dell-parent-${parent.configName}`,
-        _isDellIsilonParent: true,
-        _isExpanded: expandedParents.has(parent.configName),
-        _zoneCount: parent.zones.reduce((acc: number, z: any) => acc + z.fileServers.length, 0),
-      });
-      
-      // If expanded, add zone file servers as indented child rows
-      if (expandedParents.has(parent.configName)) {
-        for (const zone of parent.zones) {
-          for (const fileServer of zone.fileServers) {
-            rows.push({
-              ...fileServer,
-              _isDellIsilonChild: true,
-              _parentName: parent.configName,
-              _zoneName: zone.zoneName,
-              configName: `  └─ ${zone.zoneName} (${fileServer.fileServers?.[0]?.protocol || 'N/A'})`,
-            });
-          }
-        }
-      }
-    }
-    
-    // Add regular file servers
-    rows.push(...regularServers);
-    
-    return rows;
-  }, [configByProject?.serverConfig, expandedParents]);
+  // Subscribe to Dell Isilon expand/collapse events from NameCellRenderer
+  useEffect(() => {
+    const unsubscribe = dellIsilonExpandEvents.subscribe('fileServerList', (parentName: string) => {
+      toggleParentExpand(parentName);
+    });
+    return unsubscribe;
+  }, []);
 
   const toggleParentExpand = (parentName: string) => {
     setExpandedParents((prev) => {
@@ -108,12 +76,80 @@ const FileServer = () => {
     });
   };
 
+  // Group Dell Isilon file servers by parent and build display rows
+  const displayRows = useMemo(() => {
+    const serverList = configByProject?.serverConfig || [];
+    const { parents, regularServers } = groupDellIsilonFileServers(serverList);
+    
+    const rows: any[] = [];
+    
+    // Sort parents by createdAt descending (newest first)
+    const sortedParents = [...parents].sort((a, b) => {
+      const dateA = new Date(a.createdAt || 0).getTime();
+      const dateB = new Date(b.createdAt || 0).getTime();
+      return dateB - dateA;
+    });
+    
+    // Add Dell Isilon parents with expandable zones
+    for (const parent of sortedParents) {
+      // Add parent row (expandable header)
+      const isExpanded = expandedParents.has(parent.configName);
+      
+      // Create a sort key that keeps children grouped with parent
+      // Parent gets base timestamp, children get same timestamp + small offset
+      const parentSortKey = new Date(parent.createdAt || 0).getTime();
+      
+      rows.push({
+        ...parent,
+        id: `dell-parent-${parent.configName}`,
+        _isDellIsilonParent: true,
+        _isExpanded: isExpanded,
+        _zoneCount: parent.zones.length,
+        _serverCount: parent.zoneServerCount,
+        _sortKey: parentSortKey,
+        // Show zone count in the name for parent rows
+        displayName: `${parent.configName} (${parent.zones.length} zone${parent.zones.length !== 1 ? 's' : ''})`,
+      });
+      
+      // If expanded, add zone file servers as indented child rows
+      if (isExpanded) {
+        let childOffset = 1;
+        for (const zone of parent.zones) {
+          for (const fileServer of zone.fileServers) {
+            const protocol = fileServer._protocol || fileServer.fileServers?.[0]?.protocol || 'N/A';
+            rows.push({
+              ...fileServer,
+              _isDellIsilonChild: true,
+              _parentName: parent.configName,
+              _zoneName: zone.zoneName,
+              _sortKey: parentSortKey - childOffset, // Slightly less than parent to keep order
+              // Display indented zone name with protocol
+              displayName: `${zone.zoneName} (${protocol})`,
+            });
+            childOffset++;
+          }
+        }
+      }
+    }
+    
+    // Sort regular servers by createdAt descending and add them
+    const sortedRegularServers = [...regularServers].sort((a, b) => {
+      const dateA = new Date(a.createdAt || 0).getTime();
+      const dateB = new Date(b.createdAt || 0).getTime();
+      return dateB - dateA;
+    });
+    
+    rows.push(...sortedRegularServers);
+    
+    return rows;
+  }, [configByProject?.serverConfig, expandedParents]);
+
   const canManageConfig: boolean = hasPermission(
     USER_PERMISSION_TYPE_ENUM.ManageConfig
   );
 
   const rowMenu = (row: any) => {
-    // Dell Isilon parent - no edit option (it's just a container)
+    // Dell Isilon parent - expand/collapse option only
     if (row._isDellIsilonParent) {
       return [
         {
@@ -123,6 +159,26 @@ const FileServer = () => {
       ];
     }
     
+    // Dell Isilon child (zone file server) - view/edit options
+    if (row._isDellIsilonChild) {
+      return [
+        {
+          label: "View File Server",
+          onClick: () => {
+            navigate(`/file-server/${row?.id}`);
+          },
+        },
+        {
+          label: "Edit File Server",
+          onClick: () => {
+            navigate(`/edit-file-server/${row?.id}`);
+          },
+          disabled: !canManageConfig,
+        },
+      ];
+    }
+    
+    // Regular file server
     return [
       {
         label: "Edit File Server",
@@ -148,9 +204,9 @@ const FileServer = () => {
   const tableStateProps = {
     columns: FILE_SERVER_LIST_COLUMN_DEFS,
     rows: displayRows,
-    isSorting: true,
+    // Disable table sorting - we handle sorting manually to preserve parent-child order
+    isSorting: false,
     pageSize: 10,
-    defaultSortState: { sortOrder: "desc", column: 9 },
   };
 
   return (

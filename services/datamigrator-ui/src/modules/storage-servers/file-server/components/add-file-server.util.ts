@@ -354,7 +354,14 @@ export const flattenDellIsilonPayloadToConfigs = (
 
 /**
  * Group file servers by Dell Isilon parent for display in File Server List
- * This takes the flat list of file servers and groups them by parent name
+ * 
+ * Dell Isilon file servers follow the naming pattern: {ParentName}-{ZoneName}-{Protocol}
+ * e.g., "MyIsilon-Zone1-NFS", "MyIsilon-Zone1-SMB", "MyIsilon-Zone2-NFS"
+ * 
+ * This function:
+ * 1. Identifies Dell Isilon servers by checking if fileServers[0].serverType === "dell"
+ * 2. Parses the configName to extract parent name, zone name, and protocol
+ * 3. Groups them under a parent entry with expandable zones
  */
 export const groupDellIsilonFileServers = (
   fileServers: any[]
@@ -362,42 +369,67 @@ export const groupDellIsilonFileServers = (
   const dellIsilonMap = new Map<string, any>();
   const regularServers: any[] = [];
   
+  // Regex to parse Dell Isilon config names: {ParentName}-{ZoneName}-{Protocol}
+  // Matches: "anything-Zone1-NFS" or "anything-Zone2-SMB" etc.
+  const dellConfigNameRegex = /^(.+)-(\w+)-(NFS|SMB)$/;
+  
   for (const server of fileServers) {
-    const metadata = server.dellIsilonMetadata;
+    // Check if this is a Dell Isilon file server
+    const isDellIsilon = server.fileServers?.[0]?.serverType === "dell";
     
-    if (metadata && metadata.serverType === "dell") {
-      // Dell Isilon file server - group by parent
-      const parentName = metadata.parentName;
+    if (isDellIsilon) {
+      const configName = server.configName || "";
+      const match = configName.match(dellConfigNameRegex);
       
-      if (!dellIsilonMap.has(parentName)) {
-        dellIsilonMap.set(parentName, {
-          configName: parentName,
-          serverType: "dell",
-          managementHost: metadata.managementHost,
-          isDellIsilonParent: true,
-          zones: [],
-          // Use the earliest createdAt
-          createdAt: server.createdAt,
+      if (match) {
+        const [, parentName, zoneName, protocol] = match;
+        
+        // Create or get parent entry
+        if (!dellIsilonMap.has(parentName)) {
+          dellIsilonMap.set(parentName, {
+            configName: parentName,
+            serverType: "dell",
+            isDellIsilonParent: true,
+            zones: [],
+            // Use the earliest createdAt from child servers
+            createdAt: server.createdAt,
+            // Count of zone file servers for display
+            zoneServerCount: 0,
+          });
+        }
+        
+        const parent = dellIsilonMap.get(parentName);
+        parent.zoneServerCount++;
+        
+        // Update createdAt to earliest date
+        if (server.createdAt && (!parent.createdAt || new Date(server.createdAt) < new Date(parent.createdAt))) {
+          parent.createdAt = server.createdAt;
+        }
+        
+        // Find or create zone entry
+        let zoneEntry = parent.zones.find((z: any) => z.zoneName === zoneName);
+        if (!zoneEntry) {
+          zoneEntry = {
+            zoneName: zoneName,
+            zoneId: zoneName.toLowerCase(),
+            fileServers: [],
+          };
+          parent.zones.push(zoneEntry);
+        }
+        
+        // Add file server to zone with protocol info
+        zoneEntry.fileServers.push({
+          ...server,
+          _protocol: protocol,
+          _zoneName: zoneName,
+          _parentName: parentName,
         });
+      } else {
+        // Dell Isilon but doesn't match pattern - treat as regular
+        regularServers.push(server);
       }
-      
-      const parent = dellIsilonMap.get(parentName);
-      
-      // Find or create zone entry
-      let zoneEntry = parent.zones.find((z: any) => z.zoneId === metadata.zoneId);
-      if (!zoneEntry) {
-        zoneEntry = {
-          zoneId: metadata.zoneId,
-          zoneName: metadata.zoneName,
-          fileServers: [],
-        };
-        parent.zones.push(zoneEntry);
-      }
-      
-      // Add file server to zone
-      zoneEntry.fileServers.push(server);
     } else {
-      // Regular file server
+      // Regular file server (Other NAS, etc.)
       regularServers.push(server);
     }
   }
