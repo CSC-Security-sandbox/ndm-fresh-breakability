@@ -44,7 +44,7 @@ export abstract class StorageClient {
    * Fetches credentials from DB using fileServerId
    * @param fileServerId - UUID of the file server
    */
-  abstract validateConnection(fileServerId: string): Promise<boolean>;
+  abstract validateConnection(params: any): Promise<boolean>;
 
   // ==========================================
   // Concrete methods - Common implementation for all storage types
