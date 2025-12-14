@@ -154,6 +154,8 @@ export interface FileServerType {
   host: string;
   password: string;
   workers: string[];
+  protocolVersion?: string;
+  exportPathSource?: string;
   createdBy?: string;
 }
 
@@ -165,6 +167,14 @@ export interface ConfigPayloadType {
   fileServers: FileServerType[];
   createdBy?: string;
   workingDirectory: WorkingDirectoryDetailsType;
+  // Dell Isilon specific metadata (for grouping zones under parent)
+  dellIsilonMetadata?: {
+    parentName: string;
+    zoneId: string;
+    zoneName: string;
+    managementHost: string;
+    serverType: "dell";
+  };
 }
 
 export interface ServerTypeFormType {
@@ -226,4 +236,66 @@ export interface CertificateResponseType {
   certificatePEM: string;
   host: string;
   port: number;
+}
+
+// Dell Isilon Parent File Server Type (container for zones)
+export interface DellIsilonParentType {
+  id?: string;
+  parentName: string;  // The name given in "Add File Server" (e.g., "ISILON")
+  serverType: "dell";
+  managementHost: string;
+  managementUsername: string;
+  managementPassword: string;
+  certificateAccepted: boolean;
+  projectId: string;
+  createdAt?: string;
+}
+
+// Dell Isilon Zone File Server Type (actual file server in DB)
+export interface DellIsilonZoneFileServerType {
+  id?: string;
+  parentId: string;  // Reference to DellIsilonParentType.id
+  zoneName: string;  // e.g., "Zone1"
+  zoneId: string;    // e.g., "zone1"
+  protocol: "NFS" | "SMB";
+  host: string;      // The protocol-specific IP
+  userName: string;
+  password: string;
+  workers: string[];
+  serverType: "dell";
+  protocolVersion?: string;
+  exportPathSource?: string;
+}
+
+// Dell Isilon Create Payload Type
+export interface DellIsilonCreatePayloadType {
+  // Parent information
+  parentName: string;
+  projectId: string;
+  serverType: "dell";
+  managementHost: string;
+  managementUsername: string;
+  managementPassword: string;
+  certificateFingerprint: string;
+  // Zone file servers - each zone can have 1 or 2 entries (NFS, SMB, or both)
+  zones: DellIsilonZonePayloadType[];
+}
+
+// Individual Zone Payload
+export interface DellIsilonZonePayloadType {
+  zoneId: string;
+  zoneName: string;
+  nfs?: {
+    host: string;
+    userName: string;
+    password: string;
+    workers: string[];
+    protocolVersion?: string;
+  };
+  smb?: {
+    host: string;
+    userName: string;
+    password: string;
+    workers: string[];
+  };
 }
