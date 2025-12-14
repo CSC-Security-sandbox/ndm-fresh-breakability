@@ -31,22 +31,6 @@ export class ConfigurationController{
         return await this.configurationService.createConfiguration(createConfigurationDto, userDetails.user.id, userDetails?.trackId, projectId)
     }
 
-    @ApiOperation({ summary: 'Create Management Server' })
-    @ApiCreatedResponse({ description: 'Management Server Created Successfully.' })
-    @ApiBearerAuth()
-    @Auth(Permission.ManageConfig)
-    @Post('management-server')
-    @HttpCode(HttpStatus.CREATED)
-    @ApiBody({ description: 'Management server data', type: ManagementServerDTO })
-    async createManagementServer(
-        @Body() managementServerDto: ManagementServerDTO,
-        @Request() userDetails: UserDetails,
-        @Headers('projectId') projectId?: string,
-    ) {
-        
-        return await this.configurationService.createManagementServer(managementServerDto, userDetails.user.id, userDetails?.trackId, projectId);
-    }
-
     @ApiOperation({ summary: 'Get a paginated list of Config',  description: ConfigApiDoc.GET_ALL_CONFIG})
     @ApiOkResponse({ description: 'The list of Config has been retrieved successfully.',  type: ConfigResponseDto})
     @ApiBadRequestResponse({
