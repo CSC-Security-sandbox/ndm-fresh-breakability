@@ -97,6 +97,7 @@ export const useFileServerForm = () => {
   // DELL ISILON ACCESS ZONES STATE
   const [selectedZoneIds, setSelectedZoneIds] = useState<string[]>([]);
   const [zoneCredentials, setZoneCredentials] = useState<Record<string, any>>({});
+  const [zoneWorkerAssignments, setZoneWorkerAssignments] = useState<Record<string, { nfs: string[]; smb: string[] }>>({});
 
   // API
   const [getAllWorkers, { isFetching }] = useLazyGetAllWorkersQuery();
@@ -521,5 +522,7 @@ export const useFileServerForm = () => {
     setSelectedZoneIds,
     zoneCredentials,
     setZoneCredentials,
+    zoneWorkerAssignments,
+    setZoneWorkerAssignments,
   };
 };

@@ -15,6 +15,12 @@ export interface ZoneCredentialsType {
   nfsPassword?: string;
 }
 
+// Dell Isilon Zone Worker Assignments Type
+export interface ZoneWorkerAssignmentsType {
+  nfs: string[];
+  smb: string[];
+}
+
 // THIS IS ONLY STATE LEVEL VARIABLES INCLUDE THIS WILL BE PARENT OF ALL
 export interface FileServerStateContextType {
   fileServerId: string;
@@ -64,6 +70,8 @@ export interface FileServerStateContextType {
   setSelectedZoneIds: (arg: string[] | ((prev: string[]) => string[])) => void;
   zoneCredentials: Record<string, ZoneCredentialsType>;
   setZoneCredentials: (arg: Record<string, ZoneCredentialsType> | ((prev: Record<string, ZoneCredentialsType>) => Record<string, ZoneCredentialsType>)) => void;
+  zoneWorkerAssignments: Record<string, ZoneWorkerAssignmentsType>;
+  setZoneWorkerAssignments: (arg: Record<string, ZoneWorkerAssignmentsType> | ((prev: Record<string, ZoneWorkerAssignmentsType>) => Record<string, ZoneWorkerAssignmentsType>)) => void;
 }
 
 // Management Console Form Type for Dell Isilon
