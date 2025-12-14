@@ -6,6 +6,7 @@ import { ConfigEntity } from "./config.entity";
 import { WorkerEntity } from "./worker.entity";
 import { VolumeEntity } from "./volume.entity";
 import { PathUploadsEntity } from "./pathupload.entity";
+import { ManagementServerEntity } from "./ManagementServerEntity";
 
 
 @Entity({name:'file_server'})
@@ -73,4 +74,8 @@ export class FileServerEntity extends Base {
 
     @OneToMany(() => PathUploadsEntity, (upload) => upload.fileServer)
     uploads: PathUploadsEntity[];
+
+    @ManyToOne(() => ManagementServerEntity, managamentServer => managamentServer.id, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
+    @JoinColumn({ name: 'management_server_id' }) 
+    managementServerId: ManagementServerEntity;
 }
