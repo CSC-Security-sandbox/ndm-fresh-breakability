@@ -138,6 +138,36 @@ export class ConfigurationController{
         return await this.configurationService.fetchZones(request);
     }
 
+    @ApiOperation({ 
+        summary: 'Validate connection to Dell Isilon management server',
+        description: 'Tests connectivity and authentication to the Isilon management console using provided credentials'
+    })
+    @ApiBody({ 
+        type: FetchZonesRequestDTO,
+        description: 'Management server credentials and connection details'
+    })
+    @ApiResponse({ 
+        status: 200, 
+        description: 'Connection validated successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                isValid: { type: 'boolean', example: true },
+                message: { type: 'string', example: 'Connection successful' }
+            }
+        }
+    })
+    @ApiResponse({ status: 400, description: 'Bad Request - Invalid parameters or connection failed' })
+    @ApiResponse({ status: 401, description: 'Unauthorized - Invalid credentials' })
+    @ApiBearerAuth()
+    @Auth(Permission.ManageConfig)
+    @Post('validate-connection')
+    async validateConnection(
+        @Body() request: FetchZonesRequestDTO,
+    ): Promise<{ isValid: boolean; message: string }> {
+        return await this.configurationService.validateConnection(request);
+    }
+
     @ApiOperation({ summary: 'Get Configuration by ID' , description: ConfigApiDoc.GET_CONFIG_BY_ID})
     @ApiOkResponse({ description: 'Configuration Found' ,  type: ConfigDTO})
     @ApiNotFoundResponse({ description: 'Configuration Not Found' })
