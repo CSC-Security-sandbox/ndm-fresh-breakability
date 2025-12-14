@@ -3,49 +3,51 @@ package tests
 import (
 	"fmt"
 	. "ndm-api-tests/utils"
-	"net/http"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-003: Create a fileserver with healthy workers and run scheduled discovery and migration", func() {
+var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutover - testing pause/resume/stop/adhoc-run at each stage", func() {
+	var headers map[string]string
 	var (
 		ProjectId              string
 		workerId1              string
 		workerId2              string
 		workerIds              []string
 		err                    error
-		headers                map[string]string
 		attachedWorkersConfig  map[string]SSHConfig
-		destinationVolumePath1 string
-		destinationVolumePath2 string
 		sourceVolumePath1      string
 		sourceVolumePath2      string
+		destinationVolumePath1 string
+		destinationVolumePath2 string
 	)
 	Context("TC-003", func() {
 		BeforeEach(func() {
-			numberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+			NumberOfWorker := 2
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
 			Expect(err).To(BeNil(), "Error during test environment setup")
-			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
+			Expect(len(attachedWorkersConfig)).Should(BeNumerically(">", 1), "Expected at least one worker to be attached")
 			workerIds = GetWorkerIds()
 			workerId1 = workerIds[0]
 			workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
-			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
-			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[1], DESTINATION_VOLUMES[1])
 			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
 			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[1], SOURCE_VOLUMES[1])
+			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
+			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[1], DESTINATION_VOLUMES[1])
 		})
 
-		It("TC-003: Create a fileserver with healthy workers and run scheduled discovery and migration", func() {
+		It("TC-003: Complete workflow with discovery, migration, and cutover - testing pause/resume/stop/adhoc-run at each stage", func() {
 			By("########################## TC-003 start ################################")
-			var sourceConfigID, sourcePathID1, sourcePathID2 string
-			var sourceJobConfigIDs, destinationJobConfigIDs, jobConfigIDs, migrationJobConfigIDs, cutoverRunIDs []string
-			var destinationConfigID, destinationPathID1, destinationPathID2 string
+			var sourceConfigID1, sourceConfigID2, sourcePathID1, sourcePathID2 string
+			var sourceJobConfigIDs, destinationJobConfigIDs, migrationJobConfigIDs, jobConfigIDs []string
+			var destinationConfigID, destinationPathID1, destinationPathID2, destinationJobConfigID1, destinationJobConfigID2 string
+			var migrationJobRunID string
+			var list []string
 
 			By("Creating the source file server")
+			// Adding a delay because sometimes the worker takes 10 to 15 seconds to attach
 			Wait(20)
 			sourceParams := CreateServereParams{
 				ConfigName:       "source-file-server",
@@ -60,73 +62,17 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
-			sourceConfigID, resp, err := CreateFileServer(sourceParams, headers)
+			sourceConfigID1, resp, err := CreateFileServer(sourceParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
-			Expect(sourceConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
+			Expect(sourceConfigID1).NotTo(BeEmpty(), "sourceConfigID1 is empty")
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID, headers)
+			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID1, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID, headers)
+			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID1, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
-
-			By("Creating a new discovery job for the source")
-
-			jobParams := DiscoveryJobParams{
-				SourcePathIDs:            []string{sourcePathID1, sourcePathID2},
-				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
-				PreserveAccessTime:       false,
-				FirstRunAt:               GetFutureUTCTimestamp(120),
-				CreatedBy:                nil,
-				WorkflowExecutionTimeout: "60s",
-				WorkflowTaskTimeout:      "30s",
-				WorkflowRunTimeout:       "30s",
-				StartDelay:               "10s",
-			}
-			sourceJobConfigIDs, resp, err = CreateDiscoveryJob(jobParams, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating discovery job for source: %v", err))
-			defer resp.Body.Close()
-			Wait(10)
-			By("Validating run not initiates on triggering Discovery if it is scheduled")
-			for _, sourceJobConfigID := range sourceJobConfigIDs {
-				getJobsResp, resp, err := GetJobRunDetails(sourceJobConfigID, headers, false)
-				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID for config %s", sourceJobConfigID)
-				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK for config %s", sourceJobConfigID)
-				defer resp.Body.Close()
-
-				Expect(getJobsResp.JobRuns).To(BeEmpty(), "Expected jobRuns to be empty for config %s", sourceJobConfigID)
-				Expect(getJobsResp.Status).To(Equal("ACTIVE"), "Expected status to be ACTIVE for config %s", sourceJobConfigID)
-				Expect(getJobsResp.JobType).To(Equal("DISCOVER"), "Expected jobType to be DISCOVER for config %s", sourceJobConfigID)
-			}
-
-			Wait(100)
-
-			By("Getting jobs by jobConfigId for source")
-			discovery_validators := []string{
-				"src_vol_discovery.json",
-				"src_vol2_discovery.json",
-			}
-			for i, sourceJobConfigID := range sourceJobConfigIDs {
-				getJobsResp, resp, err := GetJobRunDetails(sourceJobConfigID, headers)
-				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-				defer resp.Body.Close()
-
-				sourceDiscoveryJobRunID := getJobsResp.JobRuns[0].JobRunId
-				Expect(sourceDiscoveryJobRunID).NotTo(BeEmpty(), "Source Discovery JobRun ID should not be empty")
-
-				// Wait for discovery jobs to complete
-				err = WaitForJobState(sourceDiscoveryJobRunID, COMPLETED_JOBRUN)
-				Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", sourceDiscoveryJobRunID)
-
-				result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
-				Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", sourceDiscoveryJobRunID)
-				By(fmt.Sprintf("validate report result for %s: %s", sourceDiscoveryJobRunID, result))
-			}
 
 			By("Creating the destination file server")
 			destinationParams := CreateServereParams{
@@ -146,7 +92,6 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 			Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
 			Expect(destinationConfigID).NotTo(BeEmpty(), "destinationConfigID is empty")
 			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 
 			By("Getting the destination file server by configId")
 			destinationPathID1, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationConfigID, headers)
@@ -155,14 +100,80 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			By("Creating a new discovery job for destination")
+			By("Creating a new discovery job for the source")
+			jobParams := DiscoveryJobParams{
+				SourcePathIDs:            []string{sourcePathID1, sourcePathID2},
+				ExcludeOlderThan:         nil,
+				ExcludeFilePatterns:      "",
+				PreserveAccessTime:       false,
+				FirstRunAt:               GetCurrentUTCTimestamp(),
+				CreatedBy:                nil,
+				WorkflowExecutionTimeout: "60s",
+				WorkflowTaskTimeout:      "30s",
+				WorkflowRunTimeout:       "30s",
+				StartDelay:               "10s",
+			}
+			sourceJobConfigIDs, resp, err = CreateDiscoveryJob(jobParams, headers)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating discovery job for source: %v", err))
+			defer resp.Body.Close()
 
+			sourceConfigID1 = sourceJobConfigIDs[0]
+			sourceConfigID2 = sourceJobConfigIDs[1]
+
+			By("Getting jobs by jobConfigId for source")
+			sourceConfigIDs := []string{sourceConfigID1, sourceConfigID2}
+			sourceDiscoveryJobRunIDs := make([]string, len(sourceConfigIDs))
+			discovery_validators := []string{
+				"src_vol_discovery.json",
+				"src_vol2_discovery.json",
+			}
+			for i, configID := range sourceConfigIDs {
+				getJobsResp, resp, err := GetJobRunDetails(configID, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
+				defer resp.Body.Close()
+				jobRunID := getJobsResp.JobRuns[0].JobRunId
+				sourceDiscoveryJobRunIDs[i] = jobRunID
+				Expect(jobRunID).NotTo(BeEmpty(), fmt.Sprintf("sourceDiscoveryJobRunID%d should not be empty", i+1))
+
+				if i == 0 {
+
+					list = nil
+					list = append(list, jobRunID)
+
+					err = HandleJobRunStateChange(jobRunID, "PAUSE", list)
+					Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
+					Wait(5)
+					err = WaitForJobState(jobRunID, "PAUSED")
+					Expect(err).NotTo(HaveOccurred(), "Job did not reach PAUSED state")
+					Wait(5)
+					err = HandleJobRunStateChange(jobRunID, "RESUME", list)
+					Expect(err).NotTo(HaveOccurred(), "Error while resume job run ID")
+					Wait(5)
+					err = HandleJobRunStateChange(jobRunID, "STOP", list)
+					Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
+
+					err = WaitForJobState(jobRunID, "STOPPED")
+					Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
+					//Adding wait to ensure temporal worker shut down completes after reaching STOPPED state
+					Wait(60)
+					_, _, err := TriggerAdHocJobRun(configID)
+					Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
+					continue
+				}
+				err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
+				Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
+				result, err := ValidateReport(jobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
+				Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
+				By(fmt.Sprintf("validate report result : %s", result))
+			}
+
+			By("Creating a new discovery job for destination")
 			destinationJobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{destinationPathID1, destinationPathID2},
 				ExcludeOlderThan:         nil,
 				ExcludeFilePatterns:      "",
 				PreserveAccessTime:       false,
-				FirstRunAt:               GetFutureUTCTimestamp(120),
+				FirstRunAt:               GetCurrentUTCTimestamp(),
 				CreatedBy:                nil,
 				WorkflowExecutionTimeout: "60s",
 				WorkflowTaskTimeout:      "30s",
@@ -173,39 +184,37 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating discovery job for destination: %v", err))
 			defer resp.Body.Close()
 
-			Wait(10)
-			By("Validating run not initiates on triggering Discovery if it is scheduled")
-			for _, destinationJobConfigID := range destinationJobConfigIDs {
-				getJobsResp, resp, err := GetJobRunDetails(destinationJobConfigID, headers, false)
-				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID for config %s", destinationJobConfigID)
-				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK for config %s", destinationJobConfigID)
-				defer resp.Body.Close()
-
-				Expect(getJobsResp.JobRuns).To(BeEmpty(), "Expected jobRuns to be empty for config %s", destinationJobConfigID)
-				Expect(getJobsResp.Status).To(Equal("ACTIVE"), "Expected status to be ACTIVE for config %s", destinationJobConfigID)
-				Expect(getJobsResp.JobType).To(Equal("DISCOVER"), "Expected jobType to be DISCOVER for config %s", destinationJobConfigID)
-			}
-
-			Wait(100)
+			destinationJobConfigID1 = destinationJobConfigIDs[0]
+			destinationJobConfigID2 = destinationJobConfigIDs[1]
 
 			By("Getting jobs by jobConfigId for destination")
-			for _, destinationJobConfigID := range destinationJobConfigIDs {
-				getJobsResp, resp, err := GetJobRunDetails(destinationJobConfigID, headers)
+			destinationConfigIDs := []string{destinationJobConfigID1, destinationJobConfigID2}
+			destinationDiscoveryJobRunIDs := make([]string, len(destinationConfigIDs))
+			for i, configID := range destinationConfigIDs {
+				getJobsResp, resp, err := GetJobRunDetails(configID, headers)
 				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 				defer resp.Body.Close()
-				destinationDiscoveryJobRunID := getJobsResp.JobRuns[0].JobRunId
-				Expect(destinationDiscoveryJobRunID).NotTo(BeEmpty(), "Destination Discovery JobRun ID should not be empty")
-
-				// Wait for discovery jobs to complete
-				err = WaitForJobState(destinationDiscoveryJobRunID, COMPLETED_JOBRUN)
-				Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", destinationDiscoveryJobRunID)
+				jobRunID := getJobsResp.JobRuns[0].JobRunId
+				destinationDiscoveryJobRunIDs[i] = jobRunID
+				Expect(jobRunID).NotTo(BeEmpty(), fmt.Sprintf("destinationDiscoveryJobRunID%d should not be empty", i+1))
 			}
 
-			By("Creating a migration job")
+			// Wait for both discovery jobs to complete
+			for i, jobRunID := range destinationDiscoveryJobRunIDs {
 
+				if i == 0 {
+					err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
+					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Destination discovery job %d did not complete", i+1))
+					continue
+				}
+				err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Destination discovery job %d did not complete", i+1))
+			}
+
+			// ============== MIGRATION JOBS WITH STATE MANAGEMENT ==============
+			By("STAGE 2: Creating migration jobs and testing pause/resume/stop/adhoc-run")
 			migrationParams := MigrationJobParams{
-				FirstRunAt:         GetFutureUTCTimestamp(90),
+				FirstRunAt:         GetCurrentUTCTimestamp(),
 				FutureRunSchedule:  "",
 				SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
 				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
@@ -219,47 +228,66 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
-			Wait(10)
-
-			for _, migrationJobConfigID := range migrationJobConfigIDs {
-				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers, false)
-				Expect(getJobsResp.JobRuns).To(BeEmpty(), "Expected jobRuns to be empty")
-				Expect(getJobsResp.Status).To(Equal("ACTIVE"), "Expected status to be ACTIVE")
-				Expect(getJobsResp.JobType).To(Equal("MIGRATE"), "Expected jobType to be MIGRATE")
-				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
-				defer resp.Body.Close()
-				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-			}
-
-			Wait(80)
 
 			migration_validators := []string{
 				"src_to_dest_vol_migration.json",
 				"src2_to_dest2_vol_migration.json",
 			}
-			// Wait for migration completion
+
+			// Get migration job run IDs and perform state management tests
+			flag := false
 			for i, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
-				migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
+				migrationJobRunID = getJobsResp.JobRuns[0].JobRunId
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
 				defer resp.Body.Close()
-				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
+
+				if !flag {
+					list = nil
+					list = append(list, migrationJobRunID)
+
+					By(fmt.Sprintf("Testing PAUSE/RESUME/STOP/ADHOC on migration job %d", i+1))
+					err = HandleJobRunStateChange(migrationJobRunID, "PAUSE", list)
+					Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
+					Wait(5)
+					err = WaitForJobState(migrationJobRunID, "PAUSED")
+					Expect(err).NotTo(HaveOccurred(), "Migration job did not reach PAUSED state")
+					Wait(5)
+					err = HandleJobRunStateChange(migrationJobRunID, "RESUME", list)
+					Expect(err).NotTo(HaveOccurred(), "Error while resume job run ID")
+					Wait(10)
+					err = HandleJobRunStateChange(migrationJobRunID, "STOP", list)
+					Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
+					flag = true
+					Wait(10)
+					err = WaitForJobState(migrationJobRunID, "STOPPED")
+					Expect(err).NotTo(HaveOccurred(), "Job did not reach STOPPED state")
+					Wait(60)
+					adHocJobRunId, resp, err := TriggerAdHocJobRun(migrationJobConfigID)
+					Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
+					defer resp.Body.Close()
+					err = WaitForJobState(adHocJobRunId, COMPLETED_JOBRUN)
+					Expect(err).NotTo(HaveOccurred(), "Ad-hoc job did not complete")
+					continue
+				}
+
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
 				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
-				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
-				By(fmt.Sprintf("validate report result : %s", result))
+				Expect(err).NotTo(HaveOccurred(), "Error while validate migration report")
+				By(fmt.Sprintf("validate migration report result : %s", result))
 			}
 
-			By("Adding Delta Data")
+			// ============== ADD DELTA DATA AND RUN CUTOVER ==============
+			By("STAGE 3: Adding delta data for cutover")
 			err = AddDataToVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
 			err = AddDataToVolume(sourceVolumePath2)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
 
-			By("Creating bulk cutover job")
+			By("Creating bulk cutover job and testing pause/resume/stop/adhoc-run")
 			cutoverParams := BulkCutoverJobParams{
 				SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
 				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
@@ -268,48 +296,66 @@ var _ = Describe("TC-003: Create a fileserver with healthy workers and run sched
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating bulk cutover job: %v", err))
 			defer resp.Body.Close()
 
-			By("Getting jobs by job config id")
-			for _, jobConfigID := range jobConfigIDs {
+			jobConfigIDsLoop := []string{jobConfigIDs[0], jobConfigIDs[1]}
+			cutoverJobRunIDs := make([]string, len(jobConfigIDsLoop))
+			for i, jobConfigID := range jobConfigIDsLoop {
 				getJobsResp, resp, err := GetJobRunDetails(jobConfigID, headers)
-				Expect(err).NotTo(HaveOccurred(), "Error getting blocked job run ID for config %s", jobConfigID)
+				Expect(err).NotTo(HaveOccurred(), "Error getting cutover job run ID")
 				defer resp.Body.Close()
+				jobRunID := getJobsResp.JobRuns[0].JobRunId
+				cutoverJobRunIDs[i] = jobRunID
 
-				cutoverRunID := getJobsResp.JobRuns[0].JobRunId
-				Expect(cutoverRunID).NotTo(BeEmpty(), "Expected a valid cutoverID for config %s", cutoverRunID)
+				// Perform PAUSE, RESUME, and STOP operations on the first cutover job run
+				if i == 0 {
+					list = nil
+					list = append(list, jobRunID)
 
-				WaitForJobState(cutoverRunID, BLOCKED_JOBRUN, 30)
-				// Fetch the latest status
-				getJobsResp, resp, err = GetJobRunDetails(jobConfigID, headers)
-				Expect(err).NotTo(HaveOccurred(), "cutoverRunID job did not reach BLOCKED state")
-				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK for config %s", jobConfigID)
-				defer resp.Body.Close()
+					By(fmt.Sprintf("Testing PAUSE/RESUME/STOP/ADHOC on cutover job %d", i+1))
+					err = HandleJobRunStateChange(jobRunID, "PAUSE", list)
+					Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
+					Wait(5)
+					err = WaitForJobState(jobRunID, "PAUSED", 15)
+					Expect(err).NotTo(HaveOccurred(), "Cutover job did not reach PAUSED state")
+					Wait(5)
+					err = HandleJobRunStateChange(jobRunID, "RESUME", list)
+					Expect(err).NotTo(HaveOccurred(), "Error while resume job run ID")
+					Wait(10)
+					err = HandleJobRunStateChange(jobRunID, "STOP", list)
+					Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
+					Wait(10)
+					err = WaitForJobState(jobRunID, "STOPPED", 30)
+					Expect(err).NotTo(HaveOccurred(), "Cutover job did not reach STOPPED state")
+					Wait(60)
+					adHocJobRunId, resp, err := TriggerAdHocJobRun(jobConfigID)
+					Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
+					defer resp.Body.Close()
+					err = WaitForJobState(adHocJobRunId, BLOCKED_JOBRUN)
+					Expect(err).NotTo(HaveOccurred(), "Ad-hoc cutover job did not reach BLOCKED state")
 
-				Expect(getJobsResp.JobRuns[0].Status).To(Equal("BLOCKED"), "Expected status BLOCKED for config %s", jobConfigID)
+					cutoverJobRunIDs[i] = adHocJobRunId
+					continue
+				}
 
-				cutoverRunIDs = append(cutoverRunIDs, cutoverRunID)
+				err = WaitForJobState(jobRunID, BLOCKED_JOBRUN)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Cutover job %d did not reach BLOCKED state", i+1))
 			}
 
-			By("Approving bulk cutover job")
-			for _, cutoverRunID := range cutoverRunIDs {
-				resp, err := ApproveRejectBulkCutoverJob(cutoverRunID, "APPROVED", headers)
-				Expect(err).NotTo(HaveOccurred(), "Error approving bulk cutover job for run %s", cutoverRunID)
-				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK for run %s", cutoverRunID)
+			By("Approving bulk cutover jobs")
+			for i := 0; i < 2; i++ {
+				resp, err = ApproveRejectBulkCutoverJob(cutoverJobRunIDs[i], "APPROVED", headers)
+				Expect(err).NotTo(HaveOccurred(), "Error approving bulk cutover job for run %s", cutoverJobRunIDs[i])
 				defer resp.Body.Close()
 			}
 
-			// By("Validating cutover reports")
-			// for _, cutoverRunID := range cutoverRunIDs {
-			// 	result, err := ValidateReport(cutoverRunID, JobTypeCutover, fmt.Sprintf("../../validators/%s/cutover_validation.json", PROTOCOL_TYPE))
-			// 	Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
-			// 	LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
-			// }
 			By("########################## TC-003 end ################################")
 		})
 
 		AfterEach(func() {
 			By("Cleanup started")
+
 			err := StopAllWorkersAndWait()
 			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
+
 			err = RemoveDeltaFromVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
 

@@ -3,54 +3,68 @@ package tests
 import (
 	"fmt"
 	. "ndm-api-tests/utils"
-	"net/http"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-005: Running migration / cutover with an exclude path pattern and batch pause/resume/stop/adhoc-run", func() {
-	var headers map[string]string
+var _ = Describe("TC-005: Run migration with 'Upload GID/UID Mapping' option", func() {
+	BeforeEach(func() {
+		if PROTOCOL_TYPE == ProtocolSMB {
+			Skip("TC-005: is skipped in CI/CD as it is not supported in SMB")
+		}
+	})
 	var (
 		ProjectId              string
 		workerId1              string
 		workerId2              string
 		workerIds              []string
 		err                    error
-		attachedWorkersConfig  map[string]SSHConfig
 		sourceVolumePath1      string
-		sourceVolumePath2      string
 		destinationVolumePath1 string
 		destinationVolumePath2 string
+		headers                map[string]string
+		attachedWorkersConfig  map[string]SSHConfig
+		sourceGrpId            int
+		destinationGrpId       int
+		sourceUserId           int
+		destinationUserId      int
+		fileWithGroup          string
+		csvData                string
 	)
-	Context("TC-005", func() {
+
+	Context("TC-005: Run migration with 'Upload GID/UID Mapping' option", func() {
 		BeforeEach(func() {
-			NumberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
+			numberOfWorker := 2
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
 			Expect(err).To(BeNil(), "Error during test environment setup")
-			Expect(len(attachedWorkersConfig)).Should(BeNumerically(">", 1), "Expected at least one worker to be attached")
+			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 			workerIds = GetWorkerIds()
 			workerId1 = workerIds[0]
 			workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
 			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
 			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[1], DESTINATION_VOLUMES[1])
+			sourceGrpId = 1033
+			destinationGrpId = 1034
+			sourceUserId = 1001
+			destinationUserId = 1002
+			fileWithGroup = "sample.txt"
+			// Base64 encoded CSV data for sourceGrpId=1033, destinationGrpId=1034, sourceUserId=1001, destinationUserId=1002
+			csvData =
+				"data:text/csv;charset=utf-8;base64,Z2lkX3NvdXJjZSxnaWRfdGFyZ2V0LHVpZF9zb3VyY2UsdWlkX3RhcmdldA0KMTAzMywxMDM0LDEwMDEsMTAwMg0K"
 
-			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
-			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[1], SOURCE_VOLUMES[1])
 		})
 
-		It("TC-005 : Running migration / cutover with an exclude path pattern and batch pause/resume/stop/adhoc-run", func() {
+		It("TC-005: Run migration with 'Upload GID/UID Mapping' option", func() {
 			By("########################## TC-005 start ################################")
-			var sourceConfigID1, sourcePathID1, sourcePathID2 string
-			var jobConfigIDs, migrationJobConfigIDs []string
-			var migrationJobRunID string
-			var destinationConfigID, destinationPathID1, destinationPathID2 string
-			var list []string
+
+			var sourceFileServerID, sourcePathID1, sourcePathID2 string
+			var migrationJobConfigIDs []string
+			var destinationFileServerID, destinationPathID1, destinationPathID2 string
 
 			By("Creating the source file server")
-			// Adding a delay because sometimes the worker takes 10 to 15 seconds to attach
-			Wait(20)
 			sourceParams := CreateServereParams{
 				ConfigName:       "source-file-server",
 				ConfigType:       ConfigTypeFile,
@@ -64,16 +78,17 @@ var _ = Describe("TC-005: Running migration / cutover with an exclude path patte
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
-			sourceConfigID1, resp, err := CreateFileServer(sourceParams, headers)
+			sourceFileServerID, resp, err := CreateFileServer(sourceParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
-			Expect(sourceConfigID1).NotTo(BeEmpty(), "sourceConfigID1 is empty")
+			Expect(sourceFileServerID).NotTo(BeEmpty(), "sourceConfigID is empty")
 			defer resp.Body.Close()
+			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID1, headers)
+			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceFileServerID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID1, headers)
+			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceFileServerID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating the destination file server")
@@ -90,19 +105,19 @@ var _ = Describe("TC-005: Running migration / cutover with an exclude path patte
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
-			destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
+			destinationFileServerID, resp, err = CreateFileServer(destinationParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
-			Expect(destinationConfigID).NotTo(BeEmpty(), "destinationConfigID is empty")
+			Expect(destinationFileServerID).NotTo(BeEmpty(), "destinationConfigID is empty")
 			defer resp.Body.Close()
 
 			By("Getting the destination file server by configId")
-			destinationPathID1, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationConfigID, headers)
+			destinationPathID1, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationFileServerID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
+			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationFileServerID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			By("Creating a migration job")
+			By("Creating a migration job by uploading GID/UID mapping csv")
 			migrationParams := MigrationJobParams{
 				FirstRunAt:         GetCurrentUTCTimestamp(),
 				FutureRunSchedule:  "",
@@ -114,138 +129,46 @@ var _ = Describe("TC-005: Running migration / cutover with an exclude path patte
 					"preserveAccessTime":  true,
 					"skipFile":            "0-M",
 				},
+				ExtraParams: map[string]interface{}{
+					"gidMapping": csvData,
+				},
 			}
 			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
+
 			migration_validators := []string{
 				"src_to_dest_vol_migration.json",
 				"src2_to_dest2_vol_migration.json",
 			}
-			// Get migration job run IDs and wait for completion
-			flag := false
+			// Get migration job run IDs, wait for completion and validate the CoC migration report
 			for i, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
-				migrationJobRunID = getJobsResp.JobRuns[0].JobRunId
+				migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
 				defer resp.Body.Close()
-				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
-
-				if !flag {
-					list = nil
-					list = append(list, migrationJobRunID)
-
-					err = HandleJobRunStateChange(migrationJobRunID, "PAUSE", list)
-					Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
-					Wait(5)
-					err = WaitForJobState(migrationJobRunID, "PAUSED")
-					Expect(err).NotTo(HaveOccurred(), "Migration job did not reach PAUSED state")
-					Wait(5)
-					err = HandleJobRunStateChange(migrationJobRunID, "RESUME", list)
-					Expect(err).NotTo(HaveOccurred(), "Error while resume job run ID")
-					Wait(10)
-					err = HandleJobRunStateChange(migrationJobRunID, "STOP", list)
-					Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
-					flag = true
-					Wait(10)
-					err = WaitForJobState(migrationJobRunID, "STOPPED")
-					Expect(err).NotTo(HaveOccurred(), "Job did not reach STOPPED state")
-					//Adding wait to ensure temporal worker shut down completes after reaching STOPPED state
-					Wait(60)
-					adHocJobRunId, resp, err := TriggerAdHocJobRun(migrationJobConfigID)
-					Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
-					defer resp.Body.Close()
-					err = WaitForJobState(adHocJobRunId, COMPLETED_JOBRUN)
-					Expect(err).NotTo(HaveOccurred(), "Ad-hoc job did not complete")
-					continue
-
-				}
-
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
 				result, err := ValidateReport(migrationJobRunID, JobTypeMigration, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]))
-				Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
-				By(fmt.Sprintf("validate COC report result : %s", result))
-			}
-			By("Adding Delta Data")
-			err = AddDataToVolume(sourceVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
-			err = AddDataToVolume(sourceVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
-
-			By("Creating bulk cutover job")
-			cutoverParams := BulkCutoverJobParams{
-				SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
-				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
-			}
-			jobConfigIDs, resp, err = CreateBulkCutoverJob(cutoverParams, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating bulk cutover job: %v", err))
-			defer resp.Body.Close()
-
-			jobConfigIDsLoop := []string{jobConfigIDs[0], jobConfigIDs[1]}
-			cutoverJobRunIDs := make([]string, len(jobConfigIDsLoop))
-			for i, jobConfigID := range jobConfigIDsLoop {
-				getJobsResp, resp, err := GetJobRunDetails(jobConfigID, headers)
-				Expect(err).NotTo(HaveOccurred(), "Error getting blocked job run ID")
-				defer resp.Body.Close()
-				jobRunID := getJobsResp.JobRuns[0].JobRunId
-				cutoverJobRunIDs[i] = jobRunID
-
-				//  Perform PAUSE, RESUME, and STOP operations on the first cutover job run
-				if i == 0 {
-					list = nil
-					list = append(list, jobRunID)
-
-					err = HandleJobRunStateChange(jobRunID, "PAUSE", list)
-					Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
-					Wait(5)
-					err = WaitForJobState(jobRunID, "PAUSED", 15)
-					Expect(err).NotTo(HaveOccurred(), "Cutover job did not reach PAUSED state")
-					Wait(5)
-					err = HandleJobRunStateChange(jobRunID, "RESUME", list)
-					Expect(err).NotTo(HaveOccurred(), "Error while resume job run ID")
-					Wait(10)
-					err = HandleJobRunStateChange(jobRunID, "STOP", list)
-					Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
-					Wait(10)
-					err = WaitForJobState(jobRunID, "STOPPED", 30)
-					Expect(err).NotTo(HaveOccurred(), "Cutover job did not complete")
-					//Adding wait to ensure temporal worker shut down completes after reaching STOPPED state
-					Wait(60)
-					adHocJobRunId, resp, err := TriggerAdHocJobRun(jobConfigID)
-					Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
-					defer resp.Body.Close()
-					err = WaitForJobState(adHocJobRunId, BLOCKED_JOBRUN)
-					Expect(err).NotTo(HaveOccurred(), "Ad-hoc job did not complete")
-
-					cutoverJobRunIDs[i] = adHocJobRunId
-					continue
-				}
-
-				WaitForJobState(jobRunID, BLOCKED_JOBRUN)
-
-				getJobsResp, resp, err = GetJobRunDetails(jobConfigID, headers)
-				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Cutover%d job did not reach BLOCKED state", i+1))
-				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-				Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">", 0), "No jobRuns found in response")
-				Expect(getJobsResp.JobRuns[0].JobRunId).NotTo(BeEmpty(), "Expected a valid cutoverID")
-				Expect(getJobsResp.JobRuns[0].Status).To(Equal("BLOCKED"), "Expected jobRuns[0].status to be BLOCKED")
+				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
+				By(fmt.Sprintf("validate report result : %s", result))
 			}
 
-			// result, err := ValidateReport(cutoverJobRunIDs[1], JobTypeCutover, fmt.Sprintf("../../validators/%s/COCDetails.json", PROTOCOL_TYPE))
-			// Expect(err).NotTo(HaveOccurred(), "Error while validate COC report")
-			// LogDebug(fmt.Sprintf("validate COC report result : %s", result))
+			By("Validate mapping correctly appears on source and destination as per csv")
+			userId, groupId, err := GetFileUserGroupId(sourceVolumePath1, fileWithGroup)
+			Expect(err).NotTo(HaveOccurred(), "error while GetFileUserGroupId at source")
 
-			By("Approving bulk cutover job")
+			Expect(userId).To(Equal(sourceUserId), "fileUserId incorrect at source")
+			Expect(groupId).To(Equal(sourceGrpId), "fileGroupId incorrect at source")
 
-			for i := 0; i < 2; i++ {
-				resp, err = ApproveRejectBulkCutoverJob(cutoverJobRunIDs[i], "APPROVED", headers)
-				Expect(err).NotTo(HaveOccurred(), "Error approving/rejecting bulk cutover job for run %s", cutoverJobRunIDs[i])
-				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK for run %s", cutoverJobRunIDs[i])
-				resp.Body.Close()
-			}
+			userId, groupId, err = GetFileUserGroupId(destinationVolumePath1, fileWithGroup)
+			Expect(err).NotTo(HaveOccurred(), "error while GetFileUserGroupId at destination")
+
+			Expect(userId).To(Equal(destinationUserId), "fileuserId incorrect at destination")
+			Expect(groupId).To(Equal(destinationGrpId), "fileGroupId incorrect at destination")
+
 			By("########################## TC-005 end ################################")
 		})
 
@@ -253,12 +176,6 @@ var _ = Describe("TC-005: Running migration / cutover with an exclude path patte
 			By("Cleanup started")
 			err := StopAllWorkersAndWait()
 			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
-			err = RemoveDeltaFromVolume(sourceVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
-
-			err = RemoveDeltaFromVolume(sourceVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath2)
-
 			err = ClearVolume(destinationVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
 

@@ -1,107 +1,154 @@
 [
   {
-    "Source Path": "smb_auto_perms1\\permissions_test",
-    "Destination Checksum": ""
+    "Destination Checksum": "",
+    "Source Path": "smb_auto_perms1\\inheritance_test"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\execute_dir",
-    "Destination Checksum": ""
+    "Destination Checksum": "",
+    "Source Path": "smb_auto_perms1\\inheritance_test\\inheritance_disabled"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\execute_dir\\execute_file.txt",
-    "Destination Checksum": "a7fc4a6e5cd3a85173a0680d5edb09eaaea699d716aef7a31ab0b41b1eb1ca92"
+    "Destination Checksum": "",
+    "Source Path": "smb_auto_perms1\\inheritance_test\\inheritance_disabled\\child_disabled"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\file1.txt",
-    "Destination Checksum": "2a4349e425707cf05b81176a6a3e4423af60dbe75da52cab600a6e8252cc9159"
+    "Destination Checksum": "9b1199445b48d7779220637a379de7df496a69fd7eab0d9b5255bac08ae7629d",
+    "Source Path": "smb_auto_perms1\\inheritance_test\\inheritance_disabled\\child_disabled\\file2.txt"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\file2.txt",
-    "Destination Checksum": "c2d52a9730f7117298fa7233efafb2f58ec28eb153391e81fd0451619d30a050"
+    "Destination Checksum": "2aaae671835f3b6c32a94226123209c76e8b245f7768e03345c2ba2b03bc1881",
+    "Source Path": "smb_auto_perms1\\inheritance_test\\inheritance_disabled\\file1.txt"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\file3.txt",
-    "Destination Checksum": "3db653475caa864eac2c4b463841b4b6e05efc1da7963586a107b678b27f9e4c"
+    "Destination Checksum": "",
+    "Source Path": "smb_auto_perms1\\inheritance_test\\inheritance_enabled"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\full_access_dir",
-    "Destination Checksum": ""
+    "Destination Checksum": "",
+    "Source Path": "smb_auto_perms1\\inheritance_test\\inheritance_enabled\\child_disabled"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\full_access_dir\\full_file.txt",
-    "Destination Checksum": "a0b6dbb2a698bebef67e281f51f83e9708a52eafac60158f2b20a61e4c987349"
+    "Destination Checksum": "1adf81146013d09182e0fd98643dcde8796ddf5f940c7f2ffb58a92f7bc6c371",
+    "Source Path": "smb_auto_perms1\\inheritance_test\\inheritance_enabled\\child_disabled\\file3.txt"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\mixed_permissions_dir",
-    "Destination Checksum": ""
+    "Destination Checksum": "",
+    "Source Path": "smb_auto_perms1\\inheritance_test\\inheritance_enabled\\child_enabled"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\mixed_permissions_dir\\mixed_file1.txt",
-    "Destination Checksum": "bbe2d76eca73539dede6d3e85675ab12d31b5966c397a6e6a619560fcf0c1638"
+    "Destination Checksum": "31ccde263034be3f4a0c212d25add2f5d17c21664c454fee8db0f3fa02cad07a",
+    "Source Path": "smb_auto_perms1\\inheritance_test\\inheritance_enabled\\child_enabled\\file2.txt"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\mixed_permissions_dir\\mixed_file2.txt",
-    "Destination Checksum": "0e73a0ae9a4c0ac5fff57ee673cf7f79b3739a6b3a897c701a5243b0d148d8db"
+    "Destination Checksum": "b10587be8c48d69cde34e9987a41f7a16f19727dcf71e1f4c994ed052b8c004c",
+    "Source Path": "smb_auto_perms1\\inheritance_test\\inheritance_enabled\\file1.txt"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\mixed_permissions_dir\\subdir1",
-    "Destination Checksum": ""
+    "Destination Checksum": "fb4d016056f75d8c35339956e4a404a4478fd8a4160751f9623c4048086f582c",
+    "Source Path": "smb_auto_perms1\\inheritance_test\\share_level_file.txt"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\mixed_permissions_dir\\subdir1\\subfile1.txt",
-    "Destination Checksum": "b8b0a53e6b83e0c7c6824f5e52852c51df14bf73dd698e85d39f7c7269e090e9"
+    "Destination Checksum": "",
+    "Source Path": "smb_auto_perms1\\permissions_test"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\mixed_permissions_dir\\subdir2",
-    "Destination Checksum": ""
+    "Destination Checksum": "",
+    "Source Path": "smb_auto_perms1\\permissions_test\\execute_dir"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\mixed_permissions_dir\\subdir2\\subfile2.txt",
-    "Destination Checksum": "c8e3d65dfd1129f20dd6bb4209c521f62b05df3a867185329235120c4027a70d"
+    "Destination Checksum": "a7fc4a6e5cd3a85173a0680d5edb09eaaea699d716aef7a31ab0b41b1eb1ca92",
+    "Source Path": "smb_auto_perms1\\permissions_test\\execute_dir\\execute_file.txt"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\modify_dir",
-    "Destination Checksum": ""
+    "Destination Checksum": "2a4349e425707cf05b81176a6a3e4423af60dbe75da52cab600a6e8252cc9159",
+    "Source Path": "smb_auto_perms1\\permissions_test\\file1.txt"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\modify_dir\\modify_file.txt",
-    "Destination Checksum": "159c15a63ac1ec3f31d7a2ee9cf55b47e262cc1aae98d4f9ca939a605ac23698"
+    "Destination Checksum": "c2d52a9730f7117298fa7233efafb2f58ec28eb153391e81fd0451619d30a050",
+    "Source Path": "smb_auto_perms1\\permissions_test\\file2.txt"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\read_only_dir",
-    "Destination Checksum": ""
+    "Destination Checksum": "3db653475caa864eac2c4b463841b4b6e05efc1da7963586a107b678b27f9e4c",
+    "Source Path": "smb_auto_perms1\\permissions_test\\file3.txt"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\read_only_dir\\readonly_file.txt",
-    "Destination Checksum": "4ea4f6612bdf023f9740ccd4d87628553ec7a608dffa2fed915efcdced05838c"
+    "Destination Checksum": "",
+    "Source Path": "smb_auto_perms1\\permissions_test\\full_access_dir"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\root_file.txt",
-    "Destination Checksum": "95d999870ccb0fbcb250359f337d8470818efd885508273a55b45cd856dce2f4"
+    "Destination Checksum": "a0b6dbb2a698bebef67e281f51f83e9708a52eafac60158f2b20a61e4c987349",
+    "Source Path": "smb_auto_perms1\\permissions_test\\full_access_dir\\full_file.txt"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\subdir1",
-    "Destination Checksum": ""
+    "Destination Checksum": "",
+    "Source Path": "smb_auto_perms1\\permissions_test\\mixed_permissions_dir"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\subdir1\\subfile1.txt",
-    "Destination Checksum": "833bc03945a50d2f3450a4be79fcde3bb46ec9779718956bc8ec697b62bd6abf"
+    "Destination Checksum": "bbe2d76eca73539dede6d3e85675ab12d31b5966c397a6e6a619560fcf0c1638",
+    "Source Path": "smb_auto_perms1\\permissions_test\\mixed_permissions_dir\\mixed_file1.txt"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\subdir2",
-    "Destination Checksum": ""
+    "Destination Checksum": "0e73a0ae9a4c0ac5fff57ee673cf7f79b3739a6b3a897c701a5243b0d148d8db",
+    "Source Path": "smb_auto_perms1\\permissions_test\\mixed_permissions_dir\\mixed_file2.txt"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\subdir2\\subfile2.txt",
-    "Destination Checksum": "684300b02fe7bfd06f770de5a48097a6f3211737d6cf1c5cb16a44eeff31532f"
+    "Destination Checksum": "",
+    "Source Path": "smb_auto_perms1\\permissions_test\\mixed_permissions_dir\\subdir1"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\write_only_dir",
-    "Destination Checksum": ""
+    "Destination Checksum": "b8b0a53e6b83e0c7c6824f5e52852c51df14bf73dd698e85d39f7c7269e090e9",
+    "Source Path": "smb_auto_perms1\\permissions_test\\mixed_permissions_dir\\subdir1\\subfile1.txt"
   },
   {
-    "Source Path": "smb_auto_perms1\\permissions_test\\write_only_dir\\write_file.txt",
-    "Destination Checksum": "c0b957eaf60ef02c39d8ec39a711343959acded37c94c0fc2449fa1bdaeb58d8"
+    "Destination Checksum": "",
+    "Source Path": "smb_auto_perms1\\permissions_test\\mixed_permissions_dir\\subdir2"
+  },
+  {
+    "Destination Checksum": "c8e3d65dfd1129f20dd6bb4209c521f62b05df3a867185329235120c4027a70d",
+    "Source Path": "smb_auto_perms1\\permissions_test\\mixed_permissions_dir\\subdir2\\subfile2.txt"
+  },
+  {
+    "Destination Checksum": "",
+    "Source Path": "smb_auto_perms1\\permissions_test\\modify_dir"
+  },
+  {
+    "Destination Checksum": "159c15a63ac1ec3f31d7a2ee9cf55b47e262cc1aae98d4f9ca939a605ac23698",
+    "Source Path": "smb_auto_perms1\\permissions_test\\modify_dir\\modify_file.txt"
+  },
+  {
+    "Destination Checksum": "",
+    "Source Path": "smb_auto_perms1\\permissions_test\\read_only_dir"
+  },
+  {
+    "Destination Checksum": "4ea4f6612bdf023f9740ccd4d87628553ec7a608dffa2fed915efcdced05838c",
+    "Source Path": "smb_auto_perms1\\permissions_test\\read_only_dir\\readonly_file.txt"
+  },
+  {
+    "Destination Checksum": "95d999870ccb0fbcb250359f337d8470818efd885508273a55b45cd856dce2f4",
+    "Source Path": "smb_auto_perms1\\permissions_test\\root_file.txt"
+  },
+  {
+    "Destination Checksum": "",
+    "Source Path": "smb_auto_perms1\\permissions_test\\subdir1"
+  },
+  {
+    "Destination Checksum": "833bc03945a50d2f3450a4be79fcde3bb46ec9779718956bc8ec697b62bd6abf",
+    "Source Path": "smb_auto_perms1\\permissions_test\\subdir1\\subfile1.txt"
+  },
+  {
+    "Destination Checksum": "",
+    "Source Path": "smb_auto_perms1\\permissions_test\\subdir2"
+  },
+  {
+    "Destination Checksum": "684300b02fe7bfd06f770de5a48097a6f3211737d6cf1c5cb16a44eeff31532f",
+    "Source Path": "smb_auto_perms1\\permissions_test\\subdir2\\subfile2.txt"
+  },
+  {
+    "Destination Checksum": "",
+    "Source Path": "smb_auto_perms1\\permissions_test\\write_only_dir"
+  },
+  {
+    "Destination Checksum": "c0b957eaf60ef02c39d8ec39a711343959acded37c94c0fc2449fa1bdaeb58d8",
+    "Source Path": "smb_auto_perms1\\permissions_test\\write_only_dir\\write_file.txt"
   }
 ]
-

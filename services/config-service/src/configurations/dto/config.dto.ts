@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform, Type } from "class-transformer";
-import { IsArray, IsEnum, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, ValidateIf, ValidateNested } from "class-validator";
+import { IsArray, IsBoolean, IsEnum, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, ValidateIf, ValidateNested } from "class-validator";
 import { ConfigurationType, ExportPathSource, Protocol, ProtocolVersion, ServerType } from "src/constants/enums";
 
 export class WorkingDirDTO {
@@ -105,4 +105,162 @@ export class ConfigDTO {
     @IsUUID()
     @IsOptional()
     createdBy?: string;
+}
+
+
+export class ManagementServerDTO {
+    @ApiProperty({ description: 'Project Id', example: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f' })
+    @IsNotEmpty()
+    projectId: string;
+
+    @ApiProperty({ description: 'Name', example: 'Isilon-Management-server' })
+    @IsString()
+    @IsNotEmpty()
+    configName: string;
+
+    @ApiProperty({ description: 'Server type', enum: ServerType, default: ServerType.dell, example: ServerType.dell })
+    @IsEnum(ServerType)
+    serverType?: ServerType = ServerType.dell;
+
+    @ApiProperty({ description: 'Host', example: '127.0.0.1' })
+    @IsString()
+    @IsNotEmpty()
+    host: string;
+
+    @ApiProperty({ description: 'Port', example: 8080 })
+    @IsNumber()
+    @IsOptional()
+    port?: number;
+
+    @ApiProperty({ description: 'Username', example: 'admin' })
+    @IsNotEmpty()
+    username: string;
+
+    @ApiPropertyOptional({ description: 'password', example: '***' })
+    @IsString()
+    @IsOptional()
+    password?: string;
+
+    @ApiProperty({ description: 'UUID of createdBy', example: "36bfd77f-1d7c-47a3-8c62-3c8739e2f88f" })
+    @IsString()
+    @IsUUID()
+    @IsOptional()
+    createdBy?: string;
+
+    @ApiPropertyOptional({ description: 'TLS Accepted', example: true })
+    @IsOptional()
+    @IsNotEmpty()
+    tlsAccepted?: boolean;
+
+    @ApiPropertyOptional({ description: 'TLS Certificate', example: '-----BEGIN CERTIFICATE-----...' })
+    @IsString()
+    @IsOptional()
+    tlsCertificate?: string;
+}
+
+// ==================== TLS Certificate DTOs ==================== //
+
+export class FetchCertificateRequestDTO {
+    @ApiProperty({ 
+        description: 'Host address with optional port', 
+        example: '10.192.7.32' 
+    })
+    @IsString()
+    @IsNotEmpty()
+    host: string;
+}
+
+export class CertificateSubjectDTO {
+    @ApiPropertyOptional({ description: 'Common Name', example: 'isilon.example.com' })
+    @IsString()
+    @IsOptional()
+    CN?: string;
+
+    @ApiPropertyOptional({ description: 'Organization', example: 'Example Corp' })
+    @IsString()
+    @IsOptional()
+    O?: string;
+
+    @ApiPropertyOptional({ description: 'Organizational Unit', example: 'IT Department' })
+    @IsString()
+    @IsOptional()
+    OU?: string;
+
+    @ApiPropertyOptional({ description: 'Country', example: 'US' })
+    @IsString()
+    @IsOptional()
+    C?: string;
+
+    @ApiPropertyOptional({ description: 'State', example: 'California' })
+    @IsString()
+    @IsOptional()
+    ST?: string;
+
+    @ApiPropertyOptional({ description: 'Locality', example: 'San Jose' })
+    @IsString()
+    @IsOptional()
+    L?: string;
+}
+
+export class FetchCertificateResponseDTO {
+    @ApiProperty({ description: 'Whether the certificate is self-signed', example: true })
+    @IsBoolean()
+    isSelfSigned: boolean;
+
+    @ApiProperty({ description: 'Certificate subject information', type: CertificateSubjectDTO })
+    @IsObject()
+    subject: CertificateSubjectDTO;
+
+    @ApiProperty({ description: 'Certificate issuer information', type: CertificateSubjectDTO })
+    @IsObject()
+    issuer: CertificateSubjectDTO;
+
+    @ApiProperty({ description: 'Certificate validity start date', example: '2024-01-01T00:00:00.000Z' })
+    @IsString()
+    validFrom: string;
+
+    @ApiProperty({ description: 'Certificate validity end date', example: '2025-01-01T00:00:00.000Z' })
+    @IsString()
+    validTo: string;
+
+    @ApiProperty({ description: 'Certificate serial number', example: '01:23:45:67:89:AB:CD:EF' })
+    @IsString()
+    serialNumber: string;
+
+    @ApiProperty({ description: 'SHA-1 fingerprint', example: 'A1:B2:C3:D4:E5:F6:...' })
+    @IsString()
+    fingerprint: string;
+
+    @ApiProperty({ description: 'SHA-256 fingerprint', example: '12:34:56:78:9A:BC:...' })
+    @IsString()
+    fingerprint256: string;
+
+    @ApiProperty({ description: 'Subject Alternative Names', type: [String], example: ['DNS:isilon.example.com', 'IP:10.192.7.32'] })
+    @IsArray()
+    subjectAltNames: string[];
+
+    @ApiProperty({ description: 'Days remaining until expiration', example: 365 })
+    @IsNumber()
+    daysRemaining: number;
+
+    @ApiProperty({ description: 'Whether the certificate is expired', example: false })
+    @IsBoolean()
+    isExpired: boolean;
+
+    @ApiProperty({ description: 'Certificate chain issuers', type: [CertificateSubjectDTO] })
+    @IsArray()
+    issuerChain: CertificateSubjectDTO[];
+
+    @ApiPropertyOptional({ description: 'Certificate in PEM format' })
+    @IsString()
+    @IsOptional()
+    certificatePEM?: string;
+
+    @ApiProperty({ description: 'Host that was queried', example: '10.192.7.32' })
+    @IsString()
+    host: string;
+
+    @ApiProperty({ description: 'Port that was queried', example: 443 })
+    @IsNumber()
+    port: number;
 }

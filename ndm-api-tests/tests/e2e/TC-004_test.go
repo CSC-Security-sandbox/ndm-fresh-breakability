@@ -3,43 +3,58 @@ package tests
 import (
 	"fmt"
 	. "ndm-api-tests/utils"
+	"sync"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-004: Running discovery and batch pause/resume/stop/adhoc-run", func() {
-	var headers map[string]string
+var _ = Describe("TC-004: Run migration with incremental sync schedule - verify both addition and deletion sync", func() {
 	var (
-		ProjectId             string
-		workerId1             string
-		workerId2             string
-		workerIds             []string
-		err                   error
-		attachedWorkersConfig map[string]SSHConfig
+		ProjectId              string
+		workerId1              string
+		workerId2              string
+		workerIds              []string
+		err                    error
+		headers                map[string]string
+		attachedWorkersConfig  map[string]SSHConfig
+		sourceVolumePath1      string
+		sourceVolumePath2      string
+		destinationVolumePath1 string
+		destinationVolumePath2 string
 	)
-	Context("TC-004", func() {
+	Context("TC-004: Run migration with incremental sync schedule - verify both addition and deletion sync", func() {
+
 		BeforeEach(func() {
-			NumberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
+			numberOfWorker := 2
+			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
 			Expect(err).To(BeNil(), "Error during test environment setup")
-			Expect(len(attachedWorkersConfig)).Should(BeNumerically(">", 1), "Expected at least one worker to be attached")
+			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 			workerIds = GetWorkerIds()
 			workerId1 = workerIds[0]
 			workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
+			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[1], SOURCE_VOLUMES[1])
+
+			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
+			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[1], DESTINATION_VOLUMES[1])
 		})
 
-		It("TC-004 : Running discovery and batch pause/resume/stop/adhoc-run", func() {
+		It("TC-004: Run migration with incremental sync schedule - verify both addition and deletion sync", func() {
 			By("########################## TC-004 start ################################")
-			var sourceConfigID1, sourceConfigID2, sourcePathID1, sourcePathID2 string
-			var sourceJobConfigIDs, destinationJobConfigIDs []string
-			var destinationConfigID, destinationPathID1, destinationPathID2, destinationJobConfigID1, destinationJobConfigID2 string
-			var list []string
+			var (
+				// Source-related IDs
+				sourceConfigID               string
+				sourcePathID1, sourcePathID2 string
 
+				// Destination-related IDs
+				destinationConfigID, destinationPathID1, destinationPathID2 string
+
+				// Job Config and Migration IDs
+				migrationJobConfigIDs []string
+			)
 			By("Creating the source file server")
-			// Adding a delay because sometimes the worker takes 10 to 15 seconds to attach
-			Wait(20)
 			sourceParams := CreateServereParams{
 				ConfigName:       "source-file-server",
 				ConfigType:       ConfigTypeFile,
@@ -53,16 +68,16 @@ var _ = Describe("TC-004: Running discovery and batch pause/resume/stop/adhoc-ru
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
-			sourceConfigID1, resp, err := CreateFileServer(sourceParams, headers)
+			sourceConfigID, resp, err := CreateFileServer(sourceParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
-			Expect(sourceConfigID1).NotTo(BeEmpty(), "sourceConfigID1 is empty")
+			Expect(sourceConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
 			defer resp.Body.Close()
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID1, headers)
+			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID1, headers)
+			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating the destination file server")
@@ -91,75 +106,89 @@ var _ = Describe("TC-004: Running discovery and batch pause/resume/stop/adhoc-ru
 			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			By("Creating a new discovery job for the source")
-			jobParams := DiscoveryJobParams{
-				SourcePathIDs:            []string{sourcePathID1, sourcePathID2},
-				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
-				PreserveAccessTime:       false,
-				FirstRunAt:               GetCurrentUTCTimestamp(),
-				CreatedBy:                nil,
-				WorkflowExecutionTimeout: "60s",
-				WorkflowTaskTimeout:      "30s",
-				WorkflowRunTimeout:       "30s",
-				StartDelay:               "10s",
+			By("Creating base migration job with Incremental Sync of 5 mins")
+			currentDateTime := GetCurrentUTCTimestamp()
+			migrationParams := MigrationJobParams{
+				FirstRunAt:         currentDateTime,
+				FutureRunSchedule:  "*/5 * * * *", // Cron expression of 5 mins
+				SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
+				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
+				SidMapping:         false,
+				Options: map[string]interface{}{
+					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
+					"preserveAccessTime":  true,
+					"skipFile":            "0-M",
+				},
 			}
-			sourceJobConfigIDs, resp, err = CreateDiscoveryJob(jobParams, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating discovery job for source: %v", err))
+			migrationJobConfigIDs, resp, err = CreateMigrationJob(migrationParams, headers)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating migration job: %v", err))
 			defer resp.Body.Close()
 
-			sourceConfigID1 = sourceJobConfigIDs[0]
-			sourceConfigID2 = sourceJobConfigIDs[1]
+			var wg sync.WaitGroup
 
-			By("Getting jobs by jobConfigId for source")
-			sourceConfigIDs := []string{sourceConfigID1, sourceConfigID2}
-			sourceDiscoveryJobRunIDs := make([]string, len(sourceConfigIDs))
-			discovery_validators := []string{
-				"src_vol_discovery.json",
-				"src_vol2_discovery.json",
+			// Validators for different phases
+			baseValidators := []string{
+				"src_to_dest_vol_migration.json",
+				"src2_to_dest2_vol_migration.json",
 			}
-			for i, configID := range sourceConfigIDs {
-				getJobsResp, resp, err := GetJobRunDetails(configID, headers)
-				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
+
+			// 1) Run and validate initial migration (base data only)
+			for i, migrationJobConfigID := range migrationJobConfigIDs {
+				wg.Add(1)
+				go func(i int, migrationJobConfigID string) {
+					defer GinkgoRecover()
+					defer wg.Done()
+
+					getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
+					Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
+					Expect(len(getJobsResp.JobRuns)).To(BeNumerically("==", 1), "No jobRuns found in response")
+					defer resp.Body.Close()
+
+					migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
+					Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
+
+					// Wait for base migration completion
+					err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
+					Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
+
+					// Validate base migration report (no delta yet)
+					LogDebug("Validate migration report for 1st iteration (base data without delta)")
+					result, err := ValidateReport(migrationJobRunID, JobTypeMigration,
+						fmt.Sprintf("../../validators/TC-004-JSON/%s/%s", PROTOCOL_TYPE, baseValidators[i]))
+					Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
+					By(fmt.Sprintf("validate report result : %s", result))
+				}(i, migrationJobConfigID)
+			}
+			wg.Wait()
+
+			// 2) Addition sync: add delta data and wait for incremental run
+			By("Step 1: Adding Delta Data for Incremental run (Addition Sync)")
+			err = AddDataToVolume(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
+			err = AddDataToVolume(sourceVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
+
+			LogDebug("Waiting till new Jobs run created")
+			Wait(300)
+
+			By("Step 2: Validating incremental Sync for addition is triggered")
+			for _, migrationJobConfigID := range migrationJobConfigIDs {
+				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
+				Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">=", 2), "Expected at least 2 job runs")
 				defer resp.Body.Close()
-				jobRunID := getJobsResp.JobRuns[0].JobRunId
-				sourceDiscoveryJobRunIDs[i] = jobRunID
-				Expect(jobRunID).NotTo(BeEmpty(), fmt.Sprintf("sourceDiscoveryJobRunID%d should not be empty", i+1))
 
-				if i == 0 {
+				lastIdx := len(getJobsResp.JobRuns) - 1
+				migrationJobRunID := getJobsResp.JobRuns[lastIdx].JobRunId
+				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
 
-					list = nil
-					list = append(list, jobRunID)
-
-					err = HandleJobRunStateChange(jobRunID, "PAUSE", list)
-					Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
-					Wait(5)
-					err = WaitForJobState(jobRunID, "PAUSED")
-					Expect(err).NotTo(HaveOccurred(), "Job did not reach PAUSED state")
-					Wait(5)
-					err = HandleJobRunStateChange(jobRunID, "RESUME", list)
-					Expect(err).NotTo(HaveOccurred(), "Error while resume job run ID")
-					Wait(5)
-					err = HandleJobRunStateChange(jobRunID, "STOP", list)
-					Expect(err).NotTo(HaveOccurred(), "Error while stop job run ID")
-
-					err = WaitForJobState(jobRunID, "STOPPED")
-					Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
-					//Adding wait to ensure temporal worker shut down completes after reaching STOPPED state
-					Wait(60)
-					_, _, err := TriggerAdHocJobRun(configID)
-					Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc job run")
-					continue
-				}
-				err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
-				Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
-				result, err := ValidateReport(jobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
-				Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
-				By(fmt.Sprintf("validate report result : %s", result))
+				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
+				Expect(err).NotTo(HaveOccurred(), "Addition migration job did not complete")
+				LogDebug(fmt.Sprintf("Addition sync run %s completed for config %s", migrationJobRunID, migrationJobConfigID))
 			}
 
-			By("Creating a new discovery job for destination")
-			destinationJobParams := DiscoveryJobParams{
+			By("Step 2.1: Discovering destination to verify addition sync migrated delta data")
+			additionDiscoveryJobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{destinationPathID1, destinationPathID2},
 				ExcludeOlderThan:         nil,
 				ExcludeFilePatterns:      "",
@@ -171,35 +200,134 @@ var _ = Describe("TC-004: Running discovery and batch pause/resume/stop/adhoc-ru
 				WorkflowRunTimeout:       "30s",
 				StartDelay:               "10s",
 			}
-			destinationJobConfigIDs, resp, err = CreateDiscoveryJob(destinationJobParams, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating discovery job for destination: %v", err))
+			additionDiscoveryJobConfigIDs, resp, err := CreateDiscoveryJob(additionDiscoveryJobParams, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error creating discovery job for destination after addition sync")
+			Expect(len(additionDiscoveryJobConfigIDs)).To(BeNumerically(">", 0), "No valid additionDiscoveryJobConfigIDs found")
 			defer resp.Body.Close()
 
-			destinationJobConfigID1 = destinationJobConfigIDs[0]
-			destinationJobConfigID2 = destinationJobConfigIDs[1]
-
-			By("Getting jobs by jobConfigId for destination")
-			destinationConfigIDs := []string{destinationJobConfigID1, destinationJobConfigID2}
-			destinationDiscoveryJobRunIDs := make([]string, len(destinationConfigIDs))
-			for i, configID := range destinationConfigIDs {
-				getJobsResp, resp, err := GetJobRunDetails(configID, headers)
-				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
+			additionDiscoveryValidators := []string{
+				"dest_vol_after_addition_discovery.json",
+				"dest_vol2_after_addition_discovery.json",
+			}
+			for i, additionDiscoveryJobConfigID := range additionDiscoveryJobConfigIDs {
+				getJobsResp, resp, err := GetJobRunDetails(additionDiscoveryJobConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error getting discovery job run ID after addition sync")
 				defer resp.Body.Close()
-				jobRunID := getJobsResp.JobRuns[0].JobRunId
-				destinationDiscoveryJobRunIDs[i] = jobRunID
-				Expect(jobRunID).NotTo(BeEmpty(), fmt.Sprintf("destinationDiscoveryJobRunID%d should not be empty", i+1))
+
+				additionDiscoveryJobRunID := getJobsResp.JobRuns[0].JobRunId
+				Expect(additionDiscoveryJobRunID).NotTo(BeEmpty(), "Addition Discovery JobRun ID should not be empty")
+
+				err = WaitForJobState(additionDiscoveryJobRunID, COMPLETED_JOBRUN)
+				Expect(err).NotTo(HaveOccurred(), "Discovery job after addition sync did not complete")
+
+				result, err := ValidateReport(additionDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/TC-004-JSON/%s/%s", PROTOCOL_TYPE, additionDiscoveryValidators[i]))
+				Expect(err).NotTo(HaveOccurred(), "Error validating discovery report after addition sync")
+				By(fmt.Sprintf("Addition discovery validation result: %s", result))
 			}
 
-			// Wait for both discovery jobs to complete
-			for i, jobRunID := range destinationDiscoveryJobRunIDs {
+			// 3) Deletion sync: remove delta and wait for incremental run
+			By("Step 3: Removing Delta Data for Deletion Sync (Incremental run)")
+			err = RemoveDeltaFromVolume(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error removing delta data files from %s", sourceVolumePath1)
+			err = RemoveDeltaFromVolume(sourceVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error removing delta data files from %s", sourceVolumePath2)
 
-				if i == 0 {
-					err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
-					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Destination discovery job %d did not complete", i+1))
-					continue
-				}
-				err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
-				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Destination discovery job %d did not complete", i+1))
+			LogDebug("Waiting till new Jobs run created for deletion sync")
+			Wait(300)
+
+			By("Step 4: Validating incremental Sync for deletion is triggered")
+			for _, migrationJobConfigID := range migrationJobConfigIDs {
+				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
+				Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">=", 3), "Expected at least 3 job runs")
+				defer resp.Body.Close()
+
+				lastIdx := len(getJobsResp.JobRuns) - 1
+				migrationJobRunID := getJobsResp.JobRuns[lastIdx].JobRunId
+				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
+
+				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
+				Expect(err).NotTo(HaveOccurred(), "Deletion migration job did not complete")
+				LogDebug(fmt.Sprintf("Deletion sync run %s completed for config %s", migrationJobRunID, migrationJobConfigID))
+			}
+
+			By("Step 5: Discovering destination to verify deletion was mirrored (reusing existing discovery jobs)")
+			// Reuse the discovery jobs created during addition validation by triggering ad-hoc runs
+			deletionDiscoveryRunIDs := []string{}
+			for _, discoveryJobConfigID := range additionDiscoveryJobConfigIDs {
+				// Trigger ad-hoc run for the existing discovery job
+				adhocRunID, adhocResp, err := TriggerAdHocJobRun(discoveryJobConfigID)
+				Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc discovery run for deletion validation")
+				defer adhocResp.Body.Close()
+
+				Expect(adhocRunID).NotTo(BeEmpty(), "Ad-hoc run ID should not be empty")
+				By(fmt.Sprintf("Triggered ad-hoc discovery run for deletion validation: %s", adhocRunID))
+
+				deletionDiscoveryRunIDs = append(deletionDiscoveryRunIDs, adhocRunID)
+			}
+
+			By("Step 5.1: Waiting for deletion discovery runs to complete and validating")
+			deletion_discovery_validators := []string{
+				"dest_vol_discovery.json",
+				"dest_vol2_discovery.json",
+			}
+			for i, deletionRunID := range deletionDiscoveryRunIDs {
+				err := WaitForJobState(deletionRunID, COMPLETED_JOBRUN)
+				Expect(err).NotTo(HaveOccurred(), "Deletion discovery job did not complete")
+
+				result, err := ValidateReport(deletionRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/TC-004-JSON/%s/%s", PROTOCOL_TYPE, deletion_discovery_validators[i]))
+				Expect(err).NotTo(HaveOccurred(), "Error validating deletion discovery report")
+				By(fmt.Sprintf("Validate deletion discovery report result: %s", result))
+			}
+
+			By("Creating bulk cutover job")
+			cutoverParams := BulkCutoverJobParams{
+				SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
+				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
+			}
+			cutoverJobConfigIDs, resp, err := CreateBulkCutoverJob(cutoverParams, headers)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating bulk cutover job: %v", err))
+			defer resp.Body.Close()
+
+			cutoverRunIDs := []string{}
+
+			By("Getting jobs by job config id")
+			for _, jobConfigID := range cutoverJobConfigIDs {
+				getJobsResp, resp, err := GetJobRunDetails(jobConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error getting blocked job run ID for config %s", jobConfigID)
+				defer resp.Body.Close()
+
+				cutoverRunID := getJobsResp.JobRuns[0].JobRunId
+				Expect(cutoverRunID).NotTo(BeEmpty(), "Expected a valid cutoverID for config %s", cutoverRunID)
+
+				WaitForJobState(cutoverRunID, BLOCKED_JOBRUN)
+				// Fetch the latest status
+				getJobsResp, resp, err = GetJobRunDetails(jobConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), "cutoverRunID job did not reach BLOCKED state")
+				defer resp.Body.Close()
+
+				Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">", 0), "No jobRuns found for config %s", jobConfigID)
+				Expect(getJobsResp.JobRuns[0].JobRunId).NotTo(BeEmpty(), "Expected a valid cutoverID for config %s", jobConfigID)
+				Expect(getJobsResp.JobRuns[0].Status).To(Equal("BLOCKED"), "Expected status BLOCKED for config %s", jobConfigID)
+
+				cutoverRunIDs = append(cutoverRunIDs, cutoverRunID)
+			}
+
+			By("Approving bulk cutover job")
+			for _, cutoverRunID := range cutoverRunIDs {
+				resp, err := ApproveRejectBulkCutoverJob(cutoverRunID, "APPROVED", headers)
+				Expect(err).NotTo(HaveOccurred(), "Error approving bulk cutover job for run %s", cutoverRunID)
+				defer resp.Body.Close()
+			}
+			cutover_validators := []string{
+				"src_to_dest_vol_cutover.json",
+				"src2_to_dest2_vol_cutover.json",
+			}
+			By("Validating cutover reports")
+			for i, cutoverRunID := range cutoverRunIDs {
+				result, err := ValidateReport(cutoverRunID, JobTypeCutover, fmt.Sprintf("../../validators/TC-004-JSON/%s/%s", PROTOCOL_TYPE, cutover_validators[i]))
+				Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
+				LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
 			}
 
 			By("########################## TC-004 end ################################")
@@ -207,9 +335,19 @@ var _ = Describe("TC-004: Running discovery and batch pause/resume/stop/adhoc-ru
 
 		AfterEach(func() {
 			By("Cleanup started")
-
 			err := StopAllWorkersAndWait()
 			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
+			err = RemoveDeltaFromVolume(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
+
+			err = RemoveDeltaFromVolume(sourceVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath2)
+
+			err = ClearVolume(destinationVolumePath1)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
+
+			err = ClearVolume(destinationVolumePath2)
+			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
 
 			err = CleanupTestEnv()
 			Expect(err).To(BeNil(), "Error during test environment cleanup")

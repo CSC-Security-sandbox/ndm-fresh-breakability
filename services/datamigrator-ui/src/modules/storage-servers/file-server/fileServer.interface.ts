@@ -51,6 +51,13 @@ export interface FileServerStateContextType {
   setSelectedProtocol: (protocol: "NFS" | "SMB") => void;
 }
 
+// Management Console Form Type for Dell Isilon
+export interface ManagementConsoleFormType {
+  managementHost: string;
+  managementUsername: string;
+  managementPassword: string;
+}
+
 // THIS IS CHILD, ONLY FORM WILL BE STORED IN THIS CONTEXT
 export interface FileServerFormContextType {
   handleCreateConfiguration: () => void;
@@ -60,11 +67,26 @@ export interface FileServerFormContextType {
   smbCredentialsForm: BlueXpFormType<CredentialsValidationSchemaType>;
   jobConfigForm: BlueXpFormType<jobConfigFormFormType>;
   hostCredentialsForm: BlueXpFormType<{ hostname: string }>;
+  managementConsoleForm: BlueXpFormType<ManagementConsoleFormType>;
   workersListTableStateProps: any;
   nfsWorkersList: string[];
   children?: ReactNode;
   isFetching: boolean;
   refetch: () => void;
+  // Dell Isilon Certificate State & Handlers
+  certificateData: CertificateResponseType | null;
+  setCertificateData: (data: CertificateResponseType | null) => void;
+  showCertificateView: boolean;
+  setShowCertificateView: (show: boolean) => void;
+  certificateAccepted: boolean;
+  setCertificateAccepted: (accepted: boolean) => void;
+  fetchingCertificate: boolean;
+  certificateError: string | null;
+  handleFetchCertificate: () => Promise<void>;
+  handleAcceptCertificate: () => Promise<boolean>;
+  handleDeclineCertificate: () => void;
+  resetCertificateState: () => void;
+  isDellIsilonFormValid: () => boolean;
 }
 
 export interface CommonFileServerContextProviderType
@@ -152,4 +174,33 @@ export interface jobConfigFormFormType {
   };
   pathName: string;
   workingDirectory: string;
+}
+
+// Certificate Subject/Issuer Type
+export interface CertificateSubjectType {
+  CN?: string;
+  O?: string;
+  OU?: string;
+  C?: string;
+  ST?: string;
+  L?: string;
+}
+
+// Certificate Response Type from Dell Isilon Management Console
+export interface CertificateResponseType {
+  isSelfSigned: boolean;
+  subject: CertificateSubjectType;
+  issuer: CertificateSubjectType;
+  validFrom: string;
+  validTo: string;
+  serialNumber: string;
+  fingerprint: string;
+  fingerprint256: string;
+  subjectAltNames: string[];
+  daysRemaining: number;
+  isExpired: boolean;
+  issuerChain: CertificateSubjectType[];
+  certificatePEM: string;
+  host: string;
+  port: number;
 }

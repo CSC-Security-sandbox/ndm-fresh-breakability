@@ -16,144 +16,144 @@ import (
 )
 
 func main() {
-	BUILD_VERSION = os.Getenv("BUILD_VERSION")
-	REF_TYPE = os.Getenv("REF_TYPE")
-	NDM_NEXUS_USERNAME = os.Getenv("NDM_NEXUS_USERNAME")
-	NDM_NEXUS_PASSWORD = os.Getenv("NDM_NEXUS_PASSWORD")
-
-	if BUILD_VERSION == "" || REF_TYPE == "" || NDM_NEXUS_USERNAME == "" || NDM_NEXUS_PASSWORD == "" {
-		LogError("One or more required environment variables are not set: BUILD_VERSION, REF_TYPE, NDM_NEXUS_USERNAME, NDM_NEXUS_PASSWORD")
-		return
-	}
-
-	// Initialize the setup without worker attach setup
-	InitTestEnv()
-
-	// Step 1: Fetch project IDs
-	headers := GetHeaders(AuthToken, ContentTypeJSON)
-	projectIds, err := getProjectIds(headers)
-	if err != nil {
-		LogError(fmt.Sprintf("Error fetching project IDs: %v", err))
-		return
-	}
-	if len(projectIds) == 0 {
-		LogError("No projects found")
-		return
-	}
-	LogDebug(fmt.Sprintf("Found %d projects", len(projectIds)))
-
-	// Step 2: Build map of projectID -> workerIDs
-	projectWorkerMap := make(map[string][]string)
-	for _, projectId := range projectIds {
-		workerIds, err := getWorkerIdsByProject(headers, projectId)
-		if err != nil {
-			LogError(fmt.Sprintf("Error fetching workers for project %s: %v", projectId, err))
-			continue
-		}
-		if len(workerIds) > 0 {
-			projectWorkerMap[projectId] = workerIds
-			LogDebug(fmt.Sprintf("Project %s has %d workers", projectId, len(workerIds)))
-		} else {
-			LogDebug(fmt.Sprintf("Skipping project %s - no workers found", projectId))
-		}
-	}
-
-	if len(projectWorkerMap) == 0 {
-		LogError("No projects found with workers")
-		return
-	}
-
-	// Step 3: Generate Support Bundle for each project
-	var downloadedZips []string
-	projectIndex := 0
-
-	for projectId, workerIds := range projectWorkerMap {
-		projectIndex++
-		workerId1 := ""
-		workerId2 := ""
-
-		if len(workerIds) >= 1 {
-			workerId1 = workerIds[0]
-		}
-		if len(workerIds) >= 2 {
-			workerId2 = workerIds[1]
-		}
-
-		LogDebug(fmt.Sprintf("Generating support bundle for project %d/%d: %s with workers: %s, %s",
-			projectIndex, len(projectWorkerMap), projectId, workerId1, workerId2))
-
-		err = GenerateSupportBundle(projectId, workerId1, workerId2)
-		if err != nil {
-			LogError(fmt.Sprintf("Error generating support bundle for project %s: %v", projectId, err))
-			continue
-		}
-		LogDebug(fmt.Sprintf("Successfully generated support bundle for project %s", projectId))
-
-		// Wait for bundle to be ready
-		LogDebug(fmt.Sprintf("Waiting for support bundle to be ready for project %s", projectId))
-		Wait(10)
-
-		// Download the support bundle for this project
-		zipPath := fmt.Sprintf("ndm_logs_project_%d.zip", projectIndex)
-		err = DownloadSupportBundleZipWithPath(zipPath)
-		if err != nil {
-			LogError(fmt.Sprintf("Error downloading support bundle for project %s: %v", projectId, err))
-			continue
-		}
-		LogDebug(fmt.Sprintf("Successfully downloaded support bundle for project %s to %s", projectId, zipPath))
-		downloadedZips = append(downloadedZips, zipPath)
-
-		// Small wait between projects
-		Wait(2)
-	}
-
-	if len(downloadedZips) == 0 {
-		LogError("No support bundles were successfully downloaded")
-		return
-	}
-
-	// Step 4: Extract, combine, and re-zip all support bundles
-	LogDebug(fmt.Sprintf("Extracting and combining %d support bundles", len(downloadedZips)))
-	combinedDir := "ndm_logs_combined_temp"
-
-	// Create temporary directory for extraction
-	err = os.MkdirAll(combinedDir, os.ModePerm)
-	if err != nil {
-		LogError(fmt.Sprintf("Error creating combined directory: %v", err))
-		return
-	}
-	defer os.RemoveAll(combinedDir) // Clean up temp directory
-
-	// Extract each zip into its own project subfolder
-	for i, zipPath := range downloadedZips {
-		projectDir := fmt.Sprintf("%s/project_%d", combinedDir, i+1)
-		LogDebug(fmt.Sprintf("Extracting %s to %s (%d/%d)", zipPath, projectDir, i+1, len(downloadedZips)))
-
-		err = ExtractZipToDirectory(zipPath, projectDir)
-		if err != nil {
-			LogError(fmt.Sprintf("Error extracting %s: %v", zipPath, err))
-			continue
-		}
-		LogDebug(fmt.Sprintf("Successfully extracted %s", zipPath))
-	}
-
-	// Create a fresh combined zip from the extracted files
-	combinedZipPath := "ndm_logs_combined.zip"
-	LogDebug(fmt.Sprintf("Creating combined zip: %s", combinedZipPath))
-	err = ZipDirectory(combinedDir, combinedZipPath)
-	if err != nil {
-		LogError(fmt.Sprintf("Error creating combined zip: %v", err))
-		return
-	}
-	LogDebug(fmt.Sprintf("Successfully created combined zip: %s", combinedZipPath))
-
-	// Clean up individual zip files (optional)
-	for _, zipPath := range downloadedZips {
-		os.Remove(zipPath)
-	}
-
-	// Step 5: Upload the combined bundle to Artifactory
 	if strings.Contains(BUILD_VERSION, "nightly") || REF_TYPE == "releases" {
+		BUILD_VERSION = os.Getenv("BUILD_VERSION")
+		REF_TYPE = os.Getenv("REF_TYPE")
+		NDM_NEXUS_USERNAME = os.Getenv("NDM_NEXUS_USERNAME")
+		NDM_NEXUS_PASSWORD = os.Getenv("NDM_NEXUS_PASSWORD")
+
+		if BUILD_VERSION == "" || REF_TYPE == "" || NDM_NEXUS_USERNAME == "" || NDM_NEXUS_PASSWORD == "" {
+			LogError("One or more required environment variables are not set: BUILD_VERSION, REF_TYPE, NDM_NEXUS_USERNAME, NDM_NEXUS_PASSWORD")
+			return
+		}
+
+		// Initialize the setup without worker attach setup
+		InitTestEnv()
+
+		// Step 1: Fetch project IDs
+		headers := GetHeaders(AuthToken, ContentTypeJSON)
+		projectIds, err := getProjectIds(headers)
+		if err != nil {
+			LogError(fmt.Sprintf("Error fetching project IDs: %v", err))
+			return
+		}
+		if len(projectIds) == 0 {
+			LogError("No projects found")
+			return
+		}
+		LogDebug(fmt.Sprintf("Found %d projects", len(projectIds)))
+
+		// Step 2: Build map of projectID -> workerIDs
+		projectWorkerMap := make(map[string][]string)
+		for _, projectId := range projectIds {
+			workerIds, err := getWorkerIdsByProject(headers, projectId)
+			if err != nil {
+				LogError(fmt.Sprintf("Error fetching workers for project %s: %v", projectId, err))
+				continue
+			}
+			if len(workerIds) > 0 {
+				projectWorkerMap[projectId] = workerIds
+				LogDebug(fmt.Sprintf("Project %s has %d workers", projectId, len(workerIds)))
+			} else {
+				LogDebug(fmt.Sprintf("Skipping project %s - no workers found", projectId))
+			}
+		}
+
+		if len(projectWorkerMap) == 0 {
+			LogError("No projects found with workers")
+			return
+		}
+
+		// Step 3: Generate Support Bundle for each project
+		var downloadedZips []string
+		projectIndex := 0
+
+		for projectId, workerIds := range projectWorkerMap {
+			projectIndex++
+			workerId1 := ""
+			workerId2 := ""
+
+			if len(workerIds) >= 1 {
+				workerId1 = workerIds[0]
+			}
+			if len(workerIds) >= 2 {
+				workerId2 = workerIds[1]
+			}
+
+			LogDebug(fmt.Sprintf("Generating support bundle for project %d/%d: %s with workers: %s, %s",
+				projectIndex, len(projectWorkerMap), projectId, workerId1, workerId2))
+
+			err = GenerateSupportBundle(projectId, workerId1, workerId2)
+			if err != nil {
+				LogError(fmt.Sprintf("Error generating support bundle for project %s: %v", projectId, err))
+				continue
+			}
+			LogDebug(fmt.Sprintf("Successfully generated support bundle for project %s", projectId))
+
+			// Wait for bundle to be ready
+			LogDebug(fmt.Sprintf("Waiting for support bundle to be ready for project %s", projectId))
+			Wait(10)
+
+			// Download the support bundle for this project
+			zipPath := fmt.Sprintf("ndm_logs_project_%d.zip", projectIndex)
+			err = DownloadSupportBundleZipWithPath(zipPath)
+			if err != nil {
+				LogError(fmt.Sprintf("Error downloading support bundle for project %s: %v", projectId, err))
+				continue
+			}
+			LogDebug(fmt.Sprintf("Successfully downloaded support bundle for project %s to %s", projectId, zipPath))
+			downloadedZips = append(downloadedZips, zipPath)
+
+			// Small wait between projects
+			Wait(2)
+		}
+
+		if len(downloadedZips) == 0 {
+			LogError("No support bundles were successfully downloaded")
+			return
+		}
+
+		// Step 4: Extract, combine, and re-zip all support bundles
+		LogDebug(fmt.Sprintf("Extracting and combining %d support bundles", len(downloadedZips)))
+		combinedDir := "ndm_logs_combined_temp"
+
+		// Create temporary directory for extraction
+		err = os.MkdirAll(combinedDir, os.ModePerm)
+		if err != nil {
+			LogError(fmt.Sprintf("Error creating combined directory: %v", err))
+			return
+		}
+		defer os.RemoveAll(combinedDir) // Clean up temp directory
+
+		// Extract each zip into its own project subfolder
+		for i, zipPath := range downloadedZips {
+			projectDir := fmt.Sprintf("%s/project_%d", combinedDir, i+1)
+			LogDebug(fmt.Sprintf("Extracting %s to %s (%d/%d)", zipPath, projectDir, i+1, len(downloadedZips)))
+
+			err = ExtractZipToDirectory(zipPath, projectDir)
+			if err != nil {
+				LogError(fmt.Sprintf("Error extracting %s: %v", zipPath, err))
+				continue
+			}
+			LogDebug(fmt.Sprintf("Successfully extracted %s", zipPath))
+		}
+
+		// Create a fresh combined zip from the extracted files
+		combinedZipPath := "ndm_logs_combined.zip"
+		LogDebug(fmt.Sprintf("Creating combined zip: %s", combinedZipPath))
+		err = ZipDirectory(combinedDir, combinedZipPath)
+		if err != nil {
+			LogError(fmt.Sprintf("Error creating combined zip: %v", err))
+			return
+		}
+		LogDebug(fmt.Sprintf("Successfully created combined zip: %s", combinedZipPath))
+
+		// Clean up individual zip files (optional)
+		for _, zipPath := range downloadedZips {
+			os.Remove(zipPath)
+		}
+
+		// Step 5: Upload the combined bundle to Artifactory
 		buildType := ""
 		if strings.Contains(BUILD_VERSION, "nightly") {
 			buildType = "builds/nightly"

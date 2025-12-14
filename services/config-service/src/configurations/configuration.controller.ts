@@ -3,9 +3,10 @@ import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiN
 import { Auth, Permission } from "@netapp-cloud-datamigrate/auth-lib";
 import { ConfigurationService } from "./configuration.service";
 import { UserDetails } from "./configuration.types";
-import { ConfigDTO } from "./dto/config.dto";
+import { ConfigDTO, FetchCertificateRequestDTO, FetchCertificateResponseDTO, ManagementServerDTO } from "./dto/config.dto";
 import { ConfigResponseDto, FindAllConfigPageDto, FileServerInfo} from "./dto/findallconfig.dto";
 import { ConfigApiDoc } from "src/swaggerdoc/swagger.doc";
+
 
 @ApiTags("Configuration")
 @Controller('servers')
@@ -30,6 +31,21 @@ export class ConfigurationController{
         return await this.configurationService.createConfiguration(createConfigurationDto, userDetails.user.id, userDetails?.trackId, projectId)
     }
 
+    @ApiOperation({ summary: 'Create Management Server' })
+    @ApiCreatedResponse({ description: 'Management Server Created Successfully.' })
+    @ApiBearerAuth()
+    @Auth(Permission.ManageConfig)
+    @Post('management-server')
+    @HttpCode(HttpStatus.CREATED)
+    @ApiBody({ description: 'Management server data', type: ManagementServerDTO })
+    async createManagementServer(
+        @Body() managementServerDto: ManagementServerDTO,
+        @Request() userDetails: UserDetails,
+        @Headers('projectId') projectId?: string,
+    ) {
+        
+        return await this.configurationService.createManagementServer(managementServerDto, userDetails.user.id, userDetails?.trackId, projectId);
+    }
 
     @ApiOperation({ summary: 'Get a paginated list of Config',  description: ConfigApiDoc.GET_ALL_CONFIG})
     @ApiOkResponse({ description: 'The list of Config has been retrieved successfully.',  type: ConfigResponseDto})
@@ -122,5 +138,32 @@ export class ConfigurationController{
     @Delete(':id')
     async remove(@Param('id') id: string) {
         return await this.configurationService.remove(id);
+    }
+
+    // ==================== TLS Certificate API ==================== //
+
+    @ApiOperation({ 
+        summary: 'Fetch TLS Certificate from Isilon Management Console',
+        description: 'Fetches the self-signed TLS certificate from an Isilon/PowerScale management console. Returns the certificate in PEM format for use in subsequent API calls.'
+    })
+    @ApiOkResponse({ 
+        description: 'Certificate fetched successfully', 
+        type: FetchCertificateResponseDTO 
+    })
+    @ApiBadRequestResponse({ 
+        description: 'Invalid host or connection failed' 
+    })
+    @ApiBody({ 
+        description: 'Host address with optional port (e.g., "10.192.7.32" or "10.192.7.32:8080")', 
+        type: FetchCertificateRequestDTO 
+    })
+    @ApiBearerAuth()
+    @Auth(Permission.ManageConfig)
+    @Post('certificate/fetch')
+    @HttpCode(HttpStatus.OK)
+    async fetchCertificate(
+        @Body() request: FetchCertificateRequestDTO,
+    ): Promise<FetchCertificateResponseDTO> {
+        return await this.configurationService.fetchCertificate(request);
     }
 }

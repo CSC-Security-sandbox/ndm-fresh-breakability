@@ -18,12 +18,25 @@ import { WorkerStatsEntity } from 'src/entities/worker-stats.entity';
 import { JobConfigEntity } from 'src/entities/jobconfig.entity';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
 import { PathUploadsEntity } from 'src/entities/pathupload.entity';
+import { ManagementServerEntity } from 'src/entities/ManagementServerEntity';
 
 @Module({
     imports: [
         LoggerModule.forRoot(),
         ConfigModule.forRoot({ load: [appConfig] }),
-        TypeOrmModule.forFeature([WorkerEntity, VolumeEntity, FileServerEntity, ConfigEntity, FileServerWorkingDirectoryMappingEntity, ProjectEntity, WorkerStatsEntity, JobConfigEntity, JobRunEntity, PathUploadsEntity]),
+        TypeOrmModule.forFeature([
+            WorkerEntity, 
+            VolumeEntity, 
+            FileServerEntity, 
+            ConfigEntity, 
+            FileServerWorkingDirectoryMappingEntity, 
+            ProjectEntity, 
+            WorkerStatsEntity, 
+            JobConfigEntity, 
+            JobRunEntity, 
+            PathUploadsEntity, 
+            ManagementServerEntity
+        ]),
         AuthKeycloakModule,
         WorkflowModule
     ],
