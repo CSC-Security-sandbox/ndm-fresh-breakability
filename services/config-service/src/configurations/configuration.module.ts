@@ -19,6 +19,7 @@ import { JobConfigEntity } from 'src/entities/jobconfig.entity';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
 import { PathUploadsEntity } from 'src/entities/pathupload.entity';
 import { ManagementServerEntity } from 'src/entities/ManagementServerEntity';
+import { IsilonStorageClient } from 'src/storage-clients/isilon/isilon-storage-client';
 
 @Module({
     imports: [
@@ -40,7 +41,7 @@ import { ManagementServerEntity } from 'src/entities/ManagementServerEntity';
         AuthKeycloakModule,
         WorkflowModule
     ],
-    providers:[ConfigurationService,SendMailService],
+    providers:[ConfigurationService, SendMailService, IsilonStorageClient],
     controllers: [ConfigurationController]
 })
 export class ConfigurationModule {}
