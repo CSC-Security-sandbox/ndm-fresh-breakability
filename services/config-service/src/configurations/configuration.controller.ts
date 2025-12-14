@@ -3,7 +3,7 @@ import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiN
 import { Auth, Permission } from "@netapp-cloud-datamigrate/auth-lib";
 import { ConfigurationService } from "./configuration.service";
 import { UserDetails } from "./configuration.types";
-import { ConfigDTO, FetchCertificateRequestDTO, FetchCertificateResponseDTO, ManagementServerDTO } from "./dto/config.dto";
+import { ConfigDTO, FetchCertificateRequestDTO, FetchCertificateResponseDTO, FetchZonesRequestDTO, FetchZonesResponseDTO, ManagementServerDTO } from "./dto/config.dto";
 import { ConfigResponseDto, FindAllConfigPageDto, FileServerInfo} from "./dto/findallconfig.dto";
 import { ConfigApiDoc } from "src/swaggerdoc/swagger.doc";
 
@@ -151,5 +151,26 @@ export class ConfigurationController{
         @Query() request: FetchCertificateRequestDTO,
     ): Promise<FetchCertificateResponseDTO> {
         return await this.configurationService.fetchCertificate(request);
+    }
+
+    @ApiOperation({ summary: 'Fetch zones from Dell Isilon management server' })
+    @ApiBody({ 
+        type: FetchZonesRequestDTO,
+        description: 'Management server credentials and connection details'
+    })
+    @ApiResponse({ 
+        status: 200, 
+        description: 'Successfully fetched zones',
+        type: FetchZonesResponseDTO
+    })
+    @ApiResponse({ status: 400, description: 'Bad Request - Invalid parameters or connection failed' })
+    @ApiResponse({ status: 401, description: 'Unauthorized - Invalid credentials' })
+    @ApiBearerAuth()
+    @Auth(Permission.ManageConfig)
+    @Post('fetch-zones')
+    async fetchZones(
+        @Body() request: FetchZonesRequestDTO,
+    ): Promise<FetchZonesResponseDTO> {
+        return await this.configurationService.fetchZones(request);
     }
 }
