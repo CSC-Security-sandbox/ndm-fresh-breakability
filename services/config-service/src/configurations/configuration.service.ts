@@ -725,15 +725,19 @@ export class ConfigurationService {
   ) {
     this.logger.debug('Config creation started');
 
-    this.logger.debug("############################# ASHISH  STARTS #############################");
-
-    const sanitizedMgmtServerName = await this.sanitizeConfigName(
-      createConfig.managementServer.configName,
-    );
-
     let managementServerId: string | null = null;
 
+    // Step 1: Create Management Server if serverType is Dell
     if (createConfig.serverType === ServerType.dell) {
+      // Validate management server data is provided
+      if (!createConfig.managementServer) {
+        throw new BadRequestException('Management server details are required for Dell server type');
+      }
+
+      const sanitizedMgmtServerName = await this.sanitizeConfigName(
+        createConfig.managementServer.configName,
+      );
+
       const mgmntServerConfig = this.managementServerEntity.create({
         name: sanitizedMgmtServerName,
         projectId: createConfig.managementServer.projectId,
@@ -750,6 +754,7 @@ export class ConfigurationService {
 
       const savedMgmntServer = await this.managementServerEntity.save(mgmntServerConfig);
       managementServerId = savedMgmntServer?.id;
+      this.logger.debug(`Management server created with ID: ${managementServerId}`);
     }
 
     // Sanitize configName input
@@ -765,6 +770,7 @@ export class ConfigurationService {
         sanitizedConfigName,
       );
 
+      // Step 2: Create File Servers with management_server_id link
       const fileServerPromises = createConfig.fileServers.map(
         async (fileServer) => {
           const workers = await this.WorkerEntity.find({
@@ -792,6 +798,7 @@ export class ConfigurationService {
             isRefreshed: false,
             volumes: [],
             exportPathSource: fileServer.exportPathSource,
+            managementServerId: managementServerId, // Link to management server (null for OtherNAS, ID for Dell)
           });
         },
       );
