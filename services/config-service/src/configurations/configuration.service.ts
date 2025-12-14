@@ -1567,4 +1567,39 @@ export class ConfigurationService {
         );
     }
   }
+
+  async validateConnection(request: FetchZonesRequestDTO): Promise<{ isValid: boolean; message: string }> {
+    try {
+      // Route to appropriate storage client based on server type
+      let isValid = false;
+      
+      switch (request.serverType) {
+        case ServerType.dell:
+          isValid = await this.isilonStorageClient.validateConnection(request);
+          break;
+        default:
+          throw new BadRequestException(
+            `Unsupported server type: ${request.serverType}`
+          );
+      }
+
+      if (isValid) {
+        return {
+          isValid: true,
+          message: 'Connection validated successfully'
+        };
+      } else {
+        return {
+          isValid: false,
+          message: 'Connection validation failed'
+        };
+      }
+    } catch (error) {
+      this.logger.error(`Connection validation error: ${error.message}`);
+      return {
+        isValid: false,
+        message: error.message || 'Connection validation failed'
+      };
+    }
+  }
 }

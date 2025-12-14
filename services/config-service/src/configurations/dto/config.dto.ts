@@ -321,27 +321,51 @@ export class FetchZonesRequestDTO {
 /**
  * Zone information from Isilon
  */
+/**
+ * IP Range DTO - represents an IP address range in a pool
+ */
+export class IpRangeDTO {
+    @ApiProperty({ description: 'Pool name', example: 'pool0' })
+    @IsString()
+    poolName: string;
+
+    @ApiProperty({ description: 'Subnet name', example: 'subnet0' })
+    @IsString()
+    subnet: string;
+
+    @ApiProperty({ description: 'Low IP address', example: '10.192.7.105' })
+    @IsString()
+    low: string;
+
+    @ApiProperty({ description: 'High IP address', example: '10.192.7.107' })
+    @IsString()
+    high: string;
+}
+
+/**
+ * Zone with IP Ranges DTO - represents a zone with its groupnet and IP ranges
+ */
 export class IsilonZoneDTO {
     @ApiProperty({ description: 'Zone name/ID', example: 'System' })
     @IsString()
-    name: string;
+    zoneName: string;
 
-    @ApiProperty({ description: 'Zone path', example: '/ifs' })
+    @ApiProperty({ description: 'Groupnet name', example: 'groupnet0' })
     @IsString()
-    @IsOptional()
-    path?: string;
+    groupnet: string;
 
-    @ApiProperty({ description: 'Zone ID', example: 1 })
-    @IsNumber()
-    @IsOptional()
-    id?: number;
+    @ApiProperty({ description: 'IP ranges for this zone', type: [IpRangeDTO] })
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => IpRangeDTO)
+    ipRanges: IpRangeDTO[];
 }
 
 /**
  * Response DTO for fetching zones
  */
 export class FetchZonesResponseDTO {
-    @ApiProperty({ description: 'List of zones', type: [IsilonZoneDTO] })
+    @ApiProperty({ description: 'List of zones with IP ranges', type: [IsilonZoneDTO] })
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => IsilonZoneDTO)
@@ -350,6 +374,10 @@ export class FetchZonesResponseDTO {
     @ApiProperty({ description: 'Total number of zones found', example: 3 })
     @IsNumber()
     totalZones: number;
+
+    @ApiProperty({ description: 'Total number of IP ranges across all zones', example: 15 })
+    @IsNumber()
+    totalIpRanges: number;
 }
 
 /**
