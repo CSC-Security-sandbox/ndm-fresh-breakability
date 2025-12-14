@@ -137,16 +137,18 @@ export class ConfigurationController{
     @ApiBadRequestResponse({ 
         description: 'Invalid host or connection failed' 
     })
-    @ApiBody({ 
-        description: 'Host address with optional port (e.g., "10.192.7.32" or "10.192.7.32:8080")', 
-        type: FetchCertificateRequestDTO 
+    @ApiQuery({ 
+        name: 'host',
+        type: String,
+        description: 'Host address with optional port (e.g., "10.192.7.32" or "10.192.7.32:8080")',
+        required: true,
+        example: '10.192.7.32'
     })
     @ApiBearerAuth()
     @Auth(Permission.ManageConfig)
-    @Post('certificate/fetch')
-    @HttpCode(HttpStatus.OK)
+    @Get('fetch-certificate')
     async fetchCertificate(
-        @Body() request: FetchCertificateRequestDTO,
+        @Query() request: FetchCertificateRequestDTO,
     ): Promise<FetchCertificateResponseDTO> {
         return await this.configurationService.fetchCertificate(request);
     }
