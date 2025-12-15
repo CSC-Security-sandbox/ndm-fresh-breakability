@@ -20,57 +20,65 @@ const NameCellRenderer = (params: BlueXpTableRowType<any, any>) => {
   const navigate = useNavigate();
   const row = params?.row;
 
-  // Dell Isilon Parent Row - expandable header
+  // Dell Isilon Parent Row - Accordion header (entire row is clickable)
   if (row?._isDellIsilonParent) {
     const isExpanded = row._isExpanded;
-    const displayName = row.displayName || row.configName;
+    const parentName = row.configName;
     
     return (
-      <Box className="flex items-center gap-2">
-        <Box
-          className="cursor-pointer p-1 hover:bg-gray-100 rounded select-none"
-          onClick={(e) => {
-            e.stopPropagation();
-            dellIsilonExpandEvents.emit(row.configName);
-          }}
-        >
-          <Text className="text-sm font-bold">{isExpanded ? "▼" : "▶"}</Text>
+      <Box 
+        className="flex items-center gap-3 cursor-pointer py-1 px-2 -ml-2 rounded hover:bg-blue-50 transition-colors"
+        onClick={(e) => {
+          e.stopPropagation();
+          dellIsilonExpandEvents.emit(parentName);
+        }}
+      >
+        {/* Expand/Collapse Arrow */}
+        <Box className="flex items-center justify-center w-5 h-5">
+          <Text className="text-blue-600 font-bold text-xs">
+            {isExpanded ? "▼" : "▶"}
+          </Text>
         </Box>
-        <TooltipRenderer tooltipContent={displayName}>
-          <Heading
-            level="16"
-            color="text-title"
-            className="font-bold overflow-hidden text-ellipsis whitespace-nowrap"
-          >
-            {displayName}
-          </Heading>
-        </TooltipRenderer>
+        
+        {/* Parent Name */}
+        <Heading
+          level="16"
+          color="text-title"
+          className="font-bold overflow-hidden text-ellipsis whitespace-nowrap"
+        >
+          {parentName}
+        </Heading>
       </Box>
     );
   }
 
-  // Dell Isilon Child Row (Zone) - indented, clickable to navigate
+  // Dell Isilon Child Row (Zone) - Indented submenu item style
   if (row?._isDellIsilonChild) {
-    const displayName = row.displayName || row.configName;
+    const zoneName = row._zoneName || row.displayName;
     
     return (
-      <Box className="flex items-center gap-2 pl-6">
-        <Text className="text-gray-400">└─</Text>
-        <TooltipRenderer tooltipContent={displayName}>
-          <Heading
-            level="16"
-            color="text-title"
-            className="cursor-pointer font-bold overflow-hidden text-ellipsis whitespace-nowrap hover:text-blue-600"
-            onClick={() => navigate(`/file-server/${row?.id}`)}
-          >
-            {displayName}
-          </Heading>
-        </TooltipRenderer>
+      <Box 
+        className="flex items-center gap-2 pl-8 py-1 cursor-pointer hover:bg-blue-50 rounded transition-colors -ml-2 px-2"
+        onClick={() => navigate(`/file-server/${row?.id}`)}
+      >
+        {/* Indentation line */}
+        <Box className="flex items-center text-gray-300">
+          <Text>└</Text>
+        </Box>
+        
+        {/* Zone name only */}
+        <Heading
+          level="16"
+          color="text-title"
+          className="font-semibold overflow-hidden text-ellipsis whitespace-nowrap hover:text-blue-600"
+        >
+          {zoneName}
+        </Heading>
       </Box>
     );
   }
 
-  // Regular file server row
+  // Regular file server row (non-Dell Isilon)
   return (
     <TooltipRenderer tooltipContent={row?.configName}>
       <Heading
