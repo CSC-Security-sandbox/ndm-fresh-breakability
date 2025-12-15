@@ -34,7 +34,7 @@ export class IsilonStorageClient extends StorageClient {
    * Fetches zones, their groupnets, subnets, and IP pool ranges
    */
   async fetchZones(params: FetchZonesRequestDTO): Promise<FetchZonesResponseDTO> {
-    const { host, port = 8080, username, password, certificate } = params;
+    const { host, port , username, password, certificate } = params;
     
     try {
       this.logger.log(`Fetching all zones from ${host}:${port}`);
@@ -57,15 +57,15 @@ export class IsilonStorageClient extends StorageClient {
         return {
           zones: [],
           totalZones: 0,
-          totalIpRanges: 0,
+          totalIpAddresses: 0,
         };
       }
 
       this.logger.log(`Found ${allZones.length} zones on ${host}:${port}`);
 
-      // 2. For each zone, fetch groupnet and IP ranges
-      const zonesWithIpRanges = [];
-      let totalIpRanges = 0;
+      // 2. For each zone, fetch groupnet and IP addresses
+      const zonesWithIpAddresses = [];
+      let totalIpAddresses = 0;
 
       for (const zone of allZones) {
         const zoneName = zone?.name || 'unknown';
@@ -76,10 +76,9 @@ export class IsilonStorageClient extends StorageClient {
 
           if (!groupnet) {
             this.logger.warn(`Zone '${zoneName}' has no groupnet, skipping`);
-            zonesWithIpRanges.push({
+            zonesWithIpAddresses.push({
               zoneName,
-              groupnet: '',
-              ipRanges: [],
+              ipAddresses: [],
             });
             continue;
           }
@@ -101,16 +100,15 @@ export class IsilonStorageClient extends StorageClient {
 
           if (subnets.length === 0) {
             this.logger.debug(`No subnets found for groupnet '${groupnet}' in zone '${zoneName}'`);
-            zonesWithIpRanges.push({
+            zonesWithIpAddresses.push({
               zoneName,
-              groupnet,
-              ipRanges: [],
+              ipAddresses: [],
             });
             continue;
           }
 
-          // For each subnet, get pools and collect IP ranges
-          const ipRanges = [];
+          // For each subnet, get pools and collect IP addresses from interfaces
+          const ipAddresses = [];
 
           for (const subnet of subnets) {
             const subnetName = subnet?.name || 'unknown';
@@ -131,17 +129,38 @@ export class IsilonStorageClient extends StorageClient {
               const pools = poolsResponse?.pools || [];
 
               for (const pool of pools) {
-                if (pool?.ranges && Array.isArray(pool.ranges) && pool.ranges.length > 0) {
-                  pool.ranges.forEach((range) => {
-                    if (range?.low && range?.high) {
-                      ipRanges.push({
-                        poolName: pool.name || 'unknown',
-                        subnet: subnetName,
-                        low: range.low,
-                        high: range.high,
+                const poolName = pool?.name || 'unknown';
+                
+                try {
+                  // Get interfaces (individual IPs) from /platform/7/network/groupnets/{groupnet}/subnets/{subnet}/pools/{pool}/interfaces
+                  const interfacesResponse = await this.makeIsilonAPICall(
+                    host,
+                    port,
+                    `/platform/7/network/groupnets/${groupnet}/subnets/${subnetName}/pools/${poolName}/interfaces`,
+                    'GET',
+                    username,
+                    password,
+                    certificate,
+                  );
+
+                  const interfaces = interfacesResponse?.interfaces || [];
+                  
+                  // Extract IP addresses from each interface
+                  for (const iface of interfaces) {
+                    if (iface?.ip_addrs && Array.isArray(iface.ip_addrs)) {
+                      iface.ip_addrs.forEach((ip) => {
+                        if (ip) {
+                          ipAddresses.push(ip);
+                        }
                       });
                     }
-                  });
+                  }
+                  
+                  this.logger.debug(`Found ${interfaces.length} interfaces with ${ipAddresses.length} IPs in pool '${poolName}' for zone '${zoneName}'`);
+                } catch (poolError) {
+                  this.logger.warn(
+                    `Failed to fetch interfaces for pool '${poolName}' in zone '${zoneName}': ${poolError?.message || 'Unknown error'}`
+                  );
                 }
               }
             } catch (subnetError) {
@@ -151,35 +170,33 @@ export class IsilonStorageClient extends StorageClient {
             }
           }
 
-          totalIpRanges += ipRanges.length;
-          zonesWithIpRanges.push({
+          totalIpAddresses += ipAddresses.length;
+          zonesWithIpAddresses.push({
             zoneName,
-            groupnet,
-            ipRanges,
+            ipAddresses,
           });
 
-          this.logger.debug(`Found ${ipRanges.length} IP ranges for zone '${zoneName}'`);
+          this.logger.debug(`Found ${ipAddresses.length} IP addresses for zone '${zoneName}'`);
         } catch (zoneError) {
           this.logger.warn(
             `Failed to process zone '${zoneName}': ${zoneError?.message || 'Unknown error'}`
           );
           // Continue with next zone even if one fails
-          zonesWithIpRanges.push({
+          zonesWithIpAddresses.push({
             zoneName,
-            groupnet,
-            ipRanges: [],
+            ipAddresses: [],
           });
         }
       }
 
       this.logger.log(
-        `Successfully fetched ${totalIpRanges} IP ranges across ${zonesWithIpRanges.length} zones from ${host}:${port}`
+        `Successfully fetched ${totalIpAddresses} IP addresses across ${zonesWithIpAddresses.length} zones from ${host}:${port}`
       );
 
       return {
-        zones: zonesWithIpRanges,
-        totalZones: zonesWithIpRanges.length,
-        totalIpRanges,
+        zones: zonesWithIpAddresses,
+        totalZones: zonesWithIpAddresses.length,
+        totalIpAddresses,
       };
     } catch (error) {
       this.logger.error(`Error fetching zones and IP ranges: ${error?.message || 'Unknown error'}`);
