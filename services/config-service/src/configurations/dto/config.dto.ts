@@ -322,50 +322,24 @@ export class FetchZonesRequestDTO {
  * Zone information from Isilon
  */
 /**
- * IP Range DTO - represents an IP address range in a pool
- */
-export class IpRangeDTO {
-    @ApiProperty({ description: 'Pool name', example: 'pool0' })
-    @IsString()
-    poolName: string;
-
-    @ApiProperty({ description: 'Subnet name', example: 'subnet0' })
-    @IsString()
-    subnet: string;
-
-    @ApiProperty({ description: 'Low IP address', example: '10.192.7.105' })
-    @IsString()
-    low: string;
-
-    @ApiProperty({ description: 'High IP address', example: '10.192.7.107' })
-    @IsString()
-    high: string;
-}
-
-/**
- * Zone with IP Ranges DTO - represents a zone with its groupnet and IP ranges
+ * Zone with IP Addresses DTO - represents a zone with its IP addresses
  */
 export class IsilonZoneDTO {
     @ApiProperty({ description: 'Zone name/ID', example: 'System' })
     @IsString()
     zoneName: string;
 
-    @ApiProperty({ description: 'Groupnet name', example: 'groupnet0' })
-    @IsString()
-    groupnet: string;
-
-    @ApiProperty({ description: 'IP ranges for this zone', type: [IpRangeDTO] })
+    @ApiProperty({ description: 'Array of IP addresses for this zone', type: [String], example: ['10.192.7.105', '10.192.7.106', '10.192.7.107'] })
     @IsArray()
-    @ValidateNested({ each: true })
-    @Type(() => IpRangeDTO)
-    ipRanges: IpRangeDTO[];
+    @IsString({ each: true })
+    ipAddresses: string[];
 }
 
 /**
  * Response DTO for fetching zones
  */
 export class FetchZonesResponseDTO {
-    @ApiProperty({ description: 'List of zones with IP ranges', type: [IsilonZoneDTO] })
+    @ApiProperty({ description: 'List of zones with IP addresses', type: [IsilonZoneDTO] })
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => IsilonZoneDTO)
@@ -375,9 +349,9 @@ export class FetchZonesResponseDTO {
     @IsNumber()
     totalZones: number;
 
-    @ApiProperty({ description: 'Total number of IP ranges across all zones', example: 15 })
+    @ApiProperty({ description: 'Total number of IP addresses across all zones', example: 15 })
     @IsNumber()
-    totalIpRanges: number;
+    totalIpAddresses: number;
 }
 
 /**
