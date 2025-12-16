@@ -18,7 +18,6 @@ import { WorkerStatsEntity } from 'src/entities/worker-stats.entity';
 import { JobConfigEntity } from 'src/entities/jobconfig.entity';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
 import { PathUploadsEntity } from 'src/entities/pathupload.entity';
-import { ManagementServerEntity } from 'src/entities/ManagementServerEntity';
 import { IsilonStorageClient } from 'src/storage-clients/isilon/isilon-storage-client';
 
 @Module({
@@ -35,8 +34,7 @@ import { IsilonStorageClient } from 'src/storage-clients/isilon/isilon-storage-c
             WorkerStatsEntity, 
             JobConfigEntity, 
             JobRunEntity, 
-            PathUploadsEntity, 
-            ManagementServerEntity
+            PathUploadsEntity,
         ]),
         AuthKeycloakModule,
         WorkflowModule

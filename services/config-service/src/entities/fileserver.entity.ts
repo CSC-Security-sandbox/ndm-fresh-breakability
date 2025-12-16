@@ -6,7 +6,6 @@ import { ConfigEntity } from "./config.entity";
 import { WorkerEntity } from "./worker.entity";
 import { VolumeEntity } from "./volume.entity";
 import { PathUploadsEntity } from "./pathupload.entity";
-import { ManagementServerEntity } from "./ManagementServerEntity";
 
 
 @Entity({name:'file_server'})
@@ -14,6 +13,10 @@ export class FileServerEntity extends Base {
     @ApiProperty({ description: 'File Server ID' })
     @PrimaryGeneratedColumn('uuid')
     id: string;
+
+    @ApiProperty({ description: 'File Server Name' })
+    @Column({ type: 'text', nullable: true, name: 'file_server_name' })
+    fileServerName: string;
 
     @ApiProperty({ description: 'Host' })
     @Column({ type: 'text', nullable: true,  name:'hostname' })
@@ -30,6 +33,10 @@ export class FileServerEntity extends Base {
     @ApiProperty({ description: 'Server Type' })
     @Column({ type: 'varchar', name:'server_type' })
     serverType: ServerType;
+
+    @ApiProperty({ description: 'Status' })
+    @Column({ type: 'varchar', nullable: true, name: 'status' })
+    status: string;
 
     @ApiProperty({ description: 'password' })
     @Column({ type: 'text', nullable: true,  name:'password' })
@@ -75,11 +82,4 @@ export class FileServerEntity extends Base {
     @OneToMany(() => PathUploadsEntity, (upload) => upload.fileServer)
     uploads: PathUploadsEntity[];
 
-    @ApiProperty({ description: 'Management Server ID (FK)' })
-    @Column({ type: 'uuid', nullable: true, name: 'management_server_id' })
-    managementServerId?: string;
-
-    @ManyToOne(() => ManagementServerEntity, managementServer => managementServer.fileServers, { nullable: true, onDelete:'CASCADE', orphanedRowAction : 'delete'})
-    @JoinColumn({ name: 'management_server_id' }) 
-    managementServer?: ManagementServerEntity;
 }
