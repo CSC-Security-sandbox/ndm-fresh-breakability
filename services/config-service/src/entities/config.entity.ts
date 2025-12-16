@@ -36,6 +36,34 @@ export class ConfigEntity extends Base {
     @Column({ name: 'error_message', type: 'text', nullable: true })
     errorMessage: string;
 
+    @ApiProperty({ description: 'Hostname' })
+    @Column({ type: 'text', nullable: true, name: 'hostname' })
+    hostname: string;
+
+    @ApiProperty({ description: 'Port' })
+    @Column({ type: 'integer', nullable: true, name: 'port' })
+    port: number;
+
+    @ApiProperty({ description: 'Server Type' })
+    @Column({ type: 'text', nullable: true, name: 'server_type' })
+    serverType: string;
+
+    @ApiProperty({ description: 'Username' })
+    @Column({ type: 'text', nullable: true, name: 'username' })
+    username: string;
+
+    @ApiProperty({ description: 'Password' })
+    @Column({ type: 'text', nullable: true, name: 'password' })
+    password: string;
+
+    @ApiProperty({ description: 'TLS Accepted' })
+    @Column({ type: 'boolean', nullable: true, name: 'tls_accepted' })
+    tlsAccepted: boolean;
+
+    @ApiProperty({ description: 'TLS CA Certificate' })
+    @Column({ type: 'text', nullable: true, name: 'tls_ca_certificate' })
+    tlsCaCertificate: string;
+
     @OneToMany(()=> FileServerEntity, fileServers=>fileServers.config, { cascade: true,  eager: false})
     fileServers: FileServerEntity[]
 
