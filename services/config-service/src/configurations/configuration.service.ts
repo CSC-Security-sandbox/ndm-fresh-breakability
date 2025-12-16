@@ -24,7 +24,6 @@ import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver_workingdirectory_mapping.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
-import { ManagementServerEntity } from 'src/entities/ManagementServerEntity';
 import {
   JobConfigEntity,
   JobStatus,
@@ -32,7 +31,7 @@ import {
 } from 'src/entities/jobconfig.entity';
 import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 import { WorkflowService } from 'src/workflow/workflow.service';
-import { ConfigDTO, ManagementServerDTO, FetchCertificateRequestDTO, FetchCertificateResponseDTO, FetchZonesRequestDTO, FetchZonesResponseDTO } from './dto/config.dto';
+import { ConfigDTO, FetchCertificateRequestDTO, FetchCertificateResponseDTO, FetchZonesRequestDTO, FetchZonesResponseDTO } from './dto/config.dto';
 import { ValidateExportPathAndWorkingDirectoryDTO } from './dto/validate-export-path-working-directory.dto';
 import { FindAllConfigPageDto } from './dto/findallconfig.dto';
 import {
@@ -67,8 +66,6 @@ export class ConfigurationService {
   private escapeHtml: typeof escapeHtml;
   private sanitizeHtml: typeof sanitizeHtml;
   constructor(
-    @InjectRepository(ManagementServerEntity)
-    private readonly managementServerEntity: Repository<ManagementServerEntity>,
     private readonly isilonStorageClient: IsilonStorageClient,
     @InjectRepository(ConfigEntity)
     private readonly configEntity: Repository<ConfigEntity>,
@@ -682,43 +679,6 @@ export class ConfigurationService {
     });
   }
 
-  async createManagementServer(
-    createManagementServer: ManagementServerDTO,
-    userId: string,
-    traceId: string,
-    projectId?: string,
-  ) {
-      
-      this.logger.debug('Management server creation started');
-       // Sanitize configName input
-      const sanitizedConfigName = await this.sanitizeConfigName(
-        createManagementServer.configName,
-      );
-
-      const mgmntServerConfig = this.managementServerEntity.create({
-        name: sanitizedConfigName,
-        projectId: createManagementServer.projectId,
-        createdBy: userId,
-        updatedBy: userId,
-        hostname: createManagementServer.host,
-        port: createManagementServer.port,
-        serverType: createManagementServer.serverType,
-        username: createManagementServer.username,
-        password: createManagementServer?.password,
-        tlsAccepted: createManagementServer.tlsAccepted,
-        tlsCertificate: createManagementServer.tlsCertificate,
-      });
-
-      await this.managementServerEntity.save(mgmntServerConfig);
-      // Call the function to get the Zones from Isilon Management Server
-
-      return {
-          message: "Management server created successfully",
-          createdBy: userId,
-          data: createManagementServer,
-      };
-  }
-
   async createConfiguration(
     createConfig: ConfigDTO,
     userId: string,
@@ -728,36 +688,6 @@ export class ConfigurationService {
     this.logger.debug('Config creation started');
 
     let managementServerId: string | null = null;
-
-    // Step 1: Create Management Server if serverType is Dell
-    if (createConfig.serverType === ServerType.dell) {
-      // Validate management server data is provided
-      if (!createConfig.managementServer) {
-        throw new BadRequestException('Management server details are required for Dell server type');
-      }
-
-      const sanitizedMgmtServerName = await this.sanitizeConfigName(
-        createConfig.managementServer.configName,
-      );
-
-      const mgmntServerConfig = this.managementServerEntity.create({
-        name: sanitizedMgmtServerName,
-        projectId: createConfig.managementServer.projectId,
-        createdBy: userId,
-        updatedBy: userId,
-        hostname: createConfig.managementServer.host,
-        port: createConfig.managementServer.port,
-        serverType: createConfig.managementServer.serverType,
-        username: createConfig.managementServer.username,
-        password: createConfig.managementServer?.password,
-        tlsAccepted: createConfig.managementServer.tlsAccepted,
-        tlsCertificate: createConfig.managementServer.tlsCertificate,
-      });
-
-      const savedMgmntServer = await this.managementServerEntity.save(mgmntServerConfig);
-      managementServerId = savedMgmntServer?.id;
-      this.logger.debug(`Management server created with ID: ${managementServerId}`);
-    }
 
     // Sanitize configName input
     const sanitizedConfigName = await this.sanitizeConfigName(
@@ -788,8 +718,11 @@ export class ConfigurationService {
             workers: workers.map((it) => it.workerId),
             exportPathSource: fileServer.exportPathSource,
           });
+
+          
           return this.fileServerEntity.create({
             host: fileServer.host.trim(),
+            fileServerName : fileServer.fileServerName,
             serverType: fileServer.serverType,
             workers: workers,
             createdBy: userId,
@@ -800,7 +733,6 @@ export class ConfigurationService {
             isRefreshed: false,
             volumes: [],
             exportPathSource: fileServer.exportPathSource,
-            managementServerId: managementServerId, // Link to management server (null for OtherNAS, ID for Dell)
           });
         },
       );
@@ -812,14 +744,36 @@ export class ConfigurationService {
       const hasWorkers = createConfig?.fileServers?.some(
         (fs) => fs?.workers?.length > 0,
       );
-      const config = this.configEntity.create({
-        configName: sanitizedConfigName,
-        configType: createConfig.configType,
-        projectId: createConfig.projectId,
-        status: hasWorkers ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT,
-        fileServers: await Promise.all(fileServerPromises),
-        createdBy: userId,
-      });
+      let config;
+      switch (createConfig.serverType) {
+        case ServerType.dell:
+          config = this.configEntity.create({
+            configName: sanitizedConfigName,
+            configType: createConfig.configType,
+            projectId: createConfig.projectId,
+            status: hasWorkers ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT,
+            fileServers: await Promise.all(fileServerPromises),
+            createdBy: userId,
+            hostname: createConfig.managementHost,
+            port: createConfig.managementPort,
+            serverType: createConfig.serverType,
+            username: createConfig.managementUsername,
+            password: createConfig.managementPassword,
+            tlsAccepted: createConfig.tlsAccepted,
+            tlsCaCertificate: createConfig.tlsCertificate,
+          });
+          break;
+        default:
+          config = this.configEntity.create({
+            configName: sanitizedConfigName,
+            configType: createConfig.configType,
+            projectId: createConfig.projectId,
+            status: hasWorkers ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT,
+            fileServers: await Promise.all(fileServerPromises),
+            createdBy: userId,
+          });
+          break;
+      }
 
       if (workers?.length > 0 && (await this.isAllWorkerUnHealthy(workers)))
         allUnHealthy = true;
