@@ -4,7 +4,6 @@ import { Repository } from 'typeorm';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { StorageClient } from '../storage-client';
 import { FileServerEntity } from '../../entities/fileserver.entity';
-import { ManagementServerEntity } from '../../entities/ManagementServerEntity';
 import {
   FetchZonesRequestDTO,
   FetchZonesResponseDTO,
@@ -22,8 +21,7 @@ export class IsilonStorageClient extends StorageClient {
     private loggerFactory: LoggerFactory,
     @InjectRepository(FileServerEntity)
     private readonly fileServerRepo: Repository<FileServerEntity>,
-    @InjectRepository(ManagementServerEntity)
-    private readonly managementServerRepo: Repository<ManagementServerEntity>,
+
   ) {
     super(loggerFactory.create(IsilonStorageClient.name));
   }

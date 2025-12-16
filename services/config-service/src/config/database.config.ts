@@ -12,7 +12,6 @@ import { FileServerWorkingDirectoryMappingEntity } from 'src/entities/fileserver
 import { WorkerStatsEntity } from 'src/entities/worker-stats.entity';
 import { PathUploadsEntity } from 'src/entities/pathupload.entity';
 import { SupportBundleEntity } from 'src/entities/support-bundle-log.entity';
-import { ManagementServerEntity } from 'src/entities/ManagementServerEntity';
 
 export default registerAs(
   'typeorm',
@@ -40,7 +39,6 @@ export default registerAs(
       WorkerStatsEntity,
       PathUploadsEntity,
       SupportBundleEntity,
-      ManagementServerEntity,
     ],
     migrations: [],
   }),
