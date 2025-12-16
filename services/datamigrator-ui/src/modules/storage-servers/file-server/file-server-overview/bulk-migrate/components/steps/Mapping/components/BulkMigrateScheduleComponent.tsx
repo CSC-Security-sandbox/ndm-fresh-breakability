@@ -141,7 +141,6 @@ else{
               value={SCHEDULE_OPTIONS?.SCHEDULE_DATE}
               control={<Radio size="medium" sx={{ color: 'black', '& .MuiSvgIcon-root': { fontSize: 20 } }} />}
               label="Schedule Date & Time (UTC)"
-              //className="text-sm"
             />
           </Box>
         </RadioGroup>
@@ -151,7 +150,7 @@ else{
             <LocalizationProvider dateAdapter={AdapterDayjs}>
               <DateTimePicker
                 value={
-                  values.scheduledDateTime
+                  values?.scheduledDateTime
                 }
                 timezone="UTC"
                 slotProps={{

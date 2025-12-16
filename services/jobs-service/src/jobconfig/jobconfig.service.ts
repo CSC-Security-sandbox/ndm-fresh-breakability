@@ -1896,29 +1896,22 @@ export class JobConfigService {
 
   async getIdentityMappingsForJob(jobConfigId: string): Promise<any> {
     try {
-      // Find cross mappings for this job config
       const crossMappings = await this.identityCrossMappingRepo.find({
         where: { jobConfigId, isOrphan: false },
         relations: ['identityMapping'],
       });
-
       if (!crossMappings.length) {
         return {
           data: [],
           message: 'No identity mappings found for this job configuration',
         };
       }
-
-      // Extract identity mapping IDs
       const identityMappingIds = crossMappings.map(
         (crossMapping) => crossMapping.identityMappingId
       );
-
-      // Get the actual identity mappings
       const identityMappings = await this.identityMappingRepo.findBy({
         identityMap: In(identityMappingIds),
       });
-
       return {
         data: identityMappings,
         crossMappings: crossMappings,
@@ -1934,14 +1927,12 @@ export class JobConfigService {
       let parsedMappings = [];
       let templateType;
       const identityMap = uuidv4();
-      
       const existingCrossMapping = await this.identityCrossMappingRepo.find({
         where: {
           jobConfigId: jobConfigId,
           isOrphan: false,
         },
       });
-
       if (existingCrossMapping.length > 0) {
         await this.identityCrossMappingRepo.update(
           { jobConfigId: jobConfigId, isOrphan: false },
@@ -1949,19 +1940,16 @@ export class JobConfigService {
         );
         this.logger.log(`Marked existing mappings as orphan for job config: ${jobConfigId}`);
       }
-
       if (mappingData.sidMapping) {
         templateType = TemplateType.SID;
         const sidMapping = await this.decodeBase64(mappingData.sidMapping);
         parsedMappings = await this.parseBlobData(sidMapping, templateType);
       }
-      
       if (mappingData.gidMapping) {
         templateType = TemplateType.GID;
         const gidMapping = await this.decodeBase64(mappingData.gidMapping);
         parsedMappings = await this.parseBlobData(gidMapping, templateType);
       }
-
       if (parsedMappings.length > 0) {
         await this.saveIdentityMappingsWithMap(
           [jobConfigId],
@@ -1974,6 +1962,46 @@ export class JobConfigService {
     } catch (error) {
       this.logger.error(`Error updating identity mappings for job ${jobConfigId}:`, error);
       throw new BadRequestException(`Failed to update identity mappings: ${error.message}`);
+    }
+  }
+
+  async deleteIdentityMappingsForJob(jobConfigId: string): Promise<any> {
+    try {
+      const jobConfig = await this.jobConfigRepo.findOne({
+        where: { id: jobConfigId },
+      });
+
+      if (!jobConfig) {
+        throw new NotFoundException(`Job configuration with ID ${jobConfigId} not found`);
+      }
+
+      const crossMappings = await this.identityCrossMappingRepo.find({
+        where: { jobConfigId, isOrphan: false },
+      });
+
+      if (!crossMappings.length) {
+        return {
+          message: 'No identity mappings found for this job configuration',
+        };
+      }
+
+      await this.identityCrossMappingRepo.update(
+        { jobConfigId: jobConfigId, isOrphan: false },
+        { isOrphan: true }
+      );
+
+      this.logger.log(`Marked ${crossMappings.length} mappings as orphan for job config: ${jobConfigId}`);
+
+      return {
+        message: 'Identity mappings deleted successfully',
+        deletedCount: crossMappings.length,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      this.logger.error(`Error deleting identity mappings for job ${jobConfigId}:`, error);
+      throw new BadRequestException(`Failed to delete identity mappings: ${error.message}`);
     }
   }
 }

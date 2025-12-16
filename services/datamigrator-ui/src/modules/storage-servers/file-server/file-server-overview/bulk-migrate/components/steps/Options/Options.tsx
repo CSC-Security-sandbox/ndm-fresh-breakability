@@ -62,7 +62,7 @@ const Options = () => {
               </Box>
             </Box>
           </Box>
-          <IncrementalSyncSchedule />
+          <IncrementalSyncSchedule variant="normal_run"/>
         </Box>
         <Box className="w-3/6 flex flex-col gap-10">
           <FormFieldTextArea

@@ -284,11 +284,21 @@ export class JobConfigController {
   }
 
   @ApiOperation({ summary: 'Get identity mappings for a job by ID' })
-  @Get(':id/mappings')
+  @Get(':id/mappings-fetch')
   @Auth(Permission.ViewJob)
   @ApiBearerAuth()
   async getJobIdentityMappings(@Param('id') id: string): Promise<any> {
     return await this.jobConfigService.getIdentityMappingsForJob(id);
+  }
+
+  @ApiOperation({ summary: 'Delete identity mappings for a job by ID' })
+  @Delete(':id/mappings-remove')
+  @Auth(Permission.ManageJob)
+  @ApiBearerAuth()
+  @ApiResponse({ status: 200, description: 'Identity mappings deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Job or mappings not found' })
+  async deleteJobIdentityMappings(@Param('id') id: string): Promise<any> {
+    return await this.jobConfigService.deleteIdentityMappingsForJob(id);
   }
 }
 

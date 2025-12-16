@@ -276,7 +276,7 @@ export const jobsApi = createApi({
 
     getJobIdentityMappings: builder.query({
       query: (jobConfigId: string) => ({
-        url: `jobs/${jobConfigId}/mappings`,
+        url: `jobs/${jobConfigId}/mappings-fetch`,
         method: 'GET',
       }),
       transformResponse: (response) => {
@@ -284,6 +284,22 @@ export const jobsApi = createApi({
       },
       providesTags: (result, error, jobConfigId) => [
         { type: 'JOB_IDENTITY_MAPPINGS', id: jobConfigId }
+      ],
+    }),
+
+    removeJobIdentityMappings: builder.mutation({
+      query: (jobConfigId: string) => ({
+        url: `jobs/${jobConfigId}/mappings-remove`,
+        method: 'DELETE',
+      }),
+      transformResponse: (response) => {
+        return response?.data || response;
+      },
+      transformErrorResponse: structuredErrorResponse,
+      invalidatesTags: (result, error, jobConfigId) => [
+        { type: 'JOB_IDENTITY_MAPPINGS', id: jobConfigId },
+        'JOB_CONFIG_DETAILS',
+        'ALL_JOB_CONFIGS',
       ],
     }),
 
@@ -345,6 +361,7 @@ export const {
   useGetFileServerWorkersQuery,
   useDeleteJobConfigMutation,
   useGetJobIdentityMappingsQuery,
+  useRemoveJobIdentityMappingsMutation,
   useLazyGetJobIdentityMappingsQuery,
   useUpdateDiscoveryJobConfigMutation,
   useUpdateMigrationJobConfigMutation,

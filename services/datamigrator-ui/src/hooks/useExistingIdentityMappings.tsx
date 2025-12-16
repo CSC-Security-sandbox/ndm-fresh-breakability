@@ -5,6 +5,7 @@ import { ProtocolType } from "@/types/app.type";
 
 interface IdentityMappingData {
   identityType: string;
+  identityMap?: string;
   sourceMapping: string;
   targetMapping: string;
 }
@@ -12,16 +13,17 @@ interface IdentityMappingData {
 interface ExistingMappingsResponse {
   items?: {
     data: IdentityMappingData[];
-    crossMappings: any[];
+    crossMappings?: any[];
   };
 }
 
 interface ExistingIdentityMappingsProps {
   existingMappings?: ExistingMappingsResponse;
   protocol: string;
+  jobId: string;
 }
 
-const convertMappingsToCSV = (
+export const convertMappingsToCSV = (
   mappingsData: IdentityMappingData[],
   protocol: string
 ): string => {
@@ -30,7 +32,6 @@ const convertMappingsToCSV = (
       ? "gid_source,gid_target,uid_source,uid_target\n"
       : "sid_source,sid_target\n";
   }
-
   if (protocol === ProtocolType.NFS) {
     return convertGidUidMappingsToCSV(mappingsData);
   } else {
@@ -38,57 +39,33 @@ const convertMappingsToCSV = (
   }
 };
 
-const convertGidUidMappingsToCSV = (mappingsData: IdentityMappingData[]): string => {
+export const convertGidUidMappingsToCSV = (mappingsData: IdentityMappingData[]): string => {
   const header = "gid_source,gid_target,uid_source,uid_target\n";
-  
-  // Group mappings by source mapping to pair GID and UID together
-  const groupedMappings = new Map<string, { gid?: IdentityMappingData, uid?: IdentityMappingData }>();
-  
-  mappingsData.forEach(mapping => {
-    const key = mapping.sourceMapping;
-    if (!groupedMappings.has(key)) {
-      groupedMappings.set(key, {});
-    }
-    
-    const group = groupedMappings.get(key)!;
-    if (mapping.identityType.toUpperCase() === 'GID') {
-      group.gid = mapping;
-    } else if (mapping.identityType.toUpperCase() === 'UID') {
-      group.uid = mapping;
-    }
-  });
-  
   const rows: string[] = [];
-  
-  groupedMappings.forEach((group) => {
-    const gidSource = group.gid?.sourceMapping || '';
-    const gidTarget = group.gid?.targetMapping || '';
-    const uidSource = group.uid?.sourceMapping || '';
-    const uidTarget = group.uid?.targetMapping || '';
-    
-    if (gidSource || uidSource) {
-      rows.push(`${gidSource},${gidTarget},${uidSource},${uidTarget}`);
-    }
-  });
-  
-  return header + rows.join('\n');
+  for (let i = 0; i < mappingsData.length; i += 2) {
+    const gid = mappingsData[i];
+    const uid = mappingsData[i + 1];
+    const gidSource = gid?.sourceMapping ?? "";
+    const gidTarget = gid?.targetMapping ?? "";
+    const uidSource = uid?.sourceMapping ?? "";
+    const uidTarget = uid?.targetMapping ?? "";
+    rows.push(`${gidSource},${gidTarget},${uidSource},${uidTarget}`);
+  }
+  return header + rows.join("\n");
 };
 
-const convertSidMappingsToCSV = (mappingsData: IdentityMappingData[]): string => {
+export const convertSidMappingsToCSV = (mappingsData: IdentityMappingData[]): string => {
   const header = "sid_source,sid_target\n";
-  
   const sidMappings = mappingsData
     .filter(mapping => mapping.identityType.toUpperCase() === 'SID')
     .map(mapping => `${mapping.sourceMapping},${mapping.targetMapping}`)
     .join('\n');
-  
   return header + sidMappings;
 };
 
 export const downloadCSVFile = (csvContent: string, filename: string): void => {
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
-  
   if (link.download !== undefined) {
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
@@ -100,33 +77,27 @@ export const downloadCSVFile = (csvContent: string, filename: string): void => {
   }
 };
 
-export const getExistingMappingsFilename = (protocol: string): string => {
-  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
-  return protocol === ProtocolType.NFS 
-    ? `existing-gid-uid-mappings-${timestamp}.csv`
-    : `existing-sid-mappings-${timestamp}.csv`;
-};
-
 const ExistingIdentityMappings: React.FC<ExistingIdentityMappingsProps> = ({
   existingMappings,
   protocol,
+  jobId,
 }) => {
   const mappingsData = existingMappings?.items?.data;
   const handleDownloadExistingMappings = () => {
     const csvContent = convertMappingsToCSV(mappingsData, protocol);
-    const filename = getExistingMappingsFilename(protocol);
+    const filename = protocol === ProtocolType.NFS ? `Uploaded_GidMapping_${jobId}.csv` : `Uploaded_SidMapping_${jobId}.csv`;
     downloadCSVFile(csvContent, filename);
   };
 
   return (
-    <Box className="flex gap-2 items-center mb-2">
+    <Box className="flex gap-2 items-center">
         <Text bold className="!mb-0">Uploaded Mapping: </Text>
         <Button
-            variant="text"
-            onClick={handleDownloadExistingMappings}
-            className="!p-1 !text-sm"
+          variant="text"
+          onClick={handleDownloadExistingMappings}
+          className="!p-1 !text-sm"
         >
-            Download as CSV
+          Download CSV
         </Button>
     </Box>
   );
