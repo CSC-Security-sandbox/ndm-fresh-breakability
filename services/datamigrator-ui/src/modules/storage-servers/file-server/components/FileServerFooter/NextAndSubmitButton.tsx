@@ -37,11 +37,29 @@ const NextAndSubmitButton = () => {
     fetchingCertificate,
     showCertificateView,
     certificateAccepted,
+    selectedZoneIds,
+    zoneCredentials,
   } = useContext(CommonFileServerContext);
+
+  // Ensure safe defaults for zone state
+  const safeSelectedZoneIds = selectedZoneIds || [];
+  const safeZoneCredentials = zoneCredentials || {};
 
   const isDellIsilon = serverTypeForm?.formState?.serverType?.value === "dell";
 
+  console.debug("[NextAndSubmitButton] Render", {
+    currentStepIndex,
+    isDellIsilon,
+    selectedZoneIds: safeSelectedZoneIds,
+    zoneCredentials: safeZoneCredentials,
+    selectedProtocol,
+    hostCredentialsForm,
+    nfsCredentialsForm,
+    smbCredentialsForm,
+  });
+
   const handleFinish = async () => {
+    console.debug("[NextAndSubmitButton] handleFinish", { isEditMode });
     if (isEditMode) {
       handleEditConfiguration();
     } else {
@@ -50,6 +68,7 @@ const NextAndSubmitButton = () => {
   };
 
   const getDisableStatus = () => {
+    console.debug("[NextAndSubmitButton] getDisableStatus", { currentStepIndex });
     switch (currentStepIndex) {
       case STEP_0_FILE_SERVER_NAME: {
         // For Dell Isilon, check management console form validity
@@ -73,6 +92,39 @@ const NextAndSubmitButton = () => {
       }
 
       case STEP_1_CREDENTIALS: {
+        // Dell Isilon: Check if all selected zones have valid credentials
+        if (isDellIsilon) {
+          // Must have at least one zone selected
+          if (safeSelectedZoneIds.length === 0) {
+            return true; // Disabled - no zones selected
+          }
+          // Check if all selected zones have at least one protocol fully filled
+          const allZonesValid = safeSelectedZoneIds.every((zoneId) => {
+            const creds = safeZoneCredentials[zoneId] || {};
+            // SMB is valid if: IP is selected AND username AND password are filled
+            const smbValid = !!(
+              creds.smbIp &&
+              creds.smbUsername?.trim() &&
+              creds.smbPassword?.trim()
+            );
+            // NFS is valid if: IP is selected AND username AND password are filled
+            const nfsValid = !!(
+              creds.nfsIp &&
+              creds.nfsUsername?.trim() &&
+              creds.nfsPassword?.trim()
+            );
+            // At least one protocol must be fully filled
+            return smbValid || nfsValid;
+          });
+          console.debug("[NextAndSubmitButton] Dell Isilon STEP_1_CREDENTIALS validation", {
+            safeSelectedZoneIds,
+            safeZoneCredentials,
+            allZonesValid,
+          });
+          return !allZonesValid; // Disabled if not all zones are valid
+        }
+
+        // Other NAS: existing logic
         const isHostValid = hostCredentialsForm.isValid;
         
         // Only validate the selected protocol form
@@ -101,6 +153,7 @@ const NextAndSubmitButton = () => {
   };
 
   const handleProceed = () => {
+    console.debug("[NextAndSubmitButton] handleProceed", { currentStepIndex });
     const isConfigNameChanged =
       editingFileServerDetails?.configName !==
       serverTypeForm?.formState?.configName;
@@ -132,6 +185,7 @@ const NextAndSubmitButton = () => {
   };
 
   const checkUniqueFileServerName = async () => {
+    console.debug("[NextAndSubmitButton] checkUniqueFileServerName");
     if (
       currentStepIndex === STEP_0_FILE_SERVER_NAME &&
       serverTypeForm?.formState?.configName
@@ -151,6 +205,7 @@ const NextAndSubmitButton = () => {
   };
 
   const handleNextClick = async () => {
+    console.debug("[NextAndSubmitButton] handleNextClick", { currentStepIndex });
     if (selectedWorkerIds?.length === 0) {
       // Remove this if else and keep only gotoNextStep once speed test is enabled
       if (currentStepIndex === 2) {
@@ -182,6 +237,26 @@ const NextAndSubmitButton = () => {
     }
   };
 
+  const areAllSelectedZonesFilled = () => {
+    if (!isDellIsilon) return true;
+    if (!safeSelectedZoneIds.length) return false;
+    const result = safeSelectedZoneIds.every((zoneId) => {
+      const creds = safeZoneCredentials[zoneId] || {};
+      // SMB validation: if SMB IP is chosen, username and password must be filled
+      const smbValid = creds.smbIp
+        ? creds.smbUsername?.trim() && creds.smbPassword?.trim()
+        : false;
+      // NFS validation: if NFS IP is chosen, username and password must be filled
+      const nfsValid = creds.nfsIp
+        ? creds.nfsUsername?.trim() && creds.nfsPassword?.trim()
+        : false;
+      // At least one protocol must be fully filled
+      return smbValid || nfsValid;
+    });
+    console.debug("[NextAndSubmitButton] areAllSelectedZonesFilled result", result, { selectedZoneIds: safeSelectedZoneIds, zoneCredentials: safeZoneCredentials });
+    return result;
+  };
+
   // Uncomment this and remove the below return and handleProccedAndFinish method once decided to enable speed test
   /* return (
     <>
@@ -208,6 +283,7 @@ const NextAndSubmitButton = () => {
 
   return (
     <>
+      {console.debug("[NextAndSubmitButton] render return", { currentStepIndex, isDellIsilon, selectedZoneIds: safeSelectedZoneIds, zoneCredentials: safeZoneCredentials })}
       {currentStepIndex === 2 ? (
         <Button
           onClick={handleProceed}

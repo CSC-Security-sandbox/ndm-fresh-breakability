@@ -8,6 +8,13 @@ import {
   MountPathsOptionsListType,
   ServerTypeFormType,
   WorkingDirectoryDetailsType,
+  ZoneCredentialsType,
+  ZoneWorkerAssignmentsType,
+  DellIsilonCreatePayloadType,
+  DellIsilonZonePayloadType,
+  ManagementConsoleFormType,
+  CertificateResponseType,
+  ManagementServerType,
 } from "@modules/storage-servers/file-server/fileServer.interface";
 import { EXPORT_PATH_SOURCE_ENUM } from "@modules/storage-servers/file-server/components/file-server.constant";
 
@@ -99,10 +106,16 @@ export const createConfigPayload = (
     }
   }
 
+  // Get serverType from form, convert to backend enum format
+  const serverTypeValue = serverTypeForm?.formState?.serverType?.value;
+  // Map frontend values to backend enum: "dell" -> "Dell", "other" -> "OtherNAS"
+  const backendServerType = serverTypeValue === "dell" ? "Dell" : "OtherNAS";
+
   const configPayload: ConfigPayloadType = {
     configName: serverTypeForm.formState?.configName || "",
     configType: "FILE",
     projectId,
+    serverType: backendServerType, // Required by backend
     fileServers,
     workingDirectory: {
       workingDirectory: jobConfigForm?.formState?.workingDirectory || "",
@@ -151,8 +164,12 @@ const getFileServerDetails = (
     // Get protocolVersion value - only include if it has a valid non-empty value
     const protocolVersionValue = credentialsForm?.formState?.protocolVersion?.value;
     
+    // Convert frontend serverType to backend enum format
+    const frontendServerType = serverTypeForm?.formState?.serverType?.value;
+    const backendServerType = frontendServerType === "dell" ? "Dell" : "OtherNAS";
+ 
     const fileServerDetails: any = {
-      serverType: serverTypeForm?.formState?.serverType?.value || "OtherNAS",
+      serverType: backendServerType,
       protocol: credentialsForm.formState?.protocol || "",
       userName: credentialsForm.formState?.userName || "",
       password: credentialsForm.formState?.password || "",
@@ -188,5 +205,274 @@ export const patchJobConfigFormValue = (
     pathId: selectedPath || null,
     pathName: workingDirectory?.pathName || "",
     workingDirectory: workingDirectory?.workingDirectory || "",
+  };
+};
+
+/**
+ * Create Dell Isilon File Server Payload
+ * 
+ * Dell Isilon has a parent-child structure:
+ * - Parent: The Dell Isilon container (metadata only - name, management IP, etc.)
+ * - Children (Zones): The actual file servers with NFS/SMB credentials
+ * 
+ * Each zone can have:
+ * - NFS only → 1 file server entry
+ * - SMB only → 1 file server entry
+ * - Both NFS and SMB → 2 file server entries (separate NFS and SMB file servers)
+ * 
+ * @example
+ * Parent: "ISILON"
+ * ├── Zone1 (NFS only) → Creates: ISILON-Zone1-NFS
+ * ├── Zone2 (SMB only) → Creates: ISILON-Zone2-SMB
+ * └── Zone3 (Both) → Creates: ISILON-Zone3-NFS, ISILON-Zone3-SMB
+ */
+export const createDellIsilonConfigPayload = (
+  projectId: string,
+  serverTypeForm: BlueXpFormType<ServerTypeFormType>,
+  managementConsoleForm: BlueXpFormType<ManagementConsoleFormType>,
+  selectedZoneIds: string[],
+  zoneCredentials: Record<string, ZoneCredentialsType>,
+  zoneWorkerAssignments: Record<string, ZoneWorkerAssignmentsType>,
+  certificateData: CertificateResponseType | null,
+  zonesMetadata: { id: string; name: string }[]
+): DellIsilonCreatePayloadType => {
+  const parentName = serverTypeForm.formState?.configName || "";
+  
+  // Build zone payloads
+  const zones: DellIsilonZonePayloadType[] = selectedZoneIds.map((zoneId) => {
+    const zoneMeta = zonesMetadata.find((z) => z.id === zoneId);
+    const creds = zoneCredentials[zoneId] || {};
+    const workers = zoneWorkerAssignments[zoneId] || { nfs: [], smb: [] };
+    
+    const zonePayload: DellIsilonZonePayloadType = {
+      zoneId,
+      zoneName: zoneMeta?.name || zoneId,
+    };
+    
+    // Add NFS config if present
+    if (creds.nfsIp && creds.nfsUsername && creds.nfsPassword) {
+      zonePayload.nfs = {
+        host: creds.nfsIp,
+        userName: creds.nfsUsername,
+        password: creds.nfsPassword,
+        workers: workers.nfs || [],
+        protocolVersion: "v3", // Default NFS version - must match backend enum (v3, v4.0, v4.1, v4.2)
+      };
+    }
+    
+    // Add SMB config if present
+    if (creds.smbIp && creds.smbUsername && creds.smbPassword) {
+      zonePayload.smb = {
+        host: creds.smbIp,
+        userName: creds.smbUsername,
+        password: creds.smbPassword,
+        workers: workers.smb || [],
+      };
+    }
+    
+    return zonePayload;
+  });
+  
+  return {
+    parentName,
+    projectId,
+    serverType: "Dell",
+    managementHost: managementConsoleForm.formState?.managementHost || "",
+    managementUsername: managementConsoleForm.formState?.managementUsername || "",
+    managementPassword: managementConsoleForm.formState?.managementPassword || "",
+    certificateFingerprint: certificateData?.fingerprint256 || "",
+    zones,
+  };
+};
+
+/**
+ * Convert Dell Isilon payload to standard ConfigPayloadType array
+ * This flattens the zone structure into individual file server configs
+ * that can be sent to the existing API
+ * 
+ * Each zone with NFS → 1 config payload
+ * Each zone with SMB → 1 config payload
+ * Each zone with both → 2 config payloads
+ */
+export const flattenDellIsilonPayloadToConfigs = (
+  dellPayload: DellIsilonCreatePayloadType
+): ConfigPayloadType[] => {
+  const configs: ConfigPayloadType[] = [];
+  
+  // Build the management server object (same for all configs from this Dell Isilon)
+  const managementServer: ManagementServerType = {
+    projectId: dellPayload.projectId,
+    configName: dellPayload.parentName,
+    serverType: "Dell",
+    host: dellPayload.managementHost,
+    username: dellPayload.managementUsername,
+    password: dellPayload.managementPassword,
+    tlsAccepted: true, // Certificate was already accepted in the UI
+    tlsCertificate: dellPayload.certificateFingerprint,
+  };
+  
+  for (const zone of dellPayload.zones) {
+    // Create NFS file server if zone has NFS
+    if (zone.nfs) {
+      const nfsConfig: ConfigPayloadType = {
+        configName: `${dellPayload.parentName}-${zone.zoneName}-NFS`,
+        configType: "FILE",
+        projectId: dellPayload.projectId,
+        serverType: "Dell", // Required at root level by backend
+        fileServers: [{
+          serverType: "Dell",
+          protocol: "NFS",
+          userName: zone.nfs.userName,
+          password: zone.nfs.password,
+          host: zone.nfs.host,
+          workers: zone.nfs.workers,
+          protocolVersion: zone.nfs.protocolVersion,
+        }],
+        workingDirectory: {
+          workingDirectory: "",
+          pathId: null,
+          pathName: "",
+        },
+        // Management server (required for Dell Isilon)
+        managementServer,
+        // Custom Dell Isilon metadata
+        dellIsilonMetadata: {
+          parentName: dellPayload.parentName,
+          zoneId: zone.zoneId,
+          zoneName: zone.zoneName,
+          managementHost: dellPayload.managementHost,
+          serverType: "Dell",
+        },
+      } as ConfigPayloadType & { dellIsilonMetadata: any };
+      
+      configs.push(nfsConfig);
+    }
+    
+    // Create SMB file server if zone has SMB
+    if (zone.smb) {
+      const smbConfig: ConfigPayloadType = {
+        configName: `${dellPayload.parentName}-${zone.zoneName}-SMB`,
+        configType: "FILE",
+        projectId: dellPayload.projectId,
+        serverType: "Dell", // Required at root level by backend
+        fileServers: [{
+          serverType: "Dell",
+          protocol: "SMB",
+          userName: zone.smb.userName,
+          password: zone.smb.password,
+          host: zone.smb.host,
+          workers: zone.smb.workers,
+          protocolVersion: "v3.0", // Default SMB version for Dell Isilon
+        }],
+        workingDirectory: {
+          workingDirectory: "",
+          pathId: null,
+          pathName: "",
+        },
+        // Management server (required for Dell Isilon)
+        managementServer,
+        // Custom Dell Isilon metadata
+        dellIsilonMetadata: {
+          parentName: dellPayload.parentName,
+          zoneId: zone.zoneId,
+          zoneName: zone.zoneName,
+          managementHost: dellPayload.managementHost,
+          serverType: "Dell",
+        },
+      } as ConfigPayloadType & { dellIsilonMetadata: any };
+      
+      configs.push(smbConfig);
+    }
+  }
+  
+  return configs;
+};
+
+/**
+ * Group file servers by Dell Isilon parent for display in File Server List
+ * 
+ * Dell Isilon file servers follow the naming pattern: {ParentName}-{ZoneName}-{Protocol}
+ * e.g., "MyIsilon-Zone1-NFS", "MyIsilon-Zone1-SMB", "MyIsilon-Zone2-NFS"
+ * 
+ * This function:
+ * 1. Identifies Dell Isilon servers by checking if fileServers[0].serverType === "Dell"
+ * 2. Parses the configName to extract parent name, zone name, and protocol
+ * 3. Groups them under a parent entry with expandable zones
+ */
+export const groupDellIsilonFileServers = (
+  fileServers: any[]
+): { parents: any[]; regularServers: any[] } => {
+  const dellIsilonMap = new Map<string, any>();
+  const regularServers: any[] = [];
+  
+  // Regex to parse Dell Isilon config names: {ParentName}-{ZoneName}-{Protocol}
+  // Matches: "anything-Zone1-NFS" or "anything-Zone2-SMB" etc.
+  const dellConfigNameRegex = /^(.+)-(\w+)-(NFS|SMB)$/;
+  
+  for (const server of fileServers) {
+    // Check if this is a Dell Isilon file server (check both "Dell" and "dell" for compatibility)
+    const serverType = server.fileServers?.[0]?.serverType;
+    const isDellIsilon = serverType === "Dell" || serverType === "dell";
+    
+    if (isDellIsilon) {
+      const configName = server.configName || "";
+      const match = configName.match(dellConfigNameRegex);
+      
+      if (match) {
+        const [, parentName, zoneName, protocol] = match;
+        
+        // Create or get parent entry
+        if (!dellIsilonMap.has(parentName)) {
+          dellIsilonMap.set(parentName, {
+            configName: parentName,
+            serverType: "Dell",
+            isDellIsilonParent: true,
+            zones: [],
+            // Use the earliest createdAt from child servers
+            createdAt: server.createdAt,
+            // Count of zone file servers for display
+            zoneServerCount: 0,
+          });
+        }
+        
+        const parent = dellIsilonMap.get(parentName);
+        parent.zoneServerCount++;
+        
+        // Update createdAt to earliest date
+        if (server.createdAt && (!parent.createdAt || new Date(server.createdAt) < new Date(parent.createdAt))) {
+          parent.createdAt = server.createdAt;
+        }
+        
+        // Find or create zone entry
+        let zoneEntry = parent.zones.find((z: any) => z.zoneName === zoneName);
+        if (!zoneEntry) {
+          zoneEntry = {
+            zoneName: zoneName,
+            zoneId: zoneName.toLowerCase(),
+            fileServers: [],
+          };
+          parent.zones.push(zoneEntry);
+        }
+        
+        // Add file server to zone with protocol info
+        zoneEntry.fileServers.push({
+          ...server,
+          _protocol: protocol,
+          _zoneName: zoneName,
+          _parentName: parentName,
+        });
+      } else {
+        // Dell Isilon but doesn't match pattern - treat as regular
+        regularServers.push(server);
+      }
+    } else {
+      // Regular file server (Other NAS, etc.)
+      regularServers.push(server);
+    }
+  }
+  
+  return {
+    parents: Array.from(dellIsilonMap.values()),
+    regularServers,
   };
 };
