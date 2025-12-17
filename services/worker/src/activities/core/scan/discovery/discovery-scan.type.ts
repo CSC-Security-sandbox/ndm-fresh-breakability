@@ -16,4 +16,5 @@ export interface PublishItemInfoInput {
     command: Cmd;
     relativeSourcePath: string;
     fileType: FileType;
+    shouldScanADS: boolean;
 }

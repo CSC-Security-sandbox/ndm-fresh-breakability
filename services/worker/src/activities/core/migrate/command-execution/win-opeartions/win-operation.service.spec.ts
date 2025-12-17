@@ -6,7 +6,7 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { WinShellService } from 'src/activities/common/win-shell.service';
 import { RedisService } from 'src/redis/redis.service';
-import { SourceAclError, TargetAclError } from './acl-operation.error';
+import { SourceAclError, TargetAclError, WindowsAPINotAvailableError } from './acl-operation.error';
 import { LRUCache } from 'src/activities/core/utils/lru-cache';
 import { OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
 import { FileType } from 'src/activities/types/tasks';
@@ -1329,6 +1329,308 @@ describe('WinOperationService', () => {
         expect.stringContaining("C:\\test\\path''s folder"),
       );
       expect(result).toBe(FileType.SYMBOLIC_LINK);
+    });
+  });
+
+  describe('detectADSInfo', () => {
+    // Helper to create Uint16Array from string for decodeStreamName tests
+    const createUint16Array = (str: string, addGarbageAfter = false): Uint16Array => {
+      const arr = new Uint16Array(296);
+      for (let i = 0; i < str.length; i++) {
+        arr[i] = str.charCodeAt(i);
+      }
+      arr[str.length] = 0; // Null terminator
+      if (addGarbageAfter) {
+        arr[str.length + 1] = 65;
+        arr[str.length + 2] = 66;
+      }
+      return arr;
+    };
+
+    // Mock jobContext and command for detectADSInfo tests
+    let mockJobContextForADS: any;
+    let mockCommandForADS: any;
+
+    beforeEach(() => {
+      mockJobContextForADS = {
+        jobRunId: 'test-job-run-123',
+        jobConfig: {
+          jobType: 'DISCOVERY',
+          options: {},
+          scanADS: true,
+        },
+        publishToErrorStream: jest.fn(),
+        publishToFileStream: jest.fn(),
+      };
+
+      mockCommandForADS = {
+        id: 'test-cmd-id',
+        fPath: 'test/path',
+        ops: {},
+      };
+    });
+
+    describe('when Windows API is not available', () => {
+      it('should return default empty result after first WindowsAPINotAvailableError and set hasWindowsAPIs to false', async () => {
+        // Arrange: Create a fresh service instance with mocked initializeWindowsAPI
+        const module = await Test.createTestingModule({
+          providers: [
+            WinOperationService,
+            { provide: LoggerFactory, useValue: mockLoggerFactory },
+            { provide: WinShellService, useValue: mockWinShellService },
+            { provide: RedisService, useValue: mockRedisService },
+          ],
+        }).compile();
+
+        const freshService = module.get<WinOperationService>(WinOperationService);
+        
+        // Mock initializeWindowsAPI to prevent actual Windows API initialization
+        jest.spyOn(freshService, 'initializeWindowsAPI').mockImplementation(() => {});
+        
+        // First call throws WindowsAPINotAvailableError and sets hasWindowsAPIs to false
+        const result = await freshService.detectADSInfo(mockJobContextForADS, mockCommandForADS, 'C:\\test\\file.txt');
+        
+        // Should return default result after error is caught and logged
+        expect(result).toEqual({
+          hasADS: false,
+          streamCount: 0,
+          streamNames: [],
+          streamSizes: [],
+          totalSize: 0,
+        });
+        expect(mockJobContextForADS.publishToErrorStream).toHaveBeenCalled();
+      });
+
+      it('should return empty result on subsequent calls after Windows API is unavailable', async () => {
+        // Arrange: Create a fresh service instance with mocked initializeWindowsAPI
+        const module = await Test.createTestingModule({
+          providers: [
+            WinOperationService,
+            { provide: LoggerFactory, useValue: mockLoggerFactory },
+            { provide: WinShellService, useValue: mockWinShellService },
+            { provide: RedisService, useValue: mockRedisService },
+          ],
+        }).compile();
+
+        const freshService = module.get<WinOperationService>(WinOperationService);
+        jest.spyOn(freshService, 'initializeWindowsAPI').mockImplementation(() => {});
+
+        // First call sets hasWindowsAPIs to false
+        await freshService.detectADSInfo(mockJobContextForADS, mockCommandForADS, 'C:\\test\\file1.txt');
+        
+        // Reset mock to verify second call doesn't publish error again
+        mockJobContextForADS.publishToErrorStream.mockClear();
+        
+        // Second call should return default result immediately without throwing
+        const result = await freshService.detectADSInfo(mockJobContextForADS, mockCommandForADS, 'C:\\test\\file2.txt');
+        
+        expect(result).toEqual({
+          hasADS: false,
+          streamCount: 0,
+          streamNames: [],
+          streamSizes: [],
+          totalSize: 0,
+        });
+        // Should not publish error again since hasWindowsAPIs is already false
+        expect(mockJobContextForADS.publishToErrorStream).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('file with no alternate data streams', () => {
+      it.each([
+        ['regular file with default stream only', 'C:\\test\\regular_file.txt'],
+        ['nonexistent file', 'C:\\nonexistent\\file.txt'],
+      ])('should return empty result for %s when Windows API is unavailable', async (_description, testPath) => {
+        // On non-Windows platforms, Windows API is not available, so it returns default result
+        const result = await service.detectADSInfo(mockJobContextForADS, mockCommandForADS, testPath);
+        
+        expect(result).toEqual({
+          hasADS: false,
+          streamCount: 0,
+          streamNames: [],
+          streamSizes: [],
+          totalSize: 0,
+        });
+      });
+    });
+
+    describe('extractADSName - valid stream types', () => {
+      const validStreamTestCases = [
+        // Zone.Identifier streams (downloaded files)
+        { category: 'Zone.Identifier', streamName: ':Zone.Identifier:$DATA', expected: 'Zone.Identifier' },
+
+        // Empty/whitespace streams
+        { category: 'Empty stream', streamName: ':EmptyStream:$DATA', expected: 'EmptyStream' },
+        { category: 'Whitespace stream', streamName: ':   :$DATA', expected: '   ' },
+
+        // Binary streams
+        { category: 'Binary data', streamName: ':BinaryData:$DATA', expected: 'BinaryData' },
+        { category: 'Hidden executable', streamName: ':hidden_executable:$DATA', expected: 'hidden_executable' },
+        { category: 'Thumbnail image', streamName: ':thumbnail:$DATA', expected: 'thumbnail' },
+
+        // Office document streams
+        { category: 'SummaryInformation', streamName: ':SummaryInformation:$DATA', expected: 'SummaryInformation' },
+        { category: 'DocumentSummaryInformation', streamName: ':DocumentSummaryInformation:$DATA', expected: 'DocumentSummaryInformation' },
+
+        // System/attribute streams
+        { category: 'Attribute list', streamName: ':$ATTRIBUTE_LIST:$DATA', expected: '$ATTRIBUTE_LIST' },
+
+        // Mac compatibility streams
+        { category: 'AFP_AfpInfo (Mac)', streamName: ':AFP_AfpInfo:$DATA', expected: 'AFP_AfpInfo' },
+        { category: 'AFP_Resource (Mac)', streamName: ':AFP_Resource:$DATA', expected: 'AFP_Resource' },
+
+        // Antivirus markers
+        { category: 'CA_INOCULATEIT (antivirus)', streamName: ':CA_INOCULATEIT:$DATA', expected: 'CA_INOCULATEIT' },
+
+        // Special characters
+        { category: 'Special characters', streamName: ':stream-with_special.chars123:$DATA', expected: 'stream-with_special.chars123' },
+        { category: 'Unicode characters', streamName: ':日本語ストリーム:$DATA', expected: '日本語ストリーム' },
+        { category: 'Embedded colons', streamName: ':stream:with:colons:$DATA', expected: 'stream:with:colons' },
+      ];
+
+      it.each(validStreamTestCases)(
+        'should extract $category stream name correctly',
+        ({ streamName, expected }) => {
+          const extractedName = (service as any).extractADSName(streamName);
+          expect(extractedName).toBe(expected);
+        },
+      );
+
+      it('should handle very long stream names (200 chars)', () => {
+        const longName = 'a'.repeat(200);
+        const streamName = `:${longName}:$DATA`;
+
+        const extractedName = (service as any).extractADSName(streamName);
+
+        expect(extractedName).toBe(longName);
+        expect(extractedName.length).toBe(200);
+      });
+    });
+
+    describe('extractADSName - invalid stream formats', () => {
+      const invalidStreamTestCases = [
+        { description: 'default stream (::$DATA)', streamName: '::$DATA' },
+        { description: 'stream not starting with colon', streamName: 'InvalidStream:$DATA' },
+        { description: 'stream not ending with :$DATA', streamName: ':InvalidStream' },
+        { description: 'empty string', streamName: '' },
+        { description: 'only suffix', streamName: ':$DATA' },
+      ];
+
+      it.each(invalidStreamTestCases)(
+        'should return null for $description',
+        ({ streamName }) => {
+          const extractedName = (service as any).extractADSName(streamName);
+          expect(extractedName).toBeNull();
+        },
+      );
+    });
+
+    describe('extractADSName - multiple streams parsing', () => {
+      it('should correctly parse multiple stream names', () => {
+        const streamNames = [
+          ':Zone.Identifier:$DATA',
+          ':metadata:$DATA',
+          ':backup:$DATA',
+        ];
+
+        const extractedNames = streamNames.map((name) =>
+          (service as any).extractADSName(name),
+        );
+
+        expect(extractedNames).toEqual(['Zone.Identifier', 'metadata', 'backup']);
+      });
+    });
+
+    describe('decodeStreamName', () => {
+      const decodeTestCases = [
+        { description: 'UTF-16 encoded stream name', input: ':TestStream:$DATA', expected: ':TestStream:$DATA' },
+        { description: 'unicode characters', input: ':データ:$DATA', expected: ':データ:$DATA' },
+        { description: 'short name with garbage after null', input: ':Short', expected: ':Short', addGarbage: true },
+      ];
+
+      it.each(decodeTestCases)(
+        'should decode $description correctly',
+        ({ input, expected, addGarbage }) => {
+          const uint16Array = createUint16Array(input, addGarbage);
+          const decoded = (service as any).decodeStreamName(uint16Array);
+          expect(decoded).toBe(expected);
+        },
+      );
+
+      it('should handle empty stream name (immediate null terminator)', () => {
+        const uint16Array = new Uint16Array(296);
+        uint16Array[0] = 0;
+
+        const decoded = (service as any).decodeStreamName(uint16Array);
+
+        expect(decoded).toBe('');
+      });
+    });
+
+    describe('error handling', () => {
+      it.each([
+        ['null handle from FindFirstStreamW', 'C:\\test\\file.txt'],
+        ['exception during detection', 'C:\\test\\problematic_file.txt'],
+      ])('should return empty result for %s when Windows API is unavailable', async (_description, testPath) => {
+        // On non-Windows platforms, Windows API is not available, so it returns default result
+        const result = await service.detectADSInfo(mockJobContextForADS, mockCommandForADS, testPath);
+        
+        expect(result).toEqual({
+          hasADS: false,
+          streamCount: 0,
+          streamNames: [],
+          streamSizes: [],
+          totalSize: 0,
+        });
+      });
+    });
+
+    describe('ADSInfo result structure', () => {
+      it('should return correct default ADSInfo structure when Windows API is unavailable', async () => {
+        // On non-Windows platforms, Windows API is not available, so it returns default result
+        const result = await service.detectADSInfo(mockJobContextForADS, mockCommandForADS, 'C:\\test\\file.txt');
+        
+        // Verify structure and types
+        expect(result).toMatchObject({
+          hasADS: expect.any(Boolean),
+          streamCount: expect.any(Number),
+          streamNames: expect.any(Array),
+          streamSizes: expect.any(Array),
+          totalSize: expect.any(Number),
+        });
+
+        // Verify consistency for default result
+        expect(result.streamCount).toBe(result.streamNames.length);
+        expect(result.streamCount).toBe(result.streamSizes.length);
+        expect(result.hasADS).toBe(result.streamNames.length > 0);
+      });
+
+      it('should correctly calculate totalSize as sum of all stream sizes', () => {
+        const sizes = [100, 200, 300];
+        const expectedTotal = sizes.reduce((sum, size) => sum + size, 0);
+        expect(expectedTotal).toBe(600);
+      });
+    });
+
+    describe('file path handling', () => {
+      const pathTestCases = [
+        { description: 'UNC paths', path: '\\\\server\\share\\file.txt' },
+        { description: 'paths with spaces', path: 'C:\\Program Files\\My App\\data file.txt' },
+        { description: 'paths with special characters', path: 'C:\\test\\file (1) [copy].txt' },
+        { description: 'very long paths', path: 'C:\\' + 'a'.repeat(200) + '\\file.txt' },
+      ];
+
+      it.each(pathTestCases)(
+        'should return empty result for $description when Windows API is unavailable',
+        async ({ path }) => {
+          // On non-Windows platforms, Windows API is not available, so it returns default result
+          const result = await service.detectADSInfo(mockJobContextForADS, mockCommandForADS, path);
+          
+          expect(result).toBeDefined();
+          expect(result).toHaveProperty('hasADS');
+          expect(result).toHaveProperty('streamCount');
+        },
+      );
     });
   });
 });

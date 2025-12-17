@@ -46,6 +46,10 @@ export  class JobManagerContext {
         return await this.fileStream.append(file);
     }
 
+    async publishToFileStreamBulk(files: ItemInfo[]): Promise<string[]> {
+        return await this.fileStream.appendBulk(files);
+    }
+
     async *groupReadFileStream(readerName: string, batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: ItemInfo; id: string; }> {
         yield* this.fileStream.groupReadWithoutAck(readerName, batchSize, groupType);
     }

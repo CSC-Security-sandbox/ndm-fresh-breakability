@@ -316,3 +316,13 @@ export const TRAILING_SPACE_FILE= (schema: string) => `
     AND (i.file_name ~ ' $' OR i.file_name ~ '\t$')
     GROUP BY i.parent_path
 `;
+
+export const ALTERNATE_DATA_STREAMS = (schema: string) => `
+    SELECT
+        i.path,
+        i.is_directory,        
+    FROM ${schema}.inventory i
+    WHERE i.job_run_id = $1
+    AND i.file_type = 'STREAM'
+    order by i.path
+`;

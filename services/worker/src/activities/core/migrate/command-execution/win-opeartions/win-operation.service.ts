@@ -6,17 +6,32 @@ import {
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { WinShellService } from 'src/activities/common/win-shell.service';
-import { SourceAclError, TargetAclError } from './acl-operation.error';
+import { SourceAclError, TargetAclError, WindowsAPINotAvailableError } from './acl-operation.error';
 import { psGetAclScript, psSetAclScript, psGetLinkInfoScript } from './powershell.script';
 import { RedisService } from 'src/redis/redis.service';
 import { LRUCache } from 'src/activities/core/utils/lru-cache';
-import { OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Cmd, ErrorType, JobManagerContext, OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
 import { FileType } from 'src/activities/types/tasks';
+import * as koffi from 'koffi';
+import { Operation, Origin } from 'src/activities/utils/utils.types';
+import { dmError } from 'src/activities/utils/utils';
+
+// Windows API initialization for ADS detection
+let FindFirstStreamW: any;
+let FindNextStreamW: any;
+let FindClose: any;
+let WIN32_FIND_STREAM_DATA: any;
+
+
 
 @Injectable()
 export class WinOperationService {
   private readonly logger: LoggerService;
   private sidCache: LRUCache = new LRUCache(1000);
+
+  private readonly ADS_SUFFIX = ':$DATA';
+  private readonly DEFAULT_STREAM = '::$DATA';
+  private hasWindowsAPIs:boolean = true;
 
   constructor(
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
@@ -24,6 +39,33 @@ export class WinOperationService {
     private readonly redisService: RedisService,
   ) {
     this.logger = loggerFactory.create(WinOperationService.name);
+    this.initializeWindowsAPI();
+  }
+
+  initializeWindowsAPI() {
+    if (FindFirstStreamW) return; // Already initialized
+
+    try {
+      const kernel32 = koffi.load('kernel32.dll');
+
+      // Define WIN32_FIND_STREAM_DATA structure
+      WIN32_FIND_STREAM_DATA = koffi.struct('WIN32_FIND_STREAM_DATA', {
+        StreamSize: 'int64',
+        cStreamName: koffi.array('uint16', 296)
+      });
+
+      // Define Windows API functions
+      FindFirstStreamW = kernel32.func('FindFirstStreamW', 'void *', [
+        'str16', 'int', koffi.pointer(WIN32_FIND_STREAM_DATA), 'uint32'
+      ]);
+      FindNextStreamW = kernel32.func('FindNextStreamW', 'bool', [
+        'void *', koffi.pointer(WIN32_FIND_STREAM_DATA)
+      ]);
+      FindClose = kernel32.func('FindClose', 'bool', ['void *']);
+    } catch (error) {
+      // If Windows API initialization fails, functions will remain undefined
+      console.error('Failed to initialize Windows API for ADS detection:', error);
+    }
   }
 
   async getAclOperation(
@@ -80,7 +122,7 @@ export class WinOperationService {
     if (jobContext.jobConfig?.options?.isIdentityMappingAvailable) {
       this.logger.log(
         'Mapping SID to target: ' +
-          jobContext.jobConfig?.options?.isIdentityMappingAvailable,
+        jobContext.jobConfig?.options?.isIdentityMappingAvailable,
       );
       acl = await this.mapSIDToTarget(acl, jobContext.jobRunId);
     }
@@ -285,6 +327,103 @@ export class WinOperationService {
     } catch (error) {
       this.logger.error(`Failed to detect symbolic link for ${path}: ${error.message}`);
       return FileType.UNKNOWN;
+    }
+  }
+
+  private decodeStreamName(raw: Uint16Array): string {
+    let result = '';
+    for (const code of raw) {
+      if (code === 0) break;
+      result += String.fromCharCode(code);
+    }
+    return result;
+  }
+
+  private extractADSName(streamName: string): string | null {
+    if (
+      !streamName.startsWith(':') ||
+      !streamName.endsWith(this.ADS_SUFFIX)
+    ) {
+      return null;
+    }
+
+    const name = streamName.slice(1, -this.ADS_SUFFIX.length);
+    return name.length > 0 ? name : null;
+  }
+
+
+  async detectADSInfo(jobContext: JobManagerContext, command: Cmd, filePath: string): Promise<ADSInfo> {
+    const defaultResult: ADSInfo = {
+      hasADS: false,
+      streamCount: 0,
+      streamNames: [],
+      streamSizes: [],
+      totalSize: 0
+    };
+    if(!this.hasWindowsAPIs){
+      return defaultResult;
+    }
+    
+    try {
+     // Throw transient error if Windows API not available
+      if (!FindFirstStreamW || !FindNextStreamW || !FindClose) {      
+        this.hasWindowsAPIs = false;
+        throw new WindowsAPINotAvailableError();
+      }
+      const streamData = koffi.alloc(WIN32_FIND_STREAM_DATA, 1);
+      const INVALID_HANDLE = -1;
+      const handle = FindFirstStreamW(filePath, 0, streamData, 0);
+
+      if (handle === INVALID_HANDLE || handle === null || handle === 0) {
+        return defaultResult;
+      }
+
+      const streamNames: string[] = [];
+      const streamSizes: number[] = [];
+      let totalSize = 0;
+
+      try {
+        // Pre-allocate buffer for string conversion to avoid repeated allocations   
+        let hasMoreStreams = true;
+        while (hasMoreStreams) {
+          const data = koffi.decode(streamData, WIN32_FIND_STREAM_DATA);
+          const streamSize = Number(data.StreamSize);
+          const streamName = this.decodeStreamName(data.cStreamName);
+          if (!streamName) {
+            this.logger.warn(`Empty stream name detected for file:  ${filePath}`);
+            break;
+          }
+
+          if (streamName && streamName !== this.DEFAULT_STREAM) {
+            const extractedName = this.extractADSName(streamName);
+            if (extractedName) {
+              streamNames.push(extractedName);
+              streamSizes.push(streamSize);
+              totalSize += streamSize;
+            }
+          }
+          hasMoreStreams = FindNextStreamW(handle, streamData);
+
+        }
+      } finally {
+        FindClose(handle);
+      }
+
+      return {
+        hasADS: streamNames.length > 0,
+        streamCount: streamNames.length,
+        streamNames,
+        streamSizes,
+        totalSize
+      };
+    } catch (error) {
+      if(error instanceof WindowsAPINotAvailableError){       
+        const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, ErrorType.TRANSIENT_ERROR, command.id, error, {name: command.fPath, path: filePath});
+        await jobContext.publishToErrorStream(dmErr);  
+      }
+      // Log error but don't throw - ADS detection failure shouldn't break the scan
+      this.logger.error(`Exception during ADS detection for ${filePath}: ${error.message}`, error.stack);
+      return defaultResult;
     }
   }
 }

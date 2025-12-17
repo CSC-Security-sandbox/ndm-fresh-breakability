@@ -33,6 +33,14 @@ export class CommandExecService {
         const output: CommandExecOutput = { sourceErrors: [], targetErrors: [], cmd: input.command };
         let baseCmdRes: CommandOutput = { shouldStampMeta: false, shouldUpdateItemInfo: false, sourceErrors: [], targetErrors: [] };
 
+        // TODO: Copy Stream files in a method.
+
+        // TODO: Copy Stream directories in a method.
+
+        // TODO: Delete Stream files in a method.
+
+        // TODO: Delete Stream directories in a method.
+
         if(input.command.ops && input.command.ops[OPS_CMD.COPY_SYMLINK]) {
             // Copy Symlink
             baseCmdRes = await this.copySymlink(input);
@@ -100,6 +108,12 @@ export class CommandExecService {
         }        
     return output;
 }
+
+    async copyStreamFile(){
+        //TODO: add code to enumerate the source stream and copy them one by one to target. 
+        // calculate hash as well based on the streams. 
+    }
+    
 
     async copyFile({command , jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
         const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] , shouldUpdateItemInfo: false };

@@ -807,20 +807,15 @@ describe('MigrateScanService', () => {
             expect(jobContext.publishBulkToCommandStream).toHaveBeenCalled();
         });
 
-        it('should skip item if fs.promises.access returns false for sourceContentPath', async () => {
-            // Mock getDirContents to return source directory contents, but access fails for individual files
+        it('should skip item if isExists returns false for sourceContentPath', async () => {
+            // Mock getDirContents to return source directory contents
             jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
                 if (origin === Origin.SOURCE) return new Set(['file1']);
                 return new Set();
             });
             
-            // Mock fs.promises.access to fail for the specific file path
-            jest.spyOn(fs.promises, 'access').mockImplementation(async (path: string) => {
-                if (path.includes('file1')) {
-                    throw { code: 'ENOENT' };
-                }
-                return undefined;
-            });
+            // Mock lstat to throw error (isExists uses lstat internally and returns false on error)
+            (fs.promises.lstat as jest.Mock).mockRejectedValue({ code: 'ENOENT' });
             
             (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
 
@@ -835,8 +830,15 @@ describe('MigrateScanService', () => {
                 return new Set();
             });
             
-            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
-            (fs.promises.lstat as jest.Mock).mockRejectedValue(new Error('fail'));
+            // First lstat call for isExists returns successfully, second lstat call throws
+            (fs.promises.lstat as jest.Mock)
+                .mockResolvedValueOnce({
+                    isDirectory: () => false,
+                    isSymbolicLink: () => false,
+                    size: 100,
+                    mtime: new Date(),
+                }) // isExists check passes
+                .mockRejectedValueOnce(new Error('fail')); // actual lstat call fails
 
             await expect(service.scanDirectory(commandInput)).rejects.toThrow('fail');
             expect(jobContext.publishToErrorStream).toHaveBeenCalled();

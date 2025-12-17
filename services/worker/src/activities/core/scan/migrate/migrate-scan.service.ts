@@ -142,6 +142,8 @@ export class MigrateScanService {
                         errorType
                     );
                     if (hasTrailingSpace) continue;
+                    // TODO: check if the item has streams or not using detectADsInfo method. 
+                    // buildCOmmand with sourceStat and a new ComamndName - COPY_CONTTENT_STREAMS
                 }
 
                 const fileInfo: FileInfo = await getFileInfo({name: item, fullFilePath: sourceContentPath, relativePath: relativeSourcePath});
@@ -280,6 +282,8 @@ export class MigrateScanService {
 
     buildCommand = (sFile: fs.Stats | undefined, fPath: string, dFile?: fs.Stats): Cmd | undefined => {
 
+        // Add extra info here based on which we will generate OPS_CMD COPY_STREAMS. 
+        // OPS_CMD.COPY_STREAM_DIRS and then deelete the file and delete the STREAM_DIRs as well. 
         if (!sFile) {
             const isDirectory = dFile ? dFile.isDirectory() : false;
             return new Cmd(

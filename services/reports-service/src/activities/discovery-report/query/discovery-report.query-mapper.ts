@@ -1,5 +1,5 @@
 import { DiscoveryReportSection } from "../discovery-report.type";
-import { ACCESS_TIME_DISTRIBUTION, CREATED_TIME_DISTRIBUTION, DEPTH_DISTRIBUTION, EXTENSION_DISTRIBUTION, FILE_SYSTEM_DISTRIBUTION, JOB_RUN_DETAILS, MAX_VALUES, MODIFIED_TIME_DISTRIBUTION, NUMBER_OF_FILES_BY_SIZE, TOP_BIGGEST_FILE_NAME, TOP_DIRECTORY_WITH_MAX_COUNT_CHILD, TOP_DIRECTORY_WITH_MAX_SIZE, TOP_LONGEST_DIRECTORY_NAMES, TOP_LONGEST_DIRECTORY_PATHS, TOP_LONGEST_FILE_NAMES, TOP_LONGEST_FILE_PATHS, REDIRECTS, CASE_ERRORS, TRAILING_SPACE_FILE} from './discovery-report.query';
+import { ACCESS_TIME_DISTRIBUTION, CREATED_TIME_DISTRIBUTION, DEPTH_DISTRIBUTION, EXTENSION_DISTRIBUTION, FILE_SYSTEM_DISTRIBUTION, JOB_RUN_DETAILS, MAX_VALUES, MODIFIED_TIME_DISTRIBUTION, NUMBER_OF_FILES_BY_SIZE, TOP_BIGGEST_FILE_NAME, TOP_DIRECTORY_WITH_MAX_COUNT_CHILD, TOP_DIRECTORY_WITH_MAX_SIZE, TOP_LONGEST_DIRECTORY_NAMES, TOP_LONGEST_DIRECTORY_PATHS, TOP_LONGEST_FILE_NAMES, TOP_LONGEST_FILE_PATHS, REDIRECTS, CASE_ERRORS, TRAILING_SPACE_FILE, ALTERNATE_DATA_STREAMS} from './discovery-report.query';
 import { AccessTimeDistributionInput, CreatedTimeDistributionInput, DepthDistributionInput, ExtensionDistributionInput, FileSystemDistributionInput, JobRunDetailsInput, MaxValuesInput, ModifiedTimeDistributionInput, NumberOfFilesBySizeInput, TopBiggestFileNameInput, TopDirectoryWithMaxCountChildInput, TopDirectoryWithMaxSizeInput, TopLongestDirectoryNamesInput, TopLongestDirectoryPathsInput, TopLongestFileNamesInput, TopLongestFilePathsInput, RedirectsFileNameInput, CaseErrorsInput, TrailingSpaceInput} from "./discovery-report.query.type";
 import { SECONDS_PER_MINUTE, SECONDS_PER_HOUR, SECONDS_PER_DAY, TIME_UNITS } from "../../../constants/report";
 
@@ -452,6 +452,25 @@ export const TRAILING_SPACE_FILE_MAPPER = (input: TrailingSpaceInput[]) : Discov
     return output;
 }
 
+export const ALTERNATE_DATA_STREAMS_MAPPER = (input: any[]) : DiscoveryReportSection[] => {
+    const output: DiscoveryReportSection[] = [];
+    const adsFiles = input.filter(item => item.is_directory === false).map(item=> item.path);
+    const adsDirectories = input.filter(item => item.is_directory === true).map(item=> item.path);
+    output.push({
+        value: adsFiles.join('; '),
+        category: 'Alternative Data Streams',
+        valueType: 'string',
+        sub_category: "Files"
+    });
+    output.push({
+        value: adsDirectories.join('; '),
+        category: 'Alternative Data Streams',
+        valueType: 'string',
+        sub_category: "Directories"
+    });    
+    return output;
+}
+
 export const QueryMapper = {
     ['NUMBER_OF_FILES_BY_SIZE']: {query: NUMBER_OF_FILES_BY_SIZE , mapper: NUMBER_OF_FILES_BY_SIZE_MAPPER , isDynamic: false},
     ['MODIFIED_TIME_DISTRIBUTION']: {query: MODIFIED_TIME_DISTRIBUTION, mapper: MODIFIED_TIME_DISTRIBUTION_MAPPER, isDynamic: false},
@@ -472,6 +491,7 @@ export const QueryMapper = {
     ['REDIRECTS']: {query : REDIRECTS, mapper: REDIRECTS_FILE_NAME_MAPPER, isDynamic: false},
     ['CASE_ERRORS']: {query : CASE_ERRORS, mapper: CASE_ERRORS_MAPPER, isDynamic: true},
     ['TRAILING_SPACE_FILE']: {query : TRAILING_SPACE_FILE, mapper: TRAILING_SPACE_FILE_MAPPER, isDynamic: true},
+    ['ALTERNATE_DATA_STREAMS']: {query : ALTERNATE_DATA_STREAMS, mapper: ALTERNATE_DATA_STREAMS_MAPPER, isDynamic: true},
 
 }
 

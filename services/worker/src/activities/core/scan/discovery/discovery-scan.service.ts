@@ -12,6 +12,7 @@ import { isPathExists } from "../../utils/utils";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { FileType } from "src/activities/types/tasks";
 import { FileTypeDetectionService } from '../../utils/file-type-detection.service';
+import { WinOperationService } from '../../migrate/command-execution/win-opeartions/win-operation.service';
 
 
 export class DiscoveryScanService {
@@ -25,11 +26,12 @@ export class DiscoveryScanService {
         private readonly configService: ConfigService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
         private readonly fileTypeDetectionService: FileTypeDetectionService,
+        private readonly winOperationService: WinOperationService,
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100; 
         this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3; 
-        this.logger = loggerFactory.create(DiscoveryScanService.name);  
+        this.logger = loggerFactory.create(DiscoveryScanService.name);
     }
 
 
@@ -55,6 +57,7 @@ export class DiscoveryScanService {
         const sourceContent = await this.getDirContents({path: sourcePath, jobContext, errorType, command});
         const isSMB = process.platform === 'win32';
         const lowerCaseSourceDirs = new Set<string>();
+        const shouldScanADS = jobContext.jobConfig?.scanADS;
         try {
             for (const item of sourceContent) {
                 const sourceContentPath = path.join(sourcePath, item.name);
@@ -74,8 +77,8 @@ export class DiscoveryScanService {
                 this.logger.debug(`FileType for path ${sourceContentPath} is ${fileType}`);
 
                 await this.publishFileInfo({
-                    stats: sourceStat, command, jobContext, fPath: sourceContentPath, relativeSourcePath, fileType
-                });
+                    stats: sourceStat, command, jobContext, fPath: sourceContentPath, relativeSourcePath, fileType, shouldScanADS
+                });              
 
                 if (sourceStat.isDirectory()) {
                     if(sourceStat.isSymbolicLink() ) continue;
@@ -104,16 +107,13 @@ export class DiscoveryScanService {
         return output;
     }
     
-    
-    async publishFileInfo({ jobContext, stats, fPath, relativeSourcePath, fileType }: PublishItemInfoInput): Promise<void> {
-        const isDirectory = stats.isDirectory();
-        const sourceMeta: ItemMeta = {
+    getItemInfo(stats: fs.Stats, fPath: string, relativeSourcePath: string, fileType:FileType , isDirectory: boolean, fileSize: number): ItemInfo{
+         const sourceMeta: ItemMeta = {
             accessTime: stats.atime,
             birthTime: stats.birthtime,
             modifiedTime: stats.mtime,
             permission: getFilePermissions(stats, isDirectory),
         };
-
         const itemInfo = new ItemInfo(
             relativeSourcePath,
             isDirectory,
@@ -123,11 +123,37 @@ export class DiscoveryScanService {
             fileType,
             sourceMeta,
             sourceMeta,
-            stats.size,
+            fileSize,
             stats.ino,
             false
         );
+        return itemInfo;
 
-        await jobContext.publishToFileStream(itemInfo);
+    }
+    
+    async publishFileInfo({ jobContext, command, stats, fPath, relativeSourcePath, fileType, shouldScanADS }: PublishItemInfoInput): Promise<void> {
+        const isDirectory = stats.isDirectory();
+        const itemInfo = this.getItemInfo(stats, fPath, relativeSourcePath, fileType, isDirectory, stats.size);        
+        try {
+            await jobContext.publishToFileStream(itemInfo);
+            if(process.platform === 'win32' && shouldScanADS){           
+                const adsInfo = await this.winOperationService.detectADSInfo(jobContext, command, fPath);            
+                if (!adsInfo.hasADS) {
+                    return;
+                }
+                const items = [];
+                // Publish each ADS stream as a separate inventory item
+                for (let i = 0; i < adsInfo.streamNames.length; i++) {
+                    const streamName = adsInfo.streamNames[i];
+                    const streamSize = adsInfo.streamSizes[i];
+                    const streamRelativePath = `${relativeSourcePath}:${streamName}`;                
+                    items.push(this.getItemInfo(stats, fPath, streamRelativePath, FileType.STREAM, isDirectory, streamSize));                
+                }
+                await jobContext.publishToFileStreamBulk(items);
+            }        
+        }catch (error) {              
+                this.logger.error(`Failed to publish file stream info ${relativeSourcePath}: ${error.message}`);                
+                throw error;
+            } 
     }
 }
