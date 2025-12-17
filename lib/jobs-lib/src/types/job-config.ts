@@ -12,7 +12,7 @@ export class JobConfig implements Serializable {
   destinationPath?: string;
   options?:Options;
   skipDelete?: boolean //  Set to true for incremental or cutover jobs. When true, target files will be deleted if they are not present in the source.
-  scanADS?:boolean; // Set to true to scan Alternate Data Streams (ADS) on NTFS file systems.
+  
 
   constructor(
     jobId: string,
