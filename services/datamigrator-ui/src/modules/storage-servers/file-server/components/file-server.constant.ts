@@ -40,11 +40,11 @@ export const NFS_CREDENTIALS_VALIDATION_SCHEMA = Yup.object().shape({
 
 export const SMB_CREDENTIALS_VALIDATION_SCHEMA = Yup.object().shape({
   userName: Yup.string().required("SMB Username is required"),
+  password: Yup.string().required("SMB Password is required"),
   protocolVersion: Yup.object({
-    label: Yup.string().required("Label is required"),
-    value: Yup.string().required("Value is required"),
-  }).required("Version is required"),
-  password: Yup.string().required("Password is required"),
+    label: Yup.string(),
+    value: Yup.string(),
+  }).optional(),
   protocol: Yup.string()
     .oneOf(["SMB"], "Invalid protocol selected")
     .required("Protocol selection is required"),
@@ -135,8 +135,8 @@ export const INITIAL_VALUE_NFS_CREDENTIALS_FORM = {
   password: "",
   protocol: "NFS",
   protocolVersion: {
-    label: "",
-    value: "",
+    label: "v3",
+    value: "v3",
   },
   exportPathSource: EXPORT_PATH_SOURCE_ENUM.AUTO_DISCOVER,
 };

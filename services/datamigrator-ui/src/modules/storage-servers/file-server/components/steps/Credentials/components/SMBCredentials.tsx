@@ -49,6 +49,7 @@ const SMBCredentials = () => {
           label="Protocol Version"
           name="protocolVersion"
           placeholder="Protocol Version"
+          isOptional
           form={smbCredentialsForm}
           disabled={isDisabled}
           options={SMB_PROTOCOL_VERSION_OPTIONS}
