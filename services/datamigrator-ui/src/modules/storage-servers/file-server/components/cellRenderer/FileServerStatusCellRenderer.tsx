@@ -6,6 +6,11 @@ import { Popover } from "@netapp/bxp-design-system-react";
 const FileServerStatusCellRenderer = ({
   row,
 }: BlueXpTableRowType<any, any>) => {
+  // Dell Isilon parent rows don't have status - show dash
+  if (row?._isDellIsilonParent) {
+    return <Box>-</Box>;
+  }
+
   const statusStyleMap: Record<FILE_SERVER_STATUS_ENUM, string> = {
     [FILE_SERVER_STATUS_ENUM.ACTIVE]: "bg-chart-5",
     [FILE_SERVER_STATUS_ENUM.IN_PROGRESS]: "bg-icon-primary",
