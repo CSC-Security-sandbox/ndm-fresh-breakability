@@ -702,7 +702,7 @@ export class ConfigurationService {
         sanitizedConfigName,
       );
 
-      // Step 2: Create File Servers with management_server_id link
+     
       const fileServerPromises = createConfig.fileServers.map(
         async (fileServer) => {
           const workers = await this.WorkerEntity.find({
@@ -733,6 +733,7 @@ export class ConfigurationService {
             isRefreshed: false,
             volumes: [],
             exportPathSource: fileServer.exportPathSource,
+            zone_id: fileServer.zone_id,
           });
         },
       );
@@ -761,6 +762,7 @@ export class ConfigurationService {
             password: createConfig.managementPassword,
             tlsAccepted: createConfig.tlsAccepted,
             tlsCaCertificate: createConfig.tlsCertificate,
+            tlsExpiry: createConfig.tlsExpiry,
           });
           break;
         default:
@@ -771,6 +773,7 @@ export class ConfigurationService {
             status: hasWorkers ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT,
             fileServers: await Promise.all(fileServerPromises),
             createdBy: userId,
+            serverType: createConfig.serverType,
           });
           break;
       }
@@ -872,11 +875,23 @@ export class ConfigurationService {
       config.configType = updateConfig.configType;
       config.createdBy = updateConfig.createdBy || userId;
       config.updatedBy = userId;
+      config.serverType = updateConfig.serverType;
       config.status = hasWorkers
         ? hasPathName
           ? ConfigStatus.IN_PROGRESS
           : ConfigStatus.ACTIVE
         : ConfigStatus.DRAFT;
+
+      // Update Dell serverType specific fields
+      if (updateConfig.serverType === ServerType.dell) {
+        config.hostname = updateConfig.managementHost;
+        config.port = updateConfig.managementPort;
+        config.username = updateConfig.managementUsername;
+        config.password = updateConfig.managementPassword;
+        config.tlsAccepted = updateConfig.tlsAccepted;
+        config.tlsCaCertificate = updateConfig.tlsCertificate;
+        config.tlsExpiry = updateConfig.tlsExpiry;
+      }
 
       const fileServerPromises = config.fileServers.map(async (fileServer) => {
         const update = updateConfig.fileServers.find(
@@ -914,6 +929,7 @@ export class ConfigurationService {
         return this.fileServerEntity.create({
           id: fileServer.id,
           host: update.host.trim(),
+          fileServerName: update.fileServerName,
           serverType: fileServer.serverType,
           workers: workers,
           createdBy: fileServer.createdBy,
@@ -925,6 +941,7 @@ export class ConfigurationService {
           updatedBy: userId,
           isRefreshed: false,
           exportPathSource: update.exportPathSource,
+          zone_id: update.zone_id,
         });
       });
 
