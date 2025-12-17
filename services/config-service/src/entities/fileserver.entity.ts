@@ -1,4 +1,5 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { IsNumber, IsOptional } from "class-validator";
 import { Column, Entity, JoinColumn, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 import { ExportPathSource, Protocol, ProtocolVersion, ServerType } from "src/constants/enums";
 import { Base } from "./base.entity";
@@ -40,7 +41,7 @@ export class FileServerEntity extends Base {
 
     @ApiProperty({ description: 'password' })
     @Column({ type: 'text', nullable: true,  name:'password' })
-    password: string;
+    password: string; 
 
     @ApiProperty({ description: 'configId' })
     @Column({ type: 'uuid', nullable:true,  name: 'config_id'})
@@ -81,5 +82,11 @@ export class FileServerEntity extends Base {
 
     @OneToMany(() => PathUploadsEntity, (upload) => upload.fileServer)
     uploads: PathUploadsEntity[];
+
+    @ApiPropertyOptional({ description: 'zone_id', example: 1 })
+    @Column({ type: 'integer', nullable: true, name: 'zone_id' })
+    @IsNumber()
+    @IsOptional()
+    zone_id?: number;
 
 }
