@@ -245,6 +245,40 @@ export const configApi = createApi({
         return response?.data?.items || response?.data || response || {};
       },
     }),
+
+    // Fetch Zones from Dell Isilon
+    fetchZones: builder.mutation<
+      {
+        zones: Array<{
+          zoneName: string;
+          ipAddresses: string[];
+        }>;
+        totalZones: number;
+        totalIpAddresses: number;
+      },
+      {
+        serverType: string;
+        host: string;
+        port?: number;
+        username: string;
+        password: string;
+        certificate: string;
+      }
+    >({
+      query: (body) => ({
+        url: `servers/fetch-zones`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: any) => {
+        return (
+          response?.data?.items ||
+          response?.data ||
+          response ||
+          { zones: [], totalZones: 0, totalIpAddresses: 0 }
+        );
+      },
+    }),
   }),
 });
 
@@ -270,4 +304,5 @@ export const {
   useFetchProjectWithWorkerQuery,
   useFetchCertificateMutation,
   useCreateManagementServerMutation,
+  useFetchZonesMutation,
 } = configApi;
