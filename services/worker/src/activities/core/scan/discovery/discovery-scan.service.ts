@@ -57,7 +57,7 @@ export class DiscoveryScanService {
         const sourceContent = await this.getDirContents({path: sourcePath, jobContext, errorType, command});
         const isSMB = process.platform === 'win32';
         const lowerCaseSourceDirs = new Set<string>();
-        const shouldScanADS = jobContext.jobConfig?.scanADS;
+        const shouldScanADS = jobContext.jobConfig?.options?.shouldScanADS || false;
         try {
             for (const item of sourceContent) {
                 const sourceContentPath = path.join(sourcePath, item.name);
