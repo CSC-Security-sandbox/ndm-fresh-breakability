@@ -60,6 +60,11 @@ export class FileServersDTO {
     @IsOptional()
     password?: string;
 
+    @ApiPropertyOptional({ description: 'zone_id', example: 1 })
+    @IsNumber()
+    @IsOptional()
+    zone_id?: number;
+
     @ApiProperty({ description: 'Array of Worker IDs', type: [String] , example: ['4160b89b-bb37-48e0-81bb-16a027622d2e']})
     @IsArray()
     @IsUUID('all', { each: true })
@@ -144,6 +149,10 @@ export class ConfigDTO {
     @IsString()
     @IsOptional()
     tlsCertificate?: string;
+
+    @ApiPropertyOptional({ description: 'TLS Expiry Date', example: '2025-12-31' })
+    @IsOptional()
+    tlsExpiry?: Date;
 }
 
 // ==================== TLS Certificate DTOs ==================== //
