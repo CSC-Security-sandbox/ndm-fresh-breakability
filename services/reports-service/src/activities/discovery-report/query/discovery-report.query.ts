@@ -135,6 +135,7 @@ export const FILE_SYSTEM_DISTRIBUTION = (schema: string) => `
                 SELECT COUNT(1) as link_count
                 FROM ${schema}.inventory i2
                 WHERE i2.job_run_id = $1
+                    AND i2.file_type <> 'STREAM'
                     AND i2.inode IS NOT NULL
                 GROUP BY i2.inode
                 HAVING COUNT(1) > 1

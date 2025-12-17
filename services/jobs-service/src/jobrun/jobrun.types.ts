@@ -28,7 +28,8 @@ export interface JobRunConfig{
     jobType: JobType,
     excludeFilePatterns?: string,
     excludeOlderThan?: Date,
-    preserveAccessTime: boolean
+    preserveAccessTime: boolean,
+    shouldScanADS?: boolean,
     workers: string[],
     skipFile?: string,
     skipDelete?: boolean,
