@@ -64,6 +64,10 @@ export class ConfigEntity extends Base {
     @Column({ type: 'text', nullable: true, name: 'tls_ca_certificate' })
     tlsCaCertificate: string;
 
+    @ApiProperty({ description: 'TLS Expiry Date' })
+    @Column({ type: 'date', nullable: true, name: 'tls_expiry' })
+    tlsExpiry: Date;
+
     @OneToMany(()=> FileServerEntity, fileServers=>fileServers.config, { cascade: true,  eager: false})
     fileServers: FileServerEntity[]
 

@@ -2,7 +2,14 @@ ALTER TABLE datamigrator.file_server
 DROP COLUMN IF EXISTS status;
 
 ALTER TABLE datamigrator.file_server
+DROP COLUMN zone_id IF EXISTS status;
+
+ALTER TABLE datamigrator.file_server
 DROP COLUMN IF EXISTS file_server_name;
+
+
+ALTER TABLE datamigrator.config
+DROP COLUMN IF EXISTS tls_expiry;
 
 ALTER TABLE datamigrator.config
 DROP COLUMN IF EXISTS tls_ca_certificate;
