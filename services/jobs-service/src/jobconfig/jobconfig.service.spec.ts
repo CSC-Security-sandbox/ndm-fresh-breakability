@@ -1015,6 +1015,194 @@ describe("JobConfigService", () => {
     expect(jobConfigRepo.create).not.toHaveBeenCalled();
     expect(jobConfigRepo.save).toHaveBeenCalledWith([]);
   });
+
+  /**
+   * Test suite for shouldScanADS feature in bulk discovery
+   * 
+   * shouldScanADS enables scanning of Alternate Data Streams (ADS) which is a Windows/NTFS feature.
+   * This option is only valid for SMB protocol sources.
+   */
+  describe('createBulkDiscovery - shouldScanADS validation', () => {
+    it('should create bulk discovery job with shouldScanADS enabled for SMB source', async () => {
+      const mockBulkDiscovery = {
+        sourcePathIds: ['smbPath1'],
+        excludeFilePatterns: '*.tmp',
+        preserveAccessTime: true,
+        shouldScanADS: true,
+        excludeOlderThan: new Date('2025-04-04T13:01:08.226Z'),
+        firstRunAt: new Date('2025-04-04T13:01:08.226Z'),
+        createdBy: 'user1',
+      };
+
+      const mockSmbVolumes = [
+        {
+          id: 'smbPath1',
+          fileServer: { protocol: Protocol.SMB },
+        },
+      ];
+
+      const mockJobConfigEntity = {
+        status: JobStatus.Active,
+        excludeFilePatterns: '*.tmp',
+        jobType: JobType.DISCOVER,
+        preserveAccessTime: true,
+        shouldScanADS: true,
+        sourcePathId: 'smbPath1',
+        excludeOlderThan: new Date('2025-04-04T13:01:08.226Z'),
+        firstRunAt: new Date('2025-04-04T13:01:08.226Z'),
+        scheduler: ScheduleStatus.SCHEDULING,
+        createdBy: 'user1',
+      };
+
+      jest.spyOn(volumeRepo, 'find').mockResolvedValue(mockSmbVolumes as any);
+      jest.spyOn(jobConfigRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(jobConfigRepo, 'update').mockResolvedValue({ affected: 0 } as any);
+      jest.spyOn(jobConfigRepo, 'create').mockImplementation((data) => data as any);
+      jest.spyOn(jobConfigRepo, 'save').mockResolvedValue([mockJobConfigEntity] as any);
+
+      const result = await service.createBulkDiscovery(mockBulkDiscovery as any);
+
+      expect(result).toEqual([mockJobConfigEntity]);
+      expect(volumeRepo.find).toHaveBeenCalledWith({
+        where: { id: In(['smbPath1']) },
+        relations: ['fileServer'],
+      });
+      expect(jobConfigRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          shouldScanADS: true,
+        })
+      );
+    });
+
+    it('should throw BadRequestException when shouldScanADS is true for NFS source', async () => {
+      const mockBulkDiscovery = {
+        sourcePathIds: ['nfsPath1'],
+        excludeFilePatterns: '*.tmp',
+        preserveAccessTime: true,
+        shouldScanADS: true,
+        excludeOlderThan: new Date(),
+        firstRunAt: new Date(),
+        createdBy: 'user1',
+      };
+
+      const mockNfsVolumes = [
+        {
+          id: 'nfsPath1',
+          volumePath: '/nfs/share',
+          fileServer: { protocol: Protocol.NFS },
+        },
+      ];
+
+      jest.spyOn(volumeRepo, 'find').mockResolvedValue(mockNfsVolumes as any);
+
+      await expect(service.createBulkDiscovery(mockBulkDiscovery as any)).rejects.toThrow(
+        new BadRequestException('shouldScanADS option is only supported for SMB protocol sources')
+      );
+    });
+
+    it('should throw BadRequestException when shouldScanADS is true for mixed protocol sources', async () => {
+      const mockBulkDiscovery = {
+        sourcePathIds: ['smbPath1', 'nfsPath1'],
+        excludeFilePatterns: '*.tmp',
+        preserveAccessTime: true,
+        shouldScanADS: true,
+        excludeOlderThan: new Date(),
+        firstRunAt: new Date(),
+        createdBy: 'user1',
+      };
+
+      const mockMixedVolumes = [
+        {
+          id: 'smbPath1',
+          volumePath: '\\\\server\\share',
+          fileServer: { protocol: Protocol.SMB },
+        },
+        {
+          id: 'nfsPath1',
+          volumePath: '/nfs/share',
+          fileServer: { protocol: Protocol.NFS },
+        },
+      ];
+
+      jest.spyOn(volumeRepo, 'find').mockResolvedValue(mockMixedVolumes as any);
+
+      await expect(service.createBulkDiscovery(mockBulkDiscovery as any)).rejects.toThrow(
+        new BadRequestException('shouldScanADS option is only supported for SMB protocol sources')
+      );
+    });
+
+    it('should create bulk discovery job with shouldScanADS defaulting to false when not provided', async () => {
+      const mockBulkDiscovery = {
+        sourcePathIds: ['path1'],
+        excludeFilePatterns: '*.tmp',
+        preserveAccessTime: true,
+        // shouldScanADS not provided - should default to false
+        excludeOlderThan: new Date('2025-04-04T13:01:08.226Z'),
+        firstRunAt: new Date('2025-04-04T13:01:08.226Z'),
+        createdBy: 'user1',
+      };
+
+      const mockJobConfigEntity = {
+        status: JobStatus.Active,
+        excludeFilePatterns: '*.tmp',
+        jobType: JobType.DISCOVER,
+        preserveAccessTime: true,
+        shouldScanADS: false,
+        sourcePathId: 'path1',
+        excludeOlderThan: new Date('2025-04-04T13:01:08.226Z'),
+        firstRunAt: new Date('2025-04-04T13:01:08.226Z'),
+        scheduler: ScheduleStatus.SCHEDULING,
+        createdBy: 'user1',
+      };
+
+      jest.spyOn(jobConfigRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(jobConfigRepo, 'update').mockResolvedValue({ affected: 0 } as any);
+      jest.spyOn(jobConfigRepo, 'create').mockImplementation((data) => data as any);
+      jest.spyOn(jobConfigRepo, 'save').mockResolvedValue([mockJobConfigEntity] as any);
+
+      const result = await service.createBulkDiscovery(mockBulkDiscovery as any);
+
+      expect(result).toEqual([mockJobConfigEntity]);
+      expect(jobConfigRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          shouldScanADS: false,
+        })
+      );
+    });
+
+    it('should skip SMB validation when shouldScanADS is false', async () => {
+      const mockBulkDiscovery = {
+        sourcePathIds: ['nfsPath1'],
+        excludeFilePatterns: '*.tmp',
+        preserveAccessTime: true,
+        shouldScanADS: false,
+        excludeOlderThan: new Date('2025-04-04T13:01:08.226Z'),
+        firstRunAt: new Date('2025-04-04T13:01:08.226Z'),
+        createdBy: 'user1',
+      };
+
+      const mockJobConfigEntity = {
+        status: JobStatus.Active,
+        excludeFilePatterns: '*.tmp',
+        jobType: JobType.DISCOVER,
+        preserveAccessTime: true,
+        shouldScanADS: false,
+        sourcePathId: 'nfsPath1',
+      };
+
+      jest.spyOn(jobConfigRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(jobConfigRepo, 'update').mockResolvedValue({ affected: 0 } as any);
+      jest.spyOn(jobConfigRepo, 'create').mockImplementation((data) => data as any);
+      jest.spyOn(jobConfigRepo, 'save').mockResolvedValue([mockJobConfigEntity] as any);
+
+      const result = await service.createBulkDiscovery(mockBulkDiscovery as any);
+
+      expect(result).toEqual([mockJobConfigEntity]);
+      // volumeRepo.find should NOT be called when shouldScanADS is false
+      expect(volumeRepo.find).not.toHaveBeenCalled();
+    });
+  });
+
   it("should create bulk migrate job configs successfully", async () => {
     const mockBulkMigrate = {
       migrateConfigs: [

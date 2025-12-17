@@ -16,6 +16,7 @@ import {
   JobRunStatus,
   JobStatus,
   JobType,
+  Protocol,
   SIZE_UNITS,
   TemplateType,
   JobConfigurationEnum,
@@ -148,6 +149,25 @@ export class JobConfigService {
     bulkDiscovery: JobConfigDiscoverBulk
   ): Promise<JobConfigEntity[]> {
     const firstRunAt = bulkDiscovery?.firstRunAt ?? new Date();
+
+    // Validate shouldScanADS is only enabled for SMB protocol sources
+    if (bulkDiscovery.shouldScanADS === true) {
+      const volumes = await this.volumeRepo.find({
+        where: { id: In(bulkDiscovery.sourcePathIds) },
+        relations: ['fileServer'],
+      });
+      
+      const nonSmbPaths = volumes.filter(
+        (vol) => vol.fileServer?.protocol !== Protocol.SMB
+      );
+      
+      if (nonSmbPaths.length > 0) {
+        throw new BadRequestException(
+          'shouldScanADS option is only supported for SMB protocol sources'
+        );
+      }
+    }
+
     const existingList = await this.jobConfigRepo.find({
       where: {
         jobType: JobType.DISCOVER,
@@ -168,6 +188,7 @@ export class JobConfigService {
       {
         excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
         preserveAccessTime: bulkDiscovery.preserveAccessTime,
+        shouldScanADS: bulkDiscovery.shouldScanADS ?? false,
         excludeOlderThan: bulkDiscovery.excludeOlderThan,
         firstRunAt: firstRunAt,
         status: JobStatus.Active,
@@ -186,6 +207,7 @@ export class JobConfigService {
             excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
             jobType: JobType.DISCOVER,
             preserveAccessTime: bulkDiscovery.preserveAccessTime,
+            shouldScanADS: bulkDiscovery.shouldScanADS ?? false,
             sourcePathId: path,
             excludeOlderThan: bulkDiscovery.excludeOlderThan,
             firstRunAt: firstRunAt,

@@ -30,6 +30,11 @@ export class JobConfigDto {
   @IsBoolean()
   preserveAccessTime?: boolean;
 
+  @ApiProperty({ description: 'Scan Alternate Data Streams flag (Windows/SMB only)', example: false, required: false })
+  @IsOptional()
+  @IsBoolean()
+  shouldScanADS?: boolean;
+
   @ApiProperty({ description: 'Job schedule configuration', example: new Date().toISOString() })
   @IsOptional()
   @Type(() => Date)
