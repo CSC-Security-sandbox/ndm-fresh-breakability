@@ -11,6 +11,10 @@ const FileServerStatusCellRenderer = ({
     return <Box>-</Box>;
   }
 
+  // Dell Isilon child rows - use status directly from row if available
+  // Child rows may inherit status from parent config or have their own
+  const status = row?.status;
+
   const statusStyleMap: Record<FILE_SERVER_STATUS_ENUM, string> = {
     [FILE_SERVER_STATUS_ENUM.ACTIVE]: "bg-chart-5",
     [FILE_SERVER_STATUS_ENUM.IN_PROGRESS]: "bg-icon-primary",

@@ -308,7 +308,11 @@ export class FetchZonesRequestDTO {
  * Zone with IP Addresses DTO - represents a zone with its IP addresses
  */
 export class IsilonZoneDTO {
-    @ApiProperty({ description: 'Zone name/ID', example: 'System' })
+    @ApiProperty({ description: 'Numeric zone ID', example: 1 })
+    @IsNumber()
+    zoneId: number;
+
+    @ApiProperty({ description: 'Zone name', example: 'System' })
     @IsString()
     zoneName: string;
 
