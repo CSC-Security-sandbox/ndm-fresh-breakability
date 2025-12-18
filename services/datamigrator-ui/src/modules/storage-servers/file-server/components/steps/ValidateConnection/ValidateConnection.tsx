@@ -32,6 +32,8 @@ const ValidateConnection = () => {
     setSelectedWorkerIds,
     zoneWorkerAssignments,
     setZoneWorkerAssignments,
+    activeZoneId,
+    setActiveZoneId,
   } = useContext(CommonFileServerContext);
 
   const { selectedProjectId } = useSelectedProjectId();
@@ -56,8 +58,7 @@ const ValidateConnection = () => {
     };
   }, [workersListTableStateProps]);
 
-  // Track currently selected zone in sidebar (for Dell Isilon)
-  const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
+  // Initialize activeZoneId when zones are selected (use context's setActiveZoneId)
 
   // Initialize activeZoneId when zones are selected
   useEffect(() => {
