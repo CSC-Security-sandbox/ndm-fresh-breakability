@@ -10,12 +10,6 @@ import { useFileServerForm } from "@modules/storage-servers/file-server/context/
 import { ComponentType } from "react";
 import { useNavigate } from "react-router-dom";
 
-// Hardcoded Dell Isilon zones (should be moved to shared constant)
-const DELL_ISILON_ZONES = [
-  { id: "zone1", name: "Zone1" },
-  { id: "zone2", name: "Zone2" },
-];
-
 export function withCreateFileServer(WrappedComponent: ComponentType<any>) {
   return function WithCreateFileServerComponent(props: any) {
     const { selectedProjectId } = useSelectedProjectId();
@@ -70,6 +64,12 @@ export function withCreateFileServer(WrappedComponent: ComponentType<any>) {
 
     // Create Dell Isilon file servers (multiple entries for zones)
     const handleCreateDellIsilonConfiguration = async () => {
+      // Build zone metadata from selectedZoneIds - zone name IS the zone ID
+      const zonesMetadata = (fileServerForm.selectedZoneIds || []).map((zoneId: string) => ({
+        id: zoneId,
+        name: zoneId, // Zone name is the same as zone ID (zoneName from API)
+      }));
+      
       // Build Dell Isilon payload
       const dellPayload = createDellIsilonConfigPayload(
         selectedProjectId,
@@ -79,7 +79,7 @@ export function withCreateFileServer(WrappedComponent: ComponentType<any>) {
         fileServerForm.zoneCredentials || {},
         fileServerForm.zoneWorkerAssignments || {},
         fileServerForm.certificateData,
-        DELL_ISILON_ZONES
+        zonesMetadata
       );
       
       console.log("[Dell Isilon] Created payload:", dellPayload);

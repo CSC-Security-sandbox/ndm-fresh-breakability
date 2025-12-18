@@ -98,6 +98,8 @@ export const useFileServerForm = () => {
   const [selectedZoneIds, setSelectedZoneIds] = useState<string[]>([]);
   const [zoneCredentials, setZoneCredentials] = useState<Record<string, any>>({});
   const [zoneWorkerAssignments, setZoneWorkerAssignments] = useState<Record<string, { nfs: string[]; smb: string[] }>>({});
+  // Track currently active zone in the worker assignment sidebar (for Dell Isilon)
+  const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
 
   // API
   const [getAllWorkers, { isFetching }] = useLazyGetAllWorkersQuery();
@@ -495,5 +497,7 @@ export const useFileServerForm = () => {
     setZoneCredentials,
     zoneWorkerAssignments,
     setZoneWorkerAssignments,
+    activeZoneId,
+    setActiveZoneId,
   };
 };
