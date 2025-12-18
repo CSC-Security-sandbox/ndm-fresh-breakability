@@ -1,0 +1,1153 @@
+name: AWS Image Export & SHA256 Generation
+
+on:
+  workflow_dispatch:
+    inputs:
+      cp_ami_id:
+        description: "Control Plane AMI ID (e.g., ami-xxxxx)"
+        required: true
+        type: string
+      worker_ami_id:
+        description: "Worker Node AMI ID (e.g., ami-yyyyy)"
+        required: true
+        type: string
+      export_prefix:
+        description: "Export folder prefix (e.g., preview-dryrun)"
+        required: false
+        default: "releases"
+
+env:
+  AWS_REGION: us-east-1
+  S3_BUCKET: dk-test-workflow
+  EXPORT_FORMAT: VHD
+  LOCAL_EXPORT_PATH: /home/ubuntu/
+  SCRATCH_SPACE: /mnt/scratch_space
+  NSS_HOST: cyclortp7.rtp.openeng.netapp.com
+  NSS_PATH: /x/eng/NDM/
+
+jobs:
+  aws-image-export:
+    runs-on: openlab
+    outputs:
+      worker_vhd: ${{ steps.set-outputs.outputs.worker_vhd }}
+      controlplane_vhd: ${{ steps.set-outputs.outputs.controlplane_vhd }}
+      export_prefix: ${{ steps.set-outputs.outputs.export_prefix }}
+      timestamp: ${{ steps.set-outputs.outputs.timestamp }}
+
+    steps:
+      - name: Install sshpass
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y sshpass
+
+      - name: Execute AWS Operations
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+        run: |
+          sshpass -p "$RUNNER_PASSWORD" ssh -o StrictHostKeyChecking=no ubuntu@10.192.7.66 << 'ENDSSH'
+          set -e
+          
+          CP_AMI="${{ github.event.inputs.cp_ami_id }}"
+          WORKER_AMI="${{ github.event.inputs.worker_ami_id }}"
+          EXPORT_PREFIX="${{ github.event.inputs.export_prefix }}"
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          LOCAL_PATH="${{ env.LOCAL_EXPORT_PATH }}"
+          SCRATCH_SPACE="${{ env.SCRATCH_SPACE }}"
+          CHECKSUM_FILE="AWS_SHA256SUMS-${TIMESTAMP}.sha256"
+          
+          # Validate AMIs exist
+          echo "Validating Control Plane AMI: $CP_AMI"
+          CP_AMI_INFO=$(aws ec2 describe-images \
+            --region ${{ env.AWS_REGION }} \
+            --image-ids "$CP_AMI" \
+            --query 'Images[0].[Name,State,Architecture]' \
+            --output text 2>/dev/null || echo "")
+          
+          if [ -z "$CP_AMI_INFO" ]; then
+            echo "❌ Control Plane AMI $CP_AMI not found"
+            exit 1
+          fi
+          echo "✅ Control Plane AMI found: $CP_AMI_INFO"
+          
+          echo "Validating Worker Node AMI: $WORKER_AMI"
+          WORKER_AMI_INFO=$(aws ec2 describe-images \
+            --region ${{ env.AWS_REGION }} \
+            --image-ids "$WORKER_AMI" \
+            --query 'Images[0].[Name,State,Architecture]' \
+            --output text 2>/dev/null || echo "")
+          
+          if [ -z "$WORKER_AMI_INFO" ]; then
+            echo "❌ Worker Node AMI $WORKER_AMI not found"
+            exit 1
+          fi
+          echo "✅ Worker Node AMI found: $WORKER_AMI_INFO"
+          
+          # Export Worker Node AMI
+          echo "Exporting Worker Node AMI: $WORKER_AMI"
+          WORKER_S3_PREFIX="${EXPORT_PREFIX}/aws/worker-node"
+          
+          WORKER_EXPORT_TASK=$(aws ec2 export-image \
+            --region ${{ env.AWS_REGION }} \
+            --image-id "$WORKER_AMI" \
+            --disk-image-format ${{ env.EXPORT_FORMAT }} \
+            --s3-export-location S3Bucket=${{ env.S3_BUCKET }},S3Prefix=$WORKER_S3_PREFIX \
+            --tag-specifications "ResourceType=export-image-task,Tags=[{Key=Component,Value=worker-node},{Key=ExportPrefix,Value=${EXPORT_PREFIX}},{Key=Timestamp,Value=${TIMESTAMP}}]" \
+            --query 'ExportImageTaskId' \
+            --output text)
+          
+          echo "Worker Export Task ID: $WORKER_EXPORT_TASK"
+          
+          # Export Control Plane AMI
+          echo "Exporting Control Plane AMI: $CP_AMI"
+          CP_S3_PREFIX="${EXPORT_PREFIX}/aws/control-plane"
+          
+          CP_EXPORT_TASK=$(aws ec2 export-image \
+            --region ${{ env.AWS_REGION }} \
+            --image-id "$CP_AMI" \
+            --disk-image-format ${{ env.EXPORT_FORMAT }} \
+            --s3-export-location S3Bucket=${{ env.S3_BUCKET }},S3Prefix=$CP_S3_PREFIX \
+            --tag-specifications "ResourceType=export-image-task,Tags=[{Key=Component,Value=control-plane},{Key=ExportPrefix,Value=${EXPORT_PREFIX}},{Key=Timestamp,Value=${TIMESTAMP}}]" \
+            --query 'ExportImageTaskId' \
+            --output text)
+          
+          echo "Control Plane Export Task ID: $CP_EXPORT_TASK"
+          
+          # Monitor Worker Node export
+          echo "Monitoring Worker Node Export..."
+          MAX_WAIT=7200  # 2 hours
+          ELAPSED=0
+          SLEEP_INTERVAL=30
+          
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            WORKER_STATUS=$(aws ec2 describe-export-image-tasks \
+              --region ${{ env.AWS_REGION }} \
+              --export-image-task-ids $WORKER_EXPORT_TASK \
+              --query 'ExportImageTasks[0].[Status,StatusMessage,Progress]' \
+              --output text 2>/dev/null || echo "UNKNOWN")
+            
+            WORKER_TASK_STATUS=$(echo "$WORKER_STATUS" | awk '{print $1}')
+            WORKER_PROGRESS=$(echo "$WORKER_STATUS" | awk '{print $3}')
+            
+            echo "Worker status: $WORKER_TASK_STATUS | Progress: ${WORKER_PROGRESS}% | ${ELAPSED}s"
+            
+            if [ "$WORKER_TASK_STATUS" = "completed" ]; then
+              echo "✅ Worker export completed (${ELAPSED}s)"
+              
+              WORKER_S3_KEY=$(aws ec2 describe-export-image-tasks \
+                --region ${{ env.AWS_REGION }} \
+                --export-image-task-ids $WORKER_EXPORT_TASK \
+                --query 'ExportImageTasks[0].S3ExportLocation.S3Key' \
+                --output text)
+              
+              WORKER_VHD=$(basename "$WORKER_S3_KEY")
+              echo "Worker VHD: $WORKER_VHD"
+              break
+            elif [ "$WORKER_TASK_STATUS" = "cancelled" ] || [ "$WORKER_TASK_STATUS" = "cancelling" ] || [ "$WORKER_TASK_STATUS" = "deleted" ]; then
+              echo ""
+              echo "=========================================="
+              echo "Worker Export Failed: $WORKER_TASK_STATUS"
+              echo "=========================================="
+              echo ""
+              echo "Status Message:"
+              echo "$WORKER_STATUS" | awk '{print $2}'
+              echo ""
+              exit 1
+            fi
+            
+            sleep $SLEEP_INTERVAL
+            ELAPSED=$((ELAPSED + SLEEP_INTERVAL))
+          done
+          
+          if [ $ELAPSED -ge $MAX_WAIT ]; then
+            echo "❌ Worker export timeout after $MAX_WAIT seconds"
+            exit 1
+          fi
+          
+          # Monitor Control Plane export
+          echo "Monitoring Control Plane Export..."
+          ELAPSED=0
+          
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            CP_STATUS=$(aws ec2 describe-export-image-tasks \
+              --region ${{ env.AWS_REGION }} \
+              --export-image-task-ids $CP_EXPORT_TASK \
+              --query 'ExportImageTasks[0].[Status,StatusMessage,Progress]' \
+              --output text 2>/dev/null || echo "UNKNOWN")
+            
+            CP_TASK_STATUS=$(echo "$CP_STATUS" | awk '{print $1}')
+            CP_PROGRESS=$(echo "$CP_STATUS" | awk '{print $3}')
+            
+            echo "CP status: $CP_TASK_STATUS | Progress: ${CP_PROGRESS}% | ${ELAPSED}s"
+            
+            if [ "$CP_TASK_STATUS" = "completed" ]; then
+              echo "✅ Control Plane export completed (${ELAPSED}s)"
+              
+              CP_S3_KEY=$(aws ec2 describe-export-image-tasks \
+                --region ${{ env.AWS_REGION }} \
+                --export-image-task-ids $CP_EXPORT_TASK \
+                --query 'ExportImageTasks[0].S3ExportLocation.S3Key' \
+                --output text)
+              
+              CP_VHD=$(basename "$CP_S3_KEY")
+              echo "Control Plane VHD: $CP_VHD"
+              break
+            elif [ "$CP_TASK_STATUS" = "cancelled" ] || [ "$CP_TASK_STATUS" = "cancelling" ] || [ "$CP_TASK_STATUS" = "deleted" ]; then
+              echo ""
+              echo "=========================================="
+              echo "Control Plane Export Failed: $CP_TASK_STATUS"
+              echo "=========================================="
+              echo ""
+              echo "Status Message:"
+              echo "$CP_STATUS" | awk '{print $2}'
+              echo ""
+              exit 1
+            fi
+            
+            sleep $SLEEP_INTERVAL
+            ELAPSED=$((ELAPSED + SLEEP_INTERVAL))
+          done
+          
+          if [ $ELAPSED -ge $MAX_WAIT ]; then
+            echo "❌ Control Plane export timeout after $MAX_WAIT seconds"
+            exit 1
+          fi
+          
+          # Download from S3
+          echo "Downloading from S3..."
+          mkdir -p "$LOCAL_PATH/$EXPORT_PREFIX/aws/worker-node"
+          mkdir -p "$LOCAL_PATH/$EXPORT_PREFIX/aws/control-plane"
+          
+          echo "Downloading Worker Node VHD..."
+          aws s3 cp \
+            "s3://${{ env.S3_BUCKET }}/$WORKER_S3_PREFIX/$WORKER_VHD" \
+            "$LOCAL_PATH/$EXPORT_PREFIX/aws/worker-node/$WORKER_VHD" \
+            --region ${{ env.AWS_REGION }} \
+            --no-progress
+          
+          echo "Downloading Control Plane VHD..."
+          aws s3 cp \
+            "s3://${{ env.S3_BUCKET }}/$CP_S3_PREFIX/$CP_VHD" \
+            "$LOCAL_PATH/$EXPORT_PREFIX/aws/control-plane/$CP_VHD" \
+            --region ${{ env.AWS_REGION }} \
+            --no-progress
+          
+          # Generate checksums
+          echo "Generating checksums..."
+          cd "$LOCAL_PATH/$EXPORT_PREFIX/aws"
+          
+          sha256sum "worker-node/$WORKER_VHD" "control-plane/$CP_VHD" > "${CHECKSUM_FILE}"
+          
+          # Upload checksum to S3
+          aws s3 cp \
+            "${CHECKSUM_FILE}" \
+            "s3://${{ env.S3_BUCKET }}/${EXPORT_PREFIX}/aws/${CHECKSUM_FILE}" \
+            --region ${{ env.AWS_REGION }}
+          
+          # Copy to scratch space
+          echo "Copying to scratch space..."
+          sudo mkdir -p "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/worker-node"
+          sudo mkdir -p "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/control-plane"
+          
+          sudo cp "worker-node/$WORKER_VHD" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/worker-node/"
+          sudo cp "control-plane/$CP_VHD" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/control-plane/"
+          sudo cp "${CHECKSUM_FILE}" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/"
+          
+          sudo chmod 644 "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws"/*
+          sudo chmod 644 "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/worker-node"/*
+          sudo chmod 644 "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/control-plane"/*
+          
+          echo "Export complete"
+          
+          # Save outputs to temp files
+          echo "$TIMESTAMP" > /tmp/aws_timestamp.txt
+          echo "$WORKER_VHD" > /tmp/aws_worker.txt
+          echo "$CP_VHD" > /tmp/aws_cp.txt
+          echo "$EXPORT_PREFIX" > /tmp/aws_prefix.txt
+          
+          ENDSSH
+
+      - name: Set Outputs
+        id: set-outputs
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+        run: |
+          # Read outputs from temp files via SSH
+          OUTPUT=$(sshpass -p "$RUNNER_PASSWORD" ssh -T -o StrictHostKeyChecking=no -o LogLevel=QUIET ubuntu@10.192.7.66 << 'ENDSSH'
+          cat /tmp/aws_timestamp.txt
+          cat /tmp/aws_worker.txt
+          cat /tmp/aws_cp.txt
+          cat /tmp/aws_prefix.txt
+          ENDSSH
+          )
+          
+          echo "Raw output from remote:"
+          echo "$OUTPUT"
+          
+          # Get only the last 4 lines (actual data, skip banner)
+          CLEAN_OUTPUT=$(echo "$OUTPUT" | tail -4)
+          
+          # Parse the output
+          TIMESTAMP=$(echo "$CLEAN_OUTPUT" | sed -n '1p')
+          WORKER_VHD=$(echo "$CLEAN_OUTPUT" | sed -n '2p')
+          CP_VHD=$(echo "$CLEAN_OUTPUT" | sed -n '3p')
+          EXPORT_PREFIX=$(echo "$CLEAN_OUTPUT" | sed -n '4p')
+          
+          # Set GitHub outputs
+          echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+          echo "worker_vhd=$WORKER_VHD" >> $GITHUB_OUTPUT
+          echo "controlplane_vhd=$CP_VHD" >> $GITHUB_OUTPUT
+          echo "export_prefix=$EXPORT_PREFIX" >> $GITHUB_OUTPUT
+          
+          # Display for verification
+          echo "Captured outputs:"
+          echo "  Timestamp: $TIMESTAMP"
+          echo "  Worker: $WORKER_VHD"
+          echo "  CP: $CP_VHD"
+          echo "  Prefix: $EXPORT_PREFIX"
+
+      - name: Display Summary
+        run: |
+          echo "=========================================="
+          echo "AWS Image Export Summary"
+          echo "=========================================="
+          echo ""
+          echo "Timestamp: ${{ steps.set-outputs.outputs.timestamp }}"
+          echo "Worker VHD: ${{ steps.set-outputs.outputs.worker_vhd }}"
+          echo "Control Plane VHD: ${{ steps.set-outputs.outputs.controlplane_vhd }}"
+          echo ""
+          echo "S3 Locations:"
+          echo "  Bucket: s3://${{ env.S3_BUCKET }}/${{ steps.set-outputs.outputs.export_prefix }}/aws/"
+          echo "  Worker: s3://${{ env.S3_BUCKET }}/${{ steps.set-outputs.outputs.export_prefix }}/aws/worker-node/${{ steps.set-outputs.outputs.worker_vhd }}"
+          echo "  CP: s3://${{ env.S3_BUCKET }}/${{ steps.set-outputs.outputs.export_prefix }}/aws/control-plane/${{ steps.set-outputs.outputs.controlplane_vhd }}"
+          echo ""
+          echo "Local Path: ${{ env.LOCAL_EXPORT_PATH }}/${{ steps.set-outputs.outputs.export_prefix }}/aws/"
+          echo "Scratch Space: ${{ env.SCRATCH_SPACE }}/${{ steps.set-outputs.outputs.export_prefix }}/aws/"
+          echo ""
+          echo "✅ Export completed successfully"
+
+
+
+
+# name: Master Release Orchestration
+
+# on:
+#   workflow_dispatch:
+#     inputs:
+#       export_prefix:
+#         description: 'Release folder name (e.g., v1.0.0, 2024-12-release)'
+#         required: true
+#         type: string
+      
+#       # BDS Scan
+#       run_bds_scan:
+#         description: 'Run BDS vulnerability scan?'
+#         required: false
+#         type: boolean
+#         default: true
+      
+#       # GCP
+#       run_gcp_export:
+#         description: 'Run GCP image export?'
+#         required: false
+#         type: boolean
+#         default: true
+#       worker_image_name_gcp:
+#         description: 'GCP Worker Image Name'
+#         required: false
+#         type: string
+#       controlplane_image_name_gcp:
+#         description: 'GCP Control Plane Image Name'
+#         required: false
+#         type: string
+      
+#       # Azure
+#       run_azure_export:
+#         description: 'Run Azure image export?'
+#         required: false
+#         type: boolean
+#         default: true
+#       worker_image_name_azure:
+#         description: 'Azure Worker Image Name'
+#         required: false
+#         type: string
+#       controlplane_image_name_azure:
+#         description: 'Azure Control Plane Image Name'
+#         required: false
+#         type: string
+      
+#       # vSphere
+#       run_vsphere_export:
+#         description: 'Run vSphere image export?'
+#         required: false
+#         type: boolean
+#         default: true
+#       worker_image_name_vsphere:
+#         description: 'vSphere Worker Image Name'
+#         required: false
+#         type: string
+#       controlplane_image_name_vsphere:
+#         description: 'vSphere Control Plane Image Name'
+#         required: false
+#         type: string
+      
+#       # AWS
+#       run_aws_export:
+#         description: 'Run AWS image export?'
+#         required: false
+#         type: boolean
+#         default: true
+#       cp_ami_id:
+#         description: 'AWS Control Plane AMI ID'
+#         required: false
+#         type: string
+#       worker_ami_id:
+#         description: 'AWS Worker AMI ID'
+#         required: false
+#         type: string
+
+# permissions:
+#   contents: read
+
+# jobs:
+#   orchestration-start:
+#     runs-on: ubuntu-latest
+#     outputs:
+#       export_prefix: ${{ github.event.inputs.export_prefix }}
+#       timestamp: ${{ steps.set-timestamp.outputs.timestamp }}
+#     steps:
+#       - name: Set Timestamp
+#         id: set-timestamp
+#         run: |
+#           TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+#           echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+#           echo "Orchestration started at: $TIMESTAMP"
+
+#       - name: Display Orchestration Plan
+#         run: |
+#           echo "=========================================="
+#           echo "🚀 MASTER RELEASE ORCHESTRATION"
+#           echo "=========================================="
+#           echo ""
+#           echo "Release Folder: ${{ github.event.inputs.export_prefix }}"
+#           echo "Triggered By: ${{ github.actor }}"
+#           echo "Timestamp: ${{ steps.set-timestamp.outputs.timestamp }}"
+#           echo ""
+#           echo "Execution Plan (Sequential):"
+#           echo "  1. BDS Vulnerability Scan: ${{ github.event.inputs.run_bds_scan }}"
+#           echo "  2. GCP Image Export: ${{ github.event.inputs.run_gcp_export }}"
+#           echo "  3. Azure Image Export: ${{ github.event.inputs.run_azure_export }}"
+#           echo "  4. vSphere Image Export: ${{ github.event.inputs.run_vsphere_export }}"
+#           echo "  5. AWS Image Export: ${{ github.event.inputs.run_aws_export }}"
+#           echo ""
+#           echo "=========================================="
+          
+#           # Create GitHub Step Summary
+#           echo "## 🚀 Master Release Orchestration" >> $GITHUB_STEP_SUMMARY
+#           echo "" >> $GITHUB_STEP_SUMMARY
+#           echo "**Release Folder:** \`${{ github.event.inputs.export_prefix }}\`" >> $GITHUB_STEP_SUMMARY
+#           echo "**Triggered By:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+#           echo "**Started At:** ${{ steps.set-timestamp.outputs.timestamp }}" >> $GITHUB_STEP_SUMMARY
+#           echo "" >> $GITHUB_STEP_SUMMARY
+#           echo "### Execution Plan" >> $GITHUB_STEP_SUMMARY
+#           echo "" >> $GITHUB_STEP_SUMMARY
+#           echo "| Step | Enabled | Workflow |" >> $GITHUB_STEP_SUMMARY
+#           echo "|------|---------|----------|" >> $GITHUB_STEP_SUMMARY
+#           echo "| 1. BDS Scan | ${{ github.event.inputs.run_bds_scan }} | \`bds-scan.yml\` |" >> $GITHUB_STEP_SUMMARY
+#           echo "| 2. GCP Export | ${{ github.event.inputs.run_gcp_export }} | \`gcp-image-export.yml\` |" >> $GITHUB_STEP_SUMMARY
+#           echo "| 3. Azure Export | ${{ github.event.inputs.run_azure_export }} | \`azure-image-export.yml\` |" >> $GITHUB_STEP_SUMMARY
+#           echo "| 4. vSphere Export | ${{ github.event.inputs.run_vsphere_export }} | \`vsphere-image-export.yml\` |" >> $GITHUB_STEP_SUMMARY
+#           echo "| 5. AWS Export | ${{ github.event.inputs.run_aws_export }} | \`aws-image-upload-release.yaml\` |" >> $GITHUB_STEP_SUMMARY
+
+#   bds-scan:
+#     if: ${{ github.event.inputs.run_bds_scan == 'true' }}
+#     needs: orchestration-start
+#     runs-on: ubuntu-latest
+#     outputs:
+#       status: ${{ steps.trigger.outputs.status }}
+#       run_id: ${{ steps.trigger.outputs.run_id }}
+#       conclusion: ${{ steps.trigger.outputs.conclusion }}
+#     steps:
+#       - name: Trigger and Monitor BDS Scan Workflow
+#         id: trigger
+#         uses: actions/github-script@v7
+#         with:
+#           github-token: ${{ secrets.GITHUB_TOKEN }}
+#           script: |
+#             const workflowId = 'bds-scan.yml';
+#             const maxAttempts = 60; // 30 minutes
+            
+#             console.log('========================================');
+#             console.log('STEP 1: BDS VULNERABILITY SCAN');
+#             console.log('========================================');
+#             console.log('');
+            
+#             // Trigger workflow
+#             console.log(`Triggering ${workflowId}...`);
+#             await github.rest.actions.createWorkflowDispatch({
+#               owner: context.repo.owner,
+#               repo: context.repo.repo,
+#               workflow_id: workflowId,
+#               ref: 'main',
+#               inputs: {}
+#             });
+#             console.log('✅ Workflow triggered');
+            
+#             // Wait for workflow to appear
+#             await new Promise(resolve => setTimeout(resolve, 5000));
+            
+#             // Get run ID
+#             const runs = await github.rest.actions.listWorkflowRuns({
+#               owner: context.repo.owner,
+#               repo: context.repo.repo,
+#               workflow_id: workflowId,
+#               per_page: 1
+#             });
+            
+#             const runId = runs.data.workflow_runs[0].id;
+#             const runUrl = runs.data.workflow_runs[0].html_url;
+#             console.log(`📊 Run ID: ${runId}`);
+#             console.log(`🔗 URL: ${runUrl}`);
+#             console.log('');
+#             core.setOutput('run_id', runId);
+            
+#             // Monitor progress
+#             let status = 'in_progress';
+#             let attempts = 0;
+            
+#             console.log('Monitoring progress...');
+#             console.log('');
+            
+#             while (status === 'in_progress' && attempts < maxAttempts) {
+#               await new Promise(resolve => setTimeout(resolve, 30000));
+              
+#               const run = await github.rest.actions.getWorkflowRun({
+#                 owner: context.repo.owner,
+#                 repo: context.repo.repo,
+#                 run_id: runId
+#               });
+              
+#               status = run.data.status;
+#               const conclusion = run.data.conclusion;
+              
+#               attempts++;
+#               const elapsed = attempts * 30;
+#               console.log(`⏱️  Status: ${status} | Conclusion: ${conclusion || 'N/A'} | Elapsed: ${elapsed}s (${attempts}/${maxAttempts})`);
+              
+#               if (status === 'completed') {
+#                 console.log('');
+#                 if (conclusion === 'success') {
+#                   console.log('✅ BDS Scan completed successfully');
+#                   core.setOutput('status', 'success');
+#                   core.setOutput('conclusion', conclusion);
+#                 } else {
+#                   console.log(`❌ BDS Scan failed with conclusion: ${conclusion}`);
+#                   core.setOutput('status', 'failure');
+#                   core.setOutput('conclusion', conclusion);
+#                   core.setFailed(`BDS Scan failed: ${conclusion}`);
+#                 }
+#                 break;
+#               }
+#             }
+            
+#             if (attempts >= maxAttempts) {
+#               console.log('');
+#               console.log('❌ Timeout: BDS Scan did not complete in time');
+#               core.setOutput('status', 'timeout');
+#               core.setFailed('BDS Scan timeout');
+#             }
+
+#   gcp-export:
+#     if: ${{ github.event.inputs.run_gcp_export == 'true' && (needs.bds-scan.result == 'success' || needs.bds-scan.result == 'skipped') }}
+#     needs: [orchestration-start, bds-scan]
+#     runs-on: ubuntu-latest
+#     outputs:
+#       status: ${{ steps.trigger.outputs.status }}
+#       run_id: ${{ steps.trigger.outputs.run_id }}
+#       conclusion: ${{ steps.trigger.outputs.conclusion }}
+#     steps:
+#       - name: Trigger and Monitor GCP Export Workflow
+#         id: trigger
+#         uses: actions/github-script@v7
+#         with:
+#           github-token: ${{ secrets.GITHUB_TOKEN }}
+#           script: |
+#             const workflowId = 'gcp-image-export.yml';
+#             const maxAttempts = 120; // 60 minutes
+            
+#             console.log('========================================');
+#             console.log('STEP 2: GCP IMAGE EXPORT');
+#             console.log('========================================');
+#             console.log('');
+            
+#             // Trigger workflow
+#             console.log(`Triggering ${workflowId}...`);
+#             await github.rest.actions.createWorkflowDispatch({
+#               owner: context.repo.owner,
+#               repo: context.repo.repo,
+#               workflow_id: workflowId,
+#               ref: 'main',
+#               inputs: {
+#                 worker_image_name: '${{ github.event.inputs.worker_image_name_gcp }}',
+#                 controlplane_image_name: '${{ github.event.inputs.controlplane_image_name_gcp }}',
+#                 export_prefix: '${{ needs.orchestration-start.outputs.export_prefix }}'
+#               }
+#             });
+#             console.log('✅ Workflow triggered');
+#             console.log('');
+#             console.log('Inputs:');
+#             console.log(`  Worker Image: ${{ github.event.inputs.worker_image_name_gcp }}`);
+#             console.log(`  Control Plane Image: ${{ github.event.inputs.controlplane_image_name_gcp }}`);
+#             console.log(`  Export Prefix: ${{ needs.orchestration-start.outputs.export_prefix }}`);
+#             console.log('');
+            
+#             // Wait for workflow to appear
+#             await new Promise(resolve => setTimeout(resolve, 5000));
+            
+#             // Get run ID
+#             const runs = await github.rest.actions.listWorkflowRuns({
+#               owner: context.repo.owner,
+#               repo: context.repo.repo,
+#               workflow_id: workflowId,
+#               per_page: 1
+#             });
+            
+#             const runId = runs.data.workflow_runs[0].id;
+#             const runUrl = runs.data.workflow_runs[0].html_url;
+#             console.log(`📊 Run ID: ${runId}`);
+#             console.log(`🔗 URL: ${runUrl}`);
+#             console.log('');
+#             core.setOutput('run_id', runId);
+            
+#             // Monitor progress
+#             let status = 'in_progress';
+#             let attempts = 0;
+            
+#             console.log('Monitoring progress...');
+#             console.log('');
+            
+#             while (status === 'in_progress' && attempts < maxAttempts) {
+#               await new Promise(resolve => setTimeout(resolve, 30000));
+              
+#               const run = await github.rest.actions.getWorkflowRun({
+#                 owner: context.repo.owner,
+#                 repo: context.repo.repo,
+#                 run_id: runId
+#               });
+              
+#               status = run.data.status;
+#               const conclusion = run.data.conclusion;
+              
+#               attempts++;
+#               const elapsed = attempts * 30;
+#               const elapsedMin = Math.floor(elapsed / 60);
+#               console.log(`⏱️  Status: ${status} | Conclusion: ${conclusion || 'N/A'} | Elapsed: ${elapsedMin}m ${elapsed % 60}s (${attempts}/${maxAttempts})`);
+              
+#               if (status === 'completed') {
+#                 console.log('');
+#                 if (conclusion === 'success') {
+#                   console.log('✅ GCP Export completed successfully');
+#                   core.setOutput('status', 'success');
+#                   core.setOutput('conclusion', conclusion);
+#                 } else {
+#                   console.log(`❌ GCP Export failed with conclusion: ${conclusion}`);
+#                   core.setOutput('status', 'failure');
+#                   core.setOutput('conclusion', conclusion);
+#                   core.setFailed(`GCP Export failed: ${conclusion}`);
+#                 }
+#                 break;
+#               }
+#             }
+            
+#             if (attempts >= maxAttempts) {
+#               console.log('');
+#               console.log('❌ Timeout: GCP Export did not complete in time');
+#               core.setOutput('status', 'timeout');
+#               core.setFailed('GCP Export timeout');
+#             }
+
+#   azure-export:
+#     if: ${{ github.event.inputs.run_azure_export == 'true' && (needs.gcp-export.result == 'success' || needs.gcp-export.result == 'skipped') }}
+#     needs: [orchestration-start, bds-scan, gcp-export]
+#     runs-on: ubuntu-latest
+#     outputs:
+#       status: ${{ steps.trigger.outputs.status }}
+#       run_id: ${{ steps.trigger.outputs.run_id }}
+#       conclusion: ${{ steps.trigger.outputs.conclusion }}
+#     steps:
+#       - name: Trigger and Monitor Azure Export Workflow
+#         id: trigger
+#         uses: actions/github-script@v7
+#         with:
+#           github-token: ${{ secrets.GITHUB_TOKEN }}
+#           script: |
+#             const workflowId = 'azure-image-export.yml';
+#             const maxAttempts = 120; // 60 minutes
+            
+#             console.log('========================================');
+#             console.log('STEP 3: AZURE IMAGE EXPORT');
+#             console.log('========================================');
+#             console.log('');
+            
+#             // Trigger workflow
+#             console.log(`Triggering ${workflowId}...`);
+#             await github.rest.actions.createWorkflowDispatch({
+#               owner: context.repo.owner,
+#               repo: context.repo.repo,
+#               workflow_id: workflowId,
+#               ref: 'main',
+#               inputs: {
+#                 worker_image_name: '${{ github.event.inputs.worker_image_name_azure }}',
+#                 controlplane_image_name: '${{ github.event.inputs.controlplane_image_name_azure }}',
+#                 export_prefix: '${{ needs.orchestration-start.outputs.export_prefix }}'
+#               }
+#             });
+#             console.log('✅ Workflow triggered');
+#             console.log('');
+#             console.log('Inputs:');
+#             console.log(`  Worker Image: ${{ github.event.inputs.worker_image_name_azure }}`);
+#             console.log(`  Control Plane Image: ${{ github.event.inputs.controlplane_image_name_azure }}`);
+#             console.log(`  Export Prefix: ${{ needs.orchestration-start.outputs.export_prefix }}`);
+#             console.log('');
+            
+#             // Wait for workflow to appear
+#             await new Promise(resolve => setTimeout(resolve, 5000));
+            
+#             // Get run ID
+#             const runs = await github.rest.actions.listWorkflowRuns({
+#               owner: context.repo.owner,
+#               repo: context.repo.repo,
+#               workflow_id: workflowId,
+#               per_page: 1
+#             });
+            
+#             const runId = runs.data.workflow_runs[0].id;
+#             const runUrl = runs.data.workflow_runs[0].html_url;
+#             console.log(`📊 Run ID: ${runId}`);
+#             console.log(`🔗 URL: ${runUrl}`);
+#             console.log('');
+#             core.setOutput('run_id', runId);
+            
+#             // Monitor progress
+#             let status = 'in_progress';
+#             let attempts = 0;
+            
+#             console.log('Monitoring progress...');
+#             console.log('');
+            
+#             while (status === 'in_progress' && attempts < maxAttempts) {
+#               await new Promise(resolve => setTimeout(resolve, 30000));
+              
+#               const run = await github.rest.actions.getWorkflowRun({
+#                 owner: context.repo.owner,
+#                 repo: context.repo.repo,
+#                 run_id: runId
+#               });
+              
+#               status = run.data.status;
+#               const conclusion = run.data.conclusion;
+              
+#               attempts++;
+#               const elapsed = attempts * 30;
+#               const elapsedMin = Math.floor(elapsed / 60);
+#               console.log(`⏱️  Status: ${status} | Conclusion: ${conclusion || 'N/A'} | Elapsed: ${elapsedMin}m ${elapsed % 60}s (${attempts}/${maxAttempts})`);
+              
+#               if (status === 'completed') {
+#                 console.log('');
+#                 if (conclusion === 'success') {
+#                   console.log('✅ Azure Export completed successfully');
+#                   core.setOutput('status', 'success');
+#                   core.setOutput('conclusion', conclusion);
+#                 } else {
+#                   console.log(`❌ Azure Export failed with conclusion: ${conclusion}`);
+#                   core.setOutput('status', 'failure');
+#                   core.setOutput('conclusion', conclusion);
+#                   core.setFailed(`Azure Export failed: ${conclusion}`);
+#                 }
+#                 break;
+#               }
+#             }
+            
+#             if (attempts >= maxAttempts) {
+#               console.log('');
+#               console.log('❌ Timeout: Azure Export did not complete in time');
+#               core.setOutput('status', 'timeout');
+#               core.setFailed('Azure Export timeout');
+#             }
+
+#   vsphere-export:
+#     if: ${{ github.event.inputs.run_vsphere_export == 'true' && (needs.azure-export.result == 'success' || needs.azure-export.result == 'skipped') }}
+#     needs: [orchestration-start, bds-scan, gcp-export, azure-export]
+#     runs-on: ubuntu-latest
+#     outputs:
+#       status: ${{ steps.trigger.outputs.status }}
+#       run_id: ${{ steps.trigger.outputs.run_id }}
+#       conclusion: ${{ steps.trigger.outputs.conclusion }}
+#     steps:
+#       - name: Trigger and Monitor vSphere Export Workflow
+#         id: trigger
+#         uses: actions/github-script@v7
+#         with:
+#           github-token: ${{ secrets.GITHUB_TOKEN }}
+#           script: |
+#             const workflowId = 'vsphere-image-export.yml';
+#             const maxAttempts = 120; // 60 minutes
+            
+#             console.log('========================================');
+#             console.log('STEP 4: VSPHERE IMAGE EXPORT');
+#             console.log('========================================');
+#             console.log('');
+            
+#             // Trigger workflow
+#             console.log(`Triggering ${workflowId}...`);
+#             await github.rest.actions.createWorkflowDispatch({
+#               owner: context.repo.owner,
+#               repo: context.repo.repo,
+#               workflow_id: workflowId,
+#               ref: 'main',
+#               inputs: {
+#                 worker_image_name: '${{ github.event.inputs.worker_image_name_vsphere }}',
+#                 controlplane_image_name: '${{ github.event.inputs.controlplane_image_name_vsphere }}',
+#                 export_prefix: '${{ needs.orchestration-start.outputs.export_prefix }}'
+#               }
+#             });
+#             console.log('✅ Workflow triggered');
+#             console.log('');
+#             console.log('Inputs:');
+#             console.log(`  Worker Image: ${{ github.event.inputs.worker_image_name_vsphere }}`);
+#             console.log(`  Control Plane Image: ${{ github.event.inputs.controlplane_image_name_vsphere }}`);
+#             console.log(`  Export Prefix: ${{ needs.orchestration-start.outputs.export_prefix }}`);
+#             console.log('');
+            
+#             // Wait for workflow to appear
+#             await new Promise(resolve => setTimeout(resolve, 5000));
+            
+#             // Get run ID
+#             const runs = await github.rest.actions.listWorkflowRuns({
+#               owner: context.repo.owner,
+#               repo: context.repo.repo,
+#               workflow_id: workflowId,
+#               per_page: 1
+#             });
+            
+#             const runId = runs.data.workflow_runs[0].id;
+#             const runUrl = runs.data.workflow_runs[0].html_url;
+#             console.log(`📊 Run ID: ${runId}`);
+#             console.log(`🔗 URL: ${runUrl}`);
+#             console.log('');
+#             core.setOutput('run_id', runId);
+            
+#             // Monitor progress
+#             let status = 'in_progress';
+#             let attempts = 0;
+            
+#             console.log('Monitoring progress...');
+#             console.log('');
+            
+#             while (status === 'in_progress' && attempts < maxAttempts) {
+#               await new Promise(resolve => setTimeout(resolve, 30000));
+              
+#               const run = await github.rest.actions.getWorkflowRun({
+#                 owner: context.repo.owner,
+#                 repo: context.repo.repo,
+#                 run_id: runId
+#               });
+              
+#               status = run.data.status;
+#               const conclusion = run.data.conclusion;
+              
+#               attempts++;
+#               const elapsed = attempts * 30;
+#               const elapsedMin = Math.floor(elapsed / 60);
+#               console.log(`⏱️  Status: ${status} | Conclusion: ${conclusion || 'N/A'} | Elapsed: ${elapsedMin}m ${elapsed % 60}s (${attempts}/${maxAttempts})`);
+              
+#               if (status === 'completed') {
+#                 console.log('');
+#                 if (conclusion === 'success') {
+#                   console.log('✅ vSphere Export completed successfully');
+#                   core.setOutput('status', 'success');
+#                   core.setOutput('conclusion', conclusion);
+#                 } else {
+#                   console.log(`❌ vSphere Export failed with conclusion: ${conclusion}`);
+#                   core.setOutput('status', 'failure');
+#                   core.setOutput('conclusion', conclusion);
+#                   core.setFailed(`vSphere Export failed: ${conclusion}`);
+#                 }
+#                 break;
+#               }
+#             }
+            
+#             if (attempts >= maxAttempts) {
+#               console.log('');
+#               console.log('❌ Timeout: vSphere Export did not complete in time');
+#               core.setOutput('status', 'timeout');
+#               core.setFailed('vSphere Export timeout');
+#             }
+
+#   aws-export:
+#     if: ${{ github.event.inputs.run_aws_export == 'true' && (needs.vsphere-export.result == 'success' || needs.vsphere-export.result == 'skipped') }}
+#     needs: [orchestration-start, bds-scan, gcp-export, azure-export, vsphere-export]
+#     runs-on: ubuntu-latest
+#     outputs:
+#       status: ${{ steps.trigger.outputs.status }}
+#       run_id: ${{ steps.trigger.outputs.run_id }}
+#       conclusion: ${{ steps.trigger.outputs.conclusion }}
+#     steps:
+#       - name: Trigger and Monitor AWS Export Workflow
+#         id: trigger
+#         uses: actions/github-script@v7
+#         with:
+#           github-token: ${{ secrets.GITHUB_TOKEN }}
+#           script: |
+#             const workflowId = 'aws-image-upload-release.yaml';
+#             const maxAttempts = 240; // 120 minutes (AWS exports take longer)
+            
+#             console.log('========================================');
+#             console.log('STEP 5: AWS IMAGE EXPORT');
+#             console.log('========================================');
+#             console.log('');
+            
+#             // Trigger workflow
+#             console.log(`Triggering ${workflowId}...`);
+#             await github.rest.actions.createWorkflowDispatch({
+#               owner: context.repo.owner,
+#               repo: context.repo.repo,
+#               workflow_id: workflowId,
+#               ref: 'main',
+#               inputs: {
+#                 cp_ami_id: '${{ github.event.inputs.cp_ami_id }}',
+#                 worker_ami_id: '${{ github.event.inputs.worker_ami_id }}',
+#                 export_prefix: '${{ needs.orchestration-start.outputs.export_prefix }}'
+#               }
+#             });
+#             console.log('✅ Workflow triggered');
+#             console.log('');
+#             console.log('Inputs:');
+#             console.log(`  Control Plane AMI: ${{ github.event.inputs.cp_ami_id }}`);
+#             console.log(`  Worker AMI: ${{ github.event.inputs.worker_ami_id }}`);
+#             console.log(`  Export Prefix: ${{ needs.orchestration-start.outputs.export_prefix }}`);
+#             console.log('');
+            
+#             // Wait for workflow to appear
+#             await new Promise(resolve => setTimeout(resolve, 5000));
+            
+#             // Get run ID
+#             const runs = await github.rest.actions.listWorkflowRuns({
+#               owner: context.repo.owner,
+#               repo: context.repo.repo,
+#               workflow_id: workflowId,
+#               per_page: 1
+#             });
+            
+#             const runId = runs.data.workflow_runs[0].id;
+#             const runUrl = runs.data.workflow_runs[0].html_url;
+#             console.log(`📊 Run ID: ${runId}`);
+#             console.log(`🔗 URL: ${runUrl}`);
+#             console.log('');
+#             core.setOutput('run_id', runId);
+            
+#             // Monitor progress
+#             let status = 'in_progress';
+#             let attempts = 0;
+            
+#             console.log('Monitoring progress...');
+#             console.log('');
+            
+#             while (status === 'in_progress' && attempts < maxAttempts) {
+#               await new Promise(resolve => setTimeout(resolve, 30000));
+              
+#               const run = await github.rest.actions.getWorkflowRun({
+#                 owner: context.repo.owner,
+#                 repo: context.repo.repo,
+#                 run_id: runId
+#               });
+              
+#               status = run.data.status;
+#               const conclusion = run.data.conclusion;
+              
+#               attempts++;
+#               const elapsed = attempts * 30;
+#               const elapsedMin = Math.floor(elapsed / 60);
+#               console.log(`⏱️  Status: ${status} | Conclusion: ${conclusion || 'N/A'} | Elapsed: ${elapsedMin}m ${elapsed % 60}s (${attempts}/${maxAttempts})`);
+              
+#               if (status === 'completed') {
+#                 console.log('');
+#                 if (conclusion === 'success') {
+#                   console.log('✅ AWS Export completed successfully');
+#                   core.setOutput('status', 'success');
+#                   core.setOutput('conclusion', conclusion);
+#                 } else {
+#                   console.log(`❌ AWS Export failed with conclusion: ${conclusion}`);
+#                   core.setOutput('status', 'failure');
+#                   core.setOutput('conclusion', conclusion);
+#                   core.setFailed(`AWS Export failed: ${conclusion}`);
+#                 }
+#                 break;
+#               }
+#             }
+            
+#             if (attempts >= maxAttempts) {
+#               console.log('');
+#               console.log('❌ Timeout: AWS Export did not complete in time');
+#               core.setOutput('status', 'timeout');
+#               core.setFailed('AWS Export timeout');
+#             }
+
+#   orchestration-complete:
+#     runs-on: ubuntu-latest
+#     needs: [orchestration-start, bds-scan, gcp-export, azure-export, vsphere-export, aws-export]
+#     if: always()
+#     steps:
+#       - name: Calculate Duration
+#         id: duration
+#         run: |
+#           START_TIME="${{ needs.orchestration-start.outputs.timestamp }}"
+#           END_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+#           START_EPOCH=$(date -d "$START_TIME" +%s)
+#           END_EPOCH=$(date -d "$END_TIME" +%s)
+#           DURATION=$((END_EPOCH - START_EPOCH))
+          
+#           HOURS=$((DURATION / 3600))
+#           MINUTES=$(((DURATION % 3600) / 60))
+#           SECONDS=$((DURATION % 60))
+          
+#           DURATION_STR="${HOURS}h ${MINUTES}m ${SECONDS}s"
+#           echo "duration=$DURATION_STR" >> $GITHUB_OUTPUT
+#           echo "end_time=$END_TIME" >> $GITHUB_OUTPUT
+
+#       - name: Generate Final Summary
+#         run: |
+#           echo "=========================================="
+#           echo "🎉 MASTER ORCHESTRATION COMPLETE"
+#           echo "=========================================="
+#           echo ""
+#           echo "Release Folder: ${{ needs.orchestration-start.outputs.export_prefix }}"
+#           echo "Started: ${{ needs.orchestration-start.outputs.timestamp }}"
+#           echo "Completed: ${{ steps.duration.outputs.end_time }}"
+#           echo "Duration: ${{ steps.duration.outputs.duration }}"
+#           echo ""
+#           echo "Execution Results:"
+#           echo "  1. BDS Scan: ${{ needs.bds-scan.result }} ${{ needs.bds-scan.outputs.run_id && format('(Run: {0})', needs.bds-scan.outputs.run_id) || '' }}"
+#           echo "  2. GCP Export: ${{ needs.gcp-export.result }} ${{ needs.gcp-export.outputs.run_id && format('(Run: {0})', needs.gcp-export.outputs.run_id) || '' }}"
+#           echo "  3. Azure Export: ${{ needs.azure-export.result }} ${{ needs.azure-export.outputs.run_id && format('(Run: {0})', needs.azure-export.outputs.run_id) || '' }}"
+#           echo "  4. vSphere Export: ${{ needs.vsphere-export.result }} ${{ needs.vsphere-export.outputs.run_id && format('(Run: {0})', needs.vsphere-export.outputs.run_id) || '' }}"
+#           echo "  5. AWS Export: ${{ needs.aws-export.result }} ${{ needs.aws-export.outputs.run_id && format('(Run: {0})', needs.aws-export.outputs.run_id) || '' }}"
+#           echo ""
+#           echo "=========================================="
+          
+#           # Create comprehensive GitHub Step Summary
+#           echo "## 🎉 Master Orchestration Complete" >> $GITHUB_STEP_SUMMARY
+#           echo "" >> $GITHUB_STEP_SUMMARY
+#           echo "### Release Information" >> $GITHUB_STEP_SUMMARY
+#           echo "- **Release Folder:** \`${{ needs.orchestration-start.outputs.export_prefix }}\`" >> $GITHUB_STEP_SUMMARY
+#           echo "- **Started:** ${{ needs.orchestration-start.outputs.timestamp }}" >> $GITHUB_STEP_SUMMARY
+#           echo "- **Completed:** ${{ steps.duration.outputs.end_time }}" >> $GITHUB_STEP_SUMMARY
+#           echo "- **Total Duration:** ${{ steps.duration.outputs.duration }}" >> $GITHUB_STEP_SUMMARY
+#           echo "- **Triggered By:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+#           echo "" >> $GITHUB_STEP_SUMMARY
+          
+#           echo "### Execution Results" >> $GITHUB_STEP_SUMMARY
+#           echo "" >> $GITHUB_STEP_SUMMARY
+#           echo "| Step | Status | Run ID | Conclusion |" >> $GITHUB_STEP_SUMMARY
+#           echo "|------|--------|--------|------------|" >> $GITHUB_STEP_SUMMARY
+          
+#           # BDS Scan
+#           BDS_STATUS="${{ needs.bds-scan.result }}"
+#           BDS_RUN="${{ needs.bds-scan.outputs.run_id }}"
+#           BDS_CONCLUSION="${{ needs.bds-scan.outputs.conclusion }}"
+#           if [ "$BDS_STATUS" == "success" ]; then
+#             BDS_ICON="✅"
+#           elif [ "$BDS_STATUS" == "skipped" ]; then
+#             BDS_ICON="⏭️"
+#           else
+#             BDS_ICON="❌"
+#           fi
+#           echo "| $BDS_ICON BDS Scan | \`$BDS_STATUS\` | ${BDS_RUN:-N/A} | ${BDS_CONCLUSION:-N/A} |" >> $GITHUB_STEP_SUMMARY
+          
+#           # GCP Export
+#           GCP_STATUS="${{ needs.gcp-export.result }}"
+#           GCP_RUN="${{ needs.gcp-export.outputs.run_id }}"
+#           GCP_CONCLUSION="${{ needs.gcp-export.outputs.conclusion }}"
+#           if [ "$GCP_STATUS" == "success" ]; then
+#             GCP_ICON="✅"
+#           elif [ "$GCP_STATUS" == "skipped" ]; then
+#             GCP_ICON="⏭️"
+#           else
+#             GCP_ICON="❌"
+#           fi
+#           echo "| $GCP_ICON GCP Export | \`$GCP_STATUS\` | ${GCP_RUN:-N/A} | ${GCP_CONCLUSION:-N/A} |" >> $GITHUB_STEP_SUMMARY
+          
+#           # Azure Export
+#           AZURE_STATUS="${{ needs.azure-export.result }}"
+#           AZURE_RUN="${{ needs.azure-export.outputs.run_id }}"
+#           AZURE_CONCLUSION="${{ needs.azure-export.outputs.conclusion }}"
+#           if [ "$AZURE_STATUS" == "success" ]; then
+#             AZURE_ICON="✅"
+#           elif [ "$AZURE_STATUS" == "skipped" ]; then
+#             AZURE_ICON="⏭️"
+#           else
+#             AZURE_ICON="❌"
+#           fi
+#           echo "| $AZURE_ICON Azure Export | \`$AZURE_STATUS\` | ${AZURE_RUN:-N/A} | ${AZURE_CONCLUSION:-N/A} |" >> $GITHUB_STEP_SUMMARY
+          
+#           # vSphere Export
+#           VSPHERE_STATUS="${{ needs.vsphere-export.result }}"
+#           VSPHERE_RUN="${{ needs.vsphere-export.outputs.run_id }}"
+#           VSPHERE_CONCLUSION="${{ needs.vsphere-export.outputs.conclusion }}"
+#           if [ "$VSPHERE_STATUS" == "success" ]; then
+#             VSPHERE_ICON="✅"
+#           elif [ "$VSPHERE_STATUS" == "skipped" ]; then
+#             VSPHERE_ICON="⏭️"
+#           else
+#             VSPHERE_ICON="❌"
+#           fi
+#           echo "| $VSPHERE_ICON vSphere Export | \`$VSPHERE_STATUS\` | ${VSPHERE_RUN:-N/A} | ${VSPHERE_CONCLUSION:-N/A} |" >> $GITHUB_STEP_SUMMARY
+          
+#           # AWS Export
+#           AWS_STATUS="${{ needs.aws-export.result }}"
+#           AWS_RUN="${{ needs.aws-export.outputs.run_id }}"
+#           AWS_CONCLUSION="${{ needs.aws-export.outputs.conclusion }}"
+#           if [ "$AWS_STATUS" == "success" ]; then
+#             AWS_ICON="✅"
+#           elif [ "$AWS_STATUS" == "skipped" ]; then
+#             AWS_ICON="⏭️"
+#           else
+#             AWS_ICON="❌"
+#           fi
+#           echo "| $AWS_ICON AWS Export | \`$AWS_STATUS\` | ${AWS_RUN:-N/A} | ${AWS_CONCLUSION:-N/A} |" >> $GITHUB_STEP_SUMMARY
+          
+#           echo "" >> $GITHUB_STEP_SUMMARY
+#           echo "### Legend" >> $GITHUB_STEP_SUMMARY
+#           echo "- ✅ Success" >> $GITHUB_STEP_SUMMARY
+#           echo "- ❌ Failed" >> $GITHUB_STEP_SUMMARY
+#           echo "- ⏭️ Skipped (not enabled)" >> $GITHUB_STEP_SUMMARY
+
+#       - name: Check for Failures
+#         run: |
+#           FAILED_JOBS=""
+          
+#           if [ "${{ needs.bds-scan.result }}" == "failure" ]; then
+#             FAILED_JOBS="${FAILED_JOBS}BDS Scan, "
+#           fi
+#           if [ "${{ needs.gcp-export.result }}" == "failure" ]; then
+#             FAILED_JOBS="${FAILED_JOBS}GCP Export, "
+#           fi
+#           if [ "${{ needs.azure-export.result }}" == "failure" ]; then
+#             FAILED_JOBS="${FAILED_JOBS}Azure Export, "
+#           fi
+#           if [ "${{ needs.vsphere-export.result }}" == "failure" ]; then
+#             FAILED_JOBS="${FAILED_JOBS}vSphere Export, "
+#           fi
+#           if [ "${{ needs.aws-export.result }}" == "failure" ]; then
+#             FAILED_JOBS="${FAILED_JOBS}AWS Export, "
+#           fi
+          
+#           if [ -n "$FAILED_JOBS" ]; then
+#             FAILED_JOBS="${FAILED_JOBS%, }"  # Remove trailing comma
+#             echo "❌ The following jobs failed: $FAILED_JOBS"
+#             echo ""
+#             echo "Please check the individual workflow runs for details."
+#             exit 1
+#           else
+#             echo "✅ All enabled workflows completed successfully!"
+#           fi

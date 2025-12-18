@@ -1,627 +1,984 @@
-name: Multi-Cloud Deployment
+# name: Multi-Cloud Deployment
+
+# on:
+#   workflow_dispatch:
+#     inputs:
+#       cloud_provider:
+#         description: 'Cloud provider to deploy to'
+#         required: true
+#         type: choice
+#         options:
+#           - azure
+#           - gcp
+#           - vsphere
+#         default: 'gcp'
+#       name_prefix:
+#         description: "Name prefix for instances/VMs"
+#         required: false
+#         default: "testing-automated"
+      
+#       worker_count:
+#         description: "Number of worker nodes"
+#         required: false
+#         default: "2"
+      
+#       cp_image:
+#         description: "Control plane image leave empty for latest"
+#         required: false
+#         default: ""
+      
+#       worker_image:
+#         description: "Worker image leave empty for latest"
+#         required: false
+#         default: ""
+
+#       # SSH specific inputs (only used for Azure, Vsphere)
+#       ssh_admin_username:
+#         description: 'Username for SSH access (required for Azure, Vsphere)'
+#         required: false
+#         type: string
+#         default: "ubuntu"
+#       ssh_admin_password:
+#         description: "SSH Password (minimum 8 characters, must contain uppercase, lowercase, number, and special character)"
+#         required: false
+#         type: string
+#         default: ""
+
+
+# env:
+#   # Azure Environment Variables
+#   ARM_CLIENT_ID: ${{ secrets.NDM_AZURE_CLIENT_ID }}
+#   ARM_CLIENT_SECRET: ${{ secrets.NDM_AZURE_CLIENT_SECRET }}
+#   ARM_SUBSCRIPTION_ID: ${{ secrets.NDM_AZURE_SUBSCRIPTION_ID }}
+#   ARM_TENANT_ID: ${{ secrets.NDM_AZURE_TENANT_ID }}
+
+# jobs:
+#   display-configuration:
+#     runs-on: ubuntu-latest
+#     steps:
+#     - name: Display Selection
+#       run: |
+#         echo "🌩️ ===== MULTI-CLOUD DEPLOYMENT ===== 🌩️"
+#         echo "Selected cloud provider: ${{ github.event.inputs.cloud_provider }}"
+#         echo "Name prefix: ${{ github.event.inputs.name_prefix }}"
+#         echo "CP count: 1"
+#         echo "Worker count: ${{ github.event.inputs.worker_count }}"
+#         echo "CP image: ${{ github.event.inputs.cp_image  }}"
+#         echo "Worker image: ${{ github.event.inputs.worker_image }}"
+        
+#         if [ "${{ github.event.inputs.cloud_provider }}" == "gcp" ]; then
+#           echo "🔵 GCP Configuration: Using default region and machine type"
+#         elif [ "${{ github.event.inputs.cloud_provider }}" == "azure" ]; then
+#           echo "🔷 Azure Configuration:"
+#           echo "  Username: ${{ github.event.inputs.ssh_admin_username }}"
+#           echo "  Admin Password: ******* (hidden)"
+#         elif [ "${{ github.event.inputs.cloud_provider }}" == "vsphere" ]; then
+#           echo "🔶 vSphere Configuration:"
+#           echo "  Username: ${{ github.event.inputs.ssh_admin_username }}"
+#           echo "  Admin Password: ******* (hidden)"
+#         fi
+#         echo "================================================="
+
+
+#   deploy-to-azure:
+#     if: ${{ github.event.inputs.cloud_provider == 'azure' }}
+#     needs: display-configuration
+#     runs-on: ubuntu-latest
+    
+#     steps:
+#     - name: Checkout code
+#       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+#     - name: Set Azure Variables
+#       run: |
+#         echo "NAME_PREFIX=${{ github.event.inputs.name_prefix || 'admin' }}" >> $GITHUB_ENV
+#         echo "CP_COUNT=1" >> $GITHUB_ENV
+#         echo "WORKER_COUNT=${{ github.event.inputs.worker_count || '2' }}" >> $GITHUB_ENV
+#         echo "CP_IMAGE=${{ github.event.inputs.cp_image }}" >> $GITHUB_ENV
+#         echo "WORKER_IMAGE=${{ github.event.inputs.worker_image }}" >> $GITHUB_ENV
+        
+#         # Set AZURE_USERNAME with proper fallback logic
+#         AZURE_USERNAME="${{ secrets.AZURE_USERNAME }}"
+#         if [ -z "$AZURE_USERNAME" ] && [ -n "${{ github.event.inputs.ssh_admin_username }}" ]; then
+#           AZURE_USERNAME="${{ github.event.inputs.ssh_admin_username }}"
+#         elif [ -z "$AZURE_USERNAME" ] && [ -n "${{ github.event.inputs.name_prefix }}" ]; then
+#           AZURE_USERNAME="${{ github.event.inputs.name_prefix }}"
+#         elif [ -z "$AZURE_USERNAME" ]; then
+#           AZURE_USERNAME="admin"
+#         fi
+#         echo "AZURE_USERNAME=$AZURE_USERNAME" >> $GITHUB_ENV
+
+#         # Set PASSWORD with proper fallback logic
+#         ADMIN_PASSWORD="${{ secrets.AZURE_ADMIN_PASSWORD }}"
+#         if [ -z "$ADMIN_PASSWORD" ] && [ -n "${{ github.event.inputs.ssh_admin_password }}" ]; then
+#           ADMIN_PASSWORD="${{ github.event.inputs.ssh_admin_password }}"
+#         elif [ -z "$ADMIN_PASSWORD" ]; then
+#           ADMIN_PASSWORD="Welcome@123"
+#         fi
+#         echo "ADMIN_PASSWORD=$ADMIN_PASSWORD" >> $GITHUB_ENV
+
+
+#     - name: Setup Terraform
+#       uses: hashicorp/setup-terraform@v3
+#       with:
+#         terraform_version: 1.5.0
+
+#     - name: Azure Login
+#       uses: azure/login@v1
+#       with:
+#         creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
+
+#     - name: Deploy Control Plane
+#       working-directory: ./app-deployment/terraform/azure/control_plane
+#       run: |
+#         echo "Deploying Control Plane..."
+#         echo "Username: ${{ env.AZURE_USERNAME }}"
+#         echo "Image Version: ${{ env.CP_IMAGE || 'latest' }}"
+        
+#         terraform init -input=false
+
+#         TF_ARGS="-var=image_definition=ndm-control-plane -var=username=${{ env.AZURE_USERNAME }} -var=admin_password=${{ env.ADMIN_PASSWORD }}"
+#         if [ -n "${{ env.CP_IMAGE }}" ]; then
+#           TF_ARGS="$TF_ARGS -var=image_version=${{ env.CP_IMAGE }}"
+#         fi
+        
+#         terraform apply -auto-approve $TF_ARGS
+        
+#         CP_IP=$(terraform output -raw vm_private_ip)
+#         CP_NAME=$(terraform output -raw vm_name)
+#         CP_PASSWORD=$(terraform output -raw admin_password)
+#         echo "Control Plane Private IP: $CP_IP"
+#         echo "CONTROL_PLANE_IP=$CP_IP" >> $GITHUB_ENV
+#         echo "CONTROL_PLANE_NAME=$CP_NAME" >> $GITHUB_ENV
+#         echo "CONTROL_PLANE_PASSWORD=$CP_PASSWORD" >> $GITHUB_ENV
+
+#     - name: Deploy Workers
+#       working-directory: ./app-deployment/terraform/azure/worker
+#       run: |
+#         echo "Deploying ${{ env.WORKER_COUNT }} Worker(s)..."
+#         echo "Username: ${{ env.AZURE_USERNAME }}"
+#         echo "Worker Image Version: ${{ env.WORKER_IMAGE || 'latest' }}"
+
+#         terraform init -input=false
+
+#         TF_ARGS="-var=image_definition=ndm-worker -var=username=${{ env.AZURE_USERNAME }} -var=admin_password=${{ env.ADMIN_PASSWORD }}"
+#         if [ -n "${{ env.WORKER_IMAGE }}" ]; then
+#           TF_ARGS="$TF_ARGS -var=image_version=${{ env.WORKER_IMAGE }}"
+#         fi
+#         if [ -n "${{ env.WORKER_COUNT }}" ]; then
+#           TF_ARGS="$TF_ARGS -var=worker_count=${{ env.WORKER_COUNT }}"
+#         fi
+        
+#         terraform apply -auto-approve $TF_ARGS
+        
+#         WORKER_IPS=$(terraform output -json worker_private_ips | jq -r '.[]')
+#         WORKER_NAMES=$(terraform output -json worker_names | jq -r '.[]')
+#         WORKER_PASSWORD=$(terraform output -raw admin_password)
+#         echo "Worker Private IPs:"
+#         echo "$WORKER_IPS"
+#         echo "Worker Names:"
+#         echo "$WORKER_NAMES"
+        
+#         # Store worker information in environment variables for summary
+#         echo "WORKER_IPS<<EOF" >> $GITHUB_ENV
+#         echo "$WORKER_IPS" >> $GITHUB_ENV
+#         echo "EOF" >> $GITHUB_ENV
+#         echo "WORKER_NAMES<<EOF" >> $GITHUB_ENV
+#         echo "$WORKER_NAMES" >> $GITHUB_ENV
+#         echo "EOF" >> $GITHUB_ENV
+#         echo "WORKER_PASSWORD=$WORKER_PASSWORD" >> $GITHUB_ENV
+
+#     - name: Azure Deployment Summary
+#       run: |
+#         echo "## Azure Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+#         echo "" >> $GITHUB_STEP_SUMMARY
+#         echo "### VM Information" >> $GITHUB_STEP_SUMMARY
+#         echo "- **Control Plane VM:** \`${{ env.CONTROL_PLANE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+#         echo "  - **IP:** \`${{ env.CONTROL_PLANE_IP }}\`" >> $GITHUB_STEP_SUMMARY
+#         echo "  - **Version:** ${{ env.CP_IMAGE || 'latest' }}" >> $GITHUB_STEP_SUMMARY
+#         echo "" >> $GITHUB_STEP_SUMMARY
+#         echo "### Worker VMs" >> $GITHUB_STEP_SUMMARY
+        
+#         # Create temp files for processing
+#         echo "${{ env.WORKER_NAMES }}" > /tmp/worker_names.txt
+#         echo "${{ env.WORKER_IPS }}" > /tmp/worker_ips.txt
+        
+#         # Process workers
+#         vm_counter=1
+#         while IFS= read -r name && IFS= read -r ip <&3; do
+#           if [ -n "$name" ] && [ -n "$ip" ]; then
+#             echo "- **Worker VM ${vm_counter}:** \`${name}\`" >> $GITHUB_STEP_SUMMARY
+#             echo "  - **IP:** \`${ip}\`" >> $GITHUB_STEP_SUMMARY
+#             echo "  - **Version:** ${{ env.WORKER_IMAGE || 'latest' }}" >> $GITHUB_STEP_SUMMARY
+#             vm_counter=$((vm_counter + 1))
+#           fi
+#         done < /tmp/worker_names.txt 3< /tmp/worker_ips.txt
+        
+#         echo "" >> $GITHUB_STEP_SUMMARY
+#         echo "### Access Information" >> $GITHUB_STEP_SUMMARY
+#         echo "SSH using username: ${{ env.AZURE_USERNAME }} and the password which was provided." >> $GITHUB_STEP_SUMMARY
+
+#         echo ""
+#         echo "Azure Deployment completed successfully!"
+
+#     - name: Upload Azure Artifacts
+#       uses: actions/upload-artifact@v4
+#       if: always()
+#       with:
+#         name: azure-deployment-logs
+#         path: |
+#           app-deployment/terraform/azure/control_plane/terraform.tfstate*
+#           app-deployment/terraform/azure/control_plane/.terraform.lock.hcl
+#           app-deployment/terraform/azure/worker/terraform.tfstate*
+#           app-deployment/terraform/azure/worker/.terraform.lock.hcl
+#         retention-days: 30
+
+#   deploy-to-gcp:
+#     if: ${{ github.event.inputs.cloud_provider == 'gcp' }}
+#     needs: display-configuration
+#     runs-on: ubuntu-latest
+
+#     steps:
+#     - name: Checkout code
+#       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+#     - name: Set GCP Variables
+#       run: |
+#         echo "NAME_PREFIX=${{ github.event.inputs.name_prefix || 'admin' }}" >> $GITHUB_ENV
+#         echo "CP_COUNT=1" >> $GITHUB_ENV
+#         echo "WORKER_COUNT=${{ github.event.inputs.worker_count || '2' }}" >> $GITHUB_ENV
+#         echo "CP_IMAGE=${{ github.event.inputs.cp_image }}" >> $GITHUB_ENV
+#         echo "WORKER_IMAGE=${{ github.event.inputs.worker_image }}" >> $GITHUB_ENV
+#         echo "REGION=us-east1" >> $GITHUB_ENV
+#         echo "CP_MACHINE_TYPE=e2-custom-8-32768" >> $GITHUB_ENV
+#         echo "WORKER_MACHINE_TYPE=e2-custom-4-16384" >> $GITHUB_ENV
+#         echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID || 'app-microservices-cm' }}" >> $GITHUB_ENV
+
+#     - name: Setup Terraform
+#       uses: hashicorp/setup-terraform@v3
+#       with:
+#         terraform_version: latest
+
+#     - name: Authenticate to Google Cloud
+#       uses: google-github-actions/auth@v1
+#       with:
+#         credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+#     - name: Set up Cloud SDK
+#       uses: google-github-actions/setup-gcloud@v1
+#       with:
+#         version: 'latest'
+
+#     - name: Set up environment
+#       run: |
+#         sudo apt-get update
+#         sudo apt-get install -y jq expect
+    
+#     - name: Debug Variables Before Passing
+#       run: |
+#         echo "=== DEBUG: Variables being passed to run.sh ==="
+#         echo "1. NAME_PREFIX: '${{ env.NAME_PREFIX }}'"
+#         echo "2. CP_COUNT: '${{ env.CP_COUNT }}'"
+#         echo "3. WORKER_COUNT: '${{ env.WORKER_COUNT }}'"
+#         echo "4. CP_MACHINE_TYPE: '${{ env.CP_MACHINE_TYPE }}'"
+#         echo "5. CP_IMAGE: '${{ env.CP_IMAGE }}'"
+#         echo "6. WORKER_MACHINE_TYPE: '${{ env.WORKER_MACHINE_TYPE }}'"
+#         echo "7. WORKER_IMAGE: '${{ env.WORKER_IMAGE }}'"
+#         echo "8. REGION: '${{ env.REGION }}'"
+#         echo "============================================="
+
+#     - name: Run GCP Script
+#       run: |
+#         cd app-deployment/terraform/gcp
+#         chmod +x ./run.sh
+        
+#         echo " ===== EXECUTING GCP DEPLOYMENT ===== "
+        
+#         # REMOVE the duplicate debug section here
+#         # It's already in the previous step
+        
+#         # Pass inputs to GCP run.sh script in correct order
+#         (
+#         echo "${{ env.NAME_PREFIX }}"
+#         echo "${{ env.CP_COUNT }}"
+#         echo "${{ env.WORKER_COUNT }}"
+#         echo "${{ env.CP_MACHINE_TYPE }}"
+#         echo "${{ env.CP_IMAGE }}"
+#         echo "${{ env.WORKER_MACHINE_TYPE }}"
+#         echo "${{ env.WORKER_IMAGE }}"
+#         echo "${{ env.REGION }}"
+#         ) | ./run.sh
+
+        
+#     - name: Display GCP Instance IPs
+#       working-directory: ./app-deployment/terraform/gcp
+#       run: |
+#         echo ""
+#         echo "🖥️  ===== GCP DEPLOYMENT SUMMARY ===== 🖥️"
+#         echo ""
+
+#         # Define NAME_PREFIX variable
+#         NAME_PREFIX="${{ env.NAME_PREFIX }}"
+        
+#         # Get Terraform outputs with nice formatting
+#         echo "Control Plane Nodes:"
+#         if terraform output control_plane_internal_ips > /dev/null 2>&1; then
+#           terraform output -json control_plane_internal_ips | jq -r '.[] | "  Control Plane IP: " + .'
+#         else
+#           echo "Control plane IPs not available yet"
+#         fi
+        
+#         echo ""
+#         echo "Worker Nodes:"
+#         if terraform output worker_internal_ips > /dev/null 2>&1; then
+#           terraform output -json worker_internal_ips | jq -r '.[] | "  Worker IP: " + .'
+#         else
+#           echo " Worker IPs not available yet"
+#         fi
+        
+#         echo ""
+#         echo "Instance Details:"
+        
+#         # Get all instance details
+#         gcloud compute instances list \
+#           --project=${{ env.GCP_PROJECT_ID }} \
+#           --filter="name~'.*${NAME_PREFIX}.*'" \
+#           --format="table(
+#             name:label='Instance Name',
+#             zone.basename():label='Zone',
+#             machineType.basename():label='Machine Type',
+#             networkInterfaces[0].networkIP:label='Internal IP',
+#             status:label='Status'
+#           )"
+        
+#         echo ""
+#         echo "GCP Deployment completed successfully!"
+
+#         # Save IPs to file for artifacts with error handling
+#         echo "Control Plane IPs:" > instance_ips.txt
+#         if terraform output control_plane_internal_ips > /dev/null 2>&1; then
+#           terraform output -json control_plane_internal_ips | jq -r '.[]' >> instance_ips.txt
+#         else
+#           echo "Not available" >> instance_ips.txt
+#         fi
+        
+#         echo "" >> instance_ips.txt
+#         echo "Worker IPs:" >> instance_ips.txt
+#         if terraform output worker_internal_ips > /dev/null 2>&1; then
+#           terraform output -json worker_internal_ips | jq -r '.[]' >> instance_ips.txt
+#         else
+#           echo "Not available" >> instance_ips.txt
+#         fi
+        
+#         # Also create a summary file
+#         echo "=== DEPLOYMENT SUMMARY ===" > deployment_summary.txt
+#         echo "Name Prefix: ${NAME_PREFIX}" >> deployment_summary.txt
+#         echo "Control Plane Count: ${{ env.CP_COUNT }}" >> deployment_summary.txt
+#         echo "Worker Count: ${{ env.WORKER_COUNT }}" >> deployment_summary.txt
+#         echo "Region: ${{ env.REGION }}" >> deployment_summary.txt
+#         echo "" >> deployment_summary.txt
+#         echo "Control Plane IPs:" >> deployment_summary.txt
+#         if terraform output control_plane_internal_ips > /dev/null 2>&1; then
+#           terraform output -json control_plane_internal_ips | jq -r '.[]' >> deployment_summary.txt
+#         else
+#           echo "Not available" >> deployment_summary.txt
+#         fi
+#         echo "" >> deployment_summary.txt
+#         echo "Worker IPs:" >> deployment_summary.txt
+#         if terraform output worker_internal_ips > /dev/null 2>&1; then
+#           terraform output -json worker_internal_ips | jq -r '.[]' >> deployment_summary.txt
+#         else
+#           echo "Not available" >> deployment_summary.txt
+#         fi
+
+#     - name: Upload GCP Artifacts
+#       uses: actions/upload-artifact@v4
+#       if: always()
+#       with:
+#         name: gcp-deployment-logs
+#         path: |
+#           app-deployment/terraform/gcp/deploy_*.log
+#           app-deployment/terraform/gcp/terraform.tfstate*
+#           app-deployment/terraform/gcp/terraform.tfvars
+#           app-deployment/terraform/gcp/instance_ips.txt
+#           app-deployment/terraform/gcp/deployment_summary.txt
+#           app-deployment/terraform/gcp/ssh_credentials.txt
+#           app-deployment/terraform/gcp/.terraform.lock.hcl
+#         retention-days: 30
+#   deploy-to-vsphere:
+#     if: ${{ github.event.inputs.cloud_provider == 'vsphere' }}
+#     needs: display-configuration
+#     runs-on: openlab
+#     env:
+#       VSPHERE_SERVER: ${{ secrets.VSPHERE_SERVER }}
+#       VSPHERE_USER: ${{ secrets.VSPHERE_USERNAME }}
+#       VSPHERE_PASSWORD: ${{ secrets.VSPHERE_PASSWORD }}
+#       CONTENT_LIBRARY_ID: ${{ secrets.VSPHERE_CONTENT_LIBRARY_ID }}
+
+#     steps:
+#     - name: Checkout code
+#       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+#     - name: Decode vSphere Credentials
+#       run: |
+#         echo "Decoding base64-encoded vSphere credentials..."
+#         echo "VSPHERE_SERVER=$(echo "${{ secrets.VSPHERE_SERVER }}" | base64 --decode)" >> $GITHUB_ENV
+#         echo "VSPHERE_USER=$(echo "${{ secrets.VSPHERE_USERNAME }}" | base64 --decode)" >> $GITHUB_ENV
+#         echo "VSPHERE_PASSWORD=$(echo "${{ secrets.VSPHERE_PASSWORD }}" | base64 --decode)" >> $GITHUB_ENV
+#         echo "::add-mask::$VSPHERE_PASSWORD"
+
+#     - name: Set vSphere Variables
+#       run: |
+#         echo "NAME_PREFIX=${{ github.event.inputs.name_prefix || 'admin' }}" >> $GITHUB_ENV
+#         echo "CP_COUNT=1" >> $GITHUB_ENV
+#         echo "WORKER_COUNT=${{ github.event.inputs.worker_count || '2' }}" >> $GITHUB_ENV
+#         echo "CP_IMAGE=${{ github.event.inputs.cp_image }}" >> $GITHUB_ENV
+#         echo "WORKER_IMAGE=${{ github.event.inputs.worker_image }}" >> $GITHUB_ENV
+#         echo "CONTENT_LIBRARY_ID=${{ secrets.VSPHERE_CONTENT_LIBRARY_ID }}" >> $GITHUB_ENV
+
+#         # Set SSH_USERNAME with proper fallback logic
+#         SSH_USERNAME="${{ secrets.VSPHERE_SSH_USERNAME }}"
+#         if [ -z "$SSH_USERNAME" ] && [ -n "${{ github.event.inputs.ssh_admin_username }}" ]; then
+#           SSH_USERNAME="${{ github.event.inputs.ssh_admin_username }}"
+#         elif [ -z "$SSH_USERNAME" ] && [ -n "${{ github.event.inputs.name_prefix }}" ]; then
+#           SSH_USERNAME="${{ github.event.inputs.name_prefix }}"
+#         elif [ -z "$SSH_USERNAME" ]; then
+#           SSH_USERNAME="ubuntu"
+#         fi
+#         echo "SSH_USERNAME=$SSH_USERNAME" >> $GITHUB_ENV
+
+#         # Set SSH_PASSWORD with proper fallback logic
+#         SSH_PASSWORD="${{ secrets.VSPHERE_SSH_PASSWORD }}"
+#         if [ -z "$SSH_PASSWORD" ] && [ -n "${{ github.event.inputs.ssh_admin_password }}" ]; then
+#           SSH_PASSWORD="${{ github.event.inputs.ssh_admin_password }}"
+#         elif [ -z "$SSH_PASSWORD" ]; then
+#           SSH_PASSWORD="Welcome@123"
+#         fi
+#         echo "::add-mask::$SSH_PASSWORD"
+#         echo "SSH_PASSWORD=$SSH_PASSWORD" >> $GITHUB_ENV
+
+#     - name: Setup Node.js
+#       uses: actions/setup-node@v4
+#       with:
+#         node-version: '18'
+
+#     - name: Setup Terraform
+#       uses: hashicorp/setup-terraform@v3
+#       with:
+#         terraform_version: 1.5.0
+    
+#     - name: Deploy vSphere VMs
+#       working-directory: ./app-deployment/terraform/vsphere/automated
+#       run: |
+#         echo "Deploying VMs to vSphere..."
+#         echo "Name Prefix: ${{ env.NAME_PREFIX }}"
+#         echo "Worker Count: ${{ env.WORKER_COUNT }}"
+#         echo "CP Image: ${{ env.CP_IMAGE || 'latest' }}"
+#         echo "Worker Image: ${{ env.WORKER_IMAGE || 'latest' }}"
+#         echo "SSH Username: ${{ env.SSH_USERNAME }}"
+
+#         # Make the script executable
+#         chmod +x ./deploy-vsphere.sh
+
+#         # Run the deployment script with the required parameters
+#         ./deploy-vsphere.sh \
+#           "${{ env.NAME_PREFIX }}" \
+#           "${{ env.WORKER_COUNT }}" \
+#           "${{ env.CP_IMAGE }}" \
+#           "${{ env.WORKER_IMAGE }}" \
+#           "${{ env.SSH_USERNAME }}" \
+#           "${{ env.SSH_PASSWORD }}" \
+#           "${{ env.CONTENT_LIBRARY_ID }}"
+#     - name: Capture vSphere Outputs
+#       working-directory: ./app-deployment/terraform/vsphere/automated
+#       run: |
+#         # Capture Terraform outputs based on actual outputs.tf structure
+#         CP_IP=$(terraform output -json control_plane_vm | jq -r '.ipaddress' || echo "not_available")
+#         CP_NAME=$(terraform output -json control_plane_vm | jq -r '.name' || echo "not_available") 
+
+#         # Extract worker IPs and names from the worker_vms output
+#         WORKER_IPS=$(terraform output -json worker_vms | jq -r 'to_entries[] | .value.ipaddress' || echo '[]')
+#         WORKER_NAMES=$(terraform output -json worker_vms | jq -r 'to_entries[] | .value.name' || echo '[]')
+
+#         echo "Control Plane IP: $CP_IP"
+#         echo "Control Plane Name: $CP_NAME"
+#         echo "CONTROL_PLANE_IP=$CP_IP" >> $GITHUB_ENV
+#         echo "CONTROL_PLANE_NAME=$CP_NAME" >> $GITHUB_ENV
+
+#         # Store worker IPs as multiline environment variable
+#         echo "WORKER_IPS<<EOF" >> $GITHUB_ENV
+#         echo "$WORKER_IPS" >> $GITHUB_ENV
+#         echo "EOF" >> $GITHUB_ENV
+
+#         # Store worker names as multiline environment variable
+#         echo "WORKER_NAMES<<EOF" >> $GITHUB_ENV  
+#         echo "$WORKER_NAMES" >> $GITHUB_ENV
+#         echo "EOF" >> $GITHUB_ENV
+
+#         # Also store as single line space-separated for easier processing
+#         WORKER_IPS_LINE=$(echo "$WORKER_IPS" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+#         WORKER_NAMES_LINE=$(echo "$WORKER_NAMES" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+
+#         echo "WORKER_IPS_LINE=$WORKER_IPS_LINE" >> $GITHUB_ENV
+#         echo "WORKER_NAMES_LINE=$WORKER_NAMES_LINE" >> $GITHUB_ENV
+
+#         echo "Worker IPs: $WORKER_IPS_LINE"
+#         echo "Worker Names: $WORKER_NAMES_LINE"
+#     - name: vSphere Deployment Summary  
+#       run: |
+#         echo "## 🟡 vSphere Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+#         echo "" >> $GITHUB_STEP_SUMMARY
+#         echo "### VM Information" >> $GITHUB_STEP_SUMMARY
+#         echo "- **Control Plane VM:** \`${{ env.CONTROL_PLANE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+#         echo "  - **IP:** \`${{ env.CONTROL_PLANE_IP }}\`" >> $GITHUB_STEP_SUMMARY
+#         echo "  - **Version:** ${{ env.CP_IMAGE || 'latest' }}" >> $GITHUB_STEP_SUMMARY
+#         echo "" >> $GITHUB_STEP_SUMMARY
+#         echo "### Worker VMs" >> $GITHUB_STEP_SUMMARY
+
+#         # Display worker VMs
+#         if [ -n "${{ env.WORKER_NAMES_LINE }}" ]; then
+#           IFS=' ' read -ra NAMES <<< "${{ env.WORKER_NAMES_LINE }}"
+#           IFS=' ' read -ra IPS <<< "${{ env.WORKER_IPS_LINE }}"
+
+#           for i in "${!NAMES[@]}"; do
+#             vm_number=$((i + 1))
+#             echo "- **Worker VM ${vm_number}:** \`${NAMES[i]}\`" >> $GITHUB_STEP_SUMMARY
+#             echo "  - **IP:** \`${IPS[i]:-not_available}\`" >> $GITHUB_STEP_SUMMARY
+#             echo "  - **Version:** ${{ env.WORKER_IMAGE || 'latest' }}" >> $GITHUB_STEP_SUMMARY
+#           done
+#         else
+#           echo "- No worker VMs found" >> $GITHUB_STEP_SUMMARY
+#         fi
+
+#         echo "" >> $GITHUB_STEP_SUMMARY
+#         echo "### 🔑 SSH Access" >> $GITHUB_STEP_SUMMARY
+#         echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+#         echo "# Control Plane" >> $GITHUB_STEP_SUMMARY
+#         echo "ssh ${{ env.SSH_USERNAME }}@${{ env.CONTROL_PLANE_IP }}" >> $GITHUB_STEP_SUMMARY
+#         if [ -n "${{ env.WORKER_IPS_LINE }}" ]; then
+#           echo "" >> $GITHUB_STEP_SUMMARY
+#           echo "# Workers" >> $GITHUB_STEP_SUMMARY
+#           IFS=' ' read -ra IPS <<< "${{ env.WORKER_IPS_LINE }}"
+#           for ip in "${IPS[@]}"; do
+#             if [ -n "$ip" ] && [ "$ip" != "not_available" ]; then
+#               echo "ssh ${{ env.SSH_USERNAME }}@$ip" >> $GITHUB_STEP_SUMMARY
+#             fi
+#           done
+#         fi
+#         echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+#         echo ""
+#         echo "🎉 vSphere Deployment completed successfully!"
+#         echo "📋 Control Plane: ${{ env.CONTROL_PLANE_NAME }} (${{ env.CONTROL_PLANE_IP }})"
+#         echo "👥 Workers: ${{ env.WORKER_NAMES_LINE }} (${{ env.WORKER_IPS_LINE }})"
+#     - name: Upload vSphere Artifacts
+#       uses: actions/upload-artifact@v4
+#       if: always()
+#       with:
+#         name: vsphere-deployment-logs
+#         path: |
+#           app-deployment/terraform/vsphere/automated/terraform.tfstate*
+#           app-deployment/terraform/vsphere/automated/.terraform.lock.hcl
+#           app-deployment/terraform/vsphere/automated/terraform.tfvars
+#           app-deployment/terraform/vsphere/automated/deploy_*.log
+#         retention-days: 30
+
+#   deployment-summary:
+#     runs-on: ubuntu-latest
+#     needs: [deploy-to-gcp, deploy-to-azure, deploy-to-vsphere]
+#     if: always()
+    
+#     steps:
+#     - name: Final Summary
+#       run: |
+#         echo "🎉 ===== MULTI-CLOUD DEPLOYMENT COMPLETE ===== 🎉"
+#         echo ""
+#         echo "Selected Cloud: ${{ github.event.inputs.cloud_provider }}"
+#         echo "Name Prefix: ${{ github.event.inputs.name_prefix }}"
+#         echo "CP Count: 1"
+#         echo "Worker Count: ${{ github.event.inputs.worker_count }}"
+#         echo ""
+        
+#         if [ "${{ needs.deploy-to-gcp.result }}" == "success" ]; then
+#           echo "GCP Deployment: SUCCESS"
+#         elif [ "${{ needs.deploy-to-gcp.result }}" == "failure" ]; then
+#           echo "GCP Deployment: FAILED"
+#         elif [ "${{ needs.deploy-to-gcp.result }}" == "skipped" ]; then
+#           echo "GCP Deployment: SKIPPED (Azure was selected)"
+#         fi
+        
+#         if [ "${{ needs.deploy-to-azure.result }}" == "success" ]; then
+#           echo "Azure Deployment: SUCCESS"
+#         elif [ "${{ needs.deploy-to-azure.result }}" == "failure" ]; then
+#           echo "Azure Deployment: FAILED"
+#         elif [ "${{ needs.deploy-to-azure.result }}" == "skipped" ]; then
+#           echo "Azure Deployment: SKIPPED (GCP was selected)"
+#         fi
+
+#         if [ "${{ needs.deploy-to-vsphere.result }}" == "success" ]; then
+#           echo "vSphere Deployment: SUCCESS"
+#         elif [ "${{ needs.deploy-to-vsphere.result }}" == "failure" ]; then
+#           echo "vSphere Deployment: FAILED"
+#         elif [ "${{ needs.deploy-to-vsphere.result }}" == "skipped" ]; then
+#           echo "vSphere Deployment: SKIPPED"
+#         fi
+        
+#         echo ""
+#         echo "Multi-cloud deployment process completed!"
+
+name: AWS Image Export & SHA256 Generation
 
 on:
   workflow_dispatch:
     inputs:
-      cloud_provider:
-        description: 'Cloud provider to deploy to'
+      cp_ami_id:
+        description: "Control Plane AMI ID (e.g., ami-xxxxx)"
         required: true
-        type: choice
-        options:
-          - azure
-          - gcp
-          - vsphere
-        default: 'gcp'
-      name_prefix:
-        description: "Name prefix for instances/VMs"
-        required: false
-        default: "testing-automated"
-      
-      worker_count:
-        description: "Number of worker nodes"
-        required: false
-        default: "2"
-      
-      cp_image:
-        description: "Control plane image leave empty for latest"
-        required: false
-        default: ""
-      
-      worker_image:
-        description: "Worker image leave empty for latest"
-        required: false
-        default: ""
-
-      # SSH specific inputs (only used for Azure, Vsphere)
-      ssh_admin_username:
-        description: 'Username for SSH access (required for Azure, Vsphere)'
-        required: false
         type: string
-        default: "ubuntu"
-      ssh_admin_password:
-        description: "SSH Password (minimum 8 characters, must contain uppercase, lowercase, number, and special character)"
-        required: false
+      worker_ami_id:
+        description: "Worker Node AMI ID (e.g., ami-yyyyy)"
+        required: true
         type: string
-        default: ""
-
+      export_prefix:
+        description: "Export folder prefix (e.g., preview-dryrun)"
+        required: false
+        default: "releases"
 
 env:
-  # Azure Environment Variables
-  ARM_CLIENT_ID: ${{ secrets.NDM_AZURE_CLIENT_ID }}
-  ARM_CLIENT_SECRET: ${{ secrets.NDM_AZURE_CLIENT_SECRET }}
-  ARM_SUBSCRIPTION_ID: ${{ secrets.NDM_AZURE_SUBSCRIPTION_ID }}
-  ARM_TENANT_ID: ${{ secrets.NDM_AZURE_TENANT_ID }}
+  AWS_REGION: us-east-1
+  S3_BUCKET: dk-test-workflow
+  EXPORT_FORMAT: VHD
+  LOCAL_EXPORT_PATH: /home/ubuntu/
+  SCRATCH_SPACE: /mnt/scratch_space
+  NSS_HOST: cyclortp7.rtp.openeng.netapp.com
+  NSS_PATH: /x/eng/NDM/
 
 jobs:
-  display-configuration:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Display Selection
-      run: |
-        echo "🌩️ ===== MULTI-CLOUD DEPLOYMENT ===== 🌩️"
-        echo "Selected cloud provider: ${{ github.event.inputs.cloud_provider }}"
-        echo "Name prefix: ${{ github.event.inputs.name_prefix }}"
-        echo "CP count: 1"
-        echo "Worker count: ${{ github.event.inputs.worker_count }}"
-        echo "CP image: ${{ github.event.inputs.cp_image  }}"
-        echo "Worker image: ${{ github.event.inputs.worker_image }}"
-        
-        if [ "${{ github.event.inputs.cloud_provider }}" == "gcp" ]; then
-          echo "🔵 GCP Configuration: Using default region and machine type"
-        elif [ "${{ github.event.inputs.cloud_provider }}" == "azure" ]; then
-          echo "🔷 Azure Configuration:"
-          echo "  Username: ${{ github.event.inputs.ssh_admin_username }}"
-          echo "  Admin Password: ******* (hidden)"
-        elif [ "${{ github.event.inputs.cloud_provider }}" == "vsphere" ]; then
-          echo "🔶 vSphere Configuration:"
-          echo "  Username: ${{ github.event.inputs.ssh_admin_username }}"
-          echo "  Admin Password: ******* (hidden)"
-        fi
-        echo "================================================="
-
-
-  deploy-to-azure:
-    if: ${{ github.event.inputs.cloud_provider == 'azure' }}
-    needs: display-configuration
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-    - name: Set Azure Variables
-      run: |
-        echo "NAME_PREFIX=${{ github.event.inputs.name_prefix || 'admin' }}" >> $GITHUB_ENV
-        echo "CP_COUNT=1" >> $GITHUB_ENV
-        echo "WORKER_COUNT=${{ github.event.inputs.worker_count || '2' }}" >> $GITHUB_ENV
-        echo "CP_IMAGE=${{ github.event.inputs.cp_image }}" >> $GITHUB_ENV
-        echo "WORKER_IMAGE=${{ github.event.inputs.worker_image }}" >> $GITHUB_ENV
-        
-        # Set AZURE_USERNAME with proper fallback logic
-        AZURE_USERNAME="${{ secrets.AZURE_USERNAME }}"
-        if [ -z "$AZURE_USERNAME" ] && [ -n "${{ github.event.inputs.ssh_admin_username }}" ]; then
-          AZURE_USERNAME="${{ github.event.inputs.ssh_admin_username }}"
-        elif [ -z "$AZURE_USERNAME" ] && [ -n "${{ github.event.inputs.name_prefix }}" ]; then
-          AZURE_USERNAME="${{ github.event.inputs.name_prefix }}"
-        elif [ -z "$AZURE_USERNAME" ]; then
-          AZURE_USERNAME="admin"
-        fi
-        echo "AZURE_USERNAME=$AZURE_USERNAME" >> $GITHUB_ENV
-
-        # Set PASSWORD with proper fallback logic
-        ADMIN_PASSWORD="${{ secrets.AZURE_ADMIN_PASSWORD }}"
-        if [ -z "$ADMIN_PASSWORD" ] && [ -n "${{ github.event.inputs.ssh_admin_password }}" ]; then
-          ADMIN_PASSWORD="${{ github.event.inputs.ssh_admin_password }}"
-        elif [ -z "$ADMIN_PASSWORD" ]; then
-          ADMIN_PASSWORD="Welcome@123"
-        fi
-        echo "ADMIN_PASSWORD=$ADMIN_PASSWORD" >> $GITHUB_ENV
-
-
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: 1.5.0
-
-    - name: Azure Login
-      uses: azure/login@v1
-      with:
-        creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
-
-    - name: Deploy Control Plane
-      working-directory: ./app-deployment/terraform/azure/control_plane
-      run: |
-        echo "Deploying Control Plane..."
-        echo "Username: ${{ env.AZURE_USERNAME }}"
-        echo "Image Version: ${{ env.CP_IMAGE || 'latest' }}"
-        
-        terraform init -input=false
-
-        TF_ARGS="-var=image_definition=ndm-control-plane -var=username=${{ env.AZURE_USERNAME }} -var=admin_password=${{ env.ADMIN_PASSWORD }}"
-        if [ -n "${{ env.CP_IMAGE }}" ]; then
-          TF_ARGS="$TF_ARGS -var=image_version=${{ env.CP_IMAGE }}"
-        fi
-        
-        terraform apply -auto-approve $TF_ARGS
-        
-        CP_IP=$(terraform output -raw vm_private_ip)
-        CP_NAME=$(terraform output -raw vm_name)
-        CP_PASSWORD=$(terraform output -raw admin_password)
-        echo "Control Plane Private IP: $CP_IP"
-        echo "CONTROL_PLANE_IP=$CP_IP" >> $GITHUB_ENV
-        echo "CONTROL_PLANE_NAME=$CP_NAME" >> $GITHUB_ENV
-        echo "CONTROL_PLANE_PASSWORD=$CP_PASSWORD" >> $GITHUB_ENV
-
-    - name: Deploy Workers
-      working-directory: ./app-deployment/terraform/azure/worker
-      run: |
-        echo "Deploying ${{ env.WORKER_COUNT }} Worker(s)..."
-        echo "Username: ${{ env.AZURE_USERNAME }}"
-        echo "Worker Image Version: ${{ env.WORKER_IMAGE || 'latest' }}"
-
-        terraform init -input=false
-
-        TF_ARGS="-var=image_definition=ndm-worker -var=username=${{ env.AZURE_USERNAME }} -var=admin_password=${{ env.ADMIN_PASSWORD }}"
-        if [ -n "${{ env.WORKER_IMAGE }}" ]; then
-          TF_ARGS="$TF_ARGS -var=image_version=${{ env.WORKER_IMAGE }}"
-        fi
-        if [ -n "${{ env.WORKER_COUNT }}" ]; then
-          TF_ARGS="$TF_ARGS -var=worker_count=${{ env.WORKER_COUNT }}"
-        fi
-        
-        terraform apply -auto-approve $TF_ARGS
-        
-        WORKER_IPS=$(terraform output -json worker_private_ips | jq -r '.[]')
-        WORKER_NAMES=$(terraform output -json worker_names | jq -r '.[]')
-        WORKER_PASSWORD=$(terraform output -raw admin_password)
-        echo "Worker Private IPs:"
-        echo "$WORKER_IPS"
-        echo "Worker Names:"
-        echo "$WORKER_NAMES"
-        
-        # Store worker information in environment variables for summary
-        echo "WORKER_IPS<<EOF" >> $GITHUB_ENV
-        echo "$WORKER_IPS" >> $GITHUB_ENV
-        echo "EOF" >> $GITHUB_ENV
-        echo "WORKER_NAMES<<EOF" >> $GITHUB_ENV
-        echo "$WORKER_NAMES" >> $GITHUB_ENV
-        echo "EOF" >> $GITHUB_ENV
-        echo "WORKER_PASSWORD=$WORKER_PASSWORD" >> $GITHUB_ENV
-
-    - name: Azure Deployment Summary
-      run: |
-        echo "## Azure Deployment Complete!" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### VM Information" >> $GITHUB_STEP_SUMMARY
-        echo "- **Control Plane VM:** \`${{ env.CONTROL_PLANE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "  - **IP:** \`${{ env.CONTROL_PLANE_IP }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "  - **Version:** ${{ env.CP_IMAGE || 'latest' }}" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Worker VMs" >> $GITHUB_STEP_SUMMARY
-        
-        # Create temp files for processing
-        echo "${{ env.WORKER_NAMES }}" > /tmp/worker_names.txt
-        echo "${{ env.WORKER_IPS }}" > /tmp/worker_ips.txt
-        
-        # Process workers
-        vm_counter=1
-        while IFS= read -r name && IFS= read -r ip <&3; do
-          if [ -n "$name" ] && [ -n "$ip" ]; then
-            echo "- **Worker VM ${vm_counter}:** \`${name}\`" >> $GITHUB_STEP_SUMMARY
-            echo "  - **IP:** \`${ip}\`" >> $GITHUB_STEP_SUMMARY
-            echo "  - **Version:** ${{ env.WORKER_IMAGE || 'latest' }}" >> $GITHUB_STEP_SUMMARY
-            vm_counter=$((vm_counter + 1))
-          fi
-        done < /tmp/worker_names.txt 3< /tmp/worker_ips.txt
-        
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Access Information" >> $GITHUB_STEP_SUMMARY
-        echo "SSH using username: ${{ env.AZURE_USERNAME }} and the password which was provided." >> $GITHUB_STEP_SUMMARY
-
-        echo ""
-        echo "Azure Deployment completed successfully!"
-
-    - name: Upload Azure Artifacts
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: azure-deployment-logs
-        path: |
-          app-deployment/terraform/azure/control_plane/terraform.tfstate*
-          app-deployment/terraform/azure/control_plane/.terraform.lock.hcl
-          app-deployment/terraform/azure/worker/terraform.tfstate*
-          app-deployment/terraform/azure/worker/.terraform.lock.hcl
-        retention-days: 30
-
-  deploy-to-gcp:
-    if: ${{ github.event.inputs.cloud_provider == 'gcp' }}
-    needs: display-configuration
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-    - name: Set GCP Variables
-      run: |
-        echo "NAME_PREFIX=${{ github.event.inputs.name_prefix || 'admin' }}" >> $GITHUB_ENV
-        echo "CP_COUNT=1" >> $GITHUB_ENV
-        echo "WORKER_COUNT=${{ github.event.inputs.worker_count || '2' }}" >> $GITHUB_ENV
-        echo "CP_IMAGE=${{ github.event.inputs.cp_image }}" >> $GITHUB_ENV
-        echo "WORKER_IMAGE=${{ github.event.inputs.worker_image }}" >> $GITHUB_ENV
-        echo "REGION=us-east1" >> $GITHUB_ENV
-        echo "CP_MACHINE_TYPE=e2-custom-8-32768" >> $GITHUB_ENV
-        echo "WORKER_MACHINE_TYPE=e2-custom-4-16384" >> $GITHUB_ENV
-        echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID || 'app-microservices-cm' }}" >> $GITHUB_ENV
-
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: latest
-
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v1
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-    - name: Set up Cloud SDK
-      uses: google-github-actions/setup-gcloud@v1
-      with:
-        version: 'latest'
-
-    - name: Set up environment
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y jq expect
-    
-    - name: Debug Variables Before Passing
-      run: |
-        echo "=== DEBUG: Variables being passed to run.sh ==="
-        echo "1. NAME_PREFIX: '${{ env.NAME_PREFIX }}'"
-        echo "2. CP_COUNT: '${{ env.CP_COUNT }}'"
-        echo "3. WORKER_COUNT: '${{ env.WORKER_COUNT }}'"
-        echo "4. CP_MACHINE_TYPE: '${{ env.CP_MACHINE_TYPE }}'"
-        echo "5. CP_IMAGE: '${{ env.CP_IMAGE }}'"
-        echo "6. WORKER_MACHINE_TYPE: '${{ env.WORKER_MACHINE_TYPE }}'"
-        echo "7. WORKER_IMAGE: '${{ env.WORKER_IMAGE }}'"
-        echo "8. REGION: '${{ env.REGION }}'"
-        echo "============================================="
-
-    - name: Run GCP Script
-      run: |
-        cd app-deployment/terraform/gcp
-        chmod +x ./run.sh
-        
-        echo " ===== EXECUTING GCP DEPLOYMENT ===== "
-        
-        # REMOVE the duplicate debug section here
-        # It's already in the previous step
-        
-        # Pass inputs to GCP run.sh script in correct order
-        (
-        echo "${{ env.NAME_PREFIX }}"
-        echo "${{ env.CP_COUNT }}"
-        echo "${{ env.WORKER_COUNT }}"
-        echo "${{ env.CP_MACHINE_TYPE }}"
-        echo "${{ env.CP_IMAGE }}"
-        echo "${{ env.WORKER_MACHINE_TYPE }}"
-        echo "${{ env.WORKER_IMAGE }}"
-        echo "${{ env.REGION }}"
-        ) | ./run.sh
-
-        
-    - name: Display GCP Instance IPs
-      working-directory: ./app-deployment/terraform/gcp
-      run: |
-        echo ""
-        echo "🖥️  ===== GCP DEPLOYMENT SUMMARY ===== 🖥️"
-        echo ""
-
-        # Define NAME_PREFIX variable
-        NAME_PREFIX="${{ env.NAME_PREFIX }}"
-        
-        # Get Terraform outputs with nice formatting
-        echo "Control Plane Nodes:"
-        if terraform output control_plane_internal_ips > /dev/null 2>&1; then
-          terraform output -json control_plane_internal_ips | jq -r '.[] | "  Control Plane IP: " + .'
-        else
-          echo "Control plane IPs not available yet"
-        fi
-        
-        echo ""
-        echo "Worker Nodes:"
-        if terraform output worker_internal_ips > /dev/null 2>&1; then
-          terraform output -json worker_internal_ips | jq -r '.[] | "  Worker IP: " + .'
-        else
-          echo " Worker IPs not available yet"
-        fi
-        
-        echo ""
-        echo "Instance Details:"
-        
-        # Get all instance details
-        gcloud compute instances list \
-          --project=${{ env.GCP_PROJECT_ID }} \
-          --filter="name~'.*${NAME_PREFIX}.*'" \
-          --format="table(
-            name:label='Instance Name',
-            zone.basename():label='Zone',
-            machineType.basename():label='Machine Type',
-            networkInterfaces[0].networkIP:label='Internal IP',
-            status:label='Status'
-          )"
-        
-        echo ""
-        echo "GCP Deployment completed successfully!"
-
-        # Save IPs to file for artifacts with error handling
-        echo "Control Plane IPs:" > instance_ips.txt
-        if terraform output control_plane_internal_ips > /dev/null 2>&1; then
-          terraform output -json control_plane_internal_ips | jq -r '.[]' >> instance_ips.txt
-        else
-          echo "Not available" >> instance_ips.txt
-        fi
-        
-        echo "" >> instance_ips.txt
-        echo "Worker IPs:" >> instance_ips.txt
-        if terraform output worker_internal_ips > /dev/null 2>&1; then
-          terraform output -json worker_internal_ips | jq -r '.[]' >> instance_ips.txt
-        else
-          echo "Not available" >> instance_ips.txt
-        fi
-        
-        # Also create a summary file
-        echo "=== DEPLOYMENT SUMMARY ===" > deployment_summary.txt
-        echo "Name Prefix: ${NAME_PREFIX}" >> deployment_summary.txt
-        echo "Control Plane Count: ${{ env.CP_COUNT }}" >> deployment_summary.txt
-        echo "Worker Count: ${{ env.WORKER_COUNT }}" >> deployment_summary.txt
-        echo "Region: ${{ env.REGION }}" >> deployment_summary.txt
-        echo "" >> deployment_summary.txt
-        echo "Control Plane IPs:" >> deployment_summary.txt
-        if terraform output control_plane_internal_ips > /dev/null 2>&1; then
-          terraform output -json control_plane_internal_ips | jq -r '.[]' >> deployment_summary.txt
-        else
-          echo "Not available" >> deployment_summary.txt
-        fi
-        echo "" >> deployment_summary.txt
-        echo "Worker IPs:" >> deployment_summary.txt
-        if terraform output worker_internal_ips > /dev/null 2>&1; then
-          terraform output -json worker_internal_ips | jq -r '.[]' >> deployment_summary.txt
-        else
-          echo "Not available" >> deployment_summary.txt
-        fi
-
-    - name: Upload GCP Artifacts
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: gcp-deployment-logs
-        path: |
-          app-deployment/terraform/gcp/deploy_*.log
-          app-deployment/terraform/gcp/terraform.tfstate*
-          app-deployment/terraform/gcp/terraform.tfvars
-          app-deployment/terraform/gcp/instance_ips.txt
-          app-deployment/terraform/gcp/deployment_summary.txt
-          app-deployment/terraform/gcp/ssh_credentials.txt
-          app-deployment/terraform/gcp/.terraform.lock.hcl
-        retention-days: 30
-  deploy-to-vsphere:
-    if: ${{ github.event.inputs.cloud_provider == 'vsphere' }}
-    needs: display-configuration
+  aws-image-export:
     runs-on: openlab
-    env:
-      VSPHERE_SERVER: ${{ secrets.VSPHERE_SERVER }}
-      VSPHERE_USER: ${{ secrets.VSPHERE_USERNAME }}
-      VSPHERE_PASSWORD: ${{ secrets.VSPHERE_PASSWORD }}
-      CONTENT_LIBRARY_ID: ${{ secrets.VSPHERE_CONTENT_LIBRARY_ID }}
+    outputs:
+      worker_vhd: ${{ steps.set-outputs.outputs.worker_vhd }}
+      controlplane_vhd: ${{ steps.set-outputs.outputs.controlplane_vhd }}
+      export_prefix: ${{ steps.set-outputs.outputs.export_prefix }}
+      timestamp: ${{ steps.set-outputs.outputs.timestamp }}
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install sshpass
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y sshpass
 
-    - name: Decode vSphere Credentials
-      run: |
-        echo "Decoding base64-encoded vSphere credentials..."
-        echo "VSPHERE_SERVER=$(echo "${{ secrets.VSPHERE_SERVER }}" | base64 --decode)" >> $GITHUB_ENV
-        echo "VSPHERE_USER=$(echo "${{ secrets.VSPHERE_USERNAME }}" | base64 --decode)" >> $GITHUB_ENV
-        echo "VSPHERE_PASSWORD=$(echo "${{ secrets.VSPHERE_PASSWORD }}" | base64 --decode)" >> $GITHUB_ENV
-        echo "::add-mask::$VSPHERE_PASSWORD"
+      - name: Execute AWS Operations
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+        run: |
+          sshpass -p "$RUNNER_PASSWORD" ssh -o StrictHostKeyChecking=no ubuntu@10.192.7.66 << 'ENDSSH'
+          set -e
 
-    - name: Set vSphere Variables
-      run: |
-        echo "NAME_PREFIX=${{ github.event.inputs.name_prefix || 'admin' }}" >> $GITHUB_ENV
-        echo "CP_COUNT=1" >> $GITHUB_ENV
-        echo "WORKER_COUNT=${{ github.event.inputs.worker_count || '2' }}" >> $GITHUB_ENV
-        echo "CP_IMAGE=${{ github.event.inputs.cp_image }}" >> $GITHUB_ENV
-        echo "WORKER_IMAGE=${{ github.event.inputs.worker_image }}" >> $GITHUB_ENV
-        echo "CONTENT_LIBRARY_ID=${{ secrets.VSPHERE_CONTENT_LIBRARY_ID }}" >> $GITHUB_ENV
+          # ✅ EXPORT credentials INSIDE the SSH session
+          export AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}"
+          export AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          export AWS_DEFAULT_REGION="us-east-1"
+          
+          CP_AMI="${{ github.event.inputs.cp_ami_id }}"
+          WORKER_AMI="${{ github.event.inputs.worker_ami_id }}"
+          EXPORT_PREFIX="${{ github.event.inputs.export_prefix }}"
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          LOCAL_PATH="${{ env.LOCAL_EXPORT_PATH }}"
+          SCRATCH_SPACE="${{ env.SCRATCH_SPACE }}"
+          CHECKSUM_FILE="AWS_SHA256SUMS-${TIMESTAMP}.sha256"
 
-        # Set SSH_USERNAME with proper fallback logic
-        SSH_USERNAME="${{ secrets.VSPHERE_SSH_USERNAME }}"
-        if [ -z "$SSH_USERNAME" ] && [ -n "${{ github.event.inputs.ssh_admin_username }}" ]; then
-          SSH_USERNAME="${{ github.event.inputs.ssh_admin_username }}"
-        elif [ -z "$SSH_USERNAME" ] && [ -n "${{ github.event.inputs.name_prefix }}" ]; then
-          SSH_USERNAME="${{ github.event.inputs.name_prefix }}"
-        elif [ -z "$SSH_USERNAME" ]; then
-          SSH_USERNAME="ubuntu"
-        fi
-        echo "SSH_USERNAME=$SSH_USERNAME" >> $GITHUB_ENV
-
-        # Set SSH_PASSWORD with proper fallback logic
-        SSH_PASSWORD="${{ secrets.VSPHERE_SSH_PASSWORD }}"
-        if [ -z "$SSH_PASSWORD" ] && [ -n "${{ github.event.inputs.ssh_admin_password }}" ]; then
-          SSH_PASSWORD="${{ github.event.inputs.ssh_admin_password }}"
-        elif [ -z "$SSH_PASSWORD" ]; then
-          SSH_PASSWORD="Welcome@123"
-        fi
-        echo "::add-mask::$SSH_PASSWORD"
-        echo "SSH_PASSWORD=$SSH_PASSWORD" >> $GITHUB_ENV
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: 1.5.0
-    
-    - name: Deploy vSphere VMs
-      working-directory: ./app-deployment/terraform/vsphere/automated
-      run: |
-        echo "Deploying VMs to vSphere..."
-        echo "Name Prefix: ${{ env.NAME_PREFIX }}"
-        echo "Worker Count: ${{ env.WORKER_COUNT }}"
-        echo "CP Image: ${{ env.CP_IMAGE || 'latest' }}"
-        echo "Worker Image: ${{ env.WORKER_IMAGE || 'latest' }}"
-        echo "SSH Username: ${{ env.SSH_USERNAME }}"
-
-        # Make the script executable
-        chmod +x ./deploy-vsphere.sh
-
-        # Run the deployment script with the required parameters
-        ./deploy-vsphere.sh \
-          "${{ env.NAME_PREFIX }}" \
-          "${{ env.WORKER_COUNT }}" \
-          "${{ env.CP_IMAGE }}" \
-          "${{ env.WORKER_IMAGE }}" \
-          "${{ env.SSH_USERNAME }}" \
-          "${{ env.SSH_PASSWORD }}" \
-          "${{ env.CONTENT_LIBRARY_ID }}"
-    - name: Capture vSphere Outputs
-      working-directory: ./app-deployment/terraform/vsphere/automated
-      run: |
-        # Capture Terraform outputs based on actual outputs.tf structure
-        CP_IP=$(terraform output -json control_plane_vm | jq -r '.ipaddress' || echo "not_available")
-        CP_NAME=$(terraform output -json control_plane_vm | jq -r '.name' || echo "not_available") 
-
-        # Extract worker IPs and names from the worker_vms output
-        WORKER_IPS=$(terraform output -json worker_vms | jq -r 'to_entries[] | .value.ipaddress' || echo '[]')
-        WORKER_NAMES=$(terraform output -json worker_vms | jq -r 'to_entries[] | .value.name' || echo '[]')
-
-        echo "Control Plane IP: $CP_IP"
-        echo "Control Plane Name: $CP_NAME"
-        echo "CONTROL_PLANE_IP=$CP_IP" >> $GITHUB_ENV
-        echo "CONTROL_PLANE_NAME=$CP_NAME" >> $GITHUB_ENV
-
-        # Store worker IPs as multiline environment variable
-        echo "WORKER_IPS<<EOF" >> $GITHUB_ENV
-        echo "$WORKER_IPS" >> $GITHUB_ENV
-        echo "EOF" >> $GITHUB_ENV
-
-        # Store worker names as multiline environment variable
-        echo "WORKER_NAMES<<EOF" >> $GITHUB_ENV  
-        echo "$WORKER_NAMES" >> $GITHUB_ENV
-        echo "EOF" >> $GITHUB_ENV
-
-        # Also store as single line space-separated for easier processing
-        WORKER_IPS_LINE=$(echo "$WORKER_IPS" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
-        WORKER_NAMES_LINE=$(echo "$WORKER_NAMES" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
-
-        echo "WORKER_IPS_LINE=$WORKER_IPS_LINE" >> $GITHUB_ENV
-        echo "WORKER_NAMES_LINE=$WORKER_NAMES_LINE" >> $GITHUB_ENV
-
-        echo "Worker IPs: $WORKER_IPS_LINE"
-        echo "Worker Names: $WORKER_NAMES_LINE"
-    - name: vSphere Deployment Summary  
-      run: |
-        echo "## 🟡 vSphere Deployment Complete!" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### VM Information" >> $GITHUB_STEP_SUMMARY
-        echo "- **Control Plane VM:** \`${{ env.CONTROL_PLANE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "  - **IP:** \`${{ env.CONTROL_PLANE_IP }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "  - **Version:** ${{ env.CP_IMAGE || 'latest' }}" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Worker VMs" >> $GITHUB_STEP_SUMMARY
-
-        # Display worker VMs
-        if [ -n "${{ env.WORKER_NAMES_LINE }}" ]; then
-          IFS=' ' read -ra NAMES <<< "${{ env.WORKER_NAMES_LINE }}"
-          IFS=' ' read -ra IPS <<< "${{ env.WORKER_IPS_LINE }}"
-
-          for i in "${!NAMES[@]}"; do
-            vm_number=$((i + 1))
-            echo "- **Worker VM ${vm_number}:** \`${NAMES[i]}\`" >> $GITHUB_STEP_SUMMARY
-            echo "  - **IP:** \`${IPS[i]:-not_available}\`" >> $GITHUB_STEP_SUMMARY
-            echo "  - **Version:** ${{ env.WORKER_IMAGE || 'latest' }}" >> $GITHUB_STEP_SUMMARY
-          done
-        else
-          echo "- No worker VMs found" >> $GITHUB_STEP_SUMMARY
-        fi
-
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 🔑 SSH Access" >> $GITHUB_STEP_SUMMARY
-        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-        echo "# Control Plane" >> $GITHUB_STEP_SUMMARY
-        echo "ssh ${{ env.SSH_USERNAME }}@${{ env.CONTROL_PLANE_IP }}" >> $GITHUB_STEP_SUMMARY
-        if [ -n "${{ env.WORKER_IPS_LINE }}" ]; then
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "# Workers" >> $GITHUB_STEP_SUMMARY
-          IFS=' ' read -ra IPS <<< "${{ env.WORKER_IPS_LINE }}"
-          for ip in "${IPS[@]}"; do
-            if [ -n "$ip" ] && [ "$ip" != "not_available" ]; then
-              echo "ssh ${{ env.SSH_USERNAME }}@$ip" >> $GITHUB_STEP_SUMMARY
+          # Install AWS CLI if not present
+          if ! command -v aws &> /dev/null; then
+            echo "Installing AWS CLI v2..."
+            cd /tmp
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            
+            if ! command -v unzip &> /dev/null; then
+              sudo apt-get update -qq
+              sudo apt-get install -y unzip
             fi
+            
+            unzip -q awscliv2.zip
+            sudo ./aws/install
+            rm -rf awscliv2.zip aws/
+            echo "✅ AWS CLI v2 installed"
+          fi
+          
+          # Verify AWS credentials work (WITHOUT sudo)
+          echo "Verifying AWS credentials..."
+          aws sts get-caller-identity --region $AWS_DEFAULT_REGION || {
+            echo "❌ AWS authentication failed"
+            exit 1
+          }
+          echo "✅ AWS credentials verified"
+          
+          # Validate AMIs exist
+          echo "Validating Control Plane AMI: $CP_AMI"
+          CP_AMI_INFO=$(aws ec2 describe-images \
+            --region ${{ env.AWS_REGION }} \
+            --image-ids "$CP_AMI" \
+            --query 'Images[0].[Name,State,Architecture]' \
+            --output text 2>/dev/null || echo "")
+          
+          if [ -z "$CP_AMI_INFO" ]; then
+            echo "❌ Control Plane AMI $CP_AMI not found"
+            exit 1
+          fi
+          echo "✅ Control Plane AMI found: $CP_AMI_INFO"
+          
+          echo "Validating Worker Node AMI: $WORKER_AMI"
+          WORKER_AMI_INFO=$(aws ec2 describe-images \
+            --region ${{ env.AWS_REGION }} \
+            --image-ids "$WORKER_AMI" \
+            --query 'Images[0].[Name,State,Architecture]' \
+            --output text 2>/dev/null || echo "")
+          
+          if [ -z "$WORKER_AMI_INFO" ]; then
+            echo "❌ Worker Node AMI $WORKER_AMI not found"
+            exit 1
+          fi
+          echo "✅ Worker Node AMI found: $WORKER_AMI_INFO"
+          
+          # Export Worker Node AMI
+          echo "Exporting Worker Node AMI: $WORKER_AMI"
+          WORKER_S3_PREFIX="${EXPORT_PREFIX}/aws/worker-node"
+          
+          WORKER_EXPORT_TASK=$(aws ec2 export-image \
+            --region ${{ env.AWS_REGION }} \
+            --image-id "$WORKER_AMI" \
+            --disk-image-format ${{ env.EXPORT_FORMAT }} \
+            --s3-export-location S3Bucket=${{ env.S3_BUCKET }},S3Prefix=$WORKER_S3_PREFIX \
+            --tag-specifications "ResourceType=export-image-task,Tags=[{Key=Component,Value=worker-node},{Key=ExportPrefix,Value=${EXPORT_PREFIX}},{Key=Timestamp,Value=${TIMESTAMP}}]" \
+            --query 'ExportImageTaskId' \
+            --output text)
+          
+          echo "Worker Export Task ID: $WORKER_EXPORT_TASK"
+          
+          # Export Control Plane AMI
+          echo "Exporting Control Plane AMI: $CP_AMI"
+          CP_S3_PREFIX="${EXPORT_PREFIX}/aws/control-plane"
+          
+          CP_EXPORT_TASK=$(aws ec2 export-image \
+            --region ${{ env.AWS_REGION }} \
+            --image-id "$CP_AMI" \
+            --disk-image-format ${{ env.EXPORT_FORMAT }} \
+            --s3-export-location S3Bucket=${{ env.S3_BUCKET }},S3Prefix=$CP_S3_PREFIX \
+            --tag-specifications "ResourceType=export-image-task,Tags=[{Key=Component,Value=control-plane},{Key=ExportPrefix,Value=${EXPORT_PREFIX}},{Key=Timestamp,Value=${TIMESTAMP}}]" \
+            --query 'ExportImageTaskId' \
+            --output text)
+          
+          echo "Control Plane Export Task ID: $CP_EXPORT_TASK"
+          
+          # Monitor Worker Node export
+          echo "Monitoring Worker Node Export..."
+          MAX_WAIT=7200  # 2 hours
+          ELAPSED=0
+          SLEEP_INTERVAL=30
+          
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            WORKER_STATUS=$(aws ec2 describe-export-image-tasks \
+              --region ${{ env.AWS_REGION }} \
+              --export-image-task-ids $WORKER_EXPORT_TASK \
+              --query 'ExportImageTasks[0].[Status,StatusMessage,Progress]' \
+              --output text 2>/dev/null || echo "UNKNOWN")
+            
+            WORKER_TASK_STATUS=$(echo "$WORKER_STATUS" | awk '{print $1}')
+            WORKER_PROGRESS=$(echo "$WORKER_STATUS" | awk '{print $3}')
+            
+            echo "Worker status: $WORKER_TASK_STATUS | Progress: ${WORKER_PROGRESS}% | ${ELAPSED}s"
+            
+            if [ "$WORKER_TASK_STATUS" = "completed" ]; then
+              echo "✅ Worker export completed (${ELAPSED}s)"
+              
+              WORKER_S3_KEY=$(aws ec2 describe-export-image-tasks \
+                --region ${{ env.AWS_REGION }} \
+                --export-image-task-ids $WORKER_EXPORT_TASK \
+                --query 'ExportImageTasks[0].S3ExportLocation.S3Key' \
+                --output text)
+              
+              WORKER_VHD=$(basename "$WORKER_S3_KEY")
+              echo "Worker VHD: $WORKER_VHD"
+              break
+            elif [ "$WORKER_TASK_STATUS" = "cancelled" ] || [ "$WORKER_TASK_STATUS" = "cancelling" ] || [ "$WORKER_TASK_STATUS" = "deleted" ]; then
+              echo ""
+              echo "=========================================="
+              echo "Worker Export Failed: $WORKER_TASK_STATUS"
+              echo "=========================================="
+              echo ""
+              echo "Status Message:"
+              echo "$WORKER_STATUS" | awk '{print $2}'
+              echo ""
+              exit 1
+            fi
+            
+            sleep $SLEEP_INTERVAL
+            ELAPSED=$((ELAPSED + SLEEP_INTERVAL))
           done
-        fi
-        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          
+          if [ $ELAPSED -ge $MAX_WAIT ]; then
+            echo "❌ Worker export timeout after $MAX_WAIT seconds"
+            exit 1
+          fi
+          
+          # Monitor Control Plane export
+          echo "Monitoring Control Plane Export..."
+          ELAPSED=0
+          
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            CP_STATUS=$(aws ec2 describe-export-image-tasks \
+              --region ${{ env.AWS_REGION }} \
+              --export-image-task-ids $CP_EXPORT_TASK \
+              --query 'ExportImageTasks[0].[Status,StatusMessage,Progress]' \
+              --output text 2>/dev/null || echo "UNKNOWN")
+            
+            CP_TASK_STATUS=$(echo "$CP_STATUS" | awk '{print $1}')
+            CP_PROGRESS=$(echo "$CP_STATUS" | awk '{print $3}')
+            
+            echo "CP status: $CP_TASK_STATUS | Progress: ${CP_PROGRESS}% | ${ELAPSED}s"
+            
+            if [ "$CP_TASK_STATUS" = "completed" ]; then
+              echo "✅ Control Plane export completed (${ELAPSED}s)"
+              
+              CP_S3_KEY=$(aws ec2 describe-export-image-tasks \
+                --region ${{ env.AWS_REGION }} \
+                --export-image-task-ids $CP_EXPORT_TASK \
+                --query 'ExportImageTasks[0].S3ExportLocation.S3Key' \
+                --output text)
+              
+              CP_VHD=$(basename "$CP_S3_KEY")
+              echo "Control Plane VHD: $CP_VHD"
+              break
+            elif [ "$CP_TASK_STATUS" = "cancelled" ] || [ "$CP_TASK_STATUS" = "cancelling" ] || [ "$CP_TASK_STATUS" = "deleted" ]; then
+              echo ""
+              echo "=========================================="
+              echo "Control Plane Export Failed: $CP_TASK_STATUS"
+              echo "=========================================="
+              echo ""
+              echo "Status Message:"
+              echo "$CP_STATUS" | awk '{print $2}'
+              echo ""
+              exit 1
+            fi
+            
+            sleep $SLEEP_INTERVAL
+            ELAPSED=$((ELAPSED + SLEEP_INTERVAL))
+          done
+          
+          if [ $ELAPSED -ge $MAX_WAIT ]; then
+            echo "❌ Control Plane export timeout after $MAX_WAIT seconds"
+            exit 1
+          fi
+          
+          # Download from S3
+          echo "Downloading from S3..."
+          mkdir -p "$LOCAL_PATH/$EXPORT_PREFIX/aws/worker-node"
+          mkdir -p "$LOCAL_PATH/$EXPORT_PREFIX/aws/control-plane"
+          
+          echo "Downloading Worker Node VHD..."
+          aws s3 cp \
+            "s3://${{ env.S3_BUCKET }}/$WORKER_S3_PREFIX/$WORKER_VHD" \
+            "$LOCAL_PATH/$EXPORT_PREFIX/aws/worker-node/$WORKER_VHD" \
+            --region ${{ env.AWS_REGION }} \
+            --no-progress
+          
+          echo "Downloading Control Plane VHD..."
+          aws s3 cp \
+            "s3://${{ env.S3_BUCKET }}/$CP_S3_PREFIX/$CP_VHD" \
+            "$LOCAL_PATH/$EXPORT_PREFIX/aws/control-plane/$CP_VHD" \
+            --region ${{ env.AWS_REGION }} \
+            --no-progress
+          
+          # Generate checksums
+          echo "Generating checksums..."
+          cd "$LOCAL_PATH/$EXPORT_PREFIX/aws"
+          
+          sha256sum "worker-node/$WORKER_VHD" "control-plane/$CP_VHD" > "${CHECKSUM_FILE}"
+          
+          # Upload checksum to S3
+          aws s3 cp \
+            "${CHECKSUM_FILE}" \
+            "s3://${{ env.S3_BUCKET }}/${EXPORT_PREFIX}/aws/${CHECKSUM_FILE}" \
+            --region ${{ env.AWS_REGION }}
+          
+          # Copy to scratch space
+          echo "Copying to scratch space..."
+          sudo mkdir -p "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/worker-node"
+          sudo mkdir -p "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/control-plane"
+          
+          sudo cp "worker-node/$WORKER_VHD" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/worker-node/"
+          sudo cp "control-plane/$CP_VHD" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/control-plane/"
+          sudo cp "${CHECKSUM_FILE}" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/"
+          
+          sudo chmod 644 "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws"/*
+          sudo chmod 644 "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/worker-node"/*
+          sudo chmod 644 "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/control-plane"/*
+          
+          echo "Export complete"
+          
+          # Save outputs to temp files
+          echo "$TIMESTAMP" > /tmp/aws_timestamp.txt
+          echo "$WORKER_VHD" > /tmp/aws_worker.txt
+          echo "$CP_VHD" > /tmp/aws_cp.txt
+          echo "$EXPORT_PREFIX" > /tmp/aws_prefix.txt
+          
+          ENDSSH
 
-        echo ""
-        echo "🎉 vSphere Deployment completed successfully!"
-        echo "📋 Control Plane: ${{ env.CONTROL_PLANE_NAME }} (${{ env.CONTROL_PLANE_IP }})"
-        echo "👥 Workers: ${{ env.WORKER_NAMES_LINE }} (${{ env.WORKER_IPS_LINE }})"
-    - name: Upload vSphere Artifacts
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: vsphere-deployment-logs
-        path: |
-          app-deployment/terraform/vsphere/automated/terraform.tfstate*
-          app-deployment/terraform/vsphere/automated/.terraform.lock.hcl
-          app-deployment/terraform/vsphere/automated/terraform.tfvars
-          app-deployment/terraform/vsphere/automated/deploy_*.log
-        retention-days: 30
+      - name: Set Outputs
+        id: set-outputs
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+        run: |
+          # Read outputs from temp files via SSH
+          OUTPUT=$(sshpass -p "$RUNNER_PASSWORD" ssh -T -o StrictHostKeyChecking=no -o LogLevel=QUIET ubuntu@10.192.7.66 << 'ENDSSH'
+          cat /tmp/aws_timestamp.txt
+          cat /tmp/aws_worker.txt
+          cat /tmp/aws_cp.txt
+          cat /tmp/aws_prefix.txt
+          ENDSSH
+          )
+          
+          echo "Raw output from remote:"
+          echo "$OUTPUT"
+          
+          # Get only the last 4 lines (actual data, skip banner)
+          CLEAN_OUTPUT=$(echo "$OUTPUT" | tail -4)
+          
+          # Parse the output
+          TIMESTAMP=$(echo "$CLEAN_OUTPUT" | sed -n '1p')
+          WORKER_VHD=$(echo "$CLEAN_OUTPUT" | sed -n '2p')
+          CP_VHD=$(echo "$CLEAN_OUTPUT" | sed -n '3p')
+          EXPORT_PREFIX=$(echo "$CLEAN_OUTPUT" | sed -n '4p')
+          
+          # Set GitHub outputs
+          echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+          echo "worker_vhd=$WORKER_VHD" >> $GITHUB_OUTPUT
+          echo "controlplane_vhd=$CP_VHD" >> $GITHUB_OUTPUT
+          echo "export_prefix=$EXPORT_PREFIX" >> $GITHUB_OUTPUT
+          
+          # Display for verification
+          echo "Captured outputs:"
+          echo "  Timestamp: $TIMESTAMP"
+          echo "  Worker: $WORKER_VHD"
+          echo "  CP: $CP_VHD"
+          echo "  Prefix: $EXPORT_PREFIX"
 
-  deployment-summary:
-    runs-on: ubuntu-latest
-    needs: [deploy-to-gcp, deploy-to-azure, deploy-to-vsphere]
-    if: always()
-    
-    steps:
-    - name: Final Summary
-      run: |
-        echo "🎉 ===== MULTI-CLOUD DEPLOYMENT COMPLETE ===== 🎉"
-        echo ""
-        echo "Selected Cloud: ${{ github.event.inputs.cloud_provider }}"
-        echo "Name Prefix: ${{ github.event.inputs.name_prefix }}"
-        echo "CP Count: 1"
-        echo "Worker Count: ${{ github.event.inputs.worker_count }}"
-        echo ""
-        
-        if [ "${{ needs.deploy-to-gcp.result }}" == "success" ]; then
-          echo "GCP Deployment: SUCCESS"
-        elif [ "${{ needs.deploy-to-gcp.result }}" == "failure" ]; then
-          echo "GCP Deployment: FAILED"
-        elif [ "${{ needs.deploy-to-gcp.result }}" == "skipped" ]; then
-          echo "GCP Deployment: SKIPPED (Azure was selected)"
-        fi
-        
-        if [ "${{ needs.deploy-to-azure.result }}" == "success" ]; then
-          echo "Azure Deployment: SUCCESS"
-        elif [ "${{ needs.deploy-to-azure.result }}" == "failure" ]; then
-          echo "Azure Deployment: FAILED"
-        elif [ "${{ needs.deploy-to-azure.result }}" == "skipped" ]; then
-          echo "Azure Deployment: SKIPPED (GCP was selected)"
-        fi
-
-        if [ "${{ needs.deploy-to-vsphere.result }}" == "success" ]; then
-          echo "vSphere Deployment: SUCCESS"
-        elif [ "${{ needs.deploy-to-vsphere.result }}" == "failure" ]; then
-          echo "vSphere Deployment: FAILED"
-        elif [ "${{ needs.deploy-to-vsphere.result }}" == "skipped" ]; then
-          echo "vSphere Deployment: SKIPPED"
-        fi
-        
-        echo ""
-        echo "Multi-cloud deployment process completed!"
+      - name: Display Summary
+        run: |
+          echo "=========================================="
+          echo "AWS Image Export Summary"
+          echo "=========================================="
+          echo ""
+          echo "Timestamp: ${{ steps.set-outputs.outputs.timestamp }}"
+          echo "Worker VHD: ${{ steps.set-outputs.outputs.worker_vhd }}"
+          echo "Control Plane VHD: ${{ steps.set-outputs.outputs.controlplane_vhd }}"
+          echo ""
+          echo "S3 Locations:"
+          echo "  Bucket: s3://${{ env.S3_BUCKET }}/${{ steps.set-outputs.outputs.export_prefix }}/aws/"
+          echo "  Worker: s3://${{ env.S3_BUCKET }}/${{ steps.set-outputs.outputs.export_prefix }}/aws/worker-node/${{ steps.set-outputs.outputs.worker_vhd }}"
+          echo "  CP: s3://${{ env.S3_BUCKET }}/${{ steps.set-outputs.outputs.export_prefix }}/aws/control-plane/${{ steps.set-outputs.outputs.controlplane_vhd }}"
+          echo ""
+          echo "Local Path: ${{ env.LOCAL_EXPORT_PATH }}/${{ steps.set-outputs.outputs.export_prefix }}/aws/"
+          echo "Scratch Space: ${{ env.SCRATCH_SPACE }}/${{ steps.set-outputs.outputs.export_prefix }}/aws/"
+          echo ""
+          echo "✅ Export completed successfully"
