@@ -8,6 +8,19 @@ const SmbHostCellRenderer = (params: BlueXpTableRowType<any, any>) => {
     return <Text>-</Text>;
   }
 
+  // Dell Isilon child rows - the row IS the file server
+  if (params?.row?._isDellIsilonChild) {
+    const isSmb = params?.row?.protocol === "SMB";
+    const host = isSmb ? params?.row?.host : null;
+    return (
+      <TooltipRenderer tooltipContent={host || "-"} show={!!host}>
+        <Text className="overflow-hidden text-ellipsis whitespace-nowrap">
+          {host || "-"}
+        </Text>
+      </TooltipRenderer>
+    );
+  }
+
   const smbFileServer = params?.row?.fileServers?.find(
     (fileServer: any) => fileServer?.protocol === "SMB"
   );

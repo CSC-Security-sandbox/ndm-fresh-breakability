@@ -67,14 +67,16 @@ export class IsilonStorageClient extends StorageClient {
 
       for (const zone of allZones) {
         const zoneName = zone?.name || 'unknown';
+        const zoneId = zone?.zone_id || zone?.id || 1; // Numeric zone ID from Isilon API
         const groupnet = zone?.groupnet || '';
 
         try {
-          this.logger.debug(`Processing zone '${zoneName}'`);
+          this.logger.debug(`Processing zone '${zoneName}' (ID: ${zoneId})`);
 
           if (!groupnet) {
             this.logger.warn(`Zone '${zoneName}' has no groupnet, skipping`);
             zonesWithIpAddresses.push({
+              zoneId,
               zoneName,
               ipAddresses: [],
             });
@@ -99,6 +101,7 @@ export class IsilonStorageClient extends StorageClient {
           if (subnets.length === 0) {
             this.logger.debug(`No subnets found for groupnet '${groupnet}' in zone '${zoneName}'`);
             zonesWithIpAddresses.push({
+              zoneId,
               zoneName,
               ipAddresses: [],
             });
@@ -170,6 +173,7 @@ export class IsilonStorageClient extends StorageClient {
 
           totalIpAddresses += ipAddresses.length;
           zonesWithIpAddresses.push({
+            zoneId,
             zoneName,
             ipAddresses,
           });
@@ -181,6 +185,7 @@ export class IsilonStorageClient extends StorageClient {
           );
           // Continue with next zone even if one fails
           zonesWithIpAddresses.push({
+            zoneId,
             zoneName,
             ipAddresses: [],
           });
