@@ -72,6 +72,9 @@ export interface FileServerStateContextType {
   setZoneCredentials: (arg: Record<string, ZoneCredentialsType> | ((prev: Record<string, ZoneCredentialsType>) => Record<string, ZoneCredentialsType>)) => void;
   zoneWorkerAssignments: Record<string, ZoneWorkerAssignmentsType>;
   setZoneWorkerAssignments: (arg: Record<string, ZoneWorkerAssignmentsType> | ((prev: Record<string, ZoneWorkerAssignmentsType>) => Record<string, ZoneWorkerAssignmentsType>)) => void;
+  // Active zone for worker assignment (Dell Isilon)
+  activeZoneId: string | null;
+  setActiveZoneId: (arg: string | null) => void;
 }
 
 // Management Console Form Type for Dell Isilon
@@ -150,6 +153,7 @@ export interface FileServerType {
   id?: string;
   serverType: string;
   protocol: string;
+  fileServerName?: string; // Required by backend for Dell Isilon
   userName: string;
   host: string;
   password: string;
