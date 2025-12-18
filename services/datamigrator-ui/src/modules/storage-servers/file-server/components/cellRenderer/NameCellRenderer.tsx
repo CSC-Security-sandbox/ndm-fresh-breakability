@@ -58,11 +58,13 @@ const NameCellRenderer = (params: BlueXpTableRowType<any, any>) => {
   // Dell Isilon Child Row (Zone) - Indented submenu item style
   if (row?._isDellIsilonChild) {
     const zoneName = row._zoneName || row.displayName;
+    // Use _configId (parent config ID) for navigation, not the file server's own id
+    const configId = row._configId || row.id;
     
     return (
       <Box 
         className="flex items-center gap-2 pl-8 py-1 cursor-pointer hover:bg-blue-50 rounded transition-colors -ml-2 px-2"
-        onClick={() => navigate(`/file-server/${row?.id}`)}
+        onClick={() => navigate(`/file-server/${configId}`)}
       >
         {/* Indentation line */}
         <Box className="flex items-center text-gray-300">

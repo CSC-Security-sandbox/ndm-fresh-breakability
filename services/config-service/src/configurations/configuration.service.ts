@@ -199,6 +199,8 @@ export class ConfigurationService {
             createdBy: true,
             protocolVersion: true,
             exportPathSource: true,
+            fileServerName: true,
+            zone_id: true,
           },
         },
         relations: {
@@ -259,6 +261,8 @@ export class ConfigurationService {
             isRefreshed: true,
             protocolVersion: true,
             exportPathSource: true,
+            fileServerName: true,
+            zone_id: true,
             workers: {
               workerId: true,
               workerName: true,

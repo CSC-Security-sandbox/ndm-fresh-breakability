@@ -13,6 +13,7 @@ export interface ZoneCredentialsType {
   nfsIp?: string;
   nfsUsername?: string;
   nfsPassword?: string;
+  numericZoneId?: number; // Numeric zone ID from Isilon API (e.g., 1 for "System")
 }
 
 // Dell Isilon Zone Worker Assignments Type
@@ -174,14 +175,14 @@ export interface ConfigPayloadType {
   workingDirectory: WorkingDirectoryDetailsType;
   // Dell Isilon Management Server (required for Dell Isilon file servers)
   managementServer?: ManagementServerType;
-  // Dell Isilon specific metadata (for grouping zones under parent)
-  dellIsilonMetadata?: {
-    parentName: string;
-    zoneId: string;
-    zoneName: string;
-    managementHost: string;
-    serverType: "Dell";
-  };
+  // Dell Isilon management fields at root level (backend expects these)
+  managementHost?: string;
+  managementPort?: number;
+  managementUsername?: string;
+  managementPassword?: string;
+  tlsAccepted?: boolean | null; // null for Other NAS, true/false for Dell Isilon
+  tlsCertificate?: string;
+  tlsExpiry?: string;
 }
 
 export interface ServerTypeFormType {
@@ -297,13 +298,15 @@ export interface DellIsilonCreatePayloadType {
   managementUsername: string;
   managementPassword: string;
   certificateFingerprint: string;
+  tlsExpiry?: string; // Certificate expiry date
   // Zone file servers - each zone can have 1 or 2 entries (NFS, SMB, or both)
   zones: DellIsilonZonePayloadType[];
 }
 
 // Individual Zone Payload
 export interface DellIsilonZonePayloadType {
-  zoneId: string;
+  zoneId: string;           // Zone name (e.g., "System") - used as key
+  numericZoneId: number;    // Numeric zone ID from Isilon API (e.g., 1)
   zoneName: string;
   nfs?: {
     host: string;
