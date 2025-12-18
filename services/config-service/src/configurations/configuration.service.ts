@@ -14,6 +14,7 @@ import { validate as isUUID } from 'uuid';
 import {
   ConfigErrorMsg,
   ConfigStatus,
+  Protocol,
   ProtocolVersionError,
   ServerType,
   WorkerStatus,
@@ -737,8 +738,10 @@ export class ConfigurationService {
           });
         },
       );
+      const allWorkerIds = createConfig.fileServers.flatMap(fs => fs.workers);
+      // To fetch all workers associated with all the file servers of the config
       const workers: WorkerEntity[] = await this.WorkerEntity.find({
-        where: { workerId: In(createConfig?.fileServers[0].workers) },
+        where: { workerId: In(allWorkerIds) },
         relations: { stats: true },
       });
 
@@ -788,6 +791,19 @@ export class ConfigurationService {
       if (allUnHealthy) {
         return update;
       }
+
+      // For Dell Isilon, discover exports via API before starting workflow
+      // This bypasses showmount command - workers will still validate by mounting
+      if (createConfig.serverType === ServerType.dell) {
+        this.logger.log(`Discovering Isilon exports for config ${update.id} before workflow`);
+        await this.discoverIsilonExports(update.id, traceId).catch((error) => {
+          this.logger.error(
+            `Error discovering Isilon exports for config ${update.id}: ${error.message}`,
+          );
+          // Don't fail config creation if discovery fails
+        });
+      }
+
       await this.startValidateWorkingDirectoryWorkflow(
         createConfig,
         update.id,
@@ -1065,6 +1081,32 @@ export class ConfigurationService {
 
     try {
       const listPathPayload: ListPathDTO[] = [];
+      const isDell = createConfig.serverType === ServerType.dell;
+
+      // For Dell, fetch first discovered export for each file server from DB
+      let dellExportsMap: Map<string, string> = new Map();
+      if (isDell) {
+        // Get config with file servers to get their IDs
+        const config = await this.configEntity.findOne({
+          where: { id: configId },
+          relations: ['fileServers'],
+        });
+
+        if (config?.fileServers) {
+          for (const fs of config.fileServers) {
+            // Fetch first volume (export) for this file server
+            const firstVolume = await this.volumes.findOne({
+              where: { fileServerId: fs.id },
+              order: { createdAt: 'ASC' },
+            });
+            if (firstVolume?.volumePath) {
+              // Map file server host to first export path
+              dellExportsMap.set(fs.host, firstVolume.volumePath);
+              this.logger.debug(`Dell: First export for ${fs.host} is ${firstVolume.volumePath}`);
+            }
+          }
+        }
+      }
 
       createConfig?.fileServers?.forEach((fileServer) => {
         const payload: ListPathDTO = {
@@ -1078,14 +1120,26 @@ export class ConfigurationService {
         listPathPayload.push(payload);
       });
 
+      // For Dell, include first discovered exports in payload so workers can mount without showmount
+      const dellDiscoveredPaths = isDell 
+        ? Array.from(dellExportsMap.values()) 
+        : [];
+
       const payload: ValidateExportPathAndWorkingDirectoryDTO = {
         exportPath: createConfig?.workingDirectory?.pathName,
         workingDirectory: createConfig?.workingDirectory?.workingDirectory,
         configId: configId,
         workerIds: [],
         listPathPayload,
+        serverType: createConfig?.serverType, // Pass serverType so workers can skip showmount for Dell
         options: new Options(),
       };
+
+      // Add Dell-specific data to payload
+      if (isDell && dellDiscoveredPaths.length > 0) {
+        (payload as any).discoveredPaths = dellDiscoveredPaths;
+        (payload as any).dellExportsMap = Object.fromEntries(dellExportsMap);
+      }
 
       createConfig?.fileServers?.forEach((fileServer) => {
         fileServer?.workers?.forEach((worker) => {
@@ -1152,6 +1206,100 @@ export class ConfigurationService {
         throw error;
       }
       throw new InternalServerErrorException('Failed to remove config.');
+    }
+  }
+
+  /**
+   * Discover exports/shares from Dell Isilon using REST API
+   * Called after config creation for Dell to bypass showmount
+   * Workers will still validate by mounting these discovered exports
+   */
+  async discoverIsilonExports(configId: string, traceId: string): Promise<void> {
+    try {
+      this.logger.log(`Discovering Isilon exports for config ${configId} (trace: ${traceId})`);
+
+      // Fetch config with file servers
+      const config = await this.configEntity.findOne({
+        where: { id: configId },
+        relations: ['fileServers'],
+      });
+
+      if (!config) {
+        throw new NotFoundException(`Config ${configId} not found`);
+      }
+
+      if (config.serverType !== ServerType.dell) {
+        this.logger.warn(`Config ${configId} is not Dell Isilon (${config.serverType}), skipping API discovery`);
+        return;
+      }
+
+      this.logger.log(`Processing ${config.fileServers.length} file servers for config ${configId}`);
+
+      // For each file server (zone), fetch exports and shares
+      for (const fileServer of config.fileServers) {
+        this.logger.log(`Fetching exports for file server ${fileServer.id} (zone: ${fileServer.fileServerName})`);
+
+        const exportPaths: VolumeEntity[] = [];
+
+        // Fetch NFS exports if protocol includes NFS
+        if (fileServer.protocol === Protocol.NFS) {
+          try {
+            const nfsExports = await this.isilonStorageClient.getNFSExportPaths(fileServer.id);
+            this.logger.log(`Found ${nfsExports.length} NFS exports for file server ${fileServer.id}`);
+
+            for (const nfsExport of nfsExports) {
+              const volume = this.volumes.create({
+                volumePath: nfsExport.path,
+                fileServerId: fileServer.id,
+                isValid: true, // Mark as valid from API, workers will validate accessibility
+                isDisabled: false,
+                reachableCount: 0,
+              });
+              exportPaths.push(volume);
+            }
+          } catch (error) {
+            this.logger.error(`Failed to fetch NFS exports for file server ${fileServer.id}: ${error.message}`);
+            // Continue with other file servers even if one fails
+          }
+        }
+
+        // Fetch SMB shares if protocol includes SMB
+        if (fileServer.protocol === Protocol.SMB) {
+          try {
+            const smbShares = await this.isilonStorageClient.getSMBShares(fileServer.id);
+            this.logger.log(`Found ${smbShares.length} SMB shares for file server ${fileServer.id}`);
+
+            for (const smbShare of smbShares) {
+              const volume = this.volumes.create({
+                volumePath: smbShare.name, // For SMB, use share name
+                fileServerId: fileServer.id,
+                isValid: true, // Mark as valid from API, workers will validate accessibility
+                isDisabled: false,
+                reachableCount: 0,
+              });
+              exportPaths.push(volume);
+            }
+          } catch (error) {
+            this.logger.error(`Failed to fetch SMB shares for file server ${fileServer.id}: ${error.message}`);
+            // Continue with other file servers even if one fails
+          }
+        }
+
+        // Save all discovered exports/shares for this file server
+        if (exportPaths.length > 0) {
+          await this.volumes.save(exportPaths);
+          this.logger.log(`Saved ${exportPaths.length} exports for file server ${fileServer.id}`);
+        } else {
+          this.logger.warn(`No exports found for file server ${fileServer.id}`);
+        }
+      }
+
+      this.logger.log(`Completed Isilon export discovery for config ${configId}`);
+    } catch (error) {
+      this.logger.error(`Error discovering Isilon exports for config ${configId}: ${error.message}`);
+      throw new InternalServerErrorException(
+        `Failed to discover Isilon exports: ${error.message}`
+      );
     }
   }
 

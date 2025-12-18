@@ -41,8 +41,14 @@ export class ValidateWorkingDirectoryActivity {
       errorMessage: null
     };
 
+    const isDell = payload?.isDell || payload?.serverType === 'dell';
     const isPathExists = !!payload?.paths?.length;
-    if(!isPathExists && !payload.hasManualUpload) {
+    
+    // For Dell Isilon, exports are already discovered via API (stored in VolumeEntity)
+    // so paths may be empty but we still have dellExportsMap to validate
+    const hasDellExports = isDell && payload?.dellExportsMap && Object.keys(payload.dellExportsMap).length > 0;
+    
+    if(!isPathExists && !payload.hasManualUpload && !hasDellExports) {
       configStatusPayload.status = ConfigStatus.ERRORED;
       configStatusPayload.errorMessage = ConfigError.UNABLE_TO_DETECT_EXPORT_PATH;
       await this.updateConfigStatus(apiUrl, configStatusPayload);
@@ -120,6 +126,8 @@ export class ValidateWorkingDirectoryActivity {
   }
 
   async handleMountAndUnmountPaths(traceId: string, payload: any): Promise<void> {
+    const isDell = payload?.isDell || payload?.serverType === 'dell';
+    
     try {
       for (const fileServer of payload.listPathPayload) {
         if(fileServer.exportPathSource === ExportPathSource.MANUAL_UPLOAD) {
@@ -129,12 +137,20 @@ export class ValidateWorkingDirectoryActivity {
         
         const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
 
+        // For Dell, get the export path from dellExportsMap for this specific host
+        // This was discovered via Isilon API and stored in VolumeEntity
+        let exportPath = payload.fetchedPath;
+        if (isDell && payload.dellExportsMap && payload.dellExportsMap[fileServer.host]) {
+          exportPath = payload.dellExportsMap[fileServer.host];
+          this.logger.log(`Dell Isilon: Using discovered export path ${exportPath} for host ${fileServer.host}`);
+        }
+
         const mountPathPayload = {
           hostname: fileServer.host,
           username: fileServer.username,
           password: fileServer.password,
           protocolVersion: fileServer.protocolVersion,
-          path: payload.fetchedPath,
+          path: exportPath,
           mountBasePath: this.baseWorkingPath,
           pathId: traceId,
           jobRunId: traceId,
