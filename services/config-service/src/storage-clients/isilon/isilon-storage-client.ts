@@ -223,21 +223,145 @@ export class IsilonStorageClient extends StorageClient {
   /**
    * Get NFS export paths for a file server
    * Fetches credentials from DB and calls Isilon API
-   * TODO: Implement Isilon API integration
+   * Filters exports by zone_id to only return exports for this specific zone
    */
   async getNFSExportPaths(fileServerId: string): Promise<NFSExportPathDTO[]> {
-    // TODO: Implement
-    throw new Error('Method not implemented yet');
+    try {
+      this.logger.log(`Fetching NFS export paths for file server ${fileServerId}`);
+
+      // Fetch file server with config relationship to get management credentials
+      const fileServer = await this.fileServerRepo.findOne({
+        where: { id: fileServerId },
+        relations: ['config'],
+      });
+
+      if (!fileServer) {
+        throw new Error(`File server ${fileServerId} not found`);
+      }
+
+      if (!fileServer.config) {
+        throw new Error(`Config not found for file server ${fileServerId}`);
+      }
+
+      const { config } = fileServer;
+      const zoneName = fileServer.fileServerName;
+
+      if (!zoneName) {
+        this.logger.warn(`File server ${fileServerId} has no fileServerName (zone name), cannot filter exports`);
+        return [];
+      }
+
+      this.logger.debug(`Fetching NFS exports for zone '${zoneName}' from ${config.hostname}:${config.port}`);
+
+      // Call Isilon API: GET /platform/3/protocols/nfs/exports
+      const exportsResponse = await this.makeIsilonAPICall(
+        config.hostname,
+        config.port,
+        '/platform/3/protocols/nfs/exports',
+        'GET',
+        config.username,
+        config.password,
+        config.tlsCaCertificate,
+      );
+
+      const allExports = exportsResponse?.exports || [];
+      this.logger.log(`Found ${allExports.length} total NFS exports on Isilon`);
+
+      // Filter exports by zone name (matches fileServerName)
+      const zoneExports = allExports.filter(exp => exp?.zone === zoneName);
+      this.logger.log(`Filtered to ${zoneExports.length} NFS exports for zone '${zoneName}'`);
+
+      // Extract export paths - flatten all paths from each export
+      // Isilon exports can have multiple paths per export (e.g., /ifs/ashish and /ifs/ashish/ndm)
+      const exportPaths: NFSExportPathDTO[] = [];
+      for (const exp of zoneExports) {
+        if (exp?.paths && Array.isArray(exp.paths)) {
+          for (const path of exp.paths) {
+            exportPaths.push({
+              path: path,
+              id: exp.id,
+            });
+          }
+        }
+      }
+
+      this.logger.log(`Returning ${exportPaths.length} NFS export paths for file server ${fileServerId}`);
+      return exportPaths;
+    } catch (error) {
+      this.logger.error(`Error fetching NFS exports for file server ${fileServerId}: ${error?.message || 'Unknown error'}`);
+      throw new InternalServerErrorException(
+        `Failed to fetch NFS exports: ${error?.message || 'Unknown error'}`
+      );
+    }
   }
 
   /**
    * Get SMB shares for a file server
    * Fetches credentials from DB and calls Isilon API
-   * TODO: Implement Isilon API integration
+   * Filters shares by zone_id to only return shares for this specific zone
    */
   async getSMBShares(fileServerId: string): Promise<SMBShareDTO[]> {
-    // TODO: Implement
-    throw new Error('Method not implemented yet');
+    try {
+      this.logger.log(`Fetching SMB shares for file server ${fileServerId}`);
+
+      // Fetch file server with config relationship to get management credentials
+      const fileServer = await this.fileServerRepo.findOne({
+        where: { id: fileServerId },
+        relations: ['config'],
+      });
+
+      if (!fileServer) {
+        throw new Error(`File server ${fileServerId} not found`);
+      }
+
+      if (!fileServer.config) {
+        throw new Error(`Config not found for file server ${fileServerId}`);
+      }
+
+      const { config } = fileServer;
+      const zoneId = fileServer.zone_id;
+
+      if (!zoneId) {
+        this.logger.warn(`File server ${fileServerId} has no zone_id, cannot filter shares`);
+        return [];
+      }
+
+      this.logger.debug(`Fetching SMB shares for zone_id=${zoneId} from ${config.hostname}:${config.port}`);
+
+      // Call Isilon API: GET /platform/1/protocols/smb/shares
+      const sharesResponse = await this.makeIsilonAPICall(
+        config.hostname,
+        config.port,
+        '/platform/1/protocols/smb/shares',
+        'GET',
+        config.username,
+        config.password,
+        config.tlsCaCertificate,
+      );
+
+      const allShares = sharesResponse?.shares || [];
+      this.logger.log(`Found ${allShares.length} total SMB shares on Isilon`);
+
+      // Filter shares by zone ID (numeric zid field)
+      const zoneShares = allShares.filter(share => share?.zid === zoneId);
+      this.logger.log(`Filtered to ${zoneShares.length} SMB shares for zone_id=${zoneId}`);
+
+      // Extract share names and paths
+      const shares: SMBShareDTO[] = zoneShares
+        .filter(share => share?.name && share?.path)
+        .map(share => ({
+          name: share.name,
+          path: share.path,
+        }));
+
+      this.logger.log(`Returning ${shares.length} SMB shares for file server ${fileServerId}`);
+      return shares;
+    } catch (error) {
+      this.logger.error(`Error fetching SMB shares for file server ${fileServerId}: ${error?.message || 'Unknown error'}`);
+      throw new InternalServerErrorException(
+        `Failed to fetch SMB shares: ${error?.message || 'Unknown error'}`
+      );
+    }
   }
 
   /**
