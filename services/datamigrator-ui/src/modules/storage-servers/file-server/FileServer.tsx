@@ -161,17 +161,19 @@ const FileServer = () => {
     
     // Dell Isilon child (zone file server) - view/edit options
     if (row._isDellIsilonChild) {
+      // Use _configId (parent config ID) for navigation, not the file server's own id
+      const configId = row._configId || row.id;
       return [
         {
           label: "View File Server",
           onClick: () => {
-            navigate(`/file-server/${row?.id}`);
+            navigate(`/file-server/${configId}`);
           },
         },
         {
           label: "Edit File Server",
           onClick: () => {
-            navigate(`/edit-file-server/${row?.id}`);
+            navigate(`/edit-file-server/${configId}`);
           },
           disabled: !canManageConfig,
         },

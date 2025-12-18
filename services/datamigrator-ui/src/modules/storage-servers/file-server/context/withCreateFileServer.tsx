@@ -62,7 +62,7 @@ export function withCreateFileServer(WrappedComponent: ComponentType<any>) {
       }
     };
 
-    // Create Dell Isilon file servers (multiple entries for zones)
+    // Create Dell Isilon file server (single config with multiple file servers)
     const handleCreateDellIsilonConfiguration = async () => {
       // Build zone metadata from selectedZoneIds - zone name IS the zone ID
       const zonesMetadata = (fileServerForm.selectedZoneIds || []).map((zoneId: string) => ({
@@ -84,37 +84,25 @@ export function withCreateFileServer(WrappedComponent: ComponentType<any>) {
       
       console.log("[Dell Isilon] Created payload:", dellPayload);
       
-      // Flatten to individual file server configs
-      const configs = flattenDellIsilonPayloadToConfigs(dellPayload);
+      // Create single config with all file servers (parent-child structure)
+      // - configName = parent name (e.g., "NEWWW2")
+      // - fileServers[] = all zones with fileServerName = zone name (e.g., "System")
+      const config = flattenDellIsilonPayloadToConfigs(dellPayload);
       
-      console.log("[Dell Isilon] Flattened to configs:", configs);
+      console.log("[Dell Isilon] Single config payload:", config);
       
-      if (configs.length === 0) {
+      if (config.fileServers.length === 0) {
         throw new Error("No valid zone configurations found");
       }
       
-      // Create each file server
-      const results = await Promise.all(
-        configs.map(async (config) => {
-          // Strip out dellIsilonMetadata before sending to API
-          // The metadata is only for UI grouping, not for the backend
-          const { dellIsilonMetadata: _metadata, ...apiPayload } = config as any;
-          
-          console.log("[Dell Isilon] Original config:", config);
-          console.log("[Dell Isilon] Stripped metadata:", _metadata);
-          console.log("[Dell Isilon] API payload (should NOT have dellIsilonMetadata):", apiPayload);
-          console.log("[Dell Isilon] Has dellIsilonMetadata?:", 'dellIsilonMetadata' in apiPayload);
-          
-          const resp = await createConfigurationApi(apiPayload);
-          if (resp.error) {
-            console.error("[Dell Isilon] Error creating:", apiPayload.configName, resp.error);
-            throw new Error(`Error creating file server: ${apiPayload.configName}`);
-          }
-          return resp;
-        })
-      );
+      // Create the single configuration
+      const resp = await createConfigurationApi(config);
+      if (resp.error) {
+        console.error("[Dell Isilon] Error creating config:", config.configName, resp.error);
+        throw new Error(`Error creating file server: ${config.configName}`);
+      }
       
-      console.log("[Dell Isilon] All file servers created:", results.length);
+      console.log("[Dell Isilon] Configuration created successfully");
     };
 
     const createFileServerHelpers = {

@@ -9,7 +9,8 @@ import { useFetchZonesMutation } from "@api/configApi";
 
 // Type for zone data from API
 interface ZoneData {
-  id: string;
+  id: string;           // Zone name (used for selection/keying)
+  numericId: number;    // Numeric zone ID from Isilon API
   name: string;
   ipList: Array<{ label: string; value: string }>;
 }
@@ -82,9 +83,10 @@ const IsilonCredentials = () => {
         console.debug("[IsilonCredentials] Zones API response:", response);
 
         // Transform API response to ZoneData format
-        // Each zone has zoneName and ipAddresses[], we use the same IPs for both SMB and NFS
+        // Each zone has zoneId (numeric), zoneName and ipAddresses[]
         const transformedZones: ZoneData[] = (response?.zones || []).map((zone: any) => ({
-          id: zone.zoneName, // Use zoneName as ID
+          id: zone.zoneName, // Use zoneName as string ID for selection/keying
+          numericId: zone.zoneId || 1, // Numeric zone ID from Isilon API
           name: zone.zoneName,
           ipList: (zone.ipAddresses || []).map((ip: string) => ({
             label: ip,
@@ -401,7 +403,21 @@ const IsilonCredentials = () => {
     );
     console.debug("[IsilonCredentials] Selection changed", selectionState.rows, "selectedZoneIdArray", selectedZoneIdArray);
     setSelectedZoneIds(selectedZoneIdArray);
-  }, [selectionState.rows, setSelectedZoneIds]);
+    
+    // Also store numeric zone IDs in zoneCredentials for each selected zone
+    selectedZoneIdArray.forEach((zoneId) => {
+      const zone = zones.find((z) => z.id === zoneId);
+      if (zone && zone.numericId !== undefined) {
+        setZoneCredentials((prev: any) => ({
+          ...prev,
+          [zoneId]: {
+            ...prev[zoneId],
+            numericZoneId: zone.numericId,
+          },
+        }));
+      }
+    });
+  }, [selectionState.rows, setSelectedZoneIds, zones, setZoneCredentials]);
 
   return (
     <Box className="mt-4 flex flex-col p-6 w-full">
