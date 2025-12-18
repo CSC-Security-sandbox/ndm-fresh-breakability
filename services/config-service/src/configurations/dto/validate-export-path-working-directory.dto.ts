@@ -1,8 +1,9 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsArray, IsObject, IsOptional, IsString, IsUUID, ValidateNested } from "class-validator";
+import { IsArray, IsEnum, IsObject, IsOptional, IsString, IsUUID, ValidateNested } from "class-validator";
 import { Options } from "src/work-manager/dto/validate-connection.dto";
 import { ListPathDTO } from "src/work-manager/dto/validate-export-path.dto";
+import { ServerType } from "src/constants/enums";
 
 export class ValidateExportPathAndWorkingDirectoryDTO {
     @ApiProperty({ description: 'Export path of a config' })
@@ -25,6 +26,11 @@ export class ValidateExportPathAndWorkingDirectoryDTO {
     @ApiProperty({ description: 'List path payload details' })
     @IsArray()
     listPathPayload: ListPathDTO[]
+
+    @ApiProperty({ enum: ServerType, description: 'Server type (dell or otherNas)', required: false })
+    @IsEnum(ServerType)
+    @IsOptional()
+    serverType?: ServerType;
 
     @ApiProperty({ type: Options, description: 'Workflow options', required: false })
     @IsObject()

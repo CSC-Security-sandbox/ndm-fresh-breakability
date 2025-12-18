@@ -20,24 +20,43 @@ export async function ValidateWorkingDirectoryWorkerWorkflow(
 ): Promise<any> {
   log(args.traceId, `Starting ListPathWorkerWorkflow in ValidateWorkingDirectoryWorkerWorkflow with args: ${JSON.stringify(args)}`);
   
-  const results = await Promise.all(
-    args.payload.listPathPayload.map(async (data: any) => {
-      return await listPathActivity(args.traceId, data.type, {
-        hostname: data.host,
-        username: data.username,
-        password: data.password,
-        exportPathSource: data.exportPathSource,
-      });
-    }),
-  );
-
+  // Check if this is Dell Isilon - exports already discovered via API
+  const isDell = args.payload.serverType === 'dell';
   let paths = [];
+  
+  if (isDell) {
+    // For Dell Isilon: Skip showmount, exports already discovered via API and stored in DB
+    // Use discoveredPaths from payload (populated by config-service from VolumeEntity)
+    log(args.traceId, `Dell Isilon: Skipping showmount - exports already discovered via API`);
+    paths = args.payload.discoveredPaths || [];
+    log(args.traceId, `Dell Isilon: Using ${paths.length} discovered paths from DB`);
+  } else {
+    // For OtherNAS: Run showmount to discover exports
+    log(args.traceId, `OtherNAS: Running showmount to discover exports`);
+    const results = await Promise.all(
+      args.payload.listPathPayload.map(async (data: any) => {
+        return await listPathActivity(args.traceId, data.type, {
+          hostname: data.host,
+          username: data.username,
+          password: data.password,
+          exportPathSource: data.exportPathSource,
+        });
+      }),
+    );
 
-  for (let data of results) {
-    paths = [...data.paths];
+    for (let data of results) {
+      paths = [...data.paths];
+    }
   }
+
   args.payload.paths = paths;
   args.payload['hasManualUpload'] = args.payload.listPathPayload.some((item: any) => item.exportPathSource === ExportPathSource.MANUAL_UPLOAD);
+  
+  // For Dell, also pass the dellExportsMap so activity can get export path per host
+  if (isDell && args.payload.dellExportsMap) {
+    args.payload['isDell'] = true;
+  }
+  
   const exportPathWorkingDirectoryProvided = args?.payload?.exportPath?.length > 0;
 
   if(exportPathWorkingDirectoryProvided) {
@@ -47,7 +66,14 @@ export async function ValidateWorkingDirectoryWorkerWorkflow(
   args.payload['exportPathWorkingDirectoryProvided'] = exportPathWorkingDirectoryProvided;
 
   if(!exportPathWorkingDirectoryProvided) {
-    args.payload['fetchedPath'] = paths[0];
+    // For Dell, use dellExportsMap to get first path for the first host
+    if (isDell && args.payload.dellExportsMap) {
+      const firstHost = args.payload.listPathPayload[0]?.host;
+      args.payload['fetchedPath'] = args.payload.dellExportsMap[firstHost] || paths[0];
+      log(args.traceId, `Dell Isilon: Using fetchedPath=${args.payload['fetchedPath']} for host ${firstHost}`);
+    } else {
+      args.payload['fetchedPath'] = paths[0];
+    }
   }
   args.payload['exportPathWorkingDirectoryProvided'] = exportPathWorkingDirectoryProvided;
 
