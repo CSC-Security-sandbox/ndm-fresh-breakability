@@ -1,5 +1,5 @@
 ALTER TABLE datamigrator.config
-ADD COLUMN hostname varchar(255) NOT NULL;
+ADD COLUMN hostname varchar(255);
 
 ALTER TABLE datamigrator.config
 ADD COLUMN port integer NULL;
