@@ -21,7 +21,7 @@ export async function ValidateWorkingDirectoryWorkerWorkflow(
   log(args.traceId, `Starting ListPathWorkerWorkflow in ValidateWorkingDirectoryWorkerWorkflow with args: ${JSON.stringify(args)}`);
   
   // Check if this is Dell Isilon - exports already discovered via API
-  const isDell = args.payload.serverType === 'dell';
+  const isDell = args.payload.serverType === 'Dell';
   let paths = [];
   
   if (isDell) {
