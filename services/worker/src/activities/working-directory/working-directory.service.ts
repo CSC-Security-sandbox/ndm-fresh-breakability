@@ -41,7 +41,7 @@ export class ValidateWorkingDirectoryActivity {
       errorMessage: null
     };
 
-    const isDell = payload?.isDell || payload?.serverType === 'dell';
+    const isDell = payload?.isDell || payload?.serverType === 'Dell';
     const isPathExists = !!payload?.paths?.length;
     
     // For Dell Isilon, exports are already discovered via API (stored in VolumeEntity)
@@ -126,7 +126,7 @@ export class ValidateWorkingDirectoryActivity {
   }
 
   async handleMountAndUnmountPaths(traceId: string, payload: any): Promise<void> {
-    const isDell = payload?.isDell || payload?.serverType === 'dell';
+    const isDell = payload?.isDell || payload?.serverType === 'Dell';
     
     try {
       for (const fileServer of payload.listPathPayload) {
