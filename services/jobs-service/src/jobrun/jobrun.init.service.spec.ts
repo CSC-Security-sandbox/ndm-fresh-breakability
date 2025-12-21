@@ -607,6 +607,19 @@ describe('JobRunInitService', () => {
         },
       };
 
+      const mockJobContext = {
+        jobConfig: {
+          options: {
+            shouldScanADS: true,
+            preserveAccessTime: true,
+          },
+        },
+      };
+
+      const mockRedisProvider = {
+        buildContext: jest.fn().mockResolvedValue(mockJobContext),
+      };
+
       const redisClientMock = {
         isOpen: true,
         exists: jest.fn().mockResolvedValue(false),
@@ -616,6 +629,7 @@ describe('JobRunInitService', () => {
       };
 
       jest.spyOn(redisService, 'getClient').mockResolvedValue(redisClientMock as any);
+      jest.spyOn(JobContextFactory, 'getJobManagerProvider').mockReturnValue(mockRedisProvider as any);
       jest.spyOn(redisService, 'setJobContext').mockResolvedValue(undefined);
 
       await service.buildJobContext(jobRunId, jobRunConfig as any);
@@ -654,6 +668,18 @@ describe('JobRunInitService', () => {
         },
       };
 
+      const mockJobContext = {
+        jobConfig: {
+          options: {
+            shouldScanADS: false,
+          },
+        },
+      };
+
+      const mockRedisProvider = {
+        buildContext: jest.fn().mockResolvedValue(mockJobContext),
+      };
+
       const redisClientMock = {
         isOpen: true,
         exists: jest.fn().mockResolvedValue(false),
@@ -663,6 +689,7 @@ describe('JobRunInitService', () => {
       };
 
       jest.spyOn(redisService, 'getClient').mockResolvedValue(redisClientMock as any);
+      jest.spyOn(JobContextFactory, 'getJobManagerProvider').mockReturnValue(mockRedisProvider as any);
       jest.spyOn(redisService, 'setJobContext').mockResolvedValue(undefined);
 
       await service.buildJobContext(jobRunId, jobRunConfig as any);
