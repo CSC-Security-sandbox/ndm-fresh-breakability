@@ -281,7 +281,11 @@ export const JOB_RUN_DETAILS = (schema: string) => `
         v.volume_path,
         jr.status,
         c.config_name,
-        fsrv.protocol
+        fsrv.protocol,
+        CASE
+            WHEN fsrv.server_type != 'OtherNAS' THEN fsrv.file_server_name
+            ELSE NULL
+        END as file_server_name
     from ${schema}.jobRun jr
     inner join ${schema}.jobconfig jc on jc.id = jr.job_config_id
     inner join ${schema}.volume v on v.id = jc.source_path_id
