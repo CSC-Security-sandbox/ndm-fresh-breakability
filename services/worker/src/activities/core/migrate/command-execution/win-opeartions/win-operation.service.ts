@@ -39,7 +39,10 @@ export class WinOperationService {
     private readonly redisService: RedisService,
   ) {
     this.logger = loggerFactory.create(WinOperationService.name);
-    this.initializeWindowsAPI();
+    if(process.platform === 'win32'){
+      this.initializeWindowsAPI();
+    }
+      
   }
 
   initializeWindowsAPI() {
