@@ -907,6 +907,7 @@ describe("JobConfigService", () => {
         firstRunAt: new Date("2025-04-04T13:01:08.226Z"),
         scheduler: ScheduleStatus.SCHEDULING,
         createdBy: "user1",
+        shouldScanADS: false,
       },
     ];
 
@@ -949,6 +950,7 @@ describe("JobConfigService", () => {
         firstRunAt: mockBulkDiscovery.firstRunAt,
         scheduler: ScheduleStatus.SCHEDULING,
         status: JobStatus.Active,
+        shouldScanADS: false,
       }
     );
     expect(jobConfigRepo.create).toHaveBeenCalledWith({
@@ -961,6 +963,7 @@ describe("JobConfigService", () => {
       firstRunAt: mockBulkDiscovery.firstRunAt,
       scheduler: ScheduleStatus.SCHEDULING,
       createdBy: mockBulkDiscovery.createdBy,
+      shouldScanADS: false,
     });
     expect(jobConfigRepo.save).toHaveBeenCalledWith(mockJobConfigEntities);
   });
@@ -1010,6 +1013,7 @@ describe("JobConfigService", () => {
         firstRunAt: mockBulkDiscovery.firstRunAt,
         scheduler: ScheduleStatus.SCHEDULING,
         status: JobStatus.Active,
+        shouldScanADS: false,
       }
     );
     expect(jobConfigRepo.create).not.toHaveBeenCalled();
