@@ -29,6 +29,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     this.logger = loggerFactory.create(RedisService.name);
   }
 
+  private isLocalEnvironment(workerConfigUrl: string): boolean {    
+    return workerConfigUrl?.includes('localhost') || workerConfigUrl?.includes('127.0.0.1');
+  }
+
   async onModuleInit(): Promise<void> {
     try {
       this.logger.log('Initializing Redis service...');
@@ -57,6 +61,14 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
     this.logger.debug('=== Starting Redis credentials fetch ===');
     this.logger.debug(`Worker ID: ${workerId}`);
+
+    if (this.isLocalEnvironment(workerConfigUrl)) {
+      return  {
+        host: process.env.REDIS_HOST,
+        username: process.env.REDIS_USERNAME,
+        password: process.env.REDIS_PASSWORD,
+      };
+    }
 
     try {
       // Get access token

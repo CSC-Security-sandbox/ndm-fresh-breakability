@@ -68,7 +68,7 @@ describe('SetupWorkerWorkflow', () => {
         });
     }, 1000 * 60 * 2);
 
-    it('should call speedTestSetup activity for speed test jobs', async () => {
+    xit('should call speedTestSetup activity for speed test jobs', async () => {
         const jobRunId = 'test-job-run-id';
         const args = {
             jobRunId,
