@@ -91,6 +91,7 @@ export interface JobRunDetailsInput {
     status: string;
     config_name: string;
     protocol: string;
+    file_server_name: string;
 }
 
 export interface TrailingSpaceInput {

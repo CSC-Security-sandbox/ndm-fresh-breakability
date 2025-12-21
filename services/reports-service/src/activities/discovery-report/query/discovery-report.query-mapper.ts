@@ -401,6 +401,12 @@ export const JOB_RUN_DETAILS_MAPPER = (input: JobRunDetailsInput[]) : DiscoveryR
             { value: item.config_name, sub_category: 'Config Name' },
             { value: item.protocol, sub_category: 'Protocol' }
         ];
+        
+        // Add file server name only if it's present
+        if (item.file_server_name) {
+            fileServerInfo.push({ value: item.file_server_name, sub_category: 'File Server Name' });
+        }
+        
         fileServerInfo.forEach(({ value, sub_category }) => {
             output.push({
                 value,
