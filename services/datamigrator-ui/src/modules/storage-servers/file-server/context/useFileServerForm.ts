@@ -117,18 +117,10 @@ export const useFileServerForm = () => {
         });
         setWorkerIdWithName(allWorkersWithNameAndId);
         
-        // Filter workers based on selected protocol
-        const filteredWorkers = resp?.filter((worker: GetAllWorkersApiType) => {
-          const workerName = worker?.workerName?.toLowerCase() || "";
-          if (selectedProtocol === 'NFS') {
-            return workerName.startsWith("nfs-");
-          } else if (selectedProtocol === 'SMB') {
-            return workerName.startsWith("smb-");
-          }
-          return false;
-        });
-        
-        setAllWorkersList(filteredWorkers || []);
+        // Store all workers - filtering is done in components based on context
+        // For Other NAS: ValidateConnection filters by selectedProtocol
+        // For Dell Isilon: ValidateConnection filters per-zone based on configured protocols
+        setAllWorkersList(resp || []);
       })
       .catch((error: any) => {
         console.error({
