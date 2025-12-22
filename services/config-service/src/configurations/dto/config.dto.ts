@@ -165,6 +165,11 @@ export class FetchCertificateRequestDTO {
     @IsString()
     @IsNotEmpty()
     host: string;
+
+    @ApiProperty({ description: 'Server type', enum: ServerType, example: ServerType.dell })
+    @IsEnum(ServerType)
+    @IsNotEmpty()
+    serverType: ServerType;
 }
 
 export class CertificateSubjectDTO {
@@ -260,6 +265,16 @@ export class FetchCertificateResponseDTO {
     @ApiProperty({ description: 'Port that was queried', example: 443 })
     @IsNumber()
     port: number;
+
+    @ApiProperty({ description: 'Whether the certificate host matches the requested host', example: true })
+    @IsBoolean()
+    @IsOptional()
+    hostMatches?: boolean;
+
+    @ApiProperty({ description: 'Hosts covered by the certificate (CN and SANs)', type: [String], example: ['isilon.example.com', '*.example.com'] })
+    @IsArray()
+    @IsOptional()
+    certificateHosts?: string[];
 }
 
 // ==========================================
