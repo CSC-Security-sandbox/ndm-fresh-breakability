@@ -163,11 +163,14 @@ const FileServer = () => {
     if (row._isDellIsilonChild) {
       // Use _configId (parent config ID) for navigation, not the file server's own id
       const configId = row._configId || row.id;
+      // Get zone name for query parameter
+      const zoneName = row._zoneName || row.displayName || '';
+      const zoneParam = encodeURIComponent(zoneName);
       return [
         {
           label: "View File Server",
           onClick: () => {
-            navigate(`/file-server/${configId}`);
+            navigate(`/file-server/${configId}?zone=${zoneParam}`);
           },
         },
         {

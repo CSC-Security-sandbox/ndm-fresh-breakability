@@ -4,7 +4,7 @@ import { Box } from "@components/container/index";
 import { ConfigListTypeApiType, VolumeType } from "@/types/app.type";
 import { Button } from "@netapp/bxp-design-system-react";
 import { EditIcon } from "@netapp/bxp-style/react-icons/Action";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { FILE_SERVER_STATUS_ENUM } from "@/types/app.type";
 import { useMemo } from "react";
 
@@ -17,6 +17,10 @@ const JobsAction = ({
 }) => {
   const navigate = useNavigate();
   const pathname = window.location.pathname;
+  const [searchParams] = useSearchParams();
+  
+  // Get zone name from query parameter (for Dell Isilon zones)
+  const zoneNameParam = searchParams.get('zone');
 
   const isActive = fileServerDetails?.status === FILE_SERVER_STATUS_ENUM.ACTIVE;
 
@@ -35,12 +39,22 @@ const JobsAction = ({
     navigate(`/edit-file-server/${fileServerDetails?.id}`);
   };
 
+  // Determine display name: use zone name if available, otherwise config name
+  // For Dell Isilon zones, show just the zone name
+  const displayName = useMemo(() => {
+    if (zoneNameParam) {
+      // Dell Isilon zone view - show just the zone name
+      return decodeURIComponent(zoneNameParam);
+    }
+    return fileServerDetails?.configName;
+  }, [fileServerDetails?.configName, zoneNameParam]);
+
   return (
     <Box className="flex justify-between align-middle">
       <Box className="text-xl flex gap-3">
         <Box className="text-lg">File Server Overview:</Box>
         <Box className="text-lg font-semibold flex gap-3">
-          {fileServerDetails?.configName}
+          {displayName}
           <PermissionAuth
             permissionName={USER_PERMISSION_TYPE_ENUM.ManageConfig}
           >
