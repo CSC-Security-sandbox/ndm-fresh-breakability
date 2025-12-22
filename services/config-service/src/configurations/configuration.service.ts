@@ -807,6 +807,41 @@ export class ConfigurationService {
         return update;
       }
 
+      // For Dell, discover exports via API BEFORE worker validation
+      // This ensures workers have exports in DB to use instead of showmount
+      if (createConfig.serverType === ServerType.dell) {
+        this.logger.log(`Discovering Isilon exports for config ${update.id} before workflow`);
+        try {
+          const discoveredPathsMap = await this.discoverIsilonExports(update.id, traceId);
+          
+          // Save discovered paths as volumes (for initial creation, all are new)
+          for (const [fileServerId, paths] of discoveredPathsMap) {
+            const newVolumes: VolumeEntity[] = [];
+            for (const path of paths) {
+              newVolumes.push(
+                this.volumes.create({
+                  fileServerId: fileServerId,
+                  volumePath: path,
+                  isValid: true,
+                  isDisabled: false,
+                  reachableCount: 0,
+                  createdBy: userId,
+                }),
+              );
+            }
+            if (newVolumes.length > 0) {
+              await this.volumes.save(newVolumes);
+              this.logger.log(`Saved ${newVolumes.length} volumes for file server ${fileServerId}`);
+            }
+          }
+        } catch (error) {
+          this.logger.error(
+            `Error discovering Isilon exports for config ${update.id}: ${error.message}`,
+          );
+          // Don't fail config creation if discovery fails
+        }
+      }
+
       await this.startValidateWorkingDirectoryWorkflow(
         createConfig,
         update.id,
@@ -1215,10 +1250,12 @@ export class ConfigurationService {
 
   /**
    * Discover exports/shares from Dell Isilon using REST API
-   * Called after config creation for Dell to bypass showmount
-   * Workers will still validate by mounting these discovered exports
+   * Returns a map of fileServerId -> discovered paths
+   * Called during refresh to get zone-aware exports
    */
-  async discoverIsilonExports(configId: string, traceId: string): Promise<void> {
+  async discoverIsilonExports(configId: string, traceId: string): Promise<Map<string, string[]>> {
+    const discoveredPathsMap = new Map<string, string[]>();
+    
     try {
       this.logger.log(`Discovering Isilon exports for config ${configId} (trace: ${traceId})`);
 
@@ -1234,7 +1271,7 @@ export class ConfigurationService {
 
       if (config.serverType !== ServerType.dell) {
         this.logger.warn(`Config ${configId} is not Dell Isilon (${config.serverType}), skipping API discovery`);
-        return;
+        return discoveredPathsMap;
       }
 
       this.logger.log(`Processing ${config.fileServers.length} file servers for config ${configId}`);
@@ -1243,7 +1280,7 @@ export class ConfigurationService {
       for (const fileServer of config.fileServers) {
         this.logger.log(`Fetching exports for file server ${fileServer.id} (zone: ${fileServer.fileServerName})`);
 
-        const exportPaths: VolumeEntity[] = [];
+        const paths: string[] = [];
 
         // Fetch NFS exports if protocol includes NFS
         if (fileServer.protocol === Protocol.NFS) {
@@ -1252,14 +1289,7 @@ export class ConfigurationService {
             this.logger.log(`Found ${nfsExports.length} NFS exports for file server ${fileServer.id}`);
 
             for (const nfsExport of nfsExports) {
-              const volume = this.volumes.create({
-                volumePath: nfsExport.path,
-                fileServerId: fileServer.id,
-                isValid: true, // Mark as valid from API, workers will validate accessibility
-                isDisabled: false,
-                reachableCount: 0,
-              });
-              exportPaths.push(volume);
+              paths.push(nfsExport.path);
             }
           } catch (error) {
             this.logger.error(`Failed to fetch NFS exports for file server ${fileServer.id}: ${error.message}`);
@@ -1274,14 +1304,7 @@ export class ConfigurationService {
             this.logger.log(`Found ${smbShares.length} SMB shares for file server ${fileServer.id}`);
 
             for (const smbShare of smbShares) {
-              const volume = this.volumes.create({
-                volumePath: smbShare.name, // For SMB, use share name
-                fileServerId: fileServer.id,
-                isValid: true, // Mark as valid from API, workers will validate accessibility
-                isDisabled: false,
-                reachableCount: 0,
-              });
-              exportPaths.push(volume);
+              paths.push(smbShare.name); // For SMB, use share name
             }
           } catch (error) {
             this.logger.error(`Failed to fetch SMB shares for file server ${fileServer.id}: ${error.message}`);
@@ -1289,16 +1312,12 @@ export class ConfigurationService {
           }
         }
 
-        // Save all discovered exports/shares for this file server
-        if (exportPaths.length > 0) {
-          await this.volumes.save(exportPaths);
-          this.logger.log(`Saved ${exportPaths.length} exports for file server ${fileServer.id}`);
-        } else {
-          this.logger.warn(`No exports found for file server ${fileServer.id}`);
-        }
+        discoveredPathsMap.set(fileServer.id, paths);
+        this.logger.log(`Discovered ${paths.length} paths for file server ${fileServer.id}`);
       }
 
       this.logger.log(`Completed Isilon export discovery for config ${configId}`);
+      return discoveredPathsMap;
     } catch (error) {
       this.logger.error(`Error discovering Isilon exports for config ${configId}: ${error.message}`);
       throw new InternalServerErrorException(
@@ -1337,22 +1356,99 @@ export class ConfigurationService {
       if (config.serverType === ServerType.dell) {
         this.logger.log(`Using API-based refresh for Dell config ${configId}`);
         
-        // Clear existing volumes first (they will be re-discovered)
+        // Discover exports via API (zone-aware) - returns Map<fileServerId, paths[]>
+        const discoveredPathsMap = await this.discoverIsilonExports(configId, traceId);
+        
+        const fileServersIds = config.fileServers.map((fs) => fs.id);
+        
+        // Apply smart volume management (same logic as updatePaths for non-Dell)
         for (const fileServer of config.fileServers) {
-          await this.volumes.update(
-            { fileServerId: fileServer.id },
-            { isDisabled: true },
+          const discoveredPaths = discoveredPathsMap.get(fileServer.id) || [];
+          
+          // 1. Re-enable existing volumes if path still exists on NAS
+          if (discoveredPaths.length > 0) {
+            await this.volumes.update(
+              {
+                fileServerId: fileServer.id,
+                volumePath: In(discoveredPaths),
+              },
+              {
+                isValid: true,
+                isDisabled: false,
+              },
+            );
+          }
+          
+          // 2. Create new volumes only for paths that don't exist in DB
+          const existingPaths = new Set(
+            fileServer.volumes.map((vol) => vol.volumePath),
+          );
+          const newVolumes: VolumeEntity[] = [];
+          for (const path of discoveredPaths) {
+            if (!existingPaths.has(path)) {
+              newVolumes.push(
+                this.volumes.create({
+                  fileServerId: fileServer.id,
+                  volumePath: path,
+                  isValid: true,
+                  isDisabled: false,
+                  reachableCount: 0,
+                  createdBy: config.updatedBy ?? config.createdBy,
+                }),
+              );
+            }
+          }
+          if (newVolumes.length > 0) {
+            await this.volumes.save(newVolumes);
+            this.logger.log(`Created ${newVolumes.length} new volumes for file server ${fileServer.id}`);
+          }
+          
+          // 3. Disable volumes that no longer exist on the NAS
+          const validPaths = new Set(discoveredPaths);
+          const pathsToDisable = fileServer.volumes
+            .filter((vol) => !validPaths.has(vol.volumePath))
+            .map((vol) => vol.volumePath);
+          if (pathsToDisable.length > 0) {
+            await this.volumes.update(
+              { fileServerId: fileServer.id, volumePath: In(pathsToDisable) },
+              { isDisabled: true },
+            );
+            this.logger.log(`Disabled ${pathsToDisable.length} volumes for file server ${fileServer.id}`);
+          }
+          
+          // Mark file server as refreshed
+          await this.fileServerEntity.update(
+            { id: fileServer.id },
+            { isRefreshed: true },
           );
         }
         
-        // Discover exports via API (zone-aware)
-        await this.discoverIsilonExports(configId, traceId);
-        
-        // Mark file servers as refreshed
-        await this.fileServerEntity.update(
-          { id: In(config.fileServers.map((fs) => fs.id)) },
-          { isRefreshed: true },
-        );
+        // Update job configs to inactive if any volume is disabled or invalid
+        const volumeIds = await this.volumes
+          .createQueryBuilder('volume')
+          .select('volume.id')
+          .where('volume.file_server_id IN (:...fileServersIds)', {
+            fileServersIds: fileServersIds,
+          })
+          .andWhere('(volume.is_valid = :isValid OR volume.is_disabled = :isDisabled)', {
+            isValid: false,
+            isDisabled: true,
+          })
+          .getMany();
+
+        if (volumeIds.length > 0) {
+          const volumeIdList = volumeIds.map((vol) => vol.id);
+          await this.jobConfigRepo
+            .createQueryBuilder('jobConfig')
+            .update()
+            .set({ status: JobStatus.InActive })
+            .where(
+              'jobConfig.source_path_id IN (:...volumeIds) OR jobConfig.target_path_id IN (:...volumeIds)',
+              { volumeIds: volumeIdList },
+            )
+            .andWhere('jobConfig.status = :status', { status: JobStatus.Active })
+            .execute();
+        }
         
         await this.configEntity.update({ id: configId }, { scannedDate: new Date() });
         
