@@ -30,3 +30,6 @@ ADD COLUMN zone_id integer NULL;
 
 ALTER TABLE datamigrator.file_server
 ADD COLUMN status varchar(255);
+
+ALTER TABLE datamigrator.file_server
+DROP COLUMN IF EXISTS server_type;
