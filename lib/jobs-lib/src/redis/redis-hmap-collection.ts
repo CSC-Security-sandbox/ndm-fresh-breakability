@@ -50,7 +50,7 @@ export class RedisHMapCollection<T extends Serializable> implements WorkerRunnin
         const compressedValues = await this.redisClient.hGetAll(this.redisMapKey);
         const decompressedValues: Record<string, T> = {};
         for (const [key, compressedValue] of Object.entries(compressedValues)) {
-            decompressedValues[key] = await this.decompressValue(compressedValue);
+            decompressedValues[key] = await this.decompressValue(compressedValue as string);
         }
         return decompressedValues;
     }

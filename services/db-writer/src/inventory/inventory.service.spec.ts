@@ -414,13 +414,31 @@ describe("InventoryService", () => {
 
       await service.createInventory(data, "jobRunId", "pathId");
 
-      // Should upsert only unique items based on path|jobRunId|isDirectory key
       expect(inventoryRepo.upsert).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({ path: '/same/path.txt' }),
           expect.objectContaining({ path: '/different/path.txt' }),
         ]),
         ['path', 'jobRunId', 'isDirectory']
+      );
+    });
+
+    it("should process deleted directory markers when isDeleted is true and isDirectory is true", async () => {
+      const deletedDirectoryMarker = createMockItemInfo({
+        fileName: '/test/deleted/directory',
+        isDirectory: true
+      });
+      (deletedDirectoryMarker as any).isDeleted = true;
+      dataSource.query = jest.fn().mockResolvedValue([]);
+      jest.spyOn(service, "markDirectoryTreeAsDeleted").mockResolvedValue();
+
+      await service.createInventory([deletedDirectoryMarker], "jobRunId", "pathId");
+
+      expect(service.markDirectoryTreeAsDeleted).toHaveBeenCalledWith(
+        '/test/deleted/directory',
+        'jobRunId',
+        'pathId',
+        '"datamigrator"'
       );
     });
   });
@@ -571,7 +589,6 @@ describe("InventoryService", () => {
         id: "taskId",
       };
 
-      // Mock the query runner and its methods
       const mockTask = { id: "taskId", status: "IN_PROGRESS" };
       (queryRunner.manager.findOne as jest.Mock).mockResolvedValue(mockTask);
       (queryRunner.manager.upsert as jest.Mock).mockResolvedValue(undefined);
@@ -579,7 +596,6 @@ describe("InventoryService", () => {
 
       await service.saveTasks(data);
 
-      // Verify query runner transaction methods were called
       expect(queryRunner.connect).toHaveBeenCalled();
       expect(queryRunner.startTransaction).toHaveBeenCalled();
       expect(queryRunner.manager.findOne).toHaveBeenCalledWith(TaskEntity, {
@@ -590,7 +606,6 @@ describe("InventoryService", () => {
       expect(queryRunner.commitTransaction).toHaveBeenCalled();
       expect(queryRunner.release).toHaveBeenCalled();
       
-      // Verify operations were saved
       expect(operationRepo.upsert).toHaveBeenCalled();
     });
     
@@ -605,7 +620,7 @@ describe("InventoryService", () => {
         status: "IN_PROGRESS",
         sPathId: "sPathId",
         tPathId: "tPathId",
-        commands: [], // Empty commands array
+        commands: [], 
         workerId: "workerId",
         id: "taskId",
       };
@@ -617,7 +632,7 @@ describe("InventoryService", () => {
       await service.saveTasks(data);
 
       expect(queryRunner.manager.upsert).toHaveBeenCalled();
-      expect(operationRepo.upsert).not.toHaveBeenCalled(); // Should not be called for empty commands
+      expect(operationRepo.upsert).not.toHaveBeenCalled(); 
     });
 
     it("should skip task upsert if task already exists with completed status", async () => {
@@ -632,7 +647,7 @@ describe("InventoryService", () => {
         id: "taskId",
       };
 
-      // Mock an existing task with COMPLETED status
+      
       const mockTask = { id: "taskId", status: TaskStatus.COMPLETED };
       (queryRunner.manager.findOne as jest.Mock).mockResolvedValue(mockTask);
       operationRepo.upsert.mockResolvedValue({} as InsertResult);
@@ -640,8 +655,8 @@ describe("InventoryService", () => {
       await service.saveTasks(data);
 
       expect(queryRunner.manager.findOne).toHaveBeenCalled();
-      expect(queryRunner.manager.upsert).not.toHaveBeenCalled(); // Should skip upsert for completed task
-      expect(operationRepo.upsert).toHaveBeenCalled(); // Should still save operations
+      expect(queryRunner.manager.upsert).not.toHaveBeenCalled(); 
+      expect(operationRepo.upsert).toHaveBeenCalled(); 
     });
 
     it("should handle transaction errors and rollback", async () => {
@@ -865,7 +880,7 @@ describe("InventoryService", () => {
       await service.createPartitionInventoryTableByJobRunId(validJobRunId);
 
       expect(dataSource.query).toHaveBeenCalledWith(
-        'CALL datamigrator.create_inventory_partition($1, $2);',
+        'CALL "datamigrator".create_inventory_partition($1, $2);',
         [validJobRunId, 'datamigrator']
       );
     });
@@ -910,8 +925,8 @@ describe("InventoryService", () => {
       await service.createPartitionInventoryTableByJobRunId(validJobRunId);
 
       expect(dataSource.query).toHaveBeenCalledWith(
-        'CALL undefined.create_inventory_partition($1, $2);',
-        [validJobRunId, undefined]
+        'CALL "datamigrator".create_inventory_partition($1, $2);',
+        [validJobRunId, 'datamigrator']
       );
     });
 
@@ -939,6 +954,465 @@ describe("InventoryService", () => {
         `Failed to create partition table for jobRunId ${validJobRunId}: Database connection failed`,
         procedureError?.stack || procedureError
       );
+    });
+  });
+
+  describe("markDirectoryTreeAsDeleted", () => {
+    const jobRunId = "test-job-123";
+    const directoryPath = "/test/directory";
+
+    beforeEach(() => {
+      dataSource.query = jest.fn();
+    });
+
+    it("should mark directory tree as deleted successfully", async () => {
+      const mockResults = [
+        {
+          path: "/test/directory/file1.txt",
+          is_directory: false,
+          file_permission: "rw-r--r--",
+          file_size: "1024",
+          source_checksum: "abc123",
+          target_checksum: "def456",
+          parent_path: "/test/directory",
+          depth: 3,
+          file_name: "file1.txt",
+          uid: "1001",
+          gid: "1002",
+          extension: ".txt",
+          file_type: "text",
+          modified_time: new Date(),
+          access_time: new Date(),
+          birth_time: new Date(),
+          path_id: "path-123",
+          source_meta: {},
+          target_meta: {},
+          inode: 12345
+        },
+        {
+          path: "/test/directory/subdir",
+          is_directory: true,
+          file_permission: "rwxr-xr-x",
+          file_size: "0",
+          source_checksum: null,
+          target_checksum: null,
+          parent_path: "/test/directory",
+          depth: 3,
+          file_name: "subdir",
+          uid: "1001",
+          gid: "1002",
+          extension: "",
+          file_type: "directory",
+          modified_time: new Date(),
+          access_time: new Date(),
+          birth_time: new Date(),
+          path_id: "path-123",
+          source_meta: {},
+          target_meta: {},
+          inode: 12346
+        }
+      ];
+
+      (dataSource.query as jest.Mock)
+        .mockResolvedValueOnce([{ id: jobRunId }]) 
+        .mockResolvedValueOnce(mockResults) 
+        .mockResolvedValueOnce([]); 
+      inventoryRepo.upsert.mockResolvedValue({ identifiers: [], generatedMaps: [] } as any);
+      await service.markDirectoryTreeAsDeleted(directoryPath, jobRunId, 'pathId', 'datamigrator');
+      expect(dataSource.query).toHaveBeenCalledTimes(3);
+      expect(inventoryRepo.upsert).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: "/test/directory/file1.txt",
+            isDeleted: true,
+            jobRunId: jobRunId
+          }),
+          expect.objectContaining({
+            path: "/test/directory/subdir",
+            isDeleted: true,
+            jobRunId: jobRunId
+          })
+        ]),
+        ['path', 'jobRunId', 'isDirectory']
+      );
+    });
+
+    it("should handle empty query results gracefully", async () => {
+      (dataSource.query as jest.Mock)
+        .mockResolvedValueOnce([{ id: jobRunId }]) 
+        .mockResolvedValueOnce([]); // Empty results
+      await service.markDirectoryTreeAsDeleted(directoryPath, jobRunId, 'pathId', 'datamigrator');
+      expect(dataSource.query).toHaveBeenCalledTimes(2); 
+      expect(inventoryRepo.upsert).not.toHaveBeenCalled(); 
+    });
+
+    it("should handle null query results gracefully", async () => {
+      (dataSource.query as jest.Mock)
+        .mockResolvedValueOnce([{ id: jobRunId }]) 
+        .mockResolvedValueOnce([]); // Empty results
+      await service.markDirectoryTreeAsDeleted(directoryPath, jobRunId, 'pathId', 'datamigrator');
+      expect(dataSource.query).toHaveBeenCalledTimes(2);
+      expect(inventoryRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it("should return early when no related jobs are found", async () => {
+      (dataSource.query as jest.Mock).mockResolvedValueOnce([]);
+      await service.markDirectoryTreeAsDeleted(directoryPath, jobRunId, 'pathId', 'datamigrator');
+      expect(dataSource.query).toHaveBeenCalledTimes(1); 
+      expect(inventoryRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it("should process large result sets in batches", async () => {
+      const mockResults1000 = Array(1000).fill(null).map((_, index) => ({
+        path: `/test/directory/file${index}.txt`,
+        is_directory: false,
+        file_permission: "rw-r--r--",
+        file_size: "1024",
+        source_checksum: "abc123",
+        target_checksum: "def456",
+        parent_path: "/test/directory",
+        depth: 3,
+        file_name: `file${index}.txt`,
+        uid: "1001",
+        gid: "1002",
+        extension: ".txt",
+        file_type: "text",
+        modified_time: new Date(),
+        access_time: new Date(),
+        birth_time: new Date(),
+        path_id: "path-123",
+        source_meta: {},
+        target_meta: {},
+        inode: 12345 + index
+      }));
+      
+      const mockResults500 = Array(500).fill(null).map((_, index) => ({
+        path: `/test/directory/file${1000 + index}.txt`,
+        is_directory: false,
+        file_permission: "rw-r--r--",
+        file_size: "1024",
+        source_checksum: "abc123",
+        target_checksum: "def456",
+        parent_path: "/test/directory",
+        depth: 3,
+        file_name: `file${1000 + index}.txt`,
+        uid: "1001",
+        gid: "1002",
+        extension: ".txt",
+        file_type: "text",
+        modified_time: new Date(),
+        access_time: new Date(),
+        birth_time: new Date(),
+        path_id: "path-123",
+        source_meta: {},
+        target_meta: {},
+        inode: 13345 + index
+      }));
+
+      (dataSource.query as jest.Mock)
+        .mockResolvedValueOnce([{ id: jobRunId }]) 
+        .mockResolvedValueOnce(mockResults1000) 
+        .mockResolvedValueOnce(mockResults500)
+        .mockResolvedValueOnce([]); // Empty to end pagination
+      inventoryRepo.upsert.mockResolvedValue({ identifiers: [], generatedMaps: [] } as any);
+
+      await service.markDirectoryTreeAsDeleted(directoryPath, jobRunId, 'pathId', 'datamigrator');
+
+      expect(inventoryRepo.upsert).toHaveBeenCalledTimes(2);
+    });
+
+    it("should handle database query errors", async () => {
+      const queryError = new Error("Database connection failed");
+      (dataSource.query as jest.Mock).mockRejectedValue(queryError);
+      const loggerSpy = jest.spyOn(service["logger"], "error");
+      await service.markDirectoryTreeAsDeleted(directoryPath, jobRunId, 'pathId', 'datamigrator');
+      expect(loggerSpy).toHaveBeenCalledWith(
+        `Failed to mark directory tree as deleted ${directoryPath}: ${queryError.message}`,
+        queryError.stack
+      );
+    });
+
+    it("should handle upsert errors gracefully", async () => {
+      const mockResults = [
+        {
+          path: "/test/directory/file1.txt",
+          is_directory: false,
+          file_permission: "rw-r--r--",
+          file_size: "1024",
+          source_checksum: "abc123",
+          target_checksum: "def456",
+          parent_path: "/test/directory",
+          depth: 3,
+          file_name: "file1.txt",
+          uid: "1001",
+          gid: "1002",
+          extension: ".txt",
+          file_type: "text",
+          modified_time: new Date(),
+          access_time: new Date(),
+          birth_time: new Date(),
+          path_id: "path-123",
+          source_meta: {},
+          target_meta: {},
+          inode: 12345
+        }
+      ];
+
+      const upsertError = new Error("Upsert failed");
+      (dataSource.query as jest.Mock)
+        .mockResolvedValueOnce([{ id: jobRunId }]) 
+        .mockResolvedValueOnce(mockResults)
+        .mockResolvedValueOnce([]); // Empty to end pagination
+      inventoryRepo.upsert.mockRejectedValue(upsertError);
+      const loggerSpy = jest.spyOn(service["logger"], "error");
+      await service.markDirectoryTreeAsDeleted(directoryPath, jobRunId, 'pathId', 'datamigrator');
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`Failed to process batch`),
+        expect.any(String)
+      );
+    });
+
+    it("should handle Windows-style directory paths", async () => {
+      const windowsPath = "C:\\Users\\test\\directory";
+      const mockResults = [
+        {
+          path: "C:\\Users\\test\\directory\\file.txt",
+          is_directory: false,
+          file_permission: "rw-r--r--",
+          file_size: "1024",
+          source_checksum: "abc123",
+          target_checksum: "def456",
+          parent_path: "C:\\Users\\test\\directory",
+          depth: 4,
+          file_name: "file.txt",
+          uid: "1001",
+          gid: "1002",
+          extension: ".txt",
+          file_type: "text",
+          modified_time: new Date(),
+          access_time: new Date(),
+          birth_time: new Date(),
+          path_id: "path-123",
+          source_meta: {},
+          target_meta: {},
+          inode: 12345
+        }
+      ];
+
+      (dataSource.query as jest.Mock)
+        .mockResolvedValueOnce([{ id: jobRunId }]) 
+        .mockResolvedValueOnce(mockResults)
+        .mockResolvedValueOnce([]); // Empty result to end pagination
+      inventoryRepo.upsert.mockResolvedValue({ identifiers: [], generatedMaps: [] } as any);
+
+      await service.markDirectoryTreeAsDeleted(windowsPath, jobRunId, 'pathId', 'datamigrator');
+
+      expect(dataSource.query).toHaveBeenCalledTimes(3);
+    });
+
+    it("should preserve existing metadata when marking as deleted", async () => {
+      const mockResults = [
+        {
+          path: "/test/directory/file1.txt",
+          is_directory: false,
+          file_permission: "rw-r--r--",
+          file_size: "2048",
+          source_checksum: "source123",
+          target_checksum: "target456",
+          parent_path: "/test/directory",
+          depth: 3,
+          file_name: "file1.txt",
+          uid: "1001",
+          gid: "1002",
+          extension: ".txt",
+          file_type: "text",
+          modified_time: new Date("2024-01-01T12:00:00Z"),
+          access_time: new Date("2024-01-02T12:00:00Z"),
+          birth_time: new Date("2024-01-01T10:00:00Z"),
+          path_id: "path-123",
+          source_meta: { custom: "data" },
+          target_meta: { other: "info" },
+          inode: 98765
+        }
+      ];
+
+      (dataSource.query as jest.Mock)
+        .mockResolvedValueOnce([{ id: jobRunId }]) 
+        .mockResolvedValueOnce(mockResults)
+        .mockResolvedValueOnce([]); // Empty to end pagination
+      inventoryRepo.upsert.mockResolvedValue({ identifiers: [], generatedMaps: [] } as any);
+
+      await service.markDirectoryTreeAsDeleted(directoryPath, jobRunId, 'pathId', 'datamigrator');
+
+      expect(inventoryRepo.upsert).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: "/test/directory/file1.txt",
+            isDeleted: true,
+            fileSize: "2048",
+            permission: "rw-r--r--",
+            uid: "1001",
+            gid: "1002",
+            extension: ".txt",
+            fileType: "text",
+            sourceMeta: null,
+            targetMeta: null,
+            inode: null
+          })
+        ]),
+        ['path', 'jobRunId', 'isDirectory']
+      );
+    });
+
+    it("should handle mixed file types (files and directories)", async () => {
+      const mockResults = [
+        {
+          path: "/test/directory/file.txt",
+          is_directory: false,
+          file_permission: "rw-r--r--",
+          file_size: "1024",
+          source_checksum: "abc123",
+          target_checksum: "def456",
+          parent_path: "/test/directory",
+          depth: 3,
+          file_name: "file.txt",
+          uid: "1001",
+          gid: "1002",
+          extension: ".txt",
+          file_type: "text",
+          modified_time: new Date(),
+          access_time: new Date(),
+          birth_time: new Date(),
+          path_id: "path-123",
+          source_meta: {},
+          target_meta: {},
+          inode: 12345
+        },
+        {
+          path: "/test/directory/subdir",
+          is_directory: true,
+          file_permission: "rwxr-xr-x",
+          file_size: "0",
+          source_checksum: null,
+          target_checksum: null,
+          parent_path: "/test/directory",
+          depth: 3,
+          file_name: "subdir",
+          uid: "1001",
+          gid: "1002",
+          extension: "",
+          file_type: "directory",
+          modified_time: new Date(),
+          access_time: new Date(),
+          birth_time: new Date(),
+          path_id: "path-123",
+          source_meta: {},
+          target_meta: {},
+          inode: 12346
+        }
+      ];
+
+      (dataSource.query as jest.Mock)
+        .mockResolvedValueOnce([{ id: jobRunId }]) 
+        .mockResolvedValueOnce(mockResults)
+        .mockResolvedValueOnce([]); 
+      inventoryRepo.upsert.mockResolvedValue({ identifiers: [], generatedMaps: [] } as any);
+      await service.markDirectoryTreeAsDeleted(directoryPath, jobRunId, 'pathId', 'datamigrator');
+      const upsertCall = (inventoryRepo.upsert as jest.Mock).mock.calls[0][0];
+      
+      expect(upsertCall).toContainEqual(
+        expect.objectContaining({
+          path: "/test/directory/file.txt",
+          isDirectory: false,
+          isDeleted: true
+        })
+      );
+      expect(upsertCall).toContainEqual(
+        expect.objectContaining({
+          path: "/test/directory/subdir",
+          isDirectory: true,
+          isDeleted: true
+        })
+      );
+    });
+
+    it("should log successful deletion operations", async () => {
+      const mockResults = [
+        {
+          path: "/test/directory/file1.txt",
+          is_directory: false,
+          file_permission: "rw-r--r--",
+          file_size: "1024",
+          source_checksum: "abc123",
+          target_checksum: "def456",
+          parent_path: "/test/directory",
+          depth: 3,
+          file_name: "file1.txt",
+          uid: "1001",
+          gid: "1002",
+          extension: ".txt",
+          file_type: "text",
+          modified_time: new Date(),
+          access_time: new Date(),
+          birth_time: new Date(),
+          path_id: "path-123",
+          source_meta: {},
+          target_meta: {},
+          inode: 12345
+        }
+      ];
+
+      (dataSource.query as jest.Mock)
+        .mockResolvedValueOnce([{ id: jobRunId }]) 
+        .mockResolvedValueOnce(mockResults)
+        .mockResolvedValueOnce([]); 
+      inventoryRepo.upsert.mockResolvedValue({ identifiers: [], generatedMaps: [] } as any);
+      const loggerSpy = jest.spyOn(service["logger"], "log");
+      await service.markDirectoryTreeAsDeleted(directoryPath, jobRunId, 'pathId', 'datamigrator');
+      expect(loggerSpy).toHaveBeenCalledWith(
+        `Successfully marked 1 items (files and directories) as deleted for directory: ${directoryPath}`
+      );
+    });
+  });
+
+  describe("validateAndQuoteSchema", () => {
+    it("should validate and quote a valid schema name", () => {
+      const result = (service as any).validateAndQuoteSchema('datamigrator');
+      expect(result).toBe('"datamigrator"');
+    });
+
+    it("should handle schema names with underscores and hyphens", () => {
+      const result1 = (service as any).validateAndQuoteSchema('data_migrator');
+      const result2 = (service as any).validateAndQuoteSchema('data-migrator');
+      expect(result1).toBe('"data_migrator"');
+      expect(result2).toBe('"data-migrator"');
+    });
+
+    it("should throw error for empty schema name", () => {
+      expect(() => (service as any).validateAndQuoteSchema('')).toThrow('Schema name is required');
+      expect(() => (service as any).validateAndQuoteSchema(null)).toThrow('Schema name is required');
+    });
+
+    it("should throw error for invalid characters in schema name", () => {
+      expect(() => (service as any).validateAndQuoteSchema('data;DROP TABLE')).toThrow(
+        'Invalid schema name: data;DROP TABLE. Only alphanumeric characters, underscores, and hyphens are allowed.'
+      );
+      expect(() => (service as any).validateAndQuoteSchema('data\'migrator')).toThrow(
+        'Invalid schema name: data\'migrator. Only alphanumeric characters, underscores, and hyphens are allowed.'
+      );
+    });
+
+    it("should prevent SQL injection attempts", () => {
+      const maliciousInputs = [
+        'schema"; DROP TABLE users; --',
+        'schema\'; DELETE FROM inventory; --',
+        'schema/**/UNION/**/SELECT/**/',
+        'schema OR 1=1',
+      ];
+
+      maliciousInputs.forEach(input => {
+        expect(() => (service as any).validateAndQuoteSchema(input)).toThrow();
+      });
     });
   });
 });

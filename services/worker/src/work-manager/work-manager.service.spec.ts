@@ -58,6 +58,7 @@ describe('WorkManagerService', () => {
     };
     httpService = {
       get: jest.fn(),
+      post: jest.fn().mockReturnValue(of({ status: 200, data: {} })),
     };
     workerOptions = {
       createWorkerOptions: jest

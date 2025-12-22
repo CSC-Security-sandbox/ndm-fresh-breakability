@@ -13,12 +13,18 @@ jest.mock('path');
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 
+// Store original platform to restore after tests
+const originalPlatform = process.platform;
+
 describe('createDirectory', () => {
     let consoleSpy: jest.SpyInstance;
     let mockMkdir: jest.MockedFunction<typeof fs.promises.mkdir>;
     let mockRealpath: jest.MockedFunction<typeof fs.promises.realpath>;
 
     beforeEach(() => {
+        // Mock process.platform to simulate Windows environment for tilde detection tests
+        Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+        
         // Setup fs mocks
         mockMkdir = mockFs.promises.mkdir as jest.MockedFunction<typeof fs.promises.mkdir>;
         mockRealpath = mockFs.promises.realpath as jest.MockedFunction<typeof fs.promises.realpath>;
@@ -35,6 +41,8 @@ describe('createDirectory', () => {
 
     afterEach(() => {
         consoleSpy.mockRestore();
+        // Restore original platform
+        Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
     });
 
     describe('Tilde Detection', () => {

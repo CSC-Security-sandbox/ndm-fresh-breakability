@@ -1,5 +1,5 @@
 
-import { CommandStatus, ItemInfo, ItemMeta, OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
+import { CommandStatus, ItemInfo, ItemMeta, OPS_CMD, OPS_STATUS, JobManagerContext } from "@netapp-cloud-datamigrate/jobs-lib";
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
@@ -7,6 +7,7 @@ import * as fs from "fs";
 import * as path from 'path';
 import { WINDOWS } from "../../../../config/app.config";
 import { dmError, getFilePermissions, getFileType } from "src/activities/utils/utils";
+import { FileType } from "src/activities/types/tasks";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { createDirectory } from "src/activities/utils/directory.utils";
 import { WorkerThreadService } from "src/thread/worker.thread.service";
@@ -32,6 +33,14 @@ export class CommandExecService {
 
         const output: CommandExecOutput = { sourceErrors: [], targetErrors: [], cmd: input.command };
         let baseCmdRes: CommandOutput = { shouldStampMeta: false, shouldUpdateItemInfo: false, sourceErrors: [], targetErrors: [] };
+
+        // TODO: Copy Stream files in a method.
+
+        // TODO: Copy Stream directories in a method.
+
+        // TODO: Delete Stream files in a method.
+
+        // TODO: Delete Stream directories in a method.
 
         if(input.command.ops && input.command.ops[OPS_CMD.COPY_SYMLINK]) {
             // Copy Symlink
@@ -100,6 +109,12 @@ export class CommandExecService {
         }        
     return output;
 }
+
+    async copyStreamFile(){
+        //TODO: add code to enumerate the source stream and copy them one by one to target. 
+        // calculate hash as well based on the streams. 
+    }
+    
 
     async copyFile({command , jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
         const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] , shouldUpdateItemInfo: false };
@@ -210,8 +225,8 @@ export class CommandExecService {
         if ( command.ops[OPS_CMD.REMOVE_DIR].status !== OPS_STATUS.COMPLETED) {
             try {
                 await fs.promises.rm(targetPath, { recursive: true, force: true });
+                await this.markDirectoryContentsAsDeleted(command.fPath, jobContext);
                 command.ops[OPS_CMD.REMOVE_DIR].status = OPS_STATUS.COMPLETED;
-                output.shouldUpdateItemInfo = true;
             } catch (error) {
                 if (error.code !== 'ENOENT') {
                     command.ops[OPS_CMD.REMOVE_DIR].status = OPS_STATUS.ERROR;
@@ -223,6 +238,28 @@ export class CommandExecService {
             }
         }
         return output
+    }
+
+    private async markDirectoryContentsAsDeleted(directoryPath: string, jobContext: JobManagerContext): Promise<void> {
+        try {
+            const deletedDirectoryInfo = new ItemInfo(
+                directoryPath,                       
+                true,                               
+                false,                             
+                directoryPath.split('/').length - 2, 
+                '',                                 
+                FileType.DIRECTORY.toLowerCase(),                        
+                null,                              
+                null,                               
+                0,                                  
+                0,                                  
+                true                               
+            );
+            await jobContext.publishToFileStream(deletedDirectoryInfo);
+            this.logger.debug(`Published deleted directory info for: ${directoryPath}`);
+        } catch (error) {
+            this.logger.error(`Failed to publish deleted directory info for ${directoryPath}: ${error.message}`);
+        }
     }
 
     async publishFileInfo({command , jobContext, targetPath, sourcePath, errorType  }: CommandExecInput): Promise<void> {
@@ -262,7 +299,7 @@ export class CommandExecService {
                 false, 
                 command.fPath.split('/').length - 2,
                 path.extname(targetPath),
-                isDirectory ? 'directory' : 'file',
+                isDirectory ? FileType.DIRECTORY.toLowerCase() : FileType.FILE.toLowerCase(),
                 sourceMeta,
                 sourceMeta, 
                 0, 

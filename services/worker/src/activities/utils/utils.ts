@@ -96,6 +96,7 @@ export const checkCaseSensitiveConflict = async (jobType: string, itemName: stri
 }
 
 export function getFileType(stats: fs.Stats, isDirectory:boolean): FileType {
+  // TODO: add file_stream and dir_stream details also in this 
     switch (true) {
       case isDirectory:
         return FileType.DIRECTORY;

@@ -8,6 +8,7 @@ import { FatalError } from 'src/errors/errors.types';
 import { DiscoveryScanService } from './discovery-scan.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { WinOperationService } from "../../../core/migrate/command-execution/win-opeartions/win-operation.service";
+import { WindowsAPINotAvailableError } from "../../../core/migrate/command-execution/win-opeartions/acl-operation.error";
 import { FileTypeDetectionService } from '../../utils/file-type-detection.service';
 import { FileType } from 'src/activities/types/tasks';
 
@@ -493,6 +494,565 @@ describe('DiscoveryScanService', () => {
       expect(result.subDirs).toEqual(['Folder', 'folder', 'FOLder']);
       expect(mockJobContext.publishToErrorStream).not.toHaveBeenCalled();
       Object.defineProperty(process, 'platform', { value: originalPlatform });
+    });
+
+    describe('WindowsAPINotAvailableError handling', () => {
+      const originalPlatform = process.platform;
+
+      beforeEach(() => {
+        Object.defineProperty(process, 'platform', { value: 'win32' });
+      });
+
+      afterEach(() => {
+        Object.defineProperty(process, 'platform', { value: originalPlatform });
+      });
+
+      it('should set TRANSIENT_ERROR type when WindowsAPINotAvailableError is caught in scanDirectory', async () => {
+        // Arrange: Setup file system mocks
+        (fs.promises.readdir as jest.Mock).mockResolvedValue([
+          { name: 'file1.txt' },
+        ]);
+        (fs.promises.lstat as jest.Mock).mockResolvedValue({
+          isDirectory: () => false,
+          isSymbolicLink: () => false,
+          size: 1024,
+          atime: new Date(),
+          birthtime: new Date(),
+          mtime: new Date(),
+          ino: 12345,
+        });
+        (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+        detectFileTypeMock.mockResolvedValue(FileType.FILE);
+
+        // Arrange: Mock publishFileInfo to throw WindowsAPINotAvailableError
+        const windowsAPIError = new WindowsAPINotAvailableError();
+        jest.spyOn(service, 'publishFileInfo').mockRejectedValue(windowsAPIError);
+
+        // Act & Assert: Should throw the error
+        await expect(
+          service.scanDirectory({
+            jobContext: mockJobContext,
+            sourcePath: '/mock',
+            sourcePrefix: '/mock',
+            command: mockCommand,
+            settings: {
+              excludePatterns: [],
+              skipFile: 0,
+            },
+            errorType: ErrorType.RECOVERABLE_ERROR,
+          } as any)
+        ).rejects.toThrow(WindowsAPINotAvailableError);
+
+        // Assert: Error should be published with TRANSIENT_ERROR type
+        expect(mockJobContext.publishToErrorStream).toHaveBeenCalledWith(
+          expect.objectContaining({
+            error: expect.objectContaining({
+              message: 'Windows API is not available for ADS detection',
+            }),
+          })
+        );
+      });
+
+      it('should publish DM error to error stream when WindowsAPINotAvailableError occurs', async () => {
+        // Arrange: Setup file system mocks
+        (fs.promises.readdir as jest.Mock).mockResolvedValue([
+          { name: 'file1.txt' },
+        ]);
+        (fs.promises.lstat as jest.Mock).mockResolvedValue({
+          isDirectory: () => false,
+          isSymbolicLink: () => false,
+          size: 1024,
+          atime: new Date(),
+          birthtime: new Date(),
+          mtime: new Date(),
+          ino: 12345,
+        });
+        (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+        detectFileTypeMock.mockResolvedValue(FileType.FILE);
+
+        // Arrange: Mock publishFileInfo to throw WindowsAPINotAvailableError
+        const windowsAPIError = new WindowsAPINotAvailableError();
+        jest.spyOn(service, 'publishFileInfo').mockRejectedValue(windowsAPIError);
+
+        // Act: Execute scanDirectory
+        try {
+          await service.scanDirectory({
+            jobContext: mockJobContext,
+            sourcePath: '/mock',
+            sourcePrefix: '/mock',
+            command: mockCommand,
+            settings: {
+              excludePatterns: [],
+              skipFile: 0,
+            },
+            errorType: ErrorType.RECOVERABLE_ERROR,
+          } as any);
+        } catch (error) {
+          // Expected to throw
+        }
+
+        // Assert: publishToErrorStream should have been called
+        expect(mockJobContext.publishToErrorStream).toHaveBeenCalledTimes(1);
+      });
+
+      it('should rethrow WindowsAPINotAvailableError after publishing to error stream', async () => {
+        // Arrange: Setup file system mocks
+        (fs.promises.readdir as jest.Mock).mockResolvedValue([
+          { name: 'file1.txt' },
+        ]);
+        (fs.promises.lstat as jest.Mock).mockResolvedValue({
+          isDirectory: () => false,
+          isSymbolicLink: () => false,
+          size: 1024,
+          atime: new Date(),
+          birthtime: new Date(),
+          mtime: new Date(),
+          ino: 12345,
+        });
+        (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+        detectFileTypeMock.mockResolvedValue(FileType.FILE);
+
+        // Arrange: Mock publishFileInfo to throw WindowsAPINotAvailableError
+        const windowsAPIError = new WindowsAPINotAvailableError();
+        jest.spyOn(service, 'publishFileInfo').mockRejectedValue(windowsAPIError);
+
+        // Act & Assert: Should rethrow the error
+        await expect(
+          service.scanDirectory({
+            jobContext: mockJobContext,
+            sourcePath: '/mock',
+            sourcePrefix: '/mock',
+            command: mockCommand,
+            settings: {
+              excludePatterns: [],
+              skipFile: 0,
+            },
+            errorType: ErrorType.RECOVERABLE_ERROR,
+          } as any)
+        ).rejects.toThrow(WindowsAPINotAvailableError);
+
+        // Assert: Error was published before rethrowing
+        expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
+      });
+    });
+  });
+
+  /**
+   * Test suite for publishFileInfo method - Alternate Data Streams (ADS) scanning
+   * 
+   * ADS is a Windows NTFS feature that allows files to have multiple data streams.
+   * Common use cases include:
+   * - Zone.Identifier: Stores download source information
+   * - Custom metadata streams: Application-specific data
+   * 
+   * These tests verify:
+   * 1. ADS detection when enabled (shouldScanADS = true)
+   * 2. ADS skipping when disabled (shouldScanADS = false)  
+   * 3. Platform-specific behavior (Windows vs Linux/macOS)
+   * 4. Handling of single, multiple, and zero streams
+   * 5. Error handling during ADS detection
+   */
+  describe('publishFileInfo - Alternate Data Streams (ADS) Scanning', () => {
+    // Common test fixtures
+    let mockFileStats: any;
+    let mockWinOperationService: any;
+    const originalPlatform = process.platform;
+
+    // Helper to simulate Windows environment
+    const simulateWindowsPlatform = () => {
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+    };
+
+    // Helper to create ADS detection result
+    const createADSResult = (streams: { name: string; size: number }[]) => ({
+      hasADS: streams.length > 0,
+      streamCount: streams.length,
+      streamNames: streams.map(s => s.name),
+      streamSizes: streams.map(s => s.size),
+      totalSize: streams.reduce((sum, s) => sum + s.size, 0),
+    });
+
+    // Helper to create empty ADS result (no streams)
+    const createEmptyADSResult = () => createADSResult([]);
+
+    beforeEach(() => {
+      // Setup: Create a mock file with standard metadata
+      mockFileStats = {
+        isDirectory: () => false,
+        isSymbolicLink: () => false,
+        size: 1024,
+        atime: new Date('2023-01-01'),
+        birthtime: new Date('2023-01-01'),
+        mtime: new Date('2023-01-01'),
+        ino: 12345,
+      };
+
+      // Setup: Mock the Windows operation service
+      mockWinOperationService = {
+        detectADSInfo: jest.fn(),
+      };
+      (service as any).winOperationService = mockWinOperationService;
+
+      // Setup: Add bulk publish capability to job context
+      mockJobContext.publishToFileStreamBulk = jest.fn();
+    });
+
+    afterEach(() => {
+      // Cleanup: Restore original platform after each test
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    });
+
+    describe('When ADS scanning is ENABLED (shouldScanADS = true)', () => {
+      
+      describe('Multiple streams detection', () => {
+        it('should detect and publish two ADS streams for a file on Windows', async () => {
+          // Arrange: Simulate Windows with a file containing two ADS streams
+          simulateWindowsPlatform();
+          const twoStreams = [
+            { name: 'Zone.Identifier', size: 128 },  // Common stream for downloaded files
+            { name: 'CustomMetadata', size: 256 },   // Custom application stream
+          ];
+          mockWinOperationService.detectADSInfo.mockResolvedValue(createADSResult(twoStreams));
+
+          // Act: Publish file info with ADS scanning enabled
+          await service.publishFileInfo({
+            jobContext: mockJobContext,
+            command: mockCommand,
+            stats: mockFileStats,
+            fPath: '/mock/downloaded-file.txt',
+            relativeSourcePath: 'downloaded-file.txt',
+            fileType: FileType.FILE,
+            shouldScanADS: true,
+          } as any);
+
+          // Assert: Main file should be published
+          expect(mockJobContext.publishToFileStream).toHaveBeenCalledTimes(1);
+          
+          // Assert: ADS detection should be called for the file with jobContext, command, and path
+          expect(mockWinOperationService.detectADSInfo).toHaveBeenCalledWith(
+            mockJobContext,
+            mockCommand,
+            '/mock/downloaded-file.txt'
+          );
+          
+          // Assert: Both streams should be published with correct naming convention (filename:streamname)
+          expect(mockJobContext.publishToFileStreamBulk).toHaveBeenCalledWith(
+            expect.arrayContaining([
+              expect.objectContaining({ 
+                fileName: 'downloaded-file.txt:Zone.Identifier', 
+                fileType: FileType.STREAM 
+              }),
+              expect.objectContaining({ 
+                fileName: 'downloaded-file.txt:CustomMetadata', 
+                fileType: FileType.STREAM 
+              }),
+            ])
+          );
+        });
+
+        it('should correctly publish three streams with proper file type', async () => {
+          // Arrange: File with multiple custom streams
+          simulateWindowsPlatform();
+          const threeStreams = [
+            { name: 'Metadata', size: 100 },
+            { name: 'Thumbnail', size: 200 },
+            { name: 'History', size: 300 },
+          ];
+          mockWinOperationService.detectADSInfo.mockResolvedValue(createADSResult(threeStreams));
+
+          // Act
+          await service.publishFileInfo({
+            jobContext: mockJobContext,
+            command: mockCommand,
+            stats: mockFileStats,
+            fPath: '/mock/document.docx',
+            relativeSourcePath: 'document.docx',
+            fileType: FileType.FILE,
+            shouldScanADS: true,
+          } as any);
+
+          // Assert: All three streams published with STREAM file type
+          const publishedStreams = mockJobContext.publishToFileStreamBulk.mock.calls[0][0];
+          expect(publishedStreams).toHaveLength(3);
+          
+          expect(mockJobContext.publishToFileStreamBulk).toHaveBeenCalledWith(
+            expect.arrayContaining([
+              expect.objectContaining({ fileName: 'document.docx:Metadata', fileType: FileType.STREAM }),
+              expect.objectContaining({ fileName: 'document.docx:Thumbnail', fileType: FileType.STREAM }),
+              expect.objectContaining({ fileName: 'document.docx:History', fileType: FileType.STREAM }),
+            ])
+          );
+        });
+      });
+
+      describe('Single stream detection', () => {
+        it('should publish exactly one stream when file has single ADS', async () => {
+          // Arrange: File with only Zone.Identifier (common for downloaded files)
+          simulateWindowsPlatform();
+          const singleStream = [{ name: 'Zone.Identifier', size: 128 }];
+          mockWinOperationService.detectADSInfo.mockResolvedValue(createADSResult(singleStream));
+
+          // Act
+          await service.publishFileInfo({
+            jobContext: mockJobContext,
+            command: mockCommand,
+            stats: mockFileStats,
+            fPath: '/mock/internet-download.exe',
+            relativeSourcePath: 'internet-download.exe',
+            fileType: FileType.FILE,
+            shouldScanADS: true,
+          } as any);
+
+          // Assert: Main file published
+          expect(mockJobContext.publishToFileStream).toHaveBeenCalledTimes(1);
+          
+          // Assert: Only one stream published
+          const publishedStreams = mockJobContext.publishToFileStreamBulk.mock.calls[0][0];
+          expect(publishedStreams).toHaveLength(1);
+          expect(publishedStreams[0]).toMatchObject({
+            fileName: 'internet-download.exe:Zone.Identifier',
+            fileType: FileType.STREAM,
+          });
+        });
+      });
+
+      describe('No streams detection', () => {
+        it('should only publish main file when no ADS streams exist', async () => {
+          // Arrange: Regular file without any alternate streams
+          simulateWindowsPlatform();
+          mockWinOperationService.detectADSInfo.mockResolvedValue(createEmptyADSResult());
+
+          // Act
+          await service.publishFileInfo({
+            jobContext: mockJobContext,
+            command: mockCommand,
+            stats: mockFileStats,
+            fPath: '/mock/regular-file.txt',
+            relativeSourcePath: 'regular-file.txt',
+            fileType: FileType.FILE,
+            shouldScanADS: true,
+          } as any);
+
+          // Assert: Main file published
+          expect(mockJobContext.publishToFileStream).toHaveBeenCalledTimes(1);
+          
+          // Assert: ADS detection was attempted with correct parameters
+          expect(mockWinOperationService.detectADSInfo).toHaveBeenCalledWith(
+            mockJobContext,
+            mockCommand,
+            '/mock/regular-file.txt'
+          );
+          
+          // Assert: No streams published (bulk publish not called)
+          expect(mockJobContext.publishToFileStreamBulk).not.toHaveBeenCalled();
+        });
+      });
+
+      describe('Error handling', () => {
+        it('should rethrow error when ADS detection fails', async () => {
+          // Arrange: Simulate ADS detection throwing an error
+          simulateWindowsPlatform();
+          const adsDetectionError = new Error('Access denied to file streams');
+          mockWinOperationService.detectADSInfo.mockRejectedValue(adsDetectionError);
+
+          // Act & Assert: Should throw the error
+          await expect(
+            service.publishFileInfo({
+              jobContext: mockJobContext,
+              command: mockCommand,
+              stats: mockFileStats,
+              fPath: '/mock/protected-file.txt',
+              relativeSourcePath: 'protected-file.txt',
+              fileType: FileType.FILE,
+              shouldScanADS: true,
+            } as any)
+          ).rejects.toThrow('Access denied to file streams');
+
+          // Assert: Main file was still published before error
+          expect(mockJobContext.publishToFileStream).toHaveBeenCalledTimes(1);
+          
+          // Assert: ADS detection was attempted
+          expect(mockWinOperationService.detectADSInfo).toHaveBeenCalled();
+          
+          // Assert: No streams published due to error
+          expect(mockJobContext.publishToFileStreamBulk).not.toHaveBeenCalled();
+        });
+
+        it('should rethrow WindowsAPINotAvailableError when Windows API is unavailable', async () => {
+          // Arrange: Simulate Windows API not available
+          simulateWindowsPlatform();
+          const windowsAPIError = new WindowsAPINotAvailableError();
+          mockWinOperationService.detectADSInfo.mockRejectedValue(windowsAPIError);
+
+          // Act & Assert: Should throw WindowsAPINotAvailableError
+          await expect(
+            service.publishFileInfo({
+              jobContext: mockJobContext,
+              command: mockCommand,
+              stats: mockFileStats,
+              fPath: '/mock/file.txt',
+              relativeSourcePath: 'file.txt',
+              fileType: FileType.FILE,
+              shouldScanADS: true,
+            } as any)
+          ).rejects.toThrow(WindowsAPINotAvailableError);
+
+          // Assert: Main file was still published before error
+          expect(mockJobContext.publishToFileStream).toHaveBeenCalledTimes(1);
+          
+          // Assert: ADS detection was attempted
+          expect(mockWinOperationService.detectADSInfo).toHaveBeenCalled();
+        });
+      });
+    });
+
+    describe('When ADS scanning is DISABLED (shouldScanADS = false)', () => {
+      
+      it('should skip ADS detection entirely on Windows', async () => {
+        // Arrange
+        simulateWindowsPlatform();
+
+        // Act
+        await service.publishFileInfo({
+          jobContext: mockJobContext,
+          command: mockCommand,
+          stats: mockFileStats,
+          fPath: '/mock/file.txt',
+          relativeSourcePath: 'file.txt',
+          fileType: FileType.FILE,
+          shouldScanADS: false,
+        } as any);
+
+        // Assert: Only main file published
+        expect(mockJobContext.publishToFileStream).toHaveBeenCalledTimes(1);
+        
+        // Assert: ADS detection should NOT be called
+        expect(mockWinOperationService.detectADSInfo).not.toHaveBeenCalled();
+        
+        // Assert: No streams published
+        expect(mockJobContext.publishToFileStreamBulk).not.toHaveBeenCalled();
+      });
+
+      it('should publish only the main file info without stream detection', async () => {
+        // Arrange
+        simulateWindowsPlatform();
+
+        // Act
+        await service.publishFileInfo({
+          jobContext: mockJobContext,
+          command: mockCommand,
+          stats: mockFileStats,
+          fPath: '/mock/simple-file.txt',
+          relativeSourcePath: 'simple-file.txt',
+          fileType: FileType.FILE,
+          shouldScanADS: false,
+        } as any);
+
+        // Assert: Main file published with correct properties
+        expect(mockJobContext.publishToFileStream).toHaveBeenCalledWith(
+          expect.objectContaining({ 
+            fileName: 'simple-file.txt', 
+            fileType: FileType.FILE 
+          })
+        );
+        
+        // Assert: No ADS-related operations performed
+        expect(mockWinOperationService.detectADSInfo).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('Platform-specific behavior (ADS is Windows-only)', () => {
+      
+      it('should skip ADS scanning on Linux regardless of shouldScanADS setting', async () => {
+        // Arrange: Linux platform
+        Object.defineProperty(process, 'platform', { value: 'linux' });
+
+        // Act: Try to scan ADS on Linux
+        await service.publishFileInfo({
+          jobContext: mockJobContext,
+          command: mockCommand,
+          stats: mockFileStats,
+          fPath: '/home/user/file.txt',
+          relativeSourcePath: 'file.txt',
+          fileType: FileType.FILE,
+          shouldScanADS: true,  // Even though enabled, should be skipped on Linux
+        } as any);
+
+        // Assert: ADS detection NOT called (ADS doesn't exist on Linux)
+        expect(mockWinOperationService.detectADSInfo).not.toHaveBeenCalled();
+        
+        // Assert: Only main file published
+        expect(mockJobContext.publishToFileStream).toHaveBeenCalledTimes(1);
+        expect(mockJobContext.publishToFileStreamBulk).not.toHaveBeenCalled();
+      });
+
+      it('should skip ADS scanning on macOS regardless of shouldScanADS setting', async () => {
+        // Arrange: macOS platform
+        Object.defineProperty(process, 'platform', { value: 'darwin' });
+
+        // Act: Try to scan ADS on macOS
+        await service.publishFileInfo({
+          jobContext: mockJobContext,
+          command: mockCommand,
+          stats: mockFileStats,
+          fPath: '/Users/username/Documents/file.txt',
+          relativeSourcePath: 'file.txt',
+          fileType: FileType.FILE,
+          shouldScanADS: true,  // Even though enabled, should be skipped on macOS
+        } as any);
+
+        // Assert: ADS detection NOT called (ADS doesn't exist on macOS)
+        expect(mockWinOperationService.detectADSInfo).not.toHaveBeenCalled();
+        
+        // Assert: Only main file published
+        expect(mockJobContext.publishToFileStream).toHaveBeenCalledTimes(1);
+        expect(mockJobContext.publishToFileStreamBulk).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('Directory ADS scanning', () => {
+      
+      it('should detect and publish ADS for directories on Windows', async () => {
+        // Arrange: Directory with an ADS stream (less common but possible)
+        simulateWindowsPlatform();
+        const directoryStats = {
+          ...mockFileStats,
+          isDirectory: () => true,
+        };
+        const directoryStream = [{ name: 'FolderMetadata', size: 50 }];
+        mockWinOperationService.detectADSInfo.mockResolvedValue(createADSResult(directoryStream));
+
+        // Act
+        await service.publishFileInfo({
+          jobContext: mockJobContext,
+          command: mockCommand,
+          stats: directoryStats,
+          fPath: '/mock/project-folder',
+          relativeSourcePath: 'project-folder',
+          fileType: FileType.DIRECTORY,
+          shouldScanADS: true,
+        } as any);
+
+        // Assert: Directory info published
+        expect(mockJobContext.publishToFileStream).toHaveBeenCalledTimes(1);
+        
+        // Assert: ADS detection called for directory with correct parameters
+        expect(mockWinOperationService.detectADSInfo).toHaveBeenCalledWith(
+          mockJobContext,
+          mockCommand,
+          '/mock/project-folder'
+        );
+        
+        // Assert: Directory stream published with correct naming
+        expect(mockJobContext.publishToFileStreamBulk).toHaveBeenCalledWith(
+          expect.arrayContaining([
+            expect.objectContaining({ 
+              fileName: 'project-folder:FolderMetadata',
+              fileType: FileType.STREAM,
+            }),
+          ])
+        );
+      });
     });
   });
 });

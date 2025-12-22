@@ -11,3 +11,10 @@ export class TargetAclError extends Error {
         this.name = 'TARGET_ACL_ERROR';
     }   
 }
+
+export class WindowsAPINotAvailableError extends Error {
+    constructor(message: string = 'Windows API is not available for ADS detection', public readonly code: string = 'WINDOWS_API_UNAVAILABLE') {
+        super(message);
+        this.name = 'WindowsAPINotAvailableError';
+    }
+}

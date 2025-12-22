@@ -396,6 +396,51 @@ describe('CommandExecService', () => {
             expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
             expect(input.command.ops[OPS_CMD.REMOVE_DIR].status).toBe(OPS_STATUS.ERROR);
         });
+
+        it('should publish deleted directory info to file stream on successful delete', async () => {
+            const input = {
+                sourcePath: '/source/testdir',
+                targetPath: '/target/testdir',
+                jobContext: mockJobContext,
+                command: createMockCommand(),
+                errorType: ErrorType.RECOVERABLE_ERROR,
+            };
+
+            const result = await service.deleteDirectory(input);
+
+            expect(result.sourceErrors).toEqual([]);
+            expect(result.targetErrors).toEqual([]);
+            expect(mockJobContext.publishToFileStream).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    fileName: '/testdir',  // Uses command.fPath
+                    isDirectory: true,
+                    isSymbolicLink: false,
+                    fileType: 'directory',
+                    isDeleted: true,
+                })
+            );
+        });
+
+        it('should not publish to file stream when directory deletion fails', async () => {
+            const input = {
+                sourcePath: '/source/testdir',
+                targetPath: '/target/testdir',
+                jobContext: mockJobContext,
+                command: createMockCommand(),
+                errorType: ErrorType.RECOVERABLE_ERROR,
+            };
+            
+            const error = new Error('Permission denied') as any;
+            error.code = 'EACCES';
+            (mockFs.promises.rm as jest.Mock).mockRejectedValue(error);
+
+            // Reset the mock to clear any previous calls
+            mockJobContext.publishToFileStream.mockClear();
+
+            await service.deleteDirectory(input);
+
+            expect(mockJobContext.publishToFileStream).not.toHaveBeenCalled();
+        });
     });
 
     describe('executeCommand', () => {

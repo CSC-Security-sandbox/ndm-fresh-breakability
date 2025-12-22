@@ -45,5 +45,5 @@ export interface MigrateFile{
     sourcePath: string;
     destinationPath: string;
     operationId: string;
-    size: number;
+    size: number;    
 }

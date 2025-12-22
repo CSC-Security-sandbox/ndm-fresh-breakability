@@ -23,6 +23,7 @@ import * as path from 'path';
 
 @Injectable()
 export class InventoryService {
+  private static readonly DEFAULT_SCHEMA = 'datamigrator';
   private readonly logger: LoggerService;
 
   constructor(
@@ -56,6 +57,18 @@ export class InventoryService {
       this.logger = new Logger(InventoryService.name) as any;
     }
   }
+
+  private validateAndQuoteSchema(schema: string): string {
+    if (!schema) {
+      throw new Error('Schema name is required');
+    }
+    const sanitizedSchema = schema.replace(/[^a-zA-Z0-9_-]/g, '');
+    if (sanitizedSchema !== schema) {
+      throw new Error(`Invalid schema name: ${schema}. Only alphanumeric characters, underscores, and hyphens are allowed.`);
+    }
+    return `"${sanitizedSchema}"`;
+  }
+
   mapSourceToTarget(file: ItemInfo, jobRunId: string, pathId: string): any {
     if (!file) {
       throw new ValidationError('Invalid file object: Cannot map undefined or null file', 'file');
@@ -115,11 +128,42 @@ export class InventoryService {
       return;
     }
 
+    const deletedDirectories = data.filter(item => 
+      item.isDirectory && item.isDeleted
+    );
+
+    for (const deletedDir of deletedDirectories) {
+      const directoryPath = deletedDir.fileName;
+      
+      const schema = this.validateAndQuoteSchema(process.env.SCHEMA || InventoryService.DEFAULT_SCHEMA);
+      const existingDir = await this.dataSource.query(`
+        SELECT i.is_deleted 
+        FROM ${schema}.inventory i
+        WHERE i.job_run_id = $1 AND i.path = $2
+        LIMIT 1
+      `, [jobRunId, directoryPath]);
+      
+      if (existingDir.length > 0 && existingDir[0].is_deleted) {
+        this.logger.log(`Directory ${directoryPath} is already marked as deleted, skipping tree deletion`);
+        continue;
+      }
+      
+      await this.markDirectoryTreeAsDeleted(directoryPath, jobRunId, pathId, schema);
+    }
+
+    const regularItems = data.filter(item => 
+      !(item.isDirectory && item.isDeleted)
+    );
+
+    if (regularItems.length === 0) {
+      return;
+    }
+
     const batchSize = 500; // Adjust batch size as needed
     const failedRecords: ItemInfo[] = [];
 
-    for (let i = 0; i < data.length; i += batchSize) {
-      const batch = data.slice(i, i + batchSize);
+    for (let i = 0; i < regularItems.length; i += batchSize) {
+      const batch = regularItems.slice(i, i + batchSize);
       try {
         const mappedData = Object.values(
           batch
@@ -140,6 +184,127 @@ export class InventoryService {
 
     if (failedRecords.length > 0) {
       this.logger.error(`Failed to save ${failedRecords.length} inventory records`);
+    }
+  }
+
+  async markDirectoryTreeAsDeleted(directoryPath: string, jobRunId: string, pathId: string, schema: string): Promise<void> {
+    try {
+        const relatedJobsResult = await this.dataSource.query(`
+          WITH current_job AS (
+            SELECT jc.source_path_id, jc.target_path_id
+            FROM ${schema}.jobrun jr
+            JOIN ${schema}.jobconfig jc ON jr.job_config_id = jc.id
+            WHERE jr.id = $1
+          )
+          SELECT jr.id 
+          FROM ${schema}.jobrun jr
+          JOIN ${schema}.jobconfig jc ON jr.job_config_id = jc.id
+          JOIN current_job cj ON (jc.source_path_id, jc.target_path_id) = (cj.source_path_id, cj.target_path_id)
+          ORDER BY jr.start_time DESC
+        `, [jobRunId]);
+
+        if (!relatedJobsResult.length) {
+          this.logger.error(`Job config not found for job run: ${jobRunId}`);
+          return;
+        }
+        
+        const isWindowsDirectoryPath = directoryPath.startsWith('\\');
+        const escapedDirectoryPath = directoryPath
+          .replace(/\\/g, '\\\\')      
+          .replace(/!/g, '!!')         
+          .replace(/[%_]/g, '!$&');   
+          
+        const likePattern = isWindowsDirectoryPath 
+          ? `${escapedDirectoryPath}\\\\%`  
+          : `${escapedDirectoryPath}/%`;  
+        
+        this.logger.log(`Checking for items to mark as deleted under directory: ${directoryPath} for current job run: ${jobRunId}`);
+        const batchSize = 1000;
+        let processedCount = 0;
+        let lastProcessedPath: string | null = null;  
+        let batchNumber = 0;
+
+        while (true) {
+          try {
+            batchNumber++;
+            
+            const queryParams: any[] = [
+              relatedJobsResult.map(jr => jr.id),
+              likePattern,
+              directoryPath,
+              batchSize
+            ];
+            
+            let cursorCondition = '';
+            if (lastProcessedPath !== null) {
+              cursorCondition = 'AND path > $5';
+              queryParams.push(lastProcessedPath);
+            }
+            
+            const filesToMarkDeleted = await this.dataSource.query(`
+              WITH latest_records AS (
+                SELECT DISTINCT ON (path) path, is_directory, file_size, extension, file_type, file_permission, uid, gid, depth, is_deleted
+                FROM ${schema}.inventory
+                WHERE job_run_id = ANY($1)
+                  AND (path LIKE $2 ESCAPE '!' OR path = $3)
+                ORDER BY path, updated_at DESC NULLS LAST
+              )
+              SELECT path, is_directory, file_size, extension, file_type, file_permission, uid, gid, depth
+              FROM latest_records
+              WHERE (is_deleted = false OR is_deleted IS NULL)
+                ${cursorCondition}
+              ORDER BY path
+              LIMIT $4
+            `, queryParams);
+
+            this.logger.log(`Batch ${batchNumber}: Retrieved ${filesToMarkDeleted?.length || 0} files from database`);
+            if (!filesToMarkDeleted || filesToMarkDeleted.length === 0) {
+              break;
+            }
+            
+            lastProcessedPath = filesToMarkDeleted[filesToMarkDeleted.length - 1].path;
+            this.logger.log(`Processing files: ${filesToMarkDeleted.map(f => f.path).join(', ')}`);
+        
+            const deletedEntries = filesToMarkDeleted.map(file => {
+              const isWindowsPath = file.path.startsWith('\\');
+              const pathModule = isWindowsPath ? path.win32 : path.posix;
+              return {
+                path: file.path,
+                isDirectory: file.is_directory || false,
+                sourceChecksum: null,
+                targetChecksum: null,
+                parentPath: pathModule.dirname(file.path),
+                depth: file.depth ?? 0,
+                fileName: pathModule.basename(file.path),
+                uid: file.uid || '',
+                gid: file.gid || '',
+                fileSize: file.file_size ? BigInt(file.file_size).toString() : '0',
+                extension: file.extension || '',
+                fileType: file.file_type || 'file',
+                modifiedTime: file?.targetMeta?.modifiedTime ?? file?.sourceMeta?.modifiedTime ?? null,
+                accessTime: file?.targetMeta?.accessTime ?? file?.sourceMeta?.accessTime ?? null,
+                permission: file.file_permission || '0644',
+                jobRunId: jobRunId,
+                birthTime: file?.targetMeta?.birthTime ?? file?.sourceMeta?.birthTime ?? null,
+                pathId: pathId,
+                sourceMeta: file?.sourceMeta ?? null,
+                targetMeta: file?.targetMeta ?? null,
+                inode: null,
+                isDeleted: true,
+              };
+            });
+      
+          this.logger.log(`About to upsert ${deletedEntries.length} entries`);
+          await this.inventoryRepo.upsert(deletedEntries, ['path', 'jobRunId', 'isDirectory']);
+          processedCount += deletedEntries.length;
+          this.logger.log(`Batch ${batchNumber} processed: ${deletedEntries.length} items marked as deleted (${processedCount} total) for directory: ${directoryPath}`);
+          } catch (batchError) {
+            this.logger.error(`Failed to process batch ${batchNumber} for directory ${directoryPath}: ${batchError.message}`, batchError.stack);
+          }
+        }
+        this.logger.log(`Successfully marked ${processedCount} items (files and directories) as deleted for directory: ${directoryPath}`);
+    } catch (error) {
+      this.logger.error(`Failed to mark directory tree as deleted ${directoryPath}: ${error.message}`, error.stack);
     }
   }
 
@@ -289,9 +454,11 @@ export class InventoryService {
       throw new ValidationError("JobRunId is required to create partition table", 'jobRunId');
     }
     try {
+      const schemaName = process.env.SCHEMA || InventoryService.DEFAULT_SCHEMA;
+      const safeSchema = this.validateAndQuoteSchema(schemaName);
       await this.dataSource.query(
-        `CALL ${process.env.SCHEMA}.create_inventory_partition($1, $2);`,
-        [jobRunId, process.env.SCHEMA],
+        `CALL ${safeSchema}.create_inventory_partition($1, $2);`,
+        [jobRunId, schemaName],
       );
       this.logger.log(`Partition table  created or already exists for job run ID: ${jobRunId}`);
     } catch (error) {

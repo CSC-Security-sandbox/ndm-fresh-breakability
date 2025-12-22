@@ -25,4 +25,12 @@ interface ValidatorOutput {
   inValid: string;
 }
 
+interface ADSInfo {
+  hasADS: boolean;
+  streamCount: number;
+  streamNames: string[];
+  streamSizes: number[];
+  totalSize: number;
+}
+
 
