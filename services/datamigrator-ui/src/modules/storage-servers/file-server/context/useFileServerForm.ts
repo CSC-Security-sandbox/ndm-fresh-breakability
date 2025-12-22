@@ -224,7 +224,7 @@ export const useFileServerForm = () => {
     setFetchingCertificate(true);
     
     try {
-      const result: any = await fetchCertificateApi({ host }).unwrap();
+      const result: any = await fetchCertificateApi({ host, serverType: "Dell" }).unwrap();
       // Extract certificate data from the API response structure: { data: { items: {...} } }
       const certificateInfo = result?.data?.items || result?.items || result;
       setCertificateData(certificateInfo as CertificateResponseType);

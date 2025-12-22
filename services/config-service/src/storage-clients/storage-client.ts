@@ -101,6 +101,89 @@ export abstract class StorageClient {
           // Extract issuer chain
           const issuerChain = this.extractIssuerChain(cert);
 
+          // ==========================================
+          // Validation Checks
+          // ==========================================
+
+          // Check 1: Certificate should not be expired
+          if (isExpired) {
+            socket.destroy();
+            reject(new BadRequestException({
+              message: `Certificate from ${resolvedHost}:${resolvedPort} has expired on ${validTo.toISOString()}`,
+              host,
+              resolvedHost,
+              resolvedPort,
+              validTo: validTo.toISOString(),
+              isExpired: true,
+            }));
+            return;
+          }
+
+          // Check 2: Verify certificate host matches the requested host
+          const certHosts: string[] = [];
+          
+          // Add Common Name (CN) to list of valid hosts
+          if (cert.subject?.CN) {
+            certHosts.push(cert.subject.CN.toLowerCase());
+          }
+          
+          // Add Subject Alternative Names (SANs) - these are more reliable than CN
+          subjectAltNames.forEach((san: string) => {
+            // SANs come in format "DNS:hostname" or "IP Address:x.x.x.x"
+            const sanValue = san.replace(/^(DNS:|IP Address:)/i, '').trim().toLowerCase();
+            if (sanValue) {
+              certHosts.push(sanValue);
+            }
+          });
+
+          // Check if requested host matches any certificate host (including wildcard matching)
+          const requestedHostLower = resolvedHost.toLowerCase();
+          const hostMatches = certHosts.some((certHost) => {
+            // Exact match
+            if (certHost === requestedHostLower) return true;
+            
+            // Wildcard match (e.g., *.example.com matches sub.example.com)
+            if (certHost.startsWith('*.')) {
+              const wildcardDomain = certHost.slice(2); // Remove "*."
+              const hostParts = requestedHostLower.split('.');
+              const domainParts = wildcardDomain.split('.');
+              
+              // Host must have at least one more subdomain than the wildcard domain
+              if (hostParts.length > domainParts.length) {
+                const hostDomain = hostParts.slice(1).join('.');
+                return hostDomain === wildcardDomain;
+              }
+            }
+            
+            return false;
+          });
+
+          // For IP addresses, also check if the CN or SAN contains the IP
+          const isIPAddress = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(resolvedHost);
+          
+          // Check 3: Host must match certificate (reject if mismatch)
+          // For IP addresses, we allow mismatch since self-signed certs often use hostnames
+          if (!hostMatches && !isIPAddress) {
+            socket.destroy();
+            reject(new BadRequestException({
+              message: `Certificate host mismatch: requested host '${resolvedHost}' does not match certificate hosts [${certHosts.join(', ')}]`,
+              host,
+              resolvedHost,
+              resolvedPort,
+              certificateHosts: certHosts,
+              hostMatches: false,
+            }));
+            return;
+          }
+
+          // For IP addresses, log warning but allow (self-signed certs typically don't include IPs in SAN)
+          if (!hostMatches && isIPAddress) {
+            this.logger.warn(
+              `Certificate host check skipped for IP address ${resolvedHost}. ` +
+              `Certificate hosts: [${certHosts.join(', ')}]. This is expected for self-signed certificates.`
+            );
+          }
+
           // Convert DER-encoded certificate to PEM format
           let certificatePEM: string | undefined;
           if (cert.raw) {
@@ -140,6 +223,8 @@ export abstract class StorageClient {
             certificatePEM,
             host: resolvedHost,
             port: resolvedPort,
+            hostMatches,
+            certificateHosts: certHosts,
           };
 
           socket.destroy();

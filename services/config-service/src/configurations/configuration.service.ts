@@ -1674,7 +1674,15 @@ export class ConfigurationService {
   async fetchCertificate(request: FetchCertificateRequestDTO): Promise<FetchCertificateResponseDTO> {
     const { host } = request;
     // Delegate to IsilonStorageClient which has the implementation
-    return await this.isilonStorageClient.fetchCertificate(host);
+    
+    switch (request.serverType) {
+      case ServerType.dell:
+        return await this.isilonStorageClient.fetchCertificate(host);  
+      default:
+        throw new BadRequestException(
+          `Unsupported server type: ${request.serverType}`
+        );
+    }
   }
 
   async fetchZones(request: FetchZonesRequestDTO): Promise<FetchZonesResponseDTO> {
