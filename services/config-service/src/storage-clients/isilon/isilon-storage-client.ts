@@ -227,8 +227,8 @@ export class IsilonStorageClient extends StorageClient {
 
   /**
    * Get NFS export paths for a file server
-   * Fetches credentials from DB and calls Isilon API
-   * Filters exports by zone_id to only return exports for this specific zone
+   * Fetches credentials from DB and calls Isilon API with zone query parameter
+   * API: GET /platform/3/protocols/nfs/exports?zone=<zoneName>
    */
   async getNFSExportPaths(fileServerId: string): Promise<NFSExportPathDTO[]> {
     try {
@@ -258,23 +258,20 @@ export class IsilonStorageClient extends StorageClient {
 
       this.logger.debug(`Fetching NFS exports for zone '${zoneName}' from ${config.hostname}:${config.port}`);
 
-      // Call Isilon API: GET /platform/3/protocols/nfs/exports
+      // Call Isilon API: GET /platform/3/protocols/nfs/exports?zone=<zoneName>
+      // Pass zone as query parameter to get only exports for this specific zone
       const exportsResponse = await this.makeIsilonAPICall(
         config.hostname,
         config.port,
-        '/platform/3/protocols/nfs/exports',
+        `/platform/3/protocols/nfs/exports?zone=${encodeURIComponent(zoneName)}`,
         'GET',
         config.username,
         config.password,
         config.tlsCaCertificate,
       );
 
-      const allExports = exportsResponse?.exports || [];
-      this.logger.log(`Found ${allExports.length} total NFS exports on Isilon`);
-
-      // Filter exports by zone name (matches fileServerName)
-      const zoneExports = allExports.filter(exp => exp?.zone === zoneName);
-      this.logger.log(`Filtered to ${zoneExports.length} NFS exports for zone '${zoneName}'`);
+      const zoneExports = exportsResponse?.exports || [];
+      this.logger.log(`Found ${zoneExports.length} NFS exports for zone '${zoneName}'`);
 
       // Extract export paths - flatten all paths from each export
       // Isilon exports can have multiple paths per export (e.g., /ifs/ashish and /ifs/ashish/ndm)
@@ -302,8 +299,8 @@ export class IsilonStorageClient extends StorageClient {
 
   /**
    * Get SMB shares for a file server
-   * Fetches credentials from DB and calls Isilon API
-   * Filters shares by zone_id to only return shares for this specific zone
+   * Fetches credentials from DB and calls Isilon API with zone query parameter
+   * API: GET /platform/3/protocols/smb/shares?zone=<zoneName>
    */
   async getSMBShares(fileServerId: string): Promise<SMBShareDTO[]> {
     try {
@@ -324,32 +321,29 @@ export class IsilonStorageClient extends StorageClient {
       }
 
       const { config } = fileServer;
-      const zoneId = fileServer.zone_id;
+      const zoneName = fileServer.fileServerName;
 
-      if (!zoneId) {
-        this.logger.warn(`File server ${fileServerId} has no zone_id, cannot filter shares`);
+      if (!zoneName) {
+        this.logger.warn(`File server ${fileServerId} has no fileServerName (zone name), cannot filter shares`);
         return [];
       }
 
-      this.logger.debug(`Fetching SMB shares for zone_id=${zoneId} from ${config.hostname}:${config.port}`);
+      this.logger.debug(`Fetching SMB shares for zone '${zoneName}' from ${config.hostname}:${config.port}`);
 
-      // Call Isilon API: GET /platform/1/protocols/smb/shares
+      // Call Isilon API: GET /platform/3/protocols/smb/shares?zone=<zoneName>
+      // Pass zone as query parameter to get only shares for this specific zone
       const sharesResponse = await this.makeIsilonAPICall(
         config.hostname,
         config.port,
-        '/platform/1/protocols/smb/shares',
+        `/platform/3/protocols/smb/shares?zone=${encodeURIComponent(zoneName)}`,
         'GET',
         config.username,
         config.password,
         config.tlsCaCertificate,
       );
 
-      const allShares = sharesResponse?.shares || [];
-      this.logger.log(`Found ${allShares.length} total SMB shares on Isilon`);
-
-      // Filter shares by zone ID (numeric zid field)
-      const zoneShares = allShares.filter(share => share?.zid === zoneId);
-      this.logger.log(`Filtered to ${zoneShares.length} SMB shares for zone_id=${zoneId}`);
+      const zoneShares = sharesResponse?.shares || [];
+      this.logger.log(`Found ${zoneShares.length} SMB shares for zone '${zoneName}'`);
 
       // Extract share names and paths
       const shares: SMBShareDTO[] = zoneShares
