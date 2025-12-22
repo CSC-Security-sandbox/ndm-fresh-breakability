@@ -235,9 +235,10 @@ export class ConfigurationService {
     }
   }
 
-  async getConfigById(id: string) {
+  async getConfigById(id: string, fileServerId?: string) {
     try {
       if (!isUUID(id)) throw new BadRequestException('Invalid configId');
+      if (fileServerId && !isUUID(fileServerId)) throw new BadRequestException('Invalid fileServerId');
 
       const config = await this.configEntity.findOne({
         select: {
@@ -351,6 +352,17 @@ export class ConfigurationService {
           password: '',
         }));
       }
+      
+      // Filter by fileServerId if provided
+      if (fileServerId && config?.fileServers) {
+        config.fileServers = config.fileServers.filter(
+          (fs) => fs.id === fileServerId
+        );
+        if (config.fileServers.length === 0) {
+          throw new NotFoundException(`File server with id ${fileServerId} not found in config ${id}`);
+        }
+      }
+      
       const isUploadInProgress = await this.isUploadInProgress(
         config.fileServers.map((fs) => fs.id),
       );
