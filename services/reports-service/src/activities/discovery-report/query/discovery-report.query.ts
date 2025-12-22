@@ -283,7 +283,7 @@ export const JOB_RUN_DETAILS = (schema: string) => `
         c.config_name,
         fsrv.protocol,
         CASE
-            WHEN fsrv.server_type != 'OtherNAS' THEN fsrv.file_server_name
+            WHEN c.server_type != 'OtherNAS' THEN fsrv.file_server_name
             ELSE NULL
         END as file_server_name
     from ${schema}.jobRun jr
@@ -324,7 +324,7 @@ export const TRAILING_SPACE_FILE= (schema: string) => `
 export const ALTERNATE_DATA_STREAMS = (schema: string) => `
     SELECT
         i.path,
-        i.is_directory
+        i.is_directory     
     FROM ${schema}.inventory i
     WHERE i.job_run_id = $1
     AND i.file_type = 'STREAM'

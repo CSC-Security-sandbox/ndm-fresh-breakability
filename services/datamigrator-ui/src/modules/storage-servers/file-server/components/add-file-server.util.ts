@@ -400,7 +400,8 @@ export const groupDellIsilonFileServers = (
   
   for (const server of fileServers) {
     // Check if this is a Dell Isilon config
-    const serverType = server.serverType || server.fileServers?.[0]?.serverType;
+    // serverType is now part of the config, not the file server
+    const serverType = server.serverType;
     const isDellIsilon = serverType === "Dell" || serverType === "dell";
     
     if (isDellIsilon && server.fileServers && server.fileServers.length > 0) {

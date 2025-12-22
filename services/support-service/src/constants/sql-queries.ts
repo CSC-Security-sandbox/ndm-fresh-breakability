@@ -36,7 +36,7 @@ export const SQL_QUERIES = {
       fs.hostname as "File Server Hostname",
       fs.username as "File Server Username",
       fs.protocol as "File Server Protocol",
-      fs.server_type as "File Server Type",
+      c.server_type as "File Server Type",
       fs.protocol_version as "File Server Protocol Version",
       fs.export_path_source as "Export Path Source",
       v.volume_path as "Volume Path",

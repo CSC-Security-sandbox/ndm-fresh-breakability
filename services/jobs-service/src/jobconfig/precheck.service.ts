@@ -124,7 +124,7 @@ async checkMigrationConflicts(data: JobConfigPreCheck): Promise<PreCheckCircular
                     password: volume.fileServer.password,
                     protocol: volume.fileServer.protocol,
                     protocolVersion: volume.fileServer.protocolVersion?.replace(/^v/, ""),
-                    serverType: volume.fileServer.serverType,
+                    serverType: volume.fileServer.config.serverType,
                     exportPathSource: volume.fileServer.exportPathSource,
                 });
             }

@@ -31,10 +31,6 @@ export class FileServerEntity extends Base {
     @Column({ type: 'varchar', name: 'protocol', nullable: true})
     protocol: Protocol;
 
-    @ApiProperty({ description: 'Server Type' })
-    @Column({ type: 'varchar', name:'server_type' })
-    serverType: ServerType;
-
     @ApiProperty({ description: 'Status' })
     @Column({ type: 'varchar', nullable: true, name: 'status' })
     status: string;
