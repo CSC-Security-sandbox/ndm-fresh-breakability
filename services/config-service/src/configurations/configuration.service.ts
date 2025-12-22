@@ -795,18 +795,6 @@ export class ConfigurationService {
         return update;
       }
 
-      // For Dell Isilon, discover exports via API before starting workflow
-      // This bypasses showmount command - workers will still validate by mounting
-      if (createConfig.serverType === ServerType.dell) {
-        this.logger.log(`Discovering Isilon exports for config ${update.id} before workflow`);
-        await this.discoverIsilonExports(update.id, traceId).catch((error) => {
-          this.logger.error(
-            `Error discovering Isilon exports for config ${update.id}: ${error.message}`,
-          );
-          // Don't fail config creation if discovery fails
-        });
-      }
-
       await this.startValidateWorkingDirectoryWorkflow(
         createConfig,
         update.id,
@@ -841,6 +829,8 @@ export class ConfigurationService {
           createdBy: userId,
         });
       await this.fileServerWorkingDirectoryMappingEntity.save(workingDirectory);
+      
+      // refreshConfig handles Dell (via API) and non-Dell (via workers) internally
       this.refreshConfig(update.id, traceId);
       this.logger.debug("############################# ASHISH  ENDS #############################");
       return update;
@@ -1321,13 +1311,40 @@ export class ConfigurationService {
 
       const config = await this.configEntity.findOne({
         where: { id: configId },
-        relations: { fileServers: { workers: true } },
+        relations: { fileServers: { workers: true, volumes: true } },
       });
 
       if (!config) {
         throw new NotFoundException(
           `Config Not found with config id ${configId}`,
         );
+      }
+
+      // For Dell Isilon, use API-based discovery instead of worker-based showmount
+      // showmount doesn't understand zones and returns all exports
+      if (config.serverType === ServerType.dell) {
+        this.logger.log(`Using API-based refresh for Dell config ${configId}`);
+        
+        // Clear existing volumes first (they will be re-discovered)
+        for (const fileServer of config.fileServers) {
+          await this.volumes.update(
+            { fileServerId: fileServer.id },
+            { isDisabled: true },
+          );
+        }
+        
+        // Discover exports via API (zone-aware)
+        await this.discoverIsilonExports(configId, traceId);
+        
+        // Mark file servers as refreshed
+        await this.fileServerEntity.update(
+          { id: In(config.fileServers.map((fs) => fs.id)) },
+          { isRefreshed: true },
+        );
+        
+        await this.configEntity.update({ id: configId }, { scannedDate: new Date() });
+        
+        return { message: 'Dell config refreshed via API discovery' };
       }
 
       const payload: CreateRequestDto = {
