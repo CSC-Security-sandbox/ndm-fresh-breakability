@@ -46,17 +46,33 @@ const ValidateConnection = () => {
   const safeAllWorkersList = allWorkersList || [];
   
   // Ensure workersListTableStateProps always has rows property - MUST return a valid object
+  // For Other NAS, filter workers based on selectedProtocol
   const safeWorkersListTableStateProps = useMemo(() => {
     if (!workersListTableStateProps || typeof workersListTableStateProps !== 'object') {
       return DEFAULT_TABLE_STATE_PROPS;
     }
+    
+    // For Other NAS, filter workers by protocol
+    const allRows = workersListTableStateProps.rows || [];
+    const filteredRows = isDellIsilon 
+      ? allRows  // Dell Isilon handles its own filtering per-zone
+      : allRows.filter((worker: any) => {
+          const workerName = worker?.workerName?.toLowerCase() || "";
+          if (selectedProtocol === 'NFS') {
+            return workerName.startsWith("nfs-");
+          } else if (selectedProtocol === 'SMB') {
+            return workerName.startsWith("smb-");
+          }
+          return false;
+        });
+    
     return {
       columns: workersListTableStateProps.columns || [],
-      rows: workersListTableStateProps.rows || [],
+      rows: filteredRows,
       isSorting: workersListTableStateProps.isSorting ?? true,
       pageSize: workersListTableStateProps.pageSize || 10,
     };
-  }, [workersListTableStateProps]);
+  }, [workersListTableStateProps, isDellIsilon, selectedProtocol]);
 
   // Initialize activeZoneId when zones are selected (use context's setActiveZoneId)
 
@@ -69,10 +85,25 @@ const ValidateConnection = () => {
 
   // Get zone details with configured protocols
   const selectedZonesWithDetails = useMemo(() => {
+    console.debug("[ValidateConnection] Building zone details", {
+      safeSelectedZoneIds,
+      safeZoneCredentials,
+    });
     return safeSelectedZoneIds.map((zoneId) => {
       const creds = safeZoneCredentials[zoneId] || {};
       const hasNfs = !!(creds.nfsIp && creds.nfsUsername && creds.nfsPassword);
       const hasSmb = !!(creds.smbIp && creds.smbUsername && creds.smbPassword);
+      console.debug(`[ValidateConnection] Zone ${zoneId}:`, {
+        creds,
+        hasNfs,
+        hasSmb,
+        nfsIp: creds.nfsIp,
+        nfsUsername: creds.nfsUsername,
+        nfsPassword: !!creds.nfsPassword,
+        smbIp: creds.smbIp,
+        smbUsername: creds.smbUsername,
+        smbPassword: !!creds.smbPassword,
+      });
       return {
         id: zoneId,
         name: zoneId, // Zone name is the zoneId (zoneName from API)
@@ -91,9 +122,16 @@ const ValidateConnection = () => {
 
   // Filter workers based on active zone's configured protocols
   const filteredWorkersList = useMemo(() => {
+    console.debug("[ValidateConnection] Filtering workers", {
+      isDellIsilon,
+      activeZone,
+      safeAllWorkersList: safeAllWorkersList?.length,
+      workersDetails: safeAllWorkersList?.map(w => ({ name: w?.workerName, platform: w?.platform })),
+    });
+    
     if (!isDellIsilon || !activeZone) return safeAllWorkersList;
 
-    return safeAllWorkersList.filter((worker) => {
+    const filtered = safeAllWorkersList.filter((worker) => {
       const workerName = worker?.workerName?.toLowerCase() || "";
       if (activeZone.hasNfs && activeZone.hasSmb) {
         // Show both NFS and SMB workers
@@ -105,6 +143,15 @@ const ValidateConnection = () => {
       }
       return false;
     });
+    
+    console.debug("[ValidateConnection] Filtered workers result", {
+      activeZoneHasNfs: activeZone?.hasNfs,
+      activeZoneHasSmb: activeZone?.hasSmb,
+      filteredCount: filtered?.length,
+      filteredWorkers: filtered?.map(w => w?.workerName),
+    });
+    
+    return filtered;
   }, [isDellIsilon, activeZone, safeAllWorkersList]);
 
   // Get selected worker IDs for the active zone
@@ -331,7 +378,7 @@ const ValidateConnection = () => {
         refetchTableData={refetch}
         isRefreshing={isFetching}
         noDataLabel={
-          safeAllWorkersList.length === 0 ? getNoWorkersMessage() : "No Data"
+          safeWorkersListTableStateProps.rows.length === 0 ? getNoWorkersMessage() : "No Data"
         }
         content={renderWorkerInstallationButton()}
       />
