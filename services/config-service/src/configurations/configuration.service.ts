@@ -116,6 +116,7 @@ export class ConfigurationService {
           'worker.workerName',
           'config.id',
           'config.configName',
+          'config.serverType',
           'config.status',
           'workingDirectory.workingDirectory',
           'fileServer.exportPathSource',
@@ -134,6 +135,7 @@ export class ConfigurationService {
                 ? true
                 : false,
             status: fileServer.config.status,
+            serverType: fileServer.config.serverType,
             fileServers: [],
           };
         }
@@ -188,10 +190,10 @@ export class ConfigurationService {
           scannedDate: true,
           status: true,
           errorMessage: true,
+          serverType: true,
           fileServers: {
             id: true,
             host: true,
-            serverType: true,
             protocol: true,
             userName: true,
             isRefreshed: true,
@@ -254,7 +256,6 @@ export class ConfigurationService {
           fileServers: {
             id: true,
             host: true,
-            serverType: true,
             protocol: true,
             userName: true,
             password: true,
@@ -450,7 +451,6 @@ export class ConfigurationService {
           fileServers: {
             id: true,
             host: true,
-            serverType: true,
             protocol: true,
             exportPathSource: true,
             volumes: {
@@ -728,7 +728,6 @@ export class ConfigurationService {
           return this.fileServerEntity.create({
             host: fileServer.host.trim(),
             fileServerName : fileServer.fileServerName,
-            serverType: fileServer.serverType,
             workers: workers,
             createdBy: userId,
             protocol: fileServer.protocol,
@@ -825,9 +824,9 @@ export class ConfigurationService {
         projectId,
         createConfig: {
           configName: update.configName,
+          serverType: update.serverType,
           fileServers: update.fileServers.map((fs) => ({
             host: fs.host,
-            serverType: fs.serverType,
             protocol: fs.protocol,
             workerNames: fs.workers.map((w) => w.workerName),
           })),
@@ -950,7 +949,6 @@ export class ConfigurationService {
           id: fileServer.id,
           host: update.host.trim(),
           fileServerName: update.fileServerName,
-          serverType: fileServer.serverType,
           workers: workers,
           createdBy: fileServer.createdBy,
           protocol: fileServer.protocol,
@@ -1027,9 +1025,9 @@ export class ConfigurationService {
         projectId,
         createConfig: {
           configName: update.configName,
+          serverType: update.serverType,
           fileServers: update.fileServers.map((fs) => ({
             host: fs.host,
-            serverType: fs.serverType,
             protocol: fs.protocol,
             workerNames: fs.workers.map((w) => w.workerName),
             addedWorkers: addedWorkers.map((w) => w.workerName),
