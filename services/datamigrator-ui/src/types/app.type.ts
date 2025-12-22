@@ -157,6 +157,8 @@ export interface FileServerApiType {
   workers: WorkerApiType[];
   volumes: VolumeType[]; // Adjust this type if you have specific volume data structure
   exportPathSource?: string;
+  fileServerName?: string; // Zone name for Dell Isilon
+  zone_id?: number | null; // Zone ID for Dell Isilon
 }
 
 export type ConfigListTypeApiType = {
