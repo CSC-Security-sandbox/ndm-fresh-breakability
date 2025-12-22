@@ -19,6 +19,10 @@ export class ConfigEntity extends Base {
     @Column({ type: 'text', nullable: true,  name:'status' })
     status: string;
 
+    @ApiProperty({ description: 'Server Type' })
+    @Column({ type: 'text', nullable: true, name: 'server_type' })
+    serverType: string;
+
     @ApiProperty({ description: 'data' })
     @Column({ type: 'text', nullable: true,  name:'config_type' })
     configType: string;
