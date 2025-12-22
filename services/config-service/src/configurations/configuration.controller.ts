@@ -171,11 +171,15 @@ export class ConfigurationController{
     @ApiOperation({ summary: 'Get Configuration by ID' , description: ConfigApiDoc.GET_CONFIG_BY_ID})
     @ApiOkResponse({ description: 'Configuration Found' ,  type: ConfigDTO})
     @ApiNotFoundResponse({ description: 'Configuration Not Found' })
+    @ApiQuery({ name: 'fileServerId', required: false, description: 'Optional file server ID to filter results to a specific file server' })
     @ApiBearerAuth()
     @Auth(Permission.ViewConfig)
     @Get(':id')
-    async getConfiguration(@Param('id') id: string) {
-        return await this.configurationService.getConfigById(id)
+    async getConfiguration(
+        @Param('id') id: string,
+        @Query('fileServerId') fileServerId?: string,
+    ) {
+        return await this.configurationService.getConfigById(id, fileServerId)
     }
 
     @ApiOperation({ summary: 'Update Configuration by ID', description: ConfigApiDoc.UPDATE_CONFIG_ID })
