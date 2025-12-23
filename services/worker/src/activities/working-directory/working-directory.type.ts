@@ -7,7 +7,8 @@ export enum ConfigStatus {
 export interface ConfigStatusPayload {
   configId: string;
   status: ConfigStatus | null;
-  errorMessage: string | null
+  errorMessage: string | null;
+  fileServerId?: string | null;
 }
 
 export enum ConfigError {
