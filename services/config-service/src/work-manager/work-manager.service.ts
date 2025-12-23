@@ -13,6 +13,7 @@ import {
 import { Repository, IsNull, Not, In } from 'typeorm';
 import { WorkerConfiguration } from 'src/constants/types';
 import {
+  ConfigStatus,
   Platform,
   WorkerStatus,
   WorkFlows,
@@ -21,6 +22,7 @@ import {
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 import { ConfigEntity } from 'src/entities/config.entity';
+
 import { WorkflowService } from 'src/workflow/workflow.service';
 import { StartWorkFlowPayload } from 'src/workflow/workflow.types';
 import { CreateRequestDto } from './dto/validate-connection.dto';
@@ -200,17 +202,98 @@ export class WorkManagerService {
 
   async validateWorkingDirectory(data: ConfigStatusPayloadDTO) {
     try {
-      this.logger.debug(
-        'Updating config status after validating export path and working directory',
+      this.logger.log(
+        `Received validateWorkingDirectory callback: configId=${data.configId}, fileServerId=${data.fileServerId}, status=${data.status}`,
       );
-      await this.configRepo.update(
-        { id: data.configId },
-        { status: data.status, errorMessage: data.errorMessage },
-      );
+
+      // Check if this is a Dell per-zone callback (fileServerId present)
+      if (data.fileServerId) {
+        // Dell: Update file server status first
+        this.logger.log(`Dell per-zone callback: Updating file server ${data.fileServerId} status to ${data.status}`);
+        
+        const config = await this.configRepo.findOne({
+          where: { id: data.configId },
+          relations: ['fileServers'],
+        });
+        
+        if (config) {
+          const fileServer = config.fileServers.find(fs => fs.id === data.fileServerId);
+          if (fileServer) {
+            fileServer.status = data.status;
+            await this.configRepo.save(config);
+          }
+          
+          // Then aggregate to config level
+          await this.aggregateDellConfigStatus(config);
+        }
+      } else {
+        // Other NAS: Update config status directly
+        const config = await this.configRepo.findOne({
+          where: { id: data.configId },
+          relations: ['fileServers'],
+        });
+        
+        if (config) {
+          config.status = data.status;
+          config.errorMessage = data.errorMessage;
+          
+          // Also sync status to all file servers for consistency
+          config.fileServers.forEach(fs => {
+            fs.status = data.status;
+          });
+          
+          await this.configRepo.save(config);
+        }
+      }
     } catch (error) {
       this.logger.error(
         `Error while updating the status of a file server after validating export path and working directory- ${error.message}`,
       );
+    }
+  }
+
+  /**
+   * Aggregate Dell config status from all file server statuses
+   * - ERRORED if any file server is ERRORED
+   * - ACTIVE if all file servers are ACTIVE
+   * - IN_PROGRESS otherwise
+   */
+  private async aggregateDellConfigStatus(config: ConfigEntity) {
+    try {
+      if (!config.fileServers || config.fileServers.length === 0) {
+        this.logger.warn(`No file servers found for config ${config.id}`);
+        return;
+      }
+      
+      const fileServers = config.fileServers;
+
+      let aggregatedStatus: ConfigStatus;
+      let errorMessage: string | null = null;
+
+      const hasErrored = fileServers.some(fs => fs.status === ConfigStatus.ERRORED);
+      const allActive = fileServers.every(fs => fs.status === ConfigStatus.ACTIVE);
+
+      if (hasErrored) {
+        aggregatedStatus = ConfigStatus.ERRORED;
+        errorMessage = 'One or more zones failed validation';
+      } else if (allActive) {
+        aggregatedStatus = ConfigStatus.ACTIVE;
+        errorMessage = null;
+      } else {
+        aggregatedStatus = ConfigStatus.IN_PROGRESS;
+        errorMessage = null;
+      }
+
+      this.logger.log(
+        `Dell config ${config.id}: Aggregated status = ${aggregatedStatus} (${fileServers.length} file servers, hasErrored=${hasErrored}, allActive=${allActive})`,
+      );
+
+      // Update config status
+      config.status = aggregatedStatus;
+      config.errorMessage = errorMessage;
+      await this.configRepo.save(config);
+    } catch (error) {
+      this.logger.error(`Error aggregating Dell config status: ${error.message}`);
     }
   }
 

@@ -203,6 +203,7 @@ export class ConfigurationService {
             exportPathSource: true,
             fileServerName: true,
             zone_id: true,
+            status: true,  // Per-zone status for Dell Isilon
           },
         },
         relations: {
@@ -807,33 +808,15 @@ export class ConfigurationService {
         return update;
       }
 
-      // For Dell, discover exports via API BEFORE worker validation
-      // This ensures workers have exports in DB to use instead of showmount
+      // For Dell, discover exports via API for workflow payload
+      // NOTE: We do NOT save volumes here - refreshConfig will handle that
+      // This just discovers exports for the validation workflow
+      let discoveredPathsMap: Map<string, string[]> | null = null;
       if (createConfig.serverType === ServerType.dell) {
-        this.logger.log(`Discovering Isilon exports for config ${update.id} before workflow`);
+        this.logger.log(`Discovering Isilon exports for config ${update.id} for workflow payload`);
         try {
-          const discoveredPathsMap = await this.discoverIsilonExports(update.id, traceId);
-          
-          // Save discovered paths as volumes (for initial creation, all are new)
-          for (const [fileServerId, paths] of discoveredPathsMap) {
-            const newVolumes: VolumeEntity[] = [];
-            for (const path of paths) {
-              newVolumes.push(
-                this.volumes.create({
-                  fileServerId: fileServerId,
-                  volumePath: path,
-                  isValid: true,
-                  isDisabled: false,
-                  reachableCount: 0,
-                  createdBy: userId,
-                }),
-              );
-            }
-            if (newVolumes.length > 0) {
-              await this.volumes.save(newVolumes);
-              this.logger.log(`Saved ${newVolumes.length} volumes for file server ${fileServerId}`);
-            }
-          }
+          discoveredPathsMap = await this.discoverIsilonExports(update.id, traceId);
+          this.logger.log(`Discovered exports for ${discoveredPathsMap.size} file servers`);
         } catch (error) {
           this.logger.error(
             `Error discovering Isilon exports for config ${update.id}: ${error.message}`,
@@ -846,6 +829,7 @@ export class ConfigurationService {
         createConfig,
         update.id,
         traceId,
+        discoveredPathsMap, // Pass discovered paths for Dell
       );
       const workerNames = config.fileServers.flatMap((fileServer) => {
         return fileServer.workers.map((worker) => {
@@ -1110,6 +1094,7 @@ export class ConfigurationService {
     createConfig: ConfigDTO,
     configId: string,
     traceId: string,
+    discoveredPathsMap?: Map<string, string[]> | null, // Dell: pre-discovered exports (optional)
   ) {
     // Validate input parameters - throw InternalServerErrorException if any required parameter is empty
     if (!createConfig || !configId || !traceId || !createConfig.fileServers || createConfig.fileServers.length === 0) {
@@ -1119,99 +1104,14 @@ export class ConfigurationService {
     }
 
     try {
-      const listPathPayload: ListPathDTO[] = [];
       const isDell = createConfig.serverType === ServerType.dell;
 
-      // For Dell, fetch first discovered export for each file server from DB
-      let dellExportsMap: Map<string, string> = new Map();
       if (isDell) {
-        // Get config with file servers to get their IDs
-        const config = await this.configEntity.findOne({
-          where: { id: configId },
-          relations: ['fileServers'],
-        });
-
-        if (config?.fileServers) {
-          for (const fs of config.fileServers) {
-            // Fetch first volume (export) for this file server
-            const firstVolume = await this.volumes.findOne({
-              where: { fileServerId: fs.id },
-              order: { createdAt: 'ASC' },
-            });
-            if (firstVolume?.volumePath) {
-              // Map file server host to first export path
-              dellExportsMap.set(fs.host, firstVolume.volumePath);
-              this.logger.debug(`Dell: First export for ${fs.host} is ${firstVolume.volumePath}`);
-            }
-          }
-        }
-      }
-
-      createConfig?.fileServers?.forEach((fileServer) => {
-        const payload: ListPathDTO = {
-          type: fileServer?.protocol,
-          protocolVersion: fileServer?.protocolVersion?.replace(/^v/, ''),
-          host: fileServer?.host?.trim(),
-          username: fileServer?.userName,
-          password: fileServer?.password,
-          exportPathSource: fileServer.exportPathSource,
-        };
-        listPathPayload.push(payload);
-      });
-
-      // For Dell, include first discovered exports in payload so workers can mount without showmount
-      const dellDiscoveredPaths = isDell 
-        ? Array.from(dellExportsMap.values()) 
-        : [];
-
-      const payload: ValidateExportPathAndWorkingDirectoryDTO = {
-        exportPath: createConfig?.workingDirectory?.pathName,
-        workingDirectory: createConfig?.workingDirectory?.workingDirectory,
-        configId: configId,
-        workerIds: [],
-        listPathPayload,
-        serverType: createConfig?.serverType, // Pass serverType so workers can skip showmount for Dell
-        options: new Options(),
-      };
-
-      // Add Dell-specific data to payload
-      if (isDell && dellDiscoveredPaths.length > 0) {
-        (payload as any).discoveredPaths = dellDiscoveredPaths;
-        (payload as any).dellExportsMap = Object.fromEntries(dellExportsMap);
-      }
-
-      createConfig?.fileServers?.forEach((fileServer) => {
-        fileServer?.workers?.forEach((worker) => {
-          if (!payload.workerIds.includes(worker))
-            payload.workerIds.push(worker);
-        });
-      });
-
-      if (payload?.workerIds?.length > 0) {
-        this.logger.debug('started ValidateWorkingDirectoryWorkflow');
-        const startWorkFlowPayload: StartWorkFlowPayload = {
-          workflowId:
-            WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY +
-            '-' +
-            traceId,
-          taskQueue: 'ParentWorkflow-TaskQueue',
-          args: [
-            {
-              traceId: traceId,
-              payload: { traceId, ...payload },
-              options: payload.options,
-            },
-          ],
-          ...payload.options,
-        };
-
-        await this.workFlowService.startWorkflow(
-          WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY,
-          startWorkFlowPayload,
-        );
-        this.logger.debug(
-          'completed ValidateWorkingDirectoryWorkflow successfully',
-        );
+        // DELL: Start one workflow per file server (zone) with fileServerId for per-zone status updates
+        await this.startDellPerZoneWorkflows(createConfig, configId, traceId, discoveredPathsMap);
+      } else {
+        // OTHER NAS: Start single workflow for entire config (existing behavior)
+        await this.startOtherNasWorkflow(createConfig, configId, traceId);
       }
     } catch (error) {
       this.logger.error(
@@ -1225,6 +1125,192 @@ export class ConfigurationService {
       }
       throw new InternalServerErrorException(
         `Failed to start ValidateWorkingDirectoryWorkflow. ${error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Start per-zone workflows for Dell Isilon
+   * Each file server (zone) gets its own workflow with fileServerId
+   */
+  private async startDellPerZoneWorkflows(
+    createConfig: ConfigDTO,
+    configId: string,
+    traceId: string,
+    discoveredPathsMap?: Map<string, string[]> | null, // Pre-discovered exports (optional)
+  ) {
+    this.logger.debug(`Dell: Starting per-zone workflows for config ${configId}`);
+
+    // Get config with file servers from DB to get their IDs
+    const config = await this.configEntity.findOne({
+      where: { id: configId },
+      relations: ['fileServers', 'fileServers.workers'],
+    });
+
+    if (!config?.fileServers || config.fileServers.length === 0) {
+      this.logger.warn(`Dell: No file servers found for config ${configId}`);
+      return;
+    }
+
+    // Start a workflow for each file server (zone)
+    for (const fileServer of config.fileServers) {
+      // Get workers for this file server
+      const workerIds = fileServer.workers?.map(w => w.workerId) || [];
+      
+      if (workerIds.length === 0) {
+        this.logger.debug(`Dell: Skipping file server ${fileServer.id} - no workers assigned`);
+        continue;
+      }
+
+      // Get discovered exports for this file server
+      // Priority: 1. Pre-discovered paths passed as parameter, 2. Query from DB (for update/refresh)
+      let discoveredPaths: string[] = [];
+      if (discoveredPathsMap?.has(fileServer.id)) {
+        discoveredPaths = discoveredPathsMap.get(fileServer.id) || [];
+        this.logger.debug(`Dell: Using pre-discovered ${discoveredPaths.length} paths for file server ${fileServer.id}`);
+      } else {
+        // Fallback: Fetch from DB (for update scenarios where volumes exist)
+        const firstVolume = await this.volumes.findOne({
+          where: { fileServerId: fileServer.id },
+          order: { createdAt: 'ASC' },
+        });
+        if (firstVolume?.volumePath) {
+          discoveredPaths = [firstVolume.volumePath];
+        }
+        this.logger.debug(`Dell: Fetched ${discoveredPaths.length} paths from DB for file server ${fileServer.id}`);
+      }
+
+      // Build dellExportsMap with first path for this file server
+      const dellExportsMap: Record<string, string> = {};
+      if (discoveredPaths.length > 0) {
+        dellExportsMap[fileServer.host] = discoveredPaths[0];
+      }
+
+      // Find matching fileServer from createConfig for credentials
+      const fileServerConfig = createConfig.fileServers.find(
+        fs => fs.host?.trim() === fileServer.host || fs.id === fileServer.id
+      );
+
+      if (!fileServerConfig) {
+        this.logger.warn(`Dell: No config found for file server ${fileServer.id}`);
+        continue;
+      }
+
+      const listPathPayload: ListPathDTO[] = [{
+        type: fileServerConfig.protocol,
+        protocolVersion: fileServerConfig.protocolVersion?.replace(/^v/, ''),
+        host: fileServerConfig.host?.trim(),
+        username: fileServerConfig.userName,
+        password: fileServerConfig.password,
+        exportPathSource: fileServerConfig.exportPathSource,
+      }];
+
+      const payload: ValidateExportPathAndWorkingDirectoryDTO = {
+        exportPath: createConfig?.workingDirectory?.pathName,
+        workingDirectory: createConfig?.workingDirectory?.workingDirectory,
+        configId: configId,
+        workerIds: workerIds,
+        listPathPayload,
+        serverType: createConfig.serverType,
+        options: new Options(),
+      };
+
+      // Add Dell-specific data including fileServerId for per-zone status updates
+      (payload as any).fileServerId = fileServer.id;
+      (payload as any).discoveredPaths = discoveredPaths;
+      (payload as any).dellExportsMap = dellExportsMap;
+
+      const workflowId = `${WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY}-${traceId}-${fileServer.id}-${Date.now()}`;
+      
+      this.logger.debug(`Dell: Starting workflow for zone ${fileServer.fileServerName} (fileServerId: ${fileServer.id})`);
+
+      const startWorkFlowPayload: StartWorkFlowPayload = {
+        workflowId: workflowId,
+        taskQueue: 'ParentWorkflow-TaskQueue',
+        args: [
+          {
+            traceId: traceId,
+            payload: { traceId, ...payload },
+            options: payload.options,
+          },
+        ],
+        ...payload.options,
+      };
+
+      await this.workFlowService.startWorkflow(
+        WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY,
+        startWorkFlowPayload,
+      );
+
+      this.logger.debug(`Dell: Started workflow ${workflowId} for file server ${fileServer.id}`);
+    }
+
+    this.logger.debug(`Dell: Completed starting per-zone workflows for config ${configId}`);
+  }
+
+  /**
+   * Start single workflow for Other NAS (existing behavior)
+   */
+  private async startOtherNasWorkflow(
+    createConfig: ConfigDTO,
+    configId: string,
+    traceId: string,
+  ) {
+    const listPathPayload: ListPathDTO[] = [];
+
+    createConfig?.fileServers?.forEach((fileServer) => {
+      const payload: ListPathDTO = {
+        type: fileServer?.protocol,
+        protocolVersion: fileServer?.protocolVersion?.replace(/^v/, ''),
+        host: fileServer?.host?.trim(),
+        username: fileServer?.userName,
+        password: fileServer?.password,
+        exportPathSource: fileServer.exportPathSource,
+      };
+      listPathPayload.push(payload);
+    });
+
+    const payload: ValidateExportPathAndWorkingDirectoryDTO = {
+      exportPath: createConfig?.workingDirectory?.pathName,
+      workingDirectory: createConfig?.workingDirectory?.workingDirectory,
+      configId: configId,
+      workerIds: [],
+      listPathPayload,
+      serverType: createConfig?.serverType,
+      options: new Options(),
+    };
+
+    createConfig?.fileServers?.forEach((fileServer) => {
+      fileServer?.workers?.forEach((worker) => {
+        if (!payload.workerIds.includes(worker))
+          payload.workerIds.push(worker);
+      });
+    });
+
+    if (payload?.workerIds?.length > 0) {
+      this.logger.debug('started ValidateWorkingDirectoryWorkflow for OtherNAS');
+      const startWorkFlowPayload: StartWorkFlowPayload = {
+        workflowId:
+          WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY +
+          '-' +
+          traceId,
+        taskQueue: 'ParentWorkflow-TaskQueue',
+        args: [
+          {
+            traceId: traceId,
+            payload: { traceId, ...payload },
+            options: payload.options,
+          },
+        ],
+        ...payload.options,
+      };
+
+      await this.workFlowService.startWorkflow(
+        WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY,
+        startWorkFlowPayload,
+      );
+      this.logger.debug(
+        'completed ValidateWorkingDirectoryWorkflow successfully for OtherNAS',
       );
     }
   }
@@ -1391,7 +1477,7 @@ export class ConfigurationService {
                   fileServerId: fileServer.id,
                   volumePath: path,
                   isValid: true,
-                  isDisabled: false,
+                  isDisabled: false, 
                   reachableCount: 0,
                   createdBy: config.updatedBy ?? config.createdBy,
                 }),
