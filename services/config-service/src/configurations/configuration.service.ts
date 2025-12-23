@@ -266,6 +266,7 @@ export class ConfigurationService {
             exportPathSource: true,
             fileServerName: true,
             zone_id: true,
+            status: true,  // Per-zone status for Dell Isilon
             workers: {
               workerId: true,
               workerName: true,
@@ -1335,13 +1336,15 @@ export class ConfigurationService {
   }
 
   /**
-   * Discover exports/shares from Dell Isilon using REST API
-   * Returns a map of fileServerId -> discovered paths
-   * Called during refresh to get zone-aware exports
+   * Discover exports/shares from Dell Isilon using REST API for ALL file servers in a config.
+   * Returns a map of fileServerId -> discovered paths.
+   * 
+   * This is a convenience wrapper around discoverIsilonExportsForFileServers
+   * that fetches the config and passes all file servers.
+   * 
+   * Used during config creation to discover exports for workflow payload.
    */
   async discoverIsilonExports(configId: string, traceId: string): Promise<Map<string, string[]>> {
-    const discoveredPathsMap = new Map<string, string[]>();
-    
     try {
       this.logger.log(`Discovering Isilon exports for config ${configId} (trace: ${traceId})`);
 
@@ -1357,251 +1360,305 @@ export class ConfigurationService {
 
       if (config.serverType !== ServerType.dell) {
         this.logger.warn(`Config ${configId} is not Dell Isilon (${config.serverType}), skipping API discovery`);
-        return discoveredPathsMap;
+        return new Map<string, string[]>();
       }
 
-      this.logger.log(`Processing ${config.fileServers.length} file servers for config ${configId}`);
-
-      // For each file server (zone), fetch exports and shares
-      for (const fileServer of config.fileServers) {
-        this.logger.log(`Fetching exports for file server ${fileServer.id} (zone: ${fileServer.fileServerName})`);
-
-        const paths: string[] = [];
-
-        // Fetch NFS exports if protocol includes NFS
-        if (fileServer.protocol === Protocol.NFS) {
-          try {
-            const nfsExports = await this.isilonStorageClient.getNFSExportPaths(fileServer.id);
-            this.logger.log(`Found ${nfsExports.length} NFS exports for file server ${fileServer.id}`);
-
-            for (const nfsExport of nfsExports) {
-              paths.push(nfsExport.path);
-            }
-          } catch (error) {
-            this.logger.error(`Failed to fetch NFS exports for file server ${fileServer.id}: ${error.message}`);
-            // Continue with other file servers even if one fails
-          }
-        }
-
-        // Fetch SMB shares if protocol includes SMB
-        if (fileServer.protocol === Protocol.SMB) {
-          try {
-            const smbShares = await this.isilonStorageClient.getSMBShares(fileServer.id);
-            this.logger.log(`Found ${smbShares.length} SMB shares for file server ${fileServer.id}`);
-
-            for (const smbShare of smbShares) {
-              paths.push(smbShare.name); // For SMB, use share name
-            }
-          } catch (error) {
-            this.logger.error(`Failed to fetch SMB shares for file server ${fileServer.id}: ${error.message}`);
-            // Continue with other file servers even if one fails
-          }
-        }
-
-        discoveredPathsMap.set(fileServer.id, paths);
-        this.logger.log(`Discovered ${paths.length} paths for file server ${fileServer.id}`);
-      }
-
-      this.logger.log(`Completed Isilon export discovery for config ${configId}`);
-      return discoveredPathsMap;
+      // Delegate to the shared method for all file servers
+      return await this.discoverIsilonExportsForFileServers(config, config.fileServers, traceId);
     } catch (error) {
       this.logger.error(`Error discovering Isilon exports for config ${configId}: ${error.message}`);
-      throw new InternalServerErrorException(
-        `Failed to discover Isilon exports: ${error.message}`
-      );
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(`Failed to discover Isilon exports: ${error.message}`);
     }
   }
 
-  async refreshConfig(configId: string, traceId: string) {
+  /**
+   * Discover exports/shares for specific file servers only
+   * Used for per-zone refresh from UI
+   * 
+   * IMPORTANT: If API discovery fails, we throw an error to prevent
+   * volumes from being incorrectly disabled due to empty paths.
+   */
+  async discoverIsilonExportsForFileServers(
+    config: ConfigEntity,
+    fileServers: FileServerEntity[],
+    traceId: string,
+  ): Promise<Map<string, string[]>> {
+    const discoveredPathsMap = new Map<string, string[]>();
+    const errors: string[] = [];
+    
+    this.logger.log(`Discovering Isilon exports for ${fileServers.length} file server(s) (trace: ${traceId})`);
+
+    if (config.serverType !== ServerType.dell) {
+      this.logger.warn(`Config ${config.id} is not Dell Isilon, skipping API discovery`);
+      return discoveredPathsMap;
+    }
+
+    // For each specified file server (zone), fetch exports and shares
+    for (const fileServer of fileServers) {
+      this.logger.log(`Fetching exports for file server ${fileServer.id} (zone: ${fileServer.fileServerName})`);
+
+      const paths: string[] = [];
+      let apiError: string | null = null;
+
+      // Fetch NFS exports if protocol includes NFS
+      if (fileServer.protocol === Protocol.NFS) {
+        try {
+          const nfsExports = await this.isilonStorageClient.getNFSExportPaths(fileServer.id);
+          this.logger.log(`Found ${nfsExports.length} NFS exports for file server ${fileServer.id}`);
+
+          for (const nfsExport of nfsExports) {
+            paths.push(nfsExport.path);
+          }
+        } catch (error) {
+          apiError = `Failed to fetch NFS exports: ${error.message}`;
+          this.logger.error(`Failed to fetch NFS exports for file server ${fileServer.id}: ${error.message}`);
+        }
+      }
+
+      // Fetch SMB shares if protocol includes SMB
+      if (fileServer.protocol === Protocol.SMB) {
+        try {
+          const smbShares = await this.isilonStorageClient.getSMBShares(fileServer.id);
+          this.logger.log(`Found ${smbShares.length} SMB shares for file server ${fileServer.id}`);
+
+          for (const smbShare of smbShares) {
+            paths.push(smbShare.name);
+          }
+        } catch (error) {
+          apiError = `Failed to fetch SMB shares: ${error.message}`;
+          this.logger.error(`Failed to fetch SMB shares for file server ${fileServer.id}: ${error.message}`);
+        }
+      }
+
+      // If API failed for this file server, collect the error
+      // We don't want to continue and disable volumes due to API failure
+      if (apiError) {
+        errors.push(`Zone ${fileServer.fileServerName || fileServer.id}: ${apiError}`);
+        continue; // Skip this file server, don't add empty paths
+      }
+
+      discoveredPathsMap.set(fileServer.id, paths);
+      this.logger.log(`Discovered ${paths.length} paths for file server ${fileServer.id}`);
+    }
+
+    // If any API calls failed, throw error to prevent incorrect volume disabling
+    if (errors.length > 0) {
+      const errorMessage = `Unable to connect to Dell Isilon management server. Please check network connectivity and try again. Details: ${errors.join('; ')}`;
+      this.logger.error(`Refresh failed due to API errors: ${errorMessage}`);
+      throw new BadRequestException(errorMessage);
+    }
+
+    return discoveredPathsMap;
+  }
+
+  async refreshConfig(configId: string, traceId: string, fileServerId?: string) {
     try {
+      // ==================== Validation ====================
       if (!isUUID(configId)) {
         throw new BadRequestException('Invalid UUID format');
       }
-      // check refresh eligibility
-      const refreshStatus = await this.isRefreshPossible(configId);
-      if (!refreshStatus.isRefreshAvailable) {
-        this.logger.warn(`Refresh not available for configId: ${configId}. Reason: ${refreshStatus.message}`);
-        throw new BadRequestException(
-          refreshStatus.message || 'Refresh not available for this configuration.',
-        );
+      if (fileServerId && !isUUID(fileServerId)) {
+        throw new BadRequestException('Invalid fileServerId format');
       }
 
+      // ==================== Fetch Config ====================
       const config = await this.configEntity.findOne({
         where: { id: configId },
         relations: { fileServers: { workers: true, volumes: true } },
       });
 
       if (!config) {
-        throw new NotFoundException(
-          `Config Not found with config id ${configId}`,
-        );
+        throw new NotFoundException(`Config Not found with config id ${configId}`);
       }
 
-      // For Dell Isilon, use API-based discovery instead of worker-based showmount
-      // showmount doesn't understand zones and returns all exports
-      if (config.serverType === ServerType.dell) {
-        this.logger.log(`Using API-based refresh for Dell config ${configId}`);
-        
-        // Discover exports via API (zone-aware) - returns Map<fileServerId, paths[]>
-        const discoveredPathsMap = await this.discoverIsilonExports(configId, traceId);
-        
-        const fileServersIds = config.fileServers.map((fs) => fs.id);
-        
-        // Apply smart volume management (same logic as updatePaths for non-Dell)
-        for (const fileServer of config.fileServers) {
-          const discoveredPaths = discoveredPathsMap.get(fileServer.id) || [];
-          
-          // 1. Re-enable existing volumes if path still exists on NAS
-          if (discoveredPaths.length > 0) {
-            await this.volumes.update(
-              {
-                fileServerId: fileServer.id,
-                volumePath: In(discoveredPaths),
-              },
-              {
-                isValid: true,
-                isDisabled: false,
-              },
-            );
-          }
-          
-          // 2. Create new volumes only for paths that don't exist in DB
-          const existingPaths = new Set(
-            fileServer.volumes.map((vol) => vol.volumePath),
-          );
-          const newVolumes: VolumeEntity[] = [];
-          for (const path of discoveredPaths) {
-            if (!existingPaths.has(path)) {
-              newVolumes.push(
-                this.volumes.create({
-                  fileServerId: fileServer.id,
-                  volumePath: path,
-                  isValid: true,
-                  isDisabled: false, 
-                  reachableCount: 0,
-                  createdBy: config.updatedBy ?? config.createdBy,
-                }),
-              );
-            }
-          }
-          if (newVolumes.length > 0) {
-            await this.volumes.save(newVolumes);
-            this.logger.log(`Created ${newVolumes.length} new volumes for file server ${fileServer.id}`);
-          }
-          
-          // 3. Disable volumes that no longer exist on the NAS
-          const validPaths = new Set(discoveredPaths);
-          const pathsToDisable = fileServer.volumes
-            .filter((vol) => !validPaths.has(vol.volumePath))
-            .map((vol) => vol.volumePath);
-          if (pathsToDisable.length > 0) {
-            await this.volumes.update(
-              { fileServerId: fileServer.id, volumePath: In(pathsToDisable) },
-              { isDisabled: true },
-            );
-            this.logger.log(`Disabled ${pathsToDisable.length} volumes for file server ${fileServer.id}`);
-          }
-          
-          // Mark file server as refreshed
-          await this.fileServerEntity.update(
-            { id: fileServer.id },
-            { isRefreshed: true },
-          );
-        }
-        
-        // Update job configs to inactive if any volume is disabled or invalid
-        const volumeIds = await this.volumes
-          .createQueryBuilder('volume')
-          .select('volume.id')
-          .where('volume.file_server_id IN (:...fileServersIds)', {
-            fileServersIds: fileServersIds,
-          })
-          .andWhere('(volume.is_valid = :isValid OR volume.is_disabled = :isDisabled)', {
-            isValid: false,
-            isDisabled: true,
-          })
-          .getMany();
+      // ==================== Determine File Servers to Refresh ====================
+      // With fileServerId (UI call): refresh only that file server/zone
+      // Without fileServerId (creation flow): refresh all file servers
+      const fileServersToRefresh = fileServerId
+        ? config.fileServers.filter(fs => fs.id === fileServerId)
+        : config.fileServers;
 
-        if (volumeIds.length > 0) {
-          const volumeIdList = volumeIds.map((vol) => vol.id);
-          await this.jobConfigRepo
-            .createQueryBuilder('jobConfig')
-            .update()
-            .set({ status: JobStatus.InActive })
-            .where(
-              'jobConfig.source_path_id IN (:...volumeIds) OR jobConfig.target_path_id IN (:...volumeIds)',
-              { volumeIds: volumeIdList },
-            )
-            .andWhere('jobConfig.status = :status', { status: JobStatus.Active })
-            .execute();
-        }
-        
-        await this.configEntity.update({ id: configId }, { scannedDate: new Date() });
-        
-        return { message: 'Dell config refreshed via API discovery' };
+      if (fileServerId && fileServersToRefresh.length === 0) {
+        throw new NotFoundException(`File server ${fileServerId} not found in config ${configId}`);
       }
 
-      const payload: CreateRequestDto = {
-        fileServer: {
-          hostname: '',
-          protocols: [],
-        },
-        options: new Options(),
-        workerIds: [],
-      };
+      // ==================== Server-Type Specific Refresh ====================
+      switch (config.serverType) {
+        case ServerType.dell:
+          return await this.refreshDellIsilon(config, fileServersToRefresh, configId, fileServerId, traceId);
 
-      config.fileServers?.forEach((fileServer) => {
-        payload.fileServer.hostname = fileServer.host;
-        payload.fileServer.protocols.push({
-          type: fileServer.protocol,
-          username: fileServer.userName,
-          password: fileServer.password,
-          exportPathSource: fileServer.exportPathSource,
-        });
-        fileServer?.workers?.forEach((worker) => {
-          if (!payload.workerIds.includes(worker.workerId))
-            payload.workerIds.push(worker.workerId);
-        });
-      });
-
-      if (payload.workerIds.length === 0) return;
-
-      await this.fileServerEntity.update(
-        { id: In(config.fileServers.map((it) => it.id)) },
-        { isRefreshed: false },
-      );
-
-      const startWorkFlowPayload: StartWorkFlowPayload = {
-        workflowId: WorkFlows.LIST_PATHS + '-' + traceId,
-        taskQueue: 'ParentWorkflow-TaskQueue',
-        args: [
-          {
-            traceId: traceId,
-            payload: { traceId, ...payload },
-            options: payload.options,
-          },
-        ],
-        ...payload.options,
-      };
-
-      const workflow = await this.workFlowService.startWorkflow(
-        WorkFlows.LIST_PATHS,
-        startWorkFlowPayload,
-      );
-      this.updateResult(workflow.workflowId, configId);
-      return { workflowId: workflow.workflowId };
+        case ServerType.other:
+        default:
+          return await this.refreshOtherNAS(config, configId, traceId);
+      }
     } catch (error) {
       this.logger.error(`Error refreshing config: ${error.message}`);
-      if (
-        error instanceof BadRequestException ||
-        error instanceof NotFoundException
-      ) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
         throw error;
       }
-      throw new InternalServerErrorException(
-        `Failed to refresh config. ${error.message}`,
+      throw new InternalServerErrorException(`Failed to refresh config. ${error.message}`);
+    }
+  }
+
+  /**
+   * Refresh Dell Isilon configuration using API-based discovery.
+   * This is synchronous - exports are discovered via Isilon REST API and saved before returning.
+   * 
+   * Why API instead of showmount?
+   * - showmount doesn't understand Isilon access zones
+   * - showmount returns ALL exports from ALL zones
+   * - API allows zone-specific export discovery
+   */
+  private async refreshDellIsilon(
+    config: ConfigEntity,
+    fileServersToRefresh: FileServerEntity[],
+    configId: string,
+    fileServerId: string | undefined,
+    traceId: string,
+  ) {
+    this.logger.log(
+      `[Dell Isilon] Refreshing config ${configId}${fileServerId ? ` (zone: ${fileServerId})` : ' (all zones)'}`,
+    );
+
+    const fileServerIds = fileServersToRefresh.map((fs) => fs.id);
+
+    // Check refresh eligibility per file server (jobs running, scheduled, etc.)
+    for (const fileServer of fileServersToRefresh) {
+      const refreshStatus = await this.isRefreshPossible(configId, fileServer.id);
+      if (!refreshStatus.isRefreshAvailable) {
+        this.logger.warn(`Refresh not available for zone ${fileServer.fileServerName}. Reason: ${refreshStatus.message}`);
+        throw new BadRequestException(
+          refreshStatus.message || `Refresh not available for zone ${fileServer.fileServerName || fileServer.id}.`,
+        );
+      }
+    }
+
+    // Mark as refreshing
+    await this.fileServerEntity.update(
+      { id: In(fileServerIds) },
+      { isRefreshed: false },
+    );
+
+    try {
+      // Discover exports via Isilon REST API (zone-aware)
+      const discoveredPathsMap = await this.discoverIsilonExportsForFileServers(config, fileServersToRefresh, traceId);
+
+      // Sync volumes (create new, keep existing, mark removed as deleted)
+      await this.syncVolumesForFileServers(
+        fileServersToRefresh,
+        discoveredPathsMap,
+        config.createdBy,
+        config.updatedBy,
+      );
+
+      // Update scan timestamp
+      await this.configEntity.update({ id: configId }, { scannedDate: new Date() });
+    } catch (error) {
+      // On error, reset isRefreshed to true so user can retry
+      await this.fileServerEntity.update(
+        { id: In(fileServerIds) },
+        { isRefreshed: true },
+      );
+      throw error;
+    }
+
+    const refreshedZones = fileServersToRefresh.map(fs => fs.fileServerName || fs.id);
+    return {
+      message: fileServerId
+        ? `Zone ${refreshedZones[0]} refreshed successfully`
+        : `Dell config refreshed successfully (${refreshedZones.length} zone(s))`,
+      refreshedFileServers: fileServerIds,
+    };
+  }
+
+  /**
+   * Refresh Other NAS configuration using worker-based showmount discovery.
+   * This is asynchronous - starts a workflow and returns workflowId for UI to poll.
+   * 
+   * Flow:
+   * 1. Start ListPathsWorkflow on workers
+   * 2. Workers run showmount to discover exports
+   * 3. UI polls workflow status
+   * 4. On completion, updateResult() saves discovered paths
+   */
+  private async refreshOtherNAS(
+    config: ConfigEntity,
+    configId: string,
+    traceId: string,
+  ) {
+    this.logger.log(`[Other NAS] Refreshing config ${configId} via worker showmount`);
+
+    // Check refresh eligibility at config level
+    const refreshStatus = await this.isRefreshPossible(configId);
+    if (!refreshStatus.isRefreshAvailable) {
+      this.logger.warn(`Refresh not available for config ${configId}. Reason: ${refreshStatus.message}`);
+      throw new BadRequestException(
+        refreshStatus.message || 'Refresh not available for this configuration.',
       );
     }
+
+    // Build payload for worker workflow
+    const payload: CreateRequestDto = {
+      fileServer: {
+        hostname: '',
+        protocols: [],
+      },
+      options: new Options(),
+      workerIds: [],
+    };
+
+    config.fileServers?.forEach((fileServer) => {
+      payload.fileServer.hostname = fileServer.host;
+      payload.fileServer.protocols.push({
+        type: fileServer.protocol,
+        username: fileServer.userName,
+        password: fileServer.password,
+        exportPathSource: fileServer.exportPathSource,
+      });
+      fileServer?.workers?.forEach((worker) => {
+        if (!payload.workerIds.includes(worker.workerId)) {
+          payload.workerIds.push(worker.workerId);
+        }
+      });
+    });
+
+    if (payload.workerIds.length === 0) {
+      this.logger.warn(`No workers found for config ${configId}`);
+      return { message: 'No workers available for refresh' };
+    }
+
+    // Mark as refreshing
+    await this.fileServerEntity.update(
+      { id: In(config.fileServers.map((it) => it.id)) },
+      { isRefreshed: false },
+    );
+
+    // Start async workflow
+    const startWorkFlowPayload: StartWorkFlowPayload = {
+      workflowId: WorkFlows.LIST_PATHS + '-' + traceId,
+      taskQueue: 'ParentWorkflow-TaskQueue',
+      args: [
+        {
+          traceId: traceId,
+          payload: { traceId, ...payload },
+          options: payload.options,
+        },
+      ],
+      ...payload.options,
+    };
+
+    const workflow = await this.workFlowService.startWorkflow(
+      WorkFlows.LIST_PATHS,
+      startWorkFlowPayload,
+    );
+
+    // Background polling to save results when workflow completes
+    this.updateResult(workflow.workflowId, configId);
+
+    return { workflowId: workflow.workflowId };
   }
 
   async updateResult(id: string, configId: string) {
@@ -1643,30 +1700,36 @@ export class ConfigurationService {
     }
   }
 
+  /**
+   * Updates volumes after Other NAS workflow (ListPathsWorkflow) completes.
+   * Called by updateResult() when polling detects workflow completion.
+   * 
+   * Flow:
+   * 1. Parse workflow results to extract discovered paths per protocol
+   * 2. Build discoveredPathsMap (fileServerId -> paths[])
+   * 3. Use shared syncVolumesForFileServers to update DB
+   * 
+   * Note: Dell Isilon does NOT use this method - it uses syncVolumesForFileServers directly.
+   */
   async updatePaths(id: string, details: ListPathWorkflowStatus) {
     try {
+      // ==================== Parse Workflow Results ====================
       const pathsMap: PathsMap = {
         NFS: { workers: 0, paths: [] },
         SMB: { workers: 0, paths: [] },
       };
+
       details.completed.forEach((workflow) => {
         pathsMap[workflow.protocolType].workers++;
         workflow.paths.forEach((path) => {
-          if (!pathsMap[workflow.protocolType].paths.includes(path))
+          if (!pathsMap[workflow.protocolType].paths.includes(path)) {
             pathsMap[workflow.protocolType].paths.push(path);
+          }
         });
       });
+
+      // ==================== Fetch Config with File Servers ====================
       const config = await this.configEntity.findOne({
-        select: {
-          fileServers: {
-            id: true,
-            protocol: true,
-            volumes: {
-              id: true,
-              volumePath: true,
-            },
-          },
-        },
         where: { id },
         relations: {
           fileServers: {
@@ -1674,109 +1737,194 @@ export class ConfigurationService {
           },
         },
       });
-      const fileServersIds = config.fileServers.map((it) => it.id);
+
+      if (!config) {
+        this.logger.warn(`Config ${id} not found in updatePaths`);
+        return;
+      }
+
+      // ==================== Build Discovered Paths Map ====================
+      // Map each file server to its discovered paths based on protocol
+      const discoveredPathsMap = new Map<string, string[]>();
       for (const fileServer of config.fileServers) {
+        discoveredPathsMap.set(fileServer.id, pathsMap[fileServer.protocol].paths);
+      }
+
+      // ==================== Sync Volumes ====================
+      await this.syncVolumesForFileServers(
+        config.fileServers,
+        discoveredPathsMap,
+        config.createdBy,
+        config.updatedBy,
+        pathsMap, // Pass pathsMap for reachableCount (worker count)
+      );
+
+      // ==================== Update Scan Timestamp ====================
+      await this.configEntity.update({ id }, { scannedDate: new Date() });
+    } catch (error) {
+      this.logger.error(`Error in updatePaths: ${error.message}`);
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(`Failed to update paths: ${error.message}`);
+    }
+  }
+
+  /**
+   * Shared method to synchronize volumes for file servers
+   * Used by both Dell (API discovery) and Other NAS (workflow discovery)
+   * 
+   * Steps:
+   * 1. Re-enable existing volumes if path still exists on NAS
+   * 2. Create new volumes for paths that don't exist in DB
+   * 3. Disable volumes that no longer exist on NAS
+   * 4. Mark file servers as refreshed
+   * 5. Deactivate job configs with invalid/disabled volumes
+   */
+  private async syncVolumesForFileServers(
+    fileServers: FileServerEntity[],
+    discoveredPathsMap: Map<string, string[]>,
+    createdBy: string,
+    updatedBy?: string,
+    pathsMap?: PathsMap, // Optional: for reachableCount (non-Dell only)
+  ): Promise<void> {
+    const fileServersIds = fileServers.map((fs) => fs.id);
+
+    for (const fileServer of fileServers) {
+      const discoveredPaths = discoveredPathsMap.get(fileServer.id) || [];
+      const reachableCount = pathsMap?.[fileServer.protocol]?.workers ?? 0;
+
+      // 1. Re-enable existing volumes if path still exists on NAS
+      if (discoveredPaths.length > 0) {
         await this.volumes.update(
           {
             fileServerId: fileServer.id,
-            volumePath: In(pathsMap[fileServer.protocol].paths),
+            volumePath: In(discoveredPaths),
           },
           {
-            reachableCount: pathsMap[fileServer.protocol].workers,
+            reachableCount: reachableCount,
             isValid: true,
             isDisabled: false,
           },
         );
-
-        const existingPaths = new Set(
-          fileServer.volumes.map((vol) => vol.volumePath),
-        );
-        const founds: VolumeEntity[] = [];
-        pathsMap[fileServer.protocol].paths.forEach((path) => {
-          if (!existingPaths.has(path))
-            founds.push(
-              this.volumes.create({
-                fileServerId: fileServer.id,
-                reachableCount: pathsMap[fileServer.protocol].workers,
-                volumePath: path,
-                isValid: true,
-                isDisabled: false,
-                createdBy: config.updatedBy ?? config.createdBy,
-              }),
-            );
-        });
-        await this.volumes.save(founds);
-        await this.fileServerEntity.update(
-          { id: fileServer.id },
-          { isRefreshed: true },
-        );
-
-        // Disable volumes that are no longer in the completed payload
-        const validPaths = new Set(pathsMap[fileServer.protocol].paths);
-        const pathsToDisable = fileServer.volumes
-          .filter((vol) => !validPaths.has(vol.volumePath))
-          .map((vol) => vol.volumePath);
-        if (pathsToDisable.length > 0)
-          await this.volumes.update(
-            { fileServerId: fileServer.id, volumePath: In(pathsToDisable) },
-            { isDisabled: true },
-          );
       }
 
-      // update job configurations to inactive if any volume is disabled or invalid associated with it
-      const volumeIds = await this.volumes
-        .createQueryBuilder('volume')
-        .select('volume.id')
-        .where('volume.file_server_id IN (:...fileServersIds)', {
-          fileServersIds: fileServersIds,
-        })
-        .andWhere('volume.is_valid = :isValid', { isValid: false })
-        .orWhere('volume.is_disabled = :isDisabled', { isDisabled: true })
-        .getMany();
-
-      if (volumeIds.length > 0) {
-        const volumeIdList = volumeIds.map((vol) => vol.id);
-        await this.jobConfigRepo
-          .createQueryBuilder('jobConfig')
-          .update()
-          .set({ status: JobStatus.InActive })
-          .where(
-            'jobConfig.source_path_id IN (:...volumeIds) OR jobConfig.target_path_id IN (:...volumeIds)',
-            { volumeIds: volumeIdList },
-          )
-          .andWhere('jobConfig.status = :status', { status: JobStatus.Active })
-          .execute();
-      }
-
-      await this.configEntity.update({ id }, { scannedDate: new Date() });
-    } catch (error) {
-      this.logger.error(`Error in updatePaths: ${error.message}`);
-      if (
-        error instanceof BadRequestException ||
-        error instanceof NotFoundException
-      ) {
-        throw error;
-      }
-      throw new InternalServerErrorException(
-        `Failed to update paths ${error.message}`,
+      // 2. Create new volumes only for paths that don't exist in DB
+      const existingPaths = new Set(
+        fileServer.volumes?.map((vol) => vol.volumePath) || [],
       );
+      const newVolumes: VolumeEntity[] = [];
+      for (const path of discoveredPaths) {
+        if (!existingPaths.has(path)) {
+          newVolumes.push(
+            this.volumes.create({
+              fileServerId: fileServer.id,
+              volumePath: path,
+              isValid: true,
+              isDisabled: false,
+              reachableCount: reachableCount,
+              createdBy: updatedBy ?? createdBy,
+            }),
+          );
+        }
+      }
+      if (newVolumes.length > 0) {
+        await this.volumes.save(newVolumes);
+        this.logger.log(`Created ${newVolumes.length} new volumes for file server ${fileServer.id}`);
+      }
+
+      // 3. Disable volumes that no longer exist on the NAS
+      const validPaths = new Set(discoveredPaths);
+      const pathsToDisable = (fileServer.volumes || [])
+        .filter((vol) => !validPaths.has(vol.volumePath))
+        .map((vol) => vol.volumePath);
+      if (pathsToDisable.length > 0) {
+        await this.volumes.update(
+          { fileServerId: fileServer.id, volumePath: In(pathsToDisable) },
+          { isDisabled: true },
+        );
+        this.logger.log(`Disabled ${pathsToDisable.length} volumes for file server ${fileServer.id}`);
+      }
+
+      // 4. Mark file server as refreshed
+      await this.fileServerEntity.update(
+        { id: fileServer.id },
+        { isRefreshed: true },
+      );
+    }
+
+    // 5. Deactivate job configs with invalid/disabled volumes
+    const volumeIds = await this.volumes
+      .createQueryBuilder('volume')
+      .select('volume.id')
+      .where('volume.file_server_id IN (:...fileServersIds)', {
+        fileServersIds: fileServersIds,
+      })
+      .andWhere('(volume.is_valid = :isValid OR volume.is_disabled = :isDisabled)', {
+        isValid: false,
+        isDisabled: true,
+      })
+      .getMany();
+
+    if (volumeIds.length > 0) {
+      const volumeIdList = volumeIds.map((vol) => vol.id);
+      await this.jobConfigRepo
+        .createQueryBuilder('jobConfig')
+        .update()
+        .set({ status: JobStatus.InActive })
+        .where(
+          'jobConfig.source_path_id IN (:...volumeIds) OR jobConfig.target_path_id IN (:...volumeIds)',
+          { volumeIds: volumeIdList },
+        )
+        .andWhere('jobConfig.status = :status', { status: JobStatus.Active })
+        .execute();
     }
   }
 
-  async isRefreshPossible(configId: string): Promise<{ isRefreshAvailable: boolean; message?: string }> {
+  async isRefreshPossible(configId: string, fileServerId?: string): Promise<{ isRefreshAvailable: boolean; message?: string }> {
     try {
-      const fileServers = await this.configEntity.find({
-        where: { id: configId },
-        relations: { fileServers: { volumes: true } },
-      });
+      let volumeIds: string[] = [];
 
-      const volumeIds = fileServers.flatMap((fs) =>
-        fs.fileServers.flatMap((v) => v.volumes.map((vol) => vol.id)),
-      ); // volume ids from all file servers
-      if (volumeIds.length === 0) {
-        this.logger.warn(`No valid volumes found for config ID ${configId}.`);
-        return { isRefreshAvailable: true }; // No volumes means no jobs, so refresh is possible
+      if (fileServerId) {
+        // Per file server check (Dell per-zone refresh)
+        const fileServer = await this.fileServerEntity.findOne({
+          where: { id: fileServerId, configId: configId },
+          relations: ['volumes'],
+        });
+
+        if (!fileServer) {
+          this.logger.warn(`File server ${fileServerId} not found in config ${configId}`);
+          return { isRefreshAvailable: false, message: 'File server not found' };
+        }
+
+        volumeIds = fileServer.volumes?.map((vol) => vol.id) || [];
+        
+        if (volumeIds.length === 0) {
+          this.logger.log(`No volumes found for file server ${fileServerId}, refresh is possible`);
+          return { isRefreshAvailable: true };
+        }
+      } else {
+        // Config-level check (existing behavior)
+        const config = await this.configEntity.findOne({
+          where: { id: configId },
+          relations: { fileServers: { volumes: true } },
+        });
+
+        if (!config) {
+          return { isRefreshAvailable: false, message: 'Config not found' };
+        }
+
+        volumeIds = config.fileServers.flatMap((fs) =>
+          fs.volumes?.map((vol) => vol.id) || [],
+        );
+        
+        if (volumeIds.length === 0) {
+          this.logger.warn(`No valid volumes found for config ID ${configId}.`);
+          return { isRefreshAvailable: true }; // No volumes means no jobs, so refresh is possible
+        }
       }
+
+      const contextLabel = fileServerId ? `file server ${fileServerId}` : `configuration ${configId}`;
 
       /*
         fetch all the job configurations that has any of the volumeIds in
@@ -1794,7 +1942,7 @@ export class ConfigurationService {
       // check if any job config has schedule as SCHEDULING if yes then return false
       if (jobConfigs.some((jc) => jc.scheduler === 'SCHEDULING')) {
         const userMessage = `Job scheduling in progress. Please retry shortly.`;
-        const logMessage = `Refresh is not possible for configuration ${configId} as there are jobs with SCHEDULING status : ${JSON.stringify(jobConfigs.filter((jc) => jc.scheduler === 'SCHEDULING'))}`;
+        const logMessage = `Refresh is not possible for ${contextLabel} as there are jobs with SCHEDULING status`;
         this.logger.warn(logMessage);
         return { isRefreshAvailable: false, message: userMessage };
       }
@@ -1802,7 +1950,7 @@ export class ConfigurationService {
       // check if futureScheduleAt is not null for any job config, if yes then return false
       if (jobConfigs.some((jc) => !!jc.futureScheduleAt)) {
         const userMessage = `Jobs are scheduled for future execution. Please cancel or reschedule these jobs before refreshing.`;
-        const logMessage = `Refresh is not possible for configuration ${configId} as there are jobs with futureScheduleAt set: ${JSON.stringify(jobConfigs.filter((jc) => !!jc.futureScheduleAt))}`;
+        const logMessage = `Refresh is not possible for ${contextLabel} as there are jobs with futureScheduleAt set`;
         this.logger.warn(logMessage);
         return { isRefreshAvailable: false, message: userMessage };
       }
@@ -1821,12 +1969,12 @@ export class ConfigurationService {
 
       if (runningJobs > 0) {
         const userMessage = `Jobs are currently running. Please wait for active jobs to complete and try again.`;
-        const logMessage = `Refresh is not possible for configuration ${configId} as there are currently running jobs`;
+        const logMessage = `Refresh is not possible for ${contextLabel} as there are currently running jobs`;
         this.logger.warn(logMessage);
         return { isRefreshAvailable: false, message: userMessage };
       }
 
-      this.logger.log(`Refresh is possible for configuration ${configId}`);
+      this.logger.log(`Refresh is possible for ${contextLabel}`);
       return { isRefreshAvailable: true };
     } catch (error) {
       this.logger.error(`Error checking refresh possibility for config ${configId}: ${error.message}`);
