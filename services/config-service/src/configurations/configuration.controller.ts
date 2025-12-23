@@ -82,10 +82,15 @@ export class ConfigurationController{
 
     @ApiOperation({ summary: 'Get Updated list of exports/shared paths' }) 
     @ApiResponse({ status: 200, description: 'Request created successfully' })
+    @ApiQuery({ name: 'fileServerId', type: 'string', required: false, description: 'Optional file server ID to refresh only a specific zone (Dell Isilon)' })
     @Auth(Permission.ManageConfig)
     @Get('/refresh/:id')
-    async refreshConfig(@Param('id') id: string ,  @Request() userDetails: UserDetails) {
-        return await this.configurationService.refreshConfig(id, userDetails?.trackId)
+    async refreshConfig(
+        @Param('id') id: string,
+        @Request() userDetails: UserDetails,
+        @Query('fileServerId') fileServerId?: string,
+    ) {
+        return await this.configurationService.refreshConfig(id, userDetails?.trackId, fileServerId)
     }
 
     // ==================== TLS Certificate API ==================== //
