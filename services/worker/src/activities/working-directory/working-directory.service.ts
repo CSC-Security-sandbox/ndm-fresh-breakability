@@ -38,7 +38,8 @@ export class ValidateWorkingDirectoryActivity {
     const configStatusPayload: ConfigStatusPayload = {
       configId: payload.configId,
       status: null,
-      errorMessage: null
+      errorMessage: null,
+      fileServerId: payload?.fileServerId || null, // Dell per-zone: pass fileServerId for per-zone status updates
     };
 
     const isDell = payload?.isDell || payload?.serverType === 'Dell';
@@ -145,6 +146,9 @@ export class ValidateWorkingDirectoryActivity {
           this.logger.log(`Dell Isilon: Using discovered export path ${exportPath} for host ${fileServer.host}`);
         }
 
+        // For Dell per-zone, include fileServerId in path to prevent collision between zones
+        const uniquePathId = payload.fileServerId ? `${traceId}-${payload.fileServerId}` : traceId;
+
         const mountPathPayload = {
           hostname: fileServer.host,
           username: fileServer.username,
@@ -152,8 +156,8 @@ export class ValidateWorkingDirectoryActivity {
           protocolVersion: fileServer.protocolVersion,
           path: exportPath,
           mountBasePath: this.baseWorkingPath,
-          pathId: traceId,
-          jobRunId: traceId,
+          pathId: uniquePathId,
+          jobRunId: uniquePathId,
         };
 
         this.logger.log(`Mounting export path for host ${fileServer.host}`);
@@ -190,6 +194,9 @@ export class ValidateWorkingDirectoryActivity {
     let isDirectoryValid = false;
     let hasWritePermission = false;
 
+    // For Dell per-zone, include fileServerId in path to prevent collision between zones
+    const uniquePathId = payload.fileServerId ? `${traceId}-${payload.fileServerId}` : traceId;
+
     try {
       for (const fileServer of payload.listPathPayload) {
         const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
@@ -201,8 +208,8 @@ export class ValidateWorkingDirectoryActivity {
           protocolVersion: fileServer.protocolVersion,
           path: payload.exportPath,
           mountBasePath: this.baseWorkingPath,
-          pathId: traceId,
-          jobRunId: traceId
+          pathId: uniquePathId,
+          jobRunId: uniquePathId
         };
 
         this.logger.log(`Mounting export path for host ${fileServer.host}`);
@@ -210,7 +217,7 @@ export class ValidateWorkingDirectoryActivity {
         this.logger.log("Mounted export path successfully");
 
         this.logger.log("Started validating the working directory");
-        const mountPoint = path.join(this.baseWorkingPath, traceId, traceId);
+        const mountPoint = path.join(this.baseWorkingPath, uniquePathId, uniquePathId);
         const fullPath = path.join(mountPoint, payload.workingDirectory);
 
         if (fs.existsSync(fullPath)) {

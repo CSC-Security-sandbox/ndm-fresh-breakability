@@ -49,4 +49,9 @@ export class ConfigStatusPayloadDTO {
     @IsOptional()
     @IsString()
     errorMessage: string;
+
+    @ApiProperty({ description: 'File server ID for Dell per-zone status updates', required: false })
+    @IsOptional()
+    @IsString()
+    fileServerId?: string;
 }

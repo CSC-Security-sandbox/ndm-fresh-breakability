@@ -17,7 +17,7 @@ import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
   imports: [
     LoggerModule.forRoot(),
     ConfigModule.forRoot({ load: [appConfig] }),
-    TypeOrmModule.forFeature([WorkerEntity,JobRunEntity, ConfigEntity, WorkerJobRunMap]),
+    TypeOrmModule.forFeature([WorkerEntity, JobRunEntity, ConfigEntity, WorkerJobRunMap]),
     WorkflowModule,
     AuthKeycloakModule
   ],
