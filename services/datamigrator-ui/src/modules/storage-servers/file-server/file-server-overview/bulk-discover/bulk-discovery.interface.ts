@@ -7,6 +7,7 @@ export interface bulkDiscoveryFormType {
   scheduleTime: string;
   firstRunAt: Dayjs;
   protocol: OptionType;
+  shouldScanADS: string;
 }
 
 export interface TopSectionPropsType {
