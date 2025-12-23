@@ -59,4 +59,6 @@ export const BULK_DISCOVERY_FORM_SCHEMA = yup.object().shape({
     otherwise: (schema) => schema.notRequired(),
   }),
   protocol: yup.object().required(PROTOCOL_REQUIRED),
+  shouldScanADS: yup.string().oneOf(["yes", "no"]).notRequired(),
+
 });
