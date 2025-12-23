@@ -29,4 +29,5 @@ export interface ValidateCommandInput {
     jobContext: JobManagerContext;
     item: ItemInfo;
     errorType?: ErrorType | undefined
+    targetPath?: string;
 }
