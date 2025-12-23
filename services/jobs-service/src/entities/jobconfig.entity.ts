@@ -35,6 +35,10 @@ export class JobConfigEntity extends Base {
   @Column({ name: 'preserve_access_time', type: 'boolean', default: false })
   preserveAccessTime: boolean;
 
+  @ApiProperty({ description: 'Scan Alternate Data Streams flag (Windows/SMB only)' })
+  @Column({ name: 'should_scan_ads', type: 'boolean', default: false })
+  shouldScanADS: boolean;
+
   @ApiProperty({ description: 'Job schedule configuration' })
   @Column({ name: 'first_run_at', type: 'timestamp with time zone' , nullable: true})
   firstRunAt: Date;

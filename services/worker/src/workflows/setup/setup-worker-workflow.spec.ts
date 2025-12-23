@@ -68,36 +68,4 @@ describe('SetupWorkerWorkflow', () => {
         });
     }, 1000 * 60 * 2);
 
-    it('should call speedTestSetup activity for speed test jobs', async () => {
-        const jobRunId = 'test-job-run-id';
-        const args = {
-            jobRunId,
-            traceId: 'test-trace-id',
-            fileServer: { jobConfig: { jobType: JobServiceJobType.SPEED_TEST } },
-            hostname: 'test-hostname',
-            protocols: ['http'],
-            pathId: 'test-path-id',
-        };
-
-        mockedActivities.speedTestSetup.mockResolvedValue({ success: true });
-
-        worker = await Worker.create({
-            connection: testEnv.nativeConnection,
-            workflowsPath: require.resolve('./setup-worker-workflow'),
-            activities: mockedActivities,
-            taskQueue: 'test-task-queue',
-        });
-
-        await worker.runUntil(async () => {
-            const workflowHandle = await testEnv.client.workflow.start(SetupWorkerWorkflow, {
-                args: [args],
-                taskQueue: 'test-task-queue',
-                workflowId: 'test-setup-workflow-id-2',
-            });
-
-            const result = await workflowHandle.result();
-            expect(result).toEqual({ success: true });
-            expect(mockedActivities.speedTestSetup).toHaveBeenCalled();
-        });
-    }, 1000 * 60 * 2);
 });

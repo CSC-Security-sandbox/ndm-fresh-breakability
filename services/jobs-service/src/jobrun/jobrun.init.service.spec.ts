@@ -582,6 +582,129 @@ describe('JobRunInitService', () => {
       expect(redisClientMock.hSet).not.toHaveBeenCalled();
       expect(redisService.setJobContext).toHaveBeenCalled();
     });
+
+    it('should include shouldScanADS in job context options for Discovery job', async () => {
+      const jobRunId = 'jobRunId';
+      const jobRunConfig = {
+        jobType: JobType.DISCOVER,
+        workers: ['worker1'],
+        preserveAccessTime: true,
+        shouldScanADS: true,
+        excludeFilePatterns: '*.tmp',
+        excludeOlderThan: new Date('2025-01-01'),
+        skipFile: null,
+        connection: {
+          sourceCredential: {
+            protocol: Protocol.SMB,
+            host: 'server',
+            username: 'user',
+            password: 'pass',
+            pathId: 'pathId',
+            path: '\\\\server\\share',
+            workingDirectory: '/mnt',
+            protocolVersion: '3',
+          },
+        },
+      };
+
+      const mockJobContext = {
+        jobConfig: {
+          options: {
+            shouldScanADS: true,
+            preserveAccessTime: true,
+          },
+        },
+      };
+
+      const mockRedisProvider = {
+        buildContext: jest.fn().mockResolvedValue(mockJobContext),
+      };
+
+      const redisClientMock = {
+        isOpen: true,
+        exists: jest.fn().mockResolvedValue(false),
+        xGroupCreate: jest.fn(),
+        set: jest.fn(),
+        xAdd: jest.fn(),
+      };
+
+      jest.spyOn(redisService, 'getClient').mockResolvedValue(redisClientMock as any);
+      jest.spyOn(JobContextFactory, 'getJobManagerProvider').mockReturnValue(mockRedisProvider as any);
+      jest.spyOn(redisService, 'setJobContext').mockResolvedValue(undefined);
+
+      await service.buildJobContext(jobRunId, jobRunConfig as any);
+
+      expect(redisService.setJobContext).toHaveBeenCalledWith(
+        jobRunId,
+        expect.objectContaining({
+          jobConfig: expect.objectContaining({
+            options: expect.objectContaining({
+              shouldScanADS: true,
+              preserveAccessTime: true,
+            }),
+          }),
+        })
+      );
+    });
+
+    it('should set shouldScanADS to false when not provided in job run config', async () => {
+      const jobRunId = 'jobRunId';
+      const jobRunConfig = {
+        jobType: JobType.DISCOVER,
+        workers: [],
+        preserveAccessTime: false,
+        // shouldScanADS is not set
+        connection: {
+          sourceCredential: {
+            protocol: Protocol.NFS,
+            host: 'host',
+            username: 'user',
+            password: 'pass',
+            pathId: 'pathId',
+            path: '/nfs/share',
+            workingDirectory: '/mnt',
+            protocolVersion: '4',
+          },
+        },
+      };
+
+      const mockJobContext = {
+        jobConfig: {
+          options: {
+            shouldScanADS: false,
+          },
+        },
+      };
+
+      const mockRedisProvider = {
+        buildContext: jest.fn().mockResolvedValue(mockJobContext),
+      };
+
+      const redisClientMock = {
+        isOpen: true,
+        exists: jest.fn().mockResolvedValue(false),
+        xGroupCreate: jest.fn(),
+        set: jest.fn(),
+        xAdd: jest.fn(),
+      };
+
+      jest.spyOn(redisService, 'getClient').mockResolvedValue(redisClientMock as any);
+      jest.spyOn(JobContextFactory, 'getJobManagerProvider').mockReturnValue(mockRedisProvider as any);
+      jest.spyOn(redisService, 'setJobContext').mockResolvedValue(undefined);
+
+      await service.buildJobContext(jobRunId, jobRunConfig as any);
+
+      expect(redisService.setJobContext).toHaveBeenCalledWith(
+        jobRunId,
+        expect.objectContaining({
+          jobConfig: expect.objectContaining({
+            options: expect.objectContaining({
+              shouldScanADS: false,
+            }),
+          }),
+        })
+      );
+    });
   });
 
   describe('getWorkFlowId', () => {
@@ -1344,6 +1467,133 @@ describe("buildJobContext", () => {
       expect(result.connection.sourceCredential.protocol).toBe(Protocol.NFS);
       expect(result.connection.targetCredential).toBeDefined();
       expect(result.connection.targetCredential.protocol).toBe(Protocol.NFS);
+    });
+
+    /**
+     * Test suite for shouldScanADS in job config
+     * 
+     * shouldScanADS is an option for Discovery jobs that enables scanning of 
+     * Alternate Data Streams (Windows/NTFS feature).
+     */
+    describe('shouldScanADS handling', () => {
+      it('should return shouldScanADS as true when enabled in job config', async () => {
+        const jobConfigId = 'jobConfigId';
+        const healthStatsTimeout = 60;
+        const mockJobConfig = {
+          id: jobConfigId,
+          jobType: JobType.DISCOVER,
+          preserveAccessTime: true,
+          shouldScanADS: true,
+          excludeFilePatterns: '*.tmp',
+          excludeOlderThan: new Date(),
+          sourcePath: {
+            id: 'sourcePathId',
+            volumePath: '\\\\server\\share',
+            fileServer: {
+              protocol: Protocol.SMB,
+              userName: 'user',
+              password: 'pass',
+              host: 'server',
+              config: { configName: 'sourceConfig' },
+              workers: [
+                { 
+                  workerId: 'worker1', 
+                  stats: { 
+                    healthStatus: 'Healthy', 
+                    updatedAt: new Date() 
+                  } 
+                }
+              ]
+            }
+          },
+          targetPath: null
+        };
+
+        jest.spyOn(configService, 'get').mockReturnValue(healthStatsTimeout.toString());
+        jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+
+        const result = await service.getJobConfig(jobConfigId);
+
+        expect(result).toBeDefined();
+        expect(result.shouldScanADS).toBe(true);
+        expect(result.jobType).toBe(JobType.DISCOVER);
+      });
+
+      it('should return shouldScanADS as false when not set in job config', async () => {
+        const jobConfigId = 'jobConfigId';
+        const healthStatsTimeout = 60;
+        const mockJobConfig = {
+          id: jobConfigId,
+          jobType: JobType.DISCOVER,
+          preserveAccessTime: true,
+          // shouldScanADS is not set
+          excludeFilePatterns: '*.tmp',
+          excludeOlderThan: new Date(),
+          sourcePath: {
+            id: 'sourcePathId',
+            volumePath: '/nfs/share',
+            fileServer: {
+              protocol: Protocol.NFS,
+              userName: 'user',
+              password: 'pass',
+              host: 'host',
+              config: { configName: 'sourceConfig' },
+              workers: [
+                { 
+                  workerId: 'worker1', 
+                  stats: { 
+                    healthStatus: 'Healthy', 
+                    updatedAt: new Date() 
+                  } 
+                }
+              ]
+            }
+          },
+          targetPath: null
+        };
+
+        jest.spyOn(configService, 'get').mockReturnValue(healthStatsTimeout.toString());
+        jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+
+        const result = await service.getJobConfig(jobConfigId);
+
+        expect(result).toBeDefined();
+        expect(result.shouldScanADS).toBe(false);
+      });
+
+      it('should default shouldScanADS to false when undefined in job config', async () => {
+        const jobConfigId = 'jobConfigId';
+        const healthStatsTimeout = 60;
+        const mockJobConfig = {
+          id: jobConfigId,
+          jobType: JobType.DISCOVER,
+          preserveAccessTime: false,
+          shouldScanADS: undefined,
+          excludeFilePatterns: null,
+          excludeOlderThan: null,
+          sourcePath: {
+            id: 'sourcePathId',
+            volumePath: '/path',
+            fileServer: {
+              protocol: Protocol.NFS,
+              userName: 'user',
+              password: 'pass',
+              host: 'host',
+              config: { configName: 'sourceConfig' },
+              workers: []
+            }
+          },
+          targetPath: null
+        };
+
+        jest.spyOn(configService, 'get').mockReturnValue(healthStatsTimeout.toString());
+        jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+
+        const result = await service.getJobConfig(jobConfigId);
+
+        expect(result).toBeDefined();
+        expect(result.shouldScanADS).toBe(false);
+      });
     });
   });
 

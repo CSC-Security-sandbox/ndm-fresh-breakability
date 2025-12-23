@@ -27,6 +27,10 @@ export class JobOptionsEntity extends Base {
   @Column({ name: "preserve_access_time", type: "boolean", default: false })
   preserveAccessTime: boolean;
 
+  @ApiProperty({ description: "Scan Alternate Data Streams (ADS) flag for SMB sources" })
+  @Column({ name: "should_scan_ads", type: "boolean", default: false })
+  shouldScanADS: boolean;
+
   @ApiProperty({ description: "Source Working Directory" })
   @Column({ name: "source_working_dir", type: "text", nullable: true })
   sourceWorkingDir: string | null;

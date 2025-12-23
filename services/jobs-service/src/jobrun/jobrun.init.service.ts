@@ -178,6 +178,7 @@ export class JobRunInitService {
         targetWorkingDir: this.mountBasePath,
         preserveAccessTime: details.preserveAccessTime,
         excludeOlderThan: details.excludeOlderThan,
+        shouldScanADS: details.shouldScanADS,
       });
       const jobRun = this.jobRunRepo.create({
         id: uuid4(),
@@ -263,6 +264,7 @@ export class JobRunInitService {
     const details: JobRunConfig = {
       id: jobConfig.id,
       preserveAccessTime: jobConfig.preserveAccessTime,
+      shouldScanADS: jobConfig.shouldScanADS ?? false,
       excludeFilePatterns: jobConfig.excludeFilePatterns,
       excludeOlderThan: jobConfig.excludeOlderThan,
       connection: {
@@ -593,6 +595,7 @@ export class JobRunInitService {
       {
         excludeFilePattern: jobRunConfig.excludeFilePatterns,
         preserveAccessTime: jobRunConfig.preserveAccessTime,
+        shouldScanADS: jobRunConfig.shouldScanADS ?? false,
         skipsFilesModifiedInLast: jobRunConfig?.skipFile,
         excludeOlderThan: !!jobRunConfig.excludeOlderThan
           ? jobRunConfig.excludeOlderThan.toString()
