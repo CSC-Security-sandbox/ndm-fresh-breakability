@@ -150,7 +150,7 @@ export class JobConfigService {
   ): Promise<JobConfigEntity[]> {
     const firstRunAt = bulkDiscovery?.firstRunAt ?? new Date();
 
-    // Validate shouldScanADS is only enabled for SMB protocol sources
+    
     if (bulkDiscovery.shouldScanADS === true) {
       const volumes = await this.volumeRepo.find({
         where: { id: In(bulkDiscovery.sourcePathIds) },
@@ -167,6 +167,7 @@ export class JobConfigService {
         );
       }
     }
+  
 
     const existingList = await this.jobConfigRepo.find({
       where: {
@@ -1177,8 +1178,10 @@ export class JobConfigService {
         [JobConfigurationEnum.excludeOlderThan]: jobConfig.excludeOlderThan,
       }
     } else {
+      // DISCOVERY job type
       return {
         [JobConfigurationEnum.excludeFilePatterns]: excludeFilePatternsArray,
+        [JobConfigurationEnum.shouldScanADS]: jobConfig.shouldScanADS ? "Enabled" : "Disabled",
       }
     }
   }
