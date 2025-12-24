@@ -45,4 +45,12 @@ export class JobOptionsEntity extends Base {
   })
   @JoinColumn({ name: "job_run_id" })
   jobRun: JobRunEntity;
+
+  @ApiProperty({ description: "Skip files modified in a certain time" })
+  @Column({ name: "skip_file", type: "text", nullable: true })
+  skipFile: string | null;
+
+  @ApiProperty({ description: "ID of the associated identity mapping" })
+  @Column({ name: "identity_mapping_id", type: "uuid", nullable: true })
+  identityMappingId: string | null;
 }

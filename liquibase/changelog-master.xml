@@ -505,4 +505,18 @@
          <sqlFile path="liquibase/20251119_01_alter_inventory_table_add_column_for_deletion_rollback.sql"/>
       </rollback>
    </changeSet>
+
+   <changeSet id="20251218_01_alter_job_options_table_add_skip_file_column.sql" author="ss27372">
+      <sqlFile path="liquibase/20251218_01_alter_job_options_table_add_skip_file_column.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/20251218_01_alter_job_options_table_delete_column_skip_file.sql"/>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20251223_01_alter_job_options_table_add_identity_mapping_column.sql" author="ss27372">
+      <sqlFile path="liquibase/20251223_01_alter_job_options_table_add_identity_mapping_column.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/20251223_01_alter_job_options_table_delete_identity_mapping_column.sql"/>
+      </rollback>
+   </changeSet>
 </databaseChangeLog>

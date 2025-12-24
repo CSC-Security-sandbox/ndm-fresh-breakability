@@ -21,6 +21,7 @@ interface ExistingIdentityMappingsProps {
   existingMappings?: ExistingMappingsResponse;
   protocol: string;
   jobId: string;
+  jobRunId?: string;
 }
 
 export const convertMappingsToCSV = (
@@ -81,17 +82,22 @@ const ExistingIdentityMappings: React.FC<ExistingIdentityMappingsProps> = ({
   existingMappings,
   protocol,
   jobId,
+  jobRunId,
 }) => {
   const mappingsData = existingMappings?.items?.data;
   const handleDownloadExistingMappings = () => {
     const csvContent = convertMappingsToCSV(mappingsData, protocol);
-    const filename = protocol === ProtocolType.NFS ? `Uploaded_GidMapping_${jobId}.csv` : `Uploaded_SidMapping_${jobId}.csv`;
+    const filename = jobRunId ?
+    protocol === ProtocolType.NFS ? `Uploaded_GidMapping_${jobRunId}.csv` : `Uploaded_SidMapping_${jobRunId}.csv`
+    : protocol === ProtocolType.NFS ? `Uploaded_GidMapping_${jobId}.csv` : `Uploaded_SidMapping_${jobId}.csv`;
     downloadCSVFile(csvContent, filename);
   };
 
   return (
     <Box className="flex gap-2 items-center">
-        <Text bold className="!mb-0">Uploaded Mapping: </Text>
+        { jobRunId ? <Text bold className="!mb-0">Mapping Used: </Text> : 
+          <Text bold className="!mb-0">Uploaded Mapping: </Text>
+        }
         <Button
           variant="text"
           onClick={handleDownloadExistingMappings}

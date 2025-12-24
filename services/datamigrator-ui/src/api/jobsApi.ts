@@ -287,6 +287,16 @@ export const jobsApi = createApi({
       ],
     }),
 
+    getJobRunIdentityMappings: builder.query({
+      query: (jobRunId: string) => ({
+        url: `job-run/${jobRunId}/mappings-fetch-jobrun`,
+        method: "GET",
+      }),
+      transformResponse: (response) => {
+        return response?.data || response;
+      },
+    }),
+
     removeJobIdentityMappings: builder.mutation({
       query: (jobConfigId: string) => ({
         url: `jobs/${jobConfigId}/mappings-remove`,
@@ -361,6 +371,7 @@ export const {
   useGetFileServerWorkersQuery,
   useDeleteJobConfigMutation,
   useGetJobIdentityMappingsQuery,
+  useLazyGetJobRunIdentityMappingsQuery,
   useRemoveJobIdentityMappingsMutation,
   useLazyGetJobIdentityMappingsQuery,
   useUpdateDiscoveryJobConfigMutation,

@@ -172,12 +172,23 @@ export class JobRunInitService {
           isPathMounted: false,
         }),
       );
+      let identityMappingId: string | null = null;
+      if ( details.jobType === JobType.MIGRATE) {
+        const activeMapping = await this.identityConfigCrossMappingRepo.findOne({
+          where: { jobConfigId: details.id, isOrphan: false },
+          order: { createdAt: "DESC" },
+        });
+        identityMappingId = activeMapping?.identityMappingId || null;
+      }
+      this.logger.log("\nidentityMappingId:", identityMappingId);
       const options = this.optionRepo.create({
         excludeFilePatterns: details.excludeFilePatterns,
         sourceWorkingDir: this.mountBasePath,
         targetWorkingDir: this.mountBasePath,
         preserveAccessTime: details.preserveAccessTime,
         excludeOlderThan: details.excludeOlderThan,
+        skipFile: details.skipFile,
+        identityMappingId: identityMappingId,
       });
       const jobRun = this.jobRunRepo.create({
         id: uuid4(),

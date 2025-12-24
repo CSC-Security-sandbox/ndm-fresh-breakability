@@ -5,7 +5,11 @@ import {
   JOBS_TYPE,
 } from "@/types/app.type";
 import { getGrafanaLogUrl } from "@/utils/common.utils";
-import { useUpdateJobRunStatusMutation } from "@api/jobsApi";
+import {
+  useLazyGetJobRunIdentityMappingsQuery,
+  useUpdateJobRunStatusMutation,
+} from "@api/jobsApi";
+import { format } from "date-fns";
 import {
   useDownloadReportsMutation,
   useGetJobRunDetailsQuery,
@@ -17,34 +21,33 @@ import { Box } from "@components/container/index";
 import CutoverConfirmationModal from "@components/modal/CutOverConfirmationModal";
 import { notify } from "@components/notification/NotificationWrapper";
 import ReportsGeneratingLoader from "@components/ReportsGeneratingLoader/ReportsGeneratingLoader";
-import {
-  getActionMenu,
-  getReportActions,
-} from "@modules/jobs/job-run-list/run.utils";
+import { getActionMenu, getReportActions, } from "@modules/jobs/job-run-list/run.utils";
 import JobDescription from "@modules/jobs/jobs-list/job-details/components/JobDescription";
 import JobRunHeader from "@modules/jobs/jobs-list/job-details/components/JobRunHeader";
 import JobRunTaskCard from "@modules/jobs/jobs-list/job-details/components/JobRunTaskDetails";
-import {
-  handleDownloadReport,
-  handleDownloadCocReport,
-} from "@modules/jobs/jobs.utils";
+import { handleDownloadReport, handleDownloadCocReport, } from "@modules/jobs/jobs.utils";
 import {
   ActionMenu,
   ActionMenuButtonStyle,
   Breadcrumbs,
   Button,
-  DropdownButton,
+  DropdownButton, 
+  Text, 
 } from "@netapp/bxp-design-system-react";
-import { useCallback, useState } from "react";
+import { useDispatch } from "react-redux";
+import { setModalClose, setModalProps } from "@store/reducer/commonComponentSlice";
+import { useCallback, useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import useAdhocRun from "@hooks/useAdhocRun";
 import { Show } from "@components/show/Show";
 import JobErrors from "@modules/jobs/jobs-list/job-details/components/JobErrors";
 import { GENERATING_REPORT_LABEL } from "@modules/jobs/jobs-list/job-details/job-details.constants";
 import TitleWithLastRefreshedDate from "@components/TitleWithLastRefreshedDate/TitleWithLastRefreshedDate";
+import ExistingIdentityMappings from "@hooks/useExistingIdentityMappings";
 
 const JobRunDetails = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const adhocRun = useAdhocRun();
   const params = useParams<{ jobId: string; jobRunId: string }>();
   const { jobId, jobRunId } = params;
@@ -58,6 +61,13 @@ const JobRunDetails = () => {
     }
   );
 
+  const [fetchIdentityMappings, { data: jobRunIdentityMappings}] = useLazyGetJobRunIdentityMappingsQuery();
+  useEffect(() => {
+    if (jobRunId && jobRunDetails?.jobConfig?.jobType === JOBS_TYPE.MIGRATE) {
+      fetchIdentityMappings(jobRunId);
+    }
+  }, [jobRunId, jobRunDetails?.jobConfig?.jobType, fetchIdentityMappings]);
+  console.log("jobRunIdentityMappings", jobRunIdentityMappings);
   const [updateStatus, { isLoading: isUpdating }] =
     useUpdateJobRunStatusMutation();
 
@@ -121,11 +131,148 @@ const JobRunDetails = () => {
           "button"
         )
       : [];
+  
+  const formatSkipFile = (skipFile: string | undefined): string => {
+    if (!skipFile) return "-";
+    return skipFile
+      .split("-")
+      .map((part) => {
+        if (part.endsWith("M")) return `${part.replace("M", "")} Minutes`;
+        if (part.endsWith("H")) return `${part.replace("H", "")} Hours`;
+        if (part.endsWith("D")) return `${part.replace("D", "")} Days`;
+        return part;
+      })
+      .join("");
+  };
 
-  const isDiscoveryJob =
-    jobRunDetails?.jobConfig?.jobType === JOBS_TYPE.DISCOVERY;
-
+  const isDiscoveryJob = jobRunDetails?.jobConfig?.jobType === JOBS_TYPE.DISCOVERY;
+  const isMigrationJob = jobRunDetails?.jobConfig?.jobType === JOBS_TYPE.MIGRATE;
+  
   const viewLogUrl = getGrafanaLogUrl(jobRunId);
+
+  const showJobConfigDetails = () => {
+    const jobRunConfig = jobRunDetails?.jobOptions;
+    const preserveATime = jobRunConfig?.preserveAccessTime ? "Enabled" : "Disabled";
+    const excludeOlderThan = jobRunConfig?.excludeOlderThan ? format(new Date(jobRunConfig.excludeOlderThan), "dd MMM yyyy, hh:mm a") : "-";
+    const excludeFilePatterns = jobRunConfig?.excludeFilePatterns.split(',').join('\n') || "-";
+    if(isDiscoveryJob) {
+      dispatch(
+        setModalProps({
+          isOpen: true,
+          modalHeader: "Job Configuration Details",
+          modalContent: (
+            <Box>
+              <Box className="w-3/6 !bg-white mx-auto shadow-[rgba(0,_0,_0,_0.24)_0px_3px_8px]">
+                <Box className="p-8 flex-col">
+                  <Text className="!mb-0 font-semibold">Excluded Path Patterns:</Text>
+                  <Text className="whitespace-pre-wrap">{excludeFilePatterns}</Text>
+                </Box>
+              </Box> 
+              <Box className="pt-3 flex justify-end mt-3">
+                <Button color="secondary" onClick={() => dispatch(setModalClose())}>
+                  Close
+                </Button>
+              </Box>
+            </Box>
+          ),
+          modalFooter: null,
+        })
+      );
+    }
+    else if(isMigrationJob) {
+      const skipFilesModified = formatSkipFile(jobRunConfig?.skipFile);
+      dispatch(
+        setModalProps({
+          isOpen: true,
+          modalHeader: "Job Configuration Details",
+          modalContent: (
+            <Box>
+              <Box className="!bg-white mx-auto shadow-[rgba(0,_0,_0,_0.24)_0px_3px_8px]">
+                <Box className="p-8 flex gap-8">
+                  <Box className="w-3/6 flex flex-col gap-8">
+                    <Box>
+                      <Text className="!mb-0 font-semibold">Preserve a-time:</Text>
+                      <Text>{preserveATime}</Text>
+                    </Box>
+                    <Box>
+                      <Text className="!mb-0 font-semibold">Exclude files older than:</Text>
+                      <Text>{excludeOlderThan}</Text>
+                    </Box>
+                    <Box>
+                      <Text className="!mb-0 font-semibold">Skip files modified in last:</Text>
+                      <Text>{skipFilesModified}</Text>
+                    </Box>
+                  </Box>  
+                  <Box className="w-3/6 flex flex-col gap-8">
+                    <Box>
+                      <Text className="!mb-0 font-semibold">Excluded Path Patterns:</Text>
+                      <Text className="whitespace-pre-wrap">{excludeFilePatterns}</Text>
+                    </Box>
+                    { jobRunConfig.identityMappingId &&
+                    <ExistingIdentityMappings
+                      existingMappings={{
+                        items: {
+                          data: jobRunIdentityMappings?.items?.data
+                        }
+                      }}
+                      protocol={jobRunDetails?.jobConfig?.sourceServer?.protocol}
+                      jobId={`JobRun_${jobRunId}`}
+                      jobRunId={jobRunId}
+                    />
+                    }
+                  </Box>
+                </Box>
+              </Box> 
+              <Box className="pt-3 flex justify-end mt-3">
+                <Button color="secondary" onClick={() => dispatch(setModalClose())}>
+                  Close
+                </Button>
+              </Box>
+            </Box>
+          ),
+          modalFooter: null,
+        })
+      );
+    }
+    else{ //Cutover job
+      dispatch(
+        setModalProps({
+          isOpen: true,
+          modalHeader: "Job Configuration Details",
+          modalContent: (
+            <Box>
+              <Box className="!bg-white mx-auto shadow-[rgba(0,_0,_0,_0.24)_0px_3px_8px]">
+                <Box className="p-8 flex gap-8">
+                  <Box className="w-3/6 flex flex-col gap-8">
+                    <Box>
+                      <Text className="!mb-0 font-semibold">Preserve a-time:</Text>
+                      <Text>{preserveATime}</Text>
+                    </Box>
+                    <Box>
+                      <Text className="!mb-0 font-semibold">Exclude Files Older Than:</Text>
+                      <Text>{excludeOlderThan}</Text>
+                    </Box>
+                  </Box>  
+                  <Box className="w-3/6 flex flex-col gap-8">
+                    <Box>
+                      <Text className="!mb-0 font-semibold">Excluded Path Patterns:</Text>
+                      <Text className="whitespace-pre-wrap">{excludeFilePatterns}</Text>
+                    </Box>
+                  </Box>
+                </Box>
+              </Box> 
+              <Box className="pt-3 flex justify-end mt-3">
+                <Button onClick={() => dispatch(setModalClose())}  color="secondary">
+                  Close
+                </Button>
+              </Box>
+            </Box>
+          ),
+          modalFooter: null,
+        })
+      );
+    }
+  }
 
   const isJobStatusValid = useCallback(
     (status: JOB_STATUS_TYPE_ENUM) => {
@@ -135,7 +282,6 @@ const JobRunDetails = () => {
         JOB_STATUS_TYPE_ENUM.APPROVED,
         JOB_STATUS_TYPE_ENUM.REJECTED,
       ];
-
       return validStatuses.includes(status);
     },
     [jobRunDetails?.status]
@@ -233,6 +379,13 @@ const JobRunDetails = () => {
             }}
           >
             View Logs
+          </Button>
+          <Button
+            onClick={() => {
+              showJobConfigDetails()
+            }}
+          >
+            View Configuration
           </Button>
         </Box>
       </Box>

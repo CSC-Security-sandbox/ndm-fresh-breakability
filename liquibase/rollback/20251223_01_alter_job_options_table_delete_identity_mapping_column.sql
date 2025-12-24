@@ -1,0 +1,1 @@
+ALTER TABLE job_options DROP COLUMN IF EXISTS identity_mapping_id;
