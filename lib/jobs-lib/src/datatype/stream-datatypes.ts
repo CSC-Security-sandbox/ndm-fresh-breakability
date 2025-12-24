@@ -71,6 +71,7 @@ export class Cmd implements Serializable {
     ops: Operations
     isDir: boolean;
     metadata?: CmdMeta;
+    originalCmdId?: string; // Original command ID for retry tracking - if set, this is a retry command
 
     constructor(
         id: string,
@@ -79,13 +80,14 @@ export class Cmd implements Serializable {
         isDir: boolean,
         ops: Operations,
         metadata?: CmdMeta,
-        
+        originalCmdId?: string,
     ) {
         this.id = id;
         this.fPath = fPath;
         this.status = status;
         this.isDir = isDir;
         this.metadata = metadata;
+        this.originalCmdId = originalCmdId;
         if(ops)
             this.ops = ops;
     }

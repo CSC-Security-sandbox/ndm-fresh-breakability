@@ -17,6 +17,7 @@ export class RedisJobManagerContext extends JobManagerContext {
         this.taskStream = new RedisTaskInfoCollection(this.jobRunId, 0, '0-0', this.redisClient);
         this.taskMap = new RedisHMapCollection(this.jobRunId, 'taskMap', this.redisClient);
         this.dirBatchMap = new RedisHMapCollection(this.jobRunId, 'dirBatchMap', this.redisClient);
+        this.cursorMap = new RedisHMapCollection(this.jobRunId, 'cursorMap', this.redisClient);
     }
 
     async initializeInstance(): Promise<void> {

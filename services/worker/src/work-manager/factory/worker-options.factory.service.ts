@@ -19,6 +19,7 @@ import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-l
 import { SyncService } from "src/activities/core/migrate/sync-activity.service";
 import { MappingResolverService } from "src/activities/core/initializer/mapping-resolver.service";
 import { SetupExportsPathPermissionService } from "src/activities/core/initializer/setup-exports-path-permission.service";
+import { RetryActivityService } from "src/activities/core/retry/retry-activity.service";
 
 @Injectable()
 export class WorkerOptionsService {
@@ -41,6 +42,7 @@ export class WorkerOptionsService {
     private readonly validatePathActivity: ValidatePathActivity,
     private readonly mappingResolverService: MappingResolverService,
     private readonly setupExportsPathPermissionService: SetupExportsPathPermissionService,
+    private readonly retryActivityService: RetryActivityService,
 
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
@@ -105,7 +107,8 @@ export class WorkerOptionsService {
           createInitialDirBatch: this.commonTaskService.createInitialDirBatch.bind(this.commonTaskService),
           isCmdStreamLenValid: this.commonTaskService.isCmdStreamLenValid.bind(this.commonTaskService),
           resolveUsernamesToSids: this.mappingResolverService.resolveUsernamesToSids.bind(this.mappingResolverService),
-          setupExportPathPermission: this.setupExportsPathPermissionService.setupExportPathPermission.bind(this.setupExportsPathPermissionService)
+          setupExportPathPermission: this.setupExportsPathPermissionService.setupExportPathPermission.bind(this.setupExportsPathPermissionService),
+          fetchRetryBatch: this.retryActivityService.fetchRetryBatch.bind(this.retryActivityService),
         }, this.jobTaskActivityConcurrency, this.shutDownForceTime);
       default:
         return undefined;

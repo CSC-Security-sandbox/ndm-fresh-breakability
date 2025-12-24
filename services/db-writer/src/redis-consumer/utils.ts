@@ -6,6 +6,7 @@ export const getWorkflowId = (jobRunId: string, jobType: string) => {
     if (jobType === 'CUT_OVER') return `${WorkFlows.CUT_OVER}-${jobRunId}`;
     if (jobType === 'MIGRATE') return `${WorkFlows.MIGRATE}-${jobRunId}`;
     if (jobType === 'PRECHECK') return `${WorkFlows.PRECHECK}-${jobRunId}`;
+    if (jobType === 'RETRY') return `${WorkFlows.RETRY}-${jobRunId}`;
     return `${WorkFlows.DISCOVERY}-${jobRunId}`;
 }
 

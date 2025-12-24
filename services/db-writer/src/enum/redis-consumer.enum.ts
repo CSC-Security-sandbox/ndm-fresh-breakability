@@ -13,6 +13,7 @@ export enum WorkFlows {
     PRECHECK = 'PreCheckValidationWorkflow',
     MIGRATE = 'MigrationWorkflow',
     CUT_OVER = 'CutOverWorkFlow',
+    RETRY = 'RetryMigrationWorkflow',
 }
 
 export enum ConsumerType {

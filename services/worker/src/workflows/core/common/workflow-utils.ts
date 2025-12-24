@@ -16,6 +16,7 @@ const {
 
 const {
     isWorkflowRunningActivity: isWorkflowRunningActivity,
+    isCmdStreamLenValid: isCmdStreamLenValidActivity,
 } = wf.proxyActivities<CommonTaskService>({
   startToCloseTimeout: '5m',
   heartbeatTimeout: '1m',
@@ -51,5 +52,44 @@ export const signalIfRunning = async (workflow: any, signalName: string, payload
     }
   } catch (error) {
     console.log(`Failed to signal workflow ${workflow?.workflowId} with signal ${signalName}: ${error.message}`);
+  }
+}
+
+/**
+ * Determines the unified job status based on scan and sync statuses.
+ * Used by both normal migration and retry migration workflows.
+ */
+export const getUnifiedJobStatus = (scanStatus: JobRunStatus, syncStatus: JobRunStatus): JobRunStatus => {
+  if (scanStatus === JobRunStatus.Failed || syncStatus === JobRunStatus.Failed) {
+    return JobRunStatus.Failed;
+  }
+  if (scanStatus === JobRunStatus.Stopped || syncStatus === JobRunStatus.Stopped) {
+    return JobRunStatus.Stopped;
+  }
+  return JobRunStatus.Completed;
+};
+
+/**
+ * Validates that the command stream length is within acceptable limits.
+ * Waits if the stream is too long to prevent memory overflow.
+ * Shared by ChildScanWorkflow and ChildRetryScanWorkflow.
+ */
+export async function validateCommandStreamLength(jobRunId: string): Promise<void> {
+  let checkCount = 0;
+  const maxChecks = 100;
+
+  while (checkCount < maxChecks) {
+    checkCount++;
+    try {
+      const isCmdStreamLenValid = await isCmdStreamLenValidActivity(jobRunId);
+      if (isCmdStreamLenValid) break;
+      console.warn(`[WARNING] For jobRunId ${jobRunId}, Waiting for command stream to be valid.`);
+      await wf.sleep('30s');
+    } catch (error) {
+      console.error(`[ERROR] Error validating command stream length for jobRunId ${jobRunId}: ${error.message}`);
+    }
+  }
+  if (checkCount >= maxChecks) {
+    console.warn(`[WARNING] For jobRunId ${jobRunId}, Maximum checks reached. Exiting validation loop.`);
   }
 }

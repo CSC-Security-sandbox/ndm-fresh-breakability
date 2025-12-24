@@ -138,9 +138,15 @@ export class JobRunInitService {
   }
 
   // ------------------ Create job run  -------------------- //
-  async createJobRun(jobConfigId: string, currentTime: Date, projectId?: string) {
+  async createJobRun(jobConfigId: string, currentTime: Date, projectId?: string, jobRunId?: string) {
     // TODO: job config is fetched from here
     const details: JobRunConfig = await this.getJobConfig(jobConfigId);
+    
+    // If this is a retry run, set the jobRunId and change jobType to RETRY
+    if (jobRunId) {
+      details.jobRunId = jobRunId;
+      details.jobType = JobType.RETRY;
+    }
 
     // check if source and target paths are flagged as valid
     const source = details.connection?.sourceCredential;
@@ -444,9 +450,20 @@ export class JobRunInitService {
         break;
       }
 
+      case JobType.RETRY: {
+        const startWorkFlowPayload: StartWorkFlowPayload = {
+          workflowId: `${WorkFlows.RETRY}-${jobRunId}`,
+          taskQueue: "ParentWorkflow-TaskQueue",
+          args: [{ traceId: jobRunId, payload: jobRunConfig, options }],
+          options,
+        };
+        await this.workFlowService.startWorkflow(WorkFlows.RETRY, startWorkFlowPayload);
+        break;
+      }
+
       default: {
         const startWorkFlowPayload: StartWorkFlowPayload = {
-          workflowId: WorkFlows.MIGRATE + "-" + jobRunId,
+          workflowId: `${WorkFlows.MIGRATE}-${jobRunId}`,
           taskQueue: "ParentWorkflow-TaskQueue",
           args: [
             { traceId: jobRunId, payload: jobRunConfig, options: options },
@@ -603,6 +620,7 @@ export class JobRunInitService {
         isIdentityMappingAvailable: isIdentityMapping,
       },
       jobRunConfig.skipDelete,
+      jobRunConfig.jobRunId,  // Pass retry job run ID if this is a retry
     );
     const redisProvider = JobContextFactory.getJobManagerProvider("redis", redisClient);
     const jobContext = await redisProvider.buildContext(
@@ -696,13 +714,4 @@ export class JobRunInitService {
     }
   }
 
-  getWorkFlowId(jobRunId: string, jobType: JobType): string {
-    if (jobType === JobType.DISCOVER)
-      return `${WorkFlows.DISCOVERY}-${jobRunId}`;
-    if (jobType === JobType.CUT_OVER)
-      return `${WorkFlows.CUT_OVER}-${jobRunId}`;
-    if (jobType === JobType.PRECHECK)
-      return `${WorkFlows.PRECHECK}-${jobRunId}`;
-    return `${WorkFlows.MIGRATE}-${jobRunId}`;
-  }
 }

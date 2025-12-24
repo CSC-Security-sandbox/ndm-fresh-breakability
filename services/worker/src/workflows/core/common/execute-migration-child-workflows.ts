@@ -1,7 +1,7 @@
 import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
 import { JobRunStatus } from "src/activities/common/enums";
-import { cancelWorkflowIfRunning, signalIfRunning } from './workflow-utils';
+import { cancelWorkflowIfRunning, getUnifiedJobStatus, signalIfRunning } from './workflow-utils';
 
 
 
@@ -124,14 +124,4 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
 
     await updateLastEntryActivity(jobRunId);
     return output
-}
-
-const getUnifiedJobStatus = (scanStatus: JobRunStatus, syncStatus: JobRunStatus): JobRunStatus => {
-    if (scanStatus === JobRunStatus.Failed || syncStatus === JobRunStatus.Failed) {
-        return JobRunStatus.Failed;
-    }
-    if (scanStatus === JobRunStatus.Stopped || syncStatus === JobRunStatus.Stopped) {
-        return JobRunStatus.Stopped;
-    }
-    return JobRunStatus.Completed; 
 }
