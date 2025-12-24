@@ -19,7 +19,9 @@ const {
 
 
 const {
-  fetchRetryBatch: fetchRetryBatchActivity
+  fetchRetryBatch: fetchRetryBatchActivity,
+  fetchFailedOperations: fetchFailedOperationsActivity,
+
 } = wf.proxyActivities<RetryActivityService>({
   startToCloseTimeout: '24h',
   heartbeatTimeout: '2m',

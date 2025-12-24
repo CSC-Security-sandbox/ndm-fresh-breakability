@@ -14,7 +14,7 @@ import {
 } from "src/workflows/core/child/child-retry-scan.workflow.type";
 import { isPathExists } from "../utils/utils";
 import { CommandGenerationService } from "../shared/command-generation.service";
-import { FatalError } from "src/errors/errors.types";
+import { FatalError, RetryableError } from "src/errors/errors.types";
 
 /**
  * Failed operation data from operation_errors table.
@@ -184,7 +184,7 @@ export class RetryActivityService {
    * the parent directory changes.
    */
   private async generateAndPublishCommands(
-    operations: FailedOperation[],
+    batches: string[],
     excludePatterns: string[],
     jobContext: JobManagerContext,
     jobRunId: string
@@ -194,7 +194,13 @@ export class RetryActivityService {
     const skipTime = jobContext.jobConfig.options?.skipsFilesModifiedInLast ?? '';
     const settings = { skipFile: skipTime, excludePatterns };
 
-    // Group operations by parent directory using a Map
+    while(batches.length > 0){
+        const batchId = batches.shift();
+    //TODO: fetch ops based on the batchId
+    const operations: FailedOperation[] = fetchOperationsByBatchId(batchId);
+
+    // Group operations by parent directory using a Map    
+    // TODO: create a method group by parent directory
     const opsByParent = new Map<string, FailedOperation[]>();
     for (const op of operations) {
       const parentPath = path.dirname(op.fPath);
@@ -207,34 +213,45 @@ export class RetryActivityService {
     // Collect all subdirectories to scan
     const allSubDirs: string[] = [];
 
+    const directoryPromises = [];
     // Process each directory group
     for (const [parentPath, ops] of opsByParent) {
       const targetParentPath = path.join(targetPrefix, parentPath);
       const sourceParentPath = path.join(sourcePrefix, parentPath);
-
-      const subDirs = await this.processDirectoryItems(
-        ops.map(op => ({
-          name: path.basename(op.fPath),
-          fPath: op.fPath,
-          originalCommandId: op.id
-        })),
-        sourceParentPath,
-        targetParentPath,
-        sourcePrefix,
-        targetPrefix,
-        jobContext,
-        settings
-      );
-
-      allSubDirs.push(...subDirs);
+      const inputList  =  ops.map(op => ({
+        name: path.basename(op.fPath),
+        fPath: op.fPath,
+        originalCommandId: op.id
+      }));
+      directoryPromises.push( this.processDirectoryItems(
+       inputList,
+       sourceParentPath,
+       targetParentPath,
+       sourcePrefix,
+       targetPrefix,
+       jobContext,
+       settings
+     ));
     }
+    Promise.allSettled(directoryPromises).then((results) => {
+      results.forEach(result => {
+        if (result.status === 'fulfilled') {
+          allSubDirs.push(...result.value);
+        } else {
+          this.logger.error(`Failed to process directory : ${result.reason.message}`, result.reason.stack);
+          throw new RetryableError(result.reason.message);
+        }
+      });
+    }); 
 
     // Recursively scan all discovered subdirectories
     // This handles the case where a directory failed during initial scan
     // and its contents were never discovered
-    if (allSubDirs.length > 0) {
-      await this.scanSubDirectories(allSubDirs, sourcePrefix, targetPrefix, jobContext, settings);
+    
+    while (allSubDirs.length > 100) {
+      batches.push(createBatch(allSubDirs.splice(0,100)));       
     }
+  }
   }
 
   /**
@@ -322,6 +339,7 @@ export class RetryActivityService {
       const cursor = await jobContext.getRetryCursor();
       
       // Step 2: Fetch one batch of failed operations from ORIGINAL job run
+      // TODO: make this an activity with retries configured. If error is 500 or 403, then fail the workflow otherwise retry. 
       const fetchResult = await this.fetchFailedOperations(
         originalJobRunId,
         accessToken,
@@ -333,6 +351,7 @@ export class RetryActivityService {
         return { hasMore: false };
       }
       
+     
       // Get exclude patterns from job config
       const excludePatterns = jobContext.jobConfig.options?.excludeFilePattern
         ? jobContext.jobConfig.options.excludeFilePattern.split(",").map(p => p.trim()).filter(p => p.length > 0)
@@ -340,12 +359,17 @@ export class RetryActivityService {
       
       // Step 3: Generate and publish commands from operations (respecting exclude patterns and SMB validations)
       // Commands are published immediately after each directory batch
+      const batches:string[]  = await this.createBatches(fetchResult.operations);
+
+     
       await this.generateAndPublishCommands(
-        fetchResult.operations,
+        batches,
         excludePatterns,
         jobContext,
         jobRunId
       );
+
+      
    
       const hasMore = fetchResult.nextCursor !== null;
 
@@ -366,6 +390,27 @@ export class RetryActivityService {
       );
       throw new Error(`fetchRetryBatch activity failed: ${error.message}`);
     }
+  }
+
+  private async createBatches(operations: FailedOperation[]): Promise<string[]> {
+    
+    const batches:string[]= [];
+    const opsByParent = new Map<string, FailedOperation[]>();
+    for (const op of operations) {
+      const parentPath = path.dirname(op.fPath);
+      if (!opsByParent.has(parentPath)) {
+        opsByParent.set(parentPath, []);
+      }
+      opsByParent.get(parentPath)!.push(op);
+    }
+    for(const [parentPath, ops] of opsByParent) {
+      const batchId = calculateHash(ops.map(op => op.fPath));
+      jobContext.setBatchDir(batchId, {ops, parentPath});
+      batches.push(batchId);
+    }
+    return batches; 
+    
+    
   }
 
 }

@@ -25,3 +25,4 @@ export interface RunningSyncTaskCollection extends WorkerRunningTaskMapCollectio
 export interface TaskMap extends WorkerRunningTaskMapCollection<any> {}
 export interface DirMap extends WorkerRunningTaskMapCollection<any> {}
 export interface CursorMap extends WorkerRunningTaskMapCollection<any> {}
+export interface RetryBatchMap extends WorkerRunningTaskMapCollection<any> {}
