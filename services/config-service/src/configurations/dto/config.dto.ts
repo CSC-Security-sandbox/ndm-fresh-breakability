@@ -335,6 +335,16 @@ export class IsilonZoneDTO {
     @IsArray()
     @IsString({ each: true })
     ipAddresses: string[];
+
+    @ApiProperty({ description: 'SmartConnect FQDN (e.g., isilon.lab.local)', example: 'isilon.lab.local', required: false })
+    @IsString()
+    @IsOptional()
+    smartConnectFqdn?: string;
+
+    @ApiProperty({ description: 'SmartConnect Service IP (SSIP)', example: '10.192.7.110', required: false })
+    @IsString()
+    @IsOptional()
+    ssip?: string;
 }
 
 /**

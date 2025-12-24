@@ -250,8 +250,11 @@ export const configApi = createApi({
     fetchZones: builder.mutation<
       {
         zones: Array<{
+          zoneId: number;
           zoneName: string;
           ipAddresses: string[];
+          smartConnectFqdn?: string;
+          ssip?: string;
         }>;
         totalZones: number;
         totalIpAddresses: number;
