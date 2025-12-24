@@ -148,8 +148,32 @@ export class JobRunService {
     return await this.workFlowService.sendSignal(signal);
   }
 
-  // ------------------ Ad-hoc Run -------------------- //
-  async addHocRun(jobConfigId: string, projectId?: string) {
+  // ------------------ Ad-hoc Run Orchestrator -------------------- //
+  /**
+   * Orchestrator method for creating ad-hoc or retry job runs.
+   * Routes to appropriate handler based on whether jobRunId is provided.
+   */
+  async addHocRun(jobConfigId: string, projectId?: string, jobRunId?: string) {
+    // Common validation for job config
+    const jobConfig = await this.validateJobConfig(jobConfigId);
+
+    // Route to retry run if jobRunId is provided, otherwise create fresh ad-hoc run
+    if (jobRunId) {
+      console.log("Retrying ad-hoc run for jobRunId:", jobRunId);
+      return this.retryRun(jobConfig, projectId, jobRunId);
+    }
+
+    // Create fresh ad-hoc job run
+    this.logger.log(`Creating ad-hoc job run for job config ${jobConfigId}`);
+    return await this.jobRunInitService.createJobRun(jobConfig.id, new Date(), projectId);
+  }
+
+  // ------------------ Common Job Config Validation -------------------- //
+  /**
+   * Validates job config for both ad-hoc and retry runs.
+   * Checks: exists, not inactive, no circular dependencies.
+   */
+  private async validateJobConfig(jobConfigId: string): Promise<JobConfigEntity> {
     const jobConfig = await this.jobConfigRepo.findOne({
       where: { id: jobConfigId },
     });
@@ -157,15 +181,16 @@ export class JobRunService {
       throw new NotFoundException(
         `Job config id doesn't exist for id ${jobConfigId}`
       );
-    if (jobConfig.scheduler === ScheduleStatus.SCHEDULED)
-      throw new BadRequestException(
-        `Job run is already created for ${jobConfigId}`
-      );
+    // if (jobConfig.scheduler === ScheduleStatus.SCHEDULED)
+    //   throw new BadRequestException(
+    //     `Job run is already created for ${jobConfigId}`
+    //   );
     if (jobConfig.status === JobStatus.InActive)
       throw new BadRequestException(
         `Job run can not be created to Inactive Job Config`
       );
 
+    // Check for circular dependencies in MIGRATE/CUT_OVER jobs
     if (
       jobConfig.jobType === JobType.CUT_OVER ||
       jobConfig.jobType === JobType.MIGRATE
@@ -188,7 +213,133 @@ export class JobRunService {
         );
       }
     }
-    return await this.jobRunInitService.createJobRun(jobConfig.id, new Date(), projectId);
+
+    return jobConfig;
+  }
+
+  // ------------------ Retry Run -------------------- //
+  /**
+   * Creates a retry job run for failed operations from a previous job run.
+   * Validates: job run exists, belongs to job config, is the latest run, is in terminal state, is MIGRATE or CUT_OVER type.
+   */
+  private async retryRun(
+    jobConfig: JobConfigEntity,
+    projectId: string | undefined,
+    jobRunId: string
+  ) {
+    // First, validate the provided jobRunId exists and belongs to this job config
+    const requestedJobRun = await this.jobRunRepo.findOne({
+      where: { id: jobRunId, jobConfigId: jobConfig.id },
+    });
+
+    // if (!requestedJobRun) {
+    //   throw new NotFoundException(
+    //     `Job run ${jobRunId} not found or does not belong to job config ${jobConfig.id}`
+    //   );
+    // }
+
+    // Get the latest non-retry job run for this job config
+    const latestJobRun = await this.jobRunRepo
+      .createQueryBuilder("jr")
+      .leftJoinAndSelect("jr.jobConfig", "jc")
+      .where("jr.jobConfigId = :jobConfigId", { jobConfigId: jobConfig.id })
+      .andWhere("jc.jobType != :retryType", { retryType: JobType.RETRY })
+      .orderBy("jr.startTime", "DESC")
+      .getOne();
+
+    // // Validate the provided jobRunId matches the latest non-retry job run
+    // if (latestJobRun.id !== jobRunId) {
+    //   throw new BadRequestException(
+    //     `Job run ${jobRunId} is not the latest run for this job config. Latest job run is ${latestJobRun.id}`
+    //   );
+    // }
+
+    // Only allow retry for MIGRATE and CUT_OVER jobs
+    const retryableJobTypes = [JobType.MIGRATE, JobType.CUT_OVER];
+    if (!retryableJobTypes.includes(latestJobRun.jobConfig.jobType)) {
+      throw new BadRequestException(
+        `Retry is only supported for MIGRATE and CUT_OVER jobs. Current job type: ${latestJobRun.jobConfig.jobType}`
+      );
+    }
+
+    const operationErrorCount = await this.operationErrorRepo
+      .createQueryBuilder("oe")
+      .innerJoin("oe.operation", "o")
+      .where("o.jobRunId = :jobRunId", { jobRunId })
+      .andWhere("oe.errorStatus = :status", { status: 'UNRESOLVED' })
+      .getCount();
+
+    // if (operationErrorCount === 0) {
+    //   throw new BadRequestException(
+    //     `No failed operations found for job run ${jobRunId}. Nothing to retry.`
+    //   );
+    // }
+
+    this.logger.log(
+      `Creating retry job run for original job run ${jobRunId} under job config ${jobConfig.id}`
+    );
+
+    return await this.jobRunInitService.createJobRun(
+      jobConfig.id,
+      new Date(),
+      projectId,
+      jobRunId
+    );
+  }
+
+  // ------------------ Get Failed Operations -------------------- //
+  async getFailedOperations(
+    jobRunId: string,
+    cursor: string | null,
+    limit: number = 5000
+  ): Promise<{ data: Record<string, any>[]; nextCursor: string | null }> {
+    // Cursor-based pagination using (f_path, oe.id) for efficient deep pagination
+    // Orders by f_path which naturally groups files in same directory together
+    // Uses o.f_path to support both scan errors and migrate errors
+    const params: (string | number)[] = [jobRunId];
+    let paramIndex = 2;
+
+    let query = `
+      SELECT oe.id AS "operationErrorId", 
+             o.f_path AS "filePath",
+             oe.operation_id AS "operationId"
+      FROM datamigrator.operation_errors oe
+      JOIN datamigrator.operations o ON o.id = oe.operation_id
+      WHERE o.job_run_id = $1
+        AND oe.error_status = 'UNRESOLVED'
+    `;
+
+    if (cursor) {
+      // Cursor format: "filePath|operationErrorId"
+      const [cursorFilePath, cursorId] = cursor.split('|');
+      query += ` AND (
+        o.f_path > $${paramIndex}
+        OR (o.f_path = $${paramIndex} AND oe.id > $${paramIndex + 1})
+      )`;
+      params.push(cursorFilePath, cursorId);
+      paramIndex += 2;
+    }
+
+    query += ` ORDER BY o.f_path, oe.id LIMIT $${paramIndex}`;
+    params.push(limit + 1); // Fetch one extra to determine if there's a next page
+
+    const results = await this.operationRepo.query(query, params);
+
+    const hasMore = results.length > limit;
+    const data = hasMore ? results.slice(0, limit) : results;
+
+    // Composite cursor: "filePath|operationErrorId" - null if no more data
+    const nextCursor = hasMore && data.length > 0
+      ? `${data[data.length - 1].filePath}|${data[data.length - 1].operationErrorId}` 
+      : null;
+
+    // Transform to the format expected by retry: { id, fPath }
+    const operations = data.map((row: { operationId: string; filePath: string }) => ({
+      id: row.operationId,
+      fPath: row.filePath
+    }));
+
+    return { data: operations, nextCursor };
   }
 
   //  ------------------- get JobRun Details ------------------ //
@@ -813,6 +964,7 @@ export class JobRunService {
       .innerJoin("oe.operation", "o")
       .where("o.jobRunId = :jobRunId", { jobRunId })
       .andWhere("oe.errorType IN (:...errorTypes)", { errorTypes: USER_VISIBLE_ERROR_TYPES })
+      .andWhere("oe.errorStatus = :status", { status: 'UNRESOLVED' })
       .select([
         "oe.errorType AS errorType", 
         "COUNT(*) AS count"

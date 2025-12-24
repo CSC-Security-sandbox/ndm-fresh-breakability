@@ -43,6 +43,9 @@ export class OperationErrorEntity {
   @Column({ type: "text", name: 'error_type' })
   errorType: string;
 
+  @Column({ type: "varchar", length: 20, name: 'error_status', default: "'UNRESOLVED'" })
+  errorStatus: string;
+
   @ManyToOne(() => OperationsEntity, (operation) => operation.operationErrors, { onDelete: "CASCADE" })
   @JoinColumn({ name: 'operation_id' })
   operation: OperationsEntity;

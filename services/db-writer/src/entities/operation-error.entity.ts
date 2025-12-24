@@ -40,6 +40,9 @@ export class OperationErrorEntity {
   @Column({ type: "text", name: 'origin' })
   origin: string;
 
+  @Column({ type: "varchar", length: 20, name: 'error_status', default: "'UNRESOLVED'" })
+  errorStatus: string;
+
   @OneToOne(() => OperationsEntity, (operation) => operation.operationErrors, { onDelete: "CASCADE" })
   operation: OperationsEntity;
 }

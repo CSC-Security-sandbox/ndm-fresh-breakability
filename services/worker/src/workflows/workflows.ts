@@ -23,10 +23,12 @@ export { RedisMemoryCheckWorkflow } from '../workflows/redis/redis.memorycheck.w
 
 export { ChildScanWorkflow } from './core/child/child-scan.workflow';
 export { ChildSyncWorkflow } from './core/child/child-sync.workflow';
+export { ChildRetryScanWorkflow } from './core/child/child-retry-scan.workflow';
 
 export { waitForApproval } from './core/common/waiting-approval';
 export { CutOverWorkFlow } from './core/parent/cutover-parent-workflow';
 export { MigrationWorkflow } from './core/parent/migration-parent-workflow';
+export { RetryMigrationWorkflow } from './core/parent/retry-migration-parent-workflow';
 
 export { ValidatePathWorkerWorkflow } from './validate-path/validate-path-worker-workflow';
 export { ValidatePathsWorkflow } from './validate-path/validate-path-workflow';

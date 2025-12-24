@@ -1,4 +1,4 @@
-import { DirMap, TaskMap } from "src/redis/hmap-collection";
+import { DirMap, TaskMap, CursorMap } from "src/redis/hmap-collection";
 import { Cmd, ItemInfo, TaskInfo } from "../../datatype/stream-datatypes";
 import { GroupReaderType } from "../enums";
 import { JobConfig } from "../job-config";
@@ -18,6 +18,7 @@ export  class JobManagerContext {
     taskStream: TaskInfoCollection;
     taskMap: TaskMap;
     dirBatchMap: DirMap;
+    cursorMap: CursorMap;
 
     constructor(jobRunId: string, jobConfig?: JobConfig, jobRunStatus?: string) {
         this.jobRunId = jobRunId;
@@ -131,6 +132,22 @@ export  class JobManagerContext {
 
     async deleteBatchDir(key: string): Promise<void> {
         await this.dirBatchMap.deleteValue(key);
+    }
+
+    /**
+     * Gets the current retry cursor.
+     * Returns empty string if no cursor has been set.
+     */
+    async getRetryCursor(): Promise<string> {
+        return await this.cursorMap.getValue('retryCursor') || '';
+    }
+
+    /**
+     * Sets the retry cursor for pagination checkpoint.
+     * @param cursor - The cursor value to save
+     */
+    async setRetryCursor(cursor: string): Promise<void> {
+        await this.cursorMap.setValue('retryCursor', cursor);
     }
     
     serialize(): string {

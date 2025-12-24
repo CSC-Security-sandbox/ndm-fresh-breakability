@@ -40,6 +40,7 @@ export enum JobType {
   MIGRATE = "MIGRATE",
   CUT_OVER = "CUT_OVER",
   PRECHECK = "PRECHECK",
+  RETRY = "RETRY",
 }
 
 export enum JobIdMappingType {
@@ -98,6 +99,11 @@ export enum OperationStatus {
   COMPLETED = "COMPLETED",
 }
 
+export enum ErrorStatus {
+  UNRESOLVED = "UNRESOLVED",
+  RESOLVED = "RESOLVED",
+}
+
 export enum OperationType {
   SCAN = "SCAN",
 }
@@ -118,6 +124,7 @@ export enum WorkFlows {
   SPEED_TEST = "SpeedTestWorkflow",
   PRECHECK = "PreCheckValidationWorkflow",
   MIGRATE = "MigrationWorkflow",
+  RETRY = "RetryMigrationWorkflow",
   CUT_OVER = "CutOverWorkFlow",
 }
 

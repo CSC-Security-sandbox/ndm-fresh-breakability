@@ -3,7 +3,7 @@ import { CommonActivityService } from "src/activities/common/common.service";
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 import { ScanService } from 'src/activities/core/scan/scan-activity.service';
 import { JobRunStatus } from "src/activities/common/enums";
-import { updateJobStatusIfNotRunning } from '../common/workflow-utils';
+import { updateJobStatusIfNotRunning, validateCommandStreamLength } from '../common/workflow-utils';
 import { ChildScanWorkflowInput, ChildScanWorkflowOutput, ExecuteBatchScanInput, ExecuteBatchScansOutput } from './chid-scan.workflow.type';
 import { MappingResolverService } from 'src/activities/core/initializer/mapping-resolver.service';
 import { SetupExportsPathPermissionService } from 'src/activities/core/initializer/setup-exports-path-permission.service';
@@ -22,20 +22,6 @@ const {
 const {
   createInitialDirBatch: createInitialDirBatchActivity,
 } = wf.proxyActivities<CommonTaskService>({ startToCloseTimeout: '10m' });
-
-
-const {  
-  isCmdStreamLenValid: isCmdStreamLenValidActivity,
-} = wf.proxyActivities<CommonTaskService>({ 
-  startToCloseTimeout: '5m' ,
-   retry: {
-    maximumAttempts: 3,       // Retry up to 3 times if it fails
-    initialInterval: '2s',    // Start with 2 second delay
-    backoffCoefficient: 2.0,  // Double the delay each retry
-    maximumInterval: '30s',   // Cap retry delay at 30 seconds
-    nonRetryableErrorTypes: ['ApplicationFailure'] // Don't retry certain errors
-  }  
-});
 
 const {
     scanDirectories: scanDirectories,
@@ -145,26 +131,6 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
   }
   
   return  scanWorkflowOutput;
-}
-
-async function validateCommandStreamLength(jobRunId: string): Promise<void> {
-  let checkCount = 0;
-  const maxChecks = 100;
-
-   while(checkCount < maxChecks){
-      checkCount++;
-      try{
-        const isCmdStreamLenValid = await isCmdStreamLenValidActivity(jobRunId);
-        if(isCmdStreamLenValid) break;        
-        console.warn(`[WARNING] For jobRunId ${jobRunId}, Waiting for stream to be valid.`);                          
-        await wf.sleep('30s'); // wait before checking again        
-      }catch(error){
-        console.error(`[ERROR] Error validating command stream length for jobRunId ${jobRunId}: ${error.message}`);       
-      }      
-    }
-    if (checkCount >= maxChecks) {
-      console.warn(`[WARNING] For jobRunId ${jobRunId}, Maximum checks reached. Exiting validation loop.`);
-    }
 }
 
 export const executeBatchScan = async ({ batchSize, batches, isMigration, jobRunId}: ExecuteBatchScanInput): Promise<ExecuteBatchScansOutput> => {
