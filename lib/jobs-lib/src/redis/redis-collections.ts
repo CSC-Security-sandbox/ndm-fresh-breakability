@@ -78,6 +78,7 @@ export class RedisTaskCollection
   }
 }
 
+
 export class RedisDirectoryCollection
   extends RedisStreamCollection<FileInfo>
   implements DirectoryCollection

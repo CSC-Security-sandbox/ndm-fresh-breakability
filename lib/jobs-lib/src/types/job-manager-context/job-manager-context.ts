@@ -19,7 +19,7 @@ export  class JobManagerContext {
     taskMap: TaskMap;
     dirBatchMap: DirMap;
     cursorMap: CursorMap;
-
+    retryBatches: RetryBatchMap;
     constructor(jobRunId: string, jobConfig?: JobConfig, jobRunStatus?: string) {
         this.jobRunId = jobRunId;
         if (jobConfig)

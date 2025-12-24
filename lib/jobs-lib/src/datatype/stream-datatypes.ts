@@ -168,3 +168,28 @@ export class TaskInfo implements Serializable{
         return JSON.parse(serialized);
     }
 }
+
+export calss FailedOperations implements Serializable{
+    id: string;
+    fPath: string;
+    constructor(id: string, fPath: string) {
+        this.id = id;
+        this.fPath = fPath;
+    }
+    
+
+}
+
+export class RetryBatchInfo implements Serializable{
+    batchId: string;
+    operations: FailedOperation[];
+    parentPath: string
+    constructor(batchId: string, operations: FailedOperation[]) {
+        this.batchId = batchId;
+        this.operations = operations;
+    }
+    serialize(): string {
+        return JSON.stringify(this);
+    }
+}
+

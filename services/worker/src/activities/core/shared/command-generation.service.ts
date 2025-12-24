@@ -144,7 +144,7 @@ export class CommandGenerationService {
           // For retry items (has originalCommandId), create a resolved command
           // this handles cases where source was deleted after failure since it is deleted we mark as resolved
           if (itemData.originalCommandId) {
-            const resolvedCommand = this.buildResolvedCommand(relativePath, itemData.isDir || false, itemData.originalCommandId);
+            const resolvedCommand: Cmd = this.buildResolvedCommand(relativePath, itemData.isDir || false, itemData.originalCommandId);
             result.commands.push(resolvedCommand);
           }
           continue;
@@ -164,34 +164,14 @@ export class CommandGenerationService {
             ? new Date(jobContext.jobConfig.options.excludeOlderThan) 
             : undefined,
           jobType: jobContext.jobConfig.jobType
-        })) continue;
+        })) {
+            // TODO: resolve the error if it matches 
+        }
 
         // SMB-specific validations
         if (isSMB) {
-          const errorOpId = command?.id || '';
-          const hasConflict = await this.checkAndPublishCaseConflictError(
-            jobContext.jobConfig.jobType,
-            itemName,
-            lowerCaseSourceData!,
-            relativeSourcePath,
-            sourceContentPath,
-            errorOpId,
-            jobContext,
-            lowerCaseTargetData,
-            targetContent,
-            sourceStat.isDirectory()
-          );
-          if (hasConflict) continue;
-
-          const hasTrailingSpace = await this.checkAndPublishTrailingSpaceError(
-            itemName,
-            relativeSourcePath,
-            sourceContentPath,
-            errorOpId,
-            jobContext,
-            errorType
-          );
-          if (hasTrailingSpace) continue;
+           const hasSMBError:boolean =  await this.SMBSpecificChecks(jobContext, command, itemName, lowerCaseSourceData!, relativeSourcePath, sourceContentPath, lowerCaseTargetData, targetContent, sourceStat.isDirectory(), errorType);
+          if (hasSMBError) continue;
         }
 
         // Get file info and detect file type
@@ -282,6 +262,34 @@ export class CommandGenerationService {
     return result;
   }
 
+  private async SMBSpecificChecks(jobContext: JobManagerContext, command: Cmd, itemName: string, lowerCaseSourceData: Set<string>, relativeSourcePath: string, sourceContentPath: string, lowerCaseTargetData ,  targetContent ,  isDirectory: boolean, errorType: ErrorType): Promise<boolean> {
+    const errorOpId = command?.id || '';
+    const hasConflict = await this.checkAndPublishCaseConflictError(
+      jobContext.jobConfig.jobType,
+      itemName,
+      lowerCaseSourceData!,
+      relativeSourcePath,
+      sourceContentPath,
+      errorOpId,
+      jobContext,
+      lowerCaseTargetData,
+      targetContent,
+      isDirectory
+    );
+    if (hasConflict) return true;
+
+    const hasTrailingSpace = await this.checkAndPublishTrailingSpaceError(
+      itemName,
+      relativeSourcePath,
+      sourceContentPath,
+      errorOpId,
+      jobContext,
+      errorType
+    );
+    if (hasTrailingSpace) return true;
+
+    return false;
+  }
   /**
    * Checks if filename has trailing spaces/tabs and publishes error if so.
    */
