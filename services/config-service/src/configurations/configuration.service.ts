@@ -1546,12 +1546,20 @@ export class ConfigurationService {
       // Discover exports via Isilon REST API (zone-aware)
       const discoveredPathsMap = await this.discoverIsilonExportsForFileServers(config, fileServersToRefresh, traceId);
 
+      // For Dell Isilon, set reachableCount = 1 since exports are discovered via REST API
+      // (no worker workflow, so we assume reachable if API returns the export)
+      const dellPathsMap: PathsMap = {
+        NFS: { workers: 1, paths: [] },
+        SMB: { workers: 1, paths: [] },
+      };
+
       // Sync volumes (create new, keep existing, mark removed as deleted)
       await this.syncVolumesForFileServers(
         fileServersToRefresh,
         discoveredPathsMap,
         config.createdBy,
         config.updatedBy,
+        dellPathsMap, // Pass pathsMap so reachableCount = 1 for Dell
       );
 
       // Update scan timestamp
