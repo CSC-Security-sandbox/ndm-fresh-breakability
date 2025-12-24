@@ -83,16 +83,33 @@ const IsilonCredentials = () => {
         console.debug("[IsilonCredentials] Zones API response:", response);
 
         // Transform API response to ZoneData format
-        // Each zone has zoneId (numeric), zoneName and ipAddresses[]
-        const transformedZones: ZoneData[] = (response?.zones || []).map((zone: any) => ({
-          id: zone.zoneName, // Use zoneName as string ID for selection/keying
-          numericId: zone.zoneId || 1, // Numeric zone ID from Isilon API
-          name: zone.zoneName,
-          ipList: (zone.ipAddresses || []).map((ip: string) => ({
-            label: ip,
-            value: ip,
-          })),
-        }));
+        // Each zone has zoneId (numeric), zoneName, ipAddresses[], smartConnectFqdn, ssip
+        const transformedZones: ZoneData[] = (response?.zones || []).map((zone: any) => {
+          const smartConnectFqdn = zone.smartConnectFqdn;
+          const ssip = zone.ssip;
+          
+          // Build IP list with SmartConnect FQDN formatted as "fqdn(ssip)"
+          const ipList = (zone.ipAddresses || []).map((ip: string) => {
+            // If this IP is the FQDN, format label with SSIP
+            if (ip === smartConnectFqdn && ssip) {
+              return {
+                label: `${ip}(${ssip})`,  // e.g., "isilon.lab.local(10.192.7.110)"
+                value: ip,                 // Value is just the FQDN for mounting
+              };
+            }
+            return {
+              label: ip,
+              value: ip,
+            };
+          });
+          
+          return {
+            id: zone.zoneName,
+            numericId: zone.zoneId || 1,
+            name: zone.zoneName,
+            ipList,
+          };
+        });
 
         console.debug("[IsilonCredentials] Transformed zones:", transformedZones);
         setZones(transformedZones);
