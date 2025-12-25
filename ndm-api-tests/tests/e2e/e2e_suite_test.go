@@ -68,30 +68,3 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	LogDebug(fmt.Sprintf("[All Processes] Received shared project: %s (ID: %s) with %d workers",
 		GlobalProjectName, GlobalProjectId, len(GlobalAttachedWorkersConfig)))
 })
-
-// SynchronizedAfterSuite ensures cleanup happens after all parallel nodes finish.
-// It has 2 functions:
-// 1. First function: Runs on ALL parallel processes when they finish
-// 2. Second function: Runs ONLY on Process #1 after all others complete
-//    - This is where we stop and detach workers
-//    - Mirrors the SynchronizedBeforeSuite pattern
-var _ = SynchronizedAfterSuite(func() {
-	// This runs on ALL processes after their tests complete
-	By("Process cleanup complete")
-}, func() {
-	// This runs ONLY on Process #1 after all other processes finish
-	By("Cleaning up global test environment (Process #1)")
-	
-	if len(GlobalAttachedWorkersConfig) > 0 {
-		LogDebug("Stopping and detaching workers")
-		err := StopAllWorkersAndWait()
-		if err != nil {
-			LogError("Failed to stop workers", err)
-		}
-		err = CleanupTestEnv()
-		if err != nil {
-			LogError("Failed to cleanup test environment", err)
-		}
-		LogDebug("E2E suite cleanup complete")
-	}
-})

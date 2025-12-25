@@ -152,24 +152,12 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 
 		AfterEach(func() {
 			By("Cleanup started")
-			// Note: This is redundant with DeferCleanup in BeforeEach, but provides defense in depth
-			err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
-			if err != nil {
-				LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
-			}
-
-			// Cleanup workers and project created by SetupTestEnv
-			By("Stopping workers")
-			err = StopAllWorkersAndWait()
-			if err != nil {
-				LogError(fmt.Sprintf("Failed to stop workers: %v", err))
-			}
-
-			err = CleanupTestEnv()
-			if err != nil {
-				LogError(fmt.Sprintf("Failed to cleanup test environment: %v", err))
-			}
-		})
+		// Note: This is redundant with DeferCleanup in BeforeEach, but provides defense in depth
+		err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+		if err != nil {
+			LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
+		}
 
 	})
+
 })
