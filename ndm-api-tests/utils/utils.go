@@ -324,8 +324,8 @@ func ResetUserPassword(userID, accessToken, newPassword string) error {
 
 		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
 			isResetPasswdDone = true
-			fmt.Printf("Password reset successful for user %s, new password: %s\n", userID, PASSWORD)
-			LogDebug(fmt.Sprintf("Password reset successful for user %s, new password: %s", userID, PASSWORD))
+			// fmt.Printf("Password reset successful for user %s, new password: %s\n", userID, PASSWORD)
+			// LogDebug(fmt.Sprintf("Password reset successful for user %s, new password: %s", userID, PASSWORD))
 			break
 		}
 
@@ -336,7 +336,7 @@ func ResetUserPassword(userID, accessToken, newPassword string) error {
 		return errors.New("failed to reset-password even after 10 attempts")
 	}
 
-	LogDebug(fmt.Sprintf("Password reset completed for user %s, password: %s", userID, PASSWORD))
+	// LogDebug(fmt.Sprintf("Password reset completed for user %s, password: %s", userID, PASSWORD))
 	return nil
 }
 

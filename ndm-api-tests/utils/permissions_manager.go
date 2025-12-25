@@ -97,30 +97,32 @@ func createSMBFilesWithDefaultPermissionsScript(export string) string {
 	split := strings.Split(export, ":")
 	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
 
-	localTestDir := `C:\permissions_test`
 	testDir := `permissions_test`
 	mappedDrive := `Z:`
-	share := fmt.Sprintf(`%s\%s`, smbShare, testDir)
+	share := fmt.Sprintf(`%s\%s`, mappedDrive, testDir)
 
 	var parts []string
 	parts = append(parts, `cmd /C`)
-	parts = append(parts, fmt.Sprintf(`if exist %s rmdir /s /q %s &&`, localTestDir, localTestDir))
-	parts = append(parts, fmt.Sprintf(`mkdir %s &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`mkdir %s\subdir1 &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`mkdir %s\subdir2 &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`echo This is a test file with default permissions > %s\file1.txt &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`echo This is another test file with default permissions > %s\file2.txt &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`echo This is a third test file with default permissions > %s\file3.txt &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`echo This is a subdirectory file 1 > %s\subdir1\subfile1.txt &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`echo This is a subdirectory file 2 > %s\subdir2\subfile2.txt &&`, localTestDir))
+	// Map SMB share
 	parts = append(parts, fmt.Sprintf(`net use %s /delete /y >nul 2>&1 &`, mappedDrive))
 	parts = append(parts, fmt.Sprintf(`net use %s %s /user:%s "%s" &&`, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD))
-	parts = append(parts, fmt.Sprintf(`(if exist %s\ ( rmdir /s /q %s ) else ( echo "permissions_test not found" )) &`, share, share))
-	parts = append(parts, fmt.Sprintf(`xcopy /E /I /Y %s %s &&`, localTestDir, share))
+	// Clean up existing permissions_test directory if it exists
+	parts = append(parts, fmt.Sprintf(`(if exist %s ( rmdir /s /q %s ) else ( echo "permissions_test not found" )) &`, share, share))
+	// Create directories DIRECTLY on SMB share (not local copy)
+	parts = append(parts, fmt.Sprintf(`mkdir %s &&`, share))
+	parts = append(parts, fmt.Sprintf(`mkdir %s\subdir1 &&`, share))
+	parts = append(parts, fmt.Sprintf(`mkdir %s\subdir2 &&`, share))
+	// Create files DIRECTLY on SMB share (inherits share's default ACLs)
+	parts = append(parts, fmt.Sprintf(`echo This is a test file with default permissions > %s\file1.txt &&`, share))
+	parts = append(parts, fmt.Sprintf(`echo This is another test file with default permissions > %s\file2.txt &&`, share))
+	parts = append(parts, fmt.Sprintf(`echo This is a third test file with default permissions > %s\file3.txt &&`, share))
+	parts = append(parts, fmt.Sprintf(`echo This is a subdirectory file 1 > %s\subdir1\subfile1.txt &&`, share))
+	parts = append(parts, fmt.Sprintf(`echo This is a subdirectory file 2 > %s\subdir2\subfile2.txt &&`, share))
+	// Verify files created
 	parts = append(parts, `echo Verifying files created on SMB share... &&`)
 	parts = append(parts, fmt.Sprintf(`dir %s /s /b &&`, share))
-	parts = append(parts, fmt.Sprintf(`net use %s /delete /y &&`, mappedDrive))
-	parts = append(parts, fmt.Sprintf(`rmdir /s /q %s`, localTestDir))
+	// Unmap drive
+	parts = append(parts, fmt.Sprintf(`net use %s /delete /y`, mappedDrive))
 
 	return strings.Join(parts, " ")
 }
@@ -190,11 +192,9 @@ if (Test-Path "%s") {
             $acl = Get-Acl $path
             $isDir = (Get-Item $path) -is [System.IO.DirectoryInfo]
             
-            $obj = [PSCustomObject]@{
-                Path = $path
-                Owner = $acl.Owner
-                IsDirectory = $isDir
-                Access = @($acl.Access | ForEach-Object {
+            $accessList = @()
+            if ($acl.Access -ne $null) {
+                $accessList = @($acl.Access | ForEach-Object {
                     [PSCustomObject]@{
                         Principal = $_.IdentityReference.Value
                         Rights = $_.FileSystemRights.ToString()
@@ -204,6 +204,13 @@ if (Test-Path "%s") {
                         PropagationFlags = $_.PropagationFlags.ToString()
                     }
                 })
+            }
+            
+            $obj = [PSCustomObject]@{
+                Path = $path
+                Owner = $acl.Owner
+                IsDirectory = $isDir
+                Access = $accessList
             }
             $results += $obj
         }
@@ -899,11 +906,9 @@ foreach ($path in $paths) {
         $acl = Get-Acl $path
         $isDir = (Get-Item $path) -is [System.IO.DirectoryInfo]
         
-        $obj = [PSCustomObject]@{
-            Path = $path
-            Owner = $acl.Owner
-            IsDirectory = $isDir
-            Access = @($acl.Access | ForEach-Object {
+        $accessList = @()
+        if ($acl.Access -ne $null) {
+            $accessList = @($acl.Access | ForEach-Object {
                 [PSCustomObject]@{
                     Principal = $_.IdentityReference.Value
                     Rights = $_.FileSystemRights.ToString()
@@ -913,6 +918,13 @@ foreach ($path in $paths) {
                     PropagationFlags = $_.PropagationFlags.ToString()
                 }
             })
+        }
+        
+        $obj = [PSCustomObject]@{
+            Path = $path
+            Owner = $acl.Owner
+            IsDirectory = $isDir
+            Access = $accessList
         }
         $results += $obj
     }
@@ -1184,11 +1196,9 @@ if (Test-Path "%s") {
             $acl = Get-Acl $path
             $isDir = (Get-Item $path) -is [System.IO.DirectoryInfo]
             
-            $obj = [PSCustomObject]@{
-                Path = $path
-                Owner = $acl.Owner
-                IsDirectory = $isDir
-                Access = @($acl.Access | ForEach-Object {
+            $accessList = @()
+            if ($acl.Access -ne $null) {
+                $accessList = @($acl.Access | ForEach-Object {
                     [PSCustomObject]@{
                         Principal = $_.IdentityReference.Value
                         Rights = $_.FileSystemRights.ToString()
@@ -1198,6 +1208,13 @@ if (Test-Path "%s") {
                         PropagationFlags = $_.PropagationFlags.ToString()
                     }
                 })
+            }
+            
+            $obj = [PSCustomObject]@{
+                Path = $path
+                Owner = $acl.Owner
+                IsDirectory = $isDir
+                Access = $accessList
             }
             $results += $obj
         }
@@ -2213,11 +2230,9 @@ if (Test-Path "%s") {
             $acl = Get-Acl $path
             $isDir = (Get-Item $path) -is [System.IO.DirectoryInfo]
             
-            $obj = [PSCustomObject]@{
-                Path = $path
-                Owner = $acl.Owner
-                IsDirectory = $isDir
-                Access = @($acl.Access | ForEach-Object {
+            $accessList = @()
+            if ($acl.Access -ne $null) {
+                $accessList = @($acl.Access | ForEach-Object {
                     [PSCustomObject]@{
                         Principal = $_.IdentityReference.Value
                         Rights = $_.FileSystemRights.ToString()
@@ -2227,6 +2242,13 @@ if (Test-Path "%s") {
                         PropagationFlags = $_.PropagationFlags.ToString()
                     }
                 })
+            }
+            
+            $obj = [PSCustomObject]@{
+                Path = $path
+                Owner = $acl.Owner
+                IsDirectory = $isDir
+                Access = $accessList
             }
             $results += $obj
         }

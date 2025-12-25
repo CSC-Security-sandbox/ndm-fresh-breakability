@@ -219,10 +219,14 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 
 			// 2) Addition sync: add delta data and wait for incremental run
 			By("Step 1: Adding Delta Data for Incremental run (Addition Sync)")
-			err = AddDataToVolume(sourceVolumePath1)
+			deltaFolder1, err := AddDataToVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
-			err = AddDataToVolume(sourceVolumePath2)
+			deltaFolder2, err := AddDataToVolume(sourceVolumePath2)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
+
+			// Update volume replacement maps to include dynamic delta folder names
+			volumeReplacementMaps[0]["delta"] = deltaFolder1
+			volumeReplacementMaps[1]["delta"] = deltaFolder2
 
 			LogDebug("Waiting till new Jobs run created")
 			Wait(300)
@@ -288,9 +292,9 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 
 			// 3) Deletion sync: remove delta and wait for incremental run
 			By("Step 3: Removing Delta Data for Deletion Sync (Incremental run)")
-			err = RemoveDeltaFromVolume(sourceVolumePath1)
+			err = RemoveDeltaFromVolume(sourceVolumePath1, deltaFolder1)
 			Expect(err).NotTo(HaveOccurred(), "Error removing delta data files from %s", sourceVolumePath1)
-			err = RemoveDeltaFromVolume(sourceVolumePath2)
+			err = RemoveDeltaFromVolume(sourceVolumePath2, deltaFolder2)
 			Expect(err).NotTo(HaveOccurred(), "Error removing delta data files from %s", sourceVolumePath2)
 
 			LogDebug("Waiting till new Jobs run created for deletion sync")
@@ -407,7 +411,7 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 		AfterEach(func() {
 			testEndTime := time.Now()
 			testDuration := testEndTime.Sub(testStartTime)
-			
+
 			By("Cleanup started")
 			// Note: This is redundant with DeferCleanup in BeforeEach, but provides defense in depth
 			err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)

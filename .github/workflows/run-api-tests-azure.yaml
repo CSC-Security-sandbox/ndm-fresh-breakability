@@ -210,8 +210,24 @@ jobs:
       - name: Install sshpass
         run: |
           echo "Installing sshpass..."
-          sudo apt-get update -qq
-          sudo apt-get install -y sshpass
+          
+          # Wait for apt locks to be released (max 5 minutes)
+          for i in {1..60}; do
+            if sudo apt-get update -qq 2>/dev/null; then
+              break
+            fi
+            echo "Waiting for apt locks... (attempt $i/60)"
+            sleep 5
+          done
+          
+          # Install sshpass with retry
+          sudo apt-get install -y sshpass || {
+            echo "First attempt failed, retrying after cleanup..."
+            sudo pkill -9 unattended-upgrade 2>/dev/null || true
+            sleep 5
+            sudo apt-get install -y sshpass
+          }
+          
           echo "sshpass installed successfully."
 
       - name: Download Windows installer

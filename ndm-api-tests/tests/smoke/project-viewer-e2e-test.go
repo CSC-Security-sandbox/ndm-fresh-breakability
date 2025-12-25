@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -26,10 +27,13 @@ var _ = Describe("Project Viewer Discovery Migration Cutover Test", func() {
 
     BeforeEach(func() {
 		headers = GetHeaders(AuthToken, ContentTypeJSON)
-        ProjectID, projectName, err := CreateProject(AuthToken, AccountId)
+        
+        // Use global shared project instead of creating new one per test
+        var projectName string
+        var err error
+        projectId, projectName, _, err = GetGlobalTestEnv()
         _ = projectName
-		Expect(err).To(BeNil(), "Error creating project")
-        projectId = ProjectID
+		Expect(err).To(BeNil(), "Error getting global test environment")
 	})
 
     AfterEach(func() {
@@ -103,8 +107,9 @@ var _ = Describe("Project Viewer Discovery Migration Cutover Test", func() {
         headers = GetHeaders(authToken, ContentTypeJSON)
 
 		By("Creating the source file server")
+        uniqueID := uuid.New().String()[:8]
         sourceParams := CreateServereParams{
-            ConfigName:       "Project_viewer_config_source",
+            ConfigName:       fmt.Sprintf("project-viewer-source-%s", uniqueID),
             ConfigType:       ConfigTypeFile,
             ProjectID:        projectId,
             ServerType:       ServerTypeOtherNAS,

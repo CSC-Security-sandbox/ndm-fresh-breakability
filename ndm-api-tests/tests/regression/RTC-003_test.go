@@ -17,6 +17,9 @@ var _ = Describe("RTC-003: Test discovery with single worker and restart the wor
 		err                   error
 		attachedWorkersConfig map[string]SSHConfig
 		headers               map[string]string
+		clonedSourceVolumes   []string
+		sourceVolumeManager   *TestVolumeManager
+		destVolumeManager     *TestVolumeManager
 	)
 	Context("RTC-003", func() {
 		BeforeEach(func() {
@@ -29,6 +32,18 @@ var _ = Describe("RTC-003: Test discovery with single worker and restart the wor
 			workerIds = GetWorkerIds()
 			workerId = workerIds[0]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
+
+			// Setup test volumes (create clones for test isolation)
+			clonedSourceVolumes, _, sourceVolumeManager, destVolumeManager, err = SetupTestVolumesBeforeEach()
+			Expect(err).To(BeNil(), "Error setting up test volumes")
+
+			// Guarantee cleanup even on manual interrupt (Ctrl+C)
+			DeferCleanup(func() {
+				err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+				if err != nil {
+					LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
+				}
+			})
 		})
 
 		It("RTC-003: Test discovery with single worker and restart the worker service during discovery for NFS", func() {
@@ -56,7 +71,7 @@ var _ = Describe("RTC-003: Test discovery with single worker and restart the wor
 			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 			By("Getting the source file server by config ID and fetching the volumes")
-			volumeId, err := GetExportPathID("source", SOURCE_VOLUMES[0], ConfigID, headers)
+			volumeId, err := GetExportPathID("source", clonedSourceVolumes[0], ConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a new discovery job on the file server")
@@ -109,15 +124,25 @@ var _ = Describe("RTC-003: Test discovery with single worker and restart the wor
 
 		AfterEach(func() {
 			By("Cleanup started.")
-			
-			err := StopAllWorkersAndWait()
-			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
+
+			// Note: This is redundant with DeferCleanup in BeforeEach, but provides defense in depth
+			err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+			if err != nil {
+				LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
+			}
+
+			// Cleanup workers and project created by SetupTestEnv
+			By("Stopping and detaching workers")
+			err = StopAllWorkersAndWait()
+			if err != nil {
+				LogError(fmt.Sprintf("Failed to stop workers: %v", err))
+			}
 
 			err = CleanupTestEnv()
-			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			LogDebug("Cleanup complete.")
+			if err != nil {
+				LogError(fmt.Sprintf("Failed to cleanup test environment: %v", err))
+			}
 		})
 
 	})
-
 })

@@ -117,9 +117,22 @@ run_tests() {
     print_log_banner "Starting" | tee -a "$report_file"
 
     # Run Ginkgo test and log output
-    ginkgo run -v --timeout="$timeout" "$test_path" -- \
-        --protocol_type="$protocol_type" \
-        --environment="$environment" | tee -a "$report_file"
+    # Use parallel execution for smoke (3 cores) and e2e tests (5 cores), sequential for regression
+    if [[ "$test_type" == "smoke" ]]; then
+        echo "Running with parallel execution (3 cores)..." | tee -a "$report_file"
+        ginkgo run -v -p -procs=3 --timeout="$timeout" "$test_path" -- \
+            --protocol_type="$protocol_type" \
+            --environment="$environment" | tee -a "$report_file"
+    elif [[ "$test_type" == "end-to-end" ]]; then
+        echo "Running with parallel execution (5 cores)..." | tee -a "$report_file"
+        ginkgo run -v -p -procs=5 --timeout="$timeout" "$test_path" -- \
+            --protocol_type="$protocol_type" \
+            --environment="$environment" | tee -a "$report_file"
+    else
+        ginkgo run -v --timeout="$timeout" "$test_path" -- \
+            --protocol_type="$protocol_type" \
+            --environment="$environment" | tee -a "$report_file"
+    fi
 
     local end_time
     end_time=$(date +%s)

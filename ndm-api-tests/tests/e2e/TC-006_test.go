@@ -169,7 +169,7 @@ var _ = Describe("TC-006: Run bulk cutover with concurrent migration jobs - batc
 			defer resp.Body.Close()
 
 			By("Adding Delta Data")
-			err = AddDataToVolume(sourceVolumePath1)
+			_, err = AddDataToVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
 
 			By("Creating bulk cutover job")

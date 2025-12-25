@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -231,9 +232,22 @@ func validateCSVAgainstJSON(csvPath, jsonPath string, volumeReplacements map[str
 	}
 
 	// 2) Replace volume names in JSON content if replacements provided
+	// Sort keys by length descending to avoid substring replacement issues
+	// (e.g., "volSMBAuto_vol1" must be replaced before "vol1" to avoid partial matches)
 	jsonContent := string(raw)
 	if volumeReplacements != nil {
-		for oldVol, newVol := range volumeReplacements {
+		// Extract keys and sort by length (longest first)
+		keys := make([]string, 0, len(volumeReplacements))
+		for k := range volumeReplacements {
+			keys = append(keys, k)
+		}
+		sort.Slice(keys, func(i, j int) bool {
+			return len(keys[i]) > len(keys[j])
+		})
+		
+		// Perform replacements in order (longest keys first)
+		for _, oldVol := range keys {
+			newVol := volumeReplacements[oldVol]
 			jsonContent = strings.ReplaceAll(jsonContent, oldVol, newVol)
 			LogDebug(fmt.Sprintf("Replaced volume name in validator: '%s' -> '%s'", oldVol, newVol))
 		}

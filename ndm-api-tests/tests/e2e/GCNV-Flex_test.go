@@ -47,14 +47,14 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 		}
 	})
 
-	AfterEach(func() {
+	AfterAll(func() {
 		if PROTOCOL_TYPE == ProtocolSMB {
 			LogDebug("Skipping cleanup as test was skipped for SMB protocol")
 			return
 		}
 
 		By("Cleanup started")
-		LogDebug(fmt.Sprintf("[AfterEach] Cleaning up for Project: %s (ID: %s)", ProjectName, ProjectId))
+		LogDebug(fmt.Sprintf("[AfterAll] Cleaning up for Project: %s (ID: %s)", ProjectName, ProjectId))
 		
 		// Cleanup ONTAP cloned volumes using volume manager
 		err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
@@ -136,10 +136,14 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 			FileServerId = fileServer.FileServers[0].Id
 
 			By("Uploading a path file with multiple paths to the file server")
-			fileContent := FileContent{
-				FileName: "test_multiple_paths_file.csv",
-				FileSize: 2048,
-				Contents: fmt.Sprintf("path\n%s\n%s", clonedSourceVolumes[0], clonedSourceVolumes[1]),
+		// Format cloned volume names as NFS export paths (add leading /)
+		sourcePath1 := fmt.Sprintf("/%s", clonedSourceVolumes[0])
+		sourcePath2 := fmt.Sprintf("/%s", clonedSourceVolumes[1])
+		
+		fileContent := FileContent{
+			FileName: "test_multiple_paths_file.csv",
+			FileSize: 2048,
+			Contents: fmt.Sprintf("path\n%s\n%s", sourcePath1, sourcePath2),
 			}
 			resp, uploadStats, err := UploadPathFile(FileServerId, fileContent, headers)
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
@@ -155,7 +159,9 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Error confirming path file upload")
 			Expect(confirmResp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			Expect(confirmStats.WorkflowId).NotTo(BeEmpty(), "Expected non-empty workflow ID")
-			Wait(20)
+		
+		By("Waiting for workflow to complete and file server to refresh volumes")
+		Wait(60)
 
 			By("Confirming the volume creation")
 			fileServerDetails, err := GetFileServerDetails(SourceConfigID, headers)
@@ -163,25 +169,26 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 			Expect(len(fileServerDetails.FileServers[0].Volumes)).To(BeNumerically("==", 2), "Expected two volumes to be present in the file server")
 
 			By("Getting volume details for the valid path")
-			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, clonedSourceVolumes[0])
+		validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, sourcePath1)
 			Expect(err).NotTo(HaveOccurred(), "Expected to find volume path")
 			Expect(validVolume.IsValid).To(BeTrue(), "Expected volume to be valid")
 			Expect(validVolume.IsDisabled).To(BeFalse(), "Expected volume to not be disabled")
 
 			By("Getting volume details for the second path")
-			invalidVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, clonedSourceVolumes[1])
-			Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '%s'", clonedSourceVolumes[1])
+		invalidVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, sourcePath2)
+		Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '%s'", sourcePath2)
 			Expect(invalidVolume.IsValid).To(BeTrue(), "Expected volume to be valid")
 			Expect(invalidVolume.IsDisabled).To(BeFalse(), "Expected volume to not be disabled")
 		})
 
 		It("Should run discovery job on the valid volume", func() {
 			By("Running discovery job on the valid volume")
-			fileServerDetails, err := GetFileServerDetails(SourceConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
-			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, clonedSourceVolumes[1])
-			Expect(err).NotTo(HaveOccurred(), "Expected to find volume path '%s'", clonedSourceVolumes[1])
-
+		// Use the formatted path from the upload step
+		sourcePath2 := fmt.Sprintf("/%s", clonedSourceVolumes[1])
+		fileServerDetails, err := GetFileServerDetails(SourceConfigID, headers)
+		Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
+		validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, sourcePath2)
+		Expect(err).NotTo(HaveOccurred(), "Expected to find volume path '%s'", sourcePath2)
 			jobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{validVolume.ID},
 				ExcludeOlderThan:         nil,
@@ -216,11 +223,14 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 
 		It("Should run migration job on the valid volume", func() {
 			By("Running migration job")
-			fileServerDetails, err := GetFileServerDetails(SourceConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
-			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, clonedSourceVolumes[1])
-			Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '%s'", clonedSourceVolumes[1])
-			destinationPathID1, err := GetExportPathID("destination", clonedDestVolumes[1], DestinationConfigID, headers)
+		// Use the formatted path from the upload step
+		sourcePath2 := fmt.Sprintf("/%s", clonedSourceVolumes[1])
+		fileServerDetails, err := GetFileServerDetails(SourceConfigID, headers)
+		Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
+		validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, sourcePath2)
+		Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '%s'", sourcePath2)
+		destPath := fmt.Sprintf("/%s", clonedDestVolumes[1])
+		destinationPathID1, err := GetExportPathID("destination", destPath, DestinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			migrationParams := MigrationJobParams{
@@ -257,11 +267,14 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 
 		It("Should run cutover job on the valid volume", func() {
 			By("Running cutover job")
-			fileServerDetails, err := GetFileServerDetails(SourceConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
-			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, clonedSourceVolumes[1])
-			Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '%s'", clonedSourceVolumes[1])
-			destinationPathID1, err := GetExportPathID("destination", clonedDestVolumes[1], DestinationConfigID, headers)
+		// Use the formatted path from the upload step
+		sourcePath2 := fmt.Sprintf("/%s", clonedSourceVolumes[1])
+		fileServerDetails, err := GetFileServerDetails(SourceConfigID, headers)
+		Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
+		validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, sourcePath2)
+		Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '%s'", sourcePath2)
+		destPath := fmt.Sprintf("/%s", clonedDestVolumes[1])
+		destinationPathID1, err := GetExportPathID("destination", destPath, DestinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			cutoverParams := BulkCutoverJobParams{

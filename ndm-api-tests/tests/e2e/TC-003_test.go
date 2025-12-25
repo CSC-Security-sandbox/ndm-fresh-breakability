@@ -338,9 +338,9 @@ var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutov
 
 			// ============== ADD DELTA DATA AND RUN CUTOVER ==============
 			By("STAGE 3: Adding delta data for cutover")
-			err = AddDataToVolume(sourceVolumePath1)
+			_, err = AddDataToVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
-			err = AddDataToVolume(sourceVolumePath2)
+			_, err = AddDataToVolume(sourceVolumePath2)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
 
 			By("Creating bulk cutover job and testing pause/resume/stop/adhoc-run")
