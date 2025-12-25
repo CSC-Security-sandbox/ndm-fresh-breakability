@@ -176,7 +176,11 @@ const (
 	FormatPDF                       Format           = "pdf"
 	FormatCSV                       Format           = "csv"
 	DefaultPollInterval                              = 5
-	MaxPollRetries                                   = 240
+	MaxPollRetries                                   = 600
+	MaxFileServerStatusRetries                       = 60 // 60 × 5s = 5 minutes for FileServer status to become ACTIVE
+	MaxVolumeDiscoveryRetries                        = 60 // 60 × 5s = 5 minutes for volume discovery after FileServer creation
+	MaxFileServerDetailsRetries                      = 60 // 60 × 5s = 5 minutes for retrieving FileServer details
+	MaxWorkerStatusRetries                           = 60 // 60 × 5s = 5 minutes for workers to come online
 	WORKER_TIMEOUT                                   = 180
 	RUNNING_JOBRUN                                   = "RUNNING"
 	PAUSE_JOBRUN                                     = "PAUSE"

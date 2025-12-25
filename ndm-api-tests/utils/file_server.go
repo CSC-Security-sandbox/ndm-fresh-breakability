@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -14,6 +15,16 @@ const (
 	AutoDiscover ExportPathSource = "AUTO_DISCOVER"
 	ManualUpload ExportPathSource = "MANUAL_UPLOAD"
 )
+
+// Atomic counter for SMB drive letter selection to avoid collisions in parallel tests
+var smbDriveCounter uint64
+
+// getUniqueDriveLetter returns a unique drive letter using atomic counter
+func getUniqueDriveLetter() string {
+	driveLetters := []string{"Y:", "X:", "W:", "V:", "U:", "T:", "S:", "R:", "Q:", "P:"}
+	index := atomic.AddUint64(&smbDriveCounter, 1)
+	return driveLetters[index%uint64(len(driveLetters))]
+}
 
 type CreateServereParams struct {
 	ConfigName       string
@@ -148,7 +159,7 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 	}
 
 	// Poll and retry update attempts if initial status check failed
-	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
+	for attempt := 1; attempt <= MaxFileServerStatusRetries; attempt++ {
 		LogDebug(fmt.Sprintf("Update attempt: %d", attempt))
 
 		// Since status check failed (file server is errored), update it first
@@ -168,13 +179,13 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 		}
 
 		// If this is not the last attempt, wait before retrying
-		if attempt < MaxPollRetries {
+		if attempt < MaxFileServerStatusRetries {
 			LogDebug("Waiting before next update attempt...")
 			Wait(DefaultPollInterval)
 		}
 	}
 
-	return "", resp, fmt.Errorf("file server failed to become ACTIVE after %d update attempts", MaxPollRetries)
+	return "", resp, fmt.Errorf("file server failed to become ACTIVE after %d update attempts", MaxFileServerStatusRetries)
 }
 
 // UpdateFileServer updates an existing File server using the same payload that was used for creation
@@ -216,7 +227,7 @@ func UpdateFileServer(fileConfigID string, fileServerID string, payload map[stri
 func checkFileServerStatus(fileConfigID string, headers map[string]string) (string, error) {
 	getFileServerURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILESERVER_ENDPOINT, fileConfigID)
 
-	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
+	for attempt := 1; attempt <= MaxFileServerStatusRetries; attempt++ {
 		LogDebug(fmt.Sprintf("Checking FileServer status, attempt: %d", attempt))
 
 		resp, err := SendAPIRequest(http.MethodGet, getFileServerURL, nil, headers)
@@ -252,20 +263,20 @@ func checkFileServerStatus(fileConfigID string, headers map[string]string) (stri
 			return fileServerID, nil
 		case FileServerStatusInProgress:
 			LogDebug("FileServer is still IN_PROGRESS, waiting...")
-			if attempt < MaxPollRetries {
+			if attempt < MaxFileServerStatusRetries {
 				Wait(DefaultPollInterval)
 			}
 		case FileServerStatusErrored:
 			return fileServerID, fmt.Errorf("FileServer is in ERRORED state: %s", status)
 		default:
 			LogDebug(fmt.Sprintf("FileServer has unknown status: %s, continuing to wait...", status))
-			if attempt < MaxPollRetries {
+			if attempt < MaxFileServerStatusRetries {
 				Wait(DefaultPollInterval)
 			}
 		}
 	}
 
-	return "", fmt.Errorf("FileServer did not become ACTIVE after %d attempts", MaxPollRetries)
+	return "", fmt.Errorf("FileServer did not become ACTIVE after %d attempts", MaxFileServerStatusRetries)
 }
 
 // GetSourcePathID fetches the source file server by Volume Name, validates the response,
@@ -282,7 +293,13 @@ func GetExportPathID(
 
 	var response FileServerDetails
 
-	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
+	// Limit volume discovery retries to avoid long waits
+	maxVolumeDiscoveryRetries := MaxVolumeDiscoveryRetries
+	if MaxPollRetries < maxVolumeDiscoveryRetries {
+		maxVolumeDiscoveryRetries = MaxPollRetries
+	}
+
+	for attempt := 1; attempt <= maxVolumeDiscoveryRetries; attempt++ {
 
 		// Refresh the file server to trigger re-discovery of volumes
 		LogDebug(fmt.Sprintf("Triggering FileServer refresh for re-discovery (attempt %d)...", attempt))
@@ -325,19 +342,19 @@ func GetExportPathID(
 			break
 		}
 
-		LogDebug(fmt.Sprintf("No volumes found yet for FileServer, waiting... (attempt %d/%d)", attempt, MaxPollRetries))
-		if attempt < MaxPollRetries {
+		LogDebug(fmt.Sprintf("No volumes found yet for FileServer, waiting... (attempt %d/%d)", attempt, maxVolumeDiscoveryRetries))
+		if attempt < maxVolumeDiscoveryRetries {
 			Wait(DefaultPollInterval) // Wait before retrying
 		}
 	}
 
 	// After retries, check again
 	if len(response.Data.Items.FileServers) == 0 {
-		return "", fmt.Errorf("no fileServers found in source response after %d attempts", MaxPollRetries)
+		return "", fmt.Errorf("no fileServers found in source response after %d attempts", maxVolumeDiscoveryRetries)
 	}
 
 	if len(response.Data.Items.FileServers[0].Volumes) == 0 {
-		return "", fmt.Errorf("no volumes found for source file server after %d attempts", MaxPollRetries)
+		return "", fmt.Errorf("no volumes found for source file server after %d attempts", maxVolumeDiscoveryRetries)
 	}
 
 	// Now fetch the volume ID
@@ -354,10 +371,11 @@ func GetExportPathID(
 }
 
 func ClearVolumeForSMB(export string) string {
+	// Use unique drive letter to avoid conflicts in parallel test execution
+	mappedDrive := getUniqueDriveLetter()
+
 	split := strings.Split(export, ":")
 	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
-
-	mappedDrive := "Z:"
 
 	clearVolumeScript := fmt.Sprintf(`cmd /C
 	net use %s /delete /yes &
@@ -375,14 +393,12 @@ func ClearVolumeForSMB(export string) string {
 }
 
 func ClearVolumeForNFS(export string) string {
-	destMount := "/mnt/remove_data"
+	// Use unique directory to avoid conflicts in parallel test execution
+	uniqueID := fmt.Sprintf("%d", time.Now().UnixNano())
+	destMount := fmt.Sprintf("/mnt/remove_data_%s", uniqueID)
 
 	script := fmt.Sprintf(`
 	set -e
-
-	# Clean up any previous mount
-	sudo umount -f "%s" 2>/dev/null || true
-	sudo rm -rf "%s"
 
 	sudo mkdir -p "%s"
 	sudo mount -t nfs "%s" "%s"
@@ -398,8 +414,7 @@ func ClearVolumeForNFS(export string) string {
 
 	sudo umount "%s"
 	sudo rm -rf "%s"
-`, destMount, destMount,
-		destMount, export, destMount,
+`, destMount, export, destMount,
 		destMount,
 		destMount,
 		destMount,
@@ -437,45 +452,46 @@ func ClearVolume(export string) error {
 }
 
 // AddDataToVolumeForSMB creates a delta directory with 100 text files of 100KB each
-func AddDataToVolumeForSMB(export string) string {
-	//fullCmd := `cmd /C "mkdir C:\delta_test_smb && for /L %i in (1,1,100) do fsutil file createnew C:\delta_test_smb\file%i.txt 102400"`
+// Returns the script and the unique delta folder name that was created
+func AddDataToVolumeForSMB(export string) (string, string) {
+	// Use unique directories and drive letter to avoid conflicts in parallel test execution
+	timestamp := time.Now().UnixNano()
+	uniqueID := fmt.Sprintf("%d", timestamp)
+	mappedDrive := getUniqueDriveLetter()
+	deltaFolderName := fmt.Sprintf("delta_%s", uniqueID)
 
 	split := strings.Split(export, ":")
 	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
 
-	deltaDir := `C:\` + DeltaFolder
-	mappedDrive := `Z:`
+	deltaDir := `C:\delta_` + uniqueID
 
 	cmd := fmt.Sprintf(`cmd /C
-	if exist %s rmdir /s /q %s &&
 	mkdir %s &&
 	net use %s /delete /y &
 	(for /L %%i in (1,1,100) do fsutil file createnew %s\file%%i.txt 102400) &&
 	net use %s %s /user:%s "%s" &&
-	(if exist %s\%s\ ( rmdir /s /q %s\%s ) else ( echo "delta not found" )) &
 	xcopy /E /I /Y %s %s\%s &&
 	net use %s /delete /y &&
 	rmdir /s /q %s
-	`, deltaDir, deltaDir, deltaDir, mappedDrive, deltaDir, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, smbShare, DeltaFolder, smbShare, DeltaFolder, deltaDir, smbShare, DeltaFolder, mappedDrive, deltaDir)
+	`, deltaDir, mappedDrive, deltaDir, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, deltaDir, smbShare, deltaFolderName, mappedDrive, deltaDir)
 
 	commands := []string{}
 	for _, v := range strings.Split(cmd, "\n") {
 		commands = append(commands, strings.TrimSpace(v))
 	}
 
-	return strings.Join(commands, " ")
+	return strings.Join(commands, " "), deltaFolderName
 }
 
-func AddDataToVolumeForNFS(export string) string {
-	destMount := "/mnt/data_add"
-	deltaDir := "/" + DeltaFolder
+func AddDataToVolumeForNFS(export string) (string, string) {
+	// Use unique directories to avoid conflicts in parallel test execution
+	uniqueID := fmt.Sprintf("%d", time.Now().UnixNano())
+	destMount := fmt.Sprintf("/mnt/data_add_%s", uniqueID)
+	deltaDir := fmt.Sprintf("/delta_%s", uniqueID)
+	deltaFolderName := fmt.Sprintf("delta_%s", uniqueID)
 
 	script := fmt.Sprintf(`
 set -e
-
-# Clean up any previous run
-sudo rm -rf "%s"
-sudo rm -rf "%s"
 
 # Create delta directory and generate 100 txt files of 100KB each
 sudo mkdir -p "%s"
@@ -487,7 +503,7 @@ done
 sudo mkdir -p "%s"
 sudo mount -t nfs "%s" "%s"
 
-# Copy delta to the mounted export
+# Copy delta to the mounted export with unique folder name
 sudo cp -a "%s" "%s/"
 
 sync
@@ -496,20 +512,22 @@ sync
 sudo umount "%s" || sudo umount -l "%s"
 sudo rm -rf "%s"
 sudo rm -rf "%s"
-`, deltaDir, destMount, deltaDir, deltaDir, destMount, export, destMount, deltaDir, destMount, destMount, destMount, deltaDir, destMount)
+`, deltaDir, deltaDir, destMount, export, destMount, deltaDir, destMount, destMount, destMount, deltaDir, destMount)
 
-	return script
+	return script, deltaFolderName
 }
 
 // AddDataToVolume creates a delta directory with 100 text files of 100KB each,
-func AddDataToVolume(export string) error {
+// and returns the delta folder name that was created
+func AddDataToVolume(export string) (string, error) {
 	script := ""
+	deltaFolderName := ""
 
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
-		script = AddDataToVolumeForSMB(export)
+		script, deltaFolderName = AddDataToVolumeForSMB(export)
 	case ProtocolNFS:
-		script = AddDataToVolumeForNFS(export)
+		script, deltaFolderName = AddDataToVolumeForNFS(export)
 	}
 
 	config := GetAttachedWorkerDetails()
@@ -523,25 +541,26 @@ func AddDataToVolume(export string) error {
 
 	output, err := sshRunScript(sshConfig, script)
 	if err != nil {
-		return fmt.Errorf("AddDataToFileserver failed: %w\noutput: %s", err, output)
+		return "", fmt.Errorf("AddDataToFileserver failed: %w\noutput: %s", err, output)
 	}
 
-	return nil
+	return deltaFolderName, nil
 }
 
-// RemoveDeltaFromVolumeForSMB removes the delta directory from the SMB export mounted on the VM.
-func RemoveDeltaFromVolumeForSMB(export string) string {
+// RemoveDeltaFromVolumeForSMB removes the specified delta directory from the SMB export.
+func RemoveDeltaFromVolumeForSMB(export string, deltaFolderName string) string {
+	// Use unique drive letter to avoid conflicts in parallel test execution
+	mappedDrive := getUniqueDriveLetter()
+
 	split := strings.Split(export, ":")
 	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
-
-	mappedDrive := "Z:"
 
 	removeDeltaScript := fmt.Sprintf(`cmd /C
 	net use %s /delete /yes &
 	net use %s %s /user:%s "%s" &&
 	(if exist %s\%s\ ( rmdir /s /q %s\%s ) else ( echo "delta not found" )) &
 	net use %s /delete /yes
-	`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, smbShare, DeltaFolder, smbShare, DeltaFolder, mappedDrive)
+	`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, smbShare, deltaFolderName, smbShare, deltaFolderName, mappedDrive)
 
 	commands := []string{}
 	for _, v := range strings.Split(removeDeltaScript, "\n") {
@@ -551,14 +570,13 @@ func RemoveDeltaFromVolumeForSMB(export string) string {
 	return strings.Join(commands, " ")
 }
 
-func RemoveDeltaFromVolumeForNFS(export string) string {
-	destMount := "/mnt/data_remove"
+func RemoveDeltaFromVolumeForNFS(export string, deltaFolderName string) string {
+	// Use unique directory to avoid conflicts in parallel test execution
+	uniqueID := fmt.Sprintf("%d", time.Now().UnixNano())
+	destMount := fmt.Sprintf("/mnt/data_remove_%s", uniqueID)
 
 	script := fmt.Sprintf(`
 	set -e
-
-	# Clean up any previous run
-	sudo rm -rf "%s"
 
 	# Mount export NFS export
 	sudo mkdir -p "%s"
@@ -572,20 +590,20 @@ func RemoveDeltaFromVolumeForNFS(export string) string {
 	# Unmount and cleanup
 	sudo umount "%s"
 	sudo rm -rf "%s"
-	`, destMount, destMount, export, destMount, destMount, DeltaFolder, destMount, DeltaFolder, destMount, destMount)
+	`, destMount, export, destMount, destMount, deltaFolderName, destMount, deltaFolderName, destMount, destMount)
 
 	return script
 }
 
-// RemoveDeltaFromVolume removes the delta directory from the NFS export mounted on the VM.
-func RemoveDeltaFromVolume(export string) error {
+// RemoveDeltaFromVolume removes the specified delta directory from the export.
+func RemoveDeltaFromVolume(export string, deltaFolderName string) error {
 	script := ""
 
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
-		script = RemoveDeltaFromVolumeForSMB(export)
+		script = RemoveDeltaFromVolumeForSMB(export, deltaFolderName)
 	case ProtocolNFS:
-		script = RemoveDeltaFromVolumeForNFS(export)
+		script = RemoveDeltaFromVolumeForNFS(export, deltaFolderName)
 	}
 
 	config := GetAttachedWorkerDetails()
@@ -606,12 +624,13 @@ func RemoveDeltaFromVolume(export string) error {
 }
 
 func ModifyDataOnVolumeForSMB(export string) string {
+	// Use unique drive letter to avoid conflicts in parallel test execution
+	mappedDrive := getUniqueDriveLetter()
+
 	appendLines := "# MODIFIED 1 # MODIFIED 2"
 
 	split := strings.Split(export, ":")
 	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
-
-	mappedDrive := "Z:"
 
 	modifyDataScript := fmt.Sprintf(`cmd /C
 	net use %s /delete /yes &
@@ -631,7 +650,9 @@ func ModifyDataOnVolumeForSMB(export string) string {
 }
 
 func ModifyDataOnVolumeForNFS(export string) string {
-	destMount := "/mnt/data_modify"
+	// Use unique directory to avoid conflicts in parallel test execution
+	uniqueID := fmt.Sprintf("%d", time.Now().UnixNano())
+	destMount := fmt.Sprintf("/mnt/data_modify_%s", uniqueID)
 
 	// Lines to append
 	appendLines := "\n# MODIFIED LINE 1\n# MODIFIED LINE 2\n"
@@ -685,10 +706,11 @@ func ModifyDataOnVolume(export string) error {
 }
 
 func RestoreOriginalDataOnVolumeForSMB(export string) string {
+	// Use unique drive letter to avoid conflicts in parallel test execution
+	mappedDrive := getUniqueDriveLetter()
+
 	split := strings.Split(export, ":")
 	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
-
-	mappedDrive := "Z:"
 
 	restoreScript := fmt.Sprintf(`cmd /C
 	net use %s /delete /yes &
@@ -708,7 +730,9 @@ func RestoreOriginalDataOnVolumeForSMB(export string) string {
 }
 
 func RestoreOriginalDataOnVolumeForNFS(export string) string {
-	destMount := "/mnt/data_restore"
+	// Use unique directory to avoid conflicts in parallel test execution
+	uniqueID := fmt.Sprintf("%d", time.Now().UnixNano())
+	destMount := fmt.Sprintf("/mnt/data_restore_%s", uniqueID)
 
 	return fmt.Sprintf(`
     set -e
@@ -826,7 +850,7 @@ func GetFileServerDetails(configId string, headers map[string]string) (FileServe
 
 	var response FileServerDetails
 
-	for attempt := 1; attempt <= MaxPollRetries; attempt++ {
+	for attempt := 1; attempt <= MaxFileServerDetailsRetries; attempt++ {
 		getFileServerResp, err := SendAPIRequest(http.MethodGet, getSourceURL, nil, headers)
 		if err != nil {
 			return FileServerDetailsItems{}, fmt.Errorf("error sending API request: %w", err)
@@ -848,14 +872,14 @@ func GetFileServerDetails(configId string, headers map[string]string) (FileServe
 			break
 		}
 
-		if attempt < MaxPollRetries {
+		if attempt < MaxFileServerDetailsRetries {
 			Wait(DefaultPollInterval) // Wait before retrying
 		}
 	}
 
 	// After retries, check again
 	if len(response.Data.Items.FileServers) == 0 {
-		return FileServerDetailsItems{}, fmt.Errorf("no fileServers found in source response after %d attempts", MaxPollRetries)
+		return FileServerDetailsItems{}, fmt.Errorf("no fileServers found in source response after %d attempts", MaxFileServerDetailsRetries)
 	}
 
 	return response.Data.Items, nil

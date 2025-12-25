@@ -24,6 +24,18 @@ func TestRegression(t *testing.T) {
 var _ = BeforeSuite(func() {
 	By("Setting before the suite")
 	flag.Parse()
-	InitTestEnv()
 	UpdateConfVariables(ProtocolType, Environment)
+	
+	// Clear any workers left in memory from smoke/e2e suites
+	// (Global AttachedWorkersConfig persists across sequential suite runs)
+	if len(AttachedWorkersConfig) > 0 {
+		LogDebug("Clearing workers from previous test suites (smoke/e2e)")
+		err := DetachAllWorkers()
+		if err != nil {
+			LogError("Failed to detach workers from previous suites", err)
+		}
+	}
+	
+	// Use InitTestEnvWithoutWorkers for regression tests since each test creates its own workers
+	InitTestEnvWithoutWorkers()
 })

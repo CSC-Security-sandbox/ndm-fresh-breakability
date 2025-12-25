@@ -231,9 +231,9 @@ var _ = Describe("Support Bundle Test e2e", func() {
 			}
 
 			By("Adding Delta Data")
-			err = AddDataToVolume(sourceVolumePath1)
+			_, err = AddDataToVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
-			err = AddDataToVolume(sourceVolumePath2)
+			_, err = AddDataToVolume(sourceVolumePath2)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
 
 			By("Creating bulk cutover job")

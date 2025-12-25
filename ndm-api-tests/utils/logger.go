@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 )
@@ -40,17 +41,47 @@ func getCallerInfo() string {
 	return fmt.Sprintf("[%s:%d]", filename, line)
 }
 
-// LogDebug logs debug messages with caller information.
+// sanitizeMessage redacts sensitive information from log messages
+func sanitizeMessage(msg string) string {
+	// List of sensitive field patterns to redact
+	// Matches patterns like: password:"value", Password:"value", adPassword:"value"
+	// Also matches: password: value, Password:value (with or without quotes)
+	patterns := []string{
+		`(?i)(password|passwd|pwd|secret|token|apikey|api_key|auth|authorization)[\s]*:[\s]*"[^"]*"`,
+		`(?i)(password|passwd|pwd|secret|token|apikey|api_key|auth|authorization)[\s]*:[\s]*[^\s,}\]]+`,
+		`(?i)(password|passwd|pwd|secret|token|apikey|api_key|auth|authorization)[\s]*=[\s]*"[^"]*"`,
+		`(?i)(password|passwd|pwd|secret|token|apikey|api_key|auth|authorization)[\s]*=[\s]*[^\s,}\]]+`,
+	}
+	
+	sanitized := msg
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		sanitized = re.ReplaceAllStringFunc(sanitized, func(match string) string {
+			// Extract the field name (everything before : or =)
+			parts := regexp.MustCompile(`[\s]*[:=][\s]*`).Split(match, 2)
+			if len(parts) > 0 {
+				return parts[0] + ":***REDACTED***"
+			}
+			return "***REDACTED***"
+		})
+	}
+	
+	return sanitized
+}
+
+// LogDebug logs debug messages with caller information and sanitizes sensitive data.
 func LogDebug(msg string) {
+	sanitized := sanitizeMessage(msg)
 	caller := getCallerInfo()
 	if caller != "" {
-		log.Print("[DEBUG] " + caller + " " + msg)
+		log.Print("[DEBUG] " + caller + " " + sanitized)
 	} else {
-		log.Print("[DEBUG] " + msg)
+		log.Print("[DEBUG] " + sanitized)
 	}
 }
 
 func LogError(msg string, err ...error) {
+	sanitized := sanitizeMessage(msg)
 	caller := getCallerInfo()
 	prefix := "[ERROR] "
 	if caller != "" {
@@ -58,17 +89,19 @@ func LogError(msg string, err ...error) {
 	}
 
 	if len(err) > 0 && err[0] != nil {
-		log.Print(prefix + msg + " | Error: " + err[0].Error())
+		log.Print(prefix + sanitized + " | Error: " + err[0].Error())
 	} else {
-		log.Print(prefix + msg)
+		log.Print(prefix + sanitized)
 	}
 }
 
 func LogFatalf(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	sanitized := sanitizeMessage(msg)
 	caller := getCallerInfo()
 	if caller != "" {
-		log.Fatalf("[FATAL] "+caller+" "+format, args...)
+		log.Fatal("[FATAL] " + caller + " " + sanitized)
 	} else {
-		log.Fatalf("[FATAL] "+format, args...)
+		log.Fatal("[FATAL] " + sanitized)
 	}
 }

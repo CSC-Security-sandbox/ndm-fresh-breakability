@@ -110,6 +110,17 @@ type ExportPolicyInfo struct {
 	} `json:"svm"`
 }
 
+// SnapshotInfo represents snapshot information
+type SnapshotInfo struct {
+	UUID string `json:"uuid"`
+	Name string `json:"name"`
+}
+
+// SnapshotCreateRequest represents snapshot creation request
+type SnapshotCreateRequest struct {
+	Name string `json:"name"`
+}
+
 // NewOntapClient creates a new ONTAP REST API client
 func NewOntapClient(baseURL, username, password string) *OntapClient {
 	return &OntapClient{
@@ -221,6 +232,43 @@ func (c *OntapClient) GetVolumeByName(svmName, volumeName string) (*VolumeInfo, 
 	return nil, fmt.Errorf("volume %s not found in SVM %s", volumeName, svmName)
 }
 
+// CreateSnapshot creates a snapshot on the specified volume
+func (c *OntapClient) CreateSnapshot(volumeUUID, snapshotName string) (*SnapshotInfo, error) {
+	snapshotReq := SnapshotCreateRequest{
+		Name: snapshotName,
+	}
+
+	url := fmt.Sprintf("/api/storage/volumes/%s/snapshots", volumeUUID)
+	resp, err := c.doRequest("POST", url, snapshotReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusAccepted {
+		return nil, fmt.Errorf("failed to create snapshot, status: %d, body: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var snapshotResp OntapResponse
+	if err := json.Unmarshal(bodyBytes, &snapshotResp); err != nil {
+		return nil, fmt.Errorf("failed to decode snapshot response: %w", err)
+	}
+
+	// Wait for job completion if async
+	if snapshotResp.Job != nil {
+		LogDebug(fmt.Sprintf("Waiting for snapshot creation job %s to complete...", snapshotResp.Job.UUID))
+		if err := c.waitForJob(snapshotResp.Job.UUID, 2*time.Minute); err != nil {
+			return nil, fmt.Errorf("snapshot creation job failed: %w", err)
+		}
+	}
+
+	return &SnapshotInfo{
+		Name: snapshotName,
+	}, nil
+}
+
 // CloneVolume creates a FlexClone of the specified volume
 func (c *OntapClient) CloneVolume(svmName, parentVolumeName, cloneName string) (*VolumeInfo, error) {
 	// Get parent volume info
@@ -229,7 +277,17 @@ func (c *OntapClient) CloneVolume(svmName, parentVolumeName, cloneName string) (
 		return nil, fmt.Errorf("failed to get parent volume: %w", err)
 	}
 
-	// Create clone request
+	// Create unique snapshot name to avoid conflicts in parallel execution
+	snapshotName := fmt.Sprintf("snap_%s_%d", cloneName, time.Now().UnixNano())
+	LogDebug(fmt.Sprintf("Creating snapshot %s on volume %s before cloning", snapshotName, parentVolumeName))
+	
+	// Create snapshot first
+	_, err = c.CreateSnapshot(parentVol.UUID, snapshotName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create snapshot: %w", err)
+	}
+	LogDebug(fmt.Sprintf("Snapshot %s created successfully", snapshotName))
+	
 	cloneReq := VolumeCloneRequest{
 		Name: cloneName,
 		SVM: Reference{
@@ -241,6 +299,10 @@ func (c *OntapClient) CloneVolume(svmName, parentVolumeName, cloneName string) (
 		Name: parentVolumeName,
 		UUID: parentVol.UUID,
 	}
+	cloneReq.Clone.ParentSnapshot = &ParentSnapshot{
+		Name: snapshotName,
+	}
+	LogDebug(fmt.Sprintf("Creating clone %s from snapshot %s", cloneName, snapshotName))
 
 	// Set junction path so the volume is mounted and accessible via NFS
 	cloneReq.NAS = &struct {
@@ -532,9 +594,9 @@ func (c *OntapClient) AddExportPolicyRule(policyID int, clients []string) error 
 
 	rule := map[string]interface{}{
 		"clients":   clientMatches,
-		"ro_rule":   []string{"sys"},
-		"rw_rule":   []string{"sys"},
-		"superuser": []string{"sys"},
+		"ro_rule":   []string{"any"},
+		"rw_rule":   []string{"any"},
+		"superuser": []string{"any"},
 	}
 
 	bodyBytes, err := json.Marshal(rule)
@@ -714,7 +776,7 @@ func (c *OntapClient) DeleteSMBShare(svmName, shareName string) error {
 		LogDebug(fmt.Sprintf("[SMB-DELETE] Truncating share name from '%s' to '%s' (80 char limit)", originalShareName, shareName))
 	}
 
-	endpoint := fmt.Sprintf("/api/protocols/cifs/shares/%s/%s", svmName, shareName)
+	endpoint := fmt.Sprintf("/api/protocols/cifs/shares?svm.name=%s&name=%s", svmName, shareName)
 	LogDebug(fmt.Sprintf("[SMB-DELETE] Attempting to delete SMB share: SVM='%s', Share='%s', Endpoint='%s'", svmName, shareName, endpoint))
 
 	resp, err := c.doRequest("DELETE", endpoint, nil)

@@ -6,48 +6,65 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Project Admin Discovery Migration Cutover Test", func() {
-	var (
-		projectId              string
-		workerId               string
-		headers                map[string]string
-		userIDs                []interface{}
-		usernames              []string
-		userRoleIDs            []string
-		sourceConfigId         string
-		destinationConfigId    string
-		sourcePathId           string
-		destinationPathId      string
-		discoveryJobConfigId   string
-		discoveryJobRunId      string
-		cutoverJobConfigId     string
-		cutoverJobRunId        string
-		destinationVolumePath1 string
-		sourceVolumePath1      string
-		password               string
-		keycloakAuthToken      string
-		userKeycloakID         string
-		authToken              string
-		refreshToken           string
-		resp                   *http.Response
-	)
+    var (
+        projectId             string
+        workerId              string
+        headers               map[string]string
+        userIDs               []interface{}
+        usernames             []string
+        userRoleIDs           []string
+        sourceConfigId        string
+        destinationConfigId   string
+        sourcePathId          string
+        destinationPathId     string
+        discoveryJobConfigId  string
+        discoveryJobRunId     string
+        cutoverJobConfigId    string
+        cutoverJobRunId       string
+        clonedSourceVolumes    []string
+        clonedDestVolumes      []string
+        sourceVolumeManager    *TestVolumeManager
+        destVolumeManager      *TestVolumeManager
+        password               string
+        keycloakAuthToken      string
+        userKeycloakID         string
+        authToken              string
+        refreshToken           string
+        resp                   *http.Response
+    )
 
 	BeforeEach(func() {
 		headers = GetHeaders(AuthToken, ContentTypeJSON)
-        numberOfWorker := 1
-        ProjectID, projectName, attachedWorkersConfig, err := SetupTestEnv(numberOfWorker)
+
+        // Use global shared project and workers instead of creating new ones
+        var projectName string
+        var err error
+        var attachedWorkersConfig map[string]SSHConfig
+        projectId, projectName, attachedWorkersConfig, err = GetGlobalTestEnv()
         _ = projectName
-        Expect(err).To(BeNil(), "Error during test environment setup")
-        Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 1), "Expected 1 worker to be attached")
+        Expect(err).To(BeNil(), "Error getting global test environment")
+        Expect(len(attachedWorkersConfig)).Should(BeNumerically(">=", 1), "Expected at least 1 worker in global environment")
+
         workerIds := GetWorkerIds()
         workerId = workerIds[0]
-        projectId = ProjectID
-        destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
-        sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
+
+        // Setup test volumes (create clones for test isolation)
+        clonedSourceVolumes, clonedDestVolumes, sourceVolumeManager, destVolumeManager, err = SetupTestVolumesBeforeEach()
+        Expect(err).To(BeNil(), "Error setting up test volumes")
+
+        // DeferCleanup ensures cleanup happens even if test fails or is interrupted
+        DeferCleanup(func() {
+            err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+            if err != nil {
+                LogError(fmt.Sprintf("Failed to cleanup test volumes in DeferCleanup: %v", err))
+            }
+        })
 	})
 
 	AfterEach(func() {
@@ -76,21 +93,13 @@ var _ = Describe("Project Admin Discovery Migration Cutover Test", func() {
 			}
 		}
 
-		err := StopAllWorkersAndWait()
-		Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
-
-		err = RemoveDeltaFromVolume(sourceVolumePath1)
-		Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
-
-		err = ClearVolume(destinationVolumePath1)
-		Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
-
-		err = CleanupTestEnv()
-		Expect(err).To(BeNil(), "Error during test environment cleanup")
-		LogDebug("Cleanup complete.")
-
-		LogDebug("All source file server test cleanup operations completed.")
-	})
+        By("Cleaning up test volumes after test run")
+        err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+        if err != nil {
+            LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
+        }
+        // Workers and project cleanup handled by SynchronizedAfterSuite
+    })
 
 	It("Should complete the full discovery migration cutover workflow", func() {
 		By("########################## Project Admin E2E Tests Begins ################################")
@@ -131,31 +140,33 @@ var _ = Describe("Project Admin Discovery Migration Cutover Test", func() {
 
 		headers = GetProjectIdHeader(authToken, projectId)
 
-		By("Creating the source file server")
-		sourceParams := CreateServereParams{
-			ConfigName:       "Project_admin_config_source",
-			ConfigType:       ConfigTypeFile,
-			ProjectID:        projectId,
-			ServerType:       ServerTypeOtherNAS,
-			UserName:         PROTOCOL_USERNAME,
-			Password:         PROTOCOL_PASSWORD,
-			Protocol:         PROTOCOL_TYPE,
-			ProtocolVersion:  ProtocolVersion3,
-			Host:             SOURCE_HOST_IPs[0],
-			Workers:          []string{workerId},
-			WorkingDirectory: "",
-		}
 
-		sourceConfigId, resp, err = CreateFileServer(sourceParams, headers)
-		Expect(err).NotTo(HaveOccurred(), "Error creating source file server")
-		Expect(sourceConfigId).NotTo(BeEmpty(), "Source config ID should not be empty")
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		defer resp.Body.Close()
+        By("Creating the source file server")
+        uniqueID := uuid.New().String()[:8]
+        sourceParams := CreateServereParams{
+            ConfigName:       fmt.Sprintf("project-admin-source-%s", uniqueID),
+            ConfigType:       ConfigTypeFile,
+            ProjectID:        projectId,
+            ServerType:       ServerTypeOtherNAS,
+            UserName:         PROTOCOL_USERNAME,
+            Password:         PROTOCOL_PASSWORD,
+            Protocol:         PROTOCOL_TYPE,
+            ProtocolVersion:  ProtocolVersion3,
+            Host:             SOURCE_HOST_IPs[0],
+            Workers:          []string{workerId},
+            WorkingDirectory: "",
+        }
+        
+        sourceConfigId, resp, err = CreateFileServer(sourceParams, headers)
+        Expect(err).NotTo(HaveOccurred(), "Error creating source file server")
+        Expect(sourceConfigId).NotTo(BeEmpty(), "Source config ID should not be empty")
+        Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+        defer resp.Body.Close()
 
-		By("Getting source file server details")
-		sourcePathId, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigId, headers)
-		Expect(err).NotTo(HaveOccurred(), "Error getting source export path ID")
-		Expect(sourcePathId).NotTo(BeEmpty(), "Source path ID should not be empty")
+        By("Getting source file server details")
+        sourcePathId, err = GetExportPathID("source", clonedSourceVolumes[0], sourceConfigId, headers)
+        Expect(err).NotTo(HaveOccurred(), "Error getting source export path ID")
+        Expect(sourcePathId).NotTo(BeEmpty(), "Source path ID should not be empty")
 
 		By("Creating and running discovery job for source")
 		jobParams := DiscoveryJobParams{
@@ -191,31 +202,31 @@ var _ = Describe("Project Admin Discovery Migration Cutover Test", func() {
 		err = WaitForJobState(discoveryJobRunId, COMPLETED_JOBRUN)
 		Expect(err).NotTo(HaveOccurred(), "Discovery job should complete successfully")
 
-		By("Creating the destination file server")
-		destinationParams := CreateServereParams{
-			ConfigName:       "Project_admin_config_destination",
-			ConfigType:       ConfigTypeFile,
-			ProjectID:        projectId,
-			ServerType:       ServerTypeOtherNAS,
-			UserName:         PROTOCOL_USERNAME,
-			Password:         PROTOCOL_PASSWORD,
-			Protocol:         PROTOCOL_TYPE,
-			ProtocolVersion:  ProtocolVersion3,
-			Host:             DESTINATION_HOST_IPs[0],
-			Workers:          []string{workerId},
-			WorkingDirectory: "",
-		}
+        By("Creating the destination file server")
+        destinationParams := CreateServereParams{
+            ConfigName:       fmt.Sprintf("project-admin-dest-%s", uniqueID),
+            ConfigType:       ConfigTypeFile,
+            ProjectID:        projectId,
+            ServerType:       ServerTypeOtherNAS,
+            UserName:         PROTOCOL_USERNAME,
+            Password:         PROTOCOL_PASSWORD,
+            Protocol:         PROTOCOL_TYPE,
+            ProtocolVersion:  ProtocolVersion3,
+            Host:             DESTINATION_HOST_IPs[0],
+            Workers:          []string{workerId},
+            WorkingDirectory: "",
+        }
+        
+        destinationConfigId, resp, err = CreateFileServer(destinationParams, headers)
+        Expect(err).NotTo(HaveOccurred(), "Error creating destination file server")
+        Expect(destinationConfigId).NotTo(BeEmpty(), "Destination config ID should not be empty")
+        Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+        defer resp.Body.Close()
 
-		destinationConfigId, resp, err = CreateFileServer(destinationParams, headers)
-		Expect(err).NotTo(HaveOccurred(), "Error creating destination file server")
-		Expect(destinationConfigId).NotTo(BeEmpty(), "Destination config ID should not be empty")
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		defer resp.Body.Close()
-
-		By("Getting destination file server details")
-		destinationPathId, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationConfigId, headers)
-		Expect(err).NotTo(HaveOccurred(), "Error getting destination export path ID")
-		Expect(destinationPathId).NotTo(BeEmpty(), "Destination path ID should not be empty")
+        By("Getting destination file server details")
+        destinationPathId, err = GetExportPathID("destination", clonedDestVolumes[0], destinationConfigId, headers)
+        Expect(err).NotTo(HaveOccurred(), "Error getting destination export path ID")
+        Expect(destinationPathId).NotTo(BeEmpty(), "Destination path ID should not be empty")
 
 		By("Creating and running migration job")
 		migrationParams := MigrationJobParams{

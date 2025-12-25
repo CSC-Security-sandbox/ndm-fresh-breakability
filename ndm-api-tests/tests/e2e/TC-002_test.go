@@ -253,9 +253,9 @@ var _ = Describe("TC-002: Run discovery and migration with 'Exclude file older t
 			}
 
 			By("Adding Delta Data")
-			err = AddDataToVolume(sourceVolumePath1)
+			_, err = AddDataToVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
-			err = AddDataToVolume(sourceVolumePath2)
+			_, err = AddDataToVolume(sourceVolumePath2)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
 
 			By("Creating bulk cutover job")
